@@ -1,3 +1,4 @@
+import { assertUsersWritable } from '$lib/server/edge-mode';
 import {
 	adminRaw,
 	ServiceError,
@@ -237,6 +238,7 @@ async function readStaffTarget(name: string): Promise<CouchUserDoc> {
 }
 
 export async function rotateStaffCard(caller: Caller, name: string): Promise<StaffCardForPrint> {
+	assertUsersWritable();
 	const doc = await readStaffTarget(name);
 	if (!caller.isSA) {
 		const managed = managerShelterCodes(caller.roles);

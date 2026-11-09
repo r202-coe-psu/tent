@@ -238,6 +238,28 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 - **เช็ก uuid ก่อนสร้าง job:** `edge-init` เรียก `GET /` ของ central (ด้วย `CENTRAL_REPL_USER`) และของ edge เทียบ `uuid` — ถ้าตรงกัน แปลว่า `SYNC_URL` ชี้กลับมาที่ edge ตัวเอง (เช่น LAN DNS ยังชี้ domain มาที่ edge) จะขึ้น `FAILED` แล้ว exit 1 · อ่าน `GET /` ของ central ไม่ได้ก็ `FAILED` เช่นกัน · ถ้าไม่เช็ก job จะขึ้น `running` `error_count 0` ทั้งที่ replicate เข้าตัวเอง
 - รหัสผ่านใน doc ของ `_replicator` เป็น **plaintext** (admin อ่านกลับก็เห็น) ถือเป็นความลับของเครื่อง edge
 
+### `EDGE_MODE` — edge แก้บัญชีไม่ได้ (CR-171 FR-13–FR-17)
+
+`_users` ไหล central → edge ทางเดียว ถ้าแก้ที่ edge doc จะ conflict กับ revision ที่ pull มาทีหลัง แล้ว user คนนั้น login ไม่ได้
+`docker-compose.edge.yml` จึงตั้ง `EDGE_MODE=true` ให้ frontend ของ edge (central ไม่ตั้ง = ปิด · ไม่ต้องใส่ใน `.env`) เมื่อเปิด:
+
+- **ปฏิเสธ** (403 "แก้ไขบัญชีได้เฉพาะที่ระบบกลาง" และไม่เขียน doc): users CRUD / reset password / rotate staff card, `PATCH auth/me`,
+  forgot-password, force-setup, link/unlink Google·ThaID, volunteer-access — รายการเต็มที่ [CR-171 FR-15](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)
+- **ทำงานปกติ:** login (ชื่อ/เบอร์/OAuth), `GET auth/me`, mfa clear/skip, อ่านทุกอย่าง · OAuth login ข้ามการเขียน `verified_at` (FR-14)
+- ตั้งด้วย `docker compose ... up -d frontend` หลัง `git pull` (ไม่ต้อง build ใหม่) · ตรวจ: แก้ profile ที่ edge ต้องถูกปฏิเสธ
+
+#### บัญชีสำรอง (ต้องเตรียมก่อนเปิดศูนย์)
+
+ที่ edge ตั้ง/รีเซ็ตรหัสไม่ได้ ถ้าผู้ใช้ลืมรหัสหรือยังไม่เคย login ครั้งแรก (`must_change_password` → force-setup) จะเข้าไม่ได้จนกว่า WAN กลับ ดังนั้น:
+
+1. **provision และ activate ที่ central ก่อนเปิดศูนย์** — ให้ทุกบัญชีที่จะใช้ที่ edge login สำเร็จที่ central อย่างน้อยหนึ่งครั้ง (ผ่าน force-setup แล้ว) และรอให้ `users_<code>_pull` ส่งถึง edge
+2. เตรียม **บัญชีสำรอง** (เช่น shelter_manager / ผู้ดูแลเพิ่ม) ที่ activate แล้ว ไว้ใช้เมื่อมีคนลืมรหัสระหว่าง WAN ล่ม
+3. **จำนวนบัญชีสำรองให้ผู้จัดการศูนย์ประเมิน** (A4) ตามจำนวนคนและกะของศูนย์ — ไม่มีค่าตายตัว
+
+เขียน `_users` ตรงที่ edge (Fauxton / admin API / `ensurePublicWriter` / `ensurePrintingService` / seed) ยังข้าม guard ได้ — **ห้ามทำ** (FR-17)
+
+---
+
 ### อัปเกรดเป็น CR-171 (`_users.edge_shelters` + soft delete)
 
 selector ของ `users_<code>_pull` เปลี่ยน (hash ของ job เปลี่ยน → `edge-init` สร้างใหม่เอง, checkpoint เริ่มใหม่ครั้งเดียว) ลำดับ:
