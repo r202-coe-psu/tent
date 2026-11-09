@@ -60,13 +60,15 @@
 	let destinationSelection = $state('');
 	let customDestinationText = $state('');
 	let meal = $state<MealPeriod | undefined>('breakfast');
-	// Re-read the Thailand day each time the dialog opens: the page may stay open past midnight.
-	const today = $derived.by(() => {
-		void open;
-		return thailandCalendarDay();
-	});
-	// Reset to today with the rest of the form, so a later ticket never inherits the last day.
+	let today = $state(thailandCalendarDay());
 	let serviceDate = $state(thailandCalendarDay());
+	// The page may stay open past midnight, so take the Thailand day again each time the dialog
+	// opens rather than trusting the value read when the page loaded.
+	$effect(() => {
+		if (!open) return;
+		today = thailandCalendarDay();
+		serviceDate = today;
+	});
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
 	let pickerOpen = $state(false);
