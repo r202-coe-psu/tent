@@ -22,7 +22,7 @@ export function requiresConsent(
 	user: ConsentUserTarget,
 	currentVersion = CURRENT_CONSENT_VERSION
 ): boolean {
-	if (user.roles?.includes(COUCH_ADMIN) || user.roles?.includes('_admin')) {
+	if (user.roles?.includes(COUCH_ADMIN)) {
 		return false;
 	}
 

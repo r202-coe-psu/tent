@@ -61,10 +61,11 @@ beforeEach(() => {
 	resolveScannedRecipient.mockReset();
 	mountPicker();
 });
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
 	document.body.innerHTML = '';
+	await new Promise((resolve) => setTimeout(resolve, 50));
 });
 
 describe('RecipientSearchPicker refused scan', () => {

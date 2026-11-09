@@ -5,6 +5,7 @@
 
 import { serviceFetch } from '$lib/api/service';
 import type { RoleGrant } from '$lib/auth/role-grants';
+import type { UserConsentStatus } from '../domain/consent';
 import type { ForgotPasswordVerifyInput, ForceSetupInput } from '../domain/schema';
 
 const USERS_ENDPOINT = '/api/v1/users';
@@ -178,8 +179,6 @@ export function verifySecurityQuestionAndReset(
 	});
 }
 
-import type { UserConsentStatus } from '../domain/consent';
-
 export interface AuthStatus {
 	name: string;
 	display_name: string;
@@ -231,9 +230,7 @@ export function submitForceSetup(input: ForceSetupInput): Promise<{ ok: true }> 
 }
 
 /** Submit PDPA and NDA consent acceptance (#1246) */
-export function submitConsent(
-	agreed: boolean = true
-): Promise<{ ok: true; consent: UserConsentStatus }> {
+export function submitConsent(agreed: boolean): Promise<{ ok: true; consent: UserConsentStatus }> {
 	return serviceFetch('/api/v1/auth/consent', {
 		method: 'POST',
 		body: JSON.stringify({ agreed })

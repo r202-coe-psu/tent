@@ -62,6 +62,14 @@ describe('requiresConsent policy', () => {
 		expect(result).toBe(true);
 	});
 
+	it('requires consent for system_admin without consent record', () => {
+		const result = requiresConsent({
+			roles: ['system_admin'],
+			consent: null
+		});
+		expect(result).toBe(true);
+	});
+
 	it('exempts couch_admin from consent requirement', () => {
 		const result = requiresConsent({
 			roles: [COUCH_ADMIN],

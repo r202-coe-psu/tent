@@ -1785,11 +1785,15 @@ export async function readUserDocForLink(name: string): Promise<CouchUserDoc | n
 export async function recordUserConsent(
 	username: string
 ): Promise<{ ok: true; consent: UserConsentStatus }> {
-	const userRes = await adminRaw(`/_users/org.couchdb.user:${encodeURIComponent(username)}`, 'GET');
+	const userRes = await adminRaw(`/_users/${userDocId(username)}`, 'GET');
 	if (userRes.status !== 200 || !userRes.data) {
 		throw new ServiceError('NOT_FOUND', 'User profile doc not found');
 	}
 	const doc = userRes.data as CouchUserDoc;
+	if (isDeletedUserDoc(doc)) {
+		throw new ServiceError('NOT_FOUND', 'User profile doc not found');
+	}
+	const previousConsent = doc.consent;
 	const nowIso = new Date().toISOString();
 	const consent: UserConsentStatus = {
 		agreed: true,
@@ -1798,11 +1802,7 @@ export async function recordUserConsent(
 	};
 	doc.consent = consent;
 
-	const saveRes = await adminRaw(
-		`/_users/org.couchdb.user:${encodeURIComponent(username)}`,
-		'PUT',
-		doc
-	);
+	const saveRes = await adminRaw(`/_users/${userDocId(username)}`, 'PUT', doc);
 	if (saveRes.status !== 200 && saveRes.status !== 201) {
 		throw new ServiceError('INTERNAL', 'Failed to update user consent');
 	}
@@ -1824,7 +1824,22 @@ export async function recordUserConsent(
 		{ shelterCode: 'central', createdBy: username, roles: doc.roles ?? [] }
 	);
 
-	await adminRaw(`/central_ops/${auditDoc._id}`, 'PUT', auditDoc);
+	try {
+		const auditRes = await adminRaw(`/central_ops/${auditDoc._id}`, 'PUT', auditDoc);
+		if (auditRes.status !== 200 && auditRes.status !== 201) {
+			throw new Error(`Audit HTTP ${auditRes.status}`);
+		}
+	} catch {
+		// Rollback consent update on user doc to stay fail-closed and retry-safe
+		try {
+			const rollbackDoc = await readUserDocIncludingDeleted(username, 'rollback unaudited consent');
+			rollbackDoc.consent = previousConsent ?? null;
+			await adminRaw(`/_users/${userDocId(username)}`, 'PUT', rollbackDoc);
+		} catch {
+			// ignore rollback error, primary error takes precedence
+		}
+		throw new ServiceError('INTERNAL', 'Failed to record consent audit entry');
+	}
 
 	return { ok: true, consent };
 }

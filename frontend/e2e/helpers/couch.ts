@@ -74,6 +74,11 @@ export interface TestUser {
 	password: string;
 	roles: string[];
 	display_name?: string;
+	consent?: {
+		agreed: boolean;
+		agreed_at: string;
+		version: string;
+	} | null;
 }
 
 /**
@@ -83,7 +88,7 @@ export interface TestUser {
 export async function createCouchUser(user: TestUser): Promise<void> {
 	// Delete first in case a previous run crashed before cleanup
 	await deleteCouchUser(user.name);
-	const { name, password, roles, display_name } = user;
+	const { name, password, roles, display_name, consent } = user;
 	const res = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
 		name,
 		password,
@@ -91,7 +96,15 @@ export async function createCouchUser(user: TestUser): Promise<void> {
 		display_name: display_name ?? name,
 		type: 'user',
 		shelter_id: roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length) ?? null,
-		affiliation_tags: []
+		affiliation_tags: [],
+		consent:
+			consent !== undefined
+				? consent
+				: {
+						agreed: true,
+						agreed_at: new Date().toISOString(),
+						version: '1.0'
+					}
 	});
 	if (res.status >= 400)
 		throw new Error(`Could not create test user "${name}" (HTTP ${res.status})`);
@@ -104,15 +117,24 @@ export async function seedSecurityQuestion(name: string): Promise<void> {
 	if (got.status >= 400 || !got.data || typeof got.data !== 'object') {
 		throw new Error(`Could not load E2E user ${name} for setup`);
 	}
+	const current = got.data as Record<string, unknown>;
 	const res = await couchReq('PUT', path, {
-		...(got.data as Record<string, unknown>),
+		...current,
 		security_question: {
 			question_id: 'high_school',
 			answer_hash: 'e2e'.padEnd(64, '0'),
 			salt: 'e2e'.padEnd(32, '0'),
 			set_at: new Date().toISOString()
 		},
-		must_change_password: false
+		must_change_password: false,
+		consent:
+			current.consent !== undefined
+				? current.consent
+				: {
+						agreed: true,
+						agreed_at: new Date().toISOString(),
+						version: '1.0'
+					}
 	});
 	if (res.status >= 400) throw new Error(`Could not finish E2E user setup for ${name}`);
 }
