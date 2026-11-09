@@ -29,7 +29,11 @@
 	</div>
 
 	<div class="flex flex-1 flex-col items-center justify-center gap-6 sm:flex-row sm:justify-around">
-		<div class="relative h-36 w-36 shrink-0">
+		<div
+			class="relative h-36 w-36 shrink-0"
+			role="img"
+			aria-label="ใช้ความจุไป {summary.percent}% ({summary.present.toLocaleString()} จาก {summary.capacity.toLocaleString()} คน)"
+		>
 			<svg viewBox="0 0 120 120" class="h-full w-full -rotate-90" aria-hidden="true">
 				<circle cx="60" cy="60" r={RADIUS} fill="none" stroke-width="12" class="stroke-slate-100" />
 				<circle
