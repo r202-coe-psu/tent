@@ -1,21 +1,21 @@
 ---
 id: CR-231
-title: Public family search — บังคับ dialog ยินยอม + จุดประสงค์ และเก็บข้อมูลผู้ค้นหาใน search_audit
-status: approved
+title: Public family search — บังคับ dialog ยินยอม + จุดประสงค์ และเก็บข้อมูลผู้ค้นหาใน Mongo `audit_events`
+status: proposed
 date: 2026-11-06
 requested_by: Dev Team B
-decided_by: Soravit Sukkarn (Team Lead)
+decided_by: 
 layer: volatile
 issue: "#1159"
 affects:
-  - docs/data/schema.md §5.1 `search_audit` (field ใหม่ 5 ตัว)
-  - search_audit schema_v 1 → 2
+  - docs/data/schema.md §5.1 `search_audit` → แทนด้วย Mongo collection `audit_events` (event_type `public.search`; schema_v 1)
   - docs/data/api-contract.md `POST /public/v1/occupants` (body + 422 + 503 SEARCH_UNAVAILABLE)
-  - docs/data/couchdb-mongodb-sync.md §4.0 search_audit inbound (ตัด PII ก่อนเข้า CouchDB)
+  - docs/data/couchdb-mongodb-sync.md §4.0 search_audit inbound (เลิก sync public log เข้า CouchDB)
   - docs/features/public-tier-find-spec.html / public-tier-flow-spec.html (ข้อความ "search_audit เก็บ query text, IP hash")
   - backend/apiapp/modules/evacuee/{schemas,router,use_case}.py, backend/tests/test_evacuee.py
-  - worker/src/worker/inbound/search_audit.py, worker/tests
+  - worker/src/worker/inbound/search_audit.py (ยกเลิก/ปิด inbound), worker/tests
   - frontend/src/lib/features/public-portal/{domain,data,ui}, routes/(public)/search, family-search-modal
+  - public-policy.ts / public-term.ts (ข้อความเก็บข้อมูลผู้ค้นหา — ไม่มีกำหนดการลบ)
   - frontend/e2e/public-search-flow.test.ts
   - frontend/src/lib/api-specs/fastapi.json + frontend/src/lib/api/openapi.d.ts (regenerate)
 ---
@@ -26,10 +26,11 @@ affects:
 >
 > - **เปลี่ยนอะไร:** ก่อนค้นหาผู้อพยพสาธารณะ (`/search`, modal หน้าแรก `/`, ลิงก์ `/search?q=`) ผู้ค้นหาต้องกรอก
 >   ชื่อ / นามสกุล / เบอร์ / จุดประสงค์ และติกยินยอม; FastAPI บังคับฝั่ง server
-> - **เก็บอะไร:** `search_audit` เพิ่มข้อมูลผู้ค้นหา + IP จริง + จุดประสงค์ + `consent_version` — PII อยู่ **Mongo เท่านั้น**
->   ไม่ sync เข้า CouchDB; **ยังไม่มี retention/ลบอัตโนมัติ**
+> - **เก็บอะไร:** public log เก็บเป็น **audit event** ใน Mongo collection เดียว `audit_events` (event แรก = `public.search`)
+>   แทนการแยกเป็น `search_audit` / `xxx_audit` — payload มีข้อมูลผู้ค้นหา + IP จริง + จุดประสงค์ + `consent_version`;
+>   PII อยู่ **Mongo เท่านั้น** ไม่ sync เข้า CouchDB; **ไม่มี retention — เก็บถาวร** (ตัดสินแล้วใน #1213)
 > - **ผลต่อ contract:** `POST /public/v1/occupants` body ใหม่ (422 ถ้าขาด) และ audit เป็น **fail-closed** (503)
-> - **กระทบ:** `search_audit` schema_v 1 → 2 · แก้หลักการ "hash เท่านั้น" · ต้องกำหนด retention ภายหลัง (DPO + RoPA)
+> - **กระทบ:** `audit_events` collection ใหม่ (schema_v 1) แทน `search_audits` · แก้หลักการ "hash เท่านั้น"
 
 ---
 
@@ -82,42 +83,70 @@ affects:
   — ห้ามแก้ `SearchRequest` ให้บังคับฟิลด์ใหม่ (external จะพังทันที). ให้เพิ่ม `PublicSearchRequest` (ครอบ/ต่อยอดจาก
   `SearchRequest`) ใช้เฉพาะ `POST /public/v1/occupants`; external คง `SearchRequest` เดิม
 
-> **[NEEDS DECISION: ND-1]** `/external/v1/occupants` เรียก `EvacueeUseCase.search` ตัวเดียวกัน (CR-181) —
-> เมื่อ audit เป็น fail-closed ต้องตัดสินว่า external ยัง fail-open + hash-only เหมือนเดิม
-> หรือ fail-closed ตาม public. Draft นี้ถือว่า **external ไม่เปลี่ยนพฤติกรรม** (ตาม issue) จนกว่าเจ้าของเคาะ
+> **[RESOLVED: ND-1]** `/external/v1/occupants` **ไม่เปลี่ยน** — external กับ public แยกกันอยู่แล้ว: external คง fail-open + hash-only
+> และไม่เขียน `audit_events` (ตาม FR-14/FR-14a)
 
-### 3. Data — `search_audit` (schema_v 1 → 2)
+### 3. Data — Mongo `audit_events` (single collection, schema_v 1)
 
-- **FR-15** — ฟิลด์เดิมคงไว้: `query_kind`, `query_hash`, `ip_hash`, `result_count`, `occurred_at` (คำค้นยังเก็บเป็น hash)
-- **FR-16** — ฟิลด์ใหม่ (optional ตอนอ่าน; **ไม่ backfill** แถวเก่า):
+> ที่มา: comment ใน [#1213](https://github.com/r202-coe-psu/tent/issues/1213) (net-lynx) — ไม่ต้องมี retention เก็บถาวร;
+> ออกแบบ log เป็น **audit event collection เดียว** ใน Mongo สำหรับ public log
+> เพื่อไม่ต้องแยก `search_audit` / `xxx_audit` หลาย collection และพร้อม scale
 
-  | Field | req | เก็บที่ | หมายเหตุ |
-  | --- | --- | --- | --- |
-  | `searcher` `{first_name, last_name, phone}` | opt | Mongo เท่านั้น | **PII** ค่าจริง; `last_name` ว่างได้ |
-  | `client_ip` | opt | Mongo เท่านั้น | **PII** ค่าจริงจาก `X-Real-IP` |
-  | `purpose_note` | opt | Mongo เท่านั้น | free text อาจมี PII |
-  | `purpose` | opt | Mongo + CouchDB | enum `find_family`/`find_acquaintance`/`coordinate_aid`/`other` |
-  | `consent_version` | opt | Mongo + CouchDB | ค่าคงที่ `"search-v1"` |
+- **FR-15** — public log ทุกประเภทเขียนลง Mongo collection **`audit_events`** เดียว; การค้นผู้อพยพ = `event_type: "public.search"`.
+  ไม่สร้าง collection `*_audit` ใหม่ต่อฟีเจอร์ — event ชนิดใหม่เพิ่มด้วยค่า `event_type` + `payload` ของตัวเอง
+- **FR-16** — envelope (ทุก event) :
+
+  | Field | req | หมายเหตุ |
+  | --- | --- | --- |
+  | `_id` | ✓ | `audit_event:{ULID}` |
+  | `schema_v` | ✓ | `1` |
+  | `event_type` | ✓ | dotted string; ตอนนี้มีเฉพาะ `public.search` |
+  | `occurred_at` | ✓ | ISO UTC (index; ใช้เรียงเวลา) |
+  | `actor` | ✓ | `{ kind: "public_searcher", ip_hash, client_ip? }` — `client_ip` **PII** ค่าจริงจาก `X-Real-IP` |
+  | `request_id` | opt | ผูก event กับ log ของ FastAPI/nginx เพื่อสืบย้อน |
+  | `subject` | opt | `{ kind, id }` ถ้า event ชี้ entity เฉพาะ; `public.search` ไม่มี → เว้น |
+  | `payload` | ✓ | object ตาม `event_type` (ด้านล่าง) |
+
+  `payload` ต้อง validate ต่อ `event_type` (Pydantic discriminated union ตาม `event_type`) — ห้ามเขียน payload ลอย;
+  เพิ่ม event ชนิดใหม่ = เพิ่ม `event_type` + payload model ผ่าน CR/spec ที่เกี่ยวข้อง ไม่ต้องแก้ schema ของ collection
+
+- **FR-16a** — `payload` ของ `public.search`:
+
+  | Field | req | หมายเหตุ |
+  | --- | --- | --- |
+  | `query_kind` | ✓ | คงของเดิม |
+  | `query_hash` | ✓ | คำค้นยังเก็บเป็น hash |
+  | `result_count` | ✓ | คงของเดิม |
+  | `searcher` `{first_name, last_name, phone}` | ✓ | **PII** ค่าจริง; `last_name` ว่างได้ |
+  | `purpose` | ✓ | enum `find_family`/`find_acquaintance`/`coordinate_aid`/`other` |
+  | `purpose_note` | opt | free text อาจมี PII; มีเมื่อ `other` เท่านั้น |
+  | `consent_version` | ✓ | ค่าคงที่ `"search-v1"` |
+
+- **FR-16b** — collection **append-only** (ไม่ update/delete จาก application code); index ขั้นต่ำ `{event_type:1, occurred_at:-1}`
+- **FR-16c** — **แทน `search_audits` เลย ไม่เขียนคู่:** การเขียนใหม่ไปที่ `audit_events` เท่านั้น (fail-closed ที่เดียว); `search_audits` เดิมไม่ migrate/backfill คงไว้อ่านอย่างเดียว
 
 ### 4. Worker
 
-- **FR-17** — inbound (`worker/src/worker/inbound/search_audit.py`): ตัด `searcher`, `client_ip`, `purpose_note` ออกก่อนเขียนเข้า
-  CouchDB `central_ops` (doc append-only ลบไม่ได้ จึงห้ามมี PII)
-- **FR-18** — **ไม่มี retention loop ใน CR นี้:** PII (`searcher`, `client_ip`, `purpose_note`) คงอยู่ใน Mongo `search_audits` จนกว่าจะมี CR/issue แยกกำหนดระยะเก็บรักษา — เปิด issue ติดตามแล้ว: [#1213](https://github.com/r202-coe-psu/tent/issues/1213)
+- **FR-17** — **public log ไม่ sync เข้า CouchDB:** เลิกใช้ inbound `worker/src/worker/inbound/search_audit.py` สำหรับ event ใหม่
+  (PII อยู่ Mongo เท่านั้น; `central_ops` ไม่รับ doc ของ public log อีก). doc `search_audit:*` เดิมใน CouchDB คงไว้
+- **FR-18** — **ไม่มี retention (ตัดสินแล้ว):** `audit_events` เก็บถาวร ไม่มี TTL/ลบอัตโนมัติ ตาม [#1213](https://github.com/r202-coe-psu/tent/issues/1213)
+  (net-lynx: "ไม่ต้องมี retention เก็บไปเลย"). ต้องควบคุมสิทธิ์เข้าถึง Mongo ให้เหมาะสมกับ PII ที่เก็บถาวร
+- **FR-19** — ข้อความ `/policy` และ `/term` ต้องระบุการเก็บข้อมูลผู้ค้นหา (ชื่อ นามสกุล เบอร์ IP จุดประสงค์) และระบุว่า
+  **ไม่มีกำหนดการลบ** (เก็บถาวร); ข้อความไทย/อังกฤษตามที่ไฟล์เดิมรองรับ
 
-> **[NEEDS DECISION: ND-2]** ไม่มี retention → PII ผู้ค้นหา (`first_name`, `last_name`, `phone`, `client_ip`, `purpose_note`)
-> ไม่หมดอายุ (เสี่ยง PDPA data minimisation). ต้องตัดสินว่ายอมรับช่วงนี้ชั่วคราวจนกำหนดระยะ (DPO ยืนยัน + อัปเดต RoPA T-43)
-> และเปิด issue/CR retention แยกเมื่อใด (เปิด issue แล้ว: [#1213](https://github.com/r202-coe-psu/tent/issues/1213)). **ต้องได้ระยะเวลา retention (หรือ DPO ยอมรับช่วงชั่วคราวเป็นลายลักษณ์อักษร) ก่อนเปลี่ยน `status` เป็น `approved`**
+> **[RESOLVED: ND-2]** retention — เก็บถาวร ไม่มี retention (ผู้ตัดสิน: net-lynx ใน #1213). ไม่ต้องรอ DPO/RoPA T-43 เป็นเงื่อนไข approve;
+> ยังควรแจ้ง DPO เพื่ออัปเดต RoPA ให้ตรงว่าเก็บถาวร
 >
-> **[NEEDS DECISION: ND-3]** ข้อความ `/policy` และ `/term` (`public-policy.ts`, `public-term.ts`) ปัจจุบันไม่ระบุการเก็บข้อมูลผู้ค้นหา
-> — ต้องตัดสินว่าจะอัปเดตข้อความ consent/policy ใน CR นี้หรือแยก CR
+> **[RESOLVED: ND-3]** อัปเดตข้อความ `/policy` และ `/term` (`public-policy.ts`, `public-term.ts`) ใน CR นี้ ตาม FR-19
+
+> **[RESOLVED: ND-4]** envelope ตาม FR-16 (รวม `request_id`, `subject`) และแทน `search_audits` เลยตาม FR-16c
 
 ## Out of scope
 
 - หน้าจอให้ staff ดู/ค้นหา log การค้นหา (เปิด issue แยก)
 - OTP / การยืนยันตัวตนผู้ค้นหา
 - `/external/v1/occupants`, EXT-012 (`POST /external/persons/search`), หน้าค้นหาของ staff
-- retention / ลบ PII ผู้ค้นหาอัตโนมัติ และการทำเป็น config ใน `config:app` — แยก CR/issue ภายหลัง (issue [#1213](https://github.com/r202-coe-psu/tent/issues/1213))
+- retention / ลบ PII ผู้ค้นหาอัตโนมัติ — **ตัดสินแล้วว่าไม่ทำ (เก็บถาวร)** ตาม [#1213](https://github.com/r202-coe-psu/tent/issues/1213)
 - ใช้ข้อมูลผู้ค้นหาทำ rate limit/block (rate limit อยู่ที่ nginx ตาม CR-188)
 
 ## Impact
@@ -126,15 +155,15 @@ affects:
 
 | Doc | แก้อะไร |
 | --- | --- |
-| `docs/data/schema.md` §5.1 | เพิ่ม 5 field ตาม FR-16; `search_audit` schema_v 2; อัปเดต `updated:` |
+| `docs/data/schema.md` §5.1 | เพิ่มนิยาม Mongo `audit_events` (FR-15..16c) และระบุ `search_audit` ถูกแทนสำหรับ event ใหม่; อัปเดต `updated:` |
 | `docs/data/api-contract.md` | body/422/503 ของ `POST /public/v1/occupants`; ระบุ external ไม่เปลี่ยน |
-| `docs/data/couchdb-mongodb-sync.md` §4.0 | แทน "hash เท่านั้น / ไม่เก็บ raw IP" ด้วยกติกาใหม่; step inbound ตัด PII |
+| `docs/data/couchdb-mongodb-sync.md` §4.0 | แทน "hash เท่านั้น / ไม่เก็บ raw IP" ด้วยกติกาใหม่; เลิก inbound search_audit → CouchDB |
 | `docs/features/public-tier-find-spec.html`, `public-tier-flow-spec.html` | ปรับข้อความ audit ให้ตรง |
 | CR-044 (`search_audits` hash/ip_hash only), CR-166 (`query_hash`), CR-181 (external ไม่เขียน audit) | ไม่แก้ไฟล์ CR; อ้างอิงเป็น cross-ref ใน CR นี้ |
 
 **Code / test**
 
-- Backend: `backend/apiapp/modules/evacuee/*`; `tent_model.search_audit.SearchAudit` model ต้องเพิ่ม field
+- Backend: `backend/apiapp/modules/evacuee/*`; เพิ่ม model `AuditEvent` ใน `tent_model` (envelope + payload `public.search`) เขียนลง `audit_events`
 - Backend tests: `backend/tests/test_evacuee.py` กระทบกว้างกว่าเทสต์เดียว — มี ~25 เทสต์ และ fixture
   `@pytest.fixture(params=["/public/v1/occupants", "/external/v1/occupants"])` ยิง `POST` ด้วย `{"q": ...}` เดิม
   ซึ่งฝั่ง public จะติด 422 ทั้งหมด. ต้องทำ helper/fixture กลางสร้าง payload public search ที่ valid
@@ -147,8 +176,8 @@ affects:
 
 | Seam | ไฟล์ | ตรวจ |
 | --- | --- | --- |
-| S1 FastAPI | `backend/tests/test_evacuee.py` | ขาด `searcher`/`purpose`/`consent_accepted` → 422; `consent_accepted:false` → 422; `other` ไม่มี note → 422 และ purpose อื่นส่ง note ที่มีข้อความ → 422 (ส่ง `""`/`null`/omit → 200 และ audit เก็บ `purpose_note` เป็น `None`); เบอร์ผิด → 422; สำเร็จ → audit มี `searcher`,`client_ip`(จาก `X-Real-IP`),`purpose`,`purpose_note`,`consent_version`,`query_hash`,`ip_hash`; เขียน audit ไม่ได้ → 503 ไม่มี `results` |
-| S2 worker inbound | `worker/tests/test_search_audit_inbound.py` | doc ใน CouchDB ไม่มี `searcher`/`client_ip`/`purpose_note`; มี `purpose`,`consent_version` |
+| S1 FastAPI | `backend/tests/test_evacuee.py` | ขาด `searcher`/`purpose`/`consent_accepted` → 422; `consent_accepted:false` → 422; `other` ไม่มี note → 422 และ purpose อื่นส่ง note ที่มีข้อความ → 422 (ส่ง `""`/`null`/omit → 200 และ audit เก็บ `purpose_note` เป็น `None`); เบอร์ผิด → 422; สำเร็จ → `audit_events` มี event `public.search` ที่ `actor.client_ip`(จาก `X-Real-IP`),`actor.ip_hash` และ `payload` มี `searcher`,`purpose`,`purpose_note`,`consent_version`,`query_hash`; เขียน audit ไม่ได้ → 503 ไม่มี `results` |
+| S2 worker inbound | `worker/tests/test_search_audit_inbound.py` | event `public.search` ใน `audit_events` ไม่ถูก sync เข้า CouchDB (ไม่มี doc ใหม่ใน `central_ops`) |
 | S3 domain | `public-portal/domain/search-consent.ts` | Zod pure ใช้กติกาเดียวกับ S1 |
 | S4 data | `public-portal/data/public-api.test.ts` | body ที่ส่งไป BFF มีผู้ค้นหา+จุดประสงค์ |
 | S5 DOM `/search` | `frontend/src/routes/(public)/search/+page.svelte.test.ts`, `frontend/e2e/public-search-flow.test.ts` | ค้นครั้งแรก→dialog; ยกเลิก→ไม่ค้น; ยืนยัน→ค้น; ครั้งที่สอง→ไม่มี dialog; `?q=`→dialog แล้วค้น; e2e ต้องกรอก dialog/seed `sessionStorage` ก่อนค้น (ไม่งั้น fail ทั้งชุด) |
@@ -158,23 +187,21 @@ BFF route ไม่ทดสอบแยก (ส่ง body ต่อตรง�
 
 ## Migration
 
-- `search_audit` **schema_v 1 → 2** — additive: field ใหม่ทั้งหมด optional ตอนอ่าน
-- แถว/doc เดิม (v1) อ่านได้ตามปกติ **ไม่ backfill**
-- CouchDB `central_ops`: doc ใหม่ได้เฉพาะ `purpose` + `consent_version` เพิ่ม (sync โดย inbound worker ผ่าน
-  `CouchClient.put_doc`; `central_ops` ไม่มี `validate_doc_update` และ frontend ไม่ได้เข้าถึง doc type นี้ตรง
-  จึงไม่มี Zod/validator ฝั่ง Couch ให้แก้)
-- Mongo: ไม่ต้อง migrate; ไม่มี retention ใน CR นี้
+- Mongo: สร้าง collection `audit_events` (schema_v 1) + index `{event_type:1, occurred_at:-1}`; `search_audits` เดิมไม่ migrate/backfill
+- CouchDB `central_ops`: ไม่มี doc ใหม่ — doc `search_audit:*` เดิมคงไว้ ไม่แก้
+- ไม่มี retention (เก็บถาวร)
 
 ## Acceptance criteria
 
-- [ ] CR อนุมัติ (+ ตอบ ND-1..ND-3) และ schema.md §5.1 / api-contract / sync อัปเดตตาม CR
+- [ ] CR อนุมัติ (ND-1..ND-4 resolved แล้ว) และ schema.md §5.1 / api-contract / sync อัปเดตตาม CR
 - [ ] ค้นหาจาก `/search`, `?q=` หรือ modal หน้าแรกไม่ได้ จนกว่ากรอก dialog และติกยินยอม
 - [ ] กรอกครั้งเดียวต่อ session ใช้ได้ทั้งสองจุด
 - [ ] ยิง `POST /public/v1/occupants` ตรงโดยไม่มีข้อมูลผู้ค้นหา/จุดประสงค์ → 422
-- [ ] ทุกการค้นที่สำเร็จมีแถว `search_audit` ครบ: ชื่อ นามสกุล เบอร์ IP จุดประสงค์ (+เหตุผลถ้า `other`) `consent_version`
+- [ ] ทุกการค้นที่สำเร็จมี event `public.search` ใน Mongo `audit_events` ครบ: ชื่อ นามสกุล เบอร์ IP จุดประสงค์ (+เหตุผลถ้า `other`) `consent_version`
 - [ ] เขียน audit ไม่สำเร็จ → 503 ไม่คืนผลลัพธ์
-- [ ] doc `search_audit` ใน CouchDB ไม่มี `searcher`/`client_ip`/`purpose_note`
+- [ ] ไม่มีข้อมูลผู้ค้นหา (`searcher`/`client_ip`/`purpose_note`) ถูกเขียนเข้า CouchDB
 - [ ] `fastapi.json` + `openapi.d.ts` regenerate แล้ว
+- [ ] `/policy` และ `/term` ระบุการเก็บข้อมูลผู้ค้นหาและไม่มีกำหนดการลบ
 - [ ] มีเทสต์ที่ seam S1–S6
 - [ ] ทุกไฟล์ `.svelte` ที่แก้ผ่าน `svelte-autofixer`
 
@@ -182,3 +209,7 @@ BFF route ไม่ทดสอบแยก (ส่ง body ต่อตรง�
 
 - 2026-11-06 — proposed (Dev Team B, issue #1159); วิธี track = CR ไฟล์ (ตามที่เจ้าของโครงการสั่งให้ทำ draft CR)
 - 2026-11-06 — approved by Soravit Sukkarn (Team Lead) (issue #1159, PR #1214) — รันหมายเลข CR-231
+- 2026-11-09 — แก้ตาม comment ของ net-lynx ใน #1213: ไม่มี retention (เก็บถาวร, ND-2 resolved) และเปลี่ยนเป็น Mongo `audit_events` collection เดียวสำหรับ public log (FR-15..18, ND-4 เปิดใหม่ให้คุยออกแบบ)
+- 2026-11-09 — ND-1 resolved (external ไม่เปลี่ยน เพราะแยกจาก public); ND-3 resolved (แก้ `/policy` `/term` ใน CR นี้ ระบุไม่มีกำหนดการลบ — FR-19)
+- 2026-11-09 — ND-4 resolved: `audit_events` envelope เพิ่ม `request_id`/`subject` + payload เป็น discriminated union ตาม `event_type`; แทน `search_audits` เลย ไม่เขียนคู่ (FR-16, FR-16c)
+- 2026-11-09 — status approved → proposed: เนื้อหาเปลี่ยนหลังอนุมัติ (audit_events, ไม่มี retention, FR-19) ต้องขออนุมัติใหม่
