@@ -1,3 +1,4 @@
+import type { LanguageCode } from '$lib/utils/language';
 import type { ScheduleShift, ShiftStatus, TicketSummary } from './volunteer';
 import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 
@@ -45,16 +46,48 @@ export function parsePortalTimestamp(value: string): Date {
 	return new Date(hasTimezone ? normalized : `${normalized}Z`);
 }
 
-const SHIFT_LABELS: Record<string, string> = {
-	morning: 'กะเช้า',
-	afternoon: 'กะบ่าย',
-	night: 'กะดึก',
-	flex: 'กะยืดหยุ่น',
-	custom: 'ช่วงเวลาที่กำหนดเอง'
+const SHIFT_LABELS: Record<LanguageCode, Record<string, string>> = {
+	th: {
+		morning: 'กะเช้า',
+		afternoon: 'กะบ่าย',
+		night: 'กะดึก',
+		flex: 'กะยืดหยุ่น',
+		custom: 'ช่วงเวลาที่กำหนดเอง'
+	},
+	en: {
+		morning: 'Morning shift',
+		afternoon: 'Afternoon shift',
+		night: 'Night shift',
+		flex: 'Flexible shift',
+		custom: 'Custom time slot'
+	}
 };
 
-function shiftLabel(shift: string): string {
-	return SHIFT_LABELS[shift] ?? 'กะงาน';
+/** Wording the merged schedule invents itself (everything else is data the volunteer or staff entered). */
+const ACTIVITY_COPY = {
+	th: {
+		defaultJobTitle: 'งานอาสาสมัคร',
+		unknownShift: 'กะงาน',
+		station: (station: string) => `จุดปฏิบัติงาน: ${station}`,
+		awaitingRoster: 'การสมัครของคุณอยู่ระหว่างรอเจ้าหน้าที่จัดกะให้',
+		awaitingShift: 'รอจัดกะ'
+	},
+	en: {
+		defaultJobTitle: 'Volunteer job',
+		unknownShift: 'Shift',
+		station: (station: string) => `Duty station: ${station}`,
+		awaitingRoster: 'Your application is waiting for staff to assign a shift',
+		awaitingShift: 'Awaiting shift'
+	}
+} as const;
+
+/** The title shown for a job that has none, in the given language. */
+export function defaultJobTitle(language: LanguageCode = 'th'): string {
+	return ACTIVITY_COPY[language].defaultJobTitle;
+}
+
+function shiftLabel(shift: string, language: LanguageCode): string {
+	return SHIFT_LABELS[language][shift] ?? ACTIVITY_COPY[language].unknownShift;
 }
 
 function dateKey(activity: PortalActivity): string {
@@ -152,21 +185,21 @@ export function distinctStation(
 
 export function mergePortalActivities(
 	shifts: ScheduleShift[],
-	tickets: TicketSummary[]
+	tickets: TicketSummary[],
+	language: LanguageCode = 'th'
 ): PortalActivity[] {
+	const copy = ACTIVITY_COPY[language];
 	const activities = shifts.map<PortalActivity>((shift) => ({
 		id: shift.assignment_id,
 		jobId: shift.job_id,
 		shiftId: shift.shift_id ?? null,
 		assignmentId: shift.assignment_id,
-		title: shift.job_title || 'งานอาสาสมัคร',
-		description: distinctStation(shift.station, shift.job_title)
-			? `จุดปฏิบัติงาน: ${shift.station}`
-			: '',
+		title: shift.job_title || copy.defaultJobTitle,
+		description: distinctStation(shift.station, shift.job_title) ? copy.station(shift.station) : '',
 		location: shift.shelter_name || shift.shelter_code,
 		shelterCode: shift.shelter_code,
 		date: shift.date,
-		shiftPeriod: shiftLabel(shift.shift),
+		shiftPeriod: shiftLabel(shift.shift, language),
 		startTs: shift.start_ts,
 		endTs: shift.end_ts,
 		checkinAt: shift.check_in_at,
@@ -184,12 +217,12 @@ export function mergePortalActivities(
 			jobId: ticket.job_id,
 			shiftId: ticket.shift_id ?? null,
 			assignmentId: null,
-			title: ticket.job_title || 'งานอาสาสมัคร',
-			description: 'การสมัครของคุณอยู่ระหว่างรอเจ้าหน้าที่จัดกะให้',
+			title: ticket.job_title || copy.defaultJobTitle,
+			description: copy.awaitingRoster,
 			location: ticket.shelter_code,
 			shelterCode: ticket.shelter_code,
 			date: ticket.shift_date,
-			shiftPeriod: 'รอจัดกะ',
+			shiftPeriod: copy.awaitingShift,
 			startTs: window?.start_ts ?? null,
 			endTs: window?.end_ts ?? null,
 			checkinAt: null,

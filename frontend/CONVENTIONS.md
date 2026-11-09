@@ -640,6 +640,9 @@ Always show an explicit empty state — never render an empty list silently:
   `toLocale*` / `Intl.DateTimeFormat` with `en-US` for dates, and do not omit `timeZone`.
 - Exception: machine formats such as `en-CA` / `en-GB` used only to derive `YYYY-MM-DD` or logic
   keys (not user-visible strings).
+- Exception: when copy is EN, a short date/time **with no year** (weekday, day + month, `HH:mm`)
+  may use `en-GB` + `timeZone` so no Thai script shows (e.g. `Sat 8 Nov`, `21:30`). Anything that
+  shows a year stays `th-TH` (EN: numeric Buddhist date via `formatDisplayDateTime`).
 
 ---
 

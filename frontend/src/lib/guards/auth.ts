@@ -21,6 +21,7 @@ import {
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
 	canManageBanners,
+	canManagePrinters,
 	canManageScanners,
 	kioskConfinement,
 	shelterCodeFromRoles
@@ -164,6 +165,20 @@ export async function requireKioskManagement(fetchFn?: typeof fetch) {
 	const roles = authStore.user?.roles ?? [];
 	const shelter = activeShelterCode(roles);
 	if (!isSystemAdmin(roles) && !(shelter && canManageScanners(roles, shelter))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Printer management (`/back-office/printers`) guard — system_admin, or shelter_manager of the
+ * selected shelter (O-3; kiosk_staff excluded, unlike kiosks). The printer BFF routes re-check
+ * scope per printer.
+ */
+export async function requirePrinterManagement(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (!isSystemAdmin(roles) && !(shelter && canManagePrinters(roles, shelter))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

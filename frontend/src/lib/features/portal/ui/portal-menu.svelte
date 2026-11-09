@@ -9,6 +9,7 @@
 		portalDepartmentCssVars,
 		type PortalFeatures
 	} from '../domain/portal-menu';
+	import { portalDepartmentText, portalPublicLinkLabel } from '../domain/portal-menu-labels';
 	import {
 		PORTAL_DEPARTMENT_ALL,
 		filterPortalDepartments,
@@ -16,6 +17,9 @@
 		resolvePortalDepartmentSelection,
 		type PortalDepartmentSelection
 	} from '../domain/portal-layout';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PORTAL_MENU_I18N } from './_constants/portal-menu.i18n';
 	import { PORTAL_ICONS } from './portal-icons';
 	import PortalDepartmentSection from './portal-department-section.svelte';
 	import { readPortalDeptFilter, writePortalDeptFilter } from './portal-dept-filter-storage';
@@ -29,6 +33,8 @@
 	}
 
 	let { roles, selectedShelterCode, features, username }: Props = $props();
+
+	const t = $derived(getTranslation(PORTAL_MENU_I18N, langState.current));
 
 	const views = $derived(filterPortalMenu({ roles, shelterCode: selectedShelterCode, features }));
 	const mode = $derived(portalLayoutMode(views));
@@ -57,7 +63,7 @@
 		<div class="space-y-4">
 			<div
 				role="group"
-				aria-label="กรองเมนูตามฝ่าย"
+				aria-label={t.filterAria}
 				class="z-30 -mx-4 bg-[#F8FAFC] sm:sticky sm:top-[var(--portal-sticky-top)] sm:mx-0"
 			>
 				<div
@@ -77,7 +83,7 @@
 						{#if selection === PORTAL_DEPARTMENT_ALL}
 							<Check class="size-4 shrink-0" aria-hidden="true" />
 						{/if}
-						ทั้งหมด
+						{t.all}
 					</button>
 					{#each views as view (view.id)}
 						{@const Icon = PORTAL_ICONS[view.icon]}
@@ -104,7 +110,7 @@
 							{:else}
 								<span aria-hidden="true" class="flex shrink-0"><Icon class="size-4" /></span>
 							{/if}
-							<span>{view.label}</span>
+							<span>{portalDepartmentText(view, langState.current).label}</span>
 							<span
 								class="shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap tabular-nums {pressed
 									? 'bg-white/20 text-white'
@@ -139,7 +145,7 @@
 		<div
 			class="rounded-xl border border-slate-200/80 bg-white p-6 text-center text-base text-slate-600 shadow-2xs"
 		>
-			ยังไม่มีเมนูสำหรับบทบาทของคุณในศูนย์นี้
+			{t.empty}
 		</div>
 	{/if}
 
@@ -150,7 +156,7 @@
 				class="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium text-slate-600 underline-offset-4 hover:text-slate-900 hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
 				<Globe class="size-4" aria-hidden="true" />
-				{PORTAL_PUBLIC_LINK.label}
+				{portalPublicLinkLabel(langState.current)}
 			</a>
 		</footer>
 	{/if}

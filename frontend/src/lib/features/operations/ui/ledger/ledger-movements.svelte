@@ -17,6 +17,7 @@
 	import LedgerFilters from './ledger-filters.svelte';
 	import LedgerRowView from './ledger-row.svelte';
 	import LedgerCard from './ledger-card.svelte';
+	import SelfPurchasedSummary from './self-purchased-summary.svelte';
 	import { downloadCsv } from './download-csv';
 	import {
 		LEDGER_PAGE_SIZE,
@@ -122,6 +123,12 @@
 		</p>
 	{:else}
 		<DaySummaryCards {cards} label={summaryLabel} />
+
+		<SelfPurchasedSummary
+			ledger={ledgerQuery.data ?? []}
+			itemName={lookup.itemName}
+			unitLabel={lookup.unitLabel}
+		/>
 
 		<section class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
 			<LedgerFilters state={urlState} onchange={updateUrl} onexport={exportCsv} />

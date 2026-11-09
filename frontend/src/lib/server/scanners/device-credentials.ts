@@ -1,4 +1,8 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+	generateDeviceSecret,
+	hashDeviceSecret,
+	verifyDeviceSecret
+} from '$lib/server/device-auth/secret';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
 import {
 	scannerDevicePersistedSchema,
@@ -100,23 +104,17 @@ export interface ScannerDeviceSummaryLike {
 }
 
 export function generateScannerSecret(): string {
-	return `sk_scan_${randomBytes(32).toString('hex')}`;
+	return generateDeviceSecret('sk_scan_');
 }
 
 export function hashScannerSecret(secret: string): string {
-	return createHash('sha256').update(secret, 'utf8').digest('hex');
+	return hashDeviceSecret(secret);
 }
 
 function parsePersistedDevice(value: unknown): PersistedScannerDevice {
 	const parsed = scannerDevicePersistedSchema.safeParse(value);
 	if (!parsed.success) throw new ScannerMalformedDeviceError();
 	return parsed.data;
-}
-
-function hasMatchingSecret(secret: string, persistedHash: string): boolean {
-	const supplied = createHash('sha256').update(secret, 'utf8').digest();
-	const stored = Buffer.from(persistedHash, 'hex');
-	return stored.length === supplied.length && timingSafeEqual(supplied, stored);
 }
 
 /**
@@ -137,7 +135,7 @@ export async function authenticateScannerDevice(
 	if (device.device_id !== deviceId || device.status !== 'active') {
 		throw new ScannerAuthError();
 	}
-	if (!hasMatchingSecret(secret, device.secret_hash)) throw new ScannerAuthError();
+	if (!verifyDeviceSecret(secret, device.secret_hash)) throw new ScannerAuthError();
 
 	return {
 		registry_id: device._id,

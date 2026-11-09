@@ -9,13 +9,19 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import HandHeart from '@lucide/svelte/icons/hand-heart';
-	import { useSearchEvacuees, lookupEvacueeByScanCode, type Evacuee } from '$lib/features/people';
+	import {
+		useSearchEvacuees,
+		lookupEvacueeByScanCode,
+		readEvacueeQrPrints,
+		type Evacuee
+	} from '$lib/features/people';
 	import {
 		lookupVolunteerByScanCode,
 		useVolunteers,
 		type Volunteer
 	} from '$lib/features/volunteers';
 	import { resolveStaffCard } from '$lib/features/users';
+	import { toast } from 'svelte-sonner';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
 	import { createReadGuard } from '$lib/components/camera-code-scanner-state';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -26,7 +32,8 @@
 	import {
 		resolveScannedRecipient,
 		searchVolunteers,
-		toVolunteerSelection
+		toVolunteerSelection,
+		type QrOverrideDates
 	} from '../model/recipient-scan';
 
 	interface Props {
@@ -39,6 +46,11 @@
 		/** Accept staff QR cards. Needs `shelterCode` to resolve the card. */
 		allowStaff?: boolean;
 		shelterCode?: string | null;
+		/**
+		 * Offer "accept the risk" for an expired Person QR (CR-233 A1). Only for handouts, whose log
+		 * records the override; loan returns and bulk returns keep rejecting expired QRs.
+		 */
+		allowExpiredQrOverride?: boolean;
 		onselect?: (recipient: FrontlineRecipientSelection | null) => void;
 	}
 
@@ -49,6 +61,7 @@
 		allowVolunteer = true,
 		allowStaff = false,
 		shelterCode,
+		allowExpiredQrOverride = false,
 		onselect
 	}: Props = $props();
 
@@ -61,6 +74,8 @@
 	let scannerOpen = $state(false);
 	let isLookingUp = $state(false);
 	let scanError = $state<string | null>(null);
+	/** The scanned code behind an expired Person QR; set only while "accept the risk" is on offer (CR-233 A1). */
+	let expiredScanCode = $state<string | null>(null);
 	let outsideNotes = $state('');
 	/** Whether the current pick came from the scanner — `next()` reopens it only then. */
 	let pickedByScan = false;
@@ -102,7 +117,7 @@
 		onselect?.(selection);
 	}
 
-	function selectEvacuee(evacuee: Evacuee, viaScan: boolean) {
+	function selectEvacuee(evacuee: Evacuee, viaScan: boolean, qrOverride?: QrOverrideDates) {
 		pickedByScan = viaScan;
 		searchTerm = '';
 		scanError = null;
@@ -113,7 +128,8 @@
 			label: `${evacuee.first_name} ${evacuee.last_name}${evacuee.nickname ? ` (${evacuee.nickname})` : ''}`,
 			phone: evacuee.phone,
 			stayInfo: evacuee.current_stay?.zone ? `โซน ${evacuee.current_stay.zone}` : undefined,
-			menuTags: deriveRecipientMenuTags(evacuee)
+			menuTags: deriveRecipientMenuTags(evacuee),
+			...(qrOverride ? { qrOverride } : {})
 		});
 	}
 
@@ -124,32 +140,41 @@
 		choose(toVolunteerSelection(volunteer));
 	}
 
-	async function handleScan(code: string) {
+	async function handleScan(code: string, acceptExpiredQr = false) {
 		if (isLookingUp) return;
 		isLookingUp = true;
 		scanError = null;
+		expiredScanCode = null;
 		const isLatest = lookupGuard.begin();
 		try {
 			const result = await resolveScannedRecipient(
 				code,
-				{ allowVolunteer, allowStaff },
+				{ allowVolunteer, allowStaff, acceptExpiredQr },
 				{
 					lookupEvacuee: (c) => lookupEvacueeByScanCode(queryClient, c),
 					lookupVolunteer: (c) => lookupVolunteerByScanCode(c),
+					listQrPrints: (id) => readEvacueeQrPrints(id),
 					resolveStaffCard: shelterCode ? (p) => resolveStaffCard(p, shelterCode) : undefined
 				}
 			);
 			if (!isLatest()) return;
-			if (result.kind === 'evacuee') selectEvacuee(result.evacuee, true);
-			else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
+			if (result.kind === 'evacuee') {
+				selectEvacuee(result.evacuee, true, result.qrOverride);
+				if (acceptExpiredQr) scannerOpen = false;
+			} else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
 			else if (result.kind === 'staff_card') {
 				pickedByScan = true;
 				searchTerm = '';
 				choose(result.selection);
-			} else scanError = result.message;
+			} else {
+				scanError = result.message;
+				if (result.expiredQr && allowExpiredQrOverride) expiredScanCode = code;
+				toast.error('สแกนไม่ผ่าน');
+			}
 		} catch (err) {
 			if (!isLatest()) return;
 			scanError = formatDistributionError(err, 'เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง');
+			toast.error('สแกนไม่ผ่าน');
 		} finally {
 			if (isLatest()) isLookingUp = false;
 		}
@@ -190,6 +215,7 @@
 	/** Open the camera scanner. */
 	export function scan() {
 		scanError = null;
+		expiredScanCode = null;
 		scannerOpen = true;
 	}
 
@@ -303,7 +329,8 @@
 			{/if}
 		</Button>
 
-		{#if scanError}
+		<!-- While the scanner dialog is open it shows this error itself: render it once, not twice. -->
+		{#if scanError && !scannerOpen}
 			<div
 				class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
 				role="alert"
@@ -428,6 +455,14 @@
 	formats={SCAN_FORMATS}
 	manualInputMode="text"
 	busy={isLookingUp}
+	error={scanError}
+	errorAction={expiredScanCode
+		? {
+				label: 'ยอมรับความเสี่ยงเพื่อแจกจ่าย',
+				disabled: isLookingUp,
+				onclick: () => handleScan(expiredScanCode!, true)
+			}
+		: undefined}
 	onScan={handleScan}
 	oncancel={cancelLookup}
 />

@@ -21,6 +21,8 @@
 	import { onMount } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -64,6 +66,8 @@
 		type PortalCredential,
 		type VolunteerProfile
 	} from '../domain/volunteer';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
+	import { accessPortalI18n } from '../i18n/access-portal.i18n';
 	import {
 		filterAndSortPortalActivities,
 		mergePortalActivities,
@@ -76,6 +80,10 @@
 		mode = 'entry',
 		portalId = ''
 	}: { mode?: 'entry' | 'dashboard' | 'openings'; portalId?: string } = $props();
+
+	const t = $derived(getTranslation(accessPortalI18n, langState.current));
+	/** Server and schema messages arrive in Thai; read at the moment of display, in the current language. */
+	const localized = (message: string) => localizeVolunteerMessage(message, langState.current);
 
 	// ── VIEW MODEL ─────────────────────────────────────────────────────────────
 	// The live profile, schedule and ticket responses are mapped into one render model.
@@ -239,24 +247,23 @@
 			if (!profile?.portal_id) {
 				if (options.remembered) {
 					forgetThisDevice();
-					loginError =
-						'เครื่องนี้ไม่ได้จดจำการเข้าสู่ระบบแล้ว — รหัสตั๋วถูกยกเลิกหรือออกใหม่ กรุณาสแกนตั๋วอีกครั้ง';
+					loginError = t.rememberedForgotten;
 				} else if (credential.token) {
-					loginError = 'ไม่พบรหัสตั๋วนี้ในระบบอาสาสมัคร กรุณาตรวจสอบตั๋วแล้วสแกนอีกครั้ง';
+					loginError = t.tokenNotFound;
 				} else {
-					loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+					loginError = t.phoneNotFound;
 				}
 				toast.error(loginError);
 				return;
 			}
 			if (options.remember) rememberThisDevice({ ...credential, portal_id: profile.portal_id });
-			toast.success('เข้าสู่ระบบสำเร็จ');
+			toast.success(t.loginSuccess);
 			enterDashboard({ ...credential, portal_id: profile.portal_id });
 		} catch (error) {
 			// A failure right after a scan used to show only as small text under the form,
 			// which read as "the scan did nothing" (#625) — say it in a toast as well.
-			loginError = error instanceof Error ? error.message : 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้';
-			toast.error(`เข้าสู่ระบบไม่สำเร็จ: ${loginError}`);
+			loginError = error instanceof Error ? localized(error.message) : t.verifyFailed;
+			toast.error(t.loginFailed(loginError));
 		} finally {
 			isLoggingIn = false;
 		}
@@ -395,7 +402,7 @@
 					minute: '2-digit',
 					second: '2-digit',
 					timeZone: PORTAL_TIME_ZONE
-				})} น.`;
+				})}${t.clockSuffix}`;
 	}
 
 	function shiftDateFormatted(activity: PortalActivity): string {
@@ -442,9 +449,9 @@
 	}
 
 	function timeRange(activity: PortalActivity): string {
-		if (!activity.startTs) return activity.date || 'ยังไม่ระบุวัน';
+		if (!activity.startTs) return activity.date || t.noDate;
 		const start = parsePortalTimestamp(activity.startTs);
-		if (Number.isNaN(start.getTime())) return activity.date || 'ยังไม่ระบุวัน';
+		if (Number.isNaN(start.getTime())) return activity.date || t.noDate;
 		const opts = { hour: '2-digit', minute: '2-digit', timeZone: PORTAL_TIME_ZONE } as const;
 		const from = start.toLocaleTimeString('th-TH', opts);
 		const end = activity.endTs ? parsePortalTimestamp(activity.endTs) : null;
@@ -459,7 +466,7 @@
 		tickets: Parameters<typeof mergePortalActivities>[1]
 	): PortalVolunteer {
 		const named = `${profile.first_name} ${profile.last_name}`.trim();
-		const activities = mergePortalActivities(shifts, tickets);
+		const activities = mergePortalActivities(shifts, tickets, langState.current);
 		const first = activities[0];
 		// A token session never holds the raw number — the API returns it masked, which
 		// is also what may be shown on a screen held up at a gate (AC-VOL-03).
@@ -467,19 +474,19 @@
 		return {
 			id: profile.portal_id,
 			volunteerCode: profile.volunteer_code,
-			name: named || profile.nickname || 'จิตอาสา',
-			avatar: (named || profile.nickname || 'อา').slice(0, 2),
+			name: named || profile.nickname || t.defaultName,
+			avatar: (named || profile.nickname || t.defaultAvatar).slice(0, 2),
 			phone: shownPhone,
 			shelterName: first?.location ?? '',
 			shelterCode: first?.shelterCode ?? '',
 			verified: profile.identity_verified,
 			statusText: activities.some((s) => s.status === 'checked_in')
-				? 'ปฏิบัติหน้าที่อยู่'
+				? t.statusOnDuty
 				: activities.length
-					? 'พร้อมปฏิบัติงาน'
-					: 'รอการมอบหมาย',
+					? t.statusReady
+					: t.statusAwaiting,
 			statusType: activities.some((s) => s.status === 'checked_in') ? 'active' : 'pending',
-			roleType: profile.personnel_type || 'จิตอาสา',
+			roleType: profile.personnel_type || t.defaultRole,
 			readiness: false,
 			scheduleCount: activities.length,
 			activities
@@ -507,16 +514,20 @@
 	let filterToTime = $state('');
 	let filterStatus = $state('');
 	let filterJobTitle = $state('');
-	const scheduleStatusOptions = [
-		{ value: 'all', label: 'ทุกสถานะ' },
-		{ value: 'booking', label: 'รอเจ้าหน้าที่จัดกะ' },
-		{ value: 'dispatched', label: 'รอยืนยันการมอบหมาย' },
-		{ value: 'assigned', label: 'รอ Check-in' },
-		{ value: 'standby', label: 'รอ Check-in (สำรอง)' },
-		{ value: 'checked_in', label: 'กำลังปฏิบัติงาน' },
-		{ value: 'completed', label: 'เสร็จสิ้นงานอาสาสมัคร' },
-		{ value: 'no_show', label: 'ไม่มาปฏิบัติงาน' }
-	] as const;
+	const scheduleStatusOptions = $derived(
+		(
+			[
+				'all',
+				'booking',
+				'dispatched',
+				'assigned',
+				'standby',
+				'checked_in',
+				'completed',
+				'no_show'
+			] as const
+		).map((value) => ({ value, label: t.filterOptions[value] }))
+	);
 
 	function setFilterStatus(value: string | undefined) {
 		filterStatus = value && value !== 'all' ? value : '';
@@ -537,21 +548,9 @@
 	let pendingWithdrawal = $state<PortalActivity | null>(null);
 
 	function activityStatusLabel(activity: PortalActivity): string {
-		if (activity.status === 'booking') return 'รอเจ้าหน้าที่จัดกะ';
-		if (activity.dispatchStatus === 'dispatched') return 'รอยืนยันการมอบหมาย';
-		return (
-			(
-				{
-					assigned: 'รอ Check-in',
-					standby: 'รอ Check-in',
-					checked_in: 'กำลังปฏิบัติงาน',
-					completed: 'เสร็จสิ้นงานอาสาสมัครแล้ว',
-					done: 'เสร็จสิ้นงานอาสาสมัครแล้ว',
-					no_show: 'ไม่มาปฏิบัติงาน',
-					cancelled: 'ถอนกะแล้ว'
-				} as Record<string, string>
-			)[activity.status] ?? activity.status
-		);
+		if (activity.status === 'booking') return t.activityStatus.booking;
+		if (activity.dispatchStatus === 'dispatched') return t.activityStatus.dispatched;
+		return (t.activityStatus as Record<string, string>)[activity.status] ?? activity.status;
 	}
 
 	function activityStatusClass(activity: PortalActivity): string {
@@ -615,14 +614,10 @@
 		try {
 			await scheduleAction.mutateAsync({ assignment_id: activity.assignmentId, action });
 			toast.success(
-				action === 'check_in'
-					? 'เช็คอินเข้าปฏิบัติงานแล้ว'
-					: action === 'check_out'
-						? 'เช็คเอาต์ออกจากงานแล้ว'
-						: 'ถอนกะและส่งคำขอลาแล้ว'
+				action === 'check_in' ? t.checkedIn : action === 'check_out' ? t.checkedOut : t.withdrawn
 			);
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'ดำเนินการกับกะงานไม่สำเร็จ');
+			toast.error(error instanceof Error ? localized(error.message) : t.actionFailed);
 		} finally {
 			actingAssignment = null;
 		}
@@ -661,7 +656,7 @@
 	function handleScanToken(scanned: string) {
 		const token = ticketTokenFromScan(scanned);
 		if (!token) {
-			loginError = 'QR Code นี้ไม่ใช่ตั๋วจิตอาสา — กรุณาสแกน QR บนตั๋วหรือบัตรอาสาสมัคร';
+			loginError = t.scanNotTicket;
 			toast.error(loginError);
 			return;
 		}
@@ -702,13 +697,13 @@
 		loginError = '';
 		const trimmed = inputPhone.trim().replace(/[-\s]/g, '');
 		if (!trimmed) {
-			loginError = 'กรุณากรอกเบอร์โทรศัพท์ที่ลงทะเบียนไว้';
+			loginError = t.phoneRequired;
 			return;
 		}
 
 		const parsed = ticketFindSchema.safeParse({ phone: trimmed });
 		if (!parsed.success) {
-			loginError = parsed.error.issues[0]?.message ?? 'เบอร์โทรศัพท์ไม่ถูกต้อง';
+			loginError = localized(parsed.error.issues[0]?.message ?? t.phoneInvalid);
 			return;
 		}
 		await resolveAndEnter({ phone: parsed.data.phone });
@@ -729,12 +724,12 @@
 	async function submitToken(value: string) {
 		loginError = '';
 		if (!value.trim()) {
-			loginError = 'กรุณากรอกรหัส Token หรือรหัสตั๋วจิตอาสา';
+			loginError = t.tokenRequired;
 			return;
 		}
 		const token = normalizeTicketToken(value);
 		if (!token) {
-			loginError = 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย TKT-VOL-';
+			loginError = t.tokenFormat;
 			return;
 		}
 		await resolveAndEnter({ token }, { remember: rememberDevice });
@@ -758,18 +753,17 @@
 
 		const parsed = responseCodeSchema.safeParse(dispatchCodes[assignmentId] ?? '');
 		if (!parsed.success) {
-			dispatchErrors[assignmentId] =
-				parsed.error.issues[0]?.message ?? 'กรุณากรอกรหัสที่เจ้าหน้าที่แจ้ง';
+			dispatchErrors[assignmentId] = localized(parsed.error.issues[0]?.message ?? t.codeRequired);
 			return;
 		}
 		dispatchErrors[assignmentId] = '';
 		answering = assignmentId;
 		try {
 			await respond.mutateAsync({ assignment_id: assignmentId, code: parsed.data, action });
-			toast.success(action === 'accepted' ? 'ยอมรับงานอาสาสมัครแล้ว' : 'ปฏิเสธงานอาสาสมัครแล้ว');
+			toast.success(action === 'accepted' ? t.offerAccepted : t.offerDeclined);
 			dispatchCodes[assignmentId] = '';
 		} catch (err) {
-			const message = err instanceof Error ? err.message : 'ตอบรับงานอาสาสมัครไม่สำเร็จ';
+			const message = err instanceof Error ? localized(err.message) : t.respondFailed;
 			dispatchErrors[assignmentId] = message;
 			toast.error(message);
 		} finally {
@@ -790,20 +784,20 @@
 		inputToken = '';
 		loginError = '';
 		queryClient.removeQueries({ queryKey: volunteerPortalKeys.all });
-		toast.info(wasRemembered ? 'ออกจากระบบและลืมเครื่องนี้แล้ว' : 'ออกจากระบบแล้ว');
+		toast.info(wasRemembered ? t.loggedOutForgotten : t.loggedOut);
 		void goto(resolve('/volunteers/portal'));
 	}
 
 	function downloadRoleCardQr() {
 		if (!qrDataUrl || !currentVolunteer) {
-			toast.info('QR Code ยังไม่พร้อมดาวน์โหลด');
+			toast.info(t.qrNotReady);
 			return;
 		}
 		const link = document.createElement('a');
 		link.href = qrDataUrl;
 		link.download = `volunteer-role-card-${currentVolunteer.volunteerCode}.png`;
 		link.click();
-		toast.success('ดาวน์โหลด QR Role Card เรียบร้อยแล้ว');
+		toast.success(t.qrDownloaded);
 	}
 
 	$effect(() => {
@@ -828,11 +822,11 @@
 	<!-- TOP BRAND HEADER -->
 	<header class="space-y-3 text-center">
 		<h1 class="text-3xl font-extrabold tracking-tight text-foreground md:text-4xl">
-			{currentVolunteer ? 'ตารางงานจิตอาสา' : 'เข้าสู่ระบบตารางทำงานจิตอาสา'}
+			{currentVolunteer ? t.headingSchedule : t.headingSignIn}
 		</h1>
 		{#if !currentVolunteer}
 			<p class="mx-auto max-w-xl text-sm font-medium text-muted-foreground">
-				กรุณาระบุหมายเลขโทรศัพท์ หรือสแกน QR Code / กรอกรหัส Token เพื่อเข้าสู่ระบบและจัดการตารางงาน
+				{t.signInIntro}
 			</p>
 		{/if}
 	</header>
@@ -841,8 +835,8 @@
 		<div
 			class="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-10 text-center shadow-sm"
 		>
-			<p class="text-sm font-bold text-foreground">กำลังตรวจสอบข้อมูลจิตอาสา…</p>
-			<p class="mt-2 text-xs text-muted-foreground">กำลังโหลดโปรไฟล์และตารางงานของคุณ</p>
+			<p class="text-sm font-bold text-foreground">{t.restoringTitle}</p>
+			<p class="mt-2 text-xs text-muted-foreground">{t.restoringBody}</p>
 		</div>
 	{:else if !currentVolunteer}
 		<!-- ── NOT SIGNED IN VIEW ───────────────────────────────────────────── -->
@@ -860,7 +854,7 @@
 							: 'text-muted-foreground hover:text-foreground'}"
 					>
 						<Phone class="size-4" />
-						<span>เข้าสู่ระบบด้วยเบอร์โทรศัพท์</span>
+						<span>{t.tabPhone}</span>
 					</button>
 
 					<button
@@ -872,7 +866,7 @@
 							: 'text-muted-foreground hover:text-foreground'}"
 					>
 						<QrCode class="size-4" />
-						<span>สแกน QR ตั๋ว / รหัส Token</span>
+						<span>{t.tabQr}</span>
 					</button>
 				</div>
 
@@ -881,7 +875,7 @@
 					<form onsubmit={handlePhoneLogin} class="space-y-4">
 						<div class="space-y-1.5">
 							<label for="volunteer-phone-input" class="text-xs font-bold text-foreground">
-								หมายเลขโทรศัพท์ที่ลงทะเบียนไว้ <span class="text-destructive">*</span>
+								{t.phoneLabel} <span class="text-destructive">*</span>
 							</label>
 							<div class="relative">
 								<div
@@ -893,12 +887,12 @@
 									id="volunteer-phone-input"
 									type="tel"
 									bind:value={inputPhone}
-									placeholder="เช่น 081-234-5678"
+									placeholder={t.phonePlaceholder}
 									class="w-full rounded-xl border border-border bg-muted/20 py-3.5 pr-4 pl-10 text-xs font-medium text-foreground outline-hidden transition-all focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary md:text-sm"
 								/>
 							</div>
 							<p class="text-2xs text-muted-foreground">
-								กรอกเบอร์โทรศัพท์เดียวกันกับที่ลงทะเบียนไว้ในระบบฐานข้อมูลอาสาสมัคร
+								{t.phoneHint}
 							</p>
 						</div>
 
@@ -917,7 +911,7 @@
 							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition-all hover:opacity-95 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
 						>
 							<Rocket class="size-4" />
-							<span>{isLoggingIn ? 'กำลังตรวจสอบ…' : 'เข้าสู่ระบบทันที'}</span>
+							<span>{isLoggingIn ? t.submitChecking : t.submitNow}</span>
 						</button>
 					</form>
 				{:else}
@@ -935,18 +929,17 @@
 									for="volunteer-remember-device"
 									class="text-sm font-semibold text-foreground"
 								>
-									จดจำเครื่องนี้ 7 วัน
+									{t.rememberTitle}
 								</Label>
 								<p class="text-xs text-muted-foreground">
-									ครั้งหน้าเปิดหน้านี้แล้วเข้าระบบได้เลยโดยไม่ต้องสแกน —
-									อย่าติ๊กบนเครื่องที่ใช้ร่วมกัน เช่น เครื่องของศูนย์
+									{t.rememberBody}
 								</p>
 							</div>
 						</div>
 
 						<form onsubmit={handleTokenLogin} class="space-y-2">
 							<label for="volunteer-token-input" class="text-xs font-bold text-foreground">
-								กรอกรหัส Token หรือ รหัสตั๋วจิตอาสา
+								{t.tokenLabel}
 							</label>
 							<!-- Stacked on a phone: side by side, the button overflowed the card at 390px. -->
 							<div class="flex flex-col gap-2 sm:flex-row">
@@ -954,7 +947,7 @@
 									id="volunteer-token-input"
 									type="text"
 									bind:value={inputToken}
-									placeholder="เช่น TKT-VOL-1001 หรือ V-1001"
+									placeholder={t.tokenPlaceholder}
 									class="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs font-medium text-foreground outline-hidden transition-all focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary md:text-sm"
 								/>
 								<button
@@ -963,7 +956,7 @@
 									class="flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-primary px-5 py-3 text-xs font-bold whitespace-nowrap text-primary-foreground shadow-sm hover:opacity-95 disabled:cursor-wait disabled:opacity-60"
 								>
 									<Rocket class="size-3.5" />
-									<span>เข้าสู่ระบบ</span>
+									<span>{t.tokenSubmit}</span>
 								</button>
 							</div>
 						</form>
@@ -971,13 +964,13 @@
 						<div class="relative flex items-center justify-center">
 							<div class="w-full border-t border-border"></div>
 							<span class="absolute bg-card px-3 text-2xs font-bold text-muted-foreground"
-								>หรือ</span
+								>{t.or}</span
 							>
 						</div>
 
 						<!-- QR SCANNER SECTION -->
 						<div class="space-y-4 text-center">
-							<p class="text-xs font-bold text-foreground">สแกน QR Code ตั๋วประจำตัวอาสาสมัคร</p>
+							<p class="text-xs font-bold text-foreground">{t.scanTitle}</p>
 							<VolunteerQrScannerModal inline disabled={isLoggingIn} onScan={handleScanToken} />
 						</div>
 
@@ -1005,7 +998,7 @@
 					{#if qrDataUrl}
 						<img
 							src={qrDataUrl}
-							alt="QR Code รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}"
+							alt={t.qrAlt(currentVolunteer.volunteerCode)}
 							class="mx-auto size-44 rounded-xl border border-border bg-white p-2 shadow-xs sm:size-40"
 						/>
 					{:else if roleCardLoading}
@@ -1019,17 +1012,17 @@
 							class="mx-auto flex size-44 flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-white p-3 text-center text-muted-foreground sm:size-40"
 						>
 							<QrCode class="size-10" />
-							<p class="text-2xs leading-tight">เข้าสู่ระบบด้วยเบอร์โทร ไม่มี QR สำหรับเช็คอิน</p>
+							<p class="text-2xs leading-tight">{t.noQrShort}</p>
 						</div>
 					{/if}
 				</div>
 
 				<div class="flex w-full min-w-0 flex-1 flex-col gap-3 text-center sm:text-left">
 					<div>
-						<h4 class="text-sm font-bold text-foreground">บัตรอาสาสมัครอัจฉริยะ (QR Role Card)</h4>
+						<h4 class="text-sm font-bold text-foreground">{t.roleCardTitle}</h4>
 						<p class="mt-1 text-base font-black text-foreground">{currentVolunteer.name}</p>
 						<p class="text-xs font-semibold text-muted-foreground">
-							รหัสอาสาสมัคร: {currentVolunteer.volunteerCode}
+							{t.volunteerCode(currentVolunteer.volunteerCode)}
 						</p>
 					</div>
 					<div class="flex flex-wrap justify-center gap-1 sm:justify-start">
@@ -1038,7 +1031,7 @@
 								? 'bg-emerald-50 text-emerald-700'
 								: 'bg-amber-50 text-amber-800'}"
 						>
-							{currentVolunteer.verified ? '🟢 ยืนยันตัวตนแล้ว' : '🟡 ยังไม่ยืนยันตัวตน'}
+							{currentVolunteer.verified ? t.verifiedBadge : t.unverifiedBadge}
 						</span>
 						<span
 							class="rounded px-1.5 py-0.5 text-2xs font-bold {currentVolunteer.statusType ===
@@ -1046,18 +1039,15 @@
 								? 'bg-emerald-50 text-emerald-700'
 								: 'bg-muted text-muted-foreground'}"
 						>
-							{currentVolunteer.statusType === 'active'
-								? '🟢 ปฏิบัติหน้าที่อยู่'
-								: '⚪ ยังไม่ปฏิบัติหน้าที่'}
+							{currentVolunteer.statusType === 'active' ? t.onDutyBadge : t.offDutyBadge}
 						</span>
 					</div>
 					<p class="text-2xs text-muted-foreground">
-						คุณสามารถรับสิทธิสวัสดิการ อาหารร้อน น้ำดื่ม และเวชภัณฑ์ที่เจ้าหน้าที่จัดเตรียมไว้
-						โดยใช้บัตรนี้แสดงต่อเจ้าหน้าที่ ณ จุดแจกจ่าย
+						{t.benefitsNote}
 					</p>
 					{#if !hasScannableToken}
 						<p class="text-2xs text-muted-foreground">
-							ใช้ QR หรือรหัส Token ที่ได้รับตอนสมัครเพื่อเปิดบัตรที่เช็คอินได้
+							{t.needTokenForQr}
 						</p>
 					{/if}
 					<div class="flex flex-wrap justify-center gap-2 sm:justify-start">
@@ -1069,7 +1059,8 @@
 							onclick={downloadRoleCardQr}
 							disabled={!qrDataUrl}
 						>
-							<Download class="size-4" /> ดาวน์โหลด QR
+							<Download class="size-4" />
+							{t.downloadQr}
 						</Button>
 						<Button
 							type="button"
@@ -1078,7 +1069,8 @@
 							class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
 							onclick={() => (isPassModalOpen = true)}
 						>
-							<Maximize2 class="size-4" /> ขยายบัตร
+							<Maximize2 class="size-4" />
+							{t.expandCard}
 						</Button>
 					</div>
 				</div>
@@ -1112,7 +1104,7 @@
 								: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
 						>
 							<CircleCheck class="size-3.5 sm:size-3" />
-							{currentVolunteer.verified ? 'ยืนยันตัวตนแล้ว' : 'ยังไม่ยืนยันตัวตน'}
+							{currentVolunteer.verified ? t.verified : t.unverified}
 						</span>
 						<span
 							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-bold sm:text-2xs {currentVolunteer.statusType ===
@@ -1132,7 +1124,7 @@
 						<span class="min-w-0">
 							<MapPin
 								class="mr-1 inline size-4 -translate-y-px align-middle text-primary sm:size-3.5"
-							/>สังกัด:
+							/>{t.affiliation}
 							{currentVolunteer.shelterName}
 						</span>
 						<span class="whitespace-nowrap">📞 {currentVolunteer.phone}</span>
@@ -1155,14 +1147,14 @@
 					onclick={() => (profileDialogOpen = true)}
 					class="min-h-11 flex-1 rounded-xl border border-border bg-card px-4 py-2 text-sm font-bold whitespace-nowrap text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:flex-none"
 				>
-					แก้ไขโปรไฟล์
+					{t.editProfile}
 				</button>
 
 				<button
 					type="button"
 					onclick={handleLogout}
-					title="ออกจากระบบ / ลืมเครื่องนี้"
-					aria-label="ออกจากระบบ / ลืมเครื่องนี้"
+					title={t.logoutTitle}
+					aria-label={t.logoutTitle}
 					class="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:border-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<LogOut class="size-4" />
@@ -1185,7 +1177,7 @@
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
 					<ClipboardList class="size-4" />
-					<span>ตารางของฉัน</span>
+					<span>{t.tabSchedule}</span>
 					<span
 						class="rounded-full bg-primary/10 px-2 py-0.5 text-3xs font-black text-primary dark:bg-primary/30"
 					>
@@ -1202,7 +1194,11 @@
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
 					<Rocket class="size-4" />
-					<span>งานจิตอาสา<span class="ml-1 hidden sm:inline">(Openings)</span></span>
+					<span
+						>{t.tabOpenings}{#if t.tabOpeningsSuffix}<span class="ml-1 hidden sm:inline"
+								>{t.tabOpeningsSuffix}</span
+							>{/if}</span
+					>
 					<span
 						class="rounded-full bg-amber-500/20 px-2 py-0.5 text-3xs font-black text-amber-800 dark:text-amber-300"
 					>
@@ -1220,54 +1216,55 @@
 					<div class="flex items-center justify-between pt-2">
 						<div>
 							<h3 class="text-sm font-bold text-foreground md:text-base">
-								รายการงานอาสาสมัครของฉัน
+								{t.listTitle}
 							</h3>
-							<p class="mt-1 text-2xs text-muted-foreground">เรียงจากวันที่ใกล้ที่สุดก่อน</p>
+							<p class="mt-1 text-2xs text-muted-foreground">{t.listHint}</p>
 						</div>
 						<span class="rounded-full bg-primary/10 px-2.5 py-1 text-2xs font-bold text-primary">
-							{visibleActivities.length} รายการ
+							{t.itemCount(visibleActivities.length)}
 						</span>
 					</div>
 
 					<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
 						<div class="mb-3 flex items-center gap-2 text-xs font-bold text-foreground">
-							<Filter class="size-4 text-primary" /> ตัวกรองงานอาสาสมัคร
+							<Filter class="size-4 text-primary" />
+							{t.filterTitle}
 						</div>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span>ตั้งแต่วันที่</span>
+								<span>{t.fromDate}</span>
 								<DatePicker
 									id="portal-filter-from-date"
 									bind:value={filterFromDate}
-									placeholder="เลือกวันที่เริ่มต้น"
+									placeholder={t.fromDatePlaceholder}
 								/>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span>ถึงวันที่</span>
+								<span>{t.toDate}</span>
 								<DatePicker
 									id="portal-filter-to-date"
 									bind:value={filterToDate}
-									placeholder="เลือกวันที่สิ้นสุด"
+									placeholder={t.toDatePlaceholder}
 								/>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span>เวลาตั้งแต่</span>
+								<span>{t.fromTime}</span>
 								<TimePicker
 									id="portal-filter-from-time"
 									bind:value={filterFromTime}
-									placeholder="เลือกเวลาเริ่มต้น"
+									placeholder={t.fromTimePlaceholder}
 								/>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span>เวลาถึง</span>
+								<span>{t.toTime}</span>
 								<TimePicker
 									id="portal-filter-to-time"
 									bind:value={filterToTime}
-									placeholder="เลือกเวลาสิ้นสุด"
+									placeholder={t.toTimePlaceholder}
 								/>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span>สถานะงาน</span>
+								<span>{t.statusFilter}</span>
 								<Select.Root
 									type="single"
 									value={filterStatus || 'all'}
@@ -1279,7 +1276,7 @@
 										<span class="truncate">
 											{scheduleStatusOptions.find(
 												(option) => option.value === (filterStatus || 'all')
-											)?.label ?? 'ทุกสถานะ'}
+											)?.label ?? t.filterOptions.all}
 										</span>
 									</Select.Trigger>
 									<Select.Content>
@@ -1290,12 +1287,12 @@
 								</Select.Root>
 							</label>
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
-								<span>ชื่องาน</span>
+								<span>{t.jobName}</span>
 								<Input
 									type="search"
 									bind:value={filterJobTitle}
-									placeholder="ค้นหาชื่องาน..."
-									aria-label="ค้นหาชื่องาน"
+									placeholder={t.jobSearchPlaceholder}
+									aria-label={t.jobSearchAria}
 									class="h-9 w-full rounded-lg bg-background text-xs font-normal placeholder:font-normal"
 								/>
 							</label>
@@ -1306,7 +1303,7 @@
 								onclick={clearScheduleFilters}
 								class="mt-3 text-2xs font-bold text-primary hover:underline"
 							>
-								ล้างตัวกรอง
+								{t.clearFilters}
 							</button>
 						{/if}
 					</div>
@@ -1316,14 +1313,14 @@
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<ClipboardList class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							<p class="text-sm font-bold text-foreground">ตอนนี้ยังไม่มีงานอาสาสมัคร</p>
-							<p class="mt-1 text-xs">เมื่อมีการจองหรือได้รับมอบหมาย งานจะปรากฏรวมกันที่นี่</p>
+							<p class="text-sm font-bold text-foreground">{t.emptyTitle}</p>
+							<p class="mt-1 text-xs">{t.emptyBody}</p>
 							<button
 								type="button"
 								onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'openings')))}
 								class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
 							>
-								ดูงานจิตอาสา
+								{t.viewOpenings}
 							</button>
 						</div>
 					{:else if visibleActivities.length === 0}
@@ -1331,8 +1328,8 @@
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<Filter class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							<p class="text-sm font-bold text-foreground">ไม่พบงานอาสาสมัครตามตัวกรอง</p>
-							<p class="mt-1 text-xs">ลองขยายช่วงวันที่หรือเวลา แล้วค้นหาใหม่</p>
+							<p class="text-sm font-bold text-foreground">{t.noMatchTitle}</p>
+							<p class="mt-1 text-xs">{t.noMatchBody}</p>
 						</div>
 					{:else}
 						{#each visibleActivities as activity (activity.id)}
@@ -1349,7 +1346,7 @@
 												<span
 													class="rounded-md bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300"
 												>
-													{activity.shiftPeriod || 'กะงาน'}
+													{activity.shiftPeriod || t.defaultShift}
 												</span>
 											{/if}
 											<span
@@ -1398,12 +1395,16 @@
 										>
 											{#if activity.checkinAt}
 												<span class="flex items-center gap-1 font-medium text-emerald-700">
-													<Clock class="size-3" /> เช็คอิน: {clockText(activity.checkinAt)}
+													<Clock class="size-3" />
+													{t.checkInAt}
+													{clockText(activity.checkinAt)}
 												</span>
 											{/if}
 											{#if activity.checkoutAt}
 												<span class="flex items-center gap-1 font-medium text-muted-foreground">
-													<Clock class="size-3" /> เช็คเอาต์: {clockText(activity.checkoutAt)}
+													<Clock class="size-3" />
+													{t.checkOutAt}
+													{clockText(activity.checkoutAt)}
 												</span>
 											{/if}
 										</div>
@@ -1422,13 +1423,13 @@
 												class="w-full space-y-2 rounded-xl border border-warning-border/50 bg-warning/5 p-3 md:w-64"
 											>
 												<p class="text-2xs leading-relaxed font-bold text-warning-foreground">
-													ศูนย์เสนอมอบหมายงานอาสาสมัครนี้ให้คุณ — กรอกรหัสที่เจ้าหน้าที่แจ้ง
+													{t.offerText}
 												</p>
 												<input
 													type="text"
 													bind:value={dispatchCodes[activity.assignmentId]}
-													placeholder="เช่น 4K7-2M9"
-													aria-label="รหัสยืนยันงานอาสาสมัคร"
+													placeholder={t.offerPlaceholder}
+													aria-label={t.offerAria}
 													autocomplete="off"
 													maxlength={10}
 													class="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground uppercase outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
@@ -1446,7 +1447,7 @@
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-2xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:opacity-60"
 													>
 														<Check class="size-3.5" />
-														ยอมรับงานอาสาสมัคร
+														{t.accept}
 													</button>
 													<button
 														type="button"
@@ -1455,7 +1456,7 @@
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 text-2xs font-bold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-60"
 													>
 														<X class="size-3.5" />
-														ปฏิเสธงานอาสาสมัคร
+														{t.decline}
 													</button>
 												</div>
 											</div>
@@ -1493,7 +1494,8 @@
 													onclick={() => runScheduleAction(activity, 'check_in')}
 													class="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
 												>
-													<LogIn class="size-4" /> รายงานตัว Check-in
+													<LogIn class="size-4" />
+													{t.checkInButton}
 												</button>
 											{/if}
 											{#if canCheckOut(activity)}
@@ -1503,7 +1505,8 @@
 													onclick={() => runScheduleAction(activity, 'check_out')}
 													class="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:opacity-95 disabled:opacity-60"
 												>
-													<LogOut class="size-4" /> เช็คเอาต์ออกจากงาน
+													<LogOut class="size-4" />
+													{t.checkOutButton}
 												</button>
 											{/if}
 											{#if canWithdraw(activity)}
@@ -1513,7 +1516,7 @@
 													onclick={() => openWithdrawModal(activity)}
 													class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5 disabled:opacity-60"
 												>
-													ขอลา / ถอนกะ
+													{t.withdrawButton}
 												</button>
 											{/if}
 										</div>
@@ -1536,30 +1539,25 @@
 					<!-- WIDGET 1: กติกาการเข้ากะ -->
 					<div class="rounded-3xl border border-border bg-card p-6 shadow-sm">
 						<h4 class="flex items-center gap-2 text-sm font-bold text-foreground">
-							<span>📢</span> กติกาการเข้ากะ
+							<span>📢</span>
+							{t.rulesTitle}
 						</h4>
 						<ul class="mt-3.5 space-y-2.5 text-xs leading-relaxed text-muted-foreground">
 							<li class="flex items-start gap-2">
 								<span class="text-primary">•</span>
-								<span>กรุณารายงานตัว Check-in ทันทีเมื่อเดินทางมาถึงศูนย์พักพิง</span>
+								<span>{t.rule1}</span>
 							</li>
 							<li class="flex items-start gap-2">
 								<span class="text-primary">•</span>
-								<span
-									>เมื่อปฏิบัติงานอาสาสมัครเสร็จสิ้นตามกรอบเวลา ให้กดปุ่ม Check-out
-									เพื่อสะสมเวลาปฏิบัติงานและคืนข้อมูลทรัพยากร</span
-								>
+								<span>{t.rule2}</span>
 							</li>
 							<li class="flex items-start gap-2">
 								<span class="text-primary">•</span>
-								<span
-									>หากเกิดเหตุฉุกเฉินหรือไม่สามารถเข้าปฏิบัติการได้ตามกำหนด
-									ให้กดคำขอยกเลิกเพื่อให้ผู้จัดการศูนย์พิจารณา</span
-								>
+								<span>{t.rule3}</span>
 							</li>
 							<li class="flex items-start gap-2">
 								<span class="text-primary">•</span>
-								<span>ไม่มีการแชร์ข้อมูลส่วนบุคคลของผู้ประสบภัยเพื่อความปลอดภัยของระบบ</span>
+								<span>{t.rule4}</span>
 							</li>
 						</ul>
 					</div>
@@ -1615,10 +1613,10 @@
 							<Dialog.Header>
 								<Dialog.Title class="flex items-center gap-2">
 									<CircleAlert class="size-5 text-destructive" />
-									ยืนยันการลาและถอนกะ
+									{t.withdrawTitle}
 								</Dialog.Title>
 								<Dialog.Description>
-									เมื่อยืนยันแล้ว ระบบจะถอนการมอบหมายกะนี้และส่งสถานะการลาให้เจ้าหน้าที่รับทราบ
+									{t.withdrawBody}
 								</Dialog.Description>
 							</Dialog.Header>
 
@@ -1638,14 +1636,14 @@
 									onclick={closeWithdrawModal}
 									disabled={actingAssignment !== null}
 								>
-									กลับไป
+									{t.withdrawBack}
 								</Button>
 								<Button
 									variant="destructive"
 									onclick={confirmWithdrawal}
 									disabled={actingAssignment !== null || pendingWithdrawal === null}
 								>
-									ยืนยันลาและถอนกะ
+									{t.withdrawConfirm}
 								</Button>
 							</Dialog.Footer>
 						</Dialog.Content>
@@ -1679,7 +1677,7 @@
 				<button
 					type="button"
 					onclick={closePassModal}
-					aria-label="ปิดบัตร"
+					aria-label={t.passCloseAria}
 					class="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<X class="size-4" />
@@ -1698,7 +1696,7 @@
 				{#if qrDataUrl}
 					<img
 						src={qrDataUrl}
-						alt="QR Code Pass"
+						alt={t.passQrAlt}
 						class="mx-auto size-48 rounded-2xl border-2 border-primary/20 bg-white p-2 shadow-md"
 					/>
 				{:else if roleCardLoading}
@@ -1713,7 +1711,7 @@
 					>
 						<QrCode class="size-10" />
 						<p class="text-xs leading-snug">
-							เข้าสู่ระบบด้วยเบอร์โทร ไม่มี QR สำหรับเช็คอิน — ใช้ QR/รหัส Token ที่ได้รับตอนสมัคร
+							{t.noQrLong}
 						</p>
 					</div>
 				{/if}
@@ -1724,7 +1722,7 @@
 							? 'bg-emerald-50 text-emerald-700'
 							: 'bg-amber-50 text-amber-800'}"
 					>
-						{currentVolunteer.verified ? '🟢 ยืนยันตัวตนแล้ว' : '🟡 ยังไม่ยืนยันตัวตน'}
+						{currentVolunteer.verified ? t.verifiedBadge : t.unverifiedBadge}
 					</span>
 					<span
 						class="rounded-md px-2 py-0.5 text-2xs font-bold {currentVolunteer.statusType ===
@@ -1732,14 +1730,12 @@
 							? 'bg-emerald-50 text-emerald-700'
 							: 'bg-muted text-muted-foreground'}"
 					>
-						{currentVolunteer.statusType === 'active'
-							? '🟢 ปฏิบัติหน้าที่อยู่'
-							: '⚪ ยังไม่ปฏิบัติหน้าที่'}
+						{currentVolunteer.statusType === 'active' ? t.onDutyBadge : t.offDutyBadge}
 					</span>
 				</div>
 
 				<p class="text-2xs text-muted-foreground">
-					ยื่นแสดง QR Code นี้ต่อเจ้าหน้าที่ ณ จุดสแกนเช็คอินศูนย์พักพิง
+					{t.passShowToStaff}
 				</p>
 
 				<button
@@ -1747,7 +1743,7 @@
 					onclick={closePassModal}
 					class="mt-2 w-full rounded-xl bg-primary py-3 text-xs font-bold text-white shadow hover:opacity-95"
 				>
-					ปิดหน้าต่าง
+					{t.passClose}
 				</button>
 			</div>
 		</div>

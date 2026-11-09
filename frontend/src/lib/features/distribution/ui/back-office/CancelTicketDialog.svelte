@@ -133,7 +133,7 @@
 				}}
 				class="text-xs font-semibold"
 			>
-				ย้อนกลับ
+				ยกเลิก
 			</Button>
 
 			<Button
