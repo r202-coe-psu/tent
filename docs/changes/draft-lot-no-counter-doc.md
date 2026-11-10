@@ -79,8 +79,10 @@ migration: >
   `lot_counter:L-{6 หลัก}` (prefix เดียวกับ `lot_no` ของวันนั้น). **ห้ามลบ** — เฉพาะผู้ที่ไม่ใช่ `_admin` (admin ลบได้เพื่อ unseed/reset; ลบแล้วไม่ทำให้เลขซ้ำ
   เพราะ FR-6 seed ใหม่จากเลขสูงสุดใน ledger)
 - **FR-13** — สิทธิ์เขียน `lot_counter` ผูกกับสิทธิ์รับของ: **ใครเขียน `stock_ledger` แบบรับเข้าในศูนย์นี้ได้ตาม VDU
-  ก็เขียน `lot_counter` ได้** (ครอบคลุม role ครัวตาม CR-121, warehouse / shelter_manager, `donation_staff` ตาม CR-227)
-  — ไม่ไล่ชื่อ role แยก ไม่ขยายสิทธิ์อื่น; BFF (`_admin`) และ repl user ของ edge (`repl:<code>`, #1298) ผ่านในฐานะ
+  ก็เขียน `lot_counter` ได้** = `warehouse_staff`, `supply_coordinator`, `shelter_manager` และ `donation_staff`
+  (CR-227) ของศูนย์นี้ — ไม่รวม `distribution_staff` (รับของยืมคืนไม่ออกเลขล็อต); การตรวจรับผลผลิตครัว (CR-121)
+  ทำโดย role คลังกลุ่มนี้อยู่แล้ว
+  — ไม่เพิ่ม role ใหม่ ไม่ขยายสิทธิ์อื่น; BFF (`_admin`) และ repl user ของ edge (`repl:<code>`, #1298) ผ่านในฐานะ
   admin แต่ยังติดกฎ FR-12 ([NEEDS DECISION] ND-3)
 - **FR-14** — ตอน deploy รัน `pnpm redeploy:access` เพื่ออัปเดต VDU ทุก `shelter_*`
 
@@ -130,7 +132,7 @@ CR-088 (status `done`) ไม่ถูกแก้ไฟล์. ข้อคว�
 - **AC-4** — วันที่มี `stock_ledger` ที่มี `lot_no` อยู่แล้วแต่ยังไม่มี counter → counter ถูกสร้างโดย `last` = ลำดับสูงสุดเดิม;
   เลขถัดไปไม่ชนกับแถวเดิม
 - **AC-5** — VDU ปฏิเสธการเขียน `lot_counter` ที่ `last` ไม่เพิ่ม, `last` ติดลบ/ไม่ใช่ int หรือ `_id` ผิด pattern
-  (รวมเมื่อเขียนด้วย `_admin`); ปฏิเสธการลบจากผู้ที่ไม่ใช่ `_admin`; ปฏิเสธ user ที่เขียน `stock_ledger` รับเข้าไม่ได้
+  (รวมเมื่อเขียนด้วย `_admin`); ปฏิเสธการลบจากผู้ที่ไม่ใช่ `_admin`; ปฏิเสธ role นอกรายชื่อ FR-13 (รวม `distribution_staff`, `kitchen_staff`)
 - **AC-6** — ทั้ง 3 จุดออกเลข (BFF บริจาค, ครัว, หน้า stock) เรียกลูปจองเลขตัวเดียวกัน (ไม่มีโค้ดค้น `stock_ledger`
   เพื่อนับเลขเหลืออยู่)
 - **AC-7** — รูปแบบ `L-YYMMDD-XXX` คงเดิม; test เดิมของ format ยังผ่าน
@@ -181,4 +183,4 @@ retry เมื่อรับพร้อมกันถี่
 
 - 2026-11-08 — proposed (จาก #1110: ข้อ 1 = C, ข้อ 2 = A, ข้อ 3 = เช็ค TZ server ก่อน)
 - 2026-11-10 — แก้ตาม review PR #1287: เพิ่มจุดออกเลขที่ 3 (หน้า stock, decision sync 2026-11-06), FR-7 ตรรกะกลาง +
-  ตัวเชื่อม CouchDB, FR-12 กฎ VDU ก่อน `_admin` bypass, FR-13 ผูกสิทธิ์กับการรับของ, AC-8 replicate, ใช้ `_id` `lot_counter:{L-YYMMDD}` ทั้งไฟล์ (ตรงกับ prefix `lot_no` ในระบบ)
+  ตัวเชื่อม CouchDB, FR-12 กฎ VDU ก่อน `_admin` bypass, FR-13 ผูกสิทธิ์กับการรับของ, AC-8 replicate, ใช้ `_id` `lot_counter:{L-YYMMDD}` ทั้งไฟล์ (ตรงกับ prefix `lot_no` ในระบบ); FR-13 ระบุ role ให้ตรง VDU `stock_ledger`
