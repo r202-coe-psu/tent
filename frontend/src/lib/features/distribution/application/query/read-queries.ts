@@ -90,6 +90,23 @@ export const useDistributionLogs = (
 	});
 
 /**
+ * Every distribution log of the shelter plus the docs that failed to parse. The meal coverage
+ * report needs `skipped` so unreadable logs show as a warning instead of silently lowering counts.
+ */
+export const useDistributionLogsWithSkipped = (
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		return {
+			queryKey: distributionKeys.logsWithSkipped(shelterCode),
+			queryFn: () => distributionLogRepository(shelterCode).listWithSkipped(),
+			enabled: Boolean(toValue(enabled) && shelterCode)
+		};
+	});
+
+/**
  * `lot.expiry` of the lot dispatched for a ticket item — the ready-meal safety clock
  * (FR-MQW-06 B). `null` when unknown. Lot metadata never changes after dispatch.
  */

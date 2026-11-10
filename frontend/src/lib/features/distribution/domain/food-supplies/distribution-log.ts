@@ -526,6 +526,17 @@ export function revertBulkEntryFromLog(
 }
 
 /**
+ * The meal a log counts for, or null when it counts for none: voided logs, returnable loans and
+ * logs without a `meal` serve no meal. Shared by the duplicate-meal check and meal coverage.
+ */
+export function servedMealOfLog(
+	log: Pick<DistributionLog, 'status' | 'is_returnable' | 'meal'>
+): MealPeriod | null {
+	if (log.status === 'voided' || log.is_returnable || !log.meal) return null;
+	return log.meal;
+}
+
+/**
  * Pure predicate checking whether a DistributionLog represents a duplicate meal distribution
  * for the specified meal period on the specified Thailand calendar day.
  * Ignores voided logs and returnable loans.
@@ -535,11 +546,8 @@ export function isDuplicateMealDistributionLog(
 	targetMeal: MealPeriod,
 	referenceIsoOrDate: string | Date = new Date().toISOString()
 ): boolean {
-	if (log.status === 'voided' || log.is_returnable || !log.meal) {
-		return false;
-	}
 	return (
-		log.meal === targetMeal &&
+		servedMealOfLog(log) === targetMeal &&
 		thailandCalendarDay(log.distributed_at) === thailandCalendarDay(referenceIsoOrDate)
 	);
 }

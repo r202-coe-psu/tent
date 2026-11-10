@@ -36,6 +36,7 @@
 	import CreateTicketDialog from './CreateTicketDialog.svelte';
 	import TicketDetailShell from './TicketDetailShell.svelte';
 	import BulkReturnPoolBoard from '../bulk-return/BulkReturnPoolBoard.svelte';
+	import MealCoveragePanel from './MealCoveragePanel.svelte';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -206,7 +207,8 @@
 	}
 
 	function handleViewChange(value: string) {
-		const view: DistributionView = value === 'bulk_pools' ? 'bulk_pools' : 'tickets';
+		const view: DistributionView =
+			value === 'bulk_pools' || value === 'meal_coverage' ? value : 'tickets';
 		activeView = view;
 		updatePoolParams({ view, pool: null });
 	}
@@ -413,12 +415,20 @@
 					>
 						กองรับคืนพัสดุ
 					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="meal_coverage"
+						class="h-auto flex-none rounded-lg border-transparent px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-600 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:bg-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-none"
+					>
+						ผู้ยังไม่ได้รับอาหารครบ
+					</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>
 		</div>
 	</div>
 
-	{#if activeView === 'bulk_pools'}
+	{#if activeView === 'meal_coverage'}
+		<MealCoveragePanel {shelterCode} />
+	{:else if activeView === 'bulk_pools'}
 		<BulkReturnPoolBoard
 			{shelterCode}
 			initialPoolId={poolUrl.pool}

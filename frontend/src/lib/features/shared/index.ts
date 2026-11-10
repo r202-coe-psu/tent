@@ -44,6 +44,11 @@ export {
 	isInShelterStayStatus,
 	type InShelterStatus
 } from './domain/in-shelter';
+export {
+	wasInShelterAllDay,
+	type PresenceInput,
+	type PresenceMovement
+} from './domain/in-shelter-day';
 
 export { fetchAppConfig, updateAppConfig, type AppConfigResponse } from './data/app-config.api';
 export { fetchSystemBanner } from './data/system-banner.api';

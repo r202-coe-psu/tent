@@ -18,6 +18,8 @@ export const distributionKeys = {
 		[...distributionKeys.shelter(shelterCode), 'ticket', ticketId] as const,
 	logs: (shelterCode: string, filter?: DistributionLogListFilter) =>
 		[...distributionKeys.shelter(shelterCode), 'logs', filter ?? {}] as const,
+	logsWithSkipped: (shelterCode: string) =>
+		[...distributionKeys.shelter(shelterCode), 'logs', 'with-skipped'] as const,
 	log: (shelterCode: string, logId: string) =>
 		[...distributionKeys.shelter(shelterCode), 'log', logId] as const,
 	bulkPools: (shelterCode: string, filter?: BulkReturnPoolListFilter) =>
