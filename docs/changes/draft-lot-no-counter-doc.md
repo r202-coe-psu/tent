@@ -83,7 +83,7 @@ migration: >
   (CR-227) ของศูนย์นี้ — ไม่รวม `distribution_staff` (รับของยืมคืนไม่ออกเลขล็อต); การตรวจรับผลผลิตครัว (CR-121)
   ทำโดย role คลังกลุ่มนี้อยู่แล้ว
   — ไม่เพิ่ม role ใหม่ ไม่ขยายสิทธิ์อื่น; BFF (`_admin`) และ repl user ของ edge (`repl:<code>`, #1298) ผ่านในฐานะ
-  admin แต่ยังติดกฎ FR-12 ([NEEDS DECISION] ND-3)
+  admin แต่ยังติดกฎ FR-12 (ND-3 เคาะแล้ว — kong, 2026-11-10)
 - **FR-14** — ตอน deploy รัน `pnpm redeploy:access` เพื่ออัปเดต VDU ทุก `shelter_*`
 
 ### Domain
@@ -172,8 +172,8 @@ retry เมื่อรับพร้อมกันถี่
   (ยังไม่ได้ตรวจ) ก่อนตัดสินว่าต้องแก้ `lotDateStamp` หรือไม่
 - **ND-2** — จำนวน retry สูงสุดเมื่อ `409` (draft ใช้ 5) และ FR-8 ที่ **ไม่ให้ intake ผ่านเมื่อจองเลขไม่ได้** ซึ่งต่างจากเหตุผลเดิมของ
   CR-088 (ไม่ให้หน้าประตูรับบริจาคติด) — ยืนยันว่ายอมรับ
-- **ND-3** — ยืนยันกฎ FR-13 "ใครเขียน `stock_ledger` รับเข้าได้ ก็เขียน `lot_counter` ได้" (แตะ role/permission ต้องให้
-  owner เคาะ)
+- **ND-3** — **เคาะแล้ว** (kong, 2026-11-10): สิทธิ์เขียน `lot_counter` ตาม FR-13 — `warehouse_staff`,
+  `supply_coordinator`, `shelter_manager`, `donation_staff` ของศูนย์นี้
 - **ND-4** — กรณี edge/central ชนกัน: เลือกกลยุทธ์ conflict (เช่น รวมด้วย `max(last)` แล้วยอมรับว่าเลขที่ออกช่วงตัดขาดอาจซ้ำ) หรือ
   ยอมรับเป็น residual risk ไม่ทำอะไรใน CR นี้
 
@@ -184,3 +184,4 @@ retry เมื่อรับพร้อมกันถี่
 - 2026-11-08 — proposed (จาก #1110: ข้อ 1 = C, ข้อ 2 = A, ข้อ 3 = เช็ค TZ server ก่อน)
 - 2026-11-10 — แก้ตาม review PR #1287: เพิ่มจุดออกเลขที่ 3 (หน้า stock, decision sync 2026-11-06), FR-7 ตรรกะกลาง +
   ตัวเชื่อม CouchDB, FR-12 กฎ VDU ก่อน `_admin` bypass, FR-13 ผูกสิทธิ์กับการรับของ, AC-8 replicate, ใช้ `_id` `lot_counter:{L-YYMMDD}` ทั้งไฟล์ (ตรงกับ prefix `lot_no` ในระบบ); FR-13 ระบุ role ให้ตรง VDU `stock_ledger`
+- 2026-11-10 — ND-3 เคาะแล้ว (kong): สิทธิ์เขียน `lot_counter` ตามรายชื่อ role ใน FR-13
