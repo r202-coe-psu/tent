@@ -111,7 +111,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		};
 		const members = await reprintKioskLabels(principal.shelter_code, parsed.data, {
-			verifyStaffPin
+			verifyStaffPin,
+			deviceId: principal.device_id
 		});
 		if ('staff_pin' in parsed.data) {
 			console.info(

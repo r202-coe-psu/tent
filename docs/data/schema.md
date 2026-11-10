@@ -1361,7 +1361,7 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
 - **`kitchen_requisition` เดิม:** หยุดสร้างใหม่หลัง cutover — เอกสารเก่ายังอ่านได้ (deprecated,
   read-only; ดู §2.6) และแสดงรวม (union) กับ `requisition_ticket` ใหม่ในหน้าประวัติ
 
-### 2.30 `distribution_log` — `distribution_log:{ulid}` · **schema_v 2** (CR-121, CR-193)
+### 2.30 `distribution_log` — `distribution_log:{ulid}` · **schema_v 3** (CR-121, CR-193, CR-233 A1)
 
 บันทึกการแจกหรือการยืมรายครั้งจาก `requisition_ticket` และรวม use case เดิมของ
 `meal_distribution`. เป็น permanent distribution log; การสแกนหน้างานเพิ่มเอกสารใหม่นี้และ
@@ -1389,6 +1389,7 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
 | `is_override` | bool | req | ใช้เมื่ออนุมัติแจกซ้ำ/ข้ามข้อจำกัด |
 | `override_reason` | str | opt | เหตุผล override; override เพราะผู้รับมีประวัติแพ้ free text → ขึ้นต้นด้วย `แพ้ (ไม่อยู่ในรายการ): ‹ข้อความ, …› — ` ตามด้วยเหตุผลที่กรอก ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md) FR-MRM-11, decision sync 2026-10-27) |
 | `allergen_conflicts` | [str] | opt | master `allergy` code ที่ผู้รับแพ้และเมนูมี ณ เวลาแจก ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)); เขียนเฉพาะเมื่อมีสารชน และต้องมี `is_override: true` + `override_reason`; additive ไม่ bump `schema_v` |
+| `recipient_qr_override` | obj | opt (เฉพาะ schema_v 3) | audit การแจกที่เลือกผู้รับด้วย Person QR ที่**หมดอายุ** แล้วเจ้าหน้าที่กด "ยอมรับความเสี่ยงเพื่อแจกจ่าย" ([CR-233](../changes/02-people/CR-233-evacuee-qr-rotate-on-print.md) A1, FR-EQR-44..50): `{ issued_at: ts\|null, current_printed_at: ts, overridden_by: str, overridden_at: ts }` · `issued_at` = `null` เมื่อ QR ออกก่อนเปลี่ยนระบบ · ไม่มีชื่อ/ข้อมูลส่วนบุคคล · ใช้ได้เฉพาะ `recipient_type = evacuee` · เขียนครั้งเดียวตอนสร้าง log แก้/ลบภายหลังไม่ได้ · QR invalid ไม่มีทาง override |
 | `is_expired_warning` | bool | opt | `true` เมื่ออาหารเกิน 4 ชั่วโมง (soft-warning audit) |
 | `distributed_at` / `distributed_by` | ts / str | req | เวลาและผู้บันทึกการแจก |
 | `voided_at` / `voided_by` | ts\|null / str\|null | opt | ยกเลิกโดยไม่ลบเอกสาร |
@@ -1401,6 +1402,13 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
 `qty_returned>0`, return audit, `clear_reason`, `bulk_pool_id`, หรือ `applied_bulk_entry_ids` ที่ไม่ว่าง); ห้ามใช้ void ลบประวัติ loan ที่
 ได้รับคืน, clear, lost, waived หรือ bulk drop-off แล้ว. `bulk_pool_id` (legacy) จำกัดการ clear ตาม
 `unclaimed_quota` ของกองรวม v1/v2 นั้น.
+
+**schema_v 3 (CR-233 A1):** เพิ่ม `recipient_qr_override`. VDU รับ schema_v 1, 2 หรือ 3 ตอนสร้าง;
+`schema_v 3` เขียนเฉพาะตอนสร้าง log ที่มี `recipient_qr_override` (log อื่นยังเขียน v2) ตอนแก้ `schema_v` คงเดิม
+หรือ 1 → 2 เท่านั้น (ไม่มี 2 → 3 ภายหลัง และห้าม downgrade). `applied_bulk_entry_ids` ใช้ได้กับ v2 และ v3;
+path bulk v3 ต้องคง `schema_v 3` ของ doc ที่เป็น v3. `recipient_qr_override` ต้องไม่เปลี่ยน/หายหลังสร้าง
+(Zod และ VDU). ไม่ backfill. **Deploy:** redeploy `_design/access` ของทุก `shelter_*` (`pnpm redeploy:access`)
+ก่อน client รุ่นใหม่เขียน v3.
 
 **schema_v 2 (CR-193, #658):** เพิ่ม `applied_bulk_entry_ids`. VDU รับ schema_v 1 หรือ 2 ตอนสร้างและแก้;
 ตอนแก้ `schema_v` คงเดิมหรือ 1 → 2 ได้ ห้าม 2 → 1. เอกสาร v1 ยังใช้ได้ต่อไป — **upgrade แบบ lazy เป็น v2 ตอน path bulk v3 เขียน
@@ -2329,7 +2337,7 @@ index เดิมใช้กับ selector ของ `kiosk_banner_group` (`t
 
 ### 3.13 `config` — `config:public_portal` (singleton) · **schema_v 1** ([CR-184](../changes/12-public/CR-184-public-footer-logos.md))
 
-เนื้อหาของ public portal ที่ SA แก้จาก `/system-management/public-portal-config`. Envelope ตาม §0
+เนื้อหาของ public portal ที่ SA แก้จาก `/system-management/public-portal-config` (FAQ/ช่องทางติดต่อ) และ `/system-management/partner-logos` (`footer_logos` — ย้ายมา decision sync 2026-11-10, #1314). Envelope ตาม §0
 (`type: "config"`). BFF `GET /api/public/v1/config/faqs` อ่านจาก CouchDB ตรง (fallback FastAPI/Mongo `public_config`).
 Worker project ไป `public_config` ทั้งก้อน **ยกเว้น** `footer_logos` และ `_attachments` (CR-184 Q2, `PROJECTION_VERSION` 6 ร่วมกับ #727).
 
@@ -2349,7 +2357,7 @@ Worker project ไป `public_config` ทั้งก้อน **ยกเว้
 
 **Invariant:** ทุก entry ใน `footer_logos` มี attachment คู่กัน และไม่มี attachment `footer_logo_*` กำพร้า.
 
-**การเขียน:** SA เท่านั้น ผ่าน form action ของหน้า `public-portal-config` (admin credential) · ทุก write = PUT ทั้ง doc
+**การเขียน:** SA เท่านั้น ผ่าน form action ของหน้า `public-portal-config` (FAQ/social) และ `partner-logos` (โลโก้) (admin credential) · ทุก write = PUT ทั้ง doc
 ครั้งเดียวพร้อม attachment ตัวอื่นเป็น stub · การบันทึก FAQ/social ต้องคง `footer_logos` + `_attachments` จาก doc เดิม ·
 VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไขผู้เขียน `registry` เดิมคงไว้).
 
