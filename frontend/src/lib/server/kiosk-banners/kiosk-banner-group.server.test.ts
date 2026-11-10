@@ -14,6 +14,7 @@ vi.mock('./kiosk-banner.server', async (importOriginal) => ({
 
 import { adminRaw } from '$lib/server/couch-admin';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
+import { KIOSK_BANNER_TV_CODE_MANGO_INDEX } from '$lib/server/registry-design';
 import type { KioskBannerGroupDoc } from '$lib/features/kiosk-banners';
 import { GroupNotFoundError, listBannersForShelter } from './kiosk-banner.server';
 import {
@@ -333,6 +334,47 @@ describe('ensureTvCode', () => {
 		expect(group).toEqual({ ...v1, schema_v: 2, tv_code: '555555', _rev: '2-b' });
 	});
 
+	it('returns the group another reader already backfilled when its own write conflicts', async () => {
+		const v1 = groupDoc(GROUP_A, 'ทั่วไป');
+		const backfilled = groupDoc(GROUP_A, 'ทั่วไป', {
+			_rev: '2-other',
+			schema_v: 2,
+			tv_code: '777777'
+		} as Partial<KioskBannerGroupDoc>);
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 200, data: backfilled });
+
+		const group = await ensureTvCode(v1, { generateTvCode: () => '555555' });
+
+		expect(group).toEqual(backfilled);
+		expect(adminRawMock.mock.calls[2].slice(0, 2)).toEqual([
+			`/registry/${encodeURIComponent(GROUP_A)}`,
+			'GET'
+		]);
+	});
+
+	it('propagates the conflict when the re-read group is still v1 or gone', async () => {
+		const v1 = groupDoc(GROUP_A, 'ทั่วไป');
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 200, data: groupDoc(GROUP_A, 'ทั่วไป', { _rev: '2-x' }) });
+		await expect(ensureTvCode(v1, { generateTvCode: () => '555555' })).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
+
+		adminRawMock.mockReset();
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
+		await expect(ensureTvCode(v1, { generateTvCode: () => '555555' })).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
+	});
+
 	it('returns a v2 group unchanged without touching CouchDB', async () => {
 		const v2 = groupDoc(GROUP_A, 'ทั่วไป', {
 			schema_v: 2,
@@ -375,6 +417,25 @@ describe('ensureGroupTvCode', () => {
 			device_ids: ['kiosk-1']
 		});
 		expect(adminRawMock.mock.calls[1][1]).toBe('PUT');
+	});
+
+	it('returns the concurrently backfilled group, keeping device_ids, when its write conflicts', async () => {
+		const backfilled = groupDoc(GROUP_A, 'ทั่วไป', {
+			_rev: '2-other',
+			schema_v: 2,
+			tv_code: '777777'
+		} as Partial<KioskBannerGroupDoc>);
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 200, data: backfilled });
+
+		const group = await ensureGroupTvCode({
+			...groupDoc(GROUP_A, 'ทั่วไป'),
+			device_ids: ['kiosk-1']
+		});
+
+		expect(group).toEqual({ ...backfilled, device_ids: ['kiosk-1'] });
 	});
 });
 
@@ -564,7 +625,8 @@ describe('findGroupByTvCode', () => {
 			'/registry/_find',
 			'POST',
 			expect.objectContaining({
-				selector: { type: 'kiosk_banner_group', tv_code: '123456' }
+				selector: { type: 'kiosk_banner_group', tv_code: '123456' },
+				use_index: [KIOSK_BANNER_TV_CODE_MANGO_INDEX.ddoc, KIOSK_BANNER_TV_CODE_MANGO_INDEX.name]
 			})
 		]);
 

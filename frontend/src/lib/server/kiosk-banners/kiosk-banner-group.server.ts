@@ -10,6 +10,7 @@ import {
 	type KioskBannerGroupInput,
 	tvCodeSchema
 } from '$lib/features/kiosk-banners';
+import { KIOSK_BANNER_TV_CODE_MANGO_INDEX } from '$lib/server/registry-design';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { GroupNotFoundError, listBannersForShelter } from './kiosk-banner.server';
 
@@ -49,6 +50,7 @@ export async function findGroupByTvCode(code: string): Promise<KioskBannerGroupD
 	if (!tvCodeSchema.safeParse(code).success) return null;
 	const res = await adminRaw(`/${REGISTRY_DB}/_find`, 'POST', {
 		selector: { type: 'kiosk_banner_group', tv_code: code },
+		use_index: [KIOSK_BANNER_TV_CODE_MANGO_INDEX.ddoc, KIOSK_BANNER_TV_CODE_MANGO_INDEX.name],
 		limit: 1
 	});
 	if (res.status >= 400) {
@@ -181,13 +183,22 @@ export async function rotateTvCode(
 /**
  * Lazy backfill for a v1 group: writes it back as schema_v 2 with a fresh unused code (a system
  * upgrade, so `updated_at` stays). A group that already has a code is returned as is, unwritten.
+ * If the write conflicts because a concurrent reader backfilled it first, that doc is returned.
  */
 export async function ensureTvCode(
 	group: KioskBannerGroupDoc,
 	deps: TvCodeDeps = defaultTvCodeDeps
 ): Promise<KioskBannerGroupDoc> {
 	if (!needsTvCode(group)) return group;
-	return putGroupDoc({ ...group, schema_v: 2, tv_code: await issueTvCode(deps) });
+	try {
+		return await putGroupDoc({ ...group, schema_v: 2, tv_code: await issueTvCode(deps) });
+	} catch (err) {
+		if (!(err instanceof ServiceError) || err.code !== 'CONFLICT') throw err;
+		// A concurrent reader backfilled the same v1 doc first: serve its result instead of failing.
+		const fresh = await readGroupDoc(group._id);
+		if (fresh && !needsTvCode(fresh)) return fresh;
+		throw err;
+	}
 }
 
 /**

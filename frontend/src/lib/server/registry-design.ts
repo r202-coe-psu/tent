@@ -202,10 +202,12 @@ export const KIOSK_BANNER_MANGO_INDEX = {
 
 /**
  * Mango index for the system-wide banner group lookup by TV pairing code (`findGroupByTvCode`),
- * mirroring `{ type, tv_code }` exactly.
+ * mirroring `{ type, tv_code }` exactly. The explicit `ddoc` lets the query pin it with
+ * `use_index: [ddoc, name]` (without it CouchDB names the design doc by hash).
  */
 export const KIOSK_BANNER_TV_CODE_MANGO_INDEX = {
 	index: { fields: ['type', 'tv_code'] },
+	ddoc: 'kiosk-banner-group-by-tv-code',
 	name: 'kiosk-banner-group-by-tv-code',
 	type: 'json'
 } as const;
