@@ -4,7 +4,7 @@ title: Kiosk banner — แบนเนอร์รูปภาพประช�
 status: approved
 date: 2026-10-11
 created: 2026-10-11
-updated: 2026-10-22
+updated: 2026-11-10
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team Lead) — อนุมัติ 2026-10-11 (Asia/Bangkok) scope เดิม · Team Lead อนุมัติส่วนที่ปรับ/เพิ่ม 2026-10-15..17 ทั้งหมด รวม §7 Q1–Q5 ตามข้อเสนอ เมื่อ 2026-10-18 · Team Lead อนุมัติส่วนที่ปรับ 2026-10-21 (banner group) ทั้งหมด รวมการไม่ migrate (§6) เมื่อ 2026-10-22 — merge ได้
 decision_date: 2026-10-22
@@ -38,24 +38,30 @@ affects:
   - path ทั้งหมด: docs/features/kiosk-banner-design-guideline.md §2.3
   - (2026-10-21) kiosk banner group — docs/data/schema.md §3.11 (`scanner_device` + `banner_group_id` · `banner_enabled` deprecated · ไม่ bump) · §3.12 (`kiosk_banner` schema_v 1 → 2 + `group_id` · order ต่อ (group_id, screen_type) · VDU `REGISTRY_DESIGN_VERSION` 7 → 8) · §3.13 (`kiosk_banner_group` ใหม่ schema_v 1) · §7 index registry · docs/data/api-contract.md §2.2 (PATCH device ตัด `banner_enabled`) · §2.3 / §2.3.1 (group endpoints, `group_id`, order body) · docs/features/kiosk-banner-design-guideline.md (path map หน้ากลุ่ม)
   - (2026-10-21) frontend/src/lib/features/kiosk-banners/{domain/kiosk-banner-group.ts (ใหม่),domain/kiosk-banner.ts (v1/v2 + `matchesSlot`),domain/kiosk-banner-form.ts,data,application,ui/kiosk-banner-group-{card,form,device-picker}.svelte (ใหม่)} · frontend/src/lib/server/kiosk-banners/{kiosk-banner-group.server.ts (ใหม่),kiosk-banner.server.ts} · frontend/src/lib/server/registry-design.ts (VDU branch `kiosk_banner_group` + `kiosk_banner` v1/v2) · frontend/src/lib/server/scanners/{device-repository (`setBannerGroup`),device-credentials (principal `banner_group_id`)}.ts · frontend/src/routes/api/back-office/kiosk-banner-groups/** (ใหม่) · frontend/src/routes/api/back-office/kiosk-banners/{+server,[id]/+server,order/+server}.ts · frontend/src/routes/api/v1/kiosk/{banners/+server.ts,devices/[id]/+server.ts} · frontend/src/lib/features/kiosk-devices/** (ตัด `banner_enabled` Switch · badge กลุ่ม) · frontend/src/routes/(protected)/back-office/kiosks/banners/{groups/new,groups/[group],groups/[group]/[screen=kioskScreen]}/** (ใหม่ · route `[screen=kioskScreen]` เดิมเหลือเป็น redirect ไป `/back-office/kiosks/banners`)
+  - (2026-11-10 · #1299 A–D · ทีมเสนอ / รอ PO ยืนยัน) จอ TV ภายในศูนย์ — docs/data/schema.md §3.11 (`scanner_device.screen_type` คง `compact` \| `portrait` · ไม่ bump) · §3.12 (`kiosk_banner` schema_v 2 → 3 · `screen_type` + `tv`) · §3.13 (`kiosk_banner_group` schema_v 1 → 2 + `tv_code`) · §7 index registry (+ `kiosk-banner-group-by-tv-code` = `(type, tv_code)`) · VDU `REGISTRY_DESIGN_VERSION` 8 → 9 · docs/data/api-contract.md §2.3 (+ `GET /api/v1/kiosk/internal/{shelter}/banners`) · §2.3.1 (+ `POST …/kiosk-banner-groups/{id}/tv-code` · `KioskBannerGroupSummary.tv_code`)
+  - (2026-11-10) frontend/src/lib/features/shared/domain/kiosk-screen.ts (`tv` + `kioskDeviceScreenTypeSchema`) · frontend/src/lib/features/kiosk-banners/domain/{kiosk-banner.ts (v3),kiosk-banner-group.ts (v2 · `tvCodeSchema` · `generateTvCode` · `internalBannerUrl`)} · frontend/src/lib/features/kiosk-banners/ui/kiosk-banner-group-tv-code.svelte (ใหม่) · frontend/src/lib/server/kiosk-banners/{kiosk-banner-group.server.ts (`findGroupByTvCode` · `rotateTvCode` · `ensureTvCode`),kiosk-banner.server.ts (เขียน v3)} · frontend/src/lib/server/registry-design.ts (VDU v9 · `KIOSK_BANNER_TV_CODE_MANGO_INDEX`) · frontend/src/routes/api/v1/kiosk/internal/[shelter]/banners/+server.ts (ใหม่) · frontend/src/routes/api/back-office/kiosk-banner-groups/[id]/tv-code/+server.ts (ใหม่) · frontend/src/lib/features/kiosk/{data/internal-banners.api.ts,ui/internal-banner-display.svelte.ts} (ใหม่) · frontend/src/routes/banner/[shelter]/internal/** (ใหม่)
 why: >
   หน้าแรก kiosk ค้างอยู่โดยไม่มีผู้ใช้เกือบตลอดเวลา ศูนย์ต้องใช้หน้าจอนี้แจ้งข่าวสาร (ตารางแจกอาหาร, จุดบริการ, คำเตือน)
   ทีมเคยใช้ banner รูปภาพบน kiosk ในระบบก่อนหน้า (ghosa) และพิสูจน์แล้วว่าพอสำหรับงานประชาสัมพันธ์หน้าตู้ ·
   (เพิ่ม 2026-10-15..17) CR-162 ออกแบบก่อน CR-165 — role, path, ชื่อ client และเมนูไม่ตรงกับโค้ดปัจจุบัน ·
   หน้า `/back-office/kiosk-banners` อยู่นอก route ที่ `kiosk_staff` เข้าได้ (FR-SBO-29) ·
-  banner หลายศูนย์ทำให้ต้องตรวจสิทธิ์ทั้งค่าเดิมและค่าใหม่และต้องมี multi-select ขณะที่หน้า kiosk อื่นใช้ active shelter อย่างเดียว (FR-SBO-27)
+  banner หลายศูนย์ทำให้ต้องตรวจสิทธิ์ทั้งค่าเดิมและค่าใหม่และต้องมี multi-select ขณะที่หน้า kiosk อื่นใช้ active shelter อย่างเดียว (FR-SBO-27) ·
+  (2026-11-10 · #1299) ศูนย์ต้องขึ้นประกาศภายในศูนย์บน TV ทั่วไปโดยไม่ต้อง login และไม่ต้องลงทะเบียน TV เป็นเครื่อง kiosk — feed เดิมส่งให้เฉพาะเครื่องที่มี device secret
 migration: >
   N/A สำหรับ data — doc type ใหม่ ไม่มีข้อมูลเดิม (ยังไม่มี doc `kiosk_banner` ใน `registry`) จึงคง `schema_v 1` และเปลี่ยนรูปร่างได้โดยไม่ต้อง migrate ·
   `scanner_device.banner_enabled` / `screen_type` และ `kiosk_banner.screen_type` เป็น additive optional ไม่ backfill ·
   deploy ต้องตั้ง `BODY_SIZE_LIMIT=4M` และ deploy kiosk client ที่มี allowlist ใหม่ (รายละเอียด §6) ·
   (2026-10-21) **ไม่ migrate** — `kiosk_banner` v1 (ไม่มี `group_id`) คงอยู่เป็น "ยังไม่จัดกลุ่ม" (ไม่แสดงบนตู้) ·
   `scanner_device` เดิมไม่มี `banner_group_id` = ไม่มีกลุ่ม · `banner_enabled` ที่ค้างบน doc เดิมไม่ถูกอ่าน/เขียนอีก ·
-  deploy: `pnpm db:sync` ให้ VDU ของ `registry` เป็น version 8 · ไม่เพิ่ม index · ไม่แก้ kiosk client
+  deploy: `pnpm db:sync` ให้ VDU ของ `registry` เป็น version 8 · ไม่เพิ่ม index · ไม่แก้ kiosk client ·
+  (2026-11-10 · #1299) ไม่มี migration script — `kiosk_banner` v1/v2 คงเดิม (มีได้แค่ `compact` \| `portrait`) · app เขียน v3 ตอนสร้าง/แก้ ·
+  `kiosk_banner_group` v1 ถูก backfill แบบ lazy เป็น v2 (+ `tv_code`) เมื่อ server อ่านกลุ่มนั้นทีละกลุ่ม ·
+  deploy: `pnpm db:sync` ให้ VDU ของ `registry` เป็น version 9 + index `kiosk-banner-group-by-tv-code` **ก่อน** deploy frontend · ไม่แก้ kiosk client · ไม่แก้ nginx (§6)
 ---
 
 # CR-162: Kiosk banner — แบนเนอร์รูปภาพบนหน้าแรก kiosk
 
-> **สถานะ:** approved เป็น spec เมื่อ 2026-10-11 (Asia/Bangkok) โดย Soravit Sukkarn (Team Lead) สำหรับ scope เดิม · ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติแล้วเมื่อ 2026-10-18 · implementation อยู่บน branch `feat-kiosk-banner` (ยังไม่ merge) · schema.md §3.11 / §3.12 / §6 / §7, api-contract.md §2.2 / §2.3 และ role-permission-matrix.md §1.1 sync ตามไฟล์นี้แล้ว (2026-10-18) · **ส่วนที่ปรับ 2026-10-21 (banner group) Team Lead อนุมัติแล้วเมื่อ 2026-10-22 — merge ได้** (PR #743) · ยังไม่ได้ทดสอบบน staging / prod (§6)
+> **สถานะ:** approved เป็น spec เมื่อ 2026-10-11 (Asia/Bangkok) โดย Soravit Sukkarn (Team Lead) สำหรับ scope เดิม · ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติแล้วเมื่อ 2026-10-18 · implementation อยู่บน branch `feat-kiosk-banner` (ยังไม่ merge) · schema.md §3.11 / §3.12 / §6 / §7, api-contract.md §2.2 / §2.3 และ role-permission-matrix.md §1.1 sync ตามไฟล์นี้แล้ว (2026-10-18) · **ส่วนที่ปรับ 2026-10-21 (banner group) Team Lead อนุมัติแล้วเมื่อ 2026-10-22 — merge ได้** (PR #743) · ยังไม่ได้ทดสอบบน staging / prod (§6) · **ส่วนที่ปรับ 2026-11-10 (จอ TV ภายในศูนย์ — #1299 A–D) ทีมเสนอ / รอ PO ยืนยัน** · implementation อยู่บน branch `feat/kiosk-banner-tv`
 
 > **ส่วนที่ปรับ/เพิ่มเมื่อ 2026-10-15..17 — เสนอโดย ทีม kiosk · Team Lead อนุมัติแล้ว 2026-10-18:**
 >
@@ -70,6 +76,14 @@ migration: >
 > - **แถวที่ถูกแทนที่ (ไม่ลบ — ทำเครื่องหมาย "แทนที่โดย FR-KBG-xx"):** FR-KBN-05, 19, 20, 32 · FR-KBR-20, 35, 36, 37, 38, 44, 45 · AC-KBR-15, 16, 18, 19 (ในส่วนที่เกี่ยวกับ `banner_enabled`, route `{compact|portrait}` เดิม, order ต่อขนาดจอ)
 > - **ไม่กระทบ:** response shape ของ `POST /api/v1/kiosk/banners` · `GET …/image` · `kiosk/app/manager.py` allowlist · สิทธิ์ / role · signed URL · overlay บนตู้ (FR-KBR-46)
 
+> **ส่วนที่ปรับ 2026-11-10 (#1299 ข้อ A–D) — ทีมเสนอ / รอ PO ยืนยัน (ยังไม่อนุมัติ):** เพิ่ม **จอ TV ภายในศูนย์** — `tv_code` 6 หลักต่อกลุ่ม · screen type `tv` · feed แบบไม่ต้อง login · หน้า `/banner/{shelter_code}/internal` · ออกรหัสใหม่ได้ · ทุกจุดที่แก้มีเครื่องหมาย "(2026-11-10)"
+>
+> - **สถานะของ CR:** frontmatter คง `status: approved` สำหรับส่วนที่อนุมัติแล้ว (2026-10-11 / 10-18 / 10-22) · ส่วน 2026-11-10 มีสถานะ **proposed** จนกว่า PO ยืนยัน (แบบเดียวกับส่วน 2026-10-21 ก่อนอนุมัติ)
+> - **Section ที่เพิ่ม/แก้:** TL;DR · §1.5 (ใหม่) · §2.1.2 (ใหม่ before → after) · §2.2 (หมายเหตุไฟล์เพิ่ม) · §2.3 (`screen_type` + `tv` · v3 · VDU v9) · §2.3.1 (`tv_code` · v2 · index ใหม่) · §2.4 (feed จอภายใน · `POST …/tv-code`) · §2.5 (f) (ใหม่) · §3.5 (out of scope) · §3.8 (ใหม่ FR-KBT-01..44) · §4.5 (ใหม่ AC-KBT-01..16) · §4.3 DoD · §5 · §6 · Decision log
+> - **แถวที่ถูกแทนที่:** ไม่มี — เป็นส่วนเพิ่ม (additive) · FR-KBG-05 / FR-KBG-50 (VDU v8, ไม่เพิ่ม index) ยังเป็นจริงสำหรับรุ่น 2026-10-22 และถูกต่อยอดโดย FR-KBT-06 / FR-KBT-44
+> - **ไม่กระทบ:** response shape + พฤติกรรมของ `POST /api/v1/kiosk/banners` (ตู้ไม่ได้ banner `tv`) · `scanner_device.screen_type` (คง `compact` \| `portrait`) · `kiosk/app/manager.py` allowlist · role / capability (`requireBannerManager` เดิม) · signed image URL · nginx (`/api/v1/kiosk/` อยู่ใน zone `tent_kiosk` แล้ว — CR-188)
+> - **ไม่อยู่ในส่วนนี้:** #1299 ข้อ E (สร้างประกาศจาก template HTML · field `template` ใน `kiosk_banner`) — จะเพิ่มเป็น amendment ถัดไปของ CR นี้ใน PR แยก · ส่วนนี้ **ไม่** ระบุ field `template` ใน schema
+
 > **สรุป (TL;DR)**
 >
 > - **เปลี่ยนอะไร:** doc type `kiosk_banner` ใน DB `registry` (รูป + ช่วงเวลา + ลำดับ + ระยะเวลาต่อสไลด์ + ศูนย์เดียว `shelter_code` แก้ไม่ได้ + `screen_type` ตู้เล็ก/ตู้ใหญ่) · `scanner_device` มี `screen_type` + `banner_enabled` รายเครื่อง · `/kiosk` เข้า **attract mode** เมื่อไม่มีการแตะ 30 วินาที — overlay เต็มจอแสดง**รูปอย่างเดียว** (ไม่มี caption / dot / ข้อความ) วนตาม `duration_sec` · แตะจอ = กลับหน้าเลือกวิธี
@@ -80,6 +94,7 @@ migration: >
 > - **กระทบ schema / scope:** `kiosk_banner` v1 (ใหม่ ไม่ bump) · `scanner_device` +2 field optional (ไม่ bump) · อ่านผ่าน Node BFF → CouchDB (ไม่ผ่าน worker/Mongo/FastAPI)
 > - **Design pattern:** [`docs/features/kiosk-banner-design-guideline.md`](../../features/kiosk-banner-design-guideline.md)
 > - **(2026-10-21) banner group:** เพิ่ม doc `kiosk_banner_group:{ulid}` (ต่อศูนย์ · มีชื่อ · แก้ชื่อได้) · เครื่อง 1 เครื่อง = 0 หรือ 1 กลุ่ม (`scanner_device.banner_group_id`) แทน `banner_enabled` · banner 1 อัน = 1 กลุ่ม (`kiosk_banner` v2 + `group_id`) · ข้างในกลุ่มยังแยก resolution (ตู้เล็ก/ตู้ใหญ่) และจัดลำดับแยกต่อ (`group_id`, `screen_type`) · ตู้เห็นเฉพาะ banner ของกลุ่มตัวเอง (ไม่มีกลุ่ม = ไม่แสดง) · **ไม่ migrate** (banner v1 / เครื่องเดิม = ไม่มีกลุ่ม → ไม่แสดงบนตู้จนกว่าจัดกลุ่ม) · Dev build: group CRUD + `PUT …/devices` + `group_id` ใน banner/order API + feed กรองตามกลุ่ม + หน้า `/back-office/kiosks/banners/groups/**` + VDU v8 · เหตุผล §1.4
+> - **(2026-11-10 · #1299 A–D · ทีมเสนอ / รอ PO ยืนยัน) จอ TV ภายในศูนย์:** กลุ่มมี `tv_code` เลขสุ่ม 6 หลัก ไม่ซ้ำทั้งระบบ (`kiosk_banner_group` v1 → v2 · backfill แบบ lazy) · banner มี screen type ที่ 3 `tv` 1920×1080 (`kiosk_banner` v2 → v3 · เครื่อง kiosk ยังเป็น `compact` / `portrait` เท่านั้น) · TV เปิด `/banner/{shelter_code}/internal?c={tv_code}` โดยไม่ login → เล่น banner `tv` ของกลุ่มเต็มจอ · feed `GET /api/v1/kiosk/internal/{shelter}/banners?c=` (anonymous · รหัสผิด/ศูนย์ไม่ตรง = `404 TV_CODE_NOT_FOUND` แบบเดียวกันทุกกรณี) · ออกรหัสใหม่ `POST …/kiosk-banner-groups/{id}/tv-code` (รหัสเก่าใช้ไม่ได้ทันที) · VDU v9 + index `kiosk-banner-group-by-tv-code` · ความเสี่ยง: feed ไม่ต้อง login และรหัส 6 หลักเดาได้ภายในเพดาน nginx (§5) · เหตุผล §1.5
 
 ---
 
@@ -116,6 +131,14 @@ migration: >
 2. **`banner_enabled` ละเอียดไม่พอ:** เปิด/ปิดรายเครื่องได้แค่ "เห็นทั้งชุด" หรือ "ไม่เห็นเลย" — ไม่สามารถเลือกชุดให้เครื่องได้ จึงแทนด้วยการสังกัดกลุ่ม (ไม่มีกลุ่ม = ไม่แสดง)
 3. **ทางเลือกที่ตัดทิ้ง:** (ก) tag ต่อ banner หลายค่า / banner 1 อันหลายกลุ่ม — ตัดทิ้ง: ซับซ้อนทั้งการจัดลำดับ (`order` ต่อ slot) และการลบ · ใช้ซ้ำหลายกลุ่ม = สร้างซ้ำ (ข) เก็บรายการ `device_ids` ใน doc กลุ่ม — ตัดทิ้ง: ต้องซิงก์สองทางกับ `scanner_device` · เก็บ `banner_group_id` ที่เครื่องอย่างเดียว (single source) แล้ว derive `device_ids` ตอนอ่าน
 4. **ไม่ migrate:** ยอมรับว่า banner เดิมและเครื่องเดิมไม่แสดงบนตู้จนกว่าเจ้าหน้าที่จัดกลุ่ม — แลกกับไม่ต้องเดากลุ่มให้ข้อมูลเดิม (ดู §6)
+
+### 1.5 ทำไมต้องมีจอ TV ภายในศูนย์ (2026-11-10 · #1299 — ทีมเสนอ / รอ PO ยืนยัน)
+
+1. **ศูนย์มี TV อยู่แล้ว แต่ใช้ขึ้นประกาศไม่ได้:** ศูนย์ต้องการเปิดสื่อภายในศูนย์ (ประกาศในศูนย์ ตามหาญาติ ฯลฯ) บน browser ของ TV ทั่วไป · feed เดิม `POST /api/v1/kiosk/banners` ส่งให้เฉพาะเครื่องที่ยืนยันตัวด้วย `x-device-id` / `x-device-secret` (`authenticateScannerDevice`) — TV ต้องลงทะเบียนเป็น `scanner_device` และติดตั้ง kiosk client ซึ่งไม่คุ้มสำหรับจอแสดงผลอย่างเดียว
+2. **ผูก TV กับกลุ่มด้วยรหัสสั้น:** กลุ่ม banner (§1.4) เป็นหน่วยเนื้อหาอยู่แล้ว · รหัส 6 หลักต่อกลุ่มพิมพ์ด้วยรีโมต TV ได้ และเปลี่ยนได้ทันทีเมื่อรั่ว · ไม่ต้องมี session หรือ device secret บน TV
+3. **ขนาดจอต่างจากตู้:** TV เป็นแนวนอน 1920×1080 · รูปของตู้เล็ก (1024×600) / ตู้ใหญ่ (1080×1920) ไม่พอดี จึงเพิ่ม screen type `tv` เป็น slot ที่ 3 ในกลุ่ม · TV ไม่ใช่เครื่อง kiosk จึงไม่เพิ่ม `tv` ใน `scanner_device.screen_type`
+4. **ทางเลือกที่ตัดทิ้ง:** (ก) ลงทะเบียน TV เป็น `scanner_device` — ตัดทิ้ง: ต้องเก็บ device secret บน TV และนับเป็นเครื่อง kiosk (ข) หน้าประกาศสาธารณะผ่าน public plane (Mongo + FastAPI) — ตัดทิ้ง: เนื้อหาเป็นของภายในศูนย์ ไม่ต้องการ projector ใหม่ (ค) rate limit ในแอป — ตัดทิ้ง: CR-188 ให้ nginx จัดการ rate limit ที่เดียว
+5. **ความเสี่ยงที่ต้องให้ PO ยืนยัน:** feed ไม่ต้อง login — ใครรู้ shelter code + รหัส 6 หลักก็เห็นสื่อของกลุ่มนั้น · รหัสมี 10⁶ ค่า เพดาน nginx (CR-188 zone `tent_kiosk` 10,000 ครั้ง/นาที/IP) กัน flood ได้แต่กันการเดารหัสไม่ได้ — IP เดียวไล่ครบทุกค่าได้ในราว 100 นาที (เร็วขึ้นตามจำนวนกลุ่มของศูนย์เป้าหมาย และจำนวน IP) · มาตรการลดความเสี่ยง: ออกรหัสใหม่ได้ทันที (รหัสเก่าใช้ไม่ได้) · feed คืนเฉพาะรายการ banner (ไม่มีชื่อกลุ่ม / ศูนย์ / เครื่อง) · ทุกกรณีที่ไม่ผ่านตอบ `404` เหมือนกัน (§5)
 
 ---
 
@@ -162,6 +185,24 @@ migration: >
 | หน้าจัดการอุปกรณ์ `/back-office/kiosks` | Switch「แสดงแบนเนอร์」ต่อเครื่อง                                         | ไม่มี Switch · badge ชื่อกลุ่ม หรือ「ไม่มีกลุ่มแบนเนอร์」· dialog แก้ไขแสดงกลุ่มแบบอ่านอย่างเดียว + ลิงก์ไปหน้ากลุ่ม                              |
 | kiosk client (`manager.py`)    | allowlist 10 path                                                               | ไม่เปลี่ยน                                                                                                                                       |
 
+#### 2.1.2 Before → after (2026-11-10 · #1299 A–D — ทีมเสนอ / รอ PO ยืนยัน)
+
+คอลัมน์ "ก่อน" = ค่าที่อนุมัติแล้ว 2026-10-22 · คอลัมน์ "หลัง" = ข้อเสนอ
+
+| เรื่อง                          | ก่อน (อนุมัติ 2026-10-22)                                       | หลัง (2026-11-10)                                                                                                                                       |
+| :------------------------------ | :-------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ผู้ชม banner                    | ตู้ kiosk ที่มี device credential เท่านั้น                      | + TV ภายในศูนย์ (browser ทั่วไป · ไม่ login · ไม่ลงทะเบียนเป็นเครื่อง)                                                                                  |
+| `kiosk_banner_group`            | schema_v 1 (ไม่มีรหัส)                                          | schema_v 2 + `tv_code` (6 หลัก · ไม่ซ้ำทั้งระบบ · server ออก · ออกใหม่ได้) · v1 backfill แบบ lazy                                                        |
+| `screen_type` ของ banner        | `compact` \| `portrait`                                         | `compact` \| `portrait` \| `tv` (1920×1080) · `kiosk_banner` schema_v 2 → 3 · v1/v2 มีได้แค่ `compact` \| `portrait`                                     |
+| `screen_type` ของเครื่อง        | `compact` \| `portrait`                                         | ไม่เปลี่ยน (TV ไม่ใช่เครื่อง kiosk)                                                                                                                     |
+| slot ในกลุ่ม                    | 2 slot (ตู้เล็ก / ตู้ใหญ่)                                      | 3 slot (ตู้เล็ก / ตู้ใหญ่ / จอ TV) · `order` นับต่อ (`group_id`, `screen_type`) เหมือนเดิม                                                              |
+| feed                            | `POST /api/v1/kiosk/banners` (device auth)                      | เดิมไม่เปลี่ยน (ไม่คืน `tv`) + `GET /api/v1/kiosk/internal/{shelter}/banners?c={tv_code}` (anonymous · คืนเฉพาะ `tv`)                                    |
+| API ออกรหัส                     | —                                                               | `POST /api/back-office/kiosk-banner-groups/{id}/tv-code` · `KioskBannerGroupSummary` + `tv_code`                                                       |
+| หน้าแสดงผล                      | `/kiosk` (attract overlay บนตู้)                                | + `/banner/{shelter_code}/internal` (นอก `(protected)` / `(public)` · แป้นตัวเลข + slideshow เต็มจอ)                                                     |
+| หน้ากลุ่ม back-office           | header + card 2 ขนาดจอ                                          | + รหัส TV · ปุ่มคัดลอกลิงก์ · ปุ่ม「ออกรหัสใหม่」(confirm) · card 3 ขนาดจอ · route `[screen=kioskScreen]` รับ `tv`                                       |
+| VDU / index `registry`          | `REGISTRY_DESIGN_VERSION` 8 · index `kiosk-banner-by-shelter`   | `REGISTRY_DESIGN_VERSION` 9 · + index `kiosk-banner-group-by-tv-code` = `(type, tv_code)`                                                              |
+| rate limit                      | nginx CR-188 (`/api/v1/kiosk/` → zone `tent_kiosk`)             | ไม่เปลี่ยน · feed จอภายในอยู่ใต้ `/api/v1/kiosk/` จึงอยู่ใน zone เดิม · ไม่มี rate limit ในแอป                                                         |
+
 ### 2.2 System design
 
 ```text
@@ -197,6 +238,17 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 
 (2026-10-21) เพิ่ม: `lib/features/kiosk-banners/domain/kiosk-banner-group.ts` · `lib/server/kiosk-banners/kiosk-banner-group.server.ts` · `routes/api/back-office/kiosk-banner-groups/{+server,[id]/+server,[id]/devices/+server}.ts` · `routes/(protected)/back-office/kiosks/banners/groups/**` · VDU branch `kiosk_banner_group` + `kiosk_banner` v1/v2 (version 7 → 8) · feed `routes/api/v1/kiosk/banners/+server.ts` อ่าน `principal.banner_group_id` แทน `banner_enabled` · `lib/server/scanners/device-repository.ts` `setBannerGroup(ids, groupId | null)` (ไม่ขัดจังหวะกับการแก้เครื่องจากหน้าอื่น — merge + retry `409`)
 
+(2026-11-10 · ทีมเสนอ / รอ PO ยืนยัน) เพิ่ม: `routes/api/v1/kiosk/internal/[shelter]/banners/+server.ts` (feed anonymous — `findGroupByTvCode` → `listActiveForShelter(shelter, now, { groupId, screenType: 'tv' })` → `signBannerImageUrl`) · `routes/api/back-office/kiosk-banner-groups/[id]/tv-code/+server.ts` (`requireBannerManager` → `loadGroupInScope` → `rotateTvCode`) · `lib/server/kiosk-banners/kiosk-banner-group.server.ts` (`issueTvCode` สุ่มสูงสุด 10 ครั้ง · `ensureTvCode` backfill ใน `getGroup`) · `lib/features/kiosk-banners/domain/kiosk-banner-group.ts` (`tvCodeSchema`, `generateTvCode` ด้วย `crypto.getRandomValues` แบบไม่ bias, `internalBannerUrl`) · `lib/features/kiosk/{data/internal-banners.api.ts,ui/internal-banner-display.svelte.ts}` · `routes/banner/[shelter]/internal/**` · VDU version 8 → 9 + `KIOSK_BANNER_TV_CODE_MANGO_INDEX`
+
+```text
+TV (browser · ไม่ login)
+  └─ /banner/{shelter_code}/internal[?c={tv_code}]        (นอก (protected) / (public) · ไม่มี guard)
+       ├─ GET /api/v1/kiosk/internal/{shelter}/banners?c=  ← nginx zone tent_kiosk (CR-188)
+       │    findGroupByTvCode(c)  (index (type, tv_code)) → group.shelter_code = {shelter} ?
+       │    → listActiveForShelter(shelter, now, { groupId, screenType: 'tv' }) → sign image_url
+       └─ <img src="/api/v1/kiosk/banners/{id}/image?exp=&sig=">   (signed URL เดิม)
+```
+
 ### 2.3 Schema — `kiosk_banner` v1 (แทน schema.md §3.12 ทั้งตาราง) · v2 + `kiosk_banner_group` (2026-10-21)
 
 | Field                                      | ชนิด                       | req | หมายเหตุ                                                                                                              |
@@ -225,6 +277,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - **VDU:** reject เมื่อ `shelter_code` ว่าง/ไม่ใช่ string, `screen_type` นอก enum, `title` ว่างหรือ >120, `caption` >200, `order` ไม่ใช่ int ≥1, `duration_sec` ไม่ใช่ int 3–60, `status` นอก enum, `end_at ≤ start_at`, `schema_v ≠ 1` (**2026-10-21:** `schema_v` ต้องเป็น 1 หรือ 2 · v2 ต้องมี `group_id` เป็น string ขึ้นต้น `kiosk_banner_group:` · `REGISTRY_DESIGN_VERSION` 7 → 8) · ไม่ตรวจ doc ที่ `_deleted` · เงื่อนไขผู้เขียนเดิมของ `registry` (`_admin` / SA) คงไว้
 - **Index (Mango):** `kiosk-banner-by-shelter` = `["type", "shelter_code"]` (แทน `(type, status, end_at)` เดิม) · CouchDB ใช้ json index เฉพาะเมื่อ selector ระบุครบทุก field จึงตรงกับ selector ของรายการ banner พอดี · deploy โดย `pnpm db:sync` / `sync:central` (`registry-redeploy.ts`)
 - **ลบ:** hard delete ทั้ง doc
+- **(2026-11-10 · ทีมเสนอ / รอ PO ยืนยัน) schema_v 2 → 3:** `screen_type` เป็น enum(`compact`,`portrait`,`tv`) · `tv` = จอ TV 1920×1080 · **v1 / v2 มีได้แค่ `compact` \| `portrait`** · v3 ต้องมี `group_id` เหมือน v2 · app เขียน `schema_v: 3` ทุกครั้งที่สร้างหรือแก้ (`PUT`) · banner `tv` ไม่ถูกคืนใน feed ของตู้ (เครื่องมีแค่ `compact` / `portrait`) และถูกคืนเฉพาะใน feed จอภายใน (§2.4) · **VDU:** `schema_v` ต้องเป็น 1, 2 หรือ 3 · `schema_v ≥ 2` ต้องมี `group_id` · `screen_type = 'tv'` ต้องเป็น `schema_v 3` · `REGISTRY_DESIGN_VERSION` 8 → 9
 
 #### 2.3.1 `kiosk_banner_group` v1 (ใหม่ — 2026-10-21 · แทน schema.md §3.13)
 
@@ -242,6 +295,19 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - **VDU:** reject เมื่อ `schema_v ≠ 1`, `shelter_code` ว่าง/ไม่ใช่ string, `name` ว่างหลัง trim หรือ >60, `description` >200 · ไม่ตรวจ doc ที่ `_deleted`
 - **ไม่ sync เข้า MongoDB** · **Index:** ใช้ `kiosk-banner-by-shelter` `["type", "shelter_code"]` เดิม (ไม่เพิ่ม)
 - **ลบ:** hard delete · ได้เมื่อไม่มี banner ในกลุ่ม (ทั้งที่ยังแสดงและหมดอายุ) มิฉะนั้น `409` · ตอนลบ ล้าง `banner_group_id` ของเครื่องในกลุ่ม
+
+#### 2.3.2 `kiosk_banner_group` v2 — `tv_code` (2026-11-10 · ทีมเสนอ / รอ PO ยืนยัน)
+
+| Field      | ชนิด | req      | หมายเหตุ                                                                                                                                                                                                                         |
+| ---------- | ---- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_v` | int  | req      | `1` (เดิม — ไม่มี `tv_code`) · `2` (มี `tv_code`) · กลุ่มใหม่เขียน `2`                                                                                                                                                         |
+| `tv_code`  | str  | req (v2) | ตัวเลข ASCII 6 หลักพอดี `^[0-9]{6}$` (`000000`–`999999` · เก็บเลข 0 นำหน้า) · ไม่ซ้ำทั้งระบบ (best effort) · server ออกด้วย `crypto.getRandomValues` (ไม่รับจาก client) · ออกใหม่ได้ (รหัสเก่าใช้ไม่ได้ทันที) · v1 ไม่มี field นี้ |
+
+- **ความไม่ซ้ำ (best effort):** ก่อนเขียน server query `{ type: 'kiosk_banner_group', tv_code }` — ซ้ำให้สุ่มใหม่ (สูงสุด 10 ครั้ง · ครบแล้วยังซ้ำ → `500 INTERNAL`) · CouchDB ไม่มี unique constraint จึงอาจชนได้เมื่อสร้างพร้อมกัน (โอกาสต่ำมากใน 10⁶ ค่า) · รหัสปัจจุบันของกลุ่มนับเป็น "ใช้แล้ว" → รหัสใหม่ต่างจากเดิมเสมอ
+- **Backfill แบบ lazy:** เมื่อ server อ่านกลุ่ม v1 ทีละกลุ่ม (`getGroup` — ทุก endpoint `/api/back-office/kiosk-banner-groups/{id}/**` และการตรวจ `group_id` ของ banner) ให้ออก `tv_code` แล้วเขียนกลับเป็น `schema_v: 2` (ไม่แตะ `updated_at` — เป็นการ upgrade โดยระบบ) · `GET` รายการกลุ่ม (`?shelter_code=`) **ไม่** backfill — กลุ่ม v1 ในรายการยังไม่มี `tv_code` · กลุ่ม v1 ที่ยังไม่ถูก backfill ไม่มีรหัส จึงยังเปิดบน TV ไม่ได้
+- **ออกรหัสใหม่:** เขียน `tv_code` ใหม่ + `updated_at` · กลุ่ม v1 ถูก upgrade เป็น v2 ในการเขียนเดียวกัน
+- **VDU:** `schema_v` ต้องเป็น 1 หรือ 2 · v2 ต้องมี `tv_code` เป็น string ตัวเลข `0`–`9` ยาว 6 พอดี · ความไม่ซ้ำตรวจที่ BFF (ไม่ใช่ VDU) · `REGISTRY_DESIGN_VERSION` 8 → 9
+- **Index (Mango) ใหม่:** `kiosk-banner-group-by-tv-code` = `["type", "tv_code"]` (ตรงกับ selector `{ type, tv_code }` พอดี) · deploy โดย `pnpm db:sync` / `sync:central` (`REGISTRY_MANGO_INDEXES`)
 
 ### 2.4 API
 
@@ -281,6 +347,18 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 | `PUT`    | `/api/back-office/kiosk-banner-groups/{id}/devices`  | `{ device_ids: string[] }` — **แทนที่สมาชิก:** ที่ระบุได้กลุ่มนี้ (ย้ายออกจากกลุ่มเดิม) · ที่เคยอยู่แต่ไม่ระบุ → `null`                            | `200`                           | `404` · เครื่องของศูนย์อื่น `422`                                                      |
 
 `PATCH /api/v1/kiosk/devices/{id}` (2026-10-21): ตัด `banner_enabled` (strict body → `422`) · summary มี `banner_group_id: string\|null` แทน `banner_enabled`
+
+**จอ TV ภายในศูนย์ (2026-11-10 · ทีมเสนอ / รอ PO ยืนยัน)**
+
+| Method | Path                                                        | Auth                                                      | ผล                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------ | ----------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/kiosk/internal/{shelter}/banners?c={tv_code}`      | ไม่มี (anonymous · ไม่ใช้ cookie / device secret)         | `200 { banners: [{ id, title, caption, duration_sec, image_url }], fetched_at }` (shape เดียวกับ feed ตู้) — banner ของกลุ่มที่ `tv_code = c` ที่ `screen_type = 'tv'`, `status = active`, `start_at ≤ now < end_at` · เรียง `order` → `start_at` → `_id` · สูงสุด 20 · `404 TV_CODE_NOT_FOUND` เมื่อไม่มี `c` / `c` ผิดรูป / ไม่รู้จัก / เป็นของศูนย์อื่นที่ไม่ใช่ `{shelter}` — body เดียวกันทุกกรณี · `503 DEPENDENCY_UNAVAILABLE` · ทุก response `cache-control: no-store` + `pragma: no-cache` |
+| `POST` | `/api/back-office/kiosk-banner-groups/{id}/tv-code`         | `_session` · `requireBannerManager` + scope ศูนย์ของกลุ่ม | `200 KioskBannerGroupSummary` (มี `tv_code` ใหม่) · รหัสเก่าใช้ไม่ได้ทันที · ไม่มี body · ไม่พบ / นอก scope `404 NOT_FOUND` · ไม่มี session `401` · ไม่มี capability `403`                                                                                                                                                                                                                         |
+
+- `KioskBannerGroupSummary` (ทุก endpoint ของ §2.3.1) มี `tv_code` เมื่อกลุ่มเป็น v2 · endpoint `{id}` คืนกลุ่มที่ backfill แล้วเสมอ · รายการ (`GET ?shelter_code=`) อาจมีกลุ่ม v1 ที่ยังไม่มี `tv_code`
+- feed จอภายในอยู่ใต้ `/api/v1/kiosk/` → nginx zone `tent_kiosk` (CR-188) ครอบโดยไม่ต้องแก้ nginx · ไม่มี rate limit ในแอป
+- `image_url` ใช้ signed URL เดิม (`GET /api/v1/kiosk/banners/{id}/image`) — ไม่เปลี่ยน
+- `POST /api/v1/kiosk/banners` (ตู้) ไม่เปลี่ยน — กรองด้วย `screen_type` ของเครื่อง (`compact` / `portrait`) จึงไม่คืน banner `tv`
 
 ### 2.5 UI
 
@@ -379,6 +457,31 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - ขั้น 2 ของ `/groups/new`: รายการเครื่องของศูนย์ (checkbox) แสดงขนาดจอ + กลุ่มปัจจุบัน · เลือกเครื่องที่อยู่กลุ่มอื่น = ย้าย พร้อมคำเตือน
 - หน้า `/back-office/kiosks`: ไม่มี Switch「แสดงแบนเนอร์」· badge ชื่อกลุ่ม หรือ「ไม่มีกลุ่มแบนเนอร์」· dialog แก้ไขเครื่องแสดงกลุ่มแบบอ่านอย่างเดียว + ลิงก์ไปหน้ากลุ่ม
 
+**(f) จอ TV ภายในศูนย์ (2026-11-10 · ทีมเสนอ / รอ PO ยืนยัน)**
+
+```text
+หน้ากลุ่ม /back-office/kiosks/banners/groups/{group}
+┌ ตู้หน้าประตู ───────────── [แก้ชื่อ] [จัดการเครื่อง] [ลบกลุ่ม] ┐
+│ รหัสจอ TV  482 913     [คัดลอกลิงก์] [ออกรหัสใหม่]              │
+│ ตู้เล็ก 1024×600 · ตู้ใหญ่ 1080×1920 · จอ TV 1920×1080  (card) │
+└────────────────────────────────────────────────────────────────┘
+
+/banner/{shelter_code}/internal            (ไม่มี ?c=)
+┌────────────────────────────────┐
+│        กรอกรหัสจอ 6 หลัก         │
+│        [ _ _ _ _ _ _ ]          │
+│        [1] [2] [3]              │
+│        [4] [5] [6]              │   ← โฟกัสด้วยลูกศรรีโมต · Enter = กด
+│        [7] [8] [9]              │
+│        [ลบ] [0] [ตกลง]          │
+└────────────────────────────────┘
+
+/banner/{shelter_code}/internal?c=482913   → slideshow เต็มจอ (พื้นดำ · object-contain · ไม่มีเคอร์เซอร์)
+```
+
+- ปุ่ม「ออกรหัสใหม่」เปิด confirm dialog ที่บอกว่า TV ที่เปิดรหัสเดิมอยู่จะกลับไปหน้ากรอกรหัส
+- ลิงก์ที่คัดลอก = `{origin}/banner/{shelter_code}/internal?c={tv_code}`
+
 ---
 
 ## 3. Requirements
@@ -451,6 +554,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - ฟิลด์ภาษาอังกฤษ (`title_en` / `caption_en`)
 - banner เดียวหลายศูนย์ / broadcast ทุกศูนย์ / ย้าย banner ข้ามศูนย์ (เพิ่ม 2026-10-15 — ดู Q4)
 - (2026-10-21) banner เดียวหลายกลุ่ม (ใช้ซ้ำ = สร้างซ้ำ) · เครื่องเดียวหลายกลุ่ม · กลุ่มข้ามศูนย์ · ย้ายกลุ่มข้ามศูนย์ · migrate banner/เครื่องเดิมเข้ากลุ่มอัตโนมัติ
+- (2026-11-10 · ทีมเสนอ) ลงทะเบียน TV เป็นเครื่อง / นับว่า TV ไหนเปิดอยู่ · `tv` ใน `scanner_device.screen_type` · rate limit ในแอปสำหรับ feed จอภายใน (ใช้ nginx CR-188) · หน้าประกาศสาธารณะ (นอกศูนย์) · วิดีโอ · เชื่อมกับข้อมูลคนหาย / unassigned · สร้างประกาศจาก template HTML (#1299 ข้อ E — amendment ถัดไปของ CR นี้) · editor แบบลากวาง (Konva/canvas — phase หน้า)
 
 ### 3.6 ปรับ design หลัง CR-165 (FR-KBR-01..46)
 
@@ -600,6 +704,67 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | FR-KBG-50 | deploy: `pnpm db:sync` ให้ VDU ของ `registry` เป็น `REGISTRY_DESIGN_VERSION` 8 · ไม่เพิ่ม index (ใช้ `kiosk-banner-by-shelter` เดิม) · ไม่มี data migration (§6) | —      |
 
+### 3.8 จอ TV ภายในศูนย์ (FR-KBT-01..44 — 2026-11-10 · #1299 A–D)
+
+> **ทีมเสนอ / รอ PO ยืนยัน (ยังไม่อนุมัติ)** — เหตุผล §1.5 · เป็นส่วนเพิ่ม ไม่แทนที่ FR เดิม · guard / สิทธิ์ของ endpoint back-office ใหม่ = `requireBannerManager` (SA · `{code}:shelter_manager` / `{code}:kiosk_staff` / `{code}:pr_staff` — CR-203) เหมือน FR-KBG-20 · #1299 ข้อ E (template HTML) ไม่อยู่ในตารางนี้
+
+#### 3.8.1 Data — `tv_code` และ screen type `tv`
+
+| ID        | Requirement                                                                                                                                                                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBT-01 | `kiosk_banner_group` schema_v 1 → 2 · v2 มี `tv_code` (req) = ตัวเลข ASCII 6 หลักพอดี (`^[0-9]{6}$` · เก็บเลข 0 นำหน้า) · กลุ่มใหม่เขียน v2 พร้อมรหัส                                                          |
+| FR-KBT-02 | server ออก `tv_code` ด้วย `crypto.getRandomValues` (กระจายสม่ำเสมอ ไม่ bias) · ไม่รับ `tv_code` จาก client ในทุก endpoint                                                                                         |
+| FR-KBT-03 | `tv_code` ไม่ซ้ำทั้งระบบแบบ best effort: query `{ type: 'kiosk_banner_group', tv_code }` ก่อนเขียน · ซ้ำ → สุ่มใหม่ สูงสุด 10 ครั้ง · ครบแล้วยังซ้ำ → `500 INTERNAL`                                            |
+| FR-KBT-04 | กลุ่ม v1 ถูก backfill แบบ lazy เมื่อ server อ่านกลุ่มนั้นทีละกลุ่ม (`getGroup`): ออก `tv_code` แล้วเขียนกลับเป็น v2 โดยไม่เปลี่ยน `updated_at` · กลุ่ม v2 ไม่ถูกเขียนซ้ำ · `GET` รายการกลุ่มไม่ backfill          |
+| FR-KBT-05 | `kiosk_banner` schema_v 2 → 3 · `screen_type` เพิ่มค่า `tv` (จอ TV 1920×1080) · v1 / v2 มีได้แค่ `compact` \| `portrait` · v3 ต้องมี `group_id` เหมือน v2 · app เขียน v3 ทุกครั้งที่สร้างหรือแก้ banner        |
+| FR-KBT-06 | VDU `registry`: `kiosk_banner` `schema_v` ∈ {1, 2, 3} · `screen_type = 'tv'` ต้องเป็น v3 · `kiosk_banner_group` `schema_v` ∈ {1, 2} · v2 ต้องมี `tv_code` 6 หลักตัวเลข · `REGISTRY_DESIGN_VERSION` 8 → 9         |
+| FR-KBT-07 | Mango index ใหม่ `kiosk-banner-group-by-tv-code` = `["type", "tv_code"]` ใน `registry`                                                                                                                             |
+| FR-KBT-08 | `scanner_device.screen_type` ยังรับแค่ `compact` / `portrait` (`kioskDeviceScreenTypeSchema`) · `POST` / `PATCH /api/v1/kiosk/devices` ที่ส่ง `tv` → `422`                                                       |
+| FR-KBT-09 | `KIOSK_SCREENS.tv` = label「จอ TV」· 1920×1080 · `kioskScreenTypeSchema` = `compact` \| `portrait` \| `tv`                                                                                                         |
+
+#### 3.8.2 Back-office API + UI
+
+| ID        | Requirement                                                                                                                                                                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBT-10 | `POST /api/back-office/kiosk-banner-groups/{id}/tv-code` (ไม่มี body) ออกรหัสใหม่ → `200 KioskBannerGroupSummary` ที่มี `tv_code` ใหม่ · รหัสใหม่ต่างจากรหัสเดิมเสมอ · รหัสเดิมใช้ไม่ได้ทันที · กลุ่ม v1 ถูก upgrade เป็น v2 |
+| FR-KBT-11 | `POST …/tv-code` ใช้ `requireBannerManager` + scope ศูนย์ของกลุ่ม · ไม่พบ / นอก scope `404 NOT_FOUND` · ไม่มี session `401` · ไม่มี capability ที่ศูนย์ใด `403`                                                        |
+| FR-KBT-12 | `KioskBannerGroupSummary` มี `tv_code` (กลุ่ม v2) · endpoint ที่มี `{id}` คืนกลุ่มที่ backfill แล้วเสมอ                                                                                                                 |
+| FR-KBT-13 | หน้ากลุ่ม `/back-office/kiosks/banners/groups/{group}` แสดงรหัส TV                                                                                                                                                        |
+| FR-KBT-14 | หน้ากลุ่มมีปุ่ม「คัดลอกลิงก์」ที่คัดลอก `{origin}/banner/{shelter_code}/internal?c={tv_code}` · สำเร็จ / ไม่สำเร็จแจ้งด้วย toast                                                                                         |
+| FR-KBT-15 | หน้ากลุ่มมีปุ่ม「ออกรหัสใหม่」ที่เปิด confirm dialog (แจ้งว่ารหัสเดิมใช้ไม่ได้ทันที และจอที่เปิดรหัสเดิมจะกลับหน้ากรอกรหัส) ก่อนเรียก `POST …/tv-code`                                                                     |
+| FR-KBT-16 | หน้ากลุ่มมี card และหน้าจัดลำดับของ slot `tv` (route `groups/{group}/[screen=kioskScreen]` รับ `tv`) · ฟอร์ม banner เลือกขนาดจอ `tv` ได้ · `order` นับต่อ (`group_id`, `tv`) ตาม FR-KBG-09                                 |
+
+#### 3.8.3 Feed จอภายใน
+
+| ID        | Requirement                                                                                                                                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR-KBT-20 | `GET /api/v1/kiosk/internal/{shelter}/banners?c={tv_code}` อยู่ใต้ `/api/v1/kiosk/` (nginx zone `tent_kiosk` — CR-188) · ไม่ใช้ cookie และ device secret                                                          |
+| FR-KBT-21 | หากลุ่มจาก `tv_code` (index FR-KBT-07) · คืนเฉพาะ banner ของกลุ่มนั้นที่ `screen_type = 'tv'`, `status = active`, `start_at ≤ now < end_at` · เรียง `order` → `start_at` → `_id` · สูงสุด 20 (กรองก่อนตัด cap)      |
+| FR-KBT-22 | response `200 { banners: [{ id, title, caption, duration_sec, image_url }], fetched_at }` shape เดียวกับ feed ตู้ · `image_url` = signed URL เดิม · ไม่คืนข้อมูลอื่นของกลุ่ม ศูนย์ หรือเครื่อง                        |
+| FR-KBT-23 | ไม่มี `c` / `c` ผิดรูป (ไม่ query) / ไม่รู้จัก / กลุ่มเป็นของศูนย์อื่นที่ไม่ใช่ `{shelter}` → `404` body `{ error: { code: 'TV_CODE_NOT_FOUND', message } }` เหมือนกันทุกกรณี (ไม่บอกว่ารหัสเคยมี หรือเป็นของศูนย์ไหน) |
+| FR-KBT-24 | registry ใช้ไม่ได้ → `503 DEPENDENCY_UNAVAILABLE` · ทุก response `cache-control: no-store` + `pragma: no-cache`                                                                                                     |
+| FR-KBT-25 | ไม่มี rate limit ในแอป (CR-188 ให้ nginx จัดการ)                                                                                                                                                                   |
+| FR-KBT-26 | `POST /api/v1/kiosk/banners` (ตู้) ไม่คืน banner `tv` — กรองด้วย `screen_type` ของเครื่องเหมือนเดิม                                                                                                                |
+
+#### 3.8.4 หน้า `/banner/{shelter}/internal`
+
+| ID        | Requirement                                                                                                                                                                       |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBT-30 | route `/banner/[shelter]/internal` อยู่นอก `(protected)` และ `(public)` · ไม่มี guard · ไม่มี navbar · ไม่มี `SystemBannerHost`                                                  |
+| FR-KBT-31 | ไม่มี `?c=` → แป้นตัวเลขใหญ่ 0–9 + ลบ + ตกลง · ใช้รีโมต TV ได้ (โฟกัสด้วยปุ่มลูกศร · Enter = กด) · กรอกครบ 6 หลักแล้วไปที่ `?c=…` ของศูนย์เดิม                                  |
+| FR-KBT-32 | รหัสถูก → slideshow เต็มจอ · แต่ละ slide ค้างตาม `duration_sec` · วนไม่สิ้นสุด · พื้นดำ · รูป `object-contain` · ซ่อนเคอร์เซอร์                                                  |
+| FR-KBT-33 | ดึง feed ใหม่ทุก `KIOSK_BANNER_REFRESH_MS` (5 นาที) · timeout 3 วินาที · banner ที่เพิ่ม แก้ หรือหมดเวลา เปลี่ยนบนจอเองโดยไม่ reload · ชุดใหม่เริ่มที่รอยต่อ slide (ไม่ตัด slide ที่กำลังแสดง) |
+| FR-KBT-34 | เน็ตหลุด / timeout / feed ตอบ error อื่นที่ไม่ใช่ `404` → เล่นชุดเดิมต่อ แล้วลองใหม่รอบถัดไป                                                                                      |
+| FR-KBT-35 | feed ตอบ `404` (เช่น รหัสถูกออกใหม่) → หยุด slideshow และ refresh · กลับหน้าแป้นตัวเลข พร้อมข้อความ「รหัสไม่ถูกต้องหรือถูกเปลี่ยนแล้ว」                                            |
+| FR-KBT-36 | กลุ่มไม่มี banner `tv` ที่แสดงได้ → จอว่าง พร้อมข้อความ「ยังไม่มีสื่อให้แสดง」 แล้วลองดึงใหม่ตามรอบ                                                                                |
+| FR-KBT-37 | `.svelte` ที่แตะผ่าน `svelte-autofixer` · UI back-office ตาม civic-design-system                                                                                                    |
+
+#### 3.8.5 Deploy
+
+| ID        | Requirement                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBT-44 | deploy: `pnpm db:sync` ให้ VDU `registry` เป็น `REGISTRY_DESIGN_VERSION` 9 + index `kiosk-banner-group-by-tv-code` **ก่อน** deploy frontend · ไม่มี data migration script (§6) · ไม่แก้ nginx · ไม่แก้ kiosk client |
+
 ---
 
 ## 4. Acceptance
@@ -670,10 +835,32 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 | AC-KBG-18 | หน้า `/groups/new`: เลือกเครื่องที่อยู่กลุ่มอื่น                                                                  | แสดงคำเตือนว่าจะย้ายออกจากกลุ่มเดิม · ยืนยันแล้วเครื่องย้ายตาม AC-KBG-11                                                               | 13, 41        |
 | AC-KBG-19 | `kiosk/tests/test_manager.py` + การเรียก feed จาก kiosk client                                                    | ไม่ต้องแก้ · ผ่านตามเดิม (AC-KBR-13)                                                                                                    | 32            |
 
+### 4.5 Acceptance — จอ TV ภายในศูนย์ (AC-KBT-01..16 — 2026-11-10 · ทีมเสนอ / รอ PO ยืนยัน)
+
+| ID        | ขั้นตอน                                                                                                       | ผลที่คาด                                                                                                                                 | FR             |
+| --------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| AC-KBT-01 | SM A สร้างกลุ่มใหม่ แล้วเปิดหน้ากลุ่ม                                                                         | doc `schema_v: 2` มี `tv_code` 6 หลัก · หน้ากลุ่มแสดงรหัส · ปุ่มคัดลอกลิงก์ได้ `{origin}/banner/A/internal?c={tv_code}`                  | 01, 02, 13, 14 |
+| AC-KBT-02 | กลุ่ม v1 ที่มีอยู่ · `GET` รายการกลุ่ม แล้ว `GET /api/back-office/kiosk-banner-groups/{id}`                    | รายการ: กลุ่มยังไม่มี `tv_code` และ doc ไม่ถูกเขียน · `{id}`: ได้ `tv_code` · doc เป็น `schema_v: 2` · `updated_at` เดิม                   | 04, 12         |
+| AC-KBT-03 | `generateTvCode` ที่ให้รหัสซ้ำกับกลุ่มอื่น 1 ครั้งแล้วจึงไม่ซ้ำ · และที่ซ้ำทุกครั้ง                            | ครั้งแรก: ได้รหัสที่ไม่ซ้ำ · ซ้ำทุกครั้ง: `500` หลังลอง 10 ครั้ง · ไม่มี doc ใหม่                                                         | 03             |
+| AC-KBT-04 | เปิดลิงก์ของ AC-KBT-01 ใน browser ที่ไม่ได้ login (กลุ่มมี banner `tv` 2 อัน + `compact` 1 อัน)               | เล่นเฉพาะ banner `tv` เต็มจอ วนตาม `order` และ `duration_sec` · พื้นดำ · ไม่มีเคอร์เซอร์ · ไม่มี navbar                                  | 21, 30, 32     |
+| AC-KBT-05 | เปิด `/banner/A/internal` แบบไม่มี `c` · กรอกรหัสด้วยปุ่มลูกศร + Enter อย่างเดียว                              | กรอกครบ 6 หลักได้ · ไป `?c=…` ของศูนย์ A · เข้า slideshow                                                                                | 31             |
+| AC-KBT-06 | เรียก feed ด้วย: ไม่มี `c` · `c=12345` · `c=abcdef` · รหัสที่ไม่มีอยู่ · รหัสของกลุ่มศูนย์ B ที่ path `/internal/A/` | `404 TV_CODE_NOT_FOUND` body เดียวกันทุกกรณี · `no-store` · หน้าแสดงผลกลับหน้าแป้นตัวเลข                                                 | 23, 35         |
+| AC-KBT-07 | กด「ออกรหัสใหม่」→ ยืนยัน ขณะ TV เปิดรหัสเดิมค้างไว้                                                          | `200` รหัสใหม่ ≠ รหัสเดิม · feed ด้วยรหัสเดิม `404` ทันที · TV กลับหน้ากรอกรหัสพร้อม「รหัสไม่ถูกต้องหรือถูกเปลี่ยนแล้ว」ภายในรอบ refresh | 10, 15, 35     |
+| AC-KBT-08 | SM A / `kiosk_staff` A / `pr_staff` A ออกรหัสใหม่ให้กลุ่มศูนย์ B · `registration_staff` A · ไม่มี session     | `404` · `403` · `401` · รหัสของกลุ่ม B ไม่เปลี่ยน                                                                                       | 11             |
+| AC-KBT-09 | เพิ่ม / ปิด banner `tv` ใน back-office ขณะ TV เล่นอยู่                                                         | จอเปลี่ยนตามภายใน 5 นาทีโดยไม่ reload · slide ที่กำลังแสดงไม่ถูกตัดกลางทาง                                                               | 33             |
+| AC-KBT-10 | ตัดเน็ต TV ระหว่างเล่น (หรือ feed ตอบ `503`)                                                                   | เล่นชุดเดิมต่อ · ไม่ขึ้นจอ error · เน็ตกลับมาแล้วรอบถัดไปดึงสำเร็จ                                                                       | 34             |
+| AC-KBT-11 | กลุ่มไม่มี banner `tv` ที่แสดงได้                                                                              | ข้อความ「ยังไม่มีสื่อให้แสดง」· ดึงใหม่ตามรอบ · มี banner แล้วเริ่มเล่นเอง                                                              | 36             |
+| AC-KBT-12 | ตู้ K1 (`compact`) ในกลุ่มที่มี banner `tv` POST feed ตู้ · feed จอภายในของกลุ่มเดียวกัน                        | feed ตู้ไม่มี banner `tv` · feed จอภายในไม่มี banner `compact` / `portrait`                                                              | 21, 26         |
+| AC-KBT-13 | `PATCH /api/v1/kiosk/devices/{id}` `{ screen_type: 'tv' }`                                                     | `422` · เครื่องไม่เปลี่ยน                                                                                                                | 08             |
+| AC-KBT-14 | เขียนตรงเข้า CouchDB (VDU): banner v2 `screen_type: 'tv'` · กลุ่ม v2 ไม่มี `tv_code` / `tv_code: '12345a'` / `'1234567'` | VDU reject (`forbidden`) ทุกกรณี · banner v3 `tv` และกลุ่ม v2 `tv_code: '004213'` ผ่าน                                          | 05, 06         |
+| AC-KBT-15 | สร้าง / แก้ banner (รวม banner v1 / v2 เดิม)                                                                   | doc ที่เขียนเป็น `schema_v: 3`                                                                                                          | 05             |
+| AC-KBT-16 | ตู้เล็ก / ตู้ใหญ่ หลัง deploy (regression)                                                                     | overlay บน `/kiosk` แสดง banner เหมือนเดิม · `kiosk/tests/test_manager.py` ผ่านโดยไม่ต้องแก้                                             | 26             |
+
 ### 4.3 Definition of done
 
 - tests: domain (schema, active window, sort), signed URL, back-office + kiosk route `server.test.ts` (ครอบ AC-KBR-03..09, 11, 14, 15), `kiosk-banners.api.test.ts`, attract overlay component test (fake timers), `kiosk/tests/test_manager.py` allowlist case, e2e back-office CRUD
 - AC ใน §4.1 และ §4.2 ผ่านครบ · (2026-10-21) AC ใน §4.4 ผ่านครบ + tests: domain group / banner v2 / `matchesSlot`, VDU, group server, group routes (scope 403/404, ชื่อซ้ำ 409, ลบกลุ่มที่มี banner 409, เครื่องต่างศูนย์ 422), feed (ไม่มีกลุ่ม → `[]`, banner กลุ่มอื่นไม่หลุด)
+- (2026-11-10) AC ใน §4.5 ผ่านครบ + tests: unit — `tvCodeSchema` / `generateTvCode` (ไม่ bias · เลข 0 นำหน้า) / `internalBannerUrl` / `kiosk_banner` v3 + `matchesScreen('tv')` / controller slideshow + refresh ของจอภายใน · server — feed จอภายใน (รหัสถูก / ผิดรูป / ไม่รู้จัก / ศูนย์ไม่ตรง / หลังออกใหม่ / กรอง screen), `POST …/tv-code` (สิทธิ์ + scope), backfill v1, VDU v9 · e2e — กรอกรหัสบน `/banner/{shelter}/internal` → slideshow
 - `svelte-autofixer` ผ่านทุก `.svelte` ที่แตะ
 
 ---
@@ -688,6 +875,14 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - **(2026-10-21) แก้:** `kiosk_banner` v1 → v2 (domain, form, server, VDU version 7 → 8) · `matchesScreen` → `matchesSlot(group_id, screen_type)` · `scanner_device` (`banner_group_id` แทน `banner_enabled` ใน schema / repository / principal / summary / PATCH / dialog / list badge) · feed `routes/api/v1/kiosk/banners` · `PUT …/order` body · route `[screen=kioskScreen]` ย้ายไปใต้ `groups/[group]/` · tests ที่อ้าง `banner_enabled` / screen-only
 - **(2026-10-21) ไม่กระทบเพิ่ม:** `kiosk/app/manager.py` + `kiosk/tests/test_manager.py` · kiosk client `features/kiosk/**` · response shape ของ feed · signed image URL · role / capability
 - **(2026-10-21) ความเสี่ยง:** หลัง deploy banner เดิมและเครื่องเดิมไม่แสดงบนตู้จนกว่าเจ้าหน้าที่สร้างกลุ่มและจัดเครื่อง/banner ใหม่ (Team Lead ยอมรับ 2026-10-22 — staging / prod ยังไม่ได้ใช้ feature นี้ · §6) · การย้ายเครื่องข้ามกลุ่มจากหน้า `/groups/new` และ `PUT …/devices` เขียนหลาย doc ต่อคำขอ ต้อง retry `409` ต่อเครื่อง (pattern `updateDevice`) · เจ้าหน้าที่ต้องรู้ว่า「ไม่มีกลุ่ม = ไม่แสดง」(badge「ไม่มีกลุ่มแบนเนอร์」)
+- **(2026-11-10 · ทีมเสนอ / รอ PO ยืนยัน) ใหม่:** feed `routes/api/v1/kiosk/internal/[shelter]/banners` · `routes/api/back-office/kiosk-banner-groups/[id]/tv-code` · หน้า `routes/banner/[shelter]/internal/**` · `features/kiosk/{data/internal-banners.api.ts,ui/internal-banner-display.svelte.ts}` · `kiosk-banner-group-tv-code.svelte` · index `kiosk-banner-group-by-tv-code`
+- **(2026-11-10) แก้:** `kiosk-screen.ts` (`tv` + `kioskDeviceScreenTypeSchema` สำหรับเครื่อง) · `kiosk_banner` v2 → v3 · `kiosk_banner_group` v1 → v2 (domain, server, VDU version 8 → 9) · หน้ากลุ่ม + route `[screen=kioskScreen]` (3 slot) · `kiosk-devices` schema ใช้ `kioskDeviceScreenTypeSchema`
+- **(2026-11-10) ไม่กระทบ:** feed ตู้ `POST /api/v1/kiosk/banners` · `kiosk/app/manager.py` · signed image URL · role / capability · nginx · worker / Mongo / FastAPI
+- **(2026-11-10) ความเสี่ยง — ต้องให้ PO ยืนยัน:**
+  - **feed ไม่ต้อง login:** ใครรู้ shelter code + `tv_code` ก็เห็นสื่อ `tv` ของกลุ่มนั้น (เนื้อหาเป็นประกาศภายในศูนย์ ซึ่งแสดงบนจอในที่สาธารณะของศูนย์อยู่แล้ว)
+  - **รหัส 6 หลักเดาได้:** 10⁶ ค่า · เพดาน nginx CR-188 (zone `tent_kiosk` 10,000 ครั้ง/นาที/IP) กัน flood ได้แต่กันการไล่รหัสไม่ได้ — IP เดียวไล่ครบในราว 100 นาที และเร็วขึ้นตามจำนวนกลุ่มของศูนย์เป้าหมายและจำนวน IP · ไม่มี lockout / rate limit ในแอป
+  - **มาตรการลด:** ออกรหัสใหม่ได้ทันที (รหัสเก่า `404` ทันที) · feed คืนเฉพาะรายการ banner (`id`, `title`, `caption`, `duration_sec`, `image_url`) ไม่มีชื่อกลุ่ม / ศูนย์ / เครื่อง · ทุกกรณีที่ไม่ผ่านตอบ `404 TV_CODE_NOT_FOUND` เหมือนกัน · รหัสผิดรูปไม่ query DB · zone `tent_kiosk` ใช้ร่วมกับตู้ — การไล่รหัสจาก IP เดียวกับตู้จะกินโควตาของตู้
+  - **รหัสซ้ำ:** best effort (ไม่มี unique constraint ใน CouchDB) — สร้าง/ออกรหัสพร้อมกันอาจชน (โอกาสต่ำมาก) · `findGroupByTvCode` คืนกลุ่มแรกที่พบ
 - **ความเสี่ยง:** SA ต้องสลับศูนย์ก่อนสร้าง banner ให้ศูนย์อื่น และ banner เดียวกันหลายศูนย์ต้องสร้างซ้ำ — ยอมรับเพื่อให้ตรงกับหน้า kiosk อื่น · `BODY_SIZE_LIMIT` เป็นค่า global ของ Node server (กระทบทุก route ฝั่ง SvelteKit)
 - **Base branch:** โค้ดยึด `feat/pre-register_kiosk` (ยังไม่ merge เข้า develop) — branch implementation ต้องแตกจาก branch นั้น และ merge ตามหลัง CR-151/152 · เอกสารของ CR นี้เข้า `develop` ผ่าน branch `docs/cr-162-kiosk-banner`
 
@@ -708,6 +903,14 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - **สถานะ staging / prod (2026-10-22):** ทั้งสอง environment ยังไม่ได้ใช้งาน kiosk banner — ไม่มีตู้ที่แสดง banner อยู่ จึงไม่มีตู้ที่หยุดแสดงหลัง deploy และไม่ต้องมี migration script / กลุ่มเริ่มต้น · feature นี้ (รวม banner group) **ยังไม่ได้ทดสอบบน staging / prod**
 - **Deploy:** `pnpm db:sync` (VDU `registry` version 8 · ไม่เพิ่ม index) **บน central ก่อน deploy frontend** — VDU version 7 reject doc `kiosk_banner_group` และ `kiosk_banner` v2 · ไม่ต้อง deploy kiosk client ใหม่ · ไม่มี env ใหม่
 - **ชื่อกลุ่มซ้ำ:** ตรวจชื่อซ้ำก่อนบันทึก แต่ CouchDB ไม่มี unique constraint — สร้างพร้อมกัน 2 คนอาจได้ชื่อซ้ำ · ยอมรับ (แก้ด้วยการเปลี่ยนชื่อ)
+
+**(2026-11-10 · #1299 A–D · ทีมเสนอ / รอ PO ยืนยัน) Migration ของจอ TV:**
+
+- **`kiosk_banner` v2 → v3:** additive (เพิ่มค่าใน enum) · ไม่มี migration script · doc v1 / v2 คงเดิมและยัง valid (มีได้แค่ `compact` \| `portrait`) · app เขียน v3 ตอนสร้าง/แก้ · banner v1 ที่แก้ต้องเลือกกลุ่มตาม FR-KBG-08 แล้วเขียนเป็น v3
+- **`kiosk_banner_group` v1 → v2:** ไม่มี migration script · backfill แบบ lazy ตอน server อ่านกลุ่มทีละกลุ่ม (FR-KBT-04) หรือตอนออกรหัสใหม่ · กลุ่ม v1 ที่ยังไม่มีใครเปิดไม่มีรหัส = ยังเปิดบน TV ไม่ได้ (ไม่กระทบตู้)
+- **`scanner_device`:** ไม่เปลี่ยน · ไม่ bump
+- **Deploy:** `pnpm db:sync` (VDU `registry` version 9 + index `kiosk-banner-group-by-tv-code`) **บน central ก่อน deploy frontend** — VDU version 8 reject `kiosk_banner` v3 และ `kiosk_banner_group` v2 (สร้างกลุ่ม / แก้ banner / backfill จะล้ม) · ไม่มี env ใหม่ · ไม่แก้ nginx · ไม่ deploy kiosk client ใหม่
+- **Rollback:** frontend รุ่นก่อนหน้า parse `kiosk_banner` v3 และ `kiosk_banner_group` v2 ไม่ได้ — ถ้าต้อง rollback หลังมี doc v3 / v2 ต้อง rollback พร้อม VDU หรือ fix forward
 
 ## 7. Open questions (ข้อเสนอของทีม kiosk — Team Lead อนุมัติตามข้อเสนอทั้งหมด 2026-10-18)
 
@@ -746,3 +949,4 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - 2026-10-21 — **proposed โดยทีม kiosk** (ยังไม่อนุมัติ · แก้ในไฟล์นี้ ไม่เปิด CR ใหม่): เพิ่ม banner group (`kiosk_banner_group`) แทน `banner_enabled` · banner 1 อัน = 1 กลุ่ม · เครื่อง 0 หรือ 1 กลุ่ม (`banner_group_id`) · ข้างในกลุ่มแยก resolution และ `order` ต่อ (`group_id`, `screen_type`) · ลบกลุ่มได้เมื่อไม่มี banner (409) · ไม่ migrate (banner v1 / เครื่องเดิม = ไม่มีกลุ่ม ไม่แสดงบนตู้) · `kiosk_banner` schema_v 1 → 2 · VDU version 8 (FR-KBG-01..50, AC-KBG-01..19 · แทนที่ FR-KBR-35..38 และส่วน order ต่อขนาดจอ) · เหตุผล §1.4 · รอ Team Lead / Project Owner เคาะ
 - 2026-10-22 — **approved** โดย Team Lead: ส่วนที่ปรับ 2026-10-21 (banner group) ทั้งหมด (FR-KBG-01..50, AC-KBG-01..19) รวมการไม่ migrate · merge PR #743 ได้ · ยอมรับว่าตู้เดิมไม่แสดง banner จนกว่าจัดกลุ่ม เพราะ staging / prod ยังไม่ได้ใช้ feature นี้ · ยังไม่ได้ทดสอบบน staging / prod
 - 2026-10-22 — แก้ตาม PR review (#743): `deleteGroup` ลบ doc กลุ่มก่อนแล้วจึงล้าง `banner_group_id` ของเครื่อง (ตาม FR-KBG-06) · กลุ่มที่ไม่พบตอบ `404` ข้อความ `Banner group not found` · หน้าสรุปนับ「แสดงอยู่ / รอแสดง」ตามเวลาปัจจุบัน (refresh ทุก 30 วินาที) · path เดิม `/back-office/kiosks/banners/{compact|portrait}` redirect ไปหน้ารายการกลุ่ม
+- 2026-11-10 — **proposed โดยทีม kiosk — ทีมเสนอ / รอ PO ยืนยัน** (แก้ในไฟล์นี้ ไม่เปิด CR ใหม่ — owner เลือก amend CR-162 · ตาม #1299 ข้อ A–D): จอ TV ภายในศูนย์ — `kiosk_banner_group` schema_v 1 → 2 + `tv_code` 6 หลัก (server สุ่มด้วย `crypto.getRandomValues` · ไม่ซ้ำทั้งระบบแบบ best effort · ออกใหม่ได้ · v1 backfill แบบ lazy) · `kiosk_banner` schema_v 2 → 3 + screen type `tv` 1920×1080 (เครื่อง kiosk ยังเป็น `compact` / `portrait`) · feed anonymous `GET /api/v1/kiosk/internal/{shelter}/banners?c=` (`404 TV_CODE_NOT_FOUND` แบบเดียวกันทุกกรณี) · `POST …/kiosk-banner-groups/{id}/tv-code` · หน้า `/banner/{shelter}/internal` (แป้นตัวเลข + slideshow · refresh 5 นาที) · VDU version 9 + index `kiosk-banner-group-by-tv-code` (FR-KBT-01..44, AC-KBT-01..16 · ไม่แทนที่ FR เดิม) · เหตุผล §1.5 · ความเสี่ยง §5 (feed ไม่ต้อง login · รหัส 6 หลักเดาได้ภายในเพดาน nginx CR-188 · ลดด้วยการออกรหัสใหม่และ feed คืนแค่รายการ banner) · frontmatter คง `status: approved` สำหรับส่วนที่อนุมัติแล้ว — ส่วนนี้เป็น proposed จนกว่า PO ยืนยัน · #1299 ข้อ E (template HTML · field `template`) จะเพิ่มเป็น amendment ถัดไปใน PR แยก
