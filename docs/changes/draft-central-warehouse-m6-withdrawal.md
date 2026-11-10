@@ -39,8 +39,9 @@ source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Gui
 - **การเรียก M6 อยู่ใน FastAPI ที่เดียว** browser เรียกผ่าน BFF เท่านั้น
 - **Health gate ใช้ตัวเดียวกับ M5** ถ้าติดต่อไม่ได้จะแสดง "เชื่อมต่อกับระบบกลางไม่ได้" และปิดทุก action
 - **schema:** donation `schema_v` 11 → 12 แบบ additive
+- **สิทธิ์:** SA, `shelter_manager` และ `warehouse_staff` ของศูนย์ (D2)
 
-ต้องตัดสิน D1–D5 ก่อน approve
+**สถานะการตัดสิน:** owner ตัดสิน D1–D5 แล้ว (2026-11-10) เหลือ D6 ที่รอทีม M6 ตอบ
 
 ## Why
 
@@ -103,13 +104,15 @@ source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Gui
 ### 3. สถาปัตยกรรม (outbound plane ร่วมกับ M5)
 
 ```
-Browser ─► BFF /api/back-office/central-warehouse/*   (session + สิทธิ์ตาม D2, ผูก shelter_code จาก session)
+Browser ─► BFF /api/back-office/central-warehouse/*   (session + SA / shelter_manager / warehouse_staff, ผูก shelter_code จาก session)
              ▼  Bearer EXTERNAL_API_SECRET
           FastAPI /v1/integrations/m6/*   ── M6_BASE_URL / M6_CLIENT_ID / M6_CLIENT_SECRET (env backend เท่านั้น)
              · token: access 1 ชม. ต่ออายุก่อนหมด ≥ 60 วินาทีด้วย AUTH-002
                refresh token หมุนทุกครั้ง (เก็บทับ) · invalid_grant → กลับไปใช้ AUTH-001
              · cache RES-001 / RES-002 (ต่อคลัง) / RES-003 ไว้ 60 วินาที
-             · Mongo m6_withdrawals (key = external_ref) + poller RES-006 ทุก 60 วินาที เฉพาะใบที่ยังไม่จบ
+             · Mongo m6_withdrawals (key = external_ref) + POST /v1/integrations/m6/sync
+               (sync worker เคาะทุก 45 วินาที: poll RES-006 เฉพาะใบที่ยังไม่จบ + ส่ง m6_confirm_outbox)
+               FastAPI รันหลาย process จึงไม่ poll เองใน lifespan
              ▼
             M6 (staging-m6-api / onedata-logis-api)
 
@@ -140,7 +143,7 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 |---|---|---|
 | `channel` | enum เพิ่ม `m6` | สร้างโดย worker เท่านั้น ห้าม UI หรือ BFF สร้าง donation `m6` เอง |
 | `external` | ใหม่ · sys · {`system`: `m6`, `request_code`: str, `external_ref`: str, `source_warehouse_code`: str, `source_warehouse_name`: str?, `confirmed_at`: ts?, `confirm_error`: str?} | worker เขียนตอนสร้าง และเขียน `confirmed_at` / `confirm_error` หลังเรียก RES-007 |
-| `donor` | ค่าเมื่อ `channel = m6` | `{name: "คลังกลาง M6 · {ชื่อคลัง}", phone: null, phone_hash: ""}` ไม่มี PII · ต้องยืนยันว่า `phone_hash` ว่างได้ หรือใช้ค่าคงที่ (D5) |
+| `donor` | ค่าเมื่อ `channel = m6` | `{name: "คลังกลาง M6 · {ชื่อคลัง}", phone: null, phone_hash: ""}` ไม่มี PII · `phone_hash` ว่างได้เฉพาะ `channel = m6` (D5) |
 | `items[]` | ค่าเมื่อ `channel = m6` | 1 รายการต่อ `lines[]` ที่ `qty_fulfilled > 0` · `qty = qty_fulfilled` (qty_str) · `unit` = หน่วยของ M6 · `item_id` จาก mapping (D3) ถ้าไม่พบใช้ `free_text = name` (ต้องจับคู่ตอนรับตาม CR-143) · `review_status = approved` |
 | `status` | เริ่มที่ `verifying` | M6 อนุมัติแล้ว ไม่ต้องผ่าน `pending_review` |
 | `logistics` | ไม่ใส่ | `logistics` บังคับเฉพาะ `channel = public` |
@@ -149,7 +152,8 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 
 **Invariant ใหม่:**
 - `channel = m6` → ต้องมี `external.system = m6`
-- 1 `request_code` = donation ไม่เกิน 1 ใบ: ใช้ `_id` deterministic `donation:m6-{request_code}` เพื่อให้ worker สร้างซ้ำได้ปลอดภัย (ดู D5)
+- 1 `request_code` = donation ไม่เกิน 1 ใบ: ใช้ `_id` deterministic `donation:m6-{request_code}` เพื่อให้ worker สร้างซ้ำได้ปลอดภัย (D5) — เป็นข้อยกเว้นของ pattern `donation:{ulid}` เฉพาะ `channel = m6`
+- `channel = m6` → `phone_hash` ว่างได้ (ข้อยกเว้นของ req เดิมใน §2.3)
 
 **การยืนยันกลับ (RES-007):**
 - **เงื่อนไข:** donation `m6` เปลี่ยนเป็น `received` โดยปิดครบทุกจุด หรือ staff ปิดใบ
@@ -159,7 +163,7 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
   - error อื่น → เก็บ `confirm_error` และ retry แบบ backoff
   - UI แสดง "ยังยืนยันกับ M6 ไม่สำเร็จ" ในใบ donation
 
-**Public plane:** donation `m6` ไม่ถูก project ไป `public_donations`, transparency และไม่นับใน `needs_open` (ดู D4)
+**Public plane:** donation `m6` ไม่ถูก project ไป `public_donations`, transparency และไม่นับใน `needs_open` (D4)
 
 ### 6. API ใหม่
 
@@ -175,6 +179,7 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 | GET | `/v1/integrations/m6/withdrawals?shelter_code=&status=` | อ่านจาก Mongo |
 | GET | `/v1/integrations/m6/withdrawals/{request_code}?shelter_code=` | RES-006 สด แล้วอัปเดต Mongo |
 | POST | `/v1/integrations/m6/withdrawals/{request_code}/cancel` | RES-008 |
+| POST | `/v1/integrations/m6/sync` | RES-006 (ใบที่ยังไม่จบ) + RES-007 (จาก `m6_confirm_outbox`) · sync worker เป็นผู้เรียก |
 
 **BFF:**
 - `GET /api/back-office/integrations/status`
@@ -209,18 +214,12 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 
 ## เรื่องที่ต้องตัดสิน (ก่อน approve)
 
-- **D1 — จุดที่สร้าง donation:**
-  - (a) ตอน `in_transit` ← **แนะนำ** (เหตุผลในหัวข้อ 1)
-  - (b) ตอน `approved` แล้วแก้จำนวนตอน `in_transit` (ต้องยกเว้นกฎ CR-196)
-- **D2 — สิทธิ์:** ใครดูคลังกลาง ขอเบิก และยกเลิกได้ เช่น `shelter_manager` อย่างเดียว หรือรวม role ฝ่ายคลังของศูนย์ (ต้องแก้ `role-permission-matrix.md`) และควรมีขั้นอนุมัติภายในศูนย์ก่อนส่ง M6 หรือไม่
-- **D3 — การจับคู่ของ M6 กับ `item_master`:**
-  - (a) จับจาก `item_master.sku` = `item_code` แล้วให้ staff จับคู่ `free_text` ตอนรับ (ใช้ flow เดิม ไม่ต้องสร้างตารางใหม่) ← **แนะนำสำหรับรอบแรก**
-  - (b) สร้างตาราง mapping ถาวร (`item_master.m6_reference_id`) ซึ่งเป็น catalog alignment CR ที่ ADR-0002 รอไว้
-- **D4 — Public plane:** donation `m6` ไม่ขึ้น transparency และไม่นับใน needs ← **แนะนำ** หรือแสดงแยกเป็น "ของจากคลังกลาง"
-- **D5 — รายละเอียด schema:**
-  - `donor.phone_hash` เป็น req ใน §2.3 จะให้ว่างหรือใช้ค่าคงที่
-  - `_id` แบบ deterministic `donation:m6-{request_code}` ขัดกับ pattern `donation:{ulid}` หรือไม่ ทางเลือกคือ ulid + unique check ผ่าน `m6_withdrawals.donation_id`
-- **D6 — ผลการตรวจของทีม M6** (Integration Guide v3.1 ขัดกันเอง):
+- **D1 — จุดที่สร้าง donation** ✅ ตัดสินแล้ว: **ตอน `in_transit`** (เหตุผลในหัวข้อ 1) ไม่เลือก: สร้างตอน `approved` แล้วแก้จำนวนภายหลัง ซึ่งต้องยกเว้นกฎ CR-196
+- **D2 — สิทธิ์** ✅ ตัดสินแล้ว: **SA, `shelter_manager` และ `warehouse_staff` ของศูนย์** ดูคลังกลาง ขอเบิก และยกเลิกได้ ไม่มีขั้นอนุมัติภายในศูนย์ก่อนส่ง M6 ต้องแก้ `role-permission-matrix.md`
+- **D3 — การจับคู่ของ M6 กับ `item_master`** ✅ ตัดสินแล้ว: **จับจาก `item_master.sku` = `item_code`** ถ้าไม่พบให้ staff จับคู่ `free_text` ตอนรับด้วย flow เดิม ตาราง mapping ถาวร (`item_master.m6_reference_id`) เลื่อนไป catalog alignment CR ที่ ADR-0002 รอไว้
+- **D4 — Public plane** ✅ ตัดสินแล้ว: **ไม่แสดง** donation `m6` ไม่ขึ้น transparency และไม่นับใน needs
+- **D5 — รายละเอียด schema** ✅ ตัดสินแล้ว: **`phone_hash` ว่าง** เมื่อ `channel = m6` และ **`_id = donation:m6-{request_code}`** แบบ deterministic (ไม่เลือก: ulid + unique check ผ่าน `m6_withdrawals.donation_id`)
+- **D6 — ผลการตรวจของทีม M6** ⏳ รอทีม M6 ตอบ (Integration Guide v3.1 ขัดกันเอง):
   1. RES-008 บอกว่าไม่รับ body แต่ dictionary บังคับ `cancelled_by.name` + `reason` และตัวอย่างสะกดเป็น `Cancelled_by`
   2. RES-007 `received_by` เป็น Array หรือ object
   3. RES-005 ตัวอย่างขาด `destination.address`, `requester.location_name` และ `contact_role` ที่ระบุว่าบังคับ
@@ -238,7 +237,7 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 - **docs:**
   - `schema.md` §2.3 (`channel`, `external`, invariant, `schema_v` 12) และ §9 (Mongo 3 collection)
   - `api-contract.md`
-  - `role-permission-matrix.md` (D2)
+  - `role-permission-matrix.md` (D2: SA / `shelter_manager` / `warehouse_staff`)
   - `sitemap.md`
   - ADR-0002 (outbound) หรือ ADR-0003 ร่วมกับ M5
 - **backend:**
@@ -265,3 +264,4 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 ## Decision log
 
 - 2026-11-10 — proposed (ร่างจาก M6 Integration Guide v3.1 เทียบกับ flow donation และสต็อกปัจจุบัน; รอ D1–D6)
+- 2026-11-10 — owner ตัดสิน D1 สร้าง donation ตอน `in_transit` · D2 SA + `shelter_manager` + `warehouse_staff` · D3 จับคู่ด้วย `sku` + `free_text` ตอนรับ · D4 ไม่แสดงบน public plane · D5 `phone_hash` ว่าง + `_id = donation:m6-{request_code}` · เพิ่ม `sync` endpoint ให้ worker เคาะ · D6 ยังรอทีม M6 · ยังไม่ approve — รอ owner approve ก่อนเริ่ม implement
