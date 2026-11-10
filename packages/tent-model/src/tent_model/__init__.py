@@ -1,4 +1,5 @@
 from tent_model.api_key import ApiKey
+from tent_model.audit_event import AuditEvent
 from tent_model.db import ALL_DOCUMENTS, close_db, init_db
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
@@ -97,6 +98,7 @@ __all__ = [
 	"ProfileUpdateTarget",
 	"ReserveResult",
 	"RetentionAudit",
+	"AuditEvent",
 	"SearchAudit",
 	"SelectedShift",
 	"SelectedShiftBuffer",

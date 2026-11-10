@@ -325,10 +325,9 @@
               probing
             </li>
             <li>
-              ทุก query (ยกเว้น "จำลอง") เขียน <code>search_audit</code> ที่
-              central: query type, hash ของ query, IP hash, จำนวนผลลัพธ์
-              และ (CR-231) ชื่อ/นามสกุล/เบอร์ผู้ค้นหา, IP จริง, จุดประสงค์,
-              consent_version — PII เก็บที่ Mongo เท่านั้น ไม่ sync เข้า CouchDB;
+              ทุก query (ยกเว้น "จำลอง") เขียน <code>audit_event</code> (<code>public.search</code>):
+              context = query type, hash ของ query, IP hash, จำนวนผลลัพธ์, จุดประสงค์,
+              consent_version; pii (ชื่อ/นามสกุล/เบอร์ผู้ค้นหา, IP จริง, เหตุผล) เก็บที่ Mongo เท่านั้น ไม่ sync เข้า CouchDB (CR-231);
               ต้องกรอก dialog ยินยอมก่อนค้น และเขียน audit ไม่สำเร็จ = ไม่คืนผล (503)
             </li>
           </ul>
@@ -736,7 +735,7 @@ Max   : 10 results/query (ชื่อ); identifier exact = 0/1</code></pre>
             <li>☐ record ที่ <code>search_excluded</code> → ไม่ขึ้นแม้ค้นเลขบัตรตรงเป๊ะ</li>
             <li>☐ ค้นไม่พบ → empty state generic (ไม่บอกว่ามีแต่ถูกซ่อน)</li>
             <li>☐ ค้นรัว ๆ เกิน limit → <code>RATE_LIMITED</code> banner</li>
-            <li>☐ ทุกการค้นเขียน <code>search_audit</code> ที่ central</li>
+            <li>☐ ทุกการค้นเขียน <code>audit_event</code> (Mongo <code>audit_events</code> → central)</li>
             <li>☐ ไม่มีปุ่ม "จำลอง"/demo บนหน้า (FS-4 ตัดออก)</li>
             <li>☐ ตัด central → ค้นไม่ได้ตอบ error ที่ควบคุมได้ (ไม่ fallback edge)</li>
             <li>☐ deep-link <code>/search?q=...</code> จาก landing → ค้นอัตโนมัติ</li>

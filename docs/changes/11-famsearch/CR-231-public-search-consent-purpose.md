@@ -107,7 +107,7 @@ affects:
   `pii` เป็น sub-object ใน event เดียวกัน (ND-4 ข้อ 5 = แบบ A, collection เดียว)
 - **FR-15a** — `/external/v1/occupants` (ND-1: fail-open + hash-only) เขียน `audit_event` ด้วย `event_type=external.search`,
   `actor={kind:partner}`, ไม่มี `pii`/`purpose`/`consent_version`; เขียนไม่สำเร็จ → log แล้วตอบต่อ
-- **FR-15b** — **สิทธิ์ Mongo (append-only):** user ของ FastAPI มีเฉพาะ `insert`/`find` บน `audit_events`; worker มีสิทธิ์
+- **FR-15b** — **[DEFERRED — ไม่ผูก, ดูหมายเหตุ ND-5 ด้านล่าง]** **สิทธิ์ Mongo (append-only):** user ของ FastAPI มีเฉพาะ `insert`/`find` บน `audit_events`; worker มีสิทธิ์
   อัปเดตเฉพาะ field `synced_to_couch`; ไม่มีใครมี `update`/`delete` อื่น
 - **FR-15c** — `AuditEvent` ใน `tent_model` เป็น Pydantic discriminated union ต่อ `event_type` (validate `context`/`pii` ต่อชนิด);
   registry ของ `event_type` อยู่ที่เดียวใน `tent-model`
@@ -135,6 +135,14 @@ affects:
 > **[RESOLVED: ND-3]** แก้ข้อความ policy/term ใน CR นี้ (ตัดสินโดยเจ้าของโครงการ).
 > **ข้อควรระวัง:** หัวข้อ `retention` เดิมใน `public-policy.ts` ระบุว่าเก็บข้อมูลถึง 31 ธ.ค. 2569 แล้วลบ/ทำให้ไม่ระบุตัวตน —
 > ขัดกับ FR-18 สำหรับข้อมูลผู้ค้นหา ต้องแก้หัวข้อนั้นให้ยกเว้นข้อมูลผู้ค้นหา (หรือระบุกรอบเวลาแยก) ไม่ให้ policy ขัดกันเอง
+
+> **[RESOLVED: ND-5]** FR-15b **ไม่ผูกใน CR นี้** (ตัดสินโดยเจ้าของโครงการ 2026-11-10): ทุก compose profile รัน Mongo **ไม่มี auth**
+> การบังคับ role จึงต้องเปิด auth + สร้าง user ของ FastAPI/worker + เปลี่ยน `DATABASE_URI` ทุก environment — เป็นงาน infra แยก.
+> ส่งมอบแล้ว: สคริปต์ `scripts/mongo-init/audit-events-roles.js` (role `auditEventsAppend` = insert/find/createIndex,
+> `auditEventsSync` = find/update/createIndex) พร้อมใช้เมื่อเปิด auth. **ผลระหว่างนี้:** append-only ของ `audit_events` เป็น
+> ข้อตกลงในโค้ด ไม่ถูกบังคับที่ DB — ใครเข้าถึง Mongo ได้ก็แก้/ลบได้. MongoDB จำกัดสิทธิ update ระดับ field ไม่ได้ จึงกฎ
+> "worker อัปเดตเฉพาะ `synced_to_couch`" บังคับที่โค้ด (`worker/inbound/audit.py`) เท่านั้นแม้เปิด auth แล้ว.
+> ต้องเปิด issue ติดตามงานเปิด Mongo auth แล้วย้ายข้อ acceptance นี้ไปที่นั่น.
 
 ## `audit_event` รวมศูนย์ (single collection) — **อยู่ใน scope ของ CR นี้**
 
@@ -251,7 +259,7 @@ BFF route ไม่ทดสอบแยก (ส่ง body ต่อตรง�
 - [ ] ทุกการค้นที่สำเร็จมี `audit_event` `public.search` ครบ: `pii` (ชื่อ นามสกุล เบอร์ IP + เหตุผลถ้า `other`) และ `context` (จุดประสงค์ `consent_version` hash)
 - [ ] เขียน audit ไม่สำเร็จ → 503 ไม่คืนผลลัพธ์ (public); external ยัง fail-open
 - [ ] doc `audit:*` ใน CouchDB ไม่มี key `pii`
-- [ ] role Mongo ของ FastAPI ทำได้เฉพาะ insert/find บน `audit_events`
+- [ ] ~~role Mongo ของ FastAPI ทำได้เฉพาะ insert/find บน `audit_events`~~ — **deferred (ND-5)**: มีสคริปต์ role แต่ไม่ผูกกับ compose จนกว่าจะเปิด Mongo auth
 - [ ] `search_audits` migrate แล้ว และหยุดเขียน
 - [ ] `/policy` + `/term` อัปเดตตาม FR-19 และ `retention` ไม่ขัดกัน
 - [ ] `fastapi.json` + `openapi.d.ts` regenerate แล้ว
@@ -269,3 +277,4 @@ BFF route ไม่ทดสอบแยก (ส่ง body ต่อตรง�
 - 2026-11-08 — ND-4(1) resolved: ทำ `audit_event` ใน CR นี้ ไม่แยก CR (แทนที่แนวทางแยก CR ก่อนหน้า); เปลี่ยน `_id` เป็น prefix `audit:`; FR/seams ยังรอเขียนใหม่
 - 2026-11-08 — ND-4(2)(3)(4) resolved: prefix `audit:`; one-off migrate `search_audits` ไม่ dual-write; role Mongo append-only. เหลือ (5) ตำแหน่ง `pii`
 - 2026-11-08 — ND-4(5) resolved: `pii` เป็น sub-object ใน `audit_events` (แบบ A, collection เดียว); เขียน FR-15..FR-18, Impact, Migration, seams (S0–S7) และ acceptance ใหม่ตาม `audit_event`
+- 2026-11-10 — ND-5 resolved: FR-15b (role Mongo append-only) **ไม่ผูก** ใน CR นี้ — Mongo ยังไม่มี auth; ส่งสคริปต์ role ไว้แต่ deferred ไปงาน infra

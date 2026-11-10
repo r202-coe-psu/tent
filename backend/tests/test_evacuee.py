@@ -444,13 +444,13 @@ async def test_evacuee_search_rejects_more_than_four_words(
     assert response.status_code == 422
 
 
-async def test_evacuee_search_writes_search_audit(
+async def test_evacuee_search_writes_audit_event(
     client: AsyncClient,
     db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
 ):
-    from tent_model.search_audit import SearchAudit
+    from tent_model.audit_event import AuditEvent
 
     from apiapp.utils.masking import sha256_hex
 
@@ -490,24 +490,29 @@ async def test_evacuee_search_writes_search_audit(
     )
     assert response.status_code == 200
 
-    audits = await SearchAudit.find_all().to_list()
+    audits = await AuditEvent.find_all().to_list()
     assert len(audits) == 1
     audit = audits[0]
-    assert audit.query_kind == "phone"
-    assert audit.query_hash == sha256_hex(phone)
-    assert audit.ip_hash == sha256_hex("203.0.113.10")
-    assert audit.result_count == 1
+    assert audit.id.startswith("audit:")
+    assert audit.event_type == "public.search"
+    assert audit.domain == "public"
+    assert audit.actor.kind == "anonymous"
+    assert audit.outcome == "ok"
+    assert audit.schema_v == 1
     assert audit.synced_to_couch is False
-    assert audit.searcher is not None
-    assert audit.searcher.model_dump() == {
-        "first_name": "สมศรี",
-        "last_name": "ใจดี",
-        "phone": "0899999999",
+    assert audit.context == {
+        "query_kind": "phone",
+        "query_hash": sha256_hex(phone),
+        "ip_hash": sha256_hex("203.0.113.10"),
+        "result_count": 1,
+        "purpose": "other",
+        "consent_version": "search-v1",
     }
-    assert audit.client_ip == "203.0.113.10"
-    assert audit.purpose == "other"
-    assert audit.purpose_note == "หาญาติ"
-    assert audit.consent_version == "search-v1"
+    assert audit.pii == {
+        "searcher": {"first_name": "สมศรี", "last_name": "ใจดี", "phone": "0899999999"},
+        "client_ip": "203.0.113.10",
+        "purpose_note": "หาญาติ",
+    }
 
 
 async def test_evacuee_search_returns_shelter_address_and_no_zone_keys(
@@ -1181,12 +1186,12 @@ async def test_public_search_rejects_bad_consent_payload(
     payload: dict,
     loc: str,
 ):
-    from tent_model.search_audit import SearchAudit
+    from tent_model.audit_event import AuditEvent
 
     response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
     assert response.status_code == 422, label
     assert loc in response.text, label
-    assert await SearchAudit.find_all().to_list() == []
+    assert await AuditEvent.find_all().to_list() == []
 
 
 @pytest.mark.parametrize("note", [None, "", "   "])
@@ -1194,32 +1199,31 @@ async def test_public_search_rejects_bad_consent_payload(
 async def test_public_search_normalizes_empty_purpose_note_to_none(
     client: AsyncClient, auth_headers: dict[str, str], note: str | None, omit: bool
 ):
-    from tent_model.search_audit import SearchAudit
+    from tent_model.audit_event import AuditEvent
 
     payload = public_search_payload("0812345678", purpose_note=note)
     if omit:
         payload.pop("purpose_note")
     response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
     assert response.status_code == 200, response.text
-    audits = await SearchAudit.find_all().to_list()
+    audits = await AuditEvent.find_all().to_list()
     assert len(audits) == 1
-    assert audits[0].purpose == "find_family"
-    assert audits[0].purpose_note is None
+    assert audits[0].context["purpose"] == "find_family"
+    assert audits[0].pii["purpose_note"] is None
 
 
 async def test_public_search_accepts_single_name_searcher(
     client: AsyncClient, auth_headers: dict[str, str]
 ):
-    from tent_model.search_audit import SearchAudit
+    from tent_model.audit_event import AuditEvent
 
     payload = public_search_payload(
         "0812345678", searcher={"first_name": "สมชาย", "phone": "0812345678"}
     )
     response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
     assert response.status_code == 200, response.text
-    audit = (await SearchAudit.find_all().to_list())[0]
-    assert audit.searcher is not None
-    assert audit.searcher.last_name == ""
+    audit = (await AuditEvent.find_all().to_list())[0]
+    assert audit.pii["searcher"]["last_name"] == ""
 
 
 async def test_public_search_fails_closed_when_audit_cannot_be_written(
@@ -1229,12 +1233,12 @@ async def test_public_search_fails_closed_when_audit_cannot_be_written(
     auth_headers: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ):
-    from tent_model.search_audit import SearchAudit
+    from tent_model.audit_event import AuditEvent
 
     async def boom(self, *args, **kwargs):
         raise RuntimeError("mongo down")
 
-    monkeypatch.setattr(SearchAudit, "insert", boom)
+    monkeypatch.setattr(AuditEvent, "insert", boom)
     response = await client.post(
         "/public/v1/occupants", json=public_search_payload("0812345678"), headers=auth_headers
     )
@@ -1248,7 +1252,7 @@ async def test_external_search_stays_fail_open_and_hash_only(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
     """ND-1: `/external/v1/occupants` keeps plain `{"q"}`, no consent fields, fail-open audit."""
-    from tent_model.search_audit import SearchAudit
+    from tent_model.audit_event import AuditEvent
 
     await ApiKey(
         id=new_ulid(),
@@ -1264,15 +1268,17 @@ async def test_external_search_stays_fail_open_and_hash_only(
 
     ok = await client.post("/external/v1/occupants", json={"q": "0812345678"}, headers=headers)
     assert ok.status_code == 200, ok.text
-    audit = (await SearchAudit.find_all().to_list())[0]
-    assert audit.searcher is None
-    assert audit.client_ip is None
-    assert audit.consent_version is None
+    audit = (await AuditEvent.find_all().to_list())[0]
+    assert audit.event_type == "external.search"
+    assert audit.actor.kind == "partner"
+    assert audit.pii is None
+    assert "purpose" not in audit.context
+    assert "consent_version" not in audit.context
 
     async def boom(self, *args, **kwargs):
         raise RuntimeError("mongo down")
 
-    monkeypatch.setattr(SearchAudit, "insert", boom)
+    monkeypatch.setattr(AuditEvent, "insert", boom)
     still_ok = await client.post(
         "/external/v1/occupants", json={"q": "0812345678"}, headers=headers
     )
@@ -1283,7 +1289,7 @@ async def test_public_search_limits_apply_after_trim(
     client: AsyncClient, auth_headers: dict[str, str]
 ):
     """CR-231: 100/200-char limits count the trimmed text (same as the frontend Zod rule)."""
-    from tent_model.search_audit import SearchAudit
+    from tent_model.audit_event import AuditEvent
 
     payload = public_search_payload(
         "0812345678",
@@ -1297,8 +1303,7 @@ async def test_public_search_limits_apply_after_trim(
     )
     response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
     assert response.status_code == 200, response.text
-    audit = (await SearchAudit.find_all().to_list())[0]
-    assert audit.purpose_note == "ก" * 200
-    assert audit.searcher is not None
-    assert audit.searcher.first_name == "ข" * 100
-    assert audit.searcher.last_name == "ค" * 100
+    audit = (await AuditEvent.find_all().to_list())[0]
+    assert audit.pii["purpose_note"] == "ก" * 200
+    assert audit.pii["searcher"]["first_name"] == "ข" * 100
+    assert audit.pii["searcher"]["last_name"] == "ค" * 100

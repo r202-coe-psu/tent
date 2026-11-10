@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal, Self
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from tent_model.audit_event import SearchPurpose
 
 
 class SearchRequest(BaseModel):
@@ -17,8 +18,6 @@ class SearchRequest(BaseModel):
         validation_alias=AliasChoices("search", "q", "query"),
     )
 
-
-SearchPurpose = Literal["find_family", "find_acquaintance", "coordinate_aid", "other"]
 
 #: Same rule as `isThaiMobilePhone` (frontend `$lib/db/model`); checked before `normalize_phone`.
 _THAI_MOBILE = re.compile(r"0\d{9}")

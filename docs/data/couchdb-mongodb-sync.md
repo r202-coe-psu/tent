@@ -2,7 +2,7 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-11-05
+updated: 2026-11-10
 note: draft-public-needs-decimal (#934, 2026-11-05) — §3.2 `public_needs` `qty_needed`/`qty_target`/`on_hand`/`reserved` เก็บเป็น Decimal128 (เดิม double) · API ส่ง `qty_str` · PROJECTION_VERSION 16 → 17; CR-206 Amendment A2 (approved 2026-11-01, #1056) — §3.2 `public_needs` 1 แถวต่อ ศูนย์ + `item_id` + `drop_off_point_id` ของ need (`_id` `{shelter}:{item_id}@{point|-}`, field ใหม่ `item_id`, `drop_off_point_id`) · ลบแถวรูปแบบเดิม · `GET /public/v1/needs` ส่งจุดต่อแถว · `GET /external/v1/needs` รวมแถวกลับเป็นรูปเดิม · PROJECTION_VERSION 14 → 15; CR-206 Amendment A1 (2026-10-30, review PR #1038) — §3.2 `public_donations.received_summary` ไม่มี `remarks` (หมายเหตุของเจ้าหน้าที่ที่ต่อจาก `point_receipts[]`) ด้วย · projector ตัดทั้ง `closed_by` และ `remarks` · ไม่เปลี่ยน PROJECTION_VERSION (14 ยังไม่เคย release); decision sync 2026-10-30 (#813, owner) — §3.2 `public_donations.received_summary` ไม่มี `closed_by` (ชื่อเจ้าหน้าที่ที่ปิดใบ) · `closed_reason` ยังส่ง · ไม่ bump PROJECTION_VERSION เพราะ 14 ของ CR-206 ยังไม่เคย deploy; CR-206 approved (2026-10-28, #813) — §3.2 `public_donations.items_declared[].drop_off_point_id` + `point_receipts[]` (`point_id`, `line_nos`, `received_at`), PROJECTION_VERSION 13 → 14 (ต่อจาก CR-198), inbound ปั๊ม donation schema_v 11 (ต่อจาก CR-209); worker ปิดใบที่รับไปบางจุดแล้วเมื่อเลย `expires_at` (`closed_reason: expired`) และคืนยอดจองเมื่อใบเป็น `received`; CR-205 approved (2026-10-28, #812) — §3.2 `public_shelters.donation_points` ใหม่ (ticked storage points ที่มีพิกัด, ไม่มี `area_m2`), PROJECTION_VERSION 11 → 12 (ต่อจาก CR-196); CR-196 (2026-10-26) — §3.2 `public_donations.items_declared[].line_key`, PROJECTION_VERSION 10→11, inbound ปั๊ม donation schema_v 8; decision sync 2026-10-28 — inbound donation sync vs donor cancel race: re-read แถวก่อน put, flip `synced_to_couch` แบบมีเงื่อนไข (fingerprint status/revisions/courier tracking no.) + re-put ตาม `_rev` ตัวเองเมื่อไม่ตรง, quota settle ข้าม buffer ที่ยังไม่ sync, audit อนุมัติอัตโนมัติเขียนหลัง flip (§4.1 ตรงกับโค้ด; ไม่เปลี่ยนรูป doc / PROJECTION_VERSION); CR-183 (2026-10-22) — ศูนย์ปิดคง `public_shelters` + `public_persons` ไว้จนครบ `closed_at` + `retention_months_after_close`, listener/bootstrap ครอบศูนย์ปิดในระยะ retention, rescan ตอนเปิดใหม่ (bump PROJECTION_VERSION); decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
 ---
 
@@ -232,32 +232,35 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 
 ---
 
-## 4. Inbound — MongoDB → CouchDB (donation intake + search_audit)
+## 4. Inbound — MongoDB → CouchDB (donation intake + audit_event)
 
 public ประกาศบริจาคผ่าน `POST /public/v1/donations` → เขียน Mongo ก่อน → worker ค่อย persist เข้า CouchDB.
-occupants search เขียน Mongo `search_audits` (query เป็น hash; PII ผู้ค้นหา + IP จริงอยู่ Mongo เท่านั้น — CR-231) → worker ตัด PII แล้ว persist เข้า `central_ops`.
+occupants search เขียน Mongo `audit_events` (query เป็น hash; PII ผู้ค้นหา + IP จริงอยู่ใน key `pii` Mongo เท่านั้น — CR-231) → worker ตัดทั้ง key `pii` แล้ว persist เข้า `central_ops`.
 
-### 4.0 search_audit inbound
+### 4.0 audit_event inbound (CR-231; แทน search_audit inbound)
 
 ```
-1. POST /public/v1/occupants
-   → FastAPI เขียน Mongo `search_audits`:
-     { _id: search_audit:{ULID}, query_kind, query_hash, ip_hash,
-       result_count, occurred_at,
-       searcher: {first_name, last_name, phone}, client_ip,      // PII — Mongo เท่านั้น (CR-231)
-       purpose, purpose_note?, consent_version,
+1. POST /public/v1/occupants  (และ /external/v1/occupants)
+   → FastAPI เขียน Mongo `audit_events`:
+     { _id: audit:{ULID}, schema_v: 1, event_type: public.search | external.search,
+       domain: public, occurred_at, actor: {kind: anonymous | partner}, outcome: ok,
+       context: {query_kind, query_hash, ip_hash, result_count,
+                 purpose, consent_version},                 // ไม่มี PII
+       pii:     {searcher: {first_name, last_name, phone},  // Mongo เท่านั้น (เฉพาะ public.search)
+                 client_ip, purpose_note},
        synced_to_couch: false }
-   → คำค้นเก็บเป็น hash เท่านั้น (ไม่เก็บ raw query); เก็บ IP จริง (`client_ip`) + ข้อมูลผู้ค้นหา
-     ใน Mongo (แทนกติกาเดิม "hash เท่านั้น / ไม่เก็บ raw IP")
-   → fail-closed: เขียน Mongo ไม่สำเร็จ → 503 `SEARCH_UNAVAILABLE` ไม่คืนผลลัพธ์
+   → คำค้นเก็บเป็น hash เท่านั้น; เก็บ IP จริงใน `pii.client_ip` (แทนกติกาเดิม "hash เท่านั้น / ไม่เก็บ raw IP")
+   → public: fail-closed — เขียนไม่สำเร็จ → 503 `SEARCH_UNAVAILABLE` ไม่คืนผลลัพธ์
+   → external: fail-open (ND-1) — log แล้วตอบต่อ
 
-2. inbound worker poll `search_audits` where synced_to_couch=false
-   → ตัด `searcher`, `client_ip`, `purpose_note` ออกก่อน (doc append-only ลบไม่ได้ จึงห้ามมี PII)
-   → ensure DB `central_ops` → put search_audit:{ULID} (มี `purpose`, `consent_version`)
+2. inbound worker (`worker/inbound/audit.py`) poll `audit_events` where synced_to_couch=false
+   → ตัด **ทั้ง key `pii`** (และ field Mongo-only) — doc append-only ลบไม่ได้ จึงห้ามมี PII
+   → ensure DB `central_ops` → put audit:{ULID} (`_id` เดียวกับ Mongo → idempotent; schema_v 2)
    → mark synced_to_couch=true
-
-หมายเหตุ: ยังไม่มี retention ของ PII ใน Mongo `search_audits` (ติดตาม #1213)
 ```
+
+หมายเหตุ: **ไม่มี retention** ของ `pii` ใน Mongo `audit_events` (ตั้งใจ, #1213). `search_audits` ถูก migrate แบบ one-off
+(`uv run --project worker migrate-search-audits`) แล้วหยุดเขียน; doc `search_audit:*` เดิมใน `central_ops` ไม่ rewrite.
 
 ### 4.1 ลำดับ (donations)
 

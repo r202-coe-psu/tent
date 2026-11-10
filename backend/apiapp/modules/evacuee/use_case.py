@@ -9,9 +9,13 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from pymongo import ASCENDING
+from tent_model.audit_event import (
+    AUDIT_ID_PREFIX,
+    SEARCH_CONSENT_VERSION,
+    AuditEvent,
+)
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
-from tent_model.search_audit import SearchAudit, SearchAuditSearcher
 
 from ...utils.masking import (
     last_name_hash,
@@ -35,9 +39,6 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 NAME_RESULT_LIMIT = 10
-
-#: Consent text version recorded with every public search (CR-231 FR-16).
-SEARCH_CONSENT_VERSION = "search-v1"
 
 #: Staff `current_stay.status` values reported to public search verbatim
 #: (CR-080 + CR-112). Includes `arriving` and `room_confirmed` so Zone Arrival
@@ -237,35 +238,44 @@ class EvacueeUseCase:
         result_count: int,
         consent: PublicSearchRequest | None = None,
     ) -> None:
-        """Append-only audit buffer; the query is always hash-only.
+        """Append one `audit_events` row (`public.search` / `external.search`); query is hash-only.
 
         Public (`consent` given, CR-231): also stores the searcher, the real client IP, the
-        purpose and `consent_version` (PII stays in Mongo, the worker strips it before CouchDB),
+        purpose and `consent_version` (PII goes under `pii`, Mongo only; the worker drops that key),
         and a failed write is fail-closed (503 `SEARCH_UNAVAILABLE`, no results).
         External (`consent` None, ND-1): hashes only and fail-open, as before.
         """
-        extra: dict = {}
+        context: dict = {
+            "query_kind": parsed.kind.value,
+            "query_hash": sha256_hex(parsed.normalized),
+            "ip_hash": sha256_hex(client_ip),
+            "result_count": result_count,
+        }
+        pii: dict | None = None
         if consent is not None:
-            extra = {
-                "searcher": SearchAuditSearcher(**consent.searcher.model_dump()),
+            event_type, actor_kind = "public.search", "anonymous"
+            context |= {"purpose": consent.purpose, "consent_version": SEARCH_CONSENT_VERSION}
+            pii = {
+                "searcher": consent.searcher.model_dump(),
                 "client_ip": client_ip,
-                "purpose": consent.purpose,
                 "purpose_note": consent.purpose_note,
-                "consent_version": SEARCH_CONSENT_VERSION,
             }
+        else:
+            event_type, actor_kind = "external.search", "partner"
         try:
-            await SearchAudit(
-                id=f"search_audit:{new_ulid()}",
-                query_kind=parsed.kind.value,
-                query_hash=sha256_hex(parsed.normalized),
-                ip_hash=sha256_hex(client_ip),
-                result_count=result_count,
+            await AuditEvent(
+                id=f"{AUDIT_ID_PREFIX}{new_ulid()}",
+                event_type=event_type,
+                domain="public",
                 occurred_at=datetime.now(UTC),
+                actor={"kind": actor_kind},
+                outcome="ok",
+                context=context,
+                pii=pii,
                 synced_to_couch=False,
-                **extra,
             ).insert()
         except Exception:
-            logger.exception("Failed to write search_audit for kind=%s", parsed.kind.value)
+            logger.exception("Failed to write audit_event %s", event_type)
             if consent is not None:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
