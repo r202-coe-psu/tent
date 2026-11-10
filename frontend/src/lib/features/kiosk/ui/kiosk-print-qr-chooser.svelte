@@ -8,28 +8,28 @@
 	import { KIOSK_REPRINT_PATH, KIOSK_VOLUNTEER_CARD_PATH } from '../domain/identity-method';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_PRINT_I18N } from './_constants/kiosk-print.i18n';
 
 	interface Props {
 		contextQuery: KioskContextQuery;
 	}
 
 	let { contextQuery }: Props = $props();
+	const t = $derived(getTranslation(KIOSK_PRINT_I18N, languageStore.current).chooser);
 
 	interface PrintTarget {
 		id: 'evacuee' | 'volunteer';
-		title: string;
-		description: string;
 		path: typeof KIOSK_REPRINT_PATH | typeof KIOSK_VOLUNTEER_CARD_PATH;
 		icon: Component;
 		cardTone: string;
 		iconTone: string;
 	}
 
-	const TARGETS: readonly PrintTarget[] = [
+	const TARGET_STYLES: readonly PrintTarget[] = [
 		{
 			id: 'evacuee',
-			title: 'ผู้พักพิง',
-			description: 'ผู้ที่ลงทะเบียนเข้าพักในศูนย์',
 			path: KIOSK_REPRINT_PATH,
 			icon: Users,
 			cardTone: 'border-sky-200 bg-sky-50',
@@ -37,8 +37,6 @@
 		},
 		{
 			id: 'volunteer',
-			title: 'จิตอาสา',
-			description: 'พิมพ์บัตร QR จิตอาสาด้วยเบอร์โทร',
 			path: KIOSK_VOLUNTEER_CARD_PATH,
 			icon: HeartHandshake,
 			cardTone: 'border-domain-volunteer-border bg-domain-volunteer-subtle',
@@ -46,6 +44,7 @@
 		}
 	];
 
+	const targets = $derived(TARGET_STYLES.map((target) => ({ ...target, ...t[target.id] })));
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	const homeUrl = $derived(resolve(`/kiosk${contextQuery}`));
 
@@ -64,7 +63,7 @@
 </script>
 
 <svelte:head>
-	<title>พิมพ์ QR — SmartShelter Kiosk</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
@@ -83,10 +82,10 @@
 			id="print-qr-title"
 			class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 		>
-			พิมพ์ QR
+			{t.heading}
 		</h1>
 		<p class="mt-1 text-base font-medium text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-			เลือกประเภทผู้ที่ต้องการพิมพ์
+			{t.subheading}
 		</p>
 	</header>
 
@@ -94,10 +93,10 @@
 		class="method-grid grid grid-cols-2 gap-3 sm:gap-4 kiosk-portrait:grid-cols-1 kiosk-portrait:gap-5"
 		data-single-row=""
 		style:--method-rows="1"
-		style:--method-count={TARGETS.length}
-		aria-label="ประเภทผู้ที่ต้องการพิมพ์ QR"
+		style:--method-count={targets.length}
+		aria-label={t.groupLabel}
 	>
-		{#each TARGETS as target (target.id)}
+		{#each targets as target (target.id)}
 			<a
 				href={resolve(`${target.path}${contextQuery}`)}
 				aria-label={`${target.title} · ${target.description}`}

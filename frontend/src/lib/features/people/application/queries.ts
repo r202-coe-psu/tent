@@ -425,6 +425,7 @@ export {
 	type FederatedScanHit,
 	type FederatedScanCouchHit,
 	type FederatedScanUnassignedHit,
+	type FederatedScanRejectedHit,
 	type FederatedScanLookupDeps
 } from './federated-scan-lookup';
 

@@ -479,3 +479,34 @@ async function finishQuotaRelease(
 	await releaseApplicationQuota(dbName, app, now);
 	await markQuotaReleased(dbName, app._id, now);
 }
+
+/** One application of the token's owner as the portal lists it next to the shift rows (#973). */
+export interface TicketApplicationSummary {
+	application_id: string;
+	status: string;
+	job_id: string;
+	shift_id: string | null;
+	date: string;
+	can_cancel: boolean;
+}
+
+/**
+ * Every application the token stands for, with the server's cancel verdict, so the portal
+ * can put "เปิดตั๋ว" / "ยกเลิก" on each shift. A permanent token lists all of its volunteer's
+ * applications; an application token lists just its own. `null` for an unknown token.
+ */
+export async function listTicketApplications(
+	token: string,
+	now = new Date()
+): Promise<TicketApplicationSummary[] | null> {
+	const ticket = await resolveTicket(token, now);
+	if (!ticket) return null;
+	return ticket.applications.map((app) => ({
+		application_id: app._id,
+		status: String(app.status ?? ''),
+		job_id: app.job_id ?? '',
+		shift_id: app.shift_id ?? app.selected_shift?.shift_id ?? null,
+		date: app.selected_shift?.date ?? '',
+		can_cancel: canCancelTicket(app, now)
+	}));
+}
