@@ -3,6 +3,8 @@ import {
 	buildRegistryDesignDoc,
 	buildRegistryValidateDocUpdate,
 	KIOSK_BANNER_MANGO_INDEX,
+	KIOSK_BANNER_TV_CODE_MANGO_INDEX,
+	REGISTRY_MANGO_INDEXES,
 	REGISTRY_DESIGN_VERSION,
 	registryByNamePath
 } from './registry-design';
@@ -278,5 +280,11 @@ describe('registry Mango indexes', () => {
 	// must match the banner list selector `{ type, shelter_code }` exactly.
 	it('indexes exactly the fields the shelter banner list selects on', () => {
 		expect(KIOSK_BANNER_MANGO_INDEX.index.fields).toEqual(['type', 'shelter_code']);
+	});
+
+	it('indexes tv_code for the system-wide lookup and deploys it with the registry', () => {
+		expect(KIOSK_BANNER_TV_CODE_MANGO_INDEX.name).toBe('kiosk-banner-group-by-tv-code');
+		expect(KIOSK_BANNER_TV_CODE_MANGO_INDEX.index.fields).toEqual(['type', 'tv_code']);
+		expect(REGISTRY_MANGO_INDEXES).toContain(KIOSK_BANNER_TV_CODE_MANGO_INDEX);
 	});
 });

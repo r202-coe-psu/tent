@@ -4,9 +4,11 @@ import {
 	generateTvCode,
 	groupOf,
 	isDuplicateGroupName,
+	needsTvCode,
 	type KioskBannerGroupContext,
 	type KioskBannerGroupDoc,
-	type KioskBannerGroupInput
+	type KioskBannerGroupInput,
+	tvCodeSchema
 } from '$lib/features/kiosk-banners';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { GroupNotFoundError, listBannersForShelter } from './kiosk-banner.server';
@@ -39,6 +41,25 @@ async function findGroupDocs(shelterCode: string): Promise<KioskBannerGroupDoc[]
 	return (res.data as { docs: KioskBannerGroupDoc[] }).docs;
 }
 
+/**
+ * The group, in any shelter, that owns this TV pairing code; null when none does or when the
+ * code is malformed (no query). Served by the registry `(type, tv_code)` Mango index.
+ */
+export async function findGroupByTvCode(code: string): Promise<KioskBannerGroupDoc | null> {
+	if (!tvCodeSchema.safeParse(code).success) return null;
+	const res = await adminRaw(`/${REGISTRY_DB}/_find`, 'POST', {
+		selector: { type: 'kiosk_banner_group', tv_code: code },
+		limit: 1
+	});
+	if (res.status >= 400) {
+		throw new ServiceError(
+			'INTERNAL',
+			`Could not look up banner group by TV code (${res.status}): ${couchDetail(res.data)}`
+		);
+	}
+	return (res.data as { docs: KioskBannerGroupDoc[] }).docs[0] ?? null;
+}
+
 export async function listGroups(shelterCode: string): Promise<KioskBannerGroupRecord[]> {
 	const [groups, devices] = await Promise.all([
 		findGroupDocs(shelterCode),
@@ -61,14 +82,18 @@ export async function readGroupDoc(id: string): Promise<KioskBannerGroupDoc | nu
 	return doc.type === 'kiosk_banner_group' ? doc : null;
 }
 
-export async function getGroup(id: string): Promise<KioskBannerGroupRecord | null> {
-	const group = await readGroupDoc(id);
-	if (!group) return null;
+async function withDeviceIds(group: KioskBannerGroupDoc): Promise<KioskBannerGroupRecord> {
 	const devices = await scannerDeviceRepository.listDevices([group.shelter_code]);
 	return {
 		...group,
 		device_ids: devices.filter((d) => d.banner_group_id === group._id).map((d) => d.device_id)
 	};
+}
+
+export async function getGroup(id: string): Promise<KioskBannerGroupRecord | null> {
+	const doc = await readGroupDoc(id);
+	if (!doc) return null;
+	return withDeviceIds(await ensureTvCode(doc));
 }
 
 function assertDevicesInShelter(devices: { device_id: string }[], deviceIds: string[]): void {
@@ -95,11 +120,31 @@ async function putGroupDoc(doc: KioskBannerGroupDoc): Promise<KioskBannerGroupDo
 	return { ...doc, _rev: (res.data as { rev: string }).rev };
 }
 
+const TV_CODE_ATTEMPTS = 10;
+
+interface TvCodeDeps {
+	generateTvCode: () => string;
+}
+const defaultTvCodeDeps: TvCodeDeps = { generateTvCode };
+
+/**
+ * A code no group uses yet. Best effort like the name check: CouchDB has no unique constraint,
+ * so two concurrent draws can still collide, which a million-code space makes very unlikely.
+ */
+async function issueTvCode(deps: TvCodeDeps): Promise<string> {
+	for (let attempt = 0; attempt < TV_CODE_ATTEMPTS; attempt++) {
+		const code = deps.generateTvCode();
+		if (!(await findGroupByTvCode(code))) return code;
+	}
+	throw new ServiceError('INTERNAL', 'Could not issue an unused TV code, try again');
+}
+
 export async function createGroup(
 	input: KioskBannerGroupInput,
 	deviceIds: string[],
 	ctx: Omit<KioskBannerGroupContext, 'tvCode'>,
-	now: Date = new Date()
+	now: Date = new Date(),
+	deps: TvCodeDeps = defaultTvCodeDeps
 ): Promise<KioskBannerGroupRecord> {
 	// Best effort: CouchDB has no unique constraint, so two concurrent creates can both pass.
 	if (isDuplicateGroupName(await findGroupDocs(ctx.shelterCode), input.name)) {
@@ -107,10 +152,41 @@ export async function createGroup(
 	}
 	// Validate before saving so a bad device id does not leave an empty group behind.
 	assertDevicesInShelter(await scannerDeviceRepository.listDevices([ctx.shelterCode]), deviceIds);
-	const saved = await putGroupDoc(
-		createKioskBannerGroup(input, { ...ctx, tvCode: generateTvCode() }, now)
-	);
+	const tvCode = await issueTvCode(deps);
+	const saved = await putGroupDoc(createKioskBannerGroup(input, { ...ctx, tvCode }, now));
 	return setGroupDevices(saved, deviceIds, ctx.createdBy);
+}
+
+/**
+ * Replaces the group's TV code (the old one stops working at once) and upgrades a v1 group to
+ * schema_v 2. The current code counts as taken, so the new one always differs from it.
+ */
+export async function rotateTvCode(
+	id: string,
+	now: Date = new Date(),
+	deps: TvCodeDeps = defaultTvCodeDeps
+): Promise<KioskBannerGroupRecord> {
+	const current = await readGroupDoc(id);
+	if (!current) throw new GroupNotFoundError(id);
+	const saved = await putGroupDoc({
+		...current,
+		schema_v: 2,
+		tv_code: await issueTvCode(deps),
+		updated_at: now.toISOString()
+	});
+	return withDeviceIds(saved);
+}
+
+/**
+ * Lazy backfill for a v1 group: writes it back as schema_v 2 with a fresh unused code (a system
+ * upgrade, so `updated_at` stays). A group that already has a code is returned as is, unwritten.
+ */
+export async function ensureTvCode(
+	group: KioskBannerGroupDoc,
+	deps: TvCodeDeps = defaultTvCodeDeps
+): Promise<KioskBannerGroupDoc> {
+	if (!needsTvCode(group)) return group;
+	return putGroupDoc({ ...group, schema_v: 2, tv_code: await issueTvCode(deps) });
 }
 
 export async function updateGroup(

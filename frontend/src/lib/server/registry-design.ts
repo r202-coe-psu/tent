@@ -200,8 +200,21 @@ export const KIOSK_BANNER_MANGO_INDEX = {
 	type: 'json'
 } as const;
 
+/**
+ * Mango index for the system-wide banner group lookup by TV pairing code (`findGroupByTvCode`),
+ * mirroring `{ type, tv_code }` exactly.
+ */
+export const KIOSK_BANNER_TV_CODE_MANGO_INDEX = {
+	index: { fields: ['type', 'tv_code'] },
+	name: 'kiosk-banner-group-by-tv-code',
+	type: 'json'
+} as const;
+
 /** Mango indexes deployed with `_design/app`; `POST /_index` is idempotent. */
-export const REGISTRY_MANGO_INDEXES = [KIOSK_BANNER_MANGO_INDEX] as const;
+export const REGISTRY_MANGO_INDEXES = [
+	KIOSK_BANNER_MANGO_INDEX,
+	KIOSK_BANNER_TV_CODE_MANGO_INDEX
+] as const;
 
 /** Path for a single-shelter lookup by code (already URL-encoded). */
 export function registryByCodePath(code: string): string {
