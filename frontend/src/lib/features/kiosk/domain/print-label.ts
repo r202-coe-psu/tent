@@ -91,6 +91,27 @@ export const KIOSK_LABEL_TEXT = {
 	checklist: { pt: 9, lineHeight: 1.3, weight: 500 },
 	link: { pt: 7, lineHeight: 1.3, weight: 500 }
 } as const;
+/**
+ * Vulnerability marker row at the top of the text column (above the name). Printed in the zone
+ * row's face (12 pt bold), so the font load already covers its Thai words. Red is a solid black
+ * band with a white square and word; yellow is a black outline with a hollow triangle: both survive the
+ * thermal printer's black/white-only output and read apart without colour.
+ */
+export const KIOSK_LABEL_MARKER = {
+	text: { red: 'แดง', yellow: 'เหลือง' },
+	/** Space between the marker row and the name. */
+	gapMm: 1,
+	/** Text and triangle inset from the band's left edge. */
+	paddingMm: 1.5,
+	/** Outline stroke of the yellow marker (matches the DOM card's 0.5 mm border). */
+	borderMm: 0.5,
+	/** Glyph before the word (red: filled square, yellow: hollow triangle): side as a fraction of the row height. */
+	glyphRatio: 0.6,
+	/** Stroke of the yellow triangle. */
+	triangleStrokeMm: 0.4,
+	/** Triangle → word. */
+	textGapMm: 1.5
+} as const;
 /** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
 /**
