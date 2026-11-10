@@ -232,35 +232,31 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 
 ---
 
-## 4. Inbound — MongoDB → CouchDB (donation intake + audit_event)
+## 4. Inbound — MongoDB → CouchDB (donation intake + search_audit)
 
 public ประกาศบริจาคผ่าน `POST /public/v1/donations` → เขียน Mongo ก่อน → worker ค่อย persist เข้า CouchDB.
-occupants search เขียน Mongo `audit_events` (query เป็น hash; PII ผู้ค้นหา + IP จริงอยู่ใน key `pii` Mongo เท่านั้น — CR-231) → worker ตัดทั้ง key `pii` แล้ว persist เข้า `central_ops`.
+occupants search ของ **partner** (`/external/v1/occupants`) เขียน Mongo `search_audits` (hash เท่านั้น) → worker persist เข้า `central_ops`.
+การค้นของ **public** (`/public/v1/occupants`) เขียน Mongo `audit_events` แทน และ **ไม่ sync เข้า CouchDB** (CR-231 FR-17).
 
-### 4.0 audit_event inbound (CR-231; แทน search_audit inbound)
+### 4.0 search_audit inbound
 
 ```
-1. POST /public/v1/occupants  (และ /external/v1/occupants)
-   → FastAPI เขียน Mongo `audit_events`:
-     { _id: audit:{ULID}, schema_v: 1, event_type: public.search | external.search,
-       domain: public, occurred_at, actor: {kind: anonymous | partner}, outcome: ok,
-       context: {query_kind, query_hash, ip_hash, result_count,
-                 purpose, consent_version},                 // ไม่มี PII
-       pii:     {searcher: {first_name, last_name, phone},  // Mongo เท่านั้น (เฉพาะ public.search)
-                 client_ip, purpose_note},
-       synced_to_couch: false }
-   → คำค้นเก็บเป็น hash เท่านั้น; เก็บ IP จริงใน `pii.client_ip` (แทนกติกาเดิม "hash เท่านั้น / ไม่เก็บ raw IP")
-   → public: fail-closed — เขียนไม่สำเร็จ → 503 `SEARCH_UNAVAILABLE` ไม่คืนผลลัพธ์
-   → external: fail-open (ND-1) — log แล้วตอบต่อ
+1. POST /external/v1/occupants
+   → FastAPI เขียน Mongo `search_audits`:
+     { _id: search_audit:{ULID}, query_kind, query_hash, ip_hash,
+       result_count, occurred_at, synced_to_couch: false }
+   → ไม่เก็บ raw query / IP (ND-1: external fail-open + hash-only, ไม่เปลี่ยนใน CR-231)
 
-2. inbound worker (`worker/inbound/audit.py`) poll `audit_events` where synced_to_couch=false
-   → ตัด **ทั้ง key `pii`** (และ field Mongo-only) — doc append-only ลบไม่ได้ จึงห้ามมี PII
-   → ensure DB `central_ops` → put audit:{ULID} (`_id` เดียวกับ Mongo → idempotent; schema_v 2)
+2. inbound worker poll `search_audits` where synced_to_couch=false
+   → ensure DB `central_ops` → put search_audit:{ULID}
    → mark synced_to_couch=true
 ```
 
-หมายเหตุ: **ไม่มี retention** ของ `pii` ใน Mongo `audit_events` (ตั้งใจ, #1213). `search_audits` ถูก migrate แบบ one-off
-(`uv run --project worker migrate-search-audits`) แล้วหยุดเขียน; doc `search_audit:*` เดิมใน `central_ops` ไม่ rewrite.
+**Public search (CR-231) — ไม่ผ่าน inbound นี้:** `POST /public/v1/occupants` เขียน `audit_event` `public.search`
+ลง Mongo `audit_events` ที่เดียว (schema.md §5.1a) พร้อมข้อมูลผู้ค้นหา + IP จริง + จุดประสงค์ + `consent_version`;
+**ไม่ sync เข้า CouchDB** — `central_ops` ไม่รับ doc ของ public log (PII อยู่ Mongo เท่านั้น). fail-closed: เขียนไม่สำเร็จ → 503
+`SEARCH_UNAVAILABLE` ไม่คืนผลลัพธ์. `search_audits` เดิมไม่ migrate/backfill (คงไว้อ่านอย่างเดียวสำหรับข้อมูลเก่า);
+doc `search_audit:*` เดิมใน CouchDB คงไว้. ไม่มี retention — เก็บถาวร (#1213).
 
 ### 4.1 ลำดับ (donations)
 

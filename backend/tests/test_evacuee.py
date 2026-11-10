@@ -493,26 +493,25 @@ async def test_evacuee_search_writes_audit_event(
     audits = await AuditEvent.find_all().to_list()
     assert len(audits) == 1
     audit = audits[0]
-    assert audit.id.startswith("audit:")
+    assert audit.id.startswith("audit_event:")
     assert audit.event_type == "public.search"
-    assert audit.domain == "public"
-    assert audit.actor.kind == "anonymous"
-    assert audit.outcome == "ok"
     assert audit.schema_v == 1
-    assert audit.synced_to_couch is False
-    assert audit.context == {
+    assert audit.subject is None
+    assert audit.actor.model_dump() == {
+        "kind": "public_searcher",
+        "ip_hash": sha256_hex("203.0.113.10"),
+        "client_ip": "203.0.113.10",
+    }
+    assert audit.payload == {
         "query_kind": "phone",
         "query_hash": sha256_hex(phone),
-        "ip_hash": sha256_hex("203.0.113.10"),
         "result_count": 1,
+        "searcher": {"first_name": "สมศรี", "last_name": "ใจดี", "phone": "0899999999"},
         "purpose": "other",
+        "purpose_note": "หาญาติ",
         "consent_version": "search-v1",
     }
-    assert audit.pii == {
-        "searcher": {"first_name": "สมศรี", "last_name": "ใจดี", "phone": "0899999999"},
-        "client_ip": "203.0.113.10",
-        "purpose_note": "หาญาติ",
-    }
+    assert audit.request_id is None
 
 
 async def test_evacuee_search_returns_shelter_address_and_no_zone_keys(
@@ -1208,8 +1207,8 @@ async def test_public_search_normalizes_empty_purpose_note_to_none(
     assert response.status_code == 200, response.text
     audits = await AuditEvent.find_all().to_list()
     assert len(audits) == 1
-    assert audits[0].context["purpose"] == "find_family"
-    assert audits[0].pii["purpose_note"] is None
+    assert audits[0].payload["purpose"] == "find_family"
+    assert "purpose_note" not in audits[0].payload
 
 
 async def test_public_search_accepts_single_name_searcher(
@@ -1223,7 +1222,7 @@ async def test_public_search_accepts_single_name_searcher(
     response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
     assert response.status_code == 200, response.text
     audit = (await AuditEvent.find_all().to_list())[0]
-    assert audit.pii["searcher"]["last_name"] == ""
+    assert audit.payload["searcher"]["last_name"] == ""
 
 
 async def test_public_search_fails_closed_when_audit_cannot_be_written(
@@ -1253,6 +1252,7 @@ async def test_external_search_stays_fail_open_and_hash_only(
 ):
     """ND-1: `/external/v1/occupants` keeps plain `{"q"}`, no consent fields, fail-open audit."""
     from tent_model.audit_event import AuditEvent
+    from tent_model.search_audit import SearchAudit
 
     await ApiKey(
         id=new_ulid(),
@@ -1268,17 +1268,15 @@ async def test_external_search_stays_fail_open_and_hash_only(
 
     ok = await client.post("/external/v1/occupants", json={"q": "0812345678"}, headers=headers)
     assert ok.status_code == 200, ok.text
-    audit = (await AuditEvent.find_all().to_list())[0]
-    assert audit.event_type == "external.search"
-    assert audit.actor.kind == "partner"
-    assert audit.pii is None
-    assert "purpose" not in audit.context
-    assert "consent_version" not in audit.context
+    audit = (await SearchAudit.find_all().to_list())[0]
+    assert not hasattr(audit, "searcher") and not hasattr(audit, "client_ip")
+    assert audit.ip_hash == sha256_hex("198.51.100.7")
+    assert await AuditEvent.find_all().to_list() == []
 
     async def boom(self, *args, **kwargs):
         raise RuntimeError("mongo down")
 
-    monkeypatch.setattr(AuditEvent, "insert", boom)
+    monkeypatch.setattr(SearchAudit, "insert", boom)
     still_ok = await client.post(
         "/external/v1/occupants", json={"q": "0812345678"}, headers=headers
     )
@@ -1304,6 +1302,6 @@ async def test_public_search_limits_apply_after_trim(
     response = await client.post("/public/v1/occupants", json=payload, headers=auth_headers)
     assert response.status_code == 200, response.text
     audit = (await AuditEvent.find_all().to_list())[0]
-    assert audit.pii["purpose_note"] == "ก" * 200
-    assert audit.pii["searcher"]["first_name"] == "ข" * 100
-    assert audit.pii["searcher"]["last_name"] == "ค" * 100
+    assert audit.payload["purpose_note"] == "ก" * 200
+    assert audit.payload["searcher"]["first_name"] == "ข" * 100
+    assert audit.payload["searcher"]["last_name"] == "ค" * 100

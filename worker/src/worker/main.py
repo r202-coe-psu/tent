@@ -12,9 +12,9 @@ from tent_model import close_db, init_db
 from worker.config import load_settings
 from worker.couch.bootstrap import maybe_bootstrap
 from worker.couch.client import CouchClient
-from worker.inbound.audit import run_audit_inbound_loop
 from worker.inbound.donations import run_inbound_loop
 from worker.inbound.external_bookings import run_external_booking_inbound_loop
+from worker.inbound.search_audit import run_search_audit_inbound_loop
 from worker.inbound.shift_responses import run_shift_response_inbound_loop
 from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
 from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
@@ -46,7 +46,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
         loop.add_signal_handler(sig, _handle_signal)
 
     inbound_task: asyncio.Task[None] | None = None
-    audit_task: asyncio.Task[None] | None = None
+    search_audit_task: asyncio.Task[None] | None = None
     retention_task: asyncio.Task[None] | None = None
     volunteer_task: asyncio.Task[None] | None = None
     shift_response_task: asyncio.Task[None] | None = None
@@ -62,9 +62,9 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
         inbound_task = asyncio.create_task(
             run_inbound_loop(couch, stop_event=stop), name="inbound-donations"
         )
-        audit_task = asyncio.create_task(
-            run_audit_inbound_loop(couch, stop_event=stop),
-            name="inbound-audit-events",
+        search_audit_task = asyncio.create_task(
+            run_search_audit_inbound_loop(couch, stop_event=stop),
+            name="inbound-search-audit",
         )
         retention_task = asyncio.create_task(
             run_retention_loop(stop_event=stop, couch=couch), name="retention"
@@ -96,7 +96,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
         await manager.stop_all()
         for task in (
             inbound_task,
-            audit_task,
+            search_audit_task,
             retention_task,
             volunteer_task,
             shift_response_task,

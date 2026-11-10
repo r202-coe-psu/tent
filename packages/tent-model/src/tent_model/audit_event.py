@@ -1,9 +1,10 @@
-"""Single-collection audit event (CR-231) — Mongo ``audit_events``.
+"""Public audit log — Mongo ``audit_events`` (CR-231, single collection, schema_v 1).
 
-One envelope for every audit: ``event_type`` is a namespaced string whose ``context`` / ``pii``
-shape is validated per type from ``EVENT_REGISTRY`` (the one place that lists event types).
-``context`` never holds PII; ``pii`` is Mongo-only and the worker drops the whole key before the
-event reaches CouchDB (``central_ops``), so adding an event type needs no inbound change.
+One envelope for every public log; ``payload`` is validated per ``event_type`` from
+``EVENT_REGISTRY`` (the only list of event types). Mongo only: nothing here is synced to CouchDB,
+so ``actor.client_ip`` and ``payload.searcher`` / ``purpose_note`` (PII) stay on the public plane.
+The collection is append-only by convention (application code never updates or deletes), and has
+no TTL — rows are kept permanently (#1213).
 """
 
 from __future__ import annotations
@@ -15,14 +16,11 @@ from beanie import Document
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import IndexModel
 
-AUDIT_ID_PREFIX = "audit:"
+AUDIT_ID_PREFIX = "audit_event:"
 
-AuditDomain = Literal["public", "shelter", "central"]
-AuditOutcome = Literal["ok", "denied", "error"]
-ActorKind = Literal["anonymous", "staff", "partner", "system"]
 SearchPurpose = Literal["find_family", "find_acquaintance", "coordinate_aid", "other"]
 
-#: Consent text version recorded with every public search (FR-16).
+#: Consent text version recorded with every public search (FR-16a).
 SEARCH_CONSENT_VERSION = "search-v1"
 
 
@@ -30,150 +28,74 @@ class _Strict(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 
-class AuditActor(_Strict):
-	kind: ActorKind
-	id: str | None = None
+class PublicSearcherActor(_Strict):
+	"""Who triggered the event. ``client_ip`` is PII (real ``X-Real-IP``); ``ip_hash`` is not."""
+
+	kind: Literal["public_searcher"] = "public_searcher"
+	ip_hash: str
+	client_ip: str | None = None
 
 
-class AuditTarget(_Strict):
-	type: str
+class AuditSubject(_Strict):
+	"""The entity an event is about, when there is one (``public.search`` has none)."""
+
+	kind: str
 	id: str
 
 
-class SearcherPii(_Strict):
-	"""Who ran a public search. PII — Mongo only."""
+class Searcher(_Strict):
+	"""Who ran a public search. PII."""
 
 	first_name: str
 	last_name: str = ""
 	phone: str
 
 
-# ---- per-event_type context / pii -------------------------------------------------------------
-
-
-class SearchContext(_Strict):
+class PublicSearchPayload(_Strict):
 	query_kind: str
 	query_hash: str
-	ip_hash: str
 	result_count: int = Field(ge=0)
-
-
-class PublicSearchContext(SearchContext):
+	searcher: Searcher
 	purpose: SearchPurpose
+	#: Free text, may hold PII; present only when ``purpose == "other"``.
+	purpose_note: str | None = None
 	consent_version: str
 
 
-class LegacyPublicSearchContext(SearchContext):
-	"""Rows migrated from ``search_audits`` (FR-17a): v1 rows never recorded purpose / consent."""
-
-	purpose: SearchPurpose | None = None
-	consent_version: str | None = None
-
-
-class LegacyPublicSearchPii(_Strict):
-	"""Migrated rows: any subset of the PII a v1/v2 ``search_audits`` row carried."""
-
-	searcher: SearcherPii | None = None
-	client_ip: str | None = None
-	purpose_note: str | None = None
-
-
-class PublicSearchPii(_Strict):
-	searcher: SearcherPii
-	client_ip: str
-	purpose_note: str | None = None
-
-
-class EventSpec(BaseModel):
-	domain: AuditDomain
-	context: type[BaseModel]
-	#: ``None`` = this event type must not carry ``pii``.
-	pii: type[BaseModel] | None = None
-
-
-#: The only list of event types written to Mongo. Typos / unknown types fail validation.
-EVENT_REGISTRY: dict[str, EventSpec] = {
-	"public.search": EventSpec(domain="public", context=PublicSearchContext, pii=PublicSearchPii),
-	"external.search": EventSpec(domain="public", context=SearchContext),
+#: Registry of event types → payload model. Adding an event type = one entry here.
+EVENT_REGISTRY: dict[str, type[BaseModel]] = {
+	"public.search": PublicSearchPayload,
 }
 
 
-def validate_event(
-	event_type: str,
-	domain: str,
-	context: dict[str, Any],
-	pii: dict[str, Any] | None,
-	*,
-	legacy: bool = False,
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
-	"""Check ``context`` / ``pii`` against the registry; returns the normalised pair.
-
-	``legacy`` (rows migrated from ``search_audits``) relaxes ``public.search`` only: purpose,
-	consent and ``pii`` may be absent on v1 rows.
-	"""
-	if legacy and event_type == "public.search":
-		clean = LegacyPublicSearchContext.model_validate(context).model_dump(
-			mode="json", exclude_none=True
-		)
-		return clean, (
-			LegacyPublicSearchPii.model_validate(pii).model_dump(mode="json")
-			if pii is not None
-			else None
-		)
-	spec = EVENT_REGISTRY.get(event_type)
-	if spec is None:
+def validate_payload(event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+	"""Check ``payload`` against the registry; returns it normalised (``None`` fields dropped)."""
+	model = EVENT_REGISTRY.get(event_type)
+	if model is None:
 		raise ValueError(f"unknown audit event_type: {event_type!r}")
-	if spec.domain != domain:
-		raise ValueError(f"{event_type} must have domain {spec.domain!r}")
-	clean_context = spec.context.model_validate(context).model_dump(mode="json")
-	if spec.pii is None:
-		if pii is not None:
-			raise ValueError(f"{event_type} must not carry pii")
-		return clean_context, None
-	if pii is None:
-		raise ValueError(f"{event_type} requires pii")
-	return clean_context, spec.pii.model_validate(pii).model_dump(mode="json")
+	return model.model_validate(payload).model_dump(mode="json", exclude_none=True)
 
 
 class AuditEvent(Document):
-	"""``audit_events`` row; ``synced_to_couch`` gates the inbound loop (append-only otherwise)."""
+	"""``audit_events`` row."""
 
 	model_config = ConfigDict(populate_by_name=True)
 
 	id: str = Field(alias="_id")
 	schema_v: int = 1
 	event_type: str
-	domain: AuditDomain
 	occurred_at: datetime
-	actor: AuditActor
-	target: AuditTarget | None = None
-	outcome: AuditOutcome = "ok"
-	context: dict[str, Any] = Field(default_factory=dict)
-	pii: dict[str, Any] | None = None
-	synced_to_couch: bool = False
-	#: Set only by the one-off ``search_audits`` migration (FR-17a).
-	migrated_from: str | None = None
+	actor: PublicSearcherActor
+	#: Ties the event to FastAPI / nginx logs (``X-Request-ID``) when the caller sent one.
+	request_id: str | None = None
+	subject: AuditSubject | None = None
+	payload: dict[str, Any]
 
 	@model_validator(mode="after")
-	def _validate_event_type(self) -> AuditEvent:
-		self.context, self.pii = validate_event(
-			self.event_type,
-			self.domain,
-			self.context,
-			self.pii,
-			legacy=self.migrated_from is not None,
-		)
+	def _validate_payload(self) -> AuditEvent:
+		self.payload = validate_payload(self.event_type, self.payload)
 		return self
 
 	class Settings:
 		name = "audit_events"
-		indexes = [
-			IndexModel([("event_type", 1), ("occurred_at", 1)]),
-			IndexModel([("domain", 1), ("occurred_at", 1)]),
-			IndexModel([("target.type", 1), ("target.id", 1)]),
-			IndexModel(
-				[("synced_to_couch", 1)],
-				name="synced_to_couch_pending",
-				partialFilterExpression={"synced_to_couch": False},
-			),
-		]
+		indexes = [IndexModel([("event_type", 1), ("occurred_at", -1)])]

@@ -34,4 +34,9 @@ async def search_evacuees(
     """Search evacuees in the public read model (masked, no PII leakage)."""
     ip = client_ip(request)
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.search(payload.search, client_ip=ip, consent=payload)
+    return await use_case.search(
+        payload.search,
+        client_ip=ip,
+        consent=payload,
+        request_id=request.headers.get("x-request-id"),
+    )

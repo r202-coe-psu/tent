@@ -944,18 +944,6 @@ closed, cancelled = terminal (แก้อะไรไม่ได้อีก �
 | `context`                   | {}                                                                                                             | opt | payload แล้วแต่ action (เช่น revision ที่แพ้ conflict) · `reason = role_grant.*`: `{role, expires_at, actor, …}` (`actor` = ผู้กระทำ, `worker` เมื่อ worker เป็นคนถอน) และ `cause: profile_inactive` เมื่อ worker ถอน (`role_grant.revoked`) เพราะโปรไฟล์อาสาสมัครถูกปิด (CR-221 FR-20; field เสริม ไม่ bump `schema_v`) |
 | `occurred_at`               | ts                                                                                                             | req | —                                                      |
 
-> **CR-231 — schema_v 1 → 2 (additive): `audit` ขยายเป็น audit_event** (`event_type`, `domain`, `actor`, `target`, `outcome`, `context`).
-> | Field ใหม่ | ชนิด | req | หมายเหตุ |
-> | --- | --- | --- | --- |
-> | `event_type` | str (namespaced) | opt | เช่น `public.search`, `external.search`, `shelter.privacy_change` — แทน enum `action` ปิด; **reader ใช้ `event_type ?? action`** |
-> | `domain` | `public`\|`shelter`\|`central` | opt | plane ที่ event เกิด |
-> | `actor` | {`kind`: `anonymous`\|`staff`\|`partner`\|`system`, `id?`} | opt | public search = `anonymous` |
-> | `target` | {`type`, `id`} | opt | เหมือน `target_type`/`target_id` เดิม |
-> | `outcome` | `ok`\|`denied`\|`error` | opt | — |
->
-> doc v1 (`action` + `target_*` + `reason`) ยังเขียน/อ่านได้ต่อ — **CR-231 ไม่ย้าย writer ของศูนย์**; writer ย้ายมาใช้ `event_type` ทีละจุดภายหลัง.
-> event ฝั่ง public เก็บใน Mongo `audit_events` (`_id` = `audit:{ulid}` เหมือนกันทั้งสอง store) แล้ว sync เข้า `central_ops` ด้วย shape เดียวกัน **โดยไม่มี key `pii`** (ดู §5.1).
-
 ### 2.13 `donation_slot` — `donation_slot:{mode}:{date}:{from}` (deterministic) · DN-5
 
 > **schema_v 2** — แยกเป็นสองคิว: เพิ่ม `mode` (req), `capacity` เป็น opt/nullable (`null` = ไม่มีเพดาน), `_id` เพิ่ม `{mode}`, สูตรที่ว่างนับสถานะที่ถือคิวตาม CR-052. CR-157.
@@ -2722,39 +2710,42 @@ VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไ�
 
 ## 5. DB `central_ops` (central เท่านั้น)
 
-### 5.1 `audit_event` (Mongo `audit_events` → `central_ops` `audit:{ulid}`) · **append-only** · แทน `search_audit`
+### 5.1 `search_audit` — `search_audit:{ulid}` · **append-only**
 
-> **CR-231 (2026-11-08):** `search_audit` **superseded** — migrate `search_audits` → `audit_events` แบบ one-off แล้วหยุดเขียน
-> (collection เดิมคงไว้ ไม่ลบ; doc `search_audit:*` ใน `central_ops` ไม่ rewrite). Public search เขียน `event_type=public.search`;
-> `/external/v1/occupants` เขียน `event_type=external.search` (fail-open, hash เท่านั้น, ไม่มี `pii`).
+> **CR-231:** public search (`POST /public/v1/occupants`) **ไม่เขียน `search_audit` อีกแล้ว** — เขียน Mongo `audit_events` (§5.1a) แทน
+> (ไม่เขียนคู่, ไม่ migrate/backfill; collection `search_audits` เดิมคงไว้อ่านอย่างเดียว). `/external/v1/occupants` ไม่เปลี่ยน:
+> ยังเขียน `search_audit` แบบ hash เท่านั้น, fail-open (ND-1).
 
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `_id` | `audit:{ulid}` | req | ใช้ `_id` เดียวกันใน Mongo และ CouchDB → sync แบบ idempotent |
-| `schema_v` | int | req | Mongo `audit_events` เริ่ม 1; doc CouchDB = 2 (ดู §2.12) |
-| `event_type` | str | req | registry อยู่ที่เดียวใน `packages/tent-model` (`EVENT_REGISTRY`): `public.search`, `external.search` |
-| `domain` | `public`\|`shelter`\|`central` | req | `public` สำหรับ search |
-| `occurred_at` | ts | req | — |
-| `actor` | {`kind`, `id?`} | req | public = `anonymous`, external = `partner` |
-| `target` | {`type`, `id`} | opt | — |
-| `outcome` | `ok`\|`denied`\|`error` | req | — |
-| `context` | {} | req | **ห้ามมี PII**; validate ต่อ `event_type` |
-| `pii` | {} | opt | **Mongo เท่านั้น** — worker ตัดทั้ง key ก่อนเขียน CouchDB |
-| `synced_to_couch` | bool | req | Mongo เท่านั้น — gate inbound |
+| Field          | ชนิด                                          | req | หมายเหตุ                                                                  |
+| -------------- | --------------------------------------------- | --- | ------------------------------------------------------------------------- |
+| `query_kind`   | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public occupants search (CR-044, path CR-065) |
+| `query_hash`   | str                                           | req | SHA-256 ของ query (normalize แล้ว) — ไม่เก็บ query ตรง                    |
+| `ip_hash`      | str                                           | req | —                                                                         |
+| `result_count` | int≥0                                         | req | —                                                                         |
+| `occurred_at`  | ts                                            | req | —                                                                         |
 
-`public.search`:
+### 5.1a `audit_events` — Mongo `audit_events` (public log, single collection, schema_v 1) · **append-only** · CR-231
 
-| ที่ | Field | หมายเหตุ |
+เก็บที่ **Mongo เท่านั้น — ไม่ sync เข้า CouchDB** (PII อยู่ที่ public plane). `_id` = `audit_event:{ULID}`.
+ไม่มี retention / TTL — เก็บถาวร (#1213). Index: `{event_type: 1, occurred_at: -1}`. Append-only ที่ระดับ application code (ไม่ update/delete).
+
+| Field | req | หมายเหตุ |
 | --- | --- | --- |
-| `context` | `query_kind` (`name`/`phone`/`national_id`/`passport`), `query_hash` (SHA-256 ของ query normalize แล้ว), `ip_hash`, `result_count` (int≥0) | ค่าเดิมของ `search_audit`; คำค้นเป็น hash |
-| `context` | `purpose` (`find_family`/`find_acquaintance`/`coordinate_aid`/`other`), `consent_version` (`"search-v1"`) | CR-231 |
-| `pii` | `searcher {first_name 1–100, last_name 0–100 (ว่าง = ''), phone มือถือไทย 10 หลัก normalize แล้ว}`, `client_ip` (จาก `X-Real-IP`), `purpose_note` (1–200 เมื่อ `other`, ไม่งั้น `null`) | **PII** — free text อาจมี PII |
+| `_id` | req | `audit_event:{ULID}` |
+| `schema_v` | req | `1` |
+| `event_type` | req | dotted string; registry อยู่ที่เดียวใน `packages/tent-model` (`EVENT_REGISTRY`); ตอนนี้มี `public.search` |
+| `occurred_at` | req | ts (UTC) |
+| `actor` | req | `{kind: "public_searcher", ip_hash, client_ip?}` — `client_ip` **PII** ค่าจริงจาก `X-Real-IP` |
+| `request_id` | opt | จาก header `X-Request-ID` ถ้ามี — ผูกกับ log ของ FastAPI/nginx |
+| `subject` | opt | `{kind, id}` เมื่อ event ชี้ entity; `public.search` ไม่มี |
+| `payload` | req | validate ต่อ `event_type` (ห้าม key นอก model) |
 
-`external.search`: `context` = `query_kind`, `query_hash`, `ip_hash`, `result_count`; ไม่มี `pii`/`purpose`/`consent_version`.
+`public.search` `payload`: `query_kind` · `query_hash` (SHA-256; คำค้นไม่เก็บตรง) · `result_count` (int≥0) ·
+`searcher {first_name 1–100, last_name 0–100 (ว่าง = ''), phone มือถือไทย 10 หลัก normalize แล้ว}` (**PII**) ·
+`purpose` (`find_family`/`find_acquaintance`/`coordinate_aid`/`other`) · `purpose_note` (**PII** free text; มีเฉพาะ `purpose=other`, 1–200) ·
+`consent_version` (`"search-v1"`). API ที่อ่าน `audit_events` ต้อง project `actor.client_ip` และ `payload.searcher`/`purpose_note` ออกโดย default.
 
-**Mongo:** index `(event_type, occurred_at)`, `(domain, occurred_at)`, `(target.type, target.id)`, partial `synced_to_couch=false`; **ไม่มี TTL / retention** (ตั้งใจ — เก็บ PII ถาวร, #1213).
-สิทธิ์ (FR-15b — **deferred, ยังไม่บังคับ**: Mongo ยังไม่มี auth, CR-231 ND-5): สคริปต์ `scripts/mongo-init/audit-events-roles.js` เตรียม role ไว้ (FastAPI `insert`/`find`; worker `find`/`update` ใช้เฉพาะ `synced_to_couch`; ไม่มีใครมี `remove`) แต่ไม่ได้ผูกกับ compose — append-only เป็นข้อตกลงในโค้ดจนกว่าจะเปิด auth. API ที่อ่าน `audit_events` ต้อง project `pii` ออกโดย default.
-แถวที่ migrate จาก `search_audits` มี `migrated_from: "search_audits"` — แถว v1 อาจไม่มี `purpose`/`consent_version`/`pii`.
+> สิทธิ์ Mongo แบบ append-only ที่ระดับ DB ไม่ได้บังคับ (Mongo ทุก compose ยังไม่มี auth) — ต้องควบคุมสิทธิ์เข้าถึง Mongo ให้เหมาะกับ PII ที่เก็บถาวร (CR-231 FR-18)
 
 ### 5.2 `export_job` — `export_job:{ulid}`
 
@@ -3027,7 +3018,7 @@ idempotent โดย `pnpm seed` และ `pnpm redeploy:access` (แบบเ�
 | `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · `station_log`: (evacuee_id, station, occurred_at) — CR-192 · stock_ledger: (item_id, occurred_at), (type, lot.lot_no) — ddoc `stock-ledger-lot-no` (ค้นใบบริจาคด้วยเลขล็อต; #821) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) (legacy v1/v2 — frozen) · `bulk_return_entry`: (type, pool_id) · `bulk_return_entry_move`: (type, to_pool_id) (CR-193) · donation: status, tracking_token_hash, campaign_id, (logistics.slot.date), (type, status, received_at) — ddoc `donation-received-list` (รายการ "รับแล้ว"), (type, status, donor.phone_hash, received_at) — ddoc `donation-received-phone` (ค้นด้วยเบอร์; #821), (type, booking_ref) — ddoc `donation-booking-ref` (ค้นด้วยเลขใบ; #821) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date + `preregister`: evacuees with `registered_via` ∈ web/kiosk/api, not cancelled, by `created_at` date — CR-170 amend) · `station_logs_by_station` (raw `station_log` events, no reduce — key `[YYYY-MM-DD(+07) ของ occurred_at, station, channel, evacuee_id]` → `{action, occurred_at, actor}` (`actor` = `device_id` for kiosk, `created_by` for staff — CR-192 amendment 2); BFF pairs start/complete and ranks per actor — CR-192, view manifest v5) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` · `bulk_return_pool_item_totals` (`_sum` — [qty, count] ต่อ pool/item/entry จาก entry + move และหักยอด void; `_design/app` เวอร์ชัน 7 — v4 เป็นของ CR-170 amend, v5 ของ CR-192, v6 ของ CR-193 (#658); CR-193, §2.31.3) · `donation_received_by_name` (emit เฉพาะ `donation` ที่ `status = received` มี `donor.name`: key `[ชื่อ normalize แล้ว (NFKC · lowercase · trim · ยุบช่องว่าง) ทั้งก้อน, received_at]` และ `[แต่ละคำ, received_at]` — แต่ละ key ไม่เกินครั้งเดียวต่อใบ, value `null`) · `donation_received_by_item` (ใบเดียวกัน: key `[item_id, received_at]` ต่อ `item_id` ที่ไม่ซ้ำในใบ, value `null`) — ค้นใบที่รับแล้ว (CR-214, #821, view manifest v7) |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) — index เดียวกันนี้ใช้กับ `kiosk_banner_group` ด้วย (selector `type` + `shelter_code` · ไม่เพิ่ม index ใหม่ — 2026-10-21) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
-| `central_ops` | export_job: (status, requested_by) · audit (`audit:*`): occurred_at | — |
+| `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
 | `printing_devices` | print_device: (type, shelter_code) · (type) — ดู §10.5 ([CR-222](../changes/14-kiosk/CR-222-station-print-server.md)) · registry `printing_db:*` อ่านด้วย `_all_docs` | — |
 | `printing_{code}` | print_job: (printer_id, status, created_at) · (printer_id, created_at) · (status, finished_at) · (status, lease_until) · (status, expires_at) — ดู §10.5 · design doc `_design/print_access` มีแค่ VDU (ไม่มี view) | — |
 

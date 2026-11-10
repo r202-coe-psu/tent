@@ -9,13 +9,10 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from pymongo import ASCENDING
-from tent_model.audit_event import (
-    AUDIT_ID_PREFIX,
-    SEARCH_CONSENT_VERSION,
-    AuditEvent,
-)
+from tent_model.audit_event import AUDIT_ID_PREFIX, SEARCH_CONSENT_VERSION, AuditEvent
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
+from tent_model.search_audit import SearchAudit
 
 from ...utils.masking import (
     last_name_hash,
@@ -155,9 +152,12 @@ class EvacueeUseCase:
         *,
         client_ip: str = "unknown",
         consent: PublicSearchRequest | None = None,
+        request_id: str | None = None,
     ) -> SearchResponse:
         """Public search. With `consent` (the public route) the audit is fail-closed (CR-231)."""
-        persons = await self._find_and_audit(raw_query, client_ip=client_ip, consent=consent)
+        persons = await self._find_and_audit(
+            raw_query, client_ip=client_ip, consent=consent, request_id=request_id
+        )
         results = await self.build_results(persons)
         return SearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
 
@@ -175,6 +175,7 @@ class EvacueeUseCase:
         *,
         client_ip: str,
         consent: PublicSearchRequest | None = None,
+        request_id: str | None = None,
     ) -> list[PublicPerson]:
         parsed = parse_search_query(raw_query)
         if parsed is None:
@@ -194,6 +195,7 @@ class EvacueeUseCase:
             client_ip=client_ip,
             result_count=len(persons),
             consent=consent,
+            request_id=request_id,
         )
         return persons
 
@@ -237,56 +239,70 @@ class EvacueeUseCase:
         client_ip: str,
         result_count: int,
         consent: PublicSearchRequest | None = None,
+        request_id: str | None = None,
     ) -> None:
-        """Append one `audit_events` row (`public.search` / `external.search`); query is hash-only.
+        """Audit one search.
 
-        Public (`consent` given, CR-231): also stores the searcher, the real client IP, the
-        purpose and `consent_version` (PII goes under `pii`, Mongo only; the worker drops that key),
-        and a failed write is fail-closed (503 `SEARCH_UNAVAILABLE`, no results).
-        External (`consent` None, ND-1): hashes only and fail-open, as before.
+        Public (`consent` given, CR-231): append a `public.search` row to `audit_events` with the
+        searcher, real client IP, purpose and `consent_version`; a failed write is fail-closed
+        (503 `SEARCH_UNAVAILABLE`, no results).
+        External (`consent` None, ND-1): unchanged hash-only `search_audits` row, fail-open.
         """
-        context: dict = {
-            "query_kind": parsed.kind.value,
-            "query_hash": sha256_hex(parsed.normalized),
-            "ip_hash": sha256_hex(client_ip),
-            "result_count": result_count,
-        }
-        pii: dict | None = None
-        if consent is not None:
-            event_type, actor_kind = "public.search", "anonymous"
-            context |= {"purpose": consent.purpose, "consent_version": SEARCH_CONSENT_VERSION}
-            pii = {
-                "searcher": consent.searcher.model_dump(),
-                "client_ip": client_ip,
-                "purpose_note": consent.purpose_note,
-            }
-        else:
-            event_type, actor_kind = "external.search", "partner"
+        if consent is None:
+            await self._write_external_audit(
+                parsed=parsed, client_ip=client_ip, result_count=result_count
+            )
+            return
         try:
             await AuditEvent(
                 id=f"{AUDIT_ID_PREFIX}{new_ulid()}",
-                event_type=event_type,
-                domain="public",
+                event_type="public.search",
                 occurred_at=datetime.now(UTC),
-                actor={"kind": actor_kind},
-                outcome="ok",
-                context=context,
-                pii=pii,
+                actor={
+                    "kind": "public_searcher",
+                    "ip_hash": sha256_hex(client_ip),
+                    "client_ip": client_ip,
+                },
+                request_id=request_id,
+                payload={
+                    "query_kind": parsed.kind.value,
+                    "query_hash": sha256_hex(parsed.normalized),
+                    "result_count": result_count,
+                    "searcher": consent.searcher.model_dump(),
+                    "purpose": consent.purpose,
+                    "purpose_note": consent.purpose_note,
+                    "consent_version": SEARCH_CONSENT_VERSION,
+                },
+            ).insert()
+        except Exception:
+            logger.exception("Failed to write audit_event public.search")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": {
+                        "code": "SEARCH_UNAVAILABLE",
+                        "message": "Search is temporarily unavailable",
+                    }
+                },
+            ) from None
+
+    async def _write_external_audit(
+        self, *, parsed: ParsedSearchQuery, client_ip: str, result_count: int
+    ) -> None:
+        """Append-only audit buffer — never store raw query or IP (hashes only)."""
+        try:
+            await SearchAudit(
+                id=f"search_audit:{new_ulid()}",
+                query_kind=parsed.kind.value,
+                query_hash=sha256_hex(parsed.normalized),
+                ip_hash=sha256_hex(client_ip),
+                result_count=result_count,
+                occurred_at=datetime.now(UTC),
                 synced_to_couch=False,
             ).insert()
         except Exception:
-            logger.exception("Failed to write audit_event %s", event_type)
-            if consent is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail={
-                        "error": {
-                            "code": "SEARCH_UNAVAILABLE",
-                            "message": "Search is temporarily unavailable",
-                        }
-                    },
-                ) from None
-            # External: search availability > audit durability.
+            # Search availability > audit durability; inbound/ops can alert on gaps.
+            logger.exception("Failed to write search_audit for kind=%s", parsed.kind.value)
 
     async def find_persons(
         self,
