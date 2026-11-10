@@ -166,6 +166,7 @@ describe('buildAssignRoster — row state', () => {
 		});
 		expect(row.state).toEqual({
 			kind: 'collision',
+			jobId: 'job:heavy',
 			jobTitle: 'ทีมพลาธิการช่วยยกของ',
 			startTime: '09:00',
 			endTime: '15:00'

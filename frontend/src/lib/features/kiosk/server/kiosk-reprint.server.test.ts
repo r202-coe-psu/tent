@@ -135,12 +135,12 @@ describe('reprintKioskLabels', () => {
 			{
 				evacuee_id: ids[0],
 				qr_payload: issuedQr(ids[0]),
-				label: { name: 'สมชาย0 ใจดี', phone, marker: null, zone: null, stations_passed: 1 }
+				label: { name: 'สมชาย0\nใจดี', phone, marker: null, zone: null, stations_passed: 1 }
 			},
 			{
 				evacuee_id: ids[1],
 				qr_payload: issuedQr(ids[1]),
-				label: { name: 'สมชาย1 ใจดี', phone: null, marker: null, zone: null, stations_passed: 1 }
+				label: { name: 'สมชาย1\nใจดี', phone: null, marker: null, zone: null, stations_passed: 1 }
 			}
 		]);
 		expect(writes()).toEqual([]);

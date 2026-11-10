@@ -259,6 +259,36 @@ export function wrapLabelText(
 	return kept;
 }
 
+/**
+ * Wraps a label name whose parts (first name, last name) are separated by `\n`: each part starts
+ * on its own line, and a part never takes the lines the later parts still need, so a long first
+ * name cannot push the last name off the label. Within a part, `words` splits Thai words only
+ * when the part is wider than the line (the segmenter would otherwise split names mid-name).
+ */
+export function wrapLabelName(
+	name: string,
+	maxWidth: number,
+	measure: (text: string) => number,
+	maxLines: number,
+	splitWords: (text: string) => string[],
+	splitGraphemes: (text: string) => string[] = (text) => Array.from(text)
+): string[] {
+	const parts = name
+		.split('\n')
+		.map((part) => part.trim())
+		.filter(Boolean);
+	const lines: string[] = [];
+	parts.forEach((part, index) => {
+		const reserved = parts.length - index - 1;
+		const available = Math.max(1, maxLines - lines.length - reserved);
+		const segments = part
+			.split(/(\s+)/)
+			.flatMap((piece) => (measure(piece.trim()) > maxWidth ? splitWords(piece) : [piece]));
+		lines.push(...wrapLabelText(segments, maxWidth, measure, available, splitGraphemes));
+	});
+	return lines;
+}
+
 export type KioskLabelLayout = {
 	qr: { x: number; y: number };
 	divider: { x: number; y: number; width: number; height: number };

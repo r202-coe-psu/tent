@@ -32,6 +32,7 @@ import {
 	labelZoneLine,
 	mmToDots,
 	ptToDots,
+	wrapLabelName,
 	wrapLabelText
 } from './print-label';
 
@@ -363,6 +364,48 @@ describe('wrapLabelText', () => {
 
 	it('returns no lines for empty text', () => {
 		expect(wrapLabelText([], 5, measure, 2)).toEqual([]);
+	});
+});
+
+describe('wrapLabelName', () => {
+	const measure = (text: string) => text.length;
+	const words = (text: string) => text.split(/(?<= )/);
+
+	it('puts each \\n-separated part on its own line even when both fit one line', () => {
+		expect(wrapLabelName('สมชาย\nใจดี', 20, measure, 3, words)).toEqual(['สมชาย', 'ใจดี']);
+	});
+
+	it('keeps a single-line name on one line', () => {
+		expect(wrapLabelName('สมชาย ใจดี', 20, measure, 3, words)).toEqual(['สมชาย ใจดี']);
+	});
+
+	it('wraps a part that is too wide within its own share of the lines', () => {
+		expect(wrapLabelName('aa\nbb cc dd', 5, measure, 3, words)).toEqual(['aa', 'bb cc', 'dd']);
+	});
+
+	it('keeps the last name on the label when the first name overflows', () => {
+		const lines = wrapLabelName('aaaaaaaaaaaaaaaaaaaa\nbbb', 5, measure, 3, words);
+		expect(lines).toHaveLength(3);
+		expect(lines[0]).toBe('aaaaa');
+		expect(lines[1]).toMatch(/…$/);
+		expect(lines[2]).toBe('bbb');
+	});
+
+	it('clips a long last name with an ellipsis once the first name has used its lines', () => {
+		const lines = wrapLabelName('aa bb\ncc dd ee ff gg', 5, measure, 3, words);
+		expect(lines).toEqual(['aa bb', 'cc dd', 'ee f…']);
+	});
+
+	it('gives the last name one line when maxLines is 2 and the first name is long', () => {
+		expect(wrapLabelName('aa bb cc\ndd', 5, measure, 2, words)).toEqual(['aa b…', 'dd']);
+	});
+
+	it('ignores blank parts', () => {
+		expect(wrapLabelName('\n  \nสมชาย\n', 20, measure, 3, words)).toEqual(['สมชาย']);
+	});
+
+	it('returns no lines for an empty name', () => {
+		expect(wrapLabelName('', 20, measure, 3, words)).toEqual([]);
 	});
 });
 

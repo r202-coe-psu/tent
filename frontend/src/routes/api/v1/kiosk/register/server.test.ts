@@ -143,7 +143,7 @@ describe('POST /api/v1/kiosk/register', () => {
 			marker: 'red'
 		});
 		const body = await (await POST(request(validBody))).json();
-		expect(body.label).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678', marker: 'red' });
+		expect(body.label).toEqual({ name: 'สมชาย\nใจดี', phone: '0812345678', marker: 'red' });
 	});
 
 	it('passes a null marker through on the label (#1301)', async () => {
@@ -166,7 +166,7 @@ describe('POST /api/v1/kiosk/register', () => {
 			status: 'created',
 			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@a1b2c3',
-			label: { name: 'สมชาย ใจดี', phone: '0812345678', marker: null },
+			label: { name: 'สมชาย\nใจดี', phone: '0812345678', marker: null },
 			consent_ref: validBody.consent.ref,
 			consent_mode: 'full'
 		});
@@ -406,7 +406,7 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		expect(response.status).toBe(200);
 		expect(await response.json()).toMatchObject({
 			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@a1b2c3',
-			label: { name: 'สมชาย ใจดี', phone: null, marker: null }
+			label: { name: 'สมชาย\nใจดี', phone: null, marker: null }
 		});
 		expect(mockRegisterThaid.mock.calls[0]?.[3]).toBeNull();
 	});

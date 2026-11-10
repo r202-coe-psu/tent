@@ -264,14 +264,17 @@ function toSummary(
 	};
 }
 
-/** Unmasked name + phones for the printed label (check-in and a fresh walk-in registration). */
+/**
+ * Unmasked name + phones for the printed label (check-in and a fresh walk-in registration).
+ * `name` is first name, then last name on its own line (`\n`-separated), as on every label.
+ */
 export function toLabelIdentity(
 	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone' | 'emergency_contact'>
 ): KioskLabelIdentity {
 	const name = [doc.first_name, doc.last_name]
 		.map((part) => part?.trim())
 		.filter(Boolean)
-		.join(' ');
+		.join('\n');
 	// Spaces and dashes dropped: the label row has room for the digits only.
 	const emergencyPhone = doc.emergency_contact?.phone?.replace(/[\s-]/g, '');
 	return {
