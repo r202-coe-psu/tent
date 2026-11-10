@@ -129,7 +129,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	let y = layout.text.y;
 	if (label.marker) {
-		y += drawMarker(context, label.marker, fonts.zone, layout.text, y);
+		y += drawMarker(context, label.marker, fonts.checklist, layout.text, y);
 		y += mmToDots(KIOSK_LABEL_MARKER.gapMm);
 	}
 	const nameSize = ptToDots(nameStyle.pt);
@@ -178,8 +178,9 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 }
 
 /**
- * The vulnerability marker row at `top`, as wide as the text column. Returns its height. Red is a
- * white word on a black band; yellow an outline with a hollow triangle. Uses the zone font and leaves `fillStyle` black.
+ * The vulnerability marker row at `top`, as wide as the text column. Returns its height. Plain
+ * black: red a filled square, yellow a hollow triangle, then the level word and its meaning.
+ * Uses the emergency row's font (passed in, already loaded) and leaves `fillStyle` black.
  */
 function drawMarker(
 	context: CanvasRenderingContext2D,
@@ -188,52 +189,42 @@ function drawMarker(
 	column: { x: number; width: number },
 	top: number
 ): number {
-	const { pt, lineHeight } = KIOSK_LABEL_TEXT.zone;
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.emergency;
 	const height = Math.round(ptToDots(pt) * lineHeight);
 	const left = Math.round(column.x);
-	const padding = mmToDots(KIOSK_LABEL_MARKER.paddingMm);
 	const middle = top + height / 2;
+	const side = Math.round(height * KIOSK_LABEL_MARKER.glyphRatio);
+	const glyphTop = Math.round(middle - side / 2) + KIOSK_LABEL_MARKER.glyphOffsetYDots;
+	const textGap = mmToDots(KIOSK_LABEL_MARKER.textGapMm);
 	context.font = font;
+	context.fillStyle = '#000000';
+	let glyphEnd: number;
 	if (marker === 'red') {
-		context.fillStyle = '#000000';
-		context.fillRect(left, top, column.width, height);
-		context.fillStyle = '#FFFFFF';
-		const side = Math.round(height * KIOSK_LABEL_MARKER.glyphRatio);
-		context.fillRect(left + padding, Math.round(middle - side / 2), side, side);
-		const textX = left + padding + side + mmToDots(KIOSK_LABEL_MARKER.textGapMm);
-		context.fillText(
-			KIOSK_LABEL_MARKER.text.red,
-			textX,
-			middle,
-			Math.max(1, left + column.width - padding - textX)
-		);
+		context.fillRect(left, glyphTop, side, side);
+		glyphEnd = left + side;
 	} else {
-		// Outline stays inside the column: the stroke is centred on the rect's edge.
-		const border = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_MARKER.borderMm)));
+		// The stroke is centred on the path: inset by it so the triangle stays inside the column.
+		const stroke = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_MARKER.triangleStrokeMm)));
+		const triangleX = left + stroke;
+		const base = glyphTop + side - stroke / 2;
 		context.strokeStyle = '#000000';
-		context.lineWidth = border;
-		context.strokeRect(left + border / 2, top + border / 2, column.width - border, height - border);
-		const side = Math.round(height * KIOSK_LABEL_MARKER.glyphRatio);
-		const triangleX = left + padding;
-		const triangleTop = Math.round(middle - side / 2);
-		context.lineWidth = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_MARKER.triangleStrokeMm)));
+		context.lineWidth = stroke;
 		context.lineJoin = 'miter';
 		context.beginPath();
-		context.moveTo(triangleX, triangleTop + side);
-		context.lineTo(triangleX + side / 2, triangleTop);
-		context.lineTo(triangleX + side, triangleTop + side);
+		context.moveTo(triangleX, base);
+		context.lineTo(triangleX + side / 2, glyphTop + stroke / 2);
+		context.lineTo(triangleX + side, base);
 		context.closePath();
 		context.stroke();
-		const textX = triangleX + side + mmToDots(KIOSK_LABEL_MARKER.textGapMm);
-		context.fillStyle = '#000000';
-		context.fillText(
-			KIOSK_LABEL_MARKER.text.yellow,
-			textX,
-			middle,
-			Math.max(1, left + column.width - padding - textX)
-		);
+		glyphEnd = triangleX + side + stroke;
 	}
-	context.fillStyle = '#000000';
+	const textX = glyphEnd + textGap;
+	context.fillText(
+		KIOSK_LABEL_MARKER.text[marker],
+		textX,
+		middle,
+		Math.max(1, left + column.width - textX)
+	);
 	return height;
 }
 

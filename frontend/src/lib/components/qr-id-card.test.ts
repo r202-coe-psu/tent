@@ -97,31 +97,55 @@ describe('QrIdCard', () => {
 		expect(result.body).toContain('>QR</div>');
 	});
 
-	it('prints a red marker as an inverted band with a filled square and the level word', () => {
+	it('prints a red marker as plain black text: a filled square, the level word and its meaning', () => {
 		const body = render(QrIdCard, { props: { ...base, marker: 'red' } }).body;
 
 		expect(body).toContain('data-marker="red"');
-		expect(body).toContain('aria-label="ระดับความเปราะบาง: แดง"');
+		expect(body).toContain('aria-label="ระดับความเปราะบาง: แดง · ดูแลเร่งด่วน"');
 		const tag = body.match(/<[^>]*data-marker="red"[^>]*>/)?.[0] ?? '';
-		expect(tag).toContain('bg-black');
-		expect(tag).toContain('text-white');
+		expect(tag).not.toContain('bg-black');
+		expect(tag).not.toContain('text-white');
+		expect(tag).not.toContain('border');
 		expect(body).toContain('■');
-		expect(body).toContain('แดง');
+		expect(body).toContain('แดง · ดูแลเร่งด่วน');
+		expect(body).not.toContain('△');
 	});
 
-	it('prints a yellow marker as a black-outlined block with a hollow triangle and the level word', () => {
+	it('prints a yellow marker as plain black text: a hollow triangle, the level word and its meaning', () => {
 		const body = render(QrIdCard, { props: { ...base, marker: 'yellow' } }).body;
 
 		expect(body).toContain('data-marker="yellow"');
-		expect(body).toContain('aria-label="ระดับความเปราะบาง: เหลือง"');
+		expect(body).toContain('aria-label="ระดับความเปราะบาง: เหลือง · ดูแลพิเศษ"');
 		const tag = body.match(/<[^>]*data-marker="yellow"[^>]*>/)?.[0] ?? '';
-		expect(tag).toMatch(/border-\[[\d.]+mm\]/);
-		expect(tag).toContain('border-black');
+		expect(tag).not.toContain('border');
 		expect(tag).not.toContain('bg-black');
 		expect(body).toContain('△');
-		expect(body).toContain('เหลือง');
+		expect(body).toContain('เหลือง · ดูแลพิเศษ');
 		expect(body).not.toContain('■');
 	});
+
+	it.each([
+		['red', '■'],
+		['yellow', '△']
+	] as const)('raises the %s glyph 1px above the words', (marker, glyph) => {
+		const body = render(QrIdCard, { props: { ...base, marker } }).body;
+
+		expect(body).toMatch(new RegExp(`<span class="[^"]*-top-px[^"]*">${glyph}</span>`));
+		const words = body.match(/<span>([^<]*ดูแล[^<]*)<\/span>/)?.[0] ?? '';
+		expect(words).not.toContain('top-px');
+	});
+
+	it.each(['red', 'yellow'] as const)(
+		'prints the %s marker in the emergency row size (9 pt) rather than the old 12 pt bold',
+		(marker) => {
+			const body = render(QrIdCard, { props: { ...base, marker } }).body;
+			const tag = body.match(new RegExp(`<[^>]*data-marker="${marker}"[^>]*>`))?.[0] ?? '';
+
+			expect(tag).toContain('text-[9pt]');
+			expect(tag).not.toContain('text-[12pt]');
+			expect(tag).not.toContain('font-bold');
+		}
+	);
 
 	it('prints no marker when there is no level', () => {
 		for (const marker of [null, undefined]) {
@@ -143,6 +167,17 @@ describe('QrIdCard', () => {
 			expect(at).toBeLessThan(body.indexOf('<img'));
 			expect(body).toContain('size-(--qr-size)');
 		}
+	});
+
+	it('prints the name at 15 pt, bold, clamped to three lines', () => {
+		const body = render(QrIdCard, { props: base }).body;
+		const tag = body.match(/<p[^>]*>ทดสอบ หนึ่ง<\/p>/)?.[0] ?? '';
+
+		expect(tag).toContain('text-[15pt]');
+		expect(tag).not.toContain('text-[16pt]');
+		expect(tag).toContain('font-bold');
+		expect(tag).toContain('line-clamp-3');
+		expect(tag).toContain('leading-[1.3]');
 	});
 
 	it('escapes markup in the name', () => {

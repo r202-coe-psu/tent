@@ -119,7 +119,8 @@ describe('kiosk label canvas', () => {
 
 	it('converts pt to printer dots', () => {
 		expect(ptToDots(72)).toBe(203);
-		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(45.11, 2);
+		expect(KIOSK_LABEL_TEXT.name.pt).toBe(15);
+		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(42.29, 2);
 	});
 
 	it('fits a 3-line name, the zone, the emergency row, one checklist row per item and the link', () => {

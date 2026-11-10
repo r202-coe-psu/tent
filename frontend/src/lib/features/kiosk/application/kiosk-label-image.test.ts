@@ -30,6 +30,8 @@ function installFakeCanvas() {
 	/** `fillStyle` at the moment of each draw, parallel to the matching spy's `mock.calls`. */
 	const fillRectStyles: string[] = [];
 	const fillTextStyles: string[] = [];
+	/** `font` at the moment of each `fillText`, parallel to its `mock.calls`. */
+	const fillTextFonts: string[] = [];
 
 	const fakeContext = {
 		fillStyle: '',
@@ -56,6 +58,7 @@ function installFakeCanvas() {
 		putImageData: vi.fn(),
 		fillText: vi.fn<(text: string) => void>(() => {
 			fillTextStyles.push(fakeContext.fillStyle);
+			fillTextFonts.push(fontsUsedInDrawing.at(-1) ?? '');
 			// `fillText` is synchronous — if any row's font wasn't `document.fonts.load()`-ed
 			// (and awaited) before this call, the draw races the fetch (see kiosk-label-image.ts).
 			if (fontsLoaded.length < 4) orderViolation = true;
@@ -96,7 +99,8 @@ function installFakeCanvas() {
 		isOrderViolated: () => orderViolation,
 		fakeContext,
 		fillRectStyles,
-		fillTextStyles
+		fillTextStyles,
+		fillTextFonts
 	};
 }
 
@@ -155,6 +159,17 @@ describe('renderKioskLabelPng', () => {
 			KIOSK_LABEL_LINK,
 			...KIOSK_LABEL_QR_CAPTION
 		]);
+	});
+
+	it('draws and preloads the name at 15 pt bold', async () => {
+		await renderKioskLabelPng(label);
+
+		// 15 pt at 203 dpi = 42.2916... printer dots.
+		const nameAt = harness.fakeContext.fillText.mock.calls.findIndex(
+			([text]) => text === label.name
+		);
+		expect(harness.fillTextFonts[nameAt]).toMatch(/^700 42\.29\d*px /);
+		expect(harness.fontsLoaded).toContain(harness.fillTextFonts[nameAt]);
 	});
 
 	it('prints the emergency contact phone on its own row under the zone', async () => {
@@ -309,79 +324,105 @@ describe('renderKioskLabelPng', () => {
 		const lower = (style: string) => style.toLowerCase();
 		const textCalls = () =>
 			harness.fakeContext.fillText.mock.calls as unknown as [string, number, number][];
+		const fillRects = () =>
+			harness.fakeContext.fillRect.mock.calls.map(([x, y, w, h], index) => ({
+				x,
+				y,
+				w,
+				h,
+				style: lower(harness.fillRectStyles[index]!)
+			}));
+		const RED_TEXT = 'แดง · ดูแลเร่งด่วน';
+		const YELLOW_TEXT = 'เหลือง · ดูแลพิเศษ';
+		// 9 pt row: 9/72 in * 203 dpi * 1.3 line height = 33 dots.
+		const ROW_DOTS = 33;
 
-		it('draws a red marker as a white word on a black band at the top of the text column', async () => {
+		it('draws a red marker as plain black text with its meaning, with no band and no white ink', async () => {
+			await renderKioskLabelPng({ ...label, marker: 'red' });
+
+			const wordAt = textCalls().findIndex(([text]) => text === RED_TEXT);
+			expect(wordAt).toBeGreaterThanOrEqual(0);
+			expect(lower(harness.fillTextStyles[wordAt]!)).toBe('#000000');
+			expect(harness.fillTextStyles.map(lower)).not.toContain('#ffffff');
+			// Only the white page background is full-width: no black band behind the marker.
+			expect(fillRects().filter((r) => r.w > 100 && r.style === '#000000')).toEqual([]);
+			// The marker sits above the name.
+			const nameY = textCalls().find(([text]) => text === label.name)![2];
+			expect(textCalls()[wordAt]![2]).toBeLessThan(nameY);
+		});
+
+		it('draws a filled black square left of the red text so red reads as "■ แดง · ดูแลเร่งด่วน"', async () => {
 			await renderKioskLabelPng({ ...label, marker: 'red' });
 
 			const column = kioskLabelLayout(264).text;
-			const wordAt = textCalls().findIndex(([text]) => text.includes('แดง'));
-			expect(wordAt).toBeGreaterThanOrEqual(0);
-			expect(lower(harness.fillTextStyles[wordAt]!)).toBe('#ffffff');
-
-			const [, , wordY] = textCalls()[wordAt]!;
-			const bands = harness.fakeContext.fillRect.mock.calls.filter(
-				([x, y, w, h], index) =>
-					lower(harness.fillRectStyles[index]!) === '#000000' &&
-					x >= column.x &&
-					x + w <= column.x + column.width &&
-					y <= wordY &&
-					wordY <= y + h &&
-					w > 100
-			);
-			expect(bands).toHaveLength(1);
-			// The band sits above the name.
+			const word = textCalls().find(([text]) => text === RED_TEXT)!;
 			const nameY = textCalls().find(([text]) => text === label.name)![2];
-			expect(bands[0]![1] + bands[0]![3]).toBeLessThanOrEqual(nameY);
-		});
-
-		it('draws a white filled square inside the red band, left of the word, so red reads as "■ แดง"', async () => {
-			await renderKioskLabelPng({ ...label, marker: 'red' });
-
-			const rects = harness.fakeContext.fillRect.mock.calls;
-			const band = rects.find(
-				([, , w], i) => w > 100 && lower(harness.fillRectStyles[i]!) === '#000000'
-			)!;
-			const [bandX, bandY, bandW, bandH] = band;
-			const word = textCalls().find(([text]) => text.includes('แดง'))!;
-
-			const squares = rects.filter(
-				([x, y, w, h], i) =>
-					lower(harness.fillRectStyles[i]!) === '#ffffff' &&
-					w <= 100 &&
-					Math.abs(w - h) <= 1 &&
-					x >= bandX &&
-					x + w <= bandX + bandW &&
-					y >= bandY &&
-					y + h <= bandY + bandH
+			const squares = fillRects().filter(
+				(r) =>
+					r.style === '#000000' &&
+					r.w >= 10 &&
+					r.w < 100 &&
+					Math.abs(r.w - r.h) <= 1 &&
+					r.y + r.h <= nameY
 			);
 			expect(squares).toHaveLength(1);
-			const [squareX, , squareW] = squares[0]!;
-			expect(squareW).toBeGreaterThan(0);
-			expect(squareX + squareW).toBeLessThan(word[1]);
+			const square = squares[0]!;
+			expect(square.x).toBeGreaterThanOrEqual(column.x);
+			expect(square.x + square.w).toBeLessThan(word[1]);
+			// Smaller than the 33-dot row, vertically inside the marker row.
+			expect(square.h).toBeLessThan(ROW_DOTS);
+			expect(square.y).toBeLessThanOrEqual(word[2]);
+			expect(square.y + square.h).toBeGreaterThanOrEqual(word[2]);
 		});
 
-		it('draws a yellow marker as black text beside a hollow triangle in an outline, with no filled band', async () => {
+		it('sits the glyph 1 dot above its centred position while the words stay centred on the row', async () => {
+			await renderKioskLabelPng({ ...label, marker: 'red' });
+
+			const rowTop = kioskLabelLayout(264).text.y;
+			const word = textCalls().find(([text]) => text === RED_TEXT)!;
+			// Words keep the row middle: 33-dot row.
+			expect(word[2]).toBeCloseTo(rowTop + ROW_DOTS / 2, 5);
+			const nameY = textCalls().find(([text]) => text === label.name)![2];
+			const square = fillRects().find(
+				(r) => r.style === '#000000' && r.w >= 10 && r.w < 100 && r.y + r.h <= nameY
+			)!;
+			// A 20-dot square (0.6 of the row) centred on the row middle would start at row middle - 10
+			// (rounded to 7 + rowTop); the glyph is raised 1 dot above that.
+			expect(square.h).toBe(20);
+			expect(square.y).toBe(Math.round(rowTop + ROW_DOTS / 2 - 10) - 1);
+		});
+
+		it('raises the yellow triangle by the same 1 dot as the red square', async () => {
+			await renderKioskLabelPng({ ...label, marker: 'red' });
+			const nameY = textCalls().find(([text]) => text === label.name)![2];
+			const square = fillRects().find(
+				(r) => r.style === '#000000' && r.w >= 10 && r.w < 100 && r.y + r.h <= nameY
+			)!;
+			const squareMiddle = square.y + square.h / 2;
+
+			harness.fakeContext.moveTo.mockClear();
+			harness.fakeContext.lineTo.mockClear();
 			await renderKioskLabelPng({ ...label, marker: 'yellow' });
 
-			const column = kioskLabelLayout(264).text;
-			const wordAt = textCalls().findIndex(([text]) => text.includes('เหลือง'));
+			const ys = [
+				...harness.fakeContext.moveTo.mock.calls,
+				...harness.fakeContext.lineTo.mock.calls
+			].map(([, y]) => y as number);
+			expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(squareMiddle, 5);
+		});
+
+		it('draws a yellow marker as black text with its meaning beside a hollow triangle, with no outline or band', async () => {
+			await renderKioskLabelPng({ ...label, marker: 'yellow' });
+
+			const wordAt = textCalls().findIndex(([text]) => text === YELLOW_TEXT);
 			expect(wordAt).toBeGreaterThanOrEqual(0);
 			expect(lower(harness.fillTextStyles[wordAt]!)).toBe('#000000');
 			expect(textCalls().some(([text]) => text.includes('แดง'))).toBe(false);
 
-			// An outline rect in the text column, not a filled band.
-			const outlines = harness.fakeContext.strokeRect.mock.calls;
-			expect(outlines).toHaveLength(1);
-			const [outlineX, , outlineW] = outlines[0]!;
-			expect(outlineX).toBeGreaterThanOrEqual(column.x);
-			expect(outlineX + outlineW).toBeLessThanOrEqual(column.x + column.width);
-			const bands = harness.fakeContext.fillRect.mock.calls.filter(([, , w]) => w > 100);
-			expect(bands).toHaveLength(1); // only the white page background, no black band
-			expect(
-				lower(harness.fillRectStyles[harness.fakeContext.fillRect.mock.calls.indexOf(bands[0]!)]!)
-			).toBe('#ffffff');
+			expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
+			expect(fillRects().filter((r) => r.w > 100 && r.style === '#000000')).toEqual([]);
 
-			// The triangle is a stroked three-point path inside the outline, left of the word.
+			// The triangle is a stroked three-point path, left of the word.
 			expect(harness.fakeContext.stroke).toHaveBeenCalledTimes(1);
 			expect(harness.fakeContext.moveTo).toHaveBeenCalledTimes(1);
 			expect(harness.fakeContext.lineTo.mock.calls.length).toBeGreaterThanOrEqual(2);
@@ -392,8 +433,24 @@ describe('renderKioskLabelPng', () => {
 			expect(Math.max(...triangleXs)).toBeLessThan(textCalls()[wordAt]![1]);
 		});
 
+		it.each([
+			['red', RED_TEXT],
+			['yellow', YELLOW_TEXT]
+		] as const)(
+			'prints the %s marker in the emergency row face (9 pt, not bold) with no extra font load',
+			async (marker, text) => {
+				await renderKioskLabelPng({ ...label, marker });
+
+				const wordAt = textCalls().findIndex(([t]) => t === text);
+				const checkAt = textCalls().findIndex(([t]) => t === KIOSK_LABEL_CHECKLIST[0]);
+				expect(harness.fillTextFonts[wordAt]).toBe(harness.fillTextFonts[checkAt]);
+				expect(harness.fillTextFonts[wordAt]).toMatch(/^500 25\.375px /);
+				expect(harness.fontsLoaded).toHaveLength(4);
+			}
+		);
+
 		it.each(['red', 'yellow'] as const)(
-			'pushes the name and the rows after it down below the %s marker',
+			'pushes the name and the rows after it down by the 9 pt row below the %s marker',
 			async (marker) => {
 				await renderKioskLabelPng(label);
 				const plainYs = textCalls().map(([, , y]) => y);
@@ -402,32 +459,34 @@ describe('renderKioskLabelPng', () => {
 				await renderKioskLabelPng({ ...label, marker });
 
 				const markedYs = textCalls()
-					.filter(([text]) => !['แดง', 'เหลือง'].includes(text))
+					.filter(([text]) => ![RED_TEXT, YELLOW_TEXT].includes(text))
 					.map(([, , y]) => y);
 				const nameAt = 0;
-				expect(markedYs[nameAt]).toBeGreaterThan(plainYs[nameAt]!);
+				const shift = ROW_DOTS + mmToDots(1);
+				expect(markedYs[nameAt]! - plainYs[nameAt]!).toBeCloseTo(shift, 5);
 				// Zone row follows the name, so it moves down with it.
-				expect(markedYs[1]).toBeGreaterThan(plainYs[1]!);
+				expect(markedYs[1]! - plainYs[1]!).toBeCloseTo(shift, 5);
 				// The bottom-anchored checklist and link stay put.
 				expect(markedYs.slice(2)).toEqual(plainYs.slice(2));
 			}
 		);
 
-		it.each(['red', 'yellow'] as const)(
+		it.each([
+			['red', RED_TEXT],
+			['yellow', YELLOW_TEXT]
+		] as const)(
 			'keeps the %s marker inside the text column, left of the divider',
-			async (marker) => {
+			async (marker, text) => {
 				await renderKioskLabelPng({ ...label, marker });
 
-				const { divider, text } = kioskLabelLayout(264);
-				const rects = [
-					...harness.fakeContext.fillRect.mock.calls.filter(([, , w]) => w > 100 && w < 639),
-					...harness.fakeContext.strokeRect.mock.calls
-				];
-				expect(rects.length).toBeGreaterThan(0);
-				for (const [x, , w] of rects) {
-					expect(x).toBeGreaterThanOrEqual(text.x);
-					expect(x + w).toBeLessThanOrEqual(divider.x);
-				}
+				const { divider, text: column } = kioskLabelLayout(264);
+				const word = harness.fakeContext.fillText.mock.calls.find(
+					([t]) => t === text
+				) as unknown as [string, number, number, number];
+				// The word is squeezed to the room left in the column, never into the divider.
+				expect(word[1]).toBeGreaterThanOrEqual(column.x);
+				expect(word[1] + word[3]).toBeLessThanOrEqual(divider.x);
+				expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
 			}
 		);
 
@@ -437,9 +496,10 @@ describe('renderKioskLabelPng', () => {
 				await renderKioskLabelPng({ ...label, marker });
 
 				const words = textCalls().map(([text]) => text);
-				expect(words).not.toContain('แดง');
-				expect(words).not.toContain('เหลือง');
+				expect(words).not.toContain(RED_TEXT);
+				expect(words).not.toContain(YELLOW_TEXT);
 				expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
+				expect(harness.fakeContext.stroke).not.toHaveBeenCalled();
 			}
 		);
 	});
