@@ -1305,3 +1305,35 @@ async def test_public_search_limits_apply_after_trim(
     assert audit.payload["purpose_note"] == "ก" * 200
     assert audit.payload["searcher"]["first_name"] == "ข" * 100
     assert audit.payload["searcher"]["last_name"] == "ค" * 100
+
+
+@pytest.mark.parametrize(
+    ("header", "stored"),
+    [
+        ("req-123.abc_DEF", "req-123.abc_DEF"),
+        ("  padded-id  ", "padded-id"),
+        (None, None),
+        ("", None),
+        ("a" * 129, None),
+        ("has space", None),
+        ("semi;colon", None),
+    ],
+)
+async def test_public_search_stores_only_well_formed_request_id(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    header: str | None,
+    stored: str | None,
+):
+    """CR-231: `X-Request-ID` is client-controlled, the log permanent — keep plain tokens only."""
+    from tent_model.audit_event import AuditEvent
+
+    headers = dict(auth_headers)
+    if header is not None:
+        headers["X-Request-ID"] = header
+    response = await client.post(
+        "/public/v1/occupants", json=public_search_payload("0812345678"), headers=headers
+    )
+    assert response.status_code == 200, response.text
+    audit = (await AuditEvent.find_all().to_list())[0]
+    assert audit.request_id == stored

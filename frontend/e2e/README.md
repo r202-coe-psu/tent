@@ -427,6 +427,11 @@ How they obey §4:
 - **Accepted leftovers in Mongo** (a browser cannot delete them; PII-free): `external_bookings` rows (cancelled; PII
   cleared by the worker), `third_party_access_logs`, `external_booking_idempotency` keys, and the soft-deleted
   `third_party_clients` rows. They are swept by the partner janitor (§9.C).
+- **Permanent `audit_events` rows (CR-231).** Every public family search — the UI flow in `public-search-flow.test.ts`
+  and the `public-cleanup.ts` polling helper — appends a `public.search` row (searcher `E2E …`, phone `0812345678`)
+  to Mongo `audit_events`. That collection is append-only with no retention, so **these rows cannot be removed** and
+  **contain test PII**. Run the suite against a throw-away Mongo (local `docker compose`, never a shared staging
+  database) and keep the searcher name prefixed `E2E` so the rows stay recognisable.
 - **EXT-012 (person search, #736).** E12-1…5 search by CID only (every booking in the run shares the same name and phone,
   so name / phone / passport searches are covered by `backend/tests/test_thirdparty_person_search.py`): a
   `pre_registered` hit is masked, has no `family_members` / `phone` / `passport` and never echoes the CID, the response is

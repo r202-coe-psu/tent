@@ -158,7 +158,7 @@ test.describe('Public family search: server errors', { tag: ['@public', '@smoke'
 		await expect(page.getByRole('textbox', { name: SEARCH_BOX })).toHaveValue('นายทดสอบระบบ');
 
 		await page.getByRole('button', { name: 'ค้นหา' }).click();
-		await dialog.getByLabel('ชื่อ', { exact: true }).fill('ทดสอบ');
+		await dialog.getByLabel('ชื่อ', { exact: true }).fill('E2E');
 		await dialog.getByLabel('เบอร์โทรศัพท์มือถือ').fill('0812345678');
 		await dialog.getByLabel('ตามหาญาติ/ครอบครัว').check();
 		await dialog.getByLabel(/ข้าพเจ้ายินยอม/).check();

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request, Response
 
 from ...core.security import verify_external_secret
-from ...utils.request_meta import client_ip
+from ...utils.request_meta import audit_request_id, client_ip
 from .schemas import ApiErrorResponse, PublicSearchRequest, SearchResponse
 from .use_case import EvacueeUseCase, get_evacuee_use_case
 
@@ -38,5 +38,5 @@ async def search_evacuees(
         payload.search,
         client_ip=ip,
         consent=payload,
-        request_id=request.headers.get("x-request-id"),
+        request_id=audit_request_id(request),
     )

@@ -134,7 +134,8 @@ export async function publicSearchHits(query: string): Promise<PublicSearchHit[]
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
 			search: query,
-			// CR-231: every public search carries the searcher, purpose and consent.
+			// CR-231: every public search carries the searcher, purpose and consent. Each call
+			// appends a permanent audit_events row — point E2E at a throw-away Mongo (e2e/README.md).
 			searcher: { first_name: 'E2E', last_name: 'Cleanup', phone: '0812345678' },
 			purpose: 'other',
 			purpose_note: 'e2e helper',
