@@ -3,7 +3,7 @@ id: CR-150
 title: Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
 status: approved
 date: 2026-09-27
-updated: 2026-11-10 # §7 proposed (#1301) · 2026-10-13 # ข้อเสนอแก้ไข §6 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved โดย Dev Lead Soravit Sukkarn + รันเลข CR-150 และลงทะเบียนใน _index.md
+updated: 2026-11-11 # §7 approved by kong (#1301) · 2026-11-10 # §7 proposed (#1301) · 2026-10-13 # ข้อเสนอแก้ไข §6 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved โดย Dev Lead Soravit Sukkarn + รันเลข CR-150 และลงทะเบียนใน _index.md
 requested_by: ทีม (kiosk pre-register)
 decided_by: Soravit Sukkarn (Dev Lead)
 layer: volatile
@@ -95,6 +95,7 @@ N/A
 - 2026-10-04 — approved โดย Dev Lead Soravit Sukkarn หลัง merge PR #321 เข้า develop · รันเลข CR-150 จาก docs/changes/_index.md
 - 2026-10-13 — ทีม kiosk เสนอ §6 จาก feedback หน้างาน: ลิงก์เป็นข้อความบน label (ไม่เปลี่ยน QR payload) · ปุ่ม test print ต้องใส่ PIN เจ้าหน้าที่ · ปุ่มเล็กมุมล่างขวา
 - 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §6 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
+- 2026-11-11 — approved §7 (kong; #1301 / PR #1323): แถวสัญลักษณ์ระดับความเปราะบางบน label ตาม CR-233 Amendment A2 · บันทึกตามที่ผู้ร่วมงานแจ้งการอนุมัติของ kong ในแชต ไม่ได้ตรวจกับ kong โดยตรง
 
 ## 6. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
@@ -109,7 +110,7 @@ N/A
 - **AC-L5** กดปุ่ม test print → ต้องใส่ PIN ถูกก่อน → พิมพ์ label ตัวอย่าง 1 ใบ · PIN ผิด → ไม่พิมพ์ · สแกน QR ทดสอบที่ตู้ → ถูกปฏิเสธ
 - **Migration:** N/A
 
-## 7. ข้อเสนอแก้ไข 2026-11-10 — แถวสัญลักษณ์ระดับความเปราะบาง (proposed, #1301)
+## 7. ข้อเสนอแก้ไข 2026-11-10 — แถวสัญลักษณ์ระดับความเปราะบาง (approved by kong 2026-11-11, #1301)
 
 > **สรุป (TL;DR):** label 80×60 mm (ทั้ง canvas `renderKioskLabelPng` และ `qr-id-card.svelte`) เพิ่มแถวสัญลักษณ์ระดับความเปราะบางบนสุดของคอลัมน์ข้อความ เหนือชื่อ · กติกาคำนวณระดับ, field `prints[].marker` และคำเตือนบัตรล้าสมัยอยู่ใน [CR-233](../02-people/CR-233-evacuee-qr-rotate-on-print.md) Amendment A2 (FR-EQR-51..57) · สถานะ proposed รอเจ้าของโครงการ
 

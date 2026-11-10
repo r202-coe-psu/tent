@@ -3,7 +3,7 @@ id: CR-233
 title: Person QR ของผู้อพยพออกใหม่ทุกครั้งที่ปริ้น — payload `evacuee:{ULID}@{hash6}` + log `evacuee_qr:{ULID}` ให้ใบเก่าหมดอายุ
 status: approved
 date: 2026-11-06
-updated: 2026-11-10 # Amendment A2 (proposed, #1301)
+updated: 2026-11-11 # Amendment A2 approved by kong (#1301) · 2026-11-10 # Amendment A2 proposed
 requested_by: feedback อบรมระบบ 03/11/2026 (GitHub issue #1156)
 decided_by: Project Owner (เจ้าของโครงการ) — อนุมัติ 2026-11-06 (grill #1156, ข้อ 1–9)
 decision_date: 2026-11-06
@@ -12,7 +12,7 @@ supersedes:
   - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md FR-KPC-107 (reprint ไม่เขียน doc) และข้อความ payload ใน FR-KPC-81
   - docs/changes/14-kiosk/CR-149-kiosk-walk-in-registration.md ข้อความ payload ใน FR-KWR-19 และ FR-KWR-71
 affects:
-  - A2 (proposed): docs/data/schema.md §1.9 `prints[].marker` + §8 ข้อ 2 · schema_v `evacuee_qr` 1 → 2 (lazy) · docs/data/api-contract.md §2.8 + kiosk check-in/reprint/register (`marker` ใน item/label) · CR-150 §7 (ตำแหน่งสัญลักษณ์บนบัตร)
+  - A2 (approved): docs/data/schema.md §1.9 `prints[].marker` + §8 ข้อ 2 · schema_v `evacuee_qr` 1 → 2 (lazy) · docs/data/api-contract.md §2.8 + kiosk check-in/reprint/register (`marker` ใน item/label) · CR-150 §7 (ตำแหน่งสัญลักษณ์บนบัตร)
   - A2: frontend/src/lib/utils/vulnerability-marker.ts (ใหม่) · frontend/src/lib/server/{evacuee-qr-service.ts,shelter-access-design.ts} · frontend/src/lib/components/qr-id-card.svelte · frontend/src/lib/features/kiosk/{domain/print-label.ts,application/kiosk-label-image.ts,server/*,ui/*} · frontend/src/lib/features/people/{domain/evacuee-qr-label.ts,ui/evacuee-profile/*,ui/registration/family-batch-print.svelte}
   - docs/data/schema.md §1.9 (+ doc type `evacuee_qr`), §0 (ข้อยกเว้น `_id`), §8 ข้อ 1–2 · A1: §2.30 `distribution_log` `recipient_qr_override`
   - schema_v: `evacuee_qr` ใหม่ = 1 · `evacuee` คงที่ 15 (ไม่ bump) · A1: `distribution_log` 2 → 3 (lazy — เขียน v3 เฉพาะ log ที่ override)
@@ -160,9 +160,9 @@ related:
 - FR-EQR-49 — ข้อความบนหน้า/ปุ่มและ response ต้องไม่มีชื่อหรือข้อมูลส่วนบุคคลของเจ้าของ QR ก่อนกดปุ่ม (FR-EQR-35); หลังกดจึงแสดงชื่อผู้รับตามปกติ
 - FR-EQR-50 — การ override ไม่เปลี่ยน `evacuee_qr` (ไม่ออก QR ใหม่ ไม่เพิ่ม entry) และไม่ใช้กับ kiosk หรือหน้า staff อื่น (check-in/out, คัดกรอง, จัดโซน, ค้นหา) — หน้าเหล่านั้นยังตาม FR-EQR-34
 
-### K. สัญลักษณ์ระดับความเปราะบางบนบัตร (Amendment A2 — proposed)
+### K. สัญลักษณ์ระดับความเปราะบางบนบัตร (Amendment A2 — approved)
 
-> **สถานะ:** proposed 2026-11-10 โดยทีมพัฒนา (GitHub issue #1301) รอเจ้าของโครงการอนุมัติ · เพิ่มกติกาคำนวณระดับ + field ใน `prints[]` + คำเตือนบัตรล้าสมัย ไม่เปลี่ยน payload ของ QR และกฎสแกน (D, FR-EQR-27)
+> **สถานะ:** approved 2026-11-11 โดย kong (proposed 2026-11-10 โดยทีมพัฒนา, GitHub issue #1301) · เพิ่มกติกาคำนวณระดับ + field ใน `prints[]` + คำเตือนบัตรล้าสมัย ไม่เปลี่ยน payload ของ QR และกฎสแกน (D, FR-EQR-27)
 
 - FR-EQR-51 — ระดับความเปราะบางของผู้พักพิง ณ เวลาพิมพ์ = `red` | `yellow` | ไม่มี (`null`) คำนวณด้วยฟังก์ชันเดียว `vulnerabilityMarker` (`frontend/src/lib/utils/vulnerability-marker.ts`) ซึ่งใช้ร่วมกันทั้ง client และ server:
   - `red` เมื่อ `track` ของ `screening` ล่าสุดของคนนั้น (เรียงด้วย `screened_at`) เป็น `fast_track` — ไม่ขึ้นกับ `vulnerable_groups`
@@ -311,3 +311,4 @@ CR นี้แทนที่ข้อความต่อไปนี้ (ไ
 - 2026-11-10 — ปรับ A2 (proposed, ทีมขอให้มองปุ๊บรู้): เพิ่มแถบระดับเหนือ QR — แดงทึบ / เหลืองกรอบ ใช้คำเดิม ไม่ใช้คำว่า "ป่วย" (บัตรบอกแค่ระดับ) · QR ไม่เล็กลง (CR-150 §7 FR-L8b)
 - 2026-11-10 — ปรับ A2 (proposed): เปลี่ยนแถบมีข้อความเหนือ QR เป็นขีดดำล้วน — แดง 2 ขีด / เหลือง 1 ขีด (CR-150 §7 FR-L8b)
 - 2026-11-10 — ปรับ A2 (proposed): ย้ายขีดระดับจากเหนือ QR ไปเป็นแนวตั้งชิดขอบขวาของบัตร — QR เล็กลงเมื่อมีระดับ (CR-150 §7 FR-L8b)
+- 2026-11-11 — approved Amendment A2 (kong; #1301 / PR #1323): สัญลักษณ์ระดับความเปราะบางบนบัตร (FR-EQR-51..57, AC-EQR-15..18), `evacuee_qr` `schema_v` 1 → 2 แบบ lazy · CR-150 §7 approved พร้อมกัน · migration: redeploy `_design/access` ของทุก `shelter_*` ก่อน client รุ่นใหม่ (`pnpm redeploy:access`), ไม่ backfill · บันทึกตามที่ผู้ร่วมงานแจ้งการอนุมัติของ kong ในแชต ไม่ได้ตรวจกับ kong โดยตรง
