@@ -1,14 +1,15 @@
 ---
-id: draft
+id: CR-244
 title: lot_no ไม่ซ้ำ — counter doc `lot_counter` ต่อศูนย์ต่อวัน (แก้คำตัดสิน CR-088 ที่ให้ซ้ำได้)
-status: proposed
+status: approved
 date: 2026-11-08
+updated: 2026-11-10
 requested_by: Dev Team B Issue #1110 (คำตอบของ Fishcanwalk และ Hopewalk ใต้ issue) — Inventory / Supply
-decided_by: 
+decided_by: kong
 layer: volatile
 affects:
   - docs/data/schema.md §2.1 (`lot.lot_no` — ตัดข้อความ "ชนกันได้ / ไม่ใช้ counter doc") + §2 doc type ใหม่ `lot_counter` + §3 index/ตาราง doc type ถ้ามี
-  - docs/changes/03-C-supply/CR-088-stock-ledger-lot-storage-zone.md (ถูก amend ด้วย draft นี้ — ไม่แก้ไฟล์ CR-088)
+  - docs/changes/03-C-supply/CR-088-stock-ledger-lot-storage-zone.md (ถูก amend ด้วย CR นี้ — ไม่แก้ไฟล์ CR-088)
   - schema_v `lot_counter` 1 (doc type ใหม่) · `stock_ledger` ไม่ bump (รูปร่าง doc ไม่เปลี่ยน)
   - VDU `shelter_*` — frontend/src/lib/server/shelter-access-design.ts (whitelist type `lot_counter` + กฎ monotonic ก่อน `_admin` bypass) · deploy ด้วย `pnpm redeploy:access`
   - frontend/src/lib/features/operations/domain/operations.ts (`nextLotNos`, `lotDateStamp`)
@@ -26,7 +27,7 @@ migration: >
   (ครั้งเดียว) เพื่อไม่ให้ชนกับแถวที่ออกก่อน deploy
 ---
 
-# draft-lot-no-counter-doc — `lot_counter` กันเลขล็อตซ้ำ
+# CR-244 — `lot_counter` กันเลขล็อตซ้ำ
 
 > **สรุป (TL;DR):**
 >
@@ -116,13 +117,13 @@ migration: >
 
 ### 2.3 การ amend CR-088
 
-CR-088 (status `done`) ไม่ถูกแก้ไฟล์. ข้อความของ CR-088 ที่ draft นี้แทนที่:
+CR-088 (status `done`) ไม่ถูกแก้ไฟล์. ข้อความของ CR-088 ที่ CR นี้แทนที่:
 
 - "ชนกันได้ในเคสรับพร้อมกันแบบหายาก ยอมรับความเสี่ยงนี้ได้"
 - "ไม่ใช้ counter doc" (อ้างในเหตุผลของ `lot-number.ts`)
 - "ค้นเลขเดิมไม่สำเร็จให้ restart `001` เพื่อไม่ให้ intake ติด"
 
-เมื่อ approve ให้ `_index.md` แถว CR-088 ระบุ "amended by CR-NNN" (ตามข้อกำหนดของ index; ไม่แก้ไฟล์ CR-088)
+เมื่อ approve ให้ `_index.md` แถว CR-088 ระบุ "amended by CR-244" (ตามข้อกำหนดของ index; ไม่แก้ไฟล์ CR-088)
 
 ---
 
@@ -156,7 +157,7 @@ CR-088 (status `done`) ไม่ถูกแก้ไฟล์. ข้อคว�
 - **ข้อมูลเก่า / script ที่ใส่ `lot_no` เอง** — ไม่ backfill ไม่ de-dup แถวที่ซ้ำอยู่แล้ว
 - **Edge CouchDB** — ดู §5 (ความเสี่ยงคงเหลือ)
 - **`ticket_no`** (`tickets/domain/ticket-no.ts`) — ยังออกเลขแบบค้นแล้วนับต่อ (อ้างเหตุผลเดียวกับ CR-088); CR นี้ไม่เปลี่ยน
-- Rename draft → `CR-NNN-…` + ลง `_index.md` จนกว่า owner อนุมัติ
+- การแก้ `docs/data/schema.md`, VDU และโค้ด — ทำหลัง approve ตาม change-management §5 ข้อ 5–6 (CR นี้ยังเป็น `approved` ยังไม่ `done`)
 
 ---
 
@@ -202,3 +203,4 @@ retry เมื่อรับพร้อมกันถี่
 - 2026-11-10 — ND-2 และ ND-4 เคาะแล้ว (kong): FR-5 retry 5 ครั้ง + รอแบบสุ่ม, ยอมรับ FR-8 (throw); FR-17 รวม `max(last)` เมื่อ conflict + AC-9
 - 2026-11-10 — ND-1 (ส่วน TZ): เช็ก production แล้วเป็น UTC ⇒ bug fix `lotDateStamp` → Asia/Bangkok แยกจาก CR นี้ (#1310)
 - 2026-11-10 — ND-1 ปิด: Fishcanwalk ยืนยัน "เลือก C" = คำถามที่ 1 ตัวเลือก C ⇒ ไม่เหลือ ND ค้าง
+- 2026-11-10 — **approved** (kong) · รันเลข CR-244 (ถัดจาก CR-243 บน `develop`) · ย้ายจาก `draft-lot-no-counter-doc.md` → `03-C-supply/` · ND-1–ND-4 ปิดครบ
