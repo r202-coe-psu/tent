@@ -175,9 +175,9 @@ retry เมื่อรับพร้อมกันถี่
 
 ## 6. [NEEDS DECISION]
 
-- **ND-1** — ยืนยันว่าคำตอบ "เลือก C" ของ Fishcanwalk ใน #1110 หมายถึง **คำถามที่ 1 ตัวเลือก C** (ยังรอยืนยัน).
+- **ND-1** — **ปิดแล้ว.** "เลือก C" ของ Fishcanwalk ใน #1110 = **คำถามที่ 1 ตัวเลือก C** (Fishcanwalk ยืนยัน 2026-11-10).
   ส่วน TZ: **เช็กแล้ว 2026-11-10 — production เป็น UTC** (`node` ใน `tent-frontend-production` คืน `UTC`) ⇒ แก้
-  `lotDateStamp` เป็น Asia/Bangkok เป็น bug fix แยกตาม §4
+  `lotDateStamp` เป็น Asia/Bangkok เป็น bug fix แยกตาม §4 (#1310)
 - **ND-2** — retry เมื่อ `409` และ FR-8 ที่ไม่ให้ intake ผ่านเมื่อจองเลขไม่ได้ (ต่างจากเหตุผลเดิมของ CR-088).
   **เคาะแล้ว (kong, 2026-11-10):** retry 5 ครั้ง + รอแบบสุ่ม 50–200 ms (FR-5); ยอมรับ FR-8 (throw) เพราะ counter อยู่ DB
   เดียวกับ `stock_ledger` — จองไม่ได้ = เขียน ledger ไม่ได้อยู่แล้ว ไม่เพิ่มกรณีที่หน้ารับบริจาคติด (ต่างจาก `_find`
@@ -200,4 +200,5 @@ retry เมื่อรับพร้อมกันถี่
 - 2026-11-10 — ND-4 เพิ่มข้อเสนอ FR-17 / AC-9 (รวม `max(last)` เมื่อ conflict) — ยังไม่เคาะ
 - 2026-11-10 — ND-2 เพิ่มข้อเสนอ FR-5 (retry 5 + รอแบบสุ่ม) และยอมรับ FR-8 — ยังไม่เคาะ
 - 2026-11-10 — ND-2 และ ND-4 เคาะแล้ว (kong): FR-5 retry 5 ครั้ง + รอแบบสุ่ม, ยอมรับ FR-8 (throw); FR-17 รวม `max(last)` เมื่อ conflict + AC-9
-- 2026-11-10 — ND-1 (ส่วน TZ): เช็ก production แล้วเป็น UTC ⇒ bug fix `lotDateStamp` → Asia/Bangkok แยกจาก CR นี้
+- 2026-11-10 — ND-1 (ส่วน TZ): เช็ก production แล้วเป็น UTC ⇒ bug fix `lotDateStamp` → Asia/Bangkok แยกจาก CR นี้ (#1310)
+- 2026-11-10 — ND-1 ปิด: Fishcanwalk ยืนยัน "เลือก C" = คำถามที่ 1 ตัวเลือก C ⇒ ไม่เหลือ ND ค้าง
