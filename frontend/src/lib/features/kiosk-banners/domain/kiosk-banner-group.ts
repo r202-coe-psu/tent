@@ -24,6 +24,11 @@ export function generateTvCode(
 	return String(buf[0] % 1_000_000).padStart(6, '0');
 }
 
+/** The link a TV opens to show a group's banners: the tv code rides in the query so it needs no login. */
+export function internalBannerUrl(origin: string, shelterCode: string, tvCode: string): string {
+	return `${origin}/banner/${encodeURIComponent(shelterCode)}/internal?c=${tvCode}`;
+}
+
 export const kioskBannerGroupInputSchema = z.object({
 	name: z
 		.string()

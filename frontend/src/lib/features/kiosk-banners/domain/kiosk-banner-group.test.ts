@@ -3,6 +3,7 @@ import {
 	KIOSK_BANNER_GROUP_LIMITS,
 	createKioskBannerGroup,
 	generateTvCode,
+	internalBannerUrl,
 	isDuplicateGroupName,
 	kioskBannerGroupDocSchema,
 	kioskBannerGroupInputSchema,
@@ -198,5 +199,19 @@ describe('isDuplicateGroupName', () => {
 	it('lets a group keep its own name via exceptId', () => {
 		expect(isDuplicateGroupName(groups, 'canteen', 'kiosk_banner_group:b')).toBe(false);
 		expect(isDuplicateGroupName(groups, 'canteen', 'kiosk_banner_group:a')).toBe(true);
+	});
+});
+
+describe('internalBannerUrl', () => {
+	it('builds the TV link from the origin, the shelter and the tv code', () => {
+		expect(internalBannerUrl('https://tent.example.go.th', 'SH001', '048213')).toBe(
+			'https://tent.example.go.th/banner/SH001/internal?c=048213'
+		);
+	});
+
+	it('URL-encodes the shelter code', () => {
+		expect(internalBannerUrl('http://192.168.1.10:5173', 'SH 01/ก', '000123')).toBe(
+			'http://192.168.1.10:5173/banner/SH%2001%2F%E0%B8%81/internal?c=000123'
+		);
 	});
 });
