@@ -1,4 +1,7 @@
-import { VULNERABILITY_MARKER_TEXT } from '$lib/utils/vulnerability-marker';
+import {
+	VULNERABILITY_BAND_TEXT,
+	VULNERABILITY_MARKER_TEXT
+} from '$lib/utils/vulnerability-marker';
 import { KIOSK_LABEL_MM, KIOSK_PRINT_DPI, kioskLabelDots, mmToDots } from '$lib/utils/label-size';
 
 // Label size lives in a shared pure module so other features (printers) need not reach into kiosk.
@@ -111,6 +114,23 @@ export const KIOSK_LABEL_MARKER = {
 	triangleStrokeMm: 0.4,
 	/** Glyph → word. */
 	textGapMm: 1.5
+} as const;
+/**
+ * Band right above the QR, as wide as the QR image, so staff see the level at a glance. Red is
+ * solid black with white words, yellow a black outline with black words: both survive the
+ * thermal printer's black/white-only output. Same row height and face as the marker row (9 pt,
+ * `KIOSK_LABEL_TEXT.emergency`), so no extra font load. Sits in the vertical space the centred QR
+ * leaves above it, so the QR keeps its size and position with or without it.
+ */
+export const KIOSK_LABEL_BAND = {
+	text: VULNERABILITY_BAND_TEXT,
+	/**
+	 * Band → QR image. With the image's 2 margin modules this keeps the 4-module quiet zone, as the
+	 * caption gap under the QR does.
+	 */
+	gapMm: 2,
+	/** Outline of the yellow band, the same weight as the yellow triangle. */
+	strokeMm: KIOSK_LABEL_MARKER.triangleStrokeMm
 } as const;
 /** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
@@ -252,4 +272,15 @@ export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
 		text: { x: textX, y: textY, width: dividerX - gap - textX, bottom: height - padding },
 		link: { x: textX, y: Math.round(linkY) }
 	};
+}
+
+export type KioskLabelBand = { x: number; y: number; width: number; height: number };
+
+/** Whole-dot box of the level band above a `qrPx` QR: the QR's width, one 9 pt row tall. */
+export function kioskLabelBand(qrPx: number): KioskLabelBand {
+	const { qr } = kioskLabelLayout(qrPx);
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.emergency;
+	const height = Math.round(ptToDots(pt) * lineHeight);
+	const gap = Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm));
+	return { x: qr.x, y: qr.y - gap - height, width: qrPx, height };
 }

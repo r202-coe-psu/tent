@@ -8,7 +8,10 @@ import {
 	KIOSK_LABEL_QR_CAPTION,
 	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_ZONE,
+	KIOSK_LABEL_MARKER,
 	KIOSK_LABEL_ZONE_PREFIX,
+	KIOSK_QR_MIN_MM,
+	kioskLabelBand,
 	kioskLabelLayout,
 	mmToDots
 } from '../domain/print-label';
@@ -32,6 +35,8 @@ function installFakeCanvas() {
 	const fillTextStyles: string[] = [];
 	/** `font` at the moment of each `fillText`, parallel to its `mock.calls`. */
 	const fillTextFonts: string[] = [];
+	/** `strokeStyle` and `lineWidth` at the moment of each `strokeRect`. */
+	const strokeRectStyles: { style: string; lineWidth: number }[] = [];
 
 	const fakeContext = {
 		fillStyle: '',
@@ -46,7 +51,9 @@ function installFakeCanvas() {
 		fillRect: vi.fn<(x: number, y: number, w: number, h: number) => void>(() => {
 			fillRectStyles.push(fakeContext.fillStyle);
 		}),
-		strokeRect: vi.fn<(x: number, y: number, w: number, h: number) => void>(),
+		strokeRect: vi.fn<(x: number, y: number, w: number, h: number) => void>(() => {
+			strokeRectStyles.push({ style: fakeContext.strokeStyle, lineWidth: fakeContext.lineWidth });
+		}),
 		closePath: vi.fn(),
 		drawImage: vi.fn(),
 		beginPath: vi.fn(),
@@ -100,7 +107,8 @@ function installFakeCanvas() {
 		fakeContext,
 		fillRectStyles,
 		fillTextStyles,
-		fillTextFonts
+		fillTextFonts,
+		strokeRectStyles
 	};
 }
 
@@ -334,18 +342,27 @@ describe('renderKioskLabelPng', () => {
 			}));
 		const RED_TEXT = 'แดง · ดูแลเร่งด่วน';
 		const YELLOW_TEXT = 'เหลือง · ดูแลพิเศษ';
+		// The level band above the QR is a separate, QR-wide element (see 'level band above the QR').
+		const BAND_WORDS = ['ดูแลเร่งด่วน', 'ดูแลพิเศษ'];
+		const BAND_WIDTH = 264;
 		// 9 pt row: 9/72 in * 203 dpi * 1.3 line height = 33 dots.
 		const ROW_DOTS = 33;
 
-		it('draws a red marker as plain black text with its meaning, with no band and no white ink', async () => {
+		it('draws a red marker row as plain black text with its meaning, with no band behind it', async () => {
 			await renderKioskLabelPng({ ...label, marker: 'red' });
 
 			const wordAt = textCalls().findIndex(([text]) => text === RED_TEXT);
 			expect(wordAt).toBeGreaterThanOrEqual(0);
 			expect(lower(harness.fillTextStyles[wordAt]!)).toBe('#000000');
-			expect(harness.fillTextStyles.map(lower)).not.toContain('#ffffff');
-			// Only the white page background is full-width: no black band behind the marker.
-			expect(fillRects().filter((r) => r.w > 100 && r.style === '#000000')).toEqual([]);
+			// White ink is only the band word above the QR, never the marker row.
+			const whiteTexts = textCalls()
+				.filter((_, index) => lower(harness.fillTextStyles[index]!) === '#ffffff')
+				.map(([text]) => text);
+			expect(whiteTexts).toEqual(['ดูแลเร่งด่วน']);
+			// No black band behind the marker row: the only wide black box is the QR-wide band.
+			expect(
+				fillRects().filter((r) => r.w > 100 && r.w !== BAND_WIDTH && r.style === '#000000')
+			).toEqual([]);
 			// The marker sits above the name.
 			const nameY = textCalls().find(([text]) => text === label.name)![2];
 			expect(textCalls()[wordAt]![2]).toBeLessThan(nameY);
@@ -411,7 +428,7 @@ describe('renderKioskLabelPng', () => {
 			expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(squareMiddle, 5);
 		});
 
-		it('draws a yellow marker as black text with its meaning beside a hollow triangle, with no outline or band', async () => {
+		it('draws a yellow marker row as black text with its meaning beside a hollow triangle, with no outline or band behind it', async () => {
 			await renderKioskLabelPng({ ...label, marker: 'yellow' });
 
 			const wordAt = textCalls().findIndex(([text]) => text === YELLOW_TEXT);
@@ -419,8 +436,14 @@ describe('renderKioskLabelPng', () => {
 			expect(lower(harness.fillTextStyles[wordAt]!)).toBe('#000000');
 			expect(textCalls().some(([text]) => text.includes('แดง'))).toBe(false);
 
-			expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
-			expect(fillRects().filter((r) => r.w > 100 && r.style === '#000000')).toEqual([]);
+			// The only outline is the band above the QR, not around the marker row.
+			expect(harness.fakeContext.strokeRect).toHaveBeenCalledTimes(1);
+			expect(harness.fakeContext.strokeRect.mock.calls[0]![2]).toBeGreaterThanOrEqual(
+				BAND_WIDTH - 3
+			);
+			expect(
+				fillRects().filter((r) => r.w > 100 && r.w !== BAND_WIDTH && r.style === '#000000')
+			).toEqual([]);
 
 			// The triangle is a stroked three-point path, left of the word.
 			expect(harness.fakeContext.stroke).toHaveBeenCalledTimes(1);
@@ -459,7 +482,7 @@ describe('renderKioskLabelPng', () => {
 				await renderKioskLabelPng({ ...label, marker });
 
 				const markedYs = textCalls()
-					.filter(([text]) => ![RED_TEXT, YELLOW_TEXT].includes(text))
+					.filter(([text]) => ![RED_TEXT, YELLOW_TEXT, ...BAND_WORDS].includes(text))
 					.map(([, , y]) => y);
 				const nameAt = 0;
 				const shift = ROW_DOTS + mmToDots(1);
@@ -486,7 +509,6 @@ describe('renderKioskLabelPng', () => {
 				// The word is squeezed to the room left in the column, never into the divider.
 				expect(word[1]).toBeGreaterThanOrEqual(column.x);
 				expect(word[1] + word[3]).toBeLessThanOrEqual(divider.x);
-				expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
 			}
 		);
 
@@ -502,6 +524,103 @@ describe('renderKioskLabelPng', () => {
 				expect(harness.fakeContext.stroke).not.toHaveBeenCalled();
 			}
 		);
+	});
+
+	describe('level band above the QR', () => {
+		const lower = (style: string) => style.toLowerCase();
+		const textCalls = () =>
+			harness.fakeContext.fillText.mock.calls as unknown as [string, number, number, number?][];
+		const fillRects = () =>
+			harness.fakeContext.fillRect.mock.calls.map(([x, y, w, h], index) => ({
+				x,
+				y,
+				w,
+				h,
+				style: lower(harness.fillRectStyles[index]!)
+			}));
+		const QR = 264;
+
+		it('draws the red band as solid black, as wide as the QR and ending a gap above it', async () => {
+			await renderKioskLabelPng({ ...label, marker: 'red' });
+
+			const { qr } = kioskLabelLayout(QR);
+			const band = fillRects().filter((r) => r.style === '#000000' && r.w === QR);
+			expect(band).toHaveLength(1);
+			expect(band[0]!.x).toBe(qr.x);
+			expect(band[0]!.h).toBe(33);
+			// 2 mm (16 dots) between the band and the QR image keeps the quiet zone clear.
+			expect(qr.y - (band[0]!.y + band[0]!.h)).toBe(16);
+			expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
+		});
+
+		it('prints "ดูแลเร่งด่วน" in white, centred inside the red band, in the marker row face', async () => {
+			await renderKioskLabelPng({ ...label, marker: 'red' });
+
+			const band = fillRects().find((r) => r.style === '#000000' && r.w === QR)!;
+			const at = textCalls().findIndex(([text]) => text === 'ดูแลเร่งด่วน');
+			expect(at).toBeGreaterThanOrEqual(0);
+			expect(lower(harness.fillTextStyles[at]!)).toBe('#ffffff');
+			const [text, x, y] = textCalls()[at]!;
+			// The fake measureText is 6 dots per character.
+			expect(x + (text.length * 6) / 2).toBeCloseTo(band.x + QR / 2, 5);
+			expect(y).toBeCloseTo(band.y + band.h / 2, 5);
+			const checkAt = textCalls().findIndex(([t]) => t === KIOSK_LABEL_CHECKLIST[0]);
+			expect(harness.fillTextFonts[at]).toBe(harness.fillTextFonts[checkAt]);
+			expect(harness.fontsLoaded).toHaveLength(4);
+		});
+
+		it('draws the yellow band as a black outline with black "ดูแลพิเศษ", and no black fill', async () => {
+			await renderKioskLabelPng({ ...label, marker: 'yellow' });
+
+			const { qr } = kioskLabelLayout(QR);
+			const box = kioskLabelBand(QR);
+			expect(harness.fakeContext.strokeRect).toHaveBeenCalledTimes(1);
+			const [x, y, w, h] = harness.fakeContext.strokeRect.mock.calls[0]!;
+			const { style, lineWidth } = harness.strokeRectStyles[0]!;
+			expect(lower(style)).toBe('#000000');
+			// Same weight as the yellow triangle's stroke (0.4 mm = 3 dots).
+			expect(lineWidth).toBe(Math.round(mmToDots(KIOSK_LABEL_MARKER.triangleStrokeMm)));
+			// The stroke is centred on the path: the outer edge lines up with the QR's edges.
+			expect(x - lineWidth / 2).toBe(qr.x);
+			expect(x + w + lineWidth / 2).toBe(qr.x + QR);
+			expect(y - lineWidth / 2).toBe(box.y);
+			expect(y + h + lineWidth / 2).toBe(box.y + box.height);
+			expect(box.y + box.height).toBeLessThan(qr.y);
+
+			const at = textCalls().findIndex(([text]) => text === 'ดูแลพิเศษ');
+			expect(at).toBeGreaterThanOrEqual(0);
+			expect(lower(harness.fillTextStyles[at]!)).toBe('#000000');
+			expect(fillRects().filter((r) => r.style === '#000000' && r.w === QR)).toEqual([]);
+		});
+
+		it.each(['red', 'yellow'] as const)(
+			'keeps the QR at its no-marker size and place under the %s band, never below the minimum',
+			async (marker) => {
+				await renderKioskLabelPng(label);
+				const plain = harness.fakeContext.drawImage.mock.calls.at(-1)!;
+				harness.fakeContext.drawImage.mockClear();
+
+				await renderKioskLabelPng({ ...label, marker });
+
+				expect(harness.fakeContext.drawImage).toHaveBeenCalledTimes(1);
+				expect(harness.fakeContext.drawImage.mock.calls[0]).toEqual(plain);
+				expect(QR).toBeGreaterThanOrEqual(mmToDots(KIOSK_QR_MIN_MM));
+				// The band ends above the QR image and starts inside the label padding.
+				const box = kioskLabelBand(QR);
+				expect(box.y + box.height).toBeLessThan(kioskLabelLayout(QR).qr.y);
+				expect(box.y).toBeGreaterThanOrEqual(Math.round(mmToDots(2)));
+			}
+		);
+
+		it.each([undefined, null])('draws no band when the marker is %s', async (marker) => {
+			await renderKioskLabelPng({ ...label, marker });
+
+			const words = textCalls().map(([text]) => text);
+			expect(words).not.toContain('ดูแลเร่งด่วน');
+			expect(words).not.toContain('ดูแลพิเศษ');
+			expect(fillRects().filter((r) => r.w === QR)).toEqual([]);
+			expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
+		});
 	});
 
 	it('returns the rendered label as base64 PNG', async () => {

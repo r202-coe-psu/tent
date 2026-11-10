@@ -169,6 +169,64 @@ describe('QrIdCard', () => {
 		}
 	});
 
+	describe('level band above the QR', () => {
+		const bandTag = (body: string, marker: string) =>
+			body.match(new RegExp(`<[^>]*data-marker-band="${marker}"[^>]*>`))?.[0] ?? '';
+
+		it('prints the red band as solid black with white words, as wide as the QR', () => {
+			const body = render(QrIdCard, { props: { ...base, marker: 'red' } }).body;
+			const tag = bandTag(body, 'red');
+
+			expect(tag).toContain('aria-hidden="true"');
+			expect(tag).toContain('bg-black');
+			expect(tag).toContain('text-white');
+			expect(tag).toContain('w-full');
+			expect(tag).toContain('justify-center');
+			expect(body).toMatch(/data-marker-band="red"[^>]*>ดูแลเร่งด่วน</);
+		});
+
+		it('prints the yellow band as a black outline with black words, 0.4 mm like the triangle', () => {
+			const body = render(QrIdCard, { props: { ...base, marker: 'yellow' } }).body;
+			const tag = bandTag(body, 'yellow');
+
+			expect(tag).toContain('aria-hidden="true"');
+			expect(tag).toContain('border-[0.4mm]');
+			expect(tag).toContain('border-black');
+			expect(tag).not.toContain('bg-black');
+			expect(tag).not.toContain('text-white');
+			expect(body).toMatch(/data-marker-band="yellow"[^>]*>ดูแลพิเศษ</);
+		});
+
+		it.each(['red', 'yellow'] as const)(
+			'puts the %s band in the QR column, above the QR image, 2 mm clear of it',
+			(marker) => {
+				const body = render(QrIdCard, { props: { ...base, marker } }).body;
+				const at = body.indexOf('data-marker-band');
+
+				expect(at).toBeGreaterThan(body.indexOf('data-marker="'));
+				expect(at).toBeGreaterThan(body.indexOf('ทดสอบ หนึ่ง'));
+				expect(at).toBeLessThan(body.indexOf('<img'));
+				const tag = bandTag(body, marker);
+				// Absolutely placed over the QR, like the caption below it, so the QR does not move.
+				expect(tag).toContain('absolute');
+				expect(tag).toContain('bottom-full');
+				expect(tag).toContain('mb-[2mm]');
+				expect(tag).toContain('text-[9pt]');
+				expect(body).toContain('size-(--qr-size)');
+			}
+		);
+
+		it('prints no band when there is no level', () => {
+			for (const marker of [null, undefined]) {
+				const body = render(QrIdCard, { props: { ...base, marker } }).body;
+
+				expect(body).not.toContain('data-marker-band');
+				expect(body).not.toContain('ดูแลเร่งด่วน');
+				expect(body).not.toContain('ดูแลพิเศษ');
+			}
+		});
+	});
+
 	it('prints the name at 15 pt, bold, clamped to three lines', () => {
 		const body = render(QrIdCard, { props: base }).body;
 		const tag = body.match(/<p[^>]*>ทดสอบ หนึ่ง<\/p>/)?.[0] ?? '';

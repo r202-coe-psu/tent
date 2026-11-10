@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cn } from '$lib/utils/shadcn';
 	import {
+		VULNERABILITY_BAND_TEXT,
 		VULNERABILITY_MARKER_TEXT,
 		type VulnerabilityMarker
 	} from '$lib/utils/vulnerability-marker';
@@ -131,6 +132,21 @@
 		class="ml-(--label-gap) flex shrink-0 items-center border-l-[0.25mm] border-black pl-(--label-gap)"
 	>
 		<div class="relative">
+			{#if marker}
+				<!-- Level band above the QR, over the column's free space so the QR stays centred. 2 mm
+					keeps the QR's quiet zone (with its 2 margin modules); aria-hidden because the marker row
+					already carries the label. Height = the 9 pt row; the yellow outline is 0.4 mm. -->
+				<div
+					data-marker-band={marker}
+					aria-hidden="true"
+					class={cn(
+						'absolute bottom-full left-0 mb-[2mm] flex h-[calc(9pt*1.3)] w-full items-center justify-center border-black text-[9pt] leading-[1.3] font-medium whitespace-nowrap',
+						marker === 'red' ? 'bg-black text-white' : 'border-[0.4mm] text-black'
+					)}
+				>
+					{VULNERABILITY_BAND_TEXT[marker]}
+				</div>
+			{/if}
 			{#if src}
 				<img {src} {alt} class="block size-(--qr-size) [image-rendering:pixelated]" />
 			{:else}

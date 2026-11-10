@@ -1,6 +1,7 @@
 import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 import {
 	KIOSK_LABEL_CHECKBOX,
+	KIOSK_LABEL_BAND,
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_LINK_GAP_MM,
@@ -9,6 +10,7 @@ import {
 	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_ZONE,
+	kioskLabelBand,
 	kioskLabelDots,
 	kioskLabelLayout,
 	labelEmergencyLine,
@@ -126,6 +128,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	context.fillRect(layout.divider.x, layout.divider.y, layout.divider.width, layout.divider.height);
 	context.textAlign = 'left';
 	context.textBaseline = 'middle';
+	if (label.marker) drawBand(context, label.marker, fonts.checklist, kioskLabelBand(qr.width));
 
 	let y = layout.text.y;
 	if (label.marker) {
@@ -175,6 +178,47 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	binarize(context, width, height);
 	return canvas.toDataURL('image/png').slice('data:image/png;base64,'.length);
+}
+
+/**
+ * The level band above the QR: red solid black with white words, yellow a black outline with
+ * black words, the words centred. Left-aligned at a measured x like the rest of the label. Uses
+ * the emergency row's font (passed in, already loaded) and leaves `fillStyle` black.
+ */
+function drawBand(
+	context: CanvasRenderingContext2D,
+	marker: VulnerabilityMarker,
+	font: string,
+	band: { x: number; y: number; width: number; height: number }
+): void {
+	context.font = font;
+	if (marker === 'red') {
+		context.fillStyle = '#000000';
+		context.fillRect(band.x, band.y, band.width, band.height);
+		context.fillStyle = '#FFFFFF';
+	} else {
+		// The stroke is centred on the path: inset by half of it so its outer edge is the band's.
+		const stroke = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_BAND.strokeMm)));
+		context.strokeStyle = '#000000';
+		context.lineWidth = stroke;
+		context.lineJoin = 'miter';
+		context.strokeRect(
+			band.x + stroke / 2,
+			band.y + stroke / 2,
+			band.width - stroke,
+			band.height - stroke
+		);
+		context.fillStyle = '#000000';
+	}
+	const text = KIOSK_LABEL_BAND.text[marker];
+	const textWidth = context.measureText(text).width;
+	context.fillText(
+		text,
+		band.x + (band.width - textWidth) / 2,
+		band.y + band.height / 2,
+		band.width
+	);
+	context.fillStyle = '#000000';
 }
 
 /**
