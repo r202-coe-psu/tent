@@ -12,7 +12,10 @@ const rendered = vi.hoisted(() => ({ calls: [] as string[], result: null as unkn
 vi.mock('svelte-sonner', () => ({ toast: { error: toastError, success: vi.fn(), info: vi.fn() } }));
 vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({ issueEvacueeQrs: issue }));
 vi.mock('@tanstack/svelte-query', () => ({
-	useQueryClient: () => ({ fetchQuery: vi.fn().mockResolvedValue([]) })
+	useQueryClient: () => ({
+		fetchQuery: vi.fn().mockResolvedValue([]),
+		invalidateQueries: vi.fn()
+	})
 }));
 vi.mock('$lib/features/printers', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/printers')>()),

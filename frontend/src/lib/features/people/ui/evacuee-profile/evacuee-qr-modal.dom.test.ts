@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
+import { QueryClient } from '@tanstack/svelte-query';
 import type { Evacuee } from '$lib/features/people';
 
 vi.mock('$lib/features/printers', async () => ({
@@ -27,7 +28,7 @@ vi.mock('$lib/features/people', async (importOriginal) => ({
 	useScreeningsByEvacuee: () => ({ data: [] })
 }));
 
-import EvacueeQrModal from './evacuee-qr-modal.svelte';
+import Harness from './__fixtures__/evacuee-qr-modal-harness.svelte';
 
 const evacuee = {
 	_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
@@ -44,9 +45,15 @@ let instance: ReturnType<typeof mount> | null = null;
 
 function render(props: Record<string, unknown> = {}) {
 	const onClose = vi.fn();
-	instance = mount(EvacueeQrModal, {
+	instance = mount(Harness, {
 		target: document.body,
-		props: { show: true, evacuee, onClose, ...props }
+		props: {
+			client: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+			show: true,
+			evacuee,
+			onClose,
+			...props
+		}
 	});
 	flushSync();
 	return onClose;

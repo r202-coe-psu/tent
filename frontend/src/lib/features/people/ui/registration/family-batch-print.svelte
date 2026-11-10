@@ -81,11 +81,10 @@
 
 		let issued: Awaited<ReturnType<typeof issueQrPayloads>>;
 		try {
-			issued = await issueQrPayloads({
-				shelterCode,
-				source: 'family_batch',
-				evacueeIds: ordered.map((m) => m._id)
-			});
+			issued = await issueQrPayloads(
+				{ shelterCode, source: 'family_batch', evacueeIds: ordered.map((m) => m._id) },
+				{ queryClient }
+			);
 		} catch {
 			toast.error(qrT.issueFailedToast);
 			throw new ReportedRenderError('QR was not issued');

@@ -225,6 +225,7 @@ export {
 } from './application/evacuee-qr-check';
 export { issueQrPayloads, type IssuedQrPayloads } from './application/evacuee-qr-issue';
 export { readEvacueeQrPrints } from './data/evacuee-qr.remote';
+export { useEvacueeQrPrints } from './application/evacuee-qr-prints';
 
 export {
 	extractScanLookupToken,

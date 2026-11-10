@@ -2,6 +2,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { toast } from 'svelte-sonner';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { previewImageAsPdf } from '$lib/utils/pdf';
 	import { cn } from '$lib/utils/shadcn';
@@ -23,6 +24,9 @@
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	const t = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
+
+	// Refreshes the stale-card warning after a print (#1301).
+	const queryClient = useQueryClient();
 
 	let {
 		show,
@@ -122,11 +126,10 @@
 		let payload: string | undefined;
 		let marker: VulnerabilityMarker | null = null;
 		try {
-			const issued = await issueQrPayloads({
-				shelterCode,
-				source: qrSource,
-				evacueeIds: [evacuee._id]
-			});
+			const issued = await issueQrPayloads(
+				{ shelterCode, source: qrSource, evacueeIds: [evacuee._id] },
+				{ queryClient }
+			);
 			payload = issued.payloads.get(evacuee._id);
 			marker = issued.markers.get(evacuee._id) ?? null;
 		} catch {
