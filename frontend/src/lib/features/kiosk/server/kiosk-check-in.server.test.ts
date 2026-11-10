@@ -47,7 +47,8 @@ beforeEach(() => {
 	mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
 		evacuee_id,
 		qr_payload: issuedQr(evacuee_id),
-		printed_at: '2026-11-06T08:15:30.123Z'
+		printed_at: '2026-11-06T08:15:30.123Z',
+		marker: null
 	}));
 	mockQrPrints.mockReset();
 	mockQrPrints.mockResolvedValue([]);

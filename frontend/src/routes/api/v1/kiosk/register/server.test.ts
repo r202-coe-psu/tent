@@ -110,7 +110,8 @@ describe('POST /api/v1/kiosk/register', () => {
 		mockIssueQr.mockResolvedValue({
 			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@a1b2c3',
-			printed_at: '2026-11-06T08:15:30.123Z'
+			printed_at: '2026-11-06T08:15:30.123Z',
+			marker: null
 		});
 		mockRegister.mockResolvedValue({
 			_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
