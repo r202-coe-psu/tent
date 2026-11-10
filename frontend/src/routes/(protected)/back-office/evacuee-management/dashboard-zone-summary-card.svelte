@@ -28,52 +28,70 @@
 		<h3 class="leading-none font-semibold tracking-tight">ภาพรวมความจุ</h3>
 	</div>
 
-	<div class="flex flex-1 flex-col items-center justify-center gap-6 sm:flex-row sm:justify-around">
+	{#if summary.level === null}
+		<div class="flex flex-1 flex-col items-center justify-center gap-1 py-6 text-center">
+			<p class="text-sm font-medium text-foreground">ไม่มีโซนที่เปิดอยู่</p>
+			{#if summary.zones.closed > 0}
+				<p class="text-sm text-muted-foreground">ปิดอยู่ {summary.zones.closed} โซน</p>
+			{/if}
+		</div>
+	{:else}
 		<div
-			class="relative h-36 w-36 shrink-0"
-			role="img"
-			aria-label="ใช้ความจุไป {summary.percent}% ({summary.present.toLocaleString()} จาก {summary.capacity.toLocaleString()} คน)"
+			class="flex flex-1 flex-col items-center justify-center gap-6 sm:flex-row sm:justify-around"
 		>
-			<svg viewBox="0 0 120 120" class="h-full w-full -rotate-90" aria-hidden="true">
-				<circle cx="60" cy="60" r={RADIUS} fill="none" stroke-width="12" class="stroke-slate-100" />
-				<circle
-					cx="60"
-					cy="60"
-					r={RADIUS}
-					fill="none"
-					stroke-width="12"
-					stroke-linecap="round"
-					stroke-dasharray="{filled} {CIRCUMFERENCE}"
-					class="{RING[summary.level]} transition-all duration-300"
-				/>
-			</svg>
-			<div class="absolute inset-0 flex flex-col items-center justify-center tabular-nums">
-				<span class="text-2xl font-bold text-foreground">{summary.percent}%</span>
-				<span class="text-xs text-muted-foreground">
-					{summary.present.toLocaleString()} / {summary.capacity.toLocaleString()} คน
-				</span>
+			<div
+				class="relative h-36 w-36 shrink-0"
+				role="img"
+				aria-label="ใช้ความจุไป {summary.percent}% ({summary.present.toLocaleString()} จาก {summary.capacity.toLocaleString()} คน)"
+			>
+				<svg viewBox="0 0 120 120" class="h-full w-full -rotate-90" aria-hidden="true">
+					<circle
+						cx="60"
+						cy="60"
+						r={RADIUS}
+						fill="none"
+						stroke-width="12"
+						class="stroke-slate-100"
+					/>
+					<circle
+						cx="60"
+						cy="60"
+						r={RADIUS}
+						fill="none"
+						stroke-width="12"
+						stroke-linecap="round"
+						stroke-dasharray="{filled} {CIRCUMFERENCE}"
+						class="{RING[summary.level]} transition-all duration-300"
+					/>
+				</svg>
+				<div class="absolute inset-0 flex flex-col items-center justify-center tabular-nums">
+					<span class="text-2xl font-bold text-foreground">{summary.percent}%</span>
+					<span class="text-xs text-muted-foreground">
+						{summary.present.toLocaleString()} / {summary.capacity.toLocaleString()} คน
+					</span>
+				</div>
+			</div>
+
+			<div class="space-y-3">
+				<p class="text-sm text-muted-foreground">
+					ว่างอีก
+					<strong class="text-lg font-bold text-foreground tabular-nums">
+						{summary.available.toLocaleString()}
+					</strong>
+					ที่
+				</p>
+				<ul class="space-y-1.5 text-sm">
+					{#each LEGEND as item (item.key)}
+						<li class="flex items-center gap-2">
+							<span class="h-2.5 w-2.5 shrink-0 rounded-full {item.dot}"></span>
+							<span class="w-16 text-muted-foreground">{item.label}</span>
+							<span class="font-semibold text-foreground tabular-nums">
+								{summary.zones[item.key]} โซน
+							</span>
+						</li>
+					{/each}
+				</ul>
 			</div>
 		</div>
-
-		<div class="space-y-3">
-			<p class="text-sm text-muted-foreground">
-				ว่างอีก
-				<strong class="text-lg font-bold text-foreground tabular-nums">
-					{summary.available.toLocaleString()}
-				</strong>
-				ที่
-			</p>
-			<ul class="space-y-1.5 text-sm">
-				{#each LEGEND as item (item.key)}
-					<li class="flex items-center gap-2">
-						<span class="h-2.5 w-2.5 shrink-0 rounded-full {item.dot}"></span>
-						<span class="w-16 text-muted-foreground">{item.label}</span>
-						<span class="font-semibold text-foreground tabular-nums">
-							{summary.zones[item.key]} โซน
-						</span>
-					</li>
-				{/each}
-			</ul>
-		</div>
-	</div>
+	{/if}
 </div>

@@ -123,8 +123,13 @@ describe('summarizeZoneOccupancy', () => {
 		expect(summarizeZoneOccupancy([occ('A', 80, 100, 'warning')]).level).toBe('warning');
 	});
 
-	it('treats zero open capacity as full', () => {
+	it('has no level when every zone is closed, so the UI shows an empty state', () => {
 		const summary = summarizeZoneOccupancy([occ('A', 0, 30, 'normal', true)]);
-		expect(summary).toMatchObject({ capacity: 0, percent: 0, level: 'full' });
+		expect(summary).toMatchObject({ capacity: 0, percent: 0, level: null });
+		expect(summary.zones.closed).toBe(1);
+	});
+
+	it('has no level when the shelter has no zones', () => {
+		expect(summarizeZoneOccupancy([]).level).toBeNull();
 	});
 });

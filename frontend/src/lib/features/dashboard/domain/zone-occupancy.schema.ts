@@ -85,7 +85,8 @@ export type ZoneOccupancySummary = {
 	capacity: number;
 	available: number;
 	percent: number;
-	level: ZoneOccupancyLevel;
+	/** `null` when no zone is open: there is no capacity to rate, so the UI shows an empty state. */
+	level: ZoneOccupancyLevel | null;
 	zones: Record<ZoneOccupancyLevel | 'closed', number>;
 };
 
@@ -107,7 +108,7 @@ export function summarizeZoneOccupancy(zones: readonly ZoneOccupancy[]): ZoneOcc
 		capacity,
 		available: Math.max(0, capacity - present),
 		percent: capacity > 0 ? Math.round((present / capacity) * 100) : 0,
-		level: occupancyLevel(present, capacity),
+		level: tally.normal + tally.warning + tally.full > 0 ? occupancyLevel(present, capacity) : null,
 		zones: tally
 	};
 }
