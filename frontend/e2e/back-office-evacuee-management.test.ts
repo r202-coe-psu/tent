@@ -33,7 +33,7 @@ const LAST_NAME = `จ5${RUN_ID}`;
 const HEAD_FIRST = `หัวหน้าจ5${RUN_ID}`;
 const MEMBER_FIRST = `สมาชิกจ5${RUN_ID}`;
 const HEAD_FULL = `${HEAD_FIRST} ${LAST_NAME}`;
-const ZONE_NAME = `โซนจ5${RUN_ID}`;
+const ZONE_NAME = `โซนทดสอบ J5 ${RUN_ID}`;
 const PHONE = fictitiousPhone(5);
 const NATIONAL_ID = fictitiousNationalId(Number(String(Date.now()).slice(-11)));
 
