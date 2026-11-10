@@ -61,9 +61,11 @@ beforeEach(() => {
 	resolveScannedRecipient.mockReset();
 	mountPicker();
 });
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui restores body scroll 24ms after a dialog unmounts; let it run before the DOM goes.
+	await new Promise((resolve) => setTimeout(resolve, 40));
 	document.body.innerHTML = '';
 });
 
