@@ -7,6 +7,7 @@
 
 	const token = $derived(page.params.token ?? '');
 	const hideQr = $derived(page.url.searchParams.get('from') === 'portal');
+	const applicationId = $derived(page.url.searchParams.get('application') ?? undefined);
 	const t = $derived(ticketI18n[languageStore.current]);
 </script>
 
@@ -17,5 +18,5 @@
 </svelte:head>
 
 <PublicPageShell class="lg:px-8" maxWidth="max-w-7xl">
-	<DigitalPass {token} {hideQr} />
+	<DigitalPass {token} {hideQr} {applicationId} />
 </PublicPageShell>
