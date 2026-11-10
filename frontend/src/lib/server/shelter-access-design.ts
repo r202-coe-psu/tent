@@ -2446,10 +2446,13 @@ ${consentVduClause()}
     if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
       throw { forbidden: 'outside recipients must not carry recipient_id' };
     }
+    if (typeof newDoc.collected_by_recipient_id !== 'undefined' && (newDoc.recipient_type !== 'evacuee' || typeof newDoc.collected_by_recipient_id !== 'string' || newDoc.collected_by_recipient_id.indexOf('evacuee:') !== 0 || newDoc.collected_by_recipient_id === newDoc.recipient_id)) {
+      throw { forbidden: 'collected_by_recipient_id must be another evacuee collecting for an evacuee' };
+    }
     if (oldDoc) {
       var immutableLogFields = [
         '_id', 'type', 'shelter_code', 'ticket_id', 'item_id', 'qty',
-        'recipient_type', 'recipient_id', 'household_id', 'is_returnable',
+        'recipient_type', 'recipient_id', 'household_id', 'collected_by_recipient_id', 'is_returnable',
         'distributed_at', 'distributed_by', 'created_at', 'created_by'
       ];
       for (var lf = 0; lf < immutableLogFields.length; lf++) {

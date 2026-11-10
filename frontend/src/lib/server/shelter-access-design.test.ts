@@ -4608,6 +4608,28 @@ describe('buildValidateDocUpdate', () => {
 				}
 			});
 
+			it('accepts collected_by_recipient_id only as another evacuee and keeps it immutable (#1154)', () => {
+				const collector = 'evacuee:01J0000000000000000000000C';
+				const collected = { ...validFoodLog, collected_by_recipient_id: collector };
+				expect(() => compile()(collected, null, DISTRIBUTION)).not.toThrow();
+				for (const bad of [validFoodLog.recipient_id, 'volunteer:x', 42]) {
+					expectForbidden(
+						() =>
+							compile()({ ...validFoodLog, collected_by_recipient_id: bad }, null, DISTRIBUTION),
+						/collected_by_recipient_id must be another evacuee/
+					);
+				}
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...collected, collected_by_recipient_id: 'evacuee:01J0000000000000000000000D' },
+							collected,
+							DISTRIBUTION
+						),
+					/collected_by_recipient_id is immutable/
+				);
+			});
+
 			it('rejects hard-delete of distribution_log', () => {
 				expectForbidden(
 					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, DISTRIBUTION),
