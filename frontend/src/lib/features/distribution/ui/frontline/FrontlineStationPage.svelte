@@ -420,6 +420,14 @@
 	const closeOutGroupTickets = $derived(
 		reconciliationEligibleTickets.filter((t) => closeOutGroup(t.status) === closeOutGroupShown)
 	);
+	const closeOutGroupCounts = $derived(
+		new Map(
+			CLOSE_OUT_GROUPS.map((g) => [
+				g.id,
+				reconciliationEligibleTickets.filter((t) => closeOutGroup(t.status) === g.id).length
+			])
+		)
+	);
 	function pinCloseOutTicket(ticket: RequisitionTicket) {
 		pickedCloseOutGroup = null;
 		pickedReconciliationTicketId = ticket._id;
@@ -866,9 +874,7 @@
 								aria-labelledby="close-out-group-label"
 							>
 								{#each CLOSE_OUT_GROUPS as group (group.id)}
-									{@const count = reconciliationEligibleTickets.filter(
-										(t) => closeOutGroup(t.status) === group.id
-									).length}
+									{@const count = closeOutGroupCounts.get(group.id) ?? 0}
 									{@const isOn = group.id === closeOutGroupShown}
 									<button
 										type="button"

@@ -78,7 +78,7 @@ export function ticketOptionLabel(
 	return [title, ...details.map((d) => `${d.label} ${d.value}`)].join(' ');
 }
 
-/** What a receive-tab card shows instead of `ticket_no` (#1183); `meal` is null for supplies. */
+/** What a ticket card shows instead of `ticket_no` (#1183); `meal` is null for supplies. */
 export interface TicketCardSummary {
 	type: string;
 	meal: string | null;

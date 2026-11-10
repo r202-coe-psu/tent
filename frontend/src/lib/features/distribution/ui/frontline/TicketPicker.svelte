@@ -60,7 +60,6 @@
 		</Popover.Trigger>
 
 		<Popover.Content
-			aria-label={label}
 			align="start"
 			class="w-(--bits-floating-anchor-width) max-w-[calc(100vw-2rem)] min-w-72 p-2"
 		>
