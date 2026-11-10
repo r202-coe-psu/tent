@@ -23,9 +23,12 @@ export type {
 export {
 	KIOSK_BANNER_GROUP_LIMITS,
 	createKioskBannerGroup,
+	generateTvCode,
 	isDuplicateGroupName,
 	kioskBannerGroupDocSchema,
-	kioskBannerGroupInputSchema
+	kioskBannerGroupInputSchema,
+	needsTvCode,
+	tvCodeSchema
 } from './domain/kiosk-banner-group';
 export type {
 	KioskBannerGroupContext,

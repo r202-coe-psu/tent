@@ -183,7 +183,8 @@ describe('createGroup', () => {
 		expect(body).toMatchObject({
 			_id: record._id,
 			type: 'kiosk_banner_group',
-			schema_v: 1,
+			schema_v: 2,
+			tv_code: expect.stringMatching(/^[0-9]{6}$/),
 			shelter_code: 'SH1',
 			name: 'ทั่วไป',
 			description: 'ทุกจอ',

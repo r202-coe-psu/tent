@@ -1,6 +1,7 @@
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	createKioskBannerGroup,
+	generateTvCode,
 	groupOf,
 	isDuplicateGroupName,
 	type KioskBannerGroupContext,
@@ -97,7 +98,7 @@ async function putGroupDoc(doc: KioskBannerGroupDoc): Promise<KioskBannerGroupDo
 export async function createGroup(
 	input: KioskBannerGroupInput,
 	deviceIds: string[],
-	ctx: KioskBannerGroupContext,
+	ctx: Omit<KioskBannerGroupContext, 'tvCode'>,
 	now: Date = new Date()
 ): Promise<KioskBannerGroupRecord> {
 	// Best effort: CouchDB has no unique constraint, so two concurrent creates can both pass.
@@ -106,7 +107,9 @@ export async function createGroup(
 	}
 	// Validate before saving so a bad device id does not leave an empty group behind.
 	assertDevicesInShelter(await scannerDeviceRepository.listDevices([ctx.shelterCode]), deviceIds);
-	const saved = await putGroupDoc(createKioskBannerGroup(input, ctx, now));
+	const saved = await putGroupDoc(
+		createKioskBannerGroup(input, { ...ctx, tvCode: generateTvCode() }, now)
+	);
 	return setGroupDevices(saved, deviceIds, ctx.createdBy);
 }
 
