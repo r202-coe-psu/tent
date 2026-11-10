@@ -37,6 +37,11 @@ export {
 } from './data/kiosk-check-in.api';
 export { fetchKioskConfig } from './data/kiosk-config.api';
 export { fetchKioskBanners } from './data/kiosk-banners.api';
+export { fetchInternalBanners, type InternalBannersResult } from './data/internal-banners.api';
+export {
+	InternalBannerDisplayController,
+	type InternalDisplayStatus
+} from './ui/internal-banner-display.svelte.js';
 export type { KioskBannerSlide } from './domain/kiosk-banner-feed';
 export {
 	KioskBannerAttractController,
