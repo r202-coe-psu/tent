@@ -131,21 +131,6 @@
 		class="ml-(--label-gap) flex shrink-0 items-center border-l-[0.25mm] border-black pl-(--label-gap)"
 	>
 		<div class="relative">
-			{#if marker}
-				<!-- Level bars above the QR (red two, yellow one), over the column's free space so the QR
-					stays centred. Each is as wide as the QR, 1.5 mm thick, 1 mm apart; the lowest keeps 2 mm
-					from the QR (its quiet zone, with the 2 margin modules). aria-hidden because the marker
-					row already carries the label. -->
-				<div
-					data-marker-bars={marker}
-					aria-hidden="true"
-					class="absolute bottom-full left-0 mb-[2mm] flex w-full flex-col gap-[1mm]"
-				>
-					{#each marker === 'red' ? [0, 1] : [0] as bar (bar)}
-						<div class="h-[1.5mm] w-full bg-black"></div>
-					{/each}
-				</div>
-			{/if}
 			{#if src}
 				<img {src} {alt} class="block size-(--qr-size) [image-rendering:pixelated]" />
 			{:else}
@@ -165,4 +150,15 @@
 			{/if}
 		</div>
 	</div>
+	{#if marker}
+		<!-- Level bars at the card's right edge (red two, yellow one): full inner height, 1.5 mm wide,
+			1 mm apart, 2 mm clear of the QR column (its quiet zone, with the 2 margin modules). The QR
+			is sized smaller to make room (kioskQrBoxMm). aria-hidden because the marker row already
+			carries the label. -->
+		<div data-marker-bars={marker} aria-hidden="true" class="ml-[2mm] flex shrink-0 gap-[1mm]">
+			{#each marker === 'red' ? [0, 1] : [0] as bar (bar)}
+				<div class="w-[1.5mm] bg-black"></div>
+			{/each}
+		</div>
+	{/if}
 </div>

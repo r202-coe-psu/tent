@@ -10,16 +10,18 @@ import {
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
 	KIOSK_QR_MIN_MM,
-	kioskLabelBars,
 	kioskLabelLayout,
 	mmToDots
 } from '../domain/print-label';
 import { renderKioskLabelPng } from './kiosk-label-image';
 
+/** Width of the QR image `FakeImage` decodes to; the renderer sizes the layout from it. */
+let fakeQrPx = 264;
+
 class FakeImage {
 	src = '';
-	width = 264;
-	height = 264;
+	width = fakeQrPx;
+	height = fakeQrPx;
 	decode(): Promise<void> {
 		return Promise.resolve();
 	}
@@ -521,7 +523,7 @@ describe('renderKioskLabelPng', () => {
 		);
 	});
 
-	describe('level bars above the QR', () => {
+	describe('level bars at the right edge', () => {
 		const lower = (style: string) => style.toLowerCase();
 		const textCalls = () =>
 			harness.fakeContext.fillText.mock.calls as unknown as [string, number, number, number?][];
@@ -533,41 +535,61 @@ describe('renderKioskLabelPng', () => {
 				h,
 				style: lower(harness.fillRectStyles[index]!)
 			}));
-		const barRects = () => fillRects().filter((r) => r.style === '#000000' && r.w === QR);
-		const QR = 264;
+		/** Full-inner-height black rects other than the divider: the level bars. */
+		const barRects = () =>
+			fillRects().filter((r) => r.style === '#000000' && r.h === 447 && r.w > 2);
 
-		it('draws red as two black bars, each as wide as the QR, 1 mm apart and ending 2 mm above it', async () => {
+		afterEach(() => {
+			fakeQrPx = 264;
+		});
+
+		it('draws red as two vertical black bars, 12 dots wide, 8 apart, ending at the padding', async () => {
+			fakeQrPx = 198;
 			await renderKioskLabelPng({ ...label, marker: 'red' });
 
-			const { qr } = kioskLabelLayout(QR);
 			const bars = barRects();
-			expect(bars).toHaveLength(2);
-			for (const bar of bars) {
-				expect(bar.x).toBe(qr.x);
-				// 1.5 mm = 12 dots thick.
-				expect(bar.h).toBe(12);
-			}
-			const [top, bottom] = bars;
-			// 1 mm (8 dots) between the bars.
-			expect(bottom!.y - (top!.y + top!.h)).toBe(8);
-			// 2 mm (16 dots) between the lower bar and the QR image keeps the quiet zone clear.
-			expect(qr.y - (bottom!.y + bottom!.h)).toBe(16);
+			expect(bars.map(({ x, y, w, h }) => ({ x, y, w, h }))).toEqual([
+				{ x: 591, y: 16, w: 12, h: 447 },
+				{ x: 611, y: 16, w: 12, h: 447 }
+			]);
+			// Right edge of the last bar = 639 label width - 16 dots padding.
+			expect(bars[1]!.x + bars[1]!.w).toBe(623);
 		});
 
-		it('draws yellow as one black bar, as wide as the QR and ending 2 mm above it', async () => {
+		it('draws yellow as one vertical black bar at the right edge', async () => {
+			fakeQrPx = 231;
 			await renderKioskLabelPng({ ...label, marker: 'yellow' });
 
-			const { qr } = kioskLabelLayout(QR);
-			const bars = barRects();
-			expect(bars).toHaveLength(1);
-			expect(bars[0]!.x).toBe(qr.x);
-			expect(bars[0]!.h).toBe(12);
-			expect(qr.y - (bars[0]!.y + bars[0]!.h)).toBe(16);
+			expect(barRects().map(({ x, y, w, h }) => ({ x, y, w, h }))).toEqual([
+				{ x: 611, y: 16, w: 12, h: 447 }
+			]);
 		});
+
+		it.each([
+			['red', 198, 377],
+			['yellow', 231, 364]
+		] as const)(
+			'draws the QR shifted left, 2 mm (16 dots) clear of the %s bars, and none above it',
+			async (marker, qrPx, qrX) => {
+				fakeQrPx = qrPx;
+				await renderKioskLabelPng({ ...label, marker });
+
+				expect(harness.fakeContext.drawImage).toHaveBeenCalledTimes(1);
+				const [, x, y] = harness.fakeContext.drawImage.mock.calls[0]!;
+				expect(x).toBe(qrX);
+				expect(y).toBe(kioskLabelLayout(qrPx, marker).qr.y);
+				const [firstBar] = barRects();
+				expect(firstBar!.x - (qrX + qrPx)).toBe(16);
+				// No bar above the QR: nothing black as wide as the QR is drawn.
+				expect(fillRects().filter((r) => r.w === qrPx)).toEqual([]);
+				expect(qrPx).toBeGreaterThanOrEqual(mmToDots(KIOSK_QR_MIN_MM));
+			}
+		);
 
 		it.each(['red', 'yellow'] as const)(
 			'draws the %s bars with no words, no outline and no white text',
 			async (marker) => {
+				fakeQrPx = marker === 'red' ? 198 : 231;
 				await renderKioskLabelPng({ ...label, marker });
 
 				const words = textCalls().map(([text]) => text);
@@ -582,30 +604,18 @@ describe('renderKioskLabelPng', () => {
 			}
 		);
 
-		it.each(['red', 'yellow'] as const)(
-			'keeps the QR at its no-marker size and place under the %s bars, never below the minimum',
+		it.each([undefined, null])(
+			'draws no bars and keeps the QR where it was when the marker is %s',
 			async (marker) => {
-				await renderKioskLabelPng(label);
-				const plain = harness.fakeContext.drawImage.mock.calls.at(-1)!;
-				harness.fakeContext.drawImage.mockClear();
-
 				await renderKioskLabelPng({ ...label, marker });
 
-				expect(harness.fakeContext.drawImage).toHaveBeenCalledTimes(1);
-				expect(harness.fakeContext.drawImage.mock.calls[0]).toEqual(plain);
-				expect(QR).toBeGreaterThanOrEqual(mmToDots(KIOSK_QR_MIN_MM));
-				// The bars end above the QR image and start inside the label padding.
-				const [top] = kioskLabelBars(QR, marker);
-				expect(top!.y).toBeGreaterThanOrEqual(Math.round(mmToDots(2)));
+				expect(barRects()).toEqual([]);
+				expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
+				const [, x] = harness.fakeContext.drawImage.mock.calls[0]!;
+				// 639 label width - 16 padding - 264 QR.
+				expect(x).toBe(359);
 			}
 		);
-
-		it.each([undefined, null])('draws no bars when the marker is %s', async (marker) => {
-			await renderKioskLabelPng({ ...label, marker });
-
-			expect(fillRects().filter((r) => r.w === QR)).toEqual([]);
-			expect(harness.fakeContext.strokeRect).not.toHaveBeenCalled();
-		});
 	});
 
 	it('returns the rendered label as base64 PNG', async () => {

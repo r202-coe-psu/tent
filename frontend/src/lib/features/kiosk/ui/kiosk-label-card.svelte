@@ -26,7 +26,7 @@
 <!-- One 80x60 mm kiosk label: the print sheet and on-screen previews render this same card. -->
 <div
 	class={['kiosk-label-card', className]}
-	style:--qr-size="{label.qrSizeMm ?? kioskQrBoxMm()}mm"
+	style:--qr-size="{label.qrSizeMm ?? kioskQrBoxMm(label.marker)}mm"
 	style:--label-gap="{KIOSK_LABEL_GAP_MM}mm"
 	style:width="{KIOSK_LABEL_MM.width}mm"
 	style:height="{KIOSK_LABEL_MM.height}mm"

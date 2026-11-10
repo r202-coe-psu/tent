@@ -48,26 +48,43 @@ export function dotsToMm(dots: number): number {
 	return (dots / KIOSK_PRINT_DPI) * MM_PER_INCH;
 }
 
-/** Largest square (mm) the QR image may occupy on the right of the text column. */
-export function kioskQrBoxMm(): number {
+/** Width (mm) the level bars and their gap to the QR take from the right of the label; 0 for none. */
+function markerReserveMm(marker: VulnerabilityMarker | null | undefined): number {
+	if (!marker) return 0;
+	const count = KIOSK_LABEL_BAND.bars[marker];
+	return (
+		count * KIOSK_LABEL_BAND.barMm +
+		(count - 1) * KIOSK_LABEL_BAND.barGapMm +
+		KIOSK_LABEL_BAND.gapMm
+	);
+}
+
+/**
+ * Largest square (mm) the QR image may occupy on the right of the text column, after the level
+ * bars (and their gap to the QR) for a `marker`.
+ */
+export function kioskQrBoxMm(marker?: VulnerabilityMarker | null): number {
 	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2;
 	const innerHeight = KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2;
 	const besideText =
 		innerWidth - KIOSK_LABEL_TEXT_MIN_WIDTH_MM - KIOSK_LABEL_GAP_MM * 2 - KIOSK_LABEL_DIVIDER_MM;
-	return Math.min(innerHeight, besideText);
+	return Math.min(innerHeight, besideText - markerReserveMm(marker));
 }
 
 /**
  * Size a QR (moduleCount = modules per side, e.g. 29 for version 3) so every module is a whole
  * number of printer dots (at most KIOSK_QR_MAX_DOTS_PER_MODULE) and it fits the QR box.
  */
-export function kioskQrPrintSize(moduleCount: number): KioskQrPrintSize {
+export function kioskQrPrintSize(
+	moduleCount: number,
+	marker?: VulnerabilityMarker | null
+): KioskQrPrintSize {
 	const paddingDots = mmToDots(KIOSK_LABEL_PADDING_MM);
 	let size: KioskQrPrintSize | undefined;
 	// Widen the in-image margin until image margin + label padding reach the 4-module quiet zone.
 	for (let margin = KIOSK_QR_MARGIN_MODULES; margin <= KIOSK_QR_QUIET_ZONE_MODULES; margin++) {
 		const totalModules = moduleCount + margin * 2;
-		const maxDotsToFit = Math.floor(mmToDots(kioskQrBoxMm()) / totalModules);
+		const maxDotsToFit = Math.floor(mmToDots(kioskQrBoxMm(marker)) / totalModules);
 		// Largest whole-dot module that fits the box, capped so the text column keeps the rest.
 		const dotsPerModule = Math.max(1, Math.min(KIOSK_QR_MAX_DOTS_PER_MODULE, maxDotsToFit));
 		const widthPx = totalModules * dotsPerModule;
@@ -116,19 +133,19 @@ export const KIOSK_LABEL_MARKER = {
 	textGapMm: 1.5
 } as const;
 /**
- * Solid black bars right above the QR, as wide as the QR image, so staff see the level at a glance
- * without reading: red two stacked bars, yellow one. Plain black, no words (those stay in the marker
- * row), so they survive the thermal printer's black/white-only output. They sit in the vertical
- * space the centred QR leaves above it, so the QR keeps its size and position with or without them.
+ * Solid black vertical bars at the right edge of the label, inside the padding, so staff see the
+ * level at a glance without reading: red two bars, yellow one. Plain black, no words (those stay in
+ * the marker row), so they survive the thermal printer's black/white-only output. They span the
+ * full inner height; the QR column shifts left and the QR shrinks to make room (`kioskQrBoxMm`).
  */
 export const KIOSK_LABEL_BAND = {
-	/** Thickness of one bar. */
+	/** Width of one bar. */
 	barMm: 1.5,
 	/** Between the two red bars. */
 	barGapMm: 1,
 	/**
-	 * Lowest bar → QR image. With the image's 2 margin modules this keeps the 4-module quiet zone, as
-	 * the caption gap under the QR does.
+	 * Nearest bar → QR image. With the image's 2 margin modules this keeps the 4-module quiet zone,
+	 * as the padding does on the QR's other side.
 	 */
 	gapMm: 2,
 	bars: { red: 2, yellow: 1 }
@@ -252,15 +269,23 @@ export type KioskLabelLayout = {
 
 /**
  * Whole-dot geometry of the ID-card label: text column on the left, a divider line, and the QR
- * (`qrPx` square, 1 px = 1 dot) right-aligned and centred vertically, as in `QrIdCard`.
+ * (`qrPx` square, 1 px = 1 dot) right-aligned and centred vertically, as in `QrIdCard`. With a
+ * `marker` the QR sits `KIOSK_LABEL_BAND.gapMm` left of the level bars instead of the padding.
  */
-export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
+export function kioskLabelLayout(
+	qrPx: number,
+	marker?: VulnerabilityMarker | null
+): KioskLabelLayout {
 	const { width, height } = kioskLabelDots();
 	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
 	const gap = Math.round(mmToDots(KIOSK_LABEL_GAP_MM));
 	const offset = Math.round(mmToDots(KIOSK_LABEL_OFFSET_X_MM));
 	const dividerWidth = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_DIVIDER_MM)));
-	const qrX = width - padding - qrPx + offset;
+	const [firstBar] = marker ? kioskLabelBars(marker) : [];
+	const qrRight = firstBar
+		? firstBar.x - Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm))
+		: width - padding + offset;
+	const qrX = qrRight - qrPx;
 	const dividerX = qrX - gap - dividerWidth;
 	const textX = padding + offset;
 	const textY = padding + Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM));
@@ -278,19 +303,21 @@ export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
 export type KioskLabelBar = { x: number; y: number; width: number; height: number };
 
 /**
- * Whole-dot boxes of the level bars above a `qrPx` QR, top bar first: each as wide as the QR, the
- * lowest one `KIOSK_LABEL_BAND.gapMm` above it.
+ * Whole-dot boxes of the level bars, leftmost first: the last one ends at the right edge of the
+ * label padding, each `KIOSK_LABEL_BAND.barMm` wide and `barGapMm` apart, spanning the inner height.
  */
-export function kioskLabelBars(qrPx: number, marker: VulnerabilityMarker): KioskLabelBar[] {
-	const { qr } = kioskLabelLayout(qrPx);
-	const height = Math.round(mmToDots(KIOSK_LABEL_BAND.barMm));
-	const pitch = height + Math.round(mmToDots(KIOSK_LABEL_BAND.barGapMm));
+export function kioskLabelBars(marker: VulnerabilityMarker): KioskLabelBar[] {
+	const { width, height } = kioskLabelDots();
+	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
+	const offset = Math.round(mmToDots(KIOSK_LABEL_OFFSET_X_MM));
+	const barWidth = Math.round(mmToDots(KIOSK_LABEL_BAND.barMm));
+	const pitch = barWidth + Math.round(mmToDots(KIOSK_LABEL_BAND.barGapMm));
 	const count = KIOSK_LABEL_BAND.bars[marker];
-	const bottom = qr.y - Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm)) - height;
+	const right = width - padding + offset;
 	return Array.from({ length: count }, (_, index) => ({
-		x: qr.x,
-		y: bottom - (count - 1 - index) * pitch,
-		width: qrPx,
-		height
+		x: right - barWidth - (count - 1 - index) * pitch,
+		y: padding,
+		width: barWidth,
+		height: height - padding * 2
 	}));
 }

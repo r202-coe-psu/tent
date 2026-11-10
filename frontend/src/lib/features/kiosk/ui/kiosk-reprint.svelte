@@ -52,7 +52,9 @@
 	async function printMembers(
 		members: Parameters<ReprintSessionDeps['print']>[0]
 	): ReturnType<ReprintSessionDeps['print']> {
-		const images = await Promise.all(members.map((m) => prepareKioskQrImage(m.qr_payload ?? '')));
+		const images = await Promise.all(
+			members.map((m) => prepareKioskQrImage(m.qr_payload ?? '', m.label.marker))
+		);
 		sheetLabels = members.map((member, index) => ({
 			key: member.evacuee_id,
 			qrSrc: images[index].src,

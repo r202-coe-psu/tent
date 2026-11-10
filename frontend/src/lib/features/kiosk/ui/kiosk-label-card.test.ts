@@ -22,3 +22,25 @@ describe('KioskLabelCard vulnerability marker (#1301)', () => {
 		}
 	});
 });
+
+describe('KioskLabelCard QR size beside the level bars', () => {
+	const unsized = { ...label, qrSizeMm: undefined };
+
+	it('falls back to the full QR box without a marker', () => {
+		const body = render(KioskLabelCard, { props: { label: unsized } }).body;
+		expect(body).toContain('--qr-size: 34.75mm');
+	});
+
+	it.each([
+		['red', '28.75mm'],
+		['yellow', '31.25mm']
+	] as const)('falls back to the box the %s bars leave', (marker, size) => {
+		const body = render(KioskLabelCard, { props: { label: { ...unsized, marker } } }).body;
+		expect(body).toContain(`--qr-size: ${size}`);
+	});
+
+	it('uses the prepared QR size when the label carries one', () => {
+		const body = render(KioskLabelCard, { props: { label: { ...label, marker: 'red' } } }).body;
+		expect(body).toContain('--qr-size: 20mm');
+	});
+});

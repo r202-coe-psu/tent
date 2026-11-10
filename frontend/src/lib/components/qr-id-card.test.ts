@@ -169,43 +169,46 @@ describe('QrIdCard', () => {
 		}
 	});
 
-	describe('level bars above the QR', () => {
+	describe('level bars at the right edge', () => {
 		const barsTag = (body: string, marker: string) =>
 			body.match(new RegExp(`<[^>]*data-marker-bars="${marker}"[^>]*>`))?.[0] ?? '';
-		/** The container's markup, from its opening tag to the QR image that follows it. */
+		/** The container's markup, from its opening tag to the end of the card. */
 		const barsHtml = (body: string, marker: string) =>
-			body.slice(body.indexOf(barsTag(body, marker)), body.indexOf('<img'));
-		const barCount = (body: string, marker: string) =>
-			(barsHtml(body, marker).match(/bg-black/g) ?? []).length;
+			body.slice(body.indexOf(barsTag(body, marker)));
+		const barDivs = (body: string, marker: string) =>
+			barsHtml(body, marker).match(/<div[^>]*bg-black[^>]*>/g) ?? [];
 
-		it('prints red as two solid black bars and yellow as one, aria-hidden, as wide as the QR', () => {
+		it('prints red as two solid black vertical bars and yellow as one, aria-hidden', () => {
 			for (const [marker, count] of [
 				['red', 2],
 				['yellow', 1]
 			] as const) {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
-				const tag = barsTag(body, marker);
 
-				expect(tag).toContain('aria-hidden="true"');
-				expect(tag).toContain('w-full');
-				expect(barCount(body, marker)).toBe(count);
-				// Each bar is 1.5 mm thick and the full width of the container.
-				const bars = barsHtml(body, marker).match(/<div[^>]*bg-black[^>]*>/g) ?? [];
+				expect(barsTag(body, marker)).toContain('aria-hidden="true"');
+				const bars = barDivs(body, marker);
 				expect(bars).toHaveLength(count);
-				for (const bar of bars) {
-					expect(bar).toContain('h-[1.5mm]');
-					expect(bar).toContain('w-full');
-				}
+				// Each bar is 1.5 mm wide and as tall as the card's inner height.
+				for (const bar of bars) expect(bar).toContain('w-[1.5mm]');
 			}
+		});
+
+		it('spaces the bars 1 mm apart and keeps them from shrinking', () => {
+			const tag = barsTag(render(QrIdCard, { props: { ...base, marker: 'red' } }).body, 'red');
+
+			expect(tag).toContain('gap-[1mm]');
+			expect(tag).toContain('flex');
+			expect(tag).toContain('shrink-0');
 		});
 
 		it('prints no words in the bars', () => {
 			for (const marker of ['red', 'yellow'] as const) {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
-				const html = barsHtml(body, marker);
+				const container = barsTag(body, marker);
+				const inner = barsHtml(body, marker).slice(container.length);
 
-				expect(barsTag(body, marker)).not.toBe('');
-				expect(html.replace(/<[^>]*>/g, '').trim()).toBe('');
+				expect(container).not.toBe('');
+				expect(inner.replace(/<[^>]*>/g, '').trim()).toBe('');
 			}
 		});
 
@@ -220,20 +223,17 @@ describe('QrIdCard', () => {
 		});
 
 		it.each(['red', 'yellow'] as const)(
-			'puts the %s bars in the QR column, above the QR image, 1 mm apart and 2 mm clear of it',
+			'puts the %s bars after the QR column, 2 mm clear of it, not above the QR',
 			(marker) => {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
 				const at = body.indexOf('data-marker-bars');
-
-				expect(at).toBeGreaterThan(body.indexOf('data-marker="'));
-				expect(at).toBeGreaterThan(body.indexOf('ทดสอบ หนึ่ง'));
-				expect(at).toBeLessThan(body.indexOf('<img'));
 				const tag = barsTag(body, marker);
-				// Absolutely placed over the QR, like the caption below it, so the QR does not move.
-				expect(tag).toContain('absolute');
-				expect(tag).toContain('bottom-full');
-				expect(tag).toContain('mb-[2mm]');
-				expect(tag).toContain('gap-[1mm]');
+
+				expect(at).toBeGreaterThan(body.indexOf('<img'));
+				expect(tag).toContain('ml-[2mm]');
+				// In the row beside the QR column, not floated over the QR.
+				expect(tag).not.toContain('absolute');
+				expect(tag).not.toContain('bottom-full');
 				expect(body).toContain('size-(--qr-size)');
 			}
 		);

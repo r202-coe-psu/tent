@@ -19,9 +19,15 @@ export type KioskQrLabel = {
 	marker?: VulnerabilityMarker | null;
 };
 
-/** QR payload → data URL sized for the label (module-count based), in the kiosk print colour. */
-export async function prepareKioskQrImage(qrPayload: string): Promise<KioskQrImage> {
-	const size = kioskQrPrintSize(await qrModuleCount(qrPayload));
+/**
+ * QR payload → data URL sized for the label (module-count based), in the kiosk print colour. Pass
+ * the label's `marker`: the level bars at the right edge leave a smaller QR.
+ */
+export async function prepareKioskQrImage(
+	qrPayload: string,
+	marker?: VulnerabilityMarker | null
+): Promise<KioskQrImage> {
+	const size = kioskQrPrintSize(await qrModuleCount(qrPayload), marker);
 	const src = await generateQrDataUrl(qrPayload, {
 		width: size.widthPx,
 		margin: size.margin,
@@ -39,7 +45,7 @@ export async function renderKioskQrLabelPng(
 	qrPayload: string,
 	label: Omit<KioskLabelContent, 'qrSrc'>
 ): Promise<string> {
-	const image = await prepareKioskQrImage(qrPayload);
+	const image = await prepareKioskQrImage(qrPayload, label.marker);
 	return renderKioskLabelPng({ ...label, qrSrc: image.src });
 }
 

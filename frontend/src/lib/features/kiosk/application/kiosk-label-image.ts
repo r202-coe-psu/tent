@@ -113,7 +113,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 		document.fonts.ready,
 		...Object.values(fonts).map(loadLabelFont)
 	]);
-	const layout = kioskLabelLayout(qr.width);
+	const layout = kioskLabelLayout(qr.width, label.marker);
 	const words = segmenter('word');
 	const graphemes = segmenter('grapheme');
 
@@ -127,7 +127,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	context.fillRect(layout.divider.x, layout.divider.y, layout.divider.width, layout.divider.height);
 	context.textAlign = 'left';
 	context.textBaseline = 'middle';
-	if (label.marker) drawBars(context, kioskLabelBars(qr.width, label.marker));
+	if (label.marker) drawBars(context, kioskLabelBars(label.marker));
 
 	let y = layout.text.y;
 	if (label.marker) {
@@ -180,7 +180,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 }
 
 /**
- * The level bars above the QR: solid black, as wide as the QR (red two, yellow one), no words.
+ * The level bars at the right edge: solid black, full inner height (red two, yellow one), no words.
  * Leaves `fillStyle` black.
  */
 function drawBars(

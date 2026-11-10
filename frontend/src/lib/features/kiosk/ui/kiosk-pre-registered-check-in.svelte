@@ -393,11 +393,16 @@
 		try {
 			for (const item of items) {
 				if (!item.qr_payload) continue;
-				if (nextImages[item.evacuee_id] && qrImagePayloads[item.evacuee_id] === item.qr_payload) {
+				// The level bars shrink the QR, so a changed marker needs a fresh image too.
+				const imageKey = `${item.qr_payload}|${item.label?.marker ?? ''}`;
+				if (nextImages[item.evacuee_id] && qrImagePayloads[item.evacuee_id] === imageKey) {
 					continue;
 				}
-				nextImages[item.evacuee_id] = await prepareKioskQrImage(item.qr_payload);
-				qrImagePayloads[item.evacuee_id] = item.qr_payload;
+				nextImages[item.evacuee_id] = await prepareKioskQrImage(
+					item.qr_payload,
+					item.label?.marker
+				);
+				qrImagePayloads[item.evacuee_id] = imageKey;
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
