@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-246
 title: shelter_stocks — เก็บ quantity_on_hand / reorder_threshold เป็น Decimal128 และ EXT-004/006 ส่ง JSON number จาก Decimal
-status: proposed
+status: approved
 date: 2026-11-09
-requested_by:  Dev Team B #940 (parent #794) — ต่อเนื่องจาก POdecision 2026-10-27 (Mongo projection เก็บเป็น Decimal128)
-decided_by: <เจ้าของโครงการ>
+updated: 2026-11-10
+requested_by: Dev Team B #940 (parent #794) — ต่อเนื่องจาก POdecision 2026-10-27 (Mongo projection เก็บเป็น Decimal128)
+decided_by: "Soravit Sukkarn (Team Lead)"
+decision_date: 2026-11-10
 layer: volatile
 affects:
   - docs/data/schema.md §9.3 (shelter_stocks — quantity_on_hand, reorder_threshold)
@@ -18,10 +20,10 @@ why: projection shelter_stocks รวมยอดด้วย Decimal แต่�
 migration: ไม่ bump schema_v (Mongo projection ไม่ใช่ doc ใน CouchDB) — bump PROJECTION_VERSION ให้ worker bootstrap เขียนแถว double เดิมทับเป็น Decimal128
 ---
 
-# shelter_stocks — เก็บเป็น Decimal128 และ EXT-004/006 ส่ง JSON number จาก Decimal
+# CR-246 — shelter_stocks — เก็บเป็น Decimal128 และ EXT-004/006 ส่ง JSON number จาก Decimal
 
-อ้างอิง: issue #940, parent #794, [CR-038](01-core/CR-038-decimal-qty-strings.md),
-[CR-111](10-eoc/CR-111-partner-api-ext004-007.md), sibling [draft-public-needs-decimal](draft-public-needs-decimal.md) (#934)
+อ้างอิง: issue #940, parent #794, [CR-038](../01-core/CR-038-decimal-qty-strings.md),
+[CR-111](CR-111-partner-api-ext004-007.md), sibling [draft-public-needs-decimal](../draft-public-needs-decimal.md) (#934)
 
 ## สรุป (TL;DR)
 
@@ -121,4 +123,5 @@ worker เริ่มแล้วเห็นเลขต่ำกว่าจ�
 
 - 2026-10-27 — PO decision (#794): Mongo projection เก็บเป็น Decimal128 + bump PROJECTION_VERSION + bootstrap
 - 2026-11-09 — เจ้าของโครงการ: เทียบ alert level ด้วย Decimal ตรง ๆ ไม่ปัดก่อน
-- 2026-11-09 — proposed (draft; ติดตามด้วย draft CR ไม่ลงเลข CR และไม่ลง `_index.md` ตามแนว #934 — รอเจ้าของโครงการยืนยันวิธี track)
+- 2026-11-09 — proposed (draft; ติดตามด้วย draft CR ไม่ลงเลข CR และไม่ลง `_index.md` ตามแนว #934)
+- 2026-11-10 — Approved โดย Soravit Sukkarn (Team Lead) กำหนดหมายเลข CR-246
