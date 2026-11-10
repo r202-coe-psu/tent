@@ -54,8 +54,9 @@ export function buildHouseholdPickupRows(input: {
 	allergyItems: readonly MasterDataItem[];
 }): HouseholdPickupRow[] {
 	const byId = new Map(input.members.map((m) => [m._id, m]));
-	const rows = evaluateHouseholdMealPickup(input).map((status) => {
-		const member = byId.get(status.evacuee_id)!;
+	const rows = evaluateHouseholdMealPickup(input).flatMap((status) => {
+		const member = byId.get(status.evacuee_id);
+		if (!member) return [];
 		const menuTags = deriveRecipientMenuTags(member);
 		const selection: FrontlineRecipientSelection = {
 			recipientType: 'evacuee',
@@ -72,27 +73,29 @@ export function buildHouseholdPickupRows(input: {
 		);
 		const lastDistributedAt =
 			status.status === 'already_received' ? status.last_distributed_at : undefined;
-		return {
-			evacueeId: member._id,
-			label:
-				[member.first_name, member.last_name].filter(Boolean).join(' ') +
-				(member.nickname ? ` (${member.nickname})` : ''),
-			isCollector: member._id === input.collectorId,
-			lastDistributedAt,
-			menuMismatchLabel: menuCheck.isMismatch ? formatMenuTags(menuCheck.menuTags) : null,
-			allergenConflictLabel:
-				allergen.conflicts.length > 0
-					? formatAllergyCodes(allergen.conflicts, input.allergyItems)
-					: null,
-			allergyLabel: formatAllergyCodes(allergen.recipientCodes, input.allergyItems),
-			allergen,
-			menuTags,
-			needsOverride:
-				lastDistributedAt !== undefined ||
-				menuCheck.isMismatch ||
-				allergen.conflicts.length > 0 ||
-				allergen.recipientFreeText.length > 0
-		};
+		return [
+			{
+				evacueeId: member._id,
+				label:
+					[member.first_name, member.last_name].filter(Boolean).join(' ') +
+					(member.nickname ? ` (${member.nickname})` : ''),
+				isCollector: member._id === input.collectorId,
+				lastDistributedAt,
+				menuMismatchLabel: menuCheck.isMismatch ? formatMenuTags(menuCheck.menuTags) : null,
+				allergenConflictLabel:
+					allergen.conflicts.length > 0
+						? formatAllergyCodes(allergen.conflicts, input.allergyItems)
+						: null,
+				allergyLabel: formatAllergyCodes(allergen.recipientCodes, input.allergyItems),
+				allergen,
+				menuTags,
+				needsOverride:
+					lastDistributedAt !== undefined ||
+					menuCheck.isMismatch ||
+					allergen.conflicts.length > 0 ||
+					allergen.recipientFreeText.length > 0
+			}
+		];
 	});
 	// The collector first: they are the one standing at the desk.
 	return rows.sort((a, b) => Number(b.isCollector) - Number(a.isCollector));

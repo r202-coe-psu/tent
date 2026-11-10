@@ -110,7 +110,8 @@
 		})
 	);
 
-	// Explicit picks keyed by collector + member, so a new scan starts from the defaults.
+	// Explicit picks keyed by collector + item + meal + member, so a new scan, or a different item
+	// or meal, starts from the defaults and a typed override reason never follows it.
 	let picks = $state<Record<string, boolean>>({});
 	let overrideReasons = $state<Record<string, string>>({});
 	// Failures belong to the scan that produced them; a new collector starts clean.
@@ -119,7 +120,7 @@
 		items: { evacueeId: string; label: string; message: string }[];
 	}>({ collectorId: '', items: [] });
 	const failures = $derived(failureState.collectorId === collectorId ? failureState.items : []);
-	const key = (evacueeId: string) => `${collectorId}|${evacueeId}`;
+	const key = (evacueeId: string) => `${collectorId}|${item.item_id}|${meal}|${evacueeId}`;
 
 	// Members whose last save failed; they stay ticked for the retry unless their write landed.
 	let retryState = $state<{ collectorId: string; ids: Set<string> }>({
@@ -357,11 +358,11 @@
 	{/if}
 
 	<div class="space-y-1.5">
-		<Label for="food-notes-input" class="text-sm font-semibold text-slate-700">
+		<Label for="household-notes-input" class="text-sm font-semibold text-slate-700">
 			หมายเหตุ (ไม่บังคับ)
 		</Label>
 		<Input
-			id="food-notes-input"
+			id="household-notes-input"
 			type="text"
 			bind:value={notes}
 			class="h-12 text-base"
