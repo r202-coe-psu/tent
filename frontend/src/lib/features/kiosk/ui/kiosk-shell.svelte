@@ -2,11 +2,18 @@
 	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import Clock3 from '@lucide/svelte/icons/clock-3';
+	import { resolve } from '$app/paths';
+	import { languageStore } from '$lib/stores/language.svelte';
 	import { installReaderKeyGuard } from '../application/reader-key-guard';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
-	import { KIOSK_QR_PATH } from '../domain/identity-method';
+	import { isKioskHomePath, KIOSK_LANGUAGE_PATH, KIOSK_QR_PATH } from '../domain/identity-method';
 	import { qrInputPlan } from '../domain/kiosk-hardware';
+	import { buildKioskContextQuery, readKioskDisplayQuery } from '../domain/display-context';
 	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
+	import { KIOSK_LANGUAGE_I18N } from './_constants/kiosk-language.i18n';
+	import KioskFlag from './kiosk-flag.svelte';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 
 	interface Props {
@@ -26,6 +33,8 @@
 		showClock = true,
 		children
 	}: Props = $props();
+
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current).shell);
 
 	let now = $state(new Date());
 	let compactHeader = $state(false);
@@ -63,6 +72,12 @@
 		return () => clearInterval(timer);
 	});
 
+	// Home only: the picker always lands on the method page, so mid-visit it would drop the visit.
+	const showLanguageButton = $derived(isKioskHomePath(page.url.pathname));
+	const languageQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
+	);
+
 	const timeString = $derived(
 		now.toLocaleTimeString(DISPLAY_LOCALE, {
 			timeZone: DISPLAY_TIME_ZONE,
@@ -79,6 +94,20 @@
 		})
 	);
 </script>
+
+{#snippet languageButton(buttonClass: string, flagClass: string)}
+	{#if showLanguageButton}
+		<a
+			href={resolve(`${KIOSK_LANGUAGE_PATH}${languageQuery}`)}
+			aria-label={KIOSK_LANGUAGE_I18N.shellButton.ariaLabel}
+			data-testid="kiosk-language-button"
+			class={`inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white font-semibold whitespace-nowrap text-[#0A2647] no-underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none active:bg-slate-100 ${buttonClass}`}
+		>
+			<KioskFlag code={languageStore.current} class={`shrink-0 rounded-xs ${flagClass}`} />
+			<span>{KIOSK_LANGUAGE_I18N.shellButton.label}</span>
+		</a>
+	{/if}
+{/snippet}
 
 <div
 	data-kiosk-shell
@@ -103,7 +132,7 @@
 						</p>
 						<p
 							class="truncate text-sm leading-tight font-medium text-slate-600 kiosk-portrait:text-lg"
-							aria-label={`ศูนย์พักพิง ${shelterName} ${shelterCode} จุดบริการ ${stationName} เครื่อง ${deviceName}`}
+							aria-label={t.shelterAria(shelterName, shelterCode, stationName, deviceName)}
 						>
 							{shelterName}{#if shelterCode}<span aria-hidden="true"> · {shelterCode}</span>{/if}
 						</p>
@@ -111,10 +140,14 @@
 				</div>
 
 				<div class="flex shrink-0 items-center gap-2">
+					{@render languageButton(
+						'min-h-10 px-2.5 text-sm kiosk-portrait:min-h-12 kiosk-portrait:px-3 kiosk-portrait:text-base',
+						'h-[19px] w-[28px] kiosk-portrait:h-[24px] kiosk-portrait:w-[36px]'
+					)}
 					{#if showClock}
 						<div
 							class="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-sm text-slate-700 kiosk-portrait:min-h-12 kiosk-portrait:px-3 kiosk-portrait:text-base"
-							aria-label={`เวลาปัจจุบัน ${dateString} ${timeString}`}
+							aria-label={t.clockAria(dateString, timeString)}
 						>
 							<Clock3
 								class="h-4 w-4 text-[#0A2647] kiosk-portrait:h-5 kiosk-portrait:w-5"
@@ -130,12 +163,18 @@
 
 	{#if compactHeader}
 		<div
-			class="flex min-h-7 shrink-0 items-center justify-center border-b border-slate-200 bg-white px-3 text-xs font-medium text-slate-600"
+			class="relative flex min-h-12 shrink-0 items-center justify-center border-b border-slate-200 bg-white px-3 text-sm font-medium text-slate-600"
 		>
 			<span class="truncate"
-				>ศูนย์พักพิง {shelterName}{#if shelterCode}
+				>{t.shelterPrefix(shelterName)}{#if shelterCode}
 					· {shelterCode}{/if}</span
 			>
+			{#if showLanguageButton}
+				<!-- Overlaid at the strip's right edge so the shelter name stays centred. -->
+				<div class="absolute top-1/2 right-2 z-10 -translate-y-1/2">
+					{@render languageButton('h-10 px-2.5 text-sm', 'h-[16px] w-[24px]')}
+				</div>
+			{/if}
 		</div>
 	{/if}
 
