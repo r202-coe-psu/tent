@@ -7,7 +7,10 @@
 	import { scannerDeviceInputSchema, type CreatedScannerDevice } from '../domain/scanner.schema';
 	import { useCreateScannerDevice } from '../application/queries';
 	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
-	import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
+	import {
+		KIOSK_DEVICE_SCREEN_TYPES,
+		type KioskDeviceScreenType
+	} from '$lib/features/shared/domain/kiosk-screen';
 	import ShelterScopeSelect from '$lib/components/shelter-scope-select.svelte';
 
 	let {
@@ -26,7 +29,7 @@
 	let name = $state('');
 	let pickedShelterCode = $state<string | undefined>(undefined);
 	let stationName = $state('จุดคัดกรองหลัก');
-	let screenType = $state<KioskScreenType>('compact');
+	let screenType = $state<KioskDeviceScreenType>('compact');
 
 	const shelterCode = $derived(fixedShelterCode ?? pickedShelterCode);
 
@@ -145,6 +148,7 @@
 				<KioskScreenPicker
 					id="create-screen-type"
 					aria-labelledby="screen-type-label"
+					types={KIOSK_DEVICE_SCREEN_TYPES}
 					bind:value={screenType}
 				/>
 				<p class="text-xs text-muted-foreground">

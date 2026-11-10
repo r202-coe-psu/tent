@@ -13,6 +13,10 @@ export type KioskDeviceScreenType = z.infer<typeof kioskDeviceScreenTypeSchema>;
 
 export const KIOSK_SCREEN_TYPES: readonly KioskScreenType[] = kioskScreenTypeSchema.options;
 
+/** The screen types offered when registering or editing a kiosk device (no TV). */
+export const KIOSK_DEVICE_SCREEN_TYPES: readonly KioskDeviceScreenType[] =
+	kioskDeviceScreenTypeSchema.options;
+
 /** A doc stored before screen types existed reads as the compact kiosk. */
 export const DEFAULT_KIOSK_SCREEN_TYPE = 'compact' satisfies KioskDeviceScreenType;
 
