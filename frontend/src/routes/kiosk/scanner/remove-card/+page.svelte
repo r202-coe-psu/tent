@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_SCANNER_I18N } from '../scanner.i18n';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
@@ -20,10 +23,13 @@
 		type KioskHardware
 	} from '$lib/features/kiosk';
 
+	const t = $derived(getTranslation(KIOSK_SCANNER_I18N, languageStore.current));
 	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams), languageStore.current)
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
+	);
 	let gate = $state<GateInput | null>(null);
 	let ready = $state(false);
 	// Null until the scanner client has answered; the member list waits for it (see holdMembers).
@@ -117,7 +123,7 @@
 	}
 </script>
 
-<svelte:head><title>รายงานตัวด้วยบัตรประชาชน — SmartShelter Kiosk</title></svelte:head>
+<svelte:head><title>{t.removeCard.pageTitle} — {t.pageSuffix}</title></svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
 

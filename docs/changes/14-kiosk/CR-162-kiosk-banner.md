@@ -4,7 +4,7 @@ title: Kiosk banner — แบนเนอร์รูปภาพประช�
 status: approved
 date: 2026-10-11
 created: 2026-10-11
-updated: 2026-10-22
+updated: 2026-11-10
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team Lead) — อนุมัติ 2026-10-11 (Asia/Bangkok) scope เดิม · Team Lead อนุมัติส่วนที่ปรับ/เพิ่ม 2026-10-15..17 ทั้งหมด รวม §7 Q1–Q5 ตามข้อเสนอ เมื่อ 2026-10-18 · Team Lead อนุมัติส่วนที่ปรับ 2026-10-21 (banner group) ทั้งหมด รวมการไม่ migrate (§6) เมื่อ 2026-10-22 — merge ได้
 decision_date: 2026-10-22
@@ -72,7 +72,7 @@ migration: >
 
 > **สรุป (TL;DR)**
 >
-> - **เปลี่ยนอะไร:** doc type `kiosk_banner` ใน DB `registry` (รูป + ช่วงเวลา + ลำดับ + ระยะเวลาต่อสไลด์ + ศูนย์เดียว `shelter_code` แก้ไม่ได้ + `screen_type` ตู้เล็ก/ตู้ใหญ่) · `scanner_device` มี `screen_type` + `banner_enabled` รายเครื่อง · `/kiosk` เข้า **attract mode** เมื่อไม่มีการแตะ 30 วินาที — overlay เต็มจอแสดง**รูปอย่างเดียว** (ไม่มี caption / dot / ข้อความ) วนตาม `duration_sec` · แตะจอ = กลับหน้าเลือกวิธี
+> - **เปลี่ยนอะไร:** doc type `kiosk_banner` ใน DB `registry` (รูป + ช่วงเวลา + ลำดับ + ระยะเวลาต่อสไลด์ + ศูนย์เดียว `shelter_code` แก้ไม่ได้ + `screen_type` ตู้เล็ก/ตู้ใหญ่) · `scanner_device` มี `screen_type` + `banner_enabled` รายเครื่อง · `/kiosk` เข้า **attract mode** เมื่อไม่มีการแตะ 30 วินาที — overlay เต็มจอแสดง**รูปอย่างเดียว** (ไม่มี caption / dot / ข้อความ) วนตาม `duration_sec` · แตะจอ = กลับหน้าเลือกวิธี (ปรับ 2026-11-10: กลับหน้าเลือกภาษา + reset เป็นไทย · ไม่มี banner + idle 30 วินาทีก็กลับหน้าเลือกภาษาเช่นกัน — §3.8)
 > - **เพื่อใคร / ทำไม:** SA / SM / `kiosk_staff` ประชาสัมพันธ์ข่าวสารที่ตู้ได้เองโดยไม่ต้องแตะเครื่อง · หน้า banner ใช้ guard + active shelter เดียวกับหน้าจัดการอุปกรณ์ · ไม่เพิ่ม role (`kiosk_staff` ของ CR-165 แทน `banner_staff`)
 > - **Dev ต้องทำอะไร:** feature `kiosk-banners` (back-office `/back-office/kiosks/banners` · `/new` · `/[id]` · `/{compact|portrait}` · อัปโหลดรูป JSON base64) · `POST /api/v1/kiosk/banners` (device auth, กรองตาม `shelter_code` + `screen_type` ของเครื่อง) · signed GET URL ของรูป (key derive จาก `EXTERNAL_API_SECRET`) · overlay บน `/kiosk` · `/kiosk/banners` ใน allowlist ของ `kiosk/app/manager.py` · `BODY_SIZE_LIMIT=4M`
 > - **ลำดับ:** server กำหนด `order` (ฟอร์มไม่มีช่องลำดับ) · banner ใหม่ต่อท้ายของขนาดจอนั้น · จัดลำดับแบบลากวางในหน้าจัดการต่อขนาดจอ + `PUT /api/back-office/kiosk-banners/order`
@@ -141,7 +141,7 @@ migration: >
 | signed image URL             | HMAC ด้วย server-only secret ใหม่                                                  | key derive จาก `EXTERNAL_API_SECRET` เดิม (ไม่มี env ใหม่) · `sig` เป็น hex lowercase                      |
 | kiosk client `allowed_paths` | 8 path (`scanner_client/`)                                                         | 9 path ปัจจุบัน (รวม `/api/v1/kiosk/reprint`) + `/api/v1/kiosk/banners` = 10 path (`kiosk/app/manager.py`) |
 | body upload                  | JSON base64 (FR-KBN-22)                                                            | เหมือนเดิม + `BODY_SIZE_LIMIT=4M` ที่ Node server                                                          |
-| หน้า `/kiosk`                | การ์ดเลือกวิธีค้างตลอด                                                             | idle 30 วินาที + มี banner → attract overlay (รูปอย่างเดียว เต็มพื้นที่); ไม่มี banner = เหมือนเดิม        |
+| หน้า `/kiosk`                | การ์ดเลือกวิธีค้างตลอด                                                             | idle 30 วินาที + มี banner → attract overlay (รูปอย่างเดียว เต็มพื้นที่); ไม่มี banner = เหมือนเดิม (ปรับ 2026-11-10 — §3.8) |
 
 #### 2.1.1 Before → after (2026-10-21)
 
@@ -437,11 +437,11 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 | FR-KBN-40 | client `features/kiosk/data/kiosk-banners.api.ts` ใช้ plain `fetch` (mirror `kiosk-config.api.ts`: `cache: 'no-store'`, timeout 3 s) · ล้มเหลว = คืนรายการว่าง (fail soft) ไม่ cache error                                                                                                      |
 | FR-KBN-41 | ดึงรายการเมื่อเข้า `/kiosk` และทุก 5 นาทีระหว่างอยู่หน้าเดิม                                                                                                                                                                                                                                    |
 | FR-KBN-42 | ไม่มีการแตะ/คลิก/กดปุ่มบนหน้า `/kiosk` 30 วินาที และมี banner ≥1 → แสดง attract overlay เต็มจอ                                                                                                                                                                                                  |
-| FR-KBN-43 | แตะจอ/กดปุ่มใด ๆ ขณะ overlay แสดง → ปิด overlay กลับหน้าเลือกวิธี และ event นั้นไม่ทริกเกอร์การ์ดที่อยู่ข้างใต้ · เสียบบัตร = kiosk client นำทางออกจาก `/kiosk` ตามเดิม                                                                                                                         |
+| FR-KBN-43 | แตะจอ/กดปุ่มใด ๆ ขณะ overlay แสดง → ปิด overlay กลับหน้าเลือกวิธี (ปรับ 2026-11-10: กลับหน้าเลือกภาษา — FR-KBL-01) และ event นั้นไม่ทริกเกอร์การ์ดที่อยู่ข้างใต้ · เสียบบัตร = kiosk client นำทางออกจาก `/kiosk` ตามเดิม                                                                                                                         |
 | FR-KBN-44 | สไลด์เปลี่ยนตาม `duration_sec` ของแต่ละรายการ วนต่อเนื่อง · fade ≤300 ms · รายการเดียว = ไม่หมุน · **ไม่แสดง** dot indicator และข้อความ「แตะหน้าจอเพื่อเริ่มใช้งาน」(ปรับ 2026-10-17 — เดิมมีทั้งสอง · ดู FR-KBR-46)                                                                            |
 | FR-KBN-45 | รูป `object-contain` (ไม่ crop) เต็มพื้นที่ overlay ไม่มี padding · **ไม่แสดง** `caption` ใต้รูป (ปรับ 2026-10-17 · ดู FR-KBR-46) · พอดีไม่ scroll ที่ 1024×600 (`kiosk-compact`) และ 1080×1920 (`kiosk-portrait`) · ใช้ media literal เดียวกับ `kiosk-layout.ts` (ผ่าน `kiosk-layout.test.ts`) |
 | FR-KBN-46 | overlay ต้องไม่บัง `SystemBannerHost` (ประกาศระบบ fixed bottom)                                                                                                                                                                                                                                 |
-| FR-KBN-47 | ไม่มี banner / API ล้มเหลว / รูปโหลดไม่ได้ → ไม่แสดง overlay (หรือข้ามสไลด์ที่รูปเสีย) · ไม่มี JS error · หน้าเลือกวิธีทำงานปกติ                                                                                                                                                                |
+| FR-KBN-47 | ไม่มี banner / API ล้มเหลว / รูปโหลดไม่ได้ → ไม่แสดง overlay (หรือข้ามสไลด์ที่รูปเสีย) · ไม่มี JS error · หน้าเลือกวิธีทำงานปกติ (ปรับ 2026-11-10: idle 30 วินาทีโดยไม่มี overlay → กลับหน้าเลือกภาษา — FR-KBL-02)                                                                                                                                                               |
 
 ### 3.5 Out of scope (owner เคาะ 2026-10-11)
 
@@ -600,6 +600,17 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | FR-KBG-50 | deploy: `pnpm db:sync` ให้ VDU ของ `registry` เป็น `REGISTRY_DESIGN_VERSION` 8 · ไม่เพิ่ม index (ใช้ `kiosk-banner-by-shelter` เดิม) · ไม่มี data migration (§6) | —      |
 
+### 3.8 Idle กับหน้าเลือกภาษา (FR-KBL-01..04 — 2026-11-10)
+
+ตู้มีหน้าเลือกภาษา `/kiosk/language` (ไทย / English · issue #1160) คนถัดไปที่มาใช้ตู้ต้องไม่ได้ภาษาที่คนก่อนเลือกไว้ ข้อนี้จึงเปลี่ยนจุดที่ overlay และ idle พาไป
+
+| ID        | Requirement                                                                                                                                                            |
+| :-------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBL-01 | ปิด attract overlay (แตะจอ/กดปุ่ม) → reset ภาษาเป็นไทย แล้วไปหน้าเลือกภาษา `/kiosk/language` (คง query บริบทตู้) · event นั้นไม่ทริกเกอร์การ์ดข้างใต้ (แทนส่วน "กลับหน้าเลือกวิธี" ของ FR-KBN-43) |
+| FR-KBL-02 | หน้า `/kiosk` ไม่มีการแตะ 30 วินาที และไม่มี banner ให้แสดง (ไม่มี banner / API ล้มเหลว / ปิดด้วยกลุ่ม) → reset ภาษาเป็นไทย แล้วไปหน้าเลือกภาษา (แทนส่วน "หน้าเลือกวิธีทำงานปกติ" ของ FR-KBN-47 และ "ไม่มี banner = เหมือนเดิม" ใน §2.1) |
+| FR-KBL-03 | จบการใช้งานของคนหนึ่ง (กด「กลับหน้าแรก」ในหน้าผลลัพธ์ / หน้าเสร็จสิ้น, ยกเลิก walk-in, idle timeout ใน flow) → reset ภาษาเป็นไทย แล้วไปหน้าเลือกภาษา · ปุ่มย้อนกลับระหว่าง flow กลับหน้าเลือกวิธีโดยคงภาษาเดิม |
+| FR-KBL-04 | เปิดตู้ใหม่ (boot) ที่ `/kiosk` → หน้าเลือกภาษา ภาษาเริ่มเป็นไทย                                                                                                      |
+
 ---
 
 ## 4. Acceptance
@@ -609,7 +620,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - banner ที่ `start_at` อนาคต ไม่ขึ้นจนถึงเวลา · หลัง `end_at` หายภายใน 5 นาที
 - banner ของศูนย์ A ไม่ขึ้นบนตู้ศูนย์ B · `status = inactive` ไม่ขึ้น · เรียงตาม `order` จริง
 - ไฟล์ `.png` ที่เนื้อในไม่ใช่ PNG หรือ >2 MB → reject · `end_at ≤ start_at` → reject ทั้งฟอร์มและ VDU
-- `/kiosk` ไม่มี banner → ไม่มี overlay ไม่มี JS error · มี banner + idle 30 s → overlay · แตะ → กลับหน้าเลือกวิธีโดยไม่เลือกการ์ด
+- `/kiosk` ไม่มี banner → ไม่มี overlay ไม่มี JS error · มี banner + idle 30 s → overlay · แตะ → กลับหน้าเลือกวิธีโดยไม่เลือกการ์ด (ปรับ 2026-11-10: กลับหน้าเลือกภาษา — AC-KBL-01..03)
 - `image_url` หมดอายุหรือแก้ `sig` → 403
 - `POST /api/v1/kiosk/banners` ที่ header ปลอม/เครื่อง inactive → 401 และไม่ query banner
 - kiosk client: allowlist ฉีด header ให้ `POST /api/v1/kiosk/banners` same-origin เท่านั้น
@@ -669,6 +680,15 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 | AC-KBG-17 | เขียน doc `kiosk_banner_group` / `kiosk_banner` v2 ที่รูปผิดเข้า CouchDB ตรง (VDU): `name` ว่าง/>60, `group_id` ผิด prefix | VDU reject (`forbidden`)                                                                                                                | 05, 07        |
 | AC-KBG-18 | หน้า `/groups/new`: เลือกเครื่องที่อยู่กลุ่มอื่น                                                                  | แสดงคำเตือนว่าจะย้ายออกจากกลุ่มเดิม · ยืนยันแล้วเครื่องย้ายตาม AC-KBG-11                                                               | 13, 41        |
 | AC-KBG-19 | `kiosk/tests/test_manager.py` + การเรียก feed จาก kiosk client                                                    | ไม่ต้องแก้ · ผ่านตามเดิม (AC-KBR-13)                                                                                                    | 32            |
+
+### 4.5 Acceptance — idle กับหน้าเลือกภาษา (AC-KBL-01..04 — 2026-11-10)
+
+| ID        | ทำอะไร                                                                    | ผลที่ต้องได้                                                       |
+| :-------- | :------------------------------------------------------------------------ | :----------------------------------------------------------------- |
+| AC-KBL-01 | เลือก English → `/kiosk` มี banner · idle 30 s → overlay → แตะจอ           | ไปหน้าเลือกภาษา · ภาษาเป็นไทย · การ์ดข้างใต้ไม่ถูกเลือก            |
+| AC-KBL-02 | เลือก English → `/kiosk` ไม่มี banner (หรือ banner API ตอบ 404) · idle 30 s | ไปหน้าเลือกภาษา · ภาษาเป็นไทย · ไม่มี JS error                     |
+| AC-KBL-03 | เลือก English → ทำ flow จนหน้าเสร็จสิ้น → กด「Back to home」หรือ idle timeout | ไปหน้าเลือกภาษา · ภาษาเป็นไทย                                      |
+| AC-KBL-04 | เลือก English → เข้า flow → กดปุ่มย้อนกลับ                                  | กลับหน้าเลือกวิธี · ยังเป็น English                                |
 
 ### 4.3 Definition of done
 
@@ -746,3 +766,4 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - 2026-10-21 — **proposed โดยทีม kiosk** (ยังไม่อนุมัติ · แก้ในไฟล์นี้ ไม่เปิด CR ใหม่): เพิ่ม banner group (`kiosk_banner_group`) แทน `banner_enabled` · banner 1 อัน = 1 กลุ่ม · เครื่อง 0 หรือ 1 กลุ่ม (`banner_group_id`) · ข้างในกลุ่มแยก resolution และ `order` ต่อ (`group_id`, `screen_type`) · ลบกลุ่มได้เมื่อไม่มี banner (409) · ไม่ migrate (banner v1 / เครื่องเดิม = ไม่มีกลุ่ม ไม่แสดงบนตู้) · `kiosk_banner` schema_v 1 → 2 · VDU version 8 (FR-KBG-01..50, AC-KBG-01..19 · แทนที่ FR-KBR-35..38 และส่วน order ต่อขนาดจอ) · เหตุผล §1.4 · รอ Team Lead / Project Owner เคาะ
 - 2026-10-22 — **approved** โดย Team Lead: ส่วนที่ปรับ 2026-10-21 (banner group) ทั้งหมด (FR-KBG-01..50, AC-KBG-01..19) รวมการไม่ migrate · merge PR #743 ได้ · ยอมรับว่าตู้เดิมไม่แสดง banner จนกว่าจัดกลุ่ม เพราะ staging / prod ยังไม่ได้ใช้ feature นี้ · ยังไม่ได้ทดสอบบน staging / prod
 - 2026-10-22 — แก้ตาม PR review (#743): `deleteGroup` ลบ doc กลุ่มก่อนแล้วจึงล้าง `banner_group_id` ของเครื่อง (ตาม FR-KBG-06) · กลุ่มที่ไม่พบตอบ `404` ข้อความ `Banner group not found` · หน้าสรุปนับ「แสดงอยู่ / รอแสดง」ตามเวลาปัจจุบัน (refresh ทุก 30 วินาที) · path เดิม `/back-office/kiosks/banners/{compact|portrait}` redirect ไปหน้ารายการกลุ่ม
+- 2026-11-10 — **proposed โดยทีม kiosk** (ยังไม่อนุมัติ · แก้ในไฟล์นี้ ไม่เปิด CR ใหม่): เพิ่มหน้าเลือกภาษาบนตู้ (issue #1160) · ปิด overlay และ idle 30 วินาทีบน `/kiosk` ที่ไม่มี banner → reset เป็นไทย แล้วไปหน้าเลือกภาษา · จบการใช้งาน (กลับหน้าแรก / idle ใน flow) ก็ reset และไปหน้าเลือกภาษา เพื่อไม่ให้ภาษาค้างไปถึงคนถัดไป (FR-KBL-01..04, AC-KBL-01..04 · แทนส่วนนั้นของ FR-KBN-43/47 และ §2.1) · รอ Team Lead / Project Owner เคาะ

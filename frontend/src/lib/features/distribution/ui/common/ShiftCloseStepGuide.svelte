@@ -19,7 +19,7 @@
 </script>
 
 <div class="space-y-3 rounded-xl border border-sky-200 bg-white p-4 shadow-2xs">
-	<ol class="grid grid-cols-3 gap-2" aria-label="ขั้นตอนปิดรอบ">
+	<ol class="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="ขั้นตอนปิดรอบ">
 		{#each SHIFT_CLOSE_STEPS as step, index (step.key)}
 			{@const state = shiftCloseStepState(step.key, guide.current)}
 			<li
@@ -40,7 +40,7 @@
 							: 'bg-slate-200 text-slate-600'}">{index + 1}</span
 					>
 				{/if}
-				<span>{step.label}</span>
+				<span class="min-w-0 break-words">{step.label}</span>
 				<span class="sr-only">
 					({state === 'done' ? 'เสร็จแล้ว' : state === 'current' ? 'ขั้นปัจจุบัน' : 'ยังไม่ถึง'})
 				</span>

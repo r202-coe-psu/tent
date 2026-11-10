@@ -7,7 +7,10 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
+	import { KIOSK_THAID_I18N } from './_constants/kiosk-thaid.i18n';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
@@ -35,7 +38,7 @@
 
 	let { contextQuery, displayShelterCode }: Props = $props();
 
-	const STEPS = ['เปิดกล้องหรือ LINE', 'สแกน QR', 'ยืนยันในแอป ThaiD'] as const;
+	const t = $derived(getTranslation(KIOSK_THAID_I18N, languageStore.current));
 
 	const session = new ThaidSession({
 		create: createKioskThaidSession,
@@ -139,7 +142,7 @@
 </script>
 
 <svelte:head>
-	<title>สแกนด้วย ThaiD — SmartShelter Kiosk</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
@@ -159,7 +162,7 @@
 		class="thaid-scan-page mx-auto flex w-full max-w-4xl flex-1 flex-col gap-3"
 		aria-labelledby="thaid-title"
 	>
-		<KioskCheckInWizard currentStep={2} step2Label="สแกนด้วย ThaiD" />
+		<KioskCheckInWizard currentStep={2} step2Label={t.wizardStep} />
 		<div class="flex justify-start">
 			<KioskBackButton href={homeUrl} />
 		</div>
@@ -170,14 +173,14 @@
 		{/if}
 
 		{#if session.state === 'expired'}
-			<KioskNoticePanel tone="warning" icon={Clock} title="QR หมดอายุ" role="status">
-				<p>กรุณาสร้าง QR ใหม่แล้วสแกนอีกครั้ง</p>
+			<KioskNoticePanel tone="warning" icon={Clock} title={t.expired.title} role="status">
+				<p>{t.expired.body}</p>
 				{#snippet actions()}
 					<Button type="button" onclick={newQr} class={KIOSK_NOTICE_PRIMARY_ACTION}
-						><RefreshCw aria-hidden="true" />สร้าง QR ใหม่</Button
+						><RefreshCw aria-hidden="true" />{t.expired.newQr}</Button
 					>
 					<Button href={homeUrl} variant="outline" class={KIOSK_NOTICE_SECONDARY_ACTION}
-						>กลับหน้าเริ่มต้น</Button
+						>{t.backHome}</Button
 					>
 				{/snippet}
 			</KioskNoticePanel>
@@ -185,22 +188,18 @@
 			<KioskNoticePanel
 				tone="warning"
 				icon={CircleAlert}
-				title={session.errorKind === 'rate_limited'
-					? 'ขอ QR บ่อยเกินไป'
-					: 'ใช้ ThaiD ไม่ได้ในขณะนี้'}
+				title={session.errorKind === 'rate_limited' ? t.rateLimited.title : t.unavailable.title}
 				role="alert"
 			>
 				<p>
-					{session.errorKind === 'rate_limited'
-						? 'กรุณารอสักครู่ แล้วลองอีกครั้ง'
-						: 'ระบบ ThaiD ไม่พร้อมใช้งาน กรุณาลองอีกครั้ง หรือเลือกวิธีอื่น'}
+					{session.errorKind === 'rate_limited' ? t.rateLimited.body : t.unavailable.body}
 				</p>
 				{#snippet actions()}
 					<Button type="button" onclick={newQr} class={KIOSK_NOTICE_PRIMARY_ACTION}
-						><RefreshCw aria-hidden="true" />ลองอีกครั้ง</Button
+						><RefreshCw aria-hidden="true" />{t.retry}</Button
 					>
 					<Button href={homeUrl} variant="outline" class={KIOSK_NOTICE_SECONDARY_ACTION}
-						>กลับหน้าเริ่มต้น</Button
+						>{t.backHome}</Button
 					>
 				{/snippet}
 			</KioskNoticePanel>
@@ -215,14 +214,14 @@
 						{#if session.qrUrl}
 							<img
 								{@attach paintQr(session.qrUrl)}
-								alt="QR สำหรับยืนยันตัวตนด้วย ThaiD"
+								alt={t.qrAlt}
 								class="size-full object-contain"
 							/>
 						{:else}
 							<span
 								class="size-10 animate-spin rounded-full border-[3px] border-slate-300 border-t-[#0A2647] motion-reduce:animate-none"
 								role="status"
-								aria-label="กำลังสร้าง QR"
+								aria-label={t.creatingQr}
 							></span>
 						{/if}
 					</div>
@@ -231,7 +230,7 @@
 							{@attach tickClock}
 							class="flex items-center gap-2 text-base font-semibold text-slate-700 tabular-nums kiosk-portrait:text-2xl"
 						>
-							<Clock class="size-5" aria-hidden="true" />QR หมดอายุใน {countdown}
+							<Clock class="size-5" aria-hidden="true" />{t.expiresIn(countdown)}
 						</p>
 					{/if}
 				</div>
@@ -241,10 +240,10 @@
 						id="thaid-title"
 						class="text-xl font-extrabold tracking-tight text-[#0A2647] sm:text-2xl kiosk-portrait:text-4xl"
 					>
-						สแกน QR ด้วยมือถือ
+						{t.heading}
 					</h1>
 					<ol class="flex flex-col gap-2 kiosk-portrait:gap-4">
-						{#each STEPS as step, index (step)}
+						{#each t.steps as step, index (step)}
 							<li
 								class="flex items-center gap-3 text-lg font-semibold text-slate-800 kiosk-portrait:text-3xl"
 							>

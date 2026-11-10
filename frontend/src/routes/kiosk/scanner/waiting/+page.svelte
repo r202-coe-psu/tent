@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_SCANNER_I18N } from '../scanner.i18n';
 	import {
 		KioskBackButton,
 		KioskCardInsertScene,
@@ -7,11 +10,12 @@
 		KioskReaderPointer
 	} from '$lib/features/kiosk';
 
+	const t = $derived(getTranslation(KIOSK_SCANNER_I18N, languageStore.current));
 	const backUrl = $derived(`/kiosk${page.url.search}`);
 </script>
 
 <svelte:head>
-	<title>เสียบบัตรประชาชน — SmartShelter Kiosk</title>
+	<title>{t.waiting.pageTitle} — {t.pageSuffix}</title>
 </svelte:head>
 
 <section
@@ -31,10 +35,10 @@
 				id="waiting-title"
 				class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 			>
-				เสียบบัตรประชาชน
+				{t.waiting.title}
 			</h1>
 			<p class="mt-1 text-base font-semibold text-slate-700 kiosk-portrait:text-xl">
-				หงายบัตรขึ้น · เอาด้านบาร์โค้ดเข้า
+				{t.waiting.hint}
 			</p>
 		</header>
 
@@ -50,13 +54,13 @@
 					class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:h-6 kiosk-portrait:w-6 kiosk-portrait:border-3"
 					aria-hidden="true"
 				></span>
-				รออ่านบัตร · อย่าถอดบัตร
+				{t.waiting.status}
 			</div>
 		</main>
 	</div>
 </section>
 
-<KioskReaderPointer side="left" label="ช่องเสียบบัตร" />
+<KioskReaderPointer side="left" label={t.waiting.slot} />
 
 <style>
 	@media (max-height: 650px) {

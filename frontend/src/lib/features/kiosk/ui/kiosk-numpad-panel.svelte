@@ -96,7 +96,7 @@
 			height: 100%;
 		}
 
-		.numpad-panel-keys :global(button[aria-label^='ตัวเลข']) {
+		.numpad-panel-keys :global(button[data-digit]) {
 			font-size: 1.5rem;
 		}
 
@@ -136,12 +136,12 @@
 			border-radius: 0.75rem;
 		}
 
-		.numpad-panel-keys :global(button[aria-label^='ตัวเลข']) {
+		.numpad-panel-keys :global(button[data-digit]) {
 			font-size: 2.5rem;
 			line-height: 1;
 		}
 
-		.numpad-panel-keys :global(button:not([aria-label^='ตัวเลข'])) {
+		.numpad-panel-keys :global(button:not([data-digit])) {
 			font-size: 1.25rem;
 			line-height: 1.4;
 		}

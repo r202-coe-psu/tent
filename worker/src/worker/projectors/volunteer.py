@@ -21,6 +21,18 @@ def _ts(value: Any) -> datetime.datetime | None:
         return None
 
 
+def _strip_accepted_from(rec: Any) -> Any:
+    if not isinstance(rec, dict):
+        return rec
+    return {k: v for k, v in rec.items() if k != "accepted_from"}
+
+
+def _strip_skill_verifications(skills: Any) -> dict[str, Any]:
+    if not isinstance(skills, dict):
+        return {}
+    return {str(k): _strip_accepted_from(v) for k, v in skills.items()}
+
+
 def project_volunteer(
     doc: dict[str, Any], *, shelter_code: str
 ) -> tuple[Action, dict[str, Any]]:
@@ -61,8 +73,10 @@ def project_volunteer(
         "skills": [str(s) for s in (doc.get("skills") or [])],
         "organization": doc.get("organization"),
         "identity_verified": bool(doc.get("identity_verified")),
-        "identity_verification": doc.get("identity_verification"),
-        "skill_verifications": doc.get("skill_verifications") or {},
+        "identity_verification": _strip_accepted_from(doc.get("identity_verification")),
+        "skill_verifications": _strip_skill_verifications(
+            doc.get("skill_verifications")
+        ),
         "personnel_type": str(doc.get("personnel_type") or "volunteer"),
         "status": str(doc.get("status") or "active"),
         "updated_at": _ts(doc.get("updated_at")) or datetime.datetime.now(datetime.UTC),
