@@ -3,6 +3,7 @@ id: CR-231
 title: Public family search — บังคับ dialog ยินยอม + จุดประสงค์ และเก็บข้อมูลผู้ค้นหาใน Mongo `audit_events`
 status: proposed
 date: 2026-11-06
+updated: 2026-11-09
 requested_by: Dev Team B
 decided_by: 
 layer: volatile
@@ -12,6 +13,7 @@ affects:
   - docs/data/api-contract.md `POST /public/v1/occupants` (body + 422 + 503 SEARCH_UNAVAILABLE)
   - docs/data/couchdb-mongodb-sync.md §4.0 search_audit inbound (เลิก sync public log เข้า CouchDB)
   - docs/features/public-tier-find-spec.html / public-tier-flow-spec.html (ข้อความ "search_audit เก็บ query text, IP hash")
+  - packages/tent-model/src/tent_model/audit_event.py
   - backend/apiapp/modules/evacuee/{schemas,router,use_case}.py, backend/tests/test_evacuee.py
   - worker/src/worker/inbound/search_audit.py (ยกเลิก/ปิด inbound), worker/tests
   - frontend/src/lib/features/public-portal/{domain,data,ui}, routes/(public)/search, family-search-modal
