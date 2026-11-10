@@ -254,7 +254,7 @@ describe('QrIdCard', () => {
 		const body = render(QrIdCard, { props: base }).body;
 		const tag = body.match(/<p[^>]*>ทดสอบ หนึ่ง<\/p>/)?.[0] ?? '';
 
-		expect(tag).toContain('text-[15pt]');
+		expect(tag).toContain('text-[12pt]');
 		expect(tag).not.toContain('text-[16pt]');
 		expect(tag).toContain('font-bold');
 		expect(tag).toContain('line-clamp-3');

@@ -88,7 +88,7 @@ export function kioskLabelPageCss(): string {
  * Mirrors `QrIdCard`: bold name, zone, then the checklist and the small site address at the bottom.
  */
 export const KIOSK_LABEL_TEXT = {
-	name: { pt: 15, lineHeight: 1.3, weight: 700, maxLines: 3 },
+	name: { pt: 12, lineHeight: 1.3, weight: 700, maxLines: 3 },
 	zone: { pt: 12, lineHeight: 1.3, weight: 700 },
 	/** Emergency contact row under the zone; same face as the checklist, so no extra font load. */
 	emergency: { pt: 9, lineHeight: 1.3, weight: 500 },

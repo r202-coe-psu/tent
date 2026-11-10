@@ -171,11 +171,11 @@ describe('renderKioskLabelPng', () => {
 	it('draws and preloads the name at 15 pt bold', async () => {
 		await renderKioskLabelPng(label);
 
-		// 15 pt at 203 dpi = 42.2916... printer dots.
+		// 12 pt at 203 dpi = 33.8333... printer dots.
 		const nameAt = harness.fakeContext.fillText.mock.calls.findIndex(
 			([text]) => text === label.name
 		);
-		expect(harness.fillTextFonts[nameAt]).toMatch(/^700 42\.29\d*px /);
+		expect(harness.fillTextFonts[nameAt]).toMatch(/^700 33\.83\d*px /);
 		expect(harness.fontsLoaded).toContain(harness.fillTextFonts[nameAt]);
 	});
 

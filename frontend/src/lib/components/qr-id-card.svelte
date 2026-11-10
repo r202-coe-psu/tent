@@ -70,7 +70,7 @@
 				<span>{VULNERABILITY_MARKER_TEXT[marker]}</span>
 			</div>
 		{/if}
-		<p class="line-clamp-3 text-[15pt] leading-[1.3] font-bold [overflow-wrap:anywhere]">{name}</p>
+		<p class="line-clamp-3 text-[12pt] leading-[1.3] font-bold [overflow-wrap:anywhere]">{name}</p>
 		{#each lines as line (line)}
 			<p class="text-[10pt] leading-[1.3] font-medium [overflow-wrap:anywhere]">{line}</p>
 		{/each}
