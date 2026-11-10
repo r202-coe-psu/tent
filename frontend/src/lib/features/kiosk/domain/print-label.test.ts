@@ -22,7 +22,7 @@ import {
 	KIOSK_LABEL_LINK_GAP_MM,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
-	kioskLabelBand,
+	kioskLabelBars,
 	kioskLabelDots,
 	kioskLabelLayout,
 	kioskLabelPageCss,
@@ -188,35 +188,55 @@ describe('kioskLabelLayout', () => {
 	});
 });
 
-describe('kioskLabelBand', () => {
+describe('kioskLabelBars', () => {
 	const size = kioskQrPrintSize(QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size);
 	const layout = kioskLabelLayout(size.widthPx);
-	const band = kioskLabelBand(size.widthPx);
 	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
 
-	it('is as wide as the QR image, aligned with its left and right edges', () => {
-		expect(band.x).toBe(layout.qr.x);
-		expect(band.width).toBe(size.widthPx);
+	it('gives red two stacked bars and yellow one', () => {
+		expect(kioskLabelBars(size.widthPx, 'red')).toHaveLength(2);
+		expect(kioskLabelBars(size.widthPx, 'yellow')).toHaveLength(1);
 	});
 
-	it('is one 9 pt row (33 dots) tall', () => {
-		expect(band.height).toBe(33);
+	it('makes every bar as wide as the QR image, aligned with its left and right edges', () => {
+		for (const marker of ['red', 'yellow'] as const) {
+			for (const bar of kioskLabelBars(size.widthPx, marker)) {
+				expect(bar.x).toBe(layout.qr.x);
+				expect(bar.width).toBe(size.widthPx);
+			}
+		}
 	});
 
-	it('sits above the QR image, clear of its modules and quiet zone', () => {
-		const gap = layout.qr.y - (band.y + band.height);
-		// 2 mm gap = 16 dots; with the image's 2 margin modules (8 dots each) that is the full
-		// 4-module quiet zone, as under the QR where the caption keeps the same 2 mm.
-		expect(gap).toBe(16);
-		expect(size.margin * size.dotsPerModule + gap).toBeGreaterThanOrEqual(
-			KIOSK_QR_QUIET_ZONE_MODULES * size.dotsPerModule
-		);
+	it('makes every bar 1.5 mm (12 dots) thick', () => {
+		for (const marker of ['red', 'yellow'] as const) {
+			for (const bar of kioskLabelBars(size.widthPx, marker)) expect(bar.height).toBe(12);
+		}
 	});
+
+	it('stacks the red bars 1 mm (8 dots) apart, top bar first', () => {
+		const [top, bottom] = kioskLabelBars(size.widthPx, 'red');
+		expect(bottom!.y - (top!.y + top!.height)).toBe(8);
+	});
+
+	it.each(['red', 'yellow'] as const)(
+		'ends the lowest %s bar 2 mm (16 dots) above the QR image, keeping its quiet zone',
+		(marker) => {
+			const bars = kioskLabelBars(size.widthPx, marker);
+			const last = bars.at(-1)!;
+			const gap = layout.qr.y - (last.y + last.height);
+			// With the image's 2 margin modules (8 dots each) 16 dots is the full 4-module quiet zone,
+			// as under the QR where the caption keeps the same 2 mm.
+			expect(gap).toBe(16);
+			expect(size.margin * size.dotsPerModule + gap).toBeGreaterThanOrEqual(
+				KIOSK_QR_QUIET_ZONE_MODULES * size.dotsPerModule
+			);
+		}
+	);
 
 	it('stays inside the label padding even for the largest QR, so the QR never has to shrink', () => {
 		const largest = Math.floor(mmToDots(kioskQrBoxMm()));
 		expect(largest).toBeGreaterThanOrEqual(mmToDots(KIOSK_QR_MIN_MM));
-		expect(kioskLabelBand(largest).y).toBeGreaterThanOrEqual(padding);
+		expect(kioskLabelBars(largest, 'red')[0]!.y).toBeGreaterThanOrEqual(padding);
 	});
 });
 

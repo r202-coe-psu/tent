@@ -1,6 +1,6 @@
 import {
-	VULNERABILITY_BAND_TEXT,
-	VULNERABILITY_MARKER_TEXT
+	VULNERABILITY_MARKER_TEXT,
+	type VulnerabilityMarker
 } from '$lib/utils/vulnerability-marker';
 import { KIOSK_LABEL_MM, KIOSK_PRINT_DPI, kioskLabelDots, mmToDots } from '$lib/utils/label-size';
 
@@ -116,21 +116,22 @@ export const KIOSK_LABEL_MARKER = {
 	textGapMm: 1.5
 } as const;
 /**
- * Band right above the QR, as wide as the QR image, so staff see the level at a glance. Red is
- * solid black with white words, yellow a black outline with black words: both survive the
- * thermal printer's black/white-only output. Same row height and face as the marker row (9 pt,
- * `KIOSK_LABEL_TEXT.emergency`), so no extra font load. Sits in the vertical space the centred QR
- * leaves above it, so the QR keeps its size and position with or without it.
+ * Solid black bars right above the QR, as wide as the QR image, so staff see the level at a glance
+ * without reading: red two stacked bars, yellow one. Plain black, no words (those stay in the marker
+ * row), so they survive the thermal printer's black/white-only output. They sit in the vertical
+ * space the centred QR leaves above it, so the QR keeps its size and position with or without them.
  */
 export const KIOSK_LABEL_BAND = {
-	text: VULNERABILITY_BAND_TEXT,
+	/** Thickness of one bar. */
+	barMm: 1.5,
+	/** Between the two red bars. */
+	barGapMm: 1,
 	/**
-	 * Band → QR image. With the image's 2 margin modules this keeps the 4-module quiet zone, as the
-	 * caption gap under the QR does.
+	 * Lowest bar → QR image. With the image's 2 margin modules this keeps the 4-module quiet zone, as
+	 * the caption gap under the QR does.
 	 */
 	gapMm: 2,
-	/** Outline of the yellow band, the same weight as the yellow triangle. */
-	strokeMm: KIOSK_LABEL_MARKER.triangleStrokeMm
+	bars: { red: 2, yellow: 1 }
 } as const;
 /** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
@@ -274,13 +275,22 @@ export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
 	};
 }
 
-export type KioskLabelBand = { x: number; y: number; width: number; height: number };
+export type KioskLabelBar = { x: number; y: number; width: number; height: number };
 
-/** Whole-dot box of the level band above a `qrPx` QR: the QR's width, one 9 pt row tall. */
-export function kioskLabelBand(qrPx: number): KioskLabelBand {
+/**
+ * Whole-dot boxes of the level bars above a `qrPx` QR, top bar first: each as wide as the QR, the
+ * lowest one `KIOSK_LABEL_BAND.gapMm` above it.
+ */
+export function kioskLabelBars(qrPx: number, marker: VulnerabilityMarker): KioskLabelBar[] {
 	const { qr } = kioskLabelLayout(qrPx);
-	const { pt, lineHeight } = KIOSK_LABEL_TEXT.emergency;
-	const height = Math.round(ptToDots(pt) * lineHeight);
-	const gap = Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm));
-	return { x: qr.x, y: qr.y - gap - height, width: qrPx, height };
+	const height = Math.round(mmToDots(KIOSK_LABEL_BAND.barMm));
+	const pitch = height + Math.round(mmToDots(KIOSK_LABEL_BAND.barGapMm));
+	const count = KIOSK_LABEL_BAND.bars[marker];
+	const bottom = qr.y - Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm)) - height;
+	return Array.from({ length: count }, (_, index) => ({
+		x: qr.x,
+		y: bottom - (count - 1 - index) * pitch,
+		width: qrPx,
+		height
+	}));
 }

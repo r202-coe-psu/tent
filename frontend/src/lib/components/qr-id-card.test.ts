@@ -169,58 +169,81 @@ describe('QrIdCard', () => {
 		}
 	});
 
-	describe('level band above the QR', () => {
-		const bandTag = (body: string, marker: string) =>
-			body.match(new RegExp(`<[^>]*data-marker-band="${marker}"[^>]*>`))?.[0] ?? '';
+	describe('level bars above the QR', () => {
+		const barsTag = (body: string, marker: string) =>
+			body.match(new RegExp(`<[^>]*data-marker-bars="${marker}"[^>]*>`))?.[0] ?? '';
+		/** The container's markup, from its opening tag to the QR image that follows it. */
+		const barsHtml = (body: string, marker: string) =>
+			body.slice(body.indexOf(barsTag(body, marker)), body.indexOf('<img'));
+		const barCount = (body: string, marker: string) =>
+			(barsHtml(body, marker).match(/bg-black/g) ?? []).length;
 
-		it('prints the red band as solid black with white words, as wide as the QR', () => {
-			const body = render(QrIdCard, { props: { ...base, marker: 'red' } }).body;
-			const tag = bandTag(body, 'red');
+		it('prints red as two solid black bars and yellow as one, aria-hidden, as wide as the QR', () => {
+			for (const [marker, count] of [
+				['red', 2],
+				['yellow', 1]
+			] as const) {
+				const body = render(QrIdCard, { props: { ...base, marker } }).body;
+				const tag = barsTag(body, marker);
 
-			expect(tag).toContain('aria-hidden="true"');
-			expect(tag).toContain('bg-black');
-			expect(tag).toContain('text-white');
-			expect(tag).toContain('w-full');
-			expect(tag).toContain('justify-center');
-			expect(body).toMatch(/data-marker-band="red"[^>]*>ดูแลเร่งด่วน</);
+				expect(tag).toContain('aria-hidden="true"');
+				expect(tag).toContain('w-full');
+				expect(barCount(body, marker)).toBe(count);
+				// Each bar is 1.5 mm thick and the full width of the container.
+				const bars = barsHtml(body, marker).match(/<div[^>]*bg-black[^>]*>/g) ?? [];
+				expect(bars).toHaveLength(count);
+				for (const bar of bars) {
+					expect(bar).toContain('h-[1.5mm]');
+					expect(bar).toContain('w-full');
+				}
+			}
 		});
 
-		it('prints the yellow band as a black outline with black words, 0.4 mm like the triangle', () => {
-			const body = render(QrIdCard, { props: { ...base, marker: 'yellow' } }).body;
-			const tag = bandTag(body, 'yellow');
+		it('prints no words in the bars', () => {
+			for (const marker of ['red', 'yellow'] as const) {
+				const body = render(QrIdCard, { props: { ...base, marker } }).body;
+				const html = barsHtml(body, marker);
 
-			expect(tag).toContain('aria-hidden="true"');
-			expect(tag).toContain('border-[0.4mm]');
-			expect(tag).toContain('border-black');
-			expect(tag).not.toContain('bg-black');
-			expect(tag).not.toContain('text-white');
-			expect(body).toMatch(/data-marker-band="yellow"[^>]*>ดูแลพิเศษ</);
+				expect(barsTag(body, marker)).not.toBe('');
+				expect(html.replace(/<[^>]*>/g, '').trim()).toBe('');
+			}
+		});
+
+		it('keeps the level words only in the marker row, not as separate band text', () => {
+			const red = render(QrIdCard, { props: { ...base, marker: 'red' } }).body;
+			const yellow = render(QrIdCard, { props: { ...base, marker: 'yellow' } }).body;
+
+			expect(red.match(/ดูแลเร่งด่วน/g)).toHaveLength(2);
+			expect(yellow.match(/ดูแลพิเศษ/g)).toHaveLength(2);
+			expect(red).not.toContain('data-marker-band');
+			expect(yellow).not.toContain('data-marker-band');
 		});
 
 		it.each(['red', 'yellow'] as const)(
-			'puts the %s band in the QR column, above the QR image, 2 mm clear of it',
+			'puts the %s bars in the QR column, above the QR image, 1 mm apart and 2 mm clear of it',
 			(marker) => {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
-				const at = body.indexOf('data-marker-band');
+				const at = body.indexOf('data-marker-bars');
 
 				expect(at).toBeGreaterThan(body.indexOf('data-marker="'));
 				expect(at).toBeGreaterThan(body.indexOf('ทดสอบ หนึ่ง'));
 				expect(at).toBeLessThan(body.indexOf('<img'));
-				const tag = bandTag(body, marker);
+				const tag = barsTag(body, marker);
 				// Absolutely placed over the QR, like the caption below it, so the QR does not move.
 				expect(tag).toContain('absolute');
 				expect(tag).toContain('bottom-full');
 				expect(tag).toContain('mb-[2mm]');
-				expect(tag).toContain('text-[9pt]');
+				expect(tag).toContain('gap-[1mm]');
 				expect(body).toContain('size-(--qr-size)');
 			}
 		);
 
-		it('prints no band when there is no level', () => {
+		it('prints no bars when there is no level', () => {
 			for (const marker of [null, undefined]) {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
 
-				expect(body).not.toContain('data-marker-band');
+				expect(body).not.toContain('data-marker-bars');
+				expect(body).not.toContain('bg-black');
 				expect(body).not.toContain('ดูแลเร่งด่วน');
 				expect(body).not.toContain('ดูแลพิเศษ');
 			}
