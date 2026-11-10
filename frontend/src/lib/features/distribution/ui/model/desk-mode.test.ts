@@ -98,7 +98,7 @@ describe('modePendingCount', () => {
 			ticket('supplies', 'COMPLETED'),
 			ticket('food', 'IN_TRANSIT')
 		];
-		expect(modePendingCount(tickets, 'supplies')).toBe(3);
+		expect(modePendingCount(tickets, 'supplies')).toBe(2);
 		expect(modePendingCount(tickets, 'food')).toBe(1);
 	});
 
@@ -108,9 +108,9 @@ describe('modePendingCount', () => {
 });
 
 describe('needsCloseOutAction', () => {
-	it('is true only after shift close or a verified return', () => {
+	it('is true only after shift close; a verified return is the warehouse’s to finish', () => {
 		expect(needsCloseOutAction({ status: 'SHIFT_CLOSED' })).toBe(true);
-		expect(needsCloseOutAction({ status: 'RETURN_COMPLETED' })).toBe(true);
+		expect(needsCloseOutAction({ status: 'RETURN_COMPLETED' })).toBe(false);
 		expect(needsCloseOutAction({ status: 'DISTRIBUTING' })).toBe(false);
 	});
 });
