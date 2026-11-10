@@ -116,13 +116,27 @@ describe('referral-list accessibility', () => {
 		expect(openTag(tabElement(body, 'ขาเข้า'))).toContain('aria-selected="false"');
 	});
 
-	it('shows the load-more button and search scope hint only when more rows exist', () => {
-		const more = render(ReferralList, { props: { referrals: [draftReferral], hasMore: true } });
-		expect(more.body).toContain('โหลดเพิ่ม');
-		expect(more.body).not.toContain('ไม่มีรายการเพิ่มเติม');
-		expect(body).toContain('ไม่มีรายการเพิ่มเติม');
-		expect(body).toContain('แสดง 1 รายการ');
-		expect(body).not.toContain('จากทั้งหมด');
+	it('shows previous/next in a labelled nav, disabled at the ends', () => {
+		// aria-disabled keeps the button focusable when the last page is reached.
+		const DISABLED_ATTR = /aria-disabled="true"/;
+		const nav = (html: string) =>
+			html.slice(html.indexOf('<nav aria-label="เปลี่ยนหน้ารายการส่งต่อ"'));
+		const button = (html: string, label: string) => {
+			const end = nav(html).indexOf(label);
+			return nav(html).slice(nav(html).lastIndexOf('<button', end), end);
+		};
+		expect(body).toContain('หน้า 1 · แสดง 1 รายการ');
+		expect(button(body, 'ก่อนหน้า')).toMatch(DISABLED_ATTR);
+		expect(button(body, 'ถัดไป')).toMatch(DISABLED_ATTR);
+
+		const { body: mid } = render(ReferralList, {
+			props: { referrals: [draftReferral], page: 2, hasPrev: true, hasNext: true, search: 'สม' }
+		});
+		expect(mid).toContain('หน้า 2');
+		expect(button(mid, 'ก่อนหน้า')).not.toMatch(DISABLED_ATTR);
+		expect(button(mid, 'ถัดไป')).not.toMatch(DISABLED_ATTR);
+		expect(mid).toContain('ค้นหาเฉพาะรายการในหน้านี้');
+		expect(body).not.toContain('ค้นหาเฉพาะรายการในหน้านี้');
 	});
 
 	it('counts referrals, not collapsed batches, in the footer', () => {
@@ -147,13 +161,27 @@ describe('referral-list accessibility', () => {
 		expect(html).toContain('แสดง 4 รายการ');
 	});
 
-	it('shows a role=alert load-more error while keeping the button', () => {
+	it('turns both buttons off while the next page loads and announces the page', () => {
 		const { body: html } = render(ReferralList, {
-			props: { referrals: [draftReferral], hasMore: true, isLoadMoreError: true }
+			props: {
+				referrals: [draftReferral],
+				page: 2,
+				hasPrev: true,
+				hasNext: true,
+				isFetchingNext: true
+			}
 		});
-		expect(html).toMatch(/role="alert"[^>]*>[^<]*โหลดรายการเพิ่มไม่สำเร็จ/);
-		expect(html).toContain('โหลดเพิ่ม');
-		expect(body).not.toContain('โหลดรายการเพิ่มไม่สำเร็จ');
+		expect(html.match(/aria-disabled="true"/g)).toHaveLength(2);
+		expect(html).toMatch(/role="status"[^>]*>หน้า 2/);
+	});
+
+	it('shows a role=alert next-page error while keeping the button', () => {
+		const { body: html } = render(ReferralList, {
+			props: { referrals: [draftReferral], hasNext: true, isNextError: true }
+		});
+		expect(html).toMatch(/role="alert"[^>]*>[^<]*โหลดหน้าถัดไปไม่สำเร็จ/);
+		expect(html).toContain('ถัดไป');
+		expect(body).not.toContain('โหลดหน้าถัดไปไม่สำเร็จ');
 	});
 });
 

@@ -94,7 +94,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(alert).toHaveCount(0);
 	});
 
-	test('#552 loads more rows on demand until the list ends', async ({ page }) => {
+	test('#1266 pages through server pages with previous/next', async ({ page }) => {
 		const store = newReferralStore(
 			Array.from({ length: 60 }, (_, i) =>
 				referralFixture({
@@ -108,14 +108,22 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
 
-		await expect(page.getByText('แสดง 50 รายการ')).toBeVisible({ timeout: 20_000 });
-		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
-		await expect(page.getByText('แสดง 60 รายการ')).toBeVisible();
-		await expect(page.getByText('ไม่มีรายการเพิ่มเติม')).toBeVisible();
-		await expect(page.getByRole('button', { name: 'โหลดเพิ่ม' })).toHaveCount(0);
+		await expect(page.getByText('หน้า 1 · แสดง 50 รายการ')).toBeVisible({ timeout: 20_000 });
+		await expect(page.getByRole('button', { name: 'ก่อนหน้า' })).toBeDisabled();
+		await page.getByRole('button', { name: 'ถัดไป' }).click();
+		await expect(page.getByText('หน้า 2 · แสดง 10 รายการ')).toBeVisible();
+		await expect(page).toHaveURL(/page=2/);
+		await expect(page.getByRole('link', { name: /ลำดับ 0\b/ })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'ถัดไป' })).toBeDisabled();
+
+		await page.getByRole('button', { name: 'ก่อนหน้า' }).click();
+		await expect(page.getByText('หน้า 1 · แสดง 50 รายการ')).toBeVisible();
+		await expect(page).not.toHaveURL(/page=/);
 	});
 
-	test('#552 a failed load-more shows an inline error and the button retries', async ({ page }) => {
+	test('#1266 a failed next page shows an inline error and the button retries', async ({
+		page
+	}) => {
 		const store = newReferralStore(
 			Array.from({ length: 60 }, (_, i) =>
 				referralFixture({
@@ -130,18 +138,18 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(page.getByText('แสดง 50 รายการ')).toBeVisible({ timeout: 20_000 });
 
 		store.pageFail = true;
-		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
+		await page.getByRole('button', { name: 'ถัดไป' }).click();
 		await expect(
-			page.getByRole('alert').filter({ hasText: 'โหลดรายการเพิ่มไม่สำเร็จ' })
+			page.getByRole('alert').filter({ hasText: 'โหลดหน้าถัดไปไม่สำเร็จ' })
 		).toBeVisible();
-		await expect(page.getByText('แสดง 50 รายการ')).toBeVisible();
+		await expect(page.getByText('หน้า 1 · แสดง 50 รายการ')).toBeVisible();
 
 		store.pageFail = false;
-		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
-		await expect(page.getByText('แสดง 60 รายการ')).toBeVisible();
-		await expect(
-			page.getByRole('alert').filter({ hasText: 'โหลดรายการเพิ่มไม่สำเร็จ' })
-		).toHaveCount(0);
+		await page.getByRole('button', { name: 'ถัดไป' }).click();
+		await expect(page.getByText('หน้า 2 · แสดง 10 รายการ')).toBeVisible();
+		await expect(page.getByRole('alert').filter({ hasText: 'โหลดหน้าถัดไปไม่สำเร็จ' })).toHaveCount(
+			0
+		);
 	});
 
 	test('#548 detail load failure shows an error with retry and a way back', async ({ page }) => {
@@ -422,14 +430,14 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(page).not.toHaveURL(/dir=in/);
 	});
 
-	test('#575 list -> batch -> detail, browser back returns to the same tab and loaded rows', async ({
+	test('#575 list -> batch -> detail, browser back returns to the same tab and page', async ({
 		page
 	}) => {
 		const batch = {
 			shelter_code: MOCK_DEST,
 			to_shelter_code: MOCK_SHELTER,
 			reason: 'ชุดทดสอบ',
-			created_at: '2026-10-14T09:00:30.000Z'
+			created_at: '2026-10-14T07:00:30.000Z'
 		};
 		const store = newReferralStore([
 			referralFixture({
@@ -454,8 +462,8 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals?dir=in&status=sent');
-		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
-		await expect(page.getByText('แสดง 57 รายการ')).toBeVisible({ timeout: 20_000 });
+		await page.getByRole('button', { name: 'ถัดไป' }).click();
+		await expect(page.getByText('หน้า 2 · แสดง 7 รายการ')).toBeVisible({ timeout: 20_000 });
 
 		await page.getByRole('link', { name: /ชุดส่งต่อ 2 คน/ }).click();
 		await expect(page).toHaveURL(/\/batch$/);
@@ -467,12 +475,12 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await page.goBack();
 		await expect(page).toHaveURL(/\/batch$/);
 		await page.goBack();
-		await expect(page).toHaveURL(/\/back-office\/referrals\?dir=in&status=sent$/);
+		await expect(page).toHaveURL(/\/back-office\/referrals\?dir=in&status=sent&page=2$/);
 		await expect(page.getByRole('tab', { name: 'ขาเข้า' })).toHaveAttribute(
 			'aria-selected',
 			'true'
 		);
-		await expect(page.getByText('แสดง 57 รายการ')).toBeVisible();
+		await expect(page.getByText('หน้า 2 · แสดง 7 รายการ')).toBeVisible();
 	});
 
 	test('#575 the back link from a detail opened from the list keeps the list state', async ({
