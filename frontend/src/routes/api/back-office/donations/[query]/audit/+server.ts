@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
-	authorizeWarehouse,
+	authorizeDonation,
 	findDonationByQuery,
 	isInCallerScope,
 	routeErrorResponse
@@ -19,7 +19,7 @@ import { isAuditEntry, type AuditEntry } from '$lib/features/shared';
  */
 export const GET: RequestHandler = async ({ params, request }) => {
 	try {
-		const caller = await authorizeWarehouse(request.headers.get('cookie'));
+		const caller = await authorizeDonation(request.headers.get('cookie'));
 		const { query } = params;
 		if (!query) {
 			return json({ success: false, error: 'Query parameter is required' }, { status: 400 });

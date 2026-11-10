@@ -512,6 +512,86 @@ describe('distribution-workflow', () => {
 		).rejects.toThrow(/already received a meal/);
 	});
 
+	it('logs a staff recipient by user id and blocks their repeat meal', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-STAFF1',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const staffInput = {
+			item_id: 'item:curry',
+			qty: '1',
+			recipient_type: 'staff' as const,
+			recipient_id: 'user:somchai',
+			menu_check: { recipient_tags: null, menu: { dietary: [], age_group: 'ALL' } }
+		};
+
+		const log = await recordFoodDistribution(ticket._id, staffInput, POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+		expect(log.recipient_type).toBe('staff');
+		expect(log.recipient_id).toBe('user:somchai');
+
+		await expect(
+			recordFoodDistribution(ticket._id, staffInput, POS_CTX, { ticketRepo, logRepo })
+		).rejects.toThrow(/already received a meal/);
+	});
+
+	it('lets a different staff member receive the same meal', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-STAFF2',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const staffInput = (recipient_id: string) => ({
+			item_id: 'item:curry',
+			qty: '1',
+			recipient_type: 'staff' as const,
+			recipient_id
+		});
+		await recordFoodDistribution(ticket._id, staffInput('user:somchai'), POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+
+		const second = await recordFoodDistribution(ticket._id, staffInput('user:somsri'), POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+		expect(second.recipient_id).toBe('user:somsri');
+	});
+
 	it('scopes food entitlement to the Thailand calendar day and ignores voided logs', async () => {
 		const ticket = await ticketRepo.create(
 			{
@@ -759,6 +839,100 @@ describe('distribution-workflow', () => {
 		expect(log.status).toBe('fulfilled');
 		expect(log.is_expired_warning).toBe(false);
 		expect(logRepo.logs.size).toBe(1);
+	});
+
+	describe('expired Person QR override (CR-233 A1)', () => {
+		const qrOverride = {
+			issued_at: '2026-11-08T06:52:00.000Z',
+			current_printed_at: '2026-11-08T06:53:00.000Z',
+			overridden_at: '2026-11-08T07:00:00.000Z'
+		};
+		const evacuee = {
+			recipient_type: 'evacuee' as const,
+			recipient_id: 'evacuee:01JEVACUEE0000000000000020'
+		};
+
+		it('stamps the acting user on the audit and writes schema_v 3 for a food handout', async () => {
+			const ticket = await createFoodTicket('item:rice_qr');
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:rice_qr', qty: '1', ...evacuee, recipient_qr_override: qrOverride },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.schema_v).toBe(3);
+			expect(log.recipient_qr_override).toEqual({
+				...qrOverride,
+				overridden_by: POS_CTX.createdBy
+			});
+		});
+
+		it('keeps schema_v 2 and no audit when the QR was not overridden', async () => {
+			const ticket = await createFoodTicket('item:rice_plain');
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:rice_plain', qty: '1', ...evacuee },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.schema_v).toBe(2);
+			expect(log.recipient_qr_override).toBeUndefined();
+		});
+
+		it('records the audit for a supplies handout too', async () => {
+			const ticket = await ticketRepo.create(
+				{
+					ticket_no: 'TKT-SUP-QR',
+					requisition_type: 'supplies',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:soap_qr',
+							item_name: 'Soap',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: '10',
+							allocated_qty: '10'
+						}
+					]
+				},
+				POS_CTX
+			);
+
+			const log = await recordSuppliesDistribution(
+				ticket._id,
+				{ item_id: 'item:soap_qr', qty: '1', ...evacuee, recipient_qr_override: qrOverride },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.schema_v).toBe(3);
+			expect(log.recipient_qr_override?.overridden_by).toBe(POS_CTX.createdBy);
+		});
+
+		it('refuses the audit on a non-evacuee recipient and writes nothing', async () => {
+			const ticket = await createFoodTicket('item:rice_out');
+
+			await expect(
+				recordFoodDistribution(
+					ticket._id,
+					{
+						item_id: 'item:rice_out',
+						qty: '1',
+						recipient_type: 'outside',
+						recipient_qr_override: qrOverride
+					},
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				)
+			).rejects.toThrow();
+			expect(logRepo.logs.size).toBe(0);
+		});
 	});
 
 	describe('recipient allergy ↔ menu allergens (#607 FR-MRM-08)', () => {
@@ -1038,6 +1212,43 @@ describe('distribution-workflow', () => {
 			POS_CTX,
 			{ ticketRepo, logRepo }
 		);
+		expect(loanLog.is_returnable).toBe(true);
+		expect(loanLog.status).toBe('active');
+	});
+
+	it('lets staff borrow a returnable item under their user id (FR-SQR-32)', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-STAFF1',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:supplies',
+				items: [
+					{
+						item_id: 'item:radio',
+						item_name: 'Radio',
+						type_class: 'EQUIPMENT',
+						returnable: true,
+						requested_qty: '5',
+						allocated_qty: '5'
+					}
+				]
+			},
+			POS_CTX
+		);
+
+		const loanLog = await recordSuppliesDistribution(
+			ticket._id,
+			{
+				item_id: 'item:radio',
+				qty: '1',
+				recipient_type: 'staff',
+				recipient_id: 'user:somchai'
+			},
+			POS_CTX,
+			{ ticketRepo, logRepo }
+		);
+		expect(loanLog.recipient_id).toBe('user:somchai');
 		expect(loanLog.is_returnable).toBe(true);
 		expect(loanLog.status).toBe('active');
 	});

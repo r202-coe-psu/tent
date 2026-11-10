@@ -176,21 +176,49 @@ export async function decodeQrImage(page: Page, img: Locator): Promise<string> {
 	return candidate;
 }
 
-/** On the print screen, read each member's evacuee id from their Person QR. */
-export async function idsFromPrintScreen(
-	page: Page,
-	people: OnsitePerson[]
-): Promise<Record<string, string>> {
+/**
+ * On the print screen, check every member has a label preview. CR-233: the preview carries a
+ * placeholder, not a usable Person QR — a QR is issued only when staff press print, so the
+ * evacuee id can no longer be read from the image (use {@link evacueeIdsFromSearch}).
+ */
+export async function expectPrintScreen(page: Page, people: OnsitePerson[]): Promise<void> {
 	await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
 		timeout: 30_000
 	});
 	await expect(page.getByText(`${people.length} คน`, { exact: true })).toBeVisible();
-	const ids: Record<string, string> = {};
 	for (const p of people) {
 		const qr = page.getByAltText(`QR Code สำหรับ ${fullName(p)}`);
 		await expect(qr).toBeVisible({ timeout: 15_000 });
-		ids[p.firstName] = await decodeQrImage(page, qr);
-		expect(ids[p.firstName]).toMatch(/^evacuee:/);
+		expect(await decodeQrImage(page, qr)).toBe('PREVIEW-QR-NOT-ISSUED');
+	}
+}
+
+/**
+ * Evacuee ids (`evacuee:{ULID}`), read from the profile URL the Station 1 search result opens.
+ * The caller must be free to leave the current page.
+ */
+export async function evacueeIdsFromSearch(
+	page: Page,
+	people: OnsitePerson[]
+): Promise<Record<string, string>> {
+	const ids: Record<string, string> = {};
+	for (const p of people) {
+		await expect(async () => {
+			await searchStation1(page, p.nationalId);
+			await expect(page.getByText('กำลังค้นหา...')).toHaveCount(0, { timeout: 25_000 });
+			const hit = page
+				.getByRole('listitem')
+				.filter({ hasText: fullName(p) })
+				.first();
+			await expect(hit).toBeVisible({ timeout: 10_000 });
+			await hit.getByRole('button', { name: 'ดูสถานะ' }).click();
+			await page.waitForURL(/\/onsite\/people\/evacuee-profile-view\/evacuee:/, {
+				timeout: 15_000
+			});
+		}).toPass({ timeout: 75_000, intervals: [1_000, 3_000] });
+		const id = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
+		expect(id).toMatch(/^evacuee:[0-9A-Z]{26}$/);
+		ids[p.firstName] = id;
 	}
 	return ids;
 }
@@ -277,7 +305,7 @@ export async function screenEvacuee(
 	fill: ScreeningFill
 ): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
-	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('สถานี 2', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
 	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
@@ -291,7 +319,7 @@ export async function screenEvacuee(
 
 export async function assignZone(page: Page, evacueeId: string, zoneName: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await page.locator('div.grid button', { hasText: zoneName }).first().click();
 	await page.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
@@ -299,7 +327,7 @@ export async function assignZone(page: Page, evacueeId: string, zoneName: string
 
 export async function confirmArrivalInZone(page: Page, evacueeId: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await page.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 }
@@ -312,7 +340,7 @@ async function scanAndSelectOnly(page: Page, payload: string, others: string[]):
 	await page.getByPlaceholder('กรอกรหัส หรือ สแกน QR...').fill(payload);
 	await page.getByRole('button', { name: 'ตกลง' }).click();
 	if (others.length > 0) {
-		await expect(page.getByText('จัดการเช็คอิน/เช็คเอาท์พร้อมกับครอบครัว')).toBeVisible({
+		await expect(page.getByText('จัดการเช็คอิน/เช็คเอาต์พร้อมกับครอบครัว')).toBeVisible({
 			timeout: 15_000
 		});
 	}
@@ -320,6 +348,16 @@ async function scanAndSelectOnly(page: Page, payload: string, others: string[]):
 		const box = page.locator('label', { hasText: other }).locator('input[type=checkbox]');
 		if (await box.isEnabled()) await box.uncheck();
 	}
+}
+
+/** Open the scan page and submit `payload` once, without touching anyone selected afterwards. */
+export async function submitScan(page: Page, payload: string): Promise<void> {
+	await page.goto('/onsite/scan-check-in-out');
+	await expect(page.getByRole('heading', { name: /สแกนเข้า-ออกศูนย์/ })).toBeVisible({
+		timeout: 20_000
+	});
+	await page.getByPlaceholder('กรอกรหัส หรือ สแกน QR...').fill(payload);
+	await page.getByRole('button', { name: 'ตกลง' }).click();
 }
 
 /** Check out through the scan page; the reason goes in the check-out dialog. */
@@ -330,11 +368,11 @@ export async function checkOutByScan(
 	reason: string
 ): Promise<void> {
 	await scanAndSelectOnly(page, id, others);
-	await page.getByRole('button', { name: 'เช็คเอาท์', exact: true }).click();
-	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาท์' });
-	await dialog.getByLabel('เหตุผลการเช็คเอาท์').fill(reason);
-	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาท์' }).click();
-	await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
+	await page.getByRole('button', { name: 'เช็คเอาต์', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาต์' });
+	await dialog.getByLabel('เหตุผลการเช็คเอาต์').fill(reason);
+	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาต์' }).click();
+	await expect(page.getByText('เช็คเอาต์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
 }
 
 /** Check in through the scan page; someone with no zone to return to gets the zone dialog. */

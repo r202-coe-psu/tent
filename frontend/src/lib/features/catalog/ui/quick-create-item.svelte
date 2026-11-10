@@ -17,6 +17,7 @@
 	import { findSimilarItems } from '../domain/item-similarity';
 	import {
 		buildQuickCreateInput,
+		quickCreateNeedsFullForm,
 		quickCreateTypeClass,
 		validateQuickCreate,
 		QUICK_CREATE_DEFAULT_STORAGE,
@@ -169,6 +170,11 @@
 		event.preventDefault();
 		attempted = true;
 		if (Object.keys(errors).length > 0 || !canSubmit) return;
+		// Fuel needs fields this form lacks; hand the draft to the full form.
+		if (quickCreateNeedsFullForm(categoryId || undefined)) {
+			showFullForm = true;
+			return;
+		}
 
 		createMutation.mutate(
 			{

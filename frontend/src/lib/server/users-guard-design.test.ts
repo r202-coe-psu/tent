@@ -36,6 +36,7 @@ const stored = (): Doc => ({
 	volunteer_id: 'volunteer:V1',
 	active: true,
 	role_grants: [GRANT],
+	edge_shelters: ['SH001'],
 	display_name: 'สมชาย',
 	derived_key: 'k',
 	salt: 's'
@@ -54,7 +55,11 @@ describe('_users/_design/tent_guard validate_doc_update (FR-11, AC-7)', () => {
 		['changing active', { active: false }],
 		['changing personnel_type', { personnel_type: 'staff' }],
 		['changing volunteer_id', { volunteer_id: 'volunteer:OTHER' }],
-		['removing volunteer_id', { volunteer_id: undefined }]
+		['removing volunteer_id', { volunteer_id: undefined }],
+		['adding edge_shelters', { edge_shelters: ['SH001', 'SH002'] }],
+		['changing edge_shelters', { edge_shelters: ['SH002'] }],
+		['setting deleted_at', { deleted_at: '2026-11-01T00:00:00.000Z' }],
+		['setting deleted_by', { deleted_by: 'vol@example.com' }]
 	])('refuses a user %s on their own doc', (_label, over) => {
 		expect(() => write(over)).toThrow();
 		try {
@@ -98,15 +103,43 @@ describe('_users/_design/tent_guard validate_doc_update (FR-11, AC-7)', () => {
 
 	it('lets an admin (the BFF and the worker) change every guarded field', () => {
 		expect(() =>
-			write({ role_grants: [], active: false, personnel_type: 'staff', volunteer_id: null }, ADMIN)
+			write(
+				{
+					role_grants: [],
+					active: false,
+					personnel_type: 'staff',
+					volunteer_id: null,
+					edge_shelters: ['SH001', 'SH002'],
+					deleted_at: '2026-11-01T00:00:00.000Z',
+					deleted_by: 'admin'
+				},
+				ADMIN
+			)
 		).not.toThrow();
 	});
 
-	it('does not look at deletions or at docs that are not users', () => {
+	// CR-171 FR-3: a self-DELETE leaves a tombstone without roles/edge_shelters, so the edge
+	// would keep the old doc and its roles.
+	it('refuses a user deleting their own doc', () => {
+		const del = () =>
+			vdu({ _id: 'org.couchdb.user:vol@example.com', _deleted: true }, stored(), SELF);
+		expect(del).toThrow();
+		try {
+			del();
+		} catch (e) {
+			expect(e).toMatchObject({ forbidden: expect.stringContaining('administrator') });
+		}
+	});
+
+	it('lets an admin delete a user doc', () => {
 		expect(() =>
-			vdu({ _id: 'org.couchdb.user:vol@example.com', _deleted: true }, stored(), SELF)
+			vdu({ _id: 'org.couchdb.user:vol@example.com', _deleted: true }, stored(), ADMIN)
 		).not.toThrow();
+	});
+
+	it('does not look at docs that are not users', () => {
 		expect(() => vdu({ _id: '_design/other', active: true }, null, SELF)).not.toThrow();
+		expect(() => vdu({ _id: '_design/other', _deleted: true }, null, SELF)).not.toThrow();
 	});
 });
 

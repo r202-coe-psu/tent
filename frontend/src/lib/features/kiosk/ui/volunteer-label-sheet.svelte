@@ -69,12 +69,14 @@
 		display: none;
 	}
 
-	/* Label size comes from domain/print-label.ts (CSS vars + generated @page in <svelte:head>). */
+	/* Label size comes from domain/print-label.ts (CSS vars + generated @page in <svelte:head>).
+	   `body:where(:has(...))` keeps these global rules inert on pages without this print area
+	   (:where adds no specificity); otherwise they hide other print pages (#1057). */
 	@media print {
-		:global(body) {
+		:global(body:where(:has(.kiosk-print-area))) {
 			margin: 0 !important;
 		}
-		:global(body > :not(.kiosk-print-area)) {
+		:global(body:where(:has(.kiosk-print-area)) > :not(.kiosk-print-area)) {
 			display: none !important;
 		}
 		.kiosk-print-area {
@@ -92,7 +94,7 @@
 			translate: var(--label-offset-x) 0;
 			overflow: hidden;
 			break-inside: avoid;
-			font-family: 'IBM Plex Sans Thai', sans-serif;
+			font-family: 'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', sans-serif;
 			color: #000;
 		}
 		.text {

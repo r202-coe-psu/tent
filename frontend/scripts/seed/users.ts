@@ -1,5 +1,9 @@
+import { mergeEdgeShelters } from '$lib/auth/roles';
 import { hashSecurityAnswer } from '$lib/server/security-questions';
+import { isValidStaffTokenHash } from '$lib/features/users/server';
+import { ensurePrintingService } from '$lib/server/ensure-printing-service';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
+import { mintStaffTokenHash } from '$lib/server/staff-card-token';
 import { couchReq, env } from './couch';
 import { SH001_CODE } from './types';
 
@@ -108,6 +112,28 @@ async function seedPublicWriter(): Promise<void> {
 	);
 }
 
+async function seedPrintingService(): Promise<void> {
+	const result = await ensurePrintingService(
+		couchReq,
+		process.env.COUCHDB_PRINTING_SERVICE_URL ?? env.COUCHDB_PRINTING_SERVICE_URL
+	);
+	if (result.outcome === 'skipped') {
+		console.log('  – _users: COUCHDB_PRINTING_SERVICE_URL unset — printing service not seeded');
+		return;
+	}
+	if (result.outcome === 'invalid_format') {
+		// An old .env without COUCHDB_PRINTING_SERVICE_PASSWORD yields an empty password here;
+		// printing is optional for seed data, so warn instead of failing the whole seed.
+		console.warn(
+			'  ⚠ _users: COUCHDB_PRINTING_SERVICE_URL invalid (missing password?) — printing service not seeded'
+		);
+		return;
+	}
+	console.log(
+		`  ✓ _users: printing service "${result.username}" (${result.outcome === 'created' ? 'created' : 'already exists'})`
+	);
+}
+
 /** Staging/local test logins — not part of prod master init. */
 export async function seedUsers(): Promise<void> {
 	let created = 0;
@@ -138,6 +164,8 @@ export async function seedUsers(): Promise<void> {
 			phone: u.phone,
 			email: u.email,
 			shelter_id: u.shelter_id,
+			// CR-171 FR-11 — append-only history of shelters (edge `_users` replication routing)
+			edge_shelters: mergeEdgeShelters(existingDoc?.edge_shelters as string[] | undefined, u.roles),
 			active: true,
 			must_change_password: false,
 			security_question,
@@ -146,6 +174,10 @@ export async function seedUsers(): Promise<void> {
 
 		if (!existingDoc) {
 			userDoc.password = SEED_STAFF_PASSWORD;
+		}
+
+		if (!userDoc.volunteer_id && !isValidStaffTokenHash(userDoc.staff_token_hash)) {
+			userDoc.staff_token_hash = await mintStaffTokenHash();
 		}
 
 		const { status } = await couchReq('PUT', `/_users/${docId}`, userDoc);
@@ -170,4 +202,5 @@ export async function seedUsers(): Promise<void> {
 	);
 
 	await seedPublicWriter();
+	await seedPrintingService();
 }

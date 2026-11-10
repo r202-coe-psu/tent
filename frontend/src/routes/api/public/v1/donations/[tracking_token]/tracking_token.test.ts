@@ -155,6 +155,41 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(data.donation.received_summary?.shortfalls[0].short).toBe('2');
 	});
 
+	it('GET does not pass the campaign_id FastAPI holds on a booking CouchDB has not seen', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'declared',
+						booking_ref: 'DN-999999',
+						shelter_code: 'SH001',
+						campaign_id: 'donation_campaign:c1',
+						donor: { name: 'S***' },
+						items: [{ free_text: 'ข้าวสาร', qty: '10', unit: 'kg' }],
+						logistics: { delivery_method: 'self_dropoff' },
+						received_summary: null,
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: {} });
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.donation.booking_ref).toBe('DN-999999');
+		expect(data.donation).not.toHaveProperty('campaign_id');
+	});
+
 	describe('vehicle plate never leaves through tracking (CR-209 FR-4)', () => {
 		const PLATE = 'กข 1234 กรุงเทพมหานคร';
 		const plateLogistics = {

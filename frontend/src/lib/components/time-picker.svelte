@@ -13,10 +13,11 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils/shadcn.js';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		value = $bindable(''),
-		placeholder = 'เลือกเวลา',
+		placeholder,
 		/** Minute granularity offered in the dropdown. */
 		minuteStep = 5,
 		disabled = false,
@@ -33,6 +34,12 @@
 	} = $props();
 
 	let open = $state(false);
+
+	const copy = $derived(
+		langState.current === 'en'
+			? { placeholder: 'Select time', hour: 'Hour', minute: 'Minute' }
+			: { placeholder: 'เลือกเวลา', hour: 'ชั่วโมง', minute: 'นาที' }
+	);
 
 	const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -73,14 +80,14 @@
 				)}
 			>
 				<ClockIcon class="mr-2 size-4 opacity-60" />
-				{parsed ? value : placeholder}
+				{parsed ? value : (placeholder ?? copy.placeholder)}
 			</Button>
 		{/snippet}
 	</Popover.Trigger>
 	<Popover.Content class="w-auto p-3">
 		<div class="flex items-end gap-2">
 			<label class="space-y-1">
-				<span class="text-xs font-medium text-muted-foreground">ชั่วโมง</span>
+				<span class="text-xs font-medium text-muted-foreground">{copy.hour}</span>
 				<Select.Root type="single" value={hour} onValueChange={setHour}>
 					<Select.Trigger class={cn(triggerClass, 'w-20')}>{hour || '--'}</Select.Trigger>
 					<Select.Content>
@@ -92,7 +99,7 @@
 			</label>
 			<span class="pb-3 text-sm font-semibold text-muted-foreground">:</span>
 			<label class="space-y-1">
-				<span class="text-xs font-medium text-muted-foreground">นาที</span>
+				<span class="text-xs font-medium text-muted-foreground">{copy.minute}</span>
 				<Select.Root type="single" value={minute} onValueChange={setMinute}>
 					<Select.Trigger class={cn(triggerClass, 'w-20')}>{minute || '--'}</Select.Trigger>
 					<Select.Content>

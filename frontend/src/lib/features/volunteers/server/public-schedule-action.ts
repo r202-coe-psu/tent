@@ -37,7 +37,7 @@ type ShelterRef = {
 	name: string;
 };
 
-type ResolvedIdentity = {
+export type ResolvedIdentity = {
 	ref: ShelterRef;
 	volunteerIds: Set<string>;
 };
@@ -62,6 +62,7 @@ export class PublicScheduleError extends Error {
 			| 'ROLE_CARD_NOT_FOUND'
 			| 'ROLE_CARD_WRITE_FAILED'
 			| 'WRITE_FAILED'
+			| 'ACCESS_STATUS_UNAVAILABLE'
 			| 'SCHEDULE_UNAVAILABLE',
 		readonly httpStatus = 409
 	) {
@@ -116,7 +117,11 @@ function filterPortalId(ids: Set<string>, portalId?: string): Set<string> {
 	return ids.has(portalId) ? new Set([portalId]) : new Set();
 }
 
-async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
+/**
+ * The volunteer profiles a portal credential opens, per shelter. Shared with the access-status
+ * read so both answer for exactly the same profiles.
+ */
+export async function resolveIdentities(credential: PortalCredential): Promise<ResolvedIdentity[]> {
 	const refs = await shelterRefs();
 	const identities: ResolvedIdentity[] = [];
 	const phoneHash = credential.phone ? await sha256Hex(normalizeThaiPhone(credential.phone)) : null;
@@ -296,10 +301,23 @@ async function updateVolunteerAttendance(
 	throw new PublicScheduleError('WRITE_FAILED', 409);
 }
 
+/** `job` schema_v that introduced `released_application_ids` (CR-220). */
+const JOB_LEDGER_SCHEMA_V = 4;
+
+/**
+ * Give one confirmed slot back to the job (and its shift).
+ *
+ * `idempotencyKey` (CR-220: the `job_application` `_id` of a ticket cancel) makes the release
+ * once-only per key: every attempt re-reads the job, and a key already in
+ * `released_application_ids` writes nothing and succeeds; otherwise the counters and the
+ * key move in the same `_rev`-guarded write, so a retry after a lost response cannot release
+ * twice. Without a key (portal withdraw) the ledger is left untouched.
+ */
 export async function releaseJobQuota(
 	dbName: string,
 	assignment: CouchDoc,
-	now: string
+	now: string,
+	idempotencyKey?: string
 ): Promise<void> {
 	if (typeof assignment.job_id !== 'string') throw new PublicScheduleError('WRITE_FAILED', 502);
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
@@ -307,6 +325,12 @@ export async function releaseJobQuota(
 		if (jobResult.status !== 200 || !jobResult.data)
 			throw new PublicScheduleError('WRITE_FAILED', 502);
 		const job = structuredClone(jobResult.data) as CouchDoc;
+		const released = Array.isArray(job.released_application_ids)
+			? (job.released_application_ids as unknown[]).filter(
+					(id): id is string => typeof id === 'string'
+				)
+			: [];
+		if (idempotencyKey && released.includes(idempotencyKey)) return;
 		const shifts = Array.isArray(job.shifts) ? (job.shifts as CouchDoc[]) : [];
 		const shiftId = typeof assignment.shift_id === 'string' ? assignment.shift_id : null;
 		const shift = shifts.find((item) => item.shift_id === shiftId || item.id === shiftId);
@@ -317,10 +341,19 @@ export async function releaseJobQuota(
 				shift.slots_remaining = Number(shift.slots_remaining ?? 0) + 1;
 			}
 		}
-		job.slots_confirmed = Math.max(Number(job.slots_confirmed ?? 0) - 1, 0);
-		job.slots_remaining = Number(job.slots_remaining ?? 0) + 1;
-		job.status = 'open';
+		// Free a seat only when one is still counted (a staff reconcile may have zeroed it), and
+		// reopen only a job that was full: a closed or paused job stays as it is.
+		const jobConfirmed = Number(job.slots_confirmed ?? 0);
+		if (jobConfirmed > 0) {
+			job.slots_confirmed = jobConfirmed - 1;
+			job.slots_remaining = Number(job.slots_remaining ?? 0) + 1;
+			if (job.status === 'full') job.status = 'open';
+		}
 		job.updated_at = now;
+		if (idempotencyKey) {
+			job.released_application_ids = [...released, idempotencyKey];
+			job.schema_v = Math.max(Number(job.schema_v ?? 0), JOB_LEDGER_SCHEMA_V);
+		}
 		const put = await putAsPublicWriter(dbName, assignment.job_id, job);
 		if (put.status === 409) continue;
 		if (put.status >= 400) throw new PublicScheduleError('WRITE_FAILED', 502);
@@ -441,6 +474,53 @@ function isValidTokenHash(value: unknown): value is string {
 }
 
 /**
+ * Role-card credential of one volunteer document: the stored hash when present, a
+ * backfilled hash for legacy plaintext, otherwise a freshly minted token. Never rotates
+ * an existing hash.
+ */
+export async function ensureRoleCardToken(
+	dbName: string,
+	current: CouchDoc
+): Promise<RoleCardTokenResult> {
+	if (isValidTokenHash(current.tracking_token_hash)) {
+		return {
+			token: roleCardPayloadFromHash(current.tracking_token_hash),
+			generated: false
+		};
+	}
+
+	// Seed/legacy documents may still have the original plaintext. Preserve it and
+	// backfill the hash so later role-card reads use the volunteer hash path.
+	if (typeof current.tracking_token === 'string' && current.tracking_token.trim()) {
+		const legacyToken = current.tracking_token.trim().toUpperCase();
+		const updated = {
+			...current,
+			tracking_token_hash: await sha256Hex(legacyToken),
+			updated_at: new Date().toISOString(),
+			updated_by: 'volunteer_portal'
+		};
+		const put = await putAsPublicWriter(dbName, current._id, updated);
+		if (put.status >= 200 && put.status < 300) {
+			return { token: legacyToken, generated: false };
+		}
+		throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+	}
+
+	const token = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
+	const updated = {
+		...current,
+		tracking_token_hash: await sha256Hex(token),
+		updated_at: new Date().toISOString(),
+		updated_by: 'volunteer_portal'
+	};
+	const put = await putAsPublicWriter(dbName, current._id, updated);
+	if (put.status >= 200 && put.status < 300) {
+		return { token, generated: true };
+	}
+	throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+}
+
+/**
  * Resolve the role-card credential from the volunteer document itself.
  *
  * A stored SHA-256 cannot be reversed into the original bearer token. When the hash is
@@ -460,44 +540,7 @@ export async function readOrMintRoleCardToken(
 		for (const volunteerId of identity.volunteerIds) {
 			const currentResult = await getAsPublicWriter(identity.ref.dbName, volunteerId);
 			if (currentResult.status !== 200 || !currentResult.data) continue;
-			const current = currentResult.data as CouchDoc;
-
-			if (isValidTokenHash(current.tracking_token_hash)) {
-				return {
-					token: roleCardPayloadFromHash(current.tracking_token_hash),
-					generated: false
-				};
-			}
-
-			// Seed/legacy documents may still have the original plaintext. Preserve it and
-			// backfill the hash so later role-card reads use the volunteer hash path.
-			if (typeof current.tracking_token === 'string' && current.tracking_token.trim()) {
-				const legacyToken = current.tracking_token.trim().toUpperCase();
-				const updated = {
-					...current,
-					tracking_token_hash: await sha256Hex(legacyToken),
-					updated_at: new Date().toISOString(),
-					updated_by: 'volunteer_portal'
-				};
-				const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
-				if (put.status >= 200 && put.status < 300) {
-					return { token: legacyToken, generated: false };
-				}
-				throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
-			}
-
-			const token = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
-			const updated = {
-				...current,
-				tracking_token_hash: await sha256Hex(token),
-				updated_at: new Date().toISOString(),
-				updated_by: 'volunteer_portal'
-			};
-			const put = await putAsPublicWriter(identity.ref.dbName, volunteerId, updated);
-			if (put.status >= 200 && put.status < 300) {
-				return { token, generated: true };
-			}
-			throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
+			return ensureRoleCardToken(identity.ref.dbName, currentResult.data as CouchDoc);
 		}
 	}
 

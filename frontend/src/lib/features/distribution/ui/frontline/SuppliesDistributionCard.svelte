@@ -167,6 +167,10 @@
 						recipientSelection.recipientType === 'evacuee'
 							? recipientSelection.householdId
 							: undefined,
+					recipient_qr_override:
+						recipientSelection.recipientType === 'evacuee'
+							? recipientSelection.qrOverride
+							: undefined,
 					notes: notesInput.trim() || undefined
 				},
 				shelterCode
@@ -280,6 +284,9 @@
 		bind:this={picker}
 		bind:value={recipientSelection}
 		disabled={recordSuppliesMutation.isPending}
+		allowStaff
+		allowExpiredQrOverride
+		{shelterCode}
 	/>
 
 	{#if recipientSelection}

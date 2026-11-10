@@ -244,6 +244,7 @@ export {
 	useRequisitionTickets,
 	useRequisitionTicket,
 	useDistributionLogs,
+	useItemDistributions,
 	useDistributionLog,
 	useBulkReturnPools,
 	useBulkReturnPool,
@@ -300,7 +301,6 @@ export {
 export { default as TicketStatusBadge } from './ui/common/TicketStatusBadge.svelte';
 export { default as TicketManagementPage } from './ui/back-office/TicketManagementPage.svelte';
 export { default as BulkReturnPoolBoard } from './ui/bulk-return/BulkReturnPoolBoard.svelte';
-export { default as TicketGroupTabs } from './ui/back-office/TicketGroupTabs.svelte';
 export { default as TicketTable } from './ui/back-office/TicketTable.svelte';
 export { default as TicketFilters } from './ui/back-office/TicketFilters.svelte';
 export { default as CreateTicketDialog } from './ui/back-office/CreateTicketDialog.svelte';

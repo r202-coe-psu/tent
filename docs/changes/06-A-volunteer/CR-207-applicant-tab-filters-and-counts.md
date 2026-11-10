@@ -3,7 +3,7 @@ id: CR-207 # renumbered from draft-applicant-tab-filters-and-counts
 title: แท็บผู้สมัคร — ตัวกรอง, สถานะ "รอยืนยันการเข้างาน" (แสดงผลอย่างเดียว) และการนับกะที่มอบหมายแล้วถูกยกเลิก
 status: approved
 date: 2026-10-28
-updated: 2026-10-30 # amendment: FR-1/FR-2 นับกะ standby ที่ตอบรับแล้ว (Mhapong) · approved 2026-10-28 (Soravit Sukkarn, Team Lead)
+updated: 2026-11-02 # amendment: FR-1/FR-2 ยกเว้น assigned + dispatched (แก้โดย CR-225) · approved 2026-10-28 (Soravit Sukkarn, Team Lead)
 requested_by: "#849 (ผู้รับงาน @Mhapong) + review ของ @Jackyzaz ใน PR #968 (ขอ doc amend)"
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-28
@@ -40,15 +40,17 @@ affects:
 ### FR
 
 - **FR-1 "รอยืนยันการเข้างาน" (แสดงผลอย่างเดียว):**
-  - `shift_assignment` ที่ยังไม่เช็คอิน, ไม่ใช่กะ `flex`, `now ≥ duty_window.end_ts + 30 นาที` และ (`status = assigned` หรือ (`status = standby` และ `dispatch_status = accepted`))
+  - `shift_assignment` ที่ยังไม่เช็คอิน, ไม่ใช่กะ `flex`, `now ≥ duty_window.end_ts + 30 นาที` และ ((`status = assigned` และ `dispatch_status ≠ dispatched`) หรือ (`status = standby` และ `dispatch_status = accepted`)) _(แก้โดย CR-225)_
   - แก้ 2026-10-29 — ก่อน: `status = assigned` เท่านั้น → หลัง: รวม `standby` + `dispatch_status = accepted` (อนุมัติใบสมัคร, เจ้าหน้าที่มอบหมาย และจิตอาสาตอบรับ เขียนกะเป็น `standby` + `accepted`)
+  - แก้ 2026-11-02 (CR-225) — ยกเว้นกะ `status = assigned` ที่ `dispatch_status = dispatched` (คำเชิญที่จิตอาสายังไม่ตอบ) ออกจาก "รอยืนยันการเข้างาน"
   - คำนวณตอนแสดงผลจาก `now` ไม่เขียนเอกสาร ไม่ตั้ง `no_show`
   - `now` อัปเดตเองทุกนาที กะจึงเข้าสถานะนี้เมื่อครบ 30 นาทีโดยไม่ต้องโหลดหน้าใหม่
   - ไม่มีปุ่มยืนยันมา/ขาดและไม่มี worker ตั้ง `no_show`: #885 ยกเลิกแล้ว (2026-10-30) ตัวกรองนี้เป็นการแสดงผลอย่างเดียว
 - **FR-2 ตัวกรองสถานะการเข้างาน:** ยังไม่เช็คอิน / รอยืนยันการเข้างาน / กำลังปฏิบัติงาน / เสร็จสิ้น
   - กะที่เข้า FR-1 ไม่นับใน "ยังไม่เช็คอิน"
-  - กะ `flex`, กะ `standby` ที่ `dispatch_status ≠ accepted` และกะที่ไม่มี `duty_window.end_ts` อยู่ใน "ยังไม่เช็คอิน" เสมอจนกว่าจะเช็คอิน
+  - กะ `flex`, กะ `standby` ที่ `dispatch_status ≠ accepted`, กะ `assigned` ที่ `dispatch_status = dispatched` และกะที่ไม่มี `duty_window.end_ts` อยู่ใน "ยังไม่เช็คอิน" เสมอจนกว่าจะเช็คอิน _(แก้โดย CR-225)_
   - แก้ 2026-10-29 — ก่อน: กะ `standby` ทุกกะอยู่ใน "ยังไม่เช็คอิน" เสมอจนกว่าจะเช็คอิน → หลัง: เฉพาะกะ `standby` ที่ `dispatch_status ≠ accepted` ที่ยังคงอยู่ใน "ยังไม่เช็คอิน" เสมอ (ไม่เข้า FR-1); กะ `standby` + `accepted` อยู่ใน "ยังไม่เช็คอิน" จนครบ `end_ts` + 30 นาที แล้วย้ายไป "รอยืนยันการเข้างาน" ตาม FR-1
+  - แก้ 2026-11-02 (CR-225) — กะ `assigned` + `dispatched` อยู่ใน "ยังไม่เช็คอิน" เสมอ
 - **FR-3 กะที่เจ้าหน้าที่มอบหมายแล้วถูกยกเลิก:**
   - นับใน tile และตัวกรอง "ปฏิเสธ/ยกเลิก"
   - ไม่นับใน "มอบหมายโดยเจ้าหน้าที่" ทั้ง tile ตัวกรอง และตัวเลขในหัวข้อประวัติ จึงตรงกันทุกที่
@@ -97,3 +99,4 @@ Soravit Sukkarn (Team Lead) approve CR นี้วันที่ 2026-10-28 �
 - 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-207 (renumbered from draft-applicant-tab-filters-and-counts) ย้ายเข้า `06-A-volunteer/`
 - 2026-10-29 — Mhapong: แก้ตามข้อมูลจริง: กะที่รับแล้วเป็น standby · FR-1 นับ `status = standby` + `dispatch_status = accepted` ที่ยังไม่เช็คอินด้วย (อนุมัติใบสมัคร, เจ้าหน้าที่มอบหมาย, จิตอาสาตอบรับ เขียน `standby` + `accepted`; `assigned` + `dispatched` คือคำเชิญที่ยังไม่ตอบ) · แก้ FR-2 และ AC-1 ให้ตรงกัน · แสดงผลอย่างเดียว ไม่เพิ่ม field ไม่ bump `schema_v` · track โดยแก้ไฟล์ CR นี้ใน docs PR · approver @Jackyzaz
 - 2026-10-30 — Mhapong: #885 ยกเลิก (@Jackyzaz แจ้งว่าไม่จำเป็น, ปิด CR #1030) ลบข้อความที่อ้างว่าปุ่มยืนยันมา/ขาดและ `no_show` อัตโนมัติจะทำใน #885 ความหมายของ FR-1/FR-2 ไม่เปลี่ยน
+- 2026-11-02 — แก้โดย CR-225 (approved โดย Soravit Sukkarn, Team Lead ใน PR #1032): กะ `assigned` + `dispatched` (คำเชิญที่ยังไม่ตอบ) ไม่เข้า "รอยืนยันการเข้างาน" และอยู่ใน "ยังไม่เช็คอิน" เสมอ

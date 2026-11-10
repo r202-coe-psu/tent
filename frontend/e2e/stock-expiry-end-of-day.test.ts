@@ -379,6 +379,12 @@ test.describe(
 			await qty.fill('3');
 
 			const plan = page.getByText('แผนการตัดล็อต').locator('xpath=..');
+			// The skipped-expired notice is role="status", so any alert here is a non-ok line verdict
+			// (short / unit / no lots) and names why the plan box fell back to its empty state.
+			await expect(
+				sheet.getByRole('alert'),
+				'no line verdict alert (short / unit / no lots) should block the plan'
+			).toHaveCount(0);
 			await expect(plan, 'auto plan draws from the 10-unit today lot').toContainText(
 				'จากคงเหลือ 10'
 			);

@@ -1045,6 +1045,48 @@ describe('OperationsRemoteRepository', () => {
 			expect(up.qty).toBe('2');
 		});
 
+		// CR-234 (#1187): the supply receive form's "ซื้อเอง" checkbox.
+		it('stores lot.self_purchased: true and schema_v 7 on a manual receipt', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			const result = await repo.receiveStock(
+				{
+					item_id: 'item:rice',
+					qty: 10,
+					unit: 'kg',
+					source: 'manual',
+					ref_id: null,
+					lot: { self_purchased: true }
+				},
+				ctx
+			);
+
+			expect(result.lot?.self_purchased).toBe(true);
+			expect(result.schema_v).toBe(7);
+			const [stored] = await repo.listLedger();
+			expect(stored.lot?.self_purchased).toBe(true);
+			expect(stored.schema_v).toBe(7);
+		});
+
+		it('refuses self_purchased on a donation receipt', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+
+			await expect(
+				repo.receiveStock(
+					{
+						item_id: 'item:rice',
+						qty: 10,
+						unit: 'kg',
+						source: 'donation',
+						ref_id: DONATION_REF,
+						lot: { self_purchased: true }
+					},
+					ctx
+				)
+			).rejects.toThrow();
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
 		it('persists the ledger entry when the item exists and units match', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
 
@@ -1067,7 +1109,7 @@ describe('OperationsRemoteRepository', () => {
 			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
 		});
 
-		it('persists adjust_reason + note on a schema_v 6 row', async () => {
+		it('persists adjust_reason + note on a current-schema row', async () => {
 			await repo.receiveStock(
 				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
 				ctx
@@ -1085,7 +1127,7 @@ describe('OperationsRemoteRepository', () => {
 				ctx
 			);
 
-			expect(entry.schema_v).toBe(6);
+			expect(entry.schema_v).toBe(7);
 			const stored = (await repo.listLedger()).find((e) => e._id === entry._id);
 			expect(stored?.adjust_reason).toBe('damaged');
 			expect(stored?.note).toBe('กระสอบฉีก');
@@ -1204,7 +1246,7 @@ describe('OperationsRemoteRepository', () => {
 			});
 		});
 
-		it('sums a ledger that mixes schema_v 5 and 6 rows', async () => {
+		it('sums a ledger that mixes schema_v 5 and current rows', async () => {
 			// a pre-CR-143 adjust row as an older client persisted it
 			await repo.addLedgerEntry({
 				...createStockLedger(
@@ -1219,7 +1261,7 @@ describe('OperationsRemoteRepository', () => {
 			);
 
 			const ledger = await repo.listLedger();
-			expect(ledger.map((e) => e.schema_v).sort()).toEqual([5, 6]);
+			expect(ledger.map((e) => e.schema_v).sort()).toEqual([5, 7]);
 			expect((await repo.getBalance()).get('item:rice')).toBe('7');
 		});
 	});
@@ -1607,6 +1649,24 @@ describe('OperationsRemoteRepository.updateCampaign', () => {
 			reason: 'อัปเดตชื่อแคมเปญเพื่อความชัดเจน',
 			created_by: 'tester'
 		});
+	});
+
+	it('re-stamps a v3 campaign as schema_v 4 on any update (FR-AP-4b)', async () => {
+		const created = await repo.createCampaign(
+			{
+				title: 'น้ำดื่ม',
+				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle' }]
+			},
+			ctx
+		);
+		const v3 = { ...created, schema_v: 3 };
+		await memoryRepo.put(v3);
+		const stale = (await repo.getCampaign(created._id))!;
+
+		const result = await repo.updateCampaign({ ...stale, visible_on_home: false });
+
+		expect(result.schema_v).toBe(4);
+		expect((await repo.getCampaign(created._id))?.schema_v).toBe(4);
 	});
 
 	it('refuses to update a campaign this shelter database does not hold', async () => {

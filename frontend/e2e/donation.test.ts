@@ -2,6 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 
 const TAGS = { tag: ['@regression', '@donation'] };
 
+/** A real label PDF is ~30 KB and a blank A6 page measured 882 bytes: far from both. */
+const MIN_LABEL_PDF_BYTES = 10_000;
+
 const SH001_NAME = 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)';
 
 const NEEDS_BODY = [
@@ -79,7 +82,7 @@ async function fillDonorStep(page: Page) {
 	await page.locator('#donor-phone').fill('0899999999');
 	// The quantity starts at 0 since #941; step 3 opens only for a positive one.
 	await page.locator('input[id^="amount-"]').first().fill('1');
-	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+	await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 	await expect(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 	).toBeVisible();
@@ -254,11 +257,11 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 
 		await expect(page.locator('#shelter-select')).toHaveCount(0);
 		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
-		await expect(page.getByTestId('drop-off-points-section')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-groups')).toHaveCount(0);
 		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
 	});
 
-	test("pins the locked shelter's only drop-off point from its detail (CR-205 FR-DP-18)", async ({
+	test("pins the locked shelter's drop-off point; a tap names it and picks nothing (CR-205 FR-DP-18, FR-AP-11)", async ({
 		page
 	}) => {
 		await mockDetail(page, [GYM_POINT]);
@@ -266,40 +269,38 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 
 		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('drop-off-single-point')).toContainText('โรงยิม');
+		// The mocked card has no point of its own: step 3 says, read-only, that any point takes it
+		// (FR-AP-12).
+		await expect(page.getByTestId('drop-off-groups')).toContainText(
+			'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้'
+		);
 		const pin = page.getByTestId('point-marker-point-gym');
 		await expect(pin).toBeVisible();
 		await pin.click();
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
+		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 	});
 
-	test('a tapped pin fills the dropdown, and a dropdown pick focuses its pin (CR-206)', async ({
+	test('the donor picks no point: pins only name themselves, and only a self drop-off shows them (FR-AP-11, FR-AP-12)', async ({
 		page
 	}) => {
 		await mockDetail(page, [GYM_POINT, MED_POINT]);
 		await openShelterStep(page);
 
-		const line = page.getByTestId('drop-off-point-line-0');
-		const trigger = line.locator('[data-slot="select-trigger"]');
-		await expect(trigger).toContainText('โรงยิม', { timeout: 15_000 });
+		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('drop-off-groups')).toBeVisible();
+		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 
-		// Before any tap, the map already shows the point the first line is on.
-		await expect(page.getByTestId('point-marker-point-gym')).toHaveClass(/is-selected/);
-
+		await expect(page.getByTestId('point-marker-point-med')).toBeVisible({ timeout: 15_000 });
 		await page.getByTestId('point-marker-point-med').click();
-		await expect(trigger).toContainText('ห้องพยาบาล');
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('ชั้น 1 อาคาร B');
-		await expect(page.getByTestId('drop-off-point-applied')).toContainText('ใช้กับ:');
-
-		await trigger.click();
-		await page.getByRole('option', { name: 'โรงยิม' }).click();
-		await expect(trigger).toContainText('โรงยิม');
-		await expect(page.getByTestId('point-marker-point-gym')).toHaveClass(/is-selected/);
+		await page.getByTestId('point-marker-point-gym').click();
 		await expect(page.getByTestId('drop-off-point-note')).toContainText('เข้าทางประตู 2');
+		await expect(page.locator('[data-slot="select-trigger"]')).toHaveCount(0);
 
 		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
 		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
-		await expect(page.getByTestId('drop-off-points-section')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-groups')).toHaveCount(0);
 	});
 
 	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {
@@ -413,7 +414,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		await qty.fill('12');
 
 		// Click Next to Step 3
-		await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+		await page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' }).click();
 
 		// Step 3: Logistics & Time selection
 		await expect(
@@ -890,7 +891,7 @@ test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () =>
 		await page.locator('#donor-phone').fill('0899999999');
 		await page.locator('input[id^="amount-"]').first().fill('1');
 
-		const next = page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' });
+		const next = page.getByRole('button', { name: 'ถัดไป: นัดหมายการส่งของบริจาค' });
 		await next.scrollIntoViewIfNeeded();
 		expect(await scrollY(page)).toBeGreaterThan(0);
 		await next.click();
@@ -1110,15 +1111,38 @@ test.describe('Box label for a booking the shelter accepted (#591)', TAGS, () =>
 		await expect(label.getByRole('img')).toBeVisible();
 	});
 
-	test('the printed page is a single A6 sheet', async ({ page }) => {
+	test('the printed page is a single A6 sheet with the label on it', async ({ page }) => {
 		await mockTrack(page, 'verifying');
 		await mockShelter(page);
 
 		await page.goto(`/donations/track/${TOKEN}/label`);
 		await expect(page.getByTestId('box-label-preview').getByRole('img')).toBeVisible();
+
+		// The build's shared CSS chunks put the kiosk label's print rules on this page too: that
+		// is how #1057 blanked the label. If they stop loading, this test proves nothing.
+		const kioskPrintRulesLoaded = await page.evaluate(() =>
+			[...document.styleSheets].some((sheet) => {
+				try {
+					return [...sheet.cssRules].some((rule) => rule.cssText.includes('kiosk-print-area'));
+				} catch {
+					return false; // cross-origin sheet (fonts)
+				}
+			})
+		);
+		expect(kioskPrintRulesLoaded).toBe(true);
+
 		await page.emulateMedia({ media: 'print' });
 
+		// Other features' global print rules must not hide the label (#1057).
+		const printCopy = page.locator('body > .box-label-print');
+		await expect(printCopy.getByTestId('box-label-ref')).toBeVisible();
+		await expect(printCopy.getByTestId('box-label-ref')).toHaveText(BOOKING_REF);
+		await expect(printCopy.locator('img')).toBeVisible();
+
 		const pdf = await page.pdf({ preferCSSPageSize: true });
+		// A hidden label still yields a one-page A6 PDF with the right MediaBox, so size is
+		// the only blank-page signal here.
+		expect(pdf.length).toBeGreaterThan(MIN_LABEL_PDF_BYTES);
 		const pages = pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? [];
 		expect(pages).toHaveLength(1);
 		// MediaBox is in points and Chrome rounds to whole CSS pixels: A6 is 297.6 x 419.5.

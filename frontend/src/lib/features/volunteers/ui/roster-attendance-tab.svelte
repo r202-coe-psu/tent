@@ -22,7 +22,7 @@
 	 * Deliberately out of scope for this pass (owner instruction 2026-08-29 —
 	 * mock up only, no real hardware build yet):
 	 *   - "สแกนรับเข้างาน" camera scan — see `roster-scan-bar.svelte`.
-	 * Everything else (the roster list's 1-click check-in/out, manual override,
+	 * Everything else (the roster list's scan-dialog check-in/out, manual override,
 	 * and the audit trail) is wired to real `shift_assignment` data/mutations —
 	 * see `roster-row.svelte` / `roster-audit-trail-dialog.svelte`.
 	 *
@@ -36,6 +36,11 @@
 	import History from '@lucide/svelte/icons/history';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import { resolve } from '$app/paths';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { useShelter } from '$lib/features/shelters';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -44,6 +49,7 @@
 	} from './roster-live-attendance-bar.svelte';
 	import RosterScanBar from './roster-scan-bar.svelte';
 	import RosterRow from './roster-row.svelte';
+	import { createMinuteClock } from './minute-clock.svelte';
 	import RosterAuditTrailDialog from './roster-audit-trail-dialog.svelte';
 	import {
 		useHubMetrics,
@@ -51,9 +57,13 @@
 		useTodayAttendance,
 		useShiftAssignments,
 		useVolunteers,
-		useJobs
+		useJobs,
+		useShelterVolunteerAccounts
 	} from '../application/queries';
 	import { ASSIGNED_STATUSES } from '../domain/hub-metrics';
+	import { accountsByVolunteer, rosterAccessStatus } from '../domain/volunteer-access-status';
+	import { toast } from 'svelte-sonner';
+	import { matchesVolunteerSearch, volunteerSearchFields } from '../domain/volunteer-search';
 	import type {
 		ShiftAssignment,
 		ShiftAssignmentStatus,
@@ -72,8 +82,10 @@
 		completed: new Set(['completed'])
 	};
 
+	// One ticking clock so `today` (the row's check-in date gate) rolls over at Bangkok midnight.
+	const { now } = createMinuteClock();
 	let dateFilter = $state(todayDateString());
-	const isToday = $derived(dateFilter === todayDateString());
+	const isToday = $derived(dateFilter === todayDateString(now));
 
 	const hubMetrics = useHubMetrics();
 	const attendanceQuery = useTodayAttendance(() => dateFilter);
@@ -84,6 +96,30 @@
 	const volunteersById = $derived.by(() => {
 		const map = new Map(volunteersQuery.data?.map((v) => [v._id, v]) ?? []);
 		return map;
+	});
+	// Each row's system account, with the same verify / give / edit button as the applicants tab
+	// (CR-221 FR-24, FR-25). SA / SM / coordinator only; the server 403s anyone else.
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterQuery = useShelter(() => shelterCode);
+	const shelterLine = $derived(shelterQuery.data?.name ?? shelterCode);
+	const canManageAccess = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterCode)
+	);
+	const accountsQuery = useShelterVolunteerAccounts(
+		() => shelterCode,
+		() => canManageAccess
+	);
+	// Indexed once per load, so each row finds its account without scanning the list.
+	const accounts = $derived(accountsByVolunteer(accountsQuery.data));
+	// The strip waits for the real accounts (a skeleton), never guessing from `user_name`.
+	const accountsPending = $derived(canManageAccess && accountsQuery.isPending);
+	// Not state: it only remembers which failure was already toasted.
+	let toastedAccountsError: unknown = null;
+	$effect(() => {
+		const error = canManageAccess ? accountsQuery.error : null;
+		if (!error || error === toastedAccountsError) return;
+		toastedAccountsError = error;
+		toast.error('โหลดข้อมูลบัญชีระบบของอาสาสมัครไม่สำเร็จ กรุณาลองใหม่');
 	});
 	const jobTitleById = $derived.by(() => {
 		const map = new Map(jobsQuery.data?.map((j) => [j._id, j.title]) ?? []);
@@ -98,14 +134,7 @@
 	function matchesSearch(assignment: ShiftAssignment, term: string): boolean {
 		if (!term) return true;
 		const v = volunteersById.get(assignment.volunteer_id);
-		if (!v) return false;
-		const needle = term.trim().toLowerCase();
-		if (!needle) return true;
-		return (
-			`${v.first_name} ${v.last_name}`.toLowerCase().includes(needle) ||
-			v.volunteer_code.toLowerCase().includes(needle) ||
-			(v.phone ?? '').includes(needle)
-		);
+		return !!v && matchesVolunteerSearch(volunteerSearchFields(v), term);
 	}
 
 	// Priority order roughly matching the owner-approved mockup: on-site first,
@@ -169,8 +198,8 @@
 				Live On-Site Tracking
 			</Badge>
 			<p class="mt-1.5 max-w-2xl text-xs text-muted-foreground">
-				ติดตามสถานะรายงานตัวเข้ากะสดประจำวัน พร้อมระบบสแกน QR 1-Click และ "เช็คอินแทน (Manual
-				Override)" ที่มี Audit Trail สมบูรณ์
+				ติดตามสถานะรายงานตัวเข้ากะสดประจำวัน เช็คอิน/เช็คเอาต์ด้วยการสแกน QR ของอาสาสมัคร
+				หรือโดยไม่สแกนพร้อมระบุเหตุผล (Manual Override) ที่มี Audit Trail สมบูรณ์
 			</p>
 		</div>
 
@@ -252,6 +281,11 @@
 						{assignment}
 						{volunteer}
 						jobTitle={jobTitleById.get(assignment.job_id)}
+						today={todayDateString(now)}
+						accessStatus={rosterAccessStatus(volunteer, canManageAccess, accounts)}
+						{accountsPending}
+						canVerify={canManageAccess}
+						{shelterLine}
 						onhistory={(volunteerId) => openAudit(volunteerId)}
 					/>
 				{/if}

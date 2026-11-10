@@ -34,4 +34,13 @@ per deploy, so batch related projector changes into one bump per release when po
 #: through instead of coercing values outside the two seeded ones to ``evacuation_center``).
 #: 14 — CR-206: ``public_donations.items_declared[].drop_off_point_id`` and
 #: ``public_donations.point_receipts[]`` (``point_id``, ``line_nos``, ``received_at``).
-PROJECTION_VERSION: int = 14
+#: 15 — CR-206 A2: ``public_needs`` is one row per shelter + ``item_id`` +
+#: ``drop_off_point_id`` (``_id`` = ``{shelter}:{item_id}@{point_id|-}``; new fields
+#: ``item_id``, ``drop_off_point_id``); legacy ``{shelter}:{item_id}`` rows are pruned.
+#: 16 — decision sync 2026-11-02: EXT-005 ``occupancy_total`` / ``occupancy_breakdown`` and
+#: EXT-007 ``shelter_occupants`` count ``active`` + ``room_confirmed``; breakdown ages fall
+#: back to ``birth_year`` (``resolve_age``).
+#: 17 — draft-public-needs-decimal (#934): ``public_needs.qty_needed`` / ``qty_target`` /
+#: ``on_hand`` / ``reserved`` are ``Decimal128`` (were ``double``), computed in ``Decimal``
+#: and rounded to four places half-up before the ``<= 0`` delete.
+PROJECTION_VERSION: int = 17

@@ -1,5 +1,5 @@
 import { paginateItems } from './paginate';
-import type { FindPageResult, PaginatedResult, Repository } from './repository';
+import type { FindPageResult, PageByTypeOptions, PaginatedResult, Repository } from './repository';
 
 /** Dotted selector keys (`emergency_contact.phone`) resolve through nested objects, like Mango. */
 function valueAtPath(doc: Record<string, unknown>, path: string): unknown {
@@ -25,6 +25,12 @@ function matchesSelector(doc: Record<string, unknown>, selector: Record<string, 
 				} else if (op === '$eq') {
 					if (val !== opVal) return false;
 				} else if (op === '$gte' || op === '$gt' || op === '$lte' || op === '$lt') {
+					// Mango sorts null below every value, so `{ $gt: null }` means "field is present",
+					// which the covering indexes rely on.
+					if (opVal === null) {
+						if ((op === '$gt' || op === '$gte') && val == null) return false;
+						continue;
+					}
 					if (typeof val !== typeof opVal || val == null) return false;
 					const cmp =
 						typeof val === 'string'
@@ -82,9 +88,14 @@ export function createInMemoryRepository(): Repository {
 			type: string,
 			guard: (d: unknown) => d is T,
 			page: number,
-			pageSize: number
+			pageSize: number,
+			options?: PageByTypeOptions
 		): Promise<PaginatedResult<T>> {
-			const matched = await this.allByType(type, guard);
+			// Mirror `_all_docs`: rows come back in `_id` order, reversed when descending.
+			const matched = (await this.allByType(type, guard)).sort((a, b) =>
+				a._id < b._id ? -1 : a._id > b._id ? 1 : 0
+			);
+			if (options?.descending) matched.reverse();
 			return paginateItems(matched, page, pageSize);
 		},
 

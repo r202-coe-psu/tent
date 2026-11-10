@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
-	createUser,
 	createOrMergeUser,
+	createUser,
+	deleteUser,
+	revokeCoordinatorGrant,
 	updateUser,
 	resetUserPasswordByAdmin,
 	getCurrentUserProfile,
@@ -23,11 +25,15 @@ import {
 	updateOwnProfile,
 	resolveLoginName,
 	findUserNameByPhone,
-	listShelterStaffDirectory
+	listShelterStaffDirectory,
+	getDisplayNames
 } from './user-service';
 import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
 import { ServiceError } from './couch-admin';
+
+/** Saves that add no volunteer role never call it; the A1-7 cases pass their own. */
+const noCheck = { verifyVolunteerRoles: async () => {} };
 
 /** `_users` docs carry the password field that `CouchUserDoc` intentionally omits. */
 type FakeUserDoc = CouchUserDoc & { password?: string };
@@ -47,6 +53,14 @@ describe('user-service', () => {
 					value: { rev: doc._rev },
 					doc
 				}));
+				return { status: 200, data: { rows } };
+			}
+
+			if (method === 'POST' && cleanPath === '/_users/_all_docs') {
+				const keys = ((body ?? {}) as { keys?: string[] }).keys ?? [];
+				const rows = keys.map((key) =>
+					fakeUsersDb[key] ? { id: key, key, doc: fakeUsersDb[key] } : { key, error: 'not_found' }
+				);
 				return { status: 200, data: { rows } };
 			}
 
@@ -98,6 +112,98 @@ describe('user-service', () => {
 		expect(saved.organization).toBe('ปภ. เชียงใหม่');
 		expect(saved.roles).toEqual(['shelter:SH001', 'registration_staff', 'triage_staff']);
 		expect(saved.active).toBe(true);
+	});
+
+	it('stores a sha256 staff_token_hash for a user without volunteer_id and never the plaintext token', async () => {
+		await createUser({
+			name: 'staff01',
+			password: 'Password123!',
+			display_name: 'Staff One',
+			personnel_type: 'staff',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:staff01'];
+		expect(saved.staff_token_hash).toMatch(/^[0-9a-f]{64}$/);
+		expect(JSON.stringify(saved)).not.toContain('TKT-STF-');
+	});
+
+	it('gives each new staff user a different staff_token_hash', async () => {
+		for (const name of ['staff_a', 'staff_b']) {
+			await createUser({
+				name,
+				password: 'Password123!',
+				display_name: name,
+				personnel_type: 'staff',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+		}
+
+		const a = fakeUsersDb['org.couchdb.user:staff_a'].staff_token_hash;
+		const b = fakeUsersDb['org.couchdb.user:staff_b'].staff_token_hash;
+		expect(a).not.toBe(b);
+	});
+
+	it('stores no staff_token_hash for a user linked to a volunteer', async () => {
+		await createUser({
+			name: 'vol01',
+			password: 'Password123!',
+			display_name: 'Vol One',
+			personnel_type: 'volunteer',
+			volunteer_id: 'vol:abc',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:vol01'];
+		expect(saved).not.toHaveProperty('staff_token_hash');
+	});
+
+	it('stores no staff_token_hash for a volunteer-type user without volunteer_id', async () => {
+		await createUser({
+			name: 'vol02',
+			password: 'Password123!',
+			display_name: 'Vol Two',
+			personnel_type: 'volunteer',
+			roles: ['shelter:SH001', 'registration_staff']
+		});
+
+		const saved = fakeUsersDb['org.couchdb.user:vol02'];
+		expect(saved).not.toHaveProperty('staff_token_hash');
+	});
+
+	describe('staff card summary', () => {
+		const sa = { name: 'sa01', roles: ['system_admin'], isSA: true, shelterCode: null };
+		const hash = 'ab'.repeat(32);
+
+		it('reports has_staff_card true and never exposes the hash in the summary', async () => {
+			fakeUsersDb['org.couchdb.user:staff01'] = {
+				_id: 'org.couchdb.user:staff01',
+				_rev: '1-abc',
+				name: 'staff01',
+				type: 'user',
+				roles: ['shelter:SH001', 'registration_staff'],
+				staff_token_hash: hash
+			};
+
+			const listed = await listUsers(sa);
+			const row = listed.find((u) => u.name === 'staff01');
+			expect(row?.has_staff_card).toBe(true);
+			expect(JSON.stringify(listed)).not.toContain(hash);
+		});
+
+		it('reports has_staff_card false for a user without a staff_token_hash', async () => {
+			fakeUsersDb['org.couchdb.user:vol01'] = {
+				_id: 'org.couchdb.user:vol01',
+				_rev: '1-abc',
+				name: 'vol01',
+				type: 'user',
+				roles: ['shelter:SH001', 'registration_staff'],
+				volunteer_id: 'vol:abc'
+			};
+
+			const listed = await listUsers(sa);
+			expect(listed.find((u) => u.name === 'vol01')?.has_staff_card).toBe(false);
+		});
 	});
 
 	it('accepts a volunteer phone as a forced first-login password', async () => {
@@ -740,6 +846,27 @@ describe('user-service', () => {
 			]);
 		});
 
+		it('rejects staff_token_hash and volunteer_id and leaves the stored hash unchanged', async () => {
+			seedProfileUser('0816666666');
+			const key = 'org.couchdb.user:0816666666';
+			const hash = 'cd'.repeat(32);
+			fakeUsersDb[key].staff_token_hash = hash;
+
+			await expect(
+				updateOwnProfile('0816666666', {
+					display_name: 'ok',
+					staff_token_hash: 'ef'.repeat(32),
+					volunteer_id: 'vol:abc'
+				} as never)
+			).rejects.toMatchObject({
+				code: 'VALIDATION',
+				message: expect.stringContaining('staff_token_hash')
+			} satisfies Partial<ServiceError>);
+
+			expect(fakeUsersDb[key].staff_token_hash).toBe(hash);
+			expect(fakeUsersDb[key].volunteer_id).toBeUndefined();
+		});
+
 		it('rejects empty display_name after trim', async () => {
 			seedProfileUser('0814444444');
 			await expect(updateOwnProfile('0814444444', { display_name: '   ' })).rejects.toMatchObject({
@@ -768,6 +895,32 @@ describe('user-service', () => {
 			await expect(updateOwnProfile('missing-user', { display_name: 'x' })).rejects.toMatchObject({
 				code: 'VALIDATION'
 			});
+		});
+	});
+
+	describe('updateUser staff card', () => {
+		it('keeps staff_token_hash when display_name and roles change', async () => {
+			const sa = { name: 'sa01', roles: ['system_admin'], isSA: true, shelterCode: null };
+			await createUser({
+				name: 'staff01',
+				password: 'Password123!',
+				display_name: 'Before',
+				personnel_type: 'staff',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+			const hash = fakeUsersDb['org.couchdb.user:staff01'].staff_token_hash;
+			expect(hash).toMatch(/^[0-9a-f]{64}$/);
+
+			await updateUser(
+				'staff01',
+				{ display_name: 'After', roles: ['shelter:SH001', 'triage_staff'] },
+				sa,
+				noCheck
+			);
+
+			const saved = fakeUsersDb['org.couchdb.user:staff01'];
+			expect(saved.display_name).toBe('After');
+			expect(saved.staff_token_hash).toBe(hash);
 		});
 	});
 
@@ -803,7 +956,7 @@ describe('user-service', () => {
 				{ display_name: 'hijacked' },
 				{ must_change_password: true }
 			]) {
-				await expect(updateUser('0820000001', input, sm)).rejects.toMatchObject({
+				await expect(updateUser('0820000001', input, sm, noCheck)).rejects.toMatchObject({
 					code: 'FORBIDDEN'
 				});
 			}
@@ -813,9 +966,9 @@ describe('user-service', () => {
 		it('forbids an SM from editing an SM of another shelter', async () => {
 			await seed('0820000002', ['shelter:SH002', 'shelter_manager']);
 			await expect(
-				updateUser('0820000002', { password: 'NewPassword123!' }, sm)
+				updateUser('0820000002', { password: 'NewPassword123!' }, sm, noCheck)
 			).rejects.toMatchObject({ code: 'FORBIDDEN' });
-			await expect(updateUser('0820000002', { active: false }, sm)).rejects.toMatchObject({
+			await expect(updateUser('0820000002', { active: false }, sm, noCheck)).rejects.toMatchObject({
 				code: 'FORBIDDEN'
 			});
 		});
@@ -826,7 +979,8 @@ describe('user-service', () => {
 				updateUser(
 					'0820000003',
 					{ roles: ['shelter:SH001', 'registration_staff'], password: 'NewPassword123!' },
-					sm
+					sm,
+					noCheck
 				)
 			).rejects.toMatchObject({ code: 'FORBIDDEN' });
 			expect(fakeUsersDb[key('0820000003')].roles).toEqual(['shelter:SH002', 'registration_staff']);
@@ -834,7 +988,7 @@ describe('user-service', () => {
 
 		it('still lets an SM add an outside staff into the shelter via roles only', async () => {
 			await seed('0820000004', ['shelter:SH002', 'registration_staff']);
-			await updateUser('0820000004', { roles: ['shelter:SH001', 'triage_staff'] }, sm);
+			await updateUser('0820000004', { roles: ['shelter:SH001', 'triage_staff'] }, sm, noCheck);
 			const roles = fakeUsersDb[key('0820000004')].roles;
 			expect(roles).toContain('shelter:SH001');
 			expect(roles).toContain('shelter:SH002');
@@ -845,7 +999,8 @@ describe('user-service', () => {
 			await updateUser(
 				'0820000005',
 				{ display_name: 'renamed', active: false, email: 'in@example.com' },
-				sm
+				sm,
+				noCheck
 			);
 			const doc = fakeUsersDb[key('0820000005')];
 			expect(doc.display_name).toBe('renamed');
@@ -855,7 +1010,7 @@ describe('user-service', () => {
 
 		it('leaves SA unrestricted', async () => {
 			await seed('0820000006', ['shelter:SH002', 'registration_staff']);
-			await updateUser('0820000006', { active: false, phone: '0877777777' }, sa);
+			await updateUser('0820000006', { active: false, phone: '0877777777' }, sa, noCheck);
 			const doc = fakeUsersDb[key('0820000006')];
 			expect(doc.active).toBe(false);
 			expect(doc.phone).toBe('0877777777');
@@ -871,7 +1026,8 @@ describe('user-service', () => {
 					personnel_type: 'staff',
 					roles: ['shelter:SH001', 'triage_staff']
 				},
-				sm
+				sm,
+				noCheck
 			);
 			expect(result.merged).toBe(true);
 			const doc = fakeUsersDb[key('0820000007')];
@@ -890,12 +1046,279 @@ describe('user-service', () => {
 					personnel_type: 'staff',
 					roles: ['shelter:SH001', 'triage_staff']
 				},
-				sm
+				sm,
+				noCheck
 			);
 			expect(result.merged).toBe(true);
 			const doc = fakeUsersDb[key('0820000008')];
 			expect(doc.roles).toContain('shelter:SH001');
 			expect(doc.display_name).toBe('0820000008');
+		});
+	});
+	describe('edge_shelters + soft delete (CR-171)', () => {
+		const sa = { name: 'root-sa', roles: ['system_admin'], isSA: true, shelterCode: null };
+		const manager = (code: string) => ({
+			name: `mgr-${code}`,
+			roles: [`shelter:${code}`, `${code}:shelter_manager`],
+			isSA: false,
+			shelterCode: code
+		});
+		const idOf = (name: string) => `org.couchdb.user:${name}`;
+		const base = {
+			password: 'Password123!',
+			display_name: 'Staff'
+		};
+
+		it('createUser seeds edge_shelters; update appends and never removes', async () => {
+			await createUser({ ...base, name: 'e1', roles: ['shelter:SH001', 'registration_staff'] });
+			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001']);
+
+			await updateUser('e1', { roles: ['shelter:SH001', 'shelter:SH002'] }, sa, noCheck);
+			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001', 'SH002']);
+
+			await updateUser('e1', { roles: ['shelter:SH002'] }, sa, noCheck);
+			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001', 'SH002']);
+		});
+
+		it('manager strip keeps edge_shelters and does not soft delete when shelters remain', async () => {
+			await createUser({
+				...base,
+				name: 'e2',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:registration_staff'
+				]
+			});
+			await deleteUser('e2', manager('SH001'));
+			const saved = fakeUsersDb[idOf('e2')];
+			expect(saved.roles).toContain('shelter:SH002');
+			expect(saved.roles).not.toContain('shelter:SH001');
+			expect(saved.edge_shelters).toEqual(['SH001', 'SH002']);
+			expect(saved.deleted_at ?? null).toBeNull();
+		});
+
+		it('pre-backfill doc (no edge_shelters) records the shelter being removed', async () => {
+			fakeUsersDb[idOf('legacy')] = {
+				_id: idOf('legacy'),
+				_rev: '1-a',
+				name: 'legacy',
+				type: 'user',
+				roles: ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff']
+			};
+			await updateUser('legacy', { roles: ['shelter:SH002'] }, sa, noCheck);
+			expect(fakeUsersDb[idOf('legacy')].edge_shelters).toEqual(['SH001', 'SH002']);
+
+			fakeUsersDb[idOf('legacy2')] = {
+				_id: idOf('legacy2'),
+				_rev: '1-a',
+				name: 'legacy2',
+				type: 'user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:registration_staff'
+				]
+			};
+			await deleteUser('legacy2', manager('SH001'));
+			expect(fakeUsersDb[idOf('legacy2')].edge_shelters).toEqual(['SH001', 'SH002']);
+		});
+
+		it('SA delete soft-deletes (PUT, never DELETE) and keeps PII + edge_shelters', async () => {
+			await createUser({
+				...base,
+				name: 'e3',
+				phone: '0811111111',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+			const spy = vi.mocked(couchAdmin.adminRaw);
+			spy.mockClear();
+			await deleteUser('e3', sa);
+
+			expect(spy.mock.calls.some(([, method]) => method === 'DELETE')).toBe(false);
+			const saved = fakeUsersDb[idOf('e3')];
+			expect(saved).toBeDefined();
+			expect(saved.roles).toEqual([]);
+			expect(saved.shelter_id).toBeNull();
+			expect(saved.active).toBe(false);
+			expect(saved.deleted_by).toBe('root-sa');
+			expect(Date.parse(saved.deleted_at as string)).not.toBeNaN();
+			expect(saved.edge_shelters).toEqual(['SH001']);
+			expect(saved.phone).toBe('0811111111');
+			expect(saved.password).toMatch(/^[0-9a-f]{64}$/);
+		});
+
+		it('manager removing the last shelter soft-deletes', async () => {
+			await createUser({ ...base, name: 'e4', roles: ['shelter:SH001', 'registration_staff'] });
+			await deleteUser('e4', manager('SH001'));
+			const saved = fakeUsersDb[idOf('e4')];
+			expect(saved.roles).toEqual([]);
+			expect(saved.deleted_by).toBe('mgr-SH001');
+			expect(saved.edge_shelters).toEqual(['SH001']);
+		});
+
+		it('deleted users are hidden from list, phone checks and mutations', async () => {
+			await createUser({
+				...base,
+				name: 'e5',
+				phone: '0822222222',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+			await deleteUser('e5', sa);
+
+			expect((await listUsers(sa)).map((u) => u.name)).not.toContain('e5');
+			expect(await findUserNameByPhone('0822222222')).toBeNull();
+			await expect(resetUserPasswordByAdmin('e5', sa)).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+			await expect(updateUser('e5', { display_name: 'x' }, sa, noCheck)).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+			await expect(deleteUser('e5', sa)).rejects.toMatchObject({ code: 'VALIDATION' });
+			// phone is free again for another account
+			await expect(
+				createUser({ ...base, name: 'other', phone: '0822222222', roles: ['shelter:SH001'] })
+			).resolves.toBeUndefined();
+		});
+
+		it('deleted SA is not counted by the last-SA guard', async () => {
+			await createUser({ ...base, name: 'sa-a', roles: ['system_admin'] });
+			await createUser({ ...base, name: 'sa-b', roles: ['system_admin'] });
+			// Seed the deleted doc still carrying system_admin so only the deleted_at filter keeps it out.
+			fakeUsersDb[idOf('sa-b')] = {
+				...fakeUsersDb[idOf('sa-b')],
+				deleted_at: '2026-11-01T00:00:00.000Z'
+			};
+			await expect(deleteUser('sa-a', sa)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		});
+
+		const DELETED_MSG = 'ชื่อผู้ใช้นี้เคยถูกใช้และถูกลบไปแล้ว กรุณาใช้ชื่ออื่น';
+
+		it('createUser on a soft-deleted name conflicts and leaves the doc untouched', async () => {
+			await createUser({ ...base, name: 'e6', roles: ['shelter:SH001', 'registration_staff'] });
+			await deleteUser('e6', sa);
+			const before = structuredClone(fakeUsersDb[idOf('e6')]);
+
+			await expect(
+				createUser({ ...base, name: 'e6', roles: ['shelter:SH002', 'registration_staff'] })
+			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
+
+			const after = fakeUsersDb[idOf('e6')];
+			expect(after).toEqual(before);
+			expect(after._rev).toBe(before._rev);
+			expect(after.deleted_at).toBeTruthy();
+			expect(after.roles).toEqual([]);
+		});
+
+		it('createUser on a live name conflicts with the "already exists" message', async () => {
+			await createUser({ ...base, name: 'e7', roles: ['shelter:SH001'] });
+			const err = await createUser({ ...base, name: 'e7', roles: ['shelter:SH001'] }).catch(
+				(e: unknown) => e
+			);
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'User "e7" already exists' });
+		});
+
+		it('manager createOrMergeUser on a soft-deleted name rejects and leaves the doc untouched', async () => {
+			await createUser({ ...base, name: 'e9', roles: ['shelter:SH001', 'registration_staff'] });
+			await deleteUser('e9', sa);
+			const before = structuredClone(fakeUsersDb[idOf('e9')]);
+
+			await expect(
+				createOrMergeUser(
+					{ ...base, name: 'e9', roles: ['shelter:SH002', 'registration_staff'] },
+					manager('SH002'),
+					noCheck
+				)
+			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
+			expect(fakeUsersDb[idOf('e9')]).toEqual(before);
+		});
+
+		it('createUser keeps role_grants together with edge_shelters and null soft-delete fields', async () => {
+			const grant = {
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				expires_at: '2026-12-31T16:59:59.999Z',
+				granted_by: 'mgr-SH001',
+				granted_at: '2026-11-01T00:00:00.000Z'
+			};
+			await createUser({
+				...base,
+				name: 'g1',
+				roles: ['shelter:SH001', 'registration_staff'],
+				role_grants: [grant]
+			});
+			const saved = fakeUsersDb[idOf('g1')];
+			expect(saved.role_grants).toEqual([grant]);
+			expect(saved.edge_shelters).toEqual(['SH001']);
+			expect(saved.deleted_at ?? null).toBeNull();
+			expect(saved.deleted_by ?? null).toBeNull();
+		});
+
+		it('getDisplayNames omits soft-deleted users', async () => {
+			await createUser({
+				...base,
+				name: 'dn-live',
+				display_name: 'Live Name',
+				roles: ['shelter:SH001']
+			});
+			await createUser({
+				...base,
+				name: 'dn-gone',
+				display_name: 'Gone Name',
+				roles: ['shelter:SH001']
+			});
+			await deleteUser('dn-gone', sa);
+			const names = await getDisplayNames(['dn-live', 'dn-gone', 'dn-missing']);
+			expect([...names.entries()]).toEqual([['dn-live', 'Live Name']]);
+		});
+
+		it('revokeCoordinatorGrant name lookup (storedUserName) skips a soft-deleted case-variant', async () => {
+			const grant = {
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				expires_at: '2099-12-31T16:59:59.999Z',
+				granted_by: 'mgr-SH001',
+				granted_at: '2026-11-01T00:00:00.000Z'
+			};
+			// A soft-deleted account and a live legacy account whose names differ only in case.
+			await createUser({ ...base, name: 'CaseUser', roles: ['shelter:SH001'] });
+			await deleteUser('CaseUser', sa);
+			await createUser({
+				...base,
+				name: 'CASEUSER',
+				roles: ['shelter:SH001', 'SH001:kitchen_staff'],
+				volunteer_id: 'vol:1',
+				role_grants: [grant]
+			});
+
+			await revokeCoordinatorGrant({
+				name: 'caseuser',
+				volunteer_id: 'vol:1',
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				actor: 'coord'
+			});
+
+			// The live doc was resolved (not the deleted one) and had its grant revoked.
+			expect(fakeUsersDb[idOf('CASEUSER')].role_grants ?? []).toEqual([]);
+			expect(fakeUsersDb[idOf('CaseUser')].deleted_at).toBeTruthy();
+		});
+
+		it('re-creating the exact name of a soft-deleted account stays reserved', async () => {
+			await createUser({ ...base, name: 'e10', roles: ['shelter:SH001'] });
+			await deleteUser('e10', sa);
+			await expect(
+				createUser({ ...base, name: 'e10', roles: ['shelter:SH001'] })
+			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
+		});
+
+		it('findUserBy*Subject ignore deleted accounts', async () => {
+			await createUser({ ...base, name: 'e8', roles: ['shelter:SH001'] });
+			await linkGoogleMfa('e8', { subject: 'g-sub-8' });
+			await deleteUser('e8', sa);
+			expect(await findUserByGoogleSubject('g-sub-8')).toBeNull();
 		});
 	});
 });

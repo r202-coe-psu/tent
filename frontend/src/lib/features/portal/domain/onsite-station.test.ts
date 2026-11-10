@@ -31,7 +31,10 @@ describe('resolveOnsiteStation', () => {
 	it.each([
 		'/onsite/zoning/evacuee:seed-st:sh001:0022',
 		'/onsite/medical-screening/evacuee:abc',
-		'/onsite/people/new'
+		'/onsite/people/new',
+		// #1071: these pages dropped their own "Station N" badge and rely on the band instead.
+		'/onsite/people/evacuee:abc/report-in',
+		'/onsite/people/evacuee-profile-view/evacuee:abc'
 	])('matches nested route %s', (path) => {
 		expect(resolveOnsiteStation(path)).not.toBeNull();
 	});
@@ -45,6 +48,8 @@ describe('resolveOnsiteStation', () => {
 		'/onsite/search-edit',
 		'/onsite/scan-check-in-out',
 		'/onsite/distribution',
+		// #1071: no band here, so the page keeps its "Station 1 · Review" badge.
+		'/onsite/unassigned/abc/report-in',
 		'/portal'
 	])('%s is not a station page', (path) => {
 		expect(resolveOnsiteStation(path)).toBeNull();

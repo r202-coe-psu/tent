@@ -1,6 +1,7 @@
 services:
   couchdb:
     container_name: tent-couchdb-production
+    restart: unless-stopped
     image: couchdb:3.5
     ulimits:
       nofile:
@@ -50,6 +51,7 @@ services:
 
   mongodb:
     container_name: tent-mongodb-production
+    restart: unless-stopped
     image: mongo:8.0
     # Workaround: kernel ≥6.19 + MongoDB 8 TCMalloc rseq crash (exit 139).
     environment:
@@ -58,7 +60,9 @@ services:
       - ../deployment/tent/mongodb/data:/data/db
     # No host port — internal Docker network only
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      # mongosh is a ~150 MB Node process per probe; stalled probes piled up to 4.5 GB and
+      # caused the 2026-11-08 staging OOM. A TCP connect costs a few MB.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -138,6 +142,8 @@ services:
       # Roleless writer for anonymous public writes (CR-070 booking, CR-052
       # courier PATCH). putAsPublicWriter fails closed without it outside dev.
       COUCHDB_PUBLIC_WRITER_URL: http://${COUCHDB_PUBLIC_WRITER_USER:-public_writer}:${COUCHDB_PUBLIC_WRITER_PASSWORD}@couchdb:5984
+      COUCHDB_PRINTING_SERVICE_URL: http://${COUCHDB_PRINTING_SERVICE_USER:-printing_service}:${COUCHDB_PRINTING_SERVICE_PASSWORD:-}@couchdb:5984
+      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:-}
       # BFF donations/needs → FastAPI on the compose network (not localhost)
       FASTAPI_INTERNAL_URL: http://fastapi:9000
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
@@ -185,4 +191,22 @@ services:
     command: ["pnpm", "import-worker"]
     healthcheck:
       disable: true
+    restart: unless-stopped
+
+  print-housekeeping:
+    container_name: tent-print-housekeeping-production
+    image: tent/frontend:latest
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      PRINT_HOUSEKEEPING_URL: http://frontend:3000
+      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:-}
+    command: ["pnpm", "print-housekeeping"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "const t=Number(require('fs').readFileSync('/tmp/print-housekeeping.ok','utf8'));process.exit(Date.now()-t<=120000?0:1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 60s
     restart: unless-stopped

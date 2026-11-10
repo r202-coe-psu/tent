@@ -1,0 +1,144 @@
+---
+id: CR-230
+title: จัดการจุดเก็บของ (sub_storage) จากหน้า supply — เพิ่มสิทธิ์ warehouse_staff
+status: approved
+date: 2026-11-05
+updated: 2026-11-07
+requested_by: GitHub #1186
+decided_by: kong
+layer: volatile
+affects:
+  - docs/changes/00-baseline/CR-139-shelter-storage-points.md §Open decisions N2 (amend — เดิมอนุญาตลบจุดที่ยังมีของ → บล็อกเมื่อมี lot คงเหลือ)
+  - docs/prd/role-permission-matrix.md §3 (เพิ่มแถว Shelter Storage Points)
+  - docs/data/schema.md §3.1 `common_areas.sub_storage[]` (ไม่เปลี่ยนรูป doc — เพิ่มผู้เขียนผ่าน endpoint เฉพาะ)
+  - schema_v — ไม่เปลี่ยน
+  - frontend/src/routes/api/back-office/shelter/[code]/storage-points/+server.ts (ใหม่)
+  - frontend/src/lib/features/shelters (domain: นับ lot ที่ยังอ้างจุด; data: remote adapter; application: mutation hooks)
+  - frontend/src/lib/features/operations (หน้า "จัดการคลัง" ใน /back-office/supply)
+  - frontend/src/routes/(protected)/back-office/supply
+  - frontend/src/routes/(protected)/back-office/shelters/edit (ฟอร์มศูนย์ — ปุ่มลบจุดใช้กติกา FR-6 เดียวกัน)
+  - frontend/src/routes/api/back-office/shelter/[code]/+server.ts (GET คืน `_rev`; PATCH เช็ค `_rev` + ไม่ทับ `sub_storage` ที่ไม่ได้ส่งมา) — **Amendment A1**
+---
+
+# CR-230 — เจ้าหน้าที่คลังจัดการจุดเก็บของ
+
+> **สรุป (TL;DR):**
+>
+> - **เปลี่ยนอะไร:** `warehouse_staff` ของศูนย์ (นอกเหนือจาก `shelter_manager` / SA เดิม)
+>   เพิ่ม แก้ ลบ `shelter.common_areas.sub_storage[]` ของศูนย์ตนได้ ผ่าน endpoint เฉพาะที่แตะ `sub_storage` อย่างเดียว
+> - **ทำไม:** ปัจจุบันแก้ได้ทางเดียวคือฟอร์มศูนย์ (SM/SA เท่านั้น) เจ้าหน้าที่คลังที่ใช้ supply ทุกวันเพิ่มคลังเองไม่ได้
+> - **Dev ต้อง build:** endpoint `storage-points`, หน้า "จัดการคลัง" ใน `/back-office/supply`, ฟังก์ชันนับ lot ที่ยังอ้างจุดก่อนลบ, ปุ่มลบจุดในฟอร์มศูนย์ที่ใช้ฟังก์ชันเดียวกัน (disabled เมื่อยังมีของ)
+> - **กระทบ:** role matrix §3 และ **amend CR-139 N2** (เดิมลบจุดที่ยังมีของได้ → ลบไม่ได้ ทั้ง endpoint ใหม่และฟอร์มศูนย์). ไม่เปลี่ยนรูป doc, ไม่ bump `schema_v`
+
+---
+
+## 1. Requirements
+
+| ID    | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-1  | `{code}:warehouse_staff`, `{code}:shelter_manager` ของศูนย์ `{code}` และ SA เพิ่ม แก้ ลบ `common_areas.sub_storage[]` ของศูนย์นั้นได้ — ศูนย์อื่นและ role อื่น (เช่น `supply_coordinator`, `kitchen_staff`, `donation_staff`) ทำไม่ได้                                                                                                                                                                                                                                          |
+| FR-2  | การเขียนผ่าน endpoint เฉพาะ `/api/back-office/shelter/[code]/storage-points` ที่แก้ได้เฉพาะ `common_areas.sub_storage` — field อื่นของ shelter doc ที่ถูกส่งมาใน body ต้องถูกเพิกเฉย (ไม่เปลี่ยนค่า)                                                                                                                                                                                                                                                                            |
+| FR-3  | Guard ฝั่งเซิร์ฟเวอร์ตรวจ role + shelter scope จาก session cookie; `{code}` จาก path ต้องตรงกับ scope ของผู้เรียก (SA ผ่านทุกศูนย์). ไม่ผ่าน → 403                                                                                                                                                                                                                                                                                                                              |
+| FR-4  | `id` ของจุดใหม่ออกโดยเซิร์ฟเวอร์เป็น ULID (รูปแบบเดียวกับ `addPoint` ในฟอร์มศูนย์); `id` ใน body ของการเพิ่มถูกเพิกเฉย และ `id` ของจุดเดิมแก้ไม่ได้                                                                                                                                                                                                                                                                                                                             |
+| FR-5  | Field ของจุดและ validation ใช้ชุดเดียวกับ `subStorageItemSchema` ของ feature `shelters` (`name`, `types[]`, `area_m2`, `accepts_donations`, `lat`/`lng`, `location_note`) — ไม่สร้างกติกาชุดใหม่                                                                                                                                                                                                                                                                                |
+| FR-6  | **Amend CR-139 N2** — ลบจุดได้เมื่อไม่มี lot คงเหลือ (qty > 0) ที่ `lot.storage_point_id` ชี้มาที่จุดนั้น; ถ้ายังมี → เซิร์ฟเวอร์ตอบ 409 พร้อมจำนวน lot ที่ยังมีของ และไม่ลบ · กติกานี้ใช้กับการลบจุดจากฟอร์มศูนย์ด้วย (ดู FR-11) · **ไม่นับ** `bulk_return_pool.location_storage_point_id` — เป็นแค่ตำแหน่งกอง (กรองคิว) ไม่ใช่ที่เก็บสต็อก; ที่เก็บจริงกำหนดตอนรับ (`received_storage_point_id` / `lot.storage_point_id`) และกองเก็บชื่อ snapshot `location_storage_zone` ไว้ |
+| FR-7  | เขียนด้วย `_rev` ของ shelter doc ที่ client อ่านมา; `_rev` ไม่ตรง (มีผู้แก้ฟอร์มศูนย์พร้อมกัน) → 409 ให้ UI โหลดใหม่ ไม่ merge เงียบ                                                                                                                                                                                                                                                                                                                                            |
+| FR-8  | UI: หน้า "จัดการคลัง" ใน `/back-office/supply` แสดง "คลังหลัก" (ไม่มี point id) เป็นแถวคงที่ แก้/ลบไม่ได้; ปุ่มลบ disabled พร้อมจำนวน lot ที่ยังมีของเมื่อ FR-6 ไม่ผ่าน; ยืนยันก่อนลบ; แจ้งผลด้วย toast                                                                                                                                                                                                                                                                         |
+| FR-9  | UI ซ่อน/ปิดการจัดการสำหรับ role ที่ไม่มีสิทธิ์ตาม FR-1 (UX เท่านั้น — การบังคับจริงอยู่ที่ FR-3)                                                                                                                                                                                                                                                                                                                                                                                |
+| FR-10 | จุดที่เพิ่ม/แก้ปรากฏใน `useStoragePoints` ทุก consumer เดิมโดยไม่ต้องแก้ consumer; การเปลี่ยนชื่อไม่กระทบ ledger เดิม เพราะ `lot.storage_zone` เก็บชื่อ snapshot                                                                                                                                                                                                                                                                                                                |
+| FR-11 | ฟอร์มศูนย์ (`/back-office/shelters/edit`) ยังเพิ่ม/แก้ `sub_storage` ได้เหมือนเดิม (SM/SA) แต่ปุ่มลบจุดใช้ฟังก์ชัน domain เดียวกับ FR-6/AC-7 — disabled พร้อมจำนวน lot ที่ยังมีของ (การลบจุดตาม stock บังคับฝั่ง UI เท่านั้น เพราะฟอร์มเขียน shelter doc ตรง; ด่าน 409 ตาม stock มีเฉพาะ endpoint ใหม่ · ด่าน `_rev` ของการบันทึกฟอร์มศูนย์ดู **Amendment A1** FR-12)                                                                                                           |
+
+## 2. Acceptance
+
+- **AC-1** `warehouse_staff` ของ SH001 เพิ่ม แก้ ลบจุดของ SH001 ผ่าน endpoint ได้ (2xx); `shelter_manager` ของ SH001 ทำได้เช่นกัน
+- **AC-2** `warehouse_staff` ของ SH002 เรียก endpoint ของ SH001 → 403; `supply_coordinator` และ `kitchen_staff` ของ SH001 → 403
+- **AC-3** body ที่มี field อื่นของ shelter (เช่น `name`, `capacity`, `operation_status`) → field เหล่านั้นไม่เปลี่ยนใน doc
+- **AC-4** ลบจุดที่ยังมี lot คงเหลือ (qty > 0) → 409; หลังย้าย/ใช้ของหมดแล้วลบได้
+- **AC-5** ส่ง `_rev` เก่า → 409; doc ไม่ถูกเปลี่ยน
+- **AC-6** จุดที่เพิ่มใหม่ขึ้นในฟอร์มรับของเข้าและ filter ตารางคลังทันที
+- **AC-7** domain: ฟังก์ชันรับ storage point id + lot balances คืนจำนวน lot ที่ยังมีของ (0 = ลบได้) — unit test
+- **AC-8** ฟอร์มศูนย์: ปุ่มลบจุดที่ยังมี lot คงเหลือ (qty > 0) disabled พร้อมจำนวน lot; จุดที่ไม่มีของลบได้ (กติกาเดียวกับ AC-4)
+
+## 3. Spec delta — `docs/prd/role-permission-matrix.md` §3
+
+เพิ่มแถว (ผู้เขียน `sub_storage` ต่อ role):
+
+| หมวดงาน / เอกสาร                    | การกระทำ (Action)                                                              | SA  |  SM   | REG | TRG | MED | KS  | SC  | DON | VC  | SO  | FAC |
+| :---------------------------------- | :----------------------------------------------------------------------------- | :-: | :---: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| **Shelter Storage Points** (CR นี้) | เพิ่ม/แก้/ลบจุดเก็บของ (`sub_storage`) ของศูนย์ตนจากหน้า supply หรือฟอร์มศูนย์ |  ✓  | scope |  —  |  —  |  —  |  —  | WS  |  —  |  —  |  —  |  —  |
+
+- `WS` ในคอลัมน์ SC = เฉพาะ `{code}:warehouse_staff`; `supply_coordinator` จัดการจุดเก็บของไม่ได้ (รูปแบบเดียวกับแถว Stock Distribution, CR-204)
+- สิทธิ์เดิม: การแก้ฟอร์มศูนย์ทั้งฉบับ (field อื่นทั้งหมด) ยังเป็น SM/SA เท่านั้น — CR นี้ให้เฉพาะ `sub_storage`
+
+## 4. Impact
+
+- **Docs:** `docs/prd/role-permission-matrix.md` §3 (แถวใหม่ + note); `CR-139` N2 (เพิ่มหมายเหตุ amend)
+- **Code:** endpoint ใหม่ (guard ใหม่หรือ `requireShelterScopeOrSA` + ตรวจ capability), feature `shelters` (domain count, data, application), หน้า supply
+- **Tests:** unit (นับ lot), integration `+server.ts` (FR-1 – FR-7); UI ฟอร์มศูนย์ปุ่มลบ (AC-8)
+- **Ops:** ไม่ต้อง redeploy `_design/*` — การเขียนผ่าน server route ด้วย admin credential เดิม
+
+## 5. Migration
+
+N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่ bump `schema_v` (shelter คง schema_v 9)
+
+## 6. Out of scope
+
+- คลังกลางแยกจากศูนย์ (เช่น `warehouse:main` ใน ticket)
+- เพิ่มคลังจาก dropdown ในฟอร์มรับของเข้า
+- ย้ายของระหว่างคลัง (ใช้ flow เดิม)
+- เปิดสิทธิ์แก้ field อื่นของ shelter doc ให้ role นอกเหนือ SM/SA
+- **Known limitation:** ด่านตรวจ lot คงเหลือก่อนลบ (FR-6) นับ ledger แล้วค่อยเขียน shelter doc เป็นสองขั้น ไม่ atomic — ถ้ามีการรับของเข้าจุดนั้นระหว่างสองขั้น จุดอาจถูกลบทั้งที่มี lot ใหม่ ผลจำกัด: ยอดสต็อกไม่เปลี่ยน และ lot ยังแสดงชื่อจุดเดิมจาก `lot.storage_zone` (snapshot, CR-139) แต่จุดนั้นไม่อยู่ในตัวเลือก/ตัวกรองที่เก็บของอีก (เพิ่มจุดใหม่ได้ แต่ id เปลี่ยน lot เดิมไม่ผูกกลับเอง) ยอมรับได้ (รับของเข้าจุดที่กำลังถูกลบเป็นกรณีที่พบยาก) และไม่แก้ใน CR นี้
+
+## 7. Amendment A1 — ฟอร์มศูนย์ไม่ทับจุดเก็บของที่ผู้อื่นเพิ่ม (approved 2026-11-06)
+
+> **สรุป (TL;DR):**
+>
+> - **เปลี่ยนอะไร:** `PATCH /api/back-office/shelter/[code]` (ที่ฟอร์มศูนย์ใช้) เช็ค `_rev` และไม่เขียนทับ `common_areas.sub_storage` เมื่อฟอร์มไม่ได้แก้ส่วนนี้
+> - **ทำไม:** CR นี้เพิ่มผู้เขียน `sub_storage` คนที่สอง (`warehouse_staff`); ฟอร์มที่เปิดค้างไว้ส่ง `sub_storage` เก่าทั้งก้อนและทับจุดที่คลังเพิ่งเพิ่ม พร้อม toast สำเร็จ (พบใน QA ของ #1193)
+> - **Dev ต้อง build:** GET คืน `_rev`; PATCH ตอบ 409 เมื่อ `_rev` ไม่ตรง; PATCH เก็บ `sub_storage` เดิมเมื่อ body ไม่ส่งมา; ฟอร์มส่ง `_rev` และตัด `sub_storage` ที่ไม่เปลี่ยน
+> - **กระทบ:** amend FR-11 (ตัดข้อความ "ไม่มีด่าน 409 ที่ฟอร์ม"); ไม่เปลี่ยนรูป doc, ไม่ bump `schema_v`
+
+### Requirements
+
+| ID    | Requirement                                                                                                                                                                                                |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-12 | `GET /api/back-office/shelter/[code]` คืน `_rev` ของ shelter doc; ฟอร์มศูนย์ส่ง `_rev` นั้นใน `PATCH` ทุกครั้งที่บันทึก; `_rev` ไม่ตรงกับ doc ปัจจุบัน → 409 พร้อมข้อความไทยให้โหลดใหม่ และ doc ไม่เปลี่ยน |
+| FR-13 | `PATCH` ที่ body ไม่มี `common_areas.sub_storage` ต้องคง `sub_storage` เดิมใน doc ไว้ (รวมกรณี schema เติม default `[]`) · `PATCH` ที่ส่ง `sub_storage` มา แทนที่ตามเดิม                                   |
+| FR-14 | ฟอร์มศูนย์ตัด `sub_storage` ออกจาก payload เมื่อค่าเท่ากับที่โหลดมา; ฟอร์มรับ 409 แล้วโหลดข้อมูลใหม่และแจ้งผู้ใช้ด้วย toast                                                                                |
+| FR-15 | หลังปิดศูนย์ผ่าน close modal (CR-219) ฟอร์มอ่าน `_rev` ใหม่ก่อน `PATCH` ที่ตามมา เพราะ close route เปลี่ยน doc ไปแล้ว                                                                                      |
+| FR-16 | `PATCH /api/back-office/shelter/[code]` ตอบ `{ ok, code, rev }` (`rev` ใหม่ของ doc); หลังบันทึกสำเร็จฟอร์มเปลี่ยนเฉพาะ `_rev` กับจุดที่โหลดมา ไม่แตะช่องที่ผู้ใช้พิมพ์ต่อ (บันทึกติดกันไม่ได้ 409 โดยไม่มีคนชน) · เมื่อ doc เปลี่ยนระหว่างที่ฟอร์มมีค่าที่แก้ค้าง ฟอร์มไม่ทับค่านั้น แสดงแถบ "มีข้อมูลใหม่" พร้อมปุ่มโหลดล่าสุด (#1224) |
+
+### Acceptance
+
+- **AC-9** `PATCH` ด้วย `_rev` เก่า → 409, doc ไม่เปลี่ยน; ด้วย `_rev` ปัจจุบัน → 200
+- **AC-10** `PATCH` ที่แก้ field อื่นของ `common_areas` โดยไม่ส่ง `sub_storage` → จุดเก็บของเดิมครบ
+- **AC-11** เปิดฟอร์ม → `warehouse_staff` เพิ่มจุดผ่าน endpoint → ฟอร์มแก้ field อื่นแล้วบันทึก: จุดที่เพิ่มไม่หาย (ได้ 409 หรือจุดยังอยู่ — ห้ามหายแบบเงียบ)
+- **AC-12** ปิดศูนย์ผ่าน close modal แล้วบันทึกฟอร์มต่อ ไม่ได้ 409
+- **AC-13** แก้ช่องในฟอร์มแล้วอีกคนบันทึกศูนย์ → ช่องที่แก้ยังอยู่ + แถบ "มีข้อมูลใหม่"; บันทึกสองครั้งติดกันไม่โหลดใหม่ → ไม่ได้ 409; ตั้ง Closed ขณะมีการเปลี่ยนจุดจากที่อื่น → ค่าที่แก้ยังอยู่จน dialog เปิด และยกเลิก dialog แล้วยังอยู่
+
+### Impact / Migration
+
+- **Code:** `frontend/src/routes/api/back-office/shelter/[code]/+server.ts`, `shelters.api.ts`, `shelters.repository.ts` (`ShelterSummary._rev`), `application/queries.ts` (`useUpdateShelter`), `shelter-form-page.svelte`
+- **Tests:** integration PATCH/GET ใน `[code]/server.test.ts`; unit ของ helper เทียบ `sub_storage`
+- **Migration:** N/A — ไม่เปลี่ยนรูป doc, ไม่ bump `schema_v`
+- **Compatibility:** `_rev` ใน `PATCH` เป็น optional (ไม่ส่ง = ไม่เช็ค) เพราะ `e2e/shelter-close-checkout.test.ts` เรียก PATCH ตรงโดยไม่ส่ง `_rev`; มีเฉพาะฟอร์มศูนย์ที่ส่ง `_rev` จึงได้รับการป้องกัน
+- **ลำดับของ flow ปิดศูนย์ (known limitation):** route ปิดศูนย์ (CR-219) ทำงานและบันทึก `closed` ก่อน แล้วฟอร์มจึงตรวจว่าจุดเก็บของที่โหลดมาเปลี่ยนไปหรือไม่ — ถ้าเปลี่ยน ฟอร์มปฏิเสธเฉพาะ "การบันทึกต่อ" (toast conflict + โหลดใหม่) ศูนย์ปิดไปแล้ว ค่าที่ผู้ใช้แก้ค้างในฟอร์มไม่ถูกบันทึก แต่จุดของคนอื่นไม่หาย ยอมรับตามลำดับเดิมของ CR-219 และไม่เปลี่ยนใน CR นี้
+
+### Why
+
+- QA ของ #1193 (check 7) จำลองเหตุการณ์จริงและพบว่าบันทึกฟอร์มแล้วจุดของคลังหาย โดยแจ้งสำเร็จ
+- ความเสี่ยงมีมาก่อน CR นี้ (SM สองคนชนกัน) แต่ CR นี้ให้เจ้าหน้าที่คลังแก้ทุกวัน จึงเกิดบ่อยขึ้น
+
+## Why
+
+- เจ้าหน้าที่คลังใช้หน้า supply ทุกวันแต่เพิ่มจุดเก็บของเองไม่ได้ ต้องรอ SM/SA เข้าฟอร์มศูนย์
+- แยก endpoint ให้แตะเฉพาะ `sub_storage` เพื่อไม่ขยายสิทธิ์แก้ shelter doc ทั้งฉบับ
+
+## Decision log
+
+- 2026-11-05 — proposed (GitHub #1186)
+- 2026-11-06 — เคาะ (kong, 2026-11-06) — approved; สิทธิ์เฉพาะ `warehouse_staff` (+ SM/SA), `supply_coordinator` ไม่มีสิทธิ์; track ด้วย CR ไฟล์
+- 2026-11-06 — เคาะ (kong, 2026-11-06) — FR-6 amend CR-139 N2: บล็อกลบจุดที่มี lot คงเหลือทั้งที่ endpoint ใหม่ (409) และฟอร์มศูนย์ (UI disabled)
+- 2026-11-06 — เคาะ (kong, 2026-11-06) — FR-6 ไม่นับ `bulk_return_pool.location_storage_point_id` (ตำแหน่งกอง ไม่ใช่ที่เก็บสต็อก)
+- 2026-11-06 — proposed (Amendment A1: ฟอร์มศูนย์เช็ค `_rev` + ไม่ทับ `sub_storage`; #1186 / PR #1193) (วิธี track = Amendment ใน CR-230)
+- 2026-11-06 — เคาะ (kong, 2026-11-06) — Amendment A1 approved; FR-12 – FR-15 / AC-9 – AC-12

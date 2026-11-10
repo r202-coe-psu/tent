@@ -10,36 +10,16 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
-from typing import Any
 
 from tent_model import set_on_hand_qty
 
 from worker.couch.client import CouchClient
+from worker.donation_ledger import on_hand_decimals
 from worker.masking import shelter_db_name
 
+__all__ = ["refresh_on_hand"]
+
 logger = logging.getLogger(__name__)
-
-
-def _to_decimal(value: Any) -> Decimal:
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError):
-        return Decimal(0)
-
-
-def on_hand_decimals(stock_ledgers: list[dict[str, Any]]) -> dict[str, Decimal]:
-    """Shelter balance per item. Decimal, not the float ``on_hand_by_item`` returns —
-    this figure goes straight into a Mongo comparison against Decimal128 quantities."""
-    balance: dict[str, Decimal] = {}
-    for entry in stock_ledgers:
-        item_id = entry.get("item_id")
-        if not item_id:
-            continue
-        balance[str(item_id)] = balance.get(str(item_id), Decimal(0)) + _to_decimal(
-            entry.get("qty")
-        )
-    return balance
 
 
 async def refresh_on_hand(couch: CouchClient, shelter_code: str) -> int:
@@ -56,7 +36,8 @@ async def refresh_on_hand(couch: CouchClient, shelter_code: str) -> int:
     ledgers = [
         doc
         async for doc in couch.iter_all_docs(database)
-        if doc.get("type") == "stock_ledger" and str(doc.get("_id", "")).startswith("stock_ledger:")
+        if doc.get("type") == "stock_ledger"
+        and str(doc.get("_id", "")).startswith("stock_ledger:")
     ]
 
     now = datetime.now(UTC)
@@ -66,5 +47,7 @@ async def refresh_on_hand(couch: CouchClient, shelter_code: str) -> int:
             shelter_code=shelter_code, item_id=item_id, qty=qty, now=now
         )
     if changed:
-        logger.info("refreshed on_hand_qty on %d counter(s) for %s", changed, shelter_code)
+        logger.info(
+            "refreshed on_hand_qty on %d counter(s) for %s", changed, shelter_code
+        )
     return changed

@@ -32,7 +32,8 @@ const baseRow: PendingDonationRow = {
 	item_count: 1,
 	items: [{ free_text: 'น้ำดื่ม', qty: '5', unit: 'ลัง', review_status: 'pending' }],
 	delivery_method: 'self_dropoff',
-	vehicle: 'car'
+	vehicle: 'car',
+	point_receipts: []
 };
 
 let instance: ReturnType<typeof mount> | null = null;

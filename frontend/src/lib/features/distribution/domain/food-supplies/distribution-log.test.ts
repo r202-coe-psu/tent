@@ -6,6 +6,7 @@ import {
 	assertDistributionLogIssuanceImmutable,
 	createDistributionLog,
 	DISTRIBUTION_LOG_SCHEMA_V,
+	DISTRIBUTION_LOG_SCHEMA_V_QR_OVERRIDE,
 	distributionLogDocSchema,
 	distributionLogInputSchema,
 	revertBulkEntryFromLog,
@@ -43,6 +44,23 @@ describe('Food & Supplies DistributionLog contract', () => {
 		expect(() => assertDistributionLogIssuanceImmutable(log, { ...log, qty: '2' })).toThrow(
 			/immutable/
 		);
+	});
+
+	it('accepts a staff recipient only with a user: recipient_id', () => {
+		const staffInput = { ...foodLogInput, recipient_type: 'staff' as const };
+		const accepts = (recipient_id: string | null | undefined) =>
+			distributionLogInputSchema.safeParse({ ...staffInput, recipient_id }).success;
+		expect(accepts('user:somchai')).toBe(true);
+		expect(accepts(null)).toBe(false);
+		expect(accepts(undefined)).toBe(false);
+		expect(accepts('user:')).toBe(false);
+		expect(accepts(`volunteer:${ULID}`)).toBe(false);
+		expect(accepts(`evacuee:${ULID}`)).toBe(false);
+		const log = createDistributionLog({ ...staffInput, recipient_id: 'user:somchai' }, ctx, ULID);
+		expect(distributionLogDocSchema.safeParse(log).success).toBe(true);
+		expect(
+			distributionLogDocSchema.safeParse({ ...log, recipient_id: 'volunteer:x' }).success
+		).toBe(false);
 	});
 
 	it('keeps allergen conflicts only on an overridden log (#607)', () => {
@@ -277,7 +295,95 @@ describe('DistributionLog schema_v and v3 bulk fields', () => {
 
 	it('still reads schema_v 1 documents and rejects other versions', () => {
 		expect(distributionLogDocSchema.safeParse({ ...loan(), schema_v: 1 }).success).toBe(true);
-		expect(distributionLogDocSchema.safeParse({ ...loan(), schema_v: 3 }).success).toBe(false);
+		expect(distributionLogDocSchema.safeParse({ ...loan(), schema_v: 4 }).success).toBe(false);
+	});
+
+	describe('recipient_qr_override (CR-233 A1)', () => {
+		const override = {
+			issued_at: '2026-11-08T06:52:00.000Z',
+			current_printed_at: '2026-11-08T06:53:00.000Z',
+			overridden_at: '2026-11-08T07:00:00.000Z'
+		};
+		const handout = (over: Record<string, unknown> = {}): DistributionLog =>
+			createDistributionLog(
+				{
+					ticket_id: TICKET_ID,
+					item_id: 'item:rice',
+					qty: '2',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: false,
+					is_override: false,
+					...over
+				},
+				ctx,
+				ULID
+			);
+
+		it('writes schema_v 3 with the audit only when the QR was overridden', () => {
+			const log = handout({
+				recipient_qr_override: { ...override, overridden_by: 'someone-else' }
+			});
+
+			expect(DISTRIBUTION_LOG_SCHEMA_V_QR_OVERRIDE).toBe(3);
+			expect(log.schema_v).toBe(3);
+			expect(log.recipient_qr_override).toEqual({ ...override, overridden_by: 'someone-else' });
+			expect(handout().schema_v).toBe(2);
+			expect(handout().recipient_qr_override).toBeUndefined();
+		});
+
+		it('accepts a null issued_at (QR printed before the system change)', () => {
+			const log = handout({
+				recipient_qr_override: { ...override, issued_at: null, overridden_by: 'a' }
+			});
+
+			expect(log.recipient_qr_override?.issued_at).toBeNull();
+		});
+
+		it('rejects the audit on a non-evacuee recipient and on schema_v below 3', () => {
+			expect(() =>
+				handout({
+					recipient_type: 'outside',
+					recipient_id: null,
+					recipient_qr_override: { ...override, overridden_by: 'a' }
+				})
+			).toThrow();
+			const ok = handout({ recipient_qr_override: { ...override, overridden_by: 'a' } });
+			expect(distributionLogDocSchema.safeParse({ ...ok, schema_v: 2 }).success).toBe(false);
+		});
+
+		it('keeps the audit and schema_v 3 when the bulk path rewrites the doc, and refuses edits', () => {
+			const log = createDistributionLog(
+				{
+					ticket_id: TICKET_ID,
+					item_id: 'item:wheelchair',
+					qty: '5',
+					recipient_type: 'evacuee',
+					recipient_id: 'evacuee:01J00000000000000000000001',
+					is_returnable: true,
+					is_override: false,
+					recipient_qr_override: { ...override, overridden_by: 'a' }
+				},
+				ctx,
+				ULID
+			);
+
+			const next = applyBulkEntryToLog(log, { entry_id: ENTRY_A, qty: '2' }, 'staff:dst', AT);
+			expect(next.schema_v).toBe(3);
+			expect(next.recipient_qr_override).toEqual(log.recipient_qr_override);
+
+			const tampered = {
+				...next,
+				recipient_qr_override: { ...next.recipient_qr_override!, overridden_by: 'x' }
+			};
+			expect(() => assertDistributionLogIssuanceImmutable(next, tampered)).toThrow(
+				/recipient_qr_override is immutable/
+			);
+			const stripped = { ...next, recipient_qr_override: undefined };
+			expect(() => assertDistributionLogIssuanceImmutable(next, stripped)).toThrow(
+				/recipient_qr_override is immutable/
+			);
+		});
 	});
 
 	it('accepts applied_bulk_entry_ids only on schema_v 2, unique, entry ULID ids', () => {

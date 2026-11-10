@@ -77,7 +77,7 @@
  *  E04  เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)       13 digits, wrong checksum            #member-0-card-number
  *  E05  เลขประจำตัวประชาชนต้องมี 13 หลัก                           12 digits                            #member-0-card-number
  *  E06  กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก              head phone empty                     #member-0-phone
- *  E07  (same as E06)                                             head phone "0812"                    #member-0-phone
+ *  E07  เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0                 head phone "0812"                    #member-0-phone
  *  E08  กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก                   emergency phone "12"                 #emergency-phone
  *  E09  กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน                      emergency phone+relation, no name    #emergency-name
  *  E10  กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน                    emergency name+phone, no relation    #emergency-relation
@@ -93,8 +93,8 @@
  *  E20  กรุณากรอกเลขห้อง                                           housing = หอพัก, room empty          #dorm-room
  *  E21  ที่พักแบบไร้บ้านเลขที่ต้องมีจุดสังเกตหรือที่ตั้งครบ         housing = ไร้ที่อยู่, no landmark/area #residence-landmark
  *  E22  ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง                           21 member cards                      add-member button
- *  E23  เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 9–10 หลัก …    family-search phone, on blur         family-search input
- *  E24  กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์   joined family (mock), head phone "12" #member-0-phone
+ *  E23  เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 10 หลัก …      family-search phone, on blur         family-search input
+ *  E24  เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0                 joined family (mock), head phone "12" #member-0-phone
  *  Gates (not field errors): consent unchecked → both submit buttons disabled (V1); pets
  *  capped at 10 (S5); shelter not bookable (S2) / reCAPTCHA failure (S3) / shelter safety
  *  consent (S4) surface as a banner or toast.
@@ -122,7 +122,8 @@ import {
 } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
-	DISCLAIMER_LABEL,
+	CONSENT_HEADING,
+	CONSENT_MAIN_LABEL,
 	JUMP_BUTTON,
 	PRE_REGISTER_PATH,
 	SUBMIT_LABEL,
@@ -346,13 +347,11 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('heading', { name: 'ข้อมูลที่อยู่อาศัย', level: 2 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'สมาชิกในครอบครัว', level: 2 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'สัตว์เลี้ยง', level: 2 })).toBeVisible();
-		await expect(
-			page.getByRole('heading', { name: 'ข้อตกลงและความยินยอม', level: 3 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: CONSENT_HEADING, level: 3 })).toBeVisible();
 		await expect(
 			page.getByRole('heading', { name: 'ต้องรับทราบก่อนส่งข้อมูล', level: 4 })
-		).toBeVisible();
-		await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeVisible();
+		).toHaveCount(0);
+		await expect(page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL })).toBeVisible();
 
 		// submit button in the bottom bar, repeated once in the summary aside
 		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(2);
@@ -552,7 +551,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 	test('R2 the consent checkbox and member 2 have the same field set', async ({ page }) => {
 		await NO_BANNER(page);
 		await openPreRegister(page);
-		const consent = page.getByRole('checkbox', { name: DISCLAIMER_LABEL });
+		const consent = page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL });
 		await expect(consent).toBeEnabled();
 		await expect(consent).not.toBeChecked();
 
@@ -770,7 +769,7 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 
 		await acceptDisclaimer(page);
 		for (const button of await buttons.all()) await expect(button).toBeEnabled();
-		await page.getByRole('checkbox', { name: DISCLAIMER_LABEL }).uncheck();
+		await page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL }).uncheck();
 		for (const button of await buttons.all()) await expect(button).toBeDisabled();
 
 		await acceptDisclaimer(page);
@@ -800,7 +799,7 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 				page.locator('#member-0-card-number'),
 				'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)'
 			],
-			[page.locator('#member-0-phone'), 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก']
+			[page.locator('#member-0-phone'), HEAD_PHONE_INVALID]
 		];
 		for (const [field, message] of expected) {
 			await expect(field).toHaveAttribute('aria-invalid', 'true');
@@ -864,6 +863,9 @@ const currentBE = new Date().getFullYear() + 543;
 const currentCE = new Date().getFullYear();
 const MISSING_AREA = 'กรุณากรอกบ้านเลขที่ จังหวัด อำเภอ และตำบล';
 const HEAD_PHONE_REQUIRED = 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก';
+// A non-empty head phone that is not a 10-digit mobile gets the shared schema message (CR-210),
+// for the create flow and the join flow alike; only a blank phone gets HEAD_PHONE_REQUIRED.
+const HEAD_PHONE_INVALID = 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0';
 
 const radiogroup = (page: Page, card: Locator = primaryCard(page)) =>
 	card.getByRole('radiogroup', { name: /เพศ/ });
@@ -904,7 +906,7 @@ const ERROR_ROWS: ErrorRow[] = [
 	},
 	{
 		id: 'E07',
-		message: HEAD_PHONE_REQUIRED,
+		message: HEAD_PHONE_INVALID,
 		prepare: (page) => fillBase(page, { member: { phone: '0812' } }),
 		field: (page) => page.locator('#member-0-phone')
 	},
@@ -1182,7 +1184,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		expect(
 			await messageUnderField(
 				search,
-				'เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 9–10 หลัก (หรือ +66)'
+				'เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 10 หลัก (หรือ +66)'
 			)
 		).toBe(true);
 		await search.fill('0812345678');
@@ -1230,9 +1232,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await submitButton(page).click();
 		const phone = page.locator('#member-0-phone');
 		await expect(phone).toHaveAttribute('aria-invalid', 'true');
-		expect(
-			await messageUnderField(phone, 'กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์')
-		).toBe(true);
+		expect(await messageUnderField(phone, HEAD_PHONE_INVALID)).toBe(true);
 		await expect(summaryAlert(page)).toBeVisible();
 		expect(health.registrationWrites).toEqual([]);
 	});
@@ -1301,7 +1301,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await expect(phone).toHaveAttribute('aria-invalid', 'true');
 		await phone.fill('0899999999');
 		await expect(phone).not.toHaveAttribute('aria-invalid', 'true');
-		expect(await messageUnderField(phone, HEAD_PHONE_REQUIRED)).toBe(false);
+		expect(await messageUnderField(phone, HEAD_PHONE_INVALID)).toBe(false);
 
 		// the ID number is still short, so it stays flagged, and nothing new appeared
 		await expect(card).toHaveAttribute('aria-invalid', 'true');
@@ -1370,7 +1370,7 @@ test.describe(
 			await expect(page.locator('#member-0-phone')).toHaveValue('0899999999');
 			await expect(page.locator('#address-no')).toHaveValue('123/45');
 			await expect(page.locator('#postal_code')).toHaveValue('90110');
-			await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeChecked();
+			await expect(page.getByRole('checkbox', { name: CONSENT_MAIN_LABEL })).toBeChecked();
 			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toHaveCount(0);
 		}
 
@@ -1763,16 +1763,11 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })).toBeVisible();
 	});
 
-	test('U3 on a phone the language toggle lives in the hamburger menu', async ({ page }) => {
+	test('U3 on a phone the language toggle stays in the header', async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await openPreRegister(page);
-		// the header toggle is hidden below sm
-		await expect(
-			page.locator('header').getByRole('button', { name: 'Switch to English' })
-		).toBeHidden();
-		await page.getByRole('button', { name: /เปิดเมนู/ }).click();
-		await page.getByRole('button', { name: /เปลี่ยนภาษา/ }).click();
-		await page.keyboard.press('Escape');
+		// one switcher everywhere: no detour through the hamburger menu
+		await page.locator('header').getByRole('button', { name: 'Switch to English' }).click();
 		await expect(page.getByRole('heading', { name: 'Pre-registration', level: 1 })).toBeVisible();
 	});
 });

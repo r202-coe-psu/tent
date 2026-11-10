@@ -324,6 +324,7 @@ Feature tag `@distribution`, layer `@critical`; none carries `@release` yet.
 | `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)                                                                                              |
 | `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                                                                                         |
 | `distribution/distribution-desk-volunteer.test.ts`     | Volunteer recipients (#650): pass-QR scan → meal logged as `volunteer:{ulid}`, repeat meal needs an override, deactivated pass selects nobody, volunteer loan issued and returned at the counter                                                             |
+| `distribution/distribution-desk-staff.test.ts`         | Staff QR recipients (CR-211 AC-15): staff-card scan → meal logged as `user:{name}`, repeat meal needs an override, a volunteer-linked card is caught after the volunteer meal, lowercase payload resolves                                                    |
 | `distribution/bulk-return-pool-flow.test.ts`           | Bulk return pool v3 lifecycle on both surfaces: open, add (board, detail, loan card), move, void, submit, receive, cancel; loans, entries and `stock_ledger` read back (BRP-F1 to F10, F10 = regression for the fixed stale detail sheet; fixme: loan drift) |
 | `distribution/bulk-return-pool-storage.test.ts`        | Storage points (CR-139): a pool opened at one point and received into another, receive refuses a missing point; own shelter with two points (`shelterStoragePoints`, BRP-S1/S2)                                                                              |
 | `distribution/bulk-return-pool-access.test.ts`         | Roles on the board (onsite DST, back-office WH / SC / SM) and the VDU matrix for pool, entry, move, void and receive-ledger writes (BRP-A, BRP-V1), incl. system_admin (BRP-A-SA)                                                                            |
@@ -436,6 +437,26 @@ How they obey §4:
 Local run (the preview server must see `FASTAPI_INTERNAL_URL` and `EXTERNAL_API_SECRET`; `fastapi` and `worker`
 images must be current — `docker compose up -d --build fastapi worker`):
 `env -u E2E_BASE_URL PLAYWRIGHT_TEST_BASE_URL=http://localhost:4187 npx playwright test e2e/partner-api.test.ts`
+
+### 8.6 Food sphere analysis suite (`@food-sphere`)
+
+`food-sphere-analysis.test.ts` drives the supply "วิเคราะห์เสบียงอาหาร" tab (`/back-office/supply?tab=food-sphere`)
+as SA, `warehouse_staff` and `supply_coordinator` of SH001. The page is only read, nothing is saved.
+Assertions compare the page with itself (a status card's count vs the rows it filters to, the five
+status counts vs "ของทั้งหมด"), so they hold on any seeded shelter; a shelter with no items skips the
+data tests. Tag: `@critical` (it creates three throwaway `E2E FoodSphere` accounts, removed in
+`afterAll` and asserted gone by the Z test) + `@food-sphere`, so it needs `CAN_WRITE` like the other
+`@critical` suites. A second describe covers create / update / delete in its own `E2E FoodSphere CUD <run>`
+shelter (never SH001 or the central catalog): `warehouse_staff` creates a group, turns a central group
+into a shelter override, renames it, deactivates and reactivates it and edits a replenishment policy,
+and `supply_coordinator` is refused with 403 for create, update and delete. Its `afterAll` drops the
+shelter and accounts even after a red run, and the Z test asserts they are gone. It is in
+`playwright.staging.config.ts`'s allowlist; budget about 1 minute.
+
+```bash
+pnpm test:e2e:food-sphere                     # build + run
+playwright test e2e/food-sphere-analysis.test.ts --grep @food-sphere
+```
 
 ## 9. Agent handoff
 

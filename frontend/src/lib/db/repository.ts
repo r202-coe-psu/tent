@@ -30,6 +30,11 @@ export interface PaginatedResult<T> {
 	totalPages: number;
 }
 
+export type PageByTypeOptions = {
+	/** Newest-first by `_id` (ULID creation order). Default ascending. */
+	descending?: boolean;
+};
+
 export interface Repository {
 	put<T extends { _id: string }>(doc: T): Promise<T>;
 	get<T extends { _id: string }>(id: string): Promise<T | null>;
@@ -46,7 +51,8 @@ export interface Repository {
 		type: string,
 		guard: (d: unknown) => d is T,
 		page: number,
-		pageSize: number
+		pageSize: number,
+		options?: PageByTypeOptions
 	): Promise<PaginatedResult<T>>;
 	find<T>(query: { selector: Record<string, unknown>; [key: string]: unknown }): Promise<T[]>;
 	/**
@@ -89,7 +95,8 @@ export function createRemoteRepository(dbName: string): Repository {
 			type: string,
 			guard: (d: unknown) => d is T,
 			page: number,
-			pageSize: number
+			pageSize: number,
+			options?: PageByTypeOptions
 		): Promise<PaginatedResult<T>> {
 			const total = await countDocsByType(dbName, type);
 			const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -97,7 +104,8 @@ export function createRemoteRepository(dbName: string): Repository {
 			const skip = (safePage - 1) * pageSize;
 			const { items } = await allDocsByTypePage(dbName, type, guard, {
 				limit: pageSize,
-				skip
+				skip,
+				descending: options?.descending
 			});
 			return { items, total, page: safePage, pageSize, totalPages };
 		},

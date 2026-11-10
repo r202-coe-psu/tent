@@ -18,6 +18,8 @@
  * Optional: COUCHDB_PUBLIC_WRITER_URL — when set, ensures the `_users` doc exists
  *   (idempotent; skipped when unset) and adds its username to each shelter's
  *   `_security.members.names`.
+ * Optional: COUCHDB_PRINTING_SERVICE_URL — when set, ensures the roleless
+ *   `printing_service` `_users` doc exists (idempotent; skipped when unset).
  *
  * Runs under plain `tsx` (not the SvelteKit runtime), so this script must NOT
  * import `$lib/server/couch-admin` / `shelters.admin` — those pull `$env` and
@@ -31,6 +33,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import { couchUserFromUrl } from '$lib/server/couch-credentials';
+import { ensurePrintingService } from '$lib/server/ensure-printing-service';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
 import { redeployRegistry } from '$lib/server/registry-redeploy';
 import {
@@ -50,6 +53,7 @@ import {
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	shelterDbName,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	TRANSFER_LEDGER_MANGO_INDEXES
@@ -411,6 +415,28 @@ function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWri
 	}
 }
 
+function logPrintingServiceEnsure(result: Awaited<ReturnType<typeof ensurePrintingService>>): void {
+	switch (result.outcome) {
+		case 'skipped':
+			console.log('   printing service: ⚠️  COUCHDB_PRINTING_SERVICE_URL unset — skipping user');
+			return;
+		case 'invalid_format':
+			console.error(
+				'   printing service: ✗ COUCHDB_PRINTING_SERVICE_URL is set but invalid (missing password?)'
+			);
+			return;
+		case 'created':
+			console.log(`   printing service: ✓ _users "${result.username}" created`);
+			return;
+		case 'already_exists':
+			console.log(`   printing service: ✓ _users "${result.username}" already exists`);
+			return;
+		case 'would_create':
+			console.log(`   printing service: would create _users "${result.username}"`);
+			return;
+	}
+}
+
 async function main() {
 	console.log(
 		'🔄 Redeploy _design/access + shelter Mango indexes (referral, kiosk lookup, Daily SOP role) + public writer grant'
@@ -423,6 +449,15 @@ async function main() {
 	if (writerEnsure.outcome === 'invalid_format' && !DRY_RUN) {
 		console.error(
 			'✗ Cannot apply in write mode with invalid COUCHDB_PUBLIC_WRITER_URL (check COUCHDB_PUBLIC_WRITER_PASSWORD in .env)'
+		);
+		process.exit(1);
+	}
+	const printingUrl = process.env.COUCHDB_PRINTING_SERVICE_URL ?? env.COUCHDB_PRINTING_SERVICE_URL;
+	const printingEnsure = await ensurePrintingService(couchReq, printingUrl, { dryRun: DRY_RUN });
+	logPrintingServiceEnsure(printingEnsure);
+	if (printingEnsure.outcome === 'invalid_format' && !DRY_RUN) {
+		console.error(
+			'✗ Cannot apply in write mode with invalid COUCHDB_PRINTING_SERVICE_URL (check the password in .env)'
 		);
 		process.exit(1);
 	}
@@ -536,6 +571,14 @@ async function main() {
 			);
 			console.log(
 				`    ✓ donation received / phone / ledger lot mango indexes (${donationReceivedIndexResult.created} created, ${donationReceivedIndexResult.existing} existing)`
+			);
+			const roleGrantAuditIndexResult = await deployMangoIndexes(
+				db,
+				[ROLE_GRANT_AUDIT_MANGO_INDEX],
+				false
+			);
+			console.log(
+				`    ✓ role-grant audit mango index (${roleGrantAuditIndexResult.created} created, ${roleGrantAuditIndexResult.existing} existing)`
 			);
 			const donationPhotoIndexResult = await deployMangoIndexes(
 				db,

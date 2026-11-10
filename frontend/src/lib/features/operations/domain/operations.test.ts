@@ -267,8 +267,8 @@ describe('stockBalance', () => {
 });
 
 describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)', () => {
-	// Writer stamps schema_v 6 (CR-143 §C); legacy rows through schema_v 5 remain readable.
-	it('stamps schema_v 6 on new ledger rows', () => {
+	// Writer stamps schema_v 7 (CR-234); legacy rows through schema_v 5 remain readable.
+	it('stamps schema_v 7 on new ledger rows', () => {
 		const entry = createStockLedger(
 			{
 				item_id: 'item:rice',
@@ -279,7 +279,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			},
 			ctx
 		);
-		expect(entry.schema_v).toBe(6);
+		expect(entry.schema_v).toBe(7);
 		expect(entry.lot?.produced_at).toBe(entry.occurred_at);
 	});
 
@@ -331,7 +331,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			ctx
 		);
 		expect(entry.lot).toBeUndefined();
-		expect(entry.schema_v).toBe(6);
+		expect(entry.schema_v).toBe(7);
 	});
 
 	it('accepts `distribution_return` as a valid reason (CR-059)', () => {
@@ -1975,7 +1975,7 @@ describe('lot numbering (CR-088)', () => {
 			storage_zone: 'A-01',
 			produced_at: '2026-08-25T10:00:00.000Z'
 		});
-		expect(entry.schema_v).toBe(6);
+		expect(entry.schema_v).toBe(7);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });
@@ -2775,4 +2775,59 @@ describe('matchesStatusFilter', () => {
 			expect(matchesStatusFilter(state, show, 'closed')).toBe(closed);
 		}
 	);
+});
+
+// Staff-assigned drop-off point (CR-206 A2 FR-AP-1, 4, 4b).
+describe('campaign need drop_off_point_id', () => {
+	const make = (point?: string | null) =>
+		createCampaign(
+			{
+				title: 'ข้าว',
+				needs: [
+					{
+						item_id: 'item:rice',
+						qty_target: 10,
+						unit: 'kg',
+						...(point === undefined ? {} : { drop_off_point_id: point })
+					}
+				]
+			},
+			ctx
+		);
+
+	it('writes schema_v 4 and the chosen point', () => {
+		const c = make('p-gym');
+		expect(c.schema_v).toBe(4);
+		expect(c.needs[0].drop_off_point_id).toBe('p-gym');
+	});
+
+	it('writes null explicitly, never omits the key, when there is no point', () => {
+		for (const c of [make(), make(null)]) {
+			expect(c.needs[0]).toHaveProperty('drop_off_point_id', null);
+		}
+	});
+
+	it('refuses an empty-string point', () => {
+		expect(() => make('')).toThrow();
+	});
+
+	it('editNeed sets, changes and clears the point only when the patch carries it', () => {
+		const set = editNeed(make(null), 'item:rice', { qty_target: '10', drop_off_point_id: 'p-med' });
+		expect(set.needs[0].drop_off_point_id).toBe('p-med');
+		expect(
+			editNeed(set, 'item:rice', { qty_target: '10', drop_off_point_id: null }).needs[0]
+				.drop_off_point_id
+		).toBeNull();
+		expect(editNeed(set, 'item:rice', { qty_target: '12' }).needs[0].drop_off_point_id).toBe(
+			'p-med'
+		);
+	});
+
+	it('reads a v3 need without the key as no point', () => {
+		const v3 = { ...make(), schema_v: 3 } as DonationCampaign;
+		delete (v3.needs[0] as { drop_off_point_id?: string | null }).drop_off_point_id;
+		expect(v3.needs[0].drop_off_point_id ?? null).toBeNull();
+		const edited = editNeed(v3, 'item:rice', { qty_target: '10', drop_off_point_id: 'p-gym' });
+		expect(edited.needs[0].drop_off_point_id).toBe('p-gym');
+	});
 });

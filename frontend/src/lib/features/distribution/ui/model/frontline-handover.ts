@@ -32,6 +32,8 @@ export type FrontlineRecipientSelection =
 			stayInfo?: string;
 			/** Menu-matching tags derived from the evacuee doc at selection time. */
 			menuTags?: MenuTargetTag[];
+			/** CR-233 A1: set when staff accepted the risk of an expired Person QR to pick this person. */
+			qrOverride?: { issued_at: string | null; current_printed_at: string; overridden_at: string };
 	  }
 	| {
 			recipientType: 'volunteer';
@@ -39,6 +41,13 @@ export type FrontlineRecipientSelection =
 			label: string;
 			phone?: string | null;
 			volunteerCode?: string;
+	  }
+	| {
+			recipientType: 'staff';
+			recipientId: string; // 'user:{name}'
+			label: string;
+			roleLabel?: string;
+			position?: string | null;
 	  }
 	| {
 			recipientType: 'outside';
@@ -72,15 +81,19 @@ export function getItemCapacitySummary(
 	};
 }
 
-/** Evacuee or volunteer — someone a log can name, so a repeat meal can be caught (FR-DDS). */
+/** Evacuee, volunteer or staff — someone a log can name, so a repeat meal can be caught (FR-DDS). */
 export function isIdentifiedRecipient(recipient: FrontlineRecipientSelection | null): boolean {
-	return recipient?.recipientType === 'evacuee' || recipient?.recipientType === 'volunteer';
+	return (
+		recipient?.recipientType === 'evacuee' ||
+		recipient?.recipientType === 'volunteer' ||
+		recipient?.recipientType === 'staff'
+	);
 }
 
 /**
  * Validates whether the selected recipient is eligible to receive the given item.
- * Returnable loan items need a named borrower — an evacuee or a volunteer (FR-LON-01), never an
- * anonymous outside person.
+ * Returnable loan items need a named borrower — an evacuee, a volunteer (FR-LON-01) or staff
+ * (FR-SQR-32), never an anonymous outside person.
  */
 export function canRecipientReceiveItem(
 	recipient: FrontlineRecipientSelection | null,
@@ -104,7 +117,7 @@ export function getRecipientValidationErrorMessage(
 		return 'กรุณาเลือกผู้รับก่อนทำรายการ';
 	}
 	if (isReturnable && recipient.recipientType === 'outside') {
-		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ยืม (ผู้ประสบภัยหรือจิตอาสา) ไม่สามารถแจกให้บุคคลภายนอกได้";
+		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ยืม (ผู้ประสบภัย จิตอาสา หรือเจ้าหน้าที่) ไม่สามารถแจกให้บุคคลภายนอกได้";
 	}
 	if (isReturnable && !recipient.recipientId) {
 		return "สิ่งของประเภท 'ต้องคืน' จำเป็นต้องมีรหัสผู้รับที่ระบุตัวตนได้";

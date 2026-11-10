@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminFetch } from '$lib/server/couch-admin';
+import { findMasterByCode } from '$lib/server/shelters.admin';
+import { getEvacueeQrPrints, issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import {
 	checkInSelectedMembers,
 	KioskInputError,
@@ -8,7 +10,8 @@ import {
 	kioskCheckInInputSchema,
 	kioskGateInputSchema,
 	lookupPreRegisteredEvacuee,
-	saveKioskCheckInCardPhoto
+	saveKioskCheckInCardPhoto,
+	toLabelIdentity
 } from './kiosk-check-in.server';
 import {
 	KioskUnassignedClaimConflictError,
@@ -17,6 +20,11 @@ import {
 } from './kiosk-unassigned.server';
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
+vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
+vi.mock('$lib/server/evacuee-qr-service', () => ({
+	issueEvacueeQr: vi.fn(),
+	getEvacueeQrPrints: vi.fn()
+}));
 vi.mock('$lib/server/fastapi', () => ({
 	fastapiBaseUrl: () => 'http://fastapi.test',
 	fastapiServiceHeaders: (extra: Record<string, string> = {}) => ({
@@ -26,10 +34,23 @@ vi.mock('$lib/server/fastapi', () => ({
 }));
 
 const mockAdminFetch = vi.mocked(adminFetch);
+const mockFindShelter = vi.mocked(findMasterByCode);
+const mockIssueQr = vi.mocked(issueEvacueeQr);
+const mockQrPrints = vi.mocked(getEvacueeQrPrints);
+/** The server-issued payload the mock returns: the id plus a fixed hash6 (CR-233). */
+const issuedQr = (evacueeId: string) => `${evacueeId}@a1b2c3`;
 const fetchMock = vi.fn();
 
 // FastAPI (the central queue) defaults to "nobody registered"; tests override per case.
 beforeEach(() => {
+	mockIssueQr.mockReset();
+	mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
+		evacuee_id,
+		qr_payload: issuedQr(evacuee_id),
+		printed_at: '2026-11-06T08:15:30.123Z'
+	}));
+	mockQrPrints.mockReset();
+	mockQrPrints.mockResolvedValue([]);
 	fetchMock.mockReset();
 	fetchMock.mockImplementation(async () => queueResponse(404, notFoundBody));
 	vi.stubGlobal('fetch', fetchMock);
@@ -76,6 +97,8 @@ interface FixtureHousehold {
 	head_evacuee_id: string;
 	status?: string;
 	updated_at?: string;
+	notes?: string;
+	pets?: Array<Record<string, unknown>>;
 }
 
 let evacuees: FixtureEvacuee[] = [];
@@ -172,10 +195,31 @@ let bulkWrites: BulkDoc[] = [];
 let failBulk = false;
 
 function configureCheckInCouchMocks(
-	options: { conflictOnId?: string; bulkDocs?: BulkDocsMode; bulkRowErrorIds?: string[] } = {}
+	options: {
+		conflictOnId?: string;
+		bulkDocs?: BulkDocsMode;
+		bulkRowErrorIds?: string[];
+		/** Someone else edits the household (bumping its rev) in this many of our writes of it. */
+		householdEdits?: number;
+		/** Someone else births this household after our `_all_docs` read, before our `_bulk_docs`. */
+		householdBornDuringBulk?: FixtureHousehold;
+		/** Our household PUT lands in Couch, then the response is lost (no HTTP status). */
+		householdPutLost?: boolean;
+	} = {}
 ): void {
 	bulkWrites = [];
 	failBulk = false;
+	let bornDuringBulk = options.householdBornDuringBulk;
+	let householdEdits = options.householdEdits ?? 0;
+	/** A write of an existing household conflicts when it is raced, or carries a stale `_rev`. */
+	const householdWriteConflicts = (doc: { _rev?: string }, index: number): boolean => {
+		if (householdEdits > 0) {
+			householdEdits -= 1;
+			households[index] = { ...households[index], _rev: '9-other', notes: 'edited elsewhere' };
+			return true;
+		}
+		return doc._rev !== households[index]._rev;
+	};
 	mockAdminFetch.mockImplementation(async (path, init = {}) => {
 		if (path.endsWith('/_all_docs')) {
 			const { keys } = JSON.parse(String(init.body ?? '{}')) as { keys: string[] };
@@ -193,6 +237,10 @@ function configureCheckInCouchMocks(
 				bulkWrites.push(...written);
 				return written.map((doc) => ({ ok: true, id: doc._id, rev: '1-log' })) as never;
 			}
+			if (bornDuringBulk) {
+				households.push(bornDuringBulk);
+				bornDuringBulk = undefined;
+			}
 			const mode = options.bulkDocs ?? 'ok';
 			if (mode === 'throw') throw Object.assign(new Error('couch down'), { status: 503 });
 			const { docs } = JSON.parse(String(init.body ?? '{}')) as {
@@ -200,15 +248,21 @@ function configureCheckInCouchMocks(
 			};
 			const failed = (doc: { _id: string }) =>
 				mode === 'row-error' || (options.bulkRowErrorIds ?? []).includes(doc._id);
+			const conflicting = new Set<string>();
 			for (const doc of docs.filter((doc) => !failed(doc))) {
 				if (doc.type === 'evacuee') evacuees.push({ ...doc, _rev: '1-bulk' } as never);
-				else if (doc.type === 'household') households.push({ ...doc, _rev: '1-bulk' } as never);
-				else images.push(doc);
+				else if (doc.type === 'household') {
+					const index = households.findIndex((household) => household._id === doc._id);
+					if (index < 0) households.push({ ...doc, _rev: '1-bulk' } as never);
+					else if (householdWriteConflicts(doc as { _rev?: string }, index))
+						conflicting.add(doc._id);
+					else households[index] = { ...doc, _rev: '2-bulk' } as never;
+				} else images.push(doc);
 			}
 			return docs.map((doc) =>
 				failed(doc)
 					? { id: doc._id, error: 'forbidden', reason: 'validation failed' }
-					: mode === 'conflict'
+					: mode === 'conflict' || conflicting.has(doc._id)
 						? { id: doc._id, error: 'conflict', reason: 'Document update conflict.' }
 						: { ok: true, id: doc._id, rev: '1-bulk' }
 			) as never;
@@ -242,7 +296,12 @@ function configureCheckInCouchMocks(
 					throw Object.assign(new Error('conflict'), { status: 409 });
 				}
 			} else if (householdIndex >= 0) {
+				if (householdEdits > 0) {
+					householdWriteConflicts(updated, householdIndex);
+					throw Object.assign(new Error('conflict'), { status: 409 });
+				}
 				Object.assign(households[householdIndex], updated, { _rev: '2-household' });
+				if (options.householdPutLost) throw new TypeError('fetch failed');
 			} else {
 				throw Object.assign(new Error('not found'), { status: 404 });
 			}
@@ -1133,21 +1192,21 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
+				qr_payload: issuedQr(primary._id),
 				label: { name: 'สมชาย0 ใจดี', phone }
 			},
 			{
 				evacuee_id: member._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: member._id,
+				qr_payload: issuedQr(member._id),
 				label: { name: 'สมชาย1 ใจดี', phone }
 			},
 			{
 				evacuee_id: apiMember._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: apiMember._id
+				qr_payload: issuedQr(apiMember._id)
 			},
 			{ evacuee_id: unrelated._id, status: 'not_eligible' },
 			{ evacuee_id: otherShelter._id, status: 'not_found' }
@@ -1210,7 +1269,7 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
+				qr_payload: issuedQr(primary._id),
 				label: { name: 'สมชาย0 ใจดี', phone }
 			},
 			{ evacuee_id: active._id, status: 'already_checked_in', stay_status: 'active' }
@@ -1251,7 +1310,7 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
+				qr_payload: issuedQr(primary._id),
 				label: { name: 'สมชาย0 ใจดี', phone }
 			}
 		]);
@@ -1401,7 +1460,7 @@ describe('checkInSelectedMembers kiosk walk-in reprint', () => {
 				evacuee_id: walkIn._id,
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: walkIn._id,
+				qr_payload: issuedQr(walkIn._id),
 				label: { name: 'สมชาย0 ใจดี', phone }
 			}
 		]);
@@ -1462,7 +1521,7 @@ describe('checkInSelectedMembers requiredPrimaryCitizenId', () => {
 				evacuee_id: primary._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
+				qr_payload: issuedQr(primary._id),
 				label: { name: 'สมชาย0 ใจดี', phone }
 			}
 		]);
@@ -1484,7 +1543,19 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		device_id: string;
 		member_ids: string[];
 		required_person_id?: string;
+		claim_pets: boolean;
 	};
+
+	const petImageId = 'image:01ARZ3NDEKTSV4RRFFQ69G5PIM';
+	const dogRow = {
+		species: 'dog',
+		count: 1,
+		has_cage: false,
+		notes: 'friendly',
+		image_url: petImageId
+	};
+	const catRow = { species: 'cat', count: 2, has_cage: true };
+	const petIds = ['pet-1', 'pet-2'];
 
 	function preparedImage(imageId: string) {
 		return {
@@ -1496,7 +1567,11 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 	}
 
 	/** What FastAPI `prepare` returns for these members: the born-at-pre_registered Couch docs. */
-	function preparedClaim(memberIds: string[], withImages: unknown[] = []) {
+	function preparedClaim(
+		memberIds: string[],
+		withImages: unknown[] = [],
+		pets: Array<Record<string, unknown>> = []
+	) {
 		return {
 			registration_id: registrationId,
 			shelter_code: shelterCode,
@@ -1504,8 +1579,12 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 				_id: reservedHouseholdId,
 				type: 'household',
 				head_evacuee_id: memberIds[0],
-				status: 'pre_registered'
+				status: 'pre_registered',
+				updated_at: '2026-10-31T01:00:00.000Z',
+				pets
 			},
+			pets,
+			pet_ids: pets.map((_, index) => petIds[index]),
 			evacuees: memberIds.map((id) => ({
 				...evacuee(ids.indexOf(id.slice('evacuee:'.length)), {
 					household_id: reservedHouseholdId,
@@ -1557,6 +1636,12 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 			.filter((doc) => doc.type !== 'station_log');
 	}
 
+	function householdPutBodies(): Array<Record<string, unknown>> {
+		return putCalls()
+			.filter(([path]) => path.endsWith(`/${encodeURIComponent(reservedHouseholdId)}`))
+			.map(([, init]) => JSON.parse(String(init?.body)));
+	}
+
 	function putCalls() {
 		return mockAdminFetch.mock.calls.filter(([, init]) => init?.method === 'PUT');
 	}
@@ -1570,6 +1655,7 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		households = [];
 		images = [];
 		configureCheckInCouchMocks();
+		mockFindShelter.mockResolvedValue({ feature_flags: { allow_pets: false } } as never);
 	});
 
 	it('claims the selected open queue members into Couch, then checks them in', async () => {
@@ -1580,7 +1666,12 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		});
 
 		expect(queueCalls(prepareUrl)).toEqual([
-			{ shelter_code: shelterCode, device_id: deviceId, member_ids: [first, second] }
+			{
+				shelter_code: shelterCode,
+				device_id: deviceId,
+				member_ids: [first, second],
+				claim_pets: false
+			}
 		]);
 		expect(
 			bulkWrittenDocs()
@@ -1588,9 +1679,46 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 				.sort()
 		).toEqual([reservedHouseholdId, first, second].sort());
 		expect(results).toMatchObject([
-			{ evacuee_id: first, status: 'checked_in', stay_status: 'arriving', qr_payload: first },
-			{ evacuee_id: second, status: 'checked_in', stay_status: 'arriving', qr_payload: second }
+			{
+				evacuee_id: first,
+				status: 'checked_in',
+				stay_status: 'arriving',
+				qr_payload: issuedQr(first)
+			},
+			{
+				evacuee_id: second,
+				status: 'checked_in',
+				stay_status: 'arriving',
+				qr_payload: issuedQr(second)
+			}
 		]);
+	});
+
+	describe.each([
+		['allows pets', { feature_flags: { allow_pets: true } }, true],
+		['has allow_pets off', { feature_flags: { allow_pets: false } }, false],
+		['has no allow_pets flag', { feature_flags: {} }, false],
+		['is not in the registry', null, false]
+	] as const)('when the shelter %s (FR-KUC-12a)', (_label, shelter, claimPets) => {
+		it(`asks the queue to prepare with claim_pets ${claimPets}`, async () => {
+			mockFindShelter.mockResolvedValue(shelter as never);
+			stubQueue([queueMember(0)]);
+
+			await checkInSelectedMembers(shelterCode, first, [first], { deviceId });
+
+			expect(mockFindShelter).toHaveBeenCalledWith(shelterCode);
+			expect(queueCalls(prepareUrl)).toMatchObject([{ claim_pets: claimPets }]);
+		});
+	});
+
+	it('claims without pets, and still checks in, when the shelter cannot be read (fail closed)', async () => {
+		mockFindShelter.mockRejectedValue(new Error('registry down'));
+		stubQueue([queueMember(0)]);
+
+		const results = await checkInSelectedMembers(shelterCode, first, [first], { deviceId });
+
+		expect(queueCalls(prepareUrl)).toMatchObject([{ claim_pets: false }]);
+		expect(results).toMatchObject([{ evacuee_id: first, status: 'checked_in' }]);
 	});
 
 	it('times Station 1 for queue members claimed and checked in by the kiosk (CR-192)', async () => {
@@ -1676,7 +1804,12 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 			).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
 
 			expect(queueCalls(revertUrl)).toEqual([
-				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [first, second] }
+				{
+					shelter_code: shelterCode,
+					device_id: deviceId,
+					member_ids: [first, second],
+					pet_ids: []
+				}
 			]);
 			expect(putCalls()).toHaveLength(0);
 		});
@@ -1691,7 +1824,7 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
 
 		expect(queueCalls(revertUrl)).toEqual([
-			{ shelter_code: shelterCode, device_id: deviceId, member_ids: [second] }
+			{ shelter_code: shelterCode, device_id: deviceId, member_ids: [second], pet_ids: [] }
 		]);
 		expect(putCalls()).toHaveLength(0);
 	});
@@ -1707,6 +1840,221 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
 
 		expect(queueCalls(revertUrl)).toEqual([]);
+	});
+
+	describe('when the shelter allows pets (FR-KUC-12c)', () => {
+		const existingPet = { species: 'bird', count: 1, has_cage: true };
+		const existingHousehold = (): FixtureHousehold => ({
+			_id: reservedHouseholdId,
+			_rev: '1-household',
+			type: 'household',
+			head_evacuee_id: first,
+			status: 'pre_registered',
+			updated_at: '2026-09-01T00:00:00.000Z',
+			notes: 'kept',
+			pets: [existingPet]
+		});
+		const stubPetClaim = (pets = [dogRow, catRow], withImages = [preparedImage(petImageId)]) =>
+			stubQueue([queueMember(0), queueMember(1)], (body) =>
+				queueResponse(200, preparedClaim(body.member_ids, withImages, pets))
+			);
+
+		beforeEach(() => {
+			mockFindShelter.mockResolvedValue({ feature_flags: { allow_pets: true } } as never);
+		});
+
+		it('births a new household with the claimed pets, and writes their image doc', async () => {
+			stubPetClaim();
+
+			await checkInSelectedMembers(shelterCode, first, [first, second], { deviceId });
+
+			const written = bulkWrittenDocs();
+			expect(written.find((doc) => doc._id === reservedHouseholdId)?.pets).toEqual([
+				dogRow,
+				catRow
+			]);
+			expect(written.find((doc) => doc._id === petImageId)).toMatchObject({
+				type: 'image',
+				_attachments: {
+					full: { content_type: 'image/jpeg', data: '/9j/4AAQ' },
+					thumb: { content_type: 'image/jpeg', data: 'UklGRgAA' }
+				}
+			});
+			expect(queueCalls(revertUrl)).toEqual([]);
+		});
+
+		it('appends the pets to an existing household, keeping every other field', async () => {
+			households.push(existingHousehold());
+			stubPetClaim();
+
+			await checkInSelectedMembers(shelterCode, first, [first, second], { deviceId });
+
+			const [appended] = householdPutBodies();
+			expect(appended).toMatchObject({
+				_rev: '1-household',
+				status: 'pre_registered',
+				notes: 'kept',
+				updated_at: '2026-10-31T01:00:00.000Z',
+				pets: [existingPet, dogRow, catRow]
+			});
+			expect(bulkWrittenDocs().map((doc) => doc._id)).toContain(petImageId);
+			expect(households[0].pets).toEqual([existingPet, dogRow, catRow]);
+		});
+
+		it('appends the pets when someone else births the household between read and write', async () => {
+			const bornElsewhere = { ...existingHousehold(), pets: [] };
+			configureCheckInCouchMocks({ householdBornDuringBulk: bornElsewhere });
+			stubPetClaim();
+
+			const results = await checkInSelectedMembers(shelterCode, first, [first, second], {
+				deviceId
+			});
+
+			expect(results.map((result) => result.status)).toEqual(['checked_in', 'checked_in']);
+			expect(households).toHaveLength(1);
+			expect(households[0]).toMatchObject({ notes: 'kept', pets: [dogRow, catRow] });
+			expect(bulkWrittenDocs().map((doc) => doc._id)).toContain(petImageId);
+			expect(queueCalls(revertUrl)).toEqual([]);
+		});
+
+		it('logs the registration when a lost prepare may leave pets claimed (FR-KUC-12e)', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			stubQueue([queueMember(0), queueMember(1)], () => {
+				throw new TypeError('fetch failed');
+			});
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedUnavailableError);
+
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining('pets may stay claimed'), {
+				registration_id: registrationId,
+				shelter_code: shelterCode
+			});
+			warn.mockRestore();
+		});
+
+		it('adds no pet twice when a repeat claim brings none', async () => {
+			households.push(existingHousehold());
+			stubPetClaim([], [preparedImage(petImageId)]);
+
+			await checkInSelectedMembers(shelterCode, first, [first, second], { deviceId });
+
+			expect(bulkWrittenDocs().map((doc) => doc._id)).toEqual([first, second]);
+			expect(households[0].pets).toEqual([existingPet]);
+		});
+
+		it('re-reads and merges again when the household append conflicts, up to twice more', async () => {
+			configureCheckInCouchMocks({ householdEdits: 2 });
+			households.push(existingHousehold());
+			stubPetClaim();
+
+			const results = await checkInSelectedMembers(shelterCode, first, [first, second], {
+				deviceId
+			});
+
+			expect(results.map((result) => result.status)).toEqual(['checked_in', 'checked_in']);
+			expect(households[0]).toMatchObject({
+				notes: 'edited elsewhere',
+				pets: [existingPet, dogRow, catRow]
+			});
+			expect(queueCalls(revertUrl)).toEqual([]);
+		});
+
+		it('reverts the pets with the claim when the household append keeps conflicting', async () => {
+			configureCheckInCouchMocks({ householdEdits: 99 });
+			households.push(existingHousehold());
+			stubPetClaim();
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
+
+			expect(queueCalls(revertUrl)).toEqual([
+				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [], pet_ids: petIds }
+			]);
+			expect(households[0].pets).toEqual([existingPet]);
+		});
+
+		it('keeps the pets claimed and logs when the household append response is lost (FR-KUC-12e)', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			configureCheckInCouchMocks({ householdPutLost: true });
+			households.push(existingHousehold());
+			stubPetClaim();
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
+
+			expect(households[0].pets).toEqual([existingPet, dogRow, catRow]);
+			expect(queueCalls(revertUrl)).toEqual([]);
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining('pets may stay claimed'), {
+				registration_id: registrationId,
+				shelter_code: shelterCode
+			});
+			warn.mockRestore();
+		});
+
+		it('reverts the pets with the claim when a new household is rejected', async () => {
+			configureCheckInCouchMocks({ bulkRowErrorIds: [reservedHouseholdId] });
+			stubPetClaim();
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
+
+			expect(queueCalls(revertUrl)).toEqual([
+				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [], pet_ids: petIds }
+			]);
+			// A rejected household is a failure, not "born elsewhere": no append read or PUT.
+			const householdPath = `/${encodeURIComponent(reservedHouseholdId)}`;
+			expect(mockAdminFetch.mock.calls.filter(([path]) => path.endsWith(householdPath))).toEqual(
+				[]
+			);
+		});
+
+		it('keeps the pets when only a member fails and the household was written', async () => {
+			configureCheckInCouchMocks({ bulkRowErrorIds: [second] });
+			stubPetClaim();
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
+
+			expect(queueCalls(revertUrl)).toEqual([
+				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [second], pet_ids: [] }
+			]);
+		});
+
+		it('reverts members only, with no pet ids, when prepare times out (FR-KUC-19c)', async () => {
+			stubQueue([queueMember(0), queueMember(1)], () => {
+				throw new TypeError('fetch failed');
+			});
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+			).rejects.toBeInstanceOf(KioskUnassignedUnavailableError);
+
+			expect(queueCalls(prepareUrl)).toMatchObject([{ claim_pets: true }]);
+			expect(queueCalls(revertUrl)).toEqual([
+				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [first, second], pet_ids: [] }
+			]);
+		});
+
+		it('still parses a prepare answer from an older FastAPI that returns no pets', async () => {
+			stubQueue([queueMember(0), queueMember(1)], (body) => {
+				const older: Record<string, unknown> = { ...preparedClaim(body.member_ids) };
+				delete older.pets;
+				delete older.pet_ids;
+				return queueResponse(200, older);
+			});
+
+			const results = await checkInSelectedMembers(shelterCode, first, [first, second], {
+				deviceId
+			});
+
+			expect(results.map((result) => result.status)).toEqual(['checked_in', 'checked_in']);
+		});
 	});
 
 	it('finds the registration from a later missing member when the first is not queued', async () => {
@@ -1793,7 +2141,12 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		).rejects.toBeInstanceOf(KioskUnassignedUnavailableError);
 
 		expect(queueCalls(revertUrl)).toEqual([
-			{ shelter_code: shelterCode, device_id: deviceId, member_ids: [first, second] }
+			{
+				shelter_code: shelterCode,
+				device_id: deviceId,
+				member_ids: [first, second],
+				pet_ids: []
+			}
 		]);
 		expect(bulkWrittenDocs()).toEqual([]);
 		expect(putCalls()).toHaveLength(0);
@@ -2128,6 +2481,35 @@ describe('kioskGateInputSchema qr', () => {
 		}
 	});
 
+	it('accepts `…@hex6` on the qr token only (CR-233 FR-EQR-6), any case', () => {
+		for (const token of [`evacuee:${ids[0]}@a1b2c3`, `evacuee:${ids[0]}@A1B2C3`]) {
+			expect(kioskGateInputSchema.safeParse({ source: 'qr', token }).success).toBe(true);
+		}
+		for (const token of [
+			`evacuee:${ids[0]}@a1b2c`,
+			`evacuee:${ids[0]}@a1b2c3d`,
+			`evacuee:${ids[0]}@g1b2c3`,
+			`evacuee:${ids[0]}@`,
+			`${ids[0]}@a1b2c3`
+		]) {
+			expect(kioskGateInputSchema.safeParse({ source: 'qr', token }).success).toBe(false);
+		}
+		// Doc-id fields never take a hash.
+		expect(
+			kioskGateInputSchema.safeParse({
+				source: 'phone',
+				phone,
+				primary_evacuee_id: `evacuee:${ids[0]}@a1b2c3`
+			}).success
+		).toBe(false);
+		expect(
+			kioskCheckInInputSchema.safeParse({
+				primary_evacuee_id: `evacuee:${ids[0]}@a1b2c3`,
+				evacuee_ids: [`evacuee:${ids[0]}`]
+			}).success
+		).toBe(false);
+	});
+
 	it('rejects garbage qr tokens', () => {
 		for (const token of [
 			'',
@@ -2197,5 +2579,173 @@ describe('kioskCheckInInputSchema thaid', () => {
 				thaid_session_id: sessionId
 			}).success
 		).toBe(false);
+	});
+});
+
+describe('lookupPreRegisteredEvacuee QR scan rule (CR-233)', () => {
+	const printsLog = [
+		{ printed_at: '2026-11-03T02:10:00.000Z', hash: '289170' },
+		{ printed_at: '2026-11-05T09:41:12.512Z', hash: '2d23a3' }
+	];
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCouchMocks();
+		evacuees = [evacuee(0, { last_name: 'ใจดี' })];
+	});
+	const scan = (token: string) => lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token });
+
+	it('accepts a legacy QR with no log (row 1) and reads the log of the right shelter', async () => {
+		expect(await scan(`evacuee:${ids[0]}`)).toMatchObject({ kind: 'household' });
+		expect(mockQrPrints).toHaveBeenCalledWith(shelterCode, `evacuee:${ids[0]}`);
+	});
+
+	it('accepts the newest hash (row 3), case-insensitively', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		expect(await scan(`evacuee:${ids[0].toLowerCase()}@2D23A3`)).toMatchObject({
+			kind: 'household'
+		});
+	});
+
+	it('expires a QR without @ once a log exists (row 2): no issued_at', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		expect(await scan(`evacuee:${ids[0]}`)).toEqual({
+			kind: 'qr_expired',
+			issued_at: null,
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		});
+	});
+
+	it('expires an older hash (row 4) with both dates and no household or name', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		const outcome = await scan(`evacuee:${ids[0]}@289170`);
+		expect(outcome).toEqual({
+			kind: 'qr_expired',
+			issued_at: '2026-11-03T02:10:00.000Z',
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		});
+		expect(JSON.stringify(outcome)).not.toContain('ใจดี');
+	});
+
+	it('rejects an unknown hash (row 5), with or without a log', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		expect(await scan(`evacuee:${ids[0]}@ffffff`)).toEqual({ kind: 'qr_invalid' });
+		mockQrPrints.mockResolvedValue([]);
+		expect(await scan(`evacuee:${ids[0]}@ffffff`)).toEqual({ kind: 'qr_invalid' });
+	});
+
+	it('rejects a hashed QR for an evacuee that does not exist', async () => {
+		expect(await scan(`evacuee:${ids[5]}@a1b2c3`)).toEqual({ kind: 'qr_invalid' });
+	});
+
+	it('does not read the log for a bare ULID registration ticket (FR-EQR-31)', async () => {
+		await scan('01ARZ3NDEKTSV4RRFFQ69G5REG');
+		expect(mockQrPrints).not.toHaveBeenCalled();
+	});
+
+	it('reports an unreachable log as lookup unavailable, never as valid', async () => {
+		mockQrPrints.mockRejectedValue(new Error('couch down'));
+		await expect(scan(`evacuee:${ids[0]}@a1b2c3`)).rejects.toBeInstanceOf(
+			KioskLookupUnavailableError
+		);
+	});
+});
+
+describe('checkInSelectedMembers QR issuing (CR-233)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCheckInCouchMocks();
+	});
+
+	it('issues one kiosk_checkin entry per checked-in member, printed_by the device', async () => {
+		const primary = evacuee(0);
+		const member = evacuee(1);
+		setHousehold([primary, member], primary);
+
+		const results = await checkInSelectedMembers(
+			shelterCode,
+			primary._id,
+			[primary._id, member._id],
+			{
+				deviceId: 'kiosk-sh001-01'
+			}
+		);
+
+		expect(mockIssueQr.mock.calls.map(([arg]) => arg)).toEqual([
+			{
+				shelter_code: shelterCode,
+				evacuee_id: primary._id,
+				source: 'kiosk_checkin',
+				printed_by: 'kiosk:kiosk-sh001-01'
+			},
+			{
+				shelter_code: shelterCode,
+				evacuee_id: member._id,
+				source: 'kiosk_checkin',
+				printed_by: 'kiosk:kiosk-sh001-01'
+			}
+		]);
+		for (const result of results) {
+			expect(result.qr_payload).toMatch(/@a1b2c3$/);
+			expect(result.qr_payload).not.toBe(result.evacuee_id);
+		}
+	});
+
+	it('does not issue for members that are not arriving', async () => {
+		const active = evacuee(0, { current_stay: { status: 'active' } });
+		setHousehold([active], active);
+		await checkInSelectedMembers(shelterCode, active._id, [active._id]);
+		expect(mockIssueQr).not.toHaveBeenCalled();
+	});
+
+	it('flags qr_issue_failed without a payload and keeps the check-in (FR-EQR-24)', async () => {
+		const primary = evacuee(0);
+		const member = evacuee(1);
+		setHousehold([primary, member], primary);
+		mockIssueQr.mockRejectedValueOnce(new Error('CONFLICT'));
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [
+			primary._id,
+			member._id
+		]);
+
+		expect(results[0]).toMatchObject({ status: 'checked_in', qr_issue_failed: true });
+		expect(results[0]).not.toHaveProperty('qr_payload');
+		expect(results[1]).toMatchObject({ status: 'checked_in', qr_payload: issuedQr(member._id) });
+		expect(results[1]).not.toHaveProperty('qr_issue_failed');
+		// The stay write was not undone.
+		expect(mockAdminFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true);
+	});
+
+	it('flags qr_issue_failed for an already-arriving member too', async () => {
+		const primary = evacuee(0, { current_stay: { status: 'arriving' } });
+		setHousehold([primary], primary);
+		mockIssueQr.mockRejectedValueOnce(new Error('down'));
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
+		expect(results[0]).toMatchObject({ status: 'already_checked_in', qr_issue_failed: true });
+		expect(results[0]).not.toHaveProperty('qr_payload');
+	});
+});
+
+describe('toLabelIdentity', () => {
+	const doc = { first_name: 'สมชาย', last_name: 'ใจดี', phone: '0812345678' };
+
+	it('carries the emergency contact phone for the label, without spaces or dashes', () => {
+		expect(
+			toLabelIdentity({
+				...doc,
+				emergency_contact: { name: 'สมหญิง', phone: ' 089-123 4567 ', relation: 'ภรรยา' }
+			})
+		).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678', emergency_phone: '0891234567' });
+	});
+
+	it('leaves the emergency phone out when there is none, so the label leaves the row blank', () => {
+		expect(toLabelIdentity(doc)).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678' });
+		expect(
+			toLabelIdentity({ ...doc, emergency_contact: { name: 'สมหญิง', phone: '  ', relation: '' } })
+		).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678' });
 	});
 });

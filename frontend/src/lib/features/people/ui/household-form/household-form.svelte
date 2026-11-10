@@ -20,7 +20,7 @@
 		pre_registered: { label: 'ลงทะเบียนล่วงหน้า', variant: 'secondary' },
 		arriving: { label: 'กำลังเดินทางมา', variant: 'outline' },
 		checked_in: { label: 'เช็คอินแล้ว', variant: 'default' },
-		checked_out: { label: 'เช็คเอาท์แล้ว', variant: 'secondary' },
+		checked_out: { label: 'เช็คเอาต์แล้ว', variant: 'secondary' },
 		cancelled: { label: 'ยกเลิก', variant: 'destructive' },
 		merged: { label: 'รวมแล้ว', variant: 'secondary' }
 	};
@@ -273,25 +273,21 @@
 	});
 
 	const memberItems = $derived(
-		allEvacuees
-			.filter((e) => !e.privacy?.search_excluded)
-			.map((e) => ({
-				value: e._id,
-				label: formatPersonName(e),
-				evacuee: e,
-				hasOther: !!(e.household_id && initialData && e.household_id !== initialData._id),
-				otherLabel: households.find((h) => h._id === e.household_id)?.label ?? 'ครัวเรือนอื่น'
-			}))
+		allEvacuees.map((e) => ({
+			value: e._id,
+			label: formatPersonName(e),
+			evacuee: e,
+			hasOther: !!(e.household_id && initialData && e.household_id !== initialData._id),
+			otherLabel: households.find((h) => h._id === e.household_id)?.label ?? 'ครัวเรือนอื่น'
+		}))
 	);
 
 	const headItems = $derived([
-		...allEvacuees
-			.filter((e) => !e.privacy?.search_excluded)
-			.map((e) => ({
-				value: e._id,
-				label: formatPersonName(e),
-				evacuee: e as Evacuee | null
-			}))
+		...allEvacuees.map((e) => ({
+			value: e._id,
+			label: formatPersonName(e),
+			evacuee: e as Evacuee | null
+		}))
 	]);
 
 	function removeMember(id: string) {

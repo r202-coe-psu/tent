@@ -5,21 +5,28 @@ import { grantExpiryError } from '$lib/auth/role-grants';
 import {
 	COORDINATOR_GRANTABLE_CAPABILITIES,
 	STAFF_CAPABILITIES,
+	capabilitiesForShelter,
 	compoundCapabilityRole,
+	isSystemAdmin,
+	mergeShelterAssignment,
 	rolesFromAssignments,
 	shelterScopeRole
 } from '$lib/auth/roles';
 import { normalizeThaiPhone } from '$lib/db/model';
-import { createUser, listUsers } from '$lib/features/users';
+import { createUser, listUsers, updateUser } from '$lib/features/users';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
 import type { VolunteerRepository } from '../data/volunteer.repository';
 import { isVolunteerMobile } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
+import type { VolunteerAccount } from '../domain/volunteer-access-status';
+
+/** No role is picked for the grant by default (#1072); saving without one says this. */
+export const ROLE_REQUIRED_MESSAGE = 'กรุณาเลือกตำแหน่งหน้าที่';
 
 export const volunteerAccessSchema = z.object({
 	email: z.string().trim().toLowerCase().email('กรุณากรอกอีเมลให้ถูกต้อง'),
 	password: z.string().trim().min(1, 'กรุณากำหนดรหัสผ่าน'),
-	role: z.enum(STAFF_CAPABILITIES)
+	role: z.enum(STAFF_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE })
 });
 
 /** Thrown/shown when the profile phone is filled but not a 10-digit mobile (CR-210, #951). */
@@ -48,12 +55,21 @@ export function volunteerPasswordError(password: string, loginPhone: string | nu
 	return result.success ? null : (result.error.issues[0]?.message ?? 'รหัสผ่านไม่ถูกต้อง');
 }
 
-/** Create credentials first, then link the latest profile; an exact existing link is retryable. */
+/**
+ * Create credentials first, then link the latest profile; an exact existing link is retryable.
+ * The volunteer's own account with roles in other shelters only gets this shelter's role beside
+ * them (CR-221 A1-4); one that already holds a role here is managed on the users page.
+ */
 export async function grantVolunteerAccess(
 	volunteer: Volunteer,
-	input: z.infer<typeof volunteerAccessSchema>
-): Promise<{ created: boolean }> {
+	input: z.infer<typeof volunteerAccessSchema>,
+	/** The caller's session roles: a system admin's save replaces roles, a manager's merges them. */
+	callerRoles: readonly string[]
+): Promise<{ created: boolean; roleAdded: boolean }> {
 	const { email, password, role } = volunteerAccessSchema.parse(input);
+	// Unknown caller = unknown save shape, and the wrong one would drop other shelters' roles.
+	if (callerRoles.length === 0)
+		throw new Error('ไม่พบสิทธิ์ของผู้ใช้ กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง');
 	if (hasInvalidAccessPhone(volunteer.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
 	const loginPhone = accountPhone(volunteer.phone);
 	const isPhoneBootstrapPassword = loginPhone !== null && password === loginPhone;
@@ -88,24 +104,38 @@ export async function grantVolunteerAccess(
 	) {
 		throw new Error('โปรไฟล์อาสาสมัครผูกกับบัญชีอื่นแล้ว กรุณาจัดการผ่านหน้าผู้ใช้งาน');
 	}
+	// This shelter's roles, compound or legacy flat (issued before CR-093). Only none (add one) or
+	// exactly the picked one, held in one form (a retry whose link failed), is handled here.
+	const rolesHere = existing ? capabilitiesForShelter(existing.roles, volunteer.shelter_code) : [];
+	const pickedEntries = existing
+		? existing.roles.filter(
+				(r) => r === compoundCapabilityRole(volunteer.shelter_code, role) || r === role
+			).length
+		: 0;
 	if (
 		existing &&
 		(existing.volunteer_id !== volunteer._id ||
 			existing.personnel_type !== 'volunteer' ||
 			existing.active === false ||
-			// Scope + exactly one capability, in compound or legacy flat form (issued before CR-093).
-			// Matched literally: `hasCapabilityInShelter` also passes `system_admin`.
-			existing.roles.length !== 2 ||
-			!existing.roles.includes(scope) ||
-			!existing.roles.some(
-				(r) => r === compoundCapabilityRole(volunteer.shelter_code, role) || r === role
-			))
+			isSystemAdmin(existing.roles) ||
+			(rolesHere.length > 0 &&
+				(rolesHere.length !== 1 || rolesHere[0] !== role || pickedEntries !== 1)))
 	) {
 		throw new Error('อีเมลนี้มีบัญชีอยู่แล้วหรือสิทธิ์ไม่ตรงกัน กรุณาจัดการผ่านหน้าผู้ใช้งาน');
 	}
-	const created = !existing;
+	let created = !existing;
+	let roleAdded = !!existing && rolesHere.length === 0;
+	if (existing && roleAdded) {
+		// A system admin's save replaces the roles, so it carries the other shelters' too; a manager
+		// sends their own shelter's only and the server keeps the rest. The password stays.
+		await updateUser(existing.name, {
+			roles: isSystemAdmin(callerRoles)
+				? mergeShelterAssignment(existing.roles, volunteer.shelter_code, [role])
+				: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }])
+		});
+	}
 	if (created) {
-		await createUser({
+		const result = await createUser({
 			name: email,
 			password,
 			display_name: `${profile.first_name} ${profile.last_name}`.trim(),
@@ -117,9 +147,15 @@ export async function grantVolunteerAccess(
 			volunteer_id: volunteer._id,
 			must_change_password: isPhoneBootstrapPassword
 		});
+		// A manager does not list accounts outside their shelter: an existing one is found by the
+		// server, which adds this shelter's role and keeps the password (A1-4).
+		if (result.merged) {
+			created = false;
+			roleAdded = true;
+		}
 	}
 	await linkVolunteerProfile(repository, volunteer, profile, accountName, created);
-	return { created };
+	return { created, roleAdded };
 }
 
 /** Point the volunteer profile at the account. Retryable: the account is already provisioned. */
@@ -148,27 +184,43 @@ async function linkVolunteerProfile(
 
 /**
  * A `volunteer_coordinator` grants limited, time-boxed access (#955). The BFF enforces every
- * rule (own shelter, 4 roles, verified identity incl. other shelters, 7-day expiry) and
+ * rule (own shelter, the coordinator roles, verified identity incl. other shelters, 7-day expiry) and
  * creates or extends the account; this then links the profile like {@link grantVolunteerAccess}.
  */
-export const coordinatorAccessSchema = z.object({
-	email: volunteerAccessSchema.shape.email,
-	password: volunteerAccessSchema.shape.password,
-	role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES),
-	/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
-	expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ')
-});
+export const coordinatorAccessSchema = z
+	.object({
+		email: volunteerAccessSchema.shape.email,
+		/** Not asked for when the account exists (CR-221 FR-10): the server keeps its password. */
+		password: z.string().trim(),
+		role: z.enum(COORDINATOR_GRANTABLE_CAPABILITIES, { message: ROLE_REQUIRED_MESSAGE }),
+		/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
+		expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ'),
+		/** The linked account already exists (standing `active` / `lapsed`): no password. */
+		account_exists: z.boolean().optional()
+	})
+	.superRefine((value, ctx) => {
+		if (!value.account_exists && value.password === '') {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['password'],
+				message: 'กรุณากำหนดรหัสผ่าน'
+			});
+		}
+	});
 
 export async function grantVolunteerAccessAsCoordinator(
 	volunteer: Volunteer,
 	input: z.infer<typeof coordinatorAccessSchema>
 ): Promise<{ created: boolean; unchanged: boolean }> {
-	const { email, password, role, expires_on } = coordinatorAccessSchema.parse(input);
+	const { email, password, role, expires_on, account_exists } =
+		coordinatorAccessSchema.parse(input);
 	const expiryError = grantExpiryError(expires_on);
 	if (expiryError) throw new Error(expiryError);
 	if (hasInvalidAccessPhone(volunteer.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
-	const passwordError = volunteerPasswordError(password, accountPhone(volunteer.phone));
-	if (passwordError) throw new Error(passwordError);
+	if (!account_exists) {
+		const passwordError = volunteerPasswordError(password, accountPhone(volunteer.phone));
+		if (passwordError) throw new Error(passwordError);
+	}
 	const repository = volunteerRepositoryFor(volunteer.shelter_code);
 	const profile = await repository.get(volunteer._id);
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
@@ -193,23 +245,96 @@ export async function grantVolunteerAccessAsCoordinator(
 	return { created: result.created, unchanged: result.unchanged };
 }
 
-/** A grant on the volunteer's account; `mine` ones are those the caller may revoke (FR-8). */
-export type VolunteerGrant = { role: string; expires_at: string; mine: boolean };
+/**
+ * A grant on the volunteer's account (`mine`: issued by the caller, display only). `granted_by`
+ * is the original issuer, for "ออกโดย …" next to the old expiry (CR-221 FR-13).
+ */
+export type VolunteerGrant = {
+	role: string;
+	expires_at: string;
+	granted_by?: string;
+	mine: boolean;
+};
 
-/** The grants on the account the volunteer profile is linked to, as the coordinator sees them. */
+/**
+ * The role to preselect when the account already holds grants here (#1044): the one that runs
+ * longest, i.e. the latest grant, if the caller may still give it. Empty when there is none, so
+ * a first grant starts with nothing picked (#1072).
+ */
+export function currentGrantRole<R extends string>(
+	grants: readonly Pick<VolunteerGrant, 'role' | 'expires_at'>[],
+	choices: readonly R[]
+): R | '' {
+	const latest = [...grants]
+		.filter((g): g is typeof g & { role: R } => (choices as readonly string[]).includes(g.role))
+		.sort((a, b) => Date.parse(b.expires_at) - Date.parse(a.expires_at))[0];
+	return latest?.role ?? '';
+}
+
+/** How the account's last grant here ended (from the audit), when it holds nothing here now. */
+export type GrantEnding = {
+	role: string;
+	reason: 'expired' | 'revoked' | 'verification_revoked';
+	at: string;
+	by: string;
+	/** Why the worker revoked it, when it says (`profile_inactive`, CR-221 FR-20). */
+	cause?: string;
+};
+
+/** The account behind a volunteer profile as the coordinator dialog sees it (#1044). */
+export type VolunteerAccessView = {
+	email: string | null;
+	has_account: boolean;
+	grants: VolunteerGrant[];
+	permanent_roles: string[];
+	last_ended: GrantEnding | null;
+};
+
+/** The account the volunteer profile is linked to, as the coordinator sees it. */
 export async function fetchVolunteerGrants(
 	volunteer: Pick<Volunteer, '_id' | 'shelter_code'>
-): Promise<{ email: string | null; grants: VolunteerGrant[] }> {
+): Promise<VolunteerAccessView> {
 	const query = new URLSearchParams({
 		shelter_code: volunteer.shelter_code,
 		volunteer_id: volunteer._id
 	});
-	const { email, grants } = await serviceFetch<{
-		ok: true;
-		email: string | null;
-		grants: VolunteerGrant[];
-	}>(`/api/v1/volunteer-access?${query}`);
-	return { email, grants };
+	const { email, has_account, grants, permanent_roles, last_ended } = await serviceFetch<
+		{ ok: true } & VolunteerAccessView
+	>(`/api/v1/volunteer-access?${query}`);
+	return { email, has_account, grants, permanent_roles, last_ended };
+}
+
+/**
+ * Where the volunteer stands, for the dialog's title, button and note (#1044): no account yet,
+ * an account holding a role here, or an account whose role here has ended.
+ */
+export type AccessState =
+	| { kind: 'none' }
+	| { kind: 'active'; permanentRoles: string[] }
+	| { kind: 'lapsed'; lastEnded: GrantEnding | null };
+
+export function accessState(
+	view: Pick<
+		VolunteerAccessView,
+		'has_account' | 'grants' | 'permanent_roles' | 'last_ended'
+	> | null
+): AccessState {
+	if (!view?.has_account) return { kind: 'none' };
+	if (view.grants.length > 0 || view.permanent_roles.length > 0) {
+		return { kind: 'active', permanentRoles: view.permanent_roles };
+	}
+	return { kind: 'lapsed', lastEnded: view.last_ended };
+}
+
+/** Every volunteer account of the shelter with its roles there (#1044). */
+export async function fetchShelterVolunteerAccounts(
+	shelterCode: string
+): Promise<VolunteerAccount[]> {
+	const query = new URLSearchParams({ shelter_code: shelterCode });
+	const { accounts } = await serviceFetch<{ ok: true; accounts: VolunteerAccount[] }>(
+		`/api/v1/volunteer-access/accounts?${query}`
+	);
+	return accounts;
 }
 
 /** Take back a grant the caller issued: the role goes, the account and password stay. */

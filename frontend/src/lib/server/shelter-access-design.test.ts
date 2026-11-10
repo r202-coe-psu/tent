@@ -26,6 +26,7 @@ import {
 	DONATION_RECEIVED_MANGO_INDEX,
 	DONATION_RECEIVED_PHONE_MANGO_INDEX,
 	DONATION_BOOKING_REF_MANGO_INDEX,
+	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
 	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
@@ -354,7 +355,8 @@ describe('buildValidateDocUpdate', () => {
 			[DONATION_RECEIVED_PHONE_MANGO_INDEX],
 			[DONATION_BOOKING_REF_MANGO_INDEX],
 			[STOCK_LEDGER_LOT_NO_MANGO_INDEX],
-			[DONATION_PHOTO_ORPHAN_MANGO_INDEX]
+			[DONATION_PHOTO_ORPHAN_MANGO_INDEX],
+			[ROLE_GRANT_AUDIT_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
 		for (const { name, index } of lists.flat()) {
@@ -414,6 +416,15 @@ describe('buildValidateDocUpdate', () => {
 			`_design/${STOCK_LEDGER_LOT_NO_MANGO_INDEX.ddoc}`,
 			STOCK_LEDGER_LOT_NO_MANGO_INDEX.name
 		]);
+	});
+
+	it('indexes the audit docs of one account by reason for the last-grant-ended lookup (CR-221)', () => {
+		expect(ROLE_GRANT_AUDIT_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'target_id', 'reason'] },
+			ddoc: 'role-grant-audit-target',
+			name: 'role-grant-audit-by-target',
+			type: 'json'
+		});
 	});
 
 	it('indexes only donor photos no booking has bound, by age (CR-175 FR-16)', () => {
@@ -1229,6 +1240,123 @@ describe('buildValidateDocUpdate', () => {
 		).not.toThrow();
 	});
 
+	describe('evacuee_qr (CR-233 FR-EQR-38/39)', () => {
+		const COUCH_ADMIN: UserCtx = { name: 'server', roles: ['_admin'] };
+		const entry = (printed_at: string, hash: string, over: Doc = {}): Doc => ({
+			printed_at,
+			hash,
+			printed_by: 'staff01',
+			source: 'profile',
+			...over
+		});
+		const qrDoc = (prints: Doc[]): Doc => ({
+			...envelope,
+			schema_v: 1,
+			_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			type: 'evacuee_qr',
+			evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			prints
+		});
+		const e1 = entry('2026-11-06T08:00:00.000Z', '289170');
+		const e2 = entry('2026-11-06T09:00:00.000Z', '2d23a3', { source: 'family_batch' });
+		const one = qrDoc([e1]);
+		const two = qrDoc([e1, e2]);
+
+		it('is in the allowed whitelist (generated source)', () => {
+			expect(buildValidateDocUpdate('SH001')).toContain("'station_log', 'evacuee_qr'");
+		});
+
+		it('accepts a create and an append from the server admin credential', () => {
+			expect(() => compile()(one, null, COUCH_ADMIN)).not.toThrow();
+			expect(() => compile()(two, one, COUCH_ADMIN)).not.toThrow();
+		});
+
+		it.each([
+			['registration staff', REGISTRATION],
+			['system_admin (app role, not CouchDB _admin)', ADMIN]
+		])('rejects writes from a user session: %s', (_n, ctx) => {
+			expectForbidden(() => compile()(one, null, ctx), /server only/);
+			expectForbidden(() => compile()(two, one, ctx), /server only/);
+		});
+
+		it('rejects DELETE even from the server credential', () => {
+			expectForbidden(
+				() => compile()({ _id: one._id, _rev: '1-a', _deleted: true }, one, COUCH_ADMIN),
+				/Cannot delete evacuee_qr/
+			);
+		});
+
+		it('rejects editing, dropping or reordering existing entries', () => {
+			const run = (next: Doc) => () => compile()(next, two, COUCH_ADMIN);
+			expectForbidden(run(qrDoc([{ ...e1, printed_by: 'x' }, e2])), /append-only/);
+			expectForbidden(run(qrDoc([e1])), /append-only/);
+			expectForbidden(run(qrDoc([e2, e1])), /strictly increasing|append-only/);
+		});
+
+		it('requires strictly increasing printed_at', () => {
+			expectForbidden(
+				() => compile()(qrDoc([e1, entry(e1.printed_at as string, 'aaaaaa')]), one, COUCH_ADMIN),
+				/strictly increasing/
+			);
+		});
+
+		it('requires hash ^[0-9a-f]{6}$ and unique within prints', () => {
+			for (const bad of ['ABCDEF', 'abc', 'abcdeg', 'abcdef0']) {
+				expectForbidden(
+					() => compile()(qrDoc([entry('2026-11-06T08:00:00.000Z', bad)]), null, COUCH_ADMIN),
+					/hash must match/
+				);
+			}
+			expectForbidden(
+				() => compile()(qrDoc([e1, entry('2026-11-06T09:00:00.000Z', '289170')]), one, COUCH_ADMIN),
+				/unique/
+			);
+		});
+
+		it('requires a source from the enum', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						qrDoc([entry('2026-11-06T08:00:00.000Z', '289170', { source: 'qr' })]),
+						null,
+						COUCH_ADMIN
+					),
+				/source is not allowed/
+			);
+		});
+
+		it('reserves the evacuee_qr: _id prefix for evacuee_qr documents', () => {
+			const squatter = {
+				...envelope,
+				_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+				type: 'evacuee'
+			};
+			expectForbidden(() => compile()(squatter, null, REGISTRATION), /prefix is reserved/);
+			expectForbidden(() => compile()(squatter, null, COUCH_ADMIN), /prefix is reserved/);
+			// Deleting a squatter stays possible for an admin.
+			expect(() =>
+				compile()({ _id: squatter._id, _deleted: true }, squatter, COUCH_ADMIN)
+			).not.toThrow();
+		});
+
+		it('requires _id prefix, matching evacuee_id and this shelter', () => {
+			expectForbidden(
+				() => compile()({ ...one, _id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0' }, null, COUCH_ADMIN),
+				/_id must start with evacuee_qr:/
+			);
+			expectForbidden(
+				() =>
+					compile()(
+						{ ...one, evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH1' },
+						null,
+						COUCH_ADMIN
+					),
+				/must match _id/
+			);
+			expectForbidden(() => compile('SH002')(one, null, COUCH_ADMIN), /shelter_code must be SH002/);
+		});
+	});
+
 	it('accepts household create from registration staff', () => {
 		expect(() =>
 			compile()(
@@ -1259,6 +1387,149 @@ describe('buildValidateDocUpdate', () => {
 			() => compile()({ ...movement, zone: 'A' }, movement, REGISTRATION),
 			/Cannot update append-only movement/
 		);
+	});
+
+	describe('recipe role gate (CR-217)', () => {
+		const recipe = (over: Doc = {}): Doc => ({
+			...envelope,
+			schema_v: 4,
+			_id: 'recipe:01J',
+			type: 'recipe',
+			label: 'ข้าวผัด',
+			ingredients: [{ item_master_id: 'item_master:rice', quantity: '2', uom: 'kg' }],
+			standard_portions: '10',
+			standard_duration_hours: '1',
+			...over
+		});
+		const deletion = { _id: 'recipe:01J', _rev: '1-a', _deleted: true };
+		const SUPPLY: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'SH001:supply_coordinator'] };
+		const OTHER_KITCHEN: UserCtx = { name: 'kt2', roles: ['shelter:SH002', 'SH002:kitchen_staff'] };
+
+		it.each([
+			['kitchen staff', KITCHEN],
+			['warehouse staff', WAREHOUSE],
+			['a supply coordinator', SUPPLY],
+			['a shelter manager', MANAGER],
+			['a system admin', ADMIN]
+		])('lets %s create, update and delete a recipe', (_, user) => {
+			expect(() => compile()(recipe(), null, user)).not.toThrow();
+			expect(() => compile()(recipe({ label: 'ข้าวผัดไก่' }), recipe(), user)).not.toThrow();
+			expect(() => compile()(deletion, recipe(), user)).not.toThrow();
+		});
+
+		it.each([
+			['registration staff', REGISTRATION],
+			['distribution staff', DISTRIBUTION],
+			['kitchen staff of another shelter', OTHER_KITCHEN]
+		])('rejects %s creating, updating or deleting a recipe', (_, user) => {
+			expectForbidden(() => compile()(recipe(), null, user), /can write recipe/);
+			expectForbidden(
+				() => compile()(recipe({ label: 'ข้าวผัดไก่' }), recipe(), user),
+				/can write recipe/
+			);
+			expectForbidden(() => compile()(deletion, recipe(), user), /can write recipe/);
+		});
+	});
+
+	describe('stock parameter role gate (CR-235)', () => {
+		const TYPES = ['replenishment_policy', 'requirement_group', 'food_sphere_standard'] as const;
+		const param = (type: string, over: Doc = {}): Doc => ({
+			...envelope,
+			schema_v: 1,
+			_id: `${type}:X`,
+			type,
+			source: 'SHELTER_OVERRIDE',
+			...over
+		});
+		const tombstone = (type: string): Doc => ({ _id: `${type}:X`, _rev: '1-a', _deleted: true });
+		const SUPPLY: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'SH001:supply_coordinator'] };
+		const VOLUNTEER: UserCtx = { name: 'vol', roles: ['shelter:SH001', 'SH001:volunteer'] };
+		const DONATION: UserCtx = { name: 'don', roles: ['shelter:SH001', 'SH001:donation_staff'] };
+		const OTHER_WAREHOUSE: UserCtx = {
+			name: 'ws2',
+			roles: ['shelter:SH002', 'SH002:warehouse_staff']
+		};
+		const COUCH_ADMIN: UserCtx = { name: 'a', roles: ['_admin'] };
+
+		describe.each(TYPES)('%s', (type) => {
+			it.each([
+				['warehouse staff', WAREHOUSE],
+				['a shelter manager', MANAGER],
+				['a system admin', ADMIN]
+			])('lets %s create, update, deactivate and delete', (_, user) => {
+				expect(() => compile()(param(type), null, user)).not.toThrow();
+				expect(() =>
+					compile()(param(type, { status: 'inactive' }), param(type), user)
+				).not.toThrow();
+				expect(() => compile()(tombstone(type), param(type), user)).not.toThrow();
+			});
+
+			it.each([
+				['a supply coordinator', SUPPLY],
+				['kitchen staff', KITCHEN],
+				['a volunteer', VOLUNTEER],
+				['registration staff', REGISTRATION],
+				['donation staff', DONATION],
+				['warehouse staff of another shelter', OTHER_WAREHOUSE]
+			])('rejects %s on write and on delete', (_, user) => {
+				expectForbidden(() => compile()(param(type), null, user), /can write replenishment_policy/);
+				expectForbidden(
+					() => compile()(param(type, { status: 'inactive' }), param(type), user),
+					/can write replenishment_policy/
+				);
+				expectForbidden(
+					() => compile()(tombstone(type), param(type), user),
+					/can write replenishment_policy/
+				);
+			});
+
+			it('lets the couch admin bypass the gate (write and delete)', () => {
+				expect(() => compile()(param(type), null, COUCH_ADMIN)).not.toThrow();
+				expect(() => compile()(tombstone(type), param(type), COUCH_ADMIN)).not.toThrow();
+			});
+		});
+
+		it('does not rewrite a stock parameter into another type to dodge the gate', () => {
+			expectForbidden(
+				() => compile()(param('item_category'), param('requirement_group'), KITCHEN),
+				/Cannot change type/
+			);
+		});
+
+		describe('sop_override', () => {
+			const sop = (over: Doc = {}): Doc => param('sop_override', { ratios, version: 1, ...over });
+
+			it.each([
+				['a shelter manager', MANAGER],
+				['a system admin', ADMIN]
+			])('lets %s create, update and delete', (_, user) => {
+				expect(() => compile()(sop(), null, user)).not.toThrow();
+				expect(() => compile()(sop({ version: 2 }), sop(), user)).not.toThrow();
+				expect(() => compile()(tombstone('sop_override'), sop(), user)).not.toThrow();
+			});
+
+			it.each([
+				['warehouse staff', WAREHOUSE],
+				['a supply coordinator', SUPPLY],
+				['kitchen staff', KITCHEN],
+				['warehouse staff of another shelter', OTHER_WAREHOUSE]
+			])('rejects %s on write and on delete', (_, user) => {
+				expectForbidden(() => compile()(sop(), null, user), /can write sop_override/);
+				expectForbidden(
+					() => compile()(sop({ version: 2 }), sop(), user),
+					/can write sop_override/
+				);
+				expectForbidden(
+					() => compile()(tombstone('sop_override'), sop(), user),
+					/can write sop_override/
+				);
+			});
+
+			it('lets the couch admin bypass the gate (seed / provisioning, AC-6)', () => {
+				expect(() => compile()(sop(), null, COUCH_ADMIN)).not.toThrow();
+				expect(() => compile()(tombstone('sop_override'), sop(), COUCH_ADMIN)).not.toThrow();
+			});
+		});
 	});
 
 	it('accepts a new stock_ledger entry from warehouse staff', () => {
@@ -4252,6 +4523,111 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(validReturnableLog, null, DISTRIBUTION)).not.toThrow();
 			});
 
+			describe('recipient_qr_override (CR-233 A1, schema_v 3)', () => {
+				const audit = {
+					issued_at: '2026-11-08T06:52:00.000Z',
+					current_printed_at: '2026-11-08T06:53:00.000Z',
+					overridden_by: DISTRIBUTION.name,
+					overridden_at: '2026-11-08T07:00:00.000Z'
+				};
+				const overridden = (over: Doc = {}): Doc => ({
+					...validFoodLog,
+					schema_v: 3,
+					recipient_qr_override: audit,
+					...over
+				});
+
+				it('allows an evacuee handout with the audit on schema_v 3, null issued_at included', () => {
+					expect(() => compile()(overridden(), null, DISTRIBUTION)).not.toThrow();
+					expect(() =>
+						compile()(
+							overridden({ recipient_qr_override: { ...audit, issued_at: null } }),
+							null,
+							DISTRIBUTION
+						)
+					).not.toThrow();
+				});
+
+				it('rejects the audit below schema_v 3, on a non-evacuee and when malformed', () => {
+					expectForbidden(
+						() => compile()(overridden({ schema_v: 2 }), null, DISTRIBUTION),
+						/recipient_qr_override requires schema_v 3/
+					);
+					const outside: Doc = overridden({ recipient_type: 'outside' });
+					delete outside.recipient_id;
+					delete outside.household_id;
+					expectForbidden(
+						() => compile()(outside, null, DISTRIBUTION),
+						/applies to evacuee recipients only/
+					);
+					expectForbidden(
+						() =>
+							compile()(
+								overridden({ recipient_qr_override: { ...audit, overridden_by: '' } }),
+								null,
+								DISTRIBUTION
+							),
+						/recipient_qr_override must be/
+					);
+				});
+
+				it('rejects an overridden_by that is not the creating actor (FR-EQR-48)', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								overridden({ recipient_qr_override: { ...audit, overridden_by: 'someone-else' } }),
+								null,
+								DISTRIBUTION
+							),
+						/overridden_by must match the current actor/
+					);
+				});
+
+				it('refuses to edit or remove the audit after issuance', () => {
+					const stored = overridden();
+					expectForbidden(
+						() =>
+							compile()(
+								{ ...stored, recipient_qr_override: { ...audit, overridden_by: 'x' } },
+								stored,
+								DISTRIBUTION
+							),
+						/recipient_qr_override is immutable/
+					);
+					const stripped: Doc = { ...stored };
+					delete stripped.recipient_qr_override;
+					expectForbidden(
+						() => compile()(stripped, stored, DISTRIBUTION),
+						/recipient_qr_override is immutable/
+					);
+				});
+
+				it('does not allow an existing log to gain the audit later (2 -> 3)', () => {
+					const stored = { ...validFoodLog, schema_v: 2 };
+					expectForbidden(
+						() => compile()(overridden(), stored, DISTRIBUTION),
+						/recipient_qr_override is immutable/
+					);
+				});
+			});
+
+			it('accepts a staff recipient only with a user: recipient_id', () => {
+				const staffLog = (recipient_id?: string | null): Doc => {
+					const log: Doc = { ...validFoodLog, recipient_type: 'staff' };
+					delete log.household_id;
+					if (recipient_id === undefined) delete log.recipient_id;
+					else log.recipient_id = recipient_id;
+					return log;
+				};
+				expect(() => compile()(staffLog('user:somchai'), null, DISTRIBUTION)).not.toThrow();
+				for (const bad of [undefined, null, 'user:', 'volunteer:x', 'evacuee:x']) {
+					expectForbidden(
+						() => compile()(staffLog(bad), null, DISTRIBUTION),
+						/staff recipient_id is required/
+					);
+				}
+			});
+
 			it('rejects hard-delete of distribution_log', () => {
 				expectForbidden(
 					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, DISTRIBUTION),
@@ -4841,8 +5217,13 @@ describe('buildValidateDocUpdate', () => {
 						/schema_v can only stay the same or upgrade from 1 to 2/
 					);
 					expectForbidden(
-						() => compile()({ ...active, schema_v: 3 }, active, DISTRIBUTION),
+						() => compile()({ ...active, schema_v: 4 }, active, DISTRIBUTION),
 						/Unsupported distribution_log schema version/
+					);
+					// schema_v 3 is only written at issuance (CR-233 A1): no later 2 -> 3 upgrade.
+					expectForbidden(
+						() => compile()({ ...active, schema_v: 3 }, active, DISTRIBUTION),
+						/schema_v can only stay the same or upgrade from 1 to 2/
 					);
 				});
 
@@ -7481,6 +7862,280 @@ describe('buildValidateDocUpdate', () => {
 					},
 					abortedClaim,
 					{ name: 'reg_user', roles: ['shelter:SH001', 'registration_staff'] }
+				)
+			).not.toThrow();
+		});
+	});
+});
+
+// CR-227: donation_staff records donation receipts and nothing else that moves stock.
+describe('buildValidateDocUpdate — donation_staff (CR-227)', () => {
+	const DONATION: UserCtx = {
+		name: 'don',
+		roles: ['shelter:SH001', 'SH001:donation_staff']
+	};
+	const OTHER_SHELTER: UserCtx = {
+		name: 'don',
+		roles: ['shelter:SH002', 'SH002:donation_staff']
+	};
+	const GATE = /Only warehouse staff or managers can write stock ledger/;
+	const don = (over: Doc = {}): Doc => ledger({ created_by: 'don', ...over });
+
+	describe('allowed: positive donation receipt in its own shelter', () => {
+		it.each([
+			['compound role', DONATION],
+			[
+				'flat role with a single shelter scope',
+				{ name: 'don', roles: ['shelter:SH001', 'donation_staff'] }
+			]
+		])('lets a %s write a donation stock_ledger row', (_label, userCtx) => {
+			expect(() => compile()(don(), null, userCtx)).not.toThrow();
+		});
+
+		it('accepts a decimal quantity and a donation ref_id, lot included', () => {
+			expect(() =>
+				compile()(
+					don({
+						qty: '2.5',
+						ref_id: 'donation:01J',
+						lot: { lot_no: 'L-0001', expiry: '2026-12-31' }
+					}),
+					null,
+					DONATION
+				)
+			).not.toThrow();
+		});
+	});
+
+	describe('refused: anything else on stock_ledger', () => {
+		it.each([
+			['a donation row in another shelter', () => don(), OTHER_SHELTER],
+			['a zero donation quantity', () => don({ qty: '0' }), DONATION],
+			['a negative donation quantity', () => don({ qty: '-5' }), DONATION],
+			['a non-string donation quantity', () => don({ qty: 5 }), DONATION],
+			[
+				'an adjust row',
+				() => don({ schema_v: 6, qty: '-3', reason: 'adjust', adjust_reason: 'count_mismatch' }),
+				DONATION
+			],
+			[
+				'a positive adjust row (found)',
+				() => don({ schema_v: 6, qty: '3', reason: 'adjust', adjust_reason: 'found' }),
+				DONATION
+			],
+			[
+				'an item merge row',
+				() =>
+					don({
+						schema_v: 6,
+						qty: '-6',
+						reason: 'adjust',
+						ref_id: null,
+						adjust_reason: 'merge',
+						note: 'item_master:B'
+					}),
+				DONATION
+			],
+			[
+				'a direct distribute row',
+				() =>
+					don({
+						qty: '-10',
+						reason: 'distribute',
+						ref_id: 'requisition_ticket:direct-01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+				DONATION
+			],
+			[
+				'a batch distribute row',
+				() =>
+					don({
+						qty: '-10',
+						reason: 'distribute',
+						ref_id: 'distribution_batch:01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+				DONATION
+			],
+			[
+				'a requisition row',
+				() =>
+					don({
+						qty: '-10',
+						reason: 'requisition',
+						ref_id: 'requisition_ticket:01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+				DONATION
+			],
+			['a manual receive row', () => don({ reason: 'receive', ref_id: null }), DONATION],
+			[
+				'a loan-return receive row',
+				() =>
+					don({
+						reason: 'receive',
+						ref_id: 'distribution_log:01J',
+						lot: { note: 'counter_loan_return' }
+					}),
+				DONATION
+			]
+		] as [string, () => Doc, UserCtx][])('rejects %s', (_label, make, userCtx) => {
+			expectForbidden(() => compile()(make(), null, userCtx), GATE);
+		});
+
+		it('does not let a donation row carry adjust-only fields', () => {
+			expectForbidden(
+				() => compile()(don({ schema_v: 6, adjust_reason: 'found' }), null, DONATION),
+				/adjust_reason is only allowed when reason is adjust/
+			);
+			expectForbidden(
+				() => compile()(don({ note: 'x' }), null, DONATION),
+				/note is only allowed when reason is adjust/
+			);
+		});
+
+		it('keeps stock_ledger append-only for it', () => {
+			expectForbidden(
+				() => compile()(don({ qty: '99' }), don(), DONATION),
+				/Cannot update append-only stock_ledger/
+			);
+		});
+	});
+
+	describe('refused: other stock-side documents', () => {
+		it('refuses distribution_batch', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							_id: 'distribution_batch:01J',
+							type: 'distribution_batch',
+							request_id: 'distribution_request:01J',
+							status: 'activating',
+							items: [{ item_id: 'item:soap', allocated_qty: '10', unit: 'bar' }],
+							allocations: [{ item_id: 'item:soap', lot_ref: 'stock_ledger:01J', qty: '10' }],
+							...envelope,
+							schema_v: 1
+						},
+						null,
+						DONATION
+					),
+				/Only warehouse staff or system admin can manage distribution batches/
+			);
+		});
+
+		it('refuses stock_lot_reservation', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						{
+							_id: 'stock_lot_reservation:hash123',
+							type: 'stock_lot_reservation',
+							lot_ref: 'stock_ledger:01J',
+							pending_claims: [],
+							...envelope,
+							schema_v: 1
+						},
+						null,
+						DONATION
+					),
+				/Only warehouse staff, shelter manager, or system admin can manage stock lot reservations/
+			);
+		});
+
+		it('refuses opening, allocating and dispatching a requisition_ticket', () => {
+			const ticket = (over: Doc = {}): Doc => ({
+				_id: 'requisition_ticket:01J',
+				type: 'requisition_ticket',
+				...envelope,
+				schema_v: 1,
+				created_by: 'don',
+				ticket_no: 'TKT-KITCHEN-0001',
+				requisition_type: 'kitchen',
+				status: 'PENDING_PICK',
+				meal_plan_id: 'meal_plan:01J',
+				source_location: 'warehouse:main',
+				destination_location: 'kitchen',
+				requested_by: 'don',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				],
+				...over
+			});
+			expectForbidden(
+				() => compile()(ticket(), null, DONATION),
+				/Only kitchen staff or system admin can open/
+			);
+			const open = ticket();
+			const allocated = ticket({
+				items: [{ ...(open.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expectForbidden(
+				() => compile()(allocated, open, DONATION),
+				/Only warehouse staff, supply coordinator, kitchen staff, or system admin can update requisition_ticket items/
+			);
+			expectForbidden(
+				() => compile()({ ...allocated, status: 'READY_FOR_DISPATCH' }, allocated, DONATION),
+				/can approve a requisition_ticket/
+			);
+		});
+
+		it('refuses retiring an item_master into another (merge)', () => {
+			const item = (over: Doc = {}): Doc => ({
+				_id: 'item_master:A',
+				type: 'item_master',
+				...envelope,
+				schema_v: 5,
+				name: 'ข้าวสาร',
+				base_unit: 'kg',
+				...over
+			});
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expectForbidden(() => compile()(merged, item(), DONATION), /can merge items/);
+		});
+	});
+
+	describe('warehouse_staff keeps every right (not a regression)', () => {
+		it('still writes donation, adjust and distribute rows', () => {
+			expect(() => compile()(ledger(), null, WAREHOUSE)).not.toThrow();
+			expect(() =>
+				compile()(
+					ledger({ schema_v: 6, qty: '-3', reason: 'adjust', adjust_reason: 'count_mismatch' }),
+					null,
+					WAREHOUSE
+				)
+			).not.toThrow();
+			expect(() =>
+				compile()(
+					ledger({
+						qty: '-10',
+						reason: 'distribute',
+						ref_id: 'distribution_batch:01J',
+						lot_ref: 'stock_ledger:01J'
+					}),
+					null,
+					WAREHOUSE
+				)
+			).not.toThrow();
+		});
+
+		it('a user holding both roles keeps the warehouse rights', () => {
+			const both: UserCtx = {
+				name: 'both',
+				roles: ['shelter:SH001', 'SH001:donation_staff', 'SH001:warehouse_staff']
+			};
+			expect(() =>
+				compile()(
+					ledger({ schema_v: 6, qty: '-3', reason: 'adjust', adjust_reason: 'count_mismatch' }),
+					null,
+					both
 				)
 			).not.toThrow();
 		});

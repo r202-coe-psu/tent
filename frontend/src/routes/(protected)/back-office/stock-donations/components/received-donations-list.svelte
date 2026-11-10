@@ -18,6 +18,7 @@
 	import { ItemCombobox, useStockFormItems } from '$lib/features/operations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	/** A submitted search: what the server is asked, plus what to call it on screen. */
 	export type SubmittedReceivedSearch = ReceivedSearchTerm & { label: string };
@@ -153,6 +154,15 @@
 	</span>
 {/snippet}
 
+{#snippet receivedStamp(row: PendingDonationRow, dotClass: string, textClass: string)}
+	{#if row.received_at}
+		<span class={dotClass}>·</span>
+		<time class="{textClass} tabular-nums" datetime={row.received_at} data-testid="received-at"
+			>{formatThaiDateTime(row.received_at)}</time
+		>
+	{/if}
+{/snippet}
+
 {#snippet loadError()}
 	<div
 		class="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-white p-6 text-center"
@@ -267,6 +277,7 @@
 						<span class="font-semibold text-slate-500">{donationRefLabel(row)}</span>
 						<span class="text-slate-400">·</span>
 						<span class="text-slate-500">{formatReceivedAgo(row.received_at)}</span>
+						{@render receivedStamp(row, 'text-slate-400', 'text-slate-500')}
 					</div>
 				</div>
 
@@ -339,6 +350,7 @@
 								<span class="font-semibold text-muted-foreground">{donationRefLabel(row)}</span>
 								<span class="text-muted-foreground">·</span>
 								<span class="text-muted-foreground">{formatReceivedAgo(row.received_at)}</span>
+								{@render receivedStamp(row, 'text-muted-foreground', 'text-muted-foreground')}
 							</div>
 						</Table.Cell>
 

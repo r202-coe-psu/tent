@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	shiftAssignmentSchema,
+	normalizeLegacyShiftAssignment,
 	isShiftAssignment,
 	makeShiftAssignment,
 	shiftAssignmentInputSchema,
@@ -91,6 +92,35 @@ describe('shiftAssignmentSchema', () => {
 
 	it('accepts legacy v3 and rejects unsupported schema versions', () => {
 		expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 2 }).success).toBe(false);
+		expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 7 }).success).toBe(false);
+	});
+
+	describe('CR-220 — schema_v 6 and cancel_application_id', () => {
+		it('accepts v5 and v6', () => {
+			expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 5 }).success).toBe(true);
+			expect(shiftAssignmentSchema.safeParse({ ...validDoc(), schema_v: 6 }).success).toBe(true);
+		});
+
+		it('keeps cancel_application_id through parse (a staff save must not strip the stamp)', () => {
+			const parsed = shiftAssignmentSchema.parse({
+				...validDoc(),
+				schema_v: 6,
+				status: 'cancelled',
+				cancel_application_id: 'job_application:01AAAAAAAAAAAAAAAAAAAAAAAA'
+			});
+			expect(parsed.cancel_application_id).toBe('job_application:01AAAAAAAAAAAAAAAAAAAAAAAA');
+		});
+
+		it('treats cancel_application_id as optional and nullable', () => {
+			expect(shiftAssignmentSchema.safeParse(validDoc()).success).toBe(true);
+			expect(
+				shiftAssignmentSchema.safeParse({ ...validDoc(), cancel_application_id: null }).success
+			).toBe(true);
+		});
+
+		it('isShiftAssignment accepts a v6 doc', () => {
+			expect(isShiftAssignment({ ...validDoc(), schema_v: 6 })).toBe(true);
+		});
 	});
 
 	describe('F12 — job_id legacy migration sentinel', () => {
@@ -241,6 +271,62 @@ describe('isShiftAssignment', () => {
 	});
 });
 
+describe('shiftAssignmentSchema — legacy v4 docs (worker shape, #1014)', () => {
+	/** Worker-written v4: check_in_* present, check_out_by/method/reason absent. */
+	const workerDoc = (extra: Record<string, unknown> = {}) => {
+		const doc: Record<string, unknown> = { ...validDoc(), schema_v: 4, check_out_at: null };
+		for (const k of ['check_out_by', 'check_out_method', 'check_out_reason']) delete doc[k];
+		return { ...doc, ...extra };
+	};
+
+	it('accepts the worker shape and fills the schema.md defaults', () => {
+		const parsed = shiftAssignmentSchema.parse(workerDoc());
+		expect(parsed).toMatchObject({
+			check_out_by: null,
+			check_out_method: 'qr',
+			check_out_reason: null
+		});
+		expect(isShiftAssignment(workerDoc())).toBe(true);
+	});
+
+	it('never overwrites present check_out_* values', () => {
+		const parsed = shiftAssignmentSchema.parse(
+			workerDoc({
+				check_out_by: 'staff-1',
+				check_out_method: 'manual_override',
+				check_out_reason: 'ลืมสแกน'
+			})
+		);
+		expect(parsed).toMatchObject({
+			check_out_by: 'staff-1',
+			check_out_method: 'manual_override',
+			check_out_reason: 'ลืมสแกน'
+		});
+	});
+
+	it('normalizeLegacyShiftAssignment leaves a complete doc untouched (same reference)', () => {
+		const doc = validDoc();
+		expect(normalizeLegacyShiftAssignment(doc)).toBe(doc);
+	});
+
+	it('does not default check_in_method (worker writes it; spec keeps it required)', () => {
+		const doc = workerDoc();
+		delete doc.check_in_method;
+		expect(isShiftAssignment(doc)).toBe(false);
+	});
+
+	it('rejects an unknown check_out_method', () => {
+		expect(isShiftAssignment(workerDoc({ check_out_method: 'telepathy' }))).toBe(false);
+	});
+
+	it('rejects check_out_method manual_override without a reason', () => {
+		expect(isShiftAssignment(workerDoc({ check_out_method: 'manual_override' }))).toBe(false);
+		expect(
+			isShiftAssignment(workerDoc({ check_out_method: 'manual_override', check_out_reason: '   ' }))
+		).toBe(false);
+	});
+});
+
 describe('shiftAssignmentInputSchema', () => {
 	it('accepts a valid input', () => {
 		expect(shiftAssignmentInputSchema.safeParse(baseInput).success).toBe(true);
@@ -266,7 +352,7 @@ describe('makeShiftAssignment', () => {
 	it('defaults to status assigned, check_in_method/check_out_method qr, all check-in/out fields null', () => {
 		const a = makeShiftAssignment(baseInput, ctx);
 		expect(a._id).toMatch(/^shift_assignment:/);
-		expect(a.schema_v).toBe(5);
+		expect(a.schema_v).toBe(6);
 		expect(a.status).toBe('assigned');
 		expect(a.check_in_method).toBe('qr');
 		expect(a.check_in_at).toBeNull();

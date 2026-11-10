@@ -1,5 +1,17 @@
 <script lang="ts">
 	import '../app.css';
+	// Thai faces are self-hosted: label rendering fails closed without them (kiosk-label-image.ts),
+	// so they must load even when Google Fonts is unreachable (WAN down → PDF preview fallback).
+	import '@fontsource/ibm-plex-sans-thai-looped/300.css';
+	import '@fontsource/ibm-plex-sans-thai-looped/400.css';
+	import '@fontsource/ibm-plex-sans-thai-looped/500.css';
+	import '@fontsource/ibm-plex-sans-thai-looped/600.css';
+	import '@fontsource/ibm-plex-sans-thai-looped/700.css';
+	import '@fontsource/ibm-plex-sans-thai/300.css';
+	import '@fontsource/ibm-plex-sans-thai/400.css';
+	import '@fontsource/ibm-plex-sans-thai/500.css';
+	import '@fontsource/ibm-plex-sans-thai/600.css';
+	import '@fontsource/ibm-plex-sans-thai/700.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { afterNavigate } from '$app/navigation';
 	import { asset } from '$app/paths';

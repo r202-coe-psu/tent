@@ -9,7 +9,6 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
 
@@ -27,6 +26,9 @@
 		ClaimDialog,
 		type UnassignedRegistrationSearchHit
 	} from '$lib/features/unassigned-registration';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { STAFF_REGISTRATION_DESK_I18N } from '$lib/constants/i18n/staff-registration-desk';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -37,6 +39,8 @@
 		canAccessZoning,
 		canAccessUnassignedRegistrationQueue
 	} from '$lib/auth/roles';
+
+	const t = $derived(getTranslation(STAFF_REGISTRATION_DESK_I18N, langState.current).desk);
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const queryClient = useQueryClient();
@@ -62,6 +66,11 @@
 	let claimOpen = $state(false);
 	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 	let lookupInFlight = $state(false);
+	/** Why the last scanned Person QR was refused; shown in the scanner modal, cleared on next scan. */
+	let scanRejection = $state<string | null>(null);
+	$effect(() => {
+		if (!showCameraModal) scanRejection = null;
+	});
 
 	/** Origin path so the evacuee profile can offer a correct back link. */
 	const listOrigin = $derived(`${page.url.pathname}${page.url.search}`);
@@ -92,26 +101,33 @@
 	async function handleCodeInput(raw: string) {
 		if (lookupInFlight) return;
 		lookupInFlight = true;
+		scanRejection = null;
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, raw);
 			if (!result) {
 				// If not an exact QR/barcode payload, put into search bar to search federated by text
 				searchQuery = raw;
 				showCameraModal = false;
-				toast.info(`ค้นหา: ${raw}`);
+				toast.info(t.toastSearch(raw));
+				return;
+			}
+			if (result.source === 'qr_rejected') {
+				// Expired / invalid Person QR (CR-233): message only, nothing opened or recorded.
+				scanRejection = result.message;
+				toast.error('สแกนไม่ผ่าน');
 				return;
 			}
 			showCameraModal = false;
 			if (result.source === 'couch') {
-				toast.success(`พบ: ${formatPersonName(result.evacuee)}`);
+				toast.success(t.toastFound(formatPersonName(result.evacuee)));
 				handleOpenRow(result.evacuee);
 				return;
 			}
-			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+			toast.success(t.toastPoolFound);
 			claimHit = result.hit;
 			claimOpen = true;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ');
+			toast.error(err instanceof Error ? err.message : t.toastScanFailed);
 		} finally {
 			lookupInFlight = false;
 		}
@@ -140,7 +156,7 @@
 				() => {}
 			)
 			.catch(() => {
-				cameraError = 'ไม่สามารถเข้าถึงกล้องได้';
+				cameraError = t.cameraError;
 			});
 		return () => {
 			if (html5QrCode.isScanning) html5QrCode.stop().catch(() => {});
@@ -149,7 +165,7 @@
 </script>
 
 <svelte:head>
-	<title>ทะเบียนผู้ประสบภัย (Station 1) | SmartShelter</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
@@ -159,7 +175,7 @@
 			<a
 				href={resolve('/portal')}
 				class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
-				aria-label="กลับหน้าเลือกเมนูหลัก"
+				aria-label={t.backToMenuAria}
 			>
 				<ArrowLeft class="size-4" />
 			</a>
@@ -167,17 +183,11 @@
 				<div class="flex items-center gap-2">
 					<ClipboardList class="size-6 text-station-1" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-						ทะเบียนผู้ประสบภัย
+						{t.heading}
 					</h1>
-					<Badge
-						variant="outline"
-						class="border-station-1-border bg-station-1-subtle font-semibold text-station-1-text"
-					>
-						Station 1
-					</Badge>
 				</div>
 				<p class="mt-0.5 text-xs text-slate-500">
-					Registration Desk — จุดรับรายงานตัวผู้จองล่วงหน้าและรับลงทะเบียนหน้างาน (Walk-in)
+					{t.subheading}
 				</p>
 			</div>
 		</div>
@@ -187,7 +197,7 @@
 				class="h-11 gap-2 rounded-xl bg-[#0A2647] font-semibold text-white shadow-xs hover:bg-[#051930]"
 			>
 				<UserPlus class="size-4" />
-				<span>+ ลงทะเบียน Walk-in</span>
+				<span>{t.walkInCta}</span>
 			</Button>
 		{/if}
 	</header>
@@ -196,10 +206,10 @@
 	<Card.Root class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 			<label for="station1-search-input" class="text-sm font-semibold text-slate-800">
-				ค้นหาหรือสแกนก่อนลงทะเบียน (ตรวจซ้ำในศูนย์นี้และคิวกลาง)
+				{t.searchLabel}
 			</label>
 			<span class="text-xs text-slate-500">
-				พิมพ์ชื่อ, เลขบัตร 13 หลัก, เบอร์โทร หรือใช้เครื่องสแกนบาร์โค้ด
+				{t.searchHint}
 			</span>
 		</div>
 		<Station1IntakeSearch
@@ -229,7 +239,7 @@
 <Dialog.Root bind:open={showCameraModal}>
 	<Dialog.Content class="max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>สแกน Person QR</Dialog.Title>
+			<Dialog.Title>{t.scanTitle}</Dialog.Title>
 		</Dialog.Header>
 		{#if cameraError}
 			<p class="text-sm text-destructive">{cameraError}</p>
@@ -239,6 +249,14 @@
 				class="overflow-hidden rounded-lg"
 				{@attach cameraAttachment}
 			></div>
+		{/if}
+		{#if scanRejection}
+			<p
+				role="alert"
+				class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+			>
+				{scanRejection}
+			</p>
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>

@@ -18,6 +18,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { languageStore } from '$lib/stores/language.svelte';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import { skillLabels } from '../domain/skill-label';
 	import {
 		useCancelTicketMutation,
@@ -132,7 +133,11 @@
 			cancelDialogOpen = false;
 			toast.success(t.toastCancelSuccess);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : t.toastCancelError);
+			toast.error(
+				err instanceof Error
+					? localizeVolunteerMessage(err.message, languageStore.current)
+					: t.toastCancelError
+			);
 		}
 	}
 </script>
@@ -169,7 +174,9 @@
 			<Card.Content class="flex flex-col items-center gap-3 py-12 text-center">
 				<CircleAlert class="size-8 text-muted-foreground" aria-hidden="true" />
 				<p class="text-sm">
-					{query.error instanceof Error ? query.error.message : t.notFoundError}
+					{query.error instanceof Error
+						? localizeVolunteerMessage(query.error.message, languageStore.current)
+						: t.notFoundError}
 				</p>
 			</Card.Content>
 		</Card.Root>
@@ -348,7 +355,7 @@
 						</button>
 					</div>
 
-					{#if ticket.status !== 'cancelled' && ticket.can_cancel}
+					{#if ticket.can_cancel}
 						<Button
 							variant="outline"
 							class="h-auto w-full rounded-xl border-destructive/40 px-4 py-2.5 text-xs font-semibold whitespace-normal text-destructive hover:bg-destructive/10 hover:text-destructive"

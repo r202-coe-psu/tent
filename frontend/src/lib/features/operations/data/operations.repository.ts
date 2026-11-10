@@ -24,6 +24,13 @@ import type { CycleCountResult, CycleCountSubmission } from '../domain/cycle-cou
 import type { AuditAction } from '$lib/features/shared';
 
 /**
+ * Options shared by the three stock-page receive paths. `issueLotNo` mints a
+ * `lot.lot_no` (`L-YYMMDD-XXX`) per ledger row written; omitted = none, as before.
+ * A lot number is never typed by the user (schema.md §2.1).
+ */
+export type ReceiveOptions = { issueLotNo?: boolean };
+
+/**
  * Persistence contract for the `operations` feature (stock, campaigns, donations).
  * Allows UI and query layers to query and mutate data independent of specific PouchDB API shapes.
  *
@@ -79,7 +86,11 @@ export interface OperationsRepository {
 	/**
 	 * Process and persist an inbound stock receive entry.
 	 */
-	receiveStock(input: ReceiveInput, ctx: AuthorContext): Promise<StockLedger>;
+	receiveStock(
+		input: ReceiveInput,
+		ctx: AuthorContext,
+		options?: ReceiveOptions
+	): Promise<StockLedger>;
 
 	/**
 	 * Receive goods that arrived without a booking (CR-055 R4 / D-1).
@@ -93,7 +104,8 @@ export interface OperationsRepository {
 	receiveWalkInDonation(
 		donationInput: WalkInDonationInput,
 		receiveInput: ReceiveInput,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		options?: ReceiveOptions
 	): Promise<{ donation: Donation; entry: StockLedger }>;
 
 	/**
@@ -110,7 +122,8 @@ export interface OperationsRepository {
 	receiveDonationBatch(
 		donation: Donation,
 		counted: readonly DonationBatchLine[],
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		options?: ReceiveOptions
 	): Promise<DonationBatchResult>;
 
 	/**

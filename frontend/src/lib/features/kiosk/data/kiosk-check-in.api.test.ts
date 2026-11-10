@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
+import { personQrVerdictMessage } from '$lib/utils/evacuee-qr';
 import {
 	checkInSelectedMembers,
 	KioskPartialCheckInError,
@@ -323,6 +324,72 @@ const decision: ConsentDecision = {
 	verbal: false,
 	...mintConsentStamp()
 };
+
+describe('lookupPreRegisteredEvacuee QR errors (CR-233)', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	function stub(status: number, body: unknown) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify(body), { status }))
+		);
+	}
+
+	it('turns KIOSK_QR_EXPIRED into Bangkok-dated copy and exposes the dates', async () => {
+		stub(409, {
+			error: {
+				code: 'KIOSK_QR_EXPIRED',
+				message: 'server text',
+				issued_at: '2026-11-03T02:10:00.000Z',
+				current_printed_at: '2026-11-05T09:41:12.512Z'
+			}
+		});
+		const error = await lookupPreRegisteredEvacuee({
+			source: 'qr',
+			token: 'evacuee:X@289170'
+		}).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(KioskRequestError);
+		const err = error as KioskRequestError;
+		expect(err.status).toBe(409);
+		expect(err.code).toBe('KIOSK_QR_EXPIRED');
+		expect(err.details).toEqual({
+			issued_at: '2026-11-03T02:10:00.000Z',
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		});
+		expect(err.message).toBe(
+			personQrVerdictMessage({
+				status: 'expired',
+				issued_at: '2026-11-03T02:10:00.000Z',
+				current_printed_at: '2026-11-05T09:41:12.512Z'
+			})
+		);
+		expect(err.message).toContain('QR นี้ออกวันที่');
+		expect(err.message).toContain('มีใบใหม่วันที่');
+		expect(err.message).not.toContain('server text');
+	});
+
+	it('uses the pre-change copy when issued_at is null', async () => {
+		stub(409, {
+			error: {
+				code: 'KIOSK_QR_EXPIRED',
+				issued_at: null,
+				current_printed_at: '2026-11-05T09:41:12.512Z'
+			}
+		});
+		const err = (await lookupPreRegisteredEvacuee({ source: 'qr', token: 'evacuee:X' }).catch(
+			(e: unknown) => e
+		)) as KioskRequestError;
+		expect(err.message).toContain('QR นี้ออกก่อนเปลี่ยนระบบ');
+		expect(err.details?.issued_at).toBeNull();
+	});
+
+	it('shows "QR ไม่ถูกต้อง" for KIOSK_QR_INVALID', async () => {
+		stub(400, { error: { code: 'KIOSK_QR_INVALID', message: 'x' } });
+		await expect(
+			lookupPreRegisteredEvacuee({ source: 'qr', token: 'evacuee:X@ffffff' })
+		).rejects.toMatchObject({ status: 400, code: 'KIOSK_QR_INVALID', message: 'QR ไม่ถูกต้อง' });
+	});
+});
 
 describe('registerKioskWalkIn', () => {
 	afterEach(() => vi.unstubAllGlobals());

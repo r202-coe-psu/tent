@@ -33,7 +33,8 @@
 		{ value: 'in', label: LEDGER_GROUP_LABELS.in },
 		{ value: 'out', label: LEDGER_GROUP_LABELS.out },
 		{ value: 'adjust', label: LEDGER_GROUP_LABELS.adjust },
-		{ value: 'transfer', label: LEDGER_GROUP_LABELS.transfer }
+		{ value: 'transfer', label: LEDGER_GROUP_LABELS.transfer },
+		{ value: 'self_purchased', label: LEDGER_GROUP_LABELS.self_purchased }
 	];
 
 	// CR-143 FR-C5 — reason chips appear with the adjust group (`merge` included: it is

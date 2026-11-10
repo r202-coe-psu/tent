@@ -100,7 +100,9 @@ export {
 	petCategoryLabels,
 	petConditionLabels,
 	petCategoryConditions,
-	petCategoryOrder
+	petCategoryOrder,
+	policyLabelsByLanguage,
+	type PolicyLabelSet
 } from './domain/policy-labels';
 
 export {
@@ -140,6 +142,22 @@ export {
 	type AreaAlignment
 } from './domain/area-guide';
 
+export {
+	matchesShelterCloseConfirm,
+	shelterCloseConfirmPhrase,
+	type ShelterClosePreview,
+	type ShelterCloseResult
+} from './domain/shelter-close';
+
+export {
+	needsShelterCloseModal,
+	selectableOperationStatuses,
+	shelterCloseCountRows,
+	describeShelterCloseResult,
+	type ShelterCloseCountRow,
+	type ShelterCloseOutcome
+} from './domain/shelter-close-flow';
+
 // Data layer (public)
 export {
 	createShelter,
@@ -147,7 +165,9 @@ export {
 	listShelters,
 	updateShelter,
 	closeZone,
-	reopenZone
+	reopenZone,
+	getShelterClosePreview,
+	closeShelter
 } from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
 export type { ShelterSummary, ShelterBasic } from './data/shelters.repository';
@@ -165,12 +185,18 @@ export {
 	useSubdistricts,
 	useCreateShelter,
 	useUpdateShelter,
+	useStoragePointsAdmin,
+	useSaveStoragePoint,
+	useDeleteStoragePoint,
 	useCloseZone,
-	useReopenZone
+	useReopenZone,
+	useShelterClosePreview,
+	useCloseShelter
 } from './application/queries';
 
 // UI (public — single page now handles create+edit via isEdit prop)
 export { default as ShelterFormPage } from './ui/shelter-form-page.svelte';
+export { default as ShelterCloseDialog } from './ui/shelter-close-dialog.svelte';
 export { default as ShelterList } from './ui/shelter-list.svelte';
 export { default as BasicInfoSection } from './ui/basic-info-section.svelte';
 export { default as CapacitySection } from './ui/capacity-section.svelte';
@@ -180,6 +206,7 @@ export { default as CapacityZoneGuideline } from './ui/capacity-zone-guideline.s
 export { default as AreaZoneGuideline } from './ui/area-zone-guideline.svelte';
 export { default as FoodDistributionSection } from './ui/food-distribution-section.svelte';
 export { default as StoragePointsSection } from './ui/storage-points-section.svelte';
+export { default as StoragePointsManager } from './ui/storage-points-manager.svelte';
 export { default as UtilitiesSection } from './ui/utilities-section.svelte';
 export { default as RiskSection } from './ui/risk-section.svelte';
 export { default as AdmissionPolicySection } from './ui/admission-policy-section.svelte';

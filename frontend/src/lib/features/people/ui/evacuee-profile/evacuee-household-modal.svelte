@@ -20,6 +20,9 @@
 	} from '$lib/features/people';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 	import EvacueeQrSearchModal from '../search-scan/evacuee-qr-search-modal.svelte';
 
@@ -41,6 +44,8 @@
 		onClose: () => void;
 		onSave: (data: EvacueeHouseholdEditData) => Promise<void>;
 	} = $props();
+
+	const t = $derived(getTranslation(EVACUEE_PROFILE_MODALS_I18N, langState.current).household);
 
 	const initial = untrack(() => ({
 		householdId: evacuee.household_id ?? '',
@@ -125,7 +130,7 @@
 		householdId ? (households.find((household) => household._id === householdId) ?? null) : null
 	);
 	const selectedHouseholdLabel = $derived(
-		selectedHousehold?.label ?? (householdId ? householdId : 'ไม่สังกัดครัวเรือน')
+		selectedHousehold?.label ?? (householdId ? householdId : t.noHousehold)
 	);
 
 	function householdLabelFor(id: string): string {
@@ -155,11 +160,11 @@
 		try {
 			const found = await peopleRepository().getEvacuee(foundEvacueeId);
 			if (!found) {
-				toast.error('ไม่พบข้อมูลผู้พักพิงจาก QR');
+				toast.error(t.qrNotFound);
 				return;
 			}
 			if (!found.household_id) {
-				toast.error(`${formatPersonName(found)} ยังไม่ได้สังกัดครัวเรือน`);
+				toast.error(t.noHouseholdFor(formatPersonName(found)));
 				return;
 			}
 			let household = households.find((h) => h._id === found.household_id);
@@ -167,13 +172,13 @@
 				household = (await peopleRepository().getHousehold(found.household_id)) ?? undefined;
 			}
 			if (!isJoinableHousehold(household)) {
-				toast.error('ไม่สามารถเข้าร่วมครัวเรือนนี้ได้ (สถานะไม่พร้อมหรือไม่อยู่ในศูนย์)');
+				toast.error(t.cannotJoin);
 				return;
 			}
 			selectHouseholdId(found.household_id);
-			toast.success(`เลือกครัวเรือน: ${household.label}`);
+			toast.success(t.selectedHousehold(household.label));
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอ่าน QR');
+			toast.error(err instanceof Error ? err.message : t.qrReadError);
 		}
 	}
 
@@ -206,12 +211,12 @@
 		>
 			<header class="flex items-start justify-between border-b border-border px-5 py-4">
 				<h3 id="household-modal-title" class="text-base font-bold text-foreground">
-					แก้ไขสังกัดครัวเรือน
+					{t.title}
 				</h3>
 				<button
 					type="button"
-					aria-label="ปิด"
-					title="ปิด"
+					aria-label={t.close}
+					title={t.close}
 					onclick={onClose}
 					class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 				>
@@ -221,7 +226,7 @@
 
 			<div class="space-y-4 p-5">
 				<Form.Field {form} name="householdId">
-					<Form.Label>ครัวเรือน</Form.Label>
+					<Form.Label>{t.household}</Form.Label>
 
 					<div
 						class="rounded-md border px-3 py-2.5 text-sm {householdId
@@ -229,7 +234,7 @@
 							: 'border-border bg-muted/30 text-muted-foreground'}"
 					>
 						<p class="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
-							สังกัดที่เลือก
+							{t.selectedAffiliation}
 						</p>
 						<p class="mt-0.5 font-semibold">{selectedHouseholdLabel}</p>
 					</div>
@@ -247,7 +252,7 @@
 							{/if}
 							<Input
 								type="text"
-								placeholder="ค้นหาด้วยเบอร์โทร หรือชื่อสมาชิกในครัวเรือน"
+								placeholder={t.searchPlaceholder}
 								bind:value={searchQueryText}
 								class="h-9 pl-9"
 								disabled={saving}
@@ -261,16 +266,16 @@
 							onclick={() => (showQrModal = true)}
 						>
 							<Scan class="mr-1.5 size-4" />
-							สแกน QR
+							{t.scanQr}
 						</Button>
 					</div>
 
 					<div class="mt-2 space-y-2">
 						{#if isSearching}
-							<p class="py-3 text-center text-xs text-muted-foreground">กำลังค้นหา...</p>
+							<p class="py-3 text-center text-xs text-muted-foreground">{t.searching}</p>
 						{:else if debouncedSearchQuery && householdHits.length === 0}
 							<p class="py-3 text-center text-xs text-muted-foreground">
-								ไม่พบสมาชิกที่มีครัวเรือนที่เข้าร่วมได้
+								{t.noJoinableMembers}
 							</p>
 						{:else if householdHits.length > 0}
 							<ul class="max-h-48 space-y-1.5 overflow-y-auto pr-1">
@@ -291,7 +296,7 @@
 													<span class="text-muted-foreground"> · {hit.phone}</span>
 												{/if}
 												<p class="mt-0.5 text-2xs text-muted-foreground">
-													ครัวเรือน: {householdLabelFor(hitHouseholdId)}
+													{t.hitHousehold(householdLabelFor(hitHouseholdId))}
 												</p>
 											</button>
 										</li>
@@ -311,7 +316,7 @@
 						disabled={saving}
 						onclick={clearAffiliation}
 					>
-						ไม่สังกัดครัวเรือน
+						{t.noHousehold}
 					</Button>
 
 					<Form.FieldErrors />
@@ -326,7 +331,7 @@
 									: 'cursor-not-allowed text-muted-foreground'}"
 							>
 								<Checkbox {...props} bind:checked={setAsHead} disabled={!householdId} />
-								ตั้งเป็นหัวหน้าครัวเรือน
+								{t.setAsHead}
 							</Form.Label>
 						{/snippet}
 					</Form.Control>
@@ -334,9 +339,9 @@
 			</div>
 
 			<footer class="flex justify-end gap-2 border-t border-border px-5 py-4">
-				<Button type="button" variant="outline" onclick={onClose}>ยกเลิก</Button>
+				<Button type="button" variant="outline" onclick={onClose}>{t.cancel}</Button>
 				<Button type="button" disabled={saving} onclick={save}>
-					{saving ? 'กำลังบันทึก...' : 'บันทึกสังกัดครัวเรือน'}
+					{saving ? t.saving : t.save}
 				</Button>
 			</footer>
 		</div>

@@ -188,6 +188,16 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			});
 		});
 
+		it('treats a soft-deleted account as not linked (CR-171)', () => {
+			expect(
+				resolveThaidLoginUser({
+					name: '0812345678',
+					salt: 'salt123',
+					deleted_at: '2026-10-17T00:00:00Z'
+				})
+			).toEqual({ ok: false, reason: 'thaid_not_linked' });
+		});
+
 		it('rejects unlinked or missing salt users', () => {
 			expect(resolveThaidLoginUser(null)).toEqual({
 				ok: false,

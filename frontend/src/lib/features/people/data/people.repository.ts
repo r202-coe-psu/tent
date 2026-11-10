@@ -17,6 +17,7 @@ import type {
 } from '../domain/people';
 import type { EvacueeSearchCursor, EvacueeSearchPage } from '../domain/evacuee-search';
 import type { StationNumber } from '../domain/station-log';
+import type { EvacueeSort } from '../domain/evacuee-sort';
 import type {
 	FamilyReportInPayload,
 	RegistrationConsent,
@@ -119,12 +120,16 @@ export interface PeopleRepository {
 	listEvacuees(): Promise<Evacuee[]>;
 	/** Members linked to one household, resolved through the household_id Mango index. */
 	listHouseholdMembers(householdId: string): Promise<Evacuee[]>;
-	/** Paginated list of evacuees — optional `search` filters before paging. */
+	/**
+	 * Paginated list of evacuees — optional `search` filters before paging. `sort` defaults to
+	 * newest-registered first (#1061).
+	 */
 	listEvacueesPaginated(
 		page: number,
 		pageSize: number,
 		search?: string,
-		filters?: EvacueeFilters
+		filters?: EvacueeFilters,
+		sort?: EvacueeSort
 	): Promise<PaginatedResult<Evacuee>>;
 	/** One evacuee by `_id`, or `null` when absent. */
 	getEvacuee(id: string): Promise<Evacuee | null>;
@@ -132,6 +137,17 @@ export interface PeopleRepository {
 	updateEvacuee(evacuee: Evacuee): Promise<Evacuee>;
 	/** Merge section-owned evacuee fields into the latest persisted revision. */
 	patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee>;
+	/**
+	 * Show or hide a person in the relative search at the person's request (T-40). Writes the
+	 * evacuee and its `privacy_change` audit entry in one request and throws when either fails.
+	 * It re-reads the evacuee first, so a `_rev` conflict only happens in the short gap before
+	 * `_bulk_docs`. Resolves to `null` when the visibility already matches.
+	 */
+	setSearchVisibility(
+		evacueeId: string,
+		visible: boolean,
+		ctx: AuthorContext
+	): Promise<Evacuee | null>;
 	/** Mint a household from form input + author context and persist it. */
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household>;
 	/** Every household in this shelter database. */

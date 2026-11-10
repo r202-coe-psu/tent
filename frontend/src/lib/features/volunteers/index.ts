@@ -53,11 +53,7 @@ export * from './domain/applicant-queue';
 export * from './domain/shift-roster';
 export * from './domain/volunteer-code';
 export * from './domain/hub-metrics';
-export {
-	extractScanCode,
-	parseVolunteerScanCode,
-	type VolunteerScanCode
-} from './domain/scan-code';
+export { parseVolunteerScanCode, type VolunteerScanCode } from './domain/scan-code';
 
 // data — repository interfaces/filters + remote adapter factories
 export * from './data/volunteer.repository';
@@ -118,7 +114,6 @@ export { default as RosterAttendanceTab } from './ui/roster-attendance-tab.svelt
 export { default as RosterLiveAttendanceBar } from './ui/roster-live-attendance-bar.svelte';
 export { default as RosterScanBar } from './ui/roster-scan-bar.svelte';
 export { default as RosterRow } from './ui/roster-row.svelte';
-export { default as RosterManualCheckinDialog } from './ui/roster-manual-checkin-dialog.svelte';
 export { default as RosterAuditTrailDialog } from './ui/roster-audit-trail-dialog.svelte';
 
 // ui — On-Site (จุดเช็คอินอาสาสมัครหน้างาน, /onsite/volunteer-check-in)
@@ -138,6 +133,7 @@ export { default as VolunteerApprovalChips } from './ui/volunteer-approval-chips
 export type { ApprovalChip } from './ui/volunteer-approval-chips.svelte';
 export { default as VolunteerCard } from './ui/volunteer-card.svelte';
 export { default as VolunteerManageDialog } from './ui/volunteer-manage-dialog.svelte';
+export { default as VolunteerAccountsPage } from './ui/volunteer-accounts-page.svelte';
 export { default as VolunteerAccessDialog } from './ui/volunteer-access-dialog.svelte';
 export { default as WalkInRegistrationDialog } from './ui/walk-in-registration-dialog.svelte';
 export { default as JobShiftPicker, type JobShiftSelection } from './ui/job-shift-picker.svelte';

@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
-	ALL_LINES_PICKER,
 	ANY_POINT_KEY,
-	pickerForMapTap,
 	AT_SHELTER_KEY,
-	bookableDropOffPoints,
+	AWAITING_STAFF_KEY,
 	currentDropOffPointIds,
-	defaultDropOffPointId,
 	groupDropOffDestinations,
+	groupFormLineDestinations,
 	hasLinePoints,
 	lineDestinationResolver,
-	lineDropOffPointId,
+	withCampaignLinePoints,
 	withCurrentLinePoints
 } from './line-points';
 import type { DropOffShelterSource } from './drop-off';
 
 const ANY = 'ส่งที่จุดรับบริจาคไหนของศูนย์ก็ได้';
+const AWAITING = 'รอเจ้าหน้าที่กำหนดจุดส่ง';
+const OPTS = { anyPointName: ANY, awaitingName: AWAITING, deliveryMethod: 'self_dropoff' };
 
 const GYM = {
 	id: 'point-gym',
@@ -32,68 +32,6 @@ const SHELTER: DropOffShelterSource = {
 	geo: { lat: 7.0086, lng: 100.4747 },
 	donation_points: [GYM, MED]
 };
-
-const POINTS = [
-	{ id: 'point-gym', name: 'โรงยิม' },
-	{ id: 'point-med', name: 'ห้องพยาบาล' }
-];
-
-describe('bookableDropOffPoints (FR-MP-8, FR-MP-11)', () => {
-	it('offers the shelter points to a donor who brings the goods', () => {
-		expect(bookableDropOffPoints(SHELTER, 'self_dropoff')).toEqual(POINTS);
-	});
-
-	it('offers none for a parcel or a shelter pickup (FR-MP-4)', () => {
-		expect(bookableDropOffPoints(SHELTER, 'parcel')).toEqual([]);
-		expect(bookableDropOffPoints(SHELTER, 'shelter_pickup')).toEqual([]);
-	});
-
-	it('offers none for a shelter with no point, or before its detail loads', () => {
-		expect(bookableDropOffPoints({ ...SHELTER, donation_points: [] }, 'self_dropoff')).toEqual([]);
-		expect(bookableDropOffPoints(undefined, 'self_dropoff')).toEqual([]);
-	});
-});
-
-describe('defaultDropOffPointId (FR-MP-9)', () => {
-	it('starts at the point the donor tapped on the map', () => {
-		expect(defaultDropOffPointId(POINTS, 'point-med')).toBe('point-med');
-	});
-
-	it('starts at the first point when nothing was tapped', () => {
-		expect(defaultDropOffPointId(POINTS, null)).toBe('point-gym');
-	});
-
-	it("ignores a tap on another shelter's point", () => {
-		expect(defaultDropOffPointId(POINTS, 'point-elsewhere')).toBe('point-gym');
-	});
-
-	it('has no default without points', () => {
-		expect(defaultDropOffPointId([], 'point-med')).toBeNull();
-	});
-});
-
-describe('lineDropOffPointId', () => {
-	it("keeps the donor's own pick", () => {
-		expect(lineDropOffPointId('point-med', POINTS, 'point-gym')).toBe('point-med');
-	});
-
-	it('falls back to the default without a pick', () => {
-		expect(lineDropOffPointId(undefined, POINTS, 'point-gym')).toBe('point-gym');
-	});
-
-	it('drops a pick the shelter does not offer — a pick made for another shelter (FR-MP-12)', () => {
-		expect(lineDropOffPointId('point-other-shelter', POINTS, 'point-gym')).toBe('point-gym');
-	});
-
-	it('fills in the only point without asking (FR-MP-10)', () => {
-		const one = [POINTS[0]];
-		expect(lineDropOffPointId(undefined, one, defaultDropOffPointId(one, null))).toBe('point-gym');
-	});
-
-	it('is null when there is no point to pick (FR-MP-11)', () => {
-		expect(lineDropOffPointId('point-med', [], null)).toBeNull();
-	});
-});
 
 describe('currentDropOffPointIds / hasLinePoints', () => {
 	it('lists only ticked points, not the main point', () => {
@@ -137,13 +75,11 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 	];
 
 	it('is null for a booking that names no point — it keeps the shelter as before', () => {
-		expect(
-			groupDropOffDestinations([{}, { drop_off_point_id: null }], SHELTER, { anyPointName: ANY })
-		).toBeNull();
+		expect(groupDropOffDestinations([{}, { drop_off_point_id: null }], SHELTER, OPTS)).toBeNull();
 	});
 
 	it('groups lines by point in the order of their first line, all waiting (AC-1)', () => {
-		const groups = groupDropOffDestinations(items, SHELTER, { anyPointName: ANY })!;
+		const groups = groupDropOffDestinations(items, SHELTER, OPTS)!;
 		expect(groups.map((g) => [g.key, g.point.name, g.lineNos, g.status])).toEqual([
 			['point-gym', 'โรงยิม', [0, 2], 'pending'],
 			['point-med', 'ห้องพยาบาล', [1], 'pending']
@@ -152,7 +88,7 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 
 	it('marks a point received once every line of it has a receipt (AC-5)', () => {
 		const groups = groupDropOffDestinations(items, SHELTER, {
-			anyPointName: ANY,
+			...OPTS,
 			pointReceipts: [{ point_id: 'point-gym', line_nos: [0, 2] }]
 		})!;
 		expect(groups.map((g) => g.status)).toEqual(['received', 'pending']);
@@ -160,7 +96,7 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 
 	it('keeps a point waiting while only part of it is recorded', () => {
 		const groups = groupDropOffDestinations(items, SHELTER, {
-			anyPointName: ANY,
+			...OPTS,
 			pointReceipts: [{ point_id: 'point-gym', line_nos: [0] }]
 		})!;
 		expect(groups[0].status).toBe('pending');
@@ -168,7 +104,7 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 
 	it('counts a line recorded at another point (wrong point, FR-MP-21) as received', () => {
 		const groups = groupDropOffDestinations(items, SHELTER, {
-			anyPointName: ANY,
+			...OPTS,
 			pointReceipts: [{ point_id: 'point-gym', line_nos: [1] }]
 		})!;
 		expect(groups[1].status).toBe('received');
@@ -178,7 +114,7 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 		const groups = groupDropOffDestinations(
 			[{ drop_off_point_id: 'point-gym' }, { drop_off_point_id: 'point-gone' }, {}],
 			SHELTER,
-			{ anyPointName: ANY }
+			OPTS
 		)!;
 		expect(groups.map((g) => [g.key, g.anyPoint, g.lineNos])).toEqual([
 			['point-gym', false, [0]],
@@ -190,7 +126,7 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 	it('says "received at the shelter" for lines recorded with no point left (AC-23)', () => {
 		const unticked = { ...SHELTER, donation_points: [] };
 		const groups = groupDropOffDestinations(items, unticked, {
-			anyPointName: ANY,
+			...OPTS,
 			pointReceipts: [
 				{ point_id: 'point-gym', line_nos: [0, 2] },
 				{ point_id: null, line_nos: [1] }
@@ -209,9 +145,100 @@ describe('groupDropOffDestinations (FR-MP-13, FR-MP-16)', () => {
 				{ drop_off_point_id: 'point-med', review_status: 'rejected' }
 			],
 			SHELTER,
-			{ anyPointName: ANY }
+			OPTS
 		)!;
 		expect(groups.map((g) => g.key)).toEqual(['point-gym']);
+	});
+});
+
+describe('groupDropOffDestinations — lines awaiting staff (staff-assigned drop-off FR-AP-22)', () => {
+	const rice = { drop_off_point_id: 'point-gym', review_status: 'approved' };
+	const blanket = { drop_off_point_id: null, review_status: 'pending' };
+	const view = (groups: ReturnType<typeof groupDropOffDestinations>) =>
+		groups?.map((g) => [g.key, g.point.name, g.lineNos, g.status, g.anyPoint]) ?? null;
+
+	it('puts a typed-in line in an "awaiting staff" group after the campaign point (AC-AP-13)', () => {
+		expect(view(groupDropOffDestinations([rice, blanket], SHELTER, OPTS))).toEqual([
+			['point-gym', 'โรงยิม', [0], 'pending', false],
+			[AWAITING_STAFF_KEY, AWAITING, [1], 'pending', true]
+		]);
+	});
+
+	it('shows the awaiting group last even when its line comes first', () => {
+		expect(
+			groupDropOffDestinations([blanket, rice], SHELTER, OPTS)!.map((g) => [g.key, g.lineNos])
+		).toEqual([
+			['point-gym', [1]],
+			[AWAITING_STAFF_KEY, [0]]
+		]);
+	});
+
+	it('groups a booking with no point at all when its lines await staff (AC-AP-9)', () => {
+		const groups = groupDropOffDestinations([blanket, blanket], SHELTER, OPTS)!;
+		expect(view(groups)).toEqual([[AWAITING_STAFF_KEY, AWAITING, [0, 1], 'pending', true]]);
+		expect(groups[0].point).toMatchObject({ address: '1 ถ.เพชรเกษม', pointId: null });
+	});
+
+	it('has no awaiting group for a parcel (AC-AP-9)', () => {
+		expect(
+			groupDropOffDestinations([blanket, blanket], SHELTER, { ...OPTS, deliveryMethod: 'parcel' })
+		).toBeNull();
+	});
+
+	it('has no awaiting group at a shelter with no point', () => {
+		const noPoints = { ...SHELTER, donation_points: [] };
+		expect(groupDropOffDestinations([blanket], noPoints, OPTS)).toBeNull();
+	});
+
+	it('keeps a pending line that has a point in that point group (FR-AP-22b, AC-AP-13a)', () => {
+		const notSeeded = { drop_off_point_id: 'point-gym', review_status: 'pending' };
+		expect(view(groupDropOffDestinations([notSeeded], SHELTER, OPTS))).toEqual([
+			['point-gym', 'โรงยิม', [0], 'pending', false]
+		]);
+	});
+
+	it('puts a pending line whose point is gone in the awaiting group (AC-AP-13a)', () => {
+		const gone = { drop_off_point_id: 'point-gone', review_status: 'pending' };
+		expect(groupDropOffDestinations([gone], SHELTER, OPTS)!.map((g) => g.key)).toEqual([
+			AWAITING_STAFF_KEY
+		]);
+	});
+
+	it('keeps an approved line whose point is gone in the "any point" group (AC-AP-6, AC-AP-7)', () => {
+		const gone = { drop_off_point_id: 'point-gone', review_status: 'approved' };
+		expect(groupDropOffDestinations([gone, blanket], SHELTER, OPTS)!.map((g) => g.key)).toEqual([
+			ANY_POINT_KEY,
+			AWAITING_STAFF_KEY
+		]);
+	});
+
+	it('leaves a line a point already recorded out of the awaiting group (AC-AP-13b)', () => {
+		const groups = groupDropOffDestinations([rice, blanket], SHELTER, {
+			...OPTS,
+			pointReceipts: [{ point_id: 'point-gym', line_nos: [1] }]
+		})!;
+		expect(groups.map((g) => [g.key, g.lineNos, g.status])).toEqual([
+			['point-gym', [0], 'pending'],
+			[ANY_POINT_KEY, [1], 'received']
+		]);
+	});
+
+	it('leaves a line recorded with no point in the "received at the shelter" group', () => {
+		const groups = groupDropOffDestinations([rice, blanket], SHELTER, {
+			...OPTS,
+			pointReceipts: [{ point_id: null, line_nos: [1] }]
+		})!;
+		expect(groups.map((g) => [g.key, g.status])).toEqual([
+			['point-gym', 'pending'],
+			[AT_SHELTER_KEY, 'received_at_shelter']
+		]);
+	});
+
+	it('leaves a line refused at review out', () => {
+		const refused = { drop_off_point_id: null, review_status: 'rejected' };
+		expect(groupDropOffDestinations([rice, refused], SHELTER, OPTS)!.map((g) => g.key)).toEqual([
+			'point-gym'
+		]);
 	});
 });
 
@@ -234,23 +261,110 @@ describe('withCurrentLinePoints', () => {
 	});
 });
 
-describe('pickerForMapTap (owner 2026-10-30)', () => {
-	const keys = ['a', 'b', 'c'];
+describe('withCampaignLinePoints (staff-assigned drop-off FR-AP-8, FR-AP-9)', () => {
+	const rice = { item_id: 'item:rice', free_text: 'ข้าว' };
+	const blanket: { item_id?: string; free_text: string } = { free_text: 'ผ้าห่ม' };
+	const campaign = (pointId: string | null | undefined) => ({
+		needs: [
+			{ item_id: 'item:rice', ...(pointId !== undefined ? { drop_off_point_id: pointId } : {}) }
+		]
+	});
+	const points = (lines: { drop_off_point_id: string | null }[]) =>
+		lines.map((line) => line.drop_off_point_id);
 
-	it('fills the first line before any dropdown is used', () => {
-		expect(pickerForMapTap(null, keys)).toBe('a');
+	it('gives a campaign line its need point and a typed-in line none (AC-AP-13)', () => {
+		expect(
+			points(withCampaignLinePoints([rice, blanket], campaign('point-gym'), 'self_dropoff'))
+		).toEqual(['point-gym', null]);
 	});
 
-	it('fills the dropdown used last', () => {
-		expect(pickerForMapTap('c', keys)).toBe('c');
-		expect(pickerForMapTap(ALL_LINES_PICKER, keys)).toBe(ALL_LINES_PICKER);
+	it('reads the need of the campaign picked for the booking, not another one (AC-AP-4)', () => {
+		const campaignB = campaign('point-med');
+		expect(points(withCampaignLinePoints([rice], campaignB, 'self_dropoff'))).toEqual([
+			'point-med'
+		]);
 	});
 
-	it('falls back to the first line once the one used last is gone', () => {
-		expect(pickerForMapTap('gone', keys)).toBe('a');
+	it('uses the first need that asks for the item', () => {
+		const twice = {
+			needs: [
+				{ item_id: 'item:rice', drop_off_point_id: 'point-gym' },
+				{ item_id: 'item:rice', drop_off_point_id: 'point-med' }
+			]
+		};
+		expect(points(withCampaignLinePoints([rice], twice, 'self_dropoff'))).toEqual(['point-gym']);
 	});
 
-	it('has nothing to fill without lines', () => {
-		expect(pickerForMapTap(null, [])).toBeNull();
+	it('copies a point the shelter may have dropped since, unchecked (D-AP-5, AC-AP-6)', () => {
+		expect(points(withCampaignLinePoints([rice], campaign('point-gone'), 'self_dropoff'))).toEqual([
+			'point-gone'
+		]);
+	});
+
+	it('writes null for a need with no point, or a v3 need with no key (AC-AP-16)', () => {
+		expect(points(withCampaignLinePoints([rice], campaign(null), 'self_dropoff'))).toEqual([null]);
+		expect(points(withCampaignLinePoints([rice], campaign(undefined), 'self_dropoff'))).toEqual([
+			null
+		]);
+	});
+
+	it('writes null for every line of a booking with no campaign (AC-AP-9)', () => {
+		expect(points(withCampaignLinePoints([rice, blanket], null, 'self_dropoff'))).toEqual([
+			null,
+			null
+		]);
+	});
+
+	it('writes null for every line of a parcel or a pickup (AC-AP-8)', () => {
+		for (const method of ['parcel', 'shelter_pickup', undefined]) {
+			expect(points(withCampaignLinePoints([rice], campaign('point-gym'), method))).toEqual([null]);
+		}
+	});
+
+	it('overwrites whatever point the client sent, keeping the rest of the line (AC-AP-5)', () => {
+		const sent = { ...blanket, qty: '2', drop_off_point_id: 'point-med' };
+		expect(withCampaignLinePoints([sent], campaign('point-gym'), 'self_dropoff')).toEqual([
+			{ free_text: 'ผ้าห่ม', qty: '2', drop_off_point_id: null }
+		]);
+	});
+});
+
+describe('groupFormLineDestinations (FR-AP-12, FR-AP-12a)', () => {
+	const rice = { item_id: 'item:rice', needDropOffPointId: 'point-med' };
+	const oil = { item_id: 'item:oil', needDropOffPointId: 'point-gym' };
+	const typed = {};
+	const view = (groups: ReturnType<typeof groupFormLineDestinations>) =>
+		groups?.map((g) => [g.key, g.lineNos]);
+
+	it('puts a card line in its card point and a typed line awaiting staff (AC-AP-3, AC-AP-4h)', () => {
+		expect(view(groupFormLineDestinations([rice, typed, oil], SHELTER, OPTS))).toEqual([
+			['point-med', [0]],
+			['point-gym', [2]],
+			[AWAITING_STAFF_KEY, [1]]
+		]);
+	});
+
+	it('puts two typed lines in the awaiting-staff group (AC-AP-4h)', () => {
+		expect(view(groupFormLineDestinations([typed, typed], SHELTER, OPTS))).toEqual([
+			[AWAITING_STAFF_KEY, [0, 1]]
+		]);
+	});
+
+	it('puts a card with no point, or a point no longer offered, in the any-point group (AC-AP-4g)', () => {
+		const noPoint = { item_id: 'item:rice', needDropOffPointId: null };
+		const gone = { item_id: 'item:oil', needDropOffPointId: 'point-gone' };
+		const groups = groupFormLineDestinations([noPoint, gone], SHELTER, OPTS);
+
+		expect(view(groups)).toEqual([[ANY_POINT_KEY, [0, 1]]]);
+		expect(groups?.[0].point.name).toBe(ANY);
+		expect(groups?.[0].anyPoint).toBe(true);
+	});
+
+	it('shows no group for a parcel, a shelter without points, or no lines (FR-MP-4)', () => {
+		expect(groupFormLineDestinations([rice], SHELTER, { ...OPTS, deliveryMethod: 'parcel' })).toBe(
+			null
+		);
+		expect(groupFormLineDestinations([rice], { ...SHELTER, donation_points: [] }, OPTS)).toBe(null);
+		expect(groupFormLineDestinations([], SHELTER, OPTS)).toBe(null);
 	});
 });

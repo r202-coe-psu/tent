@@ -573,7 +573,7 @@ def test_compute_needs_aggregates_campaign_minus_donations():
         }
     ]
     remaining, item_campaign = compute_needs(campaigns, donations)
-    assert remaining["item:rice"] == "7.0"
+    assert remaining["item:rice"] == Decimal(7)
     assert item_campaign["item:rice"] == "donation_campaign:01"
 
 
@@ -660,7 +660,7 @@ def test_compute_needs_reports_a_closed_need_as_taking_nothing():
         ],
         [],
     )
-    assert remaining["item:rice"] == "0.0"
+    assert remaining["item:rice"] == Decimal(0)
 
 
 def test_compute_needs_keeps_a_closed_need_in_the_map():
@@ -693,7 +693,7 @@ def test_compute_needs_ignores_donations_against_a_closed_need():
             }
         ],
     )
-    assert remaining["item:rice"] == "0.0"
+    assert remaining["item:rice"] == Decimal(0)
 
 
 def test_compute_needs_still_offers_an_item_another_campaign_has_open():
@@ -707,7 +707,7 @@ def test_compute_needs_still_offers_an_item_another_campaign_has_open():
         ],
         [],
     )
-    assert remaining["item:rice"] == "40.0"
+    assert remaining["item:rice"] == Decimal(40)
     # Binding to the closed campaign would hand the donation to a counter with room
     # while the campaign that can actually take it goes unused.
     assert item_campaign["item:rice"] == "c2"
@@ -743,7 +743,7 @@ def test_compute_needs_counts_what_the_warehouse_holds():
         [],
         [_ledger("item:rice", "540")],
     )
-    assert remaining["item:rice"] == "-40.0"
+    assert remaining["item:rice"] == Decimal(-40)
 
 
 def test_compute_needs_adds_on_hand_and_reserved():
@@ -752,7 +752,7 @@ def test_compute_needs_adds_on_hand_and_reserved():
         [_don("donation:1", "c1", "declared", "item:rice", "50")],
         [_ledger("item:rice", "300")],
     )
-    assert remaining["item:rice"] == "150.0"
+    assert remaining["item:rice"] == Decimal(150)
 
 
 def test_compute_needs_does_not_double_count_a_ledgered_receipt():
@@ -761,7 +761,7 @@ def test_compute_needs_does_not_double_count_a_ledgered_receipt():
         [_don("donation:1", "c1", "received", "item:rice", "100")],
         [_ledger("item:rice", "100", ref_id="donation:1")],
     )
-    assert remaining["item:rice"] == "400.0"
+    assert remaining["item:rice"] == Decimal(400)
 
 
 def test_compute_needs_still_owes_a_receipt_not_in_the_ledger():
@@ -770,7 +770,7 @@ def test_compute_needs_still_owes_a_receipt_not_in_the_ledger():
         [_don("donation:1", "c1", "received", "item:rice", "100")],
         [],
     )
-    assert remaining["item:rice"] == "400.0"
+    assert remaining["item:rice"] == Decimal(400)
 
 
 def test_compute_needs_reopens_when_stock_is_issued_out():
@@ -783,7 +783,7 @@ def test_compute_needs_reopens_when_stock_is_issued_out():
             _ledger("item:rice", "-120", reason="distribute"),
         ],
     )
-    assert remaining["item:rice"] == "120.0"
+    assert remaining["item:rice"] == Decimal(120)
 
 
 def test_compute_needs_without_ledgers_behaves_as_before():
@@ -791,7 +791,7 @@ def test_compute_needs_without_ledgers_behaves_as_before():
         [_open_campaign("c1", [{"item_id": "item:rice", "qty_target": "500"}])],
         [_don("donation:1", "c1", "declared", "item:rice", "50")],
     )
-    assert remaining["item:rice"] == "450.0"
+    assert remaining["item:rice"] == Decimal(450)
 
 
 # --- PDPA D8: count_stay_statuses (pure) ---
@@ -934,6 +934,36 @@ def test_aggregate_occupancy_age_buckets():
         ]
     )
     assert total == 3
+    assert breakdown["child_under_5"] == 1
+    assert breakdown["elderly_over_60"] == 1
+
+
+def test_aggregate_occupancy_counts_room_confirmed_as_in_shelter():
+    """decision sync 2026-11-02: in shelter = active + room_confirmed (staff in-shelter.ts)."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1"),
+            _active_evacuee(_id="e2", current_stay={"status": "room_confirmed"}),
+            _active_evacuee(_id="e3", current_stay={"status": "temporary_leave"}),
+            _active_evacuee(_id="e4", current_stay={"status": "arriving"}),
+        ]
+    )
+    assert total == 2
+    assert breakdown["male"] == 2
+
+
+def test_aggregate_occupancy_age_buckets_fall_back_to_birth_year():
+    """Registration stores `birth_year` (พ.ศ.), not `age` — buckets must use it."""
+    year_be = datetime.now(UTC).year + 543
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", birth_year=year_be - 2),
+            _active_evacuee(_id="e2", birth_year=year_be - 70),
+            _active_evacuee(_id="e3", birth_year=year_be - 30),
+            _active_evacuee(_id="e4", birth_year=year_be + 5),  # future = unknown age
+        ]
+    )
+    assert total == 4
     assert breakdown["child_under_5"] == 1
     assert breakdown["elderly_over_60"] == 1
 
@@ -1246,16 +1276,16 @@ async def test_project_needs_for_shelter_visible_on_home_and_urgency():
     couch.iter_all_docs = mock_iter
 
     actions = await project_needs_for_shelter(couch, "SH001")
-    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions}
+    action_dict = {a[1]["_id"]: (a[0], a[1]) for a in actions if a[0] == "upsert"}
+    (prune,) = [a[1] for a in actions if a[0] == "prune"]
 
-    # item:rice from hidden campaign must be deleted
-    assert "SH001:item:rice" in action_dict
-    assert action_dict["SH001:item:rice"][0] == "delete"
+    # item:rice from the hidden campaign has no card: the prune retracts it
+    assert "SH001:item:rice@-" not in action_dict
+    assert prune["keep_ids"] == ["SH001:item:water@-"]
 
     # item:water from visible campaign must be upserted with qty_target and urgency="critical"
-    assert "SH001:item:water" in action_dict
-    assert action_dict["SH001:item:water"][0] == "upsert"
-    payload = action_dict["SH001:item:water"][1]
-    assert payload["qty_target"] == 1000.0
-    assert payload["qty_needed"] == 1000.0
+    assert "SH001:item:water@-" in action_dict
+    payload = action_dict["SH001:item:water@-"][1]
+    assert payload["qty_target"] == Decimal(1000)
+    assert payload["qty_needed"] == Decimal(1000)
     assert payload["urgency"] == "critical"

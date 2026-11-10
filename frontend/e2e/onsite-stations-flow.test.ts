@@ -41,7 +41,8 @@ import {
 	fillMemberCard,
 	fillWalkInAddress,
 	finishPrintScreen,
-	idsFromPrintScreen,
+	evacueeIdsFromSearch,
+	expectPrintScreen,
 	openAsShelterStaff,
 	screenEvacuee,
 	searchStation1,
@@ -207,11 +208,13 @@ test.describe(
 				if (await confirmNew.isVisible()) await confirmNew.click();
 			});
 
-			await test.step('Station 1: Person QR print carries evacuee ids', async () => {
-				Object.assign(ids, await idsFromPrintScreen(desk, people));
+			await test.step('Station 1: print screen previews a label per member', async () => {
+				await expectPrintScreen(desk, people);
 				await finishPrintScreen(desk);
 				await expectStay(desk, head, STAY_STATUS.arriving);
 				await expectStay(desk, member, STAY_STATUS.arriving);
+				// CR-233: no QR is issued until staff print, so the ids come from the search hits.
+				Object.assign(ids, await evacueeIdsFromSearch(desk, people));
 			});
 
 			await test.step('Station 2: shelter_manager screens both members', async () => {
@@ -228,7 +231,7 @@ test.describe(
 
 			await test.step('Station 3: zone both (companion), confirm arrival', async () => {
 				await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
-				await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+				await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 				await desk.locator('div.grid button', { hasText: ZONE_NAME }).first().click();
 				const companion = desk.getByRole('checkbox').first();
 				if (await companion.isVisible().catch(() => false)) await companion.click();
@@ -238,7 +241,7 @@ test.describe(
 				await expectStay(desk, member, STAY_STATUS.active, ZONE_NAME);
 
 				await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
-				await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+				await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 				// `networkidle` never settles (CouchDB `_changes` long-polls stay open): wait for the
 				// confirm button the next step branches on instead.
 				await expect(desk.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true })).toBeVisible({

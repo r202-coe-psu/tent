@@ -32,6 +32,7 @@
 		statusChangeHandlerKind,
 		canChangeEvacueeZone,
 		formatPersonName,
+		movementReasonLabel,
 		zoneLabel
 	} from '$lib/features/people';
 	import {
@@ -43,7 +44,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { formatThaiDateTime } from '$lib/utils/date';
+	import { formatDisplayDateTime } from '$lib/utils/date';
 	import type {
 		Evacuee,
 		StayStatus,
@@ -54,6 +55,9 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { useSaveImage } from '$lib/features/images';
 	import { now } from '$lib/db/model';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { EVACUEE_PROFILE_I18N } from '../_constants/evacuee-profile.i18n';
 	import LoadingScreen from '$lib/components/loading-screen.svelte';
 
 	import EvacueeProfileIdentityRail from './evacuee-profile-identity-rail.svelte';
@@ -62,6 +66,7 @@
 	import EvacueeProfileHealthCard from './evacuee-profile-health-card.svelte';
 	import EvacueeProfileHouseholdCard from './evacuee-profile-household-card.svelte';
 	import EvacueeProfileAssetsCard from './evacuee-profile-assets-card.svelte';
+	import EvacueeProfilePrivacyCard from './evacuee-profile-privacy-card.svelte';
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
 	import EvacueeStatusModal from './evacuee-status-modal.svelte';
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
@@ -81,6 +86,8 @@
 
 	let { evacueeId, readonly = false }: { evacueeId: string; readonly?: boolean } = $props();
 
+	const t = $derived(getTranslation(EVACUEE_PROFILE_I18N, langState.current).view);
+
 	const canEditProfile = $derived.by(() => {
 		if (readonly || !authStore.user) return false;
 		const roles = authStore.user.roles;
@@ -96,79 +103,75 @@
 	});
 	const profileReadonly = $derived(readonly || !canEditProfile);
 
-	const statusConfig: Partial<
-		Record<StayStatus, { label: string; shortLabel: string; colorClass: string; dotClass: string }>
-	> = {
+	const STATUS_STYLE: Record<StayStatus, { colorClass: string; dotClass: string }> = {
 		active: {
-			label: 'เช็คอิน / พักพิงในศูนย์ (Check-in)',
-			shortLabel: 'เช็คอิน',
 			colorClass:
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800',
 			dotClass: 'bg-green-500'
 		},
 		room_confirmed: {
-			label: 'ยืนยันถึงโซน (Zone Arrival Confirmed)',
-			shortLabel: 'ยืนยันถึงโซน',
 			colorClass:
 				'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
 			dotClass: 'bg-emerald-600'
 		},
 		pre_registered: {
-			label: 'ลงทะเบียนล่วงหน้า (Pre-registered)',
-			shortLabel: 'ลงทะเบียนล่วงหน้า',
 			colorClass:
 				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
 			dotClass: 'bg-blue-500'
 		},
 		kiosk_registered: {
-			label: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
-			shortLabel: 'ที่ตู้ (รอยืนยัน)',
 			colorClass: 'bg-amber-50 text-amber-900 border-amber-200',
 			dotClass: 'bg-amber-500'
 		},
 		arriving: {
-			label: 'อยู่ระหว่างรอเข้าพัก (Arriving / Waiting)',
-			shortLabel: 'รอเข้าพัก',
 			colorClass:
 				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
 			dotClass: 'bg-amber-500'
 		},
 		temporary_leave: {
-			label: 'ออกชั่วคราว (Temporary Leave)',
-			shortLabel: 'ออกชั่วคราว',
 			colorClass:
 				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
 			dotClass: 'bg-amber-500'
 		},
 		transferred: {
-			label: 'ส่งต่อ / ย้ายศูนย์ (Transferred)',
-			shortLabel: 'ย้ายศูนย์',
 			colorClass:
 				'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
 			dotClass: 'bg-purple-500'
 		},
 		checked_out: {
-			label: 'เช็คเอาต์ (Checked-out)',
-			shortLabel: 'เช็คเอาต์',
 			colorClass:
 				'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
 			dotClass: 'bg-slate-400'
 		},
 		deceased: {
-			label: 'เสียชีวิต (Deceased)',
-			shortLabel: 'เสียชีวิต',
 			colorClass:
 				'bg-slate-200 dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-300 dark:border-slate-700',
 			dotClass: 'bg-black'
 		},
 		cancelled: {
-			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
-			shortLabel: 'ยกเลิก',
 			colorClass:
 				'bg-slate-100 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800',
 			dotClass: 'bg-slate-400'
 		}
 	};
+
+	/** Style (language-neutral) + label (staff language) for one stay status. */
+	function statusEntry(status: StayStatus) {
+		return { ...t.status[status], ...STATUS_STYLE[status] };
+	}
+
+	const statusConfig = $derived.by(() => {
+		const config: Partial<
+			Record<
+				StayStatus,
+				{ label: string; shortLabel: string; colorClass: string; dotClass: string }
+			>
+		> = {};
+		for (const status of Object.keys(STATUS_STYLE) as StayStatus[]) {
+			config[status] = statusEntry(status);
+		}
+		return config;
+	});
 
 	const evacueeQuery = useEvacuee(() => evacueeId);
 	// Declared before any hook below that reads it in a getter — those hooks'
@@ -216,18 +219,10 @@
 					)[0] ?? null)
 			: null
 	);
-	const shelterName = $derived(shelterQuery.data?.name ?? 'ศูนย์พักพิงชั่วคราว');
+	const shelterName = $derived(shelterQuery.data?.name ?? t.defaultShelterName);
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const statusInfo = $derived(
-		evacuee
-			? (statusConfig[evacuee.current_stay.status] ?? {
-					label: 'ลงทะเบียนล่วงหน้า (Pre-registered)',
-					shortLabel: 'ลงทะเบียนล่วงหน้า',
-					colorClass:
-						'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-					dotClass: 'bg-blue-500'
-				})
-			: null
+		evacuee ? (statusConfig[evacuee.current_stay.status] ?? statusEntry('pre_registered')) : null
 	);
 	const householdMembers = $derived.by(() => {
 		if (!evacuee?.household_id || !householdMembersQuery.data) return [];
@@ -278,34 +273,16 @@
 			: []
 	);
 
-	const movementLabels: Record<MovementAction, { dotClass: string; label: string }> = {
-		check_in: { dotClass: 'fill-emerald-500 text-emerald-500', label: 'เช็คอิน (Check-in)' },
-		check_out: {
-			dotClass: 'fill-slate-400 text-slate-400',
-			label: 'ย้ายออก/กลับภูมิลำเนา (Checked-out)'
-		},
-		confirm_room: {
-			dotClass: 'fill-emerald-600 text-emerald-600',
-			label: 'ยืนยันถึงโซน (Zone Arrival Confirmation)'
-		},
-		transfer_in: { dotClass: 'fill-blue-500 text-blue-500', label: 'ย้ายเข้า (Transfer in)' },
-		transfer_out: { dotClass: 'fill-violet-500 text-violet-500', label: 'ย้ายออก (Transfer out)' },
-		leave_temporary: {
-			dotClass: 'fill-amber-500 text-amber-500',
-			label: 'ออกชั่วคราว (Temporary leave)'
-		},
-		return_from_leave: {
-			dotClass: 'fill-emerald-500 text-emerald-500',
-			label: 'กลับจากออกชั่วคราว (Return from leave)'
-		},
-		mark_deceased: {
-			dotClass: 'fill-slate-950 text-slate-950 dark:fill-slate-100 dark:text-slate-100',
-			label: 'เสียชีวิต (Deceased)'
-		},
-		zone_change: {
-			dotClass: 'fill-amber-600 text-amber-600',
-			label: 'ย้ายโซน (Zone change)'
-		}
+	const MOVEMENT_DOT_CLASS: Record<MovementAction, string> = {
+		check_in: 'fill-emerald-500 text-emerald-500',
+		check_out: 'fill-slate-400 text-slate-400',
+		confirm_room: 'fill-emerald-600 text-emerald-600',
+		transfer_in: 'fill-blue-500 text-blue-500',
+		transfer_out: 'fill-violet-500 text-violet-500',
+		leave_temporary: 'fill-amber-500 text-amber-500',
+		return_from_leave: 'fill-emerald-500 text-emerald-500',
+		mark_deceased: 'fill-slate-950 text-slate-950 dark:fill-slate-100 dark:text-slate-100',
+		zone_change: 'fill-amber-600 text-amber-600'
 	};
 
 	const isLoading = $derived(
@@ -336,7 +313,7 @@
 	function getAuthorContext() {
 		const createdBy = authStore.user?.name?.trim();
 		if (!createdBy) {
-			throw new Error('ไม่พบผู้ใช้งานปัจจุบัน กรุณารอการยืนยันตัวตนแล้วลองใหม่');
+			throw new Error(t.noCurrentUser);
 		}
 		return { shelterCode: getShelterCode(), createdBy };
 	}
@@ -405,10 +382,10 @@
 					patch: { current_stay: { ...evacuee.current_stay, zone: zoneCode, since: now() } }
 				});
 			}
-			toast.success(`ย้ายโซนเป็น ${zoneLabel(zoneCode, shelterZones)} เรียบร้อย`);
+			toast.success(t.zoneMoved(zoneLabel(zoneCode, shelterZones)));
 			showZoneModal = false;
 		} catch (err: unknown) {
-			toast.error(`ไม่สามารถย้ายโซนได้: ${err instanceof Error ? err.message : String(err)}`);
+			toast.error(t.zoneMoveFailed(errorDetail(err)));
 		}
 	}
 
@@ -428,7 +405,7 @@
 			if (kind === 'check_in') {
 				const zone = evacuee.current_stay.zone?.trim();
 				if (!zone) {
-					toast.error('การเช็คอินต้องระบุโซน');
+					toast.error(t.checkInNeedsZone);
 					showStatusModal = false;
 					showZoneModal = true;
 					return;
@@ -443,7 +420,7 @@
 				if (action === 'leave_temporary') {
 					const trimmed = (reason ?? '').trim();
 					if (!trimmed) {
-						toast.error('การออกชั่วคราวต้องระบุเหตุผล');
+						toast.error(t.leaveNeedsReason);
 						return;
 					}
 					await recordMovementMutation.mutateAsync({
@@ -456,10 +433,10 @@
 					await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
 				}
 			}
-			toast.success('อัปเดตสถานะการพักพิงเรียบร้อย');
+			toast.success(t.statusUpdated);
 			showStatusModal = false;
 		} catch (err: unknown) {
-			toast.error(`ไม่สามารถอัปเดตสถานะได้: ${err instanceof Error ? err.message : String(err)}`);
+			toast.error(t.statusUpdateFailed(errorDetail(err)));
 		}
 	}
 
@@ -474,7 +451,7 @@
 		community: string;
 	}) {
 		if (!household) {
-			toast.error('ไม่พบข้อมูลครัวเรือนสำหรับบันทึกที่อยู่');
+			toast.error(t.noHouseholdForAddress);
 			return;
 		}
 		try {
@@ -491,10 +468,10 @@
 					community: data.community || null
 				}
 			});
-			toast.success('แก้ไขที่อยู่ครัวเรือนสำเร็จ');
+			toast.success(t.addressSaved);
 			showAddressModal = false;
 		} catch (err: unknown) {
-			toast.error(`ไม่สามารถบันทึกที่อยู่ได้: ${err instanceof Error ? err.message : String(err)}`);
+			toast.error(t.addressSaveFailed(errorDetail(err)));
 		}
 	}
 
@@ -504,7 +481,7 @@
 		pets: PetGroup[];
 	}) {
 		if (!household) {
-			toast.error('ไม่พบข้อมูลครัวเรือนสำหรับบันทึกทรัพย์สิน');
+			toast.error(t.noHouseholdForAssets);
 			return;
 		}
 		try {
@@ -516,10 +493,10 @@
 					pets: data.pets.filter((p) => p.count > 0)
 				}
 			});
-			toast.success('แก้ไขข้อมูลทรัพย์สินและสัตว์เลี้ยงสำเร็จ');
+			toast.success(t.assetsSaved);
 			showAssetModal = false;
 		} catch (err: unknown) {
-			toast.error(`ไม่สามารถบันทึกข้อมูลได้: ${err instanceof Error ? err.message : String(err)}`);
+			toast.error(t.assetsSaveFailed(errorDetail(err)));
 		}
 	}
 
@@ -555,12 +532,10 @@
 					photo
 				}
 			});
-			toast.success('บันทึกข้อมูลส่วนบุคคลเรียบร้อย');
+			toast.success(t.personalSaved);
 			showPersonalModal = false;
 		} catch (err: unknown) {
-			toast.error(
-				`ไม่สามารถบันทึกข้อมูลส่วนบุคคลได้: ${err instanceof Error ? err.message : String(err)}`
-			);
+			toast.error(t.personalSaveFailed(errorDetail(err)));
 		}
 	}
 
@@ -571,12 +546,10 @@
 				id: evacuee._id,
 				patch: { emergency_contact: data.emergencyContact }
 			});
-			toast.success('บันทึกข้อมูลติดต่อฉุกเฉินเรียบร้อย');
+			toast.success(t.emergencySaved);
 			showEmergencyModal = false;
 		} catch (err: unknown) {
-			toast.error(
-				`ไม่สามารถบันทึกข้อมูลติดต่อฉุกเฉินได้: ${err instanceof Error ? err.message : String(err)}`
-			);
+			toast.error(t.emergencySaveFailed(errorDetail(err)));
 		}
 	}
 
@@ -667,7 +640,7 @@
 					ctx: getActor()
 				});
 			}
-			toast.success('บันทึกข้อมูลสุขภาพเรียบร้อย');
+			toast.success(t.healthSaved);
 			showHealthModal = false;
 		} catch (err: unknown) {
 			const rollbacks: Promise<unknown>[] = [];
@@ -701,8 +674,8 @@
 			const rollbackFailed = rollbackResults.some((result) => result.status === 'rejected');
 			toast.error(
 				rollbackFailed
-					? `บันทึกข้อมูลสุขภาพได้บางส่วน กรุณารีเฟรชและตรวจสอบอีกครั้ง: ${err instanceof Error ? err.message : String(err)}`
-					: `ไม่สามารถบันทึกข้อมูลสุขภาพได้ ระบบคืนค่าการเปลี่ยนแปลงแล้ว: ${err instanceof Error ? err.message : String(err)}`
+					? t.healthPartiallySaved(errorDetail(err))
+					: t.healthRolledBack(errorDetail(err))
 			);
 		}
 	}
@@ -724,27 +697,29 @@
 				});
 			}
 
-			toast.success('บันทึกสังกัดครัวเรือนเรียบร้อย');
+			toast.success(t.householdSaved);
 			showHouseholdModal = false;
 		} catch (err: unknown) {
-			toast.error(
-				`ไม่สามารถบันทึกสังกัดครัวเรือนได้: ${err instanceof Error ? err.message : String(err)}`
-			);
+			toast.error(t.householdSaveFailed(errorDetail(err)));
 		}
 	}
 
+	function errorDetail(err: unknown): string {
+		return err instanceof Error ? err.message : String(err);
+	}
+
 	function formatDateTime(ts: string | number | undefined): string {
-		if (!ts) return 'ไม่ระบุ';
-		const formatted = formatThaiDateTime(String(ts));
+		if (!ts) return t.unspecified;
+		const formatted = formatDisplayDateTime(String(ts), langState.current);
 		return formatted || String(ts);
 	}
 </script>
 
 {#if isLoading}
-	<LoadingScreen message="กำลังโหลดข้อมูลผู้พักพิง..." />
+	<LoadingScreen message={t.loading} />
 {:else if !evacuee}
 	<div class="space-y-4 rounded-lg border border-border bg-card py-16 text-center">
-		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลผู้พักพิงในระบบ</p>
+		<p class="text-base font-semibold text-destructive">{t.notFound}</p>
 		<button
 			class="inline-flex cursor-pointer items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-muted"
 			onclick={() => {
@@ -756,7 +731,7 @@
 				goto(resolve('/back-office/evacuee-management'));
 			}}
 		>
-			กลับหน้าหลัก
+			{t.backHome}
 		</button>
 	</div>
 {:else}
@@ -814,6 +789,7 @@
 						onOpenEdit={() => (showHealthModal = true)}
 					/>
 				</div>
+				<EvacueeProfilePrivacyCard {evacuee} readonly={profileReadonly} {getAuthorContext} />
 				<div class="space-y-4">
 					<EvacueeProfileHouseholdCard
 						{evacuee}
@@ -836,7 +812,7 @@
 					<div class="flex items-center gap-2.5 border-b border-border pb-2">
 						<Clock class="size-4.5 shrink-0 text-primary" />
 						<h3 class="min-w-0 text-sm font-bold break-words text-slate-900 dark:text-slate-50">
-							บันทึกการตรวจสอบ (Audit Log)
+							{t.auditLog}
 						</h3>
 					</div>
 					<ol class="min-w-0 space-y-2.5">
@@ -845,7 +821,7 @@
 								<FilePenLine class="mt-0.5 size-4 shrink-0 text-blue-600" />
 								<div class="min-w-0 flex-1 space-y-0.5">
 									<div class="font-semibold break-words text-foreground">
-										แก้ไขข้อมูลล่าสุด (Updated)
+										{t.updated}
 									</div>
 									<div class="text-muted-foreground">{formatDateTime(evacuee.updated_at)}</div>
 								</div>
@@ -853,20 +829,20 @@
 						{/if}
 						{#each visibleMovements as m (m._id)}
 							<li class="flex items-start gap-3 text-xs">
-								<Circle class="mt-1 size-3 shrink-0 {movementLabels[m.action].dotClass}" />
+								<Circle class="mt-1 size-3 shrink-0 {MOVEMENT_DOT_CLASS[m.action]}" />
 								<div class="min-w-0 flex-1 space-y-0.5">
 									<div class="font-semibold break-words text-foreground">
-										{movementLabels[m.action].label}
+										{t.movement[m.action]}
 										{#if m.zone}
 											<span class="font-normal text-muted-foreground">
-												· โซน {zoneLabel(m.zone, shelterZones)}
+												· {t.movementZone(zoneLabel(m.zone, shelterZones))}
 											</span>
 										{/if}
 									</div>
 									<div class="break-words text-muted-foreground">
 										{formatDateTime(m.occurred_at)}
 										{#if m.reason}
-											· {m.reason}
+											· {movementReasonLabel(m.reason, langState.current)}
 										{/if}
 									</div>
 								</div>
@@ -879,7 +855,7 @@
 									onclick={loadMoreMovements}
 									class="cursor-pointer text-xs font-semibold text-primary transition-colors hover:text-primary/80"
 								>
-									โหลดเพิ่มเติม ({movements.length - visibleMovementsCount} รายการ)
+									{t.loadMore(movements.length - visibleMovementsCount)}
 								</button>
 							</li>
 						{/if}
@@ -887,10 +863,12 @@
 							<UserPlus class="mt-0.5 size-4 shrink-0 text-emerald-600" />
 							<div class="min-w-0 flex-1 space-y-0.5">
 								<div class="font-semibold break-words text-foreground">
-									ลงทะเบียนข้อมูล (Registered)
+									{t.registered}
 								</div>
 								<div class="break-words text-muted-foreground">
-									{formatDateTime(evacuee.created_at)} · โดย {evacuee.created_by || 'system'}
+									{formatDateTime(evacuee.created_at)} · {t.registeredBy(
+										evacuee.created_by || 'system'
+									)}
 								</div>
 							</div>
 						</li>

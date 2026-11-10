@@ -114,6 +114,52 @@ test.describe(
 			await expect(page.getByText(LAST_NAME).filter({ visible: true }).first()).toBeVisible();
 		});
 
+		test('evacuee tab sorts newest first by default and via the sort dropdown (#1061)', async ({
+			page
+		}) => {
+			test.setTimeout(120_000);
+			expect(shelterCode).toBeTruthy();
+			const admin = await bootstrapAdminSession();
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, admin.user, admin.cookie);
+			await selectActiveShelter(page, shelterCode!);
+
+			await page.goto('/back-office/evacuee-management?tab=evacuee');
+			await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
+				timeout: 30_000
+			});
+
+			const rows = page.locator('table tbody tr');
+			const sortTrigger = page.locator('#evacuee-sort');
+			const firstNames = async () =>
+				(await rows.allInnerTexts()).map((text) =>
+					text.includes(MEMBER_FIRST) ? MEMBER_FIRST : text.includes(HEAD_FIRST) ? HEAD_FIRST : text
+				);
+			const pickSort = async (label: string) => {
+				await sortTrigger.click();
+				await page.getByRole('option', { name: label }).click();
+				await expect(sortTrigger).toContainText(label);
+			};
+
+			// Head is registered before the member, so newest-first puts the member on top.
+			await expect(sortTrigger).toContainText('ลงทะเบียนล่าสุดก่อน');
+			await expect(rows).toHaveCount(2, { timeout: 60_000 });
+			await expect.poll(firstNames).toEqual([MEMBER_FIRST, HEAD_FIRST]);
+
+			// Unfiltered: server-paged `_all_docs` path.
+			await pickSort('ลงทะเบียนเก่าสุดก่อน');
+			await expect.poll(firstNames).toEqual([HEAD_FIRST, MEMBER_FIRST]);
+			await pickSort('ชื่อ ก–ฮ');
+			await expect.poll(firstNames).toEqual([MEMBER_FIRST, HEAD_FIRST]); // ส before ห
+
+			// Search: client-paged path keeps the chosen order.
+			await page.locator('#evacuee-search').fill(LAST_NAME);
+			await pickSort('ลงทะเบียนเก่าสุดก่อน');
+			await expect.poll(firstNames).toEqual([HEAD_FIRST, MEMBER_FIRST]);
+			await pickSort('ลงทะเบียนล่าสุดก่อน');
+			await expect.poll(firstNames).toEqual([MEMBER_FIRST, HEAD_FIRST]);
+		});
+
 		test('household tab lists the registered household and opens edit', async ({ page }) => {
 			test.setTimeout(120_000);
 			expect(shelterCode).toBeTruthy();

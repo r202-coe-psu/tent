@@ -52,6 +52,9 @@ export {
 	groupPetsBySpecies,
 	genderSchema,
 	genderLabelTh,
+	genderLabel,
+	peopleLabels,
+	peopleLabelsByLanguage,
 	religionSchema,
 	stayStatusSchema,
 	STATUS_LABELS,
@@ -95,6 +98,14 @@ export {
 	listPendingZoneArrivalConfirmations,
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
+	SHELTER_CLOSE_CHECKOUT_STATUSES,
+	SHELTER_CLOSE_CANCEL_STATUSES,
+	SHELTER_CLOSE_AFFECTED_STATUSES,
+	SHELTER_CLOSED_REASON,
+	SHELTER_CLOSED_REASON_LABEL,
+	SHELTER_CLOSED_REASON_LABEL_EN,
+	movementReasonLabel,
+	type CheckoutDestinationType,
 	CONFIRM_ROOM_ELIGIBLE_STATUSES,
 	ZONE_CHANGE_ELIGIBLE_STATUSES,
 	ACTIVE_HOUSEHOLD_STATUSES,
@@ -113,6 +124,7 @@ export {
 	maskNationalId,
 	collectMemberRuleIssues,
 	type MemberRuleIssue,
+	type PeopleLabelSet,
 	formatPersonName,
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
@@ -122,6 +134,8 @@ export {
 	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
+	EWAR_SYMPTOM_GROUPS_EN,
+	ewarSymptomGroupsByLanguage,
 	ewarSymptomLabel,
 	isEvacuee,
 	isMedical,
@@ -141,6 +155,8 @@ export {
 	buildHousingTypeSelectItems,
 	setHousingTypeFromSelect,
 	housingTypeLabelForCode,
+	DEFAULT_HOUSING_TYPE_ITEMS_EN,
+	defaultHousingTypeItems,
 	type HousingTypeSelectItem,
 	type MasterHousingItem
 } from './domain/housing-type-ui';
@@ -171,6 +187,9 @@ export {
 	pickRecommendedZone,
 	resolvePreferredZone,
 	ZONE_KIND_LABELS,
+	zoneKindLabelsByLanguage,
+	nextQueueLabelText,
+	nextQueueLabelsEn,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
 	buildZoningPath,
@@ -195,7 +214,23 @@ export {
 } from './domain/evacuee-search';
 
 export {
+	buildEvacueeQrLabel,
+	EVACUEE_QR_PLACEHOLDER_PAYLOAD,
+	type EvacueeQrLabel,
+	type EvacueeQrLabelInput
+} from './domain/evacuee-qr-label';
+
+export {
+	checkPersonQr,
+	staffPersonQrRejectionMessage,
+	type EvacueeQrPrintsReader
+} from './application/evacuee-qr-check';
+export { issueQrPayloads, type IssuedQrPayloads } from './application/evacuee-qr-issue';
+export { readEvacueeQrPrints } from './data/evacuee-qr.remote';
+
+export {
 	extractScanLookupToken,
+	extractScanPersonQr,
 	toCouchEvacueeId,
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit
@@ -208,6 +243,15 @@ export {
 	type ApplyRowClickSelectionInput,
 	type ApplyRowClickSelectionResult
 } from './domain/row-selection';
+
+export {
+	EVACUEE_SORTS,
+	EVACUEE_SORT_LABELS,
+	DEFAULT_EVACUEE_SORT,
+	isEvacueeSort,
+	sortEvacuees,
+	type EvacueeSort
+} from './domain/evacuee-sort';
 
 export {
 	REPORT_IN_CTA_LABEL,
@@ -223,6 +267,7 @@ export {
 	NEW_REG_POOL_ERROR_LOCKED_HINT,
 	NEW_REG_OVERRIDE_TRIGGER_LABEL,
 	POOL_CLAIM_FORBIDDEN_HINT,
+	intakeSearchCopyByLanguage,
 	resolveShelterHitAction,
 	shelterHitStatusLabel,
 	hasFederatedIntakeHits,
@@ -233,6 +278,7 @@ export {
 	duplicateCheckKey,
 	type DuplicateCheckQuery,
 	type ShelterHitAction,
+	type IntakeSearchCopy,
 	type NewRegistrationCtaKind,
 	type DuplicateCheckMember
 } from './domain/intake-search';
@@ -261,9 +307,11 @@ export {
 	type PhoneHouseholdMatchCandidate,
 	type JoinCandidateEvacuee
 } from './domain/registration-shell';
+export { localizeRegistrationMessage } from './domain/registration-messages.i18n';
 
 export {
 	PRIMARY_CONTACT_LABEL,
+	PRIMARY_CONTACT_LABEL_EN,
 	blankUnifiedMember,
 	applyAnonymousIdToMember,
 	memberCardLabel,
@@ -330,6 +378,7 @@ export {
 	type FederatedScanHit,
 	type FederatedScanCouchHit,
 	type FederatedScanUnassignedHit,
+	type FederatedScanRejectedHit,
 	type FederatedScanLookupDeps,
 	useHouseholds,
 	useHousehold,
@@ -352,6 +401,7 @@ export {
 	usePatchMedical,
 	useDeleteMedical,
 	usePatchEvacuee,
+	useSetSearchVisibility,
 	useMedicals,
 	useMedicalByEvacuee,
 	useMovements,
@@ -430,6 +480,8 @@ export { default as InstantDuplicateDialog } from './ui/registration/instant-dup
 
 // UI — i18n dictionaries used directly by route pages
 export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';
+export { EVACUEE_PROFILE_I18N } from './ui/_constants/evacuee-profile.i18n';
+export { EVACUEE_SEARCH_I18N, type EvacueeSearchI18n } from './ui/_constants/evacuee-search.i18n';
 
 // UI — shared sub-form components (Issue #205)
 export {

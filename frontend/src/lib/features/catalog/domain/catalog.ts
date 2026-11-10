@@ -609,8 +609,31 @@ export function mergeCatalogGenerations(
 		}));
 
 	const [preferred, fallback] = LEGACY_WINS ? [legacy, masters] : [masters, legacy];
-	const claimed = new Set(preferred.map((e) => e.name.trim().toLowerCase()));
-	return [...preferred, ...fallback.filter((e) => !claimed.has(e.name.trim().toLowerCase()))];
+	const claimed = new Set(preferred.map((e) => catalogNameKey(e.name)));
+	return [...preferred, ...fallback.filter((e) => !claimed.has(catalogNameKey(e.name)))];
+}
+
+/** The name `mergeCatalogGenerations` collapses two generations on. */
+function catalogNameKey(name: string): string {
+	return name.trim().toLowerCase();
+}
+
+/**
+ * The id a picker over `mergeCatalogGenerations` should select for an item that was just
+ * created or chosen outside it (the "เพิ่มสินค้าใหม่" sheet).
+ *
+ * An `item_master` whose name a legacy row already holds is de-duplicated out of the
+ * merged list, so selecting its own id would leave the picker blank — the legacy row is
+ * the one the list shows, and the one campaigns and the ledger bind to. An id the list
+ * does not carry yet (the catalog query is still refetching after a create) is kept.
+ */
+export function mergedCatalogIdFor(
+	entries: readonly { _id: string; name: string }[],
+	item: { _id: string; name: string }
+): string {
+	if (entries.some((e) => e._id === item._id)) return item._id;
+	const key = catalogNameKey(item.name);
+	return entries.find((e) => catalogNameKey(e.name) === key)?._id ?? item._id;
 }
 
 // ---------------------------------------------------------------- input schemas

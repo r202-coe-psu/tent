@@ -201,7 +201,6 @@ test.describe(
 			await page.locator('#member-0-first-name').fill('สมชาย');
 			await page.locator('#member-0-last-name').fill('ใจดี');
 			await page.locator('#member-0-gender-male').click({ force: true });
-			await page.getByLabel(/เข้าใจว่าข้อมูลจะรอในคิว/).check();
 			await acceptFullConsent(page);
 
 			// The sticky summary aside repeats the submit button; use the one in the form body.
@@ -291,7 +290,7 @@ test.describe(
 			await expect(page.getByText('ผู้ป่วยติดเตียง').first()).toBeVisible();
 			await expect(page.getByText('ผู้สูงอายุช่วยเหลือตัวเองไม่ได้').first()).toBeVisible();
 
-			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+			await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 			const member2 = page.getByRole('region', { name: 'สมาชิกคนที่ 2' });
 			await expect(member2).toBeVisible();
 			await member2.locator('#member-1-first-name').fill('สมหญิง');
@@ -525,7 +524,6 @@ test.describe(
 			});
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
-			await page.getByLabel(/เข้าใจว่าข้อมูลจะรอในคิว/).check();
 			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
@@ -542,10 +540,10 @@ test.describe(
 			).toBeVisible();
 
 			expect(submitted).toMatchObject({
-				disclaimerAcknowledged: true,
 				members: [{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' }],
 				household: { province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'คอหงส์' }
 			});
+			expect(submitted).not.toHaveProperty('disclaimerAcknowledged');
 			expect(String((submitted as { shelter_code?: string } | null)?.shelter_code ?? '')).not.toBe(
 				'SH001'
 			);
@@ -590,7 +588,6 @@ test.describe(
 					lastName: 'ใจดี',
 					phone: '0812345678'
 				});
-				await page.getByLabel(/เข้าใจว่าข้อมูลจะรอในคิว/).check();
 				await acceptFullConsent(page);
 				await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 				await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
