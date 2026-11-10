@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { languageStore } from '$lib/stores/language.svelte';
 import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
 import { personQrVerdictMessage } from '$lib/utils/evacuee-qr';
 import {
@@ -8,7 +9,8 @@ import {
 	lookupPreRegisteredEvacuee,
 	registerKioskThaidWalkIn,
 	reprintKioskLabels,
-	registerKioskWalkIn
+	registerKioskWalkIn,
+	requestError
 } from './kiosk-check-in.api';
 
 describe('checkInSelectedMembers batching', () => {
@@ -593,5 +595,108 @@ describe('checkInSelectedMembers lookup time (CR-192)', () => {
 		await checkInSelectedMembers(primaryId, [primaryId]);
 
 		expect(bodies[0]).not.toHaveProperty('lookup_at');
+	});
+});
+
+describe('kiosk request messages language', () => {
+	afterEach(() => languageStore.setLanguage('th'));
+
+	it('builds the partial check-in message in English', () => {
+		languageStore.setLanguage('en');
+
+		const error = new KioskPartialCheckInError({
+			shelter_code: 'SH001',
+			members: [],
+			retryable_evacuee_ids: []
+		});
+
+		expect(error.message).toBe(
+			'Only part of the check-in went through. Please review the results and retry the rest'
+		);
+	});
+
+	it('keeps the Thai partial check-in message in Thai', () => {
+		const error = new KioskPartialCheckInError({
+			shelter_code: 'SH001',
+			members: [],
+			retryable_evacuee_ids: []
+		});
+
+		expect(error.message).toBe('รายงานตัวได้บางส่วน กรุณาตรวจผลและลองรายการที่เหลืออีกครั้ง');
+	});
+
+	it('uses an English generic message when the server sent none', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(new Response('{}', { status: 500 }));
+
+		expect(error.message).toBe('The system could not complete this request');
+	});
+
+	function errorResponse(status: number, error: Record<string, unknown>): Response {
+		return new Response(JSON.stringify({ error }), { status });
+	}
+
+	it('words a known server error code in English instead of the Thai server text', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(503, {
+				code: 'DEPENDENCY_UNAVAILABLE',
+				message: 'บริการค้นหาข้อมูลไม่พร้อมใช้งาน'
+			})
+		);
+
+		expect(error.message).toBe(
+			'The service is not available right now. Please try again or contact staff.'
+		);
+		expect(error.code).toBe('DEPENDENCY_UNAVAILABLE');
+	});
+
+	it('falls back to the English generic message for a code it has no English for', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(500, { code: 'SOMETHING_NEW', message: 'ข้อความไทยจาก server' })
+		);
+
+		expect(error.message).toBe('The system could not complete this request');
+	});
+
+	it('keeps the Thai server text on the Thai screen', async () => {
+		const error = await requestError(
+			errorResponse(503, {
+				code: 'DEPENDENCY_UNAVAILABLE',
+				message: 'บริการค้นหาข้อมูลไม่พร้อมใช้งาน'
+			})
+		);
+
+		expect(error.message).toBe('บริการค้นหาข้อมูลไม่พร้อมใช้งาน');
+	});
+
+	it('words an invalid QR in English', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(400, { code: 'KIOSK_QR_INVALID', message: 'QR ไม่ถูกต้อง' })
+		);
+
+		expect(error.message).toBe('Invalid QR');
+	});
+
+	it('words an expired QR in English with its dates', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(409, {
+				code: 'KIOSK_QR_EXPIRED',
+				message: 'QR นี้หมดอายุแล้ว',
+				issued_at: '2026-01-01T03:00:00.000Z',
+				current_printed_at: '2026-01-02T03:00:00.000Z'
+			})
+		);
+
+		expect(error.message).toMatch(/^This QR was issued on .+\. A new one was issued on .+\./);
+		expect(error.message).not.toMatch(/[\u0E00-\u0E7F]/);
 	});
 });

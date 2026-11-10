@@ -6,10 +6,11 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		abandonWalkIn,
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION,
 		KioskBackButton,
@@ -25,11 +26,13 @@
 		submitWalkIn,
 		walkInSession
 	} from '$lib/features/kiosk';
+	import { KIOSK_REGISTER_PHONE_PAGE_I18N } from './phone-page.i18n';
 
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const t = $derived(getTranslation(KIOSK_REGISTER_PHONE_PAGE_I18N, languageStore.current));
+
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	const viaThaid = walkInSession.source === 'thaid';
 	let registering = $state(false);
@@ -112,22 +115,22 @@
 			return;
 		}
 		expired = outcome.kind === 'expired';
-		error = outcome.kind === 'ignored' ? 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง' : outcome.message;
+		error = outcome.kind === 'ignored' ? t.failedRetry : outcome.message;
 		registering = false;
 		idleTimeout.setPaused(false);
 	}
 </script>
 
-<svelte:head><title>เบอร์โทรศัพท์ — SmartShelter Kiosk</title></svelte:head>
+<svelte:head><title>{t.pageTitle}</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div
 	class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 py-3 kiosk-compact:gap-1.5 kiosk-compact:py-0"
 >
 	<KioskCheckInWizard
 		currentStep={4}
-		step2Label="ยินยอม"
-		step3Label={viaThaid ? 'ThaiD' : 'อ่านบัตร'}
-		step4Label="เบอร์โทร"
+		step2Label={t.stepConsent}
+		step3Label={viaThaid ? t.stepThaid : t.stepCard}
+		step4Label={t.stepPhone}
 	/>
 	<div class="flex justify-start">
 		<KioskBackButton href={homeUrl} onclick={() => abandonWalkIn()} disabled={registering} />
@@ -137,31 +140,31 @@
 			tone="warning"
 			icon={CircleAlert}
 			headingTag="h1"
-			title="ลงทะเบียนไม่สำเร็จ"
+			title={t.failedTitle}
 			role="alert"
 		>
 			<p>{error}</p>
 			{#snippet actions()}
 				{#if expired}
 					<Button type="button" onclick={scanThaidAgain} class={KIOSK_NOTICE_PRIMARY_ACTION}
-						>สแกน ThaiD ใหม่</Button
+						>{t.scanThaidAgain}</Button
 					>
 				{:else}
 					<Button type="button" onclick={register} class={KIOSK_NOTICE_PRIMARY_ACTION}
-						>ลองอีกครั้ง</Button
+						>{t.retry}</Button
 					>
 				{/if}
 				<Button
 					type="button"
 					variant="outline"
 					onclick={returnHome}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}>ยกเลิก</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.cancel}</Button
 				>
 			{/snippet}
 		</KioskNoticePanel>
 	{:else if registering}
-		<KioskNoticePanel tone="info" icon={UserPlus} headingTag="h1" title="กำลังบันทึกข้อมูล">
-			<KioskBusyStatus>กรุณารอสักครู่</KioskBusyStatus>
+		<KioskNoticePanel tone="info" icon={UserPlus} headingTag="h1" title={t.savingTitle}>
+			<KioskBusyStatus>{t.pleaseWait}</KioskBusyStatus>
 		</KioskNoticePanel>
 	{:else if walkInSession.identityReady}
 		<KioskRegisterPhone notice={phoneNotice} onconfirm={confirmPhone} />
