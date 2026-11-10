@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { cn } from '$lib/utils/shadcn';
+	import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 
 	type Props = {
 		/** QR data URL; empty renders the placeholder. */
 		src: string | null | undefined;
 		alt: string;
 		name: string;
+		/** Vulnerability level band at the top of the text column (#1301); omit or null for none. */
+		marker?: VulnerabilityMarker | null;
 		/**
 		 * Zone row under the name: `value` is the assigned zone's name, or null for a blank dotted
 		 * line staff fill in by hand. Omit for no zone row.
@@ -32,6 +35,7 @@
 		src,
 		alt,
 		name,
+		marker,
 		zone,
 		emergency,
 		badge,
@@ -52,6 +56,27 @@
 
 <div class={cn('flex h-full w-full flex-row text-black', className)}>
 	<div class="flex min-w-0 flex-1 flex-col gap-[1mm]">
+		{#if marker === 'red'}
+			<div
+				data-marker="red"
+				role="img"
+				aria-label="ระดับความเปราะบาง: แดง"
+				class="flex items-center gap-[1.5mm] bg-black px-[1.5mm] text-[12pt] leading-[1.3] font-bold text-white"
+			>
+				<span>■</span>
+				<span>แดง</span>
+			</div>
+		{:else if marker === 'yellow'}
+			<div
+				data-marker="yellow"
+				role="img"
+				aria-label="ระดับความเปราะบาง: เหลือง"
+				class="flex items-center gap-[1.5mm] border-[0.5mm] border-black px-[1.5mm] text-[12pt] leading-[1.3] font-bold text-black"
+			>
+				<span>△</span>
+				<span>เหลือง</span>
+			</div>
+		{/if}
 		<p class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere]">{name}</p>
 		{#each lines as line (line)}
 			<p class="text-[10pt] leading-[1.3] font-medium [overflow-wrap:anywhere]">{line}</p>

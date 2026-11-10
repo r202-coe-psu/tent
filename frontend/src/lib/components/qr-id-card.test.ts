@@ -97,6 +97,54 @@ describe('QrIdCard', () => {
 		expect(result.body).toContain('>QR</div>');
 	});
 
+	it('prints a red marker as an inverted band with a filled square and the level word', () => {
+		const body = render(QrIdCard, { props: { ...base, marker: 'red' } }).body;
+
+		expect(body).toContain('data-marker="red"');
+		expect(body).toContain('aria-label="ระดับความเปราะบาง: แดง"');
+		const tag = body.match(/<[^>]*data-marker="red"[^>]*>/)?.[0] ?? '';
+		expect(tag).toContain('bg-black');
+		expect(tag).toContain('text-white');
+		expect(body).toContain('■');
+		expect(body).toContain('แดง');
+	});
+
+	it('prints a yellow marker as a black-outlined block with a hollow triangle and the level word', () => {
+		const body = render(QrIdCard, { props: { ...base, marker: 'yellow' } }).body;
+
+		expect(body).toContain('data-marker="yellow"');
+		expect(body).toContain('aria-label="ระดับความเปราะบาง: เหลือง"');
+		const tag = body.match(/<[^>]*data-marker="yellow"[^>]*>/)?.[0] ?? '';
+		expect(tag).toMatch(/border-\[[\d.]+mm\]/);
+		expect(tag).toContain('border-black');
+		expect(tag).not.toContain('bg-black');
+		expect(body).toContain('△');
+		expect(body).toContain('เหลือง');
+		expect(body).not.toContain('■');
+	});
+
+	it('prints no marker when there is no level', () => {
+		for (const marker of [null, undefined]) {
+			const body = render(QrIdCard, { props: { ...base, marker } }).body;
+
+			expect(body).not.toContain('data-marker');
+			expect(body).not.toContain('ระดับความเปราะบาง');
+			expect(body).not.toMatch(/[■△]/);
+		}
+	});
+
+	it('keeps the marker in the text column, above the name and clear of the QR', () => {
+		for (const marker of ['red', 'yellow'] as const) {
+			const body = render(QrIdCard, { props: { ...base, marker } }).body;
+			const at = body.indexOf('data-marker');
+
+			expect(at).toBeGreaterThan(-1);
+			expect(at).toBeLessThan(body.indexOf('ทดสอบ หนึ่ง'));
+			expect(at).toBeLessThan(body.indexOf('<img'));
+			expect(body).toContain('size-(--qr-size)');
+		}
+	});
+
 	it('escapes markup in the name', () => {
 		const result = render(QrIdCard, {
 			props: { ...base, name: '<script>alert(1)</script>' }
