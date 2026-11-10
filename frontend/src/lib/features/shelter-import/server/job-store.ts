@@ -312,9 +312,33 @@ export async function deployQueueDesign(): Promise<void> {
 	}
 }
 
-async function ensureImportQueueDatabase(): Promise<void> {
-	await ensurePrivateDatabase(IMPORT_QUEUE_DB, 'import queue');
-	await deployQueueDesign();
+let queueReady: Promise<void> | null = null;
+
+/**
+ * Setup writes _security and design docs, so it runs once per process instead of on every
+ * worker poll. A failed attempt is retried on the next call, and a missing queue view clears
+ * the cache (see {@link queueViewUnavailable}) so a database dropped by `unseed`/`reset` is
+ * recreated on the next poll.
+ */
+function ensureImportQueueDatabase(): Promise<void> {
+	queueReady ??= (async () => {
+		await ensurePrivateDatabase(IMPORT_QUEUE_DB, 'import queue');
+		await deployQueueDesign();
+	})().catch((error: unknown) => {
+		queueReady = null;
+		throw error;
+	});
+	return queueReady;
+}
+
+/** A queue view 404s when the database or its design doc is gone: redo setup next call. */
+function queueViewUnavailable(view: string): ServiceError {
+	queueReady = null;
+	return new ServiceError('INTERNAL', `Queue ${view} view is not available`);
+}
+
+export function resetImportQueueSetupForTests(): void {
+	queueReady = null;
 }
 
 async function ensureImportAuditDatabase(): Promise<void> {
@@ -523,7 +547,7 @@ export async function listRunnableImportJobs(options?: {
 	});
 	const res = await adminRaw(path, 'GET');
 	if (res.status === 404) {
-		throw new ServiceError('INTERNAL', 'Queue runnable jobs view is not available');
+		throw queueViewUnavailable('runnable jobs');
 	}
 	assertOk(res.status, 'list runnable import jobs', res.data);
 	const rows = (res.data as { rows?: { doc?: ShelterImportJob }[] }).rows ?? [];
@@ -541,7 +565,7 @@ export async function getImportJob(jobId: string): Promise<ImportJobSummary | nu
 	const itemsPath = queueItemsByJobRowPath(fullJobId, 1000);
 	const res = await adminRaw(itemsPath, 'GET');
 	if (res.status === 404) {
-		throw new ServiceError('INTERNAL', 'Queue items by row view is not available');
+		throw queueViewUnavailable('items by row');
 	}
 	assertOk(res.status, `list items for ${fullJobId}`, res.data);
 	const items = ((res.data as { rows?: { doc?: ShelterImportItem }[] }).rows ?? [])
@@ -828,7 +852,7 @@ export async function claimNextImportItem(
 	const pendingPath = queueItemsByJobStatusRowPath(fullJobId, 'pending', 1);
 	const pendingRes = await adminRaw(pendingPath, 'GET');
 	if (pendingRes.status === 404) {
-		throw new ServiceError('INTERNAL', 'Queue item status view is not available');
+		throw queueViewUnavailable('item status');
 	}
 	assertOk(pendingRes.status, 'query pending items', pendingRes.data);
 	let candidate =
@@ -839,7 +863,7 @@ export async function claimNextImportItem(
 		const expiredPath = queueRunningItemsByLeasePath(fullJobId, cutoffIso, 1);
 		const expiredRes = await adminRaw(expiredPath, 'GET');
 		if (expiredRes.status === 404) {
-			throw new ServiceError('INTERNAL', 'Queue running items view is not available');
+			throw queueViewUnavailable('running items');
 		}
 		assertOk(expiredRes.status, 'query expired running items', expiredRes.data);
 		candidate =
@@ -1001,7 +1025,7 @@ export async function recomputeImportJob(jobId: string): Promise<ShelterImportJo
 		const countPath = queueItemsByJobStatusCountPath(fullJobId);
 		const countRes = await adminRaw(countPath, 'GET');
 		if (countRes.status === 404) {
-			throw new ServiceError('INTERNAL', 'Queue items count view is not available');
+			throw queueViewUnavailable('items count');
 		}
 		assertOk(countRes.status, `count items for ${fullJobId}`, countRes.data);
 		const rows =

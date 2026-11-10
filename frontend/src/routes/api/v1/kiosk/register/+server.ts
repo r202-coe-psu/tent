@@ -15,6 +15,7 @@ import {
 	registerKioskWalkIn
 } from '$lib/features/kiosk/server/kiosk-register.server';
 import { toLabelIdentity } from '$lib/features/kiosk/server/kiosk-check-in.server';
+import { issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
 import {
 	consumeKioskSession,
@@ -156,12 +157,27 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
-		// The QR is the evacuee id itself (same as check-in), so the kiosk can print the label at once.
+		// CR-233: a freshly issued Person QR (never the bare evacuee id). The evacuee is already
+		// created, so a failed entry only drops the payload and flags it; the kiosk must not print.
+		let qrPayload: string | null = null;
+		try {
+			qrPayload = (
+				await issueEvacueeQr({
+					shelter_code: principal.shelter_code,
+					evacuee_id: evacuee._id,
+					source: 'kiosk_checkin',
+					printed_by: `kiosk:${principal.device_id}`
+				})
+			).qr_payload;
+		} catch {
+			qrPayload = null;
+		}
 		return json(
 			{
 				status: 'created',
 				evacuee_id: evacuee._id,
-				qr_payload: evacuee._id,
+				qr_payload: qrPayload,
+				...(qrPayload === null ? { qr_issue_failed: true } : {}),
 				label: toLabelIdentity(evacuee),
 				consent_ref: evacuee.consent.ref,
 				consent_mode: evacuee.consent.mode

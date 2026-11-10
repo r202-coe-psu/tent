@@ -1,4 +1,10 @@
-import type { Evacuee } from '$lib/features/people';
+import {
+	checkPersonQr,
+	extractScanPersonQr,
+	staffPersonQrRejectionMessage,
+	type Evacuee,
+	type EvacueeQrPrintsReader
+} from '$lib/features/people';
 import {
 	isStaffCardScanCode,
 	parseStaffCardPayload,
@@ -17,14 +23,30 @@ const POOL_QR_IN_RECIPIENT_SCAN_MESSAGE = 'นี่คือ QR ของกอ
  * passes. Pure over injected lookups so the routing is testable without a component.
  */
 export type ScannedRecipient =
-	| { kind: 'evacuee'; evacuee: Evacuee }
+	| { kind: 'evacuee'; evacuee: Evacuee; qrOverride?: QrOverrideDates }
 	| { kind: 'volunteer'; volunteer: Volunteer }
 	| { kind: 'staff_card'; selection: FrontlineRecipientSelection }
-	| { kind: 'error'; message: string };
+	/**
+	 * `expiredQr` is set only for an expired Person QR (CR-233 A1 FR-EQR-44): the caller may offer
+	 * "accept the risk" and scan again with `acceptExpiredQr`. Invalid QRs never carry it.
+	 */
+	| { kind: 'error'; message: string; expiredQr?: true };
+
+/** Dates of the accepted expired QR plus when it was accepted (CR-233 A1 FR-EQR-48; no PII). */
+export interface QrOverrideDates {
+	issued_at: string | null;
+	current_printed_at: string;
+	overridden_at: string;
+}
 
 export interface RecipientScanDeps {
 	lookupEvacuee: (code: string) => Promise<Evacuee | null>;
 	lookupVolunteer: (code: string) => Promise<Volunteer | null>;
+	/**
+	 * Reads `evacuee_qr:{ULID}` prints (missing doc = []) for the Person QR scan rule (CR-233).
+	 * Rejections (offline, auth) propagate to the caller's existing error handling, never "valid".
+	 */
+	listQrPrints: EvacueeQrPrintsReader;
 	resolveStaffCard?: (payload: string) => Promise<ResolvedCardRecipient>;
 }
 
@@ -50,7 +72,7 @@ export function toVolunteerSelection(volunteer: Volunteer): FrontlineRecipientSe
  */
 export async function resolveScannedRecipient(
 	code: string,
-	options: { allowVolunteer: boolean; allowStaff?: boolean },
+	options: { allowVolunteer: boolean; allowStaff?: boolean; acceptExpiredQr?: boolean },
 	deps: RecipientScanDeps
 ): Promise<ScannedRecipient> {
 	if (parsePoolScanCode(code)) {
@@ -108,14 +130,37 @@ export async function resolveScannedRecipient(
 		return { kind: 'volunteer', volunteer };
 	}
 
-	const evacuee = await deps.lookupEvacuee(code);
+	// Person QR `evacuee:{ULID}[@hash6]` (CR-233 FR-EQR-27/34): expired / invalid never resolves a
+	// recipient. A handover-slip path (`/onsite/medical-screening/evacuee:…`) is a hash-less Person QR. Bare ULIDs are registration tickets and skip the rule (FR-EQR-31). The id passed
+	// onward has no `@` (FR-EQR-6).
+	const personQr = extractScanPersonQr(code);
+	let qrOverride: QrOverrideDates | undefined;
+	if (personQr) {
+		const verdict = await checkPersonQr(personQr, deps.listQrPrints);
+		if (verdict.status === 'expired' && options.acceptExpiredQr) {
+			// CR-233 A1: staff accepted the risk; keep the dates for the audit on the distribution log.
+			qrOverride = {
+				issued_at: verdict.issued_at,
+				current_printed_at: verdict.current_printed_at,
+				overridden_at: new Date().toISOString()
+			};
+		} else if (verdict.status !== 'valid') {
+			return {
+				kind: 'error',
+				message: staffPersonQrRejectionMessage(verdict),
+				...(verdict.status === 'expired' ? { expiredQr: true as const } : {})
+			};
+		}
+	}
+
+	const evacuee = await deps.lookupEvacuee(personQr?.evacuee_id ?? code);
 	if (!evacuee) {
 		return {
 			kind: 'error',
 			message: `ไม่พบผู้ประสบภัยจากรหัส "${code}" ลองสแกนใหม่หรือค้นหาด้วยชื่อ`
 		};
 	}
-	return { kind: 'evacuee', evacuee };
+	return qrOverride ? { kind: 'evacuee', evacuee, qrOverride } : { kind: 'evacuee', evacuee };
 }
 
 /** Name / nickname / phone / `V-NNN` match over an already-loaded volunteer list. */

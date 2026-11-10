@@ -3,6 +3,7 @@ import { isListedHouseholdMember, isReprintableStatus } from '../domain/check-in
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { intakeStationsPassed } from '$lib/features/people/domain/intake-pipeline';
 import { labelZoneName, type ZoneLabelSource } from '$lib/features/people/domain/people';
+import { issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { findMasterByCode } from '$lib/server/shelters.admin';
@@ -37,7 +38,9 @@ export type KioskReprintInput = z.infer<typeof kioskReprintInputSchema>;
 
 export type KioskReprintMember = {
 	evacuee_id: string;
-	qr_payload: string;
+	/** Freshly issued (CR-233); absent with `qr_issue_failed` when the entry could not be written. */
+	qr_payload?: string;
+	qr_issue_failed?: true;
 	/**
 	 * `zone` is the member's current zone (short name, else full name), or null before Station 3
 	 * assigns one; `stations_passed` (0–3) is how many checklist boxes the label ticks.
@@ -98,6 +101,8 @@ export type KioskStaffPinResult =
 
 export type KioskReprintDeps = {
 	verifyStaffPin?: (pin: string) => Promise<KioskStaffPinResult>;
+	/** Authenticated scanner device id (never from the body): recorded as `kiosk:{id}` in the QR log. */
+	deviceId?: string;
 };
 
 function normalizeEvacueeId(id: string): string {
@@ -146,7 +151,8 @@ function citizenIdLast4(primary: EvacueeDoc): string | null {
 /**
  * Labels for the selected, already checked-in members of the phone owner's household, after the
  * last four digits of the owner's citizen id are verified. Members that are not in the household,
- * not yet checked in, gone, or hidden are skipped silently; not found if none are left. Never writes.
+ * not yet checked in, gone, or hidden are skipped silently; not found if none are left. Each printed
+ * member gets a fresh QR entry (CR-233 FR-EQR-22); a failed one carries `qr_issue_failed`.
  */
 export async function reprintKioskLabels(
 	shelterCode: string,
@@ -226,9 +232,25 @@ export async function reprintKioskLabels(
 			.filter((member) => intakeStationsPassed(member.current_stay, true) < 3)
 			.map((member) => member._id)
 	);
+	const printedBy = `kiosk:${deps.deviceId ?? 'unknown'}`;
+	const issued = new Map<string, { qr_payload: string } | { qr_issue_failed: true }>();
+	// One entry per member, one at a time: each write is read-modify-write on its own doc.
+	for (const member of eligible) {
+		try {
+			const result = await issueEvacueeQr({
+				shelter_code: shelterCode,
+				evacuee_id: member._id,
+				source: 'kiosk_reprint',
+				printed_by: printedBy
+			});
+			issued.set(member._id, { qr_payload: result.qr_payload });
+		} catch {
+			issued.set(member._id, { qr_issue_failed: true });
+		}
+	}
 	return eligible.map((member) => ({
 		evacuee_id: member._id,
-		qr_payload: member._id,
+		...issued.get(member._id)!,
 		label: {
 			...toLabelIdentity(member),
 			zone: labelZoneName(member.current_stay?.zone, zones),
