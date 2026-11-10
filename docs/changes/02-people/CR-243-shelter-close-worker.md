@@ -56,13 +56,17 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 **Job และ lock**
 
 - **FR-1** — เพิ่ม doc type `shelter_close_job` (`_id = shelter_close_job:<ulid>`, schema_v 1) ใน DB `central_ops`
-  ตามตาราง field ด้านล่าง
+  ตามตาราง field ด้านล่าง และเพิ่ม view `jobs_claimable` (design doc `_design/shelter_close`) เป็น index ให้ worker
+  - emit key `[status, lease_until ?? created_at]` เฉพาะ doc ที่ `type = shelter_close_job` และ `status` เป็น `queued` หรือ `running`
+  - worker หางานด้วย key range: `["queued"]`..`["queued", {}]` (เรียงตามเวลาสร้าง) และ `["running"]`..`["running", <now>]` (lease หมดแล้ว)
+  - ห้าม scan ทั้ง DB `central_ops` เพื่อหา job
 - **FR-2** — เพิ่ม doc type `shelter_close_lock` (`_id = shelter_close_lock:<code>`, schema_v 1) ใน `central_ops`
   job ที่ `status` เป็น `queued` หรือ `running` ได้ไม่เกิน 1 ต่อศูนย์ สร้าง lock ด้วย CAS (`_rev`)
 - **FR-3** — ปล่อย lock เมื่อ job เป็น terminal (`completed` / `completed_with_errors`)
 - **FR-3a** — route ที่อ่าน lock (FR-5, FR-6, FR-9) ต้องตรวจ job ที่ lock ชี้ก่อน: job terminal หรือหาไม่พบ →
   ลบ lock (CAS) แล้วทำต่อตามปกติ · job active แต่ `updated_at` เก่ากว่า `SHELTER_CLOSE_STALE_MS` → ตั้ง job เป็น
-  `completed_with_errors` แล้วปล่อย lock (ครอบคลุม worker ไม่ได้รัน และ crash ระหว่างจบ job กับลบ lock)
+  `completed_with_errors` (`end_reason = stale`) แล้วปล่อย lock (ครอบคลุม worker ไม่ได้รัน และ crash ระหว่างจบ job กับลบ lock)
+  การตั้งสถานะนี้ต้อง CAS ด้วย `_rev` ของ job ที่อ่านมา ถ้า `_rev` เปลี่ยนแล้ว (แปลว่า worker ยังทำงานอยู่) ให้ยกเลิกการปิด
 - **FR-4** — ห้ามเก็บ job หรือ lock ใน DB `shelter_<code>`
 
 **Route ฝั่งผู้ใช้**
@@ -86,15 +90,15 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 **Internal route และ worker**
 
 - **FR-11** — `POST /api/internal/shelter-close/worker/next` ใช้ `Authorization: Bearer
-  $SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่มีงาน → `204`
+$SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่มีงาน → `204`
 - **FR-12** — 1 call = claim หรือต่อ lease → ประมวลผล **1 chunk** → บันทึก `cursor` / `counters` ลง job doc → คืน
-  ภายใน `SHELTER_CLOSE_CHUNK_BUDGET_MS` (หมดเวลาแล้วเก็บ cursor แล้วคืน ไม่ทำต่อ)
-- **FR-13** — ต่อ lease **ก่อน** เขียน cursor
-- **FR-14** — lease หมด → worker ตัวใดก็ได้รับต่อจาก `cursor` เพิ่ม `attempt` ได้ไม่เกิน
+  ภายใน `SHELTER_CLOSE_CHUNK_BUDGET_MS` (หมดเวลาแล้วเก็บ cursor แล้วคืน ไม่ทำต่อ) · ทุกการบันทึก chunk อัปเดต `updated_at` ของ job ด้วย (FR-3a ใช้ตรวจว่า worker ยังทำงานอยู่)
+- **FR-13** — ต่อ lease **ก่อน** เขียน cursor · ถ้าเขียน cursor ได้ `409` ให้อ่าน job ใหม่: ถ้า job เป็น terminal หรือ lease เป็นของ worker อื่นแล้ว → หยุดทันที ไม่เขียนทับและไม่ทำ chunk ต่อ
+- **FR-14** — lease หมด (หาจาก view `jobs_claimable`, FR-1) → worker ตัวใดก็ได้รับต่อจาก `cursor` เพิ่ม `attempt` ได้ไม่เกิน
   `SHELTER_CLOSE_MAX_ATTEMPTS` เกินแล้ว job จบเป็น `completed_with_errors`
 - **FR-15** — `frontend/server/shelter-close-worker.mjs` (`pnpm shelter-close-worker`) poll internal route ทุก
   `SHELTER_CLOSE_WORKER_POLL_MS` ตอนไม่มีงาน
-- **FR-16** — worker ตรวจ `CHUNK_BUDGET_MS < TIMEOUT_MS < LEASE_MS` ตอนเริ่ม ตั้งผิดลำดับ → ล้มพร้อมข้อความระบุ
+- **FR-16** — worker ตรวจ `CHUNK_BUDGET_MS < TIMEOUT_MS < LEASE_MS < STALE_MS` ตอนเริ่ม ตั้งผิดลำดับ → ล้มพร้อมข้อความระบุ
   ตัวแปรที่ผิด
 
 **Phase ของ job** (ลำดับ `people → households → sweep → finalize → done`)
@@ -108,7 +112,7 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
   `operation_status = closed` + `closed_at` (ข้ามถ้าปิดอยู่แล้ว) registry เขียนครั้งเดียวที่ phase นี้เท่านั้น
 - **FR-21** — `finalize` โหมด `backfill`: ไม่แตะ registry (CR-219 FR-29) เขียน audit ต่อศูนย์ตาม CR-219 FR-30a
 - **FR-22** — สถานะสุดท้าย: `completed` เมื่อ FR-20 สำเร็จ (หรือ backfill ไม่มี failed) · มิฉะนั้น
-  `completed_with_errors` และศูนย์ไม่ถูกปิด · กดปิดซ้ำ = job ใหม่ (CR-219 FR-13)
+  `completed_with_errors` และศูนย์ไม่ถูกปิด · กดปิดซ้ำ = job ใหม่ (CR-219 FR-13) · ตั้ง `end_reason` ตามตาราง §2 ทุกครั้งที่ job จบ
 - **FR-23** — ทุกการเปลี่ยนสถานะผ่าน domain เดิม (`buildShelterCloseCheckout`, `buildShelterCloseCancel`,
   `deriveShelterCloseHousehold`) ห้าม set `current_stay.status` ตรง
 - **FR-24** — failed รายคนเก็บใน `failures[]` สูงสุด `SHELTER_CLOSE_MAX_FAILURES`; เกินแล้วนับใน
@@ -123,8 +127,12 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
   poll job ผู้ใช้ปิด modal ได้ระหว่างทำงาน
 - **FR-28** — `shelter-form-page.svelte` แสดง banner "กำลังปิดศูนย์…" ขณะมี job active (เปิดหน้าใหม่ก็เห็น) และ
   ซ่อน/disable ตัวเลือกเปลี่ยนสถานะศูนย์
-- **FR-29** — job จบแล้ว toast: `completed` → "ปิดศูนย์แล้ว · เช็คเอาต์ X คน · ยกเลิก Y คน";
-  `completed_with_errors` → "ล้มเหลว Z คน — ศูนย์ยังไม่ถูกปิด กดปิดอีกครั้งเพื่อทำต่อ"
+- **FR-29** — job จบแล้ว toast ตาม `end_reason`:
+  - `ok` → "ปิดศูนย์แล้ว · เช็คเอาต์ X คน · ยกเลิก Y คน"
+  - `failed` → "ล้มเหลว Z คน — ศูนย์ยังไม่ถูกปิด กดปิดอีกครั้งเพื่อทำต่อ" (แสดงเมื่อ `counters.failed > 0` เท่านั้น)
+  - `stale` → "งานปิดศูนย์หยุดไปนาน — ศูนย์ยังไม่ถูกปิด กดปิดอีกครั้งเพื่อเริ่มใหม่"
+  - `sweep_exhausted` → "ยังมีคนค้างหลังตรวจครบ 3 รอบ — ศูนย์ยังไม่ถูกปิด กดปิดอีกครั้งเพื่อทำต่อ"
+  - `attempts_exhausted` → "งานถูกรับต่อเกินจำนวนที่กำหนด — ศูนย์ยังไม่ถูกปิด กดปิดอีกครั้งเพื่อเริ่มใหม่"
 - **FR-30** — ไม่มีปุ่มยกเลิก job (ยืนยันด้วยการพิมพ์รหัส+ชื่อแล้ว และเช็คเอาต์ย้อนไม่ได้)
 
 **Backfill**
@@ -148,54 +156,55 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 
 ### 2. `shelter_close_job:<ulid>` (central_ops · schema_v 1)
 
-| field | ชนิด | req/opt | หมายเหตุ |
-| --- | --- | --- | --- |
-| `type` | `'shelter_close_job'` | req | |
-| `schema_v` | `1` | req | |
-| `job_ulid` | str | req | |
-| `shelter_code` | str | req | |
-| `mode` | `'close' \| 'backfill'` | req | |
-| `requested_by` | str | req | จาก session ฝั่ง server (FR-10) |
-| `status` | `queued \| running \| completed \| completed_with_errors` | req | |
-| `phase` | `people \| households \| sweep \| finalize \| done` | req | |
-| `cursor` | object | req | ตำแหน่งต่อใน phase ปัจจุบัน |
-| `sweep_round` | int (0..3) | req | |
-| `counters` | `{ checked_out, cancelled, households_repaired, failed }` (int) | req | |
-| `preview` | object | req | snapshot ของ CR-219 FR-7 ตอนสั่ง |
-| `failures` | `[{ evacuee_id, error }]` | req | จำกัดขนาดตาม FR-24 |
-| `lease_owner` / `lease_until` | str / ISO | opt | |
-| `attempt` | int | req | |
-| `created_at` / `updated_at` | ISO | req | |
-| `started_at` / `finished_at` | ISO | opt | |
-| `closed` | bool | req | registry ถูกปิดโดย job นี้หรือไม่ |
+| field                         | ชนิด                                                             | req/opt | หมายเหตุ                                                                                                        |
+| ----------------------------- | ---------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `type`                        | `'shelter_close_job'`                                            | req     |                                                                                                                 |
+| `schema_v`                    | `1`                                                              | req     |                                                                                                                 |
+| `job_ulid`                    | str                                                              | req     |                                                                                                                 |
+| `shelter_code`                | str                                                              | req     |                                                                                                                 |
+| `mode`                        | `'close' \| 'backfill'`                                          | req     |                                                                                                                 |
+| `requested_by`                | str                                                              | req     | จาก session ฝั่ง server (FR-10)                                                                                 |
+| `status`                      | `queued \| running \| completed \| completed_with_errors`        | req     |                                                                                                                 |
+| `phase`                       | `people \| households \| sweep \| finalize \| done`              | req     |                                                                                                                 |
+| `cursor`                      | object                                                           | req     | ตำแหน่งต่อใน phase ปัจจุบัน                                                                                     |
+| `sweep_round`                 | int (0..3)                                                       | req     |                                                                                                                 |
+| `counters`                    | `{ checked_out, cancelled, households_repaired, failed }` (int)  | req     |                                                                                                                 |
+| `preview`                     | object                                                           | req     | snapshot ของ CR-219 FR-7 ตอนสั่ง                                                                                |
+| `failures`                    | `[{ evacuee_id, error }]`                                        | req     | จำกัดขนาดตาม FR-24                                                                                              |
+| `lease_owner` / `lease_until` | str / ISO                                                        | opt     |                                                                                                                 |
+| `attempt`                     | int                                                              | req     |                                                                                                                 |
+| `created_at` / `updated_at`   | ISO                                                              | req     |                                                                                                                 |
+| `started_at` / `finished_at`  | ISO                                                              | opt     |                                                                                                                 |
+| `closed`                      | bool                                                             | req     | registry ถูกปิดโดย job นี้หรือไม่                                                                               |
+| `end_reason`                  | `ok \| failed \| stale \| sweep_exhausted \| attempts_exhausted` | opt     | ตั้งเมื่อ job จบเท่านั้น ถ้ามีหลายสาเหตุ ใช้ลำดับ `stale` > `attempts_exhausted` > `sweep_exhausted` > `failed` |
 
 `shelter_close_lock:<code>`: `type`, `schema_v` (1), `shelter_code`, `job_id` (`_id` เต็มของ job ที่ถือ lock),
 `created_at` · เก็บใน `central_ops`
 
 ### 3. ผลต่อข้อใน CR-219 (บันทึกที่นี่ ไม่แก้ไฟล์ CR-219)
 
-| CR-219 | ก่อน | หลัง (CR นี้) |
-| --- | --- | --- |
-| FR-9 | ทำใน server ภายใน request | ทำใน `shelter-close-worker` ผ่าน internal route (FR-11..FR-14) |
-| FR-14 | response `{ closed, checked_out, cancelled, failed }` | `202 { job_id }` · ผลอ่านจาก job status (FR-6, FR-8) |
-| FR-19 | loading, ปิด modal ไม่ได้, toast ท้ายสุด | progress poll job, ปิด modal ได้, banner, toast ท้ายสุด (FR-27..FR-29) |
-| FR-22 | PATCH ตั้ง `closed` → `400` | คงเดิม + PATCH เปลี่ยน `operation_status` ขณะ job active → `409` (FR-9) |
-| FR-28..FR-31 | script ประมวลผล synchronous | `--write` สร้าง job `mode = backfill`; `--dry-run` ยัง synchronous (FR-31..FR-33) |
-| FR-7, FR-8, FR-10..FR-13, FR-12a, FR-15..FR-18, FR-29, FR-30a, FR-31a | — | **ไม่เปลี่ยน** (ใช้ซ้ำใน worker) |
+| CR-219                                                                | ก่อน                                                  | หลัง (CR นี้)                                                                     |
+| --------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
+| FR-9                                                                  | ทำใน server ภายใน request                             | ทำใน `shelter-close-worker` ผ่าน internal route (FR-11..FR-14)                    |
+| FR-14                                                                 | response `{ closed, checked_out, cancelled, failed }` | `202 { job_id }` · ผลอ่านจาก job status (FR-6, FR-8)                              |
+| FR-19                                                                 | loading, ปิด modal ไม่ได้, toast ท้ายสุด              | progress poll job, ปิด modal ได้, banner, toast ท้ายสุด (FR-27..FR-29)            |
+| FR-22                                                                 | PATCH ตั้ง `closed` → `400`                           | คงเดิม + PATCH เปลี่ยน `operation_status` ขณะ job active → `409` (FR-9)           |
+| FR-28..FR-31                                                          | script ประมวลผล synchronous                           | `--write` สร้าง job `mode = backfill`; `--dry-run` ยัง synchronous (FR-31..FR-33) |
+| FR-7, FR-8, FR-10..FR-13, FR-12a, FR-15..FR-18, FR-29, FR-30a, FR-31a | —                                                     | **ไม่เปลี่ยน** (ใช้ซ้ำใน worker)                                                  |
 
 ### 4. Env (ทุกตัว override ได้ · test ใช้ค่าเล็กผ่าน fake clock)
 
-| ตัวแปร | default | ใช้ทำอะไร |
-| --- | --- | --- |
-| `SHELTER_CLOSE_WORKER_TOKEN` | บังคับ ไม่มี default | Bearer token ของ internal route |
-| `SHELTER_CLOSE_WORKER_URL` | `http://host.docker.internal:5173` | ที่อยู่ frontend ที่ worker เรียก |
-| `SHELTER_CLOSE_WORKER_POLL_MS` | `2000` | ช่วง poll ตอนไม่มีงาน |
-| `SHELTER_CLOSE_WORKER_TIMEOUT_MS` | `30000` | timeout ฝั่ง worker ต่อ request |
-| `SHELTER_CLOSE_CHUNK_BUDGET_MS` | `20000` | เวลาสูงสุดต่อ 1 chunk ใน route |
-| `SHELTER_CLOSE_LEASE_MS` | `60000` | อายุ lease |
-| `SHELTER_CLOSE_MAX_ATTEMPTS` | `5` | จำนวนครั้งสูงสุดที่ job ถูกรับต่อ |
-| `SHELTER_CLOSE_MAX_FAILURES` | `50` | เพดานรายการใน `failures[]` |
-| `SHELTER_CLOSE_STALE_MS` | `600000` | job active ที่ `updated_at` ไม่ขยับนานกว่านี้ถือว่าค้าง (FR-3a) · ต้องมากกว่า `SHELTER_CLOSE_LEASE_MS` |
+| ตัวแปร                            | default                            | ใช้ทำอะไร                                                                                              |
+| --------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `SHELTER_CLOSE_WORKER_TOKEN`      | บังคับ ไม่มี default               | Bearer token ของ internal route                                                                        |
+| `SHELTER_CLOSE_WORKER_URL`        | `http://host.docker.internal:5173` | ที่อยู่ frontend ที่ worker เรียก                                                                      |
+| `SHELTER_CLOSE_WORKER_POLL_MS`    | `2000`                             | ช่วง poll ตอนไม่มีงาน                                                                                  |
+| `SHELTER_CLOSE_WORKER_TIMEOUT_MS` | `30000`                            | timeout ฝั่ง worker ต่อ request                                                                        |
+| `SHELTER_CLOSE_CHUNK_BUDGET_MS`   | `20000`                            | เวลาสูงสุดต่อ 1 chunk ใน route                                                                         |
+| `SHELTER_CLOSE_LEASE_MS`          | `60000`                            | อายุ lease                                                                                             |
+| `SHELTER_CLOSE_MAX_ATTEMPTS`      | `5`                                | จำนวนครั้งสูงสุดที่ job ถูกรับต่อ                                                                      |
+| `SHELTER_CLOSE_MAX_FAILURES`      | `50`                               | เพดานรายการใน `failures[]`                                                                             |
+| `SHELTER_CLOSE_STALE_MS`          | `600000`                           | job active ที่ `updated_at` ไม่ขยับนานกว่านี้ถือว่าค้าง (FR-3a) · ต้องมากกว่า `SHELTER_CLOSE_LEASE_MS` |
 
 ค่า default เป็นการประมาณ ปรับหลัง load test (AC-11)
 
@@ -212,8 +221,8 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 - [ ] **AC-9** `/api/internal/shelter-close/` เข้าจาก public listener ไม่ได้; ไม่มี token → `401` (FR-11, FR-37)
 - [ ] **AC-10** compose ทุกไฟล์ใน FR-34 มี service `shelter-close-worker` และ env ครบใน `.env.example` ทั้งสองไฟล์ (FR-34..FR-36); worker ล้มพร้อมข้อความชัดเจนเมื่อ env ผิดลำดับ (FR-16)
 - [ ] **AC-11** ศูนย์ ~5,000 คนปิดสำเร็จ (load test: `pnpm seed:master` + `pnpm seed:bulk-evacuees --shelter=SH001 --count=5000`) โดยไม่มี request ใดเกิน budget ของ route · ต้องตรวจสัดส่วนสถานะที่ `people-builder` สร้างก่อนนับ "5,000 คน" (บางคนถูกโอนย้าย)
-- [ ] **AC-12** Tests ครบ: job store (CAS lock, lease, claim, lock ค้างตาม FR-3a) · step function (phase, cursor, sweep, finalize 2 mode, resume, `failures[]`, `createdBy` จาก `requested_by`) · close route (`202` / `409`) · job status route (รวม `404` เมื่อ job เป็นของศูนย์อื่น) · internal route (token, chunk, cursor) · PATCH block · backfill script · ingress/config · UI component · e2e ปิดศูนย์ผ่าน worker
-- [ ] **AC-13** lock ชี้ job ที่จบแล้วหรือไม่มีอยู่ → กดปิดศูนย์ได้ `202` · ไม่มี worker รันเกิน `SHELTER_CLOSE_STALE_MS` → job เป็น `completed_with_errors` และเปลี่ยนสถานะศูนย์ได้ (FR-3a)
+- [ ] **AC-12** Tests ครบ: job store (CAS lock, lease, claim ผ่าน view `jobs_claimable`, lock ค้างตาม FR-3a) · step function (phase, cursor, sweep, finalize 2 mode, resume, `failures[]`, `createdBy` จาก `requested_by`) · close route (`202` / `409`) · job status route (รวม `404` เมื่อ job เป็นของศูนย์อื่น) · internal route (token, chunk, cursor) · PATCH block · backfill script · ingress/config · UI component · e2e ปิดศูนย์ผ่าน worker
+- [ ] **AC-13** lock ชี้ job ที่จบแล้วหรือไม่มีอยู่ → กดปิดศูนย์ได้ `202` · ไม่มี worker รันเกิน `SHELTER_CLOSE_STALE_MS` → job เป็น `completed_with_errors` และเปลี่ยนสถานะศูนย์ได้ (FR-3a) · ถ้า worker ยังทำงานอยู่ (`_rev` ของ job เปลี่ยน) การปิดต้องไม่สำเร็จ และ worker หยุดเมื่อได้ `409` (FR-3a, FR-13)
 - [ ] **AC-14** SM ของศูนย์ A ขอ `close/jobs/[id]` ของ job ศูนย์ B ผ่าน path ศูนย์ A → `404` (FR-8)
 - [ ] **AC-15** movement / audit ที่ worker เขียนมีผู้เขียนเป็น `requested_by` ของ job · job backfill ใช้ `BACKFILL_CREATED_BY` (FR-10, FR-10a)
 
@@ -240,22 +249,25 @@ internal route ที่ใช้ token + Node worker poll พร้อม lease
 - 2026-11-10 — แก้ตาม review PR #1217: เพิ่ม FR-3a (เคลียร์ lock ค้าง + `SHELTER_CLOSE_STALE_MS`), FR-8 ผูก job
   กับศูนย์ใน path (`404`), FR-10 / FR-10a (`requested_by` ของ backfill และ `createdBy` ของ worker), AC-13..AC-15
 - 2026-11-10 — approved โดย kong เป็น CR-243 (track ด้วยไฟล์ CR · stable-core review ผ่าน)
+- 2026-11-10 — แก้ตาม review รอบ 2 (PR #1217, ข้อ 1–4): FR-3a CAS ด้วย `_rev` · FR-12 / FR-13 ทุก chunk bump `updated_at`
+  และหยุดเมื่อได้ `409` · `end_reason` (§2) + FR-29 toast ตามสาเหตุ · view `jobs_claimable` (FR-1, FR-14, D-5) ·
+  FR-16 ตรวจ `STALE_MS` · AC-12..AC-13 · ไม่มี decision ใหม่ด้าน scope
 
 ### ตัดสินแล้วใน #1216
 
-| # | เรื่อง | ตัดสิน | ตัดทิ้ง |
-| --- | --- | --- | --- |
-| D-1 | ใครรัน | Node worker ใหม่ เรียก internal route ที่ใช้ `closeShelterPeople` / people domain เดิม → FR-11..FR-16 | Python sync-worker (ต้องเขียน domain logic ซ้ำ → คลาดกัน, เหตุผลเดียวกับ CR-168) · รวมเข้า import-worker |
-| D-2 | สถานะศูนย์ระหว่างทำงาน | ไม่เพิ่มสถานะ; sweep สูงสุด 3 รอบ → FR-19, FR-25 | เพิ่ม `closing` ใน enum (กระทบ projection / public search / ทุกจุดที่อ่าน `operation_status`) |
-| D-3 | UX | `job_id` ทันที · progress · ปิด modal ได้ · banner · ยกเลิกไม่ได้ → FR-6, FR-27..FR-30 | หน่วง 60 วิ + ยกเลิกได้ (CR-168) · toast อย่างเดียว |
-| D-4 | งานต่อการเรียก | 1 chunk ต่อ call → FR-12 | ทำทั้งศูนย์ใน call เดียว (แค่ย้าย timeout) |
-| D-5 | ที่เก็บ job | `central_ops` + lock CAS ด้วย `_rev` → FR-1..FR-4 | เก็บใน `shelter_<code>` |
-| D-6 | ล้มกลางทาง | lease หมดรับต่อ, `attempt` จำกัด, `failures[]` จำกัด, ไม่ปิดศูนย์ถ้ามี failed → FR-14, FR-22, FR-24 | หยุดรอผู้ใช้ทันทีเมื่อล้ม |
-| D-7 | Backfill | `mode` + script สร้าง job + `--dry-run` synchronous → FR-31..FR-33 | script รอจนจบทุก job |
-| D-8 | Infra | compose service แยกทุกไฟล์ + env + nginx deny → FR-34..FR-38 | ใช้ container import-worker ร่วม |
-| D-9 | Tracking | CR ตอนเริ่ม implement; แก้ CR-219 ผ่าน CR นี้ ไม่แก้ไฟล์ CR-219 | — |
-| D-10 | ค่า budget/lease/failures | เป็น env ตามตาราง Env | hardcode |
-| D-11 | Test seam | fake CouchDB ใหม่ · S-10 (load ~5,000) อยู่ใน scope | แก้ `FakeCouch` เดิม |
+| #    | เรื่อง                    | ตัดสิน                                                                                                | ตัดทิ้ง                                                                                                  |
+| ---- | ------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| D-1  | ใครรัน                    | Node worker ใหม่ เรียก internal route ที่ใช้ `closeShelterPeople` / people domain เดิม → FR-11..FR-16 | Python sync-worker (ต้องเขียน domain logic ซ้ำ → คลาดกัน, เหตุผลเดียวกับ CR-168) · รวมเข้า import-worker |
+| D-2  | สถานะศูนย์ระหว่างทำงาน    | ไม่เพิ่มสถานะ; sweep สูงสุด 3 รอบ → FR-19, FR-25                                                      | เพิ่ม `closing` ใน enum (กระทบ projection / public search / ทุกจุดที่อ่าน `operation_status`)            |
+| D-3  | UX                        | `job_id` ทันที · progress · ปิด modal ได้ · banner · ยกเลิกไม่ได้ → FR-6, FR-27..FR-30                | หน่วง 60 วิ + ยกเลิกได้ (CR-168) · toast อย่างเดียว                                                      |
+| D-4  | งานต่อการเรียก            | 1 chunk ต่อ call → FR-12                                                                              | ทำทั้งศูนย์ใน call เดียว (แค่ย้าย timeout)                                                               |
+| D-5  | ที่เก็บ job               | `central_ops` + lock CAS ด้วย `_rev` + view `jobs_claimable` (index) → FR-1..FR-4, FR-14              | เก็บใน `shelter_<code>` · scan ทั้ง `central_ops` ทุกรอบ (ช้าเมื่อ job สะสม)                             |
+| D-6  | ล้มกลางทาง                | lease หมดรับต่อ, `attempt` จำกัด, `failures[]` จำกัด, ไม่ปิดศูนย์ถ้ามี failed → FR-14, FR-22, FR-24   | หยุดรอผู้ใช้ทันทีเมื่อล้ม                                                                                |
+| D-7  | Backfill                  | `mode` + script สร้าง job + `--dry-run` synchronous → FR-31..FR-33                                    | script รอจนจบทุก job                                                                                     |
+| D-8  | Infra                     | compose service แยกทุกไฟล์ + env + nginx deny → FR-34..FR-38                                          | ใช้ container import-worker ร่วม                                                                         |
+| D-9  | Tracking                  | CR ตอนเริ่ม implement; แก้ CR-219 ผ่าน CR นี้ ไม่แก้ไฟล์ CR-219                                       | —                                                                                                        |
+| D-10 | ค่า budget/lease/failures | เป็น env ตามตาราง Env                                                                                 | hardcode                                                                                                 |
+| D-11 | Test seam                 | fake CouchDB ใหม่ · S-10 (load ~5,000) อยู่ใน scope                                                   | แก้ `FakeCouch` เดิม                                                                                     |
 
 ### ตัดสินตอน approve (kong, 2026-11-10)
 
