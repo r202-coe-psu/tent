@@ -1,11 +1,11 @@
 ---
 id: CR-231
 title: Public family search — บังคับ dialog ยินยอม + จุดประสงค์ และเก็บข้อมูลผู้ค้นหาใน Mongo `audit_events`
-status: proposed
+status: approved
 date: 2026-11-06
-updated: 2026-11-09
+updated: 2026-11-10
 requested_by: Dev Team B
-decided_by: 
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 issue: "#1159"
 affects:
@@ -215,3 +215,4 @@ BFF route ไม่ทดสอบแยก (ส่ง body ต่อตรง�
 - 2026-11-09 — ND-1 resolved (external ไม่เปลี่ยน เพราะแยกจาก public); ND-3 resolved (แก้ `/policy` `/term` ใน CR นี้ ระบุไม่มีกำหนดการลบ — FR-19)
 - 2026-11-09 — ND-4 resolved: `audit_events` envelope เพิ่ม `request_id`/`subject` + payload เป็น discriminated union ตาม `event_type`; แทน `search_audits` เลย ไม่เขียนคู่ (FR-16, FR-16c)
 - 2026-11-09 — status approved → proposed: เนื้อหาเปลี่ยนหลังอนุมัติ (audit_events, ไม่มี retention, FR-19) ต้องขออนุมัติใหม่
+- 2026-11-10 — approved by Soravit Sukkarn (Team Lead) (issue #1159, PR #1294)
