@@ -137,6 +137,26 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (result.kind === 'kiosk_registered') {
 			return json({ ...result, shelter_code: principal.shelter_code }, { headers: noStoreHeaders });
 		}
+		if (result.kind === 'qr_expired') {
+			// FR-EQR-32/35: dates only, no household and no personal data.
+			return json(
+				{
+					error: {
+						code: 'KIOSK_QR_EXPIRED',
+						message: 'QR นี้หมดอายุแล้ว กรุณาใช้ QR ใบล่าสุดหรือติดต่อเจ้าหน้าที่',
+						issued_at: result.issued_at,
+						current_printed_at: result.current_printed_at
+					}
+				},
+				{ status: 409, headers: noStoreHeaders }
+			);
+		}
+		if (result.kind === 'qr_invalid') {
+			return json(
+				{ error: { code: 'KIOSK_QR_INVALID', message: 'QR ไม่ถูกต้อง' } },
+				{ status: 400, headers: noStoreHeaders }
+			);
+		}
 		if (result.kind === 'too_many') {
 			return json(
 				{

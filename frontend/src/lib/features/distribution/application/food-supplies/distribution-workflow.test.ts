@@ -841,6 +841,100 @@ describe('distribution-workflow', () => {
 		expect(logRepo.logs.size).toBe(1);
 	});
 
+	describe('expired Person QR override (CR-233 A1)', () => {
+		const qrOverride = {
+			issued_at: '2026-11-08T06:52:00.000Z',
+			current_printed_at: '2026-11-08T06:53:00.000Z',
+			overridden_at: '2026-11-08T07:00:00.000Z'
+		};
+		const evacuee = {
+			recipient_type: 'evacuee' as const,
+			recipient_id: 'evacuee:01JEVACUEE0000000000000020'
+		};
+
+		it('stamps the acting user on the audit and writes schema_v 3 for a food handout', async () => {
+			const ticket = await createFoodTicket('item:rice_qr');
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:rice_qr', qty: '1', ...evacuee, recipient_qr_override: qrOverride },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.schema_v).toBe(3);
+			expect(log.recipient_qr_override).toEqual({
+				...qrOverride,
+				overridden_by: POS_CTX.createdBy
+			});
+		});
+
+		it('keeps schema_v 2 and no audit when the QR was not overridden', async () => {
+			const ticket = await createFoodTicket('item:rice_plain');
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:rice_plain', qty: '1', ...evacuee },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.schema_v).toBe(2);
+			expect(log.recipient_qr_override).toBeUndefined();
+		});
+
+		it('records the audit for a supplies handout too', async () => {
+			const ticket = await ticketRepo.create(
+				{
+					ticket_no: 'TKT-SUP-QR',
+					requisition_type: 'supplies',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:soap_qr',
+							item_name: 'Soap',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: '10',
+							allocated_qty: '10'
+						}
+					]
+				},
+				POS_CTX
+			);
+
+			const log = await recordSuppliesDistribution(
+				ticket._id,
+				{ item_id: 'item:soap_qr', qty: '1', ...evacuee, recipient_qr_override: qrOverride },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.schema_v).toBe(3);
+			expect(log.recipient_qr_override?.overridden_by).toBe(POS_CTX.createdBy);
+		});
+
+		it('refuses the audit on a non-evacuee recipient and writes nothing', async () => {
+			const ticket = await createFoodTicket('item:rice_out');
+
+			await expect(
+				recordFoodDistribution(
+					ticket._id,
+					{
+						item_id: 'item:rice_out',
+						qty: '1',
+						recipient_type: 'outside',
+						recipient_qr_override: qrOverride
+					},
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				)
+			).rejects.toThrow();
+			expect(logRepo.logs.size).toBe(0);
+		});
+	});
+
 	describe('recipient allergy ↔ menu allergens (#607 FR-MRM-08)', () => {
 		const evacueeInput = {
 			item_id: 'item:fried_rice',

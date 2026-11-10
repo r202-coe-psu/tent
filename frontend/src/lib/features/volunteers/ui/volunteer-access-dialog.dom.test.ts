@@ -398,7 +398,7 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 		expect(document.body.textContent).not.toContain('worker');
 	});
 
-	it('shows the roles a manager gave, disabled with a note, and cannot be saved (FR-16)', async () => {
+	it('shows the roles a manager gave, disabled with a note (FR-16)', async () => {
 		mocks.grants = view({ permanent_roles: ['registration_staff'] });
 		await render(COORDINATOR, linked);
 		expect(document.body.textContent).toContain('สิทธิ์ถาวรจากผู้จัดการศูนย์');
@@ -411,7 +411,51 @@ describe('VolunteerAccessDialog says where the account stands (#1044)', () => {
 		expect(document.body.textContent).toContain(
 			'ผู้จัดการศูนย์เป็นผู้ให้ แก้ไขได้ที่หน้าผู้ใช้งาน'
 		);
+	});
+
+	it('grants another role beside the permanent one, nothing preselected (CR-221 A1-2)', async () => {
+		mocks.grants = view({ permanent_roles: ['registration_staff'] });
+		await render(COORDINATOR, linked);
+		expect(titleText()).toBe('แก้ไขสิทธิ์');
+		expect(roleRadios().some((r) => r.getAttribute('aria-checked') === 'true')).toBe(false);
+		expect(document.body.textContent).not.toContain('เดิม:');
+		expect(buttonText('ถอนสิทธิ์')).toBeUndefined();
+		expect(buttonText('บันทึกการแก้ไข')!.disabled).toBe(false);
+
+		await pickRole('kitchen_staff');
+		await pickExpiry(grantExpiryRange().max);
+		buttonText('บันทึกการแก้ไข')!.click();
+		await settle();
+		expect(mocks.grantLimited).toHaveBeenCalledWith(
+			expect.objectContaining({ _id: volunteer._id }),
+			expect.objectContaining({ role: 'kitchen_staff', account_exists: true })
+		);
+	});
+
+	it('blocks a grant beside the permanent role until the identity is verified here (A1-2)', async () => {
+		mocks.grants = view({ permanent_roles: ['registration_staff'] });
+		await render(COORDINATOR, {
+			...linked,
+			identity_verified: false,
+			identity_verification: null
+		} as Partial<Volunteer>);
+		expect(document.body.textContent).toContain(
+			'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ กรุณายืนยันตัวตนก่อนจึงจะออกสิทธิ์ได้'
+		);
 		expect(buttonText('บันทึกการแก้ไข')!.disabled).toBe(true);
+	});
+
+	it('still edits an existing grant of an unverified profile (FR-3)', async () => {
+		mocks.grants = view({
+			grants: [{ role: 'kitchen_staff', expires_at: '2026-11-03T16:59:59.999Z', mine: true }],
+			permanent_roles: ['registration_staff']
+		});
+		await render(COORDINATOR, {
+			...linked,
+			identity_verified: false,
+			identity_verification: null
+		} as Partial<Volunteer>);
+		expect(buttonText('บันทึกการแก้ไข')!.disabled).toBe(false);
 	});
 
 	it('blocks saving, with the reason, for a closed profile (FR-21)', async () => {
@@ -690,7 +734,8 @@ describe('VolunteerAccessDialog username and old expiry (CR-221 FR-10, FR-13)', 
 		await settle();
 		expect(mocks.grantFull).toHaveBeenCalledWith(
 			expect.objectContaining({ _id: volunteer._id }),
-			expect.objectContaining({ email: 'vol@example.com', role: 'warehouse_staff' })
+			expect.objectContaining({ email: 'vol@example.com', role: 'warehouse_staff' }),
+			MANAGER
 		);
 	});
 

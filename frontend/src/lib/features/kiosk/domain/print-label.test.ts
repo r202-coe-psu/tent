@@ -247,3 +247,12 @@ describe('wrapLabelText', () => {
 		expect(wrapLabelText([], 5, measure, 2)).toEqual([]);
 	});
 });
+
+describe('hashed person QR label (CR-233 AC-EQR-13)', () => {
+	it('sizes the label the same for `evacuee:{ULID}@{hash6}` as for the legacy payload (same default ECC, 29 modules)', () => {
+		const legacy = QRCode.create('evacuee:01K5Z8Q2J9M7X3V4B6N8C0D2EF', {}).modules.size;
+		const hashed = QRCode.create('evacuee:01K5Z8Q2J9M7X3V4B6N8C0D2EF@683508', {}).modules.size;
+		expect(hashed).toBe(29);
+		expect(kioskQrPrintSize(hashed)).toEqual(kioskQrPrintSize(legacy));
+	});
+});
