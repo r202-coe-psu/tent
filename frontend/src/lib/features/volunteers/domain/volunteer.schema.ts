@@ -39,10 +39,11 @@ export const nationalIdSchema = z
 
 export interface Volunteer extends BaseDoc {
 	type: 'volunteer';
-	schema_v: 3 | 4;
+	schema_v: 3 | 4 | 5;
 	first_name: string;
 	last_name: string;
 	nickname?: string;
+	occupation?: string | null;
 	phone: string | null;
 	phone_hash?: string | null;
 	email?: string | null;
@@ -86,7 +87,7 @@ export const volunteerSchema = z.object({
 	_id: z.string().startsWith('volunteer:'),
 	_rev: z.string().optional(),
 	type: z.literal('volunteer'),
-	schema_v: z.union([z.literal(3), z.literal(4)]),
+	schema_v: z.union([z.literal(3), z.literal(4), z.literal(5)]),
 	shelter_code: z.string().min(1),
 	created_at: z.string(),
 	updated_at: z.string(),
@@ -94,6 +95,7 @@ export const volunteerSchema = z.object({
 	first_name: z.string().min(1),
 	last_name: z.string().min(1),
 	nickname: z.string().optional(),
+	occupation: z.string().trim().max(100, 'อาชีพต้องไม่เกิน 100 ตัวอักษร').nullable().optional(),
 	phone: z.string().nullable(),
 	phone_hash: z.string().nullable().optional(),
 	email: z.string().nullable().optional(),
@@ -126,6 +128,7 @@ export const volunteerInputSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
 	nickname: z.string().trim().optional(),
+	occupation: z.string().trim().max(100, 'อาชีพต้องไม่เกิน 100 ตัวอักษร').nullable().optional(),
 	phone: optionalVolunteerMobileSchema,
 	email: z.string().trim().nullable().optional(),
 	skills: z.array(z.string()).default([]),
@@ -147,6 +150,12 @@ export const walkInVolunteerFormSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
 	nickname: z.string().trim().optional(),
+	occupation: z
+		.string()
+		.trim()
+		.max(100, 'อาชีพต้องไม่เกิน 100 ตัวอักษร')
+		.optional()
+		.or(z.literal('')),
 	phone: z
 		.string()
 		.trim()
@@ -173,11 +182,12 @@ export function makeVolunteer(
 	const d = volunteerInputSchema.parse(input);
 	return makeDoc(
 		'volunteer',
-		4,
+		5,
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
 			...(d.nickname ? { nickname: d.nickname } : {}),
+			occupation: d.occupation ? d.occupation.trim() : null,
 			phone: d.phone,
 			email: d.email ?? null,
 			skills: d.skills,

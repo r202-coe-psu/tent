@@ -82,3 +82,13 @@ def test_a_deleted_document_is_removed():
 def test_another_doc_type_is_ignored():
     action, _ = project_volunteer(_doc(type="evacuee"), shelter_code="SH001")
     assert action == "ignore"
+
+
+def test_it_projects_occupation_when_present():
+    _, payload = project_volunteer(_doc(occupation="วิศวกร"), shelter_code="SH001")
+    assert payload["occupation"] == "วิศวกร"
+
+
+def test_it_projects_occupation_as_none_when_absent():
+    _, payload = project_volunteer(_doc(), shelter_code="SH001")
+    assert payload["occupation"] is None

@@ -28,6 +28,7 @@ const profile: VolunteerProfile = {
 	nickname: null,
 	phone_masked: 'xxx-xxx-2222',
 	email: null,
+	occupation: null,
 	volunteer_code: 'V-1001',
 	skills: [],
 	organization: null,

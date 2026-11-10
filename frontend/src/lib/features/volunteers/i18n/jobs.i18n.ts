@@ -104,6 +104,8 @@ export interface JobsTranslations {
 	applyPhone: string;
 	applyPhoneLimitHint: string;
 	applyEmail: string;
+	applyOccupation: string;
+	applyOccupationPlaceholder: string;
 	applyShiftsAvailable: string;
 	/** Multi-shift picker (#716). */
 	applyPickShiftsHint: string;
@@ -278,6 +280,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyPhone: 'เบอร์โทรศัพท์มือถือ',
 		applyPhoneLimitHint: '1 เบอร์ต่อ 1 สิทธิ์การสมัครงานนี้',
 		applyEmail: 'อีเมล',
+		applyOccupation: 'อาชีพ',
+		applyOccupationPlaceholder: 'เช่น พยาบาล, ช่างไฟฟ้า, ค้าขาย (ไม่บังคับ)',
 		applyShiftsAvailable: 'กะให้เลือก',
 		applyPickShiftsHint: 'เลือกได้หลายกะ กดกะที่เลือกแล้วอีกครั้งเพื่อเอาออก',
 		applyShiftConflict: 'เวลาชน',
@@ -455,6 +459,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyPhone: 'Mobile Phone Number',
 		applyPhoneLimitHint: '1 application per phone number for this job',
 		applyEmail: 'Email',
+		applyOccupation: 'Occupation',
+		applyOccupationPlaceholder: 'e.g. Nurse, Electrician, Trader (Optional)',
 		applyShiftsAvailable: 'shifts available',
 		applyPickShiftsHint: 'You can pick several shifts. Tap a picked shift again to remove it.',
 		applyShiftConflict: 'Clashes',

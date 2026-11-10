@@ -78,6 +78,7 @@ type CouchVolunteer = {
 	first_name?: string;
 	last_name?: string;
 	skills?: string[];
+	occupation?: string | null;
 	tracking_token_hash?: string;
 	volunteer_code?: string;
 	identity_verified?: boolean;
@@ -671,6 +672,10 @@ export async function applyPublicVolunteerApplication(
 	const volunteer = existing
 		? {
 				...existing,
+				schema_v: 5,
+				occupation:
+					input.occupation?.trim() ||
+					(typeof existing.occupation === 'string' ? existing.occupation : null),
 				phone: normalizeThaiPhone(input.phone),
 				phone_hash: phoneHash,
 				skills: [
@@ -692,13 +697,14 @@ export async function applyPublicVolunteerApplication(
 		: {
 				_id: volunteerId,
 				type: 'volunteer',
-				schema_v: 4,
+				schema_v: 5,
 				shelter_code: shelterCode,
 				created_at: now,
 				updated_at: now,
 				created_by: 'public',
 				first_name: input.first_name,
 				last_name: input.last_name,
+				occupation: input.occupation?.trim() || null,
 				phone: input.phone,
 				phone_hash: phoneHash,
 				national_id: input.national_id || null,

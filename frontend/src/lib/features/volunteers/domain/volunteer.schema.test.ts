@@ -81,11 +81,12 @@ describe('volunteerSchema', () => {
 		);
 	});
 
-	it('accepts schema_v 3 or 4, rejects anything else', () => {
+	it('accepts schema_v 3, 4, or 5, rejects anything else', () => {
 		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 2 }).success).toBe(false);
 		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 3 }).success).toBe(true);
 		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 4 }).success).toBe(true);
-		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 5 }).success).toBe(false);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 5 }).success).toBe(true);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 6 }).success).toBe(false);
 	});
 
 	it('national_id is optional (F13) — a document without the key at all is still valid', () => {
@@ -113,6 +114,21 @@ describe('volunteerSchema', () => {
 		expect(
 			volunteerSchema.safeParse({ ...validVolunteerDoc(), tracking_token_hash: null }).success
 		).toBe(true);
+	});
+
+	it('accepts occupation as optional string, null, or undefined, rejecting strings over 100 chars', () => {
+		expect(
+			volunteerSchema.safeParse({ ...validVolunteerDoc(), occupation: 'พยาบาล' }).success
+		).toBe(true);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), occupation: null }).success).toBe(
+			true
+		);
+		const doc = validVolunteerDoc() as Record<string, unknown>;
+		delete doc.occupation;
+		expect(volunteerSchema.safeParse(doc).success).toBe(true);
+		expect(
+			volunteerSchema.safeParse({ ...validVolunteerDoc(), occupation: 'a'.repeat(101) }).success
+		).toBe(false);
 	});
 
 	it('rejects a malformed national_id even when present', () => {
@@ -170,16 +186,24 @@ describe('isVolunteer', () => {
 });
 
 describe('makeVolunteer', () => {
-	it('stamps volunteer: id prefix, schema_v 4, and CR-094 §6 migration defaults', () => {
+	it('stamps volunteer: id prefix, schema_v 5, and CR-094 §6 migration defaults', () => {
 		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-001' });
 		expect(v._id).toMatch(/^volunteer:/);
 		expect(v.type).toBe('volunteer');
-		expect(v.schema_v).toBe(4);
+		expect(v.schema_v).toBe(5);
 		expect(v.checked_in).toBe(false);
 		expect(v.identity_verified).toBe(false);
 		expect(v.current_shelter_code).toBeNull();
 		expect(v.volunteer_code).toBe('V-001');
 		expect(v.status).toBe('active');
+		expect(v.occupation).toBeNull();
+	});
+
+	it('preserves and trims occupation when provided', () => {
+		const v = makeVolunteer({ ...baseInput, occupation: '  แพทย์อาสา  ' }, ctx, {
+			volunteer_code: 'V-002'
+		});
+		expect(v.occupation).toBe('แพทย์อาสา');
 	});
 
 	it('defaults personnel_type to volunteer when not provided (CR-095)', () => {
@@ -244,10 +268,26 @@ describe('volunteer phone rule (#951)', () => {
 });
 
 describe('walkInVolunteerFormSchema phone', () => {
-	const form = { first_name: 'ก', last_name: 'ข', email: '', national_id: '' };
+	const form = {
+		first_name: 'ก',
+		last_name: 'ข',
+		email: '',
+		national_id: '',
+		phone: '',
+		occupation: ''
+	};
 
 	it.each(['', '081-234-5678', '0812345678'])('accepts %j', (phone) => {
 		expect(walkInVolunteerFormSchema.safeParse({ ...form, phone }).success).toBe(true);
+	});
+
+	it('accepts optional occupation up to 100 chars', () => {
+		expect(walkInVolunteerFormSchema.safeParse({ ...form, occupation: 'พยาบาล' }).success).toBe(
+			true
+		);
+		expect(
+			walkInVolunteerFormSchema.safeParse({ ...form, occupation: 'a'.repeat(101) }).success
+		).toBe(false);
 	});
 
 	it.each(['022222222', 'ไม่มี', '-'])('rejects %j', (phone) => {

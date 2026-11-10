@@ -1326,6 +1326,7 @@ class VolunteersUseCase:
             email=mask_email(newest.email),
             volunteer_code=newest.volunteer_code,
             skills=skills,
+            occupation=newest.occupation,
             organization=newest.organization,
             # True if ANY shelter has verified them — verification is about the person,
             # and a second shelter's fresh profile has not repeated the check.

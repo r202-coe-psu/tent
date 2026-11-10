@@ -85,6 +85,7 @@
 
 	let fullName = $state('');
 	let phone = $state('');
+	let occupation = $state('');
 	let selectedSkills = $state<string[]>([]);
 	let personnelType = $state<PersonnelType>('volunteer');
 	let assignedShift = $state<ShiftKind | 'unset'>('unset');
@@ -101,6 +102,7 @@
 		if (lastOpenedId === volunteer._id) return;
 		fullName = `${volunteer.first_name} ${volunteer.last_name}`.trim();
 		phone = volunteer.phone ?? '';
+		occupation = volunteer.occupation ?? '';
 		selectedSkills = toSkillCodes(volunteer.skills, skillsList);
 		personnelType = volunteer.personnel_type;
 		assignedShift = todayShift ?? 'unset';
@@ -153,6 +155,10 @@
 			toast.error(VOLUNTEER_PHONE_MESSAGE);
 			return;
 		}
+		if (occupation.trim().length > 100) {
+			toast.error('อาชีพต้องมีความยาวไม่เกิน 100 ตัวอักษร');
+			return;
+		}
 
 		try {
 			await updateMutation.mutateAsync({
@@ -160,6 +166,7 @@
 				first_name: name.slice(0, spaceIndex).trim(),
 				last_name: name.slice(spaceIndex + 1).trim(),
 				phone: parsedPhone.data,
+				occupation: occupation.trim() || null,
 				skills: selectedSkills,
 				personnel_type: personnelType
 			});
@@ -276,6 +283,15 @@
 						<Label for="vm-phone">เบอร์มือถือ</Label>
 						<Input id="vm-phone" bind:value={phone} class="h-11" />
 					</div>
+				</div>
+				<div class="space-y-1.5">
+					<Label for="vm-occupation">อาชีพ (ทางเลือก / Optional)</Label>
+					<Input
+						id="vm-occupation"
+						bind:value={occupation}
+						placeholder="เช่น พยาบาล, วิศวกร, ค้าขาย (ไม่บังคับ)"
+						class="h-11"
+					/>
 				</div>
 			</div>
 
