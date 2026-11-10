@@ -30,6 +30,10 @@ export type {
 	HousingType
 } from './domain/people';
 
+// Domain — vulnerability marker (printed QR card)
+export { vulnerabilityMarker } from '$lib/utils/vulnerability-marker';
+export type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
+
 // Domain — input schemas + factories + transitions + guards
 export {
 	CARD_NUMBER_MAX_LENGTH,
