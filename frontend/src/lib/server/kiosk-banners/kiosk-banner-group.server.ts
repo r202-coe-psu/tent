@@ -203,7 +203,8 @@ export async function ensureTvCode(
 
 /**
  * The scope-checked group with its tv_code backfilled. Call only after the caller's scope check
- * passed, and only where the group page reads the group; `getGroup` itself never writes.
+ * passed (every `{id}` route, FR-KBT-12); `getGroup` itself never writes, so a GET on another
+ * shelter's group cannot upgrade it.
  */
 export async function ensureGroupTvCode(
 	group: KioskBannerGroupRecord,
@@ -218,7 +219,8 @@ export async function updateGroup(
 	id: string,
 	rev: string,
 	input: KioskBannerGroupInput,
-	now: Date = new Date()
+	now: Date = new Date(),
+	deps: TvCodeDeps = defaultTvCodeDeps
 ): Promise<KioskBannerGroupRecord> {
 	const current = await readGroupDoc(id);
 	if (!current) throw new GroupNotFoundError(id);
@@ -228,8 +230,13 @@ export async function updateGroup(
 	if (isDuplicateGroupName(await findGroupDocs(current.shelter_code), input.name, id)) {
 		throw new ServiceError('CONFLICT', DUPLICATE_NAME_MESSAGE);
 	}
+	// FR-KBT-12: a v1 group is backfilled in the same write, so the response always has a tv_code.
+	const backfill = needsTvCode(current)
+		? { schema_v: 2 as const, tv_code: await issueTvCode(deps) }
+		: {};
 	const saved = await putGroupDoc({
 		...current,
+		...backfill,
 		name: input.name,
 		description: input.description,
 		updated_at: now.toISOString()

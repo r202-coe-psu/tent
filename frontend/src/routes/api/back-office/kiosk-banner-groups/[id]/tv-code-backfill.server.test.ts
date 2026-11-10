@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET } from './+server';
+import { GET, PUT } from './+server';
+import { PUT as PUT_DEVICES } from './devices/+server';
 import type { RequestEvent } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import { readSessionUserCtx } from '$lib/server/session-auth';
@@ -92,6 +93,63 @@ describe('GET /api/back-office/kiosk-banner-groups/[id] tv_code backfill', () =>
 			schema_v: 2,
 			tv_code: expect.stringMatching(/^[0-9]{6}$/),
 			device_ids: ['kiosk-1']
+		});
+		expect(puts()).toHaveLength(1);
+	});
+});
+
+function putJson(
+	handler: typeof PUT | typeof PUT_DEVICES,
+	path: string,
+	body: unknown
+): Promise<Response> {
+	const url = new URL(`http://localhost/api/back-office/kiosk-banner-groups/${ID}${path}`);
+	return Promise.resolve(
+		handler({
+			request: new Request(url, {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json', cookie: 'AuthSession=x' },
+				body: JSON.stringify(body)
+			}),
+			url,
+			params: { id: ID }
+		} as unknown as RequestEvent & Parameters<typeof PUT_DEVICES>[0])
+	);
+}
+
+describe('PUT routes on a v1 group backfill tv_code (FR-KBT-12)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		mockListDevices.mockResolvedValue([]);
+		mockAdminRaw.mockImplementation(async (_path, method) =>
+			method === 'GET'
+				? { status: 200, data: v1Group('SH001') }
+				: method === 'POST'
+					? { status: 200, data: { docs: [] } }
+					: { status: 201, data: { ok: true, rev: '2-b' } }
+		);
+	});
+
+	it('PUT [id] (rename) returns schema_v 2 with a tv_code', async () => {
+		const res = await putJson(PUT, '', { _rev: '1-a', name: 'ชื่อใหม่', description: null });
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({
+			schema_v: 2,
+			name: 'ชื่อใหม่',
+			tv_code: expect.stringMatching(/^[0-9]{6}$/)
+		});
+		expect(puts()).toHaveLength(1);
+	});
+
+	it('PUT [id]/devices returns schema_v 2 with a tv_code', async () => {
+		const res = await putJson(PUT_DEVICES, '/devices', { device_ids: [] });
+
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({
+			schema_v: 2,
+			tv_code: expect.stringMatching(/^[0-9]{6}$/)
 		});
 		expect(puts()).toHaveLength(1);
 	});

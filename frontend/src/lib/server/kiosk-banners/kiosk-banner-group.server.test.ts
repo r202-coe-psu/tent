@@ -454,8 +454,36 @@ describe('createGroup with an unknown kiosk', () => {
 });
 
 describe('updateGroup', () => {
-	const current = groupDoc(GROUP_A, 'ทั่วไป', { _rev: '2-b', description: 'เดิม' });
+	const current = groupDoc(GROUP_A, 'ทั่วไป', {
+		_rev: '2-b',
+		description: 'เดิม',
+		schema_v: 2,
+		tv_code: '123456'
+	});
 	const other = groupDoc(GROUP_B, 'ผู้สูงอายุ');
+
+	it('backfills a v1 group with an unused tv_code in the same write (FR-KBT-12)', async () => {
+		const v1 = groupDoc(GROUP_A, 'ทั่วไป', { _rev: '2-b' });
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: v1 })
+			.mockResolvedValueOnce(FOUND(v1, other))
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '3-c' } });
+		listDevicesMock.mockResolvedValueOnce([]);
+
+		const record = await updateGroup(
+			GROUP_A,
+			'2-b',
+			{ name: 'ทั่วไป (ใหม่)', description: null },
+			NOW,
+			{ generateTvCode: () => '555555' }
+		);
+
+		const puts = adminRawMock.mock.calls.filter(([, method]) => method === 'PUT');
+		expect(puts).toHaveLength(1);
+		expect(puts[0][2]).toMatchObject({ schema_v: 2, tv_code: '555555', name: 'ทั่วไป (ใหม่)' });
+		expect(record).toMatchObject({ _rev: '3-c', schema_v: 2, tv_code: '555555' });
+	});
 
 	it('rewrites name and description under the current rev and keeps shelter and created_*', async () => {
 		adminRawMock
