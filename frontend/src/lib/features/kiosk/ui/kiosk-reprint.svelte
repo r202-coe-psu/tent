@@ -60,7 +60,8 @@
 			name: member.label.name,
 			zone: member.label.zone,
 			emergencyPhone: member.label.emergency_phone,
-			checkedCount: member.label.stations_passed
+			checkedCount: member.label.stations_passed,
+			marker: member.label.marker
 		}));
 		try {
 			return await printKioskQrLabels(
@@ -69,7 +70,8 @@
 					name: member.label.name,
 					zone: member.label.zone,
 					emergencyPhone: member.label.emergency_phone,
-					checkedCount: member.label.stations_passed
+					checkedCount: member.label.stations_passed,
+					marker: member.label.marker
 				})),
 				async () => {
 					// The sheet must be on the page before the browser prints it.

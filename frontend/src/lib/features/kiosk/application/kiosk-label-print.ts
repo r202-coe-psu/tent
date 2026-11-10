@@ -1,3 +1,4 @@
+import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 import { printKioskLabels } from '../data/kiosk-print.api';
 import { KIOSK_QR_COLOR, kioskQrPrintSize } from '../domain/print-label';
@@ -14,6 +15,8 @@ export type KioskQrLabel = {
 	emergencyPhone?: string | null;
 	/** Intake stations passed: this many checklist boxes are ticked. */
 	checkedCount?: number;
+	/** Vulnerability level printed as a marker row above the name; none leaves no row. */
+	marker?: VulnerabilityMarker | null;
 };
 
 /** QR payload → data URL sized for the label (module-count based), in the kiosk print colour. */

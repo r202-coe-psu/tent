@@ -36,6 +36,7 @@
 		src={label.qrSrc}
 		alt={label.alt ?? 'QR ประจำตัวสำหรับใช้ภายในศูนย์'}
 		name={label.name}
+		marker={label.marker}
 		badge={label.badge}
 		lines={label.lines}
 		zone={isStaffCard ? undefined : labelZoneLine(label.zone)}

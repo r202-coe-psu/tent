@@ -1194,14 +1194,14 @@ describe('checkInSelectedMembers', () => {
 				status: 'checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0 ใจดี', phone, marker: null }
 			},
 			{
 				evacuee_id: member._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(member._id),
-				label: { name: 'สมชาย1 ใจดี', phone }
+				label: { name: 'สมชาย1 ใจดี', phone, marker: null }
 			},
 			{
 				evacuee_id: apiMember._id,
@@ -1271,7 +1271,7 @@ describe('checkInSelectedMembers', () => {
 				status: 'already_checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0 ใจดี', phone, marker: null }
 			},
 			{ evacuee_id: active._id, status: 'already_checked_in', stay_status: 'active' }
 		]);
@@ -1312,7 +1312,7 @@ describe('checkInSelectedMembers', () => {
 				status: 'already_checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0 ใจดี', phone, marker: null }
 			}
 		]);
 		expect(
@@ -1462,7 +1462,7 @@ describe('checkInSelectedMembers kiosk walk-in reprint', () => {
 				status: 'already_checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(walkIn._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0 ใจดี', phone, marker: null }
 			}
 		]);
 		expect(mockAdminFetch.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
@@ -1523,7 +1523,7 @@ describe('checkInSelectedMembers requiredPrimaryCitizenId', () => {
 				status: 'checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0 ใจดี', phone, marker: null }
 			}
 		]);
 	});
@@ -2728,6 +2728,48 @@ describe('checkInSelectedMembers QR issuing (CR-233)', () => {
 		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
 		expect(results[0]).toMatchObject({ status: 'already_checked_in', qr_issue_failed: true });
 		expect(results[0]).not.toHaveProperty('qr_payload');
+	});
+
+	it('carries the issued vulnerability marker on the label so the card matches the log (#1301)', async () => {
+		const primary = evacuee(0);
+		const member = evacuee(1);
+		setHousehold([primary, member], primary);
+		mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
+			evacuee_id,
+			qr_payload: issuedQr(evacuee_id),
+			printed_at: '2026-11-06T08:15:30.123Z',
+			marker: evacuee_id === primary._id ? 'red' : null
+		}));
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [
+			primary._id,
+			member._id
+		]);
+
+		expect(results[0].label?.marker).toBe('red');
+		expect(results[1].label?.marker).toBeNull();
+	});
+
+	it('carries the issued marker for an already-arriving member too (#1301)', async () => {
+		const primary = evacuee(0, { current_stay: { status: 'arriving' } });
+		setHousehold([primary], primary);
+		mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
+			evacuee_id,
+			qr_payload: issuedQr(evacuee_id),
+			printed_at: '2026-11-06T08:15:30.123Z',
+			marker: 'yellow'
+		}));
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
+		expect(results[0].label?.marker).toBe('yellow');
+	});
+
+	it('leaves the marker off the label when the QR issue failed (#1301)', async () => {
+		const primary = evacuee(0);
+		setHousehold([primary], primary);
+		mockIssueQr.mockRejectedValueOnce(new Error('CONFLICT'));
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
+		expect(results[0]).toMatchObject({ qr_issue_failed: true });
+		expect(results[0].label).not.toHaveProperty('marker');
 	});
 });
 

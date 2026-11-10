@@ -52,7 +52,8 @@
 						qrSizeMm: qrImage?.sizeMm,
 						name: registration.label.name,
 						emergencyPhone: registration.label.emergency_phone,
-						checkedCount: KIOSK_CHECK_IN_TICKS
+						checkedCount: KIOSK_CHECK_IN_TICKS,
+						marker: registration.label.marker
 					}
 				]
 			: []
@@ -98,7 +99,8 @@
 						qrSrc: qrImage.src,
 						name: registration.label.name,
 						emergencyPhone: registration.label.emergency_phone,
-						checkedCount: KIOSK_CHECK_IN_TICKS
+						checkedCount: KIOSK_CHECK_IN_TICKS,
+						marker: registration.label.marker
 					}
 				],
 				async () => {
