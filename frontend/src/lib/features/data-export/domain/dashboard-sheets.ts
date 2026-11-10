@@ -24,8 +24,6 @@ export const DASHBOARD_SHEET_NAMES = [
 	'ช่วงอายุ',
 	'สัญชาติ',
 	'เวลาบริการต่อจุด'
-	// 'อันดับเจ้าหน้าที่' — disabled (W2, PR #1233): lists staff names, which CR-232 §C says the
-	// file must not carry. Re-enable only once the owner decides (see `rankRows` below).
 ] as const;
 
 export interface DashboardExportData {
@@ -163,28 +161,5 @@ export function buildDashboardSheets(
 				s.open_visits
 			])
 		}
-		// Disabled — 'อันดับเจ้าหน้าที่' (staff rank, names per person). See DASHBOARD_SHEET_NAMES.
-		// {
-		// 	name: 'อันดับเจ้าหน้าที่',
-		// 	heading: timesHeading,
-		// 	columns: ['จุดบริการ', 'อันดับ', 'ชื่อ', 'ประเภท', 'ให้บริการ (ราย)', 'เวลาเฉลี่ย (วินาที)'],
-		// 	rows: rankRows(stationTimes)
-		// }
 	];
 }
-
-// /** Rank restarts at 1 per station; the BFF already orders fastest first within a station. */
-// function rankRows(t: StationTimesPayload): ExportCell[][] {
-// 	const rank: Record<number, number> = {};
-// 	return t.actors.map((a) => {
-// 		rank[a.station] = (rank[a.station] ?? 0) + 1;
-// 		return [
-// 			STATION_LABELS[a.station],
-// 			rank[a.station],
-// 			a.display_name,
-// 			CHANNEL_LABELS[a.kind],
-// 			a.timed_visits,
-// 			seconds(a.avg_duration_sec)
-// 		];
-// 	});
-// }

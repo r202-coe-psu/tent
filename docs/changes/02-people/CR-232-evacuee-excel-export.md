@@ -3,7 +3,7 @@ id: CR-232
 title: Export Excel ในแท็บ dashboard ผู้อพยพ — รายชื่อชาวต่างชาติสำหรับกงสุล (PII) + ตัวเลข dashboard
 status: approved
 date: 2026-11-06
-updated: 2026-11-08
+updated: 2026-11-10
 requested_by: Dev Team B (epic #1050 · issue #1206, #1207)
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -41,7 +41,7 @@ affects:
 | ID | Requirement |
 | --- | --- |
 | FR-1 | ปุ่ม export ทั้งสองอยู่ในแท็บ dashboard ของ `/back-office/evacuee-management` และใช้ศูนย์ที่เลือกอยู่ในหน้านั้น |
-| FR-2 | สิทธิ์ใช้ได้เฉพาะ SA และ shelter_manager — ตรวจด้วย `canAccessManagerPages(roles, shelterCode)` (= `isSystemAdmin(roles) \|\| isShelterManager(roles, shelterCode)`); **ไม่อนุญาต `registration_staff`** และห้ามใช้ `requireEvacueeRegistration` / `canAccessEvacueeRegistration` เป็นเงื่อนไขของปุ่ม — ไม่เพิ่ม role; shelter_manager export ได้เฉพาะศูนย์ตนเอง, SA เลือกศูนย์ใดก็ได้ |
+| FR-2 | สิทธิ์ใช้ได้เฉพาะ SA และ shelter_manager — ตรวจด้วย `canAccessManagerPages(roles, shelterCode)` (= `isSystemAdmin(roles) \|\| isShelterManager(roles, shelterCode)`); **ไม่อนุญาต `registration_staff`** และห้ามใช้ `requireEvacueeRegistration` / `canAccessEvacueeRegistration` เป็นเงื่อนไขของปุ่ม — ไม่เพิ่ม role; shelter_manager export ได้เฉพาะศูนย์ตนเอง, SA เลือกศูนย์ใดก็ได้ — **ขอบเขตการบังคับ (owner ยืนยัน 2026-11-10, PR #1233 review B2):** บังคับเฉพาะที่ UI (ปุ่ม export); BFF `/api/back-office/shelter/[code]/dashboard/*` คงใช้ `requireShelterScopeOrSA` เพราะ `registration_staff` ต้องเปิดดู dashboard tab ได้ จึงไม่บังคับ SA/SM ที่ BFF |
 | FR-3 | ไฟล์สร้างใน browser ด้วย `exceljs` จากข้อมูลที่อ่านผ่าน session ของผู้ใช้; ไม่มี endpoint ใหม่, ไม่ใช้ `export_job`, ไม่เพิ่ม Mango index / view |
 | FR-4 | export สำเร็จหรือล้มเหลวแจ้งด้วย toast เท่านั้น (ไม่ใช้ `console.log`) |
 | FR-5 | เวลาในชื่อไฟล์และหัว sheet ใช้ +07 (`Asia/Bangkok`) |
