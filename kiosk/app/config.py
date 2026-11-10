@@ -76,13 +76,13 @@ def _is_trusted_plaintext_host(hostname: str) -> bool:
     fallback and dev boxes. A DNS hostname (e.g. a public domain) must use HTTPS unless
     ALLOW_INSECURE_HTTP is set, so a typo'd scheme cannot silently send the device secret,
     citizen IDs and photos in cleartext on a network that is not actually private."""
-    if hostname in LOOPBACK_HOSTNAMES:
+    if is_loopback_host(hostname):
         return True
     try:
         address = ipaddress.ip_address(hostname)
     except ValueError:
         return False
-    return address.is_loopback or address.is_private or address.is_link_local
+    return address.is_private or address.is_link_local
 
 
 def load_config(

@@ -795,6 +795,24 @@ class InsecureOriginArgsTests(unittest.TestCase):
                 args = self.build(TENT_BASE_URL="http://192.168.1.50", DEBUG=debug)
                 self.assertEqual(len(self.flags(args)), 1)
 
+    def test_no_flag_when_nothing_opens_the_camera(self):
+        for overrides in (
+            {"KIOSK_QR_CHECK_IN": "off"},
+            {"KIOSK_QR_INPUT": "reader"},
+        ):
+            with self.subTest(**overrides):
+                args = self.build(TENT_BASE_URL="http://192.168.1.50", **overrides)
+                self.assertEqual(self.flags(args), [])
+
+    def test_flag_is_added_when_only_the_face_check_opens_the_camera(self):
+        with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=manager.SYSTEM_CHROMIUM_PATH):
+            client = manager.ScannerClientManager(
+                valid_config(TENT_BASE_URL="http://192.168.1.50", KIOSK_QR_INPUT="reader")
+            )
+        client.face_service = FakeFaceService()
+
+        self.assertEqual(len(self.flags(client._build_browser_args())), 1)
+
     def test_http_origin_logs_a_warning(self):
         with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=manager.SYSTEM_CHROMIUM_PATH):
             client = manager.ScannerClientManager(valid_config(TENT_BASE_URL="http://192.168.1.50"))

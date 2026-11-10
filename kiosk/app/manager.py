@@ -493,10 +493,19 @@ class ScannerClientManager:
         parts = urllib.parse.urlsplit(self.tent_base_url)
         return f"{parts.scheme}://{parts.netloc}"
 
+    def _uses_camera(self) -> bool:
+        """The face check and the camera QR scan open the camera; a reader-only kiosk (or one with
+        QR check-in off) with the face check off never does."""
+        qr_uses_camera = self.qr_check_in and self.qr_input in ("camera", "both")
+        return self.face_service is not None or qr_uses_camera
+
     def _insecure_camera_origin(self) -> Optional[str]:
         """The TENT_BASE_URL origin when Chromium would not open the camera on it: plain HTTP to a
         host that is not loopback (an edge fallback on the LAN). None for HTTPS and loopback, which
-        are secure contexts already. validate_config decides which HTTP hosts are allowed at all."""
+        are secure contexts already, and for a kiosk that never opens the camera, so the origin is
+        not marked secure without need. validate_config decides which HTTP hosts are allowed at all."""
+        if not self._uses_camera():
+            return None
         parts = urllib.parse.urlsplit(self.tent_base_url)
         if parts.scheme != "http" or is_loopback_host(parts.hostname or ""):
             return None
@@ -505,11 +514,9 @@ class ScannerClientManager:
     async def _grant_camera_permission(self, context) -> None:
         """Let the kiosk page open the camera without a permission prompt. The face check and the
         camera QR scan both open the camera; in --kiosk mode nobody can answer a prompt, and the
-        browser profile is in /tmp, so an earlier "allow" would not survive a reboot. A reader-only
-        kiosk (or one with QR check-in off) with the face check off never asks for the camera, so
-        it is not given one."""
-        qr_uses_camera = self.qr_check_in and self.qr_input in ("camera", "both")
-        if self.face_service is None and not qr_uses_camera:
+        browser profile is in /tmp, so an earlier "allow" would not survive a reboot. A kiosk that
+        never opens the camera is not given one."""
+        if not self._uses_camera():
             return
         try:
             await context.grant_permissions(["camera"], origin=self._tent_origin())
