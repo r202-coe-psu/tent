@@ -5,11 +5,8 @@ import {
 	type KioskLookupResponse,
 	type KioskReprintResult
 } from '../data/kiosk-check-in.api';
-import {
-	QR_ISSUE_FAILED_MESSAGE,
-	ReprintSession,
-	type ReprintSessionDeps
-} from './reprint-session.svelte';
+import type { LanguageCode } from '$lib/stores/language.svelte';
+import { ReprintSession, type ReprintSessionDeps } from './reprint-session.svelte';
 
 type FakeDeps = { [K in keyof ReprintSessionDeps]: Mock<ReprintSessionDeps[K]> };
 
@@ -59,14 +56,14 @@ const REPRINT_RESULT: KioskReprintResult = {
 	]
 };
 
-function setup(overrides: Partial<FakeDeps> = {}) {
+function setup(overrides: Partial<FakeDeps> = {}, language: LanguageCode = 'th') {
 	const deps: FakeDeps = {
 		lookup: vi.fn<ReprintSessionDeps['lookup']>().mockResolvedValue(HOUSEHOLD),
 		reprint: vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue(REPRINT_RESULT),
 		print: vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'printed', printed: 2 }),
 		...overrides
 	};
-	return { deps, session: new ReprintSession(deps) };
+	return { deps, session: new ReprintSession(deps, () => language) };
 }
 
 async function toVerify(session: ReprintSession) {
@@ -475,26 +472,32 @@ describe('ReprintSession printing', () => {
 		expect(session.qrIssueFailedCount).toBe(1);
 	});
 
-	it('prints nothing and returns to the member step when no QR could be issued', async () => {
-		const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue({
-			shelter_code: 'SH001',
-			members: REPRINT_RESULT.members.map((m) => ({
-				evacuee_id: m.evacuee_id,
-				qr_issue_failed: true,
-				label: m.label
-			}))
-		});
-		const { deps, session } = setup({ reprint });
-		await toVerify(session);
-		session.idLast4 = '1234';
+	it.each([
+		['th', 'ออก QR ใหม่ไม่สำเร็จ ยังไม่ได้พิมพ์ กรุณาลองอีกครั้งหรือติดต่อเจ้าหน้าที่'],
+		['en', 'Could not issue a new QR, so nothing was printed. Please try again or contact staff.']
+	] as const)(
+		'prints nothing and returns to the member step when no QR could be issued (%s)',
+		async (language, message) => {
+			const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue({
+				shelter_code: 'SH001',
+				members: REPRINT_RESULT.members.map((m) => ({
+					evacuee_id: m.evacuee_id,
+					qr_issue_failed: true,
+					label: m.label
+				}))
+			});
+			const { deps, session } = setup({ reprint }, language);
+			await toVerify(session);
+			session.idLast4 = '1234';
 
-		await session.submitVerify();
+			await session.submitVerify();
 
-		expect(deps.print).not.toHaveBeenCalled();
-		expect(session.step).toBe('members');
-		expect(session.error).toBe(QR_ISSUE_FAILED_MESSAGE);
-		expect(session.printable).toEqual([]);
-	});
+			expect(deps.print).not.toHaveBeenCalled();
+			expect(session.step).toBe('members');
+			expect(session.error).toBe(message);
+			expect(session.printable).toEqual([]);
+		}
+	);
 
 	it('reports a thrown print as a failure instead of leaving the page on printing', async () => {
 		const print = vi.fn<ReprintSessionDeps['print']>().mockRejectedValue(new Error('boom'));

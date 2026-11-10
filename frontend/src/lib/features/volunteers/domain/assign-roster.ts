@@ -47,6 +47,8 @@ export type AssignRowState =
 	| { kind: 'accepted' }
 	| {
 			kind: 'collision';
+			/** The job the clashing shift belongs to. */
+			jobId: string;
 			/** Title of the job whose shift clashes, for the badge text. */
 			jobTitle: string;
 			/** Bangkok wall-clock `HH:mm` of the clashing window. */
@@ -153,6 +155,7 @@ export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
 				});
 				state = {
 					kind: 'collision',
+					jobId: clash.job_id,
 					jobTitle: clashJob?.title ?? 'งานอาสาสมัครอื่น',
 					...windowLabel(clashShift)
 				};
@@ -164,13 +167,14 @@ export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
 		// `skills_required` is optional on the stored doc (schema.md §2.17) — an
 		// absent list means "no skill required", which matches everyone.
 		const required = job.skills_required ?? [];
+		const heldSkills = volunteer.skills ?? [];
 		return {
 			volunteer,
 			state,
 			skillMatch: skillOptions
-				? hasAnyRequiredSkill(volunteer.skills, required, skillOptions)
-				: required.length === 0 || required.some((s) => volunteer.skills.includes(s)),
-			professional: volunteer.skills.some((s) => isControlledSkill(s, controlledSkills)),
+				? hasAnyRequiredSkill(heldSkills, required, skillOptions)
+				: required.length === 0 || required.some((s) => heldSkills.includes(s)),
+			professional: heldSkills.some((s) => isControlledSkill(s, controlledSkills)),
 			assignable: state.kind === 'available'
 		};
 	});

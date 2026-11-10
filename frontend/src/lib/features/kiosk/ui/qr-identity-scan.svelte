@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Html5Qrcode } from 'html5-qrcode';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
@@ -15,11 +14,15 @@
 	import KioskReaderPointer from './kiosk-reader-pointer.svelte';
 	import type { GateInput } from '../data/kiosk-check-in.api';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
+	import { navigateToKioskHome } from '../application/kiosk-navigation';
 	import { selectCameraId } from '../domain/kiosk-camera';
 	import { qrInputPlan, type KioskHardware } from '../domain/kiosk-hardware';
 	import { createKeyboardWedge } from '../domain/keyboard-wedge';
 	import { parseKioskQr } from '../domain/kiosk-qr';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { KIOSK_QR_FLOW_I18N } from './_constants/kiosk-qr-flow.i18n';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 	import type { KioskContextQuery } from '../domain/display-context';
 
@@ -29,6 +32,7 @@
 	}
 
 	let { contextQuery, displayShelterCode }: Props = $props();
+	const t = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).qrScan);
 	let gate = $state<GateInput | null>(null);
 	let cameraError = $state('');
 	let scanNotice = $state('');
@@ -43,7 +47,7 @@
 	const backUrl = $derived(resolve(`/kiosk${contextQuery}`));
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
 		resetScan();
-		void goto(resolve(`/kiosk${contextQuery}`));
+		navigateToKioskHome(contextQuery);
 	});
 	const cameraReaderId = 'kiosk-registration-qr-reader';
 
@@ -104,7 +108,7 @@
 
 		const qr = parseKioskQr(decodedValue);
 		if (qr.kind === 'invalid') {
-			scanNotice = 'QR นี้ใช้รายงานตัวไม่ได้';
+			scanNotice = t.invalidQr;
 			return;
 		}
 
@@ -145,7 +149,7 @@
 				if (!isMounted && reader.isScanning) reader.stop().catch(() => {});
 			})
 			.catch(() => {
-				if (isMounted) cameraError = 'เปิดกล้องไม่ได้';
+				if (isMounted) cameraError = t.cameraOpenFailed;
 			});
 
 		return () => {
@@ -169,7 +173,7 @@
 </script>
 
 <svelte:head>
-	<title>สแกน QR — SmartShelter Kiosk</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={handleKeydown} />
@@ -200,7 +204,7 @@
 					id="qr-title"
 					class="text-xl font-extrabold tracking-tight text-[#0A2647] sm:text-2xl kiosk-portrait:text-3xl"
 				>
-					สแกน QR ลงทะเบียน
+					{t.heading}
 				</h1>
 			</header>
 
@@ -213,7 +217,7 @@
 				{#if plan.readerOnly}
 					<div class="flex flex-col items-center">
 						<KioskQrScanScene />
-						<KioskReaderPointer side="right" label="เครื่องสแกน QR" />
+						<KioskReaderPointer side="right" label={t.readerLabel} />
 					</div>
 				{:else}
 					<div
@@ -229,7 +233,7 @@
 											'absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!',
 											hardware?.cameraFlip && '[&_video]:-scale-x-100'
 										]}
-										aria-label="ภาพจากกล้องสแกน QR"
+										aria-label={t.cameraAria}
 									></div>
 								{/key}
 							{/if}
@@ -262,13 +266,13 @@
 									<CameraOff class="h-9 w-9 text-slate-500" aria-hidden="true" />
 									<p class="text-base font-semibold text-slate-700" role="status">{cameraError}</p>
 									{#if plan.readerEnabled}
-										<p class="text-base text-slate-600">ยังใช้เครื่องอ่าน QR ได้</p>
+										<p class="text-base text-slate-600">{t.readerStillWorks}</p>
 									{/if}
 									<Button
 										type="button"
 										onclick={retryCamera}
 										class="min-h-12 gap-2 bg-[#0A2647] px-5 text-lg font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-2xl"
-										><RefreshCw class="h-5 w-5" aria-hidden="true" />ลองอีกครั้ง</Button
+										><RefreshCw class="h-5 w-5" aria-hidden="true" />{t.retry}</Button
 									>
 								</div>
 							{/if}
@@ -280,11 +284,11 @@
 					aria-live="polite"
 				>
 					{#if plan.pending}
-						กำลังเตรียม…
+						{t.preparing}
 					{:else if plan.readerOnly}
-						สแกน QR ที่เครื่องสแกนด้านล่างขวาของจอ
+						{t.readerHint}
 					{:else}
-						วาง QR ในกรอบ
+						{t.cameraHint}
 					{/if}
 				</p>
 				{#if scanNotice}

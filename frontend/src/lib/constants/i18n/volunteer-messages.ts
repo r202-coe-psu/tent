@@ -85,6 +85,7 @@ const EN_BY_THAI_MESSAGE: Readonly<Record<string, string>> = {
 		'This shift has already started, so it cannot be cancelled',
 	'ยกเลิกการสมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง':
 		'Could not cancel the application. Please try again',
+	'โหลดรายการกะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง': 'Could not load shift list. Please try again',
 	'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่':
 		'Too many requests. Please wait a moment and try again',
 	'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง':
