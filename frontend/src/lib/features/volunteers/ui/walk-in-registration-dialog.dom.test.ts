@@ -169,9 +169,12 @@ beforeEach(() => {
 	mocks.createMutateAsync.mockResolvedValue({ _id: 'volunteer:9', volunteer_code: 'V-009' });
 });
 
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui restores the body style 24ms after the dialog's scroll lock goes; let that timer run
+	// here, or it fires after the file's DOM is torn down ("document is not defined").
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 
