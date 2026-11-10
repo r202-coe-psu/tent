@@ -32,16 +32,23 @@
 	const isError = $derived(evacueesQuery.isError || movementsQuery.isError || logsQuery.isError);
 	const skippedCount = $derived(logsQuery.data?.skipped.length ?? 0);
 
+	// A cleared or typed-in date can be empty, today or in the future: show a prompt, never a
+	// list, since presence and meals are only meaningful for a finished day.
+	const dayIsValid = $derived(/^\d{4}-\d{2}-\d{2}$/.test(day) && day <= latestDay);
+	const residents = $derived(
+		dayIsValid
+			? coverageResidents({
+					day,
+					evacuees: evacueesQuery.data ?? [],
+					movements: movementsQuery.data ?? []
+				})
+			: []
+	);
+	const presentCount = $derived(residents.filter((r) => r.presentAllDay).length);
 	const rows = $derived(
-		summarizeMealCoverage({
-			day,
-			residents: coverageResidents({
-				day,
-				evacuees: evacueesQuery.data ?? [],
-				movements: movementsQuery.data ?? []
-			}),
-			logs: logsQuery.data?.items ?? []
-		})
+		summarizeMealCoverage({ day, residents, logs: logsQuery.data?.items ?? [] }).sort((a, b) =>
+			a.name.localeCompare(b.name, 'th')
+		)
 	);
 	const mealsLabel = (meals: readonly MealPeriod[]) =>
 		meals.length ? meals.map((m) => getMealPeriodLabel(m)).join(', ') : '—';
@@ -74,13 +81,21 @@
 		</div>
 	{/if}
 
-	{#if isLoading}
+	{#if !dayIsValid}
+		<div class="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
+			เลือกวันที่ที่ผ่านมาแล้ว (ไม่เกินเมื่อวาน)
+		</div>
+	{:else if isLoading}
 		<div class="flex items-center gap-2 p-6 text-sm text-slate-500">
 			<Loader class="size-4 animate-spin" /> กำลังโหลด…
 		</div>
 	{:else if isError}
 		<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">
 			โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชหน้านี้อีกครั้ง
+		</div>
+	{:else if presentCount === 0}
+		<div class="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
+			ไม่มีผู้ที่อยู่ในศูนย์ตลอดทั้งวันนี้
 		</div>
 	{:else if rows.length === 0}
 		<div class="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">

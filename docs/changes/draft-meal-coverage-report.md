@@ -36,7 +36,7 @@ migration: >
 | R2 | นับเฉพาะ `breakfast` / `lunch` / `dinner`; `snack` ไม่นับ |
 | R3 | ไม่นับ log ที่ `voided`, ของยืมคืน (`is_returnable`) และ log ที่ไม่มี `meal` (กติกาเดียวกับเช็คกินซ้ำ `isDuplicateMealDistributionLog`) |
 | R4 | มื้อเดียวกันซ้ำ (override) นับเป็น 1 มื้อ |
-| R5 | นับที่ `recipient_id` (คนกิน) ไม่ใช่ `collected_by_recipient_id` (CR-240); log ของ `volunteer` / `staff` / `outside` ไม่สร้างแถว |
+| R5 | นับที่ `recipient_id` เท่านั้น ไม่ให้เครดิตผู้มารับแทน; log ของ `volunteer` / `staff` / `outside` ไม่สร้างแถว — **ข้อจำกัดปัจจุบัน:** CR-240 (log รายสมาชิก) ยังไม่ถูก implement ใน code การรับแทนครัวเรือนยังเป็น log ใบเดียว (`qty` = จำนวนสมาชิก, `recipient_id` = คนที่สแกน) สมาชิกคนอื่นจึงถูกแสดงว่ายังไม่มีบันทึก จนกว่า CR-240 จะเสร็จ |
 | R6 | แสดงเฉพาะผู้ที่อยู่ในศูนย์ **ตลอดทั้งวัน**: เช็คจาก `movement` ของวันนั้น — เข้า/ออก/ลาชั่วคราว/ย้ายออกระหว่างวัน → ไม่แสดง; `zone_change` ไม่กระทบ |
 | R7 | evacuee ที่ไม่มี `movement` เลย (initial check-in เป็น best-effort) → ใช้ `current_stay` (สถานะอยู่ในศูนย์ และ `since` ก่อนวันนั้น) |
 | R8 | เกณฑ์ 2 มื้อตายตัว (constant ใน domain) |
@@ -58,3 +58,4 @@ domain (`meal-coverage`, `in-shelter-day`), view-model, URL state, และ dom
 2. โหมด "วันนี้": ใช้ `meal_service` ของ date+meal เป็นตัวบอกมื้อที่ผ่านไปแล้ว และ `meal_service` ที่ถูก reject นับไหม
 3. บทบาทไหนเห็นแท็บนี้ได้ (ตอนนี้ใครเข้า distribution back-office ได้ก็เห็น) และจำกัดตาม shelter scope อย่างไร
 4. ต้องมี export หรือส่งต่อรายชื่อไหม
+5. ระหว่างรอ CR-240 จะลดผลบวกลวงจากการรับแทนครัวเรือนอย่างไร (ไม่กำหนดกติกาให้เครดิตเอง)

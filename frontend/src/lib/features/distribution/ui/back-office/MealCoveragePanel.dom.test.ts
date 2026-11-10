@@ -103,4 +103,46 @@ describe('MealCoveragePanel', () => {
 		expect(text).toContain('โหลดข้อมูลไม่สำเร็จ');
 		expect(text).not.toContain('อย่างน้อย 2 มื้อ');
 	});
+
+	function typeDate(value: string) {
+		const input = document.querySelector('input[type="date"]') as HTMLInputElement;
+		input.value = value;
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		flushSync();
+		return document.body.textContent ?? '';
+	}
+
+	it('asks for a date instead of listing everyone when the date is cleared', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
+		render();
+		const text = typeDate('');
+		expect(text).toContain('เลือกวันที่');
+		expect(text).not.toContain('สมชาย');
+	});
+
+	it('refuses today or a future day, whose meals are not over', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
+		render();
+		const text = typeDate('2026-11-10');
+		expect(text).toContain('เลือกวันที่');
+		expect(text).not.toContain('สมชาย');
+	});
+
+	it('says so when nobody was in the shelter all day, instead of "everyone has 2 meals"', () => {
+		env.evacuees.data = [
+			{
+				...person('evacuee:A', 'สมชาย'),
+				current_stay: { status: 'active', since: '2026-11-09T03:00:00Z' }
+			}
+		];
+		const text = render();
+		expect(text).toContain('ไม่มีผู้ที่อยู่ในศูนย์ตลอดทั้งวัน');
+		expect(text).not.toContain('อย่างน้อย 2 มื้อ');
+	});
+
+	it('sorts the rows by name', () => {
+		env.evacuees.data = [person('evacuee:B', 'ศศิ'), person('evacuee:A', 'กมล')];
+		const text = render();
+		expect(text.indexOf('กมล')).toBeLessThan(text.indexOf('ศศิ'));
+	});
 });
