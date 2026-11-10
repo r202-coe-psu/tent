@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	/**
 	 * "ลงทะเบียนอาสาสมัคร Walk-in ด่วน" (CR-094 FR-VOL-10.1/10.5, owner-approved
 	 * mockup 2026-08-28).
@@ -153,7 +154,7 @@
 		SPA: true,
 		dataType: 'json',
 		validators: zod4(walkInVolunteerFormSchema),
-		resetForm: false,
+		resetForm: true,
 		onUpdate: async ({ form: validated }) => {
 			if (!validated.valid) return;
 			const data = validated.data;
@@ -217,7 +218,7 @@
 		}
 	});
 
-	const { form: formData, errors, submitting } = form;
+	const { form: formData, errors, submitting, reset: superReset } = form;
 
 	let phoneConflictExisting = $state<ExistingVolunteerSummary[]>([]);
 	let conflictVolunteer = $state<Volunteer | null>(null);
@@ -257,12 +258,21 @@
 
 	function reset() {
 		lastPrefill = {};
+		superReset({ data: emptyValues() });
 		$formData = emptyValues();
 		selectedSkills = [];
 		jobShiftSelection = null;
 		instantCheckIn = true;
 		phoneConflictExisting = [];
 	}
+
+	$effect(() => {
+		if (open) {
+			untrack(() => {
+				reset();
+			});
+		}
+	});
 
 	const isPending = $derived(
 		$submitting ||

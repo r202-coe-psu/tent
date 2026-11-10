@@ -4,6 +4,7 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import type { Evacuee } from '$lib/features/people';
 import { toast } from 'svelte-sonner';
 import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
+import Harness from './walk-in-registration-dialog-harness.test-fixture.svelte';
 import { VolunteerPhoneTakenError } from '../domain/phone-errors';
 
 const MANAGER = ['shelter:SH001', 'SH001:shelter_manager'];
@@ -469,5 +470,39 @@ describe('WalkInRegistrationDialog — duplicate phone rejection (CR-239)', () =
 
 		expect(document.body.textContent).toContain('พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์');
 		expect(document.body.textContent).toContain('เปิดโปรไฟล์ V-012');
+	});
+});
+
+describe('WalkInRegistrationDialog — form reset behavior', () => {
+	it('resets form fields when reopened after submit succeeds', async () => {
+		mocks.roles = COORDINATOR;
+		mocks.createMutateAsync.mockResolvedValueOnce({
+			_id: 'volunteer:001',
+			volunteer_code: 'V-001',
+			first_name: 'มานะ',
+			last_name: 'อดทน'
+		});
+
+		const harness = mount(Harness, { target: document.body });
+		instance = harness;
+		await settle();
+
+		await typeInto(field('first_name'), 'มานะ');
+		await typeInto(field('last_name'), 'อดทน');
+		await typeInto(field('phone'), '0891234567');
+		submitForm();
+
+		await vi.waitFor(() => expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1));
+		await settle();
+
+		expect(harness.getOpen()).toBe(false);
+
+		harness.reopen();
+		await settle();
+
+		expect(harness.getOpen()).toBe(true);
+		expect(field('first_name').value).toBe('');
+		expect(field('last_name').value).toBe('');
+		expect(field('phone').value).toBe('');
 	});
 });
