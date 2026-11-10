@@ -108,6 +108,8 @@ $SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่
 - **FR-18** — `households`: ซ่อม household ที่ derive ไม่ตรง (CR-219 FR-12a) ทีละ chunk
 - **FR-19** — `sweep`: re-count (CR-219 FR-7) > 0 → กลับไป `people` และ `sweep_round + 1` สูงสุด **3 รอบ**
   (จับคนที่เช็คอิน/ลงทะเบียนระหว่าง job เพราะ client เขียน CouchDB ตรง server บล็อกไม่ได้)
+  · ถ้า re-count ยัง > 0 หลังครบ 3 รอบ (`sweep_round = 3`) → ไม่กลับไป `people` อีก job จบเป็น `completed_with_errors`
+  ด้วย `end_reason = sweep_exhausted` และศูนย์ไม่ถูกปิด (FR-22)
 - **FR-20** — `finalize` โหมด `close`: re-count = 0 และ `counters.failed = 0` → เขียน registry
   `operation_status = closed` + `closed_at` (ข้ามถ้าปิดอยู่แล้ว) registry เขียนครั้งเดียวที่ phase นี้เท่านั้น
 - **FR-21** — `finalize` โหมด `backfill`: ไม่แตะ registry (CR-219 FR-29) เขียน audit ต่อศูนย์ตาม CR-219 FR-30a
@@ -252,6 +254,7 @@ $SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่
 - 2026-11-10 — แก้ตาม review รอบ 2 (PR #1217, ข้อ 1–4): FR-3a CAS ด้วย `_rev` · FR-12 / FR-13 ทุก chunk bump `updated_at`
   และหยุดเมื่อได้ `409` · `end_reason` (§2) + FR-29 toast ตามสาเหตุ · view `jobs_claimable` (FR-1, FR-14, D-5) ·
   FR-16 ตรวจ `STALE_MS` · AC-12..AC-13 · ไม่มี decision ใหม่ด้าน scope
+- 2026-11-10 — แก้ตาม review รอบ 2 ข้อ 5: FR-19 ระบุพฤติกรรมเมื่อ sweep ครบ 3 รอบแล้วยังเหลือคน (`sweep_exhausted`)
 
 ### ตัดสินแล้วใน #1216
 
