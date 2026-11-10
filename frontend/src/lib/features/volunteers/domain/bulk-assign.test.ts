@@ -154,7 +154,7 @@ describe('planBulkAssign (#1164)', () => {
 		expect(skipped[0].reason.kind).toBe('bad_shift_time');
 	});
 
-	it('says where two shifts overlap, and leaves it out for a shift past midnight', () => {
+	it('says where two shifts overlap, and leaves it out for a shift past midnight (W7)', () => {
 		const a = volunteer('ก');
 		const overnight = shift({
 			id: 'js-night',
@@ -167,15 +167,26 @@ describe('planBulkAssign (#1164)', () => {
 			kind: 'clash',
 			overlap: { start: '10:00', end: '12:00' }
 		});
+
+		const evening = shift({
+			id: 'js-evening',
+			date: '2026-11-10',
+			start_time: '21:00',
+			end_time: '23:00'
+		});
 		const [night] = plan({
 			shifts: [overnight],
 			volunteers: [a],
-			assignments: [held(a, MORNING, { job_id: 'job:other' })],
-			jobsById: new Map([['job:other', { title: 'งานอื่น', shifts: [MORNING] }]])
+			assignments: [held(a, evening, { job_id: 'job:other' })],
+			jobsById: new Map([['job:other', { title: 'งานอื่น', shifts: [evening] }]])
 		}).skipped;
-		expect(night?.reason ?? { kind: 'none' }).not.toMatchObject({
+		expect(night.reason).toEqual({
 			kind: 'clash',
-			overlap: expect.anything()
+			sameJob: false,
+			jobTitle: 'งานอื่น',
+			startTime: '21:00',
+			endTime: '23:00',
+			overlap: null
 		});
 	});
 
@@ -198,7 +209,7 @@ describe('planBulkAssign (#1164)', () => {
 });
 
 describe('summarizeBulk (#1164)', () => {
-	it('lists, per person in the order chosen, the shifts placed and those not, with reasons', () => {
+	it('lists, per person in the order chosen, the shifts placed and those not, with reasons and shiftId keys', () => {
 		const [a, b] = [volunteer('ก'), volunteer('ข')];
 		const summary = summarizeBulk(
 			[a, b],
@@ -212,12 +223,49 @@ describe('summarizeBulk (#1164)', () => {
 		expect(summary.notPlacedCount).toBe(1);
 		expect(summary.people.map((p) => p.name)).toEqual(['ก ทดสอบ', 'ข ทดสอบ']);
 		expect(summary.people[0]).toMatchObject({
-			placed: ['2026-11-10 08:00-12:00 น.'],
-			notPlaced: [{ shift: '2026-11-10 13:00-17:00 น.', why: 'กะนี้เต็มแล้ว' }]
+			placed: [{ shiftId: 'js-morning', shift: '2026-11-10 08:00-12:00 น.' }],
+			notPlaced: [
+				{ shiftId: 'js-afternoon', shift: '2026-11-10 13:00-17:00 น.', why: 'กะนี้เต็มแล้ว' }
+			]
 		});
 		expect(summary.people[1]).toMatchObject({
-			placed: ['2026-11-10 08:00-12:00 น.'],
+			placed: [{ shiftId: 'js-morning', shift: '2026-11-10 08:00-12:00 น.' }],
 			notPlaced: []
+		});
+	});
+
+	it('provides unique shiftId keys even when multiple shifts have identical times (W1)', () => {
+		const a = volunteer('ก');
+		const shift1 = shift({ id: 'js-dup-1', start_time: '08:00', end_time: '12:00' });
+		const shift2 = shift({ id: 'js-dup-2', start_time: '08:00', end_time: '12:00' });
+		const summary = summarizeBulk(
+			[a],
+			[
+				{ shift: shift1, volunteer: a, ok: false, why: 'กะนี้เต็มแล้ว' },
+				{ shift: shift2, volunteer: a, ok: false, why: 'กะนี้เต็มแล้ว' }
+			]
+		);
+		expect(summary.people[0].notPlaced).toEqual([
+			{ shiftId: 'js-dup-1', shift: '2026-11-10 08:00-12:00 น.', why: 'กะนี้เต็มแล้ว' },
+			{ shiftId: 'js-dup-2', shift: '2026-11-10 08:00-12:00 น.', why: 'กะนี้เต็มแล้ว' }
+		]);
+		const keys = summary.people[0].notPlaced.map((item) => item.shiftId);
+		expect(new Set(keys).size).toBe(2);
+	});
+
+	it('displays end_date in shift text when shift spans across midnight (Nitpicks)', () => {
+		const a = volunteer('ก');
+		const overnight = shift({
+			id: 'js-night',
+			date: '2026-11-10',
+			start_time: '22:00',
+			end_time: '06:00',
+			end_date: '2026-11-11'
+		});
+		const summary = summarizeBulk([a], [{ shift: overnight, volunteer: a, ok: true }]);
+		expect(summary.people[0].placed[0]).toEqual({
+			shiftId: 'js-night',
+			shift: '2026-11-10 22:00 - 2026-11-11 06:00 น.'
 		});
 	});
 

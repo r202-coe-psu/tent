@@ -82,4 +82,9 @@ describe('AssignRosterRow assign button by identity', () => {
 		expect(assignButton()).toBeUndefined();
 		expect(document.body.textContent).toContain('กะเต็มแล้ว');
 	});
+
+	it('omits unknown skills that are not in master skillOptions instead of showing raw code (W3)', async () => {
+		await render(candidate({ skills: ['unknown_skill_id', 'medical'] }));
+		expect(document.body.textContent).not.toContain('unknown_skill_id');
+	});
 });

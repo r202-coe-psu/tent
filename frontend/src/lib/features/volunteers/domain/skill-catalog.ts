@@ -80,28 +80,17 @@ export function skillOptionsFromMaster(
 		}));
 }
 
-/**
- * Compatibility map for legacy item codes (schema_v 3 ULID codes) seeded before CR-100.
- */
-const LEGACY_ITEM_CODE_MAP: Record<string, string> = {
-	item_01m34tzhgqexqk105e4xxq0bq2: 'cooking',
-	item_01m34tzhgqexqk105e4xxq0bq3: 'logistics',
-	item_01m34tzhgqexqk105e4xxq0bq4: 'screening',
-	item_01m34tzhgqexqk105e4xxq0bq5: 'medical',
-	item_01m34tzhgqexqk105e4xxq0bq6: 'reception',
-	item_01m34tzhgqexqk105e4xxq0bqa: 'childcare'
-};
-
 /** The option a stored value refers to: by `code`, else by legacy label. */
 export function resolveSkillOption(
 	value: string,
 	options: readonly SkillOption[]
 ): SkillOption | undefined {
-	if (!value) return undefined;
-	const mappedCode = LEGACY_ITEM_CODE_MAP[value.trim().toLowerCase()] ?? value;
-	const byCode = options.find((option) => option.code === mappedCode || option.code === value);
+	if (!value || typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	if (!trimmed) return undefined;
+	const byCode = options.find((option) => option.code === trimmed);
 	if (byCode) return byCode;
-	const needle = normalizeSkillText(mappedCode);
+	const needle = normalizeSkillText(trimmed);
 	return options.find(
 		(option) =>
 			normalizeSkillText(option.code) === needle || normalizeSkillText(option.label) === needle

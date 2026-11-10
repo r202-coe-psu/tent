@@ -300,4 +300,65 @@ describe('JobAssignPage — several shifts at once (#1164)', () => {
 		expect(text()).not.toContain('อาสาคนที่_1 ทดสอบ');
 		expect(text()).toContain('แสดงหน้าที่ 2 จาก 2');
 	});
+
+	it('prevents deselecting the only remaining shift and toasts error (W4)', async () => {
+		await render();
+		// Morning is initially selected by default (1/3 shifts)
+		const morningBtn = byLabel('เลือกกะ 2026-11-10 | 08:00 - 12:00 น. (0/5 คน)');
+		await click(morningBtn);
+		expect(toast.error).toHaveBeenCalledWith('ต้องเลือกอย่างน้อย 1 กะ');
+		expect(text()).not.toContain('งานนี้ยังไม่มีกะย่อย');
+	});
+
+	it('assigns candidate across all selected shifts when clicking row assign button in multiShift mode (W5)', async () => {
+		await render();
+		// Select afternoon as well (2 shifts: morning + afternoon)
+		await click(byLabel('เลือกกะ 2026-11-10 | 13:00 - 17:00 น. (0/5 คน)'));
+
+		// Find row assign button for candidate A (สมชาย)
+		const rowAssignBtn = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+			(b) => b.textContent?.trim() === 'มอบหมาย'
+		);
+		expect(rowAssignBtn).not.toBeNull();
+		await click(rowAssignBtn!);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+
+		const sent = mocks.assign.mock.calls.map(([c]) => [c.shift_id, c.volunteer_id]);
+		expect(sent).toEqual([
+			['js-morning', A._id],
+			['js-afternoon', A._id]
+		]);
+	});
+
+	it('skips remaining candidates for a shift that encounters a quota error (W6)', async () => {
+		mocks.assign.mockImplementation(async (c: { shift_id: string; volunteer_id: string }) => {
+			if (c.shift_id === 'js-afternoon') {
+				throw new Error('โควตาเต็ม');
+			}
+			return {};
+		});
+
+		await render();
+		await click(byLabel('เลือกกะ 2026-11-10 | 13:00 - 17:00 น. (0/5 คน)'));
+		await click(byLabel('เลือก สมชาย ทดสอบ'));
+		await click(byLabel('เลือก สมหญิง ทดสอบ'));
+		await click(sendButton());
+		await new Promise((resolve) => setTimeout(resolve, 20));
+
+		// Afternoon was called for A and failed with quota error. B should be skipped without calling mutateAsync for afternoon.
+		const afternoonCalls = mocks.assign.mock.calls.filter(([c]) => c.shift_id === 'js-afternoon');
+		expect(afternoonCalls.length).toBe(1);
+
+		const dialog = document.body.querySelector('[data-testid="bulk-result"]');
+		expect(dialog).not.toBeNull();
+		const report = (dialog?.textContent ?? '').replace(/\s+/g, ' ');
+		expect(report).toContain('กะนี้เต็มแล้ว');
+	});
+
+	it('omits unknown skill codes from required skills chips (W3)', async () => {
+		mocks.jobSkillsRequired = ['unknown_item_code', 'cooking'];
+		await render();
+		expect(text()).toContain('ประกอบอาหาร / ครัวสนาม');
+		expect(text()).not.toContain('unknown_item_code');
+	});
 });

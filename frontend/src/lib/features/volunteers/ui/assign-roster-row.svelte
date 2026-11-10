@@ -60,14 +60,6 @@
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {
 				map.set(option.code, option);
-			} else if (!option && !map.has(value)) {
-				map.set(value, {
-					code: value,
-					label: value,
-					description: '',
-					icon: '✨',
-					controlled: false
-				});
 			}
 		}
 		return Array.from(map.values());

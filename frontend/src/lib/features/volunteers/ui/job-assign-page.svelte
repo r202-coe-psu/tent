@@ -26,7 +26,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Search from '@lucide/svelte/icons/search';
@@ -224,7 +224,13 @@
 	const roster = $derived.by(
 		(): { rows: ReturnType<typeof buildAssignRoster>; error: string | null } => {
 			if (!job) return { rows: [], error: null };
-			if (!shift) return { rows: [], error: 'งานนี้ยังไม่มีกะย่อย' };
+			if (!shift) {
+				const hasAnyShifts = (job.shifts ?? []).length > 0;
+				return {
+					rows: [],
+					error: hasAnyShifts ? 'กรุณาเลือกอย่างน้อย 1 กะ' : 'งานนี้ยังไม่มีกะย่อย'
+				};
+			}
 			try {
 				return {
 					rows: buildAssignRoster({
@@ -258,14 +264,6 @@
 			const option = resolveSkillOption(code, skillCatalog.options);
 			if (option && !map.has(option.code)) {
 				map.set(option.code, option);
-			} else if (!option && !map.has(code)) {
-				map.set(code, {
-					code,
-					label: code,
-					description: '',
-					icon: '✨',
-					controlled: false
-				});
 			}
 		}
 		return Array.from(map.values());
@@ -326,6 +324,10 @@
 		if (isFull) return;
 
 		const current = [...selectedShiftIds];
+		if (current.includes(s.id) && current.length === 1) {
+			toast.error('ต้องเลือกอย่างน้อย 1 กะ');
+			return;
+		}
 		const next = current.includes(s.id) ? current.filter((id) => id !== s.id) : [...current, s.id];
 
 		pickedShiftIds = next;
@@ -346,6 +348,7 @@
 	// With several shifts a full one is skipped and reported, so only a single shift is gated here.
 	const overCapacity = $derived(!multiShift && selectedCount > remaining);
 	const sending = $derived(assignMutation.isPending);
+	let bulkProgress = $state<{ current: number; total: number } | null>(null);
 
 	/**
 	 * Place the chosen people in every target shift. A pair that cannot go through (already there,
@@ -370,28 +373,53 @@
 		}));
 		// Only a failed save is worth retrying; a rule that said no will say no again.
 		const failedSave: string[] = [];
-		for (const item of plan.assign) {
-			try {
-				await assignMutation.mutateAsync({
-					job_id: job._id,
-					shift_id: item.shift.id,
-					volunteer_id: item.volunteer._id,
-					date: item.shift.date,
-					shift: item.shiftKind,
-					// The job is the posting, so its title is the station (as for a single shift).
-					station: job.title,
-					duty_window: item.dutyWindow
-				});
-				outcomes.push({ shift: item.shift, volunteer: item.volunteer, ok: true });
-			} catch (err) {
-				outcomes.push({
-					shift: item.shift,
-					volunteer: item.volunteer,
-					ok: false,
-					why: `บันทึกไม่สำเร็จ (${errorMessage(err)})`
-				});
-				failedSave.push(item.volunteer._id);
+		const fullShiftIds = new SvelteSet<string>();
+		const total = plan.assign.length;
+		let processed = 0;
+		bulkProgress = { current: 0, total };
+
+		try {
+			for (const item of plan.assign) {
+				bulkProgress = { current: processed + 1, total };
+				if (fullShiftIds.has(item.shift.id)) {
+					outcomes.push({
+						shift: item.shift,
+						volunteer: item.volunteer,
+						ok: false,
+						why: 'กะนี้เต็มแล้ว'
+					});
+					processed += 1;
+					continue;
+				}
+				try {
+					await assignMutation.mutateAsync({
+						job_id: job._id,
+						shift_id: item.shift.id,
+						volunteer_id: item.volunteer._id,
+						date: item.shift.date,
+						shift: item.shiftKind,
+						// The job is the posting, so its title is the station (as for a single shift).
+						station: job.title,
+						duty_window: item.dutyWindow
+					});
+					outcomes.push({ shift: item.shift, volunteer: item.volunteer, ok: true });
+				} catch (err) {
+					const isQuota = err instanceof Error && /quota|โควตา|เต็ม|capacity/i.test(err.message);
+					if (isQuota) {
+						fullShiftIds.add(item.shift.id);
+					}
+					outcomes.push({
+						shift: item.shift,
+						volunteer: item.volunteer,
+						ok: false,
+						why: isQuota ? 'กะนี้เต็มแล้ว' : `บันทึกไม่สำเร็จ (${errorMessage(err)})`
+					});
+					failedSave.push(item.volunteer._id);
+				}
+				processed += 1;
 			}
+		} finally {
+			bulkProgress = null;
 		}
 		selectedIds = selectedIds.filter((id) => failedSave.includes(id));
 		const summary = summarizeBulk(
@@ -500,8 +528,13 @@
 
 	async function assignOne(candidate: AssignCandidate) {
 		if (!candidate.assignable) return;
-		const sent = await assignCandidates([candidate]);
-		if (sent > 0) detailOpen = false;
+		if (multiShift) {
+			await assignAcrossShifts([candidate]);
+			detailOpen = false;
+		} else {
+			const sent = await assignCandidates([candidate]);
+			if (sent > 0) detailOpen = false;
+		}
 	}
 
 	// `flex-1` at every breakpoint (not just mobile) so each segmented row
@@ -962,7 +995,11 @@
 					onclick={assignSelected}
 				>
 					{#if sending}
-						กำลังมอบหมาย...
+						{#if bulkProgress}
+							กำลังมอบหมาย ({bulkProgress.current}/{bulkProgress.total})...
+						{:else}
+							กำลังมอบหมาย...
+						{/if}
 					{:else}
 						<Send class="size-4 shrink-0" />
 						<!-- A short label on the narrowest phones, where the full one breaks mid-word. -->
@@ -1003,8 +1040,8 @@
 							<div class="text-sm">
 								<p class="font-semibold text-emerald-700">เข้ากะแล้ว</p>
 								<ul class="list-disc pl-5 text-foreground">
-									{#each person.placed as when (when)}
-										<li>{when}</li>
+									{#each person.placed as item (item.shiftId)}
+										<li>{item.shift}</li>
 									{/each}
 								</ul>
 							</div>
@@ -1013,7 +1050,7 @@
 							<div class="text-sm">
 								<p class="font-semibold text-amber-700">ไม่ได้เข้ากะ</p>
 								<ul class="list-disc pl-5 text-foreground">
-									{#each person.notPlaced as item (item.shift)}
+									{#each person.notPlaced as item (item.shiftId)}
 										<li>
 											<span class="font-medium">กะ {item.shift}</span>
 											<span class="block text-muted-foreground">{item.why}</span>

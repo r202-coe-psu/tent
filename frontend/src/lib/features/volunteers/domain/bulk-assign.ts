@@ -159,13 +159,16 @@ export type BulkOutcome =
 	| { shift: JobShift; volunteer: Volunteer; ok: true }
 	| { shift: JobShift; volunteer: Volunteer; ok: false; why: string };
 
+export type BulkPlacedItem = { shiftId: string; shift: string };
+export type BulkNotPlacedItem = { shiftId: string; shift: string; why: string };
+
 export type BulkPersonResult = {
 	volunteerId: string;
 	name: string;
 	/** Shifts the person was placed in. */
-	placed: string[];
+	placed: BulkPlacedItem[];
 	/** Shifts the person was not placed in, each with the reason. */
-	notPlaced: { shift: string; why: string }[];
+	notPlaced: BulkNotPlacedItem[];
 };
 
 export type BulkRunSummary = {
@@ -175,7 +178,12 @@ export type BulkRunSummary = {
 	people: BulkPersonResult[];
 };
 
-const shiftText = (shift: JobShift) => `${shift.date} ${shift.start_time}-${shift.end_time} น.`;
+const shiftText = (shift: JobShift) => {
+	if (shift.end_date && shift.end_date !== shift.date) {
+		return `${shift.date} ${shift.start_time} - ${shift.end_date} ${shift.end_time} น.`;
+	}
+	return `${shift.date} ${shift.start_time}-${shift.end_time} น.`;
+};
 
 /**
  * The result of a run, per person, so a user sees who got into which shifts and who did not and why
@@ -202,10 +210,14 @@ export function summarizeBulk(
 		const person = people.get(outcome.volunteer._id);
 		if (!person) continue;
 		if (outcome.ok) {
-			person.placed.push(shiftText(outcome.shift));
+			person.placed.push({ shiftId: outcome.shift.id, shift: shiftText(outcome.shift) });
 			placedCount += 1;
 		} else {
-			person.notPlaced.push({ shift: shiftText(outcome.shift), why: outcome.why });
+			person.notPlaced.push({
+				shiftId: outcome.shift.id,
+				shift: shiftText(outcome.shift),
+				why: outcome.why
+			});
 			notPlacedCount += 1;
 		}
 	}

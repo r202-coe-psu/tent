@@ -82,8 +82,10 @@ describe('resolveSkillOption', () => {
 		expect(resolveSkillOption('ทักษะที่เลิกใช้', OPTIONS)).toBeUndefined();
 	});
 
-	it('resolves legacy item codes to master data options', () => {
-		expect(resolveSkillOption('item_01m34tzhgqexqk105e4xxq0bq5', OPTIONS)?.code).toBe('medical');
+	it('safely handles Object prototype keys without throwing (S2)', () => {
+		expect(resolveSkillOption('constructor', OPTIONS)).toBeUndefined();
+		expect(resolveSkillOption('toString', OPTIONS)).toBeUndefined();
+		expect(resolveSkillOption('__proto__', OPTIONS)).toBeUndefined();
 	});
 });
 
@@ -132,7 +134,6 @@ describe('skillMatches', () => {
 
 	it('matches when one side is an option label and the other is raw code', () => {
 		expect(skillMatches('medical', 'การแพทย์ / ปฐมพยาบาล', OPTIONS)).toBe(true);
-		expect(skillMatches('item_01m34tzhgqexqk105e4xxq0bq5', 'medical', OPTIONS)).toBe(true);
 	});
 });
 
@@ -146,9 +147,6 @@ describe('hasAnyRequiredSkill', () => {
 	it('matches across the code/label boundary', () => {
 		expect(hasAnyRequiredSkill(['การแพทย์ / ปฐมพยาบาล'], ['medical'], OPTIONS)).toBe(true);
 		expect(hasAnyRequiredSkill(['kitchen'], ['medical'], OPTIONS)).toBe(false);
-		expect(hasAnyRequiredSkill(['item_01m34tzhgqexqk105e4xxq0bq5'], ['medical'], OPTIONS)).toBe(
-			true
-		);
 	});
 });
 
