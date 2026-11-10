@@ -1,24 +1,27 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_HOME_PAGE_I18N } from './page.i18n';
 	import type { PageProps } from './$types';
 	import {
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		readKioskDisplayQuery,
 		IdentityMethodSelector,
 		KioskBannerAttract,
-		KioskDeviceInfo
+		KioskDeviceInfo,
+		returnToKioskLanguagePicker
 	} from '$lib/features/kiosk';
 	let { data }: PageProps = $props();
 
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const t = $derived(getTranslation(KIOSK_HOME_PAGE_I18N, languageStore.current));
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 </script>
 
 <svelte:head>
-	<title>เลือกวิธียืนยันตัวตน — SmartShelter Kiosk</title>
+	<title>{t.pageTitle} — SmartShelter Kiosk</title>
 </svelte:head>
 
 <IdentityMethodSelector
@@ -28,4 +31,9 @@
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
 />
 <KioskDeviceInfo />
-<KioskBannerAttract mode="live" />
+<!-- A new person is at the kiosk: Thai again and pick a language, with or without banners. -->
+<KioskBannerAttract
+	mode="live"
+	onDismiss={() => returnToKioskLanguagePicker(contextQuery)}
+	onIdleWithoutBanners={() => returnToKioskLanguagePicker(contextQuery)}
+/>

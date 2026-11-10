@@ -142,6 +142,34 @@ describe('renderKioskLabelPng', () => {
 		]);
 	});
 
+	it('draws the first and last name on separate rows', async () => {
+		await renderKioskLabelPng({ ...label, name: 'สมชาย\nใจดี' });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts.slice(0, 3)).toEqual(['สมชาย', 'ใจดี', KIOSK_LABEL_ZONE_PREFIX]);
+		const ys = harness.fakeContext.fillText.mock.calls.map(
+			(call) => (call as unknown as [string, number, number])[2]
+		);
+		expect(ys[1]).toBeGreaterThan(ys[0]!);
+	});
+
+	it('keeps the last name on the label when the first name is too long for one row', async () => {
+		const first = 'ก'.repeat(120);
+		await renderKioskLabelPng({ ...label, name: `${first}\nใจดี` });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		const zoneAt = texts.indexOf(KIOSK_LABEL_ZONE_PREFIX);
+		expect(zoneAt).toBeLessThanOrEqual(3);
+		expect(texts[zoneAt - 1]).toBe('ใจดี');
+	});
+
+	it('draws a single-line name on one row', async () => {
+		await renderKioskLabelPng({ ...label, name: 'สมชาย' });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts.slice(0, 2)).toEqual(['สมชาย', KIOSK_LABEL_ZONE_PREFIX]);
+	});
+
 	it('prints the emergency contact phone on its own row under the zone', async () => {
 		await renderKioskLabelPng({ ...label, emergencyPhone: '0891234567' });
 

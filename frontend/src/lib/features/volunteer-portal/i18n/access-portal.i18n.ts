@@ -164,6 +164,17 @@ export interface AccessPortalTranslations {
 	passQrAlt: string;
 	passShowToStaff: string;
 	passClose: string;
+
+	// Ticket & cancellation (#973)
+	openTicket: string;
+	cancelShift: string;
+	cancelShiftAria: (jobTitle: string, period: string) => string;
+	confirmCancelTitle: string;
+	confirmCancelDescription: string;
+	confirmCancelBack: string;
+	confirmCancelConfirm: string;
+	cancelledSuccess: string;
+	cancelFailed: string;
 }
 
 export const accessPortalI18n: Record<LanguageCode, AccessPortalTranslations> = {
@@ -323,7 +334,18 @@ export const accessPortalI18n: Record<LanguageCode, AccessPortalTranslations> = 
 		passCloseAria: 'ปิดบัตร',
 		passQrAlt: 'QR Code Pass',
 		passShowToStaff: 'ยื่นแสดง QR Code นี้ต่อเจ้าหน้าที่ ณ จุดสแกนเช็คอินศูนย์พักพิง',
-		passClose: 'ปิดหน้าต่าง'
+		passClose: 'ปิดหน้าต่าง',
+
+		openTicket: 'เปิดตั๋ว',
+		cancelShift: 'ยกเลิก',
+		cancelShiftAria: (jobTitle: string, period: string) => `ยกเลิกกะ ${jobTitle} (${period})`,
+		confirmCancelTitle: 'ยืนยันการยกเลิกกะ',
+		confirmCancelDescription:
+			'ใบสมัครของกะนี้จะถูกยกเลิก และที่นั่งที่จองไว้จะคืนให้คนอื่น กะอื่นของคุณไม่เปลี่ยน',
+		confirmCancelBack: 'กลับไป',
+		confirmCancelConfirm: 'ยืนยันยกเลิก',
+		cancelledSuccess: 'ยกเลิกกะงานเรียบร้อยแล้ว',
+		cancelFailed: 'ยกเลิกกะงานไม่สำเร็จ'
 	},
 	en: {
 		pageTitleEntry: 'Volunteer sign-in — Smart Shelter',
@@ -486,6 +508,18 @@ export const accessPortalI18n: Record<LanguageCode, AccessPortalTranslations> = 
 		passCloseAria: 'Close card',
 		passQrAlt: 'QR Code Pass',
 		passShowToStaff: 'Show this QR code to staff at the shelter check-in scan point',
-		passClose: 'Close window'
+		passClose: 'Close window',
+
+		openTicket: 'Open ticket',
+		cancelShift: 'Cancel',
+		cancelShiftAria: (jobTitle: string, period: string) =>
+			`Cancel shift for ${jobTitle} (${period})`,
+		confirmCancelTitle: 'Confirm shift cancellation',
+		confirmCancelDescription:
+			'Your application for this shift will be cancelled and the reserved slot released to others. Your other shifts remain unchanged.',
+		confirmCancelBack: 'Go back',
+		confirmCancelConfirm: 'Confirm cancellation',
+		cancelledSuccess: 'Shift successfully cancelled',
+		cancelFailed: 'Failed to cancel shift'
 	}
 };

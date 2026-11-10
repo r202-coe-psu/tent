@@ -20,6 +20,7 @@ vi.mock('../data/kiosk-print.api', async (importOriginal) => ({
 	printKioskLabels: mocks.printKioskLabels
 }));
 
+import { KioskPrintError } from '../data/kiosk-print.api';
 import { printVolunteerLabel } from './volunteer-label-print';
 
 const volunteer = {
@@ -78,5 +79,29 @@ describe('printVolunteerLabel', () => {
 		expect(result.kind).toBe('error');
 		expect(mocks.printKioskLabels).not.toHaveBeenCalled();
 		expect(fallbackPrint).not.toHaveBeenCalled();
+	});
+
+	it('words its print failures in the language it is given', async () => {
+		mocks.generateQrDataUrl.mockRejectedValue(new Error('qr'));
+
+		const renderFailed = await printVolunteerLabel(volunteer, vi.fn(), 'en');
+
+		expect(renderFailed).toEqual({
+			kind: 'error',
+			message: 'Could not create the label to print. Please try again.'
+		});
+
+		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
+		mocks.renderVolunteerLabelPng.mockResolvedValue('png-volunteer');
+		mocks.printKioskLabels.mockRejectedValue(
+			new KioskPrintError('เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง', 0, 'connection')
+		);
+
+		const connection = await printVolunteerLabel(volunteer, vi.fn(), 'en');
+
+		expect(connection).toEqual({
+			kind: 'error',
+			message: 'Could not reach the printer. Please try again.'
+		});
 	});
 });

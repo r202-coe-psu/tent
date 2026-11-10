@@ -10,7 +10,9 @@
 	const displayContext = $derived(
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
+	);
 </script>
 
 <KioskThaidIdentityScan {contextQuery} displayShelterCode={displayContext.shelterCode} />

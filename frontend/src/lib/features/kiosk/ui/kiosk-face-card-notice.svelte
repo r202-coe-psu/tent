@@ -1,6 +1,9 @@
 <script lang="ts">
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_FACE_I18N } from './_constants/kiosk-face.i18n';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
 
 	interface Props {
@@ -9,6 +12,8 @@
 	}
 
 	let { removable }: Props = $props();
+
+	const t = $derived(getTranslation(KIOSK_FACE_I18N, languageStore.current).cardNotice);
 </script>
 
 <!--
@@ -22,7 +27,7 @@
 		class="mb-4 kiosk-compact:mb-2"
 		role="status"
 		data-testid="kiosk-face-card-notice"
-		data-card-removable="true">ถอดบัตรได้แล้ว</KioskInlineAlert
+		data-card-removable="true">{t.removable}</KioskInlineAlert
 	>
 {:else}
 	<KioskInlineAlert
@@ -31,6 +36,6 @@
 		class="mb-4 kiosk-compact:mb-2"
 		role="status"
 		data-testid="kiosk-face-card-notice"
-		data-card-removable="false">กรุณาเสียบบัตรค้างไว้จนกว่าระบบจะบอกให้ถอด</KioskInlineAlert
+		data-card-removable="false">{t.keepInserted}</KioskInlineAlert
 	>
 {/if}

@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TEST_PRINT_DONE_VISIBLE_MS, TestPrint, type TestPrintDeps } from './test-print.svelte';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
+import type { LanguageCode } from '$lib/stores/language.svelte';
 
 afterEach(() => {
 	vi.useRealTimers();
 });
 
-function setup(result: KioskPrintFlowResult | Error = { kind: 'printed', printed: 1 }) {
+function setup(
+	result: KioskPrintFlowResult | Error = { kind: 'printed', printed: 1 },
+	language?: LanguageCode
+) {
 	const prepareQrImage = vi.fn<TestPrintDeps['prepareQrImage']>(async () => ({
 		src: 'data:image/png;base64,QR',
 		sizeMm: 20
@@ -16,7 +20,12 @@ function setup(result: KioskPrintFlowResult | Error = { kind: 'printed', printed
 		return result;
 	});
 	const fallbackPrint = vi.fn();
-	const testPrint = new TestPrint({ prepareQrImage, printLabels, fallbackPrint });
+	const testPrint = new TestPrint({
+		prepareQrImage,
+		printLabels,
+		fallbackPrint,
+		...(language ? { language: () => language } : {})
+	});
 	return { testPrint, prepareQrImage, printLabels, fallbackPrint };
 }
 
@@ -78,6 +87,25 @@ describe('TestPrint', () => {
 		expect(testPrint.phase).toBe('error');
 		expect(testPrint.error).not.toBe('');
 		expect(printLabels).not.toHaveBeenCalled();
+	});
+
+	it('prints in Thai unless told otherwise', async () => {
+		const { testPrint, printLabels } = setup();
+		await testPrint.print();
+		expect(printLabels.mock.calls[0][2]).toBe('th');
+	});
+
+	it('hands the on-screen language to the print flow so its errors match the screen', async () => {
+		const { testPrint, printLabels } = setup({ kind: 'printed', printed: 1 }, 'en');
+		await testPrint.print();
+		expect(printLabels.mock.calls[0][2]).toBe('en');
+	});
+
+	it('words a QR render failure in English on the English screen', async () => {
+		const { testPrint, prepareQrImage } = setup(undefined, 'en');
+		prepareQrImage.mockRejectedValueOnce(new Error('qr'));
+		await testPrint.print();
+		expect(testPrint.error).toBe('Could not create the QR Code to print');
 	});
 
 	it('with no scanner client the browser print label sheet is used and the screen goes back to idle', async () => {
