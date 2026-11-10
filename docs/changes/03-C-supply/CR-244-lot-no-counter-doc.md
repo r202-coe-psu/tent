@@ -86,8 +86,8 @@ migration: >
   ก็เขียน `lot_counter` ได้** = `warehouse_staff`, `supply_coordinator`, `shelter_manager` และ `donation_staff`
   (CR-227) ของศูนย์นี้ — ไม่รวม `distribution_staff` (รับของยืมคืนไม่ออกเลขล็อต); การตรวจรับผลผลิตครัว (CR-121)
   ทำโดย role คลังกลุ่มนี้อยู่แล้ว
-  — ไม่เพิ่ม role ใหม่ ไม่ขยายสิทธิ์อื่น; BFF (`_admin`) และ repl user ของ edge (`repl:<code>`, #1298) ผ่านในฐานะ
-  admin แต่ยังติดกฎ FR-12 (ND-3 เคาะแล้ว — kong, 2026-11-10)
+  — ไม่เพิ่ม role ใหม่ ไม่ขยายสิทธิ์อื่น; BFF (`_admin`) และ repl user ของ edge (`repl:<code>`, #1298 — เมื่อ PR #1305
+  merge แล้ว) ผ่านในฐานะ admin แต่ยังติดกฎ FR-12 (ND-3 เคาะแล้ว — kong, 2026-11-10)
 - **FR-14** — ตอน deploy รัน `pnpm redeploy:access` เพื่ออัปเดต VDU ทุก `shelter_*`
 
 ### Domain
@@ -140,7 +140,9 @@ CR-088 (status `done`) ไม่ถูกแก้ไฟล์. ข้อคว�
 - **AC-6** — ทั้ง 3 จุดออกเลข (BFF บริจาค, ครัว, หน้า stock) เรียกลูปจองเลขตัวเดียวกัน (ไม่มีโค้ดค้น `stock_ledger`
   เพื่อนับเลขเหลืออยู่)
 - **AC-7** — รูปแบบ `L-YYMMDD-XXX` คงเดิม; test เดิมของ format ยังผ่าน
-- **AC-8** — replicate `lot_counter` จาก edge ขึ้น central ด้วย `repl:<code>` (#1298) ผ่าน VDU ได้
+- **AC-8** — replicate `lot_counter` จาก edge ขึ้น central ผ่าน VDU ได้ ด้วย user ที่ edge ใช้อยู่ตอนทดสอบ —
+  central admin ก่อน PR #1305 (#1298) merge, `repl:<code>` หลัง merge (FR-12 อยู่ก่อน `_admin` bypass จึงมีผลทั้งสองแบบ);
+  PR ที่ merge ทีหลังระหว่าง CR-244 กับ #1305 ต้องรัน AC-8 ซ้ำกับ `repl:<code>`
 - **AC-9** _(ND-4)_ — counter มี conflict (`last=7` กับ `last=12`) → จอง `count=1` ได้ `-013` และ `last=13`;
   ทดสอบกับการ replicate edge ↔ central จริง
 
@@ -204,3 +206,4 @@ retry เมื่อรับพร้อมกันถี่
 - 2026-11-10 — ND-1 (ส่วน TZ): เช็ก production แล้วเป็น UTC ⇒ bug fix `lotDateStamp` → Asia/Bangkok แยกจาก CR นี้ (#1310)
 - 2026-11-10 — ND-1 ปิด: Fishcanwalk ยืนยัน "เลือก C" = คำถามที่ 1 ตัวเลือก C ⇒ ไม่เหลือ ND ค้าง
 - 2026-11-10 — **approved** (kong) · รันเลข CR-244 (ถัดจาก CR-243 บน `develop`) · ย้ายจาก `draft-lot-no-counter-doc.md` → `03-C-supply/` · ND-1–ND-4 ปิดครบ
+- 2026-11-10 — AC-8 / FR-13: ไม่ผูกกับ PR #1305 — ทดสอบ AC-8 ด้วย user ที่ edge ใช้อยู่; PR ที่ merge ทีหลังรัน AC-8 ซ้ำกับ `repl:<code>`
