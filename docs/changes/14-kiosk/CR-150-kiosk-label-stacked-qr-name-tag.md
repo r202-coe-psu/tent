@@ -3,7 +3,7 @@ id: CR-150
 title: Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
 status: approved
 date: 2026-09-27
-updated: 2026-10-13 # ข้อเสนอแก้ไข §6 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved โดย Dev Lead Soravit Sukkarn + รันเลข CR-150 และลงทะเบียนใน _index.md
+updated: 2026-11-10 # §7 proposed (#1301) · 2026-10-13 # ข้อเสนอแก้ไข §6 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved โดย Dev Lead Soravit Sukkarn + รันเลข CR-150 และลงทะเบียนใน _index.md
 requested_by: ทีม (kiosk pre-register)
 decided_by: Soravit Sukkarn (Dev Lead)
 layer: volatile
@@ -108,3 +108,16 @@ N/A
 - **AC-L4** label ที่พิมพ์มี `shelter.psu.ac.th` ใต้ QR และ QR ยังสแกนได้
 - **AC-L5** กดปุ่ม test print → ต้องใส่ PIN ถูกก่อน → พิมพ์ label ตัวอย่าง 1 ใบ · PIN ผิด → ไม่พิมพ์ · สแกน QR ทดสอบที่ตู้ → ถูกปฏิเสธ
 - **Migration:** N/A
+
+## 7. ข้อเสนอแก้ไข 2026-11-10 — แถวสัญลักษณ์ระดับความเปราะบาง (proposed, #1301)
+
+> **สรุป (TL;DR):** label 80×60 mm (ทั้ง canvas `renderKioskLabelPng` และ `qr-id-card.svelte`) เพิ่มแถวสัญลักษณ์ระดับความเปราะบางบนสุดของคอลัมน์ข้อความ เหนือชื่อ · กติกาคำนวณระดับ, field `prints[].marker` และคำเตือนบัตรล้าสมัยอยู่ใน [CR-233](../02-people/CR-233-evacuee-qr-rotate-on-print.md) Amendment A2 (FR-EQR-51..57) · สถานะ proposed รอเจ้าของโครงการ
+
+| ID    | Requirement |
+| :---- | :---------- |
+| FR-L7 | เมื่อมีระดับ (`red` / `yellow`) แถวสัญลักษณ์อยู่บนสุดของคอลัมน์ข้อความ กว้างเต็มคอลัมน์ (ขอบขวา ≤ เส้นแบ่ง QR) สูงเท่าแถวโซน (12pt bold × line-height 1.3 ≈ 5.5 mm) เว้น 1 mm ก่อนชื่อ · ชื่อและแถวถัดไปเลื่อนลงตามความสูงแถว ส่วน checklist และ `shelter.psu.ac.th` ยังชิดล่าง · QR ไม่ย้ายและไม่ลดขนาด |
+| FR-L8 | **แดง:** แถบดำทึบ + สี่เหลี่ยมทึบสีขาว (ด้าน ≈ 0.6 × ความสูงแถว) เยื้องซ้าย 1.5 mm + คำ "แดง" สีขาว ห่างสัญลักษณ์ 1.5 mm · **เหลือง:** กรอบดำหนา 0.5 mm + สามเหลี่ยมโปร่ง (stroke 0.4 mm ขนาดเท่าสี่เหลี่ยม) + คำ "เหลือง" สีดำ ตำแหน่งเดียวกัน · ใช้เฉพาะ #000/#FFF จึงคงอยู่หลัง `binarize()` และแยกกันได้บนเครื่องพิมพ์ thermal ขาวดำ |
+| FR-L9 | ไม่มีระดับ (`null`) → ไม่มีแถว และ label หน้าตาเหมือนเดิมทุกจุด |
+
+- **AC-L6** พิมพ์ label คนระดับแดง / เหลือง / ไม่มีระดับ บน XP-365B แล้วแยกแดงกับเหลืองได้ด้วยตาเปล่า ชื่อ/โซนไม่ถูกตัด และ QR ยังสแกนผ่าน
+- **Migration:** N/A (layout เท่านั้น; การเปลี่ยน doc อยู่ใน CR-233 A2)
