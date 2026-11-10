@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { error } from '@sveltejs/kit';
 import { GET } from './+server';
-import { requireShelterScopeOrSA, adminRaw, ServiceError } from '$lib/server/couch-admin';
+import { requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
 import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/server';
 import type { RequestEvent } from './$types';
 
@@ -35,15 +36,29 @@ describe('GET /api/back-office/shelter/[code]/dashboard/zones', () => {
 		vi.resetAllMocks();
 	});
 
-	it('checks shelter scope with the cookie and the URL shelter code', async () => {
-		vi.mocked(requireShelterScopeOrSA).mockRejectedValue(
-			new ServiceError('FORBIDDEN', 'Access denied')
-		);
+	it('returns 403 FORBIDDEN when the caller is outside the shelter scope', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockImplementation(async () => {
+			error(403, 'Access denied: shelter scope mismatch');
+		});
 
 		const res = (await GET(createMockEvent('SH002'))) as Response;
 
 		expect(res.status).toBe(403);
+		expect((await res.json()).error.code).toBe('FORBIDDEN');
 		expect(requireShelterScopeOrSA).toHaveBeenCalledWith('test_cookie', 'SH002');
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('returns 401 UNAUTHENTICATED when the request has no session cookie', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockImplementation(async () => {
+			error(401, 'Not authenticated');
+		});
+
+		const res = (await GET(createMockEvent('SH001', null))) as Response;
+
+		expect(res.status).toBe(401);
+		expect((await res.json()).error.code).toBe('UNAUTHENTICATED');
+		expect(requireShelterScopeOrSA).toHaveBeenCalledWith(null, 'SH001');
 		expect(adminRaw).not.toHaveBeenCalled();
 	});
 

@@ -10,7 +10,7 @@ import type { RequestHandler } from './$types';
 import {
 	adminRaw,
 	requireShelterScopeOrSA,
-	serviceError,
+	serviceOrHttpError,
 	ServiceError
 } from '$lib/server/couch-admin';
 import { ZoneOccupancyPayloadSchema } from '$lib/features/dashboard';
@@ -50,6 +50,6 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		});
 		return json(payload);
 	} catch (e) {
-		return serviceError(e);
+		return serviceOrHttpError(e);
 	}
 };
