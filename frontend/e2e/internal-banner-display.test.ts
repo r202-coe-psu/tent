@@ -4,6 +4,7 @@ const TAGS = { tag: ['@regression', '@kiosk'] };
 
 const INVALID_CODE_MESSAGE = 'รหัสไม่ถูกต้องหรือถูกเปลี่ยนแล้ว';
 const EMPTY_FEED_MESSAGE = 'ยังไม่มีสื่อให้แสดง';
+const CONNECTING_MESSAGE = 'กำลังเชื่อมต่อ…';
 
 /** 1x1 transparent PNG: the slide images only need to load, not to look like anything. */
 const PIXEL_PNG = Buffer.from(
@@ -85,6 +86,41 @@ test.describe('Internal banner display (/banner/[shelter]/internal)', () => {
 		}
 	);
 
+	test(
+		'typing digits on the keyboard enters the code and opens the slideshow',
+		TAGS,
+		async ({ page }) => {
+			await mockFeed(page, {
+				status: 200,
+				slides: [{ id: 'b1', title: 'ประกาศ 1', duration_sec: 30 }]
+			});
+
+			await page.goto('/banner/SH1/internal');
+			await expect(page.getByRole('button', { name: 'ตัวเลข 1' })).toBeFocused();
+			for (const digit of '246802') await page.keyboard.press(digit);
+
+			await expect(page).toHaveURL(/\/banner\/SH1\/internal\?c=246802$/);
+			await expect(page.getByRole('img', { name: 'ประกาศ 1' })).toBeVisible();
+		}
+	);
+
+	test('Backspace deletes the last digit', TAGS, async ({ page }) => {
+		await mockFeed(page, {
+			status: 200,
+			slides: [{ id: 'b1', title: 'ประกาศ 1', duration_sec: 30 }]
+		});
+
+		await page.goto('/banner/SH1/internal');
+		await expect(page.getByRole('button', { name: 'ตัวเลข 1' })).toBeFocused();
+		for (const digit of '1234') await page.keyboard.press(digit);
+		await page.keyboard.press('Backspace');
+		await expect(page.getByRole('status', { name: 'รหัสที่กรอก' })).toHaveText('123');
+
+		for (const digit of '789') await page.keyboard.press(digit);
+
+		await expect(page).toHaveURL(/\/banner\/SH1\/internal\?c=123789$/);
+	});
+
 	test('the slideshow advances to the next slide after its duration', TAGS, async ({ page }) => {
 		await mockFeed(page, {
 			status: 200,
@@ -125,6 +161,18 @@ test.describe('Internal banner display (/banner/[shelter]/internal)', () => {
 
 		await expect(page.getByText(EMPTY_FEED_MESSAGE)).toBeVisible();
 	});
+
+	test(
+		`a failing feed shows '${CONNECTING_MESSAGE}' instead of a black screen`,
+		TAGS,
+		async ({ page }) => {
+			await mockFeed(page, { status: 500 });
+
+			await page.goto('/banner/SH1/internal?c=123456');
+
+			await expect(page.getByText(CONNECTING_MESSAGE)).toBeVisible();
+		}
+	);
 
 	test('the system banner is not shown on the TV screen', TAGS, async ({ page }) => {
 		await mockFeed(page, {

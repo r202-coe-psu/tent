@@ -13,11 +13,8 @@
 
 	// The route keys this component on `shelter` + `code`, so they never change for an instance.
 	const controller = new InternalBannerDisplayController({
-		fetch: async () => {
-			const result = await fetchInternalBanners(shelter, code);
-			if (result.kind === 'not_found') oninvalid();
-			return result;
-		}
+		fetch: () => fetchInternalBanners(shelter, code),
+		onInvalid: () => oninvalid()
 	});
 
 	// Lifecycle only: start the fetch/rotation timers on mount, stop them on unmount.
@@ -37,6 +34,10 @@
 				draggable="false"
 			/>
 		{/key}
+	{:else if controller.status === 'connecting'}
+		<p class="flex h-full items-center justify-center text-4xl font-medium text-slate-300">
+			กำลังเชื่อมต่อ…
+		</p>
 	{:else if controller.status === 'empty'}
 		<p class="flex h-full items-center justify-center text-4xl font-medium text-slate-300">
 			ยังไม่มีสื่อให้แสดง

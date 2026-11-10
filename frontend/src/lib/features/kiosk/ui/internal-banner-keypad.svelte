@@ -33,7 +33,33 @@
 
 	let pad = $state<HTMLElement | null>(null);
 
-	/** TV remotes move focus with the arrow keys; Enter then clicks the focused button. */
+	/**
+	 * TV remotes and USB keyboards: digits 0-9 type the code, Backspace deletes, and the arrow keys
+	 * move focus (Enter then clicks the focused button).
+	 */
+	function handleKeydown(event: KeyboardEvent): void {
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
+		const target = event.target;
+		if (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		) {
+			return;
+		}
+		if (/^[0-9]$/.test(event.key)) {
+			event.preventDefault();
+			press(event.key as Key);
+			return;
+		}
+		if (event.key === 'Backspace') {
+			event.preventDefault();
+			press('delete');
+			return;
+		}
+		moveFocus(event);
+	}
+
 	function moveFocus(event: KeyboardEvent): void {
 		const step: Record<string, number> = {
 			ArrowLeft: -1,
@@ -64,7 +90,7 @@
 		'h-24 rounded-xl border-slate-300 bg-slate-100 text-2xl font-bold text-slate-800 focus-visible:ring-4 focus-visible:ring-[#0284C7] focus-visible:ring-offset-2';
 </script>
 
-<svelte:window onkeydown={moveFocus} />
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="flex min-h-screen flex-col items-center justify-center gap-8 bg-[#F8FAFC] p-8">
 	<h1 class="text-3xl font-bold text-[#0A2647]">กรอกรหัสจอ 6 หลัก</h1>

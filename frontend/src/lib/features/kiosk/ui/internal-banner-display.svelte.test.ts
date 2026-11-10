@@ -190,4 +190,123 @@ describe('InternalBannerDisplayController', () => {
 		expect(controller.status).toBe('loading');
 		expect(vi.getTimerCount()).toBe(0);
 	});
+
+	it('onInvalid fires on not_found', async () => {
+		const onInvalid = vi.fn();
+		const fetchFn = vi
+			.fn<() => Promise<InternalBannersResult>>()
+			.mockResolvedValue({ kind: 'not_found' });
+		const controller = new InternalBannerDisplayController({ fetch: fetchFn, onInvalid });
+
+		controller.start();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(onInvalid).toHaveBeenCalledTimes(1);
+		controller.destroy();
+	});
+
+	it('a not_found that resolves after destroy() does not call onInvalid', async () => {
+		const onInvalid = vi.fn();
+		let resolveFetch: (r: InternalBannersResult) => void = () => {};
+		const fetchFn = vi.fn<() => Promise<InternalBannersResult>>(
+			() => new Promise((resolve) => (resolveFetch = resolve))
+		);
+		const controller = new InternalBannerDisplayController({ fetch: fetchFn, onInvalid });
+		controller.start();
+		controller.destroy();
+
+		resolveFetch({ kind: 'not_found' });
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(onInvalid).not.toHaveBeenCalled();
+	});
+
+	it('retries a first-load error after 10s, 20s, 40s, then every 60s, showing connecting', async () => {
+		const { controller, fetchFn } = await started({ kind: 'error' });
+		expect(controller.status).toBe('connecting');
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(9_999);
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(fetchFn).toHaveBeenCalledTimes(2);
+
+		await vi.advanceTimersByTimeAsync(19_999);
+		expect(fetchFn).toHaveBeenCalledTimes(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(fetchFn).toHaveBeenCalledTimes(3);
+
+		await vi.advanceTimersByTimeAsync(39_999);
+		expect(fetchFn).toHaveBeenCalledTimes(3);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(fetchFn).toHaveBeenCalledTimes(4);
+
+		await vi.advanceTimersByTimeAsync(59_999);
+		expect(fetchFn).toHaveBeenCalledTimes(4);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(fetchFn).toHaveBeenCalledTimes(5);
+
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(fetchFn).toHaveBeenCalledTimes(6);
+		expect(controller.status).toBe('connecting');
+		controller.destroy();
+	});
+
+	it('plays as soon as a retry succeeds, and later errors only wait for the 5-minute refresh', async () => {
+		const { controller, fetchFn } = await started({ kind: 'error' });
+		fetchFn.mockResolvedValueOnce({ kind: 'error' });
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(controller.status).toBe('connecting');
+
+		fetchFn.mockResolvedValue(ok(slide('a', 5), slide('b', 6)));
+		await vi.advanceTimersByTimeAsync(20_000);
+		expect(controller.status).toBe('playing');
+		expect(controller.current?.id).toBe('a');
+		expect(fetchFn).toHaveBeenCalledTimes(3);
+
+		fetchFn.mockResolvedValue({ kind: 'error' });
+		await vi.advanceTimersByTimeAsync(300_000);
+		expect(fetchFn).toHaveBeenCalledTimes(4);
+		expect(controller.status).toBe('playing');
+		expect(controller.slides.map((s) => s.id)).toEqual(['a', 'b']);
+
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(fetchFn).toHaveBeenCalledTimes(4);
+		controller.destroy();
+	});
+
+	it('shows empty (not connecting) once the feed answered, even if later refreshes error', async () => {
+		const { controller, fetchFn } = await started(ok());
+		fetchFn.mockResolvedValue({ kind: 'error' });
+
+		await vi.advanceTimersByTimeAsync(300_000);
+
+		expect(controller.status).toBe('empty');
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(fetchFn).toHaveBeenCalledTimes(2);
+		controller.destroy();
+	});
+
+	it('a not_found after first-load errors stops the retry timer', async () => {
+		const { controller, fetchFn } = await started({ kind: 'error' });
+		fetchFn.mockResolvedValue({ kind: 'not_found' });
+
+		await vi.advanceTimersByTimeAsync(10_000);
+
+		expect(controller.status).toBe('invalid_code');
+		expect(vi.getTimerCount()).toBe(0);
+		await vi.advanceTimersByTimeAsync(600_000);
+		expect(fetchFn).toHaveBeenCalledTimes(2);
+	});
+
+	it('destroy clears the retry timer while connecting', async () => {
+		const { controller, fetchFn } = await started({ kind: 'error' });
+		expect(controller.status).toBe('connecting');
+
+		controller.destroy();
+
+		expect(vi.getTimerCount()).toBe(0);
+		await vi.advanceTimersByTimeAsync(600_000);
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+	});
 });
