@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view or the registry write policy changes so deployers can tell a
  * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 8;
+export const REGISTRY_DESIGN_VERSION = 9;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -41,11 +41,11 @@ export function buildRegistryValidateDocUpdate(): string {
     throw({ forbidden: 'Only system administrators can write registry documents' });
   }
   if (newDoc.type === 'kiosk_banner' && !newDoc._deleted) {
-    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
-      throw({ forbidden: 'kiosk_banner schema_v must be 1 or 2' });
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2 && newDoc.schema_v !== 3) {
+      throw({ forbidden: 'kiosk_banner schema_v must be 1, 2 or 3' });
     }
     if (
-      newDoc.schema_v === 2 &&
+      newDoc.schema_v >= 2 &&
       (typeof newDoc.group_id !== 'string' || newDoc.group_id.indexOf('kiosk_banner_group:') !== 0)
     ) {
       throw({ forbidden: 'kiosk_banner group_id must be a kiosk_banner_group id' });
@@ -80,9 +80,13 @@ export function buildRegistryValidateDocUpdate(): string {
     if (
       newDoc.screen_type !== undefined &&
       newDoc.screen_type !== 'compact' &&
-      newDoc.screen_type !== 'portrait'
+      newDoc.screen_type !== 'portrait' &&
+      newDoc.screen_type !== 'tv'
     ) {
-      throw({ forbidden: 'kiosk_banner screen_type must be compact or portrait' });
+      throw({ forbidden: 'kiosk_banner screen_type must be compact, portrait or tv' });
+    }
+    if (newDoc.screen_type === 'tv' && newDoc.schema_v !== 3) {
+      throw({ forbidden: 'kiosk_banner screen_type tv requires schema_v 3' });
     }
     var startMs = typeof newDoc.start_at === 'string' ? Date.parse(newDoc.start_at) : NaN;
     var endMs = typeof newDoc.end_at === 'string' ? Date.parse(newDoc.end_at) : NaN;
@@ -94,8 +98,19 @@ export function buildRegistryValidateDocUpdate(): string {
     }
   }
   if (newDoc.type === 'kiosk_banner_group' && !newDoc._deleted) {
-    if (newDoc.schema_v !== 1) {
-      throw({ forbidden: 'kiosk_banner_group schema_v must be 1' });
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
+      throw({ forbidden: 'kiosk_banner_group schema_v must be 1 or 2' });
+    }
+    if (newDoc.schema_v === 2) {
+      var tvCode = newDoc.tv_code;
+      if (typeof tvCode !== 'string' || tvCode.length !== 6) {
+        throw({ forbidden: 'kiosk_banner_group tv_code must be exactly six digits' });
+      }
+      for (var d = 0; d < tvCode.length; d++) {
+        if (tvCode.charAt(d) < '0' || tvCode.charAt(d) > '9') {
+          throw({ forbidden: 'kiosk_banner_group tv_code must be exactly six digits' });
+        }
+      }
     }
     if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('kiosk_banner_group:') !== 0) {
       throw({ forbidden: 'kiosk_banner_group _id must start with kiosk_banner_group:' });

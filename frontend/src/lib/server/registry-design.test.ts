@@ -12,7 +12,7 @@ describe('registry shelter lookup design', () => {
 		const design = buildRegistryDesignDoc();
 
 		expect(design.version).toBe(REGISTRY_DESIGN_VERSION);
-		expect(REGISTRY_DESIGN_VERSION).toBe(8);
+		expect(REGISTRY_DESIGN_VERSION).toBe(9);
 		expect(design.views.by_normalized_name.map).toContain("doc.type === 'shelter'");
 		expect(design.views.by_normalized_name.map).toContain("replace(/\\s+/g, ' ')");
 	});
@@ -79,7 +79,7 @@ describe('registry kiosk_banner validate_doc_update', () => {
 	});
 
 	it.each([
-		['schema_v 3', { schema_v: 3 }],
+		['schema_v 4', { schema_v: 4 }],
 		['schema_v 0', { schema_v: 0 }],
 		['missing schema_v', { schema_v: undefined }],
 		['schema_v 2 without group_id', { schema_v: 2 }],
@@ -88,6 +88,23 @@ describe('registry kiosk_banner validate_doc_update', () => {
 		['schema_v 2 with wrong-prefix group_id', { schema_v: 2, group_id: 'shelter:01H' }]
 	])('rejects %s', (_label, overrides) => {
 		expect(() => runVdu(validBanner(overrides))).toThrow(
+			expect.objectContaining({ forbidden: expect.any(String) })
+		);
+	});
+
+	it("accepts schema_v 3 banners with screen_type 'tv', compact or portrait", () => {
+		for (const screen_type of ['tv', 'compact', 'portrait']) {
+			expect(() =>
+				runVdu(validBanner({ schema_v: 3, group_id: 'kiosk_banner_group:01H', screen_type }))
+			).not.toThrow();
+		}
+	});
+
+	it.each([
+		['schema_v 1', { schema_v: 1 }],
+		['schema_v 2', { schema_v: 2, group_id: 'kiosk_banner_group:01H' }]
+	])("rejects screen_type 'tv' on a %s banner", (_label, overrides) => {
+		expect(() => runVdu(validBanner({ ...overrides, screen_type: 'tv' }))).toThrow(
 			expect.objectContaining({ forbidden: expect.any(String) })
 		);
 	});
@@ -211,7 +228,7 @@ describe('registry kiosk_banner_group validate_doc_update', () => {
 	});
 
 	it.each([
-		['schema_v 2', { schema_v: 2 }],
+		['schema_v 3', { schema_v: 3, tv_code: '000123' }],
 		['missing schema_v', { schema_v: undefined }],
 		['wrong _id prefix', { _id: 'kiosk_banner:01H' }],
 		['missing shelter_code', { shelter_code: undefined }],
@@ -227,6 +244,24 @@ describe('registry kiosk_banner_group validate_doc_update', () => {
 		['non-string created_by', { created_by: 5 }]
 	])('rejects %s', (_label, overrides) => {
 		expect(() => runVdu(validGroup(overrides))).toThrow(
+			expect.objectContaining({ forbidden: expect.any(String) })
+		);
+	});
+
+	it('accepts a schema_v 2 group with a six-digit tv_code, and a v1 group without one', () => {
+		expect(() => runVdu(validGroup({ schema_v: 2, tv_code: '000123' }))).not.toThrow();
+		expect(() => runVdu(validGroup({ schema_v: 1 }))).not.toThrow();
+	});
+
+	it.each([
+		['missing tv_code', { tv_code: undefined }],
+		['null tv_code', { tv_code: null }],
+		['five-digit tv_code', { tv_code: '12345' }],
+		['seven-digit tv_code', { tv_code: '1234567' }],
+		['non-digit tv_code', { tv_code: '12a456' }],
+		['numeric tv_code', { tv_code: 123456 }]
+	])('rejects a schema_v 2 group with %s', (_label, overrides) => {
+		expect(() => runVdu(validGroup({ schema_v: 2, ...overrides }))).toThrow(
 			expect.objectContaining({ forbidden: expect.any(String) })
 		);
 	});
