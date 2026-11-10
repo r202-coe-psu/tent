@@ -14,9 +14,12 @@ import {
 import { fail, error, type ActionFailure } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ request }) => {
-	let caller;
 	try {
-		caller = await authorizeUserWrite(request.headers.get('cookie'));
+		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		// SA-only page (CR-184 FR-7) — matches the menu's `requiresAdmin`.
+		if (!caller.isSA) {
+			throw new ServiceError('FORBIDDEN', 'ต้องเป็นผู้ดูแลระบบ (System Admin) เท่านั้น');
+		}
 	} catch (e) {
 		if (e instanceof ServiceError) {
 			throw error(e.code === 'UNAUTHENTICATED' ? 401 : 403, e.message);
@@ -29,7 +32,7 @@ export const load: PageServerLoad = async ({ request }) => {
 	return {
 		footerLogos: footerLogoRecords(existing),
 		configRev: existing?._rev ?? '',
-		canEditLogos: caller.isSA,
+		canEditLogos: true,
 		title: 'โลโก้หน่วยงาน'
 	};
 };

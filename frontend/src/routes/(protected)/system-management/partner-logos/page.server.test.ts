@@ -6,17 +6,23 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => ({
 }));
 vi.mock('$lib/server/public-portal/footer-logos.server', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/public-portal/footer-logos.server')>()),
+	readPublicPortalConfig: vi.fn(),
 	createFooterLogo: vi.fn(),
 	deleteFooterLogo: vi.fn()
 }));
 
-import { actions } from './+page.server';
+import { actions, load } from './+page.server';
 import { authorizeUserWrite, ServiceError } from '$lib/server/couch-admin';
-import { createFooterLogo, deleteFooterLogo } from '$lib/server/public-portal/footer-logos.server';
+import {
+	createFooterLogo,
+	deleteFooterLogo,
+	readPublicPortalConfig
+} from '$lib/server/public-portal/footer-logos.server';
 
 const mockAuthorize = vi.mocked(authorizeUserWrite);
 const mockCreate = vi.mocked(createFooterLogo);
 const mockDelete = vi.mocked(deleteFooterLogo);
+const mockRead = vi.mocked(readPublicPortalConfig);
 
 const SA = { name: 'sa', roles: ['system_admin'], isSA: true, shelterCode: null };
 const MANAGER = { name: 'mgr', roles: ['S1:shelter_manager'], isSA: false, shelterCode: 'S1' };
@@ -42,6 +48,7 @@ beforeEach(() => {
 	mockAuthorize.mockReset();
 	mockCreate.mockReset();
 	mockDelete.mockReset();
+	mockRead.mockReset();
 });
 
 describe('footer logo actions', () => {
@@ -85,5 +92,34 @@ describe('footer logo actions', () => {
 		const result = await actions.deleteLogo(formRequest('deleteLogo', logoForm({ id: 'a' })));
 
 		expect(result).toMatchObject({ status: 409, data: { logoError: 'stale' } });
+	});
+});
+
+describe('load', () => {
+	const loadEvent = () =>
+		({ request: new Request('http://localhost/') }) as unknown as Parameters<typeof load>[0];
+
+	it('rejects a shelter manager with 403 and never reads the config (SA-only, FR-7)', async () => {
+		mockAuthorize.mockResolvedValue(MANAGER as never);
+
+		await expect(load(loadEvent())).rejects.toMatchObject({ status: 403 });
+		expect(mockRead).not.toHaveBeenCalled();
+	});
+
+	it('maps UNAUTHENTICATED to 401', async () => {
+		mockAuthorize.mockRejectedValue(new ServiceError('UNAUTHENTICATED', 'no session'));
+
+		await expect(load(loadEvent())).rejects.toMatchObject({ status: 401 });
+	});
+
+	it('returns the logos and rev for a System Admin', async () => {
+		mockAuthorize.mockResolvedValue(SA as never);
+		mockRead.mockResolvedValue({ _rev: '3-a', footer_logos: [] } as never);
+
+		await expect(load(loadEvent())).resolves.toMatchObject({
+			footerLogos: [],
+			configRev: '3-a',
+			canEditLogos: true
+		});
 	});
 });
