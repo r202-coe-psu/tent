@@ -22,9 +22,10 @@ const SHELTER_CODE = /^[A-Za-z0-9_-]{1,32}$/;
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeTransfer(request.headers.get('cookie'));
 		const param = url.searchParams.get('shelter_code')?.trim() || null;
 		if (param && !SHELTER_CODE.test(param)) throw error(400, 'Invalid shelter_code');
+		// The capability is checked in the shelter the caller asked for (#477), not their first one.
+		const caller = await authorizeTransfer(request.headers.get('cookie'), param);
 
 		let shelterCode: string | null;
 		if (caller.isSA) {
