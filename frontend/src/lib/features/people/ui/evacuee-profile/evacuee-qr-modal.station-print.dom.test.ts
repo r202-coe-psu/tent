@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
 	createPrintJob: vi.fn(),
 	getPrintJobStatus: vi.fn()
 }));
+const issueQrs = vi.hoisted(() => vi.fn());
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
 
 vi.mock('$lib/stores/auth.svelte', () => ({
@@ -29,6 +30,9 @@ vi.mock('$lib/features/printers/data/printers.api', async (importOriginal) => ({
 	...api
 }));
 vi.mock('svelte-sonner', () => ({ toast }));
+vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({
+	issueEvacueeQrs: issueQrs
+}));
 vi.mock('$lib/features/kiosk', () => ({
 	KIOSK_LABEL_MM: { width: 80, height: 60 },
 	renderKioskQrLabelPng: async () => 'AAAA'
@@ -43,7 +47,7 @@ vi.mock('$lib/features/people', async (importOriginal) => ({
 }));
 
 const evacuee = {
-	_id: 'evacuee:test-1',
+	_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
 	type: 'evacuee',
 	first_name: 'สุนิตา',
 	last_name: 'บางค้างพลู',
@@ -80,6 +84,13 @@ beforeEach(() => {
 	localStorage.clear();
 	stationPrinter.set('SH001', 'p1');
 	endpointStore.markConnected();
+	issueQrs.mockImplementation(async (input: { evacuee_ids: string[] }) =>
+		input.evacuee_ids.map((evacuee_id) => ({
+			evacuee_id,
+			status: 'issued',
+			qr_payload: `${evacuee_id}@683508`
+		}))
+	);
 	api.listShelterPrinters.mockResolvedValue({
 		printers: [printer('p1')],
 		server_time: '2026-10-22T03:00:10.000Z'
@@ -92,6 +103,28 @@ afterEach(() => {
 });
 
 describe('EvacueeQrModal with the station printer button', () => {
+	it('shows only the specific toast when the QR cannot be issued, and sends nothing', async () => {
+		issueQrs.mockRejectedValue(new Error('offline'));
+		instance = mount(Harness, {
+			target: document.body,
+			props: {
+				client: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+				show: true,
+				evacuee,
+				onClose: vi.fn()
+			}
+		});
+		await settle();
+
+		printButton()!.click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		await settle();
+
+		expect(toast.error).toHaveBeenCalledTimes(1);
+		expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('ออก QR ใหม่ไม่สำเร็จ'));
+		expect(api.createPrintJob).not.toHaveBeenCalled();
+	});
+
 	it('stays open while a sent job may still print and closes once its printer leaves the list', async () => {
 		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 		const onClose = vi.fn();

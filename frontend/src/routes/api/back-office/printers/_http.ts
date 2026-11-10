@@ -34,7 +34,8 @@ const SERVICE_STATUS: Record<ServiceError['code'], number> = {
 	VALIDATION: 422,
 	CONFLICT: 409,
 	NOT_FOUND: 404,
-	INTERNAL: 500
+	INTERNAL: 500,
+	DEPENDENCY_UNAVAILABLE: 503
 };
 
 const DEVICE_ID_PARAM = /^[a-z0-9][a-z0-9-]{2,62}$/;

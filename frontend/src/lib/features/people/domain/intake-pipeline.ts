@@ -4,6 +4,7 @@
  */
 import type { Evacuee, TriageLevel } from './people';
 import { isInShelterStayStatus } from '$lib/features/shared';
+import { parsePersonQr } from '$lib/utils/evacuee-qr';
 import type { LanguageCode } from '$lib/utils/language';
 
 export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว' | '—';
@@ -367,6 +368,13 @@ export function parseZoningQrCode(input: string): string | null {
 		trimmed.endsWith('/onsite/medical-screening')
 	) {
 		return null;
+	}
+
+	// Person QR `evacuee:{ULID}@{hash6}` (CR-233): the id handed onward never carries `@` (FR-EQR-6);
+	// the hash is read separately by the scan-rule evaluation. A malformed `@` suffix is not a
+	// Person QR at all (FR-EQR-5).
+	if (/^evacuee:/i.test(trimmed) && trimmed.includes('@')) {
+		return parsePersonQr(trimmed)?.evacuee_id ?? null;
 	}
 
 	return trimmed;

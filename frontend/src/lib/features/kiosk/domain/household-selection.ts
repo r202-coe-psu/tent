@@ -11,8 +11,21 @@ type ExistingReportResult = {
 	evacuee_id: string;
 	status: 'already_checked_in';
 	stay_status: string;
-	qr_payload?: string;
+	/** Client-side marker only (CR-233): this arriving member's QR can be reissued; NOT a QR. */
+	reprintable?: true;
 };
+
+type QrBearing = { qr_payload?: string; reprintable?: boolean; qr_issue_failed?: boolean };
+
+/** FR-EQR-24: a member whose QR entry failed must never be printed. */
+export function isQrIssueFailed(result: Pick<QrBearing, 'qr_issue_failed'>): boolean {
+	return result.qr_issue_failed === true;
+}
+
+/** True when the member has (or can be given) a QR to print; never for `qr_issue_failed`. */
+export function canPrintQr(result: QrBearing): boolean {
+	return !isQrIssueFailed(result) && (Boolean(result.qr_payload) || result.reprintable === true);
+}
 
 /** Phone lookup preselects every eligible member; QR, card and ThaiD preselect the scanned member. */
 export function initialSelection(
@@ -34,15 +47,15 @@ export function toExistingReportResults(
 			evacuee_id: member.evacuee_id,
 			status: 'already_checked_in',
 			stay_status: member.status,
-			...(member.status === 'arriving' ? { qr_payload: member.evacuee_id } : {})
+			...(member.status === 'arriving' ? { reprintable: true as const } : {})
 		}));
 }
 
 /** A reprint starts with every member that has a QR ticked; the visitor unticks the rest. */
 export function initialReprintSelection(
-	results: readonly { evacuee_id: string; qr_payload?: string }[]
+	results: readonly ({ evacuee_id: string } & QrBearing)[]
 ): string[] {
-	return results.filter((result) => result.qr_payload).map((result) => result.evacuee_id);
+	return results.filter(canPrintQr).map((result) => result.evacuee_id);
 }
 
 /** Ids the visitor may tick: members already reported stay locked. */

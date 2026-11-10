@@ -11,6 +11,7 @@ import {
 	PRINT_JOB_PICKUP_HINT_MS
 } from '../domain/print-job-timing';
 import { PrintApiError } from '../data/printers.api';
+import { ReportedRenderError } from '../domain/reported-error';
 import type { PrinterSummary } from '../domain/print-device.schema';
 import Harness from './__fixtures__/print-labels-button-harness.svelte';
 
@@ -221,6 +222,32 @@ describe('PrintLabelsButton', () => {
 			?.click();
 		flushSync();
 		expect(options()).toHaveLength(2);
+	});
+
+	it('shows the chosen printer name and an underlined change link beside it', async () => {
+		stationPrinter.set('SH001', 'p2');
+
+		await render({ printers: [printer('p1'), printer('p2', { name: 'โต๊ะ 1' })] });
+
+		const name = document.querySelector('[data-testid="chosen-printer-name"]');
+		expect(name?.textContent?.trim()).toBe('โต๊ะ 1');
+		const change = buttons().find((b) => b.textContent?.includes('เปลี่ยนเครื่อง'))!;
+		expect(change.classList.contains('underline')).toBe(true);
+		// Name first, then the link, in one row.
+		expect(name!.parentElement).toBe(change.parentElement);
+		expect(name!.compareDocumentPosition(change) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('hides the name and link while the picker is open', async () => {
+		stationPrinter.set('SH001', 'p1');
+
+		await render({ printers: [printer('p1'), printer('p2')] });
+		buttons()
+			.find((b) => b.textContent?.includes('เปลี่ยนเครื่อง'))
+			?.click();
+		flushSync();
+
+		expect(document.querySelector('[data-testid="chosen-printer-name"]')).toBeNull();
 	});
 
 	it('renders lazily on click, sends one job and ignores a second click while printing', async () => {
@@ -737,6 +764,37 @@ describe('PrintLabelsButton', () => {
 			expect(retryHeld()).toBe('false');
 		}
 	);
+
+	it('adds no generic toast when renderLabels already reported its own failure', async () => {
+		stationPrinter.set('SH001', 'p1');
+		await render({
+			printers: [printer('p1')],
+			renderLabels: async () => {
+				throw new ReportedRenderError();
+			}
+		});
+
+		mainButton().click();
+		await settle();
+
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(api.createPrintJob).not.toHaveBeenCalled();
+		expect(mainButton().disabled).toBe(false);
+	});
+
+	it('shows the generic toast when renderLabels throws an unreported error', async () => {
+		stationPrinter.set('SH001', 'p1');
+		await render({
+			printers: [printer('p1')],
+			renderLabels: async () => {
+				throw new Error('boom');
+			}
+		});
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		expect(api.createPrintJob).not.toHaveBeenCalled();
+	});
 
 	it('cancels while the labels are still rendering without sending anything', async () => {
 		stationPrinter.set('SH001', 'p1');

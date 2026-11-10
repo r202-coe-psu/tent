@@ -40,7 +40,9 @@ export type RoleGrantAuditReason =
 	| 'role_grant.revoked'
 	| 'role_grant.expired'
 	| 'role_grant.verification_revoked'
-	| 'role_grant.made_permanent';
+	| 'role_grant.made_permanent'
+	/** A manager gave a volunteer account a new role for good (CR-221 A1-8): no grant behind it. */
+	| 'role_grant.permanent_issued';
 
 export type CoordinatorGrantableRole = (typeof COORDINATOR_GRANTABLE_CAPABILITIES)[number];
 
