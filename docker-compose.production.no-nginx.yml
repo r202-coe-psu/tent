@@ -1,6 +1,7 @@
 services:
   couchdb:
     container_name: tent-couchdb-production
+    restart: unless-stopped
     image: couchdb:3.5
     ulimits:
       nofile:
@@ -50,6 +51,7 @@ services:
 
   mongodb:
     container_name: tent-mongodb-production
+    restart: unless-stopped
     image: mongo:8.0
     # Workaround: kernel ≥6.19 + MongoDB 8 TCMalloc rseq crash (exit 139).
     environment:
@@ -58,7 +60,9 @@ services:
       - ../deployment/tent/mongodb/data:/data/db
     # No host port — internal Docker network only
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      # mongosh is a ~150 MB Node process per probe; stalled probes piled up to 4.5 GB and
+      # caused the 2026-11-08 staging OOM. A TCP connect costs a few MB.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
       interval: 5s
       timeout: 3s
       retries: 10
