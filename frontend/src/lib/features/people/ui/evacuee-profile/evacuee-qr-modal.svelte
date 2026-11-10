@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { previewImageAsPdf } from '$lib/utils/pdf';
 	import { cn } from '$lib/utils/shadcn';
-	import type { Evacuee } from '$lib/features/people';
+	import type { Evacuee, VulnerabilityMarker } from '$lib/features/people';
 	import {
 		buildEvacueeQrLabel,
 		formatPersonName,
@@ -98,6 +98,7 @@
 		return buildEvacueeQrLabel(evacuee, {
 			zones: shelterQuery.data?.zones,
 			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
+			screenings: screeningsQuery.data,
 			qrPayload
 		});
 	}
@@ -119,6 +120,7 @@
 	 */
 	async function renderIssuedLabelPng(): Promise<string> {
 		let payload: string | undefined;
+		let marker: VulnerabilityMarker | null = null;
 		try {
 			const issued = await issueQrPayloads({
 				shelterCode,
@@ -126,6 +128,7 @@
 				evacueeIds: [evacuee._id]
 			});
 			payload = issued.payloads.get(evacuee._id);
+			marker = issued.markers.get(evacuee._id) ?? null;
 		} catch {
 			payload = undefined;
 		}
@@ -135,7 +138,8 @@
 		}
 		issuedPayload = payload;
 		const { qrPayload, label } = labelContent(payload);
-		return renderKioskQrLabelPng(qrPayload, label);
+		// The printed card carries the marker the server recorded for this print, not the preview's.
+		return renderKioskQrLabelPng(qrPayload, { ...label, marker });
 	}
 
 	async function renderStationLabels(): Promise<string[]> {

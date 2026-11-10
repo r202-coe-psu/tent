@@ -26,6 +26,21 @@ describe('issueQrPayloads', () => {
 		});
 	});
 
+	it('carries the server-issued marker of each issued item (#1301)', async () => {
+		const issue = vi.fn().mockResolvedValue([
+			{ evacuee_id: ULIDS[0], status: 'issued', qr_payload: `${ULIDS[0]}@683508`, marker: 'red' },
+			{ evacuee_id: ULIDS[1], status: 'issued', qr_payload: `${ULIDS[1]}@683508`, marker: null }
+		]);
+		const result = await issueQrPayloads(
+			{ shelterCode: 'SH001', source: 'profile', evacueeIds: ULIDS },
+			{ issue }
+		);
+		expect([...result.markers]).toEqual([
+			[ULIDS[0], 'red'],
+			[ULIDS[1], null]
+		]);
+	});
+
 	it('fails an issued item whose payload is missing or belongs to someone else', async () => {
 		const issue = vi.fn().mockResolvedValue([
 			{ evacuee_id: ULIDS[0], status: 'issued' },

@@ -111,9 +111,14 @@
 				const { qrPayload, label } = buildEvacueeQrLabel(member, {
 					zones,
 					hasScreening: screenings.length > 0,
+					screenings,
 					qrPayload: issued.payloads.get(member._id)
 				});
-				return renderKioskQrLabelPng(qrPayload, label);
+				// The printed card carries the marker the server recorded for this print.
+				return renderKioskQrLabelPng(qrPayload, {
+					...label,
+					marker: issued.markers.get(member._id) ?? null
+				});
 			})
 		);
 	}

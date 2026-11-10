@@ -35,6 +35,7 @@ const member = (id: string) =>
 		type: 'evacuee',
 		first_name: `ชื่อ-${id}`,
 		last_name: 'ทดสอบ',
+		vulnerable_groups: [],
 		current_stay: { status: 'arriving', zone: null, since: '2026-10-24T10:00:00.000Z' },
 		household_id: 'household:test-1',
 		shelter_code: 'SH001'
