@@ -19,6 +19,7 @@ import { GroupNotFoundError, listBannersForShelter } from './kiosk-banner.server
 import {
 	createGroup,
 	deleteGroup,
+	ensureGroupTvCode,
 	ensureTvCode,
 	findGroupByTvCode,
 	getGroup,
@@ -343,15 +344,29 @@ describe('ensureTvCode', () => {
 	});
 });
 
-describe('getGroup backfill', () => {
-	it('gives a v1 group its tv_code when it is read', async () => {
-		adminRawMock
-			.mockResolvedValueOnce({ status: 200, data: groupDoc(GROUP_A, 'ทั่วไป') })
-			.mockResolvedValueOnce(FOUND())
-			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '2-b' } });
+describe('getGroup', () => {
+	it('reads a v1 group as stored and never writes it', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: groupDoc(GROUP_A, 'ทั่วไป') });
 		listDevicesMock.mockResolvedValueOnce([device('kiosk-1', GROUP_A)]);
 
 		const group = await getGroup(GROUP_A);
+
+		expect(group).toMatchObject({ _rev: '1-a', schema_v: 1, device_ids: ['kiosk-1'] });
+		expect(group).not.toHaveProperty('tv_code');
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('ensureGroupTvCode', () => {
+	it('gives a v1 group its tv_code, keeping its device_ids', async () => {
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '2-b' } });
+
+		const group = await ensureGroupTvCode({
+			...groupDoc(GROUP_A, 'ทั่วไป'),
+			device_ids: ['kiosk-1']
+		});
 
 		expect(group).toMatchObject({
 			_rev: '2-b',
@@ -359,7 +374,7 @@ describe('getGroup backfill', () => {
 			tv_code: expect.stringMatching(/^[0-9]{6}$/),
 			device_ids: ['kiosk-1']
 		});
-		expect(adminRawMock.mock.calls[2][1]).toBe('PUT');
+		expect(adminRawMock.mock.calls[1][1]).toBe('PUT');
 	});
 });
 

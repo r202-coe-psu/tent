@@ -90,10 +90,11 @@ async function withDeviceIds(group: KioskBannerGroupDoc): Promise<KioskBannerGro
 	};
 }
 
+/** A pure read: a v1 group comes back as stored, without a tv_code (see `ensureGroupTvCode`). */
 export async function getGroup(id: string): Promise<KioskBannerGroupRecord | null> {
 	const doc = await readGroupDoc(id);
 	if (!doc) return null;
-	return withDeviceIds(await ensureTvCode(doc));
+	return withDeviceIds(doc);
 }
 
 function assertDevicesInShelter(devices: { device_id: string }[], deviceIds: string[]): void {
@@ -187,6 +188,19 @@ export async function ensureTvCode(
 ): Promise<KioskBannerGroupDoc> {
 	if (!needsTvCode(group)) return group;
 	return putGroupDoc({ ...group, schema_v: 2, tv_code: await issueTvCode(deps) });
+}
+
+/**
+ * The scope-checked group with its tv_code backfilled. Call only after the caller's scope check
+ * passed, and only where the group page reads the group; `getGroup` itself never writes.
+ */
+export async function ensureGroupTvCode(
+	group: KioskBannerGroupRecord,
+	deps: TvCodeDeps = defaultTvCodeDeps
+): Promise<KioskBannerGroupRecord> {
+	if (!needsTvCode(group)) return group;
+	const { device_ids, ...doc } = group;
+	return { ...(await ensureTvCode(doc, deps)), device_ids };
 }
 
 export async function updateGroup(
