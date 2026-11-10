@@ -33,6 +33,7 @@ export type {
 // Domain — vulnerability marker (printed QR card)
 export { vulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 export type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
+export { isQrCardStale } from './domain/qr-card-staleness';
 
 // Domain — input schemas + factories + transitions + guards
 export {
