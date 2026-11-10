@@ -1,6 +1,9 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 
 	interface Props {
 		href: string;
@@ -11,7 +14,8 @@
 		disabled?: boolean;
 	}
 
-	let { href, label = 'กลับหน้าเริ่มต้น', onclick, disabled = false }: Props = $props();
+	let { href, label, onclick, disabled = false }: Props = $props();
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current).back);
 </script>
 
 <!--
@@ -25,8 +29,8 @@
 	{disabled}
 	onclick={disabled ? undefined : onclick}
 	variant="ghost"
-	aria-label={label}
+	aria-label={label ?? t.label}
 	class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647] aria-disabled:pointer-events-none aria-disabled:opacity-50 kiosk-portrait:min-h-16 kiosk-portrait:px-5 kiosk-portrait:text-xl kiosk-portrait:[&_svg]:size-6!"
 >
-	<ArrowLeft aria-hidden="true" />กลับ
+	<ArrowLeft aria-hidden="true" />{t.text}
 </Button>

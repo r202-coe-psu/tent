@@ -1,5 +1,6 @@
 import type { ConsentDecision } from '$lib/features/consent';
 import type { SmartCardData } from '$lib/features/kiosk-devices';
+import { languageStore, type LanguageCode } from '$lib/stores/language.svelte';
 import {
 	KioskRequestError,
 	type KioskRegistrationResult,
@@ -50,14 +51,51 @@ function isConsentExpired(cause: unknown): cause is KioskRequestError {
 export const THAID_CONSENT_EXPIRED_MESSAGE =
 	'การยินยอมและการยืนยันตัวตนด้วย ThaiD หมดเวลาแล้ว กรุณาสแกน ThaiD ใหม่อีกครั้ง';
 
-const CARD_MISMATCH_MESSAGE = 'บัตรไม่ตรงกับบัตรที่ค้นหา กรุณาเสียบบัตรเดิมหรือติดต่อเจ้าหน้าที่';
+/**
+ * Messages the walk-in screens show as they are. Each takes the language as a trailing argument
+ * that defaults to the kiosk's current one, so callers that already show `message` need no change.
+ */
+const MESSAGES: Record<
+	LanguageCode,
+	Record<'thaidExpired' | 'cardMismatch' | 'readFailed' | 'registerFailed', string>
+> = {
+	th: {
+		thaidExpired: THAID_CONSENT_EXPIRED_MESSAGE,
+		cardMismatch: 'บัตรไม่ตรงกับบัตรที่ค้นหา กรุณาเสียบบัตรเดิมหรือติดต่อเจ้าหน้าที่',
+		readFailed: 'อ่านข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง',
+		registerFailed: 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง'
+	},
+	en: {
+		thaidExpired: 'Consent and ThaiD verification timed out. Please scan ThaiD again',
+		cardMismatch:
+			'This is not the card you searched with. Please insert the original card or see staff',
+		readFailed: 'Could not read the data. Please try again',
+		registerFailed: 'Registration failed. Please try again'
+	}
+};
+
+/**
+ * English for the errors the register endpoint marks with a code. In Thai the server's own text is
+ * shown, so the two cannot drift apart for the language the server writes in.
+ */
+const CODED_MESSAGES_EN: Record<string, string> = {
+	KIOSK_PHONE_DUPLICATE:
+		'This phone number is already registered. Enter another number or tap "No phone"',
+	KIOSK_CONSENT_EXPIRED: 'Your consent timed out. Please give consent again',
+	KIOSK_THAID_SESSION_INVALID: 'ThaiD verification expired or is not valid. Please scan again'
+};
+
+function codedMessage(cause: KioskRequestError, language: LanguageCode): string {
+	return language === 'en' ? (CODED_MESSAGES_EN[cause.code ?? ''] ?? cause.message) : cause.message;
+}
 
 /** The card read is not the one the walk-in started with: the message to show, else null. */
 export function walkInCardMismatch(
 	card: SmartCardData,
-	session: Pick<WalkInCardSession, 'citizenId'>
+	session: Pick<WalkInCardSession, 'citizenId'>,
+	language: LanguageCode = languageStore.current
 ): string | null {
-	return card.citizen_id === session.citizenId ? null : CARD_MISMATCH_MESSAGE;
+	return card.citizen_id === session.citizenId ? null : MESSAGES[language].cardMismatch;
 }
 
 export async function registerWalkInCardRead(
@@ -67,10 +105,11 @@ export async function registerWalkInCardRead(
 		card: SmartCardData,
 		consent: ConsentDecision,
 		startedAt: string | null
-	) => Promise<KioskRegistrationResult>
+	) => Promise<KioskRegistrationResult>,
+	language: LanguageCode = languageStore.current
 ): Promise<WalkInCardRegistrationOutcome> {
 	if (!session.consentDecision || !session.citizenId || !card) return { kind: 'ignored' };
-	const mismatch = walkInCardMismatch(card, session);
+	const mismatch = walkInCardMismatch(card, session, language);
 	if (mismatch) return { kind: 'mismatch', message: mismatch };
 	try {
 		return {
@@ -78,11 +117,15 @@ export async function registerWalkInCardRead(
 			registration: await register(card, session.consentDecision, session.startedAt ?? null)
 		};
 	} catch (cause) {
-		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
-		if (isConsentExpired(cause)) return { kind: 'consent_expired', message: cause.message };
+		if (isPhoneDuplicate(cause)) {
+			return { kind: 'phone_duplicate', message: codedMessage(cause, language) };
+		}
+		if (isConsentExpired(cause)) {
+			return { kind: 'consent_expired', message: codedMessage(cause, language) };
+		}
 		return {
 			kind: 'error',
-			message: cause instanceof Error ? cause.message : 'อ่านข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง'
+			message: cause instanceof Error ? cause.message : MESSAGES[language].readFailed
 		};
 	}
 }
@@ -90,19 +133,32 @@ export async function registerWalkInCardRead(
 /** Register a walk-in from the full card read: compress the chip photo, send the card without it. */
 export function submitWalkInCard(
 	card: SmartCardData | null | undefined,
-	session: WalkInCardSession
+	session: WalkInCardSession,
+	language: LanguageCode = languageStore.current
 ): Promise<WalkInCardRegistrationOutcome> {
-	return registerWalkInCardRead(card, session, async (fullCard, consent, startedAt) => {
-		const photo = await buildKioskPhotoPayload(fullCard.photo_base64).catch(() => null);
-		const cardWithoutPhoto = { ...fullCard, photo_base64: undefined };
-		return registerKioskWalkIn(cardWithoutPhoto, photo, consent, session.phone ?? null, startedAt);
-	});
+	return registerWalkInCardRead(
+		card,
+		session,
+		async (fullCard, consent, startedAt) => {
+			const photo = await buildKioskPhotoPayload(fullCard.photo_base64).catch(() => null);
+			const cardWithoutPhoto = { ...fullCard, photo_base64: undefined };
+			return registerKioskWalkIn(
+				cardWithoutPhoto,
+				photo,
+				consent,
+				session.phone ?? null,
+				startedAt
+			);
+		},
+		language
+	);
 }
 
 /** Register a ThaiD walk-in: the server takes the citizen from the verified session (no photo). */
 export async function submitWalkInThaid(
 	session: Pick<WalkInSubmitSession, 'thaidSessionId' | 'consentDecision' | 'phone' | 'startedAt'>,
-	register: typeof registerKioskThaidWalkIn = registerKioskThaidWalkIn
+	register: typeof registerKioskThaidWalkIn = registerKioskThaidWalkIn,
+	language: LanguageCode = languageStore.current
 ): Promise<WalkInCardRegistrationOutcome> {
 	if (!session.consentDecision || !session.thaidSessionId) return { kind: 'ignored' };
 	try {
@@ -114,22 +170,27 @@ export async function submitWalkInThaid(
 		);
 		return { kind: 'registered', registration };
 	} catch (cause) {
-		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
-		if (isConsentExpired(cause))
-			return { kind: 'thaid_restart', message: THAID_CONSENT_EXPIRED_MESSAGE };
-		const message = cause instanceof Error ? cause.message : 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
-		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
-			return { kind: 'expired', message };
+		if (isPhoneDuplicate(cause)) {
+			return { kind: 'phone_duplicate', message: codedMessage(cause, language) };
 		}
+		if (isConsentExpired(cause))
+			return { kind: 'thaid_restart', message: MESSAGES[language].thaidExpired };
+		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
+			return { kind: 'expired', message: codedMessage(cause, language) };
+		}
+		const message = cause instanceof Error ? cause.message : MESSAGES[language].registerFailed;
 		return { kind: 'error', message };
 	}
 }
 
 /** The one submit of the walk-in flow (the phone step), whichever way they proved who they are. */
-export function submitWalkIn(session: WalkInSubmitSession): Promise<WalkInCardRegistrationOutcome> {
+export function submitWalkIn(
+	session: WalkInSubmitSession,
+	language: LanguageCode = languageStore.current
+): Promise<WalkInCardRegistrationOutcome> {
 	return session.source === 'thaid'
-		? submitWalkInThaid(session)
-		: submitWalkInCard(session.card, session);
+		? submitWalkInThaid(session, undefined, language)
+		: submitWalkInCard(session.card, session, language);
 }
 
 /**

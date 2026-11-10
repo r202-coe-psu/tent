@@ -2342,7 +2342,7 @@ index เดิมใช้กับ selector ของ `kiosk_banner_group` (`t
 
 ### 3.13 `config` — `config:public_portal` (singleton) · **schema_v 1** ([CR-184](../changes/12-public/CR-184-public-footer-logos.md))
 
-เนื้อหาของ public portal ที่ SA แก้จาก `/system-management/public-portal-config`. Envelope ตาม §0
+เนื้อหาของ public portal ที่ SA แก้จาก `/system-management/public-portal-config` (FAQ/ช่องทางติดต่อ) และ `/system-management/partner-logos` (`footer_logos` — ย้ายมา decision sync 2026-11-10, #1314). Envelope ตาม §0
 (`type: "config"`). BFF `GET /api/public/v1/config/faqs` อ่านจาก CouchDB ตรง (fallback FastAPI/Mongo `public_config`).
 Worker project ไป `public_config` ทั้งก้อน **ยกเว้น** `footer_logos` และ `_attachments` (CR-184 Q2, `PROJECTION_VERSION` 6 ร่วมกับ #727).
 
@@ -2362,7 +2362,7 @@ Worker project ไป `public_config` ทั้งก้อน **ยกเว้
 
 **Invariant:** ทุก entry ใน `footer_logos` มี attachment คู่กัน และไม่มี attachment `footer_logo_*` กำพร้า.
 
-**การเขียน:** SA เท่านั้น ผ่าน form action ของหน้า `public-portal-config` (admin credential) · ทุก write = PUT ทั้ง doc
+**การเขียน:** SA เท่านั้น ผ่าน form action ของหน้า `public-portal-config` (FAQ/social) และ `partner-logos` (โลโก้) (admin credential) · ทุก write = PUT ทั้ง doc
 ครั้งเดียวพร้อม attachment ตัวอื่นเป็น stub · การบันทึก FAQ/social ต้องคง `footer_logos` + `_attachments` จาก doc เดิม ·
 VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไขผู้เขียน `registry` เดิมคงไว้).
 
