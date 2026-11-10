@@ -24,6 +24,7 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Lock from '@lucide/svelte/icons/lock';
 	import Check from '@lucide/svelte/icons/check';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -235,16 +236,30 @@
 				</div>
 				<p class="text-xs text-muted-foreground">สังกัดศูนย์: {shelterLine}</p>
 				<div class="flex flex-wrap items-center gap-2 pt-1">
-					<Button
-						type="button"
-						size="sm"
-						class="h-9 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-						disabled={identityReviewMutation.isPending}
-						onclick={() => reviewIdentity(identityActionStatus)}
-					>
-						<Check class="h-3.5 w-3.5" />
-						{identityActionLabel}
-					</Button>
+					{#if identityStatus === 'verified'}
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							class="h-9 gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/40"
+							disabled={identityReviewMutation.isPending}
+							onclick={() => reviewIdentity(identityActionStatus)}
+						>
+							<RotateCcw class="h-3.5 w-3.5" />
+							{identityActionLabel}
+						</Button>
+					{:else}
+						<Button
+							type="button"
+							size="sm"
+							class="h-9 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+							disabled={identityReviewMutation.isPending}
+							onclick={() => reviewIdentity(identityActionStatus)}
+						>
+							<Check class="h-3.5 w-3.5" />
+							{identityActionLabel}
+						</Button>
+					{/if}
 					{#if identityStatus !== 'rejected'}
 						<Button
 							type="button"
