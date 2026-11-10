@@ -19,6 +19,7 @@ import type { VolunteerRepository } from '../data/volunteer.repository';
 import { isVolunteerMobile } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 import type { VolunteerAccount } from '../domain/volunteer-access-status';
+import type { CrossShelterMatch } from '../domain/cross-shelter-verification';
 
 /** No role is picked for the grant by default (#1072); saving without one says this. */
 export const ROLE_REQUIRED_MESSAGE = 'กรุณาเลือกตำแหน่งหน้าที่';
@@ -351,4 +352,21 @@ export async function revokeVolunteerGrant(
 			role: input.role
 		})
 	});
+}
+
+/**
+ * Other shelters' in-person results for the same person (CR-228), shown in the qualification
+ * dialog for staff to accept. Read-only: accepting writes this shelter's profile directly.
+ */
+export async function fetchCrossShelterVerifications(
+	volunteer: Pick<Volunteer, '_id' | 'shelter_code'>
+): Promise<CrossShelterMatch[]> {
+	const query = new URLSearchParams({
+		shelter_code: volunteer.shelter_code,
+		volunteer_id: volunteer._id
+	});
+	const { matches } = await serviceFetch<{ ok: true; matches: CrossShelterMatch[] }>(
+		`/api/v1/volunteer-access/cross-shelter-verifications?${query}`
+	);
+	return matches;
 }
