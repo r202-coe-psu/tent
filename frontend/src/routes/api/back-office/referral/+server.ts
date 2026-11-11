@@ -1,7 +1,13 @@
 /* eslint-disable no-restricted-imports */
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode, handleEndpointError } from './_auth';
+import {
+	allowedReferralTypes,
+	assertReferralTypeAllowed,
+	authorizeReferral,
+	resolveShelterCode,
+	handleEndpointError
+} from './_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
@@ -55,7 +61,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const query = parseListQuery(url.searchParams);
 
 		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
-		const page = await repo.listPage(query);
+		const types = allowedReferralTypes(caller, shelterCode);
+		const page = await repo.listPage(types ? { ...query, referral_types: [...types] } : query);
 
 		return json({
 			items: page.items.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)),
@@ -104,6 +111,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		if (!parsed.success) {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });
 		}
+
+		assertReferralTypeAllowed(caller, shelterCode, parsed.data.referral_type);
 
 		// FR-001: Self-referral guard
 		if (

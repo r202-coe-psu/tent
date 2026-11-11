@@ -290,7 +290,9 @@ export const referralFilterSchema = z.object({
 	/** Omitted = legacy `$or` over both directions (used for `evacuee_id` lookups). */
 	direction: referralDirectionFilterSchema.optional(),
 	/** Opaque Mango bookmark from the previous page; never combined with `skip`. */
-	bookmark: z.string().max(2000).optional()
+	bookmark: z.string().max(2000).optional(),
+	/** Server-side role limit (D16): only these referral types. Never from the query string. */
+	referral_types: z.array(referralTypeSchema).optional()
 });
 
 const DEFAULT_LIST_LIMIT = 50;

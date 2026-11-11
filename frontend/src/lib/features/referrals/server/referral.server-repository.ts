@@ -16,6 +16,13 @@ import {
 } from '../domain/referral.schema';
 import { applyTransition, canTransition } from '../domain/referral.transitions';
 import {
+	M5_REFERRAL_SCHEMA_V,
+	assertM5TransitionAllowed,
+	buildM5BatchReferralBodies,
+	type M5BatchInput,
+	type ReferralTransitionChannel
+} from '../domain/referral.m5';
+import {
 	assertActorMayTransition,
 	ReferralAuthorizationError
 } from '../domain/referral.authorization';
@@ -54,6 +61,26 @@ interface PutResultResponse {
 	id: string;
 	rev: string;
 }
+
+interface BulkDocsRow {
+	id: string;
+	rev?: string;
+	ok?: boolean;
+	error?: string;
+	reason?: string;
+}
+
+/** Extra knobs for `transition()` used by the M5 batch path (CR §4). */
+export type TransitionOptions = {
+	/** Who drives the transition; `row` (default) is the per-item endpoint. */
+	channel?: ReferralTransitionChannel;
+	/** Applied to the transitioned doc before it is written (e.g. attach `external`). */
+	patch?: (doc: Referral) => Referral;
+};
+
+/** Cap on members read for one `batch_id` (an M5 batch is one transfer, far below this). */
+const BATCH_ID_LIMIT = 1000;
+const UPDATE_MAX_ATTEMPTS = 3;
 
 let centralOpsDbCreated = false;
 async function ensureCentralDb() {
@@ -306,6 +333,9 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		if (parsed.evacuee_id) {
 			selector.evacuee_id = parsed.evacuee_id;
 		}
+		if (parsed.referral_types) {
+			selector.referral_type = { $in: parsed.referral_types };
+		}
 
 		const body: Record<string, unknown> = { selector, limit: parsed.limit, sort };
 		if (parsed.bookmark) {
@@ -341,6 +371,9 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 	 * keeps docs whose `referralBatchKey` matches.
 	 */
 	async getBatchFor(anchor: Referral): Promise<Referral[]> {
+		if ('batch_id' in anchor && anchor.batch_id) {
+			return this.findByBatchId(anchor.batch_id, anchor.shelter_code);
+		}
 		const { start, end } = referralBatchBucketBounds(anchor.created_at);
 		const key = referralBatchKey(anchor);
 		const limit = CouchDbReferralServerRepository.BATCH_LIMIT;
@@ -371,6 +404,76 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			bookmark = data.bookmark;
 		}
 		throw new CouchDbReferralError('Referral batch exceeds the page cap', 500);
+	}
+
+	/** Members of a stored batch (`batch_id`, M5), oldest first, scoped to the source shelter. */
+	async findByBatchId(batchId: string, shelterCode = this.contextShelterCode): Promise<Referral[]> {
+		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
+			selector: { type: 'referral', batch_id: batchId, shelter_code: shelterCode },
+			limit: BATCH_ID_LIMIT
+		});
+		if (status !== HTTP_OK) {
+			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
+		}
+		return (data.docs || [])
+			.filter((d): d is Referral => isReferral(d))
+			.sort((a, b) => a.created_at.localeCompare(b.created_at) || a._id.localeCompare(b._id));
+	}
+
+	/**
+	 * Create every draft of one M5 batch in a single `_bulk_docs` write (schema_v 3, FR-B2).
+	 * All-or-nothing: if any row fails, the rows that were written are deleted again.
+	 */
+	async createM5Batch(
+		input: M5BatchInput,
+		batchId: string,
+		ctx: AuthorContext,
+		summaries: ReadonlyMap<string, EvacueeSummary | undefined>
+	): Promise<Referral[]> {
+		const docs = buildM5BatchReferralBodies(input, batchId, summaries).map((body) =>
+			referralSchema.parse(makeDoc('referral', M5_REFERRAL_SCHEMA_V, body, ctx))
+		);
+		const { status, data } = await this.couchPost<BulkDocsRow[]>(this.dbName, '/_bulk_docs', {
+			docs
+		});
+		if (status !== HTTP_CREATED || !Array.isArray(data)) {
+			throw new CouchDbReferralError('Failed to create referral batch', status, data);
+		}
+		const written = data.filter((r) => r.ok && r.rev);
+		if (written.length !== docs.length) {
+			if (written.length) {
+				await this.couchPost(this.dbName, '/_bulk_docs', {
+					docs: written.map((r) => ({ _id: r.id, _rev: r.rev, _deleted: true }))
+				});
+			}
+			throw new CouchDbReferralError('Failed to create referral batch', 500, data);
+		}
+		const revs = new Map(written.map((r) => [r.id, r.rev!]));
+		return docs.map((d) => ({ ...d, _rev: revs.get(d._id) }));
+	}
+
+	/**
+	 * Read-modify-write of one referral without a status change (e.g. `external.status` after
+	 * TRF-005). `mutate` returns `null` to skip. Retries on 409.
+	 */
+	async update(id: string, mutate: (doc: Referral) => Referral | null): Promise<Referral | null> {
+		for (let attempt = 0; attempt < UPDATE_MAX_ATTEMPTS; attempt++) {
+			const latest = await this.get(id);
+			if (!latest) throw new CouchDbReferralError('Referral not found', HTTP_NOT_FOUND);
+			const next = mutate(latest);
+			if (!next) return null;
+			const touched = touch(next);
+			const { status, data } = await this.couchPut<PutResultResponse>(
+				this.dbName,
+				`/${encodeURIComponent(touched._id)}`,
+				touched
+			);
+			if (status === HTTP_CREATED || status === HTTP_OK) return { ...touched, _rev: data.rev };
+			if (status !== 409) {
+				throw new CouchDbReferralError('Failed to update referral', status, data);
+			}
+		}
+		throw new CouchDbReferralError('Conflict: referral update failed', 409);
 	}
 
 	async getBatch(id: string): Promise<Referral[]> {
@@ -439,7 +542,8 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		to: ReferralStatus,
 		actor: string,
 		reason?: string,
-		actorShelter?: string
+		actorShelter?: string,
+		options: TransitionOptions = {}
 	): Promise<Referral> {
 		const latest = await this.get(id);
 		if (!latest) {
@@ -462,6 +566,10 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			throw new CouchDbReferralError('Invalid referral transition', 422);
 		}
 
+		// M5 referrals: status comes from M5; send/withdraw only per batch (CR §4 rules 1–4).
+		// Throws ExternallyManagedError, which the retry loop never treats as a conflict.
+		assertM5TransitionAllowed(latest, to, options.channel ?? 'row');
+
 		const nowIso = new Date().toISOString();
 
 		// Capacity accept: cross-DB transfer BEFORE marking referral accepted (fail-fast).
@@ -477,7 +585,8 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			}
 		}
 
-		const updated = applyTransition(latest, to, actor, nowIso, reason);
+		const transitioned = applyTransition(latest, to, actor, nowIso, reason);
+		const updated = options.patch ? options.patch(transitioned) : transitioned;
 		const touched = touch(updated);
 
 		const { status, data } = await this.couchPut<PutResultResponse>(
