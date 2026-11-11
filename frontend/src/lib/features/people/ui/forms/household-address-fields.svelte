@@ -354,11 +354,12 @@
 				<Select.Trigger
 					id="housing-type"
 					class={selectTriggerClass}
-					title={housingTypeTriggerLabel}
 					aria-invalid={!!errors?.housing_type}
 					aria-describedby={errors?.housing_type ? 'housing-type-error' : undefined}
 				>
-					<span class="min-w-0 truncate leading-normal">{housingTypeTriggerLabel}</span>
+					<span class="min-w-0 truncate leading-normal" title={housingTypeTriggerLabel}
+						>{housingTypeTriggerLabel}</span
+					>
 				</Select.Trigger>
 				<Select.Content>
 					{#each housingTypeItems as opt (opt.value)}
