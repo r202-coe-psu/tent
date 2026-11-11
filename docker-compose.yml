@@ -81,9 +81,12 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
-      # Print housekeeping task (CR-222 FR-17) — off unless PRINT_HOUSEKEEPING_TOKEN is set
+      # Print housekeeping task (CR-222 FR-17) — dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the
+      # PRINT_HOUSEKEEPING_TOKEN in frontend/.env. Not PRINT_HOUSEKEEPING_TOKEN: the root .env
+      # carries a staging placeholder that would switch the task on against a token-less pnpm dev.
       PRINT_HOUSEKEEPING_URL: ${PRINT_HOUSEKEEPING_URL:-http://host.docker.internal:5173}
-      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:-}
+      PRINT_HOUSEKEEPING_TOKEN: ${DEV_PRINT_HOUSEKEEPING_TOKEN:-}
+      PRINT_HOUSEKEEPING_INTERVAL_MS: ${PRINT_HOUSEKEEPING_INTERVAL_MS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
