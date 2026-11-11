@@ -606,10 +606,13 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		const housing = page.locator('#housing-type');
 		await expect(housing).toHaveAccessibleName('ประเภทที่อยู่อาศัย');
 		await expect(housing).toHaveAccessibleDescription('');
-		await expect(housing.locator('span[title]')).toHaveAttribute(
-			'title',
+		// The full label wraps inside the trigger, so it is readable without a hover-only tooltip.
+		await expect(housing).toHaveText(
 			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
 		);
+		await expect(housing.locator('[title]')).toHaveCount(0);
+		const label = housing.locator('span').first();
+		expect(await label.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 
 		await page.locator('#province').click();
 		await expect(page.getByRole('button', { name: 'สงขลา', exact: true })).toBeVisible();
