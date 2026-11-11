@@ -124,7 +124,7 @@
 		</p>
 		<Button variant="outline" class="h-11 sm:h-10" disabled={shown === 0} onclick={onExport}>
 			<Download class="size-4" aria-hidden="true" />
-			Export CSV
+			ส่งออก CSV
 		</Button>
 	</div>
 </div>

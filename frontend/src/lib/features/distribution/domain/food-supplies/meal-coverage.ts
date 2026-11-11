@@ -26,6 +26,11 @@ export interface MealCoverageRow {
 	missing: MealPeriod[];
 }
 
+/** Whether a "one meal so far" group exists: it only does when a person needs two or more meals. */
+export function hasPartialStatus(threshold: number): boolean {
+	return threshold >= MIN_MEALS_PER_DAY;
+}
+
 /** How many main meals a person needs on record, given the meals that were actually served. */
 export function coverageThreshold(servedMeals: readonly MealPeriod[]): number {
 	return Math.min(MIN_MEALS_PER_DAY, servedMeals.length);

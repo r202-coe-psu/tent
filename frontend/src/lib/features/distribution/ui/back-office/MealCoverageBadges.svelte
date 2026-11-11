@@ -24,7 +24,7 @@
 			{@const recorded = received.includes(meal)}
 			{@const notYet = !recorded && !servedMeals.includes(meal)}
 			<li
-				class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium {recorded
+				class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold {recorded
 					? 'border-emerald-200 bg-emerald-50 text-emerald-900'
 					: notYet
 						? 'border-dashed border-slate-300 bg-white text-slate-500'
@@ -48,7 +48,7 @@
 	</ul>
 	{#if householdRecorded.length > 0}
 		<p
-			class="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-900"
+			class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900"
 		>
 			<Users class="size-3.5" aria-hidden="true" />
 			ครัวเรือนมีบันทึกรับ: {mealList(householdRecorded)}

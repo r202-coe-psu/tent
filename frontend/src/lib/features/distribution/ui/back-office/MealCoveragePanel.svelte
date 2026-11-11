@@ -14,6 +14,7 @@
 	import {
 		COVERAGE_MEALS,
 		coverageThreshold,
+		hasPartialStatus,
 		summarizeMealCoverage,
 		unscannedMeals
 	} from '../../domain/food-supplies/meal-coverage';
@@ -117,7 +118,7 @@
 		presentCount > 0 && threshold > 0 ? unscannedMeals({ day, logs, servedMeals }) : []
 	);
 	const counts = $derived(coverageCounts(allRows));
-	const showPartial = $derived(threshold >= 2);
+	const showPartial = $derived(hasPartialStatus(threshold));
 	const activeFilter = $derived(filter === 'partial' && !showPartial ? 'all' : filter);
 	const rows = $derived(
 		sortCoverageRows(filterCoverageRows(allRows, { filter: activeFilter, query, zone }))
@@ -151,12 +152,14 @@
 	<div class="flex flex-wrap items-end justify-between gap-3">
 		<div class="space-y-1">
 			<h3 id="meal-coverage-title" class="text-lg font-bold text-slate-900 sm:text-xl">
-				{threshold >= 2
+				{showPartial
 					? `ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารครบ ${threshold} มื้อ`
 					: 'ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารของมื้อที่ให้บริการแล้ว'}
 			</h3>
 			<p class="text-sm text-slate-500">
-				นับมื้อเช้า กลางวัน เย็น จากบันทึกการแจกของผู้ที่อยู่ในศูนย์ตลอดทั้งวัน
+				นับมื้อเช้า กลางวัน เย็น จากบันทึกการแจกของผู้ที่อยู่ในศูนย์{mode.kind === 'today'
+					? 'ตั้งแต่ต้นวันถึงตอนนี้'
+					: 'ตลอดทั้งวัน'}
 				มื้อที่แจกโดยไม่สแกนจะไม่ถูกนับ
 			</p>
 		</div>
@@ -189,7 +192,7 @@
 		</p>
 	{/if}
 
-	<MealCoverageAdvisories {skippedCount} unscannedMeals={isLoading || isError ? [] : unscanned} />
+	<MealCoverageAdvisories {skippedCount} unscanned={isLoading || isError ? [] : unscanned} />
 
 	{#if mode.kind === 'invalid'}
 		<div
@@ -198,7 +201,7 @@
 			เลือกวันที่ (ไม่เกินวันนี้)
 		</div>
 	{:else if isLoading}
-		<div class="flex items-center gap-2 p-6 text-sm text-slate-500">
+		<div class="flex items-center gap-2 p-6 text-sm text-slate-500" role="status">
 			<Loader class="size-4 animate-spin" aria-hidden="true" /> กำลังโหลด…
 		</div>
 	{:else if isError}
@@ -225,6 +228,7 @@
 			{presentCount}
 			{counts}
 			{threshold}
+			isToday={mode.kind === 'today'}
 			onSelect={selectFilter}
 		/>
 

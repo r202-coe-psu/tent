@@ -22,6 +22,7 @@
 
 <div class="overflow-x-auto">
 	<Table.Root class="w-full text-left text-sm text-slate-700">
+		<Table.Caption class="sr-only">รายชื่อผู้พักพิงที่ยังไม่มีบันทึกรับอาหารครบ</Table.Caption>
 		<Table.Header class="border-b border-slate-200 bg-slate-50/75 text-xs text-slate-600">
 			<Table.Row>
 				<Table.Head scope="col" class="px-4 py-3 font-semibold">ชื่อ</Table.Head>
@@ -45,14 +46,14 @@
 					<Table.Cell class="px-3 py-3 whitespace-nowrap">
 						{#if row.received.length === 0}
 							<span
-								class="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-800"
+								class="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-900"
 							>
 								<CircleAlert class="size-3.5" aria-hidden="true" />
 								{coverageStatusLabel(row)}
 							</span>
 						{:else}
 							<span
-								class="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"
+								class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
 							>
 								<TriangleAlert class="size-3.5" aria-hidden="true" />
 								{coverageStatusLabel(row)}
