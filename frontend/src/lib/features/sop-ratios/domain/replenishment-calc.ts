@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { parseQty, qtyGt, qtyLte, roundQtyNumber, type QtyValue } from '$lib/utils/qty';
 import type { ReplenishmentPolicy } from './replenishment-policy';
 
 export type DocAlertStatus =
@@ -25,17 +26,32 @@ export function calculateStandardReorderDays(
 }
 
 /**
- * คำนวณอัตราความต้องการสินค้ารายวัน (Item Daily Demand)
+ * คำนวณอัตราความต้องการสินค้ารายวัน (Item Daily Demand) — full precision
  * Formula: (Total Group Demand * (share_percent / 100)) / conversion_factor
  */
+export function calculateItemDailyDemandDecimal(
+	groupDailyDemand: QtyValue,
+	sharePercent: QtyValue, // 0 - 100
+	conversionFactor: QtyValue // > 0
+): Decimal {
+	const group = parseQty(groupDailyDemand);
+	const share = parseQty(sharePercent);
+	const cf = parseQty(conversionFactor);
+	if (group.lte(0) || cf.lte(0) || share.lte(0)) return new Decimal(0);
+	return group.mul(share.div(100)).div(cf);
+}
+
+/** Number form of {@link calculateItemDailyDemandDecimal} (display only). */
 export function calculateItemDailyDemand(
-	groupDailyDemand: number,
-	sharePercent: number, // 0 - 100
-	conversionFactor: number // > 0
+	groupDailyDemand: QtyValue,
+	sharePercent: QtyValue,
+	conversionFactor: QtyValue
 ): number {
-	if (groupDailyDemand <= 0 || conversionFactor <= 0 || sharePercent <= 0) return 0;
-	const share = new Decimal(sharePercent).div(100);
-	return new Decimal(groupDailyDemand).mul(share).div(conversionFactor).toNumber();
+	return calculateItemDailyDemandDecimal(
+		groupDailyDemand,
+		sharePercent,
+		conversionFactor
+	).toNumber();
 }
 
 /**
@@ -43,13 +59,14 @@ export function calculateItemDailyDemand(
  * ป้องกัน Infinity / NaN ด้วย Graceful Fallback (Invariant 4)
  */
 export function calculateReplenishmentAnalysis(
-	currentStock: number,
-	itemDailyDemand: number,
+	currentStock: QtyValue,
+	itemDailyDemand: QtyValue,
 	policy: ReplenishmentPolicy | null | undefined
 ): ReplenishmentAnalysisResult {
-	if (!policy || itemDailyDemand <= 0) {
+	const demand = parseQty(itemDailyDemand);
+	if (!policy || demand.lte(0)) {
 		return {
-			itemDailyDemand: Math.max(0, itemDailyDemand),
+			itemDailyDemand: Decimal.max(0, demand).toNumber(),
 			standardReorderDays: 0,
 			reorderLevel: 0,
 			docDays: null,
@@ -58,33 +75,30 @@ export function calculateReplenishmentAnalysis(
 		};
 	}
 
-	const stock = new Decimal(Math.max(0, currentStock));
-	const demand = new Decimal(itemDailyDemand);
+	const stock = Decimal.max(0, parseQty(currentStock));
 	const reorderDays = new Decimal(calculateStandardReorderDays(policy));
 
-	const reorderLevel = demand.mul(reorderDays).toNumber();
-	const docDays = demand.gt(0) ? stock.div(demand).toNumber() : null;
-	const shortageQty = Decimal.max(0, demand.mul(reorderDays).minus(stock)).toNumber();
+	const reorderLevel = demand.mul(reorderDays);
+	const docDecimal = stock.div(demand);
+	const shortageQty = Decimal.max(0, reorderLevel.minus(stock));
 
 	let status: DocAlertStatus;
-	if (docDays === null) {
-		status = 'UNCONFIGURED';
-	} else if (docDays <= policy.lead_time_days || docDays <= policy.min_doc_days) {
+	if (qtyLte(docDecimal, policy.lead_time_days) || qtyLte(docDecimal, policy.min_doc_days)) {
 		status = 'CRITICAL';
-	} else if (docDays <= reorderDays.toNumber()) {
+	} else if (qtyLte(docDecimal, reorderDays)) {
 		status = 'WARNING_REORDER';
-	} else if (policy.max_doc_days > 0 && docDays > policy.max_doc_days) {
+	} else if (policy.max_doc_days > 0 && qtyGt(docDecimal, policy.max_doc_days)) {
 		status = 'OVERSTOCK';
 	} else {
 		status = 'ADEQUATE';
 	}
 
 	return {
-		itemDailyDemand,
+		itemDailyDemand: demand.toNumber(),
 		standardReorderDays: reorderDays.toNumber(),
-		reorderLevel,
-		docDays,
-		shortageQty,
+		reorderLevel: reorderLevel.toNumber(),
+		docDays: roundQtyNumber(docDecimal),
+		shortageQty: shortageQty.toNumber(),
 		status
 	};
 }

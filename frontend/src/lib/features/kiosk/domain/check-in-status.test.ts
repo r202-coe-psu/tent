@@ -3,6 +3,8 @@ import {
 	isAlreadyCheckedInStatus,
 	isListedHouseholdMember,
 	isReprintableStatus,
+	localizeReprintReason,
+	REPRINT_NOBODY_REASON,
 	reprintUnavailableReason
 } from './check-in-status';
 
@@ -73,5 +75,24 @@ describe('isListedHouseholdMember', () => {
 				privacy: { search_excluded: true }
 			})
 		).toBe(false);
+	});
+});
+
+describe('reprintUnavailableReason language', () => {
+	it('explains in English when asked for English', () => {
+		expect(reprintUnavailableReason('pre_registered', 'en')).toBe(
+			'Not registered yet — use your ID card or ThaiD'
+		);
+		expect(reprintUnavailableReason('temporary_leave', 'en')).toBe(
+			'Temporarily away from the shelter — cannot print QR'
+		);
+	});
+
+	it('translates the shared reasons other modules hold as Thai text', () => {
+		expect(localizeReprintReason(REPRINT_NOBODY_REASON, 'en')).toBe(
+			'No one can print a QR. Please contact staff'
+		);
+		expect(localizeReprintReason(REPRINT_NOBODY_REASON, 'th')).toBe(REPRINT_NOBODY_REASON);
+		expect(localizeReprintReason('something else', 'en')).toBe('something else');
 	});
 });

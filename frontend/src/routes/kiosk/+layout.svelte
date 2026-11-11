@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
+	import { languageStore } from '$lib/stores/language.svelte';
 	import { getKioskDisplayContext, KioskShell, readKioskDisplayQuery } from '$lib/features/kiosk';
 
 	let { children }: { children: Snippet } = $props();
 
 	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams), languageStore.current)
 	);
 	const showClock = $derived(!page.url.pathname.startsWith('/kiosk/scanner/'));
 </script>

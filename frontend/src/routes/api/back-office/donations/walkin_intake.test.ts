@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw, requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import { sha256Hex } from '$lib/db/hash';
+import { createLotCounterMock } from '$lib/testing/lot-counter-mock';
+
+let counterMock = createLotCounterMock();
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -38,7 +41,10 @@ let written: BulkBody | null = null;
 
 function mockCouch() {
 	written = null;
+	counterMock = createLotCounterMock();
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string, body?: unknown) => {
+		const lc = counterMock.handle(path, method, body);
+		if (lc) return Promise.resolve(lc);
 		if (method === 'GET' && path.includes('/registry/')) {
 			return Promise.resolve({
 				status: 200,
@@ -48,7 +54,10 @@ function mockCouch() {
 		if (method === 'GET' && path.includes('/catalog/')) {
 			return Promise.resolve({ status: 200, data: { rows: catalogRows } });
 		}
-		// Lot allocation reads today's existing ledger rows; none yet.
+		// Counter seeding looks up today's existing lot numbers; none yet.
+		if (method === 'POST' && path.includes('_find')) {
+			return Promise.resolve({ status: 200, data: { docs: [] } });
+		}
 		if (method === 'GET' && path.includes('/shelter_sh001/')) {
 			return Promise.resolve({ status: 200, data: { rows: [] } });
 		}
@@ -114,13 +123,45 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 		expect(ledgers[0]).toMatchObject({ reason: 'donation', ref_id: donationId, qty: '10' });
 	});
 
+	it('answers 503 with the Thai message and writes nothing when lot numbers cannot be reserved (FR-8)', async () => {
+		mockCouch();
+		const base = vi.mocked(adminRaw).getMockImplementation()!;
+		vi.mocked(adminRaw).mockImplementation((path, method, body) =>
+			String(path).includes('lot_counter')
+				? Promise.resolve({ status: 503, data: null })
+				: base(path, method, body)
+		);
+
+		const res = await POST(event(validBody));
+
+		expect(res.status).toBe(503);
+		expect((await res.json()).error).toContain('ออกเลขล็อตไม่สำเร็จ');
+		expect(written).toBeNull();
+	});
+
+	it('answers 500 (not retryable) when the stored counter is corrupt', async () => {
+		mockCouch();
+		const base = vi.mocked(adminRaw).getMockImplementation()!;
+		vi.mocked(adminRaw).mockImplementation((path, method, body) =>
+			String(path).includes('lot_counter') && method === 'GET'
+				? Promise.resolve({ status: 200, data: { _id: 'lot_counter:x', _rev: '1-a', last: -5 } })
+				: base(path, method, body)
+		);
+
+		const res = await POST(event(validBody));
+
+		expect(res.status).toBe(500);
+		expect((await res.json()).error).toContain('ตัวนับเลขล็อตมีค่าไม่ถูกต้อง');
+		expect(written).toBeNull();
+	});
+
 	it('mints the lot number server-side and returns it for the box labels', async () => {
 		mockCouch();
 
 		const data = await (await POST(event(validBody))).json();
 
 		const lot = docsOfType('stock_ledger')[0].lot as { lot_no?: string; storage_zone?: string };
-		expect(lot.lot_no).toMatch(/^L-\d{6}-\d{3}$/);
+		expect(lot.lot_no).toMatch(/^L-\d{6}-\d{3}$/); // first of the day: 001
 		expect(lot.storage_zone).toBe('A-01');
 		expect(data.lots).toEqual([{ item_id: 'item:rice', lot_no: lot.lot_no }]);
 	});

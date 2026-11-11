@@ -8,6 +8,9 @@ import {
 	type StockLedger
 } from '$lib/features/operations/server';
 import type { AuditEntry } from '$lib/features/shared';
+import { createLotCounterMock } from '$lib/testing/lot-counter-mock';
+
+let counterMock = createLotCounterMock();
 
 /**
  * CR-206 — receiving one booking point by point at the scan station. The CouchDB here is a
@@ -126,7 +129,10 @@ function nextRev(rev: string | undefined): string {
 }
 
 function installCouch() {
+	counterMock = createLotCounterMock();
 	vi.mocked(adminRaw).mockImplementation(async (path: string, method: string, body?: unknown) => {
+		const lc = counterMock.handle(path, method, body);
+		if (lc) return lc;
 		if (method === 'GET' && path.includes('/registry/')) {
 			// The by-code view answers with the shelter doc; `_all_docs` lists the shelters.
 			const doc = path.includes('by_code')
@@ -203,7 +209,10 @@ const ledgerRows = () =>
 	[...couch.docs.values()].filter((d) => d.type === 'stock_ledger') as unknown as StockLedger[];
 const audits = () =>
 	[...couch.docs.values()].filter((d) => d.type === 'audit') as unknown as AuditEntry[];
-const puts = () => vi.mocked(adminRaw).mock.calls.filter((c) => c[1] === 'PUT');
+const puts = () =>
+	vi
+		.mocked(adminRaw)
+		.mock.calls.filter((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'));
 const bulkWrites = () =>
 	vi.mocked(adminRaw).mock.calls.filter((c) => String(c[0]).includes('_bulk_docs'));
 

@@ -20,12 +20,17 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
+		useCrossShelterVerifications,
 		useReviewVolunteerIdentity,
 		useReviewVolunteerSkill,
 		useSkillOptions
 	} from '../application/queries';
+	import { useShelters } from '$lib/features/shelters';
+	import { crossShelterLabel, type CrossShelterMatch } from '../domain/cross-shelter-verification';
 	import { isControlledSkill } from '../domain/skills';
 	import { resolveSkillOption } from '../domain/skill-catalog';
 	import {
@@ -33,6 +38,7 @@
 		skillVerificationRecord,
 		skillVerificationStatus,
 		VERIFICATION_STATUS_LABEL,
+		type AcceptedFrom,
 		type VerificationStatus
 	} from '../domain/verification';
 	import type { Volunteer } from '../domain/volunteer.schema';
@@ -43,6 +49,9 @@
 		label: string;
 		description: string;
 		status: VerificationStatus;
+		/** Verified by accepting another shelter's result (CR-228): no license field to fill. */
+		acceptedFrom: AcceptedFrom | null;
+		credentialReference: string | null;
 	};
 
 	let {
@@ -80,16 +89,111 @@
 				code,
 				label: option?.label ?? value,
 				description: option?.description ?? 'ทักษะควบคุมที่ต้องตรวจสอบก่อนรับรอง',
-				status: skillVerificationStatus(volunteer, code)
+				status: skillVerificationStatus(volunteer, code),
+				...acceptedSkill(code)
 			});
 		}
 		return Array.from(rows.values());
 	});
+	function acceptedSkill(code: string) {
+		const record = skillVerificationRecord(volunteer, code);
+		return {
+			acceptedFrom: record?.status === 'verified' ? (record.accepted_from ?? null) : null,
+			credentialReference: record?.credential_reference ?? null
+		};
+	}
 	const controlledSkills = $derived(
 		focusSkillCode && allControlledSkills.some((skill) => skill.code === focusSkillCode)
 			? allControlledSkills.filter((skill) => skill.code === focusSkillCode)
 			: allControlledSkills
 	);
+
+	// CR-228: what other shelters checked in person for the same person (same phone and ID),
+	// for SA / SM / coordinator to accept one by one. Reference only: nothing applies by itself.
+	const canSeeOtherShelters = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], volunteer.shelter_code)
+	);
+	const crossShelterQuery = useCrossShelterVerifications(
+		() => volunteer,
+		() => open && canSeeOtherShelters && volunteer.status !== 'inactive'
+	);
+	// A failed search hides the panel; checking by hand below still works (FR-12).
+	const crossShelterMatches = $derived(
+		crossShelterQuery.isError ? [] : (crossShelterQuery.data ?? [])
+	);
+	const identityReferences = $derived(
+		identityStatus === 'pending' ? crossShelterMatches.filter((match) => match.identity) : []
+	);
+	// Not state: it only remembers which failure was already toasted.
+	let toastedSearchError: unknown = null;
+	$effect(() => {
+		const error = crossShelterQuery.error;
+		if (!error || error === toastedSearchError) return;
+		toastedSearchError = error;
+		toast.error('ค้นผลยืนยันจากศูนย์อื่นไม่สำเร็จ ตรวจและบันทึกผลด้วยตนเองได้ตามปกติ');
+	});
+
+	function skillReferences(skill: ControlledSkillRow) {
+		if (skill.status !== 'pending') return [];
+		return crossShelterMatches.flatMap((match) =>
+			match.skills
+				.filter((ref) => ref.code === skill.code)
+				.map((ref) => ({ match, reviewedAt: ref.reviewed_at }))
+		);
+	}
+
+	// Names for the shelter an accepted result came from; the code stands in until it loads.
+	const sheltersQuery = useShelters();
+	function shelterLabel(code: string): string {
+		const shelter = sheltersQuery.data?.find((s) => s.code === code);
+		return crossShelterLabel({ shelter_code: code, shelter_name: shelter?.name ?? code });
+	}
+
+	const whenChecked = (reviewedAt: string | null) =>
+		reviewedAt ? `เมื่อ ${formatThaiShortDate(reviewedAt)}` : '(ไม่ระบุวันที่)';
+
+	const isPending = $derived(identityReviewMutation.isPending || skillReviewMutation.isPending);
+
+	/** Accept another shelter's identity result (FR-8): no notes, the source kept in `accepted_from`. */
+	async function acceptIdentity(match: CrossShelterMatch) {
+		if (isPending) return;
+		try {
+			await identityReviewMutation.mutateAsync({
+				id: volunteer._id,
+				status: 'verified',
+				notes: null,
+				acceptedFrom: {
+					shelter_code: match.shelter_code,
+					verified_at: match.identity?.reviewed_at ?? null
+				}
+			});
+			toast.success(`ยืนยันตัวตนโดยอ้างอิงผลจาก ${crossShelterLabel(match)} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'บันทึกผลยืนยันตัวตนไม่สำเร็จ');
+		}
+	}
+
+	/** Accept another shelter's skill result (FR-10): this shelter's own credential field, no notes. */
+	async function acceptSkill(
+		skill: ControlledSkillRow,
+		match: CrossShelterMatch,
+		reviewedAt: string | null
+	) {
+		if (isPending) return;
+		try {
+			await skillReviewMutation.mutateAsync({
+				id: volunteer._id,
+				skillCode: skill.code,
+				status: 'verified',
+				notes: null,
+				credentialReference: credentialReferenceValue(skill.code).trim() || null,
+				acceptedFrom: { shelter_code: match.shelter_code, verified_at: reviewedAt }
+			});
+			toast.success(`รับรองทักษะ${skill.label}โดยอ้างอิงผลจาก ${crossShelterLabel(match)} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'บันทึกผลรับรองทักษะไม่สำเร็จ');
+		}
+	}
 
 	let decision = $state<Decision>('controlled');
 	let notes = $state('');
@@ -108,7 +212,6 @@
 		lastOpenedId = volunteer._id;
 	});
 
-	const isPending = $derived(identityReviewMutation.isPending || skillReviewMutation.isPending);
 	const needsReason = $derived(decision === 'rejected' && notes.trim().length === 0);
 	const decisionLabel = $derived(
 		decision === 'controlled'
@@ -140,22 +243,36 @@
 		if (isPending || needsReason) return;
 		const reviewNotes = notes.trim() || null;
 		const skillStatus: VerificationStatus = decision === 'controlled' ? 'verified' : 'rejected';
+		const identityStatusNext: VerificationStatus =
+			decision === 'rejected' ? 'rejected' : 'verified';
+
+		// Keep any previously accepted source unless the decision turns it down (W2 / anti-chaining).
+		const preservedIdentityAcceptedFrom =
+			identityStatusNext === 'rejected'
+				? undefined
+				: (volunteer.identity_verification?.accepted_from ?? undefined);
 
 		try {
 			// These writes must be sequential. Each repository call reads the latest
 			// CouchDB revision, so parallel writes could race on the same volunteer.
 			await identityReviewMutation.mutateAsync({
 				id: volunteer._id,
-				status: decision === 'rejected' ? 'rejected' : 'verified',
-				notes: reviewNotes
+				status: identityStatusNext,
+				notes: reviewNotes,
+				...(preservedIdentityAcceptedFrom ? { acceptedFrom: preservedIdentityAcceptedFrom } : {})
 			});
 			for (const skill of controlledSkills) {
+				const existingRecord = skillVerificationRecord(volunteer, skill.code);
+				const preservedSkillAcceptedFrom =
+					skillStatus === 'rejected' ? undefined : (existingRecord?.accepted_from ?? undefined);
+
 				await skillReviewMutation.mutateAsync({
 					id: volunteer._id,
 					skillCode: skill.code,
 					status: skillStatus,
 					notes: reviewNotes,
-					credentialReference: credentialReferenceValue(skill.code).trim() || null
+					credentialReference: credentialReferenceValue(skill.code).trim() || null,
+					...(preservedSkillAcceptedFrom ? { acceptedFrom: preservedSkillAcceptedFrom } : {})
 				});
 			}
 			toast.success(`${decisionLabel}แล้ว`);
@@ -231,6 +348,38 @@
 						</Badge>
 					</div>
 				</div>
+				{#if identityReferences.length > 0}
+					<div
+						class="space-y-2 rounded-xl border border-sky-200 bg-sky-50/60 p-3"
+						data-testid="cross-shelter-identity"
+					>
+						<p class="text-xs font-semibold text-sky-900">
+							ผลยืนยันตัวตนจากศูนย์อื่น (ข้อมูลอ้างอิง)
+						</p>
+						<p class="text-xs text-sky-900">ตรวจบัตรประชาชนตัวจริงของจิตอาสาต่อหน้าก่อนกดยืนยัน</p>
+						{#each identityReferences as match (match.shelter_code)}
+							<div
+								class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background px-3 py-2"
+							>
+								<p class="text-sm text-foreground">
+									ยืนยันตัวตนแล้วที่ {crossShelterLabel(match)}
+									{whenChecked(match.identity?.reviewed_at ?? null)}
+								</p>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									class="gap-1.5"
+									disabled={isPending}
+									onclick={() => acceptIdentity(match)}
+								>
+									<BadgeCheck class="h-4 w-4" />
+									ยืนยันตัวตน (อ้างอิงผลจาก {crossShelterLabel(match)})
+								</Button>
+							</div>
+						{/each}
+					</div>
+				{/if}
 			</section>
 
 			<section class="space-y-3 rounded-xl border border-border p-4">
@@ -254,23 +403,58 @@
 										{VERIFICATION_STATUS_LABEL[skill.status]}
 									</Badge>
 								</div>
-								<div class="mt-2 text-xs text-violet-900/70">
-									<label
-										for={`credential-reference-${skill.code}`}
-										class="mb-1.5 block font-semibold"
+								{#if skill.acceptedFrom}
+									<div
+										class="mt-2 rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2 text-xs text-sky-900"
+										data-testid="accepted-skill"
 									>
-										เลขใบอนุญาต / เลข ว. / เอกสารอ้างอิง
-									</label>
-									<Input
-										id={`credential-reference-${skill.code}`}
-										value={credentialReferenceValue(skill.code)}
-										oninput={(event) => {
-											credentialReferences[skill.code] = event.currentTarget.value;
-										}}
-										placeholder="ระบุเลขที่ใบอนุญาตประกอบวิชาชีพ / เลข ว. / หมายเหตุวิชาชีพ..."
-										class="border-violet-200 bg-background"
-									/>
-								</div>
+										<p class="font-semibold">
+											ใช้ผลตรวจใบอนุญาตจาก {shelterLabel(skill.acceptedFrom.shelter_code)}
+											{whenChecked(skill.acceptedFrom.verified_at)}
+										</p>
+										<p class="mt-0.5">
+											เลขใบอนุญาตที่บันทึกในศูนย์นี้: {skill.credentialReference ?? 'ไม่ได้ระบุ'}
+										</p>
+									</div>
+								{:else}
+									<div class="mt-2 text-xs text-violet-900/70">
+										<label
+											for={`credential-reference-${skill.code}`}
+											class="mb-1.5 block font-semibold"
+										>
+											เลขใบอนุญาต / เลข ว. / เอกสารอ้างอิง
+										</label>
+										<Input
+											id={`credential-reference-${skill.code}`}
+											value={credentialReferenceValue(skill.code)}
+											oninput={(event) => {
+												credentialReferences[skill.code] = event.currentTarget.value;
+											}}
+											placeholder="ระบุเลขที่ใบอนุญาตประกอบวิชาชีพ / เลข ว. / หมายเหตุวิชาชีพ..."
+											class="border-violet-200 bg-background"
+										/>
+									</div>
+								{/if}
+								{#each skillReferences(skill) as ref (ref.match.shelter_code)}
+									<div
+										class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50/60 px-3 py-2"
+										data-testid="cross-shelter-skill"
+									>
+										<p class="text-xs text-sky-900">
+											รับรองแล้วที่ {crossShelterLabel(ref.match)}
+											{whenChecked(ref.reviewedAt)}
+										</p>
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											disabled={isPending}
+											onclick={() => acceptSkill(skill, ref.match, ref.reviewedAt)}
+										>
+											รับรองทักษะนี้
+										</Button>
+									</div>
+								{/each}
 							</div>
 						{/each}
 					</div>

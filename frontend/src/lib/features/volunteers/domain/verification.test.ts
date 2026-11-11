@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	hasPendingControlledSkill,
 	identityVerificationStatus,
+	isDirectlyVerified,
 	skillVerificationStatus
 } from './verification';
 
@@ -38,5 +39,21 @@ describe('volunteer verification helpers', () => {
 			}
 		};
 		expect(hasPendingControlledSkill(owner, ['medical'], ['medical'])).toBe(false);
+	});
+});
+
+describe('isDirectlyVerified (CR-228 FR-15)', () => {
+	it('counts only a verified result checked at its own shelter', () => {
+		expect(isDirectlyVerified({ status: 'verified' })).toBe(true);
+		expect(
+			isDirectlyVerified({
+				status: 'verified',
+				accepted_from: { shelter_code: 'SH001', verified_at: null }
+			})
+		).toBe(false);
+		expect(isDirectlyVerified({ status: 'pending' })).toBe(false);
+		expect(isDirectlyVerified({ status: 'rejected' })).toBe(false);
+		expect(isDirectlyVerified(null)).toBe(false);
+		expect(isDirectlyVerified(undefined)).toBe(false);
 	});
 });
