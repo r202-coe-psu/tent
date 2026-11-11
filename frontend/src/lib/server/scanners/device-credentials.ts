@@ -5,6 +5,7 @@ import {
 } from '$lib/server/device-auth/secret';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
 import {
+	isServiceOpen,
 	scannerDevicePersistedSchema,
 	type PersistedScannerDevice,
 	type ScannerBootstrapDevice
@@ -88,6 +89,8 @@ export interface ScannerDevicePrincipal {
 	readonly banner_group_id: string | null;
 	/** Which kiosk screen the device drives; absent on the doc = `compact`. */
 	readonly screen_type: KioskScreenType;
+	/** Service closure: `false` = "ปิดให้บริการ" (authenticated but refused service). */
+	readonly service_open: boolean;
 }
 
 export interface ScannerDeviceLookup {
@@ -144,7 +147,8 @@ export async function authenticateScannerDevice(
 		shelter_code: device.shelter_code,
 		station_name: device.station_name,
 		banner_group_id: device.banner_group_id ?? null,
-		screen_type: screenTypeOf(device)
+		screen_type: screenTypeOf(device),
+		service_open: isServiceOpen(device)
 	};
 }
 
@@ -161,6 +165,7 @@ export function toBootstrapDevice(
 		shelter_name: shelterName,
 		station_name: principal.station_name,
 		status,
-		last_seen_at
+		last_seen_at,
+		service_open: principal.service_open !== false
 	};
 }

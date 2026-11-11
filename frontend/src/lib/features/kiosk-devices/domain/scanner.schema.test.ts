@@ -14,6 +14,7 @@ import {
 	staffPinSchema,
 	staffPinUpdateRequestSchema,
 	scannerDeviceSummarySchema,
+	isServiceOpen,
 	toScannerDeviceSummary,
 	withoutScannerPlaintext
 } from './scanner.schema';
@@ -268,6 +269,42 @@ describe('scanner.schema', () => {
 				staffPinUpdateRequestSchema.safeParse({ pin: '482913', regenerate: true }).success
 			).toBe(false);
 			expect(staffPinUpdateRequestSchema.safeParse({}).success).toBe(false);
+		});
+	});
+});
+
+describe('service closure (service_open)', () => {
+	it('treats a doc without service_open as open, service_open:false as closed, and surfaces it in the summary', () => {
+		const open = scannerDevicePersistedSchema.parse(v2Doc);
+		const closed = scannerDevicePersistedSchema.parse({
+			...v2Doc,
+			service_open: false,
+			service_open_changed_at: '2026-11-11T08:00:00Z',
+			service_open_changed_by: 'staff-1'
+		});
+
+		expect(isServiceOpen(open)).toBe(true);
+		expect(isServiceOpen(closed)).toBe(false);
+
+		expect(toScannerDeviceSummary(open)).toMatchObject({
+			service_open: true,
+			service_open_changed_at: null,
+			service_open_changed_by: null
+		});
+		const summary = toScannerDeviceSummary(closed);
+		expect(summary).toMatchObject({
+			service_open: false,
+			service_open_changed_at: '2026-11-11T08:00:00Z',
+			service_open_changed_by: 'staff-1'
+		});
+		expect(scannerDeviceSummarySchema.safeParse(summary).success).toBe(true);
+		expect(withoutScannerPlaintext(summary)).toEqual(summary);
+
+		expect(scannerDevicePersistedSchema.safeParse({ ...v2Doc, service_oepn: true }).success).toBe(
+			false
+		);
+		expect(scannerDevicePatchSchema.parse({ service_open: false })).toEqual({
+			service_open: false
 		});
 	});
 });

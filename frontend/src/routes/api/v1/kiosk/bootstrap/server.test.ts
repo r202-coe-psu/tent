@@ -108,7 +108,8 @@ describe('POST /api/v1/kiosk/bootstrap', () => {
 			shelter_name: 'ศูนย์พักพิงทดสอบ',
 			station_name: 'โต๊ะ 1',
 			status: 'active',
-			last_seen_at: null
+			last_seen_at: null,
+			service_open: true
 		});
 		expect(data.device).not.toHaveProperty('secret_hash');
 		expect(data.device).not.toHaveProperty('_rev');

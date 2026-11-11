@@ -142,7 +142,11 @@ const scannerDevicePersistedBaseShape = {
 	/** Banner group the kiosk is fed from; absent or null = no group, no banners. */
 	banner_group_id: z.string().min(1).nullable().optional(),
 	/** Absent = `compact` (additive field, no `schema_v` bump). */
-	screen_type: kioskScreenTypeSchema.optional()
+	screen_type: kioskScreenTypeSchema.optional(),
+	/** Service closure ("ปิดให้บริการ"): absent = open (additive field, no `schema_v` bump). */
+	service_open: z.boolean().optional(),
+	service_open_changed_at: z.string().min(1).nullable().optional(),
+	service_open_changed_by: z.string().min(1).nullable().optional()
 };
 
 /** v1 document (before staff PIN). Read as "no PIN"; upgraded to v2 when a PIN is first set. */
@@ -171,6 +175,11 @@ export const scannerDevicePersistedSchema = z.discriminatedUnion('schema_v', [
 export type PersistedScannerDeviceV1 = z.infer<typeof scannerDevicePersistedV1Schema>;
 export type PersistedScannerDeviceV2 = z.infer<typeof scannerDevicePersistedV2Schema>;
 export type PersistedScannerDevice = z.infer<typeof scannerDevicePersistedSchema>;
+
+/** A kiosk is open for service unless the registry doc says `service_open: false`. */
+export function isServiceOpen(doc: { service_open?: boolean }): boolean {
+	return doc.service_open !== false;
+}
 
 export interface ScannerStaffPinState {
 	staff_pin_set: boolean;
@@ -215,7 +224,11 @@ export const scannerDeviceSummarySchema = z
 		/** Banner group the kiosk is fed from (stored absent = `null`: no group, no banners). */
 		banner_group_id: z.string().min(1).nullable(),
 		/** Which kiosk screen the device drives (stored absent = `compact`). */
-		screen_type: kioskScreenTypeSchema
+		screen_type: kioskScreenTypeSchema,
+		/** Service closure flag (stored absent = open). */
+		service_open: z.boolean(),
+		service_open_changed_at: z.string().min(1).nullable(),
+		service_open_changed_by: z.string().min(1).nullable()
 	})
 	.strict();
 
@@ -234,7 +247,8 @@ export const scannerDevicePatchSchema = z
 		name: scannerDeviceInputSchema.shape.name.optional(),
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').optional(),
 		status: deviceStatusSchema.optional(),
-		screen_type: kioskScreenTypeSchema.optional()
+		screen_type: kioskScreenTypeSchema.optional(),
+		service_open: z.boolean().optional()
 	})
 	.strict()
 	.refine((value) => Object.keys(value).length > 0, { message: 'ไม่มีข้อมูลที่จะแก้ไข' });
@@ -247,7 +261,9 @@ export const scannerBootstrapDeviceSchema = scannerDeviceSummarySchema
 		staff_pin_set: true,
 		staff_pin_is_default: true,
 		banner_group_id: true,
-		screen_type: true
+		screen_type: true,
+		service_open_changed_at: true,
+		service_open_changed_by: true
 	})
 	.extend({ shelter_name: z.string().trim().min(1) });
 export type ScannerBootstrapDevice = z.infer<typeof scannerBootstrapDeviceSchema>;
@@ -276,7 +292,10 @@ export function toScannerDeviceSummary(doc: PersistedScannerDevice): ScannerDevi
 		staff_pin_set: pin.staff_pin_set,
 		staff_pin_is_default: pin.staff_pin_is_default,
 		banner_group_id: doc.banner_group_id ?? null,
-		screen_type: screenTypeOf(doc)
+		screen_type: screenTypeOf(doc),
+		service_open: isServiceOpen(doc),
+		service_open_changed_at: doc.service_open_changed_at ?? null,
+		service_open_changed_by: doc.service_open_changed_by ?? null
 	};
 }
 
@@ -289,7 +308,8 @@ export function toScannerBootstrapDevice(doc: PersistedScannerDevice): ScannerBo
 		shelter_name: summary.shelter_code,
 		station_name: summary.station_name,
 		status: summary.status,
-		last_seen_at: summary.last_seen_at
+		last_seen_at: summary.last_seen_at,
+		service_open: summary.service_open
 	};
 }
 
@@ -313,7 +333,10 @@ export function withoutScannerPlaintext(
 		staff_pin_set: device.staff_pin_set,
 		staff_pin_is_default: device.staff_pin_is_default,
 		banner_group_id: device.banner_group_id,
-		screen_type: device.screen_type
+		screen_type: device.screen_type,
+		service_open: device.service_open,
+		service_open_changed_at: device.service_open_changed_at,
+		service_open_changed_by: device.service_open_changed_by
 	};
 }
 

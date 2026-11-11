@@ -206,7 +206,10 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 			staff_pin_set: false,
 			staff_pin_is_default: false,
 			banner_group_id: null,
-			screen_type: 'compact'
+			screen_type: 'compact',
+			service_open: true,
+			service_open_changed_at: null,
+			service_open_changed_by: null
 		});
 		expect(JSON.stringify(data)).not.toContain('secret_hash');
 	});

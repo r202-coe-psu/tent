@@ -20,6 +20,9 @@ const device = (id: string, over: Partial<ScannerDevice> = {}): ScannerDevice =>
 	staff_pin_is_default: false,
 	banner_group_id: null,
 	screen_type: 'compact',
+	service_open: true,
+	service_open_changed_at: null,
+	service_open_changed_by: null,
 	...over
 });
 
