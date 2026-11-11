@@ -1,3 +1,4 @@
+import { InvalidRatioQtyError } from '../domain/qty-input';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { persistQty } from '$lib/utils/qty';
 import { now } from '$lib/db/model';
@@ -45,7 +46,8 @@ export class RequirementGroupRemoteRepository {
 				effectiveMap.set(o._id, o);
 			}
 			return Array.from(effectiveMap.values()).map(normalizeRequirementGroup);
-		} catch {
+		} catch (error) {
+			if (error instanceof InvalidRatioQtyError) throw error;
 			return baselineDocs.map(normalizeRequirementGroup);
 		}
 	}
@@ -58,7 +60,8 @@ export class RequirementGroupRemoteRepository {
 				if (override && isRequirementGroup(override)) {
 					return normalizeRequirementGroup(override);
 				}
-			} catch {
+			} catch (error) {
+				if (error instanceof InvalidRatioQtyError) throw error;
 				// fallback to catalog
 			}
 		}
