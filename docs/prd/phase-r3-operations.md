@@ -5,7 +5,7 @@ phase: R3
 month: ก.ค.–ส.ค. 2026 (Operations Gate 22 ส.ค.)
 gate: Operations Gate
 created: 2026-06-03
-updated: 2026-10-20 # CR-155 amend — incident log จำกัดเป็น SO/SM/SA; เดิม 2026-10-08 shelter_incident replaces shelter_report
+updated: 2026-11-06 # CR-228 FR-42 โปรไฟล์ต่อศูนย์ + ผลยืนยันจากศูนย์อื่นแบบกดรับ; 2026-10-20 CR-155 amend — incident log จำกัดเป็น SO/SM/SA; เดิม 2026-10-08 shelter_incident replaces shelter_report
 ---
 
 # Phase R3 PRD: Operations — Donation, Kitchen, Volunteer, SOP & Shelter Reports
@@ -170,6 +170,7 @@ Kitchen Lead บันทึกการแจกจ่ายอาหารแ�
 - อาสาสมัครสามารถบันทึก/เปิดลิงก์ Digital Ticket หรือ QR Code เพื่อตรวจสอบสถานะการอนุมัติ วันเวลานัดหมาย หรือกดยกเลิก
 - โต๊ะลงทะเบียน/ต้อนรับของศูนย์สามารถสแกน QR Ticket เพื่อบันทึกการเช็คอิน (Check-in/Check-out Timestamp) เพื่ออัปเดตยอด `volunteers_active`
 - ข้อมูลส่วนตัวอาสา mask ตาม role เช่นเดียวกับผู้พักพิง (ต่อ NFR-5)
+- โปรไฟล์อาสาเก็บแยกต่อศูนย์ (ไม่มีโปรไฟล์กลาง) · ผลยืนยันตัวตน / รับรองทักษะที่ศูนย์อื่นตรวจตรงของคนเดียวกัน (`phone_hash` และ `national_id_hash` ตรงกัน) แสดงให้ SA / SM / VC ของศูนย์นี้เห็น และมีผลในศูนย์นี้เมื่อเจ้าหน้าที่กดรับเท่านั้น ไม่รับอัตโนมัติ ([CR-228](../changes/06-A-volunteer/CR-228-cross-shelter-verification-reference.md))
 
 #### FR-43: Volunteer Job Board, Configurable Shifts & Time-Bound Access
 

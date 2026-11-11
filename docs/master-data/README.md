@@ -2,7 +2,8 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-10-27
+updated: 2026-11-10
+note: decision sync 2026-11-10 (#1161, PR #1279) — ชี้แจงป้าย homeless ให้ตรง schema โดยคง code และความหมายเดิม
 language: th
 ---
 
@@ -105,13 +106,17 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 
 #### `housing_type` — ประเภทที่อยู่อาศัย
 
-| code             | label_th                          | label_en | default |
-| ---------------- | --------------------------------- | -------- | ------- |
-| `owned_house`    | บ้านตนเอง                         | Owned house | **ใช่** |
-| `rented_house`   | บ้านเช่า                          | Rented house | —       |
-| `condo`          | คอนโดมิเนียม                      | Condominium | —       |
-| `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                | Apartment / dormitory | —       |
-| `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
+| code             | label_th                                                           | label_en                                              | default |
+| ---------------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ------- |
+| `owned_house`    | บ้านตนเอง                                                          | Owned house                                           | **ใช่** |
+| `rented_house`   | บ้านเช่า                                                           | Rented house                                          | —       |
+| `condo`          | คอนโดมิเนียม                                                       | Condominium                                           | —       |
+| `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                                                 | Apartment / dormitory                                 | —       |
+| `homeless`       | ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด) | No fixed residence (no house number or fixed address) | —       |
+
+**หมายเหตุการเปลี่ยนชื่อ `homeless`:** ระบบที่ seed ไว้ก่อนการแก้ไขนี้จะยังแสดงชื่อเดิม จนกว่าจะรัน `pnpm seed:master` อีกครั้ง (คำสั่งนี้เขียนทับ `label_th` / `label_en` ของแถว `homeless`) หรือให้ผู้ดูแลระบบแก้ที่หน้าข้อมูลหลักครัวเรือน
+
+ค่าที่ศูนย์ตั้งเอง (`master_data:housing_type:{shelter}`) seed ไม่ได้แก้ให้ ต้องแก้ทีละศูนย์
 
 #### `shelter_type` — ประเภทอาคาร
 

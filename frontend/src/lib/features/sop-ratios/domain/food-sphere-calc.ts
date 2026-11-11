@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { parseQty } from '$lib/utils/qty';
 import type { FoodSphereStandard, TargetSegment } from './food-sphere';
 
 export type HeadcountBySegment = Record<TargetSegment, number>;
@@ -38,11 +39,11 @@ export function headcountsFromAgeGroups(
  * Total Daily Demand = sum( Headcount_segment * daily_demand_effective(segment, group) )
  * หากไม่มี food_sphere_standard สำหรับ (target_segment, req_group_id) คู่นั้น ระบบจะ fallback ไปใช้ target_segment = 'ALL'
  */
-export function calculateTotalDailyDemand(
+export function calculateTotalDailyDemandDecimal(
 	reqGroupId: string,
 	headcounts: Partial<HeadcountBySegment>,
 	standards: FoodSphereStandard[]
-): number {
+): Decimal {
 	let total = new Decimal(0);
 	const groupStandards = standards.filter(
 		(s) => s.req_group_id === reqGroupId && (s.status ?? 'active') === 'active'
@@ -55,10 +56,19 @@ export function calculateTotalDailyDemand(
 	][]) {
 		if (count === undefined || count === null || count <= 0) continue;
 		const std = groupStandards.find((s) => s.target_segment === segment) ?? fallbackAll;
-		if (std && std.daily_demand > 0) {
-			total = total.plus(new Decimal(count).mul(std.daily_demand));
+		if (std && parseQty(std.daily_demand).gt(0)) {
+			total = total.plus(new Decimal(count).mul(parseQty(std.daily_demand)));
 		}
 	}
 
-	return total.toNumber();
+	return total;
+}
+
+/** Number form of {@link calculateTotalDailyDemandDecimal} (display only). */
+export function calculateTotalDailyDemand(
+	reqGroupId: string,
+	headcounts: Partial<HeadcountBySegment>,
+	standards: FoodSphereStandard[]
+): number {
+	return calculateTotalDailyDemandDecimal(reqGroupId, headcounts, standards).toNumber();
 }

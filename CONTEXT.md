@@ -2,6 +2,8 @@
 
 Canonical glossary and domain model vocabulary for the Smart Shelter disaster evacuation management system.
 
+<!-- decision sync 2026-11-10 (#1161, PR #1279): ชี้แจงป้าย homeless โดยคง code และความหมายเดิม -->
+
 ## People & Intake
 
 **Evacuee**:
@@ -22,7 +24,7 @@ The shared dwelling address of a Household (where the unit lives while displaced
 _Avoid_: Domicile (ambiguous), home address, mailing address.
 
 **Housing Type**:
-A master-data classification of the Household's Residence kind: owned home, rented, condo, apartment/dorm, or homeless (includes no house number / canal-side — not a separate code).
+A master-data classification of the Household's Residence kind: owned home, rented, condo, apartment/dorm, or no fixed residence (no house number or fixed address — not a separate code).
 _Avoid_: House damage, shelter type, zone, no_house_number (folded into homeless).
 
 **Identity-document address**:

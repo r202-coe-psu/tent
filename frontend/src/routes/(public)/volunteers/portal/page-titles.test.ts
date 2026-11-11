@@ -19,6 +19,8 @@ vi.mock('$lib/features/volunteer-portal/application/queries', () => ({
 	useVolunteerProfile: () => idleQuery,
 	useVolunteerSchedule: () => idleQuery,
 	useVolunteerTickets: () => idleQuery,
+	useVolunteerApplications: () => idleQuery,
+	useCancelTicketMutation: () => idleMutation,
 	useUpdateProfileMutation: () => idleMutation,
 	useVolunteerSkills: () => ({ ...idleQuery, data: [] })
 }));

@@ -61,7 +61,7 @@ def _volunteer_doc(
     return {
         "_id": application.volunteer_id,
         "type": "volunteer",
-        "schema_v": 4,
+        "schema_v": 5,
         "shelter_code": application.shelter_code,
         "created_at": _iso(application.created_at),
         "updated_at": now,

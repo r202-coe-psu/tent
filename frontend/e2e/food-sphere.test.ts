@@ -67,7 +67,7 @@ type SphereDoc = {
 	type: 'food_sphere_standard';
 	target_segment: string;
 	req_group_id: string;
-	daily_demand: number;
+	daily_demand: number | string; // Legacy seed documents may contain numbers.
 	standard_uom?: string;
 	effective_date: string;
 	source: 'SPHERE_BASELINE' | 'SHELTER_OVERRIDE';

@@ -1,4 +1,8 @@
 <script lang="ts">
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
+
 	interface Props {
 		currentStep: 1 | 2 | 3 | 4 | 5;
 		step2Label?: string;
@@ -8,31 +12,28 @@
 		step4Label?: string;
 	}
 
-	let {
-		currentStep,
-		step2Label = 'สแกน',
-		step3Label = 'ค้นหา',
-		step4Label = 'สมาชิก'
-	}: Props = $props();
+	let { currentStep, step2Label, step3Label, step4Label }: Props = $props();
+
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current).wizard);
 
 	const steps = $derived([
-		{ id: 1, label: 'วิธีค้นหา' },
-		{ id: 2, label: step2Label },
-		{ id: 3, label: step3Label },
-		{ id: 4, label: step4Label },
-		{ id: 5, label: 'เสร็จสิ้น' }
+		{ id: 1, label: t.method },
+		{ id: 2, label: step2Label ?? t.scan },
+		{ id: 3, label: step3Label ?? t.lookup },
+		{ id: 4, label: step4Label ?? t.members },
+		{ id: 5, label: t.done }
 	]);
 	const currentLabel = $derived(steps[currentStep - 1].label);
 </script>
 
-<nav class="kiosk-check-in-wizard px-1" aria-label="ขั้นตอนรายงานตัว">
+<nav class="kiosk-check-in-wizard px-1" aria-label={t.navLabel}>
 	<div class="mb-2 flex items-center justify-between gap-3 text-sm kiosk-portrait:text-lg">
 		<p class="truncate font-semibold text-[#0A2647]" aria-live="polite">
-			ขั้น {currentStep} จาก 5 · {currentLabel}
+			{t.progress(currentStep, currentLabel)}
 		</p>
 	</div>
 	<div class="mt-2">
-		<ol class="progress-dashes flex w-full items-center" aria-label="5 ขั้นตอน">
+		<ol class="progress-dashes flex w-full items-center" aria-label={t.listLabel}>
 			{#each steps as step (step.id)}
 				<li
 					class="min-w-0 flex-1"

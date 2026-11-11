@@ -20,6 +20,7 @@ import { calculateShiftReconciliation } from '../food-supplies/reconciliation-wo
 import { resolveDispatchedLotExpiry } from '../food-supplies/lot-expiry';
 import { DEFAULT_QUERY_STALE_TIME_MS } from '$lib/db/query-client';
 import { operationsRepository } from '$lib/features/operations';
+import { peopleKeys, peopleRepository } from '$lib/features/people';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import {
 	getBulkReturnPoolOverview,
@@ -103,6 +104,54 @@ export const useDistributionLogsWithSkipped = (
 			queryKey: distributionKeys.logsWithSkipped(shelterCode),
 			queryFn: () => distributionLogRepository(shelterCode).listWithSkipped(),
 			enabled: Boolean(toValue(enabled) && shelterCode)
+		};
+	});
+
+/**
+ * Recorded allergies per evacuee for the food desk's household list (#1154 R7), keyed by
+ * evacuee id; an evacuee without a medical record maps to `[]`.
+ */
+export const useEvacueeAllergies = (
+	evacueeIds: MaybeGetter<readonly string[]>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const ids = [...toValue(evacueeIds)].sort();
+		return {
+			// Under the people medical key so the people live query refreshes it on a medical change.
+			queryKey: [...peopleKeys.medicals(), 'distribution_allergies', shelterCode, ids] as const,
+			queryFn: async (): Promise<Record<string, string[]>> => {
+				const repo = peopleRepository(shelterCode);
+				const entries = await Promise.all(
+					ids.map(
+						async (id) => [id, (await repo.getMedicalByEvacuee(id))?.allergies ?? []] as const
+					)
+				);
+				return Object.fromEntries(entries);
+			},
+			enabled: Boolean(toValue(enabled) && shelterCode && ids.length > 0)
+		};
+	});
+
+/** Logs of several recipients at once — every member of a household at the food desk (#1154). */
+export const useRecipientsDistributionLogs = (
+	recipientIds: MaybeGetter<readonly string[]>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const ids = [...toValue(recipientIds)].sort();
+		return {
+			queryKey: distributionKeys.recipientsLogs(shelterCode, ids),
+			queryFn: async () => {
+				const repo = distributionLogRepository(shelterCode);
+				const perRecipient = await Promise.all(ids.map((id) => repo.list({ recipient_id: id })));
+				return perRecipient.flat();
+			},
+			enabled: Boolean(toValue(enabled) && shelterCode && ids.length > 0)
 		};
 	});
 

@@ -120,6 +120,19 @@ describe('GET /api/back-office/stock/incoming', () => {
 		expect(adminRaw).not.toHaveBeenCalled();
 	});
 
+	it('checks the warehouse capability in the requested shelter, not any shelter (#477)', async () => {
+		// warehouse_staff in SH002 only; registration_staff in SH001.
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'w',
+			roles: ['registration_staff', 'shelter:SH001', 'warehouse_staff', 'shelter:SH002'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+		mockCouch([]);
+		expect((await GET(event({ shelter_code: 'SH001' }))).status).toBe(403);
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
 	it('rejects a malformed shelter_code', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue(sa);
 		expect((await GET(event({ shelter_code: '../x' }))).status).toBe(400);

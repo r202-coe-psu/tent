@@ -350,6 +350,7 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('ประเภทที่อยู่อาศัย');
 			expect(result.body).toContain('จุดสังเกตที่อยู่');
 			expect(result.body).toContain('บ้านเลขที่');
+			expect(result.body).toContain('for="address-no"');
 			expect(result.body).toContain('หมู่ที่ / ตรอก / ซอย / ถนน');
 			expect(result.body).toContain('99/1');
 			expect(result.body).toContain('ใกล้สะพาน');
@@ -370,7 +371,8 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			});
 			expect(result.body).toContain('จุดสังเกตที่อยู่');
 			expect(result.body).not.toContain('id="address-no"');
-			expect(result.body).not.toContain('บ้านเลขที่');
+			// The homeless option label itself mentions "บ้านเลขที่" (#1161), so check the field label only.
+			expect(result.body).not.toContain('for="address-no"');
 		});
 
 		it('uses DEFAULT_HOUSING_TYPES when loadMasterHousingTypes is false', () => {
@@ -399,7 +401,23 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 					loadMasterHousingTypes: false
 				}
 			});
-			expect(homeless.body).toContain('ไร้ที่อยู่อาศัยเป็นหลักแหล่ง');
+			expect(homeless.body).toContain(
+				'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
+			);
+		});
+
+		it('shows the full housing label in the trigger without a hover-only title', () => {
+			const result = render(HouseholdAddressFields, {
+				props: { housing_type: 'homeless', loadMasterHousingTypes: false }
+			});
+			const trigger =
+				result.body.match(/<button[^>]*id="housing-type"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '';
+			expect(trigger).toContain(
+				'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
+			);
+			expect(trigger).toContain('whitespace-normal');
+			expect(trigger).not.toContain('truncate');
+			expect(trigger).not.toContain('title=');
 		});
 
 		it('shows pre-reg semantic housing_type label even without master data', () => {
