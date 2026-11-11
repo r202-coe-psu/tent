@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	addQty,
+	parseQtyInput,
 	formatQty,
 	parseQty,
 	persistQty,
@@ -96,5 +97,26 @@ describe('formatQty', () => {
 
 	it('rounds past the quantity scale instead of showing float noise', () => {
 		expect(formatQty('1000.00005')).toBe('1,000.0001');
+	});
+});
+
+describe('parseQtyInput', () => {
+	it('returns the canonical qty string for what a number input can hold', () => {
+		const cases: [string, string][] = [
+			['0', '0'],
+			['12', '12'],
+			['-0.1', '-0.1'],
+			['0.30', '0.3'],
+			['.5', '0.5'],
+			['5.', '5'],
+			[' 1.2345 ', '1.2345']
+		];
+		for (const [raw, out] of cases) expect(parseQtyInput(raw)).toBe(out);
+	});
+
+	it('returns null for blanks, exponents, hex, and more than 4 decimals', () => {
+		for (const raw of ['', ' ', '.', '-', '1e3', '0x10', '1.23456', 'Infinity', '+1', '1 2']) {
+			expect(parseQtyInput(raw)).toBeNull();
+		}
 	});
 });

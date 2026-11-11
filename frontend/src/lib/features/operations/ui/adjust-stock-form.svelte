@@ -14,7 +14,15 @@
 	import ItemCombobox from './item-combobox.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
-	import { subQty, qtyAbs, qtyGt, persistQty } from '$lib/utils/qty';
+	import {
+		subQty,
+		qtyAbs,
+		qtyGt,
+		qtyGte,
+		qtyIsZero,
+		parseQtyInput,
+		persistQty
+	} from '$lib/utils/qty';
 	import { projectLotsByItem } from '../domain/operations';
 	import { isExpiryPassed } from '../domain/expiry-instant';
 	import { formatThaiShortDate } from '$lib/utils/date';
@@ -129,19 +137,23 @@
 	const currentLotQty = $derived(currentLot ? currentLot.qty : '0');
 	const systemQty = $derived(selectedLotKey === 'new' ? '0' : currentLotQty);
 
+	const NEW_QTY_HINT = 'จำนวนใหม่ต้องไม่ติดลบ ทศนิยมไม่เกิน 4 ตำแหน่ง';
+	const newQty = $derived(parseQtyInput(newQtyInput));
+	const newQtyInvalid = $derived(
+		newQtyInput.trim() !== '' && (newQty === null || !qtyGte(newQty, 0))
+	);
+
 	// Delta Calculation
 	const deltaQty = $derived.by(() => {
-		if (!newQtyInput || isNaN(Number(newQtyInput))) return '0';
+		if (newQty === null) return '0';
 		const base = selectedLotKey === 'new' ? '0' : currentLotQty;
-		return subQty(newQtyInput, base);
+		return subQty(newQty, base);
 	});
 
 	const deltaAbs = $derived(qtyAbs(deltaQty));
 	const deltaSign = $derived.by(() => {
-		const n = Number(deltaQty);
-		if (n < 0) return 'write_off' as const;
-		if (n > 0) return 'add' as const;
-		return null;
+		if (qtyIsZero(deltaQty)) return null;
+		return qtyGt(deltaQty, 0) ? ('add' as const) : ('write_off' as const);
 	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
@@ -229,11 +241,11 @@
 			toast.error('ล็อตที่เลือกไม่มีคงเหลือแล้ว กรุณาเลือกล็อตใหม่');
 			return;
 		}
-		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
-			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
+		if (newQty === null || !qtyGte(newQty, 0)) {
+			toast.error(NEW_QTY_HINT);
 			return;
 		}
-		if (deltaQty === '0') {
+		if (qtyIsZero(deltaQty)) {
 			toast.error('จำนวนใหม่เท่ากับจำนวนเดิม ไม่มีความเปลี่ยนแปลง');
 			return;
 		}
@@ -285,7 +297,7 @@
 			loading: 'กำลังบันทึก...',
 			success: () => {
 				const name = selectedItem?.name ?? input.item_id;
-				const signed = Number(deltaQty) > 0 ? `+${deltaQty}` : `${deltaQty}`;
+				const signed = qtyGt(deltaQty, 0) ? `+${deltaQty}` : `${deltaQty}`;
 				const summary = `${name} ${signed} ${selectedItem?.unit ?? ''}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
@@ -419,7 +431,8 @@
 								placeholder="0"
 								min="0"
 								step="any"
-								bind:value={newQtyInput}
+								value={newQtyInput}
+								oninput={(event) => (newQtyInput = event.currentTarget.value)}
 								class="min-h-11 border-sky-200 bg-white pr-14 font-mono text-lg font-bold"
 							/>
 							<span
@@ -428,6 +441,9 @@
 								{unitLabel}
 							</span>
 						</div>
+						{#if newQtyInvalid}
+							<p class="mt-1 text-xs font-semibold text-red-700" role="alert">{NEW_QTY_HINT}</p>
+						{/if}
 					</div>
 
 					<div
@@ -519,7 +535,7 @@
 						variant={deltaSign === 'write_off' ? 'destructive' : 'default'}
 						disabled={offline ||
 							isSubmitting ||
-							deltaQty === '0' ||
+							qtyIsZero(deltaQty) ||
 							!adjustReason ||
 							(noteRequired && !note.trim())}
 						class="min-h-11 w-full font-bold"

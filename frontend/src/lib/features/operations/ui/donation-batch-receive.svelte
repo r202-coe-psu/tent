@@ -252,7 +252,8 @@
 
 	function problemText(line: BatchLineDraft): string | null {
 		const problem = attempted ? draftProblem(line, requires(line)) : null;
-		if (problem === 'qty') return 'ระบุจำนวนที่รับจริง (ใส่ 0 ถ้าไม่ได้รับ)';
+		if (problem === 'qty')
+			return 'ระบุจำนวนที่รับจริง ทศนิยมไม่เกิน 4 ตำแหน่ง (ใส่ 0 ถ้าไม่ได้รับ)';
 		if (problem === 'item') return 'เลือกสินค้าให้ตรงกับรายการนี้ก่อนบันทึก';
 		if (problem === 'expiry') return 'สินค้านี้ต้องระบุวันหมดอายุ';
 		return null;

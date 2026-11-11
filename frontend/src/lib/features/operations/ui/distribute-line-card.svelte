@@ -4,7 +4,16 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { itemMasterUnit, itemSelectableUoms, qtyFromBaseUnit } from '$lib/features/catalog';
-	import { addQty, persistQty, qtyGt, qtyGte, qtyIsZero, qtyLte, subQty } from '$lib/utils/qty';
+	import {
+		addQty,
+		parseQtyInput,
+		persistQty,
+		qtyGt,
+		qtyGte,
+		qtyIsZero,
+		qtyLte,
+		subQty
+	} from '$lib/utils/qty';
 	import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
 	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
 	import Minus from '@lucide/svelte/icons/minus';
@@ -125,8 +134,7 @@
 	}
 
 	function stepQty(delta: number) {
-		const typed = line.qty.trim();
-		const current = typed !== '' && !Number.isNaN(Number(typed)) ? typed : '0';
+		const current = parseQtyInput(line.qty) ?? '0';
 		const next = delta >= 0 ? addQty(current, delta) : subQty(current, Math.abs(delta));
 		if (qtyLte(next, 0)) {
 			line.qty = '';
@@ -494,6 +502,10 @@
 					{baseUnitLabel} ขาดอีก {shortfall}
 					{baseUnitLabel} จึงยังบันทึกไม่ได้
 				</span>
+			</p>
+		{:else if verdict.kind === 'incomplete' && verdict.missing === 'qty' && line.qty.trim() !== ''}
+			<p class="text-sm font-semibold text-red-700" role="alert">
+				จำนวนต้องเป็นตัวเลขมากกว่า 0 ทศนิยมไม่เกิน 4 ตำแหน่ง
 			</p>
 		{:else if verdict.kind === 'incomplete' && verdict.missing === 'unit'}
 			<p class="text-sm font-semibold text-red-700" role="alert">

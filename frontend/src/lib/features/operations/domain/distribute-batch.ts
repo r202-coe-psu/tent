@@ -8,7 +8,7 @@
  */
 
 import { defaultIssueUom, qtyToBaseUnit, type PackagingSource } from '$lib/features/catalog';
-import { addQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+import { addQty, parseQtyInput, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import { distributeInputSchema, type StockLotBalance } from './operations';
 import { isLotExpired, rankLotsForIssue, type LotPriorityItem } from './lot-priority';
 import { planLotSplit, type LotAllocation, type LotSplitPlan } from './lot-split';
@@ -195,8 +195,8 @@ function checkLine(
 	const packaging = ctx.packaging.get(line.item_id);
 	if (!packaging) return { kind: 'incomplete', missing: 'item' };
 
-	const qty = line.qty.trim();
-	if (qty === '' || !Number.isFinite(Number(qty)) || !qtyGt(qty, 0)) {
+	const qty = parseQtyInput(line.qty);
+	if (qty === null || !qtyGt(qty, 0)) {
 		return { kind: 'incomplete', missing: 'qty' };
 	}
 	let baseQty: string;

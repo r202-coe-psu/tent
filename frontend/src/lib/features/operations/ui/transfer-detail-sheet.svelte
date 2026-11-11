@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { formatThaiDateTime } from '$lib/utils/date';
+	import { qtyIsZero, subQty } from '$lib/utils/qty';
 	import { transferItemLabel } from '../domain/transfer-item-label';
 	import { transferTimelineSteps } from '../domain/transfer-timeline';
 	import type { StockTransfer } from '../domain/operations';
@@ -68,17 +69,17 @@
 					<ul class="space-y-2">
 						{#each transfer.items as item (item.item_id)}
 							{@const line = lineOf(item)}
-							{@const received = item.received_qty !== undefined}
+							{@const received = item.received_qty}
 							<li class="rounded-lg border border-border/60 p-2.5 text-sm">
 								<p class="font-semibold">{line.name}</p>
 								<p class="text-xs text-muted-foreground">{item.qty} {line.unit}</p>
-								{#if received}
+								{#if received !== undefined}
 									<p
-										class="mt-0.5 text-xs {Number(item.received_qty) !== Number(item.qty)
+										class="mt-0.5 text-xs {!qtyIsZero(subQty(received, item.qty))
 											? 'font-bold text-rose-700'
 											: 'text-emerald-700'}"
 									>
-										รับจริง {item.received_qty}
+										รับจริง {received}
 										{line.unit}
 									</p>
 								{/if}

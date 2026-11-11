@@ -92,6 +92,16 @@ describe('checkDistributeBatch: balance per line (#837)', () => {
 		expect(water.baseQty).toBe('24');
 	});
 
+	it('a decimal typed without a leading zero is a quantity', () => {
+		const check = checkDistributeBatch([line({ item_id: RICE, qty: '.5', unit: 'ชิ้น' })], ctx());
+		expect(check.verdicts[0]).toMatchObject({ kind: 'ok', baseQty: '0.5' });
+	});
+
+	it('a quantity that is not a plain decimal string is incomplete (CR-038)', () => {
+		const check = checkDistributeBatch([line({ item_id: RICE, qty: '1e1', unit: 'ชิ้น' })], ctx());
+		expect(check.verdicts[0]).toEqual({ kind: 'incomplete', missing: 'qty' });
+	});
+
 	it('converts the typed unit to the base unit before comparing with the balance', () => {
 		const check = checkDistributeBatch([line({ item_id: WATER, qty: '9', unit: 'แพ็ค' })], ctx());
 		expect(check.verdicts[0]).toMatchObject({ kind: 'short', requested: '108', available: '100' });

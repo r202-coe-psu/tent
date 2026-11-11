@@ -91,6 +91,18 @@ export function qtyIsZero(value: QtyValue): boolean {
 	return parseQty(roundQty(value)).isZero();
 }
 
+const QTY_INPUT_RE = /^-?(\d+(\.\d{0,4})?|\.\d{1,4})$/;
+
+/**
+ * Parse what a person typed into a qty field: the canonical qty string, or null when it is not
+ * a plain decimal with ≤4 fractional digits. Accepts `.5` and `5.`, which a number input allows;
+ * rejects exponents, which it also allows but CR-038 does not.
+ */
+export function parseQtyInput(raw: string): string | null {
+	const trimmed = raw.trim();
+	return QTY_INPUT_RE.test(trimmed) ? persistQty(trimmed) : null;
+}
+
 /** Zod: transactional qty string (allows zero; signed). */
 export const qtyStrSchema = z
 	.string()
