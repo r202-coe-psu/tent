@@ -193,17 +193,17 @@
 		use:form.enhance
 		class={compact ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'space-y-6'}
 	>
-		<div class={compact ? 'min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6' : 'space-y-6'}>
-			<div class="space-y-2">
+		<div class={compact ? 'min-h-0 flex-1 space-y-3.5 overflow-y-auto p-4 sm:p-6' : 'space-y-3.5'}>
+			<div class="space-y-1.5">
 				<span class="text-sm font-semibold text-slate-800 dark:text-slate-200"> ประเภทข้อมูล </span>
 				<div
-					class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-3.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
+					class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-2.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
 				>
 					สูตรอาหาร
 				</div>
 			</div>
 
-			<Field.FieldGroup class="space-y-6">
+			<Field.FieldGroup class="gap-0 space-y-3.5">
 				<!-- SECTION 1: ข้อมูลสินค้า (Item Details) -->
 				<Form.Field {form} name="label">
 					<Form.Control>
@@ -215,7 +215,7 @@
 								{...props}
 								bind:value={$formData.label}
 								placeholder="เช่น ข้าวหอมมะลิ 100%, น้ำดื่ม 600ml"
-								class="w-full rounded-xl border border-slate-200/80 px-4 py-6 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+								class="h-10 w-full rounded-xl border border-slate-200/80 px-3.5 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
 							/>
 						{/snippet}
 					</Form.Control>
@@ -223,7 +223,7 @@
 				</Form.Field>
 				<!-- SECTION 2: รายการส่วนประกอบ (Ingredients / JSON) -->
 				<section
-					class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+					class="space-y-3.5 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/30"
 				>
 					<div class="flex items-center justify-between">
 						<div class="space-y-1">
@@ -375,7 +375,7 @@
 												$formData.standard_portions = '100';
 											}
 										}}
-										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
+										class="h-10 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -405,7 +405,7 @@
 												$formData.standard_duration_hours = '1';
 											}
 										}}
-										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
+										class="h-10 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -417,7 +417,7 @@
 				{#if isEdit}
 					<!-- SECTION: สถานะการใช้งาน (Status) -->
 					<section
-						class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+						class="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/30"
 					>
 						<div class="flex items-center justify-between">
 							<div class="space-y-0.5">
