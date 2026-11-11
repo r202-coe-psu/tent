@@ -387,7 +387,9 @@
 			});
 
 		// First visit: request GPS so the map can show the user marker without a distance click.
-		await ensureUserPosition();
+		// The page binds its own GPS result into `userLat`/`userLng`; when that lands first
+		// `ensureUserPosition` returns early, so commit here too (a no-op if the URL matches).
+		if (await ensureUserPosition()) commitFilters();
 		await locationsPromise;
 	});
 
