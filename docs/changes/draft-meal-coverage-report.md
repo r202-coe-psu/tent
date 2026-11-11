@@ -10,16 +10,19 @@ affects:
   - docs/sitemap.md (`/back-office/distribution` เพิ่มมุมมอง `?view=meal_coverage`)
   - docs/changes/03-C-supply/CR-121-spec-ticket.md (หน้า back-office distribution)
   - docs/changes/03-C-supply/CR-240-household-meal-pickup.md (อ้างอิง — ยังไม่ implement ใน code, ดู FR-MCR-22)
-  - frontend/scripts/redeploy-access.ts (Mango index `distribution_log` ตาม `distributed_at`)
+  - frontend/src/lib/server/shelter-access-design.ts (`DISTRIBUTION_LOG_DAY_MANGO_INDEX` — fields `type`, `distributed_at`)
+  - frontend/scripts/redeploy-access.ts, frontend/src/lib/server/shelters.admin.ts, frontend/src/lib/features/shelters/server/provisioner.ts (deploy index: ศูนย์เดิม + ศูนย์ใหม่)
   - frontend/scripts/seed/distribution.ts (log ย้อนหลัง 1 วันสำหรับทดสอบ)
-  - frontend/src/lib/features/distribution (domain `meal-coverage`, data `listByDistributedDay`, แท็บ `MealCoveragePanel`)
-  - frontend/src/lib/features/shared (`wasInShelterAllDay`, โซนของวันที่เลือก)
+  - frontend/src/lib/features/distribution (domain `meal-coverage`, data `DistributionLogRepository.listByDistributedDay`, hook `useDistributionLogsByDay`, แท็บ `MealCoveragePanel`)
+  - frontend/src/lib/features/shared (`wasInShelterAllDay`, `zoneOnDay`)
+  - frontend/src/lib/features/kitchen (`cooking-ingredients.ts` สร้าง category id ตอนเรียกใช้ ไม่ใช่ตอน import; `mealServiceReceiptOutcome` รับ `Pick<…,'outcome'>` — พฤติกรรมเดิม)
+  - frontend/src/lib/utils/download-csv.ts (ย้ายจาก features/operations เพื่อใช้ร่วม)
   - PR #1318 (implementation)
 why: >
   เจ้าหน้าที่ตามตัวผู้พักพิงที่อาจตกหล่นไม่ได้ เพราะไม่มีหน้าไหนสรุปว่าใครมีบันทึกรับอาหารไม่ถึง 2 มื้อต่อวัน
 migration: >
   N/A — อ่านอย่างเดียว ไม่เพิ่ม/แก้ field ใน doc ใด ไม่ bump `schema_v`.
-  ต้องรัน `pnpm redeploy:access` หนึ่งครั้งเพื่อสร้าง Mango index ใหม่ (ถ้าไม่รัน query ยังทำงาน แต่ scan ทั้ง DB)
+  ศูนย์ที่มีอยู่แล้วต้องรัน `pnpm redeploy:access` หนึ่งครั้งเพื่อสร้าง Mango index ใหม่ (ถ้าไม่รัน query ยังทำงาน แต่ scan ทั้ง DB); ศูนย์ที่สร้างใหม่ได้ index จาก provisioner
 ---
 
 # draft-meal-coverage-report — ผู้ยังไม่ได้รับอาหารครบ
@@ -66,8 +69,9 @@ migration: >
 | --- | --- |
 | FR-MCR-10 | เลือกวันได้ถึงวันนี้ ค่าเริ่มต้นคือเมื่อวาน วันอนาคตหรือค่าว่างแสดงข้อความให้เลือกวัน |
 | FR-MCR-11 | วันที่ผ่านมา: แสดงผู้ที่มีบันทึกน้อยกว่า 2 มื้อ |
-| FR-MCR-12 | วันนี้: "มื้อที่ให้บริการแล้ว" = มื้อที่มี `meal_service` ของ `date` + `meal` นั้นอย่างน้อย 1 ใบ ที่ไม่ถูก reject ตอนตรวจรับ (`meal_service_receipt.outcome = rejected`); ใบที่ยังไม่มี receipt นับว่าให้บริการแล้ว |
-| FR-MCR-13 | วันนี้: แสดงผู้ที่มีบันทึกน้อยกว่า `min(2, จำนวนมื้อที่ให้บริการแล้ว)` ผู้ที่มีบันทึกครบทุกมื้อที่ให้บริการแล้วไม่ถูกแสดง |
+| FR-MCR-12 | วันนี้: "มื้อที่ให้บริการแล้ว" = มื้อที่มี `meal_service` ของ `date` + `meal` นั้นอย่างน้อย 1 ใบ ที่ไม่ถูก reject ตอนตรวจรับ (`meal_service_receipt.outcome = rejected`); ใบที่ยังไม่มี receipt นับว่าให้บริการแล้ว; ใบที่มีหลาย receipt ใช้ receipt ล่าสุดตาม `created_at` |
+| FR-MCR-13 | วันนี้: แสดงผู้ที่มีบันทึกน้อยกว่า `min(2, จำนวนมื้อที่ให้บริการแล้ว)` ผู้ที่มีบันทึกครบทุกมื้อที่ให้บริการแล้วไม่ถูกแสดง; จำนวนบันทึกนับทุกมื้อหลักที่มี log ในวันนั้น รวมมื้อที่ยังไม่มี `meal_service` |
+| FR-MCR-13a | วันนี้ และเกณฑ์เหลือ 1 มื้อ: หัวข้อเปลี่ยนเป็น "ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารของมื้อที่ให้บริการแล้ว" และซ่อนการ์ด/ตัวเลือกสถานะ "มีบันทึก 1 มื้อ"; มื้อที่ยังไม่ให้บริการแสดง badge "ยังไม่ถึงมื้อ" |
 | FR-MCR-14 | วันนี้ และยังไม่มีมื้อที่ให้บริการแล้ว → แสดงข้อความ "ยังไม่มีมื้อที่ให้บริการวันนี้" ไม่แสดงรายชื่อ |
 | FR-MCR-15 | วันนี้: ฐานคนคือผู้ที่อยู่ในศูนย์ตั้งแต่ 00:00 ถึงเวลาปัจจุบัน; คอลัมน์ "มื้อที่ยังไม่มีบันทึก" แสดงเฉพาะมื้อที่ให้บริการแล้ว |
 
@@ -81,17 +85,17 @@ migration: >
 | FR-MCR-19 | แบ่งหน้า 20 คนต่อหน้า ฝั่ง client; เปลี่ยนวัน/ตัวกรอง/คำค้นแล้วกลับหน้า 1 |
 | FR-MCR-20 | โซน = โซนของผู้พักพิง ณ สิ้นวันที่เลือก (จาก `movement.zone` ล่าสุดก่อนสิ้นวัน; ไม่มีข้อมูลใช้ `current_stay.zone`) แสดงเป็นชื่อโซนของศูนย์ ไม่มีชื่อจึงแสดงรหัส |
 | FR-MCR-21 | ข้อความบนหน้าใช้ "ยังไม่มีบันทึกรับอาหาร" ห้ามใช้ "ไม่ได้กิน" |
-| FR-MCR-22 | แถวของผู้ที่สมาชิกคนอื่นใน `household_id` เดียวกันมีบันทึกรับมื้อที่ตนยังขาดในวันนั้น แสดงป้าย "ครัวเรือนมีบันทึกรับ" พร้อมชื่อมื้อ **ป้ายนี้ไม่เปลี่ยนจำนวนมื้อและไม่ตัดแถวออก** |
+| FR-MCR-22 | แถวของผู้ที่สมาชิกคนอื่นใน `household_id` เดียวกันมีบันทึกรับมื้อที่ตนยังขาดในวันนั้น แสดงป้าย "ครัวเรือนมีบันทึกรับ" พร้อมชื่อมื้อ **ป้ายนี้ไม่เปลี่ยนจำนวนมื้อและไม่ตัดแถวออก**; สมาชิกที่ไม่ได้อยู่ในศูนย์ตลอดวันก็นับเป็นผู้มีบันทึกของครัวเรือน |
 | FR-MCR-23 | มื้อ (เช้า/กลางวัน/เย็น) ที่ไม่มีบันทึกสแกนของผู้พักพิงเลยทั้งศูนย์ในวันนั้น แสดงคำเตือนสีเหลืองว่ามื้อนั้นอาจแจกโดยไม่สแกน (วันนี้: เฉพาะมื้อที่ให้บริการแล้ว) |
 | FR-MCR-24 | มี log ที่อ่านไม่ได้ → เตือนว่าจำนวนมื้ออาจต่ำกว่าความจริง; query ล้มเหลว → แสดง error ไม่แสดงรายการว่าง |
-| FR-MCR-25 | ปุ่ม "Export CSV" ส่งออกรายชื่อตามตัวกรองปัจจุบัน (ทุกหน้า) คอลัมน์: ชื่อ, โซน, มื้อที่มีบันทึก, มื้อที่ยังไม่มีบันทึก, สถานะ, ครัวเรือนมีบันทึกรับ; ไฟล์ UTF-8 มี BOM ชื่อ `meal-coverage-{shelter_code}-{YYYY-MM-DD}.csv`; ไม่มีเลขบัตรหรือเบอร์โทร |
+| FR-MCR-25 | ปุ่ม "ส่งออก CSV" ส่งออกรายชื่อตามตัวกรองปัจจุบัน (ทุกหน้า) คอลัมน์: ชื่อ, โซน, มื้อที่มีบันทึก, มื้อที่ยังไม่มีบันทึก, สถานะ, ครัวเรือนมีบันทึกรับ; ไฟล์ UTF-8 มี BOM ชื่อ `meal-coverage-{shelter_code}-{YYYY-MM-DD}.csv`; ไม่มีเลขบัตรหรือเบอร์โทร; ทุก cell ใส่ quote และ cell ที่ขึ้นต้นด้วย `=` `+` `-` `@` ถูกนำหน้าด้วย `'` (กัน formula injection); ปุ่มกดไม่ได้เมื่อไม่มีแถว |
 
 ### 5. Data และสิทธิ์
 
 | ID | Requirement |
 | --- | --- |
-| FR-MCR-26 | data layer มี query log ตามวันไทย (`listByDistributedDay`) คืนเฉพาะ log ที่ `distributed_at` อยู่ในช่วง `[00:00, 24:00)` เวลาไทยของวันที่ขอ |
-| FR-MCR-27 | query ใช้ Mango index บน `type` + `distributed_at` ที่สร้างโดย `pnpm redeploy:access` |
+| FR-MCR-26 | data layer มี query log ตามวันไทย (`listByDistributedDay`) คืนเฉพาะ log ที่ `distributed_at` อยู่ในช่วง `[00:00, 24:00)` เวลาไทยของวันที่ขอ ผ่าน Mango `_find` อ่านทีละ 200 ใบตาม `bookmark` จนหมด; request ล้มเหลว = reject |
+| FR-MCR-27 | query ใช้ Mango index `distribution-log-type-distributed-at-idx` (fields `type`, `distributed_at`) ที่สร้างโดย `pnpm redeploy:access` (ศูนย์เดิม), provisioner (ศูนย์ใหม่) และ seed; ไม่ระบุ `use_index` — ไม่มี index ก็ยังตอบได้ด้วยการ scan |
 | FR-MCR-28 | สิทธิ์เข้าแท็บ = guard เดิมของ `/back-office/distribution` (`requireWarehouseAccess`) ไม่เพิ่ม role; ขอบเขตข้อมูล = shelter DB ของศูนย์ที่เลือก |
 
 ## Acceptance
@@ -116,7 +120,7 @@ migration: >
 - อ่านอย่างเดียว ไม่มี write ต่อ doc ใด ไม่กระทบ worker / public plane / FastAPI
 - เพิ่ม Mango index 1 ตัวใน shelter DB ผ่าน `redeploy-access.ts` (deploy ต้องรัน `pnpm redeploy:access`)
 - แท็บโหลด `evacuee`, `movement` ทั้งศูนย์ (hook เดิม) และ `distribution_log` เฉพาะวันที่เลือก; แบ่งหน้าฝั่ง client เพราะรายชื่อคือผลต่างของสองชุดข้อมูล
-- อ่าน `meal_service` / `meal_service_receipt` ผ่าน barrel ของ feature `kitchen` (โหมดวันนี้เท่านั้น)
+- อ่าน `meal_service` / `meal_service_receipt` ผ่าน barrel ของ feature `kitchen`; hook โหลดทุกครั้งที่เปิดแท็บ แต่ผลถูกใช้เฉพาะโหมดวันนี้
 - CSV มีชื่อผู้พักพิง (PII ระดับชื่อ) ผู้ใช้ที่เข้าแท็บได้ทุกคน export ได้
 - Seed: `scripts/seed/distribution.ts` เพิ่ม log ย้อนหลัง 1 วัน เพื่อให้แท็บมีข้อมูลบน seed ใหม่
 
