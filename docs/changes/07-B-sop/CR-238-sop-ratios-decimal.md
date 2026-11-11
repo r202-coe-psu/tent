@@ -3,7 +3,7 @@ id: CR-238 # renumbered from draft-sop-ratios-decimal
 title: sop-ratios — ค่าตั้งต้น Food Sphere เป็น qty_str และคำนวณ/เทียบสถานะด้วย Decimal
 status: approved
 date: 2026-11-07
-updated: 2026-11-07 # approved (Soravit Sukkarn, Team Lead)
+updated: 2026-11-11
 requested_by: "PO decision 2026-10-27 (#794) ข้อ 3 — daily_demand / conversion_factor / share_percent เป็น qty_str; issue #936"
 decided_by: "Soravit Sukkarn (Team Lead)"
 decision_date: 2026-11-07
@@ -77,6 +77,27 @@ PO decision 2026-10-27 (#794) ข้อ 3: `daily_demand` / `conversion_factor` 
 - หมายเหตุ: schema.md §4.8 เขียน "DoC ต่ำกว่า min_doc_days" ซึ่งไม่ตรงกับโค้ด `≤` — CR นี้คงพฤติกรรมโค้ด (`≤`)
   และไม่แก้ข้อความ §4.8 (แยกเป็นเรื่องอื่น)
 
+### การตรวจค่า
+
+**ฟอร์ม (ฝั่งเขียน)**
+
+- V-1 — `share_percent` ที่ว่าง (`null` / `undefined` / `""`) ไม่ส่ง field ใน payload; `0` ที่กรอกจริงบันทึกเป็น `"0"`
+- V-2 — `share_percent` ต้องอยู่ในช่วง 0–100 โดยตรวจ**หลัง**ปัด 4 ตำแหน่ง (`100.00004` → `100` ผ่าน; `100.5` ไม่ผ่าน)
+- V-3 — `conversion_factor` ต้อง ≥ `0.0001` (ค่าต่ำสุดที่ยังไม่เป็น 0 หลังปัด 4 ตำแหน่ง)
+
+**ข้อมูลที่อ่านจาก CouchDB (ฝั่งอ่าน)**
+
+- V-4 — ตรวจชนิดก่อน coerce: รับเฉพาะ number ที่ finite หรือ string รูป `-?\d+(\.\d+)?`
+- V-5 — ค่าต่อไปนี้ถือว่า**อ่านไม่ได้**: ชนิดอื่น (รวม `undefined` ของ `daily_demand`), `null`, `""`, ช่องว่าง,
+  `NaN`, `Infinity`, ติดลบใน field ที่ห้ามติดลบ, `daily_demand` ≤ 0 หลังปัด, `share_percent` > 100 หลังปัด
+- V-6 — `conversion_factor` ที่ค่าดิบ > 0 แต่ปัดแล้วเป็น 0 (เช่น `0.00004`) ถือว่าอ่านไม่ได้ ไม่ใช้ fallback 1
+  (fallback ใช้เฉพาะค่าดิบ ≤ 0 ตามกติกาด้านบน)
+- V-7 — `share_percent` ที่ไม่มี field (`undefined`) ไม่ใช่ข้อผิดพลาด: นับเป็น "ไม่กรอก" ตามกติกาด้านบน
+- V-8 — เมื่อพบค่าอ่านไม่ได้ ระบบต้อง **fail-closed**: หยุดคำนวณทั้งตาราง แสดง alert ที่ระบุ `_id` และ field
+  (เช่น `requirement_group:DRINKING_WATER` ช่อง `item_maps[0].share_percent`) ไม่ข้าม record เงียบ ๆ
+  ไม่แสดงผลบางส่วน และไม่ตกไปใช้ค่า baseline แทนค่า override ของศูนย์
+- V-9 — เมื่อแก้ข้อมูลให้ถูกแล้ว alert หายและหน้ากลับมาคำนวณตามปกติ
+
 ### คงเดิม / นอกขอบเขต
 
 - `replenishment_policy` (`*_days` เป็น int — จำนวนวัน, out of scope ของ #794)
@@ -98,8 +119,15 @@ PO decision 2026-10-27 (#794) ข้อ 3: `daily_demand` / `conversion_factor` 
 ## Migration
 
 - ไม่มีสคริปต์ migrate และไม่ต้อง unseed
-- อ่าน: data adapter normalize ด้วย `qtyStrCoercePositiveSchema` / `qtyStrCoerceNonNegativeSchema`
-  (รับ number เดิมและ string) — doc `schema_v` 2 (food_sphere_standard) / 1 (requirement_group) ยังอ่านและคำนวณได้
+- อ่าน: data adapter ตรวจชนิดตาม V-4 แล้ว normalize (รับทั้ง number เดิมและ string) — doc `schema_v` 2
+  (food_sphere_standard) / 1 (requirement_group) ยังอ่านและคำนวณได้
+
+  | field               | schema ที่ใช้ normalize         | หมายเหตุ                                        |
+  | ------------------- | ------------------------------- | ----------------------------------------------- |
+  | `daily_demand`      | `qtyStrCoercePositiveSchema`    | ≤ 0 → อ่านไม่ได้                                |
+  | `share_percent`     | `qtyStrCoerceNonNegativeSchema` | > 100 หลังปัด → อ่านไม่ได้                      |
+  | `conversion_factor` | `qtyStrCoerceSchema`            | ไม่ใช้ Positive เพื่อคง fallback ค่าดิบ ≤ 0 → 1 |
+
 - เขียน: `persistQty` + `schema_v` ใหม่เสมอ → doc เก่าเปลี่ยนเป็น `qty_str` เมื่อถูกแก้ครั้งถัดไป
 - ช่วง client เก่า/ใหม่ปนกัน: client ใหม่อ่าน number เดิมที่ client เก่าเขียนได้ผ่าน coerce; ทั้งนี้ client เก่าจะกรอง doc ใหม่ออกเนื่องจาก predicate `isFoodSphereStandard` เดิมตรวจ `typeof daily_demand === 'number'` จึงต้องให้ client รีโหลดแอปเป็นเวอร์ชันใหม่เพื่อรองรับ doc ที่เขียนเป็น string
 - Seed fixture เปลี่ยนเป็น string
@@ -114,6 +142,10 @@ PO decision 2026-10-27 (#794) ข้อ 3: `daily_demand` / `conversion_factor` 
 - [ ] doc เก่าที่ `daily_demand` / `conversion_factor` / `share_percent` เป็น number อ่านและคำนวณได้ผลเท่ากับ string
 - [ ] เขียนใหม่ได้ `qty_str` + `schema_v` food_sphere_standard 3 / requirement_group 2
 - [ ] unit test เดิมผ่านโดยไม่แก้ค่า expected (ยกเว้นชนิด number → string ใน fixture/seed, และปรับ assertion ของฟังก์ชันที่เปลี่ยน signature เป็น Decimal)
+- [ ] ล้าง share ที่เคยเป็น `40` แล้วบันทึก → เปิดฟอร์มซ้ำ share ว่าง ไม่มี `40` ค้าง (V-1)
+- [ ] share `100.00004` บันทึกได้เป็น `100`; `100.5` ขึ้น error ใต้ช่อง (V-2)
+- [ ] doc ที่ `share_percent` = `"abc"` / `null` หรือ `daily_demand` ไม่มีค่า → แท็บสต็อกแสดง alert ระบุ `_id` + field และไม่แสดงตาราง/สรุป; แก้ doc แล้วกลับมาปกติ (V-5, V-8, V-9)
+- [ ] `conversion_factor` ค่าดิบ `0.00004` → alert; ค่าดิบ `0` หรือติดลบ → ใช้ 1 (V-6)
 - [ ] ทุก `.svelte` ที่แตะผ่าน `svelte-autofixer`
 
 ## Decision log
@@ -121,3 +153,5 @@ PO decision 2026-10-27 (#794) ข้อ 3: `daily_demand` / `conversion_factor` 
 - 2026-10-27 — PO decision (#794 ข้อ 3): daily_demand / conversion_factor / share_percent เป็น qty_str + bump schema_v
 - 2026-11-07 — proposed (draft; PR #1270)
 - 2026-11-07 — approved โดย Soravit Sukkarn (Team Lead) — มอบหมายเลข CR-238
+- 2026-11-11 — เพิ่มหัวข้อ "การตรวจค่า" (V-1..V-9) และ acceptance ที่เกี่ยวข้อง; ระบุ schema ฝั่งอ่านรายฟิลด์ใน
+  Migration — ไม่เปลี่ยนชนิดข้อมูล, `schema_v` หรือขอบเขตเดิม
