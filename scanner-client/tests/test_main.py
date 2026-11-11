@@ -39,9 +39,12 @@ class FakePage(FakeEmitter):
     def __init__(self):
         super().__init__()
         self.gotos = []
+        self.goto_error: Exception | None = None
 
     async def goto(self, url, **kwargs):
         self.gotos.append(url)
+        if self.goto_error is not None:
+            raise self.goto_error
 
 
 class FakeContext(FakeEmitter):
@@ -196,6 +199,23 @@ def test_closing_the_page_stops_the_watcher_and_returns(tmp_path):
 
     assert harness.watcher.stop.is_set()
     assert harness.watcher.finished
+
+
+def test_an_unreachable_shelter_logs_the_error_type_and_keeps_running_with_the_watcher(
+    tmp_path, caplog
+):
+    harness = Harness(tmp_path)
+    harness.playwright.page.goto_error = ConnectionError("net::ERR_NAME_NOT_RESOLVED secret-host")
+
+    with caplog.at_level(logging.WARNING):
+        harness.run()  # the window close still ends the app; nothing is raised
+
+    assert harness.watcher.stop is not None
+    assert harness.watcher.finished
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "ConnectionError" in warnings[0].getMessage()
+    assert "secret-host" not in warnings[0].getMessage()
 
 
 @pytest.mark.parametrize(

@@ -117,7 +117,10 @@ async def run_app(
 
         watcher_task = asyncio.create_task(watcher_factory(settings, handle_card).run(stop))
         try:
-            await page.goto(f"{settings.shelter_origin}/")
+            try:
+                await page.goto(f"{settings.shelter_origin}/")
+            except Exception as exc:  # unreachable shelter: keep the window open, staff can reload
+                log.warning("could not open the shelter page: %s", type(exc).__name__)
             await stop.wait()
         finally:
             stop.set()
