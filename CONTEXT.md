@@ -2,6 +2,8 @@
 
 Canonical glossary and domain model vocabulary for the Smart Shelter disaster evacuation management system.
 
+<!-- decision sync 2026-11-10 (#1161, PR #1279): ชี้แจงป้าย homeless โดยคง code และความหมายเดิม -->
+
 ## People & Intake
 
 **Evacuee**:
