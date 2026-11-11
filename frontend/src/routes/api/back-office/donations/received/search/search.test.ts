@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as route from './+server';
 import { adminRaw, requireShelterScopeOrSA } from '$lib/server/couch-admin';
+import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/server';
 
 const { POST } = route;
 type PostEvent = Parameters<typeof POST>[0];
@@ -71,7 +72,7 @@ function mockCouch(fake: Fake) {
 			if (fake.designVersion === 'missing') return Promise.resolve({ status: 404, data: {} });
 			return Promise.resolve({
 				status: 200,
-				data: { tent_view: { version: fake.designVersion ?? 7 } }
+				data: { tent_view: { version: fake.designVersion ?? SHELTER_VIEW_MANIFEST.version } }
 			});
 		}
 		const view = /\/_design\/app\/_view\/([a-z_]+)\?(.*)$/.exec(path);
@@ -456,7 +457,10 @@ describe('POST /api/back-office/donations/received/search (#821 FR-8)', () => {
 		});
 
 		it.each([
-			['view version 6 (not yet redeployed)', { designVersion: 6 }],
+			[
+				'an older view version (not yet redeployed)',
+				{ designVersion: SHELTER_VIEW_MANIFEST.version - 1 }
+			],
 			['no _design/app', { designVersion: 'missing' as const }],
 			['view missing from the design', { viewRows: {} }]
 		])('AC-6: 503 DONATION_INDEX_UNAVAILABLE when %s', async (_label, fake) => {

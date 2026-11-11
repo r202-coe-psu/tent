@@ -60,9 +60,13 @@ export function modeOwningStep(tab: StationTab): DeskMode | null {
 	return owners.length === 1 ? owners[0] : null;
 }
 
-/** Post-distribution tickets waiting on a direct frontline close-out action. */
+/**
+ * Post-distribution tickets waiting on a direct frontline close-out action: the shift is closed
+ * and the leftovers still have to go back. `RETURN_COMPLETED` is the warehouse's to finish, so it
+ * is not here.
+ */
 export function needsCloseOutAction(ticket: { status: RequisitionTicketStatus }): boolean {
-	return ticket.status === 'SHIFT_CLOSED' || ticket.status === 'RETURN_COMPLETED';
+	return ticket.status === 'SHIFT_CLOSED';
 }
 
 /** Work the desk must act on in a mode: cargo to receive plus close-outs to finish. */

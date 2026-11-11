@@ -31,4 +31,10 @@ describe('extractScanCode', () => {
 	it('trims surrounding whitespace', () => {
 		expect(extractScanCode('  V-002  ')).toBe('V-002');
 	});
+
+	it('keeps a Person QR with @hash6 intact so the hash reaches the scan rule (CR-233)', () => {
+		const qr = 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0@683508';
+		expect(extractScanCode(qr)).toBe(qr);
+		expect(extractScanCode(`  ${qr}\n`)).toBe(qr);
+	});
 });

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 	import {
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION
@@ -35,11 +38,16 @@
 		onrescan
 	}: Props = $props();
 
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current).lookupActions);
 	const isMethodDisabled = $derived(lookupErrorCode === 'KIOSK_METHOD_DISABLED');
 	const isPhoneLookupMiss = $derived(
 		isPhoneGate &&
 			(lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND' ||
 				lookupErrorCode === 'KIOSK_TOO_MANY_MATCHES')
+	);
+	/** CR-233: an expired / malformed Person QR cannot be retried; scan the latest one. */
+	const isQrRejected = $derived(
+		lookupErrorCode === 'KIOSK_QR_EXPIRED' || lookupErrorCode === 'KIOSK_QR_INVALID'
 	);
 	/** The verified ThaiD session was used up, expired or mismatched: only a new QR scan can go on. */
 	const isThaidSessionInvalid = $derived(lookupErrorCode === 'KIOSK_THAID_SESSION_INVALID');
@@ -52,13 +60,13 @@
 
 <!-- Rendered in a KioskNoticePanel's actions: the panel stacks and sizes them. -->
 {#if !backIsPrimary}
-	{#if isThaidSessionInvalid}
+	{#if isThaidSessionInvalid || isQrRejected}
 		<Button type="button" onclick={onrescan ?? onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
-			>สแกนใหม่</Button
+			>{t.scanAgain}</Button
 		>
 	{:else if isPhoneLookupMiss}
 		<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
-			>กรอกเบอร์ใหม่</Button
+			>{t.enterPhoneAgain}</Button
 		>
 	{:else}
 		<Button
@@ -68,11 +76,11 @@
 			class={KIOSK_NOTICE_PRIMARY_ACTION}
 		>
 			{#if retryAfterSeconds > 0}
-				ลองอีกครั้งใน <span class="tabular-nums">{retryAfterSeconds}</span> วินาที
+				{t.retryInBefore} <span class="tabular-nums">{retryAfterSeconds}</span> {t.retryInAfter}
 			{:else if isLookingUp}
-				กำลังค้นหา…
+				{t.searching}
 			{:else}
-				ลองอีกครั้ง
+				{t.retry}
 			{/if}
 		</Button>
 	{/if}
@@ -82,5 +90,6 @@
 	href={backIsPrimary ? homeUrl : backUrl}
 	variant={backIsPrimary ? 'default' : 'outline'}
 	onclick={isThaidGate ? undefined : onreset}
-	class={backIsPrimary ? KIOSK_NOTICE_PRIMARY_ACTION : KIOSK_NOTICE_SECONDARY_ACTION}>กลับ</Button
+	class={backIsPrimary ? KIOSK_NOTICE_PRIMARY_ACTION : KIOSK_NOTICE_SECONDARY_ACTION}
+	>{t.back}</Button
 >

@@ -66,6 +66,12 @@ vi.mock('../../application/queries', () => ({
 vi.mock('../../application/food-supplies/auth', () => ({
 	canPerformFrontlineDistribution: () => true
 }));
+vi.mock('$lib/features/catalog', () => ({
+	useItemMasters: () => ({ data: [] }),
+	useUnitsOfMeasure: () => ({ data: [] }),
+	itemMasterUnit: (item: { base_unit?: string }) => item.base_unit ?? '',
+	formatUnit: (code: string) => code
+}));
 vi.mock('$lib/stores/shelter.svelte', () => ({ shelterStore: { selectedShelterCode: 'SH001' } }));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));

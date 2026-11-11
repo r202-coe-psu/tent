@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { makeDoc, catalogDoc, type AuthorContext, touch, shelterCodeSchema } from '$lib/db/model';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared/domain/audit';
-import { qtyStrPositiveSchema } from '$lib/utils/qty';
+import { parseQty, qtyStrPositiveSchema } from '$lib/utils/qty';
 
 export const SOP_RATIO_KEYS = [
 	'water_l_per_person_day',
@@ -546,5 +546,25 @@ export function createNewVersion<T extends SopMaster | SopOverride>(
 		} as SopOverride;
 
 		return { deactivatedPrev, profile, audit } as CreateNewVersionResult<T>;
+	}
+}
+
+/**
+ * True when a ratio input differs from its initial value (Decimal compare).
+ * No current value -> false; unparsable or missing initial -> true.
+ */
+export function isRatioChanged(
+	current: string | number | undefined,
+	initial: string | number | undefined
+): boolean {
+	if (current === undefined) return false;
+	if (initial === undefined) return true;
+	try {
+		const a = parseQty(current);
+		const b = parseQty(initial);
+		if (!a.isFinite() || !b.isFinite()) return true;
+		return !a.eq(b);
+	} catch {
+		return true;
 	}
 }

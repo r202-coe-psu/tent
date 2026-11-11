@@ -8,6 +8,8 @@
  * effective SOP ratio vs stock_balance) — the return type is the stable seam.
  */
 
+import Decimal from 'decimal.js';
+import { parseQty } from '$lib/utils/qty';
 import { computeGap, type GapRow, type ResourceCalcSnapshot } from '../domain/resource-calc';
 import type { TrendSeries } from '../domain/trend';
 
@@ -30,7 +32,10 @@ function gapRow(
 		gap: computeGap(rest.need, rest.have),
 		provenance: {
 			occupancy,
-			ratio: occupancy > 0 ? Math.round((rest.need / occupancy) * 100) / 100 : 0,
+			ratio:
+				occupancy > 0
+					? parseQty(rest.need).div(occupancy).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber()
+					: 0,
 			stock: rest.have,
 			as_of: asOf
 		}

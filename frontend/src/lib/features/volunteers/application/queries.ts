@@ -40,13 +40,17 @@ import type { Job, JobInput } from '../domain/job.schema';
 import type { JobApplicationInput, JobApplicationStatus } from '../domain/job-application.schema';
 import type { CheckInMethod, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
 import type { Volunteer, VolunteerInput } from '../domain/volunteer.schema';
-import type { VerificationStatus } from '../domain/verification';
+import type { AcceptedFrom, VerificationStatus } from '../domain/verification';
 import { jobRepository } from '../data/job.remote';
 import { jobApplicationRepository } from '../data/job-application.remote';
 import { shiftAssignmentRepository } from '../data/shift-assignment.remote';
 import { volunteerRepository, volunteerRepositoryFor } from '../data/volunteer.remote';
 import { getVolunteerNamesByIds, uniqueVolunteerIds } from '../data/volunteer-names.remote';
-import { fetchShelterVolunteerAccounts, fetchVolunteerGrants } from './volunteer-access';
+import {
+	fetchCrossShelterVerifications,
+	fetchShelterVolunteerAccounts,
+	fetchVolunteerGrants
+} from './volunteer-access';
 import type {
 	JobApplicationFilter,
 	JobFilter,
@@ -107,7 +111,9 @@ export const volunteerKeys = {
 	/** Coordinator grants on the volunteer's account (#955); under `all` so a grant refetches it. */
 	grants: (shelterCode: string, volunteerId: string) =>
 		[...volunteerKeys.all, 'grants', shelterCode, volunteerId] as const,
-	accounts: (shelterCode: string) => [...volunteerKeys.all, 'accounts', shelterCode] as const
+	accounts: (shelterCode: string) => [...volunteerKeys.all, 'accounts', shelterCode] as const,
+	crossShelter: (shelterCode: string, volunteerId: string) =>
+		[...volunteerKeys.all, 'cross-shelter', shelterCode, volunteerId] as const
 };
 
 /** Build the `{shelterCode, createdBy}` author context the same way every mutation does. */
@@ -160,6 +166,18 @@ export const useVolunteerGrants = (
 		queryKey: volunteerKeys.grants(volunteer().shelter_code, volunteer()._id),
 		queryFn: () => fetchVolunteerGrants(volunteer()),
 		enabled: enabled()
+	}));
+
+/** Other shelters' in-person results for this profile (CR-228). Not retried: a 503 hides the panel. */
+export const useCrossShelterVerifications = (
+	volunteer: () => Pick<Volunteer, '_id' | 'shelter_code'>,
+	enabled: () => boolean
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.crossShelter(volunteer().shelter_code, volunteer()._id),
+		queryFn: () => fetchCrossShelterVerifications(volunteer()),
+		enabled: enabled(),
+		retry: false
 	}));
 
 export const useJobs = (filter?: JobFilter) =>
@@ -558,13 +576,22 @@ export const useReviewVolunteerIdentity = (queryClient: QueryClient) =>
 		mutationFn: ({
 			id,
 			status,
-			notes
+			notes,
+			acceptedFrom
 		}: {
 			id: string;
 			status: VerificationStatus;
 			notes?: string | null;
+			/** Accepting another shelter's result (CR-228 FR-8). */
+			acceptedFrom?: AcceptedFrom;
 		}) =>
-			volunteerRepository().reviewIdentity(id, status, authStore.user?.name ?? 'unknown', notes),
+			volunteerRepository().reviewIdentity(
+				id,
+				status,
+				authStore.user?.name ?? 'unknown',
+				notes,
+				acceptedFrom
+			),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
@@ -580,13 +607,16 @@ export const useReviewVolunteerSkill = (queryClient: QueryClient) =>
 			skillCode,
 			status,
 			notes,
-			credentialReference
+			credentialReference,
+			acceptedFrom
 		}: {
 			id: string;
 			skillCode: string;
 			status: VerificationStatus;
 			notes?: string | null;
 			credentialReference?: string | null;
+			/** Accepting another shelter's result (CR-228 FR-10). */
+			acceptedFrom?: AcceptedFrom;
 		}) =>
 			volunteerRepository().reviewSkill(
 				id,
@@ -594,7 +624,8 @@ export const useReviewVolunteerSkill = (queryClient: QueryClient) =>
 				status,
 				authStore.user?.name ?? 'unknown',
 				notes,
-				credentialReference
+				credentialReference,
+				acceptedFrom
 			),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });

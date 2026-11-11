@@ -66,6 +66,11 @@
 	let claimOpen = $state(false);
 	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
 	let lookupInFlight = $state(false);
+	/** Why the last scanned Person QR was refused; shown in the scanner modal, cleared on next scan. */
+	let scanRejection = $state<string | null>(null);
+	$effect(() => {
+		if (!showCameraModal) scanRejection = null;
+	});
 
 	/** Origin path so the evacuee profile can offer a correct back link. */
 	const listOrigin = $derived(`${page.url.pathname}${page.url.search}`);
@@ -96,6 +101,7 @@
 	async function handleCodeInput(raw: string) {
 		if (lookupInFlight) return;
 		lookupInFlight = true;
+		scanRejection = null;
 		try {
 			const result = await lookupFederatedByScanCode(queryClient, raw);
 			if (!result) {
@@ -103,6 +109,12 @@
 				searchQuery = raw;
 				showCameraModal = false;
 				toast.info(t.toastSearch(raw));
+				return;
+			}
+			if (result.source === 'qr_rejected') {
+				// Expired / invalid Person QR (CR-233): message only, nothing opened or recorded.
+				scanRejection = result.message;
+				toast.error('สแกนไม่ผ่าน');
 				return;
 			}
 			showCameraModal = false;
@@ -237,6 +249,14 @@
 				class="overflow-hidden rounded-lg"
 				{@attach cameraAttachment}
 			></div>
+		{/if}
+		{#if scanRejection}
+			<p
+				role="alert"
+				class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+			>
+				{scanRejection}
+			</p>
 		{/if}
 	</Dialog.Content>
 </Dialog.Root>

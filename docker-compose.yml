@@ -58,7 +58,9 @@ services:
     volumes:
       - ../deployment/tent/mongodb/data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      # mongosh is a ~150 MB Node process per probe; stalled probes piled up to 4.5 GB and
+      # caused the 2026-11-08 staging OOM. A TCP connect costs a few MB.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -79,6 +81,22 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+    restart: unless-stopped
+
+  edge-users-copy:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: edge-users-copy
+    command: ["uv", "run", "--project", "worker", "edge-users-copy"]
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+    mem_limit: 256m
     restart: unless-stopped
 
   fastapi:

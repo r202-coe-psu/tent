@@ -205,3 +205,17 @@ export function buildCloseShiftOptions(
 		returned_quantities: { ...normalizedValues }
 	};
 }
+
+/**
+ * A summed quantity with its unit when every item shares one ("150 กล่อง"); with mixed or unknown
+ * units the sum has no single unit, so only the number is shown.
+ */
+export function formatTotalWithUnit(
+	total: string,
+	itemIds: readonly string[],
+	unitOf: (itemId: string) => string
+): string {
+	const units = new Set(itemIds.map(unitOf));
+	const [unit] = units;
+	return units.size === 1 && unit ? `${total} ${unit}` : total;
+}

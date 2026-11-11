@@ -18,6 +18,15 @@ export {
 // Data — shared exceljs writer (reused by the dashboard numbers file, #1207)
 export { writeWorkbook, XLSX_MIME_TYPE, type WorkbookSheet } from './data/workbook';
 
+// Domain — dashboard numbers file (#1207)
+export {
+	DASHBOARD_SHEET_NAMES,
+	buildDashboardSheets,
+	type DashboardExportData
+} from './domain/dashboard-sheets';
+export type { ExportCell, ExportMeta, ExportSheet } from './domain/export-sheet';
+export { fileStamp, headingTimestamp } from './domain/export-time';
+
 // Application
 export {
 	exportConsulateList,
@@ -26,8 +35,10 @@ export {
 	type ExportConsulateInput,
 	type ExportConsulateResult
 } from './application/export-consulate';
+export { dashboardFileName, exportDashboard } from './application/export-dashboard';
 export { dataExportKeys, useExportCountries, useConsulateExport } from './application/queries';
 
 // UI
 export { default as ConsulateExportButton } from './ui/consulate-export-button.svelte';
 export { default as ConsulateExportDialog } from './ui/consulate-export-dialog.svelte';
+export { default as DashboardExportButton } from './ui/dashboard-export-button.svelte';

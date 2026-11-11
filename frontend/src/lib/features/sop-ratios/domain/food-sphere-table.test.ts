@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildFoodSphereTable, resolveItemPolicy } from './food-sphere-table';
+import { buildFoodSphereTable, resolveItemPolicy, InvalidStockQtyError } from './food-sphere-table';
 import { DEFAULT_FOOD_SPHERE_STANDARDS } from './food-sphere.fixture';
 import { DEFAULT_REQUIREMENT_GROUPS } from './requirement-group.fixture';
 import { DEFAULT_REPLENISHMENT_POLICIES } from './replenishment-policy.fixture';
 import type { ReplenishmentPolicy } from './replenishment-policy';
 import type { RequirementGroup } from './requirement-group';
+import type { FoodSphereStandard } from './food-sphere';
 
 describe('Food Sphere Table Domain Logic', () => {
 	const mockItemMasters = [
@@ -195,14 +196,14 @@ describe('Food Sphere Table Domain Logic', () => {
 					{
 						item_id: 'item_master:egg',
 						base_uom: 'piece',
-						conversion_factor: 6.3,
-						share_percent: 30
+						conversion_factor: '6.3',
+						share_percent: '30'
 					},
 					{
 						item_id: 'item_master:chicken',
 						base_uom: 'kg',
-						conversion_factor: 250,
-						share_percent: 70
+						conversion_factor: '250',
+						share_percent: '70'
 					}
 				],
 				source: 'SPHERE_BASELINE',
@@ -294,5 +295,165 @@ describe('Food Sphere Table Domain Logic', () => {
 			expect(result.groups.some((g) => g.id === 'FOOD_PROTEIN')).toBe(false);
 			expect(result.groups.some((g) => g.id === 'FOOD_ENERGY')).toBe(true);
 		});
+	});
+});
+
+describe('Food Sphere table decimal stock and demand (#936)', () => {
+	const RICE_MASTER = {
+		_id: 'item_master:rice',
+		name: 'ข้าวสารหอมมะลิ',
+		category: 'food',
+		base_unit: 'kg'
+	};
+	const BLANKET_MASTER = {
+		_id: 'item_master:blanket',
+		name: 'ผ้าห่มกันหนาว',
+		category: 'bedding',
+		base_unit: 'piece'
+	};
+
+	const ENERGY_GROUP = {
+		_id: 'requirement_group:FOOD_ENERGY',
+		type: 'requirement_group',
+		schema_v: 1,
+		name: 'พลังงาน',
+		standard_uom: 'kcal',
+		item_maps: [
+			{ item_id: 'item_master:rice', base_uom: 'kg', conversion_factor: '3', share_percent: '100' }
+		],
+		source: 'SPHERE_BASELINE',
+		created_at: '2026-07-16T00:00:00.000Z',
+		updated_at: '2026-07-16T00:00:00.000Z',
+		created_by: 'system'
+	} as unknown as RequirementGroup;
+
+	const ALL_STANDARD = {
+		_id: 'food_sphere_standard:ALL:FOOD_ENERGY',
+		type: 'food_sphere_standard',
+		schema_v: 3,
+		target_segment: 'ALL',
+		req_group_id: 'FOOD_ENERGY',
+		daily_demand: '2',
+		effective_date: '2026-07-16',
+		source: 'SPHERE_BASELINE',
+		created_at: '2026-07-16T00:00:00.000Z',
+		updated_at: '2026-07-16T00:00:00.000Z',
+		created_by: 'system'
+	} as unknown as FoodSphereStandard;
+
+	const RICE_ITEM_POLICY: ReplenishmentPolicy = {
+		_id: 'replenishment_policy:ITEM:item_master:rice',
+		type: 'replenishment_policy',
+		schema_v: 1,
+		scope_type: 'ITEM',
+		target_id: 'item_master:rice',
+		lead_time_days: 3,
+		review_period_days: 4,
+		safety_days: 3,
+		min_doc_days: 0,
+		max_doc_days: 45,
+		source: 'SPHERE_BASELINE',
+		created_at: '2026-07-16T00:00:00.000Z',
+		updated_at: '2026-07-16T00:00:00.000Z',
+		created_by: 'system'
+	};
+
+	function buildRiceTable(rawStock: string) {
+		return buildFoodSphereTable({
+			itemMasters: [RICE_MASTER],
+			balance: new Map([['item_master:rice', rawStock]]),
+			requirementGroups: [ENERGY_GROUP],
+			standards: [ALL_STANDARD],
+			policies: [RICE_ITEM_POLICY],
+			headcounts: { ALL: 1 }
+		});
+	}
+
+	function captureError(fn: () => unknown): unknown {
+		try {
+			fn();
+		} catch (error) {
+			return error;
+		}
+		throw new Error('expected the function to throw');
+	}
+
+	describe('unreadable stock values', () => {
+		it.each(['abc', '12abc', '', 'NaN', 'Infinity'])(
+			'mapped item with stock "%s" throws InvalidStockQtyError with the item id',
+			(raw) => {
+				const error = captureError(() => buildRiceTable(raw));
+				expect(error).toBeInstanceOf(InvalidStockQtyError);
+				expect((error as InvalidStockQtyError).itemId).toBe('item_master:rice');
+				expect((error as Error).message).toContain('item_master:rice');
+			}
+		);
+
+		it.each(['abc', '12abc', '', 'NaN', 'Infinity'])(
+			'unmapped item in the general group with stock "%s" throws InvalidStockQtyError',
+			(raw) => {
+				const error = captureError(() =>
+					buildFoodSphereTable({
+						itemMasters: [BLANKET_MASTER],
+						balance: new Map([['item_master:blanket', raw]]),
+						requirementGroups: [],
+						standards: [],
+						policies: [],
+						headcounts: {}
+					})
+				);
+				expect(error).toBeInstanceOf(InvalidStockQtyError);
+				expect((error as InvalidStockQtyError).itemId).toBe('item_master:blanket');
+				expect((error as Error).message).toContain('item_master:blanket');
+			}
+		);
+	});
+
+	describe('readable stock values', () => {
+		it.each([
+			{ raw: '0', expected: 0 },
+			{ raw: '0.0001', expected: 0.0001 },
+			{ raw: '-5', expected: 0 }
+		])('stock "$raw" is read as physicalStock $expected', ({ raw, expected }) => {
+			const result = buildRiceTable(raw);
+			const rice = result.groups.find((g) => g.id === 'FOOD_ENERGY')?.items[0];
+			expect(rice?.physicalStock).toBe(expected);
+		});
+	});
+
+	it('#936 end-to-end: 2 x 100% / 3 with stock 2 and lead 3 is CRITICAL at DoC 3', () => {
+		const result = buildRiceTable('2');
+		const rice = result.groups.find((g) => g.id === 'FOOD_ENERGY')?.items[0];
+		expect(rice?.status).toBe('CRITICAL');
+		expect(rice?.docDays).toBe(3);
+		expect(result.summary.criticalCount).toBe(1);
+	});
+
+	it('legacy numeric conversion_factor, share_percent and daily_demand give the same row as strings', () => {
+		const legacyGroup = {
+			...ENERGY_GROUP,
+			item_maps: [
+				{ item_id: 'item_master:rice', base_uom: 'kg', conversion_factor: 3, share_percent: 100 }
+			]
+		} as unknown as RequirementGroup;
+		const legacyStandard = {
+			...ALL_STANDARD,
+			daily_demand: 2,
+			schema_v: 2
+		} as unknown as FoodSphereStandard;
+
+		const build = (group: RequirementGroup, standard: FoodSphereStandard) =>
+			buildFoodSphereTable({
+				itemMasters: [RICE_MASTER],
+				balance: new Map([['item_master:rice', '2']]),
+				requirementGroups: [group],
+				standards: [standard],
+				policies: [RICE_ITEM_POLICY],
+				headcounts: { ALL: 1 }
+			});
+
+		expect(build(legacyGroup, legacyStandard).groups).toEqual(
+			build(ENERGY_GROUP, ALL_STANDARD).groups
+		);
 	});
 });

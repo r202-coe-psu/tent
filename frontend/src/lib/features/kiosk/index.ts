@@ -24,9 +24,14 @@ export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
 export { default as KioskVolunteerCard } from './ui/kiosk-volunteer-card.svelte';
 export { default as KioskPrintQrChooser } from './ui/kiosk-print-qr-chooser.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
+export { default as KioskLanguagePicker } from './ui/kiosk-language-picker.svelte';
+export { kioskLanguageSession } from './application/kiosk-language-session.svelte';
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
+export { default as InternalBannerDisplay } from './ui/internal-banner-display.svelte';
+export { default as InternalBannerKeypad } from './ui/internal-banner-keypad.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
-export { navigateToKioskHome } from './application/kiosk-navigation';
+export { navigateToKioskHome, returnToKioskLanguagePicker } from './application/kiosk-navigation';
+export { isKioskHomePath, KIOSK_LANGUAGE_PATH } from './domain/identity-method';
 export {
 	registerKioskWalkIn,
 	reprintKioskLabels,
@@ -37,6 +42,11 @@ export {
 } from './data/kiosk-check-in.api';
 export { fetchKioskConfig } from './data/kiosk-config.api';
 export { fetchKioskBanners } from './data/kiosk-banners.api';
+export { fetchInternalBanners, type InternalBannersResult } from './data/internal-banners.api';
+export {
+	InternalBannerDisplayController,
+	type InternalDisplayStatus
+} from './ui/internal-banner-display.svelte.js';
 export type { KioskBannerSlide } from './domain/kiosk-banner-feed';
 export {
 	KioskBannerAttractController,

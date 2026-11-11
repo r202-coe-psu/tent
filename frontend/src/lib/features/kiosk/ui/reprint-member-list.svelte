@@ -3,10 +3,9 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import type { KioskEvacueeSummary } from '../data/kiosk-check-in.api';
-	import {
-		REPRINT_PRE_REGISTERED_REASON,
-		reprintUnavailableReason
-	} from '../domain/check-in-status';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_REPRINT_I18N } from './_constants/kiosk-reprint.i18n';
 	import { KIOSK_NOTICE_SECONDARY_ACTION } from './kiosk-notice-actions';
 
 	interface Props {
@@ -27,22 +26,23 @@
 		ontoggleall
 	}: Props = $props();
 
+	const t = $derived(getTranslation(KIOSK_REPRINT_I18N, languageStore.current).memberList);
 	const selectableCount = $derived(members.filter((member) => member.selectable).length);
 
 	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
-		return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ';
+		return [member.first_name, member.last_name].filter(Boolean).join(' ') || t.noName;
 	}
 
 	function statusLabel(member: Pick<KioskEvacueeSummary, 'status' | 'selectable'>): string {
 		const { status } = member;
 		if (!member.selectable) {
-			const reason = reprintUnavailableReason(status);
-			if (reason) return reason;
+			if (status === 'pre_registered') return t.preRegisteredReason;
+			if (status === 'temporary_leave') return t.temporaryLeaveReason;
 		}
-		if (status === 'arriving') return 'รายงานตัวแล้ว · รอคัดกรอง';
-		if (status === 'room_confirmed') return 'ยืนยันที่พักแล้ว';
-		if (status === 'active') return 'เข้าพักแล้ว';
-		return REPRINT_PRE_REGISTERED_REASON;
+		if (status === 'arriving') return t.arriving;
+		if (status === 'room_confirmed') return t.room_confirmed;
+		if (status === 'active') return t.active;
+		return t.preRegisteredReason;
 	}
 </script>
 
@@ -62,10 +62,10 @@
 				id="reprint-members-title"
 				class="text-lg font-bold text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
 			>
-				เลือกสมาชิกที่ต้องการพิมพ์ QR
+				{t.heading}
 			</h2>
 			<p class="text-base text-slate-600 kiosk-portrait:text-xl kiosk-compact:text-sm">
-				ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว
+				{t.nameMasked}
 			</p>
 		</div>
 		{#if selectableCount > 1}
@@ -76,7 +76,7 @@
 				onclick={ontoggleall}
 				class="{KIOSK_NOTICE_SECONDARY_ACTION} w-auto shrink-0 kiosk-portrait:px-10"
 			>
-				{allSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+				{allSelected ? t.clearAll : t.selectAll}
 			</Button>
 		{/if}
 	</div>
@@ -119,7 +119,7 @@
 						class="mt-1 text-base text-slate-600 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:mt-0 kiosk-compact:text-sm"
 					>
 						{#if member.selectable}
-							{member.age === null ? 'ไม่ระบุอายุ' : `${member.age} ปี`}
+							{member.age === null ? t.ageUnknown : t.age(member.age)}
 							<span class="mx-1" aria-hidden="true">·</span>
 						{/if}{statusLabel(member)}
 					</p>

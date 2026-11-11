@@ -239,4 +239,66 @@ describe('KioskBannerAttractController', () => {
 		controller.destroy();
 		expect(vi.getTimerCount()).toBe(0);
 	});
+
+	describe('idle without banners', () => {
+		async function startedBare(initial: KioskBannerSlide[]) {
+			const fetchFn = vi.fn<() => Promise<KioskBannerSlide[]>>().mockResolvedValue(initial);
+			const onIdleWithoutBanners = vi.fn();
+			const controller = new KioskBannerAttractController({
+				fetch: fetchFn,
+				onIdleWithoutBanners
+			});
+			controller.start();
+			await vi.advanceTimersByTimeAsync(0);
+			return { fetchFn, controller, onIdleWithoutBanners };
+		}
+
+		it('calls onIdleWithoutBanners after 30 s idle when there are no banners', async () => {
+			const { controller, onIdleWithoutBanners } = await startedBare([]);
+			await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS - 1);
+			expect(onIdleWithoutBanners).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(onIdleWithoutBanners).toHaveBeenCalledOnce();
+			expect(controller.phase).toBe('hidden');
+			controller.destroy();
+		});
+
+		it('restarts the bare idle window on activity', async () => {
+			const { controller, onIdleWithoutBanners } = await startedBare([]);
+			await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS - 1);
+			controller.recordActivity();
+			await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS - 1);
+			expect(onIdleWithoutBanners).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(onIdleWithoutBanners).toHaveBeenCalledOnce();
+			controller.destroy();
+		});
+
+		it('leaves idle to the banners when there are any', async () => {
+			const { controller, onIdleWithoutBanners } = await startedBare([slide('a')]);
+			await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS * 2);
+			expect(controller.phase).toBe('showing');
+			expect(onIdleWithoutBanners).not.toHaveBeenCalled();
+			controller.destroy();
+		});
+
+		it('falls back to bare idle when a refresh empties the list', async () => {
+			const { fetchFn, controller, onIdleWithoutBanners } = await startedBare([slide('a')]);
+			fetchFn.mockResolvedValue([]);
+			await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS - 1);
+			controller.recordActivity();
+			await vi.advanceTimersByTimeAsync(KIOSK_BANNER_REFRESH_MS);
+			expect(controller.phase).toBe('hidden');
+			expect(onIdleWithoutBanners).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS);
+			expect(onIdleWithoutBanners).toHaveBeenCalledOnce();
+			controller.destroy();
+		});
+
+		it('destroy clears the bare idle timer', async () => {
+			const { controller } = await startedBare([]);
+			controller.destroy();
+			expect(vi.getTimerCount()).toBe(0);
+		});
+	});
 });

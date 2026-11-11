@@ -2,12 +2,13 @@
 title: Edge disaster continuity — operational idea (parked)
 status: idea / elevated-via-CR-064
 created: 2026-08-12
-updated: 2026-10-18
+updated: 2026-11-09
 note: >
   แนวคิดปฏิบัติการ LAN edge — elevate ผ่าน CR-064 (proposed) + T-54 Package B.
   Topology binding ยังอยู่ที่ docs/data/* จนกว่า CR-064 จะ approved แล้ว reconcile.
   OD-1..OD-5 ล็อกแล้ว (2026-08-12).
-  decision sync 2026-10-05 — OD-6 replicator credential = central admin ชุดเดียว (ดู §6 + Decision log).
+  decision sync 2026-10-05 — OD-6 replicator credential = central admin ชุดเดียว (ดู §6 + Decision log) —
+  **ถูกแทนแล้วด้วย docs/changes/01-core/CR-247-edge-per-shelter-repl-user.md (#1298): edge ใช้ replication user ต่อศูนย์ (`repl:<CODE>`) ไม่ถือ central admin**.
 related:
   - docs/changes/01-core/CR-064-edge-disaster-continuity.md
   - docs/changes/01-core/CR-033-remote-first-architecture-program-index.md
@@ -19,8 +20,6 @@ related:
 
 # Edge disaster continuity — operational idea (parked)
 
-
-
 ## สรุป (TL;DR)
 
 บันทึกแนวปฏิบัติการ: **แจก mini PC ที่ image พร้อมก่อนเหตุการณ์ → warm sync central→edge ตลอดช่วงเปิดศูนย์ → WAN ล่มแล้ว network-only cutover ไป edge (login ใหม่ได้) → WAN กลับแล้ว sync edge→central + ops UI สถานะ → ตัดกลับ central** · ไม่รวม FastAPI/Mongo บน edge · ไม่ scale user บน edge · **elevate ผ่าน [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md)** (proposed) + T-54 Package B · ยังไม่ supersede data-model/api-contract จนกว่า CR approve
@@ -31,19 +30,15 @@ related:
 
 ## 2. Locked assumptions (จากบทสนทนา 2026-08-12)
 
-
-| ID  | Assumption                                                                                                                  |
-| --- | --------------------------------------------------------------------------------------------------------------------------- |
-| A1  | **ไม่ scale / สร้าง user บน edge** — user provision ที่ central ก่อนเปิดศูนย์; edge ได้เฉพาะ filtered `_users` สำหรับ login |
-| A2  | DevOps แจก **mini computer + router** ที่ install/setup ครบก่อนเหตุการณ์                                                    |
-| A3  | ระหว่างสถานการณ์ (WAN ยังใช้ได้) mini PC **online** เพื่อ sync จาก central ลง edge ตลอด                                     |
-| A4  | Sync เฉพาะ **DB ของศูนย์นั้น** + **global DB ที่แชร์ระหว่างศูนย์** (`registry`, `catalog`)                                  |
+| ID  | Assumption                                                                                                                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | **ไม่ scale / สร้าง user บน edge** — user provision ที่ central ก่อนเปิดศูนย์; edge ได้เฉพาะ filtered `_users` สำหรับ login                  |
+| A2  | DevOps แจก **mini computer + router** ที่ install/setup ครบก่อนเหตุการณ์                                                                     |
+| A3  | ระหว่างสถานการณ์ (WAN ยังใช้ได้) mini PC **online** เพื่อ sync จาก central ลง edge ตลอด                                                      |
+| A4  | Sync เฉพาะ **DB ของศูนย์นั้น** + **global DB ที่แชร์ระหว่างศูนย์** (`registry`, `catalog`)                                                   |
 | A5  | ตอนล่ม: ใช้ระบบบน **local network**; DevOps ชี้ **domain เดิม** ไป edge (network-only); **login ใหม่บน edge ได้** (ไม่บังคับคง session เดิม) |
-| A6  | ตอน WAN กลับ: sync data กลับ central → แจ้งทุกศูนย์กลับไปใช้ central → วน loop เดิม                                         |
-| A7  | Edge เป็น **LAN continuity replica** ไม่ใช่ normal client hub / ไม่ใช่ public plane hub                                     |
-
-
-
+| A6  | ตอน WAN กลับ: sync data กลับ central → แจ้งทุกศูนย์กลับไปใช้ central → วน loop เดิม                                                          |
+| A7  | Edge เป็น **LAN continuity replica** ไม่ใช่ normal client hub / ไม่ใช่ public plane hub                                                      |
 
 ## 3. Operational loop
 
@@ -73,10 +68,7 @@ related:
   stop replication · wipe edge appliance · central retention clock
 ```
 
-
-
 ## 4. Data plane (intended)
-
 
 | DB / store                                   | While WAN up                                                 | During edge-only       | After WAN restore                            |
 | -------------------------------------------- | ------------------------------------------------------------ | ---------------------- | -------------------------------------------- |
@@ -86,7 +78,6 @@ related:
 | `_users`                                     | master central; **filtered central→edge** (`shelter:{code}`) | login via edge replica | re-login central; no edge→central user merge |
 | Mongo / public / FastAPI                     | worker from central                                          | stale or down          | catch-up after central heal                  |
 | `/api/v1/*` (users, export, mint, provision) | central only                                                 | **unavailable**        | resume on central                            |
-
 
 **Invariant:** active write target = **หนึ่ง endpoint ต่อเวลา** — ห้ามเขียน central และ edge พร้อมกัน
 
@@ -99,21 +90,17 @@ related:
 - Cross-shelter transfer / global dashboard ตอนเป็น edge islands
 - การเปิดศูนย์ใหม่ตอน WAN ล่ม (mint/provision = central-only)
 
-
-
 ## 6. Locked decisions (2026-08-12 · OD-6 2026-10-05)
 
-| ID | Decision | Implication |
-| --- | --- | --- |
-| **OD-1** | Edge image = **staff stack ครบ** (CouchDB + nginx `/couch` + staff SPA Node) — **ยกเว้น FastAPI + MongoDB** | Public plane ไม่รันบน edge; `/api/v1` central-only ยัง degraded ตอน edge-only |
-| **OD-2** | Failover = **network-only** — router/DNS ชี้ domain เดิมไป edge; app ไม่สลับ `ActiveEndpoint` เอง | C1–C3 (app-aware probe/switch) **ลด / ไม่ทำ**; โฟกัส cutover ที่ LAN + login บน edge |
-| **OD-3** | Cutover **ยอมให้ login ใหม่** — ไม่บังคับคง `_session` จาก central ข้ามไป edge | Same-domain ยังมีประโยชน์เรื่อง URL/bookmark แต่ cookie continuity ไม่ใช่ hard req; ต้องมี runbook “login ใหม่บน edge / login ใหม่ตอนกลับ central” |
-| **OD-4** | Cutback / continuity มองผ่าน **ops UI**: (1) หน้า central เห็นสถานะ **shelter ทีละศูนย์** (2) ที่ศูนย์ staff เห็นสถานะ **WAN** | เกณฑ์ lag/conflict + ใครประกาศ cutback ผูกกับ UI นี้ (รายละเอียด SLO ลงใน CR/T-54) |
-| **OD-5** | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion** | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync |
-| **OD-6** | Replicator credential (A5) = **central CouchDB admin ชุดเดียว** (`CENTRAL_REPL_*`) กับทุก job รวม filtered `_users` pull — เอา `CENTRAL_USERS_REPL_*` / per-shelter `repl_<code>` ออกจาก setup · เหตุผล: `_users/_changes` เปิดเฉพาะ server admin (ทดสอบ CouchDB 3.5: role member / db admin ของ `_users` ยังได้ 401) และเมื่อ edge ต้องถือ admin อยู่แล้ว `repl_<code>` ไม่ลดความเสี่ยงตอนเครื่อง edge หลุด | ยอมรับ: เครื่อง edge หลุด = central admin หลุด · `SHELTER_CODE` ผิดไม่ถูก central ปฏิเสธ · `_design/*` จาก edge push ขึ้น central ได้ · เปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ · ทางเลือก least-privilege ที่เลื่อนไว้: per-shelter users mirror DB ที่ central (`scripts/central-repl-user.sh` เก็บไว้) · กระทบ `scripts/edge-init.sh`, `docker-compose.edge.yml`, `.env.edge.example`, `docs/couchdb-replication/*` |
-| **OD-6 (ต่อ — decision sync 2026-10-18)** | push job `<code>_push` กรอง `_design/*` ด้วย `selector` `{"_id":{"$not":{"$regex":"^_design/"}}}` · A2–A4: บล็อกเขียน `_users` + login ครั้งแรกที่ edge, ไม่สร้าง user ที่ edge (คง A1) ใช้ spare account ที่ activate ที่ central ล่วงหน้า — edge mode — PR แยก, CR-171 amendment pending | กัน**อุบัติเหตุ / edge ที่มี design doc เก่ากว่า central** เท่านั้น — **ไม่กัน edge ที่ถูกขโมย** (ยังถือ central admin ตาม OD-6) · ทบทวน OD-6 (replication user ต่อศูนย์) ก่อนติดตั้ง edge ศูนย์ที่สอง (หลัง pilot) หรือเมื่อเครื่อง edge หาย · **Gate:** ห้ามติดตั้ง edge ที่ศูนย์จริงก่อน PR edge mode merge |
-
-
+| ID                                        | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Implication                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **OD-1**                                  | Edge image = **staff stack ครบ** (CouchDB + nginx `/couch` + staff SPA Node) — **ยกเว้น FastAPI + MongoDB**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Public plane ไม่รันบน edge; `/api/v1` central-only ยัง degraded ตอน edge-only                                                                                                                                                                                                                                                                                                                                        |
+| **OD-2**                                  | Failover = **network-only** — router/DNS ชี้ domain เดิมไป edge; app ไม่สลับ `ActiveEndpoint` เอง                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | C1–C3 (app-aware probe/switch) **ลด / ไม่ทำ**; โฟกัส cutover ที่ LAN + login บน edge                                                                                                                                                                                                                                                                                                                                 |
+| **OD-3**                                  | Cutover **ยอมให้ login ใหม่** — ไม่บังคับคง `_session` จาก central ข้ามไป edge                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Same-domain ยังมีประโยชน์เรื่อง URL/bookmark แต่ cookie continuity ไม่ใช่ hard req; ต้องมี runbook “login ใหม่บน edge / login ใหม่ตอนกลับ central”                                                                                                                                                                                                                                                                   |
+| **OD-4**                                  | Cutback / continuity มองผ่าน **ops UI**: (1) หน้า central เห็นสถานะ **shelter ทีละศูนย์** (2) ที่ศูนย์ staff เห็นสถานะ **WAN**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | เกณฑ์ lag/conflict + ใครประกาศ cutback ผูกกับ UI นี้ (รายละเอียด SLO ลงใน CR/T-54)                                                                                                                                                                                                                                                                                                                                   |
+| **OD-5**                                  | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync                                                                                                                                                                                                                                                                                                           |
+| **OD-6**                                  | ⚠️ **ถูกแทนด้วย [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md)** — edge ใช้ `EDGE_REPL_*` (user `repl_<code>_<suffix>` role `repl:<CODE>`) และดึง `_users` จาก `edge_users_<code>` ที่ central คัดลอกให้ · ข้อความต่อจากนี้เป็นบันทึกของการตัดสินใจเดิม · (เดิม) Replicator credential (A5) = **central CouchDB admin ชุดเดียว** (`CENTRAL_REPL_*`) กับทุก job รวม filtered `_users` pull — เอา `CENTRAL_USERS_REPL_*` / per-shelter `repl_<code>` ออกจาก setup · เหตุผล: `_users/_changes` เปิดเฉพาะ server admin (ทดสอบ CouchDB 3.5: role member / db admin ของ `_users` ยังได้ 401) และเมื่อ edge ต้องถือ admin อยู่แล้ว `repl_<code>` ไม่ลดความเสี่ยงตอนเครื่อง edge หลุด | ยอมรับ: เครื่อง edge หลุด = central admin หลุด · `SHELTER_CODE` ผิดไม่ถูก central ปฏิเสธ · `_design/*` จาก edge push ขึ้น central ได้ · เปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ · ทางเลือก least-privilege ที่เลื่อนไว้: per-shelter users mirror DB ที่ central (`scripts/central-repl-user.sh` เก็บไว้) · กระทบ `scripts/edge-init.sh`, `docker-compose.edge.yml`, `.env.edge.example`, `docs/couchdb-replication/*` |
+| **OD-6 (ต่อ — decision sync 2026-10-18)** | ⚠️ ส่วนที่ว่า "edge ถือ central admin" ถูกแทนด้วย [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) · ส่วน push กรอง `_design/*` และ edge mode ยังใช้อยู่ · push job `<code>_push` กรอง `_design/*` ด้วย `selector` `{"_id":{"$not":{"$regex":"^_design/"}}}` · A2–A4: บล็อกเขียน `_users` + login ครั้งแรกที่ edge, ไม่สร้าง user ที่ edge (คง A1) ใช้ spare account ที่ activate ที่ central ล่วงหน้า — edge mode — PR แยก, spec = FR-13–FR-17 ของ [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md) (amend 2026-11-09, #1179)                                                                                                                            | กัน**อุบัติเหตุ / edge ที่มี design doc เก่ากว่า central** เท่านั้น — **ไม่กัน edge ที่ถูกขโมย** (เดิมถือ central admin ตาม OD-6 — หลัง [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) edge ไม่มี admin แล้ว แต่ยังเขียน `shelter_<code>` ของศูนย์ตัวเองได้จนกว่า `--remove`) · การทบทวน OD-6 ที่รอไว้ = CR นี้ · **Gate:** ห้ามติดตั้ง edge ที่ศูนย์จริงก่อน PR edge mode merge                  |
 
 ## 7. Gap checklist (สถานะ ณ 2026-08-12)
 
@@ -121,37 +108,28 @@ related:
 
 ### 7.0 Decisions
 
-
-| #   | รายการ | Status |
-| --- | --- | --- |
-| 0.1 | OD-1 image = staff stack ยกเว้น FastAPI/Mongo | ✅ locked |
-| 0.2 | OD-2 network-only | ✅ locked |
-| 0.3 | OD-3 login ใหม่ได้ (ไม่บังคับ cookie continuity) | ✅ locked |
-| 0.4 | OD-4 ops UI สถานะ shelter + WAN ที่ศูนย์ | ✅ locked (รายละเอียดใน CR-064) |
-| 0.5 | OD-5 CR + ขยาย T-54 + Notion | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 updated · Notion sync |
-| 0.6 | OD-6 replicator credential = central admin ชุดเดียว | ✅ decision sync 2026-10-05 |
-
-
-
+| #   | รายการ                                              | Status                                                                                                                                         |
+| --- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.1 | OD-1 image = staff stack ยกเว้น FastAPI/Mongo       | ✅ locked                                                                                                                                      |
+| 0.2 | OD-2 network-only                                   | ✅ locked                                                                                                                                      |
+| 0.3 | OD-3 login ใหม่ได้ (ไม่บังคับ cookie continuity)    | ✅ locked                                                                                                                                      |
+| 0.4 | OD-4 ops UI สถานะ shelter + WAN ที่ศูนย์            | ✅ locked (รายละเอียดใน CR-064)                                                                                                                |
+| 0.5 | OD-5 CR + ขยาย T-54 + Notion                        | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 updated · Notion sync                                       |
+| 0.6 | OD-6 replicator credential = central admin ชุดเดียว | ⚠️ ถูกแทนด้วย [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) (replication user ต่อศูนย์) — เดิม ✅ decision sync 2026-10-05 |
 
 ### 7.A Infra / DevOps
 
-
-| #   | รายการ                                               | Pri |
-| --- | ---------------------------------------------------- | --- |
-| A1  | Edge appliance image + bootstrap ตาม `shelter_code`  | P0  |
-| A2  | Router / LAN runbook (DHCP, DNS, firewall, `/couch`) | P0  |
-| A3  | Same-domain DNS cutover + ทดสอบ login ใหม่บน edge        | P0  |
-| A4  | Staging dry-run ก่อนฤดูเสี่ยง                        | P1  |
-| A5  | Replicator credentials / rotation (credential = OD-6) | P1  |
-| A6  | Monitor `_up`, replicator lag, disk                  | P1  |
-| A7  | Wipe edge ตอนปิดศูนย์                                | P1  |
-
-
-
+| #   | รายการ                                                                                                                                                  | Pri |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| A1  | Edge appliance image + bootstrap ตาม `shelter_code`                                                                                                     | P0  |
+| A2  | Router / LAN runbook (DHCP, DNS, firewall, `/couch`)                                                                                                    | P0  |
+| A3  | Same-domain DNS cutover + ทดสอบ login ใหม่บน edge                                                                                                       | P0  |
+| A4  | Staging dry-run ก่อนฤดูเสี่ยง                                                                                                                           | P1  |
+| A5  | Replicator credentials / rotation (credential = replication user ต่อศูนย์ — [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) แทน OD-6) | P1  |
+| A6  | Monitor `_up`, replicator lag, disk                                                                                                                     | P1  |
+| A7  | Wipe edge ตอนปิดศูนย์                                                                                                                                   | P1  |
 
 ### 7.B Data / replication
-
 
 | #   | รายการ                                         | Pri |
 | --- | ---------------------------------------------- | --- |
@@ -164,42 +142,30 @@ related:
 | B7  | Conflict / no-duplicate tests ตอน failback     | P1  |
 | B8  | ปิดศูนย์ = หยุด replication + purge + wipe     | P2  |
 
-
-
-
 ### 7.C App / failover / ops UI
 
-
-| #   | รายการ | Pri | หมายเหตุ |
-| --- | --- | --- | --- |
-| C1 | `ActiveEndpoint` app-aware switch | — | **ตัด** ตาม OD-2 = network-only |
-| C2 | Probe central แล้วค่อย edge ใน app | — | **ตัด** ตาม OD-2 |
-| C3 | App-driven failback switch | — | **ตัด**; failback = network cutback + re-login |
-| C4 | **Ops UI (central):** สถานะต่อ shelter (WAN / edge-only / sync lag / ready-to-cutback) | P0 | OD-4 |
-| C5 | **UI ที่ศูนย์:** แสดงสถานะ WAN (ขึ้น/ลง) ให้ staff เห็น | P0 | OD-4 |
-| C6 | ปิดหรือบอกชัดฟีเจอร์ที่ต้อง WAN / public | P1 | |
-| C7 | Runbook + UX: login ใหม่หลัง cutover / หลัง cutback | P0 | OD-3 |
-
-
-
+| #   | รายการ                                                                                 | Pri | หมายเหตุ                                       |
+| --- | -------------------------------------------------------------------------------------- | --- | ---------------------------------------------- |
+| C1  | `ActiveEndpoint` app-aware switch                                                      | —   | **ตัด** ตาม OD-2 = network-only                |
+| C2  | Probe central แล้วค่อย edge ใน app                                                     | —   | **ตัด** ตาม OD-2                               |
+| C3  | App-driven failback switch                                                             | —   | **ตัด**; failback = network cutback + re-login |
+| C4  | **Ops UI (central):** สถานะต่อ shelter (WAN / edge-only / sync lag / ready-to-cutback) | P0  | OD-4                                           |
+| C5  | **UI ที่ศูนย์:** แสดงสถานะ WAN (ขึ้น/ลง) ให้ staff เห็น                                | P0  | OD-4                                           |
+| C6  | ปิดหรือบอกชัดฟีเจอร์ที่ต้อง WAN / public                                               | P1  |                                                |
+| C7  | Runbook + UX: login ใหม่หลัง cutover / หลัง cutback                                    | P0  | OD-3                                           |
 
 ### 7.D Auth / users
 
-
-| #   | รายการ | Pri | หมายเหตุ |
-| --- | --- | --- | --- |
-| D1 | Login บน edge หลัง network cutover (expected path) | P0 | OD-3 — ไม่พึ่ง session จาก central |
-| D2 | Edge cookie ห้ามเรียก `/api/v1` (central-only) | P0 | |
-| D3 | Re-login ตอนกลับ central หลัง cutback | P0 | OD-3 |
-| D4 | Pre-provision users ก่อนเปิดศูนย์ (ops) | P0 | |
-| D5 | บล็อก user admin / เปลี่ยนรหัสตอน edge mode | P1 | |
-| D6 | ทดสอบ user ใหม่ที่ central โผล่บน edge ภายใน SLA | P1 | |
-
-
-
+| #   | รายการ                                             | Pri | หมายเหตุ                                                                                                                                          |
+| --- | -------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Login บน edge หลัง network cutover (expected path) | P0  | OD-3 — ไม่พึ่ง session จาก central                                                                                                                |
+| D2  | Edge cookie ห้ามเรียก `/api/v1` (central-only)     | P0  |                                                                                                                                                   |
+| D3  | Re-login ตอนกลับ central หลัง cutback              | P0  | OD-3                                                                                                                                              |
+| D4  | Pre-provision users ก่อนเปิดศูนย์ (ops)            | P0  |                                                                                                                                                   |
+| D5  | บล็อก user admin / เปลี่ยนรหัสตอน edge mode        | P1  | spec: FR-13–FR-17 ของ [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md) (`EDGE_MODE` ปฏิเสธทุกเส้นที่เขียน `_users` ที่ BFF) |
+| D6  | ทดสอบ user ใหม่ที่ central โผล่บน edge ภายใน SLA   | P1  |                                                                                                                                                   |
 
 ### 7.E Provisioning / lifecycle
-
 
 | #   | รายการ                                                   | Pri |
 | --- | -------------------------------------------------------- | --- |
@@ -209,11 +175,7 @@ related:
 | E4  | Close shelter ผูกหยุด sync + wipe                        | P1  |
 | E5  | Inventory ความพร้อม edge ต่อศูนย์                        | P1  |
 
-
-
-
 ### 7.F Central services / public plane
-
 
 | #   | รายการ                                                | Pri |
 | --- | ----------------------------------------------------- | --- |
@@ -223,11 +185,7 @@ related:
 | F4  | งานข้ามศูนย์ใช้ไม่ได้ตอน edge islands                 | P1  |
 | F5  | หลัง failback รอ worker catch-up ก่อนประกาศระบบครบ    | P1  |
 
-
-
-
 ### 7.G Testing / runbook
-
 
 | #   | รายการ                                                      | Pri |
 | --- | ----------------------------------------------------------- | --- |
@@ -238,9 +196,6 @@ related:
 | G5  | เกณฑ์ lag / สัญญาณ cutback                                  | P1  |
 | G6  | UAT continuity (FR-17/18)                                   | P1  |
 
-
-
-
 ## 8. Suggested sequencing (เมื่อเริ่มทำ)
 
 1. **Approve CR-064** → reconcile api-contract / data-model / offline-fallback
@@ -250,12 +205,12 @@ related:
 
 ## 9. Relation to existing specs
 
-| Doc | Relationship |
-| --- | --- |
-| [CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md) | Master remote-first; follow-up edge orchestration → CR ใหม่ตาม OD-5 |
-| [T-54](../task-breakdown/00-baseline.md) | ขยายให้ครอบ network-only cutover + ops UI + failback tests |
+| Doc                                                                                 | Relationship                                                                                                   |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md)      | Master remote-first; follow-up edge orchestration → CR ใหม่ตาม OD-5                                            |
+| [T-54](../task-breakdown/00-baseline.md)                                            | ขยายให้ครอบ network-only cutover + ops UI + failback tests                                                     |
 | [data-model.md](../data/data-model.md) / [api-contract.md](../data/api-contract.md) | Binding — อย่า supersede จนกว่า CR approve; note: api-contract เคยเขียน app-aware → CR ต้อง reconcile กับ OD-2 |
-| [offline-fallback-flow-spec.html](./offline-fallback-flow-spec.html) | App-aware state machine — ลด scope ตาม OD-2; เก็บ UX สถานะ WAN / degraded |
+| [offline-fallback-flow-spec.html](./offline-fallback-flow-spec.html)                | App-aware state machine — ลด scope ตาม OD-2; เก็บ UX สถานะ WAN / degraded                                      |
 
 ## 10. Acceptance preview (เมื่อ elevate เป็น work item)
 
@@ -267,11 +222,12 @@ related:
 
 ## Decision log
 
-| Date | Note |
-| --- | --- |
-| 2026-08-12 | Parked idea: mini PC + warm sync + same-domain LAN cutover + failback; ตัด scale user บน edge |
-| 2026-08-12 | **Locked OD-1..OD-5:** staff stack ยกเว้น FastAPI/Mongo · network-only · re-login OK · ops UI shelter+WAN · track = CR + T-54 + Notion |
-| 2026-08-12 | Elevated: [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync |
-| 2026-10-05 | **Decision sync OD-6:** edge ใช้ central CouchDB admin ชุดเดียว (`CENTRAL_REPL_*`) กับทุก replication job (A5) — ปิดคำถามเปิดข้อ 2 ใน [couchdb-replication/README.md](../couchdb-replication/README.md) |
-| 2026-10-18 | **Decision sync (owner @net-lynx, PR #348):** push กรอง `_design/*` (กันอุบัติเหตุ ไม่กัน edge ถูกขโมย — OD-6 ยังอยู่; ทบทวนก่อน edge ศูนย์ที่สอง/เมื่อเครื่องหาย) · A2 บล็อกเขียน `_users` ที่ edge (`EDGE_MODE`) · A3 login ครั้งแรกที่ edge ถูกบล็อก · A4 ไม่สร้าง user ที่ edge ใช้ spare account — edge mode — PR แยก, CR-171 amendment pending · gate: ไม่ติดตั้ง edge ศูนย์จริงก่อน PR edge mode merge |
-
+| Date       | Note                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-12 | Parked idea: mini PC + warm sync + same-domain LAN cutover + failback; ตัด scale user บน edge                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 2026-08-12 | **Locked OD-1..OD-5:** staff stack ยกเว้น FastAPI/Mongo · network-only · re-login OK · ops UI shelter+WAN · track = CR + T-54 + Notion                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-08-12 | Elevated: [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 2026-10-05 | **Decision sync OD-6:** edge ใช้ central CouchDB admin ชุดเดียว (`CENTRAL_REPL_*`) กับทุก replication job (A5) — ปิดคำถามเปิดข้อ 2 ใน [couchdb-replication/README.md](../couchdb-replication/README.md) · **ถูกแทนแล้วด้วย [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) (2026-11-09)**                                                                                                                                                                                                                                                                                 |
+| 2026-10-18 | **Decision sync (owner @net-lynx, PR #348):** push กรอง `_design/*` (กันอุบัติเหตุ ไม่กัน edge ถูกขโมย — ตอนนั้น OD-6 ยังอยู่; การทบทวนก่อน edge ศูนย์ที่สอง/เมื่อเครื่องหาย = [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md)) · A2 บล็อกเขียน `_users` ที่ edge (`EDGE_MODE`) · A3 login ครั้งแรกที่ edge ถูกบล็อก · A4 ไม่สร้าง user ที่ edge ใช้ spare account — edge mode — PR แยก, spec = FR-13–FR-17 ของ [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md) (amend 2026-11-09, #1179) · gate: ไม่ติดตั้ง edge ศูนย์จริงก่อน PR edge mode merge |
+| 2026-11-09 | **Amend [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md) (#1179, kong อนุมัติ 2026-11-09):** เพิ่ม FR-13–FR-17 `EDGE_MODE` — ปฏิเสธทุกเส้นที่เขียน `_users` ที่ BFF · เส้นอ่านและ OAuth login ทำงานต่อ (ข้าม `touch*Verified`) · ปิด "amendment pending" · D5 ชี้ที่ CR นี้                                                                                                                                                                                                                                                                                           |
+| 2026-11-09 | **CR-247 ([CR-247-edge-per-shelter-repl-user.md](../changes/01-core/CR-247-edge-per-shelter-repl-user.md)):** เปลี่ยน OD-6 — edge ไม่ถือ central admin อีก ใช้ replication user ต่อศูนย์ (`repl:<CODE>`) + DB `edge_users_<code>` ที่ service `edge-users-copy` ของ central คัดลอก `_users` ให้ · เครื่อง edge หาย = `--remove` ที่ central โดยไม่กระทบศูนย์อื่น · approved 2026-11-11                                                                                                                                                                                                      |

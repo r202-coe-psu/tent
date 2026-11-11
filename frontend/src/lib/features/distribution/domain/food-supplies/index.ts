@@ -33,6 +33,9 @@ export {
 	distributionLogInputSchema,
 	distributionLogDocSchema,
 	DISTRIBUTION_LOG_SCHEMA_V,
+	DISTRIBUTION_LOG_SCHEMA_V_QR_OVERRIDE,
+	recipientQrOverrideSchema,
+	type RecipientQrOverride,
 	createDistributionLog,
 	assertDistributionLogIssuanceImmutable,
 	assertDistributionLogCanBeVoided,
@@ -49,6 +52,13 @@ export {
 	type DistributionLogInput,
 	type DistributionLog
 } from './distribution-log';
+
+export {
+	evaluateHouseholdMealPickup,
+	type HouseholdPickupMember,
+	type HouseholdPickupLog,
+	type HouseholdMemberMealStatus
+} from './household-meal-pickup';
 
 export {
 	bulkReturnPoolStatusSchema,

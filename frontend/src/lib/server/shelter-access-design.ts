@@ -381,7 +381,11 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	const dailySopRoleContract = DAILY_SOP_ROLE_VDU_CONTRACT;
 	return `function (newDoc, oldDoc, userCtx) {
-  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1;
+  // #1298 (edge per-shelter replication user): the role repl:<CODE> of THIS database's shelter counts
+  // exactly like _admin everywhere below, so an edge can push shelter_<code> without holding the
+  // central admin. repl:<other code> gets nothing. The rules above the _admin bypass still apply.
+  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1 ||
+    userCtx.roles.indexOf('repl:${code}') !== -1;
   var isRoleAssessmentWrite = newDoc.type === 'daily_sop_role_assessment' ||
     (oldDoc && oldDoc.type === 'daily_sop_role_assessment');
   if (isRoleAssessmentWrite && newDoc._deleted === true) {
@@ -392,6 +396,105 @@ export function buildValidateDocUpdate(code: string): string {
     throw { forbidden: 'Daily SOP role assessment type cannot change' };
   }
 ${consentVduClause()}
+  // CR-233 FR-EQR-38/39: evacuee_qr is the Person QR print log. Written only by the server with the
+  // admin credential (issueEvacueeQr); these rules run BEFORE the _admin bypass so even the server
+  // can only append (prefix kept, printed_at strictly increasing, unique hash6) and never delete.
+  // The evacuee_qr: _id prefix is reserved: another type squatting an evacuee_qr:{ULID} id would make
+  // issueEvacueeQr fail permanently for that person (no prints array to append to).
+  if (typeof newDoc._id === 'string' && newDoc._id.indexOf('evacuee_qr:') === 0 &&
+      newDoc._deleted !== true && newDoc.type !== 'evacuee_qr') {
+    throw { forbidden: 'The evacuee_qr: _id prefix is reserved for evacuee_qr documents' };
+  }
+  if (newDoc.type === 'evacuee_qr' || (oldDoc && oldDoc.type === 'evacuee_qr')) {
+    if (!isCouchAdmin) {
+      throw { forbidden: 'evacuee_qr is written by the server only' };
+    }
+    if (newDoc._deleted === true) {
+      throw { forbidden: 'Cannot delete evacuee_qr documents' };
+    }
+    if (oldDoc && newDoc.type !== 'evacuee_qr') {
+      throw { forbidden: 'Cannot change type of evacuee_qr document' };
+    }
+    if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('evacuee_qr:') !== 0) {
+      throw { forbidden: 'evacuee_qr _id must start with evacuee_qr:' };
+    }
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported evacuee_qr schema version' };
+    }
+    if (newDoc.shelter_code !== '${code}') {
+      throw { forbidden: 'shelter_code must be ${code}' };
+    }
+    if (newDoc.evacuee_id !== 'evacuee:' + newDoc._id.slice('evacuee_qr:'.length)) {
+      throw { forbidden: 'evacuee_qr evacuee_id must match _id' };
+    }
+    if (!Array.isArray(newDoc.prints) || newDoc.prints.length === 0) {
+      throw { forbidden: 'evacuee_qr prints must be a non-empty array' };
+    }
+    var qrSources = ['kiosk_checkin', 'kiosk_reprint', 'profile', 'family_batch'];
+    var qrSeenHashes = {};
+    for (var qi = 0; qi < newDoc.prints.length; qi++) {
+      var qp = newDoc.prints[qi];
+      if (!qp || typeof qp.printed_at !== 'string' ||
+          !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(qp.printed_at)) {
+        throw { forbidden: 'evacuee_qr printed_at must be ISO 8601 UTC with milliseconds' };
+      }
+      if (typeof qp.hash !== 'string' || !/^[0-9a-f]{6}$/.test(qp.hash)) {
+        throw { forbidden: 'evacuee_qr hash must match ^[0-9a-f]{6}$' };
+      }
+      if (qrSeenHashes[qp.hash]) {
+        throw { forbidden: 'evacuee_qr hash must be unique within prints' };
+      }
+      qrSeenHashes[qp.hash] = true;
+      if (qrSources.indexOf(qp.source) === -1) {
+        throw { forbidden: 'evacuee_qr source is not allowed' };
+      }
+      if (typeof qp.printed_by !== 'string' || qp.printed_by.length === 0) {
+        throw { forbidden: 'evacuee_qr printed_by is required' };
+      }
+      if (qi > 0 && !(qp.printed_at > newDoc.prints[qi - 1].printed_at)) {
+        throw { forbidden: 'evacuee_qr printed_at must be strictly increasing' };
+      }
+      if (oldDoc && qi < oldDoc.prints.length) {
+        var qo = oldDoc.prints[qi];
+        if (qo.printed_at !== qp.printed_at || qo.hash !== qp.hash ||
+            qo.printed_by !== qp.printed_by || qo.source !== qp.source) {
+          throw { forbidden: 'evacuee_qr prints is append-only' };
+        }
+      }
+    }
+    if (oldDoc && newDoc.prints.length < oldDoc.prints.length) {
+      throw { forbidden: 'evacuee_qr prints is append-only' };
+    }
+    return;
+  }
+  // CR-244 FR-12: lot_counter is the per-day lot-number counter. These rules run BEFORE the _admin
+  // bypass (like evacuee_qr above) so even the BFF admin credential and the edge replication user
+  // can only move the counter forward on a well-formed _id. Only a couch admin may delete (unseed/reset;
+  // a re-created counter is re-seeded from the ledger, so a delete never makes numbers repeat).
+  if (typeof newDoc._id === 'string' && newDoc._id.indexOf('lot_counter:') === 0 &&
+      newDoc._deleted !== true && newDoc.type !== 'lot_counter') {
+    throw { forbidden: 'The lot_counter: _id prefix is reserved for lot_counter documents' };
+  }
+  if (newDoc.type === 'lot_counter' || (oldDoc && oldDoc.type === 'lot_counter')) {
+    if (newDoc._deleted === true) {
+      if (!isCouchAdmin) throw { forbidden: 'Cannot delete lot_counter documents' };
+    } else {
+      if (oldDoc && oldDoc._deleted !== true && oldDoc.type !== 'lot_counter') {
+        throw { forbidden: 'Cannot change type of lot_counter document' };
+      }
+      if (typeof newDoc._id !== 'string' || !/^lot_counter:L-\\d{6}$/.test(newDoc._id)) {
+        throw { forbidden: 'lot_counter _id must match lot_counter:L-YYMMDD' };
+      }
+      if (typeof newDoc.last !== 'number' || !isFinite(newDoc.last) ||
+          Math.floor(newDoc.last) !== newDoc.last || newDoc.last < 0) {
+        throw { forbidden: 'lot_counter last must be an integer >= 0' };
+      }
+      if (oldDoc && oldDoc._deleted !== true && typeof oldDoc.last === 'number' &&
+          !(newDoc.last > oldDoc.last)) {
+        throw { forbidden: 'lot_counter last must only increase' };
+      }
+    }
+  }
   if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
@@ -635,8 +738,8 @@ ${consentVduClause()}
   // directly to any shelter's jobs via the Job Board instead.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
-    'people_import_log', 'station_log',
-    'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
+    'people_import_log', 'station_log', 'evacuee_qr',
+    'donation', 'donation_campaign', 'stock_ledger', 'lot_counter', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'referral',
     'meal_session', 'kitchen_counter',
     'meal_plan', 'kitchen_requisition', 'meal_service',
@@ -1303,6 +1406,14 @@ ${consentVduClause()}
       if (zoneChangeEligibleStatuses.indexOf(oldDoc.current_stay.status) === -1) {
         throw { forbidden: 'zone_change requires current_stay.status active or room_confirmed' };
       }
+    }
+  }
+  // CR-244 FR-13: whoever may receive stock (stock_ledger receipt) may reserve lot numbers.
+  // distribution_staff is excluded (loan returns mint no lot number).
+  if (newDoc.type === 'lot_counter') {
+    if (!isRole('warehouse_staff') && !isRole('supply_coordinator') &&
+        !isRole('shelter_manager') && !isRole('donation_staff')) {
+      throw { forbidden: 'Only stock-receiving staff can write lot_counter' };
     }
   }
   // 3. only warehouse staff / managers may write stock
@@ -2297,12 +2408,38 @@ ${consentVduClause()}
   // A v1 log is lazily upgraded to v2 when the bulk path first writes the field; never 2 -> 1.
   // The legacy bulk path (bulk_pool_id, frontline DST/SM) is unchanged.
   if (newDoc.type === 'distribution_log') {
-    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2 && newDoc.schema_v !== 3) {
       throw { forbidden: 'Unsupported distribution_log schema version' };
     }
+    // CR-233 A1 (schema_v 3): audit of a handout made with an expired Person QR. Dates only, evacuee
+    // recipients only, written at issuance and never edited or removed.
+    if (typeof newDoc.recipient_qr_override !== 'undefined') {
+      var qrOverride = newDoc.recipient_qr_override;
+      if (newDoc.schema_v !== 3) {
+        throw { forbidden: 'distribution_log.recipient_qr_override requires schema_v 3' };
+      }
+      if (newDoc.recipient_type !== 'evacuee') {
+        throw { forbidden: 'distribution_log.recipient_qr_override applies to evacuee recipients only' };
+      }
+      if (!qrOverride || typeof qrOverride !== 'object' || Array.isArray(qrOverride) ||
+          (qrOverride.issued_at !== null && typeof qrOverride.issued_at !== 'string') ||
+          typeof qrOverride.current_printed_at !== 'string' ||
+          typeof qrOverride.overridden_by !== 'string' || !qrOverride.overridden_by ||
+          typeof qrOverride.overridden_at !== 'string') {
+        throw { forbidden: 'distribution_log.recipient_qr_override must be {issued_at, current_printed_at, overridden_by, overridden_at}' };
+      }
+      // FR-EQR-48: the risk taker is the actor creating the log, never a client-supplied name.
+      if (!oldDoc && qrOverride.overridden_by !== userCtx.name) {
+        throw { forbidden: 'distribution_log.recipient_qr_override.overridden_by must match the current actor' };
+      }
+    }
+    if (oldDoc && oldDoc.type === 'distribution_log' &&
+        JSON.stringify(oldDoc.recipient_qr_override || null) !== JSON.stringify(newDoc.recipient_qr_override || null)) {
+      throw { forbidden: 'distribution_log.recipient_qr_override is immutable after issuance' };
+    }
     if (typeof newDoc.applied_bulk_entry_ids !== 'undefined') {
-      if (newDoc.schema_v !== 2) {
-        throw { forbidden: 'distribution_log.applied_bulk_entry_ids requires schema_v 2' };
+      if (newDoc.schema_v !== 2 && newDoc.schema_v !== 3) {
+        throw { forbidden: 'distribution_log.applied_bulk_entry_ids requires schema_v 2 or 3' };
       }
       if (!Array.isArray(newDoc.applied_bulk_entry_ids)) {
         throw { forbidden: 'distribution_log.applied_bulk_entry_ids must be an array' };
@@ -2349,10 +2486,13 @@ ${consentVduClause()}
     if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
       throw { forbidden: 'outside recipients must not carry recipient_id' };
     }
+    if (typeof newDoc.collected_by_recipient_id !== 'undefined' && (newDoc.recipient_type !== 'evacuee' || typeof newDoc.collected_by_recipient_id !== 'string' || newDoc.collected_by_recipient_id.indexOf('evacuee:') !== 0 || newDoc.collected_by_recipient_id === newDoc.recipient_id)) {
+      throw { forbidden: 'collected_by_recipient_id must be another evacuee collecting for an evacuee' };
+    }
     if (oldDoc) {
       var immutableLogFields = [
         '_id', 'type', 'shelter_code', 'ticket_id', 'item_id', 'qty',
-        'recipient_type', 'recipient_id', 'household_id', 'is_returnable',
+        'recipient_type', 'recipient_id', 'household_id', 'collected_by_recipient_id', 'is_returnable',
         'distributed_at', 'distributed_by', 'created_at', 'created_by'
       ];
       for (var lf = 0; lf < immutableLogFields.length; lf++) {
@@ -2410,7 +2550,7 @@ ${consentVduClause()}
         // #658 v3 bulk return path (apply an entry / revert a voided entry): WH, SC, SM, DST.
         // The legacy bulk path below (bulk_pool_id) stays frontline-only and never changes the ids.
         if (!canReturnLoanPhysical()) throw { forbidden: 'Only warehouse staff, supply coordinators, distribution staff, shelter managers, or system admins can apply bulk return entries to loans' };
-        if (newDoc.schema_v !== 2) throw { forbidden: 'distribution_log bulk entry changes require schema_v 2' };
+        if (newDoc.schema_v !== 2 && !(newDoc.schema_v === 3 && oldDoc.schema_v === 3)) throw { forbidden: 'distribution_log bulk entry changes require schema_v 2 (or an existing schema_v 3 doc)' };
         if (newDoc.bulk_pool_id !== oldDoc.bulk_pool_id) {
           throw { forbidden: 'distribution_log.bulk_pool_id is immutable on the v3 bulk path' };
         }

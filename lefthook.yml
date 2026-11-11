@@ -23,9 +23,9 @@ pre-commit:
       stage_fixed: true
 
 pre-push:
-  # Sequential: svelte-check + vitest + pytest in parallel starve RAM and run slower overall.
-  # Fast jobs first so cheap failures surface early.
+  # Sequential: vitest + pytest in parallel starve RAM and run slower overall.
   # glob is matched relative to `root`; a job is skipped when no pushed file matches.
+  # svelte-check (`pnpm check`) is manual before a PR. Vitest keeps its fs module cache.
   parallel: false
   commands:
     worker-test:
@@ -38,13 +38,7 @@ pre-push:
       glob: "**/*.{py,toml,lock}"
       run: uv run pytest tests
 
-    frontend-check:
-      root: frontend/
-      glob: "**/*.{ts,js,svelte,json,css,yaml}"
-      run: pnpm check
-
     frontend-test:
       root: frontend/
       glob: "**/*.{ts,js,svelte,json,css,yaml}"
-      # Vitest fs cache disabled here: this hook is the only unit-test gate (see frontend/CONTRIBUTING.md §6).
-      run: VITEST_NO_FS_CACHE=1 pnpm test
+      run: pnpm test

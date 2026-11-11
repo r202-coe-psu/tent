@@ -102,3 +102,45 @@ describe('summarizeByCategory', () => {
 		expect(byCat.volunteer).toMatchObject({ total_items: 0, short_items: 0, severity: 'ok' });
 	});
 });
+
+describe('severity boundaries on decimal quantities (#936)', () => {
+	it.each([
+		{
+			name: '100 need, 50 have is exactly 50% coverage (low)',
+			need: 100,
+			have: 50,
+			severity: 'low'
+		},
+		{
+			name: '10000 need, 4999 have is 0.4999 coverage (critical)',
+			need: 10000,
+			have: 4999,
+			severity: 'critical'
+		},
+		{
+			name: 'string quantities 0.3 need, 0.15 have (low)',
+			need: '0.3',
+			have: '0.15',
+			severity: 'low'
+		},
+		{ name: 'float-equal need and have is ok', need: 0.3, have: 0.3, severity: 'ok' },
+		{ name: 'zero need is ok', need: 0, have: 5, severity: 'ok' },
+		{ name: 'surplus is ok', need: 100, have: 120, severity: 'ok' }
+	])('$name', ({ need, have, severity }) => {
+		expect(severityOf(need, have)).toBe(severity);
+	});
+
+	it('summarizeByCategory marks a 50% worst coverage as low with coverage 0.5', () => {
+		const [food] = summarizeByCategory([
+			row({ item_id: 'rice', category: 'food', need: 100, have: 50 })
+		]);
+		expect(food).toMatchObject({ severity: 'low', coverage: 0.5, short_items: 1 });
+	});
+
+	it('summarizeByCategory marks 4999 of 10000 as critical', () => {
+		const [food] = summarizeByCategory([
+			row({ item_id: 'water', category: 'food', need: 10000, have: 4999 })
+		]);
+		expect(food).toMatchObject({ severity: 'critical', coverage: 0.4999, short_items: 1 });
+	});
+});

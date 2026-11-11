@@ -25,6 +25,7 @@
 	import {
 		KIOSK_BANNER_GROUP_LIMITS,
 		KioskBannerGroupDevicePicker,
+		KioskBannerGroupTvCode,
 		KioskBannerScreenCard,
 		isDuplicateGroupName,
 		kioskBannerGroupInputSchema,
@@ -289,22 +290,25 @@
 			</Button>
 		{/snippet}
 
-		<div class={[spatial.container.staffPageCard, 'p-4 sm:p-6']}>
-			{#if currentQuery.isLoading || expiredQuery.isLoading}
-				<p class="py-16 text-center text-muted-foreground">กำลังโหลดรายการแบนเนอร์...</p>
-			{:else if currentQuery.error || expiredQuery.error}
-				<p class="py-16 text-center text-sm text-destructive">โหลดรายการแบนเนอร์ไม่สำเร็จ</p>
-			{:else}
-				<div class="grid gap-4 sm:grid-cols-2">
-					{#each KIOSK_SCREEN_TYPES as type (type)}
-						<KioskBannerScreenCard
-							screen={type}
-							summary={summaryOf(type)}
-							href={screenHref(type)}
-						/>
-					{/each}
-				</div>
-			{/if}
+		<div class="flex flex-col gap-4">
+			<KioskBannerGroupTvCode {group} origin={page.url.origin} />
+			<div class={[spatial.container.staffPageCard, 'p-4 sm:p-6']}>
+				{#if currentQuery.isLoading || expiredQuery.isLoading}
+					<p class="py-16 text-center text-muted-foreground">กำลังโหลดรายการแบนเนอร์...</p>
+				{:else if currentQuery.error || expiredQuery.error}
+					<p class="py-16 text-center text-sm text-destructive">โหลดรายการแบนเนอร์ไม่สำเร็จ</p>
+				{:else}
+					<div class="grid gap-4 sm:grid-cols-2">
+						{#each KIOSK_SCREEN_TYPES as type (type)}
+							<KioskBannerScreenCard
+								screen={type}
+								summary={summaryOf(type)}
+								href={screenHref(type)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			</div>
 		</div>
 	</StaffPageShell>
 
