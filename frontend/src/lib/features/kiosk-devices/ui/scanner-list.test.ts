@@ -30,12 +30,14 @@ const html = (devices: ScannerDevice[], groupNames?: ReadonlyMap<string, string>
 	render(ScannerList, { props: { devices, groupNames } }).body;
 
 describe('ScannerList', () => {
-	it('shows the banner group name as a labelled badge, not a switch', () => {
+	it('shows the banner group name as a labelled badge; its only switch is the service one', () => {
 		const names = new Map([['kiosk_banner_group:lobby', 'ล็อบบี้']]);
 		const body = html([device('a', { banner_group_id: 'kiosk_banner_group:lobby' })], names);
 		expect(body).toContain('ล็อบบี้');
 		expect(body).not.toContain('ไม่มีกลุ่มแบนเนอร์');
-		expect(body).not.toContain('role="switch"');
+		expect(body.match(/role="switch"/g)).toHaveLength(1);
+		expect(body).toContain('เปิดให้บริการ');
+		expect(body).not.toContain('แสดงแบนเนอร์');
 	});
 
 	it('says ไม่มีกลุ่มแบนเนอร์ for a device without a group or whose group is gone', () => {
