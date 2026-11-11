@@ -10,12 +10,18 @@ const env = vi.hoisted(() => ({
 		data: { items: [] as unknown[], skipped: [] as unknown[] } as unknown,
 		isLoading: false,
 		isError: false
-	}
+	},
+	shelter: { data: undefined as unknown }
 }));
 
-vi.mock('$lib/features/people', () => ({
+vi.mock('$lib/features/people', async (orig) => ({
+	zoneLabel: (await orig<typeof import('$lib/features/people')>()).zoneLabel,
 	useEvacuees: () => env.evacuees,
 	useMovements: () => env.movements
+}));
+vi.mock('$lib/features/shelters', async (orig) => ({
+	...(await orig<typeof import('$lib/features/shelters')>()),
+	useShelter: () => env.shelter
 }));
 vi.mock('../../application/queries', () => ({
 	useDistributionLogsWithSkipped: () => env.logs
@@ -52,6 +58,7 @@ beforeEach(() => {
 	env.evacuees = { data: [], isLoading: false, isError: false };
 	env.movements = { data: [], isLoading: false, isError: false };
 	env.logs = { data: { items: [], skipped: [] }, isLoading: false, isError: false };
+	env.shelter = { data: undefined };
 });
 afterEach(() => {
 	if (cmp) void unmount(cmp);
@@ -73,7 +80,8 @@ describe('MealCoveragePanel', () => {
 		const text = render();
 		expect(text).toContain('สมชาย ใจดี');
 		expect(text).not.toContain('สมหญิง');
-		expect(text).toContain('1 คนยังไม่มีบันทึกรับอาหารครบ');
+		expect(text).toContain('ยังไม่ครบ 1 คน');
+		expect(text).toContain('1 คน');
 	});
 
 	it('shows the empty state when everyone has 2 meals', () => {
@@ -140,9 +148,105 @@ describe('MealCoveragePanel', () => {
 		expect(text).not.toContain('อย่างน้อย 2 มื้อ');
 	});
 
+	it('shows the zone name, falling back to the code when the shelter has no name for it', () => {
+		const zoned = (id: string, first: string, zone: string) => {
+			const p = person(id, first);
+			return { ...p, current_stay: { ...p.current_stay, zone } };
+		};
+		env.evacuees.data = [zoned('evacuee:A', 'สมชาย', 'Z1'), zoned('evacuee:B', 'สมหญิง', 'Z9')];
+		env.shelter = { data: { zones: [{ code: 'z1', name: 'อาคารหนึ่ง' }] } };
+		const text = render();
+		expect(text).toContain('อาคารหนึ่ง');
+		expect(text).not.toContain('Z1');
+		expect(text).toContain('Z9');
+	});
+
 	it('sorts the rows by name', () => {
 		env.evacuees.data = [person('evacuee:B', 'ศศิ'), person('evacuee:A', 'กมล')];
 		const text = render();
 		expect(text.indexOf('กมล')).toBeLessThan(text.indexOf('ศศิ'));
+	});
+
+	describe('paging, filtering and search', () => {
+		const names = (n: number) =>
+			Array.from({ length: n }, (_, i) =>
+				person(`evacuee:${i}`, `ชื่อ${String(i).padStart(2, '0')}`)
+			);
+		const rowNames = () =>
+			Array.from(document.querySelectorAll('tbody tr')).map((tr) => tr.textContent ?? '');
+		const click = (el: Element | null | undefined) => {
+			(el as HTMLElement).click();
+			flushSync();
+		};
+		const card = (label: string) =>
+			Array.from(document.querySelectorAll('button[aria-pressed]')).find((b) =>
+				b.textContent?.includes(label)
+			);
+		const search = (value: string) => {
+			const input = document.querySelector('input[type="search"]') as HTMLInputElement;
+			input.value = value;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			flushSync();
+		};
+
+		it('shows 20 rows per page and a next-page control reveals the rest', () => {
+			env.evacuees.data = names(45);
+			render();
+			expect(rowNames()).toHaveLength(20);
+			expect(document.body.textContent).toContain('แสดง 1–20 จาก 45 คน');
+			click(document.querySelector('a[aria-label*="next" i], button[aria-label*="next" i]'));
+			expect(rowNames()).toHaveLength(20);
+			expect(document.body.textContent).toContain('แสดง 21–40 จาก 45 คน');
+		});
+
+		it('hides the page controls but keeps the range line for a single page', () => {
+			env.evacuees.data = names(3);
+			render();
+			expect(document.querySelector('nav[aria-label*="pagination" i]')).toBeNull();
+			expect(document.body.textContent).toContain('แสดง 1–3 จาก 3 คน');
+		});
+
+		it('filters to people with no meals when the red card is pressed', () => {
+			env.evacuees.data = [person('evacuee:A', 'สมชาย'), person('evacuee:B', 'สมหญิง')];
+			env.logs.data = { items: [log('evacuee:B', 'lunch')], skipped: [] };
+			render();
+			expect(rowNames()).toHaveLength(2);
+			const red = card('ยังไม่มีบันทึกเลย');
+			click(red);
+			expect(red?.getAttribute('aria-pressed')).toBe('true');
+			expect(rowNames()).toHaveLength(1);
+			expect(rowNames()[0]).toContain('สมชาย');
+		});
+
+		it('lists people with no record before people with one meal', () => {
+			env.evacuees.data = [person('evacuee:A', 'กมล'), person('evacuee:B', 'ศศิ')];
+			env.logs.data = { items: [log('evacuee:A', 'lunch')], skipped: [] };
+			render();
+			expect(rowNames()[0]).toContain('ศศิ');
+		});
+
+		it('narrows rows by name search and returns to page 1', () => {
+			env.evacuees.data = names(45);
+			render();
+			click(document.querySelector('a[aria-label*="next" i], button[aria-label*="next" i]'));
+			expect(document.body.textContent).toContain('แสดง 21–40');
+			search('ชื่อ07');
+			expect(rowNames()).toHaveLength(1);
+			expect(document.body.textContent).toContain('แสดง 1–1 จาก 1 คน');
+		});
+
+		it('shows the empty-filter state and clears it', () => {
+			env.evacuees.data = [person('evacuee:A', 'สมชาย')];
+			render();
+			search('ไม่มีใคร');
+			expect(document.body.textContent).toContain('ไม่พบรายชื่อที่ตรงกับเงื่อนไข');
+			click(
+				Array.from(document.querySelectorAll('button')).find((b) =>
+					b.textContent?.includes('ล้างตัวกรอง')
+				)
+			);
+			expect(rowNames()).toHaveLength(1);
+			expect((document.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('');
+		});
 	});
 });
