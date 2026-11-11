@@ -447,6 +447,38 @@ ck_code AC-8 "soft-deleted user POST edge /_session with the old password" "$(cu
 ck_eq AC-8 "edge _users/staff2_sh001 roles" "$(edge_user_roles staff2_sh001)" '[]'
 ck_ok AC-8 "edge-users-copy is healthy: central-repl-user.sh SH001 --status" 'run_cru SH001 --status; [ "$rc" = 0 ]'
 
+# ------------------------------------------------------------------ AC-12
+step "AC-12: edge-users-copy stopped while changes are pending, then restarted"
+kill "$COPY_PID" >/dev/null 2>&1; wait "$COPY_PID" 2>/dev/null
+ck_ok AC-12 "edge-users-copy is stopped" '! kill -0 "$COPY_PID" 2>/dev/null'
+# changes made while the service is down: a new user, 5 more new users, a password change, a second revision of
+# a soft-deleted user (staff_sh001 has roles [] but edge_shelters kept, AC-8 a)
+AC12_PW="ac12-$(python3 -c 'import secrets;print(secrets.token_hex(6))')"
+for i in 1 2 3 4 5; do mkuser "ac12_user$i" "$AC12_PW" '["SH001:shelter_manager","shelter:SH001"]' '["SH001"]'; done
+mkuser ac12_new "$AC12_PW" '["SH001:shelter_manager","shelter:SH001"]' '["SH001"]'
+mod_user staff_sh001 'd["password"]=secrets.token_hex(8)'
+mod_user staff2_sh001 'd["display_name"]="changed while the copy service was down"'
+sleep 5
+ck_code AC-12 "while the service is down ac12_new is NOT in edge_users_sh001" "$(code -u "$CA:$CPW" "$CU/edge_users_sh001/org.couchdb.user:ac12_new")" '^404$'
+COUCHDB_URL="$CU" COUCHDB_USER="$CA" COUCHDB_PASSWORD="$CPW" \
+	uv run --project "$ROOT/worker" edge-users-copy >>"$COPY_LOG" 2>&1 &
+COPY_PID=$!
+AC12_IDS="ac12_new ac12_user1 ac12_user2 ac12_user3 ac12_user4 ac12_user5 staff_sh001 staff2_sh001"
+rev_of() { jget _rev; } # stdin: a doc
+ac12_synced() { # every pending doc has the same _rev on central and on the edge _users
+	local n
+	for n in $AC12_IDS; do
+		[ "$(cadm "$CU/_users/org.couchdb.user:$n" | rev_of)" = "$(eadm "$EU/_users/org.couchdb.user:$n" | rev_of)" ] || return 1
+	done
+}
+t=$(date +%s)
+retry 150 ac12_synced && ck AC-12 PASS "all 8 pending changes reached the edge _users after the restart in $(($(date +%s) - t))s, same _rev as central" || ck AC-12 FAIL "after 150s these differ: $(for n in $AC12_IDS; do [ "$(cadm "$CU/_users/org.couchdb.user:$n" | rev_of)" = "$(eadm "$EU/_users/org.couchdb.user:$n" | rev_of)" ] || printf '%s ' "$n"; done)"
+ck_code AC-12 "ac12_new is in edge_users_sh001 on central" "$(code -u "$CA:$CPW" "$CU/edge_users_sh001/org.couchdb.user:ac12_new")" '^200$'
+ck_eq AC-12 "edge _users docs with _conflicts" "$(eadm "$EU/_users/_all_docs?conflicts=true&include_docs=true" | python3 -c 'import sys,json;print(sum(1 for r in json.load(sys.stdin)["rows"] if "_conflicts" in r.get("doc",{})))')" 0
+ck_code AC-12 "edge login as ac12_new" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -X POST "$EU/_session" -d "{\"name\":\"ac12_new\",\"password\":\"$AC12_PW\"}")" '^200$'
+status_ok() { run_cru SH001 --status; [ "$rc" = 0 ]; }
+retry 60 status_ok && ck AC-12 PASS "central-repl-user.sh SH001 --status is healthy after the restart (checkpoint resumed, no last_error)" || ck AC-12 FAIL "--status after restart: $out"
+
 # ------------------------------------------------------------------ AC-6
 step "AC-6: central-repl-user.sh SH001 --remove stops SH001's edge jobs, SH002 unaffected"
 run_cru SH001 --remove
