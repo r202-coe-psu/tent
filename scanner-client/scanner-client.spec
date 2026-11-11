@@ -39,7 +39,9 @@ exe = EXE(
     strip=False,
     upx=False,  # UPX-packed binaries trip antivirus more often
     console=DEBUG,
-    icon=None,
+    # assets/tent.ico is generated from frontend/static/icon-512.png (the web app icon);
+    # install-shortcut.ps1 reuses the .exe's embedded icon for the shortcuts.
+    icon=os.path.join(HERE, "assets", "tent.ico"),
 )
 coll = COLLECT(
     exe,

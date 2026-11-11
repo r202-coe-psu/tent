@@ -67,7 +67,7 @@ Name=tent
 Comment=Read Thai ID cards into the shelter walk-in registration page
 Exec="$(command -v uv)" run --project "$PWD" scanner-client
 Path=$PWD
-Icon=scanner
+Icon=$PWD/assets/tent.png
 Terminal=false
 Categories=Utility;
 EOF
