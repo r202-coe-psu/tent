@@ -128,14 +128,45 @@ describe('normalizeRequirementGroup (#936)', () => {
 			item_maps: [{ item_id: 'item_master:egg', base_uom: 'egg', ...item_map }]
 		}) as unknown as RequirementGroup;
 
-	it('converts legacy numbers to strings without rounding', () => {
+	it('rounds legacy numbers to four decimal places', () => {
 		const out = normalizeRequirementGroup(
 			legacy({ conversion_factor: 6.33333, share_percent: 33.33333 })
 		);
 		expect(out.item_maps?.[0]).toMatchObject({
-			conversion_factor: '6.33333',
-			share_percent: '33.33333'
+			conversion_factor: '6.3333',
+			share_percent: '33.3333'
 		});
+	});
+
+	it.each([null, '', ' ', 'abc', 'NaN', 'Infinity', NaN, Infinity])(
+		'rejects invalid share %s',
+		(value) => {
+			expect(() =>
+				normalizeRequirementGroup(legacy({ conversion_factor: 1, share_percent: value }))
+			).toThrow(/share_percent/);
+		}
+	);
+
+	it.each([-1, 100.0001])('rejects out-of-range share %s', (value) => {
+		expect(() =>
+			normalizeRequirementGroup(legacy({ conversion_factor: 1, share_percent: value }))
+		).toThrow(/share_percent/);
+	});
+
+	it('rejects a positive conversion factor that rounds to zero while preserving the legacy nonpositive fallback', () => {
+		expect(() => normalizeRequirementGroup(legacy({ conversion_factor: 0.00001 }))).toThrow(
+			/conversion_factor/
+		);
+		expect(
+			normalizeRequirementGroup(legacy({ conversion_factor: 0 })).item_maps?.[0].conversion_factor
+		).toBe('0');
+	});
+
+	it('validates range after rounding', () => {
+		expect(
+			normalizeRequirementGroup(legacy({ conversion_factor: 1, share_percent: 100.00004 }))
+				.item_maps?.[0].share_percent
+		).toBe('100');
 	});
 
 	it('leaves strings unchanged', () => {
