@@ -46,7 +46,12 @@
 		VERIFICATION_STATUS_LABEL,
 		type VerificationStatus
 	} from '../domain/verification';
-	import type { PersonnelType, Volunteer } from '../domain/volunteer.schema';
+	import {
+		MAX_OCCUPATION_LENGTH,
+		OCCUPATION_TOO_LONG_MESSAGE,
+		type PersonnelType,
+		type Volunteer
+	} from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
 
 	let {
@@ -156,8 +161,8 @@
 			toast.error(VOLUNTEER_PHONE_MESSAGE);
 			return;
 		}
-		if (occupation.trim().length > 100) {
-			toast.error('อาชีพต้องมีความยาวไม่เกิน 100 ตัวอักษร');
+		if (occupation.trim().length > MAX_OCCUPATION_LENGTH) {
+			toast.error(OCCUPATION_TOO_LONG_MESSAGE);
 			return;
 		}
 

@@ -43,6 +43,7 @@
 		seatsLeft,
 		visibleDateCount
 	} from '../domain/shift-picker';
+	import { MAX_OCCUPATION_LENGTH } from '../domain/volunteer.schema';
 	import type {
 		PortalCredential,
 		VolunteerProfile,
@@ -967,7 +968,7 @@
 											<input
 												id="occupation"
 												type="text"
-												maxlength={100}
+												maxlength={MAX_OCCUPATION_LENGTH}
 												bind:value={formData.occupation}
 												readonly={isPortalApplicant}
 												aria-readonly={isPortalApplicant}

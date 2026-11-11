@@ -42,9 +42,13 @@ export const nationalIdSchema = z
 /** The `schema_v` every volunteer write stamps (CR-228). */
 export const VOLUNTEER_SCHEMA_V = 6;
 
+/** CR-245 — max length of the optional free-text occupation. */
+export const MAX_OCCUPATION_LENGTH = 100;
+export const OCCUPATION_TOO_LONG_MESSAGE = `อาชีพต้องไม่เกิน ${MAX_OCCUPATION_LENGTH} ตัวอักษร`;
+
 export interface Volunteer extends BaseDoc {
 	type: 'volunteer';
-	schema_v: 3 | 4 | 5;
+	schema_v: 3 | 4 | 5 | 6;
 	first_name: string;
 	last_name: string;
 	nickname?: string;
@@ -100,7 +104,12 @@ export const volunteerSchema = z.object({
 	first_name: z.string().min(1),
 	last_name: z.string().min(1),
 	nickname: z.string().optional(),
-	occupation: z.string().trim().max(100, 'อาชีพต้องไม่เกิน 100 ตัวอักษร').nullable().optional(),
+	occupation: z
+		.string()
+		.trim()
+		.max(MAX_OCCUPATION_LENGTH, OCCUPATION_TOO_LONG_MESSAGE)
+		.nullable()
+		.optional(),
 	phone: z.string().nullable(),
 	phone_hash: z.string().nullable().optional(),
 	email: z.string().nullable().optional(),
@@ -133,7 +142,12 @@ export const volunteerInputSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
 	nickname: z.string().trim().optional(),
-	occupation: z.string().trim().max(100, 'อาชีพต้องไม่เกิน 100 ตัวอักษร').nullable().optional(),
+	occupation: z
+		.string()
+		.trim()
+		.max(MAX_OCCUPATION_LENGTH, OCCUPATION_TOO_LONG_MESSAGE)
+		.nullable()
+		.optional(),
 	phone: optionalVolunteerMobileSchema,
 	email: z.string().trim().nullable().optional(),
 	skills: z.array(z.string()).default([]),
@@ -158,7 +172,7 @@ export const walkInVolunteerFormSchema = z.object({
 	occupation: z
 		.string()
 		.trim()
-		.max(100, 'อาชีพต้องไม่เกิน 100 ตัวอักษร')
+		.max(MAX_OCCUPATION_LENGTH, OCCUPATION_TOO_LONG_MESSAGE)
 		.optional()
 		.or(z.literal('')),
 	phone: z
