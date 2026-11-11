@@ -7,11 +7,11 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import {
 		buildKioskContextQuery,
-		fetchKioskConfig,
 		getKioskDisplayContext,
-		KioskClosedWatch,
 		KioskDeviceInfo,
-		readKioskDisplayQuery
+		KioskServiceWatch,
+		readKioskDisplayQuery,
+		readKioskServiceOpen
 	} from '$lib/features/kiosk';
 	import { KIOSK_CLOSED_LANGUAGE_OPTIONS, KIOSK_CLOSED_PAGE_I18N } from './closed-page.i18n';
 
@@ -23,9 +23,10 @@
 	// Staff reopen the kiosk from the admin app; the device finds out here, without anyone touching it.
 	$effect(() => {
 		const search = contextQuery;
-		const watch = new KioskClosedWatch({
-			fetchConfig: (options) => fetchKioskConfig(fetch, options),
-			onReopen: () => void goto(resolve(`/kiosk${search}`), { replaceState: true })
+		const watch = new KioskServiceWatch({
+			readServiceOpen: () => readKioskServiceOpen(fetch),
+			until: 'open',
+			onChange: () => void goto(resolve(`/kiosk${search}`), { replaceState: true })
 		});
 		watch.start();
 		return () => watch.stop();

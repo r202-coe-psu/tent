@@ -3,6 +3,7 @@ import {
 	fetchKioskConfig,
 	KIOSK_CONFIG_CACHE_TTL_MS,
 	KIOSK_CONFIG_TIMEOUT_MS,
+	readKioskServiceOpen,
 	resetKioskConfigCache
 } from './kiosk-config.api';
 
@@ -173,5 +174,56 @@ describe('fetchKioskConfig', () => {
 		expect(fetchFn).toHaveBeenCalledTimes(2);
 		expect(fresh.serviceOpen).toBe(false);
 		expect(afterwards.serviceOpen).toBe(false);
+	});
+});
+
+describe('readKioskServiceOpen', () => {
+	beforeEach(() => {
+		resetKioskConfigCache();
+		vi.useRealTimers();
+	});
+
+	it.each([
+		['service_open true', { service_open: true }, true],
+		['service_open false', { service_open: false }, false]
+	])('answers the server value when the read succeeds: %s', async (_label, body, expected) => {
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
+
+		await expect(readKioskServiceOpen(fetchFn)).resolves.toBe(expected);
+	});
+
+	it.each([
+		[
+			'non-ok response',
+			vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }))
+		],
+		['network error', vi.fn<typeof fetch>().mockRejectedValue(new Error('offline'))],
+		[
+			'timeout',
+			vi
+				.fn<typeof fetch>()
+				.mockRejectedValue(new DOMException('The operation timed out', 'TimeoutError'))
+		]
+	])('answers null (could not read) on %s', async (_label, fetchFn) => {
+		await expect(readKioskServiceOpen(fetchFn)).resolves.toBeNull();
+	});
+
+	it('always bypasses the cache and refreshes it on a successful read', async () => {
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(new Response(JSON.stringify({ service_open: true }), { status: 200 }))
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ service_open: false }), { status: 200 })
+			);
+
+		await fetchKioskConfig(fetchFn);
+		const fresh = await readKioskServiceOpen(fetchFn);
+		const cached = await fetchKioskConfig(fetchFn);
+
+		expect(fetchFn).toHaveBeenCalledTimes(2);
+		expect(fresh).toBe(false);
+		expect(cached.serviceOpen).toBe(false);
 	});
 });

@@ -28,7 +28,7 @@ export { default as KioskLanguagePicker } from './ui/kiosk-language-picker.svelt
 export { kioskLanguageSession } from './application/kiosk-language-session.svelte';
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
-export { KioskClosedWatch, KIOSK_CLOSED_POLL_MS } from './application/kiosk-closed-watch.svelte';
+export { KioskServiceWatch, KIOSK_SERVICE_POLL_MS } from './application/kiosk-service-watch.svelte';
 export {
 	goToKioskClosed,
 	navigateToKioskHome,
@@ -43,7 +43,7 @@ export {
 	type KioskReprintMember,
 	type KioskReprintResult
 } from './data/kiosk-check-in.api';
-export { fetchKioskConfig } from './data/kiosk-config.api';
+export { fetchKioskConfig, readKioskServiceOpen } from './data/kiosk-config.api';
 export { fetchKioskBanners } from './data/kiosk-banners.api';
 export type { KioskBannerSlide } from './domain/kiosk-banner-feed';
 export {

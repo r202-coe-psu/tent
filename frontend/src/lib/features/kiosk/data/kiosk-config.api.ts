@@ -41,13 +41,27 @@ export async function fetchKioskConfig(
 	) {
 		return cachedConfig.config;
 	}
+	return (await requestKioskConfig(fetchFn)) ?? { ...FAIL_CLOSED_CONFIG };
+}
+
+/** What the server says about this kiosk right now: `true`/`false` only for a successful read, `null`
+ * when it could not be read (non-ok, network error, timeout). Always bypasses the cache and refreshes
+ * it on success. Used where "unreadable" must differ from "open" (the closed page must not reopen on
+ * a network blip, the home screen must not close on one). */
+export async function readKioskServiceOpen(fetchFn: typeof fetch = fetch): Promise<boolean | null> {
+	const config = await requestKioskConfig(fetchFn);
+	return config === null ? null : config.serviceOpen;
+}
+
+/** One config round trip. `null` = could not read; a successful read also refreshes the cache. */
+async function requestKioskConfig(fetchFn: typeof fetch): Promise<KioskConfig | null> {
 	try {
 		const response = await fetchFn('/api/v1/kiosk/config', {
 			method: 'POST',
 			cache: 'no-store',
 			signal: AbortSignal.timeout(KIOSK_CONFIG_TIMEOUT_MS)
 		});
-		if (!response.ok) return { ...FAIL_CLOSED_CONFIG };
+		if (!response.ok) return null;
 		const body = (await response.json()) as {
 			phone_check_in_enabled?: unknown;
 			walk_in_registration_enabled?: unknown;
@@ -63,6 +77,6 @@ export async function fetchKioskConfig(
 		cachedConfig = { config, fetchedAt: Date.now() };
 		return config;
 	} catch {
-		return { ...FAIL_CLOSED_CONFIG };
+		return null;
 	}
 }
