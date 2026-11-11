@@ -42,11 +42,29 @@ export {
 	transferFilterSchema,
 	TRANSFER_IDS_PER_REQUEST,
 	receivedItemSchema,
-	nextLotNos,
+	buildLotNos,
+	maxLotSeq,
+	lotSeedFindBody,
+	parseLotSeedMax,
+	lotCounterId,
+	nextCounterLast,
 	lotDateStamp,
 	stockLotSchema,
 	LOT_NO_PATTERN
 } from './domain/operations';
+
+// Lot-number reservation loop (CR-244) — pure of I/O, callers inject a connector.
+export {
+	reserveLotNos,
+	LotReservationError,
+	LOT_RESERVATION_MAX_ATTEMPTS
+} from './data/lot-reservation';
+export type {
+	LotCounterConnector,
+	LotCounterRecord,
+	LotCounterPutResult,
+	ReserveLotNosOptions
+} from './data/lot-reservation';
 
 export { projectLotsByItem, StockLotIntegrityError } from './domain/operations';
 export { countLotsHoldingStock } from './domain/lot-storage';
@@ -62,6 +80,7 @@ export type {
 	LedgerReason,
 	StockLedger,
 	StockLot,
+	LotCounter,
 	StockTransfer,
 	StockTransferItem,
 	TransferInput,

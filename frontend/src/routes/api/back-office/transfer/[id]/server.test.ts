@@ -130,6 +130,41 @@ describe('GET /api/back-office/transfer/[id]', () => {
 		expect(data.error).toContain('Forbidden: You do not have access');
 	});
 
+	describe('multi-shelter user (#477)', () => {
+		const roles = [
+			'shelter:SH001',
+			'shelter:SH002',
+			'SH001:registration_staff',
+			'SH002:warehouse_staff'
+		];
+		beforeEach(() => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles,
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockGet.mockResolvedValue(mockTransfer);
+		});
+
+		it('403 when acting as the shelter where they only hold registration_staff', async () => {
+			const res = await GET(createMockEvent('stock_transfer:1', { shelter_code: 'SH001' }));
+			expect(res.status).toBe(403);
+			expect(mockGet).not.toHaveBeenCalled();
+		});
+
+		it('200 when acting as the shelter where they hold warehouse_staff', async () => {
+			const res = await GET(createMockEvent('stock_transfer:1', { shelter_code: 'SH002' }));
+			expect(res.status).toBe(200);
+		});
+
+		it('400 when no shelter is named — the first is not assumed', async () => {
+			const res = await GET(createMockEvent('stock_transfer:1'));
+			expect(res.status).toBe(400);
+			expect(mockGet).not.toHaveBeenCalled();
+		});
+	});
+
 	it('returns 404 when transfer is not found', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 			name: 'ws_user',

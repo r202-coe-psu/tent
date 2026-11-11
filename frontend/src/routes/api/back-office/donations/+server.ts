@@ -218,7 +218,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			ctx
 		);
 
-		const lotNos = await allocateLotNos(dbName, counted.length);
+		const lotNos = await allocateLotNos(dbName, counted.length, ctx);
 		const countedWithLots: CountedItem[] = counted.map((line, i) => ({
 			...line,
 			lot: { ...(line.lot ?? {}), lot_no: lotNos[i] }

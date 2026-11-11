@@ -139,7 +139,7 @@ describe.each([
 	}
 
 	it('sends the QR override dates with an evacuee recipient picked by an expired QR', async () => {
-		await submitWith('pick-evacuee-qr-override');
+		await submitWith('pick-solo-evacuee-qr-override');
 
 		expect(mock).toHaveBeenCalledTimes(1);
 		expect(mock.mock.calls[0][0].input).toMatchObject({
@@ -150,7 +150,7 @@ describe.each([
 	});
 
 	it('sends no override for an evacuee picked normally', async () => {
-		await submitWith('pick-evacuee');
+		await submitWith('pick-solo-evacuee');
 
 		expect(mock).toHaveBeenCalledTimes(1);
 		expect(mock.mock.calls[0][0].input.recipient_qr_override).toBeUndefined();

@@ -114,7 +114,7 @@ function toHttpError(
 	docContext?: { docId?: string; docType?: string }
 ): AppError {
 	if (status === 404) return new NotFoundError();
-	if (status === 409) return new ConflictError();
+	if (status === 409) return new ConflictError(undefined, { httpStatus: 409 });
 	if (status === 401) return new CouchAuthError(401);
 	if (status === 403) {
 		if (isCouchDocumentPolicyForbidden(data)) {

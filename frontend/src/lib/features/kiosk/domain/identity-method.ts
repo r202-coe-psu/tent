@@ -10,12 +10,19 @@ export interface IdentityMethodDefinition {
 	href?: typeof KIOSK_QR_PATH | typeof KIOSK_CARD_PATH | typeof KIOSK_THAID_PATH;
 }
 
+export const KIOSK_HOME_PATH = '/kiosk';
+export const KIOSK_LANGUAGE_PATH = '/kiosk/language';
 export const KIOSK_QR_PATH = '/kiosk/qr';
 export const KIOSK_CARD_PATH = '/kiosk/scanner/waiting';
 export const KIOSK_THAID_PATH = '/kiosk/thaid';
 export const KIOSK_REPRINT_PATH = '/kiosk/reprint';
 export const KIOSK_PRINT_QR_PATH = '/kiosk/print-qr';
 export const KIOSK_VOLUNTEER_CARD_PATH = '/kiosk/volunteer';
+
+/** The method page, where a visit starts and ends (with or without the trailing slash). */
+export function isKioskHomePath(pathname: string): boolean {
+	return pathname === KIOSK_HOME_PATH || pathname === `${KIOSK_HOME_PATH}/`;
+}
 
 /**
  * Not a check-in method: a secondary entry under the method grid for printing a QR (a registered

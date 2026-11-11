@@ -1,3 +1,5 @@
+import type { LanguageCode } from '$lib/utils/language';
+
 export const KIOSK_DISPLAY_QUERY_KEYS = [
 	'shelter_name',
 	'shelter_code',
@@ -21,23 +23,36 @@ export interface KioskDisplayContext {
 	deviceName: string;
 }
 
-const FALLBACK_DISPLAY_CONTEXT: KioskDisplayContext = {
-	shelterName: 'ศูนย์พักพิง',
-	shelterCode: '',
-	stationName: 'จุดคัดกรองทั่วไป',
-	deviceName: 'Kiosk'
+const FALLBACK_DISPLAY_CONTEXT: Record<LanguageCode, KioskDisplayContext> = {
+	th: {
+		shelterName: 'ศูนย์พักพิง',
+		shelterCode: '',
+		stationName: 'จุดคัดกรองทั่วไป',
+		deviceName: 'Kiosk'
+	},
+	en: {
+		shelterName: 'Shelter',
+		shelterCode: '',
+		stationName: 'General screening point',
+		deviceName: 'Kiosk'
+	}
 };
 
 function clean(value: string | null | undefined): string {
 	return value?.trim() ?? '';
 }
 
-export function getKioskDisplayContext(query: KioskDisplayQuery): KioskDisplayContext {
+/** `language` only picks the wording of the fallbacks; names that came in the query stay as given. */
+export function getKioskDisplayContext(
+	query: KioskDisplayQuery,
+	language: LanguageCode = 'th'
+): KioskDisplayContext {
+	const fallback = FALLBACK_DISPLAY_CONTEXT[language];
 	return {
-		shelterName: clean(query.shelter_name) || FALLBACK_DISPLAY_CONTEXT.shelterName,
+		shelterName: clean(query.shelter_name) || fallback.shelterName,
 		shelterCode: clean(query.shelter_code),
-		stationName: clean(query.station_name) || FALLBACK_DISPLAY_CONTEXT.stationName,
-		deviceName: clean(query.device_name) || FALLBACK_DISPLAY_CONTEXT.deviceName
+		stationName: clean(query.station_name) || fallback.stationName,
+		deviceName: clean(query.device_name) || fallback.deviceName
 	};
 }
 
@@ -48,18 +63,19 @@ export function getKioskDisplayContext(query: KioskDisplayQuery): KioskDisplayCo
 export type KioskContextQuery = '' | `?${string}`;
 
 /**
- * Preserve allowlisted display context when moving between kiosk routes.
- * Secrets, session identifiers, and unknown query parameters never cross this boundary.
+ * Preserve allowlisted display context when moving between kiosk routes. Takes the raw query, not
+ * a `KioskDisplayContext`: fallback names stay out of the URL so the next screen can still word
+ * them in the language the person picked. Secrets, session identifiers, and unknown query
+ * parameters never cross this boundary.
  */
-export function buildKioskContextQuery(context: KioskDisplayContext): KioskContextQuery {
+export function buildKioskContextQuery(query: KioskDisplayQuery): KioskContextQuery {
 	const params = new URLSearchParams();
-
-	params.set('shelter_name', context.shelterName);
-	if (context.shelterCode) params.set('shelter_code', context.shelterCode);
-	params.set('station_name', context.stationName);
-	params.set('device_name', context.deviceName);
-
-	return `?${params.toString()}`;
+	for (const key of KIOSK_DISPLAY_QUERY_KEYS) {
+		const value = clean(query[key]);
+		if (value) params.set(key, value);
+	}
+	const search = params.toString();
+	return search ? `?${search}` : '';
 }
 
 /** Read only allowlisted kiosk context keys from a URL. */

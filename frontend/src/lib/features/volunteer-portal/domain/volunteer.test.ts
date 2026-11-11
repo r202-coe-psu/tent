@@ -403,7 +403,6 @@ describe('volunteerProfileUpdateSchema', () => {
 			status: 'inactive'
 		});
 		expect(parsed.success && parsed.data).toEqual({ skills: ['ครัว'] });
-		expect(parsed.success && parsed.data).toEqual({ skills: ['ครัว'] });
 	});
 });
 

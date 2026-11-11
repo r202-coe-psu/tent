@@ -90,9 +90,9 @@ export default defineConfig(({ mode }) => {
 			environment: 'node',
 			setupFiles: ['./src/lib/testing/vitest-setup.ts'],
 			// Persistent transform cache: node_modules/.experimental-vitest-cache (delete if stale).
-			// VITEST_NO_FS_CACHE=1 disables it (pre-push hook). The CLI flag
-			// `--experimental.fsModuleCache=false` is NOT honoured: projects (`extends: true`) take
-			// the value from this file.
+			// Pre-push leaves this cache on. Set VITEST_NO_FS_CACHE=1 to disable it for one run.
+			// The CLI flag `--experimental.fsModuleCache=false` is NOT honoured: projects
+			// (`extends: true`) take the value from this file.
 			experimental: { fsModuleCache: process.env.VITEST_NO_FS_CACHE !== '1' },
 			projects: [
 				{

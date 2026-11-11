@@ -114,6 +114,55 @@ describe('VolunteerRemoteRepository', () => {
 		});
 	});
 
+	describe("accepting another shelter's result (CR-228)", () => {
+		const fromSh001 = { shelter_code: 'SH001', verified_at: '2026-11-01T03:00:00.000Z' };
+
+		it('marks an accepted identity and skill with accepted_from and stamps schema_v 5', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh002');
+			const created = await repo.create({ ...baseInput, skills: ['medical'] }, ctx);
+
+			const identity = await repo.reviewIdentity(created._id, 'verified', 'sm02', null, fromSh001);
+			expect(identity.schema_v).toBe(5);
+			expect(identity.identity_verified).toBe(true);
+			expect(identity.identity_verification).toMatchObject({
+				status: 'verified',
+				reviewed_by: 'sm02',
+				notes: null,
+				accepted_from: fromSh001
+			});
+
+			const skill = await repo.reviewSkill(
+				created._id,
+				'medical',
+				'verified',
+				'sm02',
+				null,
+				'ว.555',
+				{ shelter_code: 'SH001', verified_at: null }
+			);
+			expect(skill.skill_verifications?.medical).toEqual({
+				status: 'verified',
+				reviewed_at: expect.any(String),
+				reviewed_by: 'sm02',
+				notes: null,
+				credential_reference: 'ว.555',
+				accepted_from: { shelter_code: 'SH001', verified_at: null }
+			});
+		});
+
+		it('drops the mark when the result is checked again at this shelter', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh002');
+			const created = await repo.create({ ...baseInput, skills: ['medical'] }, ctx);
+			await repo.reviewIdentity(created._id, 'verified', 'sm02', null, fromSh001);
+			await repo.reviewSkill(created._id, 'medical', 'verified', 'sm02', null, null, fromSh001);
+
+			const identity = await repo.reviewIdentity(created._id, 'verified', 'sm02', 'ตรวจบัตรเอง');
+			expect(identity.identity_verification?.accepted_from).toBeUndefined();
+			const skill = await repo.reviewSkill(created._id, 'medical', 'verified', 'sm02', null, null);
+			expect(skill.skill_verifications?.medical.accepted_from).toBeUndefined();
+		});
+	});
+
 	it('getByTrackingToken / getByPhoneHash return null when absent', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 		expect(await repo.getByTrackingToken('missing')).toBeNull();

@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import UsersRound from '@lucide/svelte/icons/users-round';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import type { KioskHouseholdCandidate } from '../data/kiosk-check-in.api';
+	import { KIOSK_QR_FLOW_I18N } from './_constants/kiosk-qr-flow.i18n';
 
 	interface Props {
 		candidates: KioskHouseholdCandidate[];
@@ -13,23 +16,25 @@
 
 	let { candidates, onselect, disabled = false, mode = 'check-in' }: Props = $props();
 
+	const t = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).picker);
+
 	function summary(candidate: KioskHouseholdCandidate): string {
 		if (mode === 'reprint') {
 			return candidate.pending_count === 0
-				? `สมาชิก ${candidate.member_count} คน · ยังไม่มี QR ให้พิมพ์`
-				: `สมาชิก ${candidate.member_count} คน · พิมพ์ QR ได้ ${candidate.pending_count} คน`;
+				? t.reprintNone(candidate.member_count)
+				: t.reprintSome(candidate.member_count, candidate.pending_count);
 		}
 		return candidate.pending_count === 0
-			? 'รายงานตัวครบแล้ว'
-			: `สมาชิก ${candidate.member_count} คน · รอรายงานตัว ${candidate.pending_count} คน`;
+			? t.allReported
+			: t.pendingSummary(candidate.member_count, candidate.pending_count);
 	}
 
 	function accessibleName(candidate: KioskHouseholdCandidate): string {
 		const state =
 			mode === 'reprint'
-				? `พิมพ์ QR ได้ ${candidate.pending_count} คน`
-				: `รอรายงานตัว ${candidate.pending_count} คน`;
-		return `${candidate.contact_display}, สมาชิก ${candidate.member_count} คน, ${state}`;
+				? t.reprintState(candidate.pending_count)
+				: t.pendingState(candidate.pending_count);
+		return t.accessibleName(candidate.contact_display, candidate.member_count, state);
 	}
 </script>
 
@@ -39,10 +44,10 @@
 			id="phone-household-title"
 			class="text-lg font-bold tracking-tight text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
 		>
-			พบหลายครัวเรือนที่ใช้เบอร์นี้
+			{t.heading}
 		</h2>
 		<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-			เลือกครัวเรือนของท่าน
+			{t.subheading}
 		</p>
 	</header>
 	<div class="space-y-2 kiosk-portrait:space-y-4">
@@ -63,7 +68,7 @@
 				</span>
 				<span class="min-w-0 flex-1">
 					<span class="block truncate text-lg font-bold sm:text-xl kiosk-portrait:text-3xl"
-						>{candidate.contact_display || 'ไม่ระบุชื่อ'}</span
+						>{candidate.contact_display || t.noName}</span
 					>
 					<span
 						class="mt-1 block text-base font-medium text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"

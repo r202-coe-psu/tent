@@ -3,7 +3,7 @@ id: CR-232
 title: Export Excel ในแท็บ dashboard ผู้อพยพ — รายชื่อชาวต่างชาติสำหรับกงสุล (PII) + ตัวเลข dashboard
 status: approved
 date: 2026-11-06
-updated: 2026-11-08
+updated: 2026-11-10
 requested_by: Dev Team B (epic #1050 · issue #1206, #1207)
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -41,7 +41,7 @@ affects:
 | ID | Requirement |
 | --- | --- |
 | FR-1 | ปุ่ม export ทั้งสองอยู่ในแท็บ dashboard ของ `/back-office/evacuee-management` และใช้ศูนย์ที่เลือกอยู่ในหน้านั้น |
-| FR-2 | สิทธิ์ใช้ได้เฉพาะ SA และ shelter_manager — ตรวจด้วย `canAccessManagerPages(roles, shelterCode)` (= `isSystemAdmin(roles) \|\| isShelterManager(roles, shelterCode)`); **ไม่อนุญาต `registration_staff`** และห้ามใช้ `requireEvacueeRegistration` / `canAccessEvacueeRegistration` เป็นเงื่อนไขของปุ่ม — ไม่เพิ่ม role; shelter_manager export ได้เฉพาะศูนย์ตนเอง, SA เลือกศูนย์ใดก็ได้ |
+| FR-2 | สิทธิ์ใช้ได้เฉพาะ SA และ shelter_manager — ตรวจด้วย `canAccessManagerPages(roles, shelterCode)` (= `isSystemAdmin(roles) \|\| isShelterManager(roles, shelterCode)`); **ไม่อนุญาต `registration_staff`** และห้ามใช้ `requireEvacueeRegistration` / `canAccessEvacueeRegistration` เป็นเงื่อนไขของปุ่ม — ไม่เพิ่ม role; shelter_manager export ได้เฉพาะศูนย์ตนเอง, SA เลือกศูนย์ใดก็ได้ — **ขอบเขตการบังคับ (owner ยืนยัน 2026-11-10, PR #1233 review B2):** บังคับเฉพาะที่ UI (ปุ่ม export); BFF `/api/back-office/shelter/[code]/dashboard/*` คงใช้ `requireShelterScopeOrSA` เพราะ `registration_staff` ต้องเปิดดู dashboard tab ได้ จึงไม่บังคับ SA/SM ที่ BFF |
 | FR-3 | ไฟล์สร้างใน browser ด้วย `exceljs` จากข้อมูลที่อ่านผ่าน session ของผู้ใช้; ไม่มี endpoint ใหม่, ไม่ใช้ `export_job`, ไม่เพิ่ม Mango index / view |
 | FR-4 | export สำเร็จหรือล้มเหลวแจ้งด้วย toast เท่านั้น (ไม่ใช้ `console.log`) |
 | FR-5 | เวลาในชื่อไฟล์และหัว sheet ใช้ +07 (`Asia/Bangkok`) |
@@ -91,7 +91,7 @@ affects:
 | --- | --- |
 | FR-50 | ปุ่ม "Export Excel" ที่หัวแท็บ dashboard ใช้ศูนย์และช่วงวันที่เลือกอยู่บนจอ; ถ้า query ใดยังโหลดไม่เสร็จหรือ error ปุ่มกดไม่ได้ |
 | FR-51 | ชื่อไฟล์ `dashboard-{shelter_code}-{YYYYMMDD-HHmm}.xlsx`; ภาษาไทย เป็นตัวเลขอย่างเดียว ไม่มีกราฟ |
-| FR-52 | ไฟล์มี 1 sheet ต่อ 1 ส่วน รวม 6 sheet ชื่อตายตัวตามลำดับ: `KPI` (`dashboard/occupancy`) · `ลงทะเบียนรายวัน` (`dashboard/registration`, ช่วงวันเดียวกับบนจอ) · `ช่วงอายุ` (`dashboard/demographics` `age_groups`) · `สัญชาติ` (`dashboard/demographics` `countries`) · `เวลาบริการต่อจุด` และ `อันดับเจ้าหน้าที่` (`dashboard/station-times`) — S3 (`buildDashboardSheets`) และ S4 (`writeWorkbook`) assert ชื่อเหล่านี้ |
+| FR-52 | ไฟล์มี 1 sheet ต่อ 1 ส่วน รวม 5 sheet ชื่อตายตัวตามลำดับ: `KPI` (`dashboard/occupancy`) · `ลงทะเบียนรายวัน` (`dashboard/registration`, ช่วงวันเดียวกับบนจอ) · `ช่วงอายุ` (`dashboard/demographics` `age_groups`) · `สัญชาติ` (`dashboard/demographics` `countries`) · `เวลาบริการต่อจุด` (`dashboard/station-times`) — **ไม่มี sheet `อันดับเจ้าหน้าที่`** (2026-11-08, review PR #1233 W2: ชีตนั้นแสดงชื่อเจ้าหน้าที่รายบุคคล ขัดกับหัวข้อ C "ไม่มี PII รายบุคคล"; ปิดไว้ก่อน เปิดกลับได้เมื่อ owner ตัดสินเรื่องการเปิดเผยชื่อ) — S3 (`buildDashboardSheets`) และ S4 (`writeWorkbook`) assert ชื่อเหล่านี้ |
 | FR-53 | ทุก sheet มีหัวบอกชื่อและรหัสศูนย์, ช่วงวัน, เวลาที่ export (+07) |
 | FR-54 | ไม่มีข้อมูลรายคน → **ไม่เขียน `audit`** |
 
