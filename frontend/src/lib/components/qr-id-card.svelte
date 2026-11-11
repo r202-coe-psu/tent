@@ -52,7 +52,11 @@
 
 <div class={cn('flex h-full w-full flex-row text-black', className)}>
 	<div class="flex min-w-0 flex-1 flex-col gap-[1mm]">
-		<p class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere]">{name}</p>
+		<p
+			class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere] whitespace-pre-line"
+		>
+			{name}
+		</p>
 		{#each lines as line (line)}
 			<p class="text-[10pt] leading-[1.3] font-medium [overflow-wrap:anywhere]">{line}</p>
 		{/each}

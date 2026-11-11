@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Evacuee } from './people';
-import { buildEvacueeQrLabel } from './evacuee-qr-label';
+import { buildEvacueeQrLabel, EVACUEE_QR_PLACEHOLDER_PAYLOAD } from './evacuee-qr-label';
 
 function ev(partial: {
 	status: Evacuee['current_stay']['status'];
@@ -44,9 +44,9 @@ describe('buildEvacueeQrLabel', () => {
 				hasScreening: true
 			})
 		).toEqual({
-			qrPayload: 'evacuee:abc123',
+			qrPayload: EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 			label: {
-				name: 'สมชาย ใจดี',
+				name: 'สมชาย\nใจดี',
 				zone: 'เอ',
 				emergencyPhone: null,
 				checkedCount: 3
@@ -70,6 +70,16 @@ describe('buildEvacueeQrLabel', () => {
 		expect(label.checkedCount).toBe(1);
 	});
 
+	it('uses the issued payload when given, and a non-person placeholder otherwise (CR-233)', () => {
+		const e = ev({ status: 'arriving' });
+		const issued = 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0@683508';
+		const input = { hasScreening: false };
+		expect(buildEvacueeQrLabel(e, { ...input, qrPayload: issued }).qrPayload).toBe(issued);
+		const placeholder = buildEvacueeQrLabel(e, input).qrPayload;
+		expect(placeholder).toBe(EVACUEE_QR_PLACEHOLDER_PAYLOAD);
+		expect(placeholder.startsWith('evacuee:')).toBe(false);
+	});
+
 	it('prints the emergency contact phone as digits only', () => {
 		const evacuee = {
 			...ev({ status: 'active', zone: 'A' }),
@@ -77,5 +87,37 @@ describe('buildEvacueeQrLabel', () => {
 		} as Evacuee;
 		const { label } = buildEvacueeQrLabel(evacuee, { zones: ZONES, hasScreening: true });
 		expect(label.emergencyPhone).toBe('0812345678');
+	});
+
+	it('prints the first name alone when there is no last name', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '' }), {
+			zones: ZONES,
+			hasScreening: false
+		});
+		expect(label.name).toBe('สมชาย');
+	});
+
+	it('omits a whitespace-only last name', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '   ' }), {
+			zones: ZONES,
+			hasScreening: false
+		});
+		expect(label.name).toBe('สมชาย');
+	});
+
+	it('gives an empty name when both names are blank', () => {
+		const { label } = buildEvacueeQrLabel(
+			ev({ status: 'arriving', first_name: ' ', last_name: '' }),
+			{ zones: ZONES, hasScreening: false }
+		);
+		expect(label.name).toBe('');
+	});
+
+	it('trims each name part before joining', () => {
+		const { label } = buildEvacueeQrLabel(
+			ev({ status: 'arriving', first_name: ' สมชาย ', last_name: ' ใจดี ' }),
+			{ zones: ZONES, hasScreening: false }
+		);
+		expect(label.name).toBe('สมชาย\nใจดี');
 	});
 });

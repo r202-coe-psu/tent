@@ -10,9 +10,10 @@ import {
 } from '../data/kiosk-check-in.api';
 import type { KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 import { isKioskPhoneSubmittable } from '../domain/phone';
-import { REPRINT_NOBODY_REASON, REPRINT_PRE_REGISTERED_REASON } from '../domain/check-in-status';
 import { selectableIds, isAllSelected, toggleAllSelection } from '../domain/household-selection';
+import type { LanguageCode } from '$lib/stores/language.svelte';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
+import { REPRINT_SESSION_I18N, type ReprintSessionMessages } from './reprint-session.i18n';
 
 export const REPRINT_LAST4_LENGTH = 4;
 export const REPRINT_PHONE_MAX_LENGTH = 10;
@@ -34,31 +35,24 @@ export interface ReprintSessionDeps {
 	print(members: readonly KioskReprintMember[]): Promise<KioskPrintFlowResult>;
 }
 
-const NOT_FOUND_MESSAGE = 'ไม่พบข้อมูลที่ลงทะเบียนด้วยเบอร์นี้';
-const RATE_LIMITED_MESSAGE = 'ลองผิดหลายครั้ง กรุณารอสักครู่หรือติดต่อเจ้าหน้าที่';
-const UNVERIFIABLE_MESSAGE = 'ไม่สามารถยืนยันตัวตนได้ กรุณาติดต่อเจ้าหน้าที่';
-const VERIFY_FAILED_MESSAGE = 'เลข 4 ตัวท้ายไม่ถูกต้อง';
-const GENERIC_MESSAGE = 'ระบบไม่สามารถทำรายการได้ กรุณาลองอีกครั้ง';
-const PRINT_RENDER_FAILED_MESSAGE = 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ';
-
-function messageFor(error: unknown): string {
-	if (!(error instanceof KioskRequestError)) return GENERIC_MESSAGE;
+function messageFor(error: unknown, t: ReprintSessionMessages): string {
+	if (!(error instanceof KioskRequestError)) return t.generic;
 	switch (error.code) {
 		case 'PRE_REGISTRATION_NOT_FOUND':
 		case 'KIOSK_REPRINT_NOT_FOUND':
-			return NOT_FOUND_MESSAGE;
+			return t.notFound;
 		case 'KIOSK_RATE_LIMITED':
-			return RATE_LIMITED_MESSAGE;
+			return t.rateLimited;
 		case 'KIOSK_REPRINT_UNVERIFIABLE':
-			return UNVERIFIABLE_MESSAGE;
+			return t.unverifiable;
 		case 'KIOSK_REPRINT_VERIFY_FAILED':
-			return VERIFY_FAILED_MESSAGE;
+			return t.verifyFailed;
 		case 'KIOSK_TOO_MANY_MATCHES':
-			return 'พบหลายรายการ กรุณาติดต่อเจ้าหน้าที่';
+			return t.tooManyMatches;
 		case 'KIOSK_METHOD_DISABLED':
-			return 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่';
+			return t.methodDisabled;
 		default:
-			return error.message || GENERIC_MESSAGE;
+			return error.message || t.generic;
 	}
 }
 
@@ -82,6 +76,8 @@ export class ReprintSession {
 	/** Verified labels of the household, kept so a printer failure can retry without re-asking. */
 	printable = $state.raw<KioskReprintMember[]>([]);
 	printedCount = $state(0);
+	/** Members of the last print whose QR could not be issued (not printed): tell the visitor. */
+	qrIssueFailedCount = $state(0);
 
 	private phoneValue = $state('');
 	private last4Value = $state('');
@@ -90,7 +86,18 @@ export class ReprintSession {
 	/** Bumped by `reset()` so an answer for an abandoned visit is dropped. */
 	private generation = 0;
 
-	constructor(private readonly deps: ReprintSessionDeps) {}
+	/**
+	 * `language` is read each time a message is worded, so it follows the visitor's choice; it
+	 * defaults to Thai. Messages the server wrote are shown as they came.
+	 */
+	constructor(
+		private readonly deps: ReprintSessionDeps,
+		private readonly language: () => LanguageCode = () => 'th'
+	) {}
+
+	private get messages(): ReprintSessionMessages {
+		return REPRINT_SESSION_I18N[this.language()];
+	}
 
 	get phone(): string {
 		return this.phoneValue;
@@ -131,7 +138,7 @@ export class ReprintSession {
 	get blockedReason(): string {
 		const everyonePreRegistered =
 			this.members.length > 0 && this.members.every((m) => m.status === 'pre_registered');
-		return everyonePreRegistered ? REPRINT_PRE_REGISTERED_REASON : REPRINT_NOBODY_REASON;
+		return everyonePreRegistered ? this.messages.blockedPreRegistered : this.messages.blockedNobody;
 	}
 
 	get allSelected(): boolean {
@@ -190,7 +197,7 @@ export class ReprintSession {
 		} catch (error) {
 			if (generation !== this.generation) return;
 			this.last4Value = '';
-			this.error = messageFor(error);
+			this.error = messageFor(error, this.messages);
 			if (error instanceof KioskRequestError && error.code === 'KIOSK_REPRINT_NOT_FOUND') {
 				this.clearHousehold();
 				this.step = 'phone';
@@ -239,7 +246,7 @@ export class ReprintSession {
 				return { kind: 'not_set' };
 			}
 			if (error instanceof KioskRequestError && error.code === 'KIOSK_REPRINT_NOT_FOUND') {
-				this.error = messageFor(error);
+				this.error = messageFor(error, this.messages);
 				this.clearHousehold();
 				this.step = 'phone';
 				return { kind: 'error' };
@@ -307,6 +314,7 @@ export class ReprintSession {
 		this.clearHousehold();
 		this.printable = [];
 		this.printedCount = 0;
+		this.qrIssueFailedCount = 0;
 		this.fromCandidates = false;
 		this.step = 'phone';
 	}
@@ -324,7 +332,7 @@ export class ReprintSession {
 				return;
 			}
 			if (found.kind === 'kiosk_registered') {
-				this.error = NOT_FOUND_MESSAGE;
+				this.error = this.messages.notFound;
 				this.step = 'phone';
 				return;
 			}
@@ -336,19 +344,30 @@ export class ReprintSession {
 			this.step = 'members';
 		} catch (error) {
 			if (generation !== this.generation) return;
-			this.error = messageFor(error);
+			this.error = messageFor(error, this.messages);
 		} finally {
 			if (generation === this.generation) this.busy = false;
 		}
 	}
 
 	private async printLabels(generation: number): Promise<void> {
+		// A member without a freshly issued payload is never printed (FR-EQR-24).
+		const printable = this.printable.filter((m) => !m.qr_issue_failed && Boolean(m.qr_payload));
+		const failedCount = this.printable.length - printable.length;
+		if (printable.length === 0) {
+			this.printable = [];
+			this.error = this.messages.qrIssueFailed;
+			this.step = 'members';
+			return;
+		}
+		this.printable = printable;
+		this.qrIssueFailedCount = failedCount;
 		this.step = 'printing';
 		let outcome: KioskPrintFlowResult;
 		try {
 			outcome = await this.deps.print(this.printable);
 		} catch {
-			outcome = { kind: 'error', message: PRINT_RENDER_FAILED_MESSAGE };
+			outcome = { kind: 'error', message: this.messages.printRenderFailed };
 		}
 		if (generation !== this.generation) return;
 		if (outcome.kind === 'error') {

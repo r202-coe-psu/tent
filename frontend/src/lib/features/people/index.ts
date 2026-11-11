@@ -208,12 +208,22 @@ export {
 
 export {
 	buildEvacueeQrLabel,
+	EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 	type EvacueeQrLabel,
 	type EvacueeQrLabelInput
 } from './domain/evacuee-qr-label';
 
 export {
+	checkPersonQr,
+	staffPersonQrRejectionMessage,
+	type EvacueeQrPrintsReader
+} from './application/evacuee-qr-check';
+export { issueQrPayloads, type IssuedQrPayloads } from './application/evacuee-qr-issue';
+export { readEvacueeQrPrints } from './data/evacuee-qr.remote';
+
+export {
 	extractScanLookupToken,
+	extractScanPersonQr,
 	toCouchEvacueeId,
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit
@@ -360,6 +370,7 @@ export {
 	type FederatedScanHit,
 	type FederatedScanCouchHit,
 	type FederatedScanUnassignedHit,
+	type FederatedScanRejectedHit,
 	type FederatedScanLookupDeps,
 	useHouseholds,
 	useHousehold,
