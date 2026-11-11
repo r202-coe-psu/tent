@@ -66,13 +66,21 @@ describe('normalizeFoodSphereStandard (#936)', () => {
 	const legacy = (daily_demand: unknown, status?: 'active' | 'inactive') =>
 		({ ...base, schema_v: 2, daily_demand, status }) as unknown as FoodSphereStandard;
 
-	it('converts a legacy number to a string without rounding', () => {
-		expect(normalizeFoodSphereStandard(legacy(6.33333)).daily_demand).toBe('6.33333');
+	it('rounds a legacy number to four decimal places', () => {
+		expect(normalizeFoodSphereStandard(legacy(6.33333)).daily_demand).toBe('6.3333');
 	});
 
-	it('does not use exponent notation for tiny legacy numbers', () => {
-		expect(normalizeFoodSphereStandard(legacy(1e-7)).daily_demand).toBe('0.0000001');
+	it('rejects a positive legacy number that rounds to zero', () => {
+		expect(() => normalizeFoodSphereStandard(legacy(1e-7))).toThrow(/daily_demand/);
 	});
+
+	// undefined: the type guard no longer checks daily_demand, so a missing value must fail here.
+	it.each([undefined, null, '', ' ', 'abc', 'NaN', 'Infinity', NaN, Infinity, -1])(
+		'rejects invalid demand %s',
+		(value) => {
+			expect(() => normalizeFoodSphereStandard(legacy(value))).toThrow(/daily_demand/);
+		}
+	);
 
 	it('leaves a string unchanged', () => {
 		expect(normalizeFoodSphereStandard(legacy('2100')).daily_demand).toBe('2100');
