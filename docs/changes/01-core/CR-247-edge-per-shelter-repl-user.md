@@ -22,6 +22,7 @@ affects:
   - frontend/src/lib/server/registry-design.ts + `syncCatalogAccessDesign` ใน frontend/scripts/sync-central-db.ts (ปฏิเสธ `repl:*`)
   - worker/src/worker/ (คำสั่งใหม่ `edge-users-copy` — คัดลอก `_users` ของ central ลง `edge_users_<code>`) + worker/tests/ (unit + integration)
   - docker-compose.yml (service ใหม่ `edge-users-copy` บน central — build จาก `worker/Dockerfile` ตัวเดียวกับ service `worker`, ไม่มี env ของ MongoDB, ตั้ง `mem_limit`)
+  - scripts/edge-users-clean.sh + scripts/tests/edge-users-clean.test.sh (ใหม่ — FR-13a เก็บกวาด orphan ใน `edge_users_*`)
   - scripts/central-repl-user.sh (มีอยู่แล้ว — ต่อยอด: ชื่อเดายาก, สร้าง `edge_users_<code>`, `--status`, ตรวจ `_security` ของ `edge_users_*`) + scripts/tests/central-repl-user.test.sh (ใหม่)
   - frontend/src/lib/server/user-service.ts (ซ่อน/กันแก้บัญชี `repl_*` ในหน้าจัดการผู้ใช้)
   - scripts/edge-init.sh, scripts/edge-watchdog.sh, .env.edge.example, docker-compose.edge.yml (`CENTRAL_REPL_*` → `EDGE_REPL_*`)
@@ -113,13 +114,14 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
   - **เหตุผล (`edge-users-copy` แทน `_replicator`):** `_replicator` ต้องมี job ต่อเนื่องหนึ่งตัวต่อศูนย์ และทุก job อ่าน + กรอง `_users` ทั้งก้อนเอง — 100 ศูนย์ = 100 job ต่อเนื่องค้างไว้บน central (เกิน `[replicator] max_jobs` ซึ่ง default = 500 เมื่อไหร่ scheduler จะหมุน job ทำให้การถอดสิทธิ์ถึง edge ช้าลง) และตอน rollout ทุก job ไล่ `_users` จาก seq 0 พร้อมกัน · `edge-users-copy` อ่าน feed เดียวแล้วเขียนเฉพาะศูนย์ที่เกี่ยว ไม่ว่ามีกี่ศูนย์
   - **revision tree ไม่เสีย:** prototype บน CouchDB local (2026-11-11) — edge ที่ดึง `_users` ตรงอยู่แล้วเปลี่ยน source มาเป็น `edge_users_<code>` ที่เขียนด้วย `new_edits: false` → ไม่มี conflict ทุกกรณี (สลับ source, เปลี่ยนรหัส 2 ครั้งแต่คัดลอกแค่ครั้งล่าสุด, ถอด role, soft delete, ประมวลผล change ซ้ำ) · ตัวควบคุมที่เขียนแบบปกติเกิด conflict
   - ถอด role / soft delete / ย้ายศูนย์: `edge_shelters` เป็น append-only (CR-171 FR-2) → revision ใหม่ยังไปถึงศูนย์เดิมเสมอ
-  - hard delete (tombstone ไม่มี `edge_shelters`) **นอกขอบเขต** — เหมือนเดิม · ติดตามที่ #1331
+  - hard delete (tombstone ไม่มี `edge_shelters`) ไม่ไหลลง `edge_users_<code>` ตามเดิม — เก็บกวาดภายหลังด้วย `scripts/edge-users-clean.sh` (FR-13a) · การไหลอัตโนมัติยังเป็นขอบเขตของ #1331
 - **FR-11a (backfill)** — เมื่อมี `edge_users_<code>` ใหม่ (FR-10) `edge-users-copy` ต้องคัดลอก user ที่มีอยู่แล้วของศูนย์นั้นทั้งหมดด้วยวิธีเดียวกับ FR-11 ภายใน 1 นาทีหลังสร้าง DB · อ่าน `_users` ทีละหน้า (เช่น 500 doc) ห้ามโหลดทั้งก้อน · backfill เสร็จ → เขียน `_local/backfill_done` (เวลาที่เสร็จ) ลงใน `edge_users_<code>` ของศูนย์นั้นเอง · backfill ซ้ำต้องไม่มีผลเสีย (`new_edits: false` กับ revision ที่มีแล้ว = no-op)
   - **รู้ว่ามีศูนย์ใหม่:** `edge-users-copy` เช็กรายชื่อ DB ทุก 30 วินาทีด้วย `GET /_all_dbs?start_key="edge_users_"&end_key="edge_users_\ufff0"` · DB ที่ยังไม่มี `_local/backfill_done` = ศูนย์ใหม่ → backfill · service ปิดอยู่ตอนสร้าง DB → เจอในรอบแรกหลังเปิด
   - **ทำไมเก็บไว้ใน DB ของศูนย์ ไม่ใช่รายชื่อกลาง:** `--remove` ลบ DB แล้ว `_local/backfill_done` หายไปด้วยเอง ติดตั้งใหม่ (แม้ภายใน 30 วินาที) DB ใหม่ยังไม่มี doc นี้จึง backfill แน่นอน · สคริปต์กับ service ไม่ต้องเขียน doc เดียวกัน · doc `_local` ไม่ถูก replicate ไป edge
   - รายชื่อ DB ชุดเดียวกันใช้ตัดสินว่าศูนย์ไหน "มี DB `edge_users_<code>` อยู่" ใน FR-11 · ไม่ใช้ `_db_updates` (ต้องพึ่ง DB ระบบ `_global_changes` และ checkpoint อีกตัว)
 - **FR-12** — `central-repl-user.sh` ทุก action ตรวจ `edge_users_*` ทุก DB บน central: `members.names` ไม่ว่าง หรือ `members.roles` ≠ `["repl:<CODE>"]` พอดี (รวมกรณีว่าง = เปิดสาธารณะ) → หยุดพร้อม error ระบุชื่อ DB
 - **FR-13 (health)** — service FR-11 บันทึกสถานะ (`last_seq` ที่ประมวลผลแล้ว, `last_error`, `updated_at`) ใน `_users/_local/edge_users_copy` · `scripts/central-repl-user.sh <CODE> --status` อ่าน doc นี้ด้วย `curl` แล้วแสดงเทียบกับ `update_seq` ของ `_users` และสถานะ backfill ของศูนย์ (`_local/backfill_done` ใน `edge_users_<code>`, FR-11a) · แสดง **"edge ดึงข้อมูลล่าสุดเมื่อ"** จาก checkpoint ที่ replicator ของ edge เขียนไว้ใน `edge_users_<code>` (doc `_local/<id>` ยกเว้น `_local/backfill_done` ฟิลด์ `history[0].end_time` — CouchDB เขียนให้เองทุกครั้งที่ edge ดึง; ทดสอบบน CouchDB local 2026-11-11) · ไม่มี checkpoint = "edge ยังไม่เคยต่อเข้ามา" · exit ≠ 0 เมื่อมี `last_error` หรือ service ตามหลัง `_users` นานเกิน 5 นาที · SETUP-CENTRAL.md ระบุให้ใส่ในการตรวจประจำวันของ central
+- **FR-13a (เก็บกวาด user ที่ถูกลบจริง)** — `scripts/edge-users-clean.sh [CODE...] [--apply] [--allow-empty]` เทียบ id ใน `edge_users_*` กับ `_users` ที่ central แล้วลบ doc ที่ไม่มีใน `_users` แล้ว (ไม่แตะ `_design/*`) · ค่าเริ่มต้นเป็น dry-run พิมพ์ `<db> <id>` ต่อ orphan · `--apply` ลบด้วย `_bulk_docs` ครั้งละ 100 · อ่าน `_users` ก่อนอ่าน `edge_users_*` · `_users` ว่าง = ปฏิเสธ เว้นแต่ `--allow-empty` · รันซ้ำได้ · edge รับการลบในรอบ pull ถัดไป · ใช้เมื่อมีคนลบ user ตรงใน CouchDB (แอปใช้ soft delete จึงไม่เกิด orphan)
 
 ### Requirements — edge
 
@@ -159,13 +161,14 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - **AC-14** — user ที่อยู่ 2 ศูนย์ → change หนึ่งครั้งถึง `edge_users_<code>` ของทั้งสองศูนย์ และไม่ถึงศูนย์อื่น
 - **AC-15** — `--remove SH001` แล้วติดตั้งใหม่ด้วย `central-repl-user.sh SH001` ภายใน 30 วินาที → `edge_users_sh001` ใหม่มี user เดิมของ SH001 ครบภายใน 1 นาที
 - **AC-16** — `--status SH001` ก่อน edge ต่อเข้ามา → "edge ยังไม่เคยต่อเข้ามา" · หลัง `edge-init` → แสดงเวลาที่ edge ดึงล่าสุด
+- **AC-17** — ลบ user ตรงใน `_users` ของ central แล้วรัน `edge-users-clean.sh` → dry-run แสดง doc ของ user นั้นใน `edge_users_<code>` ที่มีอยู่ · `--apply` ลบ · รันซ้ำ = 0 orphan · user อื่นและ `_design/readonly` ยังอยู่ (`scripts/tests/edge-users-clean.test.sh`)
 
 ## Impact
 
 - **ความเสี่ยง:** `edge_users_<code>` มี password hash ซ้ำอีกชุด — ตั้ง `_security` พลาดจะรั่วกว่าเดิม (กันด้วย FR-10 + FR-12) · service `edge-users-copy` หยุดหรือ error = user ที่ควรหมดสิทธิ์ยัง login ที่ edge ได้ (กันด้วย FR-13) · service นี้กลายเป็นส่วนหนึ่งของเส้นทางถอดสิทธิ์ — โค้ดที่ทีมดูแลเองแทน CouchDB (retry / checkpoint / backfill)
 - **ยอมรับ:** เครื่อง edge ที่ถูกขโมยยังเขียน `shelter_<code>` ของตัวเองได้ (ข้าม VDU ตาม FR-6) จนกว่า `--remove` · ข้อมูลในเครื่อง (`shelter_<code>`, password hash ของ staff ศูนย์นั้น) ยังอยู่ในมือคนขโมย → FR-21
 - **ไม่เปลี่ยน:** EDGE_MODE, `edge-grant-sweep`, การเขียน `_users` ทั้งหมดยังทำที่ central ผ่าน `user-service.ts`
-- **นอกขอบเขต:** เปลี่ยนชื่อ central admin บน staging/prod · reset password ทั้งศูนย์ในคำสั่งเดียว · เครื่องมือตรวจ revision ตามช่วงเวลา · เข้ารหัสดิสก์ edge · hard delete ใน `_users` ไม่ลง edge (เหมือนเดิม — CR-064 decision sync 2026-10-18 · #1331)
+- **นอกขอบเขต:** เปลี่ยนชื่อ central admin บน staging/prod · reset password ทั้งศูนย์ในคำสั่งเดียว · เครื่องมือตรวจ revision ตามช่วงเวลา · เข้ารหัสดิสก์ edge · hard delete ใน `_users` ไม่ลง edge อัตโนมัติ (เหมือนเดิม — CR-064 decision sync 2026-10-18 · #1331; เก็บกวาดด้วยมือ FR-13a)
 - **scale:** service อ่าน `_users` feed เดียวไม่ว่ามีกี่ศูนย์ · ภาระต่อ change = เขียนเฉพาะ `edge_users_<code>` ของศูนย์ที่ user อยู่ · RAM ไม่โตตาม load (ประมวลผลทีละ change, backfill ทีละหน้า) · sync-worker ที่ทำงานหลายอย่างใช้ราว 65 MB บนเครื่อง dev
 - **ไม่พึ่ง MongoDB:** การคัดลอก user ไป edge ใช้ CouchDB อย่างเดียว ทั้งข้อมูล checkpoint และสถานะ · MongoDB ล่ม หรือ sync-worker พัง / bootstrap นาน ไม่กระทบการถอดสิทธิ์ที่ edge
 
@@ -189,3 +192,4 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - 2026-11-11 — แก้ตามรีวิว PR #1304: FR-22 หมุนรหัส central admin ต้องอัปเดตทั้ง `edge-users-copy` และ sync-worker · เรียกตัวคัดลอกว่า `edge-users-copy` ทั้ง CR
 - 2026-11-11 — kong: FR-11a รู้ว่ามีศูนย์ใหม่ด้วยการเช็ก `_all_dbs` (กรองช่วงชื่อ `edge_users_`) ทุก 30 วินาที · คงชื่อ DB `edge_users_<code>` (ไม่ใช้ `users_<code>` — กันสับสนกับ `_users` ตัวจริงและกันคำนำหน้าชนกับ DB อื่น)
 - 2026-11-11 — kong: `--remove` ลบ `edge_users_<code>` ทั้ง DB (ถอด role อย่างเดียวทำให้ DB เปิดสาธารณะ — ทดสอบแล้ว) · สถานะ backfill เก็บเป็น `_local/backfill_done` ใน DB ของศูนย์แทนรายชื่อกลาง · `--status` แสดงเวลาที่ edge ดึงล่าสุดจาก checkpoint · เพิ่ม runbook ปิดศูนย์ที่มี edge (FR-21a) · AC-15, AC-16
+- 2026-11-11 — kong: เพิ่ม `scripts/edge-users-clean.sh` (FR-13a, AC-17) เก็บกวาด user ที่ถูกลบจริงใน `_users` ออกจาก `edge_users_*` · แอปใช้ soft delete จึงมีเฉพาะการลบตรงใน CouchDB · ไม่แก้ `edge-users-copy` · การไหลอัตโนมัติของ hard delete ยังเป็น #1331
