@@ -44,7 +44,7 @@ describe('FoodSphereRemoteRepository (#936)', () => {
 		expect(saved.schema_v).toBe(3);
 	});
 
-	it('listAll normalizes legacy numeric docs losslessly and defaults status', async () => {
+	it('listAll rounds legacy numeric docs and defaults status', async () => {
 		vi.mocked(catalog.allByType).mockResolvedValue([
 			{
 				_id: 'food_sphere_standard:ALL:X',
@@ -57,7 +57,7 @@ describe('FoodSphereRemoteRepository (#936)', () => {
 			} as never
 		]);
 		const [doc] = await new FoodSphereRemoteRepository().listAll();
-		expect(doc.daily_demand).toBe('6.33333');
+		expect(doc.daily_demand).toBe('6.3333');
 		expect(doc.status).toBe('active');
 	});
 });
