@@ -42,6 +42,8 @@
 - ใช้ Edge ที่ติดตั้งในเครื่อง (`channel="msedge"`) จึง**ไม่ต้อง**รัน `playwright install` — ตามเอกสาร Playwright
   ต้องสั่ง `uv run playwright install msedge` เฉพาะเครื่องที่ยังไม่มี Edge; ถ้าใช้ `BROWSER_CHANNEL=chromium` ต้อง
   `uv run playwright install chromium`
+- Linux (Debian/Ubuntu) รันทีเดียวจบ: `./run-linux.sh` — ติดตั้ง `pcscd`/`libccid` (sudo), uv, deps, Chromium,
+  สร้าง `.env` (ถาม `SHELTER_URL` ครั้งแรก) แล้วเปิดโปรแกรม · รันซ้ำได้ ข้ามขั้นที่ทำแล้ว
 - test: `uv run pytest`
 - build exe (ต้องทำบน Windows): `powershell -ExecutionPolicy Bypass -File .\build.ps1` → `dist\scanner-client-win64.zip`
   และ `dist\scanner-client-debug-win64.zip` (spec: `scanner-client.spec`, onedir, ไม่ bundle browser)
