@@ -58,7 +58,7 @@ describe('RequirementGroupRemoteRepository (#936)', () => {
 	});
 
 	it('replaces the maps and clears a previously persisted share', async () => {
-		let stored: Record<string, unknown> = {
+		let stored: { _id: string; [key: string]: unknown } = {
 			_id: 'requirement_group:X',
 			_rev: '1-a',
 			item_maps: [{ item_id: 'i', base_uom: 'kg', conversion_factor: '1', share_percent: '40' }]
