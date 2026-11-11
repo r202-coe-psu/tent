@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+	assertExpectedShelters,
 	assertHostConfirmed,
 	classifyEvacuee,
 	parseCliArgs,
@@ -12,9 +13,18 @@ import {
 	runCleanup,
 	runRestore,
 	type CleanupOptions,
-	type CouchDoc
+	type CouchDoc,
+	type IoSizes
 } from './prod-readiness-cleanup';
 import type { CouchReq } from './unseed-stock';
+
+// No real CouchDB or frontend/.env: every test passes its own `req` and URL.
+vi.mock('./seed/couch', () => ({
+	couchReq: vi.fn(),
+	displayCouchUrl: () => 'mock',
+	env: {},
+	rawCouchUrl: 'http://admin:password@localhost:5984'
+}));
 
 const NOW = '2026-11-11T00:00:00.000Z';
 const ALL: CleanupOptions = {
@@ -97,7 +107,9 @@ describe('planShelterCleanup — people', () => {
 		doc('movement:1', { evacuee_id: 'evacuee:A2' }),
 		doc('screening:1', { evacuee_id: 'evacuee:A2' }),
 		doc('station_log:1', { evacuee_id: 'evacuee:A1' }),
+		doc('evacuee_qr:A1', { evacuee_id: 'evacuee:A1' }),
 		doc('evacuee_qr:A2', { evacuee_id: 'evacuee:A2' }),
+		doc('people_import_log:1'),
 		doc('image:P1'),
 		doc('image:PET'),
 		doc('image:KEEP'),
@@ -109,7 +121,7 @@ describe('planShelterCleanup — people', () => {
 	const deleted = plan.deletes.map((d) => d.id);
 	const updated = new Map(plan.updates.map((d) => [d._id, d]));
 
-	it('deletes walk-ins with their medical doc, photo and every check-in history doc', () => {
+	it('deletes walk-ins with their medical doc, QR log, photo and all check-in/import history', () => {
 		expect(deleted).toEqual(
 			[
 				'evacuee:A1',
@@ -121,7 +133,8 @@ describe('planShelterCleanup — people', () => {
 				'movement:1',
 				'screening:1',
 				'station_log:1',
-				'evacuee_qr:A2'
+				'evacuee_qr:A1',
+				'people_import_log:1'
 			].sort()
 		);
 		expect(plan.evacueesDeleted).toEqual({ 'staff/active': 1, 'kiosk/checked_out': 1 });
@@ -149,8 +162,16 @@ describe('planShelterCleanup — people', () => {
 		expect(plan.householdsUpdated).toBe(1);
 	});
 
-	it('leaves design docs, volunteers, audits, kept medical and unrelated images alone', () => {
-		for (const id of ['_design/app', 'volunteer:V1', 'audit:1', 'medical:M2', 'image:KEEP']) {
+	it('leaves design docs, volunteers, audits, kept people’s medical/QR and other images alone', () => {
+		const kept = [
+			'_design/app',
+			'volunteer:V1',
+			'audit:1',
+			'medical:M2',
+			'evacuee_qr:A2',
+			'image:KEEP'
+		];
+		for (const id of kept) {
 			expect(deleted).not.toContain(id);
 		}
 	});
@@ -233,6 +254,29 @@ describe('parseCliArgs / assertHostConfirmed', () => {
 		expect(() => parseCliArgs(['--apply', '--dry-run'])).toThrow(/mutually exclusive/);
 	});
 
+	it('throws on a flag given without a value instead of widening to every shelter/category', () => {
+		expect(() => parseCliArgs(['--shelter=', '--apply'])).toThrow(/--shelter needs a value/);
+		expect(() => parseCliArgs(['--shelter', '--apply'])).toThrow(/--shelter needs a value/);
+		expect(() => parseCliArgs(['--shelter'])).toThrow(/--shelter needs a value/);
+		expect(() => parseCliArgs(['--only=,'])).toThrow(/--only needs at least one/);
+		expect(() => parseCliArgs(['--keep-channels='])).toThrow(/needs a value/);
+	});
+
+	it('parses --expect-shelters as a whole number', () => {
+		expect(parseCliArgs(['--expect-shelters=4']).expectShelters).toBe(4);
+		expect(parseCliArgs([]).expectShelters).toBeNull();
+		expect(() => parseCliArgs(['--expect-shelters=four'])).toThrow(/whole number/);
+	});
+
+	it('off localhost, requires --expect-shelters to match the shelters found', () => {
+		expect(() => assertExpectedShelters('http://a:b@localhost:5984', null, 4)).not.toThrow();
+		expect(() => assertExpectedShelters('http://a:b@couchdb:5984', null, 4)).toThrow(
+			/--expect-shelters=4/
+		);
+		expect(() => assertExpectedShelters('http://a:b@couchdb:5984', 3, 4)).toThrow();
+		expect(() => assertExpectedShelters('http://a:b@couchdb:5984', 4, 4)).not.toThrow();
+	});
+
 	it('requires the exact hostname for a non-local CouchDB', () => {
 		expect(() => assertHostConfirmed('http://a:b@localhost:5984', null)).not.toThrow();
 		// Staging/production run inside the compose network, where Couch is `couchdb`.
@@ -258,6 +302,9 @@ function fakeCouch(initial: Record<string, CouchDoc[]>) {
 		dbs.set(db, new Map(docs.map((d) => [d._id, structuredClone(d)])));
 	}
 	let revCounter = 1;
+	/** Ids whose next write answers `conflict` once (a concurrent edit mid-run). */
+	const conflictOnce = new Set<string>();
+	const bulkCalls: number[] = [];
 	const nextRev = (rev?: string) => `${Number(rev?.split('-')[0] ?? 0) + 1}-r${++revCounter}`;
 
 	const req: CouchReq = async (method, path, body) => {
@@ -274,7 +321,8 @@ function fakeCouch(initial: Record<string, CouchDoc[]>) {
 			const live = [...store.values()]
 				.filter((d) => !d._deleted)
 				.sort((a, b) => (a._id < b._id ? -1 : 1));
-			const from = start === null ? 0 : live.findIndex((d) => d._id >= start) + skip;
+			const at = start === null ? 0 : live.findIndex((d) => d._id >= start);
+			const from = (at < 0 ? live.length : at) + skip;
 			const rows = live
 				.slice(from, from + limit)
 				.map((d) => ({ id: d._id, value: { rev: d._rev }, doc: structuredClone(d) }));
@@ -290,7 +338,9 @@ function fakeCouch(initial: Record<string, CouchDoc[]>) {
 			return { status: 200, data: { rows } };
 		}
 		if (method === 'POST' && rest === '_bulk_docs') {
+			bulkCalls.push((body as { docs: CouchDoc[] }).docs.length);
 			const results = (body as { docs: CouchDoc[] }).docs.map((d) => {
+				if (conflictOnce.delete(d._id)) return { id: d._id, error: 'conflict' };
 				const cur = store.get(d._id);
 				// Like CouchDB: a tombstone is recreated without `_rev`; its own rev conflicts.
 				const expected = cur && !cur._deleted ? cur._rev : undefined;
@@ -309,7 +359,7 @@ function fakeCouch(initial: Record<string, CouchDoc[]>) {
 			.map((d) => d._id)
 			.sort();
 	const get = (db: string, id: string) => dbs.get(db)?.get(id);
-	return { req, live, get };
+	return { req, live, get, conflictOnce, bulkCalls };
 }
 
 describe('runCleanup / runRestore against a fake CouchDB', () => {
@@ -411,6 +461,92 @@ describe('runCleanup / runRestore against a fake CouchDB', () => {
 		expect(couch.get('shelter_sh001', 'evacuee:W')).toMatchObject({
 			current_stay: { status: 'active', zone: 'Z1' }
 		});
+	});
+
+	it('pages _all_docs and chunks _bulk_docs past the page/chunk sizes', async () => {
+		const ledgers = Array.from({ length: 11 }, (_, i) =>
+			doc(`stock_ledger:${String(i).padStart(2, '0')}`)
+		);
+		const couch = fakeCouch({ shelter_sh001: [...ledgers, doc('volunteer:V')] });
+		const sizes: IoSizes = { pageSize: 3, attachmentPageSize: 2, bulkChunk: 4 };
+		const backupDir = join(dir, 'paged');
+
+		await runCleanup(parseCliArgs(['--apply', `--backup-dir=${backupDir}`]), {
+			...deps(couch.req),
+			sizes
+		});
+
+		const backup = JSON.parse(readFileSync(join(backupDir, 'shelter_sh001.json'), 'utf-8'));
+		expect(backup.docs).toHaveLength(12);
+		expect(couch.live('shelter_sh001')).toEqual(['volunteer:V']);
+		expect(couch.bulkCalls).toEqual([4, 4, 3]);
+	});
+
+	it('stops on a conflict mid-run and a re-run finishes the job', async () => {
+		const couch = seed();
+		couch.conflictOnce.add('stock_ledger:1');
+
+		await expect(
+			runCleanup(parseCliArgs(['--apply', `--backup-dir=${join(dir, 'c1')}`]), deps(couch.req))
+		).rejects.toThrow(/conflict/);
+		expect(couch.live('shelter_sh001')).toContain('stock_ledger:1');
+
+		await runCleanup(parseCliArgs(['--apply', `--backup-dir=${join(dir, 'c2')}`]), deps(couch.req));
+		const after = await runCleanup(parseCliArgs([]), deps(couch.req));
+		expect(after.shelters.every((p) => !p.deletes.length && !p.updates.length)).toBe(true);
+		expect(couch.live('shelter_sh001')).not.toContain('stock_ledger:1');
+	});
+
+	it('writes the PII backup owner-only', async () => {
+		const couch = seed();
+		const backupDir = join(dir, 'private');
+		await runCleanup(parseCliArgs(['--apply', `--backup-dir=${backupDir}`]), deps(couch.req));
+
+		expect(statSync(backupDir).mode & 0o777).toBe(0o700);
+		expect(statSync(join(backupDir, 'shelter_sh001.json')).mode & 0o777).toBe(0o600);
+	});
+
+	it('never applies to the default localhost URL when COUCHDB_ADMIN_URL is unset', async () => {
+		const saved = process.env.COUCHDB_ADMIN_URL;
+		delete process.env.COUCHDB_ADMIN_URL;
+		try {
+			const couch = seed();
+			await expect(
+				runCleanup(parseCliArgs(['--apply']), { req: couch.req, now: NOW, displayUrl: 'test' })
+			).rejects.toThrow(/COUCHDB_ADMIN_URL is not set/);
+			await expect(
+				runCleanup(parseCliArgs([]), { req: couch.req, now: NOW, displayUrl: 'test' })
+			).resolves.toBeDefined();
+		} finally {
+			if (saved !== undefined) process.env.COUCHDB_ADMIN_URL = saved;
+		}
+	});
+
+	it('off localhost, apply needs --expect-shelters to match before writing', async () => {
+		const couch = seed();
+		const url = 'http://a:b@couchdb:5984';
+		await expect(
+			runCleanup(parseCliArgs(['--apply', '--confirm-host=couchdb']), deps(couch.req, url))
+		).rejects.toThrow(/--expect-shelters=2/);
+		expect(couch.live('shelter_sh001')).toContain('stock_ledger:1');
+
+		await runCleanup(
+			parseCliArgs([
+				'--apply',
+				'--confirm-host=couchdb',
+				'--expect-shelters=2',
+				`--backup-dir=${join(dir, 'remote')}`
+			]),
+			deps(couch.req, url)
+		);
+		expect(couch.live('shelter_sh001')).not.toContain('stock_ledger:1');
+	});
+
+	it('restore reports a missing backup directory clearly', async () => {
+		const couch = seed();
+		await expect(
+			runRestore(parseCliArgs([`--restore=${join(dir, 'nope')}`]), deps(couch.req))
+		).rejects.toThrow(/Backup directory not found/);
 	});
 
 	it('--shelter scopes the run to one DB and skips central_ops', async () => {

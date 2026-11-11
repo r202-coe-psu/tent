@@ -8,15 +8,16 @@
  *   - Evacuee that came through a pre-registration channel (`registered_via` ∈ --keep-channels,
  *     default `web,api`) → reset to `current_stay = { status: 'pre_registered', zone: null }`.
  *   - Every other evacuee → deleted together with its `medical` doc and its photo `image`.
- *   - Every `movement`, `screening`, `station_log` and `evacuee_qr` → deleted (check-in history).
+ *   - Every `movement`, `screening`, `station_log`, `people_import_log` → deleted (check-in and
+ *     import history); `evacuee_qr` only for deleted evacuees (kept people's printed QR stays valid).
  *   - Households: no member left → deleted (+ pet/asset images); otherwise status re-derived
  *     (`deriveHouseholdStatus`), `checkout_destination` cleared, head moved to a kept member.
  *   - central_ops `referral`, `referral_close_job`, `referral_close_lock` → deleted.
  * Supplies (categories `stock`, `food`, `distribution`, `tickets`, `donations`): every doc of the
  *   `_id` prefixes in {@link CATEGORY_PREFIXES} is deleted; central_ops `stock_transfer` too.
  *
- * Kept on purpose: registry (shelters, config, master_data), catalog (item_master, recipes, …),
- * _users, volunteers/jobs/shifts, incidents, audits, people_import_log, donation_slot, sop_override.
+ * Kept on purpose: registry (shelters, config, master_data), the central `catalog` DB (item_master,
+ * recipes, …), _users, volunteers/jobs/shifts, incidents, audits, donation_slot, sop_override.
  * MongoDB is not written: the running sync worker turns these CouchDB writes into projection
  * updates/deletes (keep it running during --apply).
  *
@@ -25,17 +26,19 @@
  *   pnpm migrate:prod-cleanup --shelter=SH001                  # dry-run one shelter
  *   pnpm migrate:prod-cleanup --only=stock,food                # limit categories
  *   pnpm migrate:prod-cleanup --apply                          # backup, then write (local host)
- *   pnpm migrate:prod-cleanup --apply --confirm-host=<host>    # any other host (incl. `couchdb`)
+ *   pnpm migrate:prod-cleanup --apply --confirm-host=<host> --expect-shelters=<n>
+ *                                                              # any other host (incl. `couchdb`)
  *   pnpm migrate:prod-cleanup --restore=<backup-dir> [--apply] # put backed-up docs back
  *
- * --apply always exports every touched database (docs + attachments) to --backup-dir first
+ * --apply needs COUCHDB_ADMIN_URL set explicitly (no localhost fallback) and always exports every
+ * touched database (docs + attachments, owner-only file mode) to --backup-dir first
  * (default `backups/prod-cleanup/<host>-<timestamp>/`, gitignored — it holds PII). Re-runnable:
  * a second run finds nothing left to do.
  *
  * Needs: COUCHDB_ADMIN_URL in the environment or frontend/.env.
  */
 
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import {
@@ -43,7 +46,7 @@ import {
 	type HouseholdStatus,
 	type StayStatus
 } from '$lib/features/people/domain/people';
-import { couchReq, displayCouchUrl, rawCouchUrl } from './seed/couch';
+import { couchReq, displayCouchUrl, env, rawCouchUrl } from './seed/couch';
 import { assertBulkWriteResults, type BulkWriteResult } from './t31-seed-support';
 import { resolveShelterTarget, type CouchReq } from './unseed-stock';
 
@@ -96,12 +99,12 @@ export const CATEGORY_PREFIXES: Record<Exclude<Category, 'people'>, readonly str
 	donations: ['donation:', 'donation_redirect:', 'donation_campaign:']
 };
 
-/** Check-in history of every evacuee — deleted for kept and removed people alike. */
+/** Check-in and import history — deleted for kept and removed people alike. */
 export const PEOPLE_HISTORY_PREFIXES = [
 	'movement:',
 	'screening:',
 	'station_log:',
-	'evacuee_qr:'
+	'people_import_log:'
 ] as const;
 
 export const CENTRAL_OPS_DB = 'central_ops';
@@ -116,8 +119,9 @@ const UNTOUCHED_STAYS: readonly string[] = ['pre_registered', 'cancelled'];
 const SHELTER_DB_PATTERN = /^shelter_[a-z0-9-]+$/;
 /** Hosts that skip `--confirm-host`. Not `couchdb`: staging/production reach Couch by that name. */
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
-const PAGE_SIZE = 1000;
-const BULK_CHUNK = 500;
+/** Paging / chunk sizes; tests shrink them to exercise the multi-page paths. */
+export type IoSizes = { pageSize: number; attachmentPageSize: number; bulkChunk: number };
+const DEFAULT_SIZES: IoSizes = { pageSize: 1000, attachmentPageSize: 50, bulkChunk: 500 };
 
 export type CouchDoc = {
 	_id: string;
@@ -260,9 +264,8 @@ function planPeople(
 
 	for (const doc of byId.values()) {
 		if (PEOPLE_HISTORY_PREFIXES.some((p) => doc._id.startsWith(p))) markDelete(doc._id);
-		if (doc._id.startsWith('medical:') && removed.has(String(doc.evacuee_id))) {
-			markDelete(doc._id);
-		}
+		const removedOwner = doc._id.startsWith('medical:') || doc._id.startsWith('evacuee_qr:');
+		if (removedOwner && removed.has(String(doc.evacuee_id))) markDelete(doc._id);
 	}
 
 	const membersByHousehold = new Map<string, string[]>();
@@ -320,17 +323,21 @@ export type CliArgs = {
 	categories: Category[];
 	keepChannels: string[];
 	confirmHost: string | null;
+	expectShelters: number | null;
 	backupDir: string | null;
 	restore: string | null;
 	help: boolean;
 };
 
+/** Value of `--name=v` / `--name v`; a flag given without a value throws (never "all"). */
 function flagValue(argv: readonly string[], name: string): string | null {
 	const eq = argv.find((a) => a.startsWith(`--${name}=`));
-	if (eq) return eq.slice(name.length + 3).trim() || null;
 	const idx = argv.indexOf(`--${name}`);
-	const next = idx >= 0 ? argv[idx + 1] : undefined;
-	return next && !next.startsWith('--') ? next.trim() : null;
+	if (!eq && idx < 0) return null;
+	const raw = eq ? eq.slice(name.length + 3) : argv[idx + 1];
+	const value = raw?.startsWith('--') ? '' : (raw?.trim() ?? '');
+	if (!value) throw new Error(`--${name} needs a value`);
+	return value;
 }
 
 function listValue(raw: string | null): string[] | null {
@@ -347,6 +354,12 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 		throw new Error('--apply and --dry-run are mutually exclusive');
 	}
 	const only = listValue(flagValue(argv, 'only'));
+	if (only && only.length === 0) throw new Error('--only needs at least one category');
+	const expectRaw = flagValue(argv, 'expect-shelters');
+	const expectShelters = expectRaw === null ? null : Number(expectRaw);
+	if (expectShelters !== null && !(Number.isInteger(expectShelters) && expectShelters >= 0)) {
+		throw new Error(`--expect-shelters must be a whole number, got "${expectRaw}"`);
+	}
 	const unknown = (only ?? []).filter((c) => !(CATEGORIES as readonly string[]).includes(c));
 	if (unknown.length) {
 		throw new Error(
@@ -359,10 +372,15 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 		categories: (only as Category[] | null) ?? [...CATEGORIES],
 		keepChannels: listValue(flagValue(argv, 'keep-channels')) ?? [...DEFAULT_KEEP_CHANNELS],
 		confirmHost: flagValue(argv, 'confirm-host'),
+		expectShelters,
 		backupDir: flagValue(argv, 'backup-dir'),
 		restore: flagValue(argv, 'restore'),
 		help: argv.includes('--help') || argv.includes('-h')
 	};
+}
+
+export function isLocalHost(couchUrl: string): boolean {
+	return LOCAL_HOSTS.has(new URL(couchUrl).hostname);
 }
 
 /** Non-local CouchDB needs `--confirm-host=<exact hostname>` before anything is written. */
@@ -376,6 +394,38 @@ export function assertHostConfirmed(couchUrl: string, confirmHost: string | null
 	}
 }
 
+/**
+ * Staging and production both reach Couch as `couchdb`, so the hostname cannot tell them apart:
+ * off localhost, --apply also needs the shelter count seen in the dry-run.
+ */
+export function assertExpectedShelters(
+	couchUrl: string,
+	expected: number | null,
+	found: number
+): void {
+	if (isLocalHost(couchUrl)) return;
+	if (expected !== found) {
+		throw new Error(
+			`Found ${found} shelter database(s) — re-run with --expect-shelters=${found} after checking the dry-run`
+		);
+	}
+}
+
+/** The admin URL the operator set (env or frontend/.env) — never the seed localhost fallback. */
+function explicitAdminUrl(): string | null {
+	return process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL ?? null;
+}
+
+function targetCouchUrl(apply: boolean, given: string | undefined): string {
+	if (given) return given;
+	const explicit = explicitAdminUrl();
+	if (explicit) return explicit;
+	if (apply) {
+		throw new Error('COUCHDB_ADMIN_URL is not set — --apply/--restore never use a default URL');
+	}
+	return rawCouchUrl;
+}
+
 // ── CouchDB I/O ────────────────────────────────────────────────────────────────────────────
 
 function httpError(what: string, res: { status: number; data: unknown }): Error {
@@ -387,12 +437,14 @@ function httpError(what: string, res: { status: number; data: unknown }): Error 
 export async function fetchAllDocs(
 	db: string,
 	req: CouchReq,
-	options: { attachments?: boolean } = {}
+	options: { attachments?: boolean; sizes?: IoSizes } = {}
 ): Promise<CouchDoc[]> {
+	const sizes = options.sizes ?? DEFAULT_SIZES;
+	const pageSize = options.attachments ? sizes.attachmentPageSize : sizes.pageSize;
 	const out: CouchDoc[] = [];
 	let startkey: string | null = null;
 	for (;;) {
-		const params = new URLSearchParams({ include_docs: 'true', limit: String(PAGE_SIZE) });
+		const params = new URLSearchParams({ include_docs: 'true', limit: String(pageSize) });
 		if (options.attachments) params.set('attachments', 'true');
 		if (startkey !== null) {
 			params.set('startkey', JSON.stringify(startkey));
@@ -402,15 +454,20 @@ export async function fetchAllDocs(
 		if (res.status !== 200) throw httpError(`Cannot read "${db}"`, res);
 		const rows = (res.data as { rows?: Array<{ id: string; doc?: CouchDoc }> }).rows ?? [];
 		for (const row of rows) if (row.doc) out.push(row.doc);
-		if (rows.length < PAGE_SIZE) return out;
+		if (rows.length < pageSize) return out;
 		startkey = rows[rows.length - 1].id;
 	}
 }
 
-async function bulkWrite(db: string, docs: CouchDoc[], req: CouchReq): Promise<void> {
-	for (let i = 0; i < docs.length; i += BULK_CHUNK) {
+async function bulkWrite(
+	db: string,
+	docs: CouchDoc[],
+	req: CouchReq,
+	sizes: IoSizes = DEFAULT_SIZES
+): Promise<void> {
+	for (let i = 0; i < docs.length; i += sizes.bulkChunk) {
 		const res = await req('POST', `/${encodeURIComponent(db)}/_bulk_docs`, {
-			docs: docs.slice(i, i + BULK_CHUNK)
+			docs: docs.slice(i, i + sizes.bulkChunk)
 		});
 		if (res.status !== 201) throw httpError(`_bulk_docs to "${db}" failed`, res);
 		assertBulkWriteResults(db, res.data as BulkWriteResult[], { allowConflicts: false });
@@ -433,16 +490,17 @@ export async function resolveShelterDbs(shelter: string, req: CouchReq): Promise
 	return [target.db];
 }
 
-/** Write `<dir>/<db>.json` with every doc of each db (attachments inline). */
+/** Write `<dir>/<db>.json` with every doc of each db (attachments inline, owner-only: PII). */
 export async function backupDatabases(
 	dbs: readonly string[],
 	dir: string,
-	req: CouchReq
+	req: CouchReq,
+	sizes: IoSizes = DEFAULT_SIZES
 ): Promise<void> {
-	mkdirSync(dir, { recursive: true });
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
 	for (const db of dbs) {
-		const docs = await fetchAllDocs(db, req, { attachments: true });
-		writeFileSync(join(dir, `${db}.json`), JSON.stringify({ db, docs }));
+		const docs = await fetchAllDocs(db, req, { attachments: true, sizes });
+		writeFileSync(join(dir, `${db}.json`), JSON.stringify({ db, docs }), { mode: 0o600 });
 		console.log(`  ✓ backup ${db}: ${docs.length} doc(s) → ${join(dir, `${db}.json`)}`);
 	}
 }
@@ -472,10 +530,17 @@ function printPlan(plan: ShelterPlan): void {
 
 export async function runCleanup(
 	args: CliArgs,
-	deps: { req?: CouchReq; couchUrl?: string; now?: string; displayUrl?: string } = {}
+	deps: {
+		req?: CouchReq;
+		couchUrl?: string;
+		now?: string;
+		displayUrl?: string;
+		sizes?: IoSizes;
+	} = {}
 ): Promise<CleanupResult> {
 	const req = deps.req ?? couchReq;
-	const couchUrl = deps.couchUrl ?? rawCouchUrl;
+	const sizes = deps.sizes ?? DEFAULT_SIZES;
+	const couchUrl = targetCouchUrl(args.apply, deps.couchUrl);
 	const now = deps.now ?? new Date().toISOString();
 	if (args.apply) assertHostConfirmed(couchUrl, args.confirmHost);
 
@@ -487,6 +552,7 @@ export async function runCleanup(
 	);
 
 	const shelterDbs = await resolveShelterDbs(args.shelter, req);
+	if (args.apply) assertExpectedShelters(couchUrl, args.expectShelters, shelterDbs.length);
 	const options: CleanupOptions = {
 		categories: args.categories,
 		keepChannels: args.keepChannels,
@@ -494,7 +560,7 @@ export async function runCleanup(
 	};
 	const shelters: ShelterPlan[] = [];
 	for (const db of shelterDbs) {
-		const plan = planShelterCleanup(db, await fetchAllDocs(db, req), options);
+		const plan = planShelterCleanup(db, await fetchAllDocs(db, req, { sizes }), options);
 		printPlan(plan);
 		shelters.push(plan);
 	}
@@ -502,7 +568,7 @@ export async function runCleanup(
 	const hasCentralOps = (await listDbs(req)).includes(CENTRAL_OPS_DB);
 	const centralOps =
 		hasCentralOps && args.shelter === 'all'
-			? planCentralOpsCleanup(await fetchAllDocs(CENTRAL_OPS_DB, req), args.categories)
+			? planCentralOpsCleanup(await fetchAllDocs(CENTRAL_OPS_DB, req, { sizes }), args.categories)
 			: [];
 	const centralCounts: Record<string, number> = {};
 	for (const ref of centralOps) bump(centralCounts, typeOfId(ref.id));
@@ -528,13 +594,13 @@ export async function runCleanup(
 		args.backupDir ?? join('backups', 'prod-cleanup', `${host}-${now.replace(/[:.]/g, '-')}`)
 	);
 	console.log(`\nBackup → ${backupDir}`);
-	await backupDatabases(touched, backupDir, req);
+	await backupDatabases(touched, backupDir, req, sizes);
 
 	console.log('\nWriting…');
 	for (const plan of shelters) {
-		if (plan.updates.length) await bulkWrite(plan.db, plan.updates, req);
+		if (plan.updates.length) await bulkWrite(plan.db, plan.updates, req, sizes);
 		const tombstones = plan.deletes.map((d) => ({ _id: d.id, _rev: d.rev, _deleted: true }));
-		if (tombstones.length) await bulkWrite(plan.db, tombstones, req);
+		if (tombstones.length) await bulkWrite(plan.db, tombstones, req, sizes);
 		if (plan.updates.length || tombstones.length) {
 			console.log(`  ✓ ${plan.db}: updated ${plan.updates.length}, deleted ${tombstones.length}`);
 		}
@@ -543,7 +609,8 @@ export async function runCleanup(
 		await bulkWrite(
 			CENTRAL_OPS_DB,
 			centralOps.map((d) => ({ _id: d.id, _rev: d.rev, _deleted: true })),
-			req
+			req,
+			sizes
 		);
 		console.log(`  ✓ ${CENTRAL_OPS_DB}: deleted ${centralOps.length}`);
 	}
@@ -557,11 +624,13 @@ export async function runCleanup(
  */
 export async function runRestore(
 	args: CliArgs,
-	deps: { req?: CouchReq; couchUrl?: string } = {}
+	deps: { req?: CouchReq; couchUrl?: string; sizes?: IoSizes } = {}
 ): Promise<Record<string, number>> {
 	const req = deps.req ?? couchReq;
-	if (args.apply) assertHostConfirmed(deps.couchUrl ?? rawCouchUrl, args.confirmHost);
+	const sizes = deps.sizes ?? DEFAULT_SIZES;
+	if (args.apply) assertHostConfirmed(targetCouchUrl(true, deps.couchUrl), args.confirmHost);
 	const dir = resolve(args.restore!);
+	if (!existsSync(dir)) throw new Error(`Backup directory not found: ${dir}`);
 	const restored: Record<string, number> = {};
 	for (const file of readdirSync(dir)
 		.filter((f) => f.endsWith('.json'))
@@ -572,8 +641,8 @@ export async function runRestore(
 		};
 		const candidates = docs.filter((d) => !d._id.startsWith('_'));
 		const current = new Map<string, string | null>();
-		for (let i = 0; i < candidates.length; i += BULK_CHUNK) {
-			const keys = candidates.slice(i, i + BULK_CHUNK).map((d) => d._id);
+		for (let i = 0; i < candidates.length; i += sizes.bulkChunk) {
+			const keys = candidates.slice(i, i + sizes.bulkChunk).map((d) => d._id);
 			const res = await req('POST', `/${encodeURIComponent(db)}/_all_docs`, { keys });
 			if (res.status !== 200) throw httpError(`Cannot read "${db}"`, res);
 			const rows = (
@@ -595,7 +664,7 @@ export async function runRestore(
 			});
 		restored[db] = writes.length;
 		console.log(`${db}: ${writes.length} doc(s) to restore`);
-		if (args.apply && writes.length) await bulkWrite(db, writes, req);
+		if (args.apply && writes.length) await bulkWrite(db, writes, req, sizes);
 	}
 	console.log(args.apply ? '\nRestore done.\n' : '\nDry run — re-run with --apply to restore.\n');
 	return restored;
@@ -607,11 +676,13 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
 		console.log(`
 Usage (from frontend/):
   pnpm migrate:prod-cleanup [--shelter=SH001|all] [--only=${CATEGORIES.join(',')}]
-                            [--keep-channels=web,api] [--apply [--confirm-host=<host>]]
-                            [--backup-dir=<dir>]
+                            [--keep-channels=web,api] [--backup-dir=<dir>]
+                            [--apply [--confirm-host=<host> --expect-shelters=<n>]]
   pnpm migrate:prod-cleanup --restore=<backup-dir> [--apply [--confirm-host=<host>]]
 
-Dry-run by default. --apply backs up every touched database before writing.
+Dry-run by default. --apply needs COUCHDB_ADMIN_URL set explicitly and backs up every touched
+database (owner-only files) before writing. Off localhost, --apply also needs --confirm-host and
+--expect-shelters (the shelter count from the dry-run).
 Runbook: scripts/prod-readiness-cleanup.md
 `);
 		return;
