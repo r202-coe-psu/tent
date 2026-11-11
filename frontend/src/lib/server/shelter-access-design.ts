@@ -387,7 +387,11 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	const dailySopRoleContract = DAILY_SOP_ROLE_VDU_CONTRACT;
 	return `function (newDoc, oldDoc, userCtx) {
-  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1;
+  // #1298 (edge per-shelter replication user): the role repl:<CODE> of THIS database's shelter counts
+  // exactly like _admin everywhere below, so an edge can push shelter_<code> without holding the
+  // central admin. repl:<other code> gets nothing. The rules above the _admin bypass still apply.
+  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1 ||
+    userCtx.roles.indexOf('repl:${code}') !== -1;
   var isRoleAssessmentWrite = newDoc.type === 'daily_sop_role_assessment' ||
     (oldDoc && oldDoc.type === 'daily_sop_role_assessment');
   if (isRoleAssessmentWrite && newDoc._deleted === true) {

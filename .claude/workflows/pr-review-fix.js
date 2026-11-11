@@ -227,7 +227,7 @@ pass=true only if everything that ran is green.`, { label: `test r${round}`, pha
 let push = null
 if (commits.length) {
   phase('Push')
-  push = await agent(`Push branch ${ctx.branch} for PR #${PR}: \`git push\` (the lefthook pre-push runs backend tests, pnpm check and pnpm test — let it run, it can take several minutes). ${RULES} If the hook fails, do not retry with any bypass; return pushed=false and the failing output tail.`, { label: 'push', phase: 'Push', model: 'haiku', schema: PUSH_SCHEMA })
+  push = await agent(`Push branch ${ctx.branch} for PR #${PR}: first, if the PR touches frontend/, run the full \`pnpm test\` from frontend/ (the pre-push hook only runs the vitest files affected vs origin/develop, and Jenkins runs only e2e after deploy, never vitest) — if it fails, do not push; return pushed=false with the failing output tail. Then \`git push\` (the lefthook pre-push runs pytest for touched backend/worker trees and \`pnpm test:changed\` — let it run, it can take several minutes). ${RULES} If the hook fails, do not retry with any bypass; return pushed=false and the failing output tail.`, { label: 'push', phase: 'Push', model: 'haiku', schema: PUSH_SCHEMA })
   if (!push || !push.pushed) status = 'push_failed'
 }
 

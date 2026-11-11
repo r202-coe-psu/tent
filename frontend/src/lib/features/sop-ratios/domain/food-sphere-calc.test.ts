@@ -1,7 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTotalDailyDemand, headcountsFromAgeGroups } from './food-sphere-calc';
+import {
+	calculateTotalDailyDemand,
+	calculateTotalDailyDemandDecimal,
+	headcountsFromAgeGroups
+} from './food-sphere-calc';
 import { DEFAULT_FOOD_SPHERE_STANDARDS } from './food-sphere.fixture';
 import { targetSegmentSchema, type FoodSphereStandard } from './food-sphere';
+
+/** Minimal active standard for decimal-precision cases (#936). */
+function makeStandard(
+	segment: FoodSphereStandard['target_segment'],
+	dailyDemand: unknown,
+	over: Partial<FoodSphereStandard> = {}
+): FoodSphereStandard {
+	return {
+		_id: `food_sphere_standard:${segment}:TEST_GROUP`,
+		type: 'food_sphere_standard',
+		schema_v: 3,
+		target_segment: segment,
+		req_group_id: 'TEST_GROUP',
+		daily_demand: dailyDemand as string,
+		effective_date: '2026-07-16',
+		source: 'SPHERE_BASELINE',
+		created_at: '2026-07-16T00:00:00.000Z',
+		updated_at: '2026-07-16T00:00:00.000Z',
+		created_by: 'system',
+		...over
+	};
+}
 
 describe('Food Sphere Calculation Engine', () => {
 	it('calculates total daily demand correctly when exact segments match', () => {
@@ -29,10 +55,10 @@ describe('Food Sphere Calculation Engine', () => {
 			{
 				_id: 'food_sphere_standard:ALL:FOOD_ENERGY',
 				type: 'food_sphere_standard',
-				schema_v: 1,
+				schema_v: 3,
 				target_segment: 'ALL',
 				req_group_id: 'FOOD_ENERGY',
-				daily_demand: 2100,
+				daily_demand: '2100',
 				effective_date: '2026-07-16',
 				source: 'SPHERE_BASELINE',
 				created_at: '2026-07-16T00:00:00.000Z',
@@ -122,5 +148,67 @@ describe('headcountsFromAgeGroups', () => {
 
 	it('never returns a negative ALL when age buckets exceed occupancy', () => {
 		expect(headcountsFromAgeGroups(3, { '20-59': 5 }).ALL).toBe(0);
+	});
+});
+
+describe('Food Sphere decimal daily demand (#936)', () => {
+	it('keeps 0.3 x 3 exact in the Decimal variant (float would give 0.8999999999999999)', () => {
+		const standards = [makeStandard('ALL', '0.3')];
+		expect(calculateTotalDailyDemandDecimal('TEST_GROUP', { ALL: 3 }, standards).toString()).toBe(
+			'0.9'
+		);
+	});
+
+	it('returns the same number through the kept number API', () => {
+		const standards = [makeStandard('ALL', '0.3')];
+		expect(calculateTotalDailyDemand('TEST_GROUP', { ALL: 3 }, standards)).toBe(0.9);
+	});
+
+	it('treats a legacy number daily_demand the same as its string form', () => {
+		const legacy = calculateTotalDailyDemandDecimal('TEST_GROUP', { ALL: 2 }, [
+			makeStandard('ALL', 2100)
+		]);
+		const modern = calculateTotalDailyDemandDecimal('TEST_GROUP', { ALL: 2 }, [
+			makeStandard('ALL', '2100')
+		]);
+		expect(legacy.toString()).toBe('4200');
+		expect(modern.toString()).toBe('4200');
+	});
+
+	it('falls back to the ALL standard with string values', () => {
+		const total = calculateTotalDailyDemandDecimal('TEST_GROUP', { INFANT: 4 }, [
+			makeStandard('ALL', '53')
+		]);
+		expect(total.toString()).toBe('212');
+	});
+
+	it('skips inactive standards and uses ALL instead', () => {
+		const standards = [
+			makeStandard('ALL', '2100'),
+			makeStandard('ELDERLY', '1900', { status: 'inactive' })
+		];
+		const total = calculateTotalDailyDemandDecimal(
+			'TEST_GROUP',
+			{ ALL: 10, ELDERLY: 2 },
+			standards
+		);
+		expect(total.toString()).toBe('25200');
+	});
+
+	it('skips a standard whose daily_demand is "0"', () => {
+		const total = calculateTotalDailyDemandDecimal('TEST_GROUP', { ALL: 5 }, [
+			makeStandard('ALL', '0')
+		]);
+		expect(total.toString()).toBe('0');
+	});
+
+	it('sums multiple segments exactly: 3 x 0.1 + 3 x 0.2 = 0.9', () => {
+		const standards = [makeStandard('ADULT', '0.1'), makeStandard('ELDERLY', '0.2')];
+		const total = calculateTotalDailyDemandDecimal(
+			'TEST_GROUP',
+			{ ADULT: 3, ELDERLY: 3 },
+			standards
+		);
+		expect(total.toString()).toBe('0.9');
 	});
 });

@@ -12,6 +12,7 @@
 		useCreateMasterVersion,
 		useCreateOverrideVersion
 	} from '$lib/features/sop-ratios';
+	import { isRatioChanged } from '../domain/sop-ratio';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import Save from '@lucide/svelte/icons/save';
 	import { toast } from 'svelte-sonner';
@@ -76,7 +77,7 @@
 		SOP_RATIO_KEYS.some((key) => {
 			const currentVal = $formData.ratios[key];
 			const initialVal = profile?.ratios[key];
-			return currentVal !== undefined && Number(currentVal) !== Number(initialVal);
+			return isRatioChanged(currentVal, initialVal);
 		})
 	);
 
@@ -90,7 +91,7 @@
 			for (const key of SOP_RATIO_KEYS) {
 				const currentVal = data.ratios[key];
 				const initialVal = profile?.ratios[key];
-				if (currentVal !== undefined && Number(currentVal) !== Number(initialVal)) {
+				if (isRatioChanged(currentVal, initialVal)) {
 					changes[key] = String(currentVal);
 				}
 			}

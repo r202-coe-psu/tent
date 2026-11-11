@@ -10,9 +10,9 @@
 	import { isM5Referral } from '../domain/referral.m5';
 	import { useReferralBatch } from '../application/queries';
 	import M5BatchPanel from './m5-batch-panel.svelte';
-	import ReferralBackLink from './referral-back-link.svelte';
+	import BackLink from '$lib/components/back-link.svelte';
 	import ReferralBatchCards from './referral-batch-cards.svelte';
-	import { ONEDATA_M5_PATH } from './referral.ui-helpers';
+	import { ONEDATA_M5_PATH, REFERRALS_PATH } from './referral.ui-helpers';
 
 	/** Batch page body, shared by the referrals route and the OneData M5 route (D17). */
 	let { id }: { id: string } = $props();
@@ -27,9 +27,9 @@
 
 <div class="flex flex-wrap items-center gap-3">
 	{#if isM5Batch}
-		<ReferralBackLink href={ONEDATA_M5_PATH} label="OneData (M5)" />
+		<BackLink href={ONEDATA_M5_PATH} label="กลับไป OneData (M5)" />
 	{:else}
-		<ReferralBackLink />
+		<BackLink href={REFERRALS_PATH} label="กลับไปรายการส่งต่อ" />
 	{/if}
 </div>
 

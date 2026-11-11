@@ -1339,6 +1339,67 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	describe('repl:<CODE> edge replication role (#1298 FR-6)', () => {
+		const REPL_SAME: UserCtx = { name: 'repl_sh001_ab12cd34', roles: ['repl:SH001'] };
+		const REPL_OTHER: UserCtx = { name: 'repl_sh002_ab12cd34', roles: ['repl:SH002'] };
+		const qrDoc = (): Doc => ({
+			...envelope,
+			schema_v: 1,
+			_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			type: 'evacuee_qr',
+			evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			prints: [
+				{
+					printed_at: '2026-11-06T08:00:00.000Z',
+					hash: '289170',
+					printed_by: 'staff01',
+					source: 'profile'
+				}
+			]
+		});
+		const simulation = (): Doc => ({
+			...envelope,
+			_id: 'simulation:01K1ABCDEFGHJKMNPQRSTVWXYZ',
+			type: 'simulation',
+			schema_v: 1,
+			created_by: 'sm',
+			result: simulationResult()
+		});
+
+		it('lets repl:<same code> write evacuee_qr like _admin', () => {
+			expect(() => compile()(qrDoc(), null, REPL_SAME)).not.toThrow();
+		});
+
+		it('lets repl:<same code> push a doc whose created_by is not the pusher', () => {
+			expect(() => compile()(simulation(), null, REPL_SAME)).not.toThrow();
+			expectForbidden(
+				() => compile()(simulation(), null, REPL_OTHER),
+				/shelter managers or system admins/
+			);
+		});
+
+		it('rejects repl:<other code> and a user with no repl role', () => {
+			expectForbidden(() => compile()(qrDoc(), null, REPL_OTHER), /server only/);
+			expectForbidden(() => compile('SH002')(qrDoc(), null, REPL_SAME), /server only/);
+			expectForbidden(
+				() => compile()(qrDoc(), null, { name: 'x', roles: ['shelter:SH001'] }),
+				/server only/
+			);
+		});
+
+		it('keeps the pre-bypass rules: evacuee_qr never deleted, role assessments never deleted', () => {
+			expectForbidden(
+				() => compile()({ _id: qrDoc()._id, _rev: '1-a', _deleted: true }, qrDoc(), REPL_SAME),
+				/Cannot delete evacuee_qr/
+			);
+			const assessment = makeRoleAssessment('REG', '2026-09-30', 'reg');
+			expectForbidden(
+				() => compile()({ ...assessment, _deleted: true }, assessment, REPL_SAME),
+				/cannot be deleted/
+			);
+		});
+	});
+
 	it('accepts household create from registration staff', () => {
 		expect(() =>
 			compile()(

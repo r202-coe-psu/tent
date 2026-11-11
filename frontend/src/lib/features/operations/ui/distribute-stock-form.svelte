@@ -8,6 +8,7 @@
 		itemMasterUnit,
 		formatUnit,
 		useUnitsOfMeasure,
+		useUnitDimensionResolver,
 		useItemMasters
 	} from '$lib/features/catalog';
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
@@ -66,6 +67,7 @@
 
 	const stockItems = useStockFormItems(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
+	const unitDimension = useUnitDimensionResolver();
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	// FR-E2: destination chips come from the shelter's own storage points and zones.
 	const destinations = useDestinationOptions(() => getShelterCode());
@@ -148,7 +150,8 @@
 			priorityItems,
 			reorder: reorderPolicies,
 			occupancy,
-			now: Date.now()
+			now: Date.now(),
+			unitDimension: unitDimension.resolve
 		})
 	);
 
@@ -384,6 +387,7 @@
 						storagePoints={storagePoints.points}
 						{labels}
 						{unitLabel}
+						unitDimension={unitDimension.resolve}
 						disabled={lineDisabled}
 						removable={lines.length > 1}
 						onremove={() => removeLine(line.key)}
