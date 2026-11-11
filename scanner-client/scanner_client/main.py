@@ -21,6 +21,8 @@ LOG_FILE_NAME = "scanner-client.log"
 LOG_MAX_BYTES = 1_000_000
 LOG_BACKUP_COUNT = 3
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+# Follow the real window size (Playwright pins a 1280x720 viewport by default); open maximized.
+WINDOW_ARGS = ["--start-maximized"]
 
 log = logging.getLogger(__name__)
 
@@ -96,13 +98,17 @@ async def run_app(
         browser = None
         if settings.keep_login:
             context = await playwright.chromium.launch_persistent_context(
-                user_data_dir=str(data_dir / "profile"), **channel, headless=False
+                user_data_dir=str(data_dir / "profile"),
+                **channel,
+                headless=False,
+                args=WINDOW_ARGS,
+                no_viewport=True,
             )
             page = context.pages[0] if context.pages else await context.new_page()
         else:
-            browser = await playwright.chromium.launch(**channel, headless=False)
+            browser = await playwright.chromium.launch(**channel, headless=False, args=WINDOW_ARGS)
             browser.on("disconnected", lambda *_: stop.set())
-            context = await browser.new_context()
+            context = await browser.new_context(no_viewport=True)
             page = await context.new_page()
         context.on("close", lambda *_: stop.set())
         page.on("close", lambda *_: stop.set())
