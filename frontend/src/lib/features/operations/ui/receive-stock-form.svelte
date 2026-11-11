@@ -29,7 +29,11 @@
 		itemSelectableUoms,
 		defaultInventoryUom,
 		toLedgerQtyUnit,
-		shelfLifeExpiryLabel
+		shelfLifeExpiryLabel,
+		useUnitDimensionResolver,
+		qtyInputStep,
+		requiresWholeQty,
+		wholeQtyError
 	} from '$lib/features/catalog';
 	import {
 		applyExpiryAutofill,
@@ -81,6 +85,7 @@
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
 	// decision sync 2026-11-06 (schema.md §2.1 lot.lot_no): stock-page receives may mint a lot number; on by default.
 	let issueLotNo = $state(true);
 	const receiveMutation = useReceiveStock();
@@ -209,6 +214,12 @@
 				return;
 			}
 
+			if (qtyWholeError) {
+				cancel();
+				toast.error(qtyWholeError);
+				return;
+			}
+
 			// FR-D2: an item that requires an expiry cannot be saved without one.
 			if (selectedItem?.requiresExpiry && !validated.data.lot?.expiry) {
 				expiryAttempted = true;
@@ -240,6 +251,10 @@
 	});
 
 	const { form: formData, submitting, reset } = form;
+
+	const qtyWholeError = $derived(
+		wholeQtyError($formData.qty, unitDimension.resolve($formData.unit))
+	);
 
 	/** "ซื้อเอง" (schema_v 7): a hand-keyed receipt of goods the shelter bought itself. */
 	const selfPurchased = $derived($formData.lot?.self_purchased === true);
@@ -820,13 +835,17 @@
 							bind:ref={qtyInput}
 							type="number"
 							placeholder="0"
-							min="0.01"
-							step="any"
+							min={requiresWholeQty(unitDimension.resolve($formData.unit)) ? '1' : '0.01'}
+							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							bind:value={$formData.qty}
+							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
 							class="min-h-11 font-mono font-bold"
 						/>
 					{/snippet}
 				</Form.Control>
+				{#if qtyWholeError}
+					<p class="text-sm font-medium text-destructive">{qtyWholeError}</p>
+				{/if}
 				<Form.FieldErrors />
 			</Form.Field>
 
@@ -1026,7 +1045,11 @@
 			<div
 				class="sticky -bottom-4 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:-bottom-6 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
 			>
-				<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
+				<Form.Button
+					size="lg"
+					disabled={$submitting || offline || !!qtyWholeError}
+					class="min-h-11 w-full font-bold"
+				>
 					{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
 				</Form.Button>
 			</div>

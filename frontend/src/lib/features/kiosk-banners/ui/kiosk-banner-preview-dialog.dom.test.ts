@@ -39,7 +39,7 @@ const playing = () =>
 		...document.body.querySelectorAll<HTMLImageElement>('[data-testid="kiosk-banner-attract"] img')
 	].map((img) => img.getAttribute('alt'));
 
-const both = { compact: [slide('c1'), slide('c2')], portrait: [slide('p1')] };
+const both = { compact: [slide('c1'), slide('c2')], portrait: [slide('p1')], tv: [] };
 
 beforeEach(() => {
 	// happy-dom has no layout: give the preview area a width so the viewport renders.
@@ -73,12 +73,13 @@ describe('KioskBannerPreviewDialog', () => {
 		render({ slides: both });
 		expect(toggles().map((b) => b.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
 			'ตู้เล็ก 1024×600 (2)',
-			'ตู้ใหญ่ 1080×1920 (1)'
+			'ตู้ใหญ่ 1080×1920 (1)',
+			'จอ TV 1920×1080 (0)'
 		]);
 	});
 
 	it('starts on the first screen that has slides and plays only that screen', () => {
-		render({ slides: { compact: [], portrait: [slide('p1')] } });
+		render({ slides: { compact: [], portrait: [slide('p1')], tv: [] } });
 		expect(toggle('ตู้ใหญ่')?.getAttribute('aria-pressed')).toBe('true');
 		expect(playing()).toEqual(['Title p1']);
 	});
@@ -102,7 +103,7 @@ describe('KioskBannerPreviewDialog', () => {
 	});
 
 	it('shows the per-screen empty message when that screen has no slides', () => {
-		render({ slides: { compact: [slide('c1')], portrait: [] } });
+		render({ slides: { compact: [slide('c1')], portrait: [], tv: [] } });
 		toggle('ตู้ใหญ่')?.click();
 		flushSync();
 
@@ -112,7 +113,7 @@ describe('KioskBannerPreviewDialog', () => {
 
 	it('single-screen mode has a heading instead of a toggle and uses the message override', () => {
 		render({
-			slides: { compact: [], portrait: [] },
+			slides: { compact: [], portrait: [], tv: [] },
 			screens: ['portrait'],
 			emptyMessage: 'เลือกรูปก่อนจึงจะดูตัวอย่างได้'
 		});

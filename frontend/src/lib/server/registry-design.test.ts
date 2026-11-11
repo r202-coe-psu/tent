@@ -3,6 +3,8 @@ import {
 	buildRegistryDesignDoc,
 	buildRegistryValidateDocUpdate,
 	KIOSK_BANNER_MANGO_INDEX,
+	KIOSK_BANNER_TV_CODE_MANGO_INDEX,
+	REGISTRY_MANGO_INDEXES,
 	REGISTRY_DESIGN_VERSION,
 	registryByNamePath
 } from './registry-design';
@@ -91,7 +93,7 @@ describe('registry kiosk_banner validate_doc_update', () => {
 	});
 
 	it.each([
-		['schema_v 3', { schema_v: 3 }],
+		['schema_v 4', { schema_v: 4 }],
 		['schema_v 0', { schema_v: 0 }],
 		['missing schema_v', { schema_v: undefined }],
 		['schema_v 2 without group_id', { schema_v: 2 }],
@@ -100,6 +102,23 @@ describe('registry kiosk_banner validate_doc_update', () => {
 		['schema_v 2 with wrong-prefix group_id', { schema_v: 2, group_id: 'shelter:01H' }]
 	])('rejects %s', (_label, overrides) => {
 		expect(() => runVdu(validBanner(overrides))).toThrow(
+			expect.objectContaining({ forbidden: expect.any(String) })
+		);
+	});
+
+	it("accepts schema_v 3 banners with screen_type 'tv', compact or portrait", () => {
+		for (const screen_type of ['tv', 'compact', 'portrait']) {
+			expect(() =>
+				runVdu(validBanner({ schema_v: 3, group_id: 'kiosk_banner_group:01H', screen_type }))
+			).not.toThrow();
+		}
+	});
+
+	it.each([
+		['schema_v 1', { schema_v: 1 }],
+		['schema_v 2', { schema_v: 2, group_id: 'kiosk_banner_group:01H' }]
+	])("rejects screen_type 'tv' on a %s banner", (_label, overrides) => {
+		expect(() => runVdu(validBanner({ ...overrides, screen_type: 'tv' }))).toThrow(
 			expect.objectContaining({ forbidden: expect.any(String) })
 		);
 	});
@@ -223,7 +242,7 @@ describe('registry kiosk_banner_group validate_doc_update', () => {
 	});
 
 	it.each([
-		['schema_v 2', { schema_v: 2 }],
+		['schema_v 3', { schema_v: 3, tv_code: '000123' }],
 		['missing schema_v', { schema_v: undefined }],
 		['wrong _id prefix', { _id: 'kiosk_banner:01H' }],
 		['missing shelter_code', { shelter_code: undefined }],
@@ -243,6 +262,24 @@ describe('registry kiosk_banner_group validate_doc_update', () => {
 		);
 	});
 
+	it('accepts a schema_v 2 group with a six-digit tv_code, and a v1 group without one', () => {
+		expect(() => runVdu(validGroup({ schema_v: 2, tv_code: '000123' }))).not.toThrow();
+		expect(() => runVdu(validGroup({ schema_v: 1 }))).not.toThrow();
+	});
+
+	it.each([
+		['missing tv_code', { tv_code: undefined }],
+		['null tv_code', { tv_code: null }],
+		['five-digit tv_code', { tv_code: '12345' }],
+		['seven-digit tv_code', { tv_code: '1234567' }],
+		['non-digit tv_code', { tv_code: '12a456' }],
+		['numeric tv_code', { tv_code: 123456 }]
+	])('rejects a schema_v 2 group with %s', (_label, overrides) => {
+		expect(() => runVdu(validGroup({ schema_v: 2, ...overrides }))).toThrow(
+			expect.objectContaining({ forbidden: expect.any(String) })
+		);
+	});
+
 	it('lets a _deleted group through even when fields are missing', () => {
 		expect(() =>
 			runVdu({ _id: 'kiosk_banner_group:01H', type: 'kiosk_banner_group', _deleted: true })
@@ -255,5 +292,11 @@ describe('registry Mango indexes', () => {
 	// must match the banner list selector `{ type, shelter_code }` exactly.
 	it('indexes exactly the fields the shelter banner list selects on', () => {
 		expect(KIOSK_BANNER_MANGO_INDEX.index.fields).toEqual(['type', 'shelter_code']);
+	});
+
+	it('indexes tv_code for the system-wide lookup and deploys it with the registry', () => {
+		expect(KIOSK_BANNER_TV_CODE_MANGO_INDEX.name).toBe('kiosk-banner-group-by-tv-code');
+		expect(KIOSK_BANNER_TV_CODE_MANGO_INDEX.index.fields).toEqual(['type', 'tv_code']);
+		expect(REGISTRY_MANGO_INDEXES).toContain(KIOSK_BANNER_TV_CODE_MANGO_INDEX);
 	});
 });

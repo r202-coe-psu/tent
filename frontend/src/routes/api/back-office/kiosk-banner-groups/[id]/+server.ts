@@ -10,7 +10,11 @@ import {
 	readJsonObject,
 	requireBannerManager
 } from '$lib/server/kiosk-banners/kiosk-banner-access';
-import { deleteGroup, updateGroup } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
+import {
+	deleteGroup,
+	ensureGroupTvCode,
+	updateGroup
+} from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 import { kioskBannerGroupInputSchema } from '$lib/features/kiosk-banners';
 
 export const prerender = false;
@@ -23,7 +27,8 @@ const updateBodySchema = z.strictObject({
 export const GET: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await requireBannerManager(request);
-		return json(await loadGroupInScope(caller, params.id));
+		const group = await loadGroupInScope(caller, params.id);
+		return json(await ensureGroupTvCode(group));
 	} catch (error) {
 		return bannerErrorResponse(error);
 	}

@@ -43,6 +43,7 @@ import {
 	useDeleteKioskBannerGroup,
 	useKioskBannerGroup,
 	useKioskBannerGroups,
+	useRotateTvCode,
 	useSetKioskBannerGroupDevices,
 	useUpdateKioskBannerGroup
 } from './kiosk-banner.queries';
@@ -53,7 +54,8 @@ const groupRepo = {
 	create: vi.fn(),
 	update: vi.fn(),
 	remove: vi.fn(),
-	setDevices: vi.fn()
+	setDevices: vi.fn(),
+	rotateTvCode: vi.fn()
 } satisfies KioskBannerGroupRepository;
 
 beforeEach(() => {
@@ -188,6 +190,19 @@ describe('group mutations', () => {
 		});
 		expect(groupRepo.setDevices).toHaveBeenCalledWith('kiosk_banner_group:1', ['scanner_device:2']);
 		expect(invalidatedKeys()).toEqual([kioskBannerGroupKeys.all, scannerKeys.allDevices]);
+	});
+
+	it('rotateTvCode issues the new code and refreshes groups only', async () => {
+		await useRotateTvCode(groupRepo).mutate({ id: 'kiosk_banner_group:1' });
+		expect(groupRepo.rotateTvCode).toHaveBeenCalledWith('kiosk_banner_group:1');
+		expect(invalidatedKeys()).toEqual([kioskBannerGroupKeys.all]);
+	});
+
+	it('a failed rotation toasts the fallback text and refreshes nothing', async () => {
+		groupRepo.rotateTvCode.mockRejectedValue(new Error(''));
+		await useRotateTvCode(groupRepo).mutate({ id: 'kiosk_banner_group:1' });
+		expect(toastError).toHaveBeenCalledWith('ออกรหัสใหม่ไม่สำเร็จ');
+		expect(invalidateQueries).not.toHaveBeenCalled();
 	});
 
 	it('a delete refused because the group still has banners toasts that reason', async () => {

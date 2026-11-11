@@ -21,7 +21,8 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/catalog')>()),
 	useRecipes: () => ({ data: [] }),
 	useItemMasters: () => ({ data: [] }),
-	useUnitsOfMeasure: () => ({ data: [] })
+	useUnitsOfMeasure: () => ({ data: [] }),
+	useUnitDimensionResolver: () => ({ resolve: () => undefined })
 }));
 vi.mock('$lib/features/supply', () => ({
 	useSupplyItems: () => ({ data: [RICE], isPending: false })

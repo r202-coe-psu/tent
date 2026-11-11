@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { makeDocId } from '$lib/db/model';
 import {
+	kioskDeviceScreenTypeSchema,
 	kioskScreenTypeSchema,
 	screenTypeOf,
 	type KioskScreenType
@@ -45,8 +46,11 @@ const kioskBannerFieldsSchema = z.object({
 	start_at: z.string().datetime({ message: 'รูปแบบเวลาเริ่มไม่ถูกต้อง' }),
 	end_at: z.string().datetime({ message: 'รูปแบบเวลาสิ้นสุดไม่ถูกต้อง' }),
 	status: kioskBannerStatusSchema.default('active'),
-	/** Absent on a doc stored before screen types existed = compact. */
-	screen_type: kioskScreenTypeSchema.optional(),
+	/**
+	 * Absent on a doc stored before screen types existed = compact. v1/v2 docs only know the
+	 * kiosk screens; v3 widens this to allow `tv`.
+	 */
+	screen_type: kioskDeviceScreenTypeSchema.optional(),
 	/** Absent on a doc stored before banner groups existed = ungrouped, never fed to a kiosk. */
 	group_id: z.string().startsWith('kiosk_banner_group:').optional()
 });
@@ -90,9 +94,20 @@ const kioskBannerDocV2Schema = kioskBannerFieldsSchema
 	})
 	.refine(endAfterStart.check, endAfterStart.params);
 
+/** v3 adds the `tv` screen type (a new enum value), otherwise the v2 shape. */
+const kioskBannerDocV3Schema = kioskBannerFieldsSchema
+	.extend({
+		...kioskBannerEnvelope,
+		schema_v: z.literal(3),
+		group_id: z.string().startsWith('kiosk_banner_group:'),
+		screen_type: kioskScreenTypeSchema.optional()
+	})
+	.refine(endAfterStart.check, endAfterStart.params);
+
 export const kioskBannerDocSchema = z.discriminatedUnion('schema_v', [
 	kioskBannerDocV1Schema,
-	kioskBannerDocV2Schema
+	kioskBannerDocV2Schema,
+	kioskBannerDocV3Schema
 ]);
 
 export type KioskBannerDoc = z.infer<typeof kioskBannerDocSchema>;
@@ -115,7 +130,7 @@ export function createKioskBanner(
 	return {
 		_id: makeDocId('kiosk_banner'),
 		type: 'kiosk_banner',
-		schema_v: 2,
+		schema_v: 3,
 		shelter_code: ctx.shelterCode,
 		group_id: input.group_id,
 		title: input.title,

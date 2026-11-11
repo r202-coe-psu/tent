@@ -69,8 +69,13 @@
 		formatUnit,
 		mergeCatalogGenerations,
 		QuickCreateItem,
+		qtyInputStep,
+		requiresWholeQty,
 		useItemMasters,
+		useUnitDimensionResolver,
 		useUnitsOfMeasure,
+		WHOLE_QTY_MESSAGE,
+		wholeQtyError,
 		type ItemMaster
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -366,6 +371,8 @@
 	// place this file SHOWS a unit runs it back through `formatUnit`.
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
 	const unitsOfMeasure = $derived(unitsOfMeasureQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
+	const qtyErrorOf = (qty: string, unit: string) => wholeQtyError(qty, unitDimension.resolve(unit));
 	let lastLots = $state<{ item_id: string; lot_no: string | null }[]>([]);
 
 	const VEHICLE_LABELS: Record<string, string> = {
@@ -514,6 +521,7 @@
 	);
 
 	// Validation check for receiving into stock
+	const hasScanWholeError = $derived(keptItems.some((it) => qtyErrorOf(it.qty, it.unit)));
 	const canReceive = $derived(
 		!otherShelterCode &&
 			!pointChoiceMissing &&
@@ -526,6 +534,7 @@
 					: it.verified &&
 						it.item_id &&
 						it.qty &&
+						!qtyErrorOf(it.qty, it.unit) &&
 						isStoragePointChosen(storageOf(idx), storagePoints.points)
 			) &&
 			scannedMissingExpiry.length === 0
@@ -535,7 +544,8 @@
 	// waits on, ticked as staff complete it (it used to be a red error box listing
 	// what was still missing, which read as a failure before anything had been done).
 	const checkMapped = $derived(
-		scopeLines.length > 0 && keptItems.every((it) => it.item_id && it.qty)
+		scopeLines.length > 0 &&
+			keptItems.every((it) => it.item_id && it.qty && !qtyErrorOf(it.qty, it.unit))
 	);
 	const checkZoned = $derived(
 		scopeLines.length > 0 &&
@@ -698,6 +708,9 @@
 		}
 	]);
 	let walkinSaving = $state(false);
+	const hasWalkinWholeError = $derived(
+		walkinItems.some((it) => it.itemId && qtyErrorOf(it.qty, it.unit))
+	);
 
 	/**
 	 * `fromList` — opened from a row of the booking list: a miss there sends staff back to
@@ -847,7 +860,12 @@
 	}
 
 	async function handleSaveScan() {
-		if (!actionRef || saving || otherShelterCode || !canReceive) return;
+		if (!actionRef || saving || otherShelterCode) return;
+		if (hasScanWholeError) {
+			toast.error(WHOLE_QTY_MESSAGE);
+			return;
+		}
+		if (!canReceive) return;
 		const lineNos = scopeLines.map(({ idx }) => idx);
 		const recorded = new Set(lineNos);
 		const pointName = chosenPointId ? destinationName(chosenPointId) : null;
@@ -1089,6 +1107,10 @@
 		const validItems = walkinItems.filter((it) => it.itemId);
 		if (validItems.length === 0) {
 			toast.error('กรุณาเลือกรายการสิ่งของอย่างน้อย 1 รายการพร้อมระบุจำนวน');
+			return;
+		}
+		if (hasWalkinWholeError) {
+			toast.error(WHOLE_QTY_MESSAGE);
 			return;
 		}
 
@@ -1436,6 +1458,8 @@
 										/>
 									</div>
 								{:else}
+									{@const qtyDimension = unitDimension.resolve(item.unit)}
+									{@const qtyError = wholeQtyError(item.qty, qtyDimension)}
 									<!-- Fields: what it is and how much, then where it goes -->
 									<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:px-5">
 										<div class="space-y-1.5">
@@ -1473,8 +1497,11 @@
 												<Input
 													id="item-qty-{idx}"
 													type="text"
-													inputmode="decimal"
+													inputmode={requiresWholeQty(qtyDimension) ? 'numeric' : 'decimal'}
+													step={qtyInputStep(qtyDimension)}
 													bind:value={item.qty}
+													aria-invalid={qtyError ? true : undefined}
+													aria-describedby={qtyError ? `item-qty-${idx}-error` : undefined}
 													class="h-11 pr-16 text-base font-bold tabular-nums"
 												/>
 												<span
@@ -1483,6 +1510,15 @@
 													{formatUnit(item.unit, unitsOfMeasure, langState.current)}
 												</span>
 											</div>
+											{#if qtyError}
+												<p
+													id="item-qty-{idx}-error"
+													data-testid="scan-line-{idx}-qty-error"
+													class="text-sm font-medium text-red-700"
+												>
+													{qtyError}
+												</p>
+											{/if}
 										</div>
 
 										<div class="space-y-1.5">
@@ -2147,6 +2183,8 @@
 
 					<div class="space-y-4">
 						{#each walkinItems as item, idx (item.id)}
+							{@const qtyDimension = unitDimension.resolve(item.unit)}
+							{@const qtyError = item.itemId ? wholeQtyError(item.qty, qtyDimension) : undefined}
 							<div
 								class="relative rounded-2xl border border-border/70 bg-muted/20 p-5 transition-all hover:border-border"
 							>
@@ -2210,10 +2248,22 @@
 										<Input
 											id="walkin-qty-{item.id}"
 											type="text"
-											inputmode="decimal"
+											inputmode={requiresWholeQty(qtyDimension) ? 'numeric' : 'decimal'}
+											step={qtyInputStep(qtyDimension)}
 											bind:value={item.qty}
+											aria-invalid={qtyError ? true : undefined}
+											aria-describedby={qtyError ? `walkin-qty-${item.id}-error` : undefined}
 											class="h-10 rounded-xl text-center text-sm font-bold"
 										/>
+										{#if qtyError}
+											<p
+												id="walkin-qty-{item.id}-error"
+												data-testid="walkin-qty-error"
+												class="text-sm font-medium text-destructive"
+											>
+												{qtyError}
+											</p>
+										{/if}
 									</div>
 
 									<!-- Unit Display / Input -->
@@ -2297,7 +2347,7 @@
 					<Button
 						type="button"
 						onclick={handleSaveWalkin}
-						disabled={walkinSaving}
+						disabled={walkinSaving || hasWalkinWholeError}
 						class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#001f3f] sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700"
 					>
 						{#if walkinSaving}
