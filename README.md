@@ -107,7 +107,7 @@ pnpm dev          # http://localhost:5173
 repo root ใช้ **[Lefthook](https://github.com/evilmartians/lefthook)** เป็น quality gate ก่อน commit และ push:
 
 - **pre-commit:** ตรวจ format และ lint (frontend, backend, worker)
-- **pre-push:** ตรวจ type-check และ unit tests (frontend, backend, worker)
+- **pre-push:** ตรวจ unit tests (frontend Vitest, backend และ worker pytest)
 
 > ⚠️ **ข้อตกลงสำคัญ (Strict Rule):**
 > **ห้าม commit หรือ push โดยใช้ `--no-verify` (หรือ `LEFTHOOK=0`) โดยเด็ดขาด**
@@ -126,7 +126,7 @@ pnpm exec lefthook run pre-push
 
 - `pnpm dev` — Vite dev server
 - `pnpm lint` — format + ESLint check
-- `pnpm check` — type-check (รันก่อนปิดงานทุกครั้ง)
+- `pnpm check` — type-check (รันเองก่อนเปิด PR; ไม่อยู่ใน hook)
 - `pnpm test` — unit tests (Vitest)
 - `pnpm test:e2e` — Playwright e2e
 - `pnpm seed` — Staging/local full seed (alias ของ `seed:staging`: ~1,000 ผู้เข้าพัก + ops)
