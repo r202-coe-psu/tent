@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End-to-end test of edge <-> central CouchDB replication with the per-shelter replication user
-# (draft CR #1298, AC-1..AC-10 + FR-9). Everything runs in THROWAWAY docker containers: one central, one edge
+# (CR-247, AC-1..AC-10 + FR-9). Everything runs in THROWAWAY docker containers: one central, one edge
 # (plus a second edge for the migration test AC-9) on private docker networks. Never touches the repo's compose
 # CouchDB or deployment/ data; everything is removed on exit.
 #

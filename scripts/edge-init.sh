@@ -6,7 +6,7 @@
 #   3. _replicator jobs: registry / catalog / shelter pull, shelter push, _users pull จาก edge_users_<code>
 #
 # credential ฝั่ง central = user ต่อศูนย์ (role `repl:<SHELTER_CODE>`, ไม่ใช่ admin) สร้างที่ central ด้วย
-# `scripts/central-repl-user.sh <CODE>` — edge ไม่ถือ central admin (draft CR #1298, แทน OD-6 ของ CR-064)
+# `scripts/central-repl-user.sh <CODE>` — edge ไม่ถือ central admin (CR-247, แทน OD-6 ของ CR-064)
 #
 # Idempotent: DB ที่มีอยู่แล้ว (412) และ doc ที่มีอยู่แล้ว (409) จะถูกข้าม · job ใน _replicator ที่ config
 # (SYNC_URL / credential / SHELTER_CODE) ไม่ตรงกับ .env ปัจจุบันจะถูกลบแล้วสร้างใหม่ (`stale`) — แก้ .env แล้ว
@@ -118,7 +118,7 @@ if [ "$CEN_UUID" = "$EDGE_UUID" ]; then
 fi
 echo "ok      central uuid ${CEN_UUID} ≠ edge uuid ${EDGE_UUID}"
 
-# 2.6) FR-16 (draft CR #1298): credential ต้องเป็น user ต่อศูนย์ role `repl:<SHELTER_CODE>` เท่านั้น — ห้ามเป็น `_admin`
+# 2.6) FR-16 (CR-247): credential ต้องเป็น user ต่อศูนย์ role `repl:<SHELTER_CODE>` เท่านั้น — ห้ามเป็น `_admin`
 #      (กันเอา central admin มาใส่ซ้ำ) · GET /_session ด้วย basic auth ของ EDGE_REPL_*
 : >/tmp/edge-init.ses
 ses_status=$(curl -s -o /tmp/edge-init.ses -w '%{http_code}' \
@@ -142,7 +142,7 @@ esac
 echo "ok      central session: EDGE_REPL_USER มี role repl:${SHELTER_CODE} และไม่ใช่ admin"
 
 # 3) replication jobs — edge เป็นฝ่ายเปิด connection ไปหา central เสมอ
-#    credential ฝั่ง central ชุดเดียวทุก job = user ต่อศูนย์ role `repl:<SHELTER_CODE>` (ตรวจแล้วที่ 2.6; draft CR #1298)
+#    credential ฝั่ง central ชุดเดียวทุก job = user ต่อศูนย์ role `repl:<SHELTER_CODE>` (ตรวจแล้วที่ 2.6; CR-247)
 LOC_AUTH=$(auth "$COUCHDB_USER" "$COUCHDB_PASSWORD")
 CEN_AUTH=$(auth "$EDGE_REPL_USER" "$EDGE_REPL_PASSWORD")
 
@@ -151,13 +151,13 @@ job catalog_pull "$CEN/catalog" "$CEN_AUTH" "$LOC/catalog" "$LOC_AUTH"
 job "${CODE_LC}_pull" "$CEN/$SHELTER_DB" "$CEN_AUTH" "$LOC/$SHELTER_DB" "$LOC_AUTH"
 # กรอง `_design/*` ออกจาก push — กันอุบัติเหตุ / edge ที่มี design doc เก่ากว่า central · ไม่ใช่ตัวกั้นความปลอดภัย:
 # ของจริงคือ credential ต่อศูนย์ (`repl:<CODE>`) ที่เข้าได้เฉพาะ shelter_<code> / edge_users_<code> และ VDU ของ
-# shelter_<code> ที่ central (draft CR #1298 แทน OD-6 — edge ไม่ถือ central admin)
+# shelter_<code> ที่ central (CR-247 แทน OD-6 — edge ไม่ถือ central admin)
 job "${CODE_LC}_push" "$LOC/$SHELTER_DB" "$LOC_AUTH" "$CEN/$SHELTER_DB" "$CEN_AUTH" \
 	"\"selector\":{\"_id\":{\"\$not\":{\"\$regex\":\"^_design/\"}}}"
 
 # _users: pull จาก DB `edge_users_<code>` ที่ central ซึ่งมีเฉพาะ _users doc ของศูนย์นี้อยู่แล้ว (FR-15)
-# CR-171 selector (`edge_shelters` OR `roles`) ย้ายไปอยู่ใน job `_replicator` ฝั่ง central ที่ copy
-# `_users` → `edge_users_<code>` (scripts/central-repl-user.sh) — ฝั่ง edge จึงไม่กรอง user (draft CR #1298)
+# CR-171 selector (`edge_shelters` OR `roles`) ย้ายไปอยู่ใน service `edge-users-copy` ฝั่ง central ที่ copy
+# `_users` → `edge_users_<code>` (worker/, CR-247 FR-11) — ฝั่ง edge จึงไม่กรอง user
 # กรองแค่ `_design/*`: `_design/readonly` ของ edge_users_<code> (เขียนได้เฉพาะ _admin) ไม่ใช่ของ _users ที่ edge
 job "users_${CODE_LC}_pull" "$CEN/edge_users_${CODE_LC}" "$CEN_AUTH" "$LOC/_users" "$LOC_AUTH" \
 	"\"selector\":{\"_id\":{\"\$not\":{\"\$regex\":\"^_design/\"}}}"
