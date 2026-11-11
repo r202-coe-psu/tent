@@ -51,7 +51,23 @@ export function sweepExpiredDrafts(now = Date.now()): void {
  * Fresh page loads (navigating to the URL, opening a new tab, bookmarks) return false
  * so that drafts containing personal data are never restored on shared devices.
  */
+let initialNavEligible: boolean | null = null;
+let pageLoadGateApplied = false;
+
 export function isEligibleNavigationForDraftRestore(): boolean {
+	// Decided once per page load: a form that unmounts and remounts in the same page (e.g. after
+	// CAPACITY_EXCEEDED) must keep its draft instead of treating the remount as a fresh visit.
+	if (initialNavEligible === null) initialNavEligible = computeNavEligible();
+	return initialNavEligible;
+}
+
+/** Test hook: forget the cached per-page-load decision. */
+export function resetNavigationEligibilityCache(): void {
+	initialNavEligible = null;
+	pageLoadGateApplied = false;
+}
+
+function computeNavEligible(): boolean {
 	if (typeof window === 'undefined' || typeof performance === 'undefined') return false;
 	try {
 		const entries = performance.getEntriesByType?.('navigation');
@@ -76,9 +92,14 @@ export function loadRegistrationDraft(
 	now = Date.now()
 ): RestoredRegistrationDraft | null {
 	sweepExpiredDrafts(now);
-	if (!isEligibleNavigationForDraftRestore()) {
-		clearRegistrationDraft(key);
-		return null;
+	if (!pageLoadGateApplied) {
+		// First look in this page load: only a reload / back-forward may restore, anything else
+		// is a fresh visit and must not surface an older person's draft.
+		pageLoadGateApplied = true;
+		if (!isEligibleNavigationForDraftRestore()) {
+			clearRegistrationDraft(key);
+			return null;
+		}
 	}
 	try {
 		const raw = sessionStorage.getItem(PREFIX + key);

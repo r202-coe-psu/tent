@@ -320,9 +320,10 @@
 	// Not state: once the form is sent, the effect below must not write the draft back.
 	let draftSent = false;
 
-	// Drop the draft when navigating away to another route to avoid leaving personal data in sessionStorage.
+	// Drop the draft when navigating away — to another route or off the site (`to` is null) — so no
+	// personal data is left in sessionStorage.
 	beforeNavigate(({ to }) => {
-		if (draftKey && to && to.url.pathname !== page.url.pathname) {
+		if (draftKey && (!to || to.url.pathname !== page.url.pathname)) {
 			clearRegistrationDraft(draftKey);
 		}
 	});

@@ -62,7 +62,27 @@ export function toRegistrationDraft(
 			pets: (household.pets ?? []).map((pet) => ({ ...pet, image_url: null })),
 			assets: household.assets ? { ...household.assets, image_url: null } : null
 		},
-		members: members.map((member) => ({ ...member, photo: null }))
+		members: members.map(stripSensitiveFields)
+	};
+}
+
+/**
+ * Owner decision (#358, B3): a draft never keeps the ID number, medical data, vulnerability tags or
+ * the emergency contact — they stay out of sessionStorage and must be re-entered after a reload.
+ */
+function stripSensitiveFields(member: UnifiedMemberWithMeta): UnifiedMemberWithMeta {
+	const blank = blankUnifiedMember();
+	return {
+		...member,
+		photo: null,
+		person_id: { cardType: member.person_id?.cardType ?? blank.person_id.cardType, number: '' },
+		vulnerable_groups: blank.vulnerable_groups,
+		special_needs: blank.special_needs,
+		disability_other_detail: blank.disability_other_detail,
+		medical_conditions: blank.medical_conditions,
+		medical_allergies: blank.medical_allergies,
+		medical_medications: blank.medical_medications,
+		emergency_contact: blank.emergency_contact
 	};
 }
 

@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	clearRegistrationDraft,
 	isEligibleNavigationForDraftRestore,
 	loadRegistrationDraft,
+	resetNavigationEligibilityCache,
 	saveRegistrationDraft,
 	sweepExpiredDrafts
 } from './registration-draft.storage';
@@ -16,6 +17,10 @@ const household = {
 	pets: []
 } as unknown as UnifiedRegistrationInput['household'];
 const members = [{ ...blankUnifiedMember(), first_name: 'สมชาย' }];
+
+beforeEach(() => {
+	resetNavigationEligibilityCache();
+});
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -80,6 +85,49 @@ describe('registration draft storage (#358)', () => {
 		expect(loadRegistrationDraft(KEY, NOW)).toBeNull();
 		// Draft must be wiped from storage to protect privacy on shared devices
 		expect(sessionStorage.getItem(`tent.registrationDraft:${KEY}`)).toBeNull();
+	});
+
+	it('keeps a draft typed after a fresh open when the form remounts in the same page (B2)', () => {
+		vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+			{ type: 'navigate' } as PerformanceNavigationTiming
+		]);
+		expect(loadRegistrationDraft(KEY, NOW)).toBeNull();
+
+		// The user types, the form unmounts (shelter full) and mounts again in the same page.
+		saveRegistrationDraft(KEY, household, members, NOW);
+		expect(loadRegistrationDraft(KEY, NOW)?.members[0].first_name).toBe('สมชาย');
+	});
+
+	it('never stores the ID number, medical data or emergency contact (B1/B3)', () => {
+		const sensitive = [
+			{
+				...members[0],
+				person_id: { cardType: 'national_id' as const, number: '1101700230673' },
+				special_needs: ['wheelchair'],
+				medical_conditions: ['diabetes'],
+				medical_allergies: ['penicillin'],
+				medical_medications: ['insulin'],
+				emergency_contact: { name: 'ญาติ', phone: '0812345678', relation: 'sibling' }
+			}
+		];
+		saveRegistrationDraft(KEY, household, sensitive, NOW);
+		const raw = sessionStorage.getItem(`tent.registrationDraft:${KEY}`) ?? '';
+		for (const secret of [
+			'1101700230673',
+			'wheelchair',
+			'diabetes',
+			'penicillin',
+			'insulin',
+			'0812345678'
+		]) {
+			expect(raw).not.toContain(secret);
+		}
+		vi.spyOn(performance, 'getEntriesByType').mockReturnValue([
+			{ type: 'reload' } as PerformanceNavigationTiming
+		]);
+		const restored = loadRegistrationDraft(KEY, NOW)?.members[0];
+		expect(restored?.first_name).toBe('สมชาย');
+		expect(restored?.person_id.number).toBe('');
 	});
 
 	it('restores draft when navigation is a reload or back/forward', () => {
