@@ -11,11 +11,14 @@ from urllib.parse import urlsplit
 
 from app.scard import split_card_address  # reused from the kiosk, not copied
 
-# Runs in the page. `dispatchEvent` returns false when a listener called preventDefault(),
-# which is how the page acknowledges; so `!dispatchEvent(...)` is "acknowledged".
 log = logging.getLogger(__name__)
 
-DISPATCH_JS = """([name, detail]) => {
+# Runs in the page. Refuses (= not acknowledged) unless the tab is still on the expected origin
+# and path: closes the race between the Python-side url check and this call.
+# `dispatchEvent` returns false when a listener called preventDefault(),
+# which is how the page acknowledges; so `!dispatchEvent(...)` is "acknowledged".
+DISPATCH_JS = """([name, detail, origin, path]) => {
+    if (location.origin !== origin || location.pathname !== path) return false;
     const event = new CustomEvent(name, { detail, cancelable: true });
     return !window.dispatchEvent(event);
 }"""
@@ -82,7 +85,7 @@ class CardSession:
                 log.warning("dropping %s: page is not the shelter walk-in page", name)
                 return False
             try:
-                if await page.evaluate(DISPATCH_JS, [name, detail]):
+                if await page.evaluate(DISPATCH_JS, [name, detail, *self._expected()]):
                     return True
             except Exception:
                 pass  # navigation in progress: not acknowledged for this attempt
@@ -93,7 +96,11 @@ class CardSession:
 
     async def _on_walk_in(self, page: Any) -> bool:
         if not self._is_walk_in(page.url):
-            await page.goto(self._walk_in_url())
+            try:
+                await page.goto(self._walk_in_url())
+            except Exception as exc:
+                log.warning("walk-in navigation failed: %s", type(exc).__name__)
+                return False
         return self._is_walk_in(page.url)
 
     def _is_walk_in(self, url: str) -> bool:
@@ -106,6 +113,10 @@ class CardSession:
     def _origin(url: str) -> tuple[str, str | None, int | None]:
         parts = urlsplit(url)
         return parts.scheme, parts.hostname, parts.port or _DEFAULT_PORTS.get(parts.scheme)
+
+    def _expected(self) -> tuple[str, str]:
+        shelter = urlsplit(self._shelter_url)
+        return f"{shelter.scheme}://{shelter.netloc}", self._walk_in_path
 
     def _walk_in_url(self) -> str:
         shelter = urlsplit(self._shelter_url)

@@ -1,10 +1,11 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 import pytest
 
-from scanner_client.card_session import CardSession
+from scanner_client.card_session import DISPATCH_JS, CardSession
 
 CONTRACT_CARD_KEYS = {
     "citizen_id",
@@ -39,6 +40,13 @@ class FakePage:
     ack_after: failed attempts per event before the page acknowledges (None = never acknowledges).
     raise_first: the first N evaluate calls raise (navigation in progress).
     navigate_after: (n, url) - once n evaluate calls were made the SPA moves the tab to url.
+    navigate_on_evaluate: url - right before the first evaluate the tab moves there (the race
+        between the Python-side url check and the in-page script).
+    goto_raises: goto() raises (net error / page closed).
+
+    evaluate() emulates the DISPATCH_JS contract: given [name, detail, origin, path] it only
+    delivers (records in `delivered`) and acknowledges while its own url matches that origin+path;
+    otherwise it refuses (returns False). `events` still records every attempt.
     """
 
     def __init__(
@@ -48,28 +56,42 @@ class FakePage:
         ack_after=0,
         raise_first=0,
         navigate_after=None,
+        navigate_on_evaluate=None,
+        goto_raises=False,
     ):
         self.url = url
         self.goto_lands = goto_lands
         self.ack_after = ack_after
         self.raise_first = raise_first
         self.navigate_after = navigate_after
+        self.navigate_on_evaluate = navigate_on_evaluate
+        self.goto_raises = goto_raises
         self.events: list[tuple[str, dict]] = []
+        self.delivered: list[tuple[str, dict]] = []
         self.gotos: list[str] = []
 
     async def goto(self, url):
         self.gotos.append(url)
+        if self.goto_raises:
+            raise RuntimeError("net::ERR_CONNECTION_REFUSED")
         self.url = self.goto_lands
 
     async def evaluate(self, script, arg):
-        name, detail = arg
+        name, detail, origin, path = arg
         self.events.append((name, detail))
         calls = len(self.events)
+        if calls == 1 and self.navigate_on_evaluate:
+            self.url = self.navigate_on_evaluate
+        # the in-page guard: location.origin / location.pathname vs the passed args
+        here = urlsplit(self.url)
+        guard_ok = f"{here.scheme}://{here.netloc}" == origin and here.path == path
+        if guard_ok:
+            self.delivered.append((name, detail))
         if self.navigate_after and calls >= self.navigate_after[0]:
             self.url = self.navigate_after[1]
         if calls <= self.raise_first:
             raise RuntimeError("Execution context was destroyed")
-        if self.ack_after is None:
+        if not guard_ok or self.ack_after is None:
             return False
         attempts_for_event = sum(1 for n, _ in self.events if n == name)
         return attempts_for_event > self.ack_after
@@ -343,3 +365,36 @@ def test_never_acknowledged_event_is_dropped_after_15_seconds_and_card_stops(cap
     assert 29 <= len(page.events) <= 31  # every 0.5 s for 15 s
     assert 14.5 <= clock.t <= 15.5
     assert any(r.levelno >= logging.WARNING for r in caplog.records)
+
+
+EVIL_WALK_IN_URL = "https://evil.example/onsite/people/new"
+
+
+def test_tab_navigating_to_another_origin_right_before_evaluate_never_receives_card_data():
+    page = FakePage(goto_lands=LOGIN_URL, navigate_on_evaluate=EVIL_WALK_IN_URL)
+
+    asyncio.run(make_session().handle_card(FakeReader(), page))
+
+    assert page.delivered == []
+    assert page.gotos == [WALK_IN_URL]
+    assert [name for name, _ in page.events] == ["scanner:card-reading"]
+
+
+def test_dispatch_script_refuses_unless_location_matches_expected_origin_and_path():
+    assert "location.origin" in DISPATCH_JS
+    assert "location.pathname" in DISPATCH_JS
+
+
+def test_goto_failure_drops_the_event_with_a_warning_and_handle_card_returns(caplog):
+    page = FakePage(url=SHELTER + "/dashboard", goto_raises=True)
+    caplog.set_level(logging.DEBUG)
+
+    asyncio.run(make_session().handle_card(FakeReader(), page))
+
+    assert page.events == []
+    assert page.gotos == [WALK_IN_URL]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings
+    for message in warnings:
+        for value in PRIVATE_VALUES:
+            assert value not in message
