@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cardToUnifiedMember, type ScannerCard } from './scanner-card';
-import { blankUnifiedMember } from './unified-registration';
+import { applyCardAddressToHousehold, cardToUnifiedMember, type ScannerCard } from './scanner-card';
+import { blankUnifiedMember, type UnifiedHouseholdInput } from './unified-registration';
 
 function card(over: Partial<ScannerCard> = {}): ScannerCard {
 	return {
@@ -46,5 +46,49 @@ describe('cardToUnifiedMember demographics', () => {
 		expect(member.gender).toBe('other');
 		expect(member.birth_year).toBe(2540);
 		expect(member.age).toBe(29);
+	});
+});
+
+const blankHousehold: UnifiedHouseholdInput = {
+	housing_type: 'owned_house',
+	residence_landmark: null,
+	address_no: '',
+	village_no: '',
+	subdistrict: '',
+	district: '',
+	province: '',
+	postal_code: '',
+	pets: [],
+	vehicles: [],
+	assets: null
+};
+
+describe('applyCardAddressToHousehold', () => {
+	const addressCard = card({
+		address_no: '99/1',
+		village_no: '3',
+		lane: 'ซอย 5',
+		road: 'ถ.เพชรเกษม',
+		subdistrict: 'ตำบลในเมือง',
+		district: 'อำเภอเมือง',
+		province: 'จังหวัดขอนแก่น'
+	});
+
+	it('fills an empty household address from the card, folding lane and road into the village line and dropping area prefixes', () => {
+		const household = applyCardAddressToHousehold(blankHousehold, addressCard);
+
+		expect(household.address_no).toBe('99/1');
+		expect(household.village_no).toBe('3 ซอย 5 ถ.เพชรเกษม');
+		expect(household.subdistrict).toBe('ในเมือง');
+		expect(household.district).toBe('เมือง');
+		expect(household.province).toBe('ขอนแก่น');
+	});
+
+	it('leaves a household that already has an address unchanged', () => {
+		const typed = { ...blankHousehold, address_no: '12', province: 'เชียงใหม่' };
+
+		const household = applyCardAddressToHousehold(typed, addressCard);
+
+		expect(household).toEqual(typed);
 	});
 });

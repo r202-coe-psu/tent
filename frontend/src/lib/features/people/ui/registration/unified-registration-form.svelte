@@ -43,7 +43,11 @@
 	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
-	import { cardToUnifiedMember, scannerCardSchema } from '../../domain/scanner-card';
+	import {
+		applyCardAddressToHousehold,
+		cardToUnifiedMember,
+		scannerCardSchema
+	} from '../../domain/scanner-card';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -1286,7 +1290,7 @@
 	});
 
 	/**
-	 * Desktop scanner client (#1326): `scanner:card-read` fills the first empty member.
+	 * Desktop scanner client (#1326): `scanner:card-read` fills the first empty member and, while the household address is empty, that address.
 	 * `preventDefault()` is the acknowledgement the scanner client waits for.
 	 */
 	function handleScannerCardRead(event: Event) {
@@ -1296,6 +1300,7 @@
 		const index = members.findIndex((m) => !m.first_name.trim() && !m.person_id?.number?.trim());
 		if (index === -1) return;
 		members[index] = cardToUnifiedMember(parsed.data, members[index]);
+		household = applyCardAddressToHousehold(household, parsed.data);
 		markDirty();
 	}
 

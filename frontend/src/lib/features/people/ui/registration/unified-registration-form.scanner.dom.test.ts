@@ -24,9 +24,9 @@ const card = {
 	age: 34,
 	address_no: '99/1',
 	village_no: '3',
-	lane: '',
+	lane: 'ซอย 5',
 	road: '',
-	subdistrict: 'ในเมือง',
+	subdistrict: 'ตำบลในเมือง',
 	district: 'เมือง',
 	province: 'ขอนแก่น',
 	scanned_at: '2026-11-11T09:00:00+07:00'
@@ -88,5 +88,17 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 		expect(values('first-name')).toEqual(['สมหญิง']);
 		expect(values('last-name')).toEqual(['ใจดี']);
 		expect(values('card-number')).toEqual(['1234567890123']);
+	});
+
+	it('fills the empty household address from the card, normalized', async () => {
+		renderWalkInForm();
+		expect(values('address-no')).toEqual(['']);
+
+		dispatchCardRead();
+		await tick();
+		flushSync();
+
+		expect(values('address-no')).toEqual(['99/1']);
+		expect(values('village-no')).toEqual(['3 ซอย 5']);
 	});
 });

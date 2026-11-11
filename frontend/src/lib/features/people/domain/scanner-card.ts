@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { toPersistBirthYearBE } from './birth-calendar';
 import { currentBEYear, genderSchema } from './people';
-import type { UnifiedMemberWithMeta } from './unified-registration';
+import {
+	cardAddressToHouseholdFields,
+	type UnifiedHouseholdInput,
+	type UnifiedMemberWithMeta
+} from './unified-registration';
 
 /** A Thai ID card read by the desktop scanner client (`scanner:card-read` detail, issue #1326). */
 export const scannerCardSchema = z.object({
@@ -11,7 +15,14 @@ export const scannerCardSchema = z.object({
 	gender: genderSchema,
 	/** Gregorian (CE) year; some cards carry no date of birth. */
 	birth_year_ce: z.number().int().optional(),
-	age: z.number().int().optional()
+	age: z.number().int().optional(),
+	address_no: z.string().optional(),
+	village_no: z.string().optional(),
+	lane: z.string().optional(),
+	road: z.string().optional(),
+	subdistrict: z.string().optional(),
+	district: z.string().optional(),
+	province: z.string().optional()
 });
 
 export type ScannerCard = z.infer<typeof scannerCardSchema>;
@@ -34,4 +45,25 @@ export function cardToUnifiedMember(
 		member.age = card.age ?? Math.max(0, currentBEYear() - birthYearBE);
 	}
 	return member;
+}
+
+const ADDRESS_KEYS = [
+	'address_no',
+	'village_no',
+	'subdistrict',
+	'district',
+	'province',
+	'postal_code'
+] as const satisfies readonly (keyof UnifiedHouseholdInput)[];
+
+/**
+ * Fill the household address from a scanned card, normalized like the report-in card autofill.
+ * Only when the address is still empty (every address part blank): a later card never overwrites it.
+ */
+export function applyCardAddressToHousehold<H extends UnifiedHouseholdInput>(
+	household: H,
+	card: ScannerCard
+): H {
+	if (ADDRESS_KEYS.some((key) => household[key]?.trim())) return household;
+	return { ...household, ...cardAddressToHouseholdFields(card) };
 }
