@@ -9,6 +9,20 @@ import UnifiedRegistrationFormHarness from './__fixtures__/unified-registration-
 vi.mock('svelte-sonner', () => ({
 	toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 }));
+const saveImageSpy = vi.hoisted(() => vi.fn());
+// The CouchDB image adapter is the system boundary: `useSaveImage` reaches it, not the barrel.
+vi.mock('$lib/features/images/data/image.remote', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features/images/data/image.remote')>();
+	return {
+		...actual,
+		imageRepository: () => ({
+			saveImage: saveImageSpy,
+			getThumbnailUrl: async () => {
+				throw new Error('no thumbnail in tests');
+			}
+		})
+	};
+});
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
 	replaceState: vi.fn(),
@@ -38,6 +52,7 @@ let instance: ReturnType<typeof mount> | null = null;
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	saveImageSpy.mockReset();
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(async () => Response.json([]))
@@ -296,6 +311,90 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 
 			expect(lookup).not.toHaveBeenCalled();
 			expect(toast.info).toHaveBeenCalledWith('บัตรนี้อยู่ในฟอร์มแล้ว');
+		});
+	});
+
+	describe('card photo (D2: the photo belongs to the member with that citizen ID)', () => {
+		const photoDetail = (citizenId: string) => ({
+			citizen_id: citizenId,
+			photo_base64: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=='
+		});
+		const dispatchCardPhoto = (detail: unknown) => {
+			const event = new CustomEvent('scanner:card-photo', { detail, cancelable: true });
+			window.dispatchEvent(event);
+			return event;
+		};
+		/** The face-photo dot in the member card header: shown once the member holds a photo. */
+		const photoMarkers = () => document.querySelectorAll('span[aria-label="ภาพถ่ายใบหน้า"]');
+		const typeInto = (suffix: string, value: string) => {
+			const input = document.querySelector<HTMLInputElement>(`input[id$="${suffix}"]`)!;
+			input.value = value;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		};
+
+		it('saves the photo as a JPEG for the form shelter and attaches it to the member with that ID', async () => {
+			saveImageSpy.mockResolvedValue({ _id: 'image:card-1' });
+			renderWalkInForm({ shelterCode: 'SH777' });
+			dispatchCardRead(card);
+			await settle();
+			expect(photoMarkers()).toHaveLength(0);
+
+			const event = dispatchCardPhoto(photoDetail(card.citizen_id));
+			expect(event.defaultPrevented).toBe(true);
+			await settle();
+
+			expect(saveImageSpy).toHaveBeenCalledTimes(1);
+			const [file, ctx] = saveImageSpy.mock.calls[0];
+			expect(file).toBeInstanceOf(File);
+			expect(file.type).toBe('image/jpeg');
+			expect([...new Uint8Array(await file.arrayBuffer()).slice(0, 4)]).toEqual([
+				0xff, 0xd8, 0xff, 0xe0
+			]);
+			expect(ctx).toMatchObject({ shelterCode: 'SH777' });
+			expect(photoMarkers()).toHaveLength(1);
+		});
+
+		it('discards a photo whose citizen ID matches no member without uploading it', async () => {
+			renderWalkInForm();
+			dispatchCardRead(card);
+			await settle();
+
+			const event = dispatchCardPhoto(photoDetail(otherCard.citizen_id));
+			await settle();
+
+			expect(event.defaultPrevented).toBe(true);
+			expect(saveImageSpy).not.toHaveBeenCalled();
+			expect(photoMarkers()).toHaveLength(0);
+		});
+
+		it('discards the photo when the member ID number changed before the upload finished', async () => {
+			let finishUpload!: (saved: { _id: string }) => void;
+			saveImageSpy.mockReturnValue(new Promise((resolve) => (finishUpload = resolve)));
+			renderWalkInForm();
+			dispatchCardRead(card);
+			await settle();
+
+			dispatchCardPhoto(photoDetail(card.citizen_id));
+			await settle();
+			typeInto('card-number', '1111111111111');
+			await settle();
+			finishUpload({ _id: 'image:card-1' });
+			await settle();
+
+			expect(saveImageSpy).toHaveBeenCalledTimes(1);
+			expect(photoMarkers()).toHaveLength(0);
+		});
+
+		it('ignores a malformed photo event without acknowledging it', async () => {
+			renderWalkInForm();
+			dispatchCardRead(card);
+			await settle();
+
+			const event = dispatchCardPhoto({ citizen_id: card.citizen_id, photo_base64: 'nope' });
+			await settle();
+
+			expect(event.defaultPrevented).toBe(false);
+			expect(saveImageSpy).not.toHaveBeenCalled();
 		});
 	});
 });

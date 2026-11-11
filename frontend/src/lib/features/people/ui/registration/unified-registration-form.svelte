@@ -48,6 +48,7 @@
 		applyCardAddressToHousehold,
 		applyScannedCard,
 		cardToUnifiedMember,
+		scannerCardPhotoSchema,
 		scannerCardSchema,
 		type ScannedCardDuplicate,
 		type ScannerCard
@@ -114,6 +115,9 @@
 		residenceSuggestTick
 	} from './residence-suggest-reactivity.svelte';
 	import { createQuery } from '@tanstack/svelte-query';
+	import { useSaveImage } from '$lib/features/images';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { rememberPhotoPreview } from './registration-photo-preview';
 
 	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
 	type ActiveRegistrationItem = { kind: 'member' | 'pet'; index: number; total: number };
@@ -1400,9 +1404,62 @@
 		placeScannedCard(card, members.length - 1);
 	}
 
+	const saveScannerPhoto = useSaveImage();
+
+	const digitsOnly = (value: string | null | undefined) => (value ?? '').replace(/\D/g, '');
+
+	/** The member holding this citizen ID right now — looked up fresh, never by a remembered index. */
+	const findMemberByCitizenId = (citizenId: string) =>
+		members.find((m) => digitsOnly(m.person_id?.number) === citizenId);
+
+	function jpegDataUrlToFile(dataUrl: string): File {
+		const binary = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+		const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+		return new File([bytes], 'card-photo.jpg', { type: 'image/jpeg' });
+	}
+
+	/**
+	 * Desktop scanner client (#1326 D2): `scanner:card-photo` belongs to the member with that citizen ID.
+	 * Saved in the background (never blocks the save button); discarded when nobody matches, or when by the
+	 * time the upload finishes that member is gone, has another ID number, or the form is locked/submitted.
+	 */
+	function handleScannerCardPhoto(event: Event) {
+		const parsed = scannerCardPhotoSchema.safeParse((event as CustomEvent).detail);
+		if (!parsed.success) return;
+		event.preventDefault();
+		const { citizen_id: citizenId, photo_base64: dataUrl } = parsed.data;
+		if (!findMemberByCitizenId(citizenId)) return;
+		void attachScannerPhoto(citizenId, dataUrl);
+	}
+
+	async function attachScannerPhoto(citizenId: string, dataUrl: string) {
+		let photoId: string;
+		let file: File;
+		try {
+			file = jpegDataUrlToFile(dataUrl);
+			const saved = await saveScannerPhoto.mutateAsync({
+				file,
+				ctx: { shelterCode, createdBy: authStore.user?.name ?? 'unknown' }
+			});
+			photoId = saved._id;
+		} catch {
+			return;
+		}
+		if (fieldsLocked) return;
+		const member = findMemberByCitizenId(citizenId);
+		if (!member) return;
+		member.photo = photoId;
+		rememberPhotoPreview(photoId, URL.createObjectURL(file));
+		markDirty();
+	}
+
 	$effect(() => {
 		window.addEventListener('scanner:card-read', handleScannerCardRead);
-		return () => window.removeEventListener('scanner:card-read', handleScannerCardRead);
+		window.addEventListener('scanner:card-photo', handleScannerCardPhoto);
+		return () => {
+			window.removeEventListener('scanner:card-read', handleScannerCardRead);
+			window.removeEventListener('scanner:card-photo', handleScannerCardPhoto);
+		};
 	});
 
 	/** 「สร้างใหม่」 always asks first — skipping a found family is how duplicate households start. */
