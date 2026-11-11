@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-248
 title: หน่วยนับ (dimension count) รับเฉพาะจำนวนเต็ม และจำนวนที่ระบบคำนวณของหน่วยนับปัดขึ้น
-status: proposed
+status: approved
 date: 2026-11-03
-updated: 2026-11-06
+updated: 2026-11-12
+decision_date: 2026-11-12
 requested_by: feedback roleplay 23/10/69 (#805)
-decided_by: net-lynx (ตอบใน #805 — ทาง A)
+decided_by: kong (อนุมัติ CR; ทาง A เลือกโดย net-lynx ใน #805)
 layer: volatile
 affects:
   - frontend/src/lib/features/catalog/domain/unit-quantity.ts (ใหม่ — กฎจุดเดียว)
@@ -118,3 +119,4 @@ lot เก่าที่มีเศษอาจจัดสรรครบไ�
   บันทึกเมื่อค่ายังเป็นทศนิยม (เดิมแค่แสดง error / กันตอน submit)
 - 2026-11-06 — FR-1 เปลี่ยน: เลิกกันการพิมพ์ทีละปุ่ม เพราะพิมพ์ `1.5` แล้วได้ `15` ที่บันทึกได้ (review PR #1148)
   ช่องเก็บค่าที่พิมพ์ไว้ แล้ว error + ปิดปุ่มบันทึกเป็นตัวกัน FR-2 เพิ่ม scan station และฟอร์มจองบริจาค public
+- 2026-11-12 — kong อนุมัติ CR นี้ รันเลข CR-248 (PR #1148)
