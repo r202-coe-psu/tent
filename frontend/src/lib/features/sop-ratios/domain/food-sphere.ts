@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { CatalogDoc } from '$lib/db/model';
-import { qtyGt, qtyStrCoerceSchema, toQtyStrLossless } from '$lib/utils/qty';
+import { qtyGt, qtyStrCoerceSchema, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { readRatioQty } from './qty-input';
 
 export const targetSegmentSchema = z.enum([
 	'ALL',
@@ -67,16 +68,20 @@ export function isFoodSphereStandard(doc: unknown): doc is FoodSphereStandard {
 	return (
 		d.type === 'food_sphere_standard' &&
 		typeof d.target_segment === 'string' &&
-		typeof d.req_group_id === 'string' &&
-		(typeof d.daily_demand === 'number' || typeof d.daily_demand === 'string')
+		typeof d.req_group_id === 'string'
 	);
 }
 
-/** Read-side normalizer: legacy number daily_demand -> qty_str (lossless); status defaults to active. */
+/** Read-side normalizer: validate and round legacy quantities; status defaults to active. */
 export function normalizeFoodSphereStandard(doc: FoodSphereStandard): FoodSphereStandard {
 	return {
 		...doc,
-		daily_demand: toQtyStrLossless(doc.daily_demand) as string,
+		daily_demand: readRatioQty(
+			doc._id,
+			'daily_demand',
+			doc.daily_demand,
+			qtyStrCoercePositiveSchema
+		),
 		status: doc.status ?? 'active'
 	};
 }
