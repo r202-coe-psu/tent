@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import type { KioskBannerGroupSummary } from '../data/kiosk-banner.repository';
 import KioskBannerGroupTvCode from './kiosk-banner-group-tv-code.svelte';
+import GroupTvCodeHarness from './__fixtures__/group-tv-code-harness.svelte';
 
 const rotate = vi.hoisted(() => ({ mutateAsync: vi.fn(), isPending: false }));
 const toastSuccess = vi.hoisted(() => vi.fn());
@@ -121,6 +122,32 @@ describe('KioskBannerGroupTvCode', () => {
 		expect(text()).not.toContain('048213');
 		expect(text()).toContain('https://tent.example.go.th/banner/SH001/internal?c=731905');
 		expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+	});
+
+	it('lets a refetched group carrying another code take over a rotated code', async () => {
+		rotate.mutateAsync.mockResolvedValue(group({ _rev: '2-a', tv_code: '731905' }));
+		instance = mount(GroupTvCodeHarness, {
+			target: document.body,
+			props: {
+				initial: group(),
+				refreshed: group({ _rev: '3-a', tv_code: '550127' }),
+				origin: 'https://tent.example.go.th'
+			}
+		});
+		flushSync();
+
+		byText('button', 'ออกรหัสใหม่')?.click();
+		flushSync();
+		byText('[role="alertdialog"] button', 'ออกรหัสใหม่')?.click();
+		await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+		flushSync();
+		expect(text()).toContain('731905');
+
+		document.body.querySelector<HTMLButtonElement>('[data-testid="refetch"]')?.click();
+		flushSync();
+
+		expect(text()).toContain('550127');
+		expect(text()).not.toContain('731905');
 	});
 
 	it('keeps the old code and the dialog open when rotating fails', async () => {

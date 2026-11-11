@@ -15,11 +15,15 @@
 	 */
 	let { group, origin }: { group: KioskBannerGroupSummary; origin: string } = $props();
 
+	/** A v1 group has no code until the server's lazy backfill on read. */
+	const groupTvCode = $derived('tv_code' in group ? group.tv_code : null);
+
 	/**
-	 * A v1 group has no code until the server's lazy backfill on read. Writable so a rotation shows
-	 * its new code at once; a fresh `group` prop (the refetch) takes over again.
+	 * Shows a rotated code at once, but only while `group` still carries the code it replaced:
+	 * any fresher prop (the refetch, or a rotation elsewhere) takes over again.
 	 */
-	let tvCode = $derived('tv_code' in group ? group.tv_code : null);
+	let rotated = $state<{ from: string | null; to: string } | null>(null);
+	const tvCode = $derived(rotated && rotated.from === groupTvCode ? rotated.to : groupTvCode);
 	const link = $derived(tvCode ? internalBannerUrl(origin, group.shelter_code, tvCode) : null);
 
 	const rotate = useRotateTvCode();
@@ -29,7 +33,7 @@
 	async function confirmRotate() {
 		try {
 			const updated = await rotate.mutateAsync({ id: group._id });
-			if ('tv_code' in updated) tvCode = updated.tv_code;
+			if ('tv_code' in updated) rotated = { from: groupTvCode, to: updated.tv_code };
 		} catch {
 			return;
 		}
