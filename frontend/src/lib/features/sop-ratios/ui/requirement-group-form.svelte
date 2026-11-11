@@ -10,10 +10,11 @@
 		STANDARD_UOM_OPTIONS,
 		type RequirementGroup,
 		type ItemMap,
+		itemMapSchema,
 		sumSharePercent,
 		isShareSumOff
 	} from '../domain/requirement-group';
-	import { qtyGt, qtyGte } from '$lib/utils/qty';
+	import { qtyStrCoerceSchema } from '$lib/utils/qty';
 	import { isPositiveQty } from '../domain/qty-input';
 	import { resolveSource, type Source } from '$lib/utils/source';
 	import { useSaveRequirementGroup } from '../application/requirement-group-queries';
@@ -50,7 +51,11 @@
 	let formName = $state('');
 	let formStandardUom = $state('');
 	let formStatus = $state<'active' | 'inactive'>('active');
-	let formItemMaps = $state<ItemMap[]>([]);
+	type FormItemMap = Omit<ItemMap, 'conversion_factor' | 'share_percent'> & {
+		conversion_factor: string | number | null;
+		share_percent?: string | number | null;
+	};
+	let formItemMaps = $state<FormItemMap[]>([]);
 	let formErrors = $state<Record<string, string>>({});
 
 	const itemMasters = $derived(itemMastersQuery.data ?? []);
@@ -91,8 +96,14 @@
 		}
 	}
 
-	const sharePercentSum = $derived(sumSharePercent(formItemMaps));
-	const showShareWarning = $derived(formItemMaps.length > 0 && isShareSumOff(formItemMaps));
+	const validShares = $derived(
+		formItemMaps.map((item) => {
+			const parsed = qtyStrCoerceSchema.safeParse(item.share_percent);
+			return { share_percent: parsed.success ? parsed.data : undefined };
+		})
+	);
+	const sharePercentSum = $derived(sumSharePercent(validShares));
+	const showShareWarning = $derived(formItemMaps.length > 0 && isShareSumOff(validShares));
 
 	$effect(() => {
 		if (group) {
@@ -160,12 +171,13 @@
 			if (!item.base_uom.trim()) {
 				formErrors[`item_${i}_uom`] = 'กรุณาระบุหน่วยนับ';
 			}
-			if (!isPositiveQty(item.conversion_factor)) {
+			if (!isPositiveQty(item.conversion_factor ?? undefined)) {
 				formErrors[`item_${i}_cf`] = 'ตัวคูณแปลงค่าต้องไม่น้อยกว่า 0.0001';
 			}
 			if (
-				item.share_percent !== undefined &&
-				(!qtyGte(item.share_percent, 0) || qtyGt(item.share_percent, 100))
+				item.share_percent != null &&
+				item.share_percent !== '' &&
+				!itemMapSchema.shape.share_percent.safeParse(item.share_percent).success
 			) {
 				formErrors[`item_${i}_share`] = 'สัดส่วนต้องอยู่ระหว่าง 0-100%';
 			}
@@ -188,8 +200,10 @@
 					item_maps: formItemMaps.map((im) => ({
 						item_id: im.item_id.trim(),
 						base_uom: im.base_uom.trim(),
-						conversion_factor: im.conversion_factor,
-						share_percent: im.share_percent
+						conversion_factor: qtyStrCoerceSchema.parse(im.conversion_factor),
+						...(im.share_percent == null || im.share_percent === ''
+							? {}
+							: { share_percent: qtyStrCoerceSchema.parse(im.share_percent) })
 					})),
 					shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 				},
