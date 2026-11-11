@@ -7,12 +7,17 @@ export type KioskConfig = {
 	phoneCheckInEnabled: boolean;
 	walkInRegistrationEnabled: boolean;
 	thaidCheckInEnabled: boolean;
+	/** Per-device closure (#1302): `false` while an admin has closed this kiosk. */
+	serviceOpen: boolean;
 };
 
 const FAIL_CLOSED_CONFIG: KioskConfig = {
 	phoneCheckInEnabled: false,
 	walkInRegistrationEnabled: false,
-	thaidCheckInEnabled: false
+	thaidCheckInEnabled: false,
+	/** An unreadable config never closes the kiosk: the server answers 403 KIOSK_CLOSED on work
+	 * endpoints, so closure is enforced there, not by a failed read here. */
+	serviceOpen: true
 };
 
 let cachedConfig: { config: KioskConfig; fetchedAt: number } | null = null;
@@ -25,8 +30,15 @@ export function resetKioskConfigCache(): void {
 /** Fail closed: any error, timeout or non-2xx response keeps the phone method hidden (FR-KPT-21).
  * A successful result is cached briefly (KIOSK_CONFIG_CACHE_TTL_MS); failures are never cached so
  * a recovered network is reflected on the very next visit, not after a stale window. */
-export async function fetchKioskConfig(fetchFn: typeof fetch = fetch): Promise<KioskConfig> {
-	if (cachedConfig && Date.now() - cachedConfig.fetchedAt < KIOSK_CONFIG_CACHE_TTL_MS) {
+export async function fetchKioskConfig(
+	fetchFn: typeof fetch = fetch,
+	options: { bypassCache?: boolean } = {}
+): Promise<KioskConfig> {
+	if (
+		!options.bypassCache &&
+		cachedConfig &&
+		Date.now() - cachedConfig.fetchedAt < KIOSK_CONFIG_CACHE_TTL_MS
+	) {
 		return cachedConfig.config;
 	}
 	try {
@@ -40,11 +52,13 @@ export async function fetchKioskConfig(fetchFn: typeof fetch = fetch): Promise<K
 			phone_check_in_enabled?: unknown;
 			walk_in_registration_enabled?: unknown;
 			thaid_check_in_enabled?: unknown;
+			service_open?: unknown;
 		};
 		const config: KioskConfig = {
 			phoneCheckInEnabled: body.phone_check_in_enabled === true,
 			walkInRegistrationEnabled: body.walk_in_registration_enabled === true,
-			thaidCheckInEnabled: body.thaid_check_in_enabled === true
+			thaidCheckInEnabled: body.thaid_check_in_enabled === true,
+			serviceOpen: body.service_open !== false
 		};
 		cachedConfig = { config, fetchedAt: Date.now() };
 		return config;

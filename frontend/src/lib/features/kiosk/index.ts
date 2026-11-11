@@ -28,7 +28,12 @@ export { default as KioskLanguagePicker } from './ui/kiosk-language-picker.svelt
 export { kioskLanguageSession } from './application/kiosk-language-session.svelte';
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
-export { navigateToKioskHome, returnToKioskLanguagePicker } from './application/kiosk-navigation';
+export { KioskClosedWatch, KIOSK_CLOSED_POLL_MS } from './application/kiosk-closed-watch.svelte';
+export {
+	goToKioskClosed,
+	navigateToKioskHome,
+	returnToKioskLanguagePicker
+} from './application/kiosk-navigation';
 export { isKioskHomePath, KIOSK_LANGUAGE_PATH } from './domain/identity-method';
 export {
 	registerKioskWalkIn,

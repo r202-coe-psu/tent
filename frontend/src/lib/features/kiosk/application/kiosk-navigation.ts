@@ -18,3 +18,8 @@ export function returnToKioskLanguagePicker(contextQuery: KioskContextQuery): vo
 	kioskLanguageSession.resetForIdle();
 	void goto(resolve(`${KIOSK_LANGUAGE_PATH}${contextQuery}`));
 }
+
+/** A work request was refused because the kiosk is closed (403 KIOSK_CLOSED): show the closed page. */
+export function goToKioskClosed(contextQuery: KioskContextQuery = ''): void {
+	void goto(resolve(`/kiosk/closed${contextQuery}`), { replaceState: true });
+}
