@@ -42,7 +42,7 @@
 
 <svelte:head>
 	<title
-		>{activeTab === 'recipes' ? 'สูตรอาหาร (BOM)' : 'สรุปมื้ออาหาร'} · ครัวกลางและอาหาร · SmartShelter</title
+		>{activeTab === 'recipes' ? 'สูตรอาหาร (BOM)' : 'รายการมื้ออาหาร'} · ครัวกลางและอาหาร · SmartShelter</title
 	>
 </svelte:head>
 
@@ -67,7 +67,7 @@
 				aria-current={activeTab === 'sessions' ? 'page' : undefined}
 				class={tabClass(activeTab === 'sessions')}
 			>
-				สรุปมื้อ
+				รายการมื้ออาหาร
 			</button>
 			<button
 				type="button"

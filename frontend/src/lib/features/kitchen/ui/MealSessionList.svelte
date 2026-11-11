@@ -381,7 +381,7 @@
 				<div class="flex flex-wrap items-start justify-between gap-3">
 					<div>
 						<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647] sm:text-4xl">
-							หน้าสรุปมื้อ
+							รายการมื้ออาหาร
 						</h1>
 						<p class="mt-2 text-base leading-relaxed text-slate-600">
 							บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
@@ -406,7 +406,7 @@
 		{:else}
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 				<div>
-					<h2 class="text-lg font-bold text-slate-900">สรุปมื้ออาหาร</h2>
+					<h2 class="text-lg font-bold text-slate-900">รายการมื้ออาหาร</h2>
 					<p class="text-sm text-slate-600">
 						บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
 					</p>
