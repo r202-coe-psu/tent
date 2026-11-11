@@ -20,6 +20,7 @@ def test_loads_minimal_env_file_with_defaults(tmp_path):
 
     assert settings.shelter_origin == "https://shelter.example"
     assert settings.walk_in_path == "/onsite/people/new"
+    assert settings.start_path == "/admin-login"
     assert settings.browser_channel == "chromium"
     assert settings.card_reader_name is None
     assert settings.keep_login is False
@@ -188,3 +189,21 @@ def test_poll_interval_out_of_bounds_or_not_a_number_is_rejected(tmp_path, raw):
 
     assert "POLL_INTERVAL" in str(err.value)
     assert raw not in str(err.value)
+
+
+def test_start_path_can_be_overridden(tmp_path):
+    settings = load(tmp_path, "SHELTER_URL=https://a.example\nSTART_PATH=/\n", platform="linux")
+
+    assert settings.start_path == "/"
+
+
+def test_start_path_must_start_with_slash(tmp_path):
+    with pytest.raises(ConfigError, match="START_PATH"):
+        load(tmp_path, "SHELTER_URL=https://a.example\nSTART_PATH=admin-login\n", platform="linux")
+
+
+def test_start_path_must_stay_on_the_shelter_origin(tmp_path):
+    with pytest.raises(ConfigError, match="START_PATH"):
+        load(
+            tmp_path, "SHELTER_URL=https://a.example\nSTART_PATH=//evil.example\n", platform="linux"
+        )

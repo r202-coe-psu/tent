@@ -14,6 +14,8 @@ from urllib.parse import urlsplit
 from dotenv import dotenv_values
 
 DEFAULT_WALK_IN_PATH = "/onsite/people/new"
+# First page the browser opens: the staff login (frontend/src/routes/admin-login).
+DEFAULT_START_PATH = "/admin-login"
 BROWSER_CHANNELS = ("msedge", "chrome", "chromium")
 # Same default as the kiosk's card poll loop (kiosk/app/manager.py: POLL_INTERVAL, "0.5").
 DEFAULT_POLL_INTERVAL = 0.5
@@ -31,6 +33,7 @@ class ConfigError(ValueError):
 class Settings:
     shelter_origin: str
     walk_in_path: str
+    start_path: str
     browser_channel: str
     card_reader_name: str | None
     keep_login: bool
@@ -77,6 +80,15 @@ def _walk_in_path(raw: str) -> str:
     return value
 
 
+def _start_path(raw: str) -> str:
+    value = raw or DEFAULT_START_PATH
+    if not value.startswith("/") or value.startswith("//"):
+        raise ConfigError(
+            "START_PATH must be a path on the shelter site starting with a single '/'"
+        )
+    return value
+
+
 def _browser_channel(raw: str, platform: str) -> str:
     value = raw.lower() or ("msedge" if platform.startswith("win") else "chromium")
     if value not in BROWSER_CHANNELS:
@@ -119,6 +131,7 @@ def load_settings(
     return Settings(
         shelter_origin=_shelter_origin(get("SHELTER_URL")),
         walk_in_path=_walk_in_path(get("WALK_IN_PATH")),
+        start_path=_start_path(get("START_PATH")),
         browser_channel=_browser_channel(get("BROWSER_CHANNEL"), platform),
         card_reader_name=get("CARD_READER_NAME") or None,
         keep_login=_keep_login(get("KEEP_LOGIN")),

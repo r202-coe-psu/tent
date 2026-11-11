@@ -88,7 +88,7 @@ async def run_app(
     watcher_factory: Callable[[Settings, Callable[[Any], Any]], Any] = _default_watcher_factory,
     card_session_factory: Callable[[Settings], Any] = _default_card_session_factory,
 ) -> None:
-    """Open the browser at the shelter, watch the reader until the user closes the window."""
+    """Open the browser at START_PATH, watch the reader until the user closes the window."""
     stop = asyncio.Event()
     channel = (
         {} if settings.browser_channel == "chromium" else {"channel": settings.browser_channel}
@@ -124,7 +124,7 @@ async def run_app(
         watcher_task = asyncio.create_task(watcher_factory(settings, handle_card).run(stop))
         try:
             try:
-                await page.goto(f"{settings.shelter_origin}/")
+                await page.goto(f"{settings.shelter_origin}{settings.start_path}")
             except Exception as exc:  # unreachable shelter: keep the window open, staff can reload
                 log.warning("could not open the shelter page: %s", type(exc).__name__)
             await stop.wait()

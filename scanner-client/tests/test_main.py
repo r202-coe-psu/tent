@@ -15,6 +15,7 @@ def make_settings(**overrides) -> Settings:
     values = {
         "shelter_origin": "https://shelter.example",
         "walk_in_path": "/onsite/people/new",
+        "start_path": "/admin-login",
         "browser_channel": "msedge",
         "card_reader_name": None,
         "keep_login": False,
@@ -190,12 +191,14 @@ def test_chromium_channel_means_bundled_chromium_without_a_channel_kwarg(tmp_pat
     assert "channel" not in persistent.playwright.chromium.persistent_calls[0]
 
 
-def test_opens_one_page_at_the_shelter_origin_root(tmp_path):
-    harness = Harness(tmp_path, shelter_origin="https://shelter.example:8443")
+def test_opens_one_page_at_the_start_path_on_the_shelter_origin(tmp_path):
+    harness = Harness(
+        tmp_path, shelter_origin="https://shelter.example:8443", start_path="/admin-login"
+    )
 
     harness.run()
 
-    assert harness.playwright.page.gotos == ["https://shelter.example:8443/"]
+    assert harness.playwright.page.gotos == ["https://shelter.example:8443/admin-login"]
 
 
 def test_closing_the_page_stops_the_watcher_and_returns(tmp_path):

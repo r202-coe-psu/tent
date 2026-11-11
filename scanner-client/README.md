@@ -32,7 +32,7 @@
 | ต้องล็อกอินใหม่ทุกครั้ง | ตั้ง `KEEP_LOGIN=true` (เก็บโปรไฟล์ใน `%LocalAppData%\ScannerClient\profile`) |
 | ต้องดูข้อความ error สด ๆ | ใช้ `scanner-client-debug.exe` (เปิดพร้อมหน้าต่าง console) จาก `scanner-client-debug-win64.zip` |
 
-ตัวแปรอื่น ๆ (`WALK_IN_PATH`, `POLL_INTERVAL`) ดูคำอธิบายใน `.env.example`
+ตัวแปรอื่น ๆ (`START_PATH` หน้าแรกที่เปิด ค่าเริ่มต้น `/admin-login`, `WALK_IN_PATH`, `POLL_INTERVAL`) ดูคำอธิบายใน `.env.example`
 
 ---
 
