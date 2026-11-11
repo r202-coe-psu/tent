@@ -573,6 +573,106 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			expect(photoMarkers()).toHaveLength(0);
 		});
 
+		it('attaches the photo to the member staff add from the dialog, even though it arrived while the dialog was open', async () => {
+			saveImageSpy.mockResolvedValue({ _id: 'image:card-2' });
+			await readTwoDifferentCards();
+
+			dispatchCardPhoto(photoDetail(otherCard.citizen_id));
+			await settle();
+			expect(saveImageSpy).not.toHaveBeenCalled();
+			toastLog.length = 0;
+			buttonByText('เพิ่มเป็นสมาชิกใหม่')!.click();
+			await settle();
+
+			expect(saveImageSpy).toHaveBeenCalledTimes(1);
+			expect(photoMarkers()).toHaveLength(1);
+			expect(progress()).toEqual([
+				'loading: เติมข้อมูลสมาชิกคนที่ 2 แล้ว · กำลังอ่านรูป…',
+				'success: อ่านบัตรเรียบร้อย'
+			]);
+		});
+
+		it('attaches the photo to the member overwritten from the dialog', async () => {
+			saveImageSpy.mockResolvedValue({ _id: 'image:card-2' });
+			await readTwoDifferentCards();
+
+			dispatchCardPhoto(photoDetail(otherCard.citizen_id));
+			await settle();
+			buttonByText('ทับคนที่ 1')!.click();
+			await settle();
+
+			expect(saveImageSpy).toHaveBeenCalledTimes(1);
+			expect(photoMarkers()).toHaveLength(1);
+		});
+
+		it('drops the held photo when staff cancel the dialog', async () => {
+			await readTwoDifferentCards();
+
+			dispatchCardPhoto(photoDetail(otherCard.citizen_id));
+			await settle();
+			buttonByText('ยกเลิก')!.click();
+			await settle();
+
+			expect(saveImageSpy).not.toHaveBeenCalled();
+			expect(photoMarkers()).toHaveLength(0);
+		});
+
+		it('attaches the photo after staff continue past the duplicate dialog', async () => {
+			saveImageSpy.mockResolvedValue({ _id: 'image:card-1' });
+			renderWalkInForm({
+				findScannedCardDuplicate: vi.fn(async () => ({ name: 'สมหญิง ใจดี', href: '/x' }))
+			});
+			dispatchCardRead(card);
+			await settle();
+
+			dispatchCardPhoto(photoDetail(card.citizen_id));
+			await settle();
+			expect(saveImageSpy).not.toHaveBeenCalled();
+			buttonByText('ลงทะเบียนต่อ')!.click();
+			await settle();
+
+			expect(saveImageSpy).toHaveBeenCalledTimes(1);
+			expect(photoMarkers()).toHaveLength(1);
+		});
+
+		it('keeps the already-in-form notice on screen when that card photo arrives, without re-uploading', async () => {
+			saveImageSpy.mockResolvedValue({ _id: 'image:card-1' });
+			renderWalkInForm();
+			dispatchCardRead(card);
+			await settle();
+			dispatchCardPhoto(photoDetail(card.citizen_id));
+			await settle();
+			toastLog.length = 0;
+
+			dispatchScannerEvent('scanner:card-reading');
+			dispatchCardRead(card);
+			await settle();
+			const event = dispatchCardPhoto(photoDetail(card.citizen_id));
+			await settle();
+
+			expect(event.defaultPrevented).toBe(true);
+			expect(saveImageSpy).toHaveBeenCalledTimes(1);
+			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
+		});
+
+		it('quietly fills a missing photo when a card already in the form is read again', async () => {
+			saveImageSpy.mockResolvedValue({ _id: 'image:card-1' });
+			renderWalkInForm();
+			dispatchCardRead(card);
+			await settle();
+			toastLog.length = 0;
+
+			dispatchScannerEvent('scanner:card-reading');
+			dispatchCardRead(card);
+			await settle();
+			dispatchCardPhoto(photoDetail(card.citizen_id));
+			await settle();
+
+			expect(saveImageSpy).toHaveBeenCalledTimes(1);
+			expect(photoMarkers()).toHaveLength(1);
+			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
+		});
+
 		it('ignores a malformed photo event without acknowledging it', async () => {
 			renderWalkInForm();
 			dispatchCardRead(card);

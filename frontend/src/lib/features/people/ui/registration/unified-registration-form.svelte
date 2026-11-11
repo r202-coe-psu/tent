@@ -1308,9 +1308,16 @@
 	/** One progress toast per card: every scanner step updates this same toast instead of stacking new ones. */
 	const SCANNER_TOAST_ID = 'scanner-card';
 
+	/** A card photo that arrived before its card was placed (staff still choosing in a dialog). */
+	let heldScannerPhoto: { citizenId: string; dataUrl: string } | null = null;
+	/** A card read again while already in the form: its photo must not replace the already-in-form notice. */
+	let quietPhotoCitizenId: string | null = null;
+
 	/** `scanner:card-reading`: the client started reading a card. */
 	function handleScannerCardReading(event: Event) {
 		event.preventDefault();
+		heldScannerPhoto = null;
+		quietPhotoCitizenId = null;
 		toast.loading(ts.reading, { id: SCANNER_TOAST_ID });
 	}
 
@@ -1338,7 +1345,7 @@
 		event.preventDefault();
 		const card = parsed.data;
 		if (applyScannedCard(members, card).kind === 'already-in-form') {
-			toast.info(ts.alreadyInForm, { id: SCANNER_TOAST_ID });
+			showAlreadyInForm(card);
 			return;
 		}
 		if (!findScannedCardDuplicate) {
@@ -1366,11 +1373,16 @@
 		placeScannedCardAsUsual(card);
 	}
 
+	function showAlreadyInForm(card: ScannerCard) {
+		quietPhotoCitizenId = card.citizen_id;
+		toast.info(ts.alreadyInForm, { id: SCANNER_TOAST_ID });
+	}
+
 	/** Fill / already-in-form / ask-overwrite, decided against the members as they are now. */
 	function placeScannedCardAsUsual(card: ScannerCard) {
 		const placement = applyScannedCard(members, card);
 		if (placement.kind === 'already-in-form') {
-			toast.info(ts.alreadyInForm, { id: SCANNER_TOAST_ID });
+			showAlreadyInForm(card);
 			return;
 		}
 		if (placement.kind === 'ask-overwrite') {
@@ -1390,6 +1402,7 @@
 	function goToScannedCardDuplicate() {
 		const pending = pendingScannerDuplicate;
 		pendingScannerDuplicate = null;
+		heldScannerPhoto = null;
 		if (pending) void goto(resolve(pending.duplicate.href as '/'));
 	}
 
@@ -1407,6 +1420,9 @@
 		household = applyCardAddressToHousehold(household, card);
 		markDirty();
 		toast.loading(ts.filledReadingPhoto(index + 1), { id: SCANNER_TOAST_ID });
+		const held = heldScannerPhoto;
+		heldScannerPhoto = null;
+		if (held?.citizenId === card.citizen_id) void attachScannerPhoto(held.citizenId, held.dataUrl);
 	}
 
 	function overwriteMemberWithPendingCard(index: number) {
@@ -1443,6 +1459,7 @@
 
 	/**
 	 * Desktop scanner client (#1326 D2): `scanner:card-photo` belongs to the member with that citizen ID.
+	 * Held when that member is not in the form yet, so a card placed from a dialog still gets its photo.
 	 * Saved in the background (never blocks the save button); discarded when nobody matches, or when by the
 	 * time the upload finishes that member is gone, has another ID number, or the form is locked/submitted.
 	 */
@@ -1451,14 +1468,22 @@
 		if (!parsed.success) return;
 		event.preventDefault();
 		const { citizen_id: citizenId, photo_base64: dataUrl } = parsed.data;
-		if (!findMemberByCitizenId(citizenId)) {
+		const member = findMemberByCitizenId(citizenId);
+		if (!member) {
+			heldScannerPhoto = { citizenId, dataUrl };
 			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
+		if (quietPhotoCitizenId === citizenId) {
+			quietPhotoCitizenId = null;
+			if (!member.photo) void attachScannerPhoto(citizenId, dataUrl, { quiet: true });
 			return;
 		}
 		void attachScannerPhoto(citizenId, dataUrl);
 	}
 
-	async function attachScannerPhoto(citizenId: string, dataUrl: string) {
+	/** `quiet`: leave the toast alone on success (the already-in-form notice stays readable). */
+	async function attachScannerPhoto(citizenId: string, dataUrl: string, { quiet = false } = {}) {
 		let photoId: string;
 		let file: File;
 		try {
@@ -1474,13 +1499,13 @@
 		}
 		const member = fieldsLocked ? undefined : findMemberByCitizenId(citizenId);
 		if (!member) {
-			toast.dismiss(SCANNER_TOAST_ID);
+			if (!quiet) toast.dismiss(SCANNER_TOAST_ID);
 			return;
 		}
 		member.photo = photoId;
 		rememberPhotoPreview(photoId, URL.createObjectURL(file));
 		markDirty();
-		toast.success(ts.readDone, { id: SCANNER_TOAST_ID });
+		if (!quiet) toast.success(ts.readDone, { id: SCANNER_TOAST_ID });
 	}
 
 	$effect(() => {
