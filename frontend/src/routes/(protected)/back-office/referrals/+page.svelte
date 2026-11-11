@@ -16,11 +16,13 @@
 	// Tab, status, search and page live in the URL so back, refresh and share keep them.
 	const params = $derived(parseReferralListParams(page.url.searchParams));
 
-	function updateParams(next: Partial<typeof params>) {
+	// Filters replace the history entry; page turns push one so browser back steps to the previous
+	// page, and scroll to the top so the new page starts at its first row.
+	function updateParams(next: Partial<typeof params>, { pageTurn = false } = {}) {
 		void goto(buildReferralListHref({ ...params, ...next }), {
-			replaceState: true,
+			replaceState: !pageTurn,
 			keepFocus: true,
-			noScroll: true
+			noScroll: !pageTurn
 		});
 	}
 
@@ -34,6 +36,14 @@
 	const pageIndex = $derived(Math.max(0, Math.min(params.page, pages.length) - 1));
 	const referrals = $derived(pages[pageIndex]?.items ?? []);
 	const hasNext = $derived(pageIndex < pages.length - 1 || listQuery.hasNextPage);
+
+	// Cursor paging cannot jump to page N, so a stale `?page=` (refresh, shared link) is rewritten
+	// to the page actually shown instead of leaving the URL and the footer disagreeing.
+	$effect(() => {
+		if (listQuery.isSuccess && !listQuery.isFetching && params.page > pages.length) {
+			updateParams({ page: pages.length });
+		}
+	});
 
 	async function goNext() {
 		// Snapshot before the await: if the tab, status or page changed mid-fetch, stay where the user is.
@@ -50,7 +60,7 @@
 		) {
 			return;
 		}
-		updateParams({ page: nextPage });
+		updateParams({ page: nextPage }, { pageTurn: true });
 	}
 </script>
 
@@ -94,7 +104,7 @@
 		{hasNext}
 		isFetchingNext={listQuery.isFetchingNextPage}
 		isNextError={listQuery.isFetchNextPageError && pageIndex === pages.length - 1}
-		onPrev={() => updateParams({ page: pageIndex })}
+		onPrev={() => updateParams({ page: pageIndex }, { pageTurn: true })}
 		onNext={goNext}
 	/>
 </section>
