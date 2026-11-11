@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { MealPeriod } from '../../domain/food-supplies';
 import { servedMealsOfDay } from './meal-coverage-served';
 
 const TODAY = '2026-11-10';
-const service = (id: string, meal: string, date = TODAY) => ({ _id: id, date, meal });
+const service = (id: string, meal: MealPeriod, date = TODAY) => ({ _id: id, date, meal });
 const receipt = (
 	meal_service_id: string,
 	outcome: 'confirmed' | 'rejected' | undefined,

@@ -11,7 +11,10 @@ const env = vi.hoisted(() => ({
 		isLoading: false,
 		isError: false
 	},
-	shelter: { data: undefined as unknown }
+	shelter: { data: undefined as unknown },
+	services: { data: [] as unknown[], isLoading: false, isError: false },
+	receipts: { data: [] as unknown[], isLoading: false, isError: false },
+	downloadCsv: vi.fn()
 }));
 
 vi.mock('$lib/features/people', async (orig) => ({
@@ -23,12 +26,14 @@ vi.mock('$lib/features/shelters', async (orig) => ({
 	...(await orig<typeof import('$lib/features/shelters')>()),
 	useShelter: () => env.shelter
 }));
+vi.mock('$lib/features/kitchen', async (orig) => ({
+	...(await orig<typeof import('$lib/features/kitchen')>()),
+	useMealServices: () => env.services,
+	useMealServiceReceipts: () => env.receipts
+}));
+vi.mock('$lib/utils/download-csv', () => ({ downloadCsv: env.downloadCsv }));
 vi.mock('../../application/queries', () => ({
 	useDistributionLogsByDay: () => env.logs
-}));
-vi.mock('../model/meal-coverage-view', async (orig) => ({
-	...(await orig<typeof import('../model/meal-coverage-view')>()),
-	previousThaiDay: () => '2026-11-09'
 }));
 
 const person = (id: string, first: string) => ({
@@ -55,12 +60,19 @@ function render() {
 }
 
 beforeEach(() => {
+	// Thai today is 2026-11-10, so the default day is 2026-11-09.
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-11-10T05:00:00Z'));
+	env.services = { data: [], isLoading: false, isError: false };
+	env.receipts = { data: [], isLoading: false, isError: false };
+	env.downloadCsv.mockReset();
 	env.evacuees = { data: [], isLoading: false, isError: false };
 	env.movements = { data: [], isLoading: false, isError: false };
 	env.logs = { data: { items: [], skipped: [] }, isLoading: false, isError: false };
 	env.shelter = { data: undefined };
 });
 afterEach(() => {
+	vi.useRealTimers();
 	if (cmp) void unmount(cmp);
 	cmp = undefined;
 	document.body.innerHTML = '';
@@ -128,10 +140,10 @@ describe('MealCoveragePanel', () => {
 		expect(text).not.toContain('สมชาย');
 	});
 
-	it('refuses today or a future day, whose meals are not over', () => {
+	it('refuses a future day, whose meals have not happened', () => {
 		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
 		render();
-		const text = typeDate('2026-11-10');
+		const text = typeDate('2026-11-11');
 		expect(text).toContain('เลือกวันที่');
 		expect(text).not.toContain('สมชาย');
 	});
@@ -159,6 +171,13 @@ describe('MealCoveragePanel', () => {
 		expect(text).toContain('อาคารหนึ่ง');
 		expect(text).not.toContain('Z1');
 		expect(text).toContain('Z9');
+	});
+
+	it('lets the date picker go up to today', () => {
+		render();
+		expect((document.querySelector('input[type="date"]') as HTMLInputElement).max).toBe(
+			'2026-11-10'
+		);
 	});
 
 	it('sorts the rows by name', () => {
@@ -248,5 +267,169 @@ describe('MealCoveragePanel', () => {
 			expect(rowNames()).toHaveLength(1);
 			expect((document.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('');
 		});
+	});
+});
+
+const click = (el: Element | null | undefined) => {
+	(el as HTMLElement).click();
+	flushSync();
+};
+const typeDay = (value: string) => {
+	const input = document.querySelector('input[type="date"]') as HTMLInputElement;
+	input.value = value;
+	input.dispatchEvent(new Event('input', { bubbles: true }));
+	flushSync();
+};
+const rowTexts = () =>
+	Array.from(document.querySelectorAll('tbody tr')).map((tr) => tr.textContent ?? '');
+const todayLog = (id: string, meal: string) => ({
+	...log(id, meal),
+	distributed_at: '2026-11-10T01:00:00Z'
+});
+const service = (id: string, meal: string, date = '2026-11-10') => ({ _id: id, date, meal });
+
+describe('MealCoveragePanel today', () => {
+	beforeEach(() => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย'), person('evacuee:B', 'สมหญิง')];
+	});
+
+	it('says no meal has been served yet and shows neither list nor cards', () => {
+		render();
+		typeDay('2026-11-10');
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('ยังไม่มีมื้อที่ให้บริการวันนี้');
+		expect(rowTexts()).toHaveLength(0);
+		expect(document.querySelector('button[aria-pressed]')).toBeNull();
+	});
+
+	it('with only breakfast served, lists who has no breakfast and names the counted meals', () => {
+		env.services.data = [service('ms:1', 'breakfast')];
+		env.logs.data = { items: [todayLog('evacuee:A', 'breakfast')], skipped: [] };
+		render();
+		typeDay('2026-11-10');
+		expect(document.body.textContent).toContain('วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว: เช้า');
+		expect(rowTexts()).toHaveLength(1);
+		expect(rowTexts()[0]).toContain('สมหญิง');
+		expect(rowTexts()[0]).toContain('ยังไม่ถึงมื้อ');
+	});
+
+	it('does not count a meal_service whose receipt was rejected', () => {
+		env.services.data = [service('ms:1', 'breakfast'), service('ms:2', 'lunch')];
+		env.receipts.data = [
+			{ meal_service_id: 'ms:1', outcome: 'rejected', created_at: '2026-11-10T03:00:00Z' }
+		];
+		render();
+		typeDay('2026-11-10');
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว: กลางวัน');
+		expect(text).not.toContain('แล้ว: เช้า');
+	});
+
+	it('words the heading and drops the one-meal card when a single meal counts', () => {
+		env.services.data = [service('ms:1', 'breakfast')];
+		render();
+		typeDay('2026-11-10');
+		const text = document.body.textContent ?? '';
+		expect(text).not.toContain('ครบ 2 มื้อ');
+		expect(text).not.toContain('มีบันทึก 1 มื้อ');
+		expect(text).toContain('ยังไม่มีบันทึกเลย');
+	});
+
+	it('keeps the two-meal rule once two meals are served', () => {
+		env.services.data = [service('ms:1', 'breakfast'), service('ms:2', 'lunch')];
+		env.logs.data = { items: [todayLog('evacuee:A', 'breakfast')], skipped: [] };
+		render();
+		typeDay('2026-11-10');
+		expect(document.body.textContent).toContain('ครบ 2 มื้อ');
+		expect(rowTexts()).toHaveLength(2);
+	});
+});
+
+describe('MealCoveragePanel zone, household, advisory and export', () => {
+	it('shows the zone of the selected day, not the zone after a later move', () => {
+		const p = person('evacuee:A', 'สมชาย');
+		env.evacuees.data = [{ ...p, current_stay: { ...p.current_stay, zone: 'NEW' } }];
+		env.movements.data = [
+			{
+				evacuee_id: 'evacuee:A',
+				action: 'check_in',
+				zone: 'OLD',
+				occurred_at: '2026-11-01T00:00:00Z'
+			},
+			{
+				evacuee_id: 'evacuee:A',
+				action: 'zone_change',
+				zone: 'NEW',
+				occurred_at: '2026-11-10T03:00:00Z'
+			}
+		];
+		render();
+		const headers = Array.from(document.querySelectorAll('th')).map((th) => th.textContent?.trim());
+		expect(headers).toContain('โซน');
+		expect(rowTexts()[0]).toContain('OLD');
+		expect(rowTexts()[0]).not.toContain('NEW');
+	});
+
+	it('flags a household member recording a meal without changing the row', () => {
+		const withHousehold = (id: string, first: string) => ({
+			...person(id, first),
+			household_id: 'h:1'
+		});
+		env.evacuees.data = [withHousehold('evacuee:A', 'สมชาย'), withHousehold('evacuee:B', 'สมหญิง')];
+		env.logs.data = { items: [log('evacuee:B', 'lunch'), log('evacuee:B', 'dinner')], skipped: [] };
+		render();
+		expect(rowTexts()).toHaveLength(1);
+		expect(rowTexts()[0]).toContain('สมชาย');
+		expect(rowTexts()[0]).toContain('ครัวเรือนมีบันทึกรับ: กลางวัน, เย็น');
+	});
+
+	it('advises that an unscanned meal may have been handed out without scanning', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
+		env.logs.data = {
+			items: [log('evacuee:A', 'breakfast'), log('evacuee:A', 'lunch')],
+			skipped: []
+		};
+		const text = render();
+		expect(text).toContain('ไม่มีบันทึกสแกนมื้อเย็นของวันที่เลือกเลย');
+		expect(text).not.toContain('ไม่มีบันทึกสแกนมื้อเช้า');
+	});
+
+	it('does not advise when nobody was in the shelter all day', () => {
+		env.evacuees.data = [
+			{
+				...person('evacuee:A', 'สมชาย'),
+				current_stay: { status: 'active', since: '2026-11-09T03:00:00Z' }
+			}
+		];
+		expect(render()).not.toContain('ไม่มีบันทึกสแกนมื้อ');
+	});
+
+	const exportButton = () =>
+		Array.from(document.querySelectorAll('button')).find((b) =>
+			b.textContent?.includes('Export CSV')
+		) as HTMLButtonElement;
+
+	it('exports the filtered rows and disables the button when none match', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย'), person('evacuee:B', 'สมหญิง')];
+		render();
+		const search = document.querySelector('input[type="search"]') as HTMLInputElement;
+		search.value = 'สมหญิง';
+		search.dispatchEvent(new Event('input', { bubbles: true }));
+		flushSync();
+		expect(exportButton().disabled).toBe(false);
+		click(exportButton());
+
+		expect(env.downloadCsv).toHaveBeenCalledOnce();
+		const [filename, csv] = env.downloadCsv.mock.calls[0] as [string, string];
+		expect(filename).toBe('meal-coverage-SH001-2026-11-09.csv');
+		expect(csv.split('\r\n')).toHaveLength(2);
+		expect(csv).toContain('"สมหญิง ใจดี"');
+		expect(csv).not.toContain('สมชาย');
+		expect(csv).toContain('"ยังไม่มีบันทึก"');
+
+		search.value = 'ไม่มีใคร';
+		search.dispatchEvent(new Event('input', { bubbles: true }));
+		flushSync();
+		expect(exportButton().disabled).toBe(true);
 	});
 });
