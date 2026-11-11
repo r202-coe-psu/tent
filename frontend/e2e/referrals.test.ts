@@ -116,9 +116,56 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(page.getByRole('link', { name: /ลำดับ 0\b/ })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'ถัดไป' })).toBeDisabled();
 
+		// A page turn starts the new page at the top, not at the pager.
+		await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
 		await page.getByRole('button', { name: 'ก่อนหน้า' }).click();
 		await expect(page.getByText('หน้า 1 · แสดง 50 รายการ')).toBeVisible();
 		await expect(page).not.toHaveURL(/page=/);
+
+		// Each page turn is its own history entry, so browser back steps back one page.
+		await page.goBack();
+		await expect(page).toHaveURL(/page=2/);
+		await expect(page.getByText('หน้า 2 · แสดง 10 รายการ')).toBeVisible();
+	});
+
+	test('#1266 a cold ?page= past the fetched pages is rewritten to the page shown', async ({
+		page
+	}) => {
+		const store = newReferralStore(
+			Array.from({ length: 60 }, (_, i) =>
+				referralFixture({
+					_id: `referral:mock_cold_${String(i).padStart(2, '0')}`,
+					created_at: new Date(Date.UTC(2026, 9, 14, 8, 0, 60 - i)).toISOString()
+				})
+			)
+		);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals?page=3');
+
+		await expect(page.getByText('หน้า 1 · แสดง 50 รายการ')).toBeVisible({ timeout: 20_000 });
+		await expect(page).not.toHaveURL(/page=/);
+	});
+
+	test('#1266 an exact multiple of the page size ends with next off, not an empty page', async ({
+		page
+	}) => {
+		const store = newReferralStore(
+			Array.from({ length: 100 }, (_, i) =>
+				referralFixture({
+					_id: `referral:mock_exact_${String(i).padStart(3, '0')}`,
+					reason: `เหตุผล ${i}`,
+					created_at: new Date(Date.UTC(2026, 9, 14, 8, 0, 0, 100 - i)).toISOString()
+				})
+			)
+		);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals');
+
+		await expect(page.getByText('หน้า 1 · แสดง 50 รายการ')).toBeVisible({ timeout: 20_000 });
+		await page.getByRole('button', { name: 'ถัดไป' }).click();
+		await expect(page.getByText('หน้า 2 · แสดง 50 รายการ')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'ถัดไป' })).toBeDisabled();
 	});
 
 	test('#1266 a failed next page shows an inline error and the button retries', async ({
