@@ -58,7 +58,8 @@
 				expired,
 				{ group_id: groupId, screen_type: 'portrait' },
 				now
-			)
+			),
+			tv: summarizeScreen(current, expired, { group_id: groupId, screen_type: 'tv' }, now)
 		};
 	}
 

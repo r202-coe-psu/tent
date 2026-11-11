@@ -2,7 +2,13 @@
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { toLotPriorityItems, useLedger } from '$lib/features/operations';
-	import { useItemMasters } from '$lib/features/catalog';
+	import {
+		qtyInputStep,
+		requiresWholeQty,
+		useItemMasters,
+		useUnitDimensionResolver,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -52,6 +58,7 @@
 
 	// Shelf life / storage type feed the weighted lot order (CR-143 §A)
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const unitDimensions = useUnitDimensionResolver();
 	const priorityItem = $derived((itemMastersQuery.data ?? []).find((im) => im._id === itemId));
 
 	const lots = $derived.by(() => {
@@ -103,9 +110,21 @@
 		return isUsableQty(value) && qtyGt(value, remaining);
 	}
 
+	function wholeErrorFor(lotRef: string, value: string | undefined): string | undefined {
+		const lot = lots.find((l) => l.lot_ref === lotRef);
+		return lot ? wholeQtyError(value, unitDimensions.resolve(lot.unit)) : undefined;
+	}
+
+	function allocationsValid(list: DispatchLotAllocation[]): boolean {
+		return (
+			validateDispatchLotAllocations(allocatedQty, list, candidates).ok &&
+			list.every((a) => !wholeErrorFor(a.lot_ref, a.qty))
+		);
+	}
+
 	function emit(next: Record<string, string>) {
 		const list = cleaned(next);
-		onChange(list, validateDispatchLotAllocations(allocatedQty, list, candidates).ok);
+		onChange(list, allocationsValid(list));
 	}
 
 	/** Cap for one lot's input: its balance, and what the other lots leave of the allocation. */
@@ -135,10 +154,8 @@
 			return;
 		}
 		draft = Object.fromEntries(plan.allocations.map((a) => [a.lot_ref, a.qty]));
-		onChange(
-			plan.allocations.map((a) => ({ lot_ref: a.lot_ref, qty: a.qty })),
-			true
-		);
+		const list = plan.allocations.map((a) => ({ lot_ref: a.lot_ref, qty: a.qty }));
+		onChange(list, allocationsValid(list));
 	}
 
 	// Wait for item masters too, so the lot order does not reshuffle once shelf life arrives
@@ -218,6 +235,8 @@
 				{@const canEdit = !disabled && !lot.isExpired}
 				{@const isOver = !lot.isExpired && overBalance(lot.lot_ref, lot.qty)}
 				{@const maxQty = maxFor(lot.lot_ref, lot.qty)}
+				{@const lotDimension = unitDimensions.resolve(lot.unit)}
+				{@const wholeError = wholeQtyError(draft[lot.lot_ref], lotDimension)}
 				{@const capped = canEdit && !isUsed && !qtyGt(maxQty, 0)}
 				{@const inputId = `lot-qty-${itemId}-${lot.lot_ref}`}
 
@@ -301,15 +320,15 @@
 							type="number"
 							min="0"
 							max={maxQty}
-							step="any"
-							inputmode="decimal"
+							step={qtyInputStep(lotDimension)}
+							inputmode={requiresWholeQty(lotDimension) ? 'numeric' : 'decimal'}
 							value={draft[lot.lot_ref] ?? ''}
 							oninput={(e: Event) =>
 								setQty(lot.lot_ref, lot.qty, (e.currentTarget as HTMLInputElement).value)}
 							disabled={!canEdit}
 							readonly={capped}
 							aria-disabled={capped || !canEdit}
-							aria-invalid={isOver}
+							aria-invalid={isOver || !!wholeError}
 							title={capped ? 'ครบจำนวนที่ต้องจ่ายแล้ว' : undefined}
 							class="h-11 w-28 [appearance:textfield] text-right text-xs tabular-nums sm:h-9 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none {capped
 								? 'cursor-not-allowed bg-slate-100 text-slate-400'
@@ -319,6 +338,8 @@
 							<p class="text-xs font-semibold text-red-700" role="alert">
 								เกินยอดคงเหลือใน Lot ({lot.qty})
 							</p>
+						{:else if wholeError}
+							<p class="text-xs font-semibold text-red-700" role="alert">{wholeError}</p>
 						{/if}
 					</div>
 				</li>

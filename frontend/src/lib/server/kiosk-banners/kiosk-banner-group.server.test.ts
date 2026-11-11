@@ -14,13 +14,18 @@ vi.mock('./kiosk-banner.server', async (importOriginal) => ({
 
 import { adminRaw } from '$lib/server/couch-admin';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
+import { KIOSK_BANNER_TV_CODE_MANGO_INDEX } from '$lib/server/registry-design';
 import type { KioskBannerGroupDoc } from '$lib/features/kiosk-banners';
 import { GroupNotFoundError, listBannersForShelter } from './kiosk-banner.server';
 import {
 	createGroup,
 	deleteGroup,
+	ensureGroupTvCode,
+	ensureTvCode,
+	findGroupByTvCode,
 	getGroup,
 	listGroups,
+	rotateTvCode,
 	setGroupDevices,
 	updateGroup
 } from './kiosk-banner-group.server';
@@ -103,7 +108,10 @@ describe('listGroups', () => {
 
 describe('getGroup', () => {
 	it('returns the group with its device_ids', async () => {
-		adminRawMock.mockResolvedValueOnce({ status: 200, data: groupDoc(GROUP_A, 'ทั่วไป') });
+		adminRawMock.mockResolvedValueOnce({
+			status: 200,
+			data: groupDoc(GROUP_A, 'ทั่วไป', { schema_v: 2, tv_code: '123456' })
+		});
 		listDevicesMock.mockResolvedValueOnce([device('kiosk-1', GROUP_A), device('kiosk-2', GROUP_B)]);
 
 		const group = await getGroup(GROUP_A);
@@ -167,6 +175,7 @@ describe('createGroup', () => {
 	it('saves the group doc with its rev and puts the listed kiosks into it', async () => {
 		adminRawMock
 			.mockResolvedValueOnce(FOUND(groupDoc(GROUP_B, 'ผู้สูงอายุ')))
+			.mockResolvedValueOnce(FOUND())
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-new' } });
 		listDevicesMock.mockResolvedValue([device('kiosk-1', null), device('kiosk-2', GROUP_B)]);
 
@@ -177,13 +186,14 @@ describe('createGroup', () => {
 			NOW
 		);
 
-		const [path, method, body] = adminRawMock.mock.calls[1];
+		const [path, method, body] = adminRawMock.mock.calls[2];
 		expect(method).toBe('PUT');
 		expect(path).toBe(`/registry/${encodeURIComponent(record._id)}`);
 		expect(body).toMatchObject({
 			_id: record._id,
 			type: 'kiosk_banner_group',
-			schema_v: 1,
+			schema_v: 2,
+			tv_code: expect.stringMatching(/^[0-9]{6}$/),
 			shelter_code: 'SH1',
 			name: 'ทั่วไป',
 			description: 'ทุกจอ',
@@ -209,6 +219,226 @@ describe('createGroup', () => {
 	});
 });
 
+describe('createGroup tv code', () => {
+	const taken = groupDoc(GROUP_B, 'ผู้สูงอายุ', {
+		schema_v: 2,
+		tv_code: '111111',
+		shelter_code: 'SH9'
+	} as Partial<KioskBannerGroupDoc>);
+
+	it('draws a new code when the first one is already taken', async () => {
+		const generate = vi.fn().mockReturnValueOnce('111111').mockReturnValueOnce('222222');
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce(FOUND(taken))
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '1-new' } });
+		listDevicesMock.mockResolvedValue([]);
+
+		const record = await createGroup({ name: 'ทั่วไป', description: null }, [], CTX, NOW, {
+			generateTvCode: generate
+		});
+
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({
+			selector: { type: 'kiosk_banner_group', tv_code: '111111' }
+		});
+		expect(adminRawMock.mock.calls[3][2]).toMatchObject({ tv_code: '222222' });
+		expect(record).toMatchObject({ tv_code: '222222' });
+	});
+
+	it('gives up with an error after 10 taken codes and writes nothing', async () => {
+		const generate = vi.fn(() => '111111');
+		adminRawMock.mockResolvedValueOnce(FOUND());
+		adminRawMock.mockResolvedValue(FOUND(taken));
+		listDevicesMock.mockResolvedValue([]);
+
+		await expect(
+			createGroup({ name: 'ทั่วไป', description: null }, [], CTX, NOW, {
+				generateTvCode: generate
+			})
+		).rejects.toMatchObject({ name: 'ServiceError', code: 'INTERNAL' });
+		expect(generate).toHaveBeenCalledTimes(10);
+		expect(adminRawMock.mock.calls.filter(([, method]) => method === 'PUT')).toHaveLength(0);
+	});
+});
+
+describe('rotateTvCode', () => {
+	const v2 = groupDoc(GROUP_A, 'ทั่วไป', {
+		_rev: '2-b',
+		schema_v: 2,
+		tv_code: '111111'
+	} as Partial<KioskBannerGroupDoc>);
+
+	it('writes a fresh unused code, different from the current one, and returns the updated group', async () => {
+		// The generator repeats the current code first: it counts as taken, so a new draw follows.
+		const generate = vi.fn().mockReturnValueOnce('111111').mockReturnValueOnce('333333');
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: v2 })
+			.mockResolvedValueOnce(FOUND(v2))
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '3-c' } });
+		listDevicesMock.mockResolvedValueOnce([device('kiosk-1', GROUP_A)]);
+
+		const record = await rotateTvCode(GROUP_A, NOW, { generateTvCode: generate });
+
+		const [path, method, body] = adminRawMock.mock.calls[3];
+		expect(path).toBe(`/registry/${encodeURIComponent(GROUP_A)}`);
+		expect(method).toBe('PUT');
+		expect(body).toEqual({
+			...v2,
+			schema_v: 2,
+			tv_code: '333333',
+			updated_at: NOW.toISOString()
+		});
+		expect(record).toMatchObject({
+			_rev: '3-c',
+			tv_code: '333333',
+			updated_at: NOW.toISOString(),
+			device_ids: ['kiosk-1']
+		});
+	});
+
+	it('upgrades a v1 group to schema_v 2 while rotating', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: groupDoc(GROUP_A, 'ทั่วไป') })
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '2-b' } });
+		listDevicesMock.mockResolvedValueOnce([]);
+
+		const record = await rotateTvCode(GROUP_A, NOW, { generateTvCode: () => '444444' });
+
+		expect(adminRawMock.mock.calls[2][2]).toMatchObject({ schema_v: 2, tv_code: '444444' });
+		expect(record).toMatchObject({ schema_v: 2, tv_code: '444444' });
+	});
+
+	it('throws GroupNotFoundError for a missing group', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
+
+		await expect(rotateTvCode(GROUP_A, NOW)).rejects.toBeInstanceOf(GroupNotFoundError);
+	});
+});
+
+describe('ensureTvCode', () => {
+	it('writes a v1 group back as schema_v 2 with a fresh unused code and returns it', async () => {
+		const v1 = groupDoc(GROUP_A, 'ทั่วไป');
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '2-b' } });
+
+		const group = await ensureTvCode(v1, { generateTvCode: () => '555555' });
+
+		const [path, method, body] = adminRawMock.mock.calls[1];
+		expect(path).toBe(`/registry/${encodeURIComponent(GROUP_A)}`);
+		expect(method).toBe('PUT');
+		expect(body).toEqual({ ...v1, schema_v: 2, tv_code: '555555' });
+		expect(group).toEqual({ ...v1, schema_v: 2, tv_code: '555555', _rev: '2-b' });
+	});
+
+	it('returns the group another reader already backfilled when its own write conflicts', async () => {
+		const v1 = groupDoc(GROUP_A, 'ทั่วไป');
+		const backfilled = groupDoc(GROUP_A, 'ทั่วไป', {
+			_rev: '2-other',
+			schema_v: 2,
+			tv_code: '777777'
+		} as Partial<KioskBannerGroupDoc>);
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 200, data: backfilled });
+
+		const group = await ensureTvCode(v1, { generateTvCode: () => '555555' });
+
+		expect(group).toEqual(backfilled);
+		expect(adminRawMock.mock.calls[2].slice(0, 2)).toEqual([
+			`/registry/${encodeURIComponent(GROUP_A)}`,
+			'GET'
+		]);
+	});
+
+	it('propagates the conflict when the re-read group is still v1 or gone', async () => {
+		const v1 = groupDoc(GROUP_A, 'ทั่วไป');
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 200, data: groupDoc(GROUP_A, 'ทั่วไป', { _rev: '2-x' }) });
+		await expect(ensureTvCode(v1, { generateTvCode: () => '555555' })).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
+
+		adminRawMock.mockReset();
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
+		await expect(ensureTvCode(v1, { generateTvCode: () => '555555' })).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
+	});
+
+	it('returns a v2 group unchanged without touching CouchDB', async () => {
+		const v2 = groupDoc(GROUP_A, 'ทั่วไป', {
+			schema_v: 2,
+			tv_code: '111111'
+		} as Partial<KioskBannerGroupDoc>);
+
+		expect(await ensureTvCode(v2)).toBe(v2);
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+});
+
+describe('getGroup', () => {
+	it('reads a v1 group as stored and never writes it', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: groupDoc(GROUP_A, 'ทั่วไป') });
+		listDevicesMock.mockResolvedValueOnce([device('kiosk-1', GROUP_A)]);
+
+		const group = await getGroup(GROUP_A);
+
+		expect(group).toMatchObject({ _rev: '1-a', schema_v: 1, device_ids: ['kiosk-1'] });
+		expect(group).not.toHaveProperty('tv_code');
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('ensureGroupTvCode', () => {
+	it('gives a v1 group its tv_code, keeping its device_ids', async () => {
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '2-b' } });
+
+		const group = await ensureGroupTvCode({
+			...groupDoc(GROUP_A, 'ทั่วไป'),
+			device_ids: ['kiosk-1']
+		});
+
+		expect(group).toMatchObject({
+			_rev: '2-b',
+			schema_v: 2,
+			tv_code: expect.stringMatching(/^[0-9]{6}$/),
+			device_ids: ['kiosk-1']
+		});
+		expect(adminRawMock.mock.calls[1][1]).toBe('PUT');
+	});
+
+	it('returns the concurrently backfilled group, keeping device_ids, when its write conflicts', async () => {
+		const backfilled = groupDoc(GROUP_A, 'ทั่วไป', {
+			_rev: '2-other',
+			schema_v: 2,
+			tv_code: '777777'
+		} as Partial<KioskBannerGroupDoc>);
+		adminRawMock
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+			.mockResolvedValueOnce({ status: 200, data: backfilled });
+
+		const group = await ensureGroupTvCode({
+			...groupDoc(GROUP_A, 'ทั่วไป'),
+			device_ids: ['kiosk-1']
+		});
+
+		expect(group).toEqual({ ...backfilled, device_ids: ['kiosk-1'] });
+	});
+});
+
 describe('createGroup with an unknown kiosk', () => {
 	it('rejects with 422 before saving, so no empty group is left behind', async () => {
 		adminRawMock
@@ -224,8 +454,36 @@ describe('createGroup with an unknown kiosk', () => {
 });
 
 describe('updateGroup', () => {
-	const current = groupDoc(GROUP_A, 'ทั่วไป', { _rev: '2-b', description: 'เดิม' });
+	const current = groupDoc(GROUP_A, 'ทั่วไป', {
+		_rev: '2-b',
+		description: 'เดิม',
+		schema_v: 2,
+		tv_code: '123456'
+	});
 	const other = groupDoc(GROUP_B, 'ผู้สูงอายุ');
+
+	it('backfills a v1 group with an unused tv_code in the same write (FR-KBT-12)', async () => {
+		const v1 = groupDoc(GROUP_A, 'ทั่วไป', { _rev: '2-b' });
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: v1 })
+			.mockResolvedValueOnce(FOUND(v1, other))
+			.mockResolvedValueOnce(FOUND())
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '3-c' } });
+		listDevicesMock.mockResolvedValueOnce([]);
+
+		const record = await updateGroup(
+			GROUP_A,
+			'2-b',
+			{ name: 'ทั่วไป (ใหม่)', description: null },
+			NOW,
+			{ generateTvCode: () => '555555' }
+		);
+
+		const puts = adminRawMock.mock.calls.filter(([, method]) => method === 'PUT');
+		expect(puts).toHaveLength(1);
+		expect(puts[0][2]).toMatchObject({ schema_v: 2, tv_code: '555555', name: 'ทั่วไป (ใหม่)' });
+		expect(record).toMatchObject({ _rev: '3-c', schema_v: 2, tv_code: '555555' });
+	});
 
 	it('rewrites name and description under the current rev and keeps shelter and created_*', async () => {
 		adminRawMock
@@ -378,5 +636,36 @@ describe('deleteGroup', () => {
 		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
 
 		await expect(deleteGroup(GROUP_A, '2-b', 'sm-a')).rejects.toBeInstanceOf(GroupNotFoundError);
+	});
+});
+
+describe('findGroupByTvCode', () => {
+	it('returns the group whose tv_code matches, whatever its shelter, or null when none does', async () => {
+		const other = groupDoc(GROUP_B, 'ผู้สูงอายุ', {
+			schema_v: 2,
+			tv_code: '123456',
+			shelter_code: 'SH9'
+		} as Partial<KioskBannerGroupDoc>);
+		adminRawMock.mockResolvedValueOnce(FOUND(other));
+
+		expect(await findGroupByTvCode('123456')).toEqual(other);
+		expect(adminRawMock.mock.calls[0]).toEqual([
+			'/registry/_find',
+			'POST',
+			expect.objectContaining({
+				selector: { type: 'kiosk_banner_group', tv_code: '123456' },
+				use_index: [KIOSK_BANNER_TV_CODE_MANGO_INDEX.ddoc, KIOSK_BANNER_TV_CODE_MANGO_INDEX.name]
+			})
+		]);
+
+		adminRawMock.mockResolvedValueOnce(FOUND());
+		expect(await findGroupByTvCode('654321')).toBeNull();
+	});
+
+	it('returns null for a malformed code without querying CouchDB', async () => {
+		for (const bad of ['', '12345', '1234567', 'abcdef', '12 456']) {
+			expect(await findGroupByTvCode(bad)).toBeNull();
+		}
+		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 });

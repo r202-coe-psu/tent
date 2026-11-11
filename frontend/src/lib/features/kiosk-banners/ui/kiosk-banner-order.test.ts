@@ -115,7 +115,7 @@ describe('summarizeScreen', () => {
 		_id: `kiosk_banner:${id}`,
 		_rev: `1-${id}`,
 		type: 'kiosk_banner',
-		schema_v: 2,
+		schema_v: 3,
 		group_id: 'kiosk_banner_group:A',
 		shelter_code: 'SH001',
 		title: `banner ${id}`,
@@ -191,7 +191,8 @@ describe('summarizeScreen', () => {
 				banner('b-active', { group_id: GROUP_B, screen_type: 'compact', order: 1 }),
 				{
 					...banner('v1', { group_id: undefined, screen_type: 'compact', order: 1 }),
-					schema_v: 1 as const
+					schema_v: 1 as const,
+					screen_type: 'compact' as const
 				}
 			],
 			[...expired, banner('b-old', { group_id: GROUP_B, ...expiredOver })],
