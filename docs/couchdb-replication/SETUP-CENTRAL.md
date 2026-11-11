@@ -5,10 +5,10 @@
 
 > **หลักการข้อเดียวที่ต้องจำ:** edge เป็นฝ่ายเปิด connection หา central เสมอ (edge อยู่หลัง NAT ของศูนย์)
 > job replication ของ edge อยู่ที่ edge ทั้งหมด — หน้าที่ของ central มี 4 อย่าง:
-> **(1) มีข้อมูลศูนย์ให้ดึง (2) สร้าง replication user ของศูนย์นั้น (ไม่ใช่ admin) (3) คัดลอก user ของศูนย์ไปไว้ใน DB `edge_users_<code>` ให้ edge ดึง (4) เปิดทางให้ edge เข้ามาถึง CouchDB**
+> **(1) มีข้อมูลศูนย์ให้ดึง (2) สร้าง replication user ของศูนย์นั้น (ไม่ใช่ admin) (3) คัดลอก user ของศูนย์ไปไว้ใน DB `edge_users_<code>` ให้ edge ดึง (service `edge-users-copy`) (4) เปิดทางให้ edge เข้ามาถึง CouchDB**
 >
-> **รหัส central admin อยู่ที่ central เท่านั้น ไม่ส่งให้ edge** (ตาม [CR ร่าง #1298](../changes/draft-edge-per-shelter-repl-user.md) ที่แทน OD-6 เดิม)
-> script `scripts/central-repl-user.sh <CODE>` ทำข้อ (2) และ (3) ให้ในคำสั่งเดียว
+> **รหัส central admin อยู่ที่ central เท่านั้น ไม่ส่งให้ edge** (ตาม [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) ที่แทน OD-6 เดิม)
+> script `scripts/central-repl-user.sh <CODE>` สร้างบัญชี + DB `edge_users_<code>` (ข้อ 2 และที่เก็บของข้อ 3) · ส่วน**คัดลอก user** เข้า DB นั้นทำโดย service `edge-users-copy` ที่รันค้างบน central (ขั้น 3.4) — ไม่ใช่ job ใน `_replicator`
 
 ## 0. เลือกแบบที่จะทำ
 
@@ -69,7 +69,7 @@ curl -s "$C/_users/_find" -H 'Content-Type: application/json' \
 
 ## ขั้น 3 — สร้าง replication user ของศูนย์ (`central-repl-user.sh`)
 
-edge **ไม่ใช้ central admin** แต่ใช้บัญชีที่สร้างให้เฉพาะศูนย์นั้น ([CR ร่าง #1298](../changes/draft-edge-per-shelter-repl-user.md) แทน OD-6 เดิมใน
+edge **ไม่ใช้ central admin** แต่ใช้บัญชีที่สร้างให้เฉพาะศูนย์นั้น ([CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) แทน OD-6 เดิมใน
 [edge-disaster-continuity-idea.md](../features/edge-disaster-continuity-idea.md) §6) ทำที่ central ครั้งเดียวต่อศูนย์ที่มี edge
 
 ### 3.1 สร้าง (provision)
@@ -82,12 +82,12 @@ scripts/central-repl-user.sh SH001
 
 สคริปต์สร้างให้ครบในครั้งเดียว:
 
-| สร้าง                                                   | รายละเอียด                                                                                                                                                                                              |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| user `repl_sh001_<8 ตัว hex สุ่ม>`                      | role `repl:SH001` เท่านั้น · รหัสผ่านสุ่ม · **ชื่อเดายาก** (กันคนนอกลองล็อกเอาต์ทีละศูนย์) · ไม่มี `edge_shelters`                                                                                      |
-| สิทธิ์อ่าน/เขียน DB                                     | เพิ่ม role `repl:SH001` ใน `_security` ของ `registry`, `catalog`, `shelter_sh001` (ไม่เพิ่มใน `shelter_<ศูนย์อื่น>`) · registry/catalog ที่ edge อ่านได้อย่างเดียว (central ปฏิเสธการเขียนของ `repl:*`) |
-| DB `edge_users_sh001`                                   | member มีแค่ `repl:SH001` · เขียนได้เฉพาะ `_admin` (`_design/readonly`) · เก็บสำเนา user ของศูนย์นี้ (มี password hash)                                                                                 |
-| job `edge_users_sh001` ใน `_replicator` **ของ central** | คัดลอก user ของศูนย์จาก `_users` ไป `edge_users_sh001` แบบ continuous ด้วย admin ของ central ที่เครื่องนี้เอง · กรองด้วย `edge_shelters` มี `SH001` หรือ `roles` มี `shelter:SH001` (กฎเดียวกับ CR-171) |
+| สร้าง                              | รายละเอียด                                                                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| user `repl_sh001_<8 ตัว hex สุ่ม>` | role `repl:SH001` เท่านั้น · รหัสผ่านสุ่ม · **ชื่อเดายาก** (กันคนนอกลองล็อกเอาต์ทีละศูนย์) · ไม่มี `edge_shelters`                                                                                      |
+| สิทธิ์อ่าน/เขียน DB                | เพิ่ม role `repl:SH001` ใน `_security` ของ `registry`, `catalog`, `shelter_sh001` (ไม่เพิ่มใน `shelter_<ศูนย์อื่น>`) · registry/catalog ที่ edge อ่านได้อย่างเดียว (central ปฏิเสธการเขียนของ `repl:*`) |
+| DB `edge_users_sh001`              | member มีแค่ `repl:SH001` · เขียนได้เฉพาะ `_admin` (`_design/readonly`) · เก็บสำเนา user ของศูนย์นี้ (มี password hash)                                                                                 |
+| (ไม่สร้าง job ใน `_replicator`)    | การคัดลอก user ไป `edge_users_sh001` ทำโดย service `edge-users-copy` ของ central (ขั้น 3.4) — เมื่อเห็น DB ใหม่จะ backfill user เดิมของศูนย์ให้เองภายใน 1 นาที                                          |
 
 **username + password แสดงครั้งเดียว** ตอนสร้าง (หรือ `--rotate`) — จดทันที แล้วใส่ใน `.env` ของ edge เป็น `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD`
 ([SETUP-EDGE ขั้น 4](SETUP-EDGE.md)) · รันซ้ำโดยไม่ใส่ `--rotate` จะคงรหัสเดิมและไม่แสดงรหัสอีก · หนึ่งศูนย์มีบัญชีได้ **1 บัญชี**
@@ -97,41 +97,55 @@ scripts/central-repl-user.sh SH001
 
 ### 3.2 ตัวเลือก
 
-| คำสั่ง                                        | ทำอะไร                                                                                                                                            |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/central-repl-user.sh SH001`          | สร้าง (ถ้ามีแล้วคงรหัสเดิม)                                                                                                                       |
-| `scripts/central-repl-user.sh SH001 --rotate` | ตั้งรหัสใหม่ แสดงครั้งเดียว · ต้องแก้ `.env` ของ edge ศูนย์นั้นแล้วรัน `edge-init` ใหม่ (**ศูนย์อื่นไม่กระทบ**)                                   |
-| `scripts/central-repl-user.sh SH001 --remove` | ลบบัญชี · ถอด role ออกจาก `_security` ของ registry/catalog/`shelter_sh001` · ลบ job คัดลอก · ลบ DB `edge_users_sh001` · รันซ้ำได้ ไม่แตะศูนย์อื่น |
-| `scripts/central-repl-user.sh SH001 --status` | แสดงสถานะ job คัดลอก (`state`, `error_count`, `last_updated`) · **exit ≠ 0 ถ้า state ไม่ใช่ `running` / `pending`**                               |
-| `--repl-url <URL>`                            | URL ที่ CouchDB ของ central ใช้เรียกตัวเอง (ค่า default `http://127.0.0.1:5984`) · เปลี่ยนเมื่อ CouchDB ไม่ได้ฟัง 5984 ในตัวมันเอง                |
-| `--url <URL>`                                 | URL ที่สคริปต์ใช้ต่อ CouchDB ของ central (default `$COUCHDB_URL` หรือ `http://localhost:5984`)                                                    |
+| คำสั่ง                                        | ทำอะไร                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/central-repl-user.sh SH001`          | สร้าง (ถ้ามีแล้วคงรหัสเดิม)                                                                                                                                                                                                                                                                                                           |
+| `scripts/central-repl-user.sh SH001 --rotate` | ตั้งรหัสใหม่ แสดงครั้งเดียว · ต้องแก้ `.env` ของ edge ศูนย์นั้นแล้วรัน `edge-init` ใหม่ (**ศูนย์อื่นไม่กระทบ**)                                                                                                                                                                                                                       |
+| `scripts/central-repl-user.sh SH001 --remove` | ลบบัญชี · ถอด role ออกจาก `_security` ของ registry/catalog/`shelter_sh001` · **ลบ DB `edge_users_sh001` ทั้ง DB** (ห้ามแค่ถอด role — `members` ว่างแล้ว DB เปิดสาธารณะ) · รันซ้ำได้ ไม่แตะศูนย์อื่น                                                                                                                                   |
+| `scripts/central-repl-user.sh SH001 --status` | อ่านสถานะของ `edge-users-copy` จาก `_users/_local/edge_users_copy` เทียบกับ `update_seq` ของ `_users` · สถานะ backfill ของศูนย์ · **"edge ดึงข้อมูลล่าสุดเมื่อ"** (จาก checkpoint ของ edge ใน `edge_users_sh001`; ไม่มี = "edge ยังไม่เคยต่อเข้ามา") · **exit ≠ 0 เมื่อมี `last_error` หรือ service ตามหลัง `_users` นานเกิน 5 นาที** |
+| `--url <URL>`                                 | URL ที่สคริปต์ใช้ต่อ CouchDB ของ central (default `$COUCHDB_URL` หรือ `http://localhost:5984`)                                                                                                                                                                                                                                        |
 
 ทุกครั้งที่รัน (ทุกคำสั่ง) สคริปต์ตรวจ `_security` ของ DB `edge_users_*` **ทุกตัว** บน central ถ้า `members` ว่าง (= เปิดสาธารณะ) หรือมีอะไรนอกจาก `repl:<CODE>` ของศูนย์นั้น
 จะ **หยุดพร้อมแจ้งชื่อ DB** — เพราะ DB นี้มี password hash ของ staff ตั้งพลาดแล้วรั่วหนักกว่าเดิม · เจอแล้วต้องแก้ `_security` ก่อนทำอะไรต่อ
 
 ### 3.3 สิ่งที่ต้องรู้
 
-| เรื่อง                                  | ผล                                                                                                                                                                                                         | ต้องทำ                                                                                                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| เครื่อง edge หลุด / ถูกขโมย             | ผู้ถือเครื่องได้ **ข้อมูล `shelter_<code>` ของศูนย์นั้น + password hash ของ staff ศูนย์นั้น** และเขียน `shelter_<code>` ของศูนย์นั้นได้จนกว่าจะ `--remove` · **ไม่ได้ central admin** และไม่กระทบศูนย์อื่น | ทำตาม "เครื่อง edge หาย" ด้านล่าง                                                                                                                        |
-| `SHELTER_CODE` ผิด                      | `edge-init` ตรวจ `_session` ด้วย `EDGE_REPL_*` ต้องมี `repl:<SHELTER_CODE>` และไม่เป็น `_admin` — ไม่ผ่านจะ `FAILED` (ใส่ central admin มาก็ไม่ผ่าน) · central ปฏิเสธการอ่าน DB ศูนย์อื่น (401/403)        | ตรวจ `SHELTER_CODE` ก่อน `up` (SETUP-EDGE ขั้น 4)                                                                                                        |
-| `_design/*`                             | `repl:*` เขียน design doc ของ `shelter_<code>` ไม่ได้ (CouchDB ให้เฉพาะ db admin) · job `<code>_push` ยังกรอง `_design/*` ออกอยู่ (กันอุบัติเหตุ)                                                          | อย่าสร้าง design doc ใน `shelter_<code>` ที่ edge                                                                                                        |
-| lockout (รหัสผิด 5 ครั้ง)               | CouchDB นับต่อ (user, IP) — **แต่ละศูนย์มีชื่อของตัวเอง** จึงหยุดแค่ศูนย์ที่รหัสผิด ศูนย์อื่นยัง sync                                                                                                      | แก้ `.env` ของ edge ศูนย์นั้นให้ตรงรหัสล่าสุด แล้วรอ 5 นาที                                                                                              |
-| หมุนรหัส central admin                  | **edge ไม่ต้องแก้อะไร** (ไม่ถือ admin) · แต่ job คัดลอก `edge_users_<code>` ใช้ admin เดิมอยู่                                                                                                             | รัน `central-repl-user.sh <CODE>` ซ้ำทุกศูนย์ที่มี edge (ดู "หลัง deploy" ด้านล่าง) และอัปเดต service ของ central ที่ใช้ admin (`COUCHDB_ADMIN_URL` ฯลฯ) |
-| job คัดลอก `edge_users_<code>` หยุด     | user ที่ถูกถอดสิทธิ์ / soft delete ยัง login ที่ edge ได้ เพราะ edge ไม่ได้รับ revision ใหม่                                                                                                               | ตรวจ `--status` ทุกวัน (ด้านล่าง)                                                                                                                        |
-| รหัส admin ใน `_replicator` ของ central | job คัดลอกเก็บรหัส central admin เป็น plaintext ใน doc ของ `_replicator` **ของ central** (เครื่องที่ถือ admin อยู่แล้ว)                                                                                    | ดูแล central ตามปกติ · ห้ามให้ edge เข้า `_replicator` ของ central                                                                                       |
+| เรื่อง                         | ผล                                                                                                                                                                                                         | ต้องทำ                                                                                              |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| เครื่อง edge หลุด / ถูกขโมย    | ผู้ถือเครื่องได้ **ข้อมูล `shelter_<code>` ของศูนย์นั้น + password hash ของ staff ศูนย์นั้น** และเขียน `shelter_<code>` ของศูนย์นั้นได้จนกว่าจะ `--remove` · **ไม่ได้ central admin** และไม่กระทบศูนย์อื่น | ทำตาม "เครื่อง edge หาย" ด้านล่าง                                                                   |
+| `SHELTER_CODE` ผิด             | `edge-init` ตรวจ `_session` ด้วย `EDGE_REPL_*` ต้องมี `repl:<SHELTER_CODE>` และไม่เป็น `_admin` — ไม่ผ่านจะ `FAILED` (ใส่ central admin มาก็ไม่ผ่าน) · central ปฏิเสธการอ่าน DB ศูนย์อื่น (401/403)        | ตรวจ `SHELTER_CODE` ก่อน `up` (SETUP-EDGE ขั้น 4)                                                   |
+| `_design/*`                    | `repl:*` เขียน design doc ของ `shelter_<code>` ไม่ได้ (CouchDB ให้เฉพาะ db admin) · job `<code>_push` ยังกรอง `_design/*` ออกอยู่ (กันอุบัติเหตุ)                                                          | อย่าสร้าง design doc ใน `shelter_<code>` ที่ edge                                                   |
+| lockout (รหัสผิด 5 ครั้ง)      | CouchDB นับต่อ (user, IP) — **แต่ละศูนย์มีชื่อของตัวเอง** จึงหยุดแค่ศูนย์ที่รหัสผิด ศูนย์อื่นยัง sync                                                                                                      | แก้ `.env` ของ edge ศูนย์นั้นให้ตรงรหัสล่าสุด แล้วรอ 5 นาที                                         |
+| หมุนรหัส central admin         | **edge ไม่ต้องแก้อะไร** (ไม่ถือ admin) · แต่ `edge-users-copy` และ sync-worker ใช้ admin เดิมอยู่ → ได้ 401 ถ้าไม่อัปเดต                                                                                   | อัปเดต `COUCHDB_PASSWORD` ของ**ทุก service** ที่ใช้รหัสนี้ แล้ว restart (ดู "หลัง deploy" ด้านล่าง) |
+| `edge-users-copy` หยุด / error | user ที่ถูกถอดสิทธิ์ / soft delete ยัง login ที่ edge ได้ เพราะ edge ไม่ได้รับ revision ใหม่                                                                                                               | ตรวจ `--status` ทุกวัน (ด้านล่าง)                                                                   |
+| hard delete ใน `_users`        | tombstone ไม่ถูกคัดลอกไป `edge_users_<code>` — บัญชีที่ hard delete ยังอยู่ที่ edge (นอกขอบเขต CR-247 · ติดตามที่ #1331)                                                                                   | ใช้ soft delete (แอปทำแบบนี้อยู่แล้ว)                                                               |
+
+### 3.4 service `edge-users-copy` (คัดลอก user ไป `edge_users_<code>`)
+
+service แยกบน central (ใน compose ของ central — build จาก `worker/Dockerfile` ตัวเดียวกับ sync-worker แต่เป็น container ของตัวเอง) ใช้ admin จาก `COUCHDB_USER` / `COUCHDB_PASSWORD` · **ต่อ CouchDB อย่างเดียว ไม่ต่อ MongoDB** จึงไม่ติดไปกับ sync-worker (MongoDB ล่มก็ไม่กระทบการถอดสิทธิ์ที่ edge)
+
+| เรื่อง     | พฤติกรรม                                                                                                                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| การทำงาน   | อ่าน `_changes` ของ `_users` feed เดียว ข้าม `_design/*` · ปลายทาง = ศูนย์ใน `edge_shelters` ∪ ศูนย์จาก role `shelter:<CODE>` · เขียนเฉพาะศูนย์ที่มี DB `edge_users_<code>` อยู่ (ด้วย `new_edits: false`)                     |
+| checkpoint | `_users/_local/edge_users_copy` บน central (`last_seq`, `last_error`, `updated_at`) · restart แล้วอ่านต่อจากจุดเดิม · doc `_local` ไม่ถูก replicate                                                                            |
+| backfill   | เช็กรายชื่อ `edge_users_*` ทุก 30 วินาที · DB ที่ยังไม่มี `_local/backfill_done` = ศูนย์ใหม่ → คัดลอก user เดิมทีละหน้า แล้วเขียน `_local/backfill_done` ใน DB นั้น · `--remove` แล้วสร้างใหม่ DB ใหม่จึง backfill ใหม่เองเสมอ |
+| เปิด / ปิด | `docker compose up -d edge-users-copy` · logs: `docker compose logs -f edge-users-copy` · คำสั่งตรงของโค้ด: `uv run --project worker edge-users-copy`                                                                          |
+
+> **Migration prerequisite (ก่อนเปิด service ครั้งแรก):** ต้อง backfill `edge_shelters` ของ CR-171 ที่ central ให้เสร็จก่อน
+> (SETUP-EDGE "อัปเกรดเป็น CR-171" ข้อ 2 — `pnpm backfill:edge-shelters --write` รันซ้ำแล้วต้องไม่มี doc เปลี่ยน)
+> user ที่ไม่มี `edge_shelters` แล้วถูกถอด role จะไม่ถูกส่งไป edge
 
 **ตรวจหลังสร้าง** (แทน `<REPL_USER>` / `<REPL_PW>` ด้วยค่าที่สคริปต์แสดง · `$C` คือ admin ของ central จากขั้น 1):
 
 ```bash
-scripts/central-repl-user.sh SH001 --status                                    # exit 0, state running/pending
+scripts/central-repl-user.sh SH001 --status                                    # exit 0 (service ตามทัน _users · backfill เสร็จ)
 
 curl -s -o /dev/null -w '%{http_code}\n' -u <REPL_USER>:<REPL_PW> http://localhost:5984/edge_users_sh001   # 200
 curl -s -o /dev/null -w '%{http_code}\n' -u <REPL_USER>:<REPL_PW> http://localhost:5984/shelter_sh002      # 401/403 (ศูนย์อื่น)
 curl -s -o /dev/null -w '%{http_code}\n' -u <REPL_USER>:<REPL_PW> http://localhost:5984/_users/_changes    # 401/403
 curl -s -o /dev/null -w '%{http_code}\n' -X PUT -u <REPL_USER>:<REPL_PW> http://localhost:5984/registry/x -d '{}'   # 403 (registry เขียนไม่ได้)
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5984/edge_users_sh001                            # 401 (ไม่ login)
-curl -s $C/edge_users_sh001 | python3 -c 'import sys,json;print(json.load(sys.stdin)["doc_count"])'          # > 0 (มี staff ของศูนย์ถูกคัดลอกแล้ว)
+curl -s $C/edge_users_sh001 | python3 -c 'import sys,json;print(json.load(sys.stdin)["doc_count"])'          # > 0 (มี staff ของศูนย์ถูกคัดลอกแล้ว — ภายใน 1 นาทีหลังสร้าง)
 ```
 
 📖 [`_users` และการ auth](https://docs.couchdb.org/en/stable/intro/security.html) ·
@@ -255,16 +269,16 @@ curl -s -u '<EDGE_REPL_USER>:<EDGE_REPL_PASSWORD>' <SYNC_URL>/edge_users_sh001
 
 ## งานประจำของ central — ตรวจ `--status` ทุกวัน
 
-job คัดลอก `edge_users_<code>` คือสิ่งที่ทำให้ user ที่ถูกถอดสิทธิ์ / soft delete หมดสิทธิ์ที่ edge ด้วย — ถ้า job หยุด edge จะเก็บสิทธิ์เก่าไว้โดยไม่มีใครรู้
+`edge-users-copy` คือสิ่งที่ทำให้ user ที่ถูกถอดสิทธิ์ / soft delete หมดสิทธิ์ที่ edge ด้วย — ถ้า service หยุด edge จะเก็บสิทธิ์เก่าไว้โดยไม่มีใครรู้
 
 ```bash
 # ทุกศูนย์ที่มี edge (ทุกวัน หรือใส่ cron / monitoring แล้ว alert เมื่อ exit ≠ 0)
 for code in SH001 SH002; do
-  scripts/central-repl-user.sh "$code" --status || echo "!! $code: job คัดลอก user ไม่ทำงาน"
+  scripts/central-repl-user.sh "$code" --status || echo "!! $code: edge-users-copy ไม่ทำงาน / ตามหลัง"
 done
 ```
 
-`state` ต้องเป็น `running` หรือ `pending` · `error_count` สูงขึ้นเรื่อย ๆ หรือ `last_updated` เก่ามาก = ไปดูสาเหตุ (ตาราง "แก้ปัญหา")
+`--status` แสดง checkpoint ของ service เทียบ `update_seq` ของ `_users`, สถานะ backfill ของศูนย์, และ "edge ดึงข้อมูลล่าสุดเมื่อ" · **exit ≠ 0** เมื่อมี `last_error` หรือ service ตามหลัง `_users` นานเกิน 5 นาที → ดู `docker compose logs edge-users-copy` และตาราง "แก้ปัญหา"
 
 ---
 
@@ -279,7 +293,7 @@ done
 scripts/central-repl-user.sh SH001 --remove
 ```
 
-ลบบัญชี `repl_sh001_*`, ถอดสิทธิ์จาก `registry` / `catalog` / `shelter_sh001`, ลบ job และ DB `edge_users_sh001` — เครื่องที่หายเข้า central ไม่ได้อีก (401)
+ลบบัญชี `repl_sh001_*`, ถอดสิทธิ์จาก `registry` / `catalog` / `shelter_sh001`, ลบ DB `edge_users_sh001` ทั้ง DB — เครื่องที่หายเข้า central ไม่ได้อีก (401)
 
 **2) reset password ของ staff ทุกคนที่ศูนย์นี้**
 
@@ -314,63 +328,76 @@ scripts/central-repl-user.sh SH001      # ได้ user + password ชุดใ
 ```
 
 แล้วทำ [SETUP-EDGE.md](SETUP-EDGE.md) ตั้งแต่ขั้น 1 บนเครื่องใหม่ (ใส่ `EDGE_REPL_*` ชุดใหม่) · ล้างเครื่องเก่าถ้าได้คืนมา (SETUP-EDGE "ถอดออก")
+`edge-users-copy` เห็น DB `edge_users_sh001` ใหม่แล้ว backfill user เดิมให้ภายใน 1 นาที — ตรวจด้วย `--status SH001`
 
 ---
 
-## หลัง deploy CR #1298 — หมุนรหัส central admin (ครั้งเดียว)
+## ปิดศูนย์ที่มี edge
+
+แอปไม่สั่ง `--remove` เอง — ปิด / ยกเลิกศูนย์ในแอปเปลี่ยนแค่ `operation_status` ใน `registry` ไม่แตะ `_security` / `_users` ผู้ดูแล central ต้องทำเอง:
+
+1. ปิดศูนย์ในแอป (`operation_status: closed`)
+2. ที่ central: `scripts/central-repl-user.sh <CODE> --remove`
+3. ล้างเครื่อง edge ทั้งเครื่อง ([SETUP-EDGE.md](SETUP-EDGE.md) "ถอดออก" · [data-model §7](../data/data-model.md))
+
+ศูนย์ที่ **ยกเลิก (`cancelled`)** ไม่ต้องทำ เพราะกลับสถานะได้ และศูนย์ที่ไม่เคยเปิดใช้มักไม่มี edge
+
+---
+
+## หลัง deploy CR-247 — หมุนรหัส central admin (ครั้งเดียว)
 
 edge ที่ติดตั้ง**ก่อน** CR นี้ยังมีรหัส central admin ค้างอยู่ใน `.env` และใน `_replicator` ของ edge — ต้องหมุนรหัสทิ้ง ลำดับ:
 
-1. ทุก edge ที่ติดตั้งไว้แล้ว เปลี่ยนไปใช้ `EDGE_REPL_*` ให้ครบก่อน (SETUP-EDGE "edge ที่ติดตั้งก่อน CR #1298") — edge ที่ยังใช้ admin เก่าจะพังทันทีที่หมุนรหัส
-2. **หมุนรหัส central admin** (`COUCHDB_PASSWORD` ใน `.env` ของ central + service ที่ใช้ admin เช่น `COUCHDB_ADMIN_URL` แล้ว restart) — edge ไม่ต้องแก้อะไร เพราะไม่ถือ admin แล้ว
-3. **รัน `scripts/central-repl-user.sh <CODE>` ซ้ำสำหรับทุกศูนย์ที่มี edge** เพื่อให้ job คัดลอก `edge_users_<code>` ใช้รหัส admin ใหม่ (รหัส repl เดิมไม่เปลี่ยน ไม่ต้องแก้ edge) แล้วตรวจ `--status` ทุกศูนย์
+1. ทุก edge ที่ติดตั้งไว้แล้ว เปลี่ยนไปใช้ `EDGE_REPL_*` ให้ครบก่อน (SETUP-EDGE "edge ที่ติดตั้งก่อน CR-247") — edge ที่ยังใช้ admin เก่าจะพังทันทีที่หมุนรหัส
+2. **หมุนรหัส central admin** แล้วอัปเดต `COUCHDB_PASSWORD` ของ**ทุก service ที่ central ที่ใช้รหัสนี้** — อย่างน้อย **`edge-users-copy` และ sync-worker (`worker`)** (รวมถึง `COUCHDB_ADMIN_URL` ของ frontend ถ้ามี) แล้ว **restart ทั้งหมด**
+3. ตรวจ `--status` ทุกศูนย์ที่มี edge — ต้อง exit 0 (รหัส `repl_*` เดิมไม่เปลี่ยน ไม่ต้องแก้ edge)
 
 ```bash
-# หลังหมุนรหัสแล้ว (COUCHDB_PASSWORD ใหม่อยู่ใน env / .env)
+# หลัง restart (COUCHDB_PASSWORD ใหม่อยู่ใน env / .env)
+docker compose up -d --force-recreate edge-users-copy worker
 for code in SH001 SH002; do
-  scripts/central-repl-user.sh "$code"
   scripts/central-repl-user.sh "$code" --status
 done
 ```
 
-ข้ามข้อ 3 = job คัดลอกล้ม (401) แล้ว user ใหม่ / การถอดสิทธิ์ไม่ถึง edge โดยไม่มี error ในแอป · ข้ามข้อ 2 = รหัส admin เก่าที่ค้างบน edge ยังใช้เข้า central ได้ต่อไป
+ลืม `edge-users-copy` = คัดลอก user ไม่ได้ (401) การถอดสิทธิ์ไม่ถึง edge โดยไม่มี error ในแอป (`--status` จะเตือน) · ลืม sync-worker = projection ไป MongoDB หยุด · ข้ามข้อ 2 ทั้งข้อ = รหัส admin เก่าที่ค้างบน edge ยังใช้เข้า central ได้ต่อไป
 
 ---
 
 ## สิ่งที่ **ไม่ต้อง** แก้ที่ central
 
-| ส่วน                             | ทำไมไม่ต้องแก้                                                                                                              |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| service `couchdb` ใน compose     | ไม่ต้องเปิด port เพิ่ม (จริง: เข้าทาง nginx · lab: dev stack เปิดอยู่แล้ว)                                                  |
-| `couchdb-session.ini` / `secret` | edge ใช้ `secret` ของตัวเอง → cookie ข้ามฝั่งไม่ได้ ต้อง login ใหม่ตอน cutover (OD-3)                                       |
-| `/couch` ของแอป                  | แอปใช้ตามเดิม ไม่เกี่ยวกับ `/sync`                                                                                          |
-| frontend / fastapi / worker      | replication คือ CouchDB คุยกับ CouchDB แอปไม่เกี่ยว                                                                         |
-| job replication ของ edge         | อยู่ที่ edge ทั้งหมด (ที่ central มีแค่ job คัดลอก `edge_users_<code>` ที่ `central-repl-user.sh` สร้างให้ ไม่ต้องสร้างเอง) |
-| staff user                       | user ที่มี role `shelter:SH001` (หรือ `edge_shelters` มี SH001) ถูกคัดลอกไป `edge_users_sh001` แล้ว edge ดึงลง `_users` เอง |
+| ส่วน                             | ทำไมไม่ต้องแก้                                                                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| service `couchdb` ใน compose     | ไม่ต้องเปิด port เพิ่ม (จริง: เข้าทาง nginx · lab: dev stack เปิดอยู่แล้ว)                                                                     |
+| `couchdb-session.ini` / `secret` | edge ใช้ `secret` ของตัวเอง → cookie ข้ามฝั่งไม่ได้ ต้อง login ใหม่ตอน cutover (OD-3)                                                          |
+| `/couch` ของแอป                  | แอปใช้ตามเดิม ไม่เกี่ยวกับ `/sync`                                                                                                             |
+| frontend / fastapi / sync-worker | replication คือ CouchDB คุยกับ CouchDB แอปไม่เกี่ยว (ยกเว้น service `edge-users-copy` ที่เพิ่มบน central — ขั้น 3.4)                           |
+| job replication ของ edge         | อยู่ที่ edge ทั้งหมด (ที่ central มีแค่ service `edge-users-copy` กับ DB `edge_users_<code>` ที่ `central-repl-user.sh` สร้างให้)              |
+| staff user                       | user ที่มี role `shelter:SH001` (หรือ `edge_shelters` มี SH001) ถูก `edge-users-copy` คัดลอกไป `edge_users_sh001` แล้ว edge ดึงลง `_users` เอง |
 
 ---
 
 ## แก้ปัญหา (ฝั่ง central)
 
-| อาการ                                                    | สาเหตุ                                                                                                                                    | แก้                                                                                                                                         |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| edge ต่อ `SYNC_URL` ไม่ติด (timeout / refused)           | firewall, IP เปลี่ยน, port ไม่ได้ publish                                                                                                 | ขั้น 4A / ตรวจ `ss -ltn \| grep 5984`                                                                                                       |
-| ได้ HTML ของ SPA แทน JSON                                | host nginx ไม่ส่ง `Host` หรือ `server_name` ไม่ตรง → ตกไป block ของแอป                                                                    | ขั้น 4B ข้อ (1), (5)                                                                                                                        |
-| `unauthorized` / `403` ทั้งที่รหัสถูก                    | `EDGE_REPL_*` ใน `.env` ของ edge ไม่ตรงกับที่สร้างไว้ (เช่นหลัง `--rotate`) หรือโดนล็อกเอาต์จากการ retry ด้วยรหัสผิด (ล็อกเฉพาะศูนย์นั้น) | ขั้น 3.2 `--rotate` แล้วใส่รหัสใหม่ · รอ 5 นาทีหลังแก้รหัส                                                                                  |
-| `central-repl-user.sh` หยุดแจ้ง `edge_users_*`           | `_security` ของ `edge_users_<code>` ว่างหรือมีสิ่งอื่นนอกจาก `repl:<CODE>` (เสี่ยงรั่ว hash)                                              | แก้ `_security` ของ DB ที่แจ้งให้ `members.roles` = `["repl:<CODE>"]` พอดี `members.names` ว่าง แล้วรันใหม่                                 |
-| `--status` exit ≠ 0                                      | job `edge_users_<code>` ไม่ `running` / `pending` (`crashing`, `failed` หรือไม่มี job)                                                    | ดู `error` ในผล · มักเป็นรหัส admin เปลี่ยนแล้วยังไม่ได้รันสคริปต์ซ้ำ → `central-repl-user.sh <CODE>` (ขั้น 3 ข้อ "หมุนรหัส central admin") |
-| `central-repl-user.sh` แจ้งเจอบัญชีแบบเก่า `repl_<code>` | บัญชีที่สร้างด้วยสคริปต์รุ่นก่อน (ไม่มี suffix)                                                                                           | `--remove` แล้วสร้างใหม่                                                                                                                    |
-| staff ใหม่ / เปลี่ยน role แล้วไม่ถึง edge                | job คัดลอกหยุด หรือ staff ไม่มี `edge_shelters` / `shelter:<CODE>` ของศูนย์นี้                                                            | `--status` · ตรวจ field ของ user ที่ central                                                                                                |
-| job ของ edge ได้ `413`                                   | `client_max_body_size` ชั้นใดชั้นหนึ่งเล็กไป                                                                                              | ขั้น 4B ข้อ (2) ทุกชั้น                                                                                                                     |
-| sync ช้าเป็นนาที                                         | nginx buffer `_changes`                                                                                                                   | `proxy_buffering off` ทุกชั้น                                                                                                               |
+| อาการ                                                    | สาเหตุ                                                                                                                                    | แก้                                                                                                                                                   |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| edge ต่อ `SYNC_URL` ไม่ติด (timeout / refused)           | firewall, IP เปลี่ยน, port ไม่ได้ publish                                                                                                 | ขั้น 4A / ตรวจ `ss -ltn \| grep 5984`                                                                                                                 |
+| ได้ HTML ของ SPA แทน JSON                                | host nginx ไม่ส่ง `Host` หรือ `server_name` ไม่ตรง → ตกไป block ของแอป                                                                    | ขั้น 4B ข้อ (1), (5)                                                                                                                                  |
+| `unauthorized` / `403` ทั้งที่รหัสถูก                    | `EDGE_REPL_*` ใน `.env` ของ edge ไม่ตรงกับที่สร้างไว้ (เช่นหลัง `--rotate`) หรือโดนล็อกเอาต์จากการ retry ด้วยรหัสผิด (ล็อกเฉพาะศูนย์นั้น) | ขั้น 3.2 `--rotate` แล้วใส่รหัสใหม่ · รอ 5 นาทีหลังแก้รหัส                                                                                            |
+| `central-repl-user.sh` หยุดแจ้ง `edge_users_*`           | `_security` ของ `edge_users_<code>` ว่างหรือมีสิ่งอื่นนอกจาก `repl:<CODE>` (เสี่ยงรั่ว hash)                                              | แก้ `_security` ของ DB ที่แจ้งให้ `members.roles` = `["repl:<CODE>"]` พอดี `members.names` ว่าง แล้วรันใหม่                                           |
+| `--status` exit ≠ 0                                      | `edge-users-copy` มี `last_error` หรือตามหลัง `_users` เกิน 5 นาที (service หยุด / 401 หลังหมุนรหัส admin)                                | `docker compose logs edge-users-copy` · มักเป็นรหัส admin เปลี่ยนแล้วยังไม่อัปเดต `COUCHDB_PASSWORD` ของ service → อัปเดตแล้ว restart ("หลัง deploy") |
+| `central-repl-user.sh` แจ้งเจอบัญชีแบบเก่า `repl_<code>` | บัญชีที่สร้างด้วยสคริปต์รุ่นก่อน (ไม่มี suffix)                                                                                           | `--remove` แล้วสร้างใหม่                                                                                                                              |
+| staff ใหม่ / เปลี่ยน role แล้วไม่ถึง edge                | `edge-users-copy` หยุด หรือ staff ไม่มี `edge_shelters` / `shelter:<CODE>` ของศูนย์นี้                                                    | `--status` · ตรวจ field ของ user ที่ central                                                                                                          |
+| job ของ edge ได้ `413`                                   | `client_max_body_size` ชั้นใดชั้นหนึ่งเล็กไป                                                                                              | ขั้น 4B ข้อ (2) ทุกชั้น                                                                                                                               |
+| sync ช้าเป็นนาที                                         | nginx buffer `_changes`                                                                                                                   | `proxy_buffering off` ทุกชั้น                                                                                                                         |
 
 ---
 
 ## ถอดออกหลังทดสอบ
 
 จริง: ลบ `location /sync/` ใน host nginx แล้ว reload · Lab: ปิด firewall rule
-ลบบัญชีและ job ของศูนย์ทดสอบด้วย `scripts/central-repl-user.sh <CODE> --remove`
-(edge ที่ติดตั้งก่อน [CR ร่าง #1298](../changes/draft-edge-per-shelter-repl-user.md) และเคยถือ central admin ให้ทำ "หลัง deploy" ด้านล่าง — หมุนรหัส admin)
+ลบบัญชีและ DB `edge_users_<code>` ของศูนย์ทดสอบด้วย `scripts/central-repl-user.sh <CODE> --remove`
+(edge ที่ติดตั้งก่อน [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md) และเคยถือ central admin ให้ทำ "หลัง deploy CR-247" ด้านบน — หมุนรหัส admin)
 
 ---
 
@@ -380,7 +407,7 @@ done
 | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | [`docs/data/data-model.md` §1, §6](../data/data-model.md)                                                                                                 | topology และ `_security` / `_users`                     |
 | [`docs/changes/01-core/CR-064-edge-disaster-continuity.md`](../changes/01-core/CR-064-edge-disaster-continuity.md)                                        | OD-1..OD-5 (OD-6 ถูกแทนแล้ว)                            |
-| [`docs/changes/draft-edge-per-shelter-repl-user.md`](../changes/draft-edge-per-shelter-repl-user.md)                                                      | replication user ต่อศูนย์ + `edge_users_<code>` (#1298) |
+| [`docs/changes/01-core/CR-247-edge-per-shelter-repl-user.md`](../changes/01-core/CR-247-edge-per-shelter-repl-user.md)                                    | replication user ต่อศูนย์ + `edge_users_<code>` (#1298) |
 | [`nginx/nginx.conf`](../../nginx/nginx.conf)                                                                                                              | nginx ของ compose stack (`location /sync/`)             |
 | [Replication intro](https://docs.couchdb.org/en/stable/replication/intro.html) · [protocol](https://docs.couchdb.org/en/stable/replication/protocol.html) | หลักการ `_changes` / `_revs_diff` / `_bulk_docs`        |
 | [`/{db}/_security`](https://docs.couchdb.org/en/stable/api/database/security.html)                                                                        | สิทธิ์ของ DB                                            |

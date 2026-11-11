@@ -4,20 +4,19 @@
 # an edge. The edge puts the printed credentials into its .env as EDGE_REPL_USER / EDGE_REPL_PASSWORD and uses
 # them for every job it runs against central (registry / catalog / shelter pull+push, and the _users copy).
 #
-#   scripts/central-repl-user.sh SH001              # create repl_sh001_<8 hex> + edge_users_sh001 + copy job
+#   scripts/central-repl-user.sh SH001              # create repl_sh001_<8 hex> + edge_users_sh001
 #   scripts/central-repl-user.sh SH001 --rotate     # new password for the existing user
-#   scripts/central-repl-user.sh SH001 --remove     # delete the user(s), the role, the copy job and edge_users_sh001
-#   scripts/central-repl-user.sh SH001 --status     # state of the _users copy job (exit != 0 unless running/pending)
+#   scripts/central-repl-user.sh SH001 --remove     # delete the user(s), the role and DROP edge_users_sh001
+#   scripts/central-repl-user.sh SH001 --status     # health of the edge-users-copy service + this shelter's edge
+#
+# The copy of the shelter's _users docs into edge_users_<code> is NOT done here: it is the separate central
+# service `edge-users-copy` (worker/, CR-247 FR-11), which picks up the new DB within ~30 s and backfills it.
 #
 # What `create` sets up (in this order):
 #   1. edge_users_<code>   DB with _security members = ONLY role repl:<CODE> and a _design/readonly VDU that
 #                          only lets _admin write (an empty members list would make the DB public)
-#   2. _replicator/edge_users_<code> on central: continuous copy of the shelter's _users docs
-#                          (edge_shelters or roles match, same selector the edge used to pull directly) into (1),
-#                          run as the central admin. Stores a config hash; re-running recreates the job when
-#                          the hash differs (admin password or --repl-url changed).
-#   3. user repl_<code>_<8 random hex> with roles ["repl:<CODE>"] only, random 32-hex password
-#   4. role repl:<CODE> in _security.members.roles of registry, catalog and shelter_<code>
+#   2. user repl_<code>_<8 random hex> with roles ["repl:<CODE>"] only, random 32-hex password
+#   3. role repl:<CODE> in _security.members.roles of registry, catalog and shelter_<code>
 #
 # At most one account per shelter: an existing repl_<code>_* account is reused. A legacy repl_<code> account
 # (no suffix) makes the script stop: --remove first, then create again.
@@ -35,19 +34,15 @@ set -euo pipefail
 usage() {
 	cat <<'EOF'
 Usage: central-repl-user.sh <SHELTER_CODE> [--rotate | --remove | --status] [--password PW] [--url URL]
-                            [--repl-url URL]
 
   <SHELTER_CODE>   e.g. SH001 (role repl:SH001, user repl_sh001_<8 hex>, DB edge_users_sh001)
   --rotate         set a new password for the existing user (creates it if missing)
-  --remove         delete the user(s), the role in registry/catalog/shelter_<code>, the _users copy job
-                   and the edge_users_<code> DB
-  --status         show state / error_count / last_updated of the _users copy job;
-                   exit != 0 unless it is running or pending
+  --remove         delete the user(s), the role in registry/catalog/shelter_<code> and DROP the
+                   edge_users_<code> DB (removing only the role would leave the DB PUBLIC)
+  --status         edge-users-copy checkpoint vs _users update_seq, last_error, backfill state and when the
+                   edge last pulled; exit != 0 on last_error, service lagging > 5 min or no checkpoint doc
   --password PW    use PW instead of a generated one (no spaces, no " or \)
   --url URL        CouchDB base URL for this script (default: $COUCHDB_URL or http://localhost:5984)
-  --repl-url URL   CouchDB base URL as seen from INSIDE the CouchDB server, used in the _replicator doc
-                   (default: http://127.0.0.1:5984). The replicator job runs in the CouchDB process, so
-                   --url (e.g. a docker-published or proxy address) is usually not reachable from there.
 EOF
 }
 
@@ -57,14 +52,12 @@ die() {
 }
 
 URL="${COUCHDB_URL:-http://localhost:5984}"
-REPL_URL="http://127.0.0.1:5984"
 ACTION=create
 PW=""
 CODE=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--url) URL="${2:?--url needs a value}"; shift 2 ;;
-	--repl-url) REPL_URL="${2:?--repl-url needs a value}"; shift 2 ;;
 	--password) PW="${2:?--password needs a value}"; shift 2 ;;
 	--rotate) ACTION=rotate; shift ;;
 	--remove) ACTION=remove; shift ;;
@@ -76,7 +69,6 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$CODE" ] || { usage >&2; exit 2; }
 URL="${URL%/}"
-REPL_URL="${REPL_URL%/}"
 
 [[ "$CODE" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "invalid shelter code: $CODE"
 CODE_UC=$(printf '%s' "$CODE" | tr '[:lower:]' '[:upper:]')
@@ -85,7 +77,7 @@ REPL_ROLE="repl:${CODE_UC}"
 USER_PREFIX="repl_${CODE_LC}_"
 LEGACY_USER="repl_${CODE_LC}"
 EDGE_USERS_DB="edge_users_${CODE_LC}"
-JOB_ID="edge_users_${CODE_LC}"
+OLD_JOB_ID="edge_users_${CODE_LC}" # the pre-CR-247 _replicator copy job, removed if still present
 DBS=(registry catalog "shelter_${CODE_LC}")
 
 if [ -n "$PW" ]; then
@@ -187,27 +179,6 @@ elif names or roles != want:
 	[ -z "$bad" ] || die $'unsafe _security on edge_users_* (they hold password hashes) — fix or delete before continuing:\n'"${bad%$'\n'}"
 }
 
-# job_body — JSON of the _replicator doc incl. central_repl_hash (sha256 of the whole config, credentials
-# included, so a changed admin password or --repl-url makes the stored job stale)
-job_body() {
-	A_USER="$ADMIN_USER" A_PW="$ADMIN_PW" python3 -c '
-import sys, os, json, hashlib
-repl_url, db, code = sys.argv[1:4]
-auth = {"basic": {"username": os.environ["A_USER"], "password": os.environ["A_PW"]}}
-cfg = {
-    "source": {"url": repl_url + "/_users", "auth": auth},
-    "target": {"url": repl_url + "/" + db, "auth": auth},
-    "continuous": True,
-    "selector": {"$or": [
-        {"edge_shelters": {"$elemMatch": {"$eq": code}}},
-        {"roles": {"$elemMatch": {"$eq": "shelter:" + code}}},
-    ]},
-}
-cfg["central_repl_hash"] = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:32]
-print(json.dumps(cfg))' "$REPL_URL" "$EDGE_USERS_DB" "$CODE_UC"
-}
-hash_of() { python3 -c 'import sys,json;print(json.load(sys.stdin).get("central_repl_hash",""))'; }
-
 # ensure_edge_users_db — DB + exact _security + _design/readonly (before the account exists, FR-10)
 ensure_edge_users_db() {
 	local st out sec vdu cur rev
@@ -248,68 +219,82 @@ print(json.dumps(d))' "$vdu" "$rev" | cj -X PUT "$URL/$EDGE_USERS_DB/_design/rea
 	fi
 }
 
-# ensure_job — _replicator/edge_users_<code>; recreated when its stored hash differs
-ensure_job() {
-	local body hash cur rev out st
-	body=$(job_body)
-	hash=$(printf '%s' "$body" | hash_of)
-	st=$(admin_code "$URL/_replicator")
-	if [ "$st" = 404 ]; then
-		cj -X PUT "$URL/_replicator" >/dev/null
-	fi
-	cur=$(cj "$URL/_replicator/$JOB_ID")
-	rev=$(printf '%s' "$cur" | python3 -c '
-import sys, json
-d = json.load(sys.stdin)
-if "_rev" in d:
-    print(d["_rev"])
-elif d.get("error") != "not_found":
-    sys.exit("unexpected response: " + json.dumps(d))') || die "reading _replicator/$JOB_ID failed"
-	if [ -n "$rev" ]; then
-		if [ "$(printf '%s' "$cur" | hash_of)" = "$hash" ]; then
-			echo "exists  _replicator/$JOB_ID (config hash matches)"
-			return
-		fi
-		out=$(cj -X DELETE "$URL/_replicator/$JOB_ID?rev=$rev")
-		ok_json "$out" || die "deleting stale _replicator/$JOB_ID failed: $out"
-		echo "stale   _replicator/$JOB_ID (config changed) — recreating"
-	fi
-	out=$(printf '%s' "$body" | cj -X PUT "$URL/_replicator/$JOB_ID" -d @-)
-	ok_json "$out" || die "writing _replicator/$JOB_ID failed: $out"
-	echo "created _replicator/$JOB_ID (continuous copy of $CODE_UC users into $EDGE_USERS_DB)"
-}
-
 # ---------------------------------------------------------------- status
 if [ "$ACTION" = status ]; then
 	check_edge_users_security
-	out=$(cj "$URL/_scheduler/docs/_replicator/$JOB_ID")
-	line=$(printf '%s' "$out" | python3 -c '
-import sys, json
-d = json.load(sys.stdin)
-if d.get("error"):
-    print("MISSING " + d.get("reason", d["error"]))
-    sys.exit(0)
-info = d.get("info") or {}
-err = info.get("error") if isinstance(info, dict) else None
-print("%s error_count=%s last_updated=%s%s" % (d.get("state"), d.get("error_count"), d.get("last_updated"),
-      " error=" + json.dumps(err) if err else ""))') || die "cannot parse scheduler response: $out"
-	state="${line%% *}"
-	echo "_replicator/$JOB_ID: state=${state} ${line#* }"
-	if [ "$state" = MISSING ]; then
-		echo "FAIL: copy job missing — run: scripts/central-repl-user.sh $CODE_UC" >&2
-		exit 1
-	fi
-	cur=$(cj "$URL/_replicator/$JOB_ID")
-	if [ "$(printf '%s' "$cur" | hash_of)" != "$(job_body | hash_of)" ]; then
-		echo "warning: job config hash differs from the current admin credentials / --repl-url — re-run create to rebuild it" >&2
-	fi
-	case "$state" in
-	running | pending) exit 0 ;;
-	*)
-		echo "FAIL: state is $state (expected running or pending)" >&2
-		exit 1
-		;;
-	esac
+	ckpt=$(cj "$URL/_users/_local/edge_users_copy")
+	usinfo=$(cj "$URL/_users")
+	backfill=$(cj "$URL/$EDGE_USERS_DB/_local/backfill_done")
+	locals=$(cj -G "$URL/$EDGE_USERS_DB/_local_docs" --data-urlencode include_docs=true)
+	CKPT="$ckpt" USINFO="$usinfo" BACKFILL="$backfill" LOCALS="$locals" python3 -c '
+import sys, os, json, datetime
+from email.utils import parsedate_to_datetime
+ckpt, usinfo, backfill, locals_ = [json.loads(os.environ[k]) for k in ("CKPT", "USINFO", "BACKFILL", "LOCALS")]
+code, db = sys.argv[1:3]
+fail = []
+
+def seq_n(s):
+    try:
+        return int(str(s).split("-")[0])
+    except ValueError:
+        return None
+
+def ts(v):
+    if isinstance(v, (int, float)):
+        return datetime.datetime.fromtimestamp(v, datetime.timezone.utc)
+    try:
+        d = datetime.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            d = parsedate_to_datetime(str(v))
+        except (TypeError, ValueError):
+            return None
+    return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)
+
+if ckpt.get("error"):
+    print("edge-users-copy: ไม่พบ checkpoint (_users/_local/edge_users_copy) — service ไม่เคยรัน?")
+    fail.append("checkpoint doc missing")
+else:
+    last, cur = ckpt.get("last_seq"), usinfo.get("update_seq")
+    ln, cn = seq_n(last), seq_n(cur)
+    behind = ln is not None and cn is not None and ln < cn
+    age = None
+    upd = ts(ckpt["updated_at"]) if ckpt.get("updated_at") else None
+    if upd:
+        age = (datetime.datetime.now(datetime.timezone.utc) - upd).total_seconds()
+    print("edge-users-copy: last_seq=%s _users update_seq=%s (%s)" % (last, cur, "ตามหลัง %s change" % (cn - ln) if behind else "ทันแล้ว"))
+    print("edge-users-copy: updated_at=%s%s" % (ckpt.get("updated_at"), " (%d s ago)" % age if age is not None else ""))
+    if behind and (age is None or age > 300):
+        fail.append("service lags behind _users for more than 5 minutes")
+    if ckpt.get("last_error"):
+        print("edge-users-copy: last_error=" + json.dumps(ckpt["last_error"], ensure_ascii=False))
+        fail.append("last_error is set")
+
+if backfill.get("error"):
+    print("backfill %s: ยังไม่เสร็จ (ไม่มี _local/backfill_done — service รอบถัดไปจะทำ, ~30 s)" % db)
+else:
+    print("backfill %s: เสร็จแล้ว %s" % (db, json.dumps({k: v for k, v in backfill.items() if not k.startswith("_")}, ensure_ascii=False)))
+
+ends = []
+if locals_.get("error"):
+    print("%s: ไม่มี DB นี้ (%s) — run: scripts/central-repl-user.sh %s" % (db, locals_.get("reason", locals_["error"]), code))
+    fail.append(db + " does not exist")
+for r in locals_.get("rows", []):
+    d = r.get("doc") or {}
+    if r.get("id") == "_local/backfill_done" or not d.get("history"):
+        continue
+    t = d["history"][0].get("end_time")
+    if t and ts(t):
+        ends.append((ts(t), t))
+if ends:
+    print("edge ดึงข้อมูลล่าสุดเมื่อ: " + max(ends)[1])
+else:
+    print("edge ยังไม่เคยต่อเข้ามา")
+
+if fail:
+    print("FAIL: " + "; ".join(fail), file=sys.stderr)
+    sys.exit(1)' "$CODE_UC" "$EDGE_USERS_DB"
+	exit $?
 fi
 
 # ---------------------------------------------------------------- remove
@@ -338,16 +323,15 @@ if [ "$ACTION" = remove ]; then
 		fi
 	done
 
-	# the _users copy: job first (so nothing writes while the DB goes away), then the DB itself — it holds
-	# password hashes of a shelter that no longer has an edge
-	rev=$(doc_rev "$URL/_replicator/$JOB_ID")
+	# a leftover pre-CR-247 _replicator copy job would keep writing into (and re-create writes against) the DB
+	rev=$(doc_rev "$URL/_replicator/$OLD_JOB_ID")
 	if [ -n "$rev" ]; then
-		out=$(cj -X DELETE "$URL/_replicator/$JOB_ID?rev=$rev")
-		ok_json "$out" || die "deleting _replicator/$JOB_ID failed: $out"
-		echo "removed _replicator/$JOB_ID"
-	else
-		echo "_replicator/$JOB_ID not found (nothing to delete)"
+		out=$(cj -X DELETE "$URL/_replicator/$OLD_JOB_ID?rev=$rev")
+		ok_json "$out" || die "deleting _replicator/$OLD_JOB_ID failed: $out"
+		echo "removed old _replicator/$OLD_JOB_ID"
 	fi
+	# drop the whole DB (it holds password hashes). Never just un-role it: empty members = PUBLIC. The
+	# edge-users-copy service treats the resulting 404 as "shelter has no edge" and skips it.
 	if [ "$(admin_code "$URL/$EDGE_USERS_DB")" = 200 ]; then
 		out=$(cj -X DELETE "$URL/$EDGE_USERS_DB")
 		ok_json "$out" || die "deleting database $EDGE_USERS_DB failed: $out"
@@ -385,9 +369,8 @@ else
 fi
 user_url="$URL/_users/$user_id"
 
-# FR-10: the DB + its _security + read-only VDU, and the copy job, exist BEFORE the account does
+# FR-10: the DB + its _security + read-only VDU exist BEFORE the account does
 ensure_edge_users_db
-ensure_job
 
 new_pw=""
 if [ -z "$user_rev" ] || [ "$ACTION" = rotate ]; then
@@ -449,7 +432,8 @@ Credentials for the edge of ${CODE_UC} (shown once — store the password now). 
   EDGE_REPL_PASSWORD=${new_pw}
 
 The edge uses this account for every job against central (registry / catalog / shelter_${CODE_LC} pull+push and
-the _users copy from ${EDGE_USERS_DB}). Check the copy job with: scripts/central-repl-user.sh ${CODE_UC} --status
+the _users copy from ${EDGE_USERS_DB}). The edge-users-copy service fills ${EDGE_USERS_DB} within ~1 minute.
+Check it with: scripts/central-repl-user.sh ${CODE_UC} --status
 EOF
 else
 	echo "Nothing printed for the password: it is only shown when created or rotated."

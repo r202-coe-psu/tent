@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Integration test for central-repl-user.sh (CR #1298 FR-1..FR-4, FR-8, FR-10..FR-13) against a REAL CouchDB.
+# Integration test for central-repl-user.sh (CR #1298 FR-1..FR-4, FR-8, FR-10, FR-12, FR-13)
+# The copy itself is the separate edge-users-copy service (worker/tests covers it); here its docs are hand-written. against a REAL CouchDB.
 #
 # Usage: bash scripts/tests/central-repl-user.test.sh
 #
@@ -92,7 +93,7 @@ adm -X PUT "$URL/_users/org.couchdb.user:staff_a" -d '{"name":"staff_a","passwor
 adm -X PUT "$URL/_users/org.couchdb.user:staff_b" -d '{"name":"staff_b","password":"x","type":"user","roles":[],"edge_shelters":["ZZT01"]}' >/dev/null
 adm -X PUT "$URL/_users/org.couchdb.user:staff_c" -d '{"name":"staff_c","password":"x","type":"user","roles":["shelter:ZZT02"]}' >/dev/null
 
-echo "== create ZZT01 (FR-1, FR-2, FR-3, FR-8, FR-10, FR-11)"
+echo "== create ZZT01 (FR-1, FR-2, FR-3, FR-8, FR-10)"
 run ZZT01
 eq "create exits 0" "$rc" 0
 USER1=$(printf '%s\n' "$out" | sed -n 's/^ *EDGE_REPL_USER=//p')
@@ -114,21 +115,11 @@ eq "edge_users_zzt01 _security exact" "$(adm "$URL/edge_users_zzt01/_security" |
 	'{"admins": {"names": [], "roles": []}, "members": {"names": [], "roles": ["repl:ZZT01"]}}'
 vdu=$(adm "$URL/edge_users_zzt01/_design/readonly" | jget validate_doc_update)
 has "_design/readonly VDU checks _admin" "$vdu" '_admin'
-job=$(adm "$URL/_replicator/edge_users_zzt01")
-eq "job source" "$(printf '%s' "$job" | jget source.url)" "http://127.0.0.1:5984/_users"
-eq "job target" "$(printf '%s' "$job" | jget target.url)" "http://127.0.0.1:5984/edge_users_zzt01"
-eq "job auth = central admin" "$(printf '%s' "$job" | jget source.auth.basic.username)" "$ADMIN"
-eq "job continuous" "$(printf '%s' "$job" | jget continuous)" True
-eq "job selector" "$(printf '%s' "$job" | jget selector)" \
-	'{"$or": [{"edge_shelters": {"$elemMatch": {"$eq": "ZZT01"}}}, {"roles": {"$elemMatch": {"$eq": "shelter:ZZT01"}}}]}'
-HASH1=$(printf '%s' "$job" | jget central_repl_hash)
-[[ "$HASH1" =~ ^[0-9a-f]{32}$ ]] && pass "job stores central_repl_hash" || fail "job hash: '$HASH1'"
+eq "no _replicator job created" "$(code -u "$A" "$URL/_replicator/edge_users_zzt01")" 404
 has "verification ran: write probe 403" "$out" "edge_users_zzt01/verify_probe -> 403"
 
-echo "== the copy works (selector) and is read-only for the repl user"
-copied() { [ "$(code -u "$A" "$URL/edge_users_zzt01/org.couchdb.user:staff_a")" = 200 ] && [ "$(code -u "$A" "$URL/edge_users_zzt01/org.couchdb.user:staff_b")" = 200 ]; }
-retry 60 copied && pass "staff_a (roles) and staff_b (edge_shelters) copied" || fail "users not copied into edge_users_zzt01"
-eq "staff_c (other shelter) not copied" "$(code -u "$A" "$URL/edge_users_zzt01/org.couchdb.user:staff_c")" 404
+echo "== repl user is read-only on its edge_users DB (docs hand-written as the copy service would)"
+adm -X PUT "$URL/edge_users_zzt01/org.couchdb.user:staff_a" -d '{"name":"staff_a","type":"user","roles":["shelter:ZZT01"]}' >/dev/null
 R="$USER1:$PW1"
 eq "repl reads edge_users_zzt01" "$(code -u "$R" "$URL/edge_users_zzt01")" 200
 eq "repl reads copied user doc" "$(code -u "$R" "$URL/edge_users_zzt01/org.couchdb.user:staff_a")" 200
@@ -150,13 +141,10 @@ c=$(code -u "$USER2:$PW2" "$URL/edge_users_zzt01")
 [ "$c" = 401 ] || [ "$c" = 403 ] && pass "ZZT02 account on edge_users_zzt01 -> $c" || fail "ZZT02 account on edge_users_zzt01 -> $c"
 
 echo "== rerun is idempotent (FR-2)"
-rev_before=$(adm "$URL/_replicator/edge_users_zzt01" | jget _rev)
 run ZZT01
 eq "rerun exits 0" "$rc" 0
 has "says password unchanged" "$out" "already exists"
 hasnt "does not print a password" "$out" "EDGE_REPL_PASSWORD"
-has "job kept" "$out" "config hash matches"
-eq "job doc untouched" "$(adm "$URL/_replicator/edge_users_zzt01" | jget _rev)" "$rev_before"
 eq "old password still works" "$(code -u "$R" "$URL/edge_users_zzt01")" 200
 eq "still exactly one account" "$(adm -G "$URL/_users/_all_docs" --data-urlencode 'startkey="org.couchdb.user:repl_zzt01_"' --data-urlencode 'endkey="org.couchdb.user:repl_zzt01_\ufff0"' | python3 -c 'import sys,json;print(len(json.load(sys.stdin)["rows"]))')" 1
 
@@ -172,24 +160,62 @@ old_rejected() { [ "$(code -u "$USER1:$PW1" "$URL/edge_users_zzt01")" = 401 ]; }
 retry 30 old_rejected && pass "old password rejected (401)" || fail "old password still accepted"
 eq "new password works" "$(code -u "$USER1:$PW1B" "$URL/edge_users_zzt01")" 200
 
-echo "== --status (FR-13)"
-st_ok() { run ZZT01 --status; [ "$rc" = 0 ]; }
-retry 60 st_ok && pass "status exit 0 while running/pending" || fail "status never exit 0: $out"
-has "status shows state" "$out" "state="
-has "status shows error_count" "$out" "error_count="
-has "status shows last_updated" "$out" "last_updated="
-run ZZT03 --status
-[ "$rc" != 0 ] && pass "status of a shelter without a job exits non-zero" || fail "status of missing job exited 0"
-has "missing job reported" "$out" "MISSING"
+echo "== --status (FR-13), copy-service docs hand-written"
+CK="$URL/_users/_local/edge_users_copy"
+put_ckpt() { # put_ckpt <last_seq> <last_error json|null> <age seconds> — replaces the hand-written checkpoint
+	local rev body
+	rev=$(adm "$CK" | jget _rev)
+	body=$(python3 -c '
+import sys, json, datetime
+seq, err, age, rev = sys.argv[1:5]
+d = {"last_seq": seq, "last_error": json.loads(err), "updated_at": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=int(age))).strftime("%Y-%m-%dT%H:%M:%SZ")}
+if rev:
+    d["_rev"] = rev
+print(json.dumps(d))' "$1" "$2" "$3" "$rev")
+	adm -X PUT "$CK" -d "$body" >/dev/null
+}
+us_seq() { adm "$URL/_users" | jget update_seq; }
 
-echo "== job config change => hash mismatch => job recreated (FR-11)"
-run ZZT01 --repl-url http://localhost:5984
-eq "create with other --repl-url exits 0" "$rc" 0
-has "stale job recreated" "$out" "stale   _replicator/edge_users_zzt01"
-eq "stored hash changed" "$([ "$(adm "$URL/_replicator/edge_users_zzt01" | jget central_repl_hash)" != "$HASH1" ] && echo yes)" yes
-run ZZT01
-has "back to default repl-url recreates again" "$out" "stale"
-eq "hash restored" "$(adm "$URL/_replicator/edge_users_zzt01" | jget central_repl_hash)" "$HASH1"
+run ZZT01 --status
+[ "$rc" != 0 ] && pass "no checkpoint doc: exit != 0" || fail "status exit 0 without _local/edge_users_copy"
+has "no checkpoint reported" "$out" "ไม่พบ checkpoint"
+has "no edge yet" "$out" "edge ยังไม่เคยต่อเข้ามา"
+has "backfill pending shown" "$out" "backfill edge_users_zzt01: ยังไม่เสร็จ"
+
+put_ckpt "$(us_seq)" null 5
+adm -X PUT "$URL/edge_users_zzt01/_local/backfill_done" -d '{"done_at":"2026-11-11T00:00:00Z"}' >/dev/null
+run ZZT01 --status
+eq "caught up, no error: exit 0" "$rc" 0
+has "shows last_seq vs update_seq" "$out" "ทันแล้ว"
+has "backfill done shown" "$out" "backfill edge_users_zzt01: เสร็จแล้ว"
+has "still no edge" "$out" "edge ยังไม่เคยต่อเข้ามา"
+
+# a checkpoint doc the way CouchDB's replicator writes it on the SOURCE db (_local/<replication id>)
+adm -X PUT "$URL/edge_users_zzt01/_local/abc123def" -d '{"history":[{"end_time":"Wed, 11 Nov 2026 10:00:00 GMT","session_id":"x"}],"replication_id_version":4}' >/dev/null
+run ZZT01 --status
+eq "with edge checkpoint: exit 0" "$rc" 0
+has "shows edge last pull time" "$out" "edge ดึงข้อมูลล่าสุดเมื่อ: Wed, 11 Nov 2026 10:00:00 GMT"
+hasnt "backfill_done is not taken as an edge checkpoint" "$out" "edge ยังไม่เคยต่อเข้ามา"
+
+put_ckpt "$(us_seq)" '"boom: 401 from _users"' 5
+run ZZT01 --status
+[ "$rc" != 0 ] && pass "last_error set: exit != 0" || fail "status exit 0 with last_error"
+has "last_error shown" "$out" "boom: 401"
+
+put_ckpt "0-g1AAAA" null 600
+run ZZT01 --status
+[ "$rc" != 0 ] && pass "behind _users and updated_at > 5 min: exit != 0" || fail "status exit 0 although the service lags > 5 min"
+has "lag reported" "$out" "ตามหลัง"
+put_ckpt "0-g1AAAA" null 30
+run ZZT01 --status
+eq "behind but updated 30 s ago: exit 0" "$rc" 0
+put_ckpt "$(us_seq)" null 600
+run ZZT01 --status
+eq "idle service (caught up, old updated_at): exit 0" "$rc" 0
+
+run ZZT03 --status
+[ "$rc" != 0 ] && pass "status of a shelter without edge_users DB exits non-zero" || fail "status of missing DB exited 0"
+has "missing DB reported" "$out" "edge_users_zzt03"
 
 echo "== broken edge_users_* _security stops every action (FR-12)"
 adm -X PUT "$URL/edge_users_zzt99" >/dev/null
@@ -225,6 +251,7 @@ adm -X DELETE "$URL/edge_users_zzt98" >/dev/null
 adm -X DELETE "$URL/edge_users_zzt99" >/dev/null
 run ZZT01
 eq "create works again after cleanup" "$rc" 0
+adm -X PUT "$URL/edge_users_zzt01/org.couchdb.user:staff_a" -d '{"name":"staff_a","type":"user","roles":["shelter:ZZT01"]}' >/dev/null
 USER1=$(printf '%s\n' "$out" | sed -n 's/^ *EDGE_REPL_USER=//p')
 
 echo "== existing legacy / duplicate accounts (FR-2)"
@@ -243,23 +270,27 @@ eq "another shelter's repl_<code>1_* account is not counted" "$rc" 0
 adm -X DELETE "$URL/_users/org.couchdb.user:repl_zzt011_aaaaaaaa?rev=$(adm "$URL/_users/org.couchdb.user:repl_zzt011_aaaaaaaa" | jget _rev)" >/dev/null
 
 echo "== --remove ZZT02 (FR-4): legacy + suffixed account, role, job, DB; ZZT01 untouched"
+# a leftover pre-CR-247 copy job
+adm -X PUT "$URL/_replicator/edge_users_zzt02" -d '{"source":"http://127.0.0.1:1/_users","target":"http://127.0.0.1:1/edge_users_zzt02"}' >/dev/null
+eq "old job doc present before remove" "$(code -u "$A" "$URL/_replicator/edge_users_zzt02")" 200
+adm -X PUT "$URL/edge_users_zzt02/org.couchdb.user:staff_c" -d '{"name":"staff_c","type":"user","roles":["shelter:ZZT02"]}' >/dev/null
 run ZZT02 --remove
 eq "remove exits 0" "$rc" 0
 has "removed suffixed account" "$out" "removed user $USER2"
 has "removed legacy account" "$out" "removed legacy user repl_zzt02"
-has "removed job" "$out" "removed _replicator/edge_users_zzt02"
+has "removed old _replicator job" "$out" "removed old _replicator/edge_users_zzt02"
 has "removed DB" "$out" "removed database edge_users_zzt02"
 eq "suffixed account gone" "$(code -u "$A" "$URL/_users/org.couchdb.user:$USER2")" 404
 eq "legacy account gone" "$(code -u "$A" "$URL/_users/org.couchdb.user:repl_zzt02")" 404
-eq "job gone" "$(code -u "$A" "$URL/_replicator/edge_users_zzt02")" 404
-eq "edge_users_zzt02 gone" "$(code -u "$A" "$URL/edge_users_zzt02")" 404
+eq "old job gone" "$(code -u "$A" "$URL/_replicator/edge_users_zzt02")" 404
+eq "edge_users_zzt02 dropped entirely (not a DB with empty members)" "$(code -u "$A" "$URL/edge_users_zzt02")" 404
 for d in registry catalog shelter_zzt02; do
 	hasnt "role repl:ZZT02 out of $d" "$(adm "$URL/$d/_security")" 'repl:ZZT02'
 done
 has "ZZT01 role still in registry" "$(adm "$URL/registry/_security")" 'repl:ZZT01'
 eq "ZZT01 account still there" "$(code -u "$A" "$URL/_users/org.couchdb.user:$USER1")" 200
 eq "ZZT01 edge_users DB still there" "$(code -u "$A" "$URL/edge_users_zzt01")" 200
-eq "ZZT01 job still there" "$(code -u "$A" "$URL/_replicator/edge_users_zzt01")" 200
+eq "ZZT01 copied doc still there" "$(code -u "$A" "$URL/edge_users_zzt01/org.couchdb.user:staff_a")" 200
 has "other members of shelter_zzt02 survive" "$(adm "$URL/shelter_zzt02/_security" | jget members.roles)" 'shelter:ZZT02'
 run ZZT02 --remove
 eq "second remove is idempotent (exit 0)" "$rc" 0

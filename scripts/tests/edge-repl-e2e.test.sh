@@ -39,6 +39,7 @@ cleanup() {
 		echo "KEEP=1: leaving $C_CENTRAL $C_EDGE $C_EDGE2 / networks $NET $NET2 / $WORK (central $CU, edge $EU, edge2 $E2U)"
 		return
 	fi
+	[ -z "${COPY_PID:-}" ] || kill "$COPY_PID" >/dev/null 2>&1
 	docker rm -f "$C_CENTRAL" "$C_EDGE" "$C_EDGE2" >/dev/null 2>&1
 	docker network rm "$NET" "$NET2" >/dev/null 2>&1
 	rm -rf "$WORK"
@@ -168,7 +169,7 @@ mkuser staff2_sh001 "$SPW1B" '["SH001:shelter_manager","shelter:SH001"]' '["SH00
 mkuser staff_sh002 "$SPW2" '["SH002:shelter_manager","shelter:SH002"]' '["SH002"]'
 mkuser staff_sh003 "$SPW3" '["SH003:shelter_manager","shelter:SH003"]' '["SH003"]'
 
-run_cru() { out=$(COUCHDB_USER=$CA COUCHDB_PASSWORD=$CPW bash "$CRU" "$@" --url "$CU" --repl-url http://127.0.0.1:5984 2>&1); rc=$?; }
+run_cru() { out=$(COUCHDB_USER=$CA COUCHDB_PASSWORD=$CPW bash "$CRU" "$@" --url "$CU" 2>&1); rc=$?; }
 repl_creds() { # sets RU / RP from the last run_cru output
 	RU=$(printf '%s\n' "$out" | sed -n 's/^ *EDGE_REPL_USER=//p')
 	RP=$(printf '%s\n' "$out" | sed -n 's/^ *EDGE_REPL_PASSWORD=//p')
@@ -179,6 +180,16 @@ repl_creds; R1U=$RU; R1P=$RP
 run_cru SH002; [ "$rc" = 0 ] || { echo "$out"; echo "central-repl-user.sh SH002 failed"; exit 2; }
 repl_creds; R2U=$RU; R2P=$RP
 echo "SH001 repl user: $R1U   SH002 repl user: $R2U"
+
+# CR-247: the _users copy into edge_users_<code> is no longer a _replicator job created by central-repl-user.sh;
+# it is the central service `edge-users-copy` (worker/). Run the real one against the throwaway central CouchDB
+# in the background (it finds edge_users_* every ~30 s, backfills, then follows _users/_changes).
+# Needs `uv` on the host; takes only COUCHDB_URL / COUCHDB_USER / COUCHDB_PASSWORD, no CLI flags.
+command -v uv >/dev/null || { echo "uv is required to run edge-users-copy"; exit 2; }
+COPY_LOG="$WORK/edge-users-copy.log"
+COUCHDB_URL="$CU" COUCHDB_USER="$CA" COUCHDB_PASSWORD="$CPW" \
+	uv run --project "$ROOT/worker" edge-users-copy >"$COPY_LOG" 2>&1 &
+COPY_PID=$!
 
 # ------------------------------------------------------------------ edge-init
 run_edge_init() { # run_edge_init <network> <code> <central user> <central password> [script] [var prefix EDGE_REPL|CENTRAL_REPL]
@@ -434,7 +445,7 @@ t=$(date +%s)
 retry 90 deleted_on_edge && ck AC-8 PASS "soft delete reached the edge _users in $(($(date +%s) - t))s" || ck AC-8 FAIL "soft delete not on edge after 90s"
 ck_code AC-8 "soft-deleted user POST edge /_session with the old password" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -X POST "$EU/_session" -d "{\"name\":\"staff2_sh001\",\"password\":\"$SPW1B\"}")" '^401$'
 ck_eq AC-8 "edge _users/staff2_sh001 roles" "$(edge_user_roles staff2_sh001)" '[]'
-ck_ok AC-8 "central job is healthy: central-repl-user.sh SH001 --status" 'run_cru SH001 --status; [ "$rc" = 0 ]'
+ck_ok AC-8 "edge-users-copy is healthy: central-repl-user.sh SH001 --status" 'run_cru SH001 --status; [ "$rc" = 0 ]'
 
 # ------------------------------------------------------------------ AC-6
 step "AC-6: central-repl-user.sh SH001 --remove stops SH001's edge jobs, SH002 unaffected"
@@ -446,7 +457,7 @@ ck_code AC-6 "SH002 repl user still reads shelter_sh002" "$(code -u "$R2U:$R2P" 
 ck_code AC-6 "SH002 repl user still reads edge_users_sh002" "$(code -u "$R2U:$R2P" "$CU/edge_users_sh002")" '^200$'
 ck_code AC-6 "SH002 repl user still reads registry" "$(code -u "$R2U:$R2P" "$CU/registry")" '^200$'
 run_cru SH002 --status
-ck_eq AC-6 "SH002 _users copy job on central (--status exit code)" "$rc" 0
+ck_eq AC-6 "SH002 edge-users-copy health (--status exit code)" "$rc" 0
 # make the jobs issue fresh requests: a write on both sides (long-lived changes connections would otherwise linger)
 cadm -X PUT "$CU/shelter_sh001/evacuee:$(ulid)" -d '{"type":"evacuee","shelter_code":"SH001","name":"after remove (central)"}' >/dev/null
 eadm -X PUT "$EU/shelter_sh001/evacuee:$(ulid)" -d '{"type":"evacuee","shelter_code":"SH001","name":"after remove (edge)"}' >/dev/null
