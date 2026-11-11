@@ -27,12 +27,12 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
 
 | Phase | สถานะ | ขึ้นกับ |
 |---|---|---|
-| P0 ปิด CR | 🟡 กำลังทำ | — |
-| P1 API (FastAPI + BFF + worker tick) | ⏸ รอ | P0 approve |
-| P2 Schema + worker เขียน CouchDB | ⏸ รอ | P1 |
-| P3 UI | ⏸ รอ | P1, P2 |
-| P4 Docs sync | ⏸ รอ | P0 approve |
-| P5 ทดสอบ staging → production | ⏸ รอ | P1–P4 |
+| P0 ปิด CR | 🟡 แผน approve แล้ว · เลข CR ออกหลังทดสอบ | — |
+| P1 API (FastAPI + BFF + worker tick) | ✅ M5 เสร็จ (`feat/m5-referral`) · M6 รอ | P0 approve |
+| P2 Schema + worker เขียน CouchDB | ✅ M5 เสร็จ · M6 รอ | P1 |
+| P3 UI | ✅ M5 เสร็จ · M6 รอ | P1, P2 |
+| P4 Docs sync | ✅ M5 เสร็จ · M6 รอ | P0 approve |
+| P5 ทดสอบ staging → production | 🟡 M5 รอทดสอบ manual กับ M5 staging แล้วเขียน e2e | P1–P4 |
 
 ## P0 — ปิด CR
 
@@ -191,3 +191,4 @@ M5 ทำก่อน ทีละ PR แยกจาก `develop`: `feat/m5-fas
 - 2026-11-11 — grill CR M5 รอบที่ 1: owner ตัดสิน D6–D12 และบันทึกลงร่าง CR · เริ่มทำ M5 ก่อน M6
 - 2026-11-11 — M5 D5 ข้อ 3 (พิกัดเป็น Number) และข้อ 4 (ไม่มี webhook) ตอบแล้ว
 - 2026-11-11 — owner approve แผน implement M5 (D13–D16) · spike บน M5 staging ปิด D5 ครบ
+- 2026-11-11 — M5 implement ครบ Phase 1–5 และ docs sync บน branch เดียว `feat/m5-referral` (PR เดียวตอนจบ) · เหลือทดสอบ manual กับ M5 staging, e2e, เลข CR

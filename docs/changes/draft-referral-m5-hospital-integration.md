@@ -12,7 +12,7 @@ affects:
   - docs/data/schema.md §9 (Mongo collection ใหม่ `m5_transfers`, `m5_outbound_logs`)
   - docs/data/api-contract.md (BFF `/api/back-office/referral/m5/*`, FastAPI `/v1/integrations/m5/*`)
   - docs/task-breakdown/09-F-referral.md (T-34 DoD — กฎ "medical detail / national ID ไม่ออกนอกระบบ" และ scope R3 internal-only)
-  - docs/adr/0002-partner-integration-architecture.md (เพิ่ม outbound plane — หรือแยกเป็น ADR ใหม่)
+  - docs/adr/0003-outbound-integration-plane.md (ใหม่ — outbound plane แยกจาก ADR-0002)
   - backend/apiapp/modules/integrations_m5 (ใหม่)
   - worker/src/worker/inbound (loop ใหม่ `m5_transfers` → `central_ops` referral + ซ่อมใบที่ค้าง `draft` (D7) + เขียน movement `leave_temporary` ลง `shelter_{code}` เมื่อ `in_transit` (D9))
   - worker config (`M5_SYNC_INTERVAL_S` — worker เป็นตัวเคาะ `/v1/integrations/m5/sync`)
@@ -226,7 +226,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 |---|---|---|
 | 400 validation | `422` + รายฟิลด์ | — |
 | `destination_not_found` | `409 M5_DESTINATION_NOT_FOUND` | — |
-| `external_ref_in_use` | `409 M5_EXTERNAL_REF_CONFLICT` | เกิดเมื่อส่งซ้ำด้วย ref เดิมแต่เนื้อหาต่าง (ยืนยันบน staging) · BFF ต้องสร้าง payload ของชุดเดิมให้ได้ค่าเดิมทุกครั้ง (เรียงผู้ป่วยตาม `referral_id`) · ถ้ายังได้ 409 (เช่น ข้อมูล evacuee เปลี่ยนระหว่างส่งซ้ำ) ให้ worker sync ใบเดิมจาก `transfer_code` แทนการสร้างใบใหม่ |
+| `external_ref_in_use` | — (กู้คืนใบเดิม) | เกิดเมื่อส่งซ้ำด้วย ref เดิมแต่เนื้อหาต่าง (ยืนยันบน staging) · BFF สร้าง payload ของชุดเดิมให้ได้ค่าเดิมทุกครั้ง (เรียงผู้ป่วยตาม `referral_id`) · ถ้ายังได้ 409 FastAPI ดึงใบเดิมจาก `transfer_code` (TRF-004) บันทึกลง `m5_transfers` แล้วตอบ `200` `replayed: true` แทนการล้ม |
 | `not_pending` / `cancel_needs_moph` / `already_closed` | `409` + code เดิม | — |
 | 401 token หมดอายุ | — | ขอ token ใหม่และลองซ้ำ 1 ครั้ง |
 | `invalid_client` / 403 | `503 M5_CREDENTIAL_INVALID` | เปิด circuit และไม่ retry |
@@ -275,7 +275,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
   - `schema.md` §9: `m5_transfers` และ `m5_outbound_logs`
   - `api-contract.md`: FastAPI และ BFF endpoints
   - `09-F-referral.md`: DoD ข้อยกเว้น PDPA (D1) และ scope release ปัจจุบัน (D2)
-  - ADR-0002: เพิ่มย่อหน้า outbound plane หรือเขียน ADR-0003 แยก
+  - ADR-0003: outbound integration plane (เขียนแล้ว)
 - **backend:**
   - module `integrations_m5` ประกอบด้วย client (httpx), token cache, sync handler (ไม่มี poller ในตัว), router และ schemas
   - tests ใช้ `respx` หรือ mock M5 ให้ครบ error ทุกตัวในข้อ 5
@@ -310,3 +310,4 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - 2026-11-11 — D5 ตอบแล้ว 2 ข้อ: (3) owner ตัดสินส่งพิกัดศูนย์เป็น Number · (4) M5 ไม่มีแผนทำ webhook ใช้ polling ถาวร · เหลือ (1), (2), (5) รอทีม M5 · ยังไม่ approve
 - 2026-11-11 — owner approve แผน implement (เลข CR-NNN ออกหลัง implement เสร็จ) พร้อมคำตัดสิน D13 ค่าเริ่มต้น `acuity` จาก `triage_level` เก่าถ้ามี ไม่มีให้ว่างและบังคับเลือก · D14 ตัด FR-B4 / `PATCH batch` · D15 stamp v3 เฉพาะใบ `m5` · D16 `medical_staff` เห็นเฉพาะ referral `medical-emergency` ใน list · D5 ที่เหลือจะตรวจจาก M5 staging จริง
 - 2026-11-11 — spike บน M5 staging ปิด D5 ข้อ 1 (ใช้ path form), 2 (ฟิลด์ผู้ป่วยไม่บังคับ), 5 (ไม่พบเพดาน, 60 คนผ่าน) · token เก่าไม่ถูก revoke เมื่อขอใหม่ · payload ของการส่งซ้ำต้องได้ค่าเดิมทุกครั้ง
+- 2026-11-11 — implement ครบ Phase 1–5 บน branch `feat/m5-referral` (FastAPI `integrations_m5`, domain v3, BFF รายชุด, worker apply + tick, UI) และ sync docs (`schema.md` §1.4 §5.4 §9.9 §9.10, `api-contract.md` §2.10 §5.4, ADR-0003, `09-F-referral.md`, role matrix) · เปลี่ยนจากร่าง: `external_ref_in_use` ให้ FastAPI กู้คืนใบเดิมเอง (§5) แทนการรอ worker · ยังไม่ได้ทดสอบ end-to-end กับ M5 staging, e2e และเลข CR
