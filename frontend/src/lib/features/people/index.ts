@@ -441,9 +441,11 @@ export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-
 export { stripThaiTitle } from './domain/thaid-profile';
 export {
 	scannerCardSchema,
+	scannerCardPhotoSchema,
 	cardToUnifiedMember,
 	applyScannedCard,
 	type ScannerCard,
+	type ScannerCardPhoto,
 	type ScannedCardPlacement
 } from './domain/scanner-card';
 export { default as ThaidActionButton } from './ui/registration/thaid-action-button.svelte';

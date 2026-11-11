@@ -7,12 +7,16 @@ import {
 	type UnifiedMemberWithMeta
 } from './unified-registration';
 
+const citizenIdSchema = z.string().regex(/^\d{13}$/);
+
 /** A Thai ID card read by the desktop scanner client (`scanner:card-read` detail, issue #1326). */
 export const scannerCardSchema = z.object({
-	citizen_id: z.string().min(1),
+	citizen_id: citizenIdSchema,
 	first_name_th: z.string(),
 	last_name_th: z.string(),
 	gender: genderSchema,
+	/** Date of birth as printed on the card (ISO-like string, Buddhist-Era year possible). */
+	birth_date: z.string().optional(),
 	/** Gregorian (CE) year; some cards carry no date of birth. */
 	birth_year_ce: z.number().int().optional(),
 	age: z.number().int().optional(),
@@ -22,10 +26,20 @@ export const scannerCardSchema = z.object({
 	road: z.string().optional(),
 	subdistrict: z.string().optional(),
 	district: z.string().optional(),
-	province: z.string().optional()
+	province: z.string().optional(),
+	/** When the client read the card (ISO 8601 timestamp). */
+	scanned_at: z.string().min(1)
 });
 
 export type ScannerCard = z.infer<typeof scannerCardSchema>;
+
+/** A card photo from the scanner client (`scanner:card-photo` detail): a JPEG data URL for one citizen ID. */
+export const scannerCardPhotoSchema = z.object({
+	citizen_id: citizenIdSchema,
+	photo_base64: z.string().regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/)
+});
+
+export type ScannerCardPhoto = z.infer<typeof scannerCardPhotoSchema>;
 
 /** Fill a registration member from a scanned card; the card wins for the fields it carries. */
 export function cardToUnifiedMember(

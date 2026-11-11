@@ -3,6 +3,8 @@ import {
 	applyCardAddressToHousehold,
 	applyScannedCard,
 	cardToUnifiedMember,
+	scannerCardPhotoSchema,
+	scannerCardSchema,
 	type ScannerCard
 } from './scanner-card';
 import { blankUnifiedMember, type UnifiedHouseholdInput } from './unified-registration';
@@ -13,12 +15,98 @@ function card(over: Partial<ScannerCard> = {}): ScannerCard {
 		first_name_th: 'สมชาย',
 		last_name_th: 'ใจดี',
 		gender: 'male',
+		scanned_at: '2026-11-11T09:00:00+07:00',
 		...over
 	};
 }
 
 afterEach(() => {
 	vi.useRealTimers();
+});
+
+describe('scanner event schemas (external window CustomEvent detail)', () => {
+	const wire = {
+		citizen_id: '1234567890123',
+		first_name_th: 'สมหญิง',
+		last_name_th: 'ใจดี',
+		gender: 'female',
+		birth_date: '2535-04-12',
+		birth_year_ce: 1992,
+		age: 34,
+		address_no: '99/1',
+		village_no: '3',
+		lane: 'ซอย 5',
+		road: '',
+		subdistrict: 'ตำบลในเมือง',
+		district: 'เมือง',
+		province: 'ขอนแก่น',
+		scanned_at: '2026-11-11T09:00:00+07:00'
+	};
+	const photo = { citizen_id: '1234567890123', photo_base64: 'data:image/jpeg;base64,/9j/4AAQ' };
+
+	it('accepts a well-formed card and keeps every contract field', () => {
+		const parsed = scannerCardSchema.safeParse(wire);
+
+		expect(parsed.success).toBe(true);
+		expect(parsed.data).toEqual(wire);
+	});
+
+	it('rejects a citizen ID that is not 13 digits', () => {
+		for (const citizen_id of [
+			'',
+			'123456789012',
+			'12345678901234',
+			'123456789012a',
+			'1-2345-67890-12-3'
+		]) {
+			expect(scannerCardSchema.safeParse({ ...wire, citizen_id }).success, citizen_id).toBe(false);
+		}
+	});
+
+	it('rejects a card without scanned_at', () => {
+		const withoutScannedAt: Partial<typeof wire> = { ...wire };
+		delete withoutScannedAt.scanned_at;
+
+		expect(scannerCardSchema.safeParse(withoutScannedAt).success).toBe(false);
+	});
+
+	it('drops fields outside the contract from the parsed card', () => {
+		const parsed = scannerCardSchema.safeParse({ ...wire, photo_base64: 'x', isAdmin: true });
+
+		expect(parsed.success).toBe(true);
+		expect(parsed.data).toEqual(wire);
+	});
+
+	it('accepts a JPEG data-URL photo with its citizen ID', () => {
+		const parsed = scannerCardPhotoSchema.safeParse(photo);
+
+		expect(parsed.success).toBe(true);
+		expect(parsed.data).toEqual(photo);
+	});
+
+	it('rejects a photo that is not a JPEG data URL', () => {
+		for (const photo_base64 of [
+			'',
+			'/9j/4AAQ',
+			'data:image/png;base64,iVBORw0KGgo=',
+			'data:image/jpeg;base64,',
+			'data:text/html;base64,PGI+',
+			'https://example.com/a.jpg'
+		]) {
+			expect(
+				scannerCardPhotoSchema.safeParse({ ...photo, photo_base64 }).success,
+				photo_base64
+			).toBe(false);
+		}
+	});
+
+	it('rejects a photo without a citizen ID and drops extra fields', () => {
+		expect(scannerCardPhotoSchema.safeParse({ photo_base64: photo.photo_base64 }).success).toBe(
+			false
+		);
+		expect(scannerCardPhotoSchema.safeParse({ ...photo, citizen_id: '123' }).success).toBe(false);
+		expect(scannerCardPhotoSchema.safeParse({ ...photo, extra: 1 }).data).toEqual(photo);
+	});
 });
 
 describe('cardToUnifiedMember demographics', () => {
