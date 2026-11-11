@@ -67,3 +67,28 @@ export function applyCardAddressToHousehold<H extends UnifiedHouseholdInput>(
 	if (ADDRESS_KEYS.some((key) => household[key]?.trim())) return household;
 	return { ...household, ...cardAddressToHouseholdFields(card) };
 }
+
+export type ScannedCardPlacement =
+	| { kind: 'fill'; index: number }
+	| { kind: 'already-in-form'; index: number }
+	| { kind: 'ask-overwrite' };
+
+const digitsOnly = (value: string | undefined) => (value ?? '').replace(/\D/g, '');
+
+/**
+ * Decide where a scanned card goes: onto the member that already carries its citizen ID, else the
+ * first empty member (no first name, no ID number), else ask staff before overwriting someone.
+ */
+export function applyScannedCard(
+	members: readonly UnifiedMemberWithMeta[],
+	card: ScannerCard
+): ScannedCardPlacement {
+	const cardId = digitsOnly(card.citizen_id);
+	const existing = cardId
+		? members.findIndex((m) => digitsOnly(m.person_id?.number) === cardId)
+		: -1;
+	if (existing !== -1) return { kind: 'already-in-form', index: existing };
+	const empty = members.findIndex((m) => !m.first_name.trim() && !m.person_id?.number?.trim());
+	if (empty !== -1) return { kind: 'fill', index: empty };
+	return { kind: 'ask-overwrite' };
+}

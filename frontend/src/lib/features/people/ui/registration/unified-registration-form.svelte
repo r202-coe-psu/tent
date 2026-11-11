@@ -45,6 +45,7 @@
 	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
 	import {
 		applyCardAddressToHousehold,
+		applyScannedCard,
 		cardToUnifiedMember,
 		scannerCardSchema
 	} from '../../domain/scanner-card';
@@ -1297,8 +1298,9 @@
 		const parsed = scannerCardSchema.safeParse((event as CustomEvent).detail);
 		if (!parsed.success) return;
 		event.preventDefault();
-		const index = members.findIndex((m) => !m.first_name.trim() && !m.person_id?.number?.trim());
-		if (index === -1) return;
+		const placement = applyScannedCard(members, parsed.data);
+		if (placement.kind !== 'fill') return;
+		const index = placement.index;
 		members[index] = cardToUnifiedMember(parsed.data, members[index]);
 		household = applyCardAddressToHousehold(household, parsed.data);
 		markDirty();

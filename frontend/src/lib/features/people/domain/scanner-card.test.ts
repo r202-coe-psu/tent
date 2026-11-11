@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyCardAddressToHousehold, cardToUnifiedMember, type ScannerCard } from './scanner-card';
+import {
+	applyCardAddressToHousehold,
+	applyScannedCard,
+	cardToUnifiedMember,
+	type ScannerCard
+} from './scanner-card';
 import { blankUnifiedMember, type UnifiedHouseholdInput } from './unified-registration';
 
 function card(over: Partial<ScannerCard> = {}): ScannerCard {
@@ -90,5 +95,46 @@ describe('applyCardAddressToHousehold', () => {
 		const household = applyCardAddressToHousehold(typed, addressCard);
 
 		expect(household).toEqual(typed);
+	});
+});
+
+describe('applyScannedCard', () => {
+	const named = (first_name: string) => ({ ...blankUnifiedMember(), first_name });
+	const withId = (number: string) => ({
+		...blankUnifiedMember(),
+		person_id: { cardType: 'national_id' as const, number }
+	});
+
+	it('fills the first empty member', () => {
+		const members = [named('สมหญิง'), blankUnifiedMember(), blankUnifiedMember()];
+
+		expect(applyScannedCard(members, card())).toEqual({ kind: 'fill', index: 1 });
+	});
+
+	it('does not treat a member with only an ID number as empty', () => {
+		const members = [withId('9999999999999'), blankUnifiedMember()];
+
+		expect(applyScannedCard(members, card())).toEqual({ kind: 'fill', index: 1 });
+	});
+
+	it('reports the member that already has this citizen ID, ignoring spaces and dashes', () => {
+		const members = [named('สมหญิง'), withId('1-2345-67890-12-1'), blankUnifiedMember()];
+
+		expect(applyScannedCard(members, card({ citizen_id: '1234567890121' }))).toEqual({
+			kind: 'already-in-form',
+			index: 1
+		});
+	});
+
+	it('checks for the same citizen ID before looking for an empty slot', () => {
+		const members = [blankUnifiedMember(), withId('1234567890121')];
+
+		expect(applyScannedCard(members, card())).toEqual({ kind: 'already-in-form', index: 1 });
+	});
+
+	it('asks to overwrite when no member is empty', () => {
+		const members = [named('สมหญิง'), withId('9999999999999')];
+
+		expect(applyScannedCard(members, card())).toEqual({ kind: 'ask-overwrite' });
 	});
 });
