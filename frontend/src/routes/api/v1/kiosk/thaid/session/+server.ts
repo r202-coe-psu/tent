@@ -9,6 +9,7 @@ import {
 import { createKioskCheckInSession } from '$lib/server/thaid-scan-session';
 import { resolvePublicOrigin } from '$lib/server/thaid-oauth';
 import { authenticateScannerDevice } from '$lib/server/scanners/device-credentials';
+import { isKioskClosed, kioskClosedResponse } from '$lib/server/scanners/kiosk-closed';
 
 export const prerender = false;
 
@@ -19,6 +20,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			request.headers.get('x-device-secret') ?? '',
 			scannerServerRepository
 		);
+		if (isKioskClosed(principal)) return kioskClosedResponse();
 		if (!(await isKioskThaidCheckInAllowed(principal.shelter_code))) {
 			return json(
 				{

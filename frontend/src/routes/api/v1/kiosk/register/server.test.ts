@@ -121,6 +121,27 @@ describe('POST /api/v1/kiosk/register', () => {
 		} as never);
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and registers nothing', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			shelter_code: 'SH001',
+			device_id: 'KIOSK-01',
+			station_name: 'โต๊ะ 1',
+			registry_id: 'registry:KIOSK-01',
+			service_open: false
+		} as never);
+
+		const response = await POST(request(validBody));
+
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(mockRegister).not.toHaveBeenCalled();
+		expect(mockRegisterThaid).not.toHaveBeenCalled();
+		expect(mockIssueQr).not.toHaveBeenCalled();
+		expect(mockFindShelter).not.toHaveBeenCalled();
+	});
+
 	it('returns qr_payload null + qr_issue_failed when the QR entry fails; the record stays (FR-EQR-24)', async () => {
 		mockIssueQr.mockRejectedValue(new Error('CONFLICT'));
 		const response = await POST(request(validBody));
