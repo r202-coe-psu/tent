@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
 	buildHousingTypeSelectItems,
 	DEFAULT_HOUSING_TYPE_ITEMS_TH,
+	DEFAULT_HOUSING_TYPE_ITEMS_EN,
 	setHousingTypeFromSelect,
 	housingTypeLabelForCode
 } from './housing-type-ui';
+import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n/public-booking-form';
 import { MASTER_DATA_DEFS } from '../../../../../scripts/seed/master-defs';
 
 describe('housing-type-ui (CR-112 Select identity)', () => {
@@ -113,6 +115,17 @@ describe('housing-type-ui (CR-112 Select identity)', () => {
 		expect(housing_type).toBe('rented_house');
 	});
 
+	it('keeps the homeless EN label in sync with the master seed', () => {
+		const seedLabel = MASTER_DATA_DEFS.find((d) => d.type === 'housing_type')?.items.find(
+			(i) => i.key === 'homeless'
+		)?.label_en;
+		expect(seedLabel).toBeDefined();
+		expect(DEFAULT_HOUSING_TYPE_ITEMS_EN.find((i) => i.value === 'homeless')?.label).toBe(
+			seedLabel
+		);
+		expect(PUBLIC_BOOKING_FORM_I18N.en.housingHomeless).toBe(seedLabel);
+	});
+
 	it('keeps the homeless TH label in sync with the master seed', () => {
 		const seedLabel = MASTER_DATA_DEFS.find((d) => d.type === 'housing_type')?.items.find(
 			(i) => i.key === 'homeless'
@@ -120,5 +133,6 @@ describe('housing-type-ui (CR-112 Select identity)', () => {
 		const uiLabel = DEFAULT_HOUSING_TYPE_ITEMS_TH.find((i) => i.value === 'homeless')?.label;
 		expect(seedLabel).toBeDefined();
 		expect(uiLabel).toBe(seedLabel);
+		expect(PUBLIC_BOOKING_FORM_I18N.th.housingHomeless).toBe(seedLabel);
 	});
 });
