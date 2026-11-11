@@ -39,7 +39,7 @@ export const DEFAULT_HOUSING_TYPE_ITEMS_EN: HousingTypeSelectItem[] = [
 	{ value: 'rented_house', label: 'Rented house' },
 	{ value: 'condo', label: 'Condominium' },
 	{ value: 'apartment_dorm', label: 'Apartment / dormitory' },
-	{ value: 'homeless', label: 'No fixed residence' }
+	{ value: 'homeless', label: 'No fixed residence (no house number or fixed address)' }
 ];
 
 export function defaultHousingTypeItems(language: LanguageCode = 'th'): HousingTypeSelectItem[] {
