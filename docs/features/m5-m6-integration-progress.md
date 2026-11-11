@@ -2,7 +2,7 @@
 title: Progress — เชื่อม M5 (ส่งต่อผู้ป่วย) และ M6 (คลังกลาง)
 status: in-progress
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-11
 track: draft-referral-m5-hospital-integration, draft-central-warehouse-m6-withdrawal
 ---
 
@@ -41,6 +41,14 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
   - D2: ทำทันที
   - D3: staff เลือกโหมด `tracking` / `m5` ต่อใบ
   - D4: รวมหลายผู้ป่วยในใบเดียว (`batch_id`) และถอนทั้งชุดแล้วส่งใหม่
+- [x] grill CR M5 รอบที่ 1 — owner ตัดสิน D6–D12 (2026-11-11)
+  - D6: ฟอร์มเดียวสร้างทั้งชุด · "ส่งข้อมูล" = สร้างแล้ว submit ต่อทันที
+  - D7: worker ซ่อมใบที่ค้าง `draft` จาก `m5_transfers`
+  - D8: เพิ่ม `medical_staff` ให้ทำ action ของ referral `medical-emergency`
+  - D9: worker เขียน `leave_temporary` เมื่อ M5 = `in_transit`
+  - D10: ไม่มีเลขบัตร/อายุส่งได้ (fallback ของ D5-2)
+  - D11: bulk ถอนใบ `m5` ทั้งชุด
+  - D12: ไม่จำกัดจำนวนผู้ป่วยต่อชุด (fallback ของ D5-5)
 - [x] owner ตัดสิน M6 D1–D5 (2026-11-10)
   - D1: สร้าง donation ตอน `in_transit`
   - D2: SA + `shelter_manager` + `warehouse_staff`
@@ -48,7 +56,8 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
   - D4: ไม่แสดงบน public plane
   - D5: `phone_hash` ว่าง และ `_id = donation:m6-{request_code}`
 - [x] บันทึกคำตัดสินลงร่าง CR ทั้งสอง
-- [ ] ส่งคำถาม M5 D5 ให้ทีม M5 และ M6 D6 ให้ทีม M6
+- [x] M5 D5 ข้อ 3–4 ตอบแล้ว (2026-11-11): พิกัดส่งเป็น Number · ไม่มีแผนทำ webhook
+- [ ] ส่งคำถาม M5 D5 ข้อ 1, 2, 5 ให้ทีม M5 และ M6 D6 ให้ทีม M6
 - [ ] ขอ credential staging
   - M5: scope `transfer-write`
   - M6: scope `read`, `request`, `confirm` และ `resource_types` ที่ต้องใช้
@@ -124,6 +133,7 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
   - `cancel` (+ `resubmit_without`)
 - [ ] กฎ bulk-transition (CR-167) และ shelter closure (CR-168)
 - [ ] worker loop `m5_transfers` → `central_ops` (ทุก referral ใน `referral_ids[]`)
+- [ ] worker: ซ่อมใบที่ค้าง `draft` (D7) และเขียน movement `leave_temporary` ลง `shelter_{code}` เมื่อ `in_transit` (D9)
 - [ ] donation `schema_v` 12
   - `channel: m6`
   - `external`
@@ -177,3 +187,5 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
 ## Log
 
 - 2026-11-10 — ร่าง CR ทั้งสองและบันทึกคำตัดสิน D1–D4 (M5) และ D1–D5 (M6) ตัดสินให้ P1 เริ่มหลัง CR approve
+- 2026-11-11 — grill CR M5 รอบที่ 1: owner ตัดสิน D6–D12 และบันทึกลงร่าง CR · เริ่มทำ M5 ก่อน M6
+- 2026-11-11 — M5 D5 ข้อ 3 (พิกัดเป็น Number) และข้อ 4 (ไม่มี webhook) ตอบแล้ว

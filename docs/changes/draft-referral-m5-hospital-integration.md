@@ -14,10 +14,13 @@ affects:
   - docs/task-breakdown/09-F-referral.md (T-34 DoD — กฎ "medical detail / national ID ไม่ออกนอกระบบ" และ scope R3 internal-only)
   - docs/adr/0002-partner-integration-architecture.md (เพิ่ม outbound plane — หรือแยกเป็น ADR ใหม่)
   - backend/apiapp/modules/integrations_m5 (ใหม่)
-  - worker/src/worker/inbound (loop ใหม่ `m5_transfers` → `central_ops` referral)
+  - worker/src/worker/inbound (loop ใหม่ `m5_transfers` → `central_ops` referral + ซ่อมใบที่ค้าง `draft` (D7) + เขียน movement `leave_temporary` ลง `shelter_{code}` เมื่อ `in_transit` (D9))
+  - worker config (`M5_SYNC_INTERVAL_S` — worker เป็นตัวเคาะ `/v1/integrations/m5/sync`)
+  - docs/data/schema.md §movement (actor `m5:worker` ของ `leave_temporary` ที่ worker เขียน — D9)
+  - role/permission: `medical_staff` ทำ action ของ referral `medical-emergency` ได้ (D8) — `frontend/src/routes/api/back-office/referral/_auth.ts`, `$lib/auth/roles`
   - frontend/src/lib/features/referrals (domain/schema, transitions, server repository, ui medical form/detail)
-  - frontend/src/routes/api/back-office/referral (m5 facilities + ส่ง/แจ้งรถออก/ถอนรายชุด + guard ใน transition และ bulk-transition)
-  - CR-167 bulk-transition และ CR-168 shelter-closure worker (ข้ามใบที่ M5 อนุมัติแล้ว)
+  - frontend/src/routes/api/back-office/referral (สร้างชุด, m5 facilities, ส่ง/แจ้งรถออก/ถอนรายชุด, guard ใน transition และ bulk-transition)
+  - CR-167 bulk-transition (ถอนใบ m5 ทั้งชุดผ่าน FastAPI — D11) และ CR-168 shelter-closure worker (ยังไม่ได้สร้าง — ต้องใช้กฎเดียวกันเมื่อสร้าง)
 source: M5_API_Patient_Referral_External.docx — "M5 Patient Referral API — Integration Guide" v1.0 (15 ต.ค. 2569, ทีม M5; ไม่ได้เก็บใน repo)
 ---
 
@@ -30,21 +33,23 @@ referral ประเภท `medical-emergency` จะส่งเป็นใ�
 - **staff เลือกโหมดได้ต่อใบ:**
   - "ติดตามอย่างเดียว" (`tracking`) — ประสานโรงพยาบาลเอง ไม่มีข้อมูลออกนอกระบบ
   - "ส่งผ่าน M5" (`m5`)
-- **ใบ M5 หนึ่งใบมีผู้ป่วยได้หลายคน** ผูกกันด้วย `batch_id` สถานะของใบใช้กับทุกคนในชุด
+- **ใบ M5 หนึ่งใบมีผู้ป่วยได้หลายคน** ผูกกันด้วย `batch_id` สถานะของใบใช้กับทุกคนในชุด ชุดเกิดจากฟอร์มเดียวที่เลือกผู้ป่วยหลายคน (D6)
+- **ผู้ใช้:** `shelter_manager`, `medical_staff` และ `system_admin` ของศูนย์ต้นทาง (D8)
+- **เมื่อรถออก (`in_transit`)** worker ตั้งสถานะการพักของผู้ป่วยทุกคนในชุดเป็น `temporary_leave` (D9)
 - **การเรียก M5 อยู่ใน FastAPI ที่เดียว** credential ของ M5 ไม่อยู่ใน Node และไม่อยู่ใน browser
 - **Browser เรียกผ่าน SvelteKit BFF เท่านั้น** ตาม CR-063
 - **สถานะของใบโหมด `m5` มาจาก M5 เท่านั้น** worker เป็นตัวเขียนสถานะกลับเข้า CouchDB
 - **Health gate:** client ต้องตรวจก่อนว่าเชื่อมต่อ FastAPI และ M5 ได้ ถ้าไม่ได้จะปิดตัวเลือก "ส่งผ่าน M5" และแสดงว่า "เชื่อมต่อกับระบบกลางไม่ได้" ส่วนโหมดติดตามอย่างเดียวยังใช้ได้
 - **schema:** referral `schema_v` 2 → 3 แบบ additive
 
-**สถานะการตัดสิน:** owner ตัดสิน D1–D4 แล้ว (2026-11-10) เหลือ D5 ที่รอทีม M5 ตอบ ดูหัวข้อ "เรื่องที่ต้องตัดสิน"
+**สถานะการตัดสิน:** owner ตัดสิน D1–D4 (2026-11-10) และ D6–D12 (2026-11-11) แล้ว D5 ตอบแล้วข้อ 3–4 (2026-11-11) เหลือข้อ 1, 2, 5 ที่รอทีม M5 — ระหว่างรอใช้ค่า fallback ใน D10 และ D12 ดูหัวข้อ "เรื่องที่ต้องตัดสิน"
 
 ## Why
 
 - ตอนนี้ medical referral เก็บปลายทางเป็นข้อความพิมพ์เอง (`to_org.name`) ไม่มีกลไกส่งถึงโรงพยาบาลจริง และ `accepted`/`rejected` ต้องให้คนในระบบกดแทน
 - M5 เปิด API ให้ระบบภายนอกส่งใบส่งต่อ ติดตามผลพิจารณาของ สธ. แจ้งรถออก และถอนใบ (AUTH-001, TRF-001 ถึง TRF-006)
 - ความปลอดภัย: ต้องเก็บ `client_secret` ของ M5 ไว้ฝั่ง server ที่เดียว (FastAPI) และให้ FastAPI ยังไม่ถือ CouchDB credential ตาม ADR-0002
-- M5 ไม่มี webhook ระบบเราต้อง poll เอง ควรทำที่ server ที่เดียว ไม่ให้ browser ทุกเครื่องยิงไป M5
+- M5 ไม่มี webhook และไม่มีแผนจะทำ (D5-4) ระบบเราต้อง poll เอง ควรทำที่ server ที่เดียว ไม่ให้ browser ทุกเครื่องยิงไป M5
 
 ## Change
 
@@ -57,12 +62,16 @@ Browser ──► SvelteKit BFF /api/back-office/referral/m5/*   (session `_sess
            FastAPI /v1/integrations/m5/*   ── ถือ M5_CLIENT_ID / M5_CLIENT_SECRET (env backend เท่านั้น)
               │  · token cache (24 ชม., ขอใหม่ก่อนหมด ≥ 60 วินาที, ไม่ขอทุก request)
               │  · Mongo `m5_transfers` (mapping + snapshot สถานะล่าสุด, ไม่มีเลขบัตรเต็ม)
-              │  · poller: TRF-003 ทุก 30–60 วินาที เฉพาะเมื่อมีใบที่ยังไม่จบ
+              │  · /v1/integrations/m5/sync: TRF-003 + TRF-004 เฉพาะเมื่อมีใบที่ยังไม่จบ
               ▼
              M5  (staging-m5-api / onedata-dbh-api)
 
+worker ── POST /v1/integrations/m5/sync ทุก M5_SYNC_INTERVAL_S (default 45) ──► FastAPI
 worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่ยน ──► อัปเดต referral ใน `central_ops`
+                                                   └──► movement `leave_temporary` ใน `shelter_{code}` (D9)
 ```
+
+- **worker เป็นผู้เคาะ sync เพียงผู้เดียว** FastAPI รันหลาย process จึงไม่มี poller ในตัว (ไม่มี background task ใน FastAPI)
 
 - **FastAPI ไม่ได้รับ CouchDB credential** การเขียนสถานะกลับเข้า CouchDB ใช้ pattern เดียวกับ `external_bookings` (ADR-0002 §7)
 - **BFF ประกอบ payload ฝั่ง server:**
@@ -71,8 +80,8 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - **FastAPI ถือเลขบัตรเต็มไว้ใน memory เท่านั้นระหว่างส่ง** `m5_transfers` เก็บเฉพาะ `national_id_masked` ที่ M5 ส่งกลับมา
 - **env ใหม่** (เฉพาะ backend):
   - `M5_BASE_URL`, `M5_CLIENT_ID`, `M5_CLIENT_SECRET`
-  - `M5_POLL_INTERVAL_S` (default 45)
   - ห้ามตั้งชื่อด้วย prefix `PUBLIC_` และห้ามใส่ใน `frontend/.env`
+- **env ใหม่ของ worker:** `M5_SYNC_INTERVAL_S` (default 45) — worker ไม่ถือ credential ของ M5
 
 ### 2. Health gate (client ต้องเชื่อมต่อได้ก่อนใช้งาน)
 
@@ -114,10 +123,18 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - ต้องไม่เกิน 64 ตัวอักษร
 - `external.external_ref` และ `external.code` ของทุก referral ในชุดมีค่าเดียวกัน
 
-**กฎของชุด (D4):**
-- referral ทุกใบในชุดต้องมีศูนย์ต้นทาง `to_org.m5_facility_id`, `transport` และ `requester_contact` เดียวกัน
+**กฎของชุด (D4, D6, D12):**
+- referral ทุกใบในชุดต้องมีศูนย์ต้นทาง, `to_org`, `transport`, `requester_contact` และ `urgency` เดียวกัน (field ร่วมของชุด)
 - `acuity` และ `reason` แยกรายคน
+- ไม่จำกัดจำนวนผู้ป่วยต่อชุดฝั่งระบบเรา (D12) — ถ้า M5 ตอบ 400 เพราะเกิน limit ให้แสดง error ของ M5 และปรับเมื่อทีม M5 ตอบ D5-5
 - ชุดที่ส่งแล้วแก้รายชื่อไม่ได้ ถ้าต้องเอาผู้ป่วยคนใดออก ให้ถอนทั้งชุดแล้วส่งชุดใหม่ (§4 ข้อ 6)
+
+**การสร้างชุด (D6):**
+- FR-B1 — ฟอร์ม medical referral โหมด `m5` เลือกผู้ป่วยได้หลายคนในฟอร์มเดียว และกรอก `acuity` / `reason` รายคน
+- FR-B2 — BFF ออก `batch_id` (ulid) ครั้งเดียวต่อการสร้าง แล้วสร้าง referral `draft` 1 ใบต่อผู้ป่วย ทุกใบมี `batch_id` เดียวกัน
+- FR-B3 — ปุ่ม "บันทึกร่าง" สร้างชุดเป็น `draft` · ปุ่ม "ส่งข้อมูล" สร้างชุดแล้ว submit ชุดไป M5 ต่อทันทีในการกดครั้งเดียว (ถ้า submit ล้ม ชุดยังอยู่เป็น `draft` ให้กดส่งใหม่ได้)
+- FR-B4 — field ร่วมของชุดแก้ได้ที่ระดับชุดเท่านั้น (ระหว่าง `draft`) · endpoint แก้รายใบ (`[id]`) ปฏิเสธการแก้ field ร่วมของใบที่มี `batch_id` ด้วย `409 BATCH_FIELD`
+- FR-B5 — ใบโหมด `tracking` สร้างแบบเดิม (1 request = 1 ใบ, ไม่มี `batch_id`)
 
 **ค่าใน payload ของ TRF-002 ที่ไม่ได้เก็บใน referral** (อ่านจาก evacuee หรือศูนย์ ณ ตอนส่ง) — `patients[i]` 1 รายการต่อ referral ในชุด:
 
@@ -125,11 +142,11 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 |---|---|---|
 | `patients[i].acuity` | `acuity` ของ referral | — |
 | `patients[i].name` | `first_name` + `last_name` | — |
-| `patients[i].national_id` | `person_id.number` เมื่อ `cardType = national_id` | เว้นว่าง (รอ D5-2 ว่าบังคับหรือไม่) |
-| `patients[i].age` | `age` หรือคำนวณจาก `birth_year` | เว้นว่าง (รอ D5-2) |
+| `patients[i].national_id` | `person_id.number` เมื่อ `cardType = national_id` | เว้นว่างและส่งได้ ไม่บล็อก (D10) · UI แสดงป้าย "ไม่มีเลขบัตร" รายคน |
+| `patients[i].age` | `age` หรือคำนวณจาก `birth_year` | เว้นว่างและส่งได้ ไม่บล็อก (D10) |
 | `patients[i].condition` | `reason` ของ referral | — |
 | `origin.location_code` / `location_name` | `shelter_code` / ชื่อศูนย์ | — |
-| `origin.latitude` / `longitude` | `shelter.location.lat` / `lng` | บล็อกการส่งพร้อมข้อความให้ไปตั้งพิกัดศูนย์ |
+| `origin.latitude` / `longitude` | `shelter.location.lat` / `lng` ส่งเป็น Number (D5-3) | บล็อกการส่งพร้อมข้อความให้ไปตั้งพิกัดศูนย์ |
 
 **PDPA (D1):** ส่ง `national_id` และ `condition` ไป สธ. ในฐานะผู้ให้การรักษา ทุกการส่งบันทึกใน `m5_outbound_logs` (ใคร, เมื่อไร, `external_ref`, จำนวนผู้ป่วย — ไม่เก็บ payload) และ DoD ของ T-34 ต้องเพิ่มข้อยกเว้นนี้
 
@@ -143,7 +160,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 | `awaiting_review` | `sent` | — | — |
 | `pending` | `sent → accepted` | worker | `timeline.responded.by = "m5:{review.by}"` · `response_reason = review.note` · ถ้า สธ. เปลี่ยนโรงพยาบาล worker อัปเดต `to_org` และเก็บ `external.original_m5_facility_id` |
 | `rejected` | `sent → rejected` | worker | `response_reason = review.note` |
-| `in_transit` | คงเป็น `accepted` | staff ต้นทาง (TRF-005) | สะท้อนผ่าน `external.status` ไม่เพิ่มค่าใน enum `status` |
+| `in_transit` | คงเป็น `accepted` | staff ต้นทาง (TRF-005) | สะท้อนผ่าน `external.status` ไม่เพิ่มค่าใน enum `status` · worker เขียน movement `leave_temporary` ให้ผู้ป่วยทุกคนในชุด (D9 — ดูข้อ 8) |
 | `arrived` | `accepted → closed` | worker | `close_reason = "ผู้ป่วยถึงโรงพยาบาลปลายทางแล้ว (M5)"` |
 | `cancelled` | `sent → closed` | staff (TRF-006) หรือ worker เมื่อ สธ. ยกเลิก | — |
 
@@ -162,7 +179,21 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
    3. staff ตรวจแล้วส่งใหม่
 
    ถ้า สธ. อนุมัติแล้ว (`pending` ขึ้นไป) → `CANCEL_NEEDS_MOPH` ให้โทรประสาน สธ.
-7. **bulk และปิดศูนย์:** `bulk-transition` (CR-167) และ shelter-closure worker (CR-168) ต้องใช้กฎข้อ 1–4 รายตัว ใบโหมด `m5` ถูกถอนทั้งชุดครั้งเดียว ชุดที่ได้ `CANCEL_NEEDS_MOPH` นับทุกใบในชุดเป็นรายการที่ล้มเหลว พร้อมเหตุผลในผลลัพธ์ ไม่ทำให้ทั้ง bulk ล้ม
+7. **bulk และปิดศูนย์ (D11):**
+   - `bulk-transition` (CR-167) ใช้กฎข้อ 1–4 รายตัว · ใบโหมด `m5` ที่ถูกเลือก (แม้เลือกมาใบเดียว) ทำให้ถอน **ทั้งชุด** ผ่าน FastAPI (TRF-006) ครั้งเดียวต่อ `batch_id`
+   - dialog ยืนยันของ bulk ต้องแสดงว่าจะถอนทั้งชุด พร้อมรายชื่อผู้ป่วยทุกคนในชุด รวมคนที่ไม่ได้ถูกเลือก
+   - ชุดที่ได้ `CANCEL_NEEDS_MOPH` นับทุกใบในชุดเป็นรายการที่ล้มเหลว พร้อมเหตุผลในผลลัพธ์ ไม่ทำให้ทั้ง bulk ล้ม
+   - shelter-closure worker (CR-168) ยังไม่ได้สร้าง — เมื่อสร้างต้องใช้กฎเดียวกันนี้ และเรียกการถอนผ่าน FastAPI (worker ไม่ถือ credential ของ M5)
+8. **สถานะการพักเมื่อรถออก (D9):** เมื่อ worker เห็น `external.status = in_transit`
+   - เขียน movement `leave_temporary` ลง `shelter_{code}` ให้ผู้ป่วยทุกคนในชุดที่ `current_stay.status ∈ {active, room_confirmed}` · สถานะอื่นข้าม (ไม่เขียนทับ)
+   - movement มี `_id` ที่ได้ค่าเดิมทุกครั้งจาก referral (idempotent — sync ซ้ำไม่เกิด movement ซ้ำ) และ `actor = m5:worker`, `reason` อ้าง `external.code`
+   - `temporary_leave` ยังนับเป็น Present (schema.md §evacuee) ยอด occupancy / `present` / EXT-00x จึงไม่เปลี่ยน
+   - ผู้ป่วยกลับศูนย์ใช้ `return_from_leave` เดิม · ไม่กลับ (รักษาตัวต่อ/ย้ายที่) staff `check_out` เอง · worker ไม่ทำทั้งสองอย่าง
+   - M5 `cancelled` หลัง `in_transit` ไม่ย้อน movement — staff บันทึก `return_from_leave` เอง
+9. **ซ่อมใบที่ส่งไม่ครบ (D7):** `m5_transfers.referral_ids` เป็นตัวตั้ง
+   - ถ้า BFF ส่ง TRF-002 สำเร็จแต่เขียน `sent` + `external` ลง CouchDB ไม่ครบ worker ต้องเขียน `draft → sent` + `external` ให้ใบที่ขาดก่อน แล้วจึง apply สถานะ M5 ตามตาราง
+   - staff กด "ส่ง" ซ้ำได้ — `external_ref` เดิมทำให้ M5 ไม่สร้างใบซ้ำ (idempotent)
+10. **สิทธิ์ (D8):** ทุก action ของ referral `medical-emergency` (ทั้งโหมด `tracking` และ `m5`: สร้าง, ส่ง, แจ้งรถออก, ถอน, ปิด) ทำได้โดย `shelter_manager`, `medical_staff` หรือ `system_admin` ของศูนย์ต้นทาง · referral ประเภทอื่นคงสิทธิ์เดิม (`shelter_manager`, `system_admin`)
 
 **การเขียนพร้อมกันใน `central_ops`:** BFF และ worker เขียน doc เดียวกันได้ ทั้งคู่ต้อง retry ด้วย `_rev` ใหม่เมื่อเจอ 409 (ใช้ `referral.transition-retry.ts` ที่มีอยู่)
 
@@ -178,11 +209,13 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 | GET | `/v1/integrations/m5/transfers/{code}` | TRF-004 | อ่านสด ใช้ตอนเปิดหน้ารายละเอียด |
 | POST | `/v1/integrations/m5/transfers/{code}/start` | TRF-005 | — |
 | POST | `/v1/integrations/m5/transfers/{code}/cancel` | TRF-006 | body `{reason}` |
-| POST | `/v1/integrations/m5/sync` | TRF-003 + TRF-004 | sync worker เรียกทุก 45 วินาที (FastAPI รันหลาย process จึงไม่ poll เอง) · ข้ามทันทีถ้าไม่มีใบที่ยังไม่จบ |
+| POST | `/v1/integrations/m5/sync` | TRF-003 + TRF-004 | sync worker เรียกทุก `M5_SYNC_INTERVAL_S` (default 45 วินาที; FastAPI รันหลาย process จึงไม่ poll เอง) · ข้ามทันทีถ้าไม่มีใบที่ยังไม่จบ |
 
-**BFF** (session + `shelter_manager` ของศูนย์ต้นทาง ตาม `_auth.ts` เดิม):
+**BFF** (session + สิทธิ์ตาม §4 ข้อ 10 ของศูนย์ต้นทาง):
 - `GET /api/back-office/integrations/status` (ร่วมกับ M6)
 - `GET /api/back-office/referral/m5/facilities`
+- `POST /api/back-office/referral/batch` — สร้างชุด `draft` (FR-B2) body: field ร่วม + `patients[]: {evacuee_id, acuity, reason}` + `submit?: boolean` (true = submit ต่อทันที, FR-B3)
+- `PATCH /api/back-office/referral/batch/[batch_id]` — แก้ field ร่วมของชุดระหว่าง `draft` (FR-B4)
 - `POST /api/back-office/referral/batch/[batch_id]/m5/submit` — ส่งทั้งชุด (`draft → sent`)
 - `POST /api/back-office/referral/batch/[batch_id]/m5/start` — แจ้งรถออก
 - `POST /api/back-office/referral/batch/[batch_id]/m5/cancel` — ถอนทั้งชุด body `{reason, resubmit_without?: referral_id[]}` · ถ้ามี `resubmit_without` จะสร้างชุดใหม่เป็น `draft` ตาม §4 ข้อ 6
@@ -217,12 +250,19 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
   - `tracking` — ติดตามอย่างเดียว staff ประสานโรงพยาบาลเอง ไม่ส่งข้อมูลออก ใช้ได้แม้ gate ไม่ผ่าน
   - `m5` — ส่งผ่าน M5 เลือกได้เมื่อ gate `ready` เท่านั้น
 - **D4 — ผู้ป่วยหลายคน** ✅ ตัดสินแล้ว: **รวมหลายคนในใบ M5 เดียว** ผูกกันด้วย `batch_id` (§3) ถ้าต้องเอาคนใดออก ให้ถอนทั้งชุดแล้วส่งใหม่ (§4 ข้อ 6)
-- **D5 — ผลการตรวจของทีม M5** ⏳ รอทีม M5 ตอบ (เอกสาร v1.0 ขัดกันเอง):
-  - (1) TRF-004 ใช้ path `/transfers/{code}` หรือ query `?code=` และ response ห่อด้วย `{data, total, page, limit}` จริงหรือไม่
-  - (2) ฟิลด์ผู้ป่วย `name`, `national_id`, `age`, `condition` บังคับหรือไม่
-  - (3) `origin.latitude/longitude` เป็น Number หรือ Text
-  - (4) M5 มีแผนทำ webhook หรือไม่ เพื่อแทน polling
-  - (5) ใบเดียวมีผู้ป่วยได้สูงสุดกี่คน (D4)
+- **D5 — ผลการตรวจของทีม M5** ⏳ ตอบแล้ว 2 จาก 5 ข้อ (เอกสาร v1.0 ขัดกันเอง):
+  - (1) ⏳ TRF-004 ใช้ path `/transfers/{code}` หรือ query `?code=` และ response ห่อด้วย `{data, total, page, limit}` จริงหรือไม่
+  - (2) ⏳ ฟิลด์ผู้ป่วย `name`, `national_id`, `age`, `condition` บังคับหรือไม่ — ระหว่างรอใช้ D10
+  - (3) ✅ (2026-11-11, owner) ส่ง `origin.latitude` / `longitude` เป็น **Number** — ถ้า M5 ตอบ 400 ที่ฟิลด์นี้ ให้กลับมาทบทวน
+  - (4) ✅ (2026-11-11) M5 **ไม่มีแผนทำ webhook** — ใช้ polling ผ่าน `/v1/integrations/m5/sync` ตาม §5 เป็นการถาวร
+  - (5) ⏳ ใบเดียวมีผู้ป่วยได้สูงสุดกี่คน (D4) — ระหว่างรอใช้ D12
+- **D6 — ชุดเกิดตอนไหน** ✅ ตัดสินแล้ว (2026-11-11): **ฟอร์มเดียวสร้างทั้งชุด** BFF ออก `batch_id` ครั้งเดียวและสร้าง `draft` รายคน · "ส่งข้อมูล" = สร้างแล้ว submit ต่อทันที · field ร่วมแก้ได้ระดับชุดเท่านั้น (§3 FR-B1–B5) (ตัวเลือกที่ไม่เลือก: สร้างรายคนแล้วมัดชุดทีหลัง, หนึ่งคนหนึ่งชุดก่อน)
+- **D7 — ส่ง M5 สำเร็จแต่เขียน CouchDB ไม่ครบ** ✅ ตัดสินแล้ว (2026-11-11): **worker ซ่อมจาก `m5_transfers`** (§4 ข้อ 9) (ตัวเลือกที่ไม่เลือก: ให้ staff กดส่งซ้ำอย่างเดียว)
+- **D8 — สิทธิ์** ✅ ตัดสินแล้ว (2026-11-11): **เพิ่ม `medical_staff`** ให้ทำทุก action ของ referral `medical-emergency` (§4 ข้อ 10) (ตัวเลือกที่ไม่เลือก: คง `shelter_manager` อย่างเดียว, `medical_staff` สร้าง draft แต่ manager เป็นคนส่ง)
+- **D9 — สถานะการพักของผู้ป่วย** ✅ ตัดสินแล้ว (2026-11-11): **`temporary_leave` เมื่อ M5 = `in_transit`** worker เขียน movement ให้ทุกคนในชุด (§4 ข้อ 8) (ตัวเลือกที่ไม่เลือก: `temporary_leave` ตอน `arrived`, `checked_out` ตอน `arrived`, ไม่แตะแล้วเตือน staff)
+- **D10 — fallback ของ D5-2** ✅ ตัดสินแล้ว (2026-11-11): ผู้ป่วยไม่มีเลขบัตรหรืออายุ **ส่งได้โดยเว้นว่าง** ไม่บล็อก (§3 ตาราง payload) — ทบทวนเมื่อทีม M5 ตอบ (ตัวเลือกที่ไม่เลือก: บล็อกจนกว่าจะกรอก)
+- **D11 — bulk ที่มีใบ `m5`** ✅ ตัดสินแล้ว (2026-11-11): **bulk ถอนทั้งชุดให้** ผ่าน FastAPI พร้อม dialog ที่แสดงทุกคนในชุด (§4 ข้อ 7) (ตัวเลือกที่ไม่เลือก: bulk ข้ามใบ `m5` และให้ใช้ปุ่มถอนรายชุด)
+- **D12 — fallback ของ D5-5** ✅ ตัดสินแล้ว (2026-11-11): **ไม่จำกัดจำนวนผู้ป่วยต่อชุด** ฝั่งระบบเรา ใช้ error ของ M5 เป็นตัวกั้น (§3 กฎของชุด) (ตัวเลือกที่ไม่เลือก: config default 10, หนึ่งคนต่อใบ)
 
 ## Impact
 
@@ -233,9 +273,13 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
   - `09-F-referral.md`: DoD ข้อยกเว้น PDPA (D1) และ scope release ปัจจุบัน (D2)
   - ADR-0002: เพิ่มย่อหน้า outbound plane หรือเขียน ADR-0003 แยก
 - **backend:**
-  - module `integrations_m5` ประกอบด้วย client (httpx), token cache, poller, router และ schemas
+  - module `integrations_m5` ประกอบด้วย client (httpx), token cache, sync handler (ไม่มี poller ในตัว), router และ schemas
   - tests ใช้ `respx` หรือ mock M5 ให้ครบ error ทุกตัวในข้อ 5
-- **worker:** inbound loop `m5_transfers` → `central_ops` แบบ idempotent ตาม `applied_rev`
+- **worker:**
+  - inbound loop `m5_transfers` → `central_ops` แบบ idempotent ตาม `applied_rev` รวมการซ่อมใบที่ค้าง `draft` (D7)
+  - เขียน movement `leave_temporary` ลง `shelter_{code}` เมื่อ `in_transit` (D9) — worker เขียน DB ของศูนย์จาก referral เป็นครั้งแรก
+  - เคาะ `POST /v1/integrations/m5/sync` ทุก `M5_SYNC_INTERVAL_S`
+- **สิทธิ์:** `_auth.ts` ของ referral รับ `medical_staff` สำหรับ `medical-emergency` (D8) และอัปเดต role matrix ใน `docs/prd/`
 - **frontend:**
   - Zod v3 และ reader ที่รับ v1–v3
   - `referral.transitions` เพิ่ม guard `EXTERNALLY_MANAGED`
@@ -256,3 +300,5 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 
 - 2026-11-10 — proposed (ร่างจากการวิเคราะห์ M5 Integration Guide v1.0 เทียบกับ referral ปัจจุบัน; รอ D1–D5)
 - 2026-11-10 — owner ตัดสิน D1 (a) ส่งเลขบัตร + อาการพร้อม log · D2 ทำทันที · D3 staff เลือกโหมด `tracking` / `m5` ต่อใบ · D4 รวมหลายผู้ป่วยในใบเดียว (`batch_id`) และถอนทั้งชุดแล้วส่งใหม่เมื่อต้องเอาคนออก · เพิ่ม `sync` endpoint ให้ worker เคาะ · D5 ยังรอทีม M5 · ยังไม่ approve — รอ owner approve ก่อนเริ่ม implement
+- 2026-11-11 — grill รอบที่ 1: owner ตัดสิน D6 ฟอร์มเดียวสร้างทั้งชุด · D7 worker ซ่อมใบที่ค้าง `draft` จาก `m5_transfers` · D8 เพิ่ม `medical_staff` · D9 `temporary_leave` เมื่อ `in_transit` · D10 ไม่มีเลขบัตร/อายุส่งได้ · D11 bulk ถอนทั้งชุด · D12 ไม่จำกัดจำนวนต่อชุด · แก้ความไม่ตรงกันในร่าง: worker เป็นผู้เคาะ sync (ย้าย interval ไปเป็น `M5_SYNC_INTERVAL_S` ของ worker), `urgency` เป็น field ร่วมของชุด, CR-168 ยังไม่ได้สร้าง · ยังไม่ approve
+- 2026-11-11 — D5 ตอบแล้ว 2 ข้อ: (3) owner ตัดสินส่งพิกัดศูนย์เป็น Number · (4) M5 ไม่มีแผนทำ webhook ใช้ polling ถาวร · เหลือ (1), (2), (5) รอทีม M5 · ยังไม่ approve
