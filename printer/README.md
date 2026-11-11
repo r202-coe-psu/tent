@@ -51,7 +51,7 @@ PRINT_HOUSEKEEPING_TOKEN=<openssl rand -hex 32>
 | `COUCHDB_PRINTING_SERVICE_URL` | `frontend` | `http://printing_service:<รหัส>@couchdb:5984` (ใช้ `couchdb` ไม่ใช่ `localhost` และเป็น `http://` เพราะคุยกันใน docker network) |
 | `PRINT_HOUSEKEEPING_TOKEN` | `frontend`, `worker` | ส่งต่อจาก root `.env` (frontend ตรวจ, worker ส่งเป็น Bearer) |
 | `PRINT_HOUSEKEEPING_URL` | `worker` | `http://frontend:3000` |
-| `PRINT_HOUSEKEEPING_INTERVAL_MS` | `worker` | ไม่ต้องตั้ง (ค่าเริ่มต้น 30 000 · ถ้าตั้งต้องไม่เกิน 120 000 ไม่งั้น healthcheck จะ unhealthy ตลอด) |
+| `PRINT_HOUSEKEEPING_INTERVAL_MS` | `worker` | ไม่ต้องตั้ง (ค่าเริ่มต้น 30 000 · healthcheck ยอมให้สำเร็จล่าสุดเก่าได้ max(2 นาที, 4 × interval)) |
 
 `frontend/.env` ไม่ถูกใช้ใน container ของ staging / prod
 
@@ -67,9 +67,15 @@ docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm red
 **nginx** มีใน repo แล้ว ไม่ต้องตั้งเพิ่ม: `/api/internal/printers/` ถูกปิดจากภายนอก (404) และ `/api/v1/printer/*` จำกัด 2 connection ต่อเครื่อง
 ควรมี HTTPS อยู่หน้า server เพราะ Pi ต่อแค่ `https://` เป็นค่าเริ่มต้น (ถ้าไม่มี ดู `TENT_ALLOW_HTTP` ในขั้นที่ตั้ง `.env`)
 
+**deploy ครั้งแรกหลังย้าย housekeeping เข้า `worker`:** ใส่ `--remove-orphans` เพื่อลบ container `print-housekeeping` เดิม (ถ้าไม่ลบ ตัวเดิมจะรันซ้อนกับ `worker`)
+
+```bash
+docker compose -f docker-compose.staging.no-nginx.yml up -d --build --remove-orphans   # prod ใช้ docker-compose.production.no-nginx.yml
+```
+
 **ตรวจหลัง deploy:**
 
-1. container `worker` ขึ้น `healthy` (healthcheck ดูว่า housekeeping เรียกสำเร็จภายใน 2 นาที — ถ้า unhealthy ดู log ของ `worker` หา `print housekeeping`)
+1. container `worker` ขึ้น `healthy` (healthcheck ดูว่า housekeeping เรียกสำเร็จภายใน 2 นาที — ถ้า unhealthy ดู log ของ `worker` หา `print housekeeping`: `401` = token สองฝั่งไม่ตรง, `503` = frontend ไม่มี token, `ConnectError` = frontend ยังไม่ขึ้น) และ `docker ps` ไม่มี container `print-housekeeping` เหลือ
 2. back-office → **จัดการเครื่องพิมพ์** เปิดได้และไม่ขึ้น 503
 3. ลงทะเบียนเครื่อง (ขั้นที่ 1) แล้วกด **พิมพ์ทดสอบ** ด้วย user ที่มี `system_admin` หรือ `shelter:{CODE}` + `{CODE}:shelter_manager`
    (`admin` ของ CouchDB มีแค่ role `_admin` ซึ่งพิมพ์ไม่ได้ และจะขึ้น "คุณไม่มีสิทธิ์ในการทำรายการนี้")
