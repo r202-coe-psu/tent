@@ -222,6 +222,26 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 		expect(await response.json()).toMatchObject({ device_id: DEVICE_ID, screen_type: 'portrait' });
 	});
 
+	it("closes service for a manager of the device's shelter and returns it in the summary", async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		mockUpdate.mockResolvedValueOnce(
+			persisted('SH001', {
+				service_open: false,
+				service_open_changed_at: '2026-11-11T08:30:00.000Z',
+				service_open_changed_by: 'sm-a'
+			})
+		);
+		const response = await patch({ service_open: false });
+		expect(response.status).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { service_open: false }, 'sm-a');
+		expect(await response.json()).toMatchObject({
+			device_id: DEVICE_ID,
+			service_open: false,
+			service_open_changed_at: '2026-11-11T08:30:00.000Z',
+			service_open_changed_by: 'sm-a'
+		});
+	});
+
 	it('returns 401 for anonymous and 403 for registration staff without touching the device', async () => {
 		mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
 		const anonymous = await patch({ status: 'inactive' });

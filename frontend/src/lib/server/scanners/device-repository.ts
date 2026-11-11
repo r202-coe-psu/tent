@@ -4,6 +4,7 @@ import { now, type Timestamp } from '$lib/db/model';
 import {
 	SCANNER_REGISTRY_DB,
 	SCANNER_SCHEMA_V,
+	isServiceOpen,
 	scannerDevicePersistedSchema,
 	toScannerDeviceSummary,
 	type PersistedScannerDevice,
@@ -261,7 +262,19 @@ export class ScannerDeviceRepository {
 
 		let current = await this.findDeviceById(id);
 		for (let attempt = 1; ; attempt += 1) {
-			const updated = parsePersistedDevice({ ...current, ...fields, updated_at: now() });
+			const timestamp = now();
+			// Audit who flipped service and when, but only on an actual change against the doc just read.
+			const serviceChanged =
+				fields.service_open !== undefined && fields.service_open !== isServiceOpen(current);
+			const updated = parsePersistedDevice({
+				...current,
+				...fields,
+				...(serviceChanged && {
+					service_open_changed_at: timestamp,
+					service_open_changed_by: updatedBy
+				}),
+				updated_at: timestamp
+			});
 			let result: { status: number; data: unknown };
 			try {
 				result = await adminRaw(
