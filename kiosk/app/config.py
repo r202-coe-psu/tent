@@ -63,7 +63,7 @@ FACE_CHECK_FLOWS = ("check_in", "walk_in")
 
 def is_loopback_host(hostname: str) -> bool:
     """localhost / 127.0.0.0/8 / ::1 — origins Chromium treats as secure even over plain HTTP."""
-    if hostname in LOOPBACK_HOSTNAMES:
+    if hostname.lower() in LOOPBACK_HOSTNAMES:
         return True
     try:
         return ipaddress.ip_address(hostname).is_loopback
