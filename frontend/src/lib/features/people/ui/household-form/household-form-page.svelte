@@ -114,6 +114,8 @@
 						license_plate: v.license_plate ?? null
 					})),
 					notes: input.notes ?? undefined,
+					housing_type: input.housing_type ?? null,
+					residence_landmark: input.residence_landmark || null,
 					address_no: input.address_no || null,
 					village_no: input.village_no || null,
 					subdistrict: input.subdistrict || null,

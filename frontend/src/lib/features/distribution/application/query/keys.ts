@@ -18,6 +18,9 @@ export const distributionKeys = {
 		[...distributionKeys.shelter(shelterCode), 'ticket', ticketId] as const,
 	logs: (shelterCode: string, filter?: DistributionLogListFilter) =>
 		[...distributionKeys.shelter(shelterCode), 'logs', filter ?? {}] as const,
+	/** Under `logs` so `invalidateDistributionLogs` refreshes it too (#1154). */
+	recipientsLogs: (shelterCode: string, recipientIds: readonly string[]) =>
+		[...distributionKeys.shelter(shelterCode), 'logs', 'recipients', [...recipientIds]] as const,
 	log: (shelterCode: string, logId: string) =>
 		[...distributionKeys.shelter(shelterCode), 'log', logId] as const,
 	bulkPools: (shelterCode: string, filter?: BulkReturnPoolListFilter) =>

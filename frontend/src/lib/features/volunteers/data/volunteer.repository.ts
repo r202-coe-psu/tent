@@ -15,7 +15,7 @@ import type {
 	VolunteerStatus,
 	VolunteerSource
 } from '../domain/volunteer.schema';
-import type { VerificationStatus } from '../domain/verification';
+import type { AcceptedFrom, VerificationStatus } from '../domain/verification';
 import type { Job, JobInput, JobStatus, JobTier } from '../domain/job.schema';
 import type {
 	JobApplication,
@@ -151,12 +151,17 @@ export interface VolunteerRepository {
 	deactivate(id: string): Promise<Volunteer>;
 	/** Undo `deactivate` (#882): marks the profile active again using the latest `_rev`. */
 	reactivate(id: string): Promise<Volunteer>;
-	/** Record the reusable identity decision without changing job applications. */
+	/**
+	 * Record the reusable identity decision without changing job applications.
+	 * `acceptedFrom` marks a result accepted from another shelter (CR-228 FR-8);
+	 * without it the record is a check made at this shelter, replacing any mark.
+	 */
 	reviewIdentity(
 		id: string,
 		status: VerificationStatus,
 		actor: string,
-		notes?: string | null
+		notes?: string | null,
+		acceptedFrom?: AcceptedFrom
 	): Promise<Volunteer>;
 	/** Record a controlled-skill decision without changing the volunteer's skill list. */
 	reviewSkill(
@@ -165,7 +170,9 @@ export interface VolunteerRepository {
 		status: VerificationStatus,
 		actor: string,
 		notes?: string | null,
-		credentialReference?: string | null
+		credentialReference?: string | null,
+		/** Another shelter's result this one accepts (CR-228 FR-10), as for identity. */
+		acceptedFrom?: AcceptedFrom
 	): Promise<Volunteer>;
 	/**
 	 * Flip `checked_in` + `current_shelter_code` (Time-Bound Write Access gate,
