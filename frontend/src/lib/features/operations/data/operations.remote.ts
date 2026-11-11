@@ -61,10 +61,10 @@ import {
 	type TransferStatus,
 	type DispatchInfoInput,
 	type CancelInfoInput,
-	type DisputeInfoInput,
-	lotDateStamp,
-	nextLotNos
+	type DisputeInfoInput
 } from '../domain/operations';
+import { reserveLotNos } from './lot-reservation';
+import { createSessionLotCounterConnector } from './lot-reservation.couch';
 import { assertDonationSlotDeletable, countSlotBookings, slotMode } from '../domain/donation-slot';
 import { ItemMergeError, planItemMerge } from '../domain/item-merge';
 import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
@@ -147,9 +147,6 @@ const DONATION_LEDGER_LIMIT = 1000;
 
 /** Rows per `_find` round when a set of items' ledger history is read to the end. */
 const LEDGER_PAGE_LIMIT = 1000;
-
-/** Cap on the day's `lot_no` lookup when minting lot numbers (same bound as kitchen). */
-const LOT_NO_LOOKUP_LIMIT = 10_000;
 
 /** Tries at closing a batch receipt while other writes keep moving its `_rev` (S-R14-1). */
 const MAX_CLOSE_ATTEMPTS = 3;
@@ -304,26 +301,14 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return stockBalance(ledger);
 	}
 
-	/** Mint `count` lot numbers `L-YYMMDD-XXX` after whatever the day's ledger already holds. */
-	private async allocateLotNos(count: number, when: Date = new Date()): Promise<string[]> {
-		const prefix = `L-${lotDateStamp(when)}-`;
-		let rows: { lot?: { lot_no?: string } }[];
-		try {
-			rows = await this.repo.find<{ lot?: { lot_no?: string } }>({
-				selector: {
-					type: 'stock_ledger',
-					'lot.lot_no': { $gte: prefix, $lt: `${prefix}\ufff0` }
-				},
-				fields: ['lot.lot_no'],
-				limit: LOT_NO_LOOKUP_LIMIT
-			});
-		} catch (cause) {
-			throw new Error('ออกเลขล็อตไม่สำเร็จ กรุณาลองบันทึกรับเข้าใหม่อีกครั้ง', { cause });
-		}
-		const existing = rows
-			.map((row) => row.lot?.lot_no)
-			.filter((lot): lot is string => typeof lot === 'string');
-		return nextLotNos(existing, when, count);
+	/** Reserve `count` lot numbers `L-YYMMDD-XXX` from the day's `lot_counter` (CR-244). */
+	private allocateLotNos(count: number, ctx: AuthorContext, when: Date = new Date()) {
+		return reserveLotNos({
+			connector: createSessionLotCounterConnector(this.dbName),
+			ctx,
+			count,
+			when
+		});
 	}
 
 	async receiveStock(
@@ -333,7 +318,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	): Promise<StockLedger> {
 		const entry = createReceiveEntry(input, ctx);
 		if (options.issueLotNo) {
-			const [lot_no] = await this.allocateLotNos(1);
+			const [lot_no] = await this.allocateLotNos(1, ctx);
 			entry.lot = { ...(entry.lot ?? {}), lot_no };
 		}
 		const item = await this.loadCatalogItem(entry.item_id);
@@ -355,7 +340,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			ctx
 		);
 		if (options.issueLotNo) {
-			const [lot_no] = await this.allocateLotNos(1);
+			const [lot_no] = await this.allocateLotNos(1, ctx);
 			entry.lot = { ...(entry.lot ?? {}), lot_no };
 		}
 
@@ -572,7 +557,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			// Only rows that are really about to be written take a number, so a retry whose
 			// rows already landed does not burn any.
 			if (options.issueLotNo) {
-				const lotNos = await this.allocateLotNos(entries.length);
+				const lotNos = await this.allocateLotNos(entries.length, ctx);
 				entries.forEach((entry, index) => {
 					entry.lot = { ...(entry.lot ?? {}), lot_no: lotNos[index] };
 				});
