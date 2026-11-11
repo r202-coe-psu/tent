@@ -100,8 +100,10 @@
 							(v) => setHousingTypeFromSelect(v, (next) => (formData.current.housing_type = next))
 						}
 					>
-						<Select.Trigger {...props} class={selectTriggerClass} title={housingTypeTriggerLabel}>
-							<span class="min-w-0 truncate leading-normal">{housingTypeTriggerLabel}</span>
+						<Select.Trigger {...props} class={selectTriggerClass}>
+							<span class="min-w-0 truncate leading-normal" title={housingTypeTriggerLabel}
+								>{housingTypeTriggerLabel}</span
+							>
 						</Select.Trigger>
 						<Select.Content>
 							{#each housingTypeItems as opt (opt.value)}
