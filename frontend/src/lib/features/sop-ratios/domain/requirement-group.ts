@@ -8,9 +8,10 @@ import {
 	qtyGte,
 	qtyLte,
 	qtyStrCoerceSchema,
-	toQtyStrLossless
+	qtyStrCoerceNonNegativeSchema
 } from '$lib/utils/qty';
 import { foodSphereSourceSchema, type FoodSphereSource } from './food-sphere';
+import { InvalidRatioQtyError, readRatioQty } from './qty-input';
 
 export const STANDARD_UOM_OPTIONS = [
 	{ value: 'kcal', label: 'กิโลแคลอรี' },
@@ -111,19 +112,37 @@ export function isShareSumOff(maps: Pick<ItemMap, 'share_percent'>[]): boolean {
 	return parseQty(sumSharePercent(maps)).minus(100).abs().gt(new Decimal('0.01'));
 }
 
-/** Read-side normalizer: legacy number conversion_factor / share_percent -> qty_str (lossless); status defaults to active. */
+/** Read-side normalizer: validate and round legacy quantities; status defaults to active. */
 export function normalizeRequirementGroup(doc: RequirementGroup): RequirementGroup {
 	const status = doc.status ?? 'active';
-	if (!doc.item_maps) return { ...doc, status };
+	if (doc.item_maps === undefined) return { ...doc, status };
+	if (!Array.isArray(doc.item_maps)) throw new InvalidRatioQtyError(doc._id, 'item_maps');
 	return {
 		...doc,
 		status,
-		item_maps: doc.item_maps.map((m) => ({
-			...m,
-			conversion_factor: toQtyStrLossless(m.conversion_factor) as string,
-			...(m.share_percent === undefined || m.share_percent === null
-				? {}
-				: { share_percent: toQtyStrLossless(m.share_percent) as string })
-		}))
+		item_maps: doc.item_maps.map((m, i) => {
+			if (!m || typeof m !== 'object') throw new InvalidRatioQtyError(doc._id, `item_maps[${i}]`);
+			const conversion_factor = readRatioQty(
+				doc._id,
+				`item_maps[${i}].conversion_factor`,
+				m.conversion_factor,
+				qtyStrCoerceSchema
+			);
+			if (parseQty(m.conversion_factor).gt(0) && !qtyGt(conversion_factor, 0)) {
+				throw new InvalidRatioQtyError(doc._id, `item_maps[${i}].conversion_factor`);
+			}
+			const share_percent =
+				m.share_percent === undefined
+					? undefined
+					: readRatioQty(
+							doc._id,
+							`item_maps[${i}].share_percent`,
+							m.share_percent,
+							qtyStrCoerceNonNegativeSchema
+						);
+			if (share_percent !== undefined && qtyGt(share_percent, 100))
+				throw new InvalidRatioQtyError(doc._id, `item_maps[${i}].share_percent`);
+			return { ...m, conversion_factor, ...(share_percent === undefined ? {} : { share_percent }) };
+		})
 	};
 }
