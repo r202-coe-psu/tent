@@ -26,7 +26,6 @@
 	const jobQuery = useJob(() => jobId ?? '');
 	const job = $derived(jobQuery.data ?? null);
 
-	/** False when the page was opened directly (deep link / refresh) — nothing to go back to. */
 	// `resolve()` here only prefixes `base`, so ids are interpolated by hand
 	// (same as `job-card.svelte`).
 
