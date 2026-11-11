@@ -323,7 +323,7 @@ test.describe(
 			expect(await readLog()).toBeNull();
 			await page
 				.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ })
-				.getByRole('button', { name: 'ปิดหน้าต่าง' })
+				.getByRole('button', { name: 'ปิด' })
 				.last()
 				.click();
 			await expect(page.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ })).toHaveCount(0);
