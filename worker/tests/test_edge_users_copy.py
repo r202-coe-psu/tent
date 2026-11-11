@@ -139,7 +139,7 @@ async def test_404_on_write_skips_shelter_and_forces_relist():
     await copier.process_batch([{"id": "u1", "changes": [{"rev": "1-a"}]}])
     assert [w[0] for w in couch.writes] == ["edge_users_sh002"]
     assert copier.existing_dbs == {"edge_users_sh002"}
-    assert copier._last_refresh == float("-inf")
+    assert copier._last_refresh == float("-inf") and not copier._pass_open
 
 
 async def test_checkpoint_saved_and_resumed():
@@ -220,6 +220,33 @@ async def test_changes_fetched_with_bulk_get_in_chunks(monkeypatch):
     assert couch.bulk_gets == [2, 2, 2]
     assert len(couch.writes) == 1  # one bulk write per destination DB
     assert [d["_id"] for d in couch.writes[0][1]] == sorted(users)
+
+
+async def test_pending_backfills_do_not_recheck_confirmed_markers():
+    n = 30
+    dbs = [f"edge_users_s{i:03d}" for i in range(n)]
+    couch = FakeCouch({"u1": user("u1", roles=["shelter:S000"])}, dbs)
+    marker_gets = 0
+    orig = couch.get_doc
+
+    async def counting(database: str, doc_id: str) -> dict | None:
+        nonlocal marker_gets
+        marker_gets += doc_id == "_local/backfill_done"
+        return await orig(database, doc_id)
+
+    couch.get_doc = counting  # type: ignore[method-assign]
+    copier = EdgeUsersCopier(couch)
+    turns = 0
+    while len(couch.local) < n:  # one backfill marker per DB
+        await copier.refresh_dbs()
+        turns += 1
+    assert turns == n
+    assert marker_gets == n  # every marker read once, not n*(n+1)/2
+
+    await copier.refresh_dbs()  # pass finished: nothing due for 30 s
+    assert marker_gets == n
+    await copier.refresh_dbs(force=True)  # forced: a new pass re-reads them all
+    assert marker_gets == 2 * n
 
 
 async def test_failure_leaves_checkpoint_and_records_error(monkeypatch):

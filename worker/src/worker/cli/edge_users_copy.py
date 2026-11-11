@@ -95,6 +95,8 @@ class EdgeUsersCopier:
         self._couch = couch
         self.existing_dbs: set[str] = set()
         self._last_refresh = float("-inf")
+        self._pass_open = False
+        self._checked: set[str] = set()
         self._checkpoint: dict[str, Any] = {"_id": CHECKPOINT_ID}
 
     # --- status / checkpoint -------------------------------------------------
@@ -129,26 +131,45 @@ class EdgeUsersCopier:
         )
         return {name for name in data if name.startswith(DB_PREFIX)}
 
+    def invalidate_db_list(self) -> None:
+        """Make the next ``refresh_dbs`` list ``edge_users_*`` again from scratch."""
+        self._last_refresh = float("-inf")
+        self._pass_open = False
+
     async def refresh_dbs(self, *, force: bool = False) -> None:
-        """Re-list ``edge_users_*`` (every 30 s) and backfill at most one new DB per call."""
-        if not force and time.monotonic() - self._last_refresh < REFRESH_SECONDS:
+        """Re-list ``edge_users_*`` (every 30 s) and backfill at most one new DB per call.
+
+        A pass checks each DB's ``_local/backfill_done`` once. It stays open across calls
+        while a backfill ended the call early, so the next call resumes after the DBs it has
+        already confirmed instead of re-checking them (that was O(N^2) markers).
+        """
+        if force or (
+            not self._pass_open
+            and time.monotonic() - self._last_refresh >= REFRESH_SECONDS
+        ):
+            self.existing_dbs = await self.list_edge_dbs()
+            self._checked = set()
+            self._pass_open = True
+        elif not self._pass_open:
             return
-        self.existing_dbs = await self.list_edge_dbs()
-        self._last_refresh = time.monotonic()
-        for database in sorted(self.existing_dbs):
-            # Checked on every refresh (no cache): ``--remove`` + reinstall inside one
+        for database in sorted(self.existing_dbs - self._checked):
+            # Checked on every pass (no cache): ``--remove`` + reinstall inside one
             # interval leaves the name unchanged but the new DB has no marker (FR-11a).
             try:
                 if await self._couch.get_doc(database, BACKFILL_DONE_ID) is None:
                     await self.backfill(database)
-                    # One backfill per loop turn so a changes batch (revocations) runs between
-                    # backfills; refresh again next turn for the remaining new DBs.
-                    self._last_refresh = float("-inf")
+                    self._checked.add(database)
+                    # One backfill per loop turn so a changes batch (revocations) runs
+                    # between backfills; the pass resumes on the next call.
                     return
             except httpx.HTTPStatusError as exc:
                 if not _is_404(exc):
                     raise
-                self._last_refresh = float("-inf")  # DB vanished: list again next loop
+                self.invalidate_db_list()  # DB vanished: list again next loop
+                return
+            self._checked.add(database)
+        self._pass_open = False
+        self._last_refresh = time.monotonic()
 
     async def backfill(self, database: str) -> int:
         """Copy every existing user of ``database``'s shelter, 500 docs per page."""
@@ -249,7 +270,7 @@ class EdgeUsersCopier:
             if not await self._write(database, docs):
                 # Dropped by ``--remove`` meanwhile: skip it, re-list, not an error.
                 self.existing_dbs.discard(database)
-                self._last_refresh = float("-inf")
+                self.invalidate_db_list()
 
     async def fetch_changes(self, since: Any) -> dict[str, Any]:
         return await self._couch.get_json(
