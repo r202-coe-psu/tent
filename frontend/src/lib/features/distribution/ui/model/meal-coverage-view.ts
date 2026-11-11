@@ -1,6 +1,16 @@
-import { wasInShelterAllDay, type PresenceMovement } from '$lib/features/shared';
-import type { CoverageResident, MealCoverageRow } from '../../domain/food-supplies/meal-coverage';
-import { thailandCalendarDay } from '../../domain/food-supplies';
+import {
+	wasInShelterAllDay,
+	zoneOnDay,
+	type PresenceMovement,
+	type ZoneMovement
+} from '$lib/features/shared';
+import {
+	countingMealsByRecipient,
+	type CoverageLog,
+	type CoverageResident,
+	type MealCoverageRow
+} from '../../domain/food-supplies/meal-coverage';
+import { thailandCalendarDay, type MealPeriod } from '../../domain/food-supplies';
 import { historyRecipientNames } from './distribution-history';
 
 interface CoverageEvacuee {
@@ -8,21 +18,42 @@ interface CoverageEvacuee {
 	first_name: string;
 	last_name: string;
 	nickname?: string | null;
+	household_id?: string | null;
 	current_stay?: { status?: string | null; since?: string | null; zone?: string | null } | null;
 }
 
-interface CoverageMovement extends PresenceMovement {
+interface CoverageMovement extends PresenceMovement, ZoneMovement {
 	evacuee_id: string;
 }
 
 export interface CoverageViewResident extends CoverageResident {
+	/** Zone at the end of the selected day (see `zoneOnDay`). */
 	zone: string | null;
+	householdId: string | null;
+}
+
+/** Which kind of day the report is looking at; today is the only one still running. */
+export type CoverageDayMode =
+	{ kind: 'invalid' } | { kind: 'past'; day: string } | { kind: 'today'; day: string };
+
+export function coverageDayMode(day: string, today: string): CoverageDayMode {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) return { kind: 'invalid' };
+	return { kind: day === today ? 'today' : 'past', day };
+}
+
+export function thaiToday(now: Date = new Date()): string {
+	return thailandCalendarDay(now);
 }
 
 export type CoverageFilter = 'all' | 'none' | 'partial';
 
 export interface CoverageListRow extends MealCoverageRow {
 	zone: string | null;
+}
+
+export interface CoverageViewRow extends CoverageListRow {
+	/** Missing meals another member of the same household has a counting log for. */
+	householdRecorded: MealPeriod[];
 }
 
 /** Every evacuee as a coverage resident for Thai calendar `day`, presence derived from movements. */
@@ -41,7 +72,12 @@ export function coverageResidents(input: {
 	return input.evacuees.map((e) => ({
 		id: e._id,
 		name: names.get(e._id) ?? e._id,
-		zone: e.current_stay?.zone ?? null,
+		zone: zoneOnDay({
+			day: input.day,
+			movements: movementsByEvacuee.get(e._id) ?? [],
+			currentZone: e.current_stay?.zone
+		}),
+		householdId: e.household_id ?? null,
 		presentAllDay: wasInShelterAllDay({
 			day: input.day,
 			movements: movementsByEvacuee.get(e._id) ?? [],
@@ -61,6 +97,33 @@ export function attachZones(
 ): CoverageListRow[] {
 	const zoneById = new Map(residents.map((r) => [r.id, r.zone]));
 	return rows.map((r) => ({ ...r, zone: zoneById.get(r.id) ?? null }));
+}
+
+/**
+ * A hint, not a credit: it never changes `received`/`missing`, so a household member's log is not
+ * counted for someone else (CR-240 is not implemented), it only tells the reader where to look.
+ */
+export function attachHouseholdRecorded<T extends CoverageListRow>(
+	rows: readonly T[],
+	residents: readonly CoverageViewResident[],
+	logs: readonly CoverageLog[],
+	day: string
+): (T & CoverageViewRow)[] {
+	const mealsBy = countingMealsByRecipient(logs, day);
+	const membersByHousehold = new Map<string, string[]>();
+	for (const r of residents) {
+		if (!r.householdId) continue;
+		membersByHousehold.set(r.householdId, [...(membersByHousehold.get(r.householdId) ?? []), r.id]);
+	}
+	const householdOf = new Map(residents.map((r) => [r.id, r.householdId]));
+	return rows.map((row) => {
+		const householdId = householdOf.get(row.id);
+		const others = householdId
+			? (membersByHousehold.get(householdId) ?? []).filter((id) => id !== row.id)
+			: [];
+		const recorded = new Set(others.flatMap((id) => [...(mealsBy.get(id) ?? [])]));
+		return { ...row, householdRecorded: row.missing.filter((m) => recorded.has(m)) };
+	});
 }
 
 export function coverageCounts(rows: readonly MealCoverageRow[]): Record<CoverageFilter, number> {

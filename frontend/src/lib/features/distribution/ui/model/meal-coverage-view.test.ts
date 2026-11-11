@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+	attachHouseholdRecorded,
 	attachZones,
+	coverageDayMode,
 	coverageCounts,
 	coverageResidents,
 	coverageZones,
@@ -8,6 +10,7 @@ import {
 	pageSlice,
 	previousThaiDay,
 	sortCoverageRows,
+	thaiToday,
 	type CoverageListRow
 } from './meal-coverage-view';
 
@@ -187,5 +190,149 @@ describe('zone filter', () => {
 	it('combines zone with the meal filter and the name query', () => {
 		expect(filterCoverageRows(rows, { filter: 'none', query: 'd', zone: 'Z2' })).toEqual([rows[3]]);
 		expect(filterCoverageRows(rows, { filter: 'partial', query: '', zone: 'Z2' })).toEqual([]);
+	});
+});
+
+describe('coverageResidents on the selected day', () => {
+	const evacuee = {
+		...person('evacuee:A', 'active', '2026-11-01T00:00:00Z'),
+		household_id: 'household:1',
+		current_stay: { status: 'active', since: '2026-11-01T00:00:00Z', zone: 'NEW' }
+	};
+
+	it('uses the zone of the day, not the zone after a later move', () => {
+		const [row] = coverageResidents({
+			day: '2026-11-09',
+			evacuees: [evacuee],
+			movements: [
+				{
+					evacuee_id: 'evacuee:A',
+					action: 'check_in',
+					zone: 'OLD',
+					occurred_at: '2026-11-01T00:00:00Z'
+				},
+				{
+					evacuee_id: 'evacuee:A',
+					action: 'zone_change',
+					zone: 'NEW',
+					occurred_at: '2026-11-10T03:00:00Z'
+				}
+			]
+		});
+		expect(row.zone).toBe('OLD');
+	});
+
+	it('falls back to the current zone when no movement names one', () => {
+		const [row] = coverageResidents({ day: '2026-11-09', evacuees: [evacuee], movements: [] });
+		expect(row.zone).toBe('NEW');
+	});
+
+	it('carries the household id', () => {
+		const [row] = coverageResidents({ day: '2026-11-09', evacuees: [evacuee], movements: [] });
+		expect(row.householdId).toBe('household:1');
+		const [lone] = coverageResidents({
+			day: '2026-11-09',
+			evacuees: [person('evacuee:B', 'active', '2026-11-01T00:00:00Z')],
+			movements: []
+		});
+		expect(lone.householdId).toBeNull();
+	});
+});
+
+describe('coverageDayMode', () => {
+	it('tells a finished day, today, and an unusable value apart', () => {
+		expect(coverageDayMode('2026-11-09', '2026-11-10')).toEqual({
+			kind: 'past',
+			day: '2026-11-09'
+		});
+		expect(coverageDayMode('2026-11-10', '2026-11-10')).toEqual({
+			kind: 'today',
+			day: '2026-11-10'
+		});
+		expect(coverageDayMode('2026-11-11', '2026-11-10')).toEqual({ kind: 'invalid' });
+		expect(coverageDayMode('', '2026-11-10')).toEqual({ kind: 'invalid' });
+		expect(coverageDayMode('10/11/2026', '2026-11-10')).toEqual({ kind: 'invalid' });
+	});
+});
+
+describe('thaiToday', () => {
+	it('is the Thai calendar day of now', () => {
+		expect(thaiToday(new Date('2026-11-09T18:00:00Z'))).toBe('2026-11-10');
+	});
+});
+
+describe('attachHouseholdRecorded', () => {
+	const DAY = '2026-11-09';
+	const resident = (id: string, householdId: string | null) => ({
+		id,
+		name: id,
+		zone: null,
+		presentAllDay: true,
+		householdId
+	});
+	const log = (id: string, meal: string, extra: Record<string, unknown> = {}) => ({
+		recipient_type: 'evacuee' as const,
+		recipient_id: id,
+		meal,
+		status: 'fulfilled',
+		is_returnable: false,
+		distributed_at: '2026-11-09T01:00:00Z',
+		...extra
+	});
+	const listed = (id: string, received: string[], missing: string[]) => ({
+		id,
+		name: id,
+		received,
+		missing,
+		zone: null
+	});
+	const attach = (rows: unknown[], residents: unknown[], logs: unknown[]) =>
+		attachHouseholdRecorded(rows as never, residents as never, logs as never, DAY);
+
+	it('lists the missing meals another household member has a log for', () => {
+		const out = attach(
+			[listed('A', [], ['breakfast', 'lunch', 'dinner'])],
+			[resident('A', 'h1'), resident('B', 'h1')],
+			[log('B', 'lunch'), log('B', 'dinner')]
+		);
+		expect(out[0].householdRecorded).toEqual(['lunch', 'dinner']);
+	});
+
+	it('does not change the row meals or drop the row', () => {
+		const rows = [listed('A', [], ['breakfast'])];
+		const out = attach(rows, [resident('A', 'h1'), resident('B', 'h1')], [log('B', 'breakfast')]);
+		expect(out).toHaveLength(1);
+		expect(out[0]).toMatchObject({ received: [], missing: ['breakfast'] });
+	});
+
+	it('ignores other households, a missing household id and the row own logs', () => {
+		const out = attach(
+			[listed('A', ['lunch'], ['breakfast']), listed('C', [], ['breakfast'])],
+			[resident('A', 'h1'), resident('B', 'h2'), resident('C', null), resident('D', null)],
+			[log('A', 'lunch'), log('B', 'breakfast'), log('D', 'breakfast')]
+		);
+		expect(out.map((r) => r.householdRecorded)).toEqual([[], []]);
+	});
+
+	it('applies the counting rule: voided, other day and snack logs do not count', () => {
+		const out = attach(
+			[listed('A', [], ['breakfast', 'lunch', 'dinner'])],
+			[resident('A', 'h1'), resident('B', 'h1')],
+			[
+				log('B', 'breakfast', { status: 'voided' }),
+				log('B', 'lunch', { distributed_at: '2026-11-10T01:00:00Z' }),
+				log('B', 'snack')
+			]
+		);
+		expect(out[0].householdRecorded).toEqual([]);
+	});
+
+	it('counts a household member who was not in the shelter all day', () => {
+		const out = attach(
+			[listed('A', [], ['breakfast'])],
+			[resident('A', 'h1'), { ...resident('B', 'h1'), presentAllDay: false }],
+			[log('B', 'breakfast')]
+		);
+		expect(out[0].householdRecorded).toEqual(['breakfast']);
 	});
 });
