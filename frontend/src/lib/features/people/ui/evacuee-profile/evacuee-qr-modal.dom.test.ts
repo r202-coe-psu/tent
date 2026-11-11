@@ -66,7 +66,7 @@ const stationRetryHeld = () =>
 /** The modal's own close buttons (X and the bottom one), by their accessible name. */
 const closeButtons = () =>
 	[...document.querySelectorAll<HTMLButtonElement>('button')].filter(
-		(b) => b.textContent?.trim() === 'ปิดหน้าต่าง'
+		(b) => b.textContent?.trim() === 'ปิด'
 	);
 const pressEscape = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 

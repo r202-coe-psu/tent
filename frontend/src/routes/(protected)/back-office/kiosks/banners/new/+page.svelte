@@ -14,7 +14,7 @@
 		useKioskBannerGroups,
 		type KioskBannerSavePayload
 	} from '$lib/features/kiosk-banners';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 
 	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
@@ -60,6 +60,7 @@
 			? (`/back-office/kiosks/banners/groups/${encodeURIComponent(groupParam)}` as const)
 			: ('/back-office/kiosks/banners' as const)
 	);
+	const backLabel = $derived(groupParam ? 'กลับไปกลุ่มแบนเนอร์' : 'กลับไปแบนเนอร์ Kiosk');
 </script>
 
 <svelte:head>
@@ -67,14 +68,8 @@
 </svelte:head>
 
 <StaffPageShell title="สร้างแบนเนอร์" maxWidth="6xl">
-	{#snippet meta()}
-		<a
-			href={resolve(backPath)}
-			class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
-		>
-			<ArrowLeft class="h-4 w-4" />
-			กลับไปรายการแบนเนอร์
-		</a>
+	{#snippet backLink()}
+		<BackLink href={resolve(backPath)} label={backLabel} class="-ml-3" />
 	{/snippet}
 
 	<div class="{spatial.container.staffPageCard} p-4 sm:p-6">
