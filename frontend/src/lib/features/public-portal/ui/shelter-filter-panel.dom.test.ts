@@ -5,7 +5,11 @@ import ShelterFilterPanel from './shelter-filter-panel.svelte';
 
 const env = vi.hoisted(() => ({
 	url: new URL('http://localhost/shelters'),
-	goto: vi.fn(async () => {}),
+	/** Like SvelteKit: `page.url` stays put while the navigation's load is in flight. */
+	pending: null as URL | null,
+	goto: vi.fn(async (href: string) => {
+		env.pending = new URL(href, 'http://localhost');
+	}),
 	position: { lat: '7.0086', lng: '100.4968' }
 }));
 
@@ -15,6 +19,11 @@ vi.mock('$app/state', () => ({
 	page: {
 		get url() {
 			return env.url;
+		}
+	},
+	navigating: {
+		get to() {
+			return env.pending ? { url: env.pending } : null;
 		}
 	}
 }));
@@ -46,6 +55,7 @@ function committedUrl(): URLSearchParams {
 describe('ShelterFilterPanel — first-visit GPS radius', () => {
 	beforeEach(() => {
 		env.url = new URL('http://localhost/shelters');
+		env.pending = null;
 		env.goto.mockClear();
 	});
 	afterEach(() => {
@@ -60,6 +70,8 @@ describe('ShelterFilterPanel — first-visit GPS radius', () => {
 		const params = committedUrl();
 		expect(params.get('user_lat')).toBe('7.0086');
 		expect(params.get('distance')).toBe('5');
+		// One navigation, not one per commit path (GPS resolve, userLat effect, onMount).
+		expect(env.goto).toHaveBeenCalledTimes(1);
 	});
 
 	it('still commits the radius when the page already resolved the shared position', async () => {
@@ -70,5 +82,17 @@ describe('ShelterFilterPanel — first-visit GPS radius', () => {
 		const params = committedUrl();
 		expect(params.get('user_lng')).toBe('100.4968');
 		expect(params.get('distance')).toBe('5');
+		expect(env.goto).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not navigate when the URL already carries the position and radius', async () => {
+		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968&distance=5');
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968', distance: '5' }
+		});
+
+		expect(env.goto).not.toHaveBeenCalled();
 	});
 });

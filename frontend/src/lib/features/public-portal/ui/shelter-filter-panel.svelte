@@ -3,7 +3,7 @@
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -161,7 +161,13 @@
 	function commitFilters() {
 		if (hydrating) return;
 		const next = buildFilterParams();
-		if (serializeParams(next) === serializeParams(page.url.searchParams)) return;
+		const query = serializeParams(next);
+		if (query === serializeParams(page.url.searchParams)) return;
+		// `page.url` only moves once the load finishes; don't queue the same navigation twice.
+		const pending = navigating.to?.url;
+		if (pending && pending.pathname === page.url.pathname) {
+			if (query === serializeParams(pending.searchParams)) return;
+		}
 		const qs = next.toString();
 		const href = (qs ? `${action}?${qs}` : action) as '/shelters';
 		void goto(resolve(href), {
@@ -388,7 +394,8 @@
 
 		// First visit: request GPS so the map can show the user marker without a distance click.
 		// The page binds its own GPS result into `userLat`/`userLng`; when that lands first
-		// `ensureUserPosition` returns early, so commit here too (a no-op if the URL matches).
+		// `ensureUserPosition` returns early, so commit here too (skipped when the URL already has
+		// it or a navigation to it is in flight).
 		if (await ensureUserPosition()) commitFilters();
 		await locationsPromise;
 	});
