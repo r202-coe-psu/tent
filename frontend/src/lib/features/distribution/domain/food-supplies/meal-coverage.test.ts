@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeMealCoverage, type CoverageLog } from './meal-coverage';
+import type { MealPeriod } from './shared';
+import {
+	COVERAGE_MEALS,
+	MIN_MEALS_PER_DAY,
+	countingMealsByRecipient,
+	coverageThreshold,
+	summarizeMealCoverage,
+	unscannedMeals,
+	type CoverageLog
+} from './meal-coverage';
 
 const DAY = '2026-11-09';
 const A = { id: 'evacuee:A', name: 'สมชาย', presentAllDay: true };
@@ -106,5 +115,85 @@ describe('summarizeMealCoverage', () => {
 
 	it('does not list residents who were not in the shelter all day', () => {
 		expect(run([{ ...A, presentAllDay: false }], [])).toEqual([]);
+	});
+});
+
+describe('summarizeMealCoverage on a running day (served meals)', () => {
+	const today = (servedMeals: MealPeriod[], residents = [A], logs: CoverageLog[] = []) =>
+		summarizeMealCoverage({ day: DAY, residents, logs, servedMeals });
+
+	it('lists nobody when no meal has been served yet', () => {
+		expect(today([])).toEqual([]);
+	});
+
+	it('with only breakfast served, drops who has breakfast and keeps who has none', () => {
+		const rows = today(['breakfast'], [A, B], [log({ recipient_id: 'evacuee:A' })]);
+		expect(rows).toEqual([
+			{ id: 'evacuee:B', name: 'สมหญิง', received: [], missing: ['breakfast'] }
+		]);
+	});
+
+	it('lists in missing only served meals', () => {
+		const rows = today(['breakfast', 'lunch'], [A], [log({ meal: 'lunch' })]);
+		expect(rows).toEqual([
+			{ id: 'evacuee:A', name: 'สมชาย', received: ['lunch'], missing: ['breakfast'] }
+		]);
+	});
+
+	it('still needs two records once two or more meals are served', () => {
+		const logs = [log()];
+		expect(today(['breakfast', 'lunch'], [A], logs)).toHaveLength(1);
+		expect(today(['breakfast', 'lunch', 'dinner'], [A], logs)).toHaveLength(1);
+		expect(today(['breakfast', 'lunch'], [A], [log(), log({ meal: 'lunch' })])).toEqual([]);
+	});
+
+	it('defaults to every coverage meal, as for a finished day', () => {
+		expect(run([A], [log()])[0].missing).toEqual(['lunch', 'dinner']);
+	});
+});
+
+describe('coverageThreshold', () => {
+	it('is capped by the number of served meals', () => {
+		expect(coverageThreshold(['breakfast'])).toBe(1);
+		expect(coverageThreshold(['breakfast', 'lunch', 'dinner'])).toBe(MIN_MEALS_PER_DAY);
+		expect(coverageThreshold([])).toBe(0);
+	});
+});
+
+describe('countingMealsByRecipient', () => {
+	it('counts only evacuee logs of the day that servedMealOfLog accepts', () => {
+		const map = countingMealsByRecipient(
+			[
+				log(),
+				log({ meal: 'snack' }),
+				log({ status: 'voided', meal: 'lunch' }),
+				log({ distributed_at: '2026-11-09T17:30:00Z', meal: 'dinner' }),
+				log({ recipient_type: 'volunteer', recipient_id: 'volunteer:V' })
+			],
+			DAY
+		);
+		expect([...map.keys()]).toEqual(['evacuee:A']);
+		expect([...(map.get('evacuee:A') ?? [])]).toEqual(['breakfast']);
+	});
+});
+
+describe('unscannedMeals', () => {
+	it('returns served meals with no counting log from anybody that day', () => {
+		const logs = [log({ recipient_id: 'evacuee:Z', meal: 'lunch' })];
+		expect(unscannedMeals({ day: DAY, logs, servedMeals: COVERAGE_MEALS })).toEqual([
+			'breakfast',
+			'dinner'
+		]);
+	});
+
+	it('ignores meals that are not served yet', () => {
+		expect(unscannedMeals({ day: DAY, logs: [], servedMeals: ['breakfast'] })).toEqual([
+			'breakfast'
+		]);
+	});
+
+	it('does not count a voided log as a scan', () => {
+		const logs = [log({ status: 'voided' })];
+		expect(unscannedMeals({ day: DAY, logs, servedMeals: ['breakfast'] })).toEqual(['breakfast']);
 	});
 });
