@@ -21,10 +21,8 @@ from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
 from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
 from worker.inbound.volunteer_schedule_actions import run_volunteer_schedule_action_loop
 from worker.listeners.registry import ListenerManager
-from worker.printing.housekeeping import (
-    load_housekeeping_config,
-    run_print_housekeeping_loop,
-)
+from worker.printing.config import load_housekeeping_config
+from worker.printing.housekeeping import run_print_housekeeping_loop
 from worker.retention.job import run_retention_loop
 
 logging.basicConfig(

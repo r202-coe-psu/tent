@@ -10,51 +10,16 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
 
+from worker.printing.config import HousekeepingConfig
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_INTERVAL_MS = 30_000
-DEFAULT_OK_FILE = "/tmp/print-housekeeping.ok"
-DEFAULT_URL = "http://frontend:3000"
 TIMEOUT_SECONDS = 25.0
-
-_ENDPOINT_PATH = "/api/internal/printers/housekeeping"
-_MIN_INTERVAL_MS = 1000
-
-
-@dataclass(frozen=True)
-class HousekeepingConfig:
-    endpoint: str
-    token: str = field(repr=False)
-    interval_ms: int
-    ok_file: str
-
-
-def _parse_interval_ms(raw: str | None) -> int:
-    try:
-        value = int(raw) if raw else DEFAULT_INTERVAL_MS
-    except ValueError:
-        return DEFAULT_INTERVAL_MS
-    return value if value >= _MIN_INTERVAL_MS else DEFAULT_INTERVAL_MS
-
-
-def load_housekeeping_config(env: Mapping[str, str]) -> HousekeepingConfig | None:
-    """Read the task config from ``env``; ``None`` when no token is set (task disabled)."""
-    token = env.get("PRINT_HOUSEKEEPING_TOKEN", "")
-    if not token:
-        return None
-    base_url = (env.get("PRINT_HOUSEKEEPING_URL") or DEFAULT_URL).removesuffix("/")
-    return HousekeepingConfig(
-        endpoint=f"{base_url}{_ENDPOINT_PATH}",
-        token=token,
-        interval_ms=_parse_interval_ms(env.get("PRINT_HOUSEKEEPING_INTERVAL_MS")),
-        ok_file=env.get("PRINT_HOUSEKEEPING_OK_FILE") or DEFAULT_OK_FILE,
-    )
 
 
 def _write_ok_file(path: str, data: str) -> None:

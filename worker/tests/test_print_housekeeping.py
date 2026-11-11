@@ -9,9 +9,8 @@ import time
 import httpx
 import pytest
 
+from worker.printing.config import HousekeepingConfig, load_housekeeping_config
 from worker.printing.housekeeping import (
-    HousekeepingConfig,
-    load_housekeeping_config,
     run_housekeeping_tick,
     run_print_housekeeping_loop,
 )

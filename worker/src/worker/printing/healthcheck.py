@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from worker.printing.housekeeping import load_housekeeping_config
+from worker.printing.config import load_housekeeping_config
 
 MAX_AGE_MS = 120_000
 
