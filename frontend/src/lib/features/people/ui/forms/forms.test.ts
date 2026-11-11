@@ -406,14 +406,18 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			);
 		});
 
-		it('puts the housing tooltip on the truncated span, not the trigger (no double reading)', () => {
+		it('shows the full housing label in the trigger without a hover-only title', () => {
 			const result = render(HouseholdAddressFields, {
 				props: { housing_type: 'homeless', loadMasterHousingTypes: false }
 			});
-			const trigger = result.body.match(/<button[^>]*id="housing-type"[^>]*>/)?.[0] ?? '';
-			expect(trigger).not.toBe('');
+			const trigger =
+				result.body.match(/<button[^>]*id="housing-type"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '';
+			expect(trigger).toContain(
+				'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
+			);
+			expect(trigger).toContain('whitespace-normal');
+			expect(trigger).not.toContain('truncate');
 			expect(trigger).not.toContain('title=');
-			expect(result.body).toMatch(/<span[^>]*title="ไร้ที่อยู่อาศัยเป็นหลักแหล่ง \(/);
 		});
 
 		it('shows pre-reg semantic housing_type label even without master data', () => {
