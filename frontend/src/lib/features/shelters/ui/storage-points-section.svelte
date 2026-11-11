@@ -147,7 +147,7 @@
 		</div>
 		<div>
 			<div class="flex items-center gap-2">
-				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 5</span>
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 4</span>
 			</div>
 			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">จุดเก็บของ</h2>
 		</div>

@@ -636,7 +636,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// Lot labels are minted here, not on the client: the per-day sequence needs
 		// to see every row already on this shelter's ledger (CR-088 · schema.md §2.1).
 		// Only rows not written yet get one; a recorded row keeps the label it was given.
-		const lotNos = await allocateLotNos(dbName, pending.length);
+		const lotNos = await allocateLotNos(dbName, pending.length, ctx);
 		const pendingWithLots: CountedItem[] = pending.map((index, i) => ({
 			...counted[index],
 			lot: { ...(counted[index].lot ?? {}), lot_no: lotNos[i] }

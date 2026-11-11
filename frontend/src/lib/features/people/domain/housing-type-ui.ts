@@ -30,7 +30,7 @@ export const DEFAULT_HOUSING_TYPE_ITEMS_TH: HousingTypeSelectItem[] = [
 	{ value: 'rented_house', label: 'บ้านเช่า' },
 	{ value: 'condo', label: 'คอนโดมิเนียม' },
 	{ value: 'apartment_dorm', label: 'อะพาร์ตเมนต์/หอพัก' },
-	{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }
+	{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)' }
 ];
 
 /** English mirror of `DEFAULT_HOUSING_TYPE_ITEMS_TH` — same values and order. */
@@ -39,7 +39,7 @@ export const DEFAULT_HOUSING_TYPE_ITEMS_EN: HousingTypeSelectItem[] = [
 	{ value: 'rented_house', label: 'Rented house' },
 	{ value: 'condo', label: 'Condominium' },
 	{ value: 'apartment_dorm', label: 'Apartment / dormitory' },
-	{ value: 'homeless', label: 'No fixed residence' }
+	{ value: 'homeless', label: 'No fixed residence (no house number or fixed address)' }
 ];
 
 export function defaultHousingTypeItems(language: LanguageCode = 'th'): HousingTypeSelectItem[] {

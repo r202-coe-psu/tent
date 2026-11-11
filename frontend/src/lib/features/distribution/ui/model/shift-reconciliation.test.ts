@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemReconciliationSummary } from '../../application/food-supplies/reconciliation-workflow';
 import {
+	formatTotalWithUnit,
 	buildCloseShiftOptions,
 	computeItemPreview,
 	computeShiftClosePreview,
@@ -194,5 +195,18 @@ describe('Shift Reconciliation UI Model', () => {
 				}
 			});
 		});
+	});
+});
+
+describe('formatTotalWithUnit', () => {
+	const unitOf = (id: string) => ({ rice: 'กล่อง', halal: 'กล่อง', net: 'หลัง' })[id] ?? '';
+
+	it('adds the unit when every item shares it', () => {
+		expect(formatTotalWithUnit('150', ['rice', 'halal'], unitOf)).toBe('150 กล่อง');
+	});
+
+	it('shows only the number for mixed or unknown units', () => {
+		expect(formatTotalWithUnit('23', ['rice', 'net'], unitOf)).toBe('23');
+		expect(formatTotalWithUnit('3', ['unknown'], unitOf)).toBe('3');
 	});
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	toQtyStrLossless,
 	addQty,
 	formatQty,
 	parseQty,
@@ -96,5 +97,19 @@ describe('formatQty', () => {
 
 	it('rounds past the quantity scale instead of showing float noise', () => {
 		expect(formatQty('1000.00005')).toBe('1,000.0001');
+	});
+});
+
+describe('toQtyStrLossless (#936)', () => {
+	it('converts a number to an exact string without rounding', () => {
+		expect(toQtyStrLossless(6.33333)).toBe('6.33333');
+	});
+	it('avoids exponent notation', () => {
+		expect(toQtyStrLossless(1e-7)).toBe('0.0000001');
+	});
+	it('passes strings and non-finite numbers through', () => {
+		expect(toQtyStrLossless('2.5')).toBe('2.5');
+		expect(toQtyStrLossless(NaN)).toBeNaN();
+		expect(toQtyStrLossless(undefined)).toBeUndefined();
 	});
 });
