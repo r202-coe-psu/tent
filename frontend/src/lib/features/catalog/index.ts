@@ -102,6 +102,15 @@ export {
 	formatUnit
 } from './domain/unit-of-measure';
 
+export {
+	WHOLE_QTY_MESSAGE,
+	resolveUnitDimension,
+	requiresWholeQty,
+	qtyInputStep,
+	wholeQtyError,
+	type UnitDimensionSource
+} from './domain/unit-quantity';
+
 // Domain — quick-create, similarity, barcode, permissions
 export { findSimilarItems, missingOptionalFields } from './domain/item-similarity';
 export {
@@ -179,6 +188,8 @@ export {
 	useUpdateUnitOfMeasure,
 	useDeleteUnitOfMeasure
 } from './application/queries';
+
+export { useUnitDimensionResolver } from './application/use-unit-dimension-resolver.svelte';
 
 // UI — feature components
 export { default as CatalogFormPage } from './ui/catalog-form-page.svelte';

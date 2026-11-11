@@ -1,4 +1,5 @@
 import { qtyGt } from '$lib/utils/qty';
+import { wholeQtyError, type Dimension } from '$lib/features/catalog';
 import { initialExpiryState, type ExpiryState } from './lot-expiry';
 import type { Donation } from './operations';
 
@@ -61,14 +62,17 @@ export function isReceivedDraft(draft: Pick<BatchLineDraft, 'qty'>): boolean {
 
 /**
  * What stops this draft from being saved, or null. `requiresExpiry` is the
- * catalog's FR-D1 answer for the matched item (FR-D2: no blank `lot.expiry`).
+ * catalog's FR-D1 answer for the matched item (FR-D2: no blank `lot.expiry`);
+ * `dimension` is the dimension of the line's own unit (#805: count units take whole numbers).
  */
 export function draftProblem(
 	draft: BatchLineDraft,
-	requiresExpiry: boolean
-): 'qty' | 'item' | 'expiry' | null {
+	requiresExpiry: boolean,
+	dimension?: Dimension
+): 'qty' | 'whole' | 'item' | 'expiry' | null {
 	const qty = draft.qty.trim();
 	if (qty === '' || !Number.isFinite(Number(qty)) || Number(qty) < 0) return 'qty';
+	if (!draft.locked && wholeQtyError(qty, dimension)) return 'whole';
 	if (!isReceivedDraft(draft)) return null;
 	if (!draft.item_id) return 'item';
 	if (!draft.locked && requiresExpiry && !draft.expiry.value.trim()) return 'expiry';
