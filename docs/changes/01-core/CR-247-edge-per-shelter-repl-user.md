@@ -114,6 +114,8 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
   - ถอด role / soft delete / ย้ายศูนย์: `edge_shelters` เป็น append-only (CR-171 FR-2) → revision ใหม่ยังไปถึงศูนย์เดิมเสมอ
   - hard delete (tombstone ไม่มี `edge_shelters`) **นอกขอบเขต** — เหมือนเดิม · ติดตามที่ #1331
 - **FR-11a (backfill)** — เมื่อมี `edge_users_<code>` ใหม่ (FR-10) `edge-users-copy` ต้องคัดลอก user ที่มีอยู่แล้วของศูนย์นั้นทั้งหมดด้วยวิธีเดียวกับ FR-11 ภายใน 1 นาทีหลังสร้าง DB · อ่าน `_users` ทีละหน้า (เช่น 500 doc) ห้ามโหลดทั้งก้อน · บันทึกว่าศูนย์ไหน backfill แล้วใน `_users/_local/edge_users_copy` · backfill ซ้ำต้องไม่มีผลเสีย (`new_edits: false` กับ revision ที่มีแล้ว = no-op)
+  - **รู้ว่ามีศูนย์ใหม่:** `edge-users-copy` เช็กรายชื่อ DB ทุก 30 วินาทีด้วย `GET /_all_dbs?start_key="edge_users_"&end_key="edge_users_\ufff0"` · DB ที่ยังไม่อยู่ในรายชื่อ backfill ของ `_users/_local/edge_users_copy` = ศูนย์ใหม่ → backfill · service ปิดอยู่ตอนสร้าง DB → เจอในรอบแรกหลังเปิด
+  - รายชื่อ DB ชุดเดียวกันใช้ตัดสินว่าศูนย์ไหน "มี DB `edge_users_<code>` อยู่" ใน FR-11 · ไม่ใช้ `_db_updates` (ต้องพึ่ง DB ระบบ `_global_changes` และ checkpoint อีกตัว)
 - **FR-12** — `central-repl-user.sh` ทุก action ตรวจ `edge_users_*` ทุก DB บน central: `members.names` ไม่ว่าง หรือ `members.roles` ≠ `["repl:<CODE>"]` พอดี (รวมกรณีว่าง = เปิดสาธารณะ) → หยุดพร้อม error ระบุชื่อ DB
 - **FR-13 (health)** — service FR-11 บันทึกสถานะ (`last_seq` ที่ประมวลผลแล้ว, `last_error`, `updated_at`) ใน `_users/_local/edge_users_copy` · `scripts/central-repl-user.sh <CODE> --status` อ่าน doc นี้ด้วย `curl` แล้วแสดงเทียบกับ `update_seq` ของ `_users` และสถานะ backfill ของศูนย์ (FR-11a) · exit ≠ 0 เมื่อมี `last_error` หรือ service ตามหลัง `_users` นานเกิน 5 นาที · SETUP-CENTRAL.md ระบุให้ใส่ในการตรวจประจำวันของ central
 
@@ -180,3 +182,4 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - 2026-11-11 — kong: ตัว copy รันเป็น service แยก `edge-users-copy` (image เดียวกับ sync-worker) และเก็บ checkpoint / สถานะใน `_users/_local/edge_users_copy` แทน MongoDB — การถอดสิทธิ์ที่ edge ไม่พึ่ง MongoDB หรือ sync-worker · `--status` อ่านด้วย `curl` ได้ · backfill ทีละหน้า + `mem_limit` · เพิ่มเงื่อนไข backfill `edge_shelters` ของ CR-171 ใน Migration
 - 2026-11-11 — approved โดย kong · รันเลข CR-247 (#1298 / PR #1304)
 - 2026-11-11 — แก้ตามรีวิว PR #1304: FR-22 หมุนรหัส central admin ต้องอัปเดตทั้ง `edge-users-copy` และ sync-worker · เรียกตัวคัดลอกว่า `edge-users-copy` ทั้ง CR
+- 2026-11-11 — kong: FR-11a รู้ว่ามีศูนย์ใหม่ด้วยการเช็ก `_all_dbs` (กรองช่วงชื่อ `edge_users_`) ทุก 30 วินาที · คงชื่อ DB `edge_users_<code>` (ไม่ใช้ `users_<code>` — กันสับสนกับ `_users` ตัวจริงและกันคำนำหน้าชนกับ DB อื่น)
