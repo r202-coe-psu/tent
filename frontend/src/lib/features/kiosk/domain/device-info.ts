@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { kioskScreenTypeSchema, type KioskScreenType } from '$lib/features/shared';
+import { kioskDeviceScreenTypeSchema, type KioskDeviceScreenType } from '$lib/features/shared';
 
 /** Wire body of a 200 from `POST /api/v1/kiosk/device-info`. */
 export const kioskDeviceInfoSchema = z.object({
@@ -7,7 +7,7 @@ export const kioskDeviceInfoSchema = z.object({
 		device_id: z.string(),
 		name: z.string(),
 		station_name: z.string(),
-		screen_type: kioskScreenTypeSchema
+		screen_type: kioskDeviceScreenTypeSchema
 	}),
 	shelter: z.object({ code: z.string(), name: z.string() }),
 	staff_pin: z.object({ is_default: z.boolean(), updated_at: z.string().nullable() }),
@@ -19,7 +19,7 @@ export type KioskDeviceInfo = {
 	deviceId: string;
 	name: string;
 	stationName: string;
-	screenType: KioskScreenType;
+	screenType: KioskDeviceScreenType;
 	shelterCode: string;
 	shelterName: string;
 	/** Always set: the panel only opens after the PIN matched. */
