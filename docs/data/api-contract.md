@@ -442,6 +442,20 @@ Kiosk แสดง "QR นี้ออกวันที่ {issued_at} มี�
 > `/api/back-office/kiosk-banner-groups/**` §2.3.1 เท่านั้น — PATCH ของเครื่องไม่รับ `banner_group_id`) · summary ของรายการ
 > เครื่องและของ `PATCH` มี `banner_group_id: string | null` (ไม่มีกลุ่ม = `null`) **แทน** `banner_enabled` · `screen_type` ไม่เปลี่ยน.
 
+**ปิดให้บริการรายเครื่อง (amend [CR-165](../changes/14-kiosk/CR-165-kiosk-management-back-office.md) §2.5 / FR-SBO-43..50, 2026-11-11, #1302 — ข้อเสนอทีม kiosk):**
+
+- `PATCH /api/v1/kiosk/devices/[id]` รับ `service_open` (boolean) ร่วมกับ field เดิม · ค่าเปลี่ยน → server set
+  `service_open_changed_by` (ผู้เรียก) และ `service_open_changed_at` · summary ของรายการเครื่องและของ `PATCH` มี
+  `service_open: boolean` เสมอ (doc ไม่มี field = `true`), `service_open_changed_at: string | null`, `service_open_changed_by: string | null`
+- `POST /api/v1/kiosk/bootstrap` (`device.service_open`) และ `POST /api/v1/kiosk/config` (`service_open`) ตอบ `200` กับเครื่องที่ปิด
+  และคืน `service_open: boolean` · `banners` และ `device-info` ไม่ถูก gate
+- เครื่องที่ปิดให้บริการเรียก `lookup`, `check-in`, `register`, `reprint`, `volunteer-card`, `thaid/session{,/status,/cancel}`,
+  `staff-pin/verify` → ตรวจ device credential ตามเดิม (`401 DEVICE_AUTH_FAILED` สำหรับเครื่อง `inactive` ไม่เปลี่ยน) แล้วตอบ
+
+| Status | Code           | เมื่อ                                                                                      |
+| ------ | -------------- | ------------------------------------------------------------------------------------------ |
+| 403    | `KIOSK_CLOSED` | เครื่องปิดให้บริการ (`service_open: false`) · ตอบก่อนอ่าน/เขียนข้อมูลใดๆ · `cache-control: no-store` |
+
 **สิทธิ์ผู้เรียก `/api/v1/kiosk/devices/**` ([CR-203](../changes/14-kiosk/CR-203-pr-staff-role.md), #930):**
 
 | Endpoint | ผู้เรียกที่รับ (scope ศูนย์ตัวเอง; SA ทุกศูนย์) |

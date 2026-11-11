@@ -3,7 +3,7 @@ id: CR-165
 title: ย้ายการจัดการเครื่องสแกน/Kiosk (scanner_device) จาก System Management ไป Back Office — SA ทุกศูนย์ + shelter_manager / kiosk_staff เฉพาะศูนย์ตัวเอง · ย้าย API `/api/v1/scanner/*` → `/api/v1/kiosk/*`
 status: approved
 date: 2026-10-12
-updated: 2026-10-12
+updated: 2026-11-11
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team LEAD)
 layer: volatile
@@ -48,6 +48,10 @@ affects:
   - tests — frontend/src/routes/api/v1/kiosk/devices/{server.test.ts,[id]/server.test.ts,[id]/staff-pin/server.test.ts,[id]/staff-pin/reveal/server.test.ts} (AC-SBO-04/06/07/08/11/16)
   - tests — frontend/src/lib/features/kiosk-devices/data/{scanner.api.test.ts,scanner.remote.test.ts} · frontend/src/lib/server/scanners/device-repository.test.ts · frontend/src/lib/auth/roles.test.ts
   - tests — frontend/src/lib/server/shelter-capability-access.test.ts (ใหม่)
+  - "amend 2026-11-11 (#1302) — ปิดให้บริการรายเครื่อง: scanner_device +service_open/service_open_changed_at/service_open_changed_by (additive, ไม่ bump schema_v) · error `403 KIOSK_CLOSED` · หน้า /kiosk/closed · Switch บนแถวใน /back-office/kiosks"
+  - docs/data/schema.md §3.11 · docs/data/api-contract.md (kiosk endpoints + KIOSK_CLOSED)
+  - frontend/src/lib/features/kiosk-devices/{domain/scanner.schema.ts,data/scanner.api.ts,application/queries.ts,ui/scanner-list.svelte} · frontend/src/lib/server/scanners/{device-credentials.ts,device-repository.ts,staff-pin-http.ts,kiosk-closed.ts}
+  - frontend/src/routes/api/v1/kiosk/{bootstrap,config,lookup,check-in,register,reprint,volunteer-card,thaid/session/**}/+server.ts · frontend/src/lib/features/kiosk/** · frontend/src/routes/kiosk/{+layout.ts,closed/**}
 why: ปัจจุบันการจัดการเครื่องทำได้เฉพาะ SA ที่ส่วนกลาง ศูนย์ต้องรอส่วนกลางทุกครั้งที่ตั้งเครื่องใหม่ เปลี่ยน PIN หรือปิดเครื่อง · ให้ศูนย์ดูแลตู้ของตัวเองได้ใน back-office และมอบงานนี้ให้เจ้าหน้าที่ดูแลตู้ (`kiosk_staff`) ได้โดยไม่ต้องให้สิทธิ์ผู้จัดการศูนย์ทั้งหมด
 migration: ไม่เปลี่ยนรูปร่าง doc `scanner_device` / `scanner_staff_pin` · ไม่ bump schema_v · ไม่ต้อง backfill · **ตัดทันที** — deploy server กับอัปเดต kiosk client ทุกเครื่องในรอบเดียวกัน ไม่มี alias path เดิม (§6)
 ---
@@ -130,6 +134,19 @@ path ในตารางนี้เป็น path หลังย้าย (�
 
 **ไม่เปลี่ยน:** body / response / error code / header ของทุก endpoint · ชื่อ doc / DB `scanner_device`, `scanner_secrets`, `scanner_staff_pin` · `client_version` default `scanner-client` ที่ kiosk client รายงาน · `GET /api/v1/auth/oauth/thaid/start?mode=kiosk_check_in` (อยู่ใต้ `auth`)
 
+### 2.5 ปิดให้บริการรายเครื่อง (amend 2026-11-11, #1302)
+
+**ปิดให้บริการ** (service closure) คือการหยุดตู้ชั่วคราว แยกจาก `status: inactive` (**ปิดใช้เครื่อง** = เพิกถอนเครื่อง ซึ่งความหมายไม่เปลี่ยน)
+
+| | before | after |
+| --- | --- | --- |
+| ข้อมูล | `scanner_device.status` อย่างเดียว | + `service_open?: boolean` (ไม่มี key = เปิด) · `service_open_changed_at?`, `service_open_changed_by?` (CouchDB username · เก็บแค่ครั้งล่าสุด) · additive ไม่ bump `schema_v` |
+| หลังบ้าน | ปิดตู้ได้ทางเดียวคือตั้ง `inactive` | Switch「เปิดให้บริการ」บนแถวเครื่อง `active` ใน `/back-office/kiosks` (ไม่มี confirm) · แถวแสดง「ปิดโดย … เมื่อ …」 |
+| `PATCH /api/v1/kiosk/devices/[id]` | `name`, `station_name`, `status`, `screen_type` | + `service_open` |
+| endpoint งานของตู้ | — | เครื่องที่ปิด → `403 KIOSK_CLOSED`: `lookup`, `check-in`, `register`, `reprint`, `volunteer-card`, `thaid/session{,/status,/cancel}`, `staff-pin/verify` |
+| `bootstrap`, `config` | — | ยังตอบ `200` และคืน `service_open` · ไม่ gate `banners`, `device-info` |
+| ตู้ | — | `service_open: false` → `/kiosk/closed` 「ตู้นี้ปิดให้บริการชั่วคราว」+ ชื่อศูนย์ · จุดบริการ (TH/EN) · poll config ทุก 30 วิ → เปิดกลับไปหน้าแรกเอง |
+
 ## 3. Requirements
 
 ### 3.1 Server — สิทธิ์
@@ -199,6 +216,19 @@ path ในตารางนี้เป็น path หลังย้าย (�
 | FR-SBO-41 | role taxonomy คง 11 บทบาท: `kiosk_staff` (ตัวย่อ **KIO**) อยู่ช่องบทบาทที่ 11 แทน **BAN** · ขอบเขต = ดูแลตู้ Kiosk ของศูนย์ตัวเอง (เครื่อง + staff PIN ตาม CR นี้ และแบนเนอร์ตาม CR-162) · ไม่ได้สิทธิ์อื่นของศูนย์ |
 | FR-SBO-42 | เมนูแบนเนอร์ของ CR-162 (เมื่อ build) อยู่ใต้เมนูแม่「จัดการ Kiosk」คู่กับ「จัดการอุปกรณ์」· เห็นเฉพาะ SA, SM และ `kiosk_staff` · FR-KBN-27 (`banner_staff` เห็นเฉพาะเมนูแบนเนอร์) ถูกแทนด้วย FR-SBO-29 |
 
+### 3.7 ปิดให้บริการรายเครื่อง (amend 2026-11-11, #1302)
+
+| ID | Requirement |
+| --- | --- |
+| FR-SBO-43 | `scanner_device` มี field optional `service_open` (boolean), `service_open_changed_at` (ISO), `service_open_changed_by` (CouchDB username) · ไม่มี `service_open` หรือค่าไม่ใช่ `false` = เปิดให้บริการ · ไม่ bump `schema_v` · ไม่ backfill |
+| FR-SBO-44 | `PATCH /api/v1/kiosk/devices/[id]` รับ `service_open` (สิทธิ์และ scope ตาม FR-SBO-02..06) · เมื่อค่าเปลี่ยนให้บันทึก `service_open_changed_by` = ผู้เรียก และ `service_open_changed_at` = เวลาปัจจุบัน · ค่าเดิมไม่แตะ audit field · การแก้ `status` ไม่เปลี่ยน `service_open` |
+| FR-SBO-45 | endpoint งานของตู้ (§2.5) ตรวจ device credential ตามเดิม แล้วถ้าเครื่องปิดให้บริการตอบ `403 { error: { code: "KIOSK_CLOSED" } }` + `cache-control: no-store` ก่อนอ่าน/เขียนข้อมูลใดๆ · staff PIN ข้ามไม่ได้ · เครื่อง `inactive` ยังได้ `401` ตามเดิม |
+| FR-SBO-46 | `bootstrap` และ `config` ตอบ `200` กับเครื่องที่ปิดให้บริการ และคืน `service_open` (boolean) · `banners`, `device-info` ไม่ gate |
+| FR-SBO-47 | ตู้: config `service_open: false` → ทุก path ใต้ `/kiosk` ไป `/kiosk/closed` (ก่อนหน้าเลือกภาษา) คง query ชื่อศูนย์ · อ่าน config ไม่ได้ ≠ ปิด |
+| FR-SBO-48 | ตู้ได้ `KIOSK_CLOSED` กลาง flow → ล้าง session แล้วไป `/kiosk/closed` · งานที่ server ตอบสำเร็จแล้วพิมพ์ต่อจนจบ · แยกจาก `KIOSK_METHOD_DISABLED` |
+| FR-SBO-49 | `/kiosk/closed` แสดงข้อความคงที่ TH/EN + ชื่อศูนย์ · จุดบริการ · สลับภาษาได้ · ไม่มีปุ่มบริการ · มีจุดเข้าข้อมูลเครื่อง/ทดสอบพิมพ์ (`KioskDeviceInfo`, PIN) จุดเดิม · poll config ทุก 30 วิ (ไม่ใช้ cache) → เปิด → `/kiosk` |
+| FR-SBO-50 | หลังบ้าน: แถวเครื่อง `active` มี Switch「เปิดให้บริการ」กดแล้วมีผลทันที (ไม่มี confirm) · disabled ระหว่างบันทึก · ปิดอยู่แสดง badge「ปิดให้บริการ」+「ปิดโดย {username} เมื่อ {เวลา}」 · แถว `inactive` ไม่มี Switch |
+
 ## 4. Acceptance criteria
 
 | ID | Scenario | ผลที่คาด | FR |
@@ -233,6 +263,16 @@ path ในตารางนี้เป็น path หลังย้าย (�
 | AC-SBO-28 | `POST /api/v1/kiosk/draft` และ `POST /api/v1/scanner/draft` | `404` ทั้งคู่ | 37 |
 | AC-SBO-29 | `grep -rn "features/scanners" frontend/src` | ไม่พบ · `$lib/features/kiosk-devices` import ได้ | 38 |
 | AC-SBO-30 | `grep -n "banner_staff" frontend/src/lib/auth/roles.ts` · ตัวเลือก role ในหน้าจัดการผู้ใช้ | ไม่พบ `banner_staff` · มี `kiosk_staff` | 39, 41 |
+
+| AC-SBO-31 | SA / SM / `kiosk_staff` ศูนย์ A กด Switch ปิดเครื่องของ A | `200` · `service_open: false` + changed_by/at · ศูนย์ B ได้ `404` · role อื่น `403` | 44, 50 |
+| AC-SBO-32 | ปิดเครื่องขณะตู้อยู่หน้าแรก | ภายใน ~30 วิ ตู้ขึ้น `/kiosk/closed` พร้อมชื่อศูนย์ · จุดบริการ · สลับ EN ได้ | 47, 49 |
+| AC-SBO-33 | ปิดเครื่องขณะมีคนใช้กลาง flow แล้วกด action ถัดไป | `403 KIOSK_CLOSED` → หน้าปิด · action นั้นไม่ถูกบันทึกหรือพิมพ์ · งานที่สำเร็จก่อนหน้าพิมพ์จนจบ | 45, 48 |
+| AC-SBO-34 | เรียกทุก endpoint งานของตู้ (รวม staff PIN) ด้วยเครื่องที่ปิด | `403 KIOSK_CLOSED` · `bootstrap` / `config` ได้ `200` + `service_open: false` | 45, 46 |
+| AC-SBO-35 | เปิดกลับ | ตู้กลับ `/kiosk` เองภายใน ~30 วิ ไม่ต้องรีสตาร์ท | 49 |
+| AC-SBO-36 | รีบูตเครื่องที่ปิดให้บริการ | bootstrap ผ่าน → `/kiosk/closed` ทันที (ไม่ผ่านหน้าเลือกภาษา) ไม่จอดำ | 46, 47 |
+| AC-SBO-37 | config ตอบ 5xx / timeout | ไม่ขึ้นหน้าปิด (ช่องทางที่มี flag ยัง fail closed ตาม CR-152) | 47 |
+| AC-SBO-38 | เครื่องเดิมที่ไม่มี `service_open` หลัง deploy · เครื่อง `inactive` | ทำงานปกติ · `inactive` ยัง `401` · ปิด → `inactive` → `active` ยังปิดให้บริการ | 43, 44, 45 |
+| AC-SBO-39 | หน้าปิดกดจุดข้อมูลเครื่อง + PIN | เห็นข้อมูลเครื่องและทดสอบพิมพ์ได้ | 46, 49 |
 
 **DoD:** `pnpm lint` · `pnpm check` (0 error) · `pnpm test` (ผ่าน pre-push hook) · test ของ kiosk client ผ่าน (allowlist path ใหม่ + AC-SBO-26) · `server.test.ts` ทุก route ครอบ AC-SBO-04/06/07/08/11/16/17/18/20 · `svelte-autofixer` ทุก `.svelte` ที่แตะ · manual AC-SBO-01..15, 19, 21..25 ด้วยบัญชี SA, SM ศูนย์ A, SM ศูนย์ B, SM ศูนย์ A+B, SM ศูนย์ A + registration_staff ศูนย์ B, registration_staff, `kiosk_staff` ศูนย์ A
 
@@ -279,6 +319,8 @@ path ในตารางนี้เป็น path หลังย้าย (�
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review PR #491): `kiosk_staff` แทน `banner_staff` ของ CR-162 ใน CR นี้ — ใช้ช่องบทบาทที่ 11 เดิม ไม่เพิ่มบทบาทที่ 12 · `kiosk_staff` ได้สิทธิ์หน้าแบนเนอร์ตาม FR-KBN-24 (§3.6, FR-SBO-39..42)
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review PR #491): คงสิทธิ์ลบเครื่องและ reveal PIN ของ `kiosk_staff` ตามที่ตกลงกับ Team Lead · คงชื่อเมนูลูก「จัดการอุปกรณ์」
 - 2026-10-12 — approved · อนุมัติโดย Soravit Sukkarn (Team LEAD) — กำหนดรหัส CR-165, ย้ายเข้า docs/changes/14-kiosk/CR-165-kiosk-management-back-office.md
+- 2026-11-11 — **ข้อเสนอทีม kiosk (amend, รอ PO อนุมัติใน PR)** issue #1302 ปิดให้บริการรายเครื่อง: field ใหม่ `service_open` แยกจาก `status` · รายเครื่องเท่านั้น ไม่มีสวิตช์ศูนย์ · ปิดทุก flow · server ตอบ `403 KIOSK_CLOSED` · staff PIN ข้ามไม่ได้ · ไม่มี key / อ่าน config ไม่ได้ = เปิด · Switch บนแถวไม่มี confirm · ตัดกลาง flow ที่ action ถัดไป · latency ~30 วิ (poll) · audit แค่คน + เวลาล่าสุด (username) · หน้าปิดยังเข้า device info/ทดสอบพิมพ์ได้ · เช็กปิดก่อนหน้าเลือกภาษา · งานที่บันทึกแล้วพิมพ์ต่อจนจบ · `inactive` → `active` คง `service_open` เดิม (§2.5, §3.7)
+- ทีม kiosk เคาะตัดทิ้ง (2026-11-11): สวิตช์ปิดทั้งศูนย์ · ตั้งเวลาเปิด/ปิดอัตโนมัติ · ข้อความกำหนดเอง · banner บนหน้าปิด · history การเปิด/ปิด · realtime push · ใช้ `inactive` แทน
 - ทีม kiosk เคาะตัดทิ้ง: ย้ายเฉพาะ `/api/v1/scanner/kiosk/*` (คง `bootstrap`, `draft`, `devices` ไว้ใต้ `scanner`) — API ของระบบเดียวกันจะแยกอยู่สอง prefix
 - ทีม kiosk เคาะตัดทิ้ง: รับทั้ง path เดิมและใหม่ชั่วคราว (alias) ระหว่างอัปเดตตู้
 - ทีม kiosk เคาะตัดทิ้ง: ย้าย `scanner_device` ไปไว้ใน `shelter_{code}` (schema.md §3.11 Future Consideration) — ต้องเปลี่ยน device auth ของ kiosk ทั้งชุด เกินขอบเขตการย้ายสิทธิ์
