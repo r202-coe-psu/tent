@@ -121,7 +121,8 @@ describe('kiosk scanner pages language', () => {
 					qrCheckInEnabled: true,
 					phoneCheckInEnabled: false,
 					thaidCheckInEnabled: true,
-					walkInRegistrationEnabled: false
+					walkInRegistrationEnabled: false,
+					serviceOpen: true
 				}
 			}
 		}).body;

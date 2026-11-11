@@ -33,7 +33,7 @@ describe('kiosk closed page', () => {
 			'http://kiosk.test/kiosk/closed?shelter_name=%E0%B8%A8%E0%B8%B9%E0%B8%99%E0%B8%A2%E0%B9%8C%20A&station_name=%E0%B8%88%E0%B8%B8%E0%B8%94%201'
 		);
 
-		const { body } = render(Page, { props: { params: {} } });
+		const { body } = render(Page);
 
 		expect(body).toContain('ตู้นี้ปิดให้บริการชั่วคราว');
 		expect(body).toContain('ขณะนี้ไม่เปิดให้ลงทะเบียนหรือรายงานตัว กรุณาติดต่อเจ้าหน้าที่');
@@ -47,7 +47,7 @@ describe('kiosk closed page', () => {
 			'http://kiosk.test/kiosk/closed?shelter_name=Shelter%20A&station_name=Station%201'
 		);
 
-		const { body } = render(Page, { props: { params: {} } });
+		const { body } = render(Page);
 
 		expect(messageOf(body)).toBe(
 			'This kiosk is temporarily closed|Registration and check-in are not available right now. Please contact staff.'
@@ -59,7 +59,7 @@ describe('kiosk closed page', () => {
 	it('offers a Thai / English switch that marks the current language', () => {
 		languageStore.setLanguage('en');
 
-		const { body } = render(Page, { props: { params: {} } });
+		const { body } = render(Page);
 
 		expect(body).toMatch(/data-language="en"[^>]*aria-pressed="true"/);
 		expect(body).toMatch(/data-language="th"[^>]*aria-pressed="false"/);
