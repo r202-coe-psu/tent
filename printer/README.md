@@ -49,8 +49,9 @@ PRINT_HOUSEKEEPING_TOKEN=<openssl rand -hex 32>
 | ตัวแปร | service | ค่า |
 |---|---|---|
 | `COUCHDB_PRINTING_SERVICE_URL` | `frontend` | `http://printing_service:<รหัส>@couchdb:5984` (ใช้ `couchdb` ไม่ใช่ `localhost` และเป็น `http://` เพราะคุยกันใน docker network) |
-| `PRINT_HOUSEKEEPING_TOKEN` | `frontend`, `print-housekeeping` | ส่งต่อจาก root `.env` |
-| `PRINT_HOUSEKEEPING_URL` | `print-housekeeping` | `http://frontend:3000` |
+| `PRINT_HOUSEKEEPING_TOKEN` | `frontend`, `worker` | ส่งต่อจาก root `.env` (frontend ตรวจ, worker ส่งเป็น Bearer) |
+| `PRINT_HOUSEKEEPING_URL` | `worker` | `http://frontend:3000` |
+| `PRINT_HOUSEKEEPING_INTERVAL_MS` | `worker` | ไม่ต้องตั้ง (ค่าเริ่มต้น 30 000 · ถ้าตั้งต้องไม่เกิน 120 000 ไม่งั้น healthcheck จะ unhealthy ตลอด) |
 
 `frontend/.env` ไม่ถูกใช้ใน container ของ staging / prod
 
@@ -68,7 +69,7 @@ docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm red
 
 **ตรวจหลัง deploy:**
 
-1. container `print-housekeeping` ขึ้น `healthy`
+1. container `worker` ขึ้น `healthy` (healthcheck ดูว่า housekeeping เรียกสำเร็จภายใน 2 นาที — ถ้า unhealthy ดู log ของ `worker` หา `print housekeeping`)
 2. back-office → **จัดการเครื่องพิมพ์** เปิดได้และไม่ขึ้น 503
 3. ลงทะเบียนเครื่อง (ขั้นที่ 1) แล้วกด **พิมพ์ทดสอบ** ด้วย user ที่มี `system_admin` หรือ `shelter:{CODE}` + `{CODE}:shelter_manager`
    (`admin` ของ CouchDB มีแค่ role `_admin` ซึ่งพิมพ์ไม่ได้ และจะขึ้น "คุณไม่มีสิทธิ์ในการทำรายการนี้")
