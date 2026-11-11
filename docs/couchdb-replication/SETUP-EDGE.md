@@ -4,9 +4,104 @@
 ฝั่ง central ต้อง **พร้อมก่อน** — ทำ [SETUP-CENTRAL.md](SETUP-CENTRAL.md) ให้ถึงขั้น 5 แล้วค่อยเริ่มที่นี่ ·
 หลักการและเหตุผลของการออกแบบอยู่ที่ [README.md §2](README.md)
 
+> **ติดตั้งศูนย์ใหม่ตั้งแต่ต้น?** อ่าน [Runbook ด้านล่าง](#runbook-ติดตั้ง-edge-ให้ศูนย์-x-ตั้งแต่ต้นจนใช้งานได้) ก่อน — สรุปว่าใครทำอะไร ที่ไหน ตามลำดับ แล้วลิงก์ไปขั้นละเอียด
+
 > **edge ทำอะไร:** เป็น CouchDB + แอป staff (SPA) ที่ศูนย์ ถือสำเนาข้อมูลของศูนย์ตัวเอง
 > **เป็นฝ่ายเปิด connection ไปหา central** แล้วดึง/ส่งข้อมูลด้วย job ใน `_replicator` — ตอน WAN ขาด staff ยังใช้งานบน LAN ได้
 > ไม่มี FastAPI / MongoDB / worker (public plane อยู่ที่ central เท่านั้น — CR-064 OD-1)
+
+## Runbook: ติดตั้ง edge ให้ศูนย์ X ตั้งแต่ต้นจนใช้งานได้
+
+ตัวอย่างใช้ศูนย์ `SH001` (DB `shelter_sh001`) — **เปลี่ยนเป็นรหัสศูนย์จริงได้ทุกจุด** (`SHELTER_CODE` เขียนตัวใหญ่ เช่น `SH001` · ชื่อ DB / job เป็นตัวเล็ก เช่น `shelter_sh001`, `sh001_pull`)
+ทำตามลำดับ **C1 → C7 ที่ central ก่อน แล้วค่อย E1 → E7 ที่เครื่อง edge** — ขั้นที่รายละเอียดยาวจะลิงก์ไปหัวข้อเดิม ไม่เขียนซ้ำ
+
+| #   | ใครทำ                  | ที่ไหน         | ทำอะไร / คำสั่ง                                                                                                                                                                                    | ตรวจว่าสำเร็จอย่างไร                                                                                                                                         |
+| --- | ---------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C1  | ผู้ดูแล central        | central        | ศูนย์เปิด/seed แล้ว: มี `registry`, `catalog`, `shelter_sh001` และมี staff ที่ role `shelter:SH001` — `curl -s $C/_all_dbs`                                                                        | เห็นครบ 3 DB (SETUP-CENTRAL ขั้น 2)                                                                                                                          |
+| C2  | ผู้ดูแล central        | central        | backfill `edge_shelters` (CR-171): `cd frontend && pnpm backfill:edge-shelters` (dry-run) แล้ว `pnpm backfill:edge-shelters --write` · **ทำก่อน C3**                                               | รันซ้ำแล้วไม่มี doc เปลี่ยน                                                                                                                                  |
+| C3  | ผู้ดูแล central        | central        | เปิด service คัดลอก user: `docker compose up -d edge-users-copy`                                                                                                                                   | `docker compose logs edge-users-copy` ไม่มี error                                                                                                            |
+| C4  | ผู้ดูแล central        | central        | deploy VDU / `_design` ของ CR-247 — Jenkins รัน `pnpm db:sync` ให้ · เครื่องที่ไม่ผ่าน Jenkins: `cd frontend && pnpm sync:central --write --confirm` แล้ว `pnpm redeploy:access --write --confirm` | รันสำเร็จ ไม่มี error (ดูหมายเหตุท้ายตาราง)                                                                                                                  |
+| C5  | ผู้ดูแล central        | central        | เปิดทางให้ edge เข้า central: lab = port `5984` (SETUP-CENTRAL ขั้น 4A) · จริง = `https://<domain>/sync` (ขั้น 4B) · เรื่อง DNS / cutover อยู่นอกขอบเขตเอกสารนี้ — ดู "ตอน cutover / cutback"      | `curl -s $SYNC_URL/_up` จากเครื่อง edge ได้ `"status":"ok"` (SETUP-CENTRAL ขั้น 5)                                                                           |
+| C6  | ผู้ดูแล central        | central        | สร้าง replication user ของศูนย์: `scripts/central-repl-user.sh SH001`                                                                                                                              | ท้ายผลลัพธ์ขึ้น `Credentials for the edge of SH001 (shown once ...)` พร้อม `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` และทุกบรรทัด `verifying as ...` เป็น `ok` |
+| C7  | ผู้ดูแล central        | central        | ตรวจสถานะ: `scripts/central-repl-user.sh SH001 --status`                                                                                                                                           | exit 0 · `backfill SH001: เสร็จแล้ว` (ถ้ายังไม่เสร็จรอ ~1 นาทีแล้วรันใหม่) · ยังไม่มี edge ต่อ = `edge ยังไม่เคยต่อเข้ามา` ปกติ                              |
+| E1  | ผู้ติดตั้ง edge        | เครื่อง edge   | clone โค้ด (ขั้น 2) · สร้าง `couchdb-edge.ini` **ก่อน `up`** (ขั้น 3): `cp couchdb-edge-example.ini couchdb-edge.ini` แล้วตั้ง `secret`                                                            | มีไฟล์ `couchdb-edge.ini` (เป็นไฟล์ ไม่ใช่โฟลเดอร์)                                                                                                          |
+| E2  | ผู้ติดตั้ง edge        | เครื่อง edge   | สร้าง `.env`: `cp .env.edge.example .env` แล้วแก้ค่า (ขั้น 4) — ดูรายการตัวแปรด้านล่าง · ตั้งเวลาเครื่อง `sudo timedatectl set-ntp true`                                                           | `timedatectl` ขึ้น `System clock synchronized: yes`                                                                                                          |
+| E3  | ผู้ติดตั้ง edge        | เครื่อง edge   | ตรวจว่าต่อ central ได้ก่อนติดตั้ง (ขั้น 1): `curl -s $SYNC_URL/_up` และ `curl -s -u '<EDGE_REPL_USER>:<EDGE_REPL_PASSWORD>' $SYNC_URL/shelter_sh001`                                               | `{"seeds":{},"status":"ok"}` และ JSON ข้อมูล DB (ไม่ใช่ HTML / `unauthorized`)                                                                               |
+| E4  | ผู้ติดตั้ง edge        | เครื่อง edge   | เปิด stack: `docker compose -f docker-compose.edge.yml up -d --build` (build ครั้งแรกหลายนาที)                                                                                                     | `docker compose -f docker-compose.edge.yml ps` ไม่มี container ที่ restart วน                                                                                |
+| E5  | ผู้ติดตั้ง edge        | เครื่อง edge   | ดูผล provisioning: `docker logs tent-edge-init-edge`                                                                                                                                               | ทุกบรรทัดเป็น `ok` หรือ `exists` ไม่มี `FAILED` (อ่านความหมายด้านล่าง)                                                                                       |
+| E6  | ผู้ติดตั้ง edge        | เครื่อง edge   | รอ ~30 วินาที แล้วตรวจ job ทั้ง 5 และทดสอบ sync (ขั้น 6)                                                                                                                                           | job ทั้ง 5 `running` · ทดสอบ 2–5 ในตาราง ขั้น 6 ผ่าน                                                                                                         |
+| E7  | ผู้ดูแล central + edge | central / edge | ปิดงาน: ตรวจ `--status` ที่ central อีกครั้ง · ศูนย์จริงทำ checklist ขั้น 6B ก่อนเปิดใช้                                                                                                           | `edge ดึงข้อมูลล่าสุดเมื่อ: <เวลาล่าสุด>` และ exit 0                                                                                                         |
+
+**หมายเหตุ C2–C4:** C2 ต้องเสร็จก่อนเปิด `edge-users-copy` (C3) ไม่งั้น user ที่ไม่มี `edge_shelters` แล้วถูกถอด role จะไม่ถูกส่งไป edge (CR-247 Migration) ·
+C4: ตัว CR-247 Migration ระบุเฉพาะ C2 — ส่วน `pnpm sync:central --write --confirm` / `pnpm redeploy:access` มาจาก "อัปเกรดเป็น CR-171" ด้านล่างและสคริปต์ `db:sync` ใน `frontend/package.json` · VDU ที่ central ต้องเป็นรุ่นที่ให้ role `repl:<CODE>` เขียน `shelter_<code>` ได้ ไม่งั้น `sh001_push` จะขึ้น `doc_write_failures`
+
+### C6 — สิ่งที่สคริปต์แสดง (ครั้งเดียว)
+
+```
+Credentials for the edge of SH001 (shown once — store the password now). Put them into the edge .env:
+
+  EDGE_REPL_USER=repl_sh001_<8 ตัว hex>
+  EDGE_REPL_PASSWORD=<รหัสสุ่ม 32 ตัว hex>
+```
+
+**จดทันที** แล้วส่งให้คนติดตั้ง edge ผ่านช่องทางที่ปลอดภัย — รันซ้ำโดยไม่ใส่ `--rotate` จะขึ้น `Nothing printed for the password` และรหัสไม่แสดงอีก (ลืมแล้วต้อง `--rotate` ซึ่งได้รหัสใหม่) ·
+ศูนย์ละ 1 บัญชี · **ห้ามส่งรหัส central admin ให้ edge**
+
+### E2 — ตัวแปรใน `.env` ที่ต้องแก้ (ไฟล์ตัวอย่าง [`.env.edge.example`](../../.env.edge.example) · ตารางเต็มที่ ขั้น 4)
+
+| ตัวแปร                                  | ใส่อะไร                                                                                                        |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `COUCHDB_USER` / `COUCHDB_PASSWORD`     | admin ของ CouchDB **ที่ edge** — ตั้งเอง **คนละรหัสกับ central** (`openssl rand -hex 24`)                      |
+| `SHELTER_CODE`                          | รหัสศูนย์ **ตัวใหญ่** เช่น `SH001` — ต้องตรงกับศูนย์ที่ได้ `EDGE_REPL_USER` มา (ไม่ตรง = `edge-init` `FAILED`) |
+| `SYNC_URL`                              | ที่อยู่ central: lab `http://<IP central>:5984` · จริง `https://<domain>/sync`                                 |
+| `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` | ค่าที่ได้จาก C6 (ห้ามใส่ central admin) · ลบ `CENTRAL_REPL_*` เดิมออกถ้ามี                                     |
+| `PUBLIC_ORIGIN`                         | URL ที่ browser เปิด (lab: `http://<IP ของ edge>`) · ฝังตอน build                                              |
+| `EDGE_LAN_IP` / `EDGE_HTTP_PORT`        | IP ของ edge ใน LAN ที่ nginx รับ / port (default `80`)                                                         |
+
+### E5 — อ่านผล `edge-init`
+
+| บรรทัด   | ความหมาย                                                                                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ok`     | สร้างใหม่สำเร็จ                                                                                                                                                        |
+| `exists` | มีอยู่แล้ว ข้ามไป (รันซ้ำได้)                                                                                                                                          |
+| `stale`  | job เดิมไม่ตรงกับ `.env` ปัจจุบัน → ลบแล้วสร้างใหม่ให้                                                                                                                 |
+| `FAILED` | หยุดทันที exit 1 — ดูข้อความหลัง `FAILED` แล้วใช้หัวข้อ "ถ้าติดปัญหา" ด้านล่าง · แก้ `.env` แล้วรัน `docker compose -f docker-compose.edge.yml run --rm edge-init` ซ้ำ |
+
+`edge-init` ตรวจ 2 อย่างก่อนสร้าง job (`ok central uuid ... ≠ edge uuid ...` และ `ok central session: EDGE_REPL_USER มี role repl:SH001 และไม่ใช่ admin`) แล้วสร้าง **5 job** ใน `_replicator`:
+`registry_pull`, `catalog_pull`, `sh001_pull`, `sh001_push`, `users_sh001_pull` (ทิศทางและหน้าที่ของแต่ละตัวดูตาราง "replication job 5 ตัว" ด้านล่าง)
+
+### E6 — เช็กลิสต์ตรวจก่อนบอกว่า "ใช้งานได้" (แบบย่อของ AC-7 ใน ขั้น 6B)
+
+- [ ] **job ทั้ง 5 `running`** — คำสั่ง `curl -s $E/_scheduler/docs/_replicator ...` ใน ขั้น 6 (รอ ~30 วินาทีหลัง `up`; รายการว่างตอนแรกเป็นเรื่องปกติ)
+- [ ] **staff login ที่ edge ได้** — `POST $EDGE/couch/_session` ได้ `{"ok":true,...}` (ขั้น 6 ข้อ 5) · ใช้ staff ที่ activate ที่ central แล้ว (ดู "บัญชีสำรอง" ด้านล่าง)
+- [ ] **central → edge** — เขียน doc ที่ central แล้วอ่านที่ edge ได้ `200` (ขั้น 6 ข้อ 2)
+- [ ] **edge → central** — เขียนที่ edge ผ่าน nginx แล้วอ่านที่ central ได้ `200` (ขั้น 6 ข้อ 3)
+- [ ] **ไม่มี user ศูนย์อื่นที่ edge** — `404` (ขั้น 6 ข้อ 4)
+- [ ] **`--status` ที่ central** แสดง `edge ดึงข้อมูลล่าสุดเมื่อ: ...` (ไม่ใช่ `edge ยังไม่เคยต่อเข้ามา`) และ exit 0
+- [ ] ศูนย์จริง: ทำ AC-1..AC-8 ใน ขั้น 6B ครบ (แอปผ่าน browser และการต่อข้ามเครื่องจริงยัง **ไม่เคยทดสอบ** ตามหมายเหตุ ขั้น 6)
+
+### ถ้าติดปัญหา — 5 อาการที่เจอบ่อย (ตารางเต็มที่ "แก้ปัญหา (ฝั่ง edge)")
+
+| อาการ                                                                                                           | สาเหตุ                                                                                                                                        | แก้                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `edge-init` `FAILED  EDGE_REPL_USER มี role _admin` / `ไม่มี role repl:<CODE>` / `GET .../_session ... ไม่ผ่าน` | ใส่ central admin, บัญชีผิดศูนย์, `SHELTER_CODE` ไม่ตรง หรือรหัสผิด                                                                           | ใช้ค่าจาก `central-repl-user.sh <CODE>` ของศูนย์นี้ · เช็ก `SHELTER_CODE` ตัวใหญ่ · รัน `edge-init` ซ้ำ                     |
+| job `crashing` + `unauthorized` (401)                                                                           | `EDGE_REPL_*` ผิด หรือผู้ดูแล central สั่ง `--rotate` / `--remove` ของศูนย์นี้แล้ว                                                            | ขอชุดล่าสุดจาก central (`--rotate` ได้รหัสใหม่) ใส่ `.env` แล้วรัน `edge-init`                                              |
+| job `crashing` + `forbidden` (403) ทั้งที่รหัสถูก                                                               | ถูกล็อกเอาต์ (รหัสผิดเกิน 5 ครั้ง) — ล็อกเฉพาะศูนย์นี้                                                                                        | แก้รหัสให้ถูก แล้วรอ **5 นาที** · อย่าลบ/สร้าง job ซ้ำระหว่างรอ                                                             |
+| job `crashing` + `nxdomain` / `econnrefused` / timeout / certificate / ได้ HTML แทน JSON                        | `SYNC_URL` ผิด, central ปิด, `location /sync/` ยังไม่มี, นาฬิกาเพี้ยน, หรือ LAN DNS ยังชี้ domain แอปมาที่ edge                               | ทำ E3 ซ้ำ · NTP (E2) · SETUP-CENTRAL ขั้น 4B · DNS ดู "ตอน cutover / cutback"                                               |
+| staff login ที่ edge ไม่ได้                                                                                     | `users_sh001_pull` ไม่ `running`, `edge-users-copy` หยุด, staff ไม่มี role `shelter:<CODE>` / `edge_shelters`, ยังไม่เคย activate ที่ central | `central-repl-user.sh SH001 --status` ที่ central · `docker compose logs edge-users-copy` · activate staff ที่ central ก่อน |
+
+### งานประจำหลังติดตั้ง
+
+| งาน                                                       | ที่ไหน         | คำสั่ง / วิธี                                                                                                                                                                                                                                 |
+| --------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ตรวจ `--status` ทุกวัน                                    | central        | `scripts/central-repl-user.sh SH001 --status` (หรือ loop ทุกศูนย์ — SETUP-CENTRAL "ตรวจ `--status` ทุกวัน") · exit ≠ 0 = `edge-users-copy` มี `last_error` หรือตามหลัง `_users` เกิน 5 นาที → `docker compose logs edge-users-copy`           |
+| หมุนรหัสของศูนย์นี้                                       | central → edge | central: `scripts/central-repl-user.sh SH001 --rotate` (แสดงรหัสใหม่ครั้งเดียว) · edge: แก้ `EDGE_REPL_PASSWORD` ใน `.env` แล้วรัน `docker compose -f docker-compose.edge.yml run --rm edge-init` **ทันที** (ศูนย์อื่นไม่กระทบ)               |
+| เครื่อง edge หาย / ถูกขโมย (FR-21)                        | central        | ทำตามลำดับใน SETUP-CENTRAL "เครื่อง edge หาย": `--remove` ทันที → reset password staff ทุกคนของศูนย์ → ตรวจ revision ที่ขึ้นมาใหม่ → ติดตั้งเครื่องใหม่ด้วย `central-repl-user.sh SH001` (credential ใหม่) แล้วทำ runbook นี้ตั้งแต่ E1       |
+| ปิดศูนย์ (FR-21a)                                         | central + edge | ปิดศูนย์ในแอป (`operation_status: closed`) → central: `scripts/central-repl-user.sh SH001 --remove` → ล้างเครื่อง edge ทั้งเครื่อง (ดู "ถอดออก" ด้านล่าง) · ศูนย์ `cancelled` ไม่ต้องทำ — SETUP-CENTRAL "ปิดศูนย์ที่มี edge"                  |
+| ลบ user ตรงใน CouchDB (hard delete) แล้วเหลือค้างที่ edge | central        | `scripts/edge-users-clean.sh SH001` (dry-run พิมพ์ `<db> <id>` ของ orphan) → ตรวจรายการ → `scripts/edge-users-clean.sh SH001 --apply` · edge ได้รับการลบในรอบ pull ถัดไป · แอปใช้ soft delete อยู่แล้ว จึงต้องทำเฉพาะเมื่อมีคนลบตรงใน CouchDB |
+| job ค้างหลัง WAN กลับ                                     | edge           | ปกติ `edge-watchdog` เตะให้เอง · เตะเองด้วย `kick` ใน "งานประจำ" ด้านล่าง                                                                                                                                                                     |
+
+---
 
 ## 0. ต้องมีก่อนเริ่ม
 

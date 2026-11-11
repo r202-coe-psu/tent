@@ -1,7 +1,7 @@
 # Setup Central — ฝั่งที่ edge มา sync ด้วย
 
 คู่มือนี้ใช้กับ **เครื่อง central เท่านั้น** (เครื่องที่รัน CouchDB หลักของระบบ) ทำตามลำดับ และตรวจให้ผ่านก่อนไปขั้นถัดไป
-ฝั่ง edge อยู่ที่ [SETUP-EDGE.md](SETUP-EDGE.md) · หลักการและเหตุผลของการออกแบบอยู่ที่ [README.md §2](README.md)
+ฝั่ง edge อยู่ที่ [SETUP-EDGE.md](SETUP-EDGE.md) (ต้นไฟล์มี runbook สรุป "ติดตั้ง edge ให้ศูนย์ X ตั้งแต่ต้นจนใช้งานได้" ทั้งฝั่ง central และ edge) · หลักการและเหตุผลของการออกแบบอยู่ที่ [README.md §2](README.md)
 
 > **หลักการข้อเดียวที่ต้องจำ:** edge เป็นฝ่ายเปิด connection หา central เสมอ (edge อยู่หลัง NAT ของศูนย์)
 > job replication ของ edge อยู่ที่ edge ทั้งหมด — หน้าที่ของ central มี 4 อย่าง:
