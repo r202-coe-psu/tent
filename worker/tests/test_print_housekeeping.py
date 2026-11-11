@@ -184,3 +184,22 @@ async def test_loop_returns_promptly_when_stop_is_set_during_sleep(tmp_path) -> 
     assert time.monotonic() - started < 1.0
     assert calls == 1
     assert (tmp_path / "hk.ok").read_text().isdigit()
+
+
+async def test_malformed_url_does_not_raise_or_write(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    writes = Writes()
+    with caplog.at_level(logging.WARNING):
+        async with httpx.AsyncClient() as client:
+            ok = await run_housekeeping_tick(
+                client,
+                make_cfg(endpoint="http://[::1/api/internal/printers/housekeeping"),
+                now=lambda: 1,
+                write_ok=writes,
+            )
+
+    assert ok is False
+    assert writes.calls == []
+    assert "InvalidURL" in caplog.text
+    assert TOKEN not in caplog.text

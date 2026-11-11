@@ -70,7 +70,7 @@ async def run_housekeeping_tick(
 ) -> bool:
     """POST the housekeeping endpoint once.
 
-    Never raises: a failure is logged (status or error name, never the token or the response
+    Never raises (only cancellation propagates): a failure is logged (status or error name, never the token or the response
     body) and reported as ``False``.
     """
     try:
@@ -86,7 +86,7 @@ async def run_housekeeping_tick(
             return False
         write_ok(cfg.ok_file, str(now()))
         return True
-    except (httpx.HTTPError, OSError) as exc:
+    except Exception as exc:  # noqa: BLE001 — a dead task would stop housekeeping silently
         logger.warning("print housekeeping request failed: %s", type(exc).__name__)
         return False
 
