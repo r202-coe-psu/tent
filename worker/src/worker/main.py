@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 
 from tent_model import close_db, init_db
@@ -20,6 +21,10 @@ from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
 from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
 from worker.inbound.volunteer_schedule_actions import run_volunteer_schedule_action_loop
 from worker.listeners.registry import ListenerManager
+from worker.printing.housekeeping import (
+    load_housekeeping_config,
+    run_print_housekeeping_loop,
+)
 from worker.retention.job import run_retention_loop
 
 logging.basicConfig(
@@ -53,6 +58,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     profile_update_task: asyncio.Task[None] | None = None
     schedule_action_task: asyncio.Task[None] | None = None
     external_booking_task: asyncio.Task[None] | None = None
+    print_housekeeping_task: asyncio.Task[None] | None = None
 
     try:
         await maybe_bootstrap(couch, force=force_bootstrap or bootstrap_only)
@@ -89,6 +95,16 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             run_external_booking_inbound_loop(couch, stop_event=stop),
             name="inbound-external-bookings",
         )
+        housekeeping_cfg = load_housekeeping_config(os.environ)
+        if housekeeping_cfg is None:
+            logger.info(
+                "print housekeeping disabled: PRINT_HOUSEKEEPING_TOKEN is not set"
+            )
+        else:
+            print_housekeeping_task = asyncio.create_task(
+                run_print_housekeeping_loop(stop_event=stop, cfg=housekeeping_cfg),
+                name="print-housekeeping",
+            )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
@@ -103,6 +119,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             profile_update_task,
             schedule_action_task,
             external_booking_task,
+            print_housekeeping_task,
         ):
             if task:
                 task.cancel()
