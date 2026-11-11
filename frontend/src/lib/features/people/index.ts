@@ -439,6 +439,7 @@ export {
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
 export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-profile';
 export { stripThaiTitle } from './domain/thaid-profile';
+export { scannerCardSchema, cardToUnifiedMember, type ScannerCard } from './domain/scanner-card';
 export { default as ThaidActionButton } from './ui/registration/thaid-action-button.svelte';
 export { default as ThaidMemberScanDialog } from './ui/registration/thaid-member-scan-dialog.svelte';
 export { default as UnifiedRegistrationSummaryCard } from './ui/registration/unified-registration-summary-card.svelte';

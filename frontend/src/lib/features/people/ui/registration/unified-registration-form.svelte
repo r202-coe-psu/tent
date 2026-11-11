@@ -43,6 +43,7 @@
 	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
+	import { cardToUnifiedMember, scannerCardSchema } from '../../domain/scanner-card';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -1282,6 +1283,25 @@
 				handleThaiDAutofill(initialThaidProfile);
 			});
 		}
+	});
+
+	/**
+	 * Desktop scanner client (#1326): `scanner:card-read` fills the first empty member.
+	 * `preventDefault()` is the acknowledgement the scanner client waits for.
+	 */
+	function handleScannerCardRead(event: Event) {
+		const parsed = scannerCardSchema.safeParse((event as CustomEvent).detail);
+		if (!parsed.success) return;
+		event.preventDefault();
+		const index = members.findIndex((m) => !m.first_name.trim() && !m.person_id?.number?.trim());
+		if (index === -1) return;
+		members[index] = cardToUnifiedMember(parsed.data, members[index]);
+		markDirty();
+	}
+
+	$effect(() => {
+		window.addEventListener('scanner:card-read', handleScannerCardRead);
+		return () => window.removeEventListener('scanner:card-read', handleScannerCardRead);
 	});
 
 	/** 「สร้างใหม่」 always asks first — skipping a found family is how duplicate households start. */
