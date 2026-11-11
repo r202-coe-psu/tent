@@ -3,7 +3,7 @@ id: CR-213
 title: ผู้ประสานงานจิตอาสาออกสิทธิ์ใช้งานระบบให้จิตอาสาได้แบบจำกัด role และมีวันหมดอายุ
 status: approved
 date: 2026-10-27
-updated: 2026-11-04 # CR-221 Amendment A1 approved 2026-11-04 (Soravit Sukkarn, Team Lead) — ลบป้าย proposed ในหมายเหตุ A1 · หมายเหตุ CR-221 Amendment A1 (proposed) ที่ TL;DR, FR-7, FR-10, AC-3, AC-6 · แก้คำเรียก @Mhapong เป็นผู้รับงาน / ผู้เสนอ · 2026-11-03 FR-10 หมายเหตุ CR-221 Amendment A1 (proposed) · 2026-11-01 amend FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12 โดย CR-221 (coordinator-grant-edit-and-roles)
+updated: 2026-11-06 # แก้หมายเหตุข้ามศูนย์ใน Impact: #886 (CR-228) จับคู่ด้วย phone_hash + national_id_hash ไม่ใช่ phone_hash อย่างเดียว; 2026-11-04 CR-221 Amendment A1 approved 2026-11-04 (Soravit Sukkarn, Team Lead) — ลบป้าย proposed ในหมายเหตุ A1 · หมายเหตุ CR-221 Amendment A1 (proposed) ที่ TL;DR, FR-7, FR-10, AC-3, AC-6 · แก้คำเรียก @Mhapong เป็นผู้รับงาน / ผู้เสนอ · 2026-11-03 FR-10 หมายเหตุ CR-221 Amendment A1 (proposed) · 2026-11-01 amend FR-2, FR-3, FR-5, FR-7, FR-8, FR-10, FR-11, FR-12 โดย CR-221 (coordinator-grant-edit-and-roles)
 requested_by: "@net-lynx ใน #879 ข้อ 2 (2026-10-27) + ผู้รับงาน (@Mhapong) เสนอรายละเอียด"
 decided_by: Soravit Sukkarn (Team Lead)
 layer: stable
@@ -185,7 +185,7 @@ affects:
   - ยอมรับเพราะแต่ละศูนย์มี SM 1 คนและ coordinator น้อย การบังคับให้คนอื่นยืนยันตัวตนจะทำให้ออกสิทธิ์หน้างานไม่ได้
   - mitigation: grant และ audit บันทึก `verified_by.reviewed_by` (FR-3, FR-14) และ SM เห็นผู้ออก ผู้ยืนยัน และวันหมดในหน้าแก้ไขผู้ใช้ พร้อมถอนหรือทำให้ถาวรได้ (FR-10, AC-11)
   - การผูกการยืนยันตัวตนกับเลขบัตรประชาชนจริง (เช่นผ่าน ThaID) ไม่อยู่ใน CR นี้
-- **ข้ามศูนย์:** เงื่อนไข `national_id_hash` (FR-3 ข) เข้มกว่าทาง D ของ #886 ที่ใช้ `phone_hash` อย่างเดียว ใช้เฉพาะการออกสิทธิ์ ส่วนการใช้ผลยืนยันข้ามศูนย์อื่น ๆ เป็นไปตาม #886
+- **ข้ามศูนย์:** เงื่อนไข `phone_hash` + `national_id_hash` (FR-3 ข) ใช้กับการออกสิทธิ์ · การใช้ผลยืนยันข้ามศูนย์อื่น ๆ เป็นไปตาม #886 ([CR-228](CR-228-cross-shelter-verification-reference.md)) ซึ่งจับคู่ด้วย `phone_hash` + `national_id_hash` ชุดเดียวกัน (แก้ 2026-11-06: เดิมระบุว่า #886 ใช้ `phone_hash` อย่างเดียว)
 - **test:**
   - unit test ของ policy, BFF (ออก / ต่ออายุ / ย่น / ถอน / บัญชีเป้าหมาย), form และ worker sweep (หมดอายุ, ยกเลิกยืนยันตัวตน, Mongo ล้ม)
   - test ของ `validate_doc_update` (AC-7)

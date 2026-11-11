@@ -175,8 +175,8 @@ export interface StockLot {
 	self_purchased?: boolean;
 }
 
-/** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = 3-digit per-day per-shelter sequence. */
-export const LOT_NO_PATTERN = /^L-\d{6}-\d{3}$/;
+/** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = per-day per-shelter sequence, 3 digits, or 4+ digits without a leading zero past 999 (CR-244 FR-3). */
+export const LOT_NO_PATTERN = /^L-\d{6}-(\d{3}|[1-9]\d{3,})$/;
 
 /**
  * Single source of truth for the shape of `stock_ledger.lot` (schema.md §2.1) —
@@ -206,27 +206,81 @@ export function lotDateStamp(date: Date): string {
 	return `${yy}${mm}${dd}`;
 }
 
+/** `lot_counter` doc `_id` for a day stamp (`YYMMDD`) — CR-244 FR-1. */
+export function lotCounterId(stamp: string): string {
+	return `lot_counter:L-${stamp}`;
+}
+
+/** `lot_counter` doc shape (schema.md §2.1 · schema_v 1). */
+export interface LotCounter extends BaseDoc {
+	type: 'lot_counter';
+	/** Last sequence number already reserved for the day (int ≥ 0, only ever increases). */
+	last: number;
+}
+
+/** The counter value after reserving `count` numbers on top of `last` (FR-4). */
+export function nextCounterLast(last: number, count: number): number {
+	return last + count;
+}
+
 /**
- * Mint the next `count` lot numbers for a day, continuing after whatever already
- * exists. `existing` is every `lot_no` already on that shelter's ledger — entries
- * from other days are ignored, so the caller may pass the lot unfiltered.
- *
- * Not atomic: two staff receiving in the same second can be handed the same
- * sequence. Accepted in CR-088 — the worst case is two lots sharing a label.
+ * Build `count` consecutive lot numbers `L-YYMMDD-XXX` starting at sequence `firstSeq`
+ * (3-digit zero pad; past 999 the number simply grows to 4+ digits — CR-244 FR-3/FR-15).
+ * Pure string building: which sequence range a caller owns is decided by the reservation loop.
  */
-export function nextLotNos(existing: readonly string[], date: Date, count: number): string[] {
-	const stamp = lotDateStamp(date);
+export function buildLotNos(date: Date, firstSeq: number, count: number): string[] {
+	const prefix = `L-${lotDateStamp(date)}-`;
+	return Array.from(
+		{ length: Math.max(0, count) },
+		(_, i) => `${prefix}${String(firstSeq + i).padStart(3, '0')}`
+	);
+}
+
+/** Rows scanned when seeding a day's counter (once per shelter per day, CR-244 FR-6). */
+export const LOT_SEED_LOOKUP_LIMIT = 10_000;
+
+/**
+ * Mango `_find` body that lists the `lot_no`s already on `stock_ledger` for a day (`YYMMDD`) — the
+ * one-time seed of a new `lot_counter` (CR-244 FR-6). Shared by every connector.
+ */
+export function lotSeedFindBody(stamp: string) {
+	const prefix = `L-${stamp}-`;
+	return {
+		selector: {
+			type: 'stock_ledger',
+			'lot.lot_no': { $gte: prefix, $lt: `${prefix}\uFFF0` }
+		},
+		fields: ['lot.lot_no'],
+		limit: LOT_SEED_LOOKUP_LIMIT
+	};
+}
+
+/** Highest sequence of the day in the rows a {@link lotSeedFindBody} query returned (0 if none). */
+export function parseLotSeedMax(
+	rows: readonly { lot?: { lot_no?: string } }[],
+	stamp: string
+): number {
+	return maxLotSeq(
+		rows.map((r) => r.lot?.lot_no).filter((v): v is string => typeof v === 'string'),
+		stamp
+	);
+}
+
+/**
+ * Highest sequence among `lotNos` that belong to `stamp`'s day, or 0 — used once, to seed a
+ * day's counter from rows issued before it existed (CR-244 FR-6). Other days / junk are ignored.
+ */
+export function maxLotSeq(lotNos: readonly string[], stamp: string): number {
 	const prefix = `L-${stamp}-`;
 	let max = 0;
-	for (const lot of existing) {
+	for (const lot of lotNos) {
 		if (!lot.startsWith(prefix)) continue;
-		const seq = Number.parseInt(lot.slice(prefix.length), 10);
-		if (Number.isFinite(seq) && seq > max) max = seq;
+		const tail = lot.slice(prefix.length);
+		if (!/^\d+$/.test(tail)) continue;
+		const seq = Number.parseInt(tail, 10);
+		if (seq > max) max = seq;
 	}
-	return Array.from(
-		{ length: count },
-		(_, i) => `${prefix}${String(max + i + 1).padStart(3, '0')}`
-	);
+	return max;
 }
 
 export interface StockLedger extends BaseDoc {
