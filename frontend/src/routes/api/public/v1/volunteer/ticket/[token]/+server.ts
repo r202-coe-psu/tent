@@ -12,7 +12,7 @@ function maskPhone(phone: string | null | undefined): string {
 }
 
 /** Digital Pass (CR-092 screen 2). The token is the only credential. */
-export const GET: RequestHandler = async ({ params, fetch }) => {
+export const GET: RequestHandler = async ({ params, url, fetch }) => {
 	const token = params.token?.trim();
 	if (!token) {
 		return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });
@@ -22,7 +22,12 @@ export const GET: RequestHandler = async ({ params, fetch }) => {
 	try {
 		const resolved = await resolveTicket(token);
 		if (resolved) {
-			const { dbName, shelter, app, volunteer } = resolved;
+			const { dbName, shelter, volunteer } = resolved;
+			// `?application=` opens one of a permanent token's applications (#973); an id the
+			// token does not own falls back to the default pick, never to someone else's.
+			const wanted = url.searchParams.get('application');
+			const app =
+				(wanted ? resolved.applications.find((a) => a._id === wanted) : undefined) ?? resolved.app;
 			let jobTitle = 'งานจิตอาสาประจำศูนย์พักพิง';
 			if (app?.job_id) {
 				try {

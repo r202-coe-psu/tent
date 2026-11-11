@@ -1,78 +1,85 @@
 # Setup Edge — ฝั่ง @ศูนย์ ที่ sync กับ central
 
-คู่มือนี้ใช้กับ **เครื่อง edge เท่านั้น** (mini PC ที่ศูนย์) ทำตามลำดับ และตรวจให้ผ่านก่อนไปขั้นถัดไป
-ฝั่ง central ต้อง **พร้อมก่อน** — ทำ [SETUP-CENTRAL.md](SETUP-CENTRAL.md) ให้ถึงขั้น 5 แล้วค่อยเริ่มที่นี่ ·
+คู่มือนี้ใช้กับ **เครื่อง edge เท่านั้น** (mini PC ที่ศูนย์) ทำตามขั้น 1 → 8 ตามลำดับ และตรวจให้ผ่านก่อนไปขั้นถัดไป ·
 หลักการและเหตุผลของการออกแบบอยู่ที่ [README.md §2](README.md)
 
 > **edge ทำอะไร:** เป็น CouchDB + แอป staff (SPA) ที่ศูนย์ ถือสำเนาข้อมูลของศูนย์ตัวเอง
 > **เป็นฝ่ายเปิด connection ไปหา central** แล้วดึง/ส่งข้อมูลด้วย job ใน `_replicator` — ตอน WAN ขาด staff ยังใช้งานบน LAN ได้
 > ไม่มี FastAPI / MongoDB / worker (public plane อยู่ที่ central เท่านั้น — CR-064 OD-1)
 
-## 0. ต้องมีก่อนเริ่ม
+> **ก่อนเริ่มต้องได้จาก central 4 ค่า:** `SYNC_URL` · `SHELTER_CODE` (ตัวใหญ่ เช่น `SH001`) · `EDGE_REPL_USER` · `EDGE_REPL_PASSWORD`
+> ผู้ดูแล central เป็นคนสร้างและส่งให้ — วิธีสร้างอยู่ที่ [SETUP-CENTRAL.md "ค่าที่ต้องส่งให้ฝั่ง edge"](SETUP-CENTRAL.md#ค่าที่ต้องส่งให้ฝั่ง-edge)
+> `EDGE_REPL_*` เป็นบัญชีของศูนย์นี้เท่านั้น **ไม่ใช่ central admin** (รหัสแสดงครั้งเดียว ถ้าหายต้องขอชุดใหม่)
+>
+> **เครื่อง edge ต้องมี:** Docker + Docker Compose, git, curl, python3 (`docker compose version`) · internet (build frontend ครั้งแรก + pull image) ·
+> port `80` ว่าง (หรือเลือก port อื่นใน `EDGE_HTTP_PORT` — `ss -ltn | grep ':80 '`)
 
-| สิ่งที่ต้องมี | ได้จาก / ตรวจยังไง |
-| --- | --- |
-| Docker + Docker Compose, git, curl, python3 | `docker compose version` |
-| internet (build frontend ครั้งแรก + pull image) | — |
-| port `80` ว่างบนเครื่อง (หรือเลือก port อื่นใน `EDGE_HTTP_PORT`) | `ss -ltn \| grep ':80 '` |
-| นาฬิกาตรง (NTP เปิด) | `timedatectl` — นาฬิกาเพี้ยนทำให้ TLS ล้มตอนต่อ `https://` · วิธีตั้งท้ายขั้น 4 |
-| ค่าจาก central 3 กลุ่ม | ตาราง "ค่าที่ต้องส่งให้ฝั่ง edge" ท้าย [SETUP-CENTRAL.md](SETUP-CENTRAL.md) |
-
-เลือกแบบเหมือนที่เลือกฝั่ง central: **Lab** (`http://<IP central>:5984`, ไม่มี cert) หรือ **จริง** (`https://<domain>/sync` — path บน domain ของแอป)
+ตัวอย่างในคู่มือใช้ศูนย์ `SH001` (DB `shelter_sh001`, job `sh001_pull`) — **เปลี่ยนเป็นรหัสศูนย์จริงทุกจุด**
+(`SHELTER_CODE` เขียนตัวใหญ่ · ชื่อ DB / job เขียนตัวเล็ก)
 
 ---
 
-## ขั้น 1 — ตรวจว่า edge ต่อ central ได้ (ก่อนติดตั้งอะไร)
+## ขั้น 1 — ตรวจว่า edge ต่อ central ได้
 
-**ทำไม:** ถ้าต่อไม่ติดตั้งแต่ตรงนี้ job ทุกตัวจะ `crashing` และหาสาเหตุยากกว่ามาก
+**ทำอะไร:** จากเครื่อง edge เรียก central ด้วย `curl` 2 ครั้ง — ครั้งแรกไม่ใส่รหัส ครั้งที่สองใส่ `EDGE_REPL_*` แล้วเปิด DB ของศูนย์
 
 ```bash
 SYNC_URL=http://<IP ของ central>:5984        # จริง: https://<domain>/sync
 curl -s $SYNC_URL/_up                        # {"seeds":{},"status":"ok"}
-curl -s -u admin:'<รหัส admin ของ central>' $SYNC_URL/shelter_sh001     # JSON ข้อมูล DB
+curl -s -u '<EDGE_REPL_USER>:<EDGE_REPL_PASSWORD>' $SYNC_URL/shelter_sh001     # JSON ข้อมูล DB
 ```
 
-ไม่ผ่าน → กลับไปแก้ฝั่ง central (ขั้น 4–5 ของ SETUP-CENTRAL.md) ยังไม่ต้องทำขั้นต่อไป
+**เพื่ออะไร:** ถ้าต่อไม่ติดหรือรหัสผิดตั้งแต่ตรงนี้ job ทุกตัวจะ `crashing` และหาสาเหตุยากกว่ามาก
+
+**ตรวจว่าผ่าน:** ได้ `"status":"ok"` และได้ JSON ข้อมูล DB (มี `db_name`, `doc_count`) — ไม่ใช่ HTML และไม่ใช่ `unauthorized` ·
+ไม่ผ่าน = แจ้งผู้ดูแล central ให้ตรวจฝั่ง central (SETUP-CENTRAL ขั้น 4–5) ยังไม่ต้องทำขั้นต่อไป
 
 ---
 
 ## ขั้น 2 — เอาโค้ดมาไว้บน edge
 
+**ทำอะไร:**
+
 ```bash
-git clone -b feat/edge-couch-replication git@github.com:r202-coe-psu/tent.git
+git clone git@github.com:r202-coe-psu/tent.git
 cd tent
 ```
 
-ไฟล์ที่ edge ใช้ (อยู่ที่ root ของ repo):
+**เพื่ออะไร:** ได้ compose, nginx, config และสคริปต์ที่ edge ใช้ (อยู่ที่ root ของ repo):
 
-| ไฟล์ | หน้าที่ |
-| --- | --- |
-| [`docker-compose.edge.yml`](../../docker-compose.edge.yml) | stack ของ edge: `couchdb`, `couchdb-init`, `edge-init`, `frontend`, `nginx` |
-| [`nginx-edge/default.conf`](../../nginx-edge/default.conf) | nginx ของ edge: `/couch` + SPA |
-| [`couchdb-edge-example.ini`](../../couchdb-edge-example.ini) | config CouchDB ของ edge (copy เป็น `couchdb-edge.ini`) |
-| [`.env.edge.example`](../../.env.edge.example) | ตัวอย่าง env (copy เป็น `.env`) |
-| [`scripts/edge-init.sh`](../../scripts/edge-init.sh) | สร้าง DB, `_security`, guard และ replication job |
+| ไฟล์                                                         | หน้าที่                                                                     |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| [`docker-compose.edge.yml`](../../docker-compose.edge.yml)   | stack ของ edge: `couchdb`, `couchdb-init`, `edge-init`, `frontend`, `nginx` |
+| [`nginx-edge/default.conf`](../../nginx-edge/default.conf)   | nginx ของ edge: `/couch` + SPA                                              |
+| [`couchdb-edge-example.ini`](../../couchdb-edge-example.ini) | config CouchDB ของ edge (copy เป็น `couchdb-edge.ini`)                      |
+| [`.env.edge.example`](../../.env.edge.example)               | ตัวอย่าง env (copy เป็น `.env`)                                             |
+| [`scripts/edge-init.sh`](../../scripts/edge-init.sh)         | สร้าง DB, `_security`, guard และ replication job                            |
+
+**ตรวจว่าผ่าน:** `ls docker-compose.edge.yml .env.edge.example couchdb-edge-example.ini` เจอครบทั้ง 3 ไฟล์
 
 ---
 
 ## ขั้น 3 — สร้าง config CouchDB ของ edge
+
+**ทำอะไร:**
 
 ```bash
 cp couchdb-edge-example.ini couchdb-edge.ini
 sed -i "s/change-me-edge-secret/$(openssl rand -hex 16)/" couchdb-edge.ini
 ```
 
-**ต้องสร้างก่อน `up`** — compose mount ไฟล์นี้เข้า CouchDB ถ้าไม่มีไฟล์ Docker จะสร้างเป็น *โฟลเดอร์* แล้ว CouchDB start ไม่ขึ้น
+**เพื่ออะไร:** ให้ CouchDB ของ edge มี `secret` ของตัวเอง และตั้งค่า replicator ให้ต่อ `SYNC_URL` ที่มี path (`/sync`) ได้ ·
+**ต้องสร้างก่อน `up`** — compose mount ไฟล์นี้เข้า CouchDB ถ้าไม่มีไฟล์ Docker จะสร้างเป็น _โฟลเดอร์_ แล้ว CouchDB start ไม่ขึ้น
 
-| ค่าในไฟล์ | ทำไม |
-| --- | --- |
-| `secret` ของ edge เอง | ใช้เซ็น cookie `AuthSession` — **ต้องต่างจาก central** ทำให้ cookie ข้ามฝั่งไม่ได้ staff ต้อง login ใหม่ตอน cutover (OD-3 — ทดสอบแล้วว่าเป็นแบบนั้น) · BFF ของ edge อ่านค่านี้ผ่าน admin API เพื่อ mint session |
-| ไม่มี `[admins]` | admin ของ edge มาจาก `COUCHDB_USER` / `COUCHDB_PASSWORD` ใน `.env` คนละรหัสกับ central — **ห้ามใช้ `couchdb-session.ini` ของ central** เพราะฝัง hash ของ admin และ secret ของ central ไว้ |
+**ตรวจว่าผ่าน:** `ls -l couchdb-edge.ini` เป็นไฟล์ (ไม่ใช่โฟลเดอร์) และ `grep secret couchdb-edge.ini` ไม่เหลือคำว่า `change-me-edge-secret`
+
+| ค่าในไฟล์                                                | ทำไม                                                                                                                                                                                                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `secret` ของ edge เอง                                    | ใช้เซ็น cookie `AuthSession` — **ต้องต่างจาก central** ทำให้ cookie ข้ามฝั่งไม่ได้ staff ต้อง login ใหม่ตอน cutover (OD-3 — ทดสอบแล้วว่าเป็นแบบนั้น) · BFF ของ edge อ่านค่านี้ผ่าน admin API เพื่อ mint session                                         |
+| ไม่มี `[admins]`                                         | admin ของ edge มาจาก `COUCHDB_USER` / `COUCHDB_PASSWORD` ใน `.env` คนละรหัสกับ central — **ห้ามใช้ `couchdb-session.ini` ของ central** เพราะฝัง hash ของ admin และ secret ของ central ไว้                                                               |
 | `[replicator] auth_plugins = couch_replicator_auth_noop` | **จำเป็นเมื่อ `SYNC_URL` มี path (`/sync`)**: replicator ปกติขอ session ที่ `<host>/_session` โดยตัด path ทิ้ง คำขอไปตกที่เว็บแอปแทน CouchDB แล้ว job ล้มด้วย `session_unexpected_result` ค่านี้ให้ส่ง Basic auth ตรง ๆ · ไม่มีผลกับ `http://<IP>:5984` |
-| `[replicator] verify_ssl_certificates` | default = `true` · lab ที่ใช้ self-signed ค่อยปิดเอง (`false`) แล้ว restart CouchDB · มีผลเฉพาะตอนต่อ `https://` |
-| `ssl_trusted_certificates_file` | CA bundle ที่มีอยู่ใน image แล้ว |
-
-ไฟล์ตัวอย่างตั้ง `verify_ssl_certificates = true` — ถ้าต่อ `https://` ด้วย self-signed cert ใน lab ให้เปลี่ยนเป็น `false` เอง · **ห้ามปิดบน edge จริง** (ปิดแล้วไม่ตรวจ cert ของ central เลย) · เปิดไว้แล้วนาฬิกาเครื่องต้องตรง ดู "ตั้งเวลาเครื่อง (NTP)" ท้ายขั้น 4
+| `[replicator] verify_ssl_certificates`                   | default = `true` · lab ที่ใช้ self-signed ค่อยปิดเอง (`false`) แล้ว restart CouchDB · **ห้ามปิดบน edge จริง** (ปิดแล้วไม่ตรวจ cert ของ central เลย) · มีผลเฉพาะตอนต่อ `https://` และนาฬิกาเครื่องต้องตรง (ดูขั้น 4)                                     |
+| `ssl_trusted_certificates_file`                          | CA bundle ที่มีอยู่ใน image แล้ว                                                                                                                                                                                                                        |
 
 ค่าเสริมใน `[replicator]` เมื่อ WAN ของศูนย์ช้า: `connection_timeout` (30000 ms), `retries_per_request` (5),
 `worker_batch_size` (500 — ลดแล้ว body เล็กลง checkpoint ถี่ขึ้น), `checkpoint_interval` (30000 ms)
@@ -82,58 +89,73 @@ sed -i "s/change-me-edge-secret/$(openssl rand -hex 16)/" couchdb-edge.ini
 
 ---
 
-## ขั้น 4 — ตั้ง `.env`
+## ขั้น 4 — ตั้ง `.env` และเวลาเครื่อง
+
+**ทำอะไร:** copy ไฟล์ตัวอย่างแล้วแก้ค่าตามตารางด้านล่าง จากนั้นเปิด NTP
 
 ```bash
 cp .env.edge.example .env
+sudo timedatectl set-ntp true
 ```
 
-แก้ค่าตามตาราง:
+**เพื่ออะไร:** `.env` บอก stack ว่าศูนย์ไหน ต่อ central ที่ไหน ด้วยบัญชีอะไร · NTP กันนาฬิกาเพี้ยน — ถ้าเพี้ยน การตรวจ cert ของ central ล้ม
+ทุก job จะ `crashing` (ดู [README T10b](README.md)) · ถ้า LAN ของศูนย์ไม่มี internet NTP ให้ชี้ `chrony` / `systemd-timesyncd` ไปที่ NTP server ในเครือข่ายเอง
 
-| ตัวแปร | Lab (ตัวอย่าง) | จริง | ใช้ทำอะไร |
-| --- | --- | --- | --- |
-| `COUCHDB_USER` / `COUCHDB_PASSWORD` | `admin` / รหัสใหม่ | เหมือนกัน | admin ของ CouchDB ที่ edge — **คนละรหัสกับ central** |
-| `SHELTER_CODE` | `SH001` | รหัสศูนย์นี้ | กำหนด DB `shelter_<code>`, role `shelter:<CODE>`, ชื่อ job · **ตรวจให้ถูก** central admin เข้าได้ทุก DB ถ้าผิด job จะ sync ข้อมูลศูนย์อื่นโดยไม่มี error |
-| `SYNC_URL` | `http://172.30.91.220:5984` | `https://<domain>/sync` | ที่อยู่ central · แบบจริงเป็น path บน domain ของแอป ตอน cutover (LAN DNS ชี้ domain แอปมาที่ edge) job จะล้มจนกว่า cutback ดู "ตอน cutover / cutback" |
-| `CENTRAL_REPL_USER` / `_PASSWORD` | `admin` / รหัส admin ของ central | เหมือนกัน | ใช้กับ**ทุก job** (`registry`, `catalog`, `shelter_*`, `_users`) · **ต้องเป็น central admin** ไม่ใช่บัญชีล็อกอินแอปอย่าง `sh1-admin` เพราะ `_users` อ่านได้เฉพาะ server admin ([SETUP-CENTRAL ขั้น 3](SETUP-CENTRAL.md)) |
-| `PUBLIC_ORIGIN` | `http://<IP ของ edge>` | domain แอป (เหมือน central) | URL ที่ browser เปิด · ฝังตอน build frontend |
-| `EDGE_LAN_IP` | `<IP ของ edge ใน LAN>` | เหมือนกัน | IP ที่ nginx ของ edge รับ — ไม่ใช้ `0.0.0.0` เพื่อไม่เปิดออก WAN |
-| `EDGE_HTTP_PORT` | `80` | `80` | port ของ nginx |
-| `EDGE_COUCHDB_PORT` | (ไม่ต้องใส่ = 5984) | เหมือนกัน | admin port ของ CouchDB — bind `127.0.0.1` เท่านั้น |
-| `FRONTEND_IMAGE` | (ว่าง = build เอง) | ถ้ามี image แล้วใส่ชื่อ | ข้ามการ build frontend |
-
-- รหัสผ่านทุกตัว **ห้ามมี** `"` `\` `@` `:` `/` `#` `%` `?` หรือช่องว่าง เพราะถูกใส่ลงใน URL และ JSON ตรง ๆ (`edge-init.sh` ประกอบเอง) · แนะนำสร้างด้วย `openssl rand -hex 24`
-- `.env` และ `couchdb-edge.ini` อยู่ใน `.gitignore` แล้ว — อย่า commit
-- `PUBLIC_ORIGIN` ฝังตอน build ถ้าเปลี่ยนภายหลังต้อง build frontend ใหม่
-
-**ตั้งเวลาเครื่อง (NTP) — ทำก่อนขั้น 5**
+**ตรวจว่าผ่าน:**
 
 ```bash
-sudo timedatectl set-ntp true
+grep -E '^(SHELTER_CODE|SYNC_URL|EDGE_REPL_USER|PUBLIC_ORIGIN|EDGE_LAN_IP)=' .env   # ค่าตรงกับที่ได้จาก central
+grep -c 'CENTRAL_REPL' .env                                                          # ต้องได้ 0
 timedatectl    # ต้องเห็น System clock synchronized: yes และ NTP service: active
 ```
 
-ทำไม: `verify_ssl_certificates = true` (ขั้น 3) — ถ้านาฬิกา edge เพี้ยน การตรวจ cert ของ central ล้ม (cert "ยังไม่เริ่ม/หมดอายุ") ทุก job จะ `crashing` (ดู [README T10b](README.md)) ·
-ถ้า LAN ของศูนย์ไม่มี internet NTP ให้ชี้ `chrony` / `systemd-timesyncd` ไปที่ NTP server ในเครือข่ายเอง
+| ตัวแปร                                  | Lab (ตัวอย่าง)                                | จริง                        | ใช้ทำอะไร                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------- | --------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `COUCHDB_USER` / `COUCHDB_PASSWORD`     | `admin` / รหัสใหม่                            | เหมือนกัน                   | admin ของ CouchDB ที่ edge — **คนละรหัสกับ central**                                                                                                                                                                                                                                                        |
+| `SHELTER_CODE`                          | `SH001`                                       | รหัสศูนย์นี้                | กำหนด DB `shelter_<code>`, role `shelter:<CODE>`, ชื่อ job · **ตรวจให้ถูก** ต้องตรงกับศูนย์ที่ `EDGE_REPL_USER` ถูกสร้างให้ (role `repl:<CODE>`) — ไม่ตรง `edge-init` จะ `FAILED`                                                                                                                           |
+| `SYNC_URL`                              | `http://172.30.91.220:5984`                   | `https://<domain>/sync`     | ที่อยู่ central · แบบจริงเป็น path บน domain ของแอป ตอน cutover (LAN DNS ชี้ domain แอปมาที่ edge) job จะล้มจนกว่า cutback ดู "ตอน cutover / cutback"                                                                                                                                                       |
+| `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` | `repl_sh001_<8 ตัว hex>` / รหัสที่สคริปต์แสดง | เหมือนกัน                   | ใช้กับ**ทุก job** ฝั่ง central (`registry`, `catalog`, `shelter_*`, `edge_users_<code>`) · **ห้ามใส่ central admin และห้ามใส่บัญชีล็อกอินแอป** (`edge-init` เช็ก `_session`: ต้องมี role `repl:<CODE>` และไม่เป็น `_admin` ไม่ผ่าน = `FAILED`) · ตัวแปรเดิม `CENTRAL_REPL_*` เลิกใช้แล้ว ให้ลบออกจาก `.env` |
+| `PUBLIC_ORIGIN`                         | `http://<IP ของ edge>`                        | domain แอป (เหมือน central) | URL ที่ browser เปิด · ฝังตอน build frontend                                                                                                                                                                                                                                                                |
+| `EDGE_LAN_IP`                           | `<IP ของ edge ใน LAN>`                        | เหมือนกัน                   | IP ที่ nginx ของ edge รับ — ไม่ใช้ `0.0.0.0` เพื่อไม่เปิดออก WAN                                                                                                                                                                                                                                            |
+| `EDGE_HTTP_PORT`                        | `80`                                          | `80`                        | port ของ nginx                                                                                                                                                                                                                                                                                              |
+| `EDGE_COUCHDB_PORT`                     | (ไม่ต้องใส่ = 5984)                           | เหมือนกัน                   | admin port ของ CouchDB — bind `127.0.0.1` เท่านั้น                                                                                                                                                                                                                                                          |
+| `FRONTEND_IMAGE`                        | (ว่าง = build เอง)                            | ถ้ามี image แล้วใส่ชื่อ     | ข้ามการ build frontend                                                                                                                                                                                                                                                                                      |
+
+- รหัสผ่านที่ตั้งเอง (`COUCHDB_PASSWORD`) **ห้ามมี** `"` `\` `@` `:` `/` `#` `%` `?` หรือช่องว่าง เพราะถูกใส่ลงใน URL และ JSON ตรง ๆ (`edge-init.sh` ประกอบเอง) · แนะนำสร้างด้วย `openssl rand -hex 24` · `EDGE_REPL_PASSWORD` ที่ central สร้างให้ (hex) ใช้ได้เลย
+- `.env` และ `couchdb-edge.ini` อยู่ใน `.gitignore` แล้ว — อย่า commit
+- `PUBLIC_ORIGIN` ฝังตอน build ถ้าเปลี่ยนภายหลังต้อง build frontend ใหม่
 
 ---
 
 ## ขั้น 5 — เปิด stack
 
+**ทำอะไร:**
+
 ```bash
 docker compose -f docker-compose.edge.yml up -d --build
-```
-
-build frontend ครั้งแรกใช้เวลาหลายนาที จากนั้นดูผลของ provisioning:
-
-```bash
 docker logs tent-edge-init-edge
 ```
 
-ผลที่ควรเห็น (`ok` = สร้างใหม่ · `exists` = มีอยู่แล้ว รันซ้ำได้):
+build frontend ครั้งแรกใช้เวลาหลายนาที
+
+**เพื่ออะไร:** เปิด CouchDB + แอป + nginx + watchdog และให้ `edge-init` สร้าง DB, `_security`, guard และ replication job ให้เอง
+(`edge-init` ตรวจ credential กับ central ก่อน ถ้าไม่ผ่านจะหยุดและไม่สร้าง job — รายละเอียดที่ "`edge-init.sh` ทำ 3 อย่าง")
+
+**ตรวจว่าผ่าน:** ทุกบรรทัดใน log ของ `edge-init` เป็น `ok` หรือ `exists` ไม่มี `FAILED` และ `docker compose -f docker-compose.edge.yml ps` ไม่มี container ที่ restart วน
+
+| บรรทัด   | ความหมาย                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ok`     | สร้างใหม่สำเร็จ                                                                                                                                                      |
+| `exists` | มีอยู่แล้ว ข้ามไป (รันซ้ำได้)                                                                                                                                        |
+| `stale`  | job เดิมไม่ตรงกับ `.env` ปัจจุบัน → ลบแล้วสร้างใหม่ให้                                                                                                               |
+| `FAILED` | หยุดทันที exit 1 — อ่านข้อความหลัง `FAILED` แล้วดู "แก้ปัญหา (ฝั่ง edge)" · แก้ `.env` แล้วรัน `docker compose -f docker-compose.edge.yml run --rm edge-init` ซ้ำได้ |
+
+ผลที่ควรเห็น:
 
 ```
 == edge-init: SH001 ← <SYNC_URL>
+ok      central uuid <uuid ของ central> ≠ edge uuid <uuid ของ edge>
+ok      central session: EDGE_REPL_USER มี role repl:SH001 และไม่ใช่ admin
 ok      registry
 ok      registry/_security
 ok      catalog
@@ -149,13 +171,11 @@ ok      _replicator/sh001_push
 ok      _replicator/users_sh001_pull
 ```
 
-`FAILED` ขึ้นบรรทัดไหน → ดูตารางแก้ปัญหาท้ายไฟล์
-
 ---
 
 ## ขั้น 6 — ตรวจว่า sync ทำงาน
 
-หลัง `up` ครั้งแรก **รอ ~30 วินาที** (replicator ยังไม่หยิบ job ช่วงแรก รายการจะว่าง)
+**ทำอะไร:** รอ ~30 วินาทีหลัง `up` ครั้งแรก (replicator ยังไม่หยิบ job ช่วงแรก รายการจะว่าง ซึ่งปกติ) แล้วดู job ทั้ง 5 และลองเขียน/อ่านข้อมูลข้ามฝั่ง
 
 ```bash
 export E=http://admin:<COUCHDB_PASSWORD ของ edge>@localhost:5984     # EDGE_COUCHDB_PORT
@@ -166,28 +186,82 @@ curl -s $E/_scheduler/docs/_replicator \
   | python3 -c 'import sys,json; [print(d["doc_id"], d["state"], (d.get("info") or {}).get("error","")) for d in json.load(sys.stdin)["docs"]]'
 ```
 
-| ตรวจ | คำสั่ง | ต้องได้ |
-| --- | --- | --- |
-| 2 sync central → edge | เขียน doc ที่ central: `curl -X PUT $C/shelter_sh001/evacuee:01EDGETEST0000000000001 -d '{"type":"evacuee"}'` แล้ว `curl -s -o /dev/null -w '%{http_code}\n' $E/shelter_sh001/evacuee:01EDGETEST0000000000001` | `200` ภายในไม่กี่วินาที |
-| 3 sync edge → central | เขียนที่ edge ผ่าน nginx: `curl -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01EDGETEST0000000000002 -d '{"type":"evacuee"}'` แล้วอ่านจาก central | `200` ที่ central |
-| 4 filtered `_users` | `curl -s -o /dev/null -w '%{http_code}\n' $E/_users/org.couchdb.user:<staff ของศูนย์อื่น>` | `404` (ไม่ถูกส่งมา) |
-| 5 login ที่ edge | `curl -s -X POST $EDGE/couch/_session -H 'Content-Type: application/json' -d '{"name":"<staff>","password":"<pw>"}'` | `{"ok":true,...}` |
-| 6 guard read-only | `curl -s -X PUT -u <staff>:<pw> $EDGE/couch/registry/x -d '{}'` | `forbidden` / `read-only replica on edge` |
-| 7 public plane ปิด | `curl -s $EDGE/external/v1/x` และ `curl -s $EDGE/api/health` | `503` edge-only mode · `{"ok":true,"service":"frontend"}` |
+**เพื่ออะไร:** ยืนยันว่าข้อมูลไหลถูกทิศ — central → edge (`registry`, `catalog`, `shelter_<code>`, `_users`) และ edge → central (`shelter_<code>`) — และ staff login ที่ edge ได้
 
-`<staff>` = staff ของศูนย์นี้ที่มีอยู่แล้วที่ central (เช่น `staff01` ใน dev seed) ซึ่งถูก sync ลงมาตาม job `_users`
+**ตรวจว่าผ่าน:** ข้อ 1–7 ในตารางผ่านครบ
 
-เกณฑ์ผ่าน: ข้อ 1–7 ผ่านครบ · **ยังไม่ได้ทดสอบ:** เปิดหน้าแอปผ่าน browser ที่ `$EDGE` (curl เท่านั้น)
-และการต่อข้ามเครื่องจริงผ่าน LAN — ผลที่ผ่านมาทดสอบแบบจำลองบนเครื่องเดียวด้วยไฟล์ชุดนี้
+| ตรวจ                  | คำสั่ง                                                                                                                                                                                                         | ต้องได้                                                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 1 job ทั้ง 5          | คำสั่ง `_scheduler/docs/_replicator` ด้านบน: `registry_pull`, `catalog_pull`, `sh001_pull`, `sh001_push`, `users_sh001_pull`                                                                                   | ทั้ง 5 เป็น `running`                                     |
+| 2 sync central → edge | เขียน doc ที่ central: `curl -X PUT $C/shelter_sh001/evacuee:01EDGETEST0000000000001 -d '{"type":"evacuee"}'` แล้ว `curl -s -o /dev/null -w '%{http_code}\n' $E/shelter_sh001/evacuee:01EDGETEST0000000000001` | `200` ภายในไม่กี่วินาที                                   |
+| 3 sync edge → central | เขียนที่ edge ผ่าน nginx: `curl -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01EDGETEST0000000000002 -d '{"type":"evacuee"}'` แล้วอ่านจาก central                                                  | `200` ที่ central                                         |
+| 4 filtered `_users`   | `curl -s -o /dev/null -w '%{http_code}\n' $E/_users/org.couchdb.user:<staff ของศูนย์อื่น>`                                                                                                                     | `404` (ไม่ถูกส่งมา)                                       |
+| 5 login ที่ edge      | `curl -s -X POST $EDGE/couch/_session -H 'Content-Type: application/json' -d '{"name":"<staff>","password":"<pw>"}'`                                                                                           | `{"ok":true,...}`                                         |
+| 6 guard read-only     | `curl -s -X PUT -u <staff>:<pw> $EDGE/couch/registry/x -d '{}'`                                                                                                                                                | `forbidden` / `read-only replica on edge`                 |
+| 7 public plane ปิด    | `curl -s $EDGE/external/v1/x` และ `curl -s $EDGE/api/health`                                                                                                                                                   | `503` edge-only mode · `{"ok":true,"service":"frontend"}` |
+
+- `$C` = URL ของ central ที่เขียน `shelter_sh001` ได้ (ผู้ดูแล central ทำข้อ 2 ให้ หรือเขียนผ่านแอปที่ central)
+- `<staff>` = staff ของศูนย์นี้ที่มีอยู่แล้วที่ central (เช่น `staff01` ใน dev seed) ซึ่งถูก sync ลงมาตาม job `users_<code>_pull` · ต้อง activate ที่ central แล้ว (ดู "บัญชีสำรอง")
+- **ยังไม่ได้ทดสอบ:** เปิดหน้าแอปผ่าน browser ที่ `$EDGE` (ทดสอบด้วย curl เท่านั้น) และการต่อข้ามเครื่องจริงผ่าน LAN — ผลที่ผ่านมาทดสอบแบบจำลองบนเครื่องเดียวด้วยไฟล์ชุดนี้
 
 📖 [`/_scheduler/docs`](https://docs.couchdb.org/en/stable/api/server/common.html#scheduler-docs) ·
 [`/_session`](https://docs.couchdb.org/en/stable/api/server/authn.html#cookie-authentication)
 
 ---
 
-## ขั้น 7 — ทดสอบตอน central ล่ม (ทางเลือก)
+## ขั้น 7 — ตรวจก่อนเปิดใช้จริง (AC-1 ถึง AC-10 ของ [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md))
 
-จำลองว่า WAN/central ขาด แล้วดูว่า edge ยังใช้งานได้และ backlog ไหลกลับ
+**ทำอะไร:** ทำ checklist ด้านล่างกับ **ศูนย์ทดสอบ** ที่มีศูนย์อื่นให้เทียบ (เช่น SH001 = ศูนย์ที่ทดสอบ, SH002 = ศูนย์อื่นใน dev seed) ·
+`$CEN` = `SYNC_URL` · `<R>` = `EDGE_REPL_USER:EDGE_REPL_PASSWORD` · AC-5, AC-6 ต้องให้ผู้ดูแล central ช่วย
+
+**เพื่ออะไร:** พิสูจน์ว่า credential ของศูนย์นี้เข้าได้เฉพาะของศูนย์ตัวเอง, ไม่มีรหัส admin บน edge, sync สองทางครบทุกชนิด doc และ login ที่ edge ได้ตอน WAN ล่ม
+
+**ตรวจว่าผ่าน:** ทุกแถวได้ผลตามคอลัมน์ "ต้องได้"
+
+| AC                                                    | ทดสอบ                                                                                                                                                                                                                                                                                                                          | ต้องได้                                                                                                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-1 ไม่มีรหัส admin บน edge                          | `grep -E 'CENTRAL_REPL' .env` และพิมพ์ username ของทุก job: `curl -s "$E/_replicator/_all_docs?include_docs=true" \| python3 -c 'import sys,json; [print(r["id"], (r["doc"].get("source") or {}).get("auth",{}).get("basic",{}).get("username")) for r in json.load(sys.stdin)["rows"] if not r["id"].startswith("_design")]'` | `.env` ไม่เจอ `CENTRAL_REPL_*` และไม่มีรหัส admin · ทุก job ฝั่ง source เป็น `repl_sh001_*` ไม่มี `admin` (job `sh001_push` ให้ดู `target.auth` แทน)       |
+| AC-2 อ่านนอกศูนย์ตัวเองไม่ได้                         | `curl -s -o /dev/null -w '%{http_code}\n' -u <R> $CEN/shelter_sh002` · `$CEN/_users/_changes` · `$CEN/edge_users_sh002`                                                                                                                                                                                                        | `401` / `403` ทั้ง 3                                                                                                                                       |
+| AC-3 เขียน registry / catalog / edge_users ไม่ได้     | `curl -s -o /dev/null -w '%{http_code}\n' -X PUT -u <R> $CEN/registry/x -d '{}'` (ทำซ้ำกับ `catalog/x` และ `edge_users_sh001/x`)                                                                                                                                                                                               | `403` ทั้ง 3                                                                                                                                               |
+| AC-4 `edge_users_sh001` ไม่เปิดให้คนอื่น              | `curl -s -o /dev/null -w '%{http_code}\n' $CEN/edge_users_sh001` (ไม่ login) แล้วอีกครั้งด้วย `-u <staff ของ SH001>:<pw>`                                                                                                                                                                                                      | `401` / `403` ทั้งสองครั้ง                                                                                                                                 |
+| AC-5 lockout หยุดแค่ศูนย์เดียว                        | **ทดสอบกับศูนย์ทดสอบเท่านั้น** ยิงรหัสผิดด้วยชื่อ `repl_sh001_*` 6 ครั้ง (`-u <ชื่อ>:wrong`) ให้ถูกล็อก (403) แล้วดู job ของ SH002                                                                                                                                                                                             | SH002 ยัง `running` และ sync ต่อ                                                                                                                           |
+| AC-6 ปิดศูนย์เดียว                                    | ที่ central: `scripts/central-repl-user.sh SH001 --remove` แล้วดู job ของ SH001 บน edge                                                                                                                                                                                                                                        | job SH001 ล้ม (`401`/`unauthorized`) · SH002 ยัง sync (**จบแล้วให้ผู้ดูแล central สร้างใหม่ด้วย `central-repl-user.sh SH001` และตั้ง `EDGE_REPL_*` ใหม่**) |
+| AC-7a sync สองทางครบทุกชนิด doc                       | ดู "AC-7a" ด้านล่าง                                                                                                                                                                                                                                                                                                            | doc ทุกชนิดไปถึงอีกฝั่ง ไม่มี `doc_write_failures`                                                                                                         |
+| AC-7b login ที่ edge ตอน WAN ล่ม                      | ดู "AC-7b" ด้านล่าง                                                                                                                                                                                                                                                                                                            | login ได้ที่ edge ทั้งที่ central ต่อไม่ได้                                                                                                                |
+| AC-8 ถอด role / soft delete แล้วใช้งานที่ edge ไม่ได้ | ดู "AC-8" ด้านล่าง                                                                                                                                                                                                                                                                                                             | soft delete: login ไม่ได้ · ถอด role: roles ว่าง อ่าน `shelter_<code>` = 403                                                                               |
+| AC-10 ใส่ admin ผิดตัว                                | ตั้ง `EDGE_REPL_USER=admin` (central admin) ใน `.env` แล้วรัน `docker compose -f docker-compose.edge.yml run --rm edge-init`                                                                                                                                                                                                   | `FAILED` exit 1 — **แล้วใส่ `EDGE_REPL_*` ที่ถูกกลับคืน**                                                                                                  |
+
+**AC-7a — sync สองทางของ `shelter_<code>`** ทำผ่านแอป (ไม่ใช่ curl เขียน doc ตรง ๆ) เพราะ VDU ตรวจผู้เขียนและ role ของ staff จริง:
+
+1. **central → edge:** ที่ central (ผ่านแอป ด้วย staff ของศูนย์) สร้าง doc หลายชนิด แล้วดูที่ edge ภายในไม่กี่วินาที
+2. **edge → central:** ที่ edge เปิดแอปที่ `$EDGE` login ด้วย staff ของศูนย์ แล้วทำครบนี้ → ดูที่ central ว่ามาถึง
+   - เขียน doc ที่มี `created_by` (เช่น ลงทะเบียนผู้อพยพ / บันทึกประจำวัน) — ต้องผ่านแม้ตอน push `userCtx.name` คือบัญชี `repl_*` ไม่ใช่ staff
+   - **`evacuee_qr`** — พิมพ์/สร้าง QR ผู้อพยพที่ edge: `curl -s -u <R> "$CEN/shelter_sh001/_all_docs?startkey=%22evacuee_qr:%22&endkey=%22evacuee_qr:%EF%BF%B0%22"` ต้องเห็น doc (ผ่านได้เพราะ `repl:<CODE>` ได้สิทธิ์เท่า admin ตาม VDU)
+   - **`daily_sop_role_assessment` ข้ามวัน** — สร้างที่ edge ขณะ WAN ล่ม แล้วรอข้ามเที่ยงคืน (เวลา Bangkok) ค่อยต่อ WAN กลับ → ต้องไม่ถูกปฏิเสธเพราะ `assessment_date` ย้อนหลัง
+3. ที่ edge ดู `curl -s $E/_active_tasks` ว่า `doc_write_failures` ไม่เพิ่มของ job `sh001_push`
+
+**AC-7b — login ที่ edge ตอน WAN ล่ม**
+
+1. รอให้ `users_<code>_pull` ส่ง staff ถึง edge แล้ว (`curl -s -o /dev/null -w '%{http_code}\n' $E/_users/org.couchdb.user:<staff>` = `200`)
+2. ตัด WAN (ขั้น 8: `docker compose stop couchdb` ที่ central หรือถอดสาย)
+3. login ที่ edge: `curl -s -X POST $EDGE/couch/_session -H 'Content-Type: application/json' -d '{"name":"<staff>","password":"<pw>"}'` และเปิดแอปที่ `$EDGE` ด้วย browser → `{"ok":true,...}` และเข้าแอปได้
+
+**AC-8 — user ที่ถูกถอดสิทธิ์ใช้งานที่ edge ไม่ได้**
+
+1. ที่ central ถอด role `shelter:<CODE>` ของ staff ทดสอบ (หรือ soft delete) ผ่านแอป
+2. รอเวลา sync ปกติ (`edge-users-copy` ที่ central + `users_<code>_pull` ที่ edge — ราว 1 นาที) · ถ้ารอนานให้ผู้ดูแล central ตรวจ `scripts/central-repl-user.sh <CODE> --status`
+3. ที่ edge ด้วย staff คนนั้น:
+   - **soft delete** → login ไม่ผ่าน (`401`) เพราะ soft delete เปลี่ยนรหัสผ่านด้วย
+   - **ถอด role อย่างเดียว** → `POST /_session` ยังได้ `200` แต่ `roles` ว่าง และอ่าน `shelter_<code>` ได้ `403`
+   - ถ้ายังเห็น role เดิม / ยัง login ได้หลัง soft delete = job คัดลอกหยุด (ดู SETUP-CENTRAL "ตรวจ `--status` ทุกวัน")
+
+เมื่อผู้ดูแล central รัน `scripts/central-repl-user.sh SH001 --status` แล้วเห็น `edge ดึงข้อมูลล่าสุดเมื่อ: ...` (ไม่ใช่ `edge ยังไม่เคยต่อเข้ามา`) และ exit 0 = edge ต่อเข้า central แล้วจริง
+
+---
+
+## ขั้น 8 — ทดสอบตอน central ล่ม (ทางเลือก)
+
+**ทำอะไร:** จำลองว่า WAN/central ขาด เขียนข้อมูลที่ edge แล้วเปิด central กลับ
 
 ```bash
 # บน central: ปิด CouchDB    →  docker compose stop couchdb
@@ -198,47 +272,58 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 # รอ job กลับมา แล้วอ่านจาก central: curl -s $C/shelter_sh001/evacuee:01OUTAGE0000000000001
 ```
 
-ถ้ารอนานแล้ว backlog ยังไม่มา แปลว่า job อยู่ในช่วง backoff — `edge-watchdog` จะเตะให้ภายในไม่กี่สิบวินาที (ดู "Watchdog") หรือ "เตะ" เอง (ดู "งานประจำ") ·
+**เพื่ออะไร:** ยืนยันว่า staff ยังเขียนที่ edge ได้ตอน WAN ขาด และ backlog ไหลกลับ central เองเมื่อต่อได้
+
+**ตรวจว่าผ่าน:** doc `evacuee:01OUTAGE0000000000001` อ่านจาก central ได้ `200` · ถ้ารอนานแล้วยังไม่มา แปลว่า job อยู่ช่วง backoff —
+`edge-watchdog` จะเตะให้ภายในไม่กี่สิบวินาที (ดู "Watchdog") หรือ "เตะ" เอง (ดู "งานประจำ") ·
 เคสละเอียด (ตัด WAN นาน ๆ, conflict, backlog ใหญ่, นาฬิกาเพี้ยน) อยู่ใน [README §4–§5](README.md) T4–T11
 
 ---
 
+> **ด้านล่างเป็นส่วนอ้างอิง** — อ่านเมื่อต้องใช้ ไม่ต้องอ่านตอนติดตั้ง
+
 ## edge stack ประกอบด้วยอะไร และทำไมไม่เหมือน stack ของ central
+
+แต่ละ service ใน `docker-compose.edge.yml` ทำหน้าที่อะไร และอะไรที่ตัดออกจาก central
 
 ตั้งต้นจาก `docker-compose.production.yml` แล้วตัดส่วนที่ edge ไม่มีออกตาม OD-1
 
-| service | ทำไม |
-| --- | --- |
-| `couchdb` (`tent-couchdb-edge`) | ตัวเก็บข้อมูลที่ศูนย์ + ที่อยู่ของ replication job · port bind `127.0.0.1` เท่านั้น staff เข้าผ่าน nginx |
-| `couchdb-init` | สร้าง `_users`, `_replicator` (single node) — เหมือน production |
-| `edge-init` | **เพิ่มใหม่** รัน `scripts/edge-init.sh` (ด้านล่าง) |
-| `frontend` | แอป staff ให้ใช้บน LAN ตอน WAN ขาด · ไม่ตั้ง `FASTAPI_INTERNAL_URL`, `EXTERNAL_API_SECRET`, `COUCHDB_PUBLIC_WRITER_URL`, import worker token, OAuth — route ของ public plane จะ fail ตามโหมด degraded แต่แอปยัง start ได้ |
-| `nginx` | `/couch` + SPA ให้ browser ในศูนย์ · ใช้ `nginx-edge/` แทน `nginx/` เพราะ `nginx/nginx.conf` proxy `/external/` ไป `fastapi:9000` ซึ่งไม่มีที่ edge → nginx **start ไม่ขึ้นทั้งตัว** (`host not found in upstream`) · edge ตอบ `/external/` ด้วย 503 แทน |
-| `edge-watchdog` | **เพิ่มใหม่** ตรวจ job ทุก 60 วินาที ถ้า job ค้างอยู่ใน backoff ทั้งที่ central กลับมาแล้ว จะเตะให้เอง (หัวข้อ "Watchdog" ด้านล่าง) |
-| ~~mongodb, worker, fastapi, import-worker~~ | ตัดออก — public plane และ import เป็นงานของ central |
+| service                                     | ทำไม                                                                                                                                                                                                                                                     |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `couchdb` (`tent-couchdb-edge`)             | ตัวเก็บข้อมูลที่ศูนย์ + ที่อยู่ของ replication job · port bind `127.0.0.1` เท่านั้น staff เข้าผ่าน nginx                                                                                                                                                 |
+| `couchdb-init`                              | สร้าง `_users`, `_replicator` (single node) — เหมือน production                                                                                                                                                                                          |
+| `edge-init`                                 | **เพิ่มใหม่** รัน `scripts/edge-init.sh` (ด้านล่าง)                                                                                                                                                                                                      |
+| `frontend`                                  | แอป staff ให้ใช้บน LAN ตอน WAN ขาด · ไม่ตั้ง `FASTAPI_INTERNAL_URL`, `EXTERNAL_API_SECRET`, `COUCHDB_PUBLIC_WRITER_URL`, import worker token, OAuth — route ของ public plane จะ fail ตามโหมด degraded แต่แอปยัง start ได้                                |
+| `nginx`                                     | `/couch` + SPA ให้ browser ในศูนย์ · ใช้ `nginx-edge/` แทน `nginx/` เพราะ `nginx/nginx.conf` proxy `/external/` ไป `fastapi:9000` ซึ่งไม่มีที่ edge → nginx **start ไม่ขึ้นทั้งตัว** (`host not found in upstream`) · edge ตอบ `/external/` ด้วย 503 แทน |
+| `edge-watchdog`                             | **เพิ่มใหม่** ตรวจ job ทุก 60 วินาที ถ้า job ค้างอยู่ใน backoff ทั้งที่ central กลับมาแล้ว จะเตะให้เอง (หัวข้อ "Watchdog" ด้านล่าง)                                                                                                                      |
+| ~~mongodb, worker, fastapi, import-worker~~ | ตัดออก — public plane และ import เป็นงานของ central                                                                                                                                                                                                      |
 
-### `edge-init.sh` ทำ 3 อย่าง
+### `edge-init.sh` ทำ 3 อย่าง (หลังตรวจ credential)
 
+0. **ตรวจ credential** (`_session` ของ `EDGE_REPL_*` — ดูด้านล่าง)
 1. **สร้าง DB + `_security`** (`registry`, `catalog`, `shelter_<code>`: `members.roles=["shelter:<CODE>"]`, `admins.roles=["system_admin"]`)
    — `_security` **ไม่ถูก replicate** ถ้าปล่อยให้ job สร้าง DB เอง (`create_target`) DB จะไม่มี `_security` และ staff ทุกศูนย์เข้าได้
 2. **`_design/edge_readonly` บน `registry` / `catalog`** — `validate_doc_update` ที่ยอมให้เขียนเฉพาะ `_admin`
    เพราะ 2 DB นี้เป็นทางเดียว (central → edge) ถ้า staff เขียนที่ edge ได้ ข้อมูลจะไม่กลับ central และไม่มีใครรู้ · ยอม `_admin` เพราะ replicator ฝั่ง edge เขียนด้วย admin
 3. **replication job 5 ตัวใน `_replicator`** (`continuous: true` — อยู่รอดหลัง restart)
 
-| job | ทิศทาง | credential ฝั่ง central | ใช้ทำอะไร |
-| --- | --- | --- | --- |
-| `registry_pull` | central → edge | `CENTRAL_REPL_USER` (central admin) | master data ให้อ่านตอน WAN ขาด |
-| `catalog_pull` | central → edge | `CENTRAL_REPL_USER` | catalog |
-| `sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ข้อมูลศูนย์ที่เขียนที่ central |
-| `sh001_push` | edge → central | `CENTRAL_REPL_USER` | ข้อมูลที่เขียนที่ edge ตอน WAN ขาด (backlog) · `selector` กรอง `_design/*` ออก (decision sync 2026-10-18) |
-| `users_sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ให้ staff ของศูนย์นี้ login ที่ edge ได้ · `selector` (`edge_shelters` มี `<CODE>` **หรือ** `roles` มี `shelter:<CODE>` — [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)) กรองที่ central จึงไม่ส่ง user ศูนย์อื่นมา และ revision ที่ถอด role / soft delete ยังถึง edge |
+| job                | ทิศทาง         | credential ฝั่ง central                       | ใช้ทำอะไร                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | -------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `registry_pull`    | central → edge | `EDGE_REPL_USER` (`repl:<CODE>` ไม่ใช่ admin) | master data ให้อ่านตอน WAN ขาด                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `catalog_pull`     | central → edge | `EDGE_REPL_USER`                              | catalog                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `sh001_pull`       | central → edge | `EDGE_REPL_USER`                              | ข้อมูลศูนย์ที่เขียนที่ central                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `sh001_push`       | edge → central | `EDGE_REPL_USER`                              | ข้อมูลที่เขียนที่ edge ตอน WAN ขาด (backlog) · `selector` กรอง `_design/*` ออก (decision sync 2026-10-18)                                                                                                                                                                                                                                                                                                                                        |
+| `users_sh001_pull` | central → edge | `EDGE_REPL_USER`                              | ให้ staff ของศูนย์นี้ login ที่ edge ได้ · source คือ DB `edge_users_sh001` ที่ central · selector กรองแค่ `_design/*` — การกรอง user (`edge_shelters` มี `<CODE>` **หรือ** `roles` มี `shelter:<CODE>` — [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)) ทำที่ central โดย service `edge-users-copy` ตอนคัดลอก `_users` → `edge_users_sh001` จึงไม่มี user ศูนย์อื่น และ revision ที่ถอด role / soft delete ยังถึง edge |
 
 - URL ฝั่ง edge ใน job คือ `http://127.0.0.1:5984` เพราะ job รัน **ภายใน container CouchDB** เอง
 - job แต่ละตัวเก็บ `edge_init_hash` (fingerprint ของ URL + credential + selector) — รันซ้ำแล้ว config ตรงกับ `.env` = `exists` (ข้าม) · ไม่ตรง เช่นแก้ `SYNC_URL` / รหัส / `SHELTER_CODE` = `stale` แล้วลบและสร้างใหม่ให้เอง (job ที่สร้างก่อนมี fingerprint ถูกสร้างใหม่หนึ่งครั้ง)
-- **เช็ก uuid ก่อนสร้าง job:** `edge-init` เรียก `GET /` ของ central (ด้วย `CENTRAL_REPL_USER`) และของ edge เทียบ `uuid` — ถ้าตรงกัน แปลว่า `SYNC_URL` ชี้กลับมาที่ edge ตัวเอง (เช่น LAN DNS ยังชี้ domain มาที่ edge) จะขึ้น `FAILED` แล้ว exit 1 · อ่าน `GET /` ของ central ไม่ได้ก็ `FAILED` เช่นกัน · ถ้าไม่เช็ก job จะขึ้น `running` `error_count 0` ทั้งที่ replicate เข้าตัวเอง
-- รหัสผ่านใน doc ของ `_replicator` เป็น **plaintext** (admin อ่านกลับก็เห็น) ถือเป็นความลับของเครื่อง edge
+- **เช็ก credential ก่อนสร้าง job:** `edge-init` เรียก `GET <SYNC_URL>/_session` ด้วย `EDGE_REPL_*` — ต้องได้ 200, `userCtx.roles` ต้องมี `repl:<SHELTER_CODE>` และ **ไม่มี `_admin`** ไม่ผ่านข้อใดข้อหนึ่ง = `FAILED` exit 1 (กันเอา central admin หรือบัญชีของศูนย์อื่นมาใส่)
+- **เช็ก uuid ก่อนสร้าง job:** `edge-init` เรียก `GET /` ของ central (ด้วย `EDGE_REPL_USER`) และของ edge เทียบ `uuid` — ถ้าตรงกัน แปลว่า `SYNC_URL` ชี้กลับมาที่ edge ตัวเอง (เช่น LAN DNS ยังชี้ domain มาที่ edge) จะขึ้น `FAILED` แล้ว exit 1 · อ่าน `GET /` ของ central ไม่ได้ก็ `FAILED` เช่นกัน · ถ้าไม่เช็ก job จะขึ้น `running` `error_count 0` ทั้งที่ replicate เข้าตัวเอง
+- รหัสผ่านใน doc ของ `_replicator` เป็น **plaintext** (admin ของ edge อ่านกลับก็เห็น) ถือเป็นความลับของเครื่อง edge · แต่รหัสนี้เป็นของ `repl:<CODE>` ที่เข้าได้แค่ DB ของศูนย์นี้ — เครื่องหายก็ปิดได้ที่ central ทีละศูนย์ (SETUP-CENTRAL "เครื่อง edge หาย") ไม่มีรหัส central admin อยู่บน edge
 
-### `EDGE_MODE` — edge แก้บัญชีไม่ได้ (CR-171 FR-13–FR-17)
+## `EDGE_MODE` — edge แก้บัญชีไม่ได้ (CR-171 FR-13–FR-17)
+
+ส่วนนี้บอกว่า frontend ของ edge ห้ามแก้บัญชีอะไรบ้าง และต้องเตรียมอะไรก่อนเปิดศูนย์
 
 `_users` ไหล central → edge ทางเดียว ถ้าแก้ที่ edge doc จะ conflict กับ revision ที่ pull มาทีหลัง แล้ว user คนนั้น login ไม่ได้
 `docker-compose.edge.yml` จึงตั้ง `EDGE_MODE=true` ให้ frontend ของ edge (central ไม่ตั้ง = ปิด · ไม่ต้องใส่ใน `.env`) เมื่อเปิด:
@@ -248,7 +333,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 - **ทำงานปกติ:** login (ชื่อ/เบอร์/OAuth), `GET auth/me`, mfa clear/skip, อ่านทุกอย่าง · OAuth login ข้ามการเขียน `verified_at` (FR-14)
 - `EDGE_MODE` ตั้งใน compose แล้ว แต่ guard เป็นโค้ดใหม่ ต้อง **build image frontend ใหม่** หลัง `git pull` (`docker compose -f docker-compose.edge.yml up -d --build frontend` · ถ้าใช้ `FRONTEND_IMAGE` ให้ pull image ที่ build จากโค้ดนี้) ไม่งั้นยังรันโค้ดเก่าที่ไม่มี guard · ตรวจ: แก้ profile ที่ edge ต้องถูกปฏิเสธ
 
-#### บัญชีสำรอง (ต้องเตรียมก่อนเปิดศูนย์)
+### บัญชีสำรอง (ต้องเตรียมก่อนเปิดศูนย์)
 
 ที่ edge ตั้ง/รีเซ็ตรหัสไม่ได้ ถ้าผู้ใช้ลืมรหัสหรือยังไม่เคย login ครั้งแรก (`must_change_password` → force-setup) จะเข้าไม่ได้จนกว่า WAN กลับ ดังนั้น:
 
@@ -260,7 +345,9 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 
 ---
 
-### อัปเกรดเป็น CR-171 (`_users.edge_shelters` + soft delete)
+## อัปเกรดเป็น CR-171 (`_users.edge_shelters` + soft delete)
+
+ใช้เมื่อ edge ที่ติดตั้งไว้ก่อนมี CR-171 ต้องอัปเกรด (ติดตั้งใหม่ไม่ต้องทำ)
 
 selector ของ `users_<code>_pull` เปลี่ยน (hash ของ job เปลี่ยน → `edge-init` สร้างใหม่เอง, checkpoint เริ่มใหม่ครั้งเดียว) ลำดับ:
 
@@ -276,7 +363,25 @@ selector ของ `users_<code>_pull` เปลี่ยน (hash ของ job
 
 ---
 
+## edge ที่ติดตั้งก่อน CR-247 (เปลี่ยนจาก central admin เป็น replication user ต่อศูนย์)
+
+ใช้เมื่อ edge เดิมยังใช้ `CENTRAL_REPL_*` (= central admin) ต้องย้ายมาใช้บัญชีต่อศูนย์ (ติดตั้งใหม่ตามขั้น 1–8 ไม่ต้องทำ)
+
+edge ที่ติดตั้งไว้แล้วใช้ `CENTRAL_REPL_*` = central admin ลำดับย้าย (ทำทีละศูนย์ได้ ไม่ต้องพร้อมกัน):
+
+1. **central (ผู้ดูแล central):** `scripts/central-repl-user.sh <CODE>` — ได้ `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` (แสดงครั้งเดียว) และ DB `edge_users_<code>` ถูกสร้าง · service `edge-users-copy` (ต้องเปิดอยู่แล้ว — SETUP-CENTRAL ขั้น 3.4) backfill user ของศูนย์ให้ภายใน 1 นาที · ตรวจ `--status` ให้ exit 0 และรอให้ DB `edge_users_<code>` มี user ครบก่อน
+2. **edge:** `git pull` · แก้ `.env` — **ลบ** `CENTRAL_REPL_USER` / `CENTRAL_REPL_PASSWORD` แล้วใส่ `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` ตามที่ได้ (ดู `.env.edge.example`)
+3. **edge:** `docker compose -f docker-compose.edge.yml run --rm edge-init` — hash ของ job เปลี่ยน (credential และ source ของ `users_<code>_pull` เปลี่ยน) จึงขึ้น `stale` แล้วสร้างใหม่ทุก job · `users_<code>_pull` ชี้ `edge_users_<code>` แทน `_users` ของ central โดย**ไม่มี conflict ใน `_users` ของ edge** (revision tree เดียวกัน — AC-9) · แล้ว `docker compose -f docker-compose.edge.yml up -d` เพื่อให้ `edge-watchdog` ได้ env ใหม่
+4. **ตรวจ:** job ทั้ง 5 `running` (ขั้น 6) · `_users` ของ edge ไม่มี conflict (`curl -s "$E/_users/_all_docs?conflicts=true&include_docs=true"` ต้องไม่มี `_conflicts` ใน doc ใด) · login ที่ edge ได้ · ทำ checklist ขั้น 7
+5. **หลังทุก edge ย้ายครบ:** ผู้ดูแล central หมุนรหัส central admin (SETUP-CENTRAL "หลัง deploy CR-247") — รหัส admin เก่าที่เคยอยู่ใน `.env` และ `_replicator` ของ edge จะใช้ไม่ได้อีก
+
+ลบรหัส admin เก่าออกจาก backup / ประวัติของ `.env` ด้วยถ้ามี · edge ที่ยังไม่ย้ายใช้ได้ตามเดิมจนกว่า central จะหมุนรหัส admin
+
+---
+
 ## งานประจำ
+
+คำสั่งดูสถานะ job ฝั่ง edge, วิธี "เตะ" job และวิธีหมุนรหัส
 
 ```bash
 curl -s $E/_scheduler/jobs            # job + history (error ล่าสุด)
@@ -296,9 +401,21 @@ kick users_sh001_pull
 docker compose -f docker-compose.edge.yml run --rm edge-init
 ```
 
+**เปลี่ยนรหัสผ่าน replication ของศูนย์นี้ (หมุนรหัส)** — ไม่กระทบศูนย์อื่น (แต่ละศูนย์มีชื่อ `repl_<code>_<suffix>` ของตัวเอง):
+
+| ขั้น | ที่ไหน  | ทำอะไร                                                                                                                                                                                            |
+| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | central | `scripts/central-repl-user.sh <CODE> --rotate` — ได้รหัสใหม่ แสดงครั้งเดียว (รหัสเก่าใช้ไม่ได้ทันที)                                                                                              |
+| 2    | edge    | แก้ `EDGE_REPL_PASSWORD` ใน `.env` แล้วรัน `docker compose -f docker-compose.edge.yml run --rm edge-init` **ทันที** — จะขึ้น `stale` แล้วสร้าง job ใหม่ อย่าปล่อยให้ job ที่ถือรหัสเก่า retry ต่อ |
+| 3    | edge    | job ทั้ง 5 กลับเป็น `running` (ตรวจตามขั้น 6)                                                                                                                                                     |
+
+เครื่อง edge หาย / ปิดศูนย์ ทำที่ central — ดู SETUP-CENTRAL "เครื่อง edge หาย" และ "ปิดศูนย์ที่มี edge" · หมุนรหัส central admin ไม่ต้องแก้ edge (edge ไม่ถือรหัสนี้)
+
 ---
 
 ## Watchdog — เตะ job ที่ค้างหลัง WAN/central ขาดนาน
+
+service `edge-watchdog` เตะ job ที่ค้างให้เอง ส่วนนี้อธิบายเงื่อนไข ตัวแปร และผลทดสอบ
 
 **ปัญหาที่พบจริงใน lab (2026-10-01):** ช่วงที่ edge ติดต่อ central ไม่ได้ (~1.5 ชั่วโมง) job ฝั่งดึง 4 ตัวล้มติดกัน 8 ครั้ง
 (`error_count=8`) CouchDB เพิ่มเวลารอก่อนลองใหม่เป็นเท่าตัวทุกครั้งที่ล้ม จึงยังเป็น `crashing` ต่อไปอีกนาน **แม้เครือข่ายกลับมาแล้ว**
@@ -308,12 +425,12 @@ docker compose -f docker-compose.edge.yml run --rm edge-init
 สคริปต์: [`scripts/edge-watchdog.sh`](../../scripts/edge-watchdog.sh) · ทุก `WATCHDOG_INTERVAL` วินาทีดู `_scheduler/docs/_replicator`
 และ "เตะ" job (ลบ doc แล้วรัน `edge-init.sh` สร้างใหม่ — checkpoint ยังอยู่ ไม่ไล่ใหม่ทั้งหมด) เมื่อ **ครบทุกข้อ**:
 
-| เงื่อนไข | ทำไม |
-| --- | --- |
-| state `crashing` และ `error_count` ≥ `WATCHDOG_MIN_ERRORS` (3) | ไม่ยุ่งกับการล้มชั่วคราวครั้งสองครั้ง |
-| error **ไม่ใช่** central ปฏิเสธรหัสผ่าน — สคริปต์จับคำว่า `unauthorized` / `forbidden` (ไม่สนตัวพิมพ์) ซึ่งครอบทั้ง `auth_noop` ของ setup จริง (`unauthorized: ...` 401 / `forbidden: ...` 403) และ session plugin แบบ lab (`session_request_unauthorized` / `session_request_forbidden`) | เตะไม่ช่วยอะไร และทุกครั้งที่ลองใหม่นับเข้าระบบล็อกเอาต์ของ CouchDB (รหัสผิดเกิน 5 ครั้ง → 403 นาน 5 นาที) ต้องแก้ `.env` เอง |
-| `GET <SYNC_URL>/_up` ตอบเป็น JSON ของ CouchDB (`"status":"ok"`) | ถ้า central ยังไม่กลับ เตะไปก็ล้มซ้ำ · ตรวจเนื้อหา ไม่ใช่แค่ HTTP 200 เพราะถ้า LAN DNS ยังชี้ domain แอปมาที่ edge คำขอจะตกไปที่เว็บแอปของ edge ซึ่งตอบ 200 (HTML) |
-| job นั้นไม่ได้ถูกเตะภายใน `WATCHDOG_COOLDOWN` (300 วินาที) | กันเตะวน |
+| เงื่อนไข                                                                                                                                                                                                                                                                                  | ทำไม                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| state `crashing` และ `error_count` ≥ `WATCHDOG_MIN_ERRORS` (3)                                                                                                                                                                                                                            | ไม่ยุ่งกับการล้มชั่วคราวครั้งสองครั้ง                                                                                                                              |
+| error **ไม่ใช่** central ปฏิเสธรหัสผ่าน — สคริปต์จับคำว่า `unauthorized` / `forbidden` (ไม่สนตัวพิมพ์) ซึ่งครอบทั้ง `auth_noop` ของ setup จริง (`unauthorized: ...` 401 / `forbidden: ...` 403) และ session plugin แบบ lab (`session_request_unauthorized` / `session_request_forbidden`) | เตะไม่ช่วยอะไร และทุกครั้งที่ลองใหม่นับเข้าระบบล็อกเอาต์ของ CouchDB (รหัสผิดเกิน 5 ครั้ง → 403 นาน 5 นาที) ต้องแก้ `.env` เอง                                      |
+| `GET <SYNC_URL>/_up` ตอบเป็น JSON ของ CouchDB (`"status":"ok"`)                                                                                                                                                                                                                           | ถ้า central ยังไม่กลับ เตะไปก็ล้มซ้ำ · ตรวจเนื้อหา ไม่ใช่แค่ HTTP 200 เพราะถ้า LAN DNS ยังชี้ domain แอปมาที่ edge คำขอจะตกไปที่เว็บแอปของ edge ซึ่งตอบ 200 (HTML) |
+| job นั้นไม่ได้ถูกเตะภายใน `WATCHDOG_COOLDOWN` (300 วินาที)                                                                                                                                                                                                                                | กันเตะวน                                                                                                                                                           |
 
 หมายเหตุ: CouchDB ห่อ error ของการต่อ central ไม่ได้ (`nxdomain`, `conn_failed`, `connection closed`) ไว้ใน `replication_auth_error` ด้วย
 (`session_request_failed`) สคริปต์จึงแยกตามสาเหตุจริงด้านบน ไม่ใช่ดูแค่ชื่อ `replication_auth_error`
@@ -325,31 +442,31 @@ docker logs -f tent-edge-watchdog-edge          # ดูการทำงาน
 ตัวอย่าง log: `sh001_pull stuck (errors=2) while central is up — deleted, will be recreated` →
 `edge-init re-run ok: 4 job(s) recreated` · หรือ `registry_pull crashing: central REJECTED the credentials ... not restarting`
 
-| ตัวแปรใน `.env` | default | ใช้ทำอะไร |
-| --- | --- | --- |
-| `WATCHDOG_INTERVAL` | 60 | ตรวจทุกกี่วินาที |
-| `WATCHDOG_MIN_ERRORS` | 3 | ล้มติดกันกี่ครั้งจึงถือว่าค้าง |
-| `WATCHDOG_COOLDOWN` | 300 | เว้นอย่างน้อยกี่วินาทีก่อนเตะ job เดิมอีก |
-| `WATCHDOG_DRY_RUN` | 0 | `1` = บันทึก log อย่างเดียว ไม่เตะ |
+| ตัวแปรใน `.env`       | default | ใช้ทำอะไร                                 |
+| --------------------- | ------- | ----------------------------------------- |
+| `WATCHDOG_INTERVAL`   | 60      | ตรวจทุกกี่วินาที                          |
+| `WATCHDOG_MIN_ERRORS` | 3       | ล้มติดกันกี่ครั้งจึงถือว่าค้าง            |
+| `WATCHDOG_COOLDOWN`   | 300     | เว้นอย่างน้อยกี่วินาทีก่อนเตะ job เดิมอีก |
+| `WATCHDOG_DRY_RUN`    | 0       | `1` = บันทึก log อย่างเดียว ไม่เตะ        |
 
 **ทดสอบแล้ว** (central จำลองเป็น CouchDB ชั่วคราว + edge stack จริง ตั้ง interval 5 วินาที):
 
-| สถานการณ์ | ผล |
-| --- | --- |
-| ปกติ | เงียบ ไม่ทำอะไร |
-| central ล่ม | job `crashing` → watchdog ขึ้นว่า "central ... is not answering — leaving them" ไม่แตะ |
+| สถานการณ์      | ผล                                                                                                                                |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| ปกติ           | เงียบ ไม่ทำอะไร                                                                                                                   |
+| central ล่ม    | job `crashing` → watchdog ขึ้นว่า "central ... is not answering — leaving them" ไม่แตะ                                            |
 | central กลับมา | เตะ 4 job ภายใน **1 วินาที** หลัง `/_up` ตอบ · doc ที่เขียนที่ central ระหว่างนั้นมาถึง edge ภายใน **5 วินาที** โดยไม่มีใครแตะมือ |
 
 **ทดสอบซ้ำกรณีรหัสผิดด้วย setup จริง** (2026-10-16 · CouchDB 3.5.2 ทั้งสองฝั่ง · central หลัง nginx TLS `location /sync/` (self-signed) ·
 edge ใช้ `couchdb-edge-example.ini` (`auth_noop`, ปิด `verify_ssl_certificates` เพราะ self-signed) · `SYNC_URL=https://central.test/sync` · watchdog `WATCHDOG_ONCE=1 WATCHDOG_DRY_RUN=1`):
 
-| ช่วง | error ใน `_scheduler/docs` (`info.error`) | watchdog regex เดิม | watchdog regex ใหม่ |
-| --- | --- | --- | --- |
-| รหัสผิด ก่อนล็อก (central ตอบ 401) | `unauthorized: unauthorized to access or create database https://central.test/sync/shelter_sh001/` | ❌ "would restart" — **เตะ** | ✅ "central REJECTED the credentials" ไม่เตะ |
-| ถูกล็อก (รหัสผิดครบ 5 ครั้ง, central ตอบ 403) | `forbidden: https://central.test/sync/_users/` · log ของ central: `Authentication rejected for locked-out user admin` | ❌ เตะ | ✅ ไม่เตะ |
-| เทียบ: lab `http://<IP>:5984` + session plugin | `{replication_auth_error,{session_request_unauthorized,"http://central:5984/_session","admin"}}` | ✅ ไม่เตะ | ✅ ไม่เตะ |
-| central ล่ม (`auth_noop`, nginx ตอบ 502) | `{http_error_code,502,<<"GET https://central.test/sync/shelter_sh001/">>}` | ไม่ตรง → รอ `/_up` | ไม่ตรง → รอ `/_up` |
-| central ล่ม (session plugin, nxdomain) | `{replication_auth_error,{session_request_failed,...,{conn_failed,{error,nxdomain}}}}` | ไม่ตรง → รอ `/_up` | ไม่ตรง → รอ `/_up` |
+| ช่วง                                           | error ใน `_scheduler/docs` (`info.error`)                                                                             | watchdog regex เดิม          | watchdog regex ใหม่                          |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------- |
+| รหัสผิด ก่อนล็อก (central ตอบ 401)             | `unauthorized: unauthorized to access or create database https://central.test/sync/shelter_sh001/`                    | ❌ "would restart" — **เตะ** | ✅ "central REJECTED the credentials" ไม่เตะ |
+| ถูกล็อก (รหัสผิดครบ 5 ครั้ง, central ตอบ 403)  | `forbidden: https://central.test/sync/_users/` · log ของ central: `Authentication rejected for locked-out user admin` | ❌ เตะ                       | ✅ ไม่เตะ                                    |
+| เทียบ: lab `http://<IP>:5984` + session plugin | `{replication_auth_error,{session_request_unauthorized,"http://central:5984/_session","admin"}}`                      | ✅ ไม่เตะ                    | ✅ ไม่เตะ                                    |
+| central ล่ม (`auth_noop`, nginx ตอบ 502)       | `{http_error_code,502,<<"GET https://central.test/sync/shelter_sh001/">>}`                                            | ไม่ตรง → รอ `/_up`           | ไม่ตรง → รอ `/_up`                           |
+| central ล่ม (session plugin, nxdomain)         | `{replication_auth_error,{session_request_failed,...,{conn_failed,{error,nxdomain}}}}`                                | ไม่ตรง → รอ `/_up`           | ไม่ตรง → รอ `/_up`                           |
 
 ผลเดิม "ไม่เตะ 0 ครั้ง" มาจาก setup lab (`http://<IP>:5984` + session plugin) — กับ setup จริง (`auth_noop`) regex เดิมจับไม่ได้
 จึงจะลบ/สร้าง job ใหม่ทุก `WATCHDOG_COOLDOWN` และทำให้ lockout ของ central ไม่หมด · แก้แล้วเป็น `grep -i -E 'unauthorized|forbidden'` ·
@@ -362,47 +479,48 @@ edge ใช้ `couchdb-edge-example.ini` (`auth_noop`, ปิด `verify_ssl_ce
 
 ## แก้ปัญหา (ฝั่ง edge)
 
-| อาการ | สาเหตุ | แก้ |
-| --- | --- | --- |
-| `crashing` + `unauthorized` (401) | credential ผิด · **เปลี่ยนรหัส admin ที่ central แล้วไม่ได้อัปเดต `.env` ของ edge** | `.env` ขั้น 4 · SETUP-CENTRAL ขั้น 3 |
-| `crashing` + `forbidden: ...` (`auth_noop`) หรือ `session_request_forbidden` (session plugin) — 403 ทั้งที่รหัสน่าจะถูก | **ถูกล็อกเอาต์**: CouchDB 3.5 นับรหัสผิดต่อ (user, IP) ถ้าเกิน 5 ครั้งจะตอบ 403 ต่อไปแม้รหัสถูกแล้ว (`chttpd_auth_lockout` default `enforce`) · job ที่ retry ด้วยรหัสผิดเองก็ทำให้เกิดได้ เห็นใน log ของ central ว่า `Authentication rejected for locked-out user` | แก้รหัสให้ถูกก่อน แล้วรอ **5 นาที** นับจากความผิดพลาดครั้งแรก (`max_lifetime`) หรือ restart CouchDB ของ central เพื่อล้างตาราง · อย่าลบ/สร้าง job ซ้ำ ๆ ระหว่างรอ เพราะ job ที่รหัสยังผิดจะทำให้ล็อกต่อ |
-| `crashing` + `nxdomain` / `econnrefused` / timeout | `SYNC_URL` ผิด, central ปิด, firewall | ขั้น 1 |
-| `crashing` + error certificate | cert ยังไม่ออก / self-signed / นาฬิกา edge เพี้ยน | ขั้น 3 (`verify_ssl_certificates`) · NTP |
-| ได้ HTML แทน JSON | `location /sync/` ยังไม่มีบน central, `proxy_pass` ไม่มี `/` ท้าย หรือ LAN DNS ยังชี้ domain แอปมาที่ edge (cutover ยังไม่ cutback) | SETUP-CENTRAL ขั้น 4B · ตรวจว่า `<domain>` resolve ได้ IP ของ central |
-| `413` ใน history ของ job | `client_max_body_size` ที่ central เล็กไป | SETUP-CENTRAL ขั้น 4B ข้อ (2) หรือลด `worker_batch_size` |
-| job ฝั่งดึงเป็น `crashing` `error_count` สูงอยู่นาน ทั้งที่ central กลับมาแล้ว (central → edge ไม่ sync, edge → central ยังได้) | CouchDB เพิ่มเวลารอเป็นเท่าตัวทุกครั้งที่ล้ม | `edge-watchdog` เตะให้เอง · ทำเองได้ด้วย `kick` ด้านบน · ดู "Watchdog" |
-| `crashing` + `session_unexpected_result` ... `/_session` | ไม่ได้ตั้ง `auth_plugins = couch_replicator_auth_noop` ใน `couchdb-edge.ini` ทั้งที่ `SYNC_URL` มี path | ขั้น 3 แล้ว restart CouchDB ของ edge · เตะ job |
-| `crashing` หลัง WAN กลับ ทั้งที่ central ปกติ | LAN DNS ยังชี้ domain แอปมาที่ edge (ยังไม่ cutback) job ยิงเข้า edge ตัวเอง ([README T9](README.md)) | cutback คืน DNS แล้ว `edge-watchdog` เตะให้เอง |
-| staff login ที่ edge ไม่ได้ | `CENTRAL_REPL_USER` ไม่ใช่ central admin (job `users_<code>_pull` ได้ 401), staff ไม่มี role `shelter:<CODE>` ที่ central หรือ CouchDB คนละ version | ขั้น 4 · ใช้ `couchdb:3.5` ทั้งสองฝั่ง |
-| `edge-init` ขึ้น `FAILED ... (HTTP 4xx/5xx)` | ดูข้อความหลัง `FAILED` — ส่วนใหญ่ central ต่อไม่ได้ หรือ JSON เพี้ยนเพราะรหัสผ่านมี `"` / `\` | แก้ `.env` แล้วรัน `edge-init` ซ้ำ (รันซ้ำได้) |
-| `edge-init` ขึ้น `FAILED  SYNC_URL (...) ชี้กลับมาที่ edge ตัวเอง (uuid ตรงกัน ...)` | `SYNC_URL` resolve มาที่ edge เอง — LAN DNS ยังชี้ domain central มาที่ edge (cutover ยังไม่ cutback) หรือใส่ URL ผิด | แก้ `SYNC_URL` / คืน DNS ให้ชี้ central แล้วรัน `edge-init` ซ้ำ |
-| `edge-init` ขึ้น `FAILED  อ่าน GET / ของ central ... ไม่ได้` | ต่อ central ไม่ได้, `SYNC_URL` ผิด หรือ `CENTRAL_REPL_*` ผิด / ถูกล็อกเอาต์ | ขั้น 1 · `.env` ขั้น 4 · แก้แล้วรัน `edge-init` ซ้ำ |
-| list job ว่างหลัง `up` | replicator ยังไม่หยิบ job | รอ ~30 วินาที |
-| CouchDB ไม่ start / mount error | ไม่มีไฟล์ `couchdb-edge.ini` (Docker สร้างเป็นโฟลเดอร์) | ขั้น 3 แล้ว `docker compose -f docker-compose.edge.yml up -d --force-recreate` |
-| nginx edge ไม่ start: `host not found in upstream "fastapi"` | mount `nginx/` ของ central แทน `nginx-edge/` | ใช้ `docker-compose.edge.yml` ตัวจริง |
-| `doc_write_failures` เพิ่มใน `_active_tasks` | VDU ฝั่ง target ปฏิเสธ (`edge_readonly` กัน user ที่ไม่ใช่ admin) | ตรวจว่า `COUCHDB_USER` เป็น admin |
+ดูอาการ → สาเหตุ → วิธีแก้ (ปัญหาฝั่ง central ดู SETUP-CENTRAL "แก้ปัญหา (ฝั่ง central)")
+
+| อาการ                                                                                                                           | สาเหตุ                                                                                                                                                                                                                                                                                                                                | แก้                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crashing` + `unauthorized` (401)                                                                                               | `EDGE_REPL_*` ผิด · **ผู้ดูแล central สั่ง `--rotate` หรือ `--remove` ของศูนย์นี้แล้ว** รหัสใน `.env` จึงใช้ไม่ได้                                                                                                                                                                                                                    | ขอ `EDGE_REPL_*` ชุดล่าสุดจาก central (`central-repl-user.sh <CODE>`) ใส่ `.env` แล้วรัน `edge-init` ใหม่ · SETUP-CENTRAL ขั้น 3                                                                        |
+| `crashing` + `forbidden: ...` (`auth_noop`) หรือ `session_request_forbidden` (session plugin) — 403 ทั้งที่รหัสน่าจะถูก         | **ถูกล็อกเอาต์**: CouchDB 3.5 นับรหัสผิดต่อ (user, IP) ถ้าเกิน 5 ครั้งจะตอบ 403 ต่อไปแม้รหัสถูกแล้ว (`chttpd_auth_lockout` default `enforce`) · job ที่ retry ด้วยรหัสผิดเองก็ทำให้เกิดได้ เห็นใน log ของ central ว่า `Authentication rejected for locked-out user` · **ล็อกเฉพาะชื่อ `repl_<code>_*` ของศูนย์นี้** ศูนย์อื่นไม่กระทบ | แก้รหัสให้ถูกก่อน แล้วรอ **5 นาที** นับจากความผิดพลาดครั้งแรก (`max_lifetime`) หรือ restart CouchDB ของ central เพื่อล้างตาราง · อย่าลบ/สร้าง job ซ้ำ ๆ ระหว่างรอ เพราะ job ที่รหัสยังผิดจะทำให้ล็อกต่อ |
+| `crashing` + `nxdomain` / `econnrefused` / timeout                                                                              | `SYNC_URL` ผิด, central ปิด, firewall                                                                                                                                                                                                                                                                                                 | ขั้น 1                                                                                                                                                                                                  |
+| `crashing` + error certificate                                                                                                  | cert ยังไม่ออก / self-signed / นาฬิกา edge เพี้ยน                                                                                                                                                                                                                                                                                     | ขั้น 3 (`verify_ssl_certificates`) · NTP                                                                                                                                                                |
+| ได้ HTML แทน JSON                                                                                                               | `location /sync/` ยังไม่มีบน central, `proxy_pass` ไม่มี `/` ท้าย หรือ LAN DNS ยังชี้ domain แอปมาที่ edge (cutover ยังไม่ cutback)                                                                                                                                                                                                   | SETUP-CENTRAL ขั้น 4B · ตรวจว่า `<domain>` resolve ได้ IP ของ central                                                                                                                                   |
+| `413` ใน history ของ job                                                                                                        | `client_max_body_size` ที่ central เล็กไป                                                                                                                                                                                                                                                                                             | SETUP-CENTRAL ขั้น 4B ข้อ (2) หรือลด `worker_batch_size`                                                                                                                                                |
+| job ฝั่งดึงเป็น `crashing` `error_count` สูงอยู่นาน ทั้งที่ central กลับมาแล้ว (central → edge ไม่ sync, edge → central ยังได้) | CouchDB เพิ่มเวลารอเป็นเท่าตัวทุกครั้งที่ล้ม                                                                                                                                                                                                                                                                                          | `edge-watchdog` เตะให้เอง · ทำเองได้ด้วย `kick` ด้านบน · ดู "Watchdog"                                                                                                                                  |
+| `crashing` + `session_unexpected_result` ... `/_session`                                                                        | ไม่ได้ตั้ง `auth_plugins = couch_replicator_auth_noop` ใน `couchdb-edge.ini` ทั้งที่ `SYNC_URL` มี path                                                                                                                                                                                                                               | ขั้น 3 แล้ว restart CouchDB ของ edge · เตะ job                                                                                                                                                          |
+| `crashing` หลัง WAN กลับ ทั้งที่ central ปกติ                                                                                   | LAN DNS ยังชี้ domain แอปมาที่ edge (ยังไม่ cutback) job ยิงเข้า edge ตัวเอง ([README T9](README.md))                                                                                                                                                                                                                                 | cutback คืน DNS แล้ว `edge-watchdog` เตะให้เอง                                                                                                                                                          |
+| staff login ที่ edge ไม่ได้                                                                                                     | job `users_<code>_pull` ไม่ `running` (รหัส `EDGE_REPL_*` ผิด), service `edge-users-copy` ที่ central หยุด, staff ไม่มี role `shelter:<CODE>` / `edge_shelters` ที่ central, ยังไม่เคย activate ที่ central (`must_change_password`) หรือ CouchDB คนละ version                                                                        | ขั้น 4 · ให้ผู้ดูแล central รัน `central-repl-user.sh <CODE> --status` · ใช้ `couchdb:3.5` ทั้งสองฝั่ง                                                                                                  |
+| login ที่ edge ได้ทั้งที่ถอดสิทธิ์ / soft delete ที่ central แล้ว                                                               | service `edge-users-copy` ที่ central หยุด หรือ `users_<code>_pull` ที่ edge ค้าง                                                                                                                                                                                                                                                     | ให้ผู้ดูแล central ตรวจ `--status` · เตะ `users_<code>_pull` ที่ edge (`kick`)                                                                                                                          |
+| `edge-init` ขึ้น `FAILED  EDGE_REPL_USER มี role _admin` / `ไม่มี role repl:<CODE>` / `GET .../_session ... ไม่ผ่าน`            | ใส่ central admin หรือบัญชีผิดศูนย์ (หรือรหัสผิด) ใน `EDGE_REPL_*`                                                                                                                                                                                                                                                                    | ใช้ค่าที่ `scripts/central-repl-user.sh <CODE>` ที่ central แสดง (ศูนย์นี้) แล้วรัน `edge-init` ซ้ำ                                                                                                     |
+| `edge-init` ขึ้น `FAILED ... (HTTP 4xx/5xx)`                                                                                    | ดูข้อความหลัง `FAILED` — ส่วนใหญ่ central ต่อไม่ได้ หรือ JSON เพี้ยนเพราะรหัสผ่านมี `"` / `\`                                                                                                                                                                                                                                         | แก้ `.env` แล้วรัน `edge-init` ซ้ำ (รันซ้ำได้)                                                                                                                                                          |
+| `edge-init` ขึ้น `FAILED  SYNC_URL (...) ชี้กลับมาที่ edge ตัวเอง (uuid ตรงกัน ...)`                                            | `SYNC_URL` resolve มาที่ edge เอง — LAN DNS ยังชี้ domain central มาที่ edge (cutover ยังไม่ cutback) หรือใส่ URL ผิด                                                                                                                                                                                                                 | แก้ `SYNC_URL` / คืน DNS ให้ชี้ central แล้วรัน `edge-init` ซ้ำ                                                                                                                                         |
+| `edge-init` ขึ้น `FAILED  อ่าน GET / ของ central ... ไม่ได้`                                                                    | ต่อ central ไม่ได้, `SYNC_URL` ผิด หรือ `EDGE_REPL_*` ผิด / ถูกล็อกเอาต์                                                                                                                                                                                                                                                              | ขั้น 1 · `.env` ขั้น 4 · แก้แล้วรัน `edge-init` ซ้ำ                                                                                                                                                     |
+| list job ว่างหลัง `up`                                                                                                          | replicator ยังไม่หยิบ job                                                                                                                                                                                                                                                                                                             | รอ ~30 วินาที                                                                                                                                                                                           |
+| CouchDB ไม่ start / mount error                                                                                                 | ไม่มีไฟล์ `couchdb-edge.ini` (Docker สร้างเป็นโฟลเดอร์)                                                                                                                                                                                                                                                                               | ขั้น 3 แล้ว `docker compose -f docker-compose.edge.yml up -d --force-recreate`                                                                                                                          |
+| nginx edge ไม่ start: `host not found in upstream "fastapi"`                                                                    | mount `nginx/` ของ central แทน `nginx-edge/`                                                                                                                                                                                                                                                                                          | ใช้ `docker-compose.edge.yml` ตัวจริง                                                                                                                                                                   |
+| `doc_write_failures` เพิ่มใน `_active_tasks`                                                                                    | VDU ฝั่ง target ปฏิเสธ (`edge_readonly` กัน user ที่ไม่ใช่ admin)                                                                                                                                                                                                                                                                     | ตรวจว่า `COUCHDB_USER` เป็น admin                                                                                                                                                                       |
 
 📖 [Replication states](https://docs.couchdb.org/en/stable/replication/replicator.html#replication-states) ·
 [`/_scheduler/*`, `/_active_tasks`](https://docs.couchdb.org/en/stable/api/server/common.html)
 
 ---
 
-> **⚠ เปลี่ยนรหัส admin ของ central — ระวัง lockout ข้าม edge:** CouchDB ล็อกเอาต์ตาม IP และทุก edge เข้า central ผ่าน nginx ตัวเดียวกัน
-> (central เห็นเป็น IP เดียว) จึงมี edge **เครื่องเดียว** ที่ใช้รหัส central admin ผิด ก็ทำให้ admin ของ **ทุก edge** ถูกล็อกได้
-> ก่อนหมุนรหัส admin ของ central ให้ **หยุด job บนทุก edge** (หรือแก้ `CENTRAL_REPL_PASSWORD` ใน `.env` ของทุก edge แล้วรัน `edge-init`) **ในช่วงเวลาเดียวกัน**
-> อย่าปล่อยให้ edge ใดใช้รหัสเก่าต่อ
-
 ## ตอน cutover / cutback (แบบ path `/sync`)
+
+ใช้เมื่อ `SYNC_URL=https://<domain>/sync` และมีการสลับ LAN DNS ให้ชี้มาที่ edge ตอน WAN ขาด
 
 `SYNC_URL=https://<domain>/sync` ใช้ชื่อเดียวกับแอป จึงมีผลตามนี้:
 
-| ช่วง | LAN DNS ของ `<domain>` | job ของ edge |
-| --- | --- | --- |
-| ปกติ | central | `running` |
-| WAN ขาด ก่อน cutover | central (แต่ต่อไม่ได้) | `crashing` (เข้า central ไม่ได้) — ปกติ |
-| cutover | **edge** | `crashing` — ยิงเข้า edge ตัวเอง (nginx edge ฟังแค่ :80 จึง TLS ล้ม) ไม่มีข้อมูลเสียหาย |
-| WAN กลับแต่ **ยังไม่ cutback** | **edge** | ยัง `crashing` — **sync ยังไม่กลับ** |
-| cutback (คืน DNS) | central | watchdog เตะ job ภายใน `WATCHDOG_INTERVAL` แล้ว sync ต่อจาก checkpoint เดิม |
+| ช่วง                           | LAN DNS ของ `<domain>` | job ของ edge                                                                            |
+| ------------------------------ | ---------------------- | --------------------------------------------------------------------------------------- |
+| ปกติ                           | central                | `running`                                                                               |
+| WAN ขาด ก่อน cutover           | central (แต่ต่อไม่ได้) | `crashing` (เข้า central ไม่ได้) — ปกติ                                                 |
+| cutover                        | **edge**               | `crashing` — ยิงเข้า edge ตัวเอง (nginx edge ฟังแค่ :80 จึง TLS ล้ม) ไม่มีข้อมูลเสียหาย |
+| WAN กลับแต่ **ยังไม่ cutback** | **edge**               | ยัง `crashing` — **sync ยังไม่กลับ**                                                    |
+| cutback (คืน DNS)              | central                | watchdog เตะ job ภายใน `WATCHDOG_INTERVAL` แล้ว sync ต่อจาก checkpoint เดิม             |
 
 ข้อสรุปสำหรับ runbook ของศูนย์: **cutback ต้องทำทันทีที่ WAN กลับ** เพราะเป็นขั้นที่ทำให้ sync กลับมา
 (ข้อมูลที่เขียนที่ edge ระหว่างนั้นไม่หาย — ขึ้น central หลัง cutback) · ยังไม่ได้ทดสอบกับ DNS ศูนย์จริง (README T9)
@@ -410,6 +528,8 @@ edge ใช้ `couchdb-edge-example.ini` (`auth_noop`, ปิด `verify_ssl_ce
 ---
 
 ## ถอดออก
+
+ใช้ตอนเลิกใช้เครื่อง edge
 
 ```bash
 docker compose -f docker-compose.edge.yml down
@@ -423,11 +543,13 @@ sudo rm -rf ../deployment/tent-edge
 
 ## อ้างอิง
 
-| เอกสาร | ใช้ดูอะไร |
-| --- | --- |
-| [`docs/changes/01-core/CR-064-edge-disaster-continuity.md`](../changes/01-core/CR-064-edge-disaster-continuity.md) | OD-1 (edge ไม่มี FastAPI/Mongo), OD-2 (cutover ที่ DNS), OD-3 (login ใหม่) |
-| [`docs/data/data-model.md` §1, §5, §6, §7](../data/data-model.md) | topology, conflict, `_security` / VDU, การ wipe edge |
-| [`docs/features/edge-disaster-continuity-idea.md` §7](../features/edge-disaster-continuity-idea.md) | gap checklist |
-| [README.md](README.md) | test T1–T11 (WAN ขาด, conflict, backlog, นาฬิกา) |
-| [Replication protocol](https://docs.couchdb.org/en/stable/replication/protocol.html) · [Conflicts](https://docs.couchdb.org/en/stable/replication/conflicts.html) | หลักการ replication และ conflict |
-| [`[replicator]`](https://docs.couchdb.org/en/stable/config/replicator.html) · [`[chttpd_auth]`](https://docs.couchdb.org/en/stable/config/auth.html) | config ใน `couchdb-edge.ini` |
+เอกสารที่เกี่ยวข้อง
+
+| เอกสาร                                                                                                                                                            | ใช้ดูอะไร                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`docs/changes/01-core/CR-064-edge-disaster-continuity.md`](../changes/01-core/CR-064-edge-disaster-continuity.md)                                                | OD-1 (edge ไม่มี FastAPI/Mongo), OD-2 (cutover ที่ DNS), OD-3 (login ใหม่) |
+| [`docs/data/data-model.md` §1, §5, §6, §7](../data/data-model.md)                                                                                                 | topology, conflict, `_security` / VDU, การ wipe edge                       |
+| [`docs/features/edge-disaster-continuity-idea.md` §7](../features/edge-disaster-continuity-idea.md)                                                               | gap checklist                                                              |
+| [README.md](README.md)                                                                                                                                            | test T1–T11 (WAN ขาด, conflict, backlog, นาฬิกา)                           |
+| [Replication protocol](https://docs.couchdb.org/en/stable/replication/protocol.html) · [Conflicts](https://docs.couchdb.org/en/stable/replication/conflicts.html) | หลักการ replication และ conflict                                           |
+| [`[replicator]`](https://docs.couchdb.org/en/stable/config/replicator.html) · [`[chttpd_auth]`](https://docs.couchdb.org/en/stable/config/auth.html)              | config ใน `couchdb-edge.ini`                                               |

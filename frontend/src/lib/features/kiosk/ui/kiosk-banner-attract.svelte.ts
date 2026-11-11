@@ -9,6 +9,8 @@ export type AttractPhase = 'hidden' | 'armed' | 'showing';
 /**
  * Attract-overlay state machine (design guideline §3): hidden -> armed (banners exist) -> showing
  * (idle for KIOSK_BANNER_IDLE_MS) -> armed (dismissed). All timers live here, not in `$effect`.
+ * While `hidden`, the same idle window calls `onIdleWithoutBanners` instead, so a kiosk with no
+ * banners still notices that the person walked away.
  */
 export class KioskBannerAttractController {
 	phase = $state<AttractPhase>('hidden');
@@ -19,6 +21,7 @@ export class KioskBannerAttractController {
 	private readonly fetchBanners: () => Promise<KioskBannerSlide[]>;
 	private readonly refreshMs: number;
 	private readonly idle: KioskIdleTimeout;
+	private readonly bareIdle: KioskIdleTimeout | null;
 	private rotationTimer: ReturnType<typeof setTimeout> | null = null;
 	private refreshTimer: ReturnType<typeof setInterval> | null = null;
 	private pending: KioskBannerSlide[] | null = null;
@@ -28,14 +31,19 @@ export class KioskBannerAttractController {
 		fetch: () => Promise<KioskBannerSlide[]>;
 		idleMs?: number;
 		refreshMs?: number;
+		onIdleWithoutBanners?: () => void;
 	}) {
 		this.fetchBanners = opts.fetch;
 		this.refreshMs = opts.refreshMs ?? KIOSK_BANNER_REFRESH_MS;
-		this.idle = new KioskIdleTimeout(opts.idleMs ?? KIOSK_BANNER_IDLE_MS, () => this.show());
+		const idleMs = opts.idleMs ?? KIOSK_BANNER_IDLE_MS;
+		this.idle = new KioskIdleTimeout(idleMs, () => this.show());
+		const onBareIdle = opts.onIdleWithoutBanners;
+		this.bareIdle = onBareIdle ? new KioskIdleTimeout(idleMs, onBareIdle) : null;
 	}
 
 	start(): void {
 		this.active = true;
+		if (this.phase === 'hidden') this.bareIdle?.start();
 		if (this.refreshTimer === null) {
 			this.refreshTimer = setInterval(() => void this.refresh(), this.refreshMs);
 		}
@@ -44,6 +52,7 @@ export class KioskBannerAttractController {
 
 	recordActivity(): void {
 		if (this.phase === 'armed') this.idle.recordActivity();
+		else if (this.phase === 'hidden') this.bareIdle?.recordActivity();
 	}
 
 	dismiss(): void {
@@ -83,6 +92,7 @@ export class KioskBannerAttractController {
 			this.refreshTimer = null;
 		}
 		this.idle.stop();
+		this.bareIdle?.stop();
 		this.pending = null;
 		this.slides = [];
 		this.index = 0;
@@ -120,18 +130,21 @@ export class KioskBannerAttractController {
 		if (list.length === 0) {
 			this.hide();
 		} else if (this.phase === 'hidden') {
+			this.bareIdle?.stop();
 			this.phase = 'armed';
 			this.idle.start();
 		}
 	}
 
 	private hide(): void {
+		const wasHidden = this.phase === 'hidden';
 		this.clearRotation();
 		this.idle.stop();
 		this.pending = null;
 		this.slides = [];
 		this.index = 0;
 		this.phase = 'hidden';
+		if (!wasHidden && this.active) this.bareIdle?.start();
 	}
 
 	private show(): void {

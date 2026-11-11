@@ -12,7 +12,7 @@ describe('registry shelter lookup design', () => {
 		const design = buildRegistryDesignDoc();
 
 		expect(design.version).toBe(REGISTRY_DESIGN_VERSION);
-		expect(REGISTRY_DESIGN_VERSION).toBe(8);
+		expect(REGISTRY_DESIGN_VERSION).toBe(9);
 		expect(design.views.by_normalized_name.map).toContain("doc.type === 'shelter'");
 		expect(design.views.by_normalized_name.map).toContain("replace(/\\s+/g, ' ')");
 	});
@@ -67,6 +67,18 @@ describe('registry kiosk_banner validate_doc_update', () => {
 	it('still rejects non-admin writers', () => {
 		expect(() => runVdu(validBanner(), { roles: ['staff'] })).toThrow();
 	});
+
+	it.each([['repl:SH001'], ['repl:SH002']])(
+		'rejects every write from the edge replication role %s (#1298 FR-7)',
+		(role) => {
+			expect(() => runVdu(validBanner(), { roles: [role] })).toThrow(
+				expect.objectContaining({ forbidden: expect.stringContaining('Replication accounts') })
+			);
+			expect(() => runVdu({ _id: 'x', _deleted: true }, { roles: [role, 'system_admin'] })).toThrow(
+				expect.objectContaining({ forbidden: expect.stringContaining('Replication accounts') })
+			);
+		}
+	);
 
 	it('accepts legacy schema_v 1 banners without a group_id', () => {
 		expect(() => runVdu(validBanner({ schema_v: 1 }))).not.toThrow();

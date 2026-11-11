@@ -22,7 +22,10 @@ type TransferDestination = { code: string; name: string };
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeTransfer(request.headers.get('cookie'));
+		const caller = await authorizeTransfer(
+			request.headers.get('cookie'),
+			url.searchParams.get('shelter_code')
+		);
 		const own = resolveShelterCode(caller, url.searchParams.get('shelter_code')).toUpperCase();
 
 		const res = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');

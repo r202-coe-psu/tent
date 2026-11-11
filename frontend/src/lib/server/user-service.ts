@@ -38,6 +38,8 @@ import {
 import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
 import { mintStaffTokenHash } from '$lib/server/staff-card-token';
 import { isValidStaffTokenHash } from '$lib/features/users/server';
+import { CURRENT_CONSENT_VERSION, type UserConsentStatus } from '$lib/features/users';
+import { createAuditEntry } from '$lib/features/shared';
 
 /**
  * User service — the ONLY module that writes CouchDB `_users` with admin creds.
@@ -165,6 +167,8 @@ export interface CouchUserDoc {
 	deleted_at?: string | null;
 	/** CR-171 — `_users` name of whoever soft-deleted the account. */
 	deleted_by?: string | null;
+	/** PDPA & Non-disclosure agreement consent status (issue #1246). */
+	consent?: UserConsentStatus | null;
 }
 
 /** CR-171 FR-5 — a soft-deleted account is not a user for any management / login path. */
@@ -179,6 +183,15 @@ export function isDeletedUserDoc(doc: { deleted_at?: string | null } | null | un
  */
 function nextEdgeShelters(doc: CouchUserDoc, nextRoles: readonly string[]): string[] {
 	return mergeEdgeShelters(mergeEdgeShelters(doc.edge_shelters, doc.roles ?? []), nextRoles);
+}
+
+/**
+ * #1298 FR-5 — per-shelter edge replication accounts (`repl_<code>_<suffix>`, role `repl:<CODE>`)
+ * are provisioned by `scripts/central-repl-user.sh`, never through user management. Treated as not
+ * found by every read / list / update / reset / delete path here.
+ */
+export function isReplUserDoc(doc: { roles?: readonly string[] } | null | undefined): boolean {
+	return (doc?.roles ?? []).some((role) => role.startsWith('repl:'));
 }
 
 function userDocId(name: string): string {
@@ -241,9 +254,13 @@ async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'GET');
 	if (res.status >= 400) throw serviceErrorFromCouch('list users', res.status, res.data);
 	const rows = (res.data as { rows?: { id: string; doc: CouchUserDoc }[] })?.rows ?? [];
-	// Soft-deleted accounts (CR-171) are invisible to list / SA count / phone + OAuth lookups.
+	// Soft-deleted accounts (CR-171) and repl:* replication accounts (#1298) are invisible to list /
+	// SA count / phone + OAuth lookups.
 	return rows
-		.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc && !isDeletedUserDoc(r.doc))
+		.filter(
+			(r) =>
+				r.id.startsWith(USER_PREFIX) && r.doc && !isDeletedUserDoc(r.doc) && !isReplUserDoc(r.doc)
+		)
 		.map((r) => r.doc);
 }
 
@@ -315,7 +332,8 @@ async function storedUserName(name: string): Promise<string> {
 /** Read a LIVE user; a soft-deleted doc (CR-171) is reported as not found. */
 async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> {
 	const doc = await readUserDocIncludingDeleted(name, action);
-	if (isDeletedUserDoc(doc)) throw new ServiceError('VALIDATION', `User "${name}" not found`);
+	if (isDeletedUserDoc(doc) || isReplUserDoc(doc))
+		throw new ServiceError('VALIDATION', `User "${name}" not found`);
 	return doc;
 }
 
@@ -1775,4 +1793,67 @@ export async function readUserDocForLink(name: string): Promise<CouchUserDoc | n
 		if (e instanceof ServiceError && e.code === 'VALIDATION') return null;
 		throw e;
 	}
+}
+
+/** Record user PDPA and NDA consent acceptance with audit trail (issue #1246). */
+export async function recordUserConsent(
+	username: string
+): Promise<{ ok: true; consent: UserConsentStatus }> {
+	const userRes = await adminRaw(`/_users/${userDocId(username)}`, 'GET');
+	if (userRes.status !== 200 || !userRes.data) {
+		throw new ServiceError('NOT_FOUND', 'User profile doc not found');
+	}
+	const doc = userRes.data as CouchUserDoc;
+	if (isDeletedUserDoc(doc)) {
+		throw new ServiceError('NOT_FOUND', 'User profile doc not found');
+	}
+	const previousConsent = doc.consent;
+	const nowIso = new Date().toISOString();
+	const consent: UserConsentStatus = {
+		agreed: true,
+		agreed_at: nowIso,
+		version: CURRENT_CONSENT_VERSION
+	};
+	doc.consent = consent;
+
+	const saveRes = await adminRaw(`/_users/${userDocId(username)}`, 'PUT', doc);
+	if (saveRes.status !== 200 && saveRes.status !== 201) {
+		throw new ServiceError('INTERNAL', 'Failed to update user consent');
+	}
+
+	// Record audit entry in central_ops
+	const auditDoc = createAuditEntry(
+		{
+			action: 'privacy_change',
+			target_type: 'user',
+			target_id: `org.couchdb.user:${username}`,
+			reason: 'PDPA and Non-disclosure Agreement accepted',
+			context: {
+				version: CURRENT_CONSENT_VERSION,
+				personnel_type: doc.personnel_type ?? null,
+				roles: doc.roles ?? []
+			},
+			occurred_at: nowIso
+		},
+		{ shelterCode: 'central', createdBy: username, roles: doc.roles ?? [] }
+	);
+
+	try {
+		const auditRes = await adminRaw(`/central_ops/${auditDoc._id}`, 'PUT', auditDoc);
+		if (auditRes.status !== 200 && auditRes.status !== 201) {
+			throw new Error(`Audit HTTP ${auditRes.status}`);
+		}
+	} catch {
+		// Rollback consent update on user doc to stay fail-closed and retry-safe
+		try {
+			const rollbackDoc = await readUserDocIncludingDeleted(username, 'rollback unaudited consent');
+			rollbackDoc.consent = previousConsent ?? null;
+			await adminRaw(`/_users/${userDocId(username)}`, 'PUT', rollbackDoc);
+		} catch {
+			// ignore rollback error, primary error takes precedence
+		}
+		throw new ServiceError('INTERNAL', 'Failed to record consent audit entry');
+	}
+
+	return { ok: true, consent };
 }

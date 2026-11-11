@@ -2,6 +2,10 @@
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { localizeFaceMessage } from '../domain/face-check';
+	import { KIOSK_FACE_I18N } from './_constants/kiosk-face.i18n';
 	import { KIOSK_NOTICE_SECONDARY_ACTION } from './kiosk-notice-actions';
 
 	interface Props {
@@ -48,6 +52,8 @@
 		skipButton = $bindable(null)
 	}: Props = $props();
 
+	const t = $derived(getTranslation(KIOSK_FACE_I18N, languageStore.current).camera);
+	const shownMessage = $derived(localizeFaceMessage(message, languageStore.current));
 	const tone = $derived(frameReady ? 'ready' : framingProblem ? 'problem' : 'idle');
 </script>
 
@@ -58,7 +64,7 @@
 	<svelte:element
 		this={headingTag}
 		class="text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
-		>ตรวจสอบใบหน้า</svelte:element
+		>{t.heading}</svelte:element
 	>
 	<div
 		class="space-y-4 kiosk-compact:grid kiosk-compact:grid-cols-[15rem_minmax(0,1fr)] kiosk-compact:items-center kiosk-compact:space-y-0 kiosk-compact:gap-x-6 kiosk-compact:gap-y-2"
@@ -75,21 +81,21 @@
 					<span
 						class="mr-3 inline-block size-5 shrink-0 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none kiosk-portrait:size-8"
 						aria-hidden="true"
-					></span>กำลังตรวจสอบ…
+					></span>{t.verifying}
 				{:else if starting}
-					กำลังเปิดกล้อง…
+					{t.starting}
 				{:else}
-					{message}
+					{shownMessage}
 				{/if}
 			</p>
 			{#if attempt > 0}
 				<p class="text-base font-semibold text-slate-700 tabular-nums kiosk-portrait:text-xl">
-					ครั้งที่ {attempt + 1} จาก {maxAttempts}
+					{t.attempt(attempt + 1, maxAttempts)}
 				</p>
 			{/if}
 			{#if slow}
 				<p class="text-base text-slate-700 kiosk-portrait:text-xl" data-testid="kiosk-face-slow">
-					หากยังไม่สำเร็จ ระบบจะให้เจ้าหน้าที่ช่วยตรวจ
+					{t.slow}
 				</p>
 			{/if}
 		</div>
@@ -102,7 +108,7 @@
 				autoplay
 				playsinline
 				muted
-				aria-label="ภาพจากกล้อง"
+				aria-label={t.videoLabel}
 			></video>
 			<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
 				<!-- Oval size is mirrored by guide_half_height_ratio / guide_aspect in kiosk/app/face/profiles.py. -->
@@ -146,7 +152,7 @@
 					type="button"
 					variant="outline"
 					onclick={onskip}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}>เจ้าหน้าที่ข้ามขั้นตอนนี้</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.skip}</Button
 				>
 			</div>
 		{/if}

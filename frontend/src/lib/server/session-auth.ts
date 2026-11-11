@@ -29,6 +29,7 @@ export type ServiceErrorCode =
 	| 'VALIDATION'
 	| 'CONFLICT'
 	| 'INTERNAL'
+	/** A store the answer depends on (registry, a shelter DB) could not be read (api-contract §2). */
 	| 'DEPENDENCY_UNAVAILABLE';
 
 const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {

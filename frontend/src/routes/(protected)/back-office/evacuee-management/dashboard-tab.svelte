@@ -13,7 +13,7 @@
 		DEFAULT_REGISTRATION_RANGE_PRESET,
 		type RegistrationRangePreset
 	} from '$lib/features/dashboard';
-	import { ConsulateExportButton } from '$lib/features/data-export';
+	import { ConsulateExportButton, DashboardExportButton } from '$lib/features/data-export';
 	import { bangkokToday } from '$lib/utils/date';
 
 	import DashboardKpiCards from './dashboard-kpi-cards.svelte';
@@ -21,6 +21,7 @@
 	import DashboardAgeChart from './dashboard-age-chart.svelte';
 	import DashboardNationalityList from './dashboard-nationality-list.svelte';
 	import DashboardStationTimesSection from './dashboard-station-times-section.svelte';
+	import DashboardZoneOccupancyCard from './dashboard-zone-occupancy-card.svelte';
 
 	let { shelterCode }: { shelterCode: string } = $props();
 
@@ -43,6 +44,10 @@
 </script>
 
 <div class="space-y-4 p-4 sm:p-6">
+	<div class="flex justify-end">
+		<DashboardExportButton {shelterCode} params={rangeParams} />
+	</div>
+
 	{#if isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />
@@ -54,6 +59,8 @@
 	{:else if occupancyQuery.data}
 		<DashboardKpiCards occupancy={occupancyQuery.data} />
 	{/if}
+
+	<DashboardZoneOccupancyCard {shelterCode} />
 
 	<DashboardRegistrationCard
 		{shelterCode}

@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view or the registry write policy changes so deployers can tell a
  * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 8;
+export const REGISTRY_DESIGN_VERSION = 9;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -35,6 +35,12 @@ export interface RegistryDesignDoc {
  */
 export function buildRegistryValidateDocUpdate(): string {
 	return `function (newDoc, oldDoc, userCtx) {
+  // #1298 FR-7: per-shelter edge replication accounts (role repl:<CODE>) read registry, never write.
+  for (var replIndex = 0; replIndex < userCtx.roles.length; replIndex++) {
+    if (userCtx.roles[replIndex].indexOf('repl:') === 0) {
+      throw({ forbidden: 'Replication accounts cannot write registry documents' });
+    }
+  }
   var isAdmin =
     userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1;
   if (!isAdmin) {

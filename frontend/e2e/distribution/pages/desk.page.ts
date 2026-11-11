@@ -159,9 +159,14 @@ export class DeskPage {
 
 	// ── Shared handover controls (tabs 2–4) ──────────────────────────────────
 
-	/** Item button on the food / supplies card (`aria-pressed` toggle). */
+	/**
+	 * Item button on the food / supplies card (`aria-pressed` toggle). The ticket picker trigger
+	 * also names its items, so only the toggle buttons match.
+	 */
 	itemButton(itemName: string): Locator {
-		return this.page.getByRole('button', { name: new RegExp(escapeRegExp(itemName)) });
+		return this.page
+			.getByRole('button', { name: new RegExp(escapeRegExp(itemName)) })
+			.and(this.page.locator('[aria-pressed]'));
 	}
 
 	selectedRecipientCard(recipient: SeededRecipient): Locator {

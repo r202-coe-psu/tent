@@ -2,15 +2,13 @@
 	import { page } from '$app/state';
 	import {
 		buildKioskContextQuery,
-		getKioskDisplayContext,
 		readKioskDisplayQuery,
 		KioskVolunteerCard
 	} from '$lib/features/kiosk';
 
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 </script>
 
 <KioskVolunteerCard {contextQuery} />

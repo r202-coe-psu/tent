@@ -28,9 +28,12 @@ const exportBtn = () =>
 		(b) => b.textContent?.trim() === 'Export'
 	)!;
 
-afterEach(() => {
-	if (instance) unmount(instance);
+afterEach(async () => {
+	if (instance) await unmount(instance);
 	instance = null;
+	// bits-ui restores the body style 24ms after the dialog's scroll lock goes; let that timer run
+	// here, or it fires after the file's DOM is torn down ("document is not defined").
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 

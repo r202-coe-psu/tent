@@ -25,6 +25,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Loader from '@lucide/svelte/icons/loader';
+	import { formatQty } from '$lib/utils/qty';
 
 	let {
 		shelterCode = '',
@@ -293,7 +294,7 @@
 										<td
 											class="p-3.5 text-right font-mono font-bold whitespace-nowrap text-slate-900"
 										>
-											{std.daily_demand.toLocaleString()}
+											{formatQty(std.daily_demand)}
 										</td>
 										<td class="p-3.5 font-mono text-xs whitespace-nowrap text-slate-600">{uom}</td>
 										<td class="p-3.5 text-xs whitespace-nowrap text-slate-600 tabular-nums"

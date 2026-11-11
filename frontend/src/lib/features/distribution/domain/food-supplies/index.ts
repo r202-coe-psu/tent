@@ -54,6 +54,13 @@ export {
 } from './distribution-log';
 
 export {
+	evaluateHouseholdMealPickup,
+	type HouseholdPickupMember,
+	type HouseholdPickupLog,
+	type HouseholdMemberMealStatus
+} from './household-meal-pickup';
+
+export {
 	bulkReturnPoolStatusSchema,
 	bulkReturnPoolInputSchema,
 	bulkReturnPoolDocSchema,
