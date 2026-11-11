@@ -2,7 +2,7 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-11-06 # CR-233 — `/people/[id]/card` QR payload `evacuee:{ULID}@{hash6}` ออกใหม่ทุกครั้งที่ปริ้น; 2026-10-25 retention 2 นาฬิกา (CR-194); 2026-10-20 CR-155 amend — incident route เฉพาะ SO/SM/SA + portal tile; เดิม 2026-10-08 shelter_incident replaces shelter_report
+updated: 2026-11-11 # draft CR referral-m5 D17 — `/back-office/onedata/m5` (OneData Platform menu)
 note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-155 route `/back-office/incidents` (แทน `/reports` ของ CR-040)
 ---
 
@@ -127,6 +127,7 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------- |
 | `/back-office/incidents` (`/new`, `/{id}`) | บันทึกเหตุการณ์ประจำวัน — เฉพาะ SO / SM ของศูนย์ / SA (CR-155 amend 2026-10-20) · เข้าจาก portal tile `security-incidents` (ฝ่ายรักษาความปลอดภัย) | FR-47 | `put`/`update shelter_incident:{ulid}` (state machine, append timeline) · `GET /api/v1/shelters/{code}/staff?capabilities=` |
 | `/referrals`                               | ส่งต่อหน่วยงานภายนอก (SM เท่านั้น) — SM เห็น flag medical-emergency แต่ **medical detail = null**                                                 | FR-48 | `put referral` (state `draft→sent→accepted                                                                                  | rejected→closed`) |
+| `/back-office/onedata/m5` (`/new`, `/{id}`) | **OneData Platform → OneData ระบบส่งต่อผู้ป่วย (M5)** — รายการเฉพาะชุดที่ส่งผ่าน M5 + ฟอร์มส่งผู้ป่วยไปโรงพยาบาลให้ สธ. พิจารณา (SA, SM, `medical_staff`) · เมนู M6 "OneData ระบบบริหารทรัพยากร (M6)" ยังเป็น "เร็วๆ นี้" | draft CR referral-m5 D17 | `GET /api/back-office/referral?dispatch_mode=m5`, `POST /api/back-office/referral/batch` (api-contract §2.10) |
 
 ### 2.9 Administration — SA, SM (ตาม scope ศูนย์)
 

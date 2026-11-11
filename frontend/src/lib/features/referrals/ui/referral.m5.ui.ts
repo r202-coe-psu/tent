@@ -9,9 +9,9 @@ import type { Acuity, M5TransferStatus, VehicleType } from '../domain/referral.s
 /** User-facing text of each health-gate state (CR §2 table). `ready` has none. */
 export const M5_GATE_MESSAGES: Record<Exclude<IntegrationState, 'ready'>, string> = {
 	central_unreachable: 'เชื่อมต่อกับระบบกลางไม่ได้',
-	m5_unavailable: 'เชื่อมต่อระบบส่งต่อผู้ป่วย (M5) ไม่ได้ ชั่วคราว',
-	m5_not_configured: 'ระบบส่งต่อผู้ป่วยยังไม่พร้อม ติดต่อผู้ดูแลระบบ',
-	m5_credential_invalid: 'ระบบส่งต่อผู้ป่วยยังไม่พร้อม ติดต่อผู้ดูแลระบบ'
+	m5_unavailable: 'เชื่อมต่อ OneData ระบบส่งต่อผู้ป่วย (M5) ไม่ได้ ชั่วคราว',
+	m5_not_configured: 'OneData ระบบส่งต่อผู้ป่วย (M5) ยังไม่พร้อม ติดต่อผู้ดูแลระบบ',
+	m5_credential_invalid: 'OneData ระบบส่งต่อผู้ป่วย (M5) ยังไม่พร้อม ติดต่อผู้ดูแลระบบ'
 };
 
 export type M5StatusTone = 'sky' | 'emerald' | 'red' | 'amber' | 'muted';
@@ -50,13 +50,13 @@ export const VEHICLE_OPTIONS: readonly { value: VehicleType; label: string }[] =
 const M5_ERROR_MESSAGES: Record<string, string> = {
 	CANCEL_NEEDS_MOPH: 'ใบนี้ สธ. อนุมัติแล้ว โทรประสาน สธ. เพื่อยกเลิก',
 	NOT_PENDING: 'แจ้งรถออกได้หลัง สธ. อนุมัติแล้วเท่านั้น',
-	ALREADY_CLOSED: 'ใบนี้จบไปแล้วใน M5 ระบบจะอัปเดตสถานะให้อัตโนมัติ',
+	ALREADY_CLOSED: 'ใบนี้จบไปแล้วใน OneData ระบบจะอัปเดตสถานะให้อัตโนมัติ',
 	CENTRAL_UNAVAILABLE: 'เชื่อมต่อกับระบบกลางไม่ได้',
-	M5_UNAVAILABLE: 'เชื่อมต่อระบบส่งต่อผู้ป่วย (M5) ไม่ได้ ชั่วคราว',
-	M5_CREDENTIAL_INVALID: 'ระบบส่งต่อผู้ป่วยยังไม่พร้อม ติดต่อผู้ดูแลระบบ',
-	M5_NOT_CONFIGURED: 'ระบบส่งต่อผู้ป่วยยังไม่พร้อม ติดต่อผู้ดูแลระบบ',
-	M5_DESTINATION_NOT_FOUND: 'ไม่พบโรงพยาบาลปลายทางใน M5 กรุณาเลือกใหม่',
-	EXTERNALLY_MANAGED: 'ใบนี้จัดการผ่าน M5 เป็นชุด'
+	M5_UNAVAILABLE: 'เชื่อมต่อ OneData ระบบส่งต่อผู้ป่วย (M5) ไม่ได้ ชั่วคราว',
+	M5_CREDENTIAL_INVALID: 'OneData ระบบส่งต่อผู้ป่วย (M5) ยังไม่พร้อม ติดต่อผู้ดูแลระบบ',
+	M5_NOT_CONFIGURED: 'OneData ระบบส่งต่อผู้ป่วย (M5) ยังไม่พร้อม ติดต่อผู้ดูแลระบบ',
+	M5_DESTINATION_NOT_FOUND: 'ไม่พบโรงพยาบาลปลายทางใน OneData กรุณาเลือกใหม่',
+	EXTERNALLY_MANAGED: 'ใบนี้จัดการผ่าน OneData (M5) เป็นชุด'
 };
 
 /** Toast text for a failed M5 action: the known code's message, else the server's. */

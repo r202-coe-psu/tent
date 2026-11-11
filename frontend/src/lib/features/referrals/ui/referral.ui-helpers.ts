@@ -208,6 +208,9 @@ export function isRowActivationKey(event: { key: string; isOwnTarget: boolean })
 
 export const REFERRALS_PATH = '/back-office/referrals';
 
+/** OneData M5 page: batches sent to hospitals through OneData (draft CR M5 D17). */
+export const ONEDATA_M5_PATH = '/back-office/onedata/m5';
+
 /** Detail page of one referral. Ids contain `:`, so they are always encoded. */
 export function referralDetailPath(id: string): string {
 	return `${REFERRALS_PATH}/${encodeURIComponent(id)}`;
@@ -216,6 +219,11 @@ export function referralDetailPath(id: string): string {
 /** Batch members page of the batch the referral belongs to. */
 export function referralBatchPath(id: string): string {
 	return `${referralDetailPath(id)}/batch`;
+}
+
+/** OneData M5 batch page of the batch holding `id` (D17). */
+export function oneDataM5BatchPath(id: string): string {
+	return `${ONEDATA_M5_PATH}/${encodeURIComponent(id)}`;
 }
 
 export type ReferralListParams = {
@@ -237,12 +245,15 @@ export function parseReferralListParams(params: URLSearchParams): ReferralListPa
 }
 
 /** List URL for the given state; defaults are omitted so the plain list URL stays clean. */
-export function buildReferralListHref(state: Partial<ReferralListParams>): string {
+export function buildReferralListHref(
+	state: Partial<ReferralListParams>,
+	base: string = REFERRALS_PATH
+): string {
 	const qs = new URLSearchParams();
 	if (state.direction === 'incoming') qs.set('dir', 'in');
 	if (state.status && state.status !== 'all') qs.set('status', state.status);
 	const q = state.q?.trim();
 	if (q) qs.set('q', q);
 	const text = qs.toString();
-	return text ? `${REFERRALS_PATH}?${text}` : REFERRALS_PATH;
+	return text ? `${base}?${text}` : base;
 }

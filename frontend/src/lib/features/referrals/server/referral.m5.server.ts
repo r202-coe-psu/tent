@@ -63,7 +63,7 @@ async function loadMembers(ctx: M5BatchContext, batchId: string): Promise<Referr
 	const members = await ctx.repo.findByBatchId(batchId, ctx.shelterCode);
 	if (!members.length) throw new M5BatchError(404, 'NOT_FOUND', 'ไม่พบชุดส่งต่อนี้');
 	if (!members.every(isM5Referral)) {
-		throw new M5BatchError(409, 'NOT_M5_BATCH', 'ชุดนี้ไม่ใช่การส่งผ่าน M5');
+		throw new M5BatchError(409, 'NOT_M5_BATCH', 'ชุดนี้ไม่ใช่การส่งผ่าน OneData (M5)');
 	}
 	return members;
 }
@@ -264,7 +264,7 @@ export async function startM5Batch(
 		const members = await loadMembers(ctx, batchId);
 		const linked = members.filter((m) => externalOf(m) && m.status !== 'closed');
 		const external = linked.map(externalOf).find(Boolean);
-		if (!external) throw new M5BatchError(409, 'NOT_SENT', 'ชุดนี้ยังไม่ได้ส่งผ่าน M5');
+		if (!external) throw new M5BatchError(409, 'NOT_SENT', 'ชุดนี้ยังไม่ได้ส่งผ่าน OneData (M5)');
 		if (external.status !== 'pending') {
 			throw new M5BatchError(409, 'NOT_PENDING', 'แจ้งรถออกได้หลัง สธ. อนุมัติแล้วเท่านั้น', {
 				status: external.status

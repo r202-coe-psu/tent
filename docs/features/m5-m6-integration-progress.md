@@ -63,6 +63,8 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
   - D14: ตัด FR-B4 / `PATCH batch` — แก้ชุด draft = ถอนแล้วสร้างใหม่
   - D15: stamp `schema_v` 3 เฉพาะใบ `m5` ใบ tracking คง v2
   - D16: `medical_staff` เห็นเฉพาะ referral `medical-emergency`
+- [x] owner ตัดสิน D17 (2026-11-11): เมนู OneData Platform ใน Portal + Sidebar (M5, M6 "เร็วๆ นี้") · M5 มีหน้าของตัวเอง · ข้อความ end-user ใช้ "OneData ระบบส่งต่อผู้ป่วย (M5)" / "OneData ระบบบริหารทรัพยากร (M6)" · เมนูส่งต่อเดิมคงไว้สำหรับ tracking
+- [x] owner ยืนยันข้อเสนอใน D17 (2026-11-11): ตัดตัวเลือก "ส่งผ่าน M5" ออกจากฟอร์มเดิม + กล่องแนะนำ OneData
 - [ ] ส่งคำถาม M6 D6 ให้ทีม M6
 - [ ] ขอ credential staging
   - [x] M5: scope `transfer-write` (ได้แล้ว, module `M4`)
@@ -166,6 +168,11 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
   - ส่งไป M5 (ชุด draft), แจ้งรถออก
   - ถอนทั้งชุด / ถอนแล้วส่งใหม่
 - [x] `medical_staff`: route guard `requireReferralAccess`, เมนู navbar และ portal, เห็นเฉพาะประเภทการแพทย์ในฟอร์ม
+- [x] D17 เมนู OneData Platform
+  - Portal แผนก `onedata` และ Sidebar กลุ่ม "4. OneData Platform" (ตั้งค่าระบบเลื่อนเป็น 5)
+  - หน้า `/back-office/onedata/m5` (รายการ `dispatch_mode=m5`), `/back-office/onedata/m5/new` (`m5-referral-create.svelte`) และ `/back-office/onedata/m5/{id}` (หน้าชุด `referral-batch-view.svelte` ใช้ร่วมกับ `/back-office/referrals/{id}/batch`)
+  - ฟอร์มเดิมตัดตัวเลือกโหมด เหลือ tracking + กล่องแนะนำ OneData
+  - เมนู M6 เป็น placeholder "เร็วๆ นี้"
 - [ ] ตรวจหน้าจอจริงใน browser (ตอนนี้ผ่านแค่ type-check + `svelte-autofixer`)
 - [ ] `/back-office/central-warehouse` 4 แท็บ
   - คลังกลาง
@@ -207,3 +214,4 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
 - 2026-11-11 — owner approve แผน implement M5 (D13–D16) · spike บน M5 staging ปิด D5 ครบ
 - 2026-11-11 — M5 implement ครบ Phase 1–5 และ docs sync บน branch เดียว `feat/m5-referral` (PR เดียวตอนจบ) · เหลือทดสอบ manual กับ M5 staging, e2e, เลข CR
 - 2026-11-11 — merge `develop` ล่าสุดเข้า `feat/m5-referral` (แทน rebase เพื่อไม่ต้อง force-push) · อัปเดต checklist ราย item ของ M5
+- 2026-11-11 — D17: เพิ่มเมนู OneData Platform (Portal + Sidebar) และหน้า OneData M5 แยกจากเมนูส่งต่อเดิม · เปลี่ยนข้อความ end-user จาก M5 เป็น OneData · ตรวจหน้าจอจริงใน browser แล้ว (SA, `medical_staff`, `supply_coordinator`) ยกเว้นการส่งเข้า M5 staging จริง

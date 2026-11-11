@@ -990,7 +990,7 @@ BFF ของ staff app (session `_session`) · สิทธิ์: `system_admi
 | `POST` | `/api/back-office/referral/batch/{batch_id}/m5/cancel` | body `{ reason, resubmit_without? }` · ถอนผ่าน M5 ก่อนแล้วปิดทุกใบ (TRF-006) · `resubmit_without` = สร้างร่างชุดใหม่จากคนที่เหลือ → `{ items, failed, new_batch_id }` · `409 CANCEL_NEEDS_MOPH` เมื่อ สธ. อนุมัติแล้ว |
 | `PATCH` | `/api/back-office/referral/{id}/transition` | เพิ่ม: ใบ `dispatch_mode = m5` → `409 { code: EXTERNALLY_MANAGED }` สำหรับ `accepted`/`rejected`, `draft → sent`, `sent → closed` และ `accepted → closed` ก่อน M5 `arrived`/`cancelled` |
 | `POST` | `/api/back-office/referral/bulk-transition` | เพิ่ม: ใบ `m5` ที่ `sent → closed` ถอนทั้งชุดผ่าน M5 ครั้งเดียวต่อ `batch_id` (D11) · ชุดที่ M5 ปฏิเสธ = ทุกใบที่เลือกเป็น `failed` |
-| `GET`  | `/api/back-office/referral` | เพิ่ม: `medical_staff` เห็นเฉพาะ `medical-emergency` |
+| `GET`  | `/api/back-office/referral` | เพิ่ม: `medical_staff` เห็นเฉพาะ `medical-emergency` · query `dispatch_mode=m5` (ค่าเดียวที่รับ ค่าอื่นตอบ `400`) = เฉพาะใบที่ส่งผ่าน OneData M5 ใช้ในหน้า `/back-office/onedata/m5` (D17) |
 
 ## 3. Provisioning (system_admin เท่านั้น)
 

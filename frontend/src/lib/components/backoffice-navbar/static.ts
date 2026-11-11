@@ -18,6 +18,7 @@ import {
 	canManagePrinters,
 	canViewSupply,
 	hasCapabilityInShelter,
+	isWarehouseStaff,
 	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
@@ -42,6 +43,8 @@ import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Images from '@lucide/svelte/icons/images';
 import Printer from '@lucide/svelte/icons/printer';
+import Ambulance from '@lucide/svelte/icons/ambulance';
+import Boxes from '@lucide/svelte/icons/boxes';
 
 type Leaf = {
 	label: string;
@@ -201,7 +204,29 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		]
 	},
 	{
-		title: '4. ตั้งค่าระบบ',
+		// Draft CR M5 D17: OneData platform shortcuts (M5 patient referral, M6 resources).
+		title: '4. OneData Platform',
+		items: [
+			{
+				label: 'OneData ระบบส่งต่อผู้ป่วย (M5)',
+				href: resolve('/back-office/onedata/m5'),
+				icon: Ambulance,
+				visibleTo: ({ roles, shelterCode }) =>
+					canAccessManagerPages(roles, shelterCode) ||
+					hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)
+			},
+			{
+				// Placeholder until the M6 central-warehouse page ships. M6 D2: SA, SM, warehouse staff.
+				label: 'OneData ระบบบริหารทรัพยากร (M6)',
+				href: null,
+				icon: Boxes,
+				visibleTo: ({ roles, shelterCode }) =>
+					canAccessManagerPages(roles, shelterCode) || isWarehouseStaff(roles, shelterCode)
+			}
+		]
+	},
+	{
+		title: '5. ตั้งค่าระบบ',
 		items: [
 			{
 				label: 'จัดการศูนย์พักพิง',

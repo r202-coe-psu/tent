@@ -48,6 +48,8 @@
 	const destination = $derived(m5Members[0]?.to_org?.name ?? '');
 
 	let cancelOpen = $state(false);
+	/** Whether the batch had been sent when the dialog opened (withdraw vs cancel draft). */
+	let cancelSent = $state(false);
 	let cancelReason = $state('');
 	let removeIds = $state<string[]>([]);
 
@@ -60,9 +62,11 @@
 		try {
 			const res = await submitMutation.mutateAsync(batchId);
 			if (res.failed.length) {
-				toast.warning(`ส่งไป M5 แล้ว (${res.code}) แต่บันทึกบางใบไม่สำเร็จ ระบบจะซ่อมให้อัตโนมัติ`);
+				toast.warning(
+					`ส่งเข้า OneData แล้ว (${res.code}) แต่บันทึกบางใบไม่สำเร็จ ระบบจะซ่อมให้อัตโนมัติ`
+				);
 			} else {
-				toast.success(`ส่งไป M5 แล้ว (${res.code}) รอ สธ. พิจารณา`);
+				toast.success(`ส่งเข้า OneData แล้ว (${res.code}) รอ สธ. พิจารณา`);
 			}
 		} catch (e: unknown) {
 			toast.error(m5ErrorMessage(e));
@@ -81,7 +85,7 @@
 	async function confirmCancel() {
 		const reason = cancelReason.trim();
 		if (!reason) {
-			toast.error('กรุณาระบุเหตุผลที่ถอนคำขอ');
+			toast.error(sent.length ? 'กรุณาระบุเหตุผลที่ถอนคำขอ' : 'กรุณาระบุเหตุผลที่ยกเลิกร่าง');
 			return;
 		}
 		try {
@@ -90,11 +94,15 @@
 				reason,
 				...(removeIds.length ? { resubmitWithout: removeIds } : {})
 			});
+			// Snapshot before the refetch: a draft batch was never sent, so it is "cancelled", not "withdrawn".
+			const wasSent = cancelSent;
 			cancelOpen = false;
 			toast.success(
 				res.new_batch_id
-					? 'ถอนชุดเดิมแล้ว และสร้างร่างชุดใหม่ไว้ในรายการส่งต่อ ตรวจแล้วกดส่งอีกครั้ง'
-					: 'ถอนคำขอทั้งชุดแล้ว'
+					? `${wasSent ? 'ถอนชุดเดิมแล้ว' : 'ยกเลิกร่างเดิมแล้ว'} และสร้างร่างชุดใหม่ไว้ในรายการส่งต่อ ตรวจแล้วกดส่งอีกครั้ง`
+					: wasSent
+						? 'ถอนคำขอทั้งชุดแล้ว'
+						: 'ยกเลิกร่างทั้งชุดแล้ว'
 			);
 		} catch (e: unknown) {
 			toast.error(m5ErrorMessage(e));
@@ -109,7 +117,9 @@
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 	<Card.Header class="space-y-2">
 		<div class="flex flex-wrap items-center justify-between gap-2">
-			<Card.Title class="text-lg font-bold text-slate-900">ส่งต่อผ่าน M5</Card.Title>
+			<Card.Title class="text-lg font-bold text-slate-900"
+				>OneData ระบบส่งต่อผู้ป่วย (M5)</Card.Title
+			>
 			{#if statusMeta}
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold {M5_TONE_BADGE[
@@ -123,7 +133,7 @@
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold {M5_TONE_BADGE.muted}"
 				>
-					ร่าง ยังไม่ได้ส่ง
+					{open.length ? 'ร่าง ยังไม่ได้ส่ง' : 'ยกเลิกร่างแล้ว'}
 				</span>
 			{/if}
 		</div>
@@ -167,7 +177,7 @@
 			{#if drafts.length}
 				<Button class="h-11 gap-2" disabled={busy || !gateReady || !batchId} onclick={submit}>
 					<Send class="h-4 w-4" aria-hidden="true" />
-					ส่งไป M5 ({drafts.length} คน)
+					ส่งเข้า OneData ({drafts.length} คน)
 				</Button>
 			{/if}
 			{#if external?.status === 'pending'}
@@ -183,6 +193,7 @@
 					disabled={busy || (sent.length > 0 && !gateReady)}
 					onclick={() => {
 						cancelReason = '';
+						cancelSent = sent.length > 0;
 						removeIds = [];
 						cancelOpen = true;
 					}}
@@ -201,7 +212,7 @@
 			<Dialog.Title>{sent.length ? 'ถอนคำขอทั้งชุด' : 'ยกเลิกร่างทั้งชุด'}</Dialog.Title>
 			<Dialog.Description>
 				ผู้ป่วยทุกคนในชุด ({open.length} คน) จะถูกปิดรายการ
-				{#if sent.length}M5 ถอนใบได้ทั้งใบเท่านั้น{/if}
+				{#if sent.length}OneData (M5) ถอนได้ทั้งชุดเท่านั้น{/if}
 			</Dialog.Description>
 		</Dialog.Header>
 		<div class="space-y-4">
@@ -238,7 +249,7 @@
 				disabled={cancelMutation.isPending}
 				onclick={confirmCancel}
 			>
-				ยืนยันถอนทั้งชุด
+				{sent.length ? 'ยืนยันถอนทั้งชุด' : 'ยืนยันยกเลิกร่าง'}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

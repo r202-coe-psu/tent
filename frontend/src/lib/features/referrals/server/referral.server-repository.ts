@@ -336,6 +336,9 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		if (parsed.referral_types) {
 			selector.referral_type = { $in: parsed.referral_types };
 		}
+		if (parsed.dispatch_mode) {
+			selector.dispatch_mode = parsed.dispatch_mode;
+		}
 
 		const body: Record<string, unknown> = { selector, limit: parsed.limit, sort };
 		if (parsed.bookmark) {

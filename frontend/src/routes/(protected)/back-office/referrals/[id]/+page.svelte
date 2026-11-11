@@ -8,6 +8,8 @@
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 
 	import {
+		isM5Referral,
+		oneDataM5BatchPath,
 		ReferralBackLink,
 		ReferralDetail,
 		referralBatchPath,
@@ -25,13 +27,15 @@
 		() => !!referral
 	);
 	const batchSize = $derived(batchQuery.data?.length ?? 0);
+	// An M5 referral's batch lives under OneData M5 (D17), where its send/withdraw panel is.
+	const isM5 = $derived(!!referral && isM5Referral(referral));
 </script>
 
 <div class="flex flex-wrap items-center gap-3">
 	<ReferralBackLink />
-	{#if batchSize > 1}
+	{#if batchSize > 1 || isM5}
 		<a
-			href={referralBatchPath(id)}
+			href={isM5 ? oneDataM5BatchPath(id) : referralBatchPath(id)}
 			class="inline-flex min-h-11 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 text-sm font-semibold text-sky-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 		>
 			<Layers class="h-4 w-4" aria-hidden="true" />

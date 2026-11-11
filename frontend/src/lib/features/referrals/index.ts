@@ -20,6 +20,7 @@ export { default as ReferralBackLink } from './ui/referral-back-link.svelte';
 export { default as ReferralList } from './ui/referral-list.svelte';
 export { default as ReferralDetail } from './ui/referral-detail.svelte';
 export { default as ReferralBatchCards } from './ui/referral-batch-cards.svelte';
+export { default as ReferralBatchView } from './ui/referral-batch-view.svelte';
 export { default as EvacueePickerTable } from './ui/evacuee-picker-table.svelte';
 export { default as RedactionBanner } from './ui/redaction-banner.svelte';
 export { default as MedicalReferralForm } from './ui/medical-referral-form.svelte';
@@ -27,4 +28,6 @@ export { default as CapacityReferralForm } from './ui/capacity-referral-form.sve
 export { default as ResourceReferralForm } from './ui/resource-referral-form.svelte';
 export { default as ShelterCombobox } from './ui/shelter-combobox.svelte';
 export { default as M5BatchPanel } from './ui/m5-batch-panel.svelte';
+export { default as M5GateAlert } from './ui/m5-gate-alert.svelte';
+export { default as M5ReferralCreate } from './ui/m5-referral-create.svelte';
 export { useIntegrationStatus } from './application/m5-queries';

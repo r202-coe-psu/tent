@@ -45,6 +45,7 @@ const ORDER = [
 	'security',
 	'facility',
 	'management',
+	'onedata',
 	'pr',
 	'central'
 ];
@@ -210,16 +211,17 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(menu(staff('triage_staff'), OFF)).toEqual([]);
 	});
 
-	it('medical_staff sees Station 2 and medical referrals (M5 D8)', () => {
+	it('medical_staff sees Station 2, medical referrals (M5 D8) and OneData M5 (D17)', () => {
 		const views = menu(staff('medical_staff'), ON);
-		expect(deptIds(views)).toEqual(['registration', 'management']);
+		expect(deptIds(views)).toEqual(['registration', 'management', 'onedata']);
 		expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
 		expect(itemIds(dept(views, 'management'))).toEqual(['referrals']);
+		expect(itemIds(dept(views, 'onedata'))).toEqual(['onedata-m5']);
 	});
 
 	it('medical_staff keeps only referrals when the flag is off', () => {
 		const views = menu(staff('medical_staff'), OFF);
-		expect(deptIds(views)).toEqual(['management']);
+		expect(deptIds(views)).toEqual(['management', 'onedata']);
 		expect(itemIds(dept(views, 'management'))).toEqual(['referrals']);
 	});
 
@@ -229,9 +231,11 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(itemIds(views[0])).toEqual(['kitchen-hub', 'kitchen-requisition']);
 	});
 
-	it('supply_coordinator sees only the supply department', () => {
+	it('supply_coordinator sees the supply department and OneData M6 (coming soon)', () => {
 		const views = menu(staff('supply_coordinator'));
-		expect(deptIds(views)).toEqual(['supply']);
+		expect(deptIds(views)).toEqual(['supply', 'onedata']);
+		expect(itemIds(dept(views, 'onedata'))).toEqual(['onedata-m6']);
+		expect(stateOf(views, 'onedata-m6')).toBe('soon');
 		expect(itemIds(views[0])).toEqual([
 			'warehouse',
 			'stock-donations',
@@ -379,7 +383,7 @@ describe('portal data integrity', () => {
 			.filter((i) => i.state === 'soon')
 			.map((i) => i.item.id);
 		expect(soon.sort()).toEqual(noRoute.sort());
-		expect(noRoute.sort()).toEqual(['zone-settings']);
+		expect(noRoute.sort()).toEqual(['onedata-m6', 'zone-settings']);
 	});
 
 	it('only the central item is system scope', () => {
@@ -410,6 +414,7 @@ describe('portal department colours', () => {
 			security: 'security',
 			facility: 'facility',
 			management: 'admin',
+			onedata: 'admin',
 			pr: 'pr',
 			central: 'admin'
 		});

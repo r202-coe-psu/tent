@@ -34,6 +34,7 @@ export type PortalDepartmentId =
 	| 'facility'
 	| 'management'
 	| 'pr'
+	| 'onedata'
 	| 'central';
 
 export type PortalIconKey =
@@ -425,7 +426,8 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			{
 				id: 'referrals',
 				label: 'การส่งต่อผู้ประสบภัย',
-				desc: 'ส่งต่อโรงพยาบาลหรือศูนย์อื่น',
+				// D17: hospital sends go through OneData M5; this page moves and tracks.
+				desc: 'ย้ายศูนย์ และบันทึกติดตามการส่งต่อ',
 				icon: 'ambulance',
 				href: '/back-office/referrals',
 				scope: 'shelter',
@@ -440,6 +442,36 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				href: '/back-office',
 				scope: 'shelter',
 				roles: []
+			}
+		]
+	},
+	{
+		// Draft CR M5 D17: links to the OneData platform (M5 patient referral, M6 resources).
+		id: 'onedata',
+		label: 'OneData Platform',
+		desc: 'ส่งต่อผู้ป่วยและขอทรัพยากรผ่านระบบ OneData',
+		domain: 'admin',
+		icon: 'globe',
+		items: [
+			{
+				id: 'onedata-m5',
+				label: 'OneData ระบบส่งต่อผู้ป่วย (M5)',
+				desc: 'ส่งผู้ป่วยไปโรงพยาบาลให้ สธ. พิจารณา',
+				icon: 'ambulance',
+				href: '/back-office/onedata/m5',
+				scope: 'shelter',
+				roles: [MED]
+			},
+			{
+				id: 'onedata-m6',
+				label: 'OneData ระบบบริหารทรัพยากร (M6)',
+				desc: 'ขอเบิกของจากคลังกลาง',
+				icon: 'package',
+				// Placeholder until the M6 central-warehouse page ships (draft CR M6).
+				href: null,
+				scope: 'shelter',
+				// M6 D2: SA, SM and warehouse staff (`supply_coordinator` covers warehouse_staff here).
+				roles: [SC]
 			}
 		]
 	},

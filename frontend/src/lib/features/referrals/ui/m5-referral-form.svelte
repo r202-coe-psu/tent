@@ -48,7 +48,8 @@
 	let urgency = $state<'normal' | 'urgent'>('urgent');
 	let vehicleType = $state<VehicleType>('ambulance');
 	let transportNote = $state('');
-	let contactName = $state(authStore.user?.name ?? '');
+	// Display name, not the login name: MOPH and the hospital call this person back.
+	let contactName = $state(authStore.user?.display_name || authStore.user?.name || '');
 	let contactRole = $state('');
 	let contactPhone = $state('');
 	let notes = $state('');
@@ -135,9 +136,9 @@
 		try {
 			const res = await createMutation.mutateAsync(input);
 			if (res.submit && !res.submit.ok) {
-				toast.error(`บันทึกเป็นร่างแล้ว แต่ส่งไป M5 ไม่สำเร็จ: ${res.submit.error}`);
+				toast.error(`บันทึกเป็นร่างแล้ว แต่ส่งเข้า OneData ไม่สำเร็จ: ${res.submit.error}`);
 			} else if (res.submit?.ok) {
-				toast.success(`ส่งไป M5 แล้ว (${res.submit.code}) รอ สธ. พิจารณา`);
+				toast.success(`ส่งเข้า OneData แล้ว (${res.submit.code}) รอ สธ. พิจารณา`);
 			} else {
 				toast.success(`บันทึกร่างชุดส่งต่อ ${res.items.length} คนแล้ว`);
 			}
@@ -152,7 +153,7 @@
 	<!-- Destination -->
 	<section class="space-y-3" aria-labelledby="m5-dest-heading">
 		<h4 id="m5-dest-heading" class="text-base font-semibold text-slate-800">
-			3. โรงพยาบาลปลายทาง (M5) <span class="text-red-600">*</span>
+			2. โรงพยาบาลปลายทาง <span class="text-red-600">*</span>
 		</h4>
 		<div class="relative md:max-w-md">
 			<Search class="absolute top-3 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
@@ -209,7 +210,7 @@
 	<!-- Patients -->
 	<section class="space-y-3" aria-labelledby="m5-patients-heading">
 		<h4 id="m5-patients-heading" class="text-base font-semibold text-slate-800">
-			4. ผู้ป่วยในชุด (<span class="tabular-nums">{patients.length}</span> คน) — ระดับความรุนแรงและอาการรายคน
+			3. ผู้ป่วยในชุด (<span class="tabular-nums">{patients.length}</span> คน) — ระดับความรุนแรงและอาการรายคน
 		</h4>
 		{#if patients.length === 0}
 			<p class="text-sm text-slate-500">เลือกผู้ป่วยจากตารางด้านบนก่อน</p>
@@ -260,7 +261,7 @@
 	<!-- Shared fields -->
 	<section class="space-y-4" aria-labelledby="m5-shared-heading">
 		<h4 id="m5-shared-heading" class="text-base font-semibold text-slate-800">
-			5. การเดินทางและผู้ติดต่อกลับ (ใช้ร่วมกันทั้งชุด)
+			4. การเดินทางและผู้ติดต่อกลับ (ใช้ร่วมกันทั้งชุด)
 		</h4>
 		<div role="group" aria-label="ระดับความเร่งด่วน" class="flex gap-2 md:max-w-md">
 			{#each [{ v: 'normal', l: 'ปกติ' }, { v: 'urgent', l: 'เร่งด่วน' }] as const as u (u.v)}
@@ -358,7 +359,7 @@
 			onclick={() => attempt(true)}
 		>
 			<Send class="h-4 w-4" aria-hidden="true" />
-			ส่งไป M5
+			ส่งเข้า OneData (M5)
 		</Button>
 	</div>
 </div>
@@ -366,11 +367,11 @@
 {#if pendingInput}
 	<ReferralConfirmDialog
 		bind:open={confirmOpen}
-		title="ยืนยันส่งชุดนี้ไป M5"
-		description="ระบบจะส่งชื่อ เลขบัตรประชาชน อายุ และอาการของผู้ป่วยไปยัง สธ. ผ่าน M5 และบันทึกประวัติการส่ง"
+		title="ยืนยันส่งชุดนี้เข้า OneData ระบบส่งต่อผู้ป่วย (M5)"
+		description="ระบบจะส่งชื่อ เลขบัตรประชาชน อายุ และอาการของผู้ป่วยไปให้ สธ. พิจารณาผ่าน OneData และบันทึกประวัติการส่ง"
 		names={patients.map((p) => p.name)}
 		count={patients.length}
-		confirmLabel={`ส่ง ${patients.length} คนไป M5`}
+		confirmLabel={`ส่ง ${patients.length} คนเข้า OneData`}
 		pending={createMutation.isPending}
 		onConfirm={() => (pendingInput ? run(pendingInput) : undefined)}
 	/>

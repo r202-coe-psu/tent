@@ -24,7 +24,8 @@
 	<div class="min-w-0 flex-1 space-y-1">
 		<Alert.Title class="text-sm font-semibold">{M5_GATE_MESSAGES[state]}</Alert.Title>
 		<Alert.Description class="text-sm text-amber-900">
-			ส่งผ่าน M5 ไม่ได้ในตอนนี้ ใช้โหมด "ติดตามอย่างเดียว" และประสานโรงพยาบาลเองได้
+			ส่งเข้า OneData ไม่ได้ในตอนนี้ บันทึกร่างไว้ก่อนได้
+			หรือประสานโรงพยาบาลเองแล้วบันทึกติดตามที่เมนู "การส่งต่อผู้เข้าพัก"
 		</Alert.Description>
 	</div>
 	<Button

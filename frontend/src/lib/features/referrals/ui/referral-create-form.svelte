@@ -14,14 +14,13 @@
 	import CapacityReferralForm from './capacity-referral-form.svelte';
 	import ResourceReferralForm from './resource-referral-form.svelte';
 	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
-	import M5ReferralForm from './m5-referral-form.svelte';
-	import M5GateAlert from './m5-gate-alert.svelte';
-	import { useIntegrationStatus } from '../application/m5-queries';
-	import type { DispatchMode } from '../domain/referral.schema';
 	import { referralTypesForRoles } from '../domain/referral.authorization';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import Check from '@lucide/svelte/icons/check';
+	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import Ambulance from '@lucide/svelte/icons/ambulance';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import { resolve } from '$app/paths';
 
 	let {
 		onBatchDone
@@ -46,8 +45,6 @@
 
 	let selectedIds = $state<string[]>([]);
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
-	/** D3: per batch, `tracking` (coordinate yourself) or `m5` (send through M5). */
-	let dispatchMode = $state<DispatchMode>('tracking');
 
 	// Medical staff see medical-emergency only (D8, D16); the BFF enforces the same rule.
 	const allowedTypes = $derived(
@@ -56,10 +53,6 @@
 	const typeAllowed = (t: 'medical-emergency' | 'capacity' | 'resource') =>
 		allowedTypes === null || allowedTypes.includes(t);
 
-	const statusQuery = useIntegrationStatus();
-	const gateState = $derived(statusQuery.data?.m5.state);
-	const m5Ready = $derived(gateState === 'ready');
-	const useM5 = $derived(selectedType === 'medical-emergency' && dispatchMode === 'm5');
 	let selectionAttempted = $state(false);
 
 	const evacueeError = $derived(
@@ -232,47 +225,28 @@
 			</div>
 
 			{#if selectedType === 'medical-emergency'}
-				<div class="space-y-3">
-					<span id="dispatch-mode-label" class="text-sm font-semibold text-foreground"
-						>วิธีส่งต่อ <span class="text-red-600">*</span></span
-					>
-					<div
-						role="radiogroup"
-						aria-labelledby="dispatch-mode-label"
-						class="grid grid-cols-1 gap-3 md:grid-cols-2"
-					>
-						{#each [{ v: 'tracking', t: 'ติดตามอย่างเดียว', d: 'ประสานโรงพยาบาลเอง ไม่มีข้อมูลออกนอกระบบ' }, { v: 'm5', t: 'ส่งผ่าน M5', d: 'ส่งใบส่งต่อให้ สธ. พิจารณาและโรงพยาบาลรับผ่านระบบ M5' }] as const as m (m.v)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={dispatchMode === m.v}
-								disabled={m.v === 'm5' && !m5Ready}
-								onclick={() => (dispatchMode = m.v)}
-								class="flex min-h-11 items-start gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60
-								{dispatchMode === m.v
-									? 'border-sky-300 bg-sky-50'
-									: 'border-slate-200/80 bg-white hover:border-slate-300'}"
-							>
-								<Check
-									class="mt-0.5 h-4 w-4 shrink-0 {dispatchMode === m.v
-										? 'text-sky-700'
-										: 'text-transparent'}"
-									aria-hidden="true"
-								/>
-								<span>
-									<span class="block text-sm font-semibold text-slate-900">{m.t}</span>
-									<span class="block text-xs text-slate-500">{m.d}</span>
-								</span>
-							</button>
-						{/each}
+				<!-- D17: sending to a hospital goes through OneData M5; this form only records tracking. -->
+				<div
+					class="flex flex-col gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 sm:flex-row sm:items-center"
+				>
+					<Ambulance class="h-6 w-6 shrink-0 text-indigo-700" aria-hidden="true" />
+					<div class="min-w-0 flex-1 space-y-1">
+						<p class="text-sm font-semibold text-indigo-950">
+							ส่งผู้ป่วยไปโรงพยาบาล ให้ใช้ OneData ระบบส่งต่อผู้ป่วย (M5)
+						</p>
+						<p class="text-sm text-indigo-900">
+							สธ. พิจารณาและโรงพยาบาลปลายทางรับเรื่องผ่านระบบ
+							ฟอร์มนี้บันทึกเพื่อติดตามภายในศูนย์เท่านั้น ไม่ส่งข้อมูลออกนอกระบบ ใช้เมื่อส่งผ่าน
+							OneData ไม่ได้และประสานโรงพยาบาลเอง
+						</p>
 					</div>
-					{#if gateState && gateState !== 'ready'}
-						<M5GateAlert
-							state={gateState}
-							checking={statusQuery.isFetching}
-							onRetry={() => statusQuery.refetch()}
-						/>
-					{/if}
+					<a
+						href={resolve('/back-office/onedata/m5/new')}
+						class={buttonVariants({ class: 'h-11 shrink-0 gap-2 font-semibold' })}
+					>
+						ไปที่ OneData (M5)
+						<ArrowRight class="h-4 w-4" aria-hidden="true" />
+					</a>
 				</div>
 			{/if}
 
@@ -282,33 +256,29 @@
 
 			<hr class="border-border/60" />
 
-			{#if useM5}
-				<M5ReferralForm evacueeIds={selectedIds} onDone={(r) => onBatchDone?.(r)} />
-			{:else}
-				<div class="contents" onsubmitcapture={handleSubmitAttempt}>
-					{#key selectedType}
-						{#if selectedType === 'medical-emergency'}
-							<MedicalReferralForm
-								evacueeId={formEvacueeId}
-								onSubmit={handleSubmit}
-								submitting={batchMutation.isPending}
-							/>
-						{:else if selectedType === 'capacity'}
-							<CapacityReferralForm
-								evacueeId={formEvacueeId}
-								onSubmit={handleSubmit}
-								submitting={batchMutation.isPending}
-							/>
-						{:else if selectedType === 'resource'}
-							<ResourceReferralForm
-								evacueeId={formEvacueeId}
-								onSubmit={handleSubmit}
-								submitting={batchMutation.isPending}
-							/>
-						{/if}
-					{/key}
-				</div>
-			{/if}
+			<div class="contents" onsubmitcapture={handleSubmitAttempt}>
+				{#key selectedType}
+					{#if selectedType === 'medical-emergency'}
+						<MedicalReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{:else if selectedType === 'capacity'}
+						<CapacityReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{:else if selectedType === 'resource'}
+						<ResourceReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{/if}
+				{/key}
+			</div>
 		</Card.Content>
 	</Card.Root>
 	{#if pendingSend}

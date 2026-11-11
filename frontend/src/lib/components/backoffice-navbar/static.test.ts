@@ -141,6 +141,9 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	const registry = 'จัดการผู้เข้าพัก';
 	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีจิตอาสา'];
 	const referrals = 'การส่งต่อผู้เข้าพัก';
+	/** Draft CR M5 D17: OneData shortcuts. M5 = referral audience; M6 = SA, SM, warehouse staff. */
+	const oneDataM5 = 'OneData ระบบส่งต่อผู้ป่วย (M5)';
+	const oneDataM6 = 'OneData ระบบบริหารทรัพยากร (M6)';
 	const warehouse = ['คลัง', 'บริจาค', 'จัดการเบิกจ่ายพัสดุและอาหาร', 'คลังสินค้า'];
 	const kitchenTickets = 'เบิกวัตถุดิบครัว';
 	const kitchen = 'ครัวกลางและอาหาร';
@@ -163,6 +166,8 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		...warehouse,
 		kitchenTickets,
 		kitchen,
+		oneDataM5,
+		oneDataM6,
 		...managerOnly
 	];
 	const withIncidents = (labels: string[]): string[] => {
@@ -195,10 +200,16 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(visibleLeafLabels(ctx(sh('kitchen_staff')))).toEqual(labelsFor(kitchenTickets, kitchen));
 	});
 
+	it('medical_staff sees referrals and OneData M5 only (M5 D8, D17)', () => {
+		expect(visibleLeafLabels(ctx(sh('medical_staff')))).toEqual(labelsFor(referrals, oneDataM5));
+	});
+
 	it.each(['supply_coordinator', 'warehouse_staff'])(
 		'%s sees warehouse menus and kitchen requisitions, not the central kitchen (#842)',
 		(cap) => {
-			expect(visibleLeafLabels(ctx(sh(cap)))).toEqual(labelsFor(warehouse, kitchenTickets));
+			expect(visibleLeafLabels(ctx(sh(cap)))).toEqual(
+				labelsFor(warehouse, kitchenTickets, oneDataM6)
+			);
 		}
 	);
 
@@ -238,7 +249,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 			backofficeNavbarGroups
 				.filter((g) => g.items.some((n) => canSeeNavNode(n, c)))
 				.map((g) => g.title);
-		expect(visibleGroups(ctx(sh('kiosk_staff')))).toEqual(['4. ตั้งค่าระบบ']);
+		expect(visibleGroups(ctx(sh('kiosk_staff')))).toEqual(['5. ตั้งค่าระบบ']);
 		expect(visibleGroups(ctx(sh('distribution_staff')))).not.toContain('1. ทะเบียนและกำลังพล');
 	});
 
@@ -379,7 +390,7 @@ describe('kiosk banner management nav child (FR-KBR-22)', () => {
 
 describe('printer management nav item', () => {
 	it('is its own settings item right after the kiosk group, not a kiosk child', () => {
-		const settings = backofficeNavbarGroups.find((g) => g.title === '4. ตั้งค่าระบบ');
+		const settings = backofficeNavbarGroups.find((g) => g.title === '5. ตั้งค่าระบบ');
 		const labels = settings?.items.map((n) => n.label) ?? [];
 		const printer = settings?.items.find((n) => n.label === 'จัดการเครื่องพิมพ์');
 

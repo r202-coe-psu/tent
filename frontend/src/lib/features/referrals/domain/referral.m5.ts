@@ -170,21 +170,21 @@ export function assertM5TransitionAllowed(
 	if (!isM5Referral(referral) || channel === 'system') return;
 
 	if (to === 'accepted' || to === 'rejected') {
-		throw new ExternallyManagedError('ผลพิจารณาของใบนี้มาจาก M5 เท่านั้น');
+		throw new ExternallyManagedError('ผลพิจารณาของใบนี้มาจาก OneData (M5) เท่านั้น');
 	}
 	if (channel === 'row') {
 		if (referral.status === 'draft' && to === 'sent') {
-			throw new ExternallyManagedError('ใบนี้ต้องส่งทั้งชุดผ่าน M5');
+			throw new ExternallyManagedError('ใบนี้ต้องส่งทั้งชุดผ่าน OneData (M5)');
 		}
 		if (referral.status === 'sent' && to === 'closed') {
-			throw new ExternallyManagedError('ใบนี้ต้องถอนทั้งชุดผ่าน M5');
+			throw new ExternallyManagedError('ใบนี้ต้องถอนทั้งชุดผ่าน OneData (M5)');
 		}
 	}
 	if (referral.status === 'accepted' && to === 'closed') {
 		const external = 'external' in referral ? referral.external : undefined;
 		if (!external || !M5_MANUAL_CLOSE_STATUSES.includes(external.status)) {
 			throw new ExternallyManagedError(
-				'ปิดรายการได้หลังผู้ป่วยถึงโรงพยาบาลหรือ M5 ยกเลิกใบแล้วเท่านั้น'
+				'ปิดรายการได้หลังผู้ป่วยถึงโรงพยาบาลหรือ OneData ยกเลิกใบแล้วเท่านั้น'
 			);
 		}
 	}
@@ -285,7 +285,7 @@ export function buildM5TransferPayload(input: {
 	const first = referrals[0];
 	if (!first) throw new M5PayloadError('EMPTY_BATCH', 'ไม่มีผู้ป่วยในชุด');
 	if (!referrals.every(isM5Referral)) {
-		throw new M5PayloadError('NOT_M5_BATCH', 'ชุดนี้ไม่ใช่การส่งผ่าน M5');
+		throw new M5PayloadError('NOT_M5_BATCH', 'ชุดนี้ไม่ใช่การส่งผ่าน OneData (M5)');
 	}
 	const m5 = referrals as (Referral & {
 		batch_id?: string;
@@ -316,7 +316,7 @@ export function buildM5TransferPayload(input: {
 	if (typeof lat !== 'number' || typeof lng !== 'number' || (lat === 0 && lng === 0)) {
 		throw new M5PayloadError(
 			'SHELTER_LOCATION_MISSING',
-			'ศูนย์นี้ยังไม่ได้ตั้งพิกัด กรุณาตั้งพิกัดศูนย์ก่อนส่งผ่าน M5'
+			'ศูนย์นี้ยังไม่ได้ตั้งพิกัด กรุณาตั้งพิกัดศูนย์ก่อนส่งผ่าน OneData (M5)'
 		);
 	}
 

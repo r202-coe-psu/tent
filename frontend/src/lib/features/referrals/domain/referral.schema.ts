@@ -292,7 +292,9 @@ export const referralFilterSchema = z.object({
 	/** Opaque Mango bookmark from the previous page; never combined with `skip`. */
 	bookmark: z.string().max(2000).optional(),
 	/** Server-side role limit (D16): only these referral types. Never from the query string. */
-	referral_types: z.array(referralTypeSchema).optional()
+	referral_types: z.array(referralTypeSchema).optional(),
+	/** `m5` = only batches sent through OneData M5 (the OneData M5 page, D17). */
+	dispatch_mode: z.literal('m5').optional()
 });
 
 const DEFAULT_LIST_LIMIT = 50;
@@ -314,7 +316,8 @@ export const referralListQuerySchema = z.object({
 	status: referralStatusSchema.optional(),
 	direction: referralDirectionFilterSchema.optional(),
 	sort: z.enum(['created_at_desc', 'created_at_asc']).optional(),
-	evacuee_id: z.string().optional()
+	evacuee_id: z.string().optional(),
+	dispatch_mode: z.literal('m5').optional()
 });
 
 export type ReferralDirectionFilter = z.infer<typeof referralDirectionFilterSchema>;
