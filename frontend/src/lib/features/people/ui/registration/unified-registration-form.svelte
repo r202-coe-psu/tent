@@ -1435,7 +1435,7 @@
 
 		return {
 			parsed,
-			entries: toRegistrationEntries([...issues, ...extras]),
+			entries: toRegistrationEntries([...issues, ...extras], langState.current),
 			fallbackSection
 		};
 	}

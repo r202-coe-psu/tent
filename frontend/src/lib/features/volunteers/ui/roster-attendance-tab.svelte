@@ -36,9 +36,15 @@
 	import History from '@lucide/svelte/icons/history';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import { resolve } from '$app/paths';
+	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { useShelter } from '$lib/features/shelters';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import RosterLiveAttendanceBar, {
 		type AttendanceTileFilter
 	} from './roster-live-attendance-bar.svelte';
@@ -52,9 +58,12 @@
 		useTodayAttendance,
 		useShiftAssignments,
 		useVolunteers,
-		useJobs
+		useJobs,
+		useShelterVolunteerAccounts
 	} from '../application/queries';
 	import { ASSIGNED_STATUSES } from '../domain/hub-metrics';
+	import { accountsByVolunteer, rosterAccessStatus } from '../domain/volunteer-access-status';
+	import { toast } from 'svelte-sonner';
 	import { matchesVolunteerSearch, volunteerSearchFields } from '../domain/volunteer-search';
 	import type {
 		ShiftAssignment,
@@ -88,6 +97,30 @@
 	const volunteersById = $derived.by(() => {
 		const map = new Map(volunteersQuery.data?.map((v) => [v._id, v]) ?? []);
 		return map;
+	});
+	// Each row's system account, with the same verify / give / edit button as the applicants tab
+	// (CR-221 FR-24, FR-25). SA / SM / coordinator only; the server 403s anyone else.
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterQuery = useShelter(() => shelterCode);
+	const shelterLine = $derived(shelterQuery.data?.name ?? shelterCode);
+	const canManageAccess = $derived(
+		canAccessVolunteerBackoffice(authStore.user?.roles ?? [], shelterCode)
+	);
+	const accountsQuery = useShelterVolunteerAccounts(
+		() => shelterCode,
+		() => canManageAccess
+	);
+	// Indexed once per load, so each row finds its account without scanning the list.
+	const accounts = $derived(accountsByVolunteer(accountsQuery.data));
+	// The strip waits for the real accounts (a skeleton), never guessing from `user_name`.
+	const accountsPending = $derived(canManageAccess && accountsQuery.isPending);
+	// Not state: it only remembers which failure was already toasted.
+	let toastedAccountsError: unknown = null;
+	$effect(() => {
+		const error = canManageAccess ? accountsQuery.error : null;
+		if (!error || error === toastedAccountsError) return;
+		toastedAccountsError = error;
+		toast.error('โหลดข้อมูลบัญชีระบบของอาสาสมัครไม่สำเร็จ กรุณาลองใหม่');
 	});
 	const jobTitleById = $derived.by(() => {
 		const map = new Map(jobsQuery.data?.map((j) => [j._id, j.title]) ?? []);
@@ -127,6 +160,22 @@
 		if (search) list = list.filter((a) => matchesSearch(a, search));
 		return [...list].sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status]);
 	});
+
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	$effect(() => {
+		void tileFilter;
+		void shiftFilter;
+		void statusFilter;
+		void search;
+		currentPage = 1;
+	});
+
+	const totalFiltered = $derived(rows.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE)));
+	const safePage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const paginatedRows = $derived(rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE));
 
 	const isLoading = $derived(attendanceQuery.isPending || volunteersQuery.isPending);
 
@@ -242,7 +291,7 @@
 		</div>
 	{:else}
 		<div class="space-y-3">
-			{#each rows as assignment (assignment._id)}
+			{#each paginatedRows as assignment (assignment._id)}
 				{@const volunteer = volunteersById.get(assignment.volunteer_id)}
 				{#if volunteer}
 					<RosterRow
@@ -250,11 +299,27 @@
 						{volunteer}
 						jobTitle={jobTitleById.get(assignment.job_id)}
 						today={todayDateString(now)}
+						accessStatus={rosterAccessStatus(volunteer, canManageAccess, accounts)}
+						{accountsPending}
+						canVerify={canManageAccess}
+						{shelterLine}
 						onhistory={(volunteerId) => openAudit(volunteerId)}
 					/>
 				{/if}
 			{/each}
 		</div>
+
+		{#if totalPages > 1}
+			<div class="flex flex-col items-center justify-between gap-3 pt-2 sm:flex-row">
+				<p class="text-xs text-muted-foreground">
+					แสดงรายการที่ {(safePage - 1) * PAGE_SIZE + 1} - {Math.min(
+						safePage * PAGE_SIZE,
+						totalFiltered
+					)} จากทั้งหมด {totalFiltered} รายการ
+				</p>
+				<PaginationControls bind:page={currentPage} count={totalFiltered} perPage={PAGE_SIZE} />
+			</div>
+		{/if}
 	{/if}
 </div>
 

@@ -15,6 +15,7 @@
 	} from '../application/queries';
 	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
 	import type { StockFormItem } from '../domain/stock-form-items';
+	import { toTransferLine, type TransferLine } from '../domain/transfer-line';
 	import ItemCombobox from './item-combobox.svelte';
 	import {
 		formatUnit,
@@ -129,23 +130,31 @@
 	}
 
 	async function handleCreate(data: z.infer<typeof transferFormSchema>) {
-		if (selectedItem) {
-			try {
-				const inBase = qtyToBaseUnit(String(data.qty), data.unit, selectedItem);
-				if (qtyGt(inBase, currentStock)) {
-					toast.error('จำนวนเกินยอดคงเหลือในศูนย์นี้');
-					return;
-				}
-			} catch {
-				toast.error('หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้');
-				return;
-			}
+		if (!selectedItem) {
+			toast.error('กรุณาเลือกสินค้า');
+			return;
+		}
+		// The server (and the ledger) only take base units: "2 bag" must go out as "10 kg".
+		let line: TransferLine;
+		try {
+			line = toTransferLine(selectedItem, {
+				item_id: data.item_id,
+				qty: data.qty,
+				unit: data.unit
+			});
+		} catch {
+			toast.error('หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้');
+			return;
+		}
+		if (qtyGt(line.qty, currentStock)) {
+			toast.error('จำนวนเกินยอดคงเหลือในศูนย์นี้');
+			return;
 		}
 
 		const input = {
 			from_shelter: getShelterCode(),
 			to_shelter: data.to_shelter,
-			items: [{ item_id: data.item_id, qty: data.qty, unit: data.unit }],
+			items: [line],
 			...(data.notes ? { notes: data.notes } : {})
 		};
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'unknown' };

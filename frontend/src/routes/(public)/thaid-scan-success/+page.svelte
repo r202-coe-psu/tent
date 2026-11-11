@@ -5,28 +5,20 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { PUBLIC_THAID_SCAN_I18N, thaidScanMessage } from '$lib/constants/i18n/public-thaid-scan';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	const errorParam = $derived(page.url.searchParams.get('error'));
 	const isError = $derived(Boolean(errorParam));
 	const isKioskFlow = $derived(page.url.searchParams.get('flow') === 'kiosk');
 
-	const errorMessage = $derived.by(() => {
-		if (isKioskFlow && errorParam === 'invalid_state')
-			return 'ข้อมูลการยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาสแกน QR ใหม่ที่ตู้';
-		if (errorParam === 'invalid_state')
-			return 'ข้อมูลการยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาสแกน QR ใหม่จากหน้าจอลงทะเบียน';
-		if (isKioskFlow && errorParam === 'session_expired')
-			return 'QR หมดอายุ กรุณาสร้าง QR ใหม่ที่ตู้';
-		if (errorParam === 'thaid_disabled') return 'ระบบยืนยันตัวตน ThaiD ถูกปิดใช้งานชั่วคราว';
-		if (errorParam === 'session_expired')
-			return 'QR Code นี้หมดอายุแล้ว กรุณาแจ้งผู้ลงทะเบียนหลักเพื่อสร้าง QR Code ใหม่';
-		if (errorParam === 'missing_session') return 'ไม่พบรหัสการเชื่อมต่อ (Invalid Session)';
-		return 'การยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
-	});
+	const t = $derived(getTranslation(PUBLIC_THAID_SCAN_I18N, langState.current));
+	const errorMessage = $derived(thaidScanMessage(errorParam, langState.current, isKioskFlow));
 </script>
 
 <svelte:head>
-	<title>{isError ? 'เกิดข้อผิดพลาดในการยืนยันตัวตน' : 'ยืนยันตัวตนสำเร็จ'} | SmartShelter</title>
+	<title>{isError ? t.pageTitleError : t.pageTitleSuccess} | SmartShelter</title>
 </svelte:head>
 
 <div class="flex min-h-[70vh] items-center justify-center px-4 py-12">
@@ -40,7 +32,7 @@
 				<AlertTriangle class="size-8" />
 			</div>
 			<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-				ยืนยันตัวตนไม่สำเร็จ
+				{t.errorHeading}
 			</h2>
 			<p class="mt-2 text-sm text-muted-foreground">
 				{errorMessage}
@@ -49,7 +41,7 @@
 				<a href={resolve('/')} class="inline-block w-full">
 					<Button variant="outline" class="w-full">
 						<ArrowLeft class="mr-2 size-4" />
-						กลับสู่หน้าหลัก
+						{t.backHome}
 					</Button>
 				</a>
 			</div>
@@ -61,23 +53,23 @@
 			</div>
 			{#if isKioskFlow}
 				<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-					ยืนยันตัวตนสำเร็จ
+					{t.kioskSuccessHeading}
 				</h2>
 				<p class="mt-2 text-sm text-muted-foreground">
-					กลับไปที่ตู้เพื่อเลือกสมาชิกและรับบัตรคิว ปิดหน้านี้ได้
+					{t.kioskSuccessBody}
 				</p>
 			{:else}
 				<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-					ยืนยันตัวตนสำเร็จ!
+					{t.successHeading}
 				</h2>
 				<p class="mt-2 text-sm text-muted-foreground">
-					ข้อมูลของคุณถูกส่งไปยังหน้าจอลงทะเบียนหลักแล้ว
+					{t.successBody}
 				</p>
 				<div
 					class="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs font-medium text-primary"
 				>
-					✓ บันทึกข้อมูลส่วนตัวและที่อยู่เรียบร้อย<br />
-					ท่านสามารถปิดหน้าต่างเบราว์เซอร์นี้ได้ทันที
+					{t.successSaved}<br />
+					{t.successCloseWindow}
 				</div>
 			{/if}
 		{/if}

@@ -19,9 +19,10 @@ describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 		vi.resetAllMocks();
 	});
 
-	function makeEvent(token: string): GetEvent {
+	function makeEvent(token: string, query = ''): GetEvent {
 		return {
 			params: { token },
+			url: new URL(`http://localhost/api/public/v1/volunteer/ticket/${token}${query}`),
 			fetch: vi.fn().mockRejectedValue(new Error('no fastapi')),
 			getClientAddress: () => '127.0.0.1'
 		} as unknown as GetEvent;
@@ -161,6 +162,51 @@ describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 			expect(ticket.application_id).toBe('job_application:app_resume');
 			expect(ticket.can_cancel).toBe(true);
 		});
+	});
+
+	it('opens the application named by ?application= on a permanent token, and ignores one it does not own (#973)', async () => {
+		const adminRawMock = vi.mocked(adminRaw);
+		const base = {
+			type: 'job_application',
+			job_id: 'job:j1',
+			status: 'confirmed',
+			applicant: { first_name: 'ก', last_name: 'ข', phone: '0812345678' }
+		};
+		const a1 = {
+			...base,
+			_id: 'job_application:a1',
+			tracking_token: 'tok-a1',
+			selected_shift: { date: '2099-01-01', start_time: '08:00', end_time: '12:00' }
+		};
+		const a2 = {
+			...base,
+			_id: 'job_application:a2',
+			tracking_token: 'tok-a2',
+			selected_shift: { date: '2099-01-02', start_time: '08:00', end_time: '12:00' }
+		};
+		const arrange = () => {
+			adminRawMock.mockReset();
+			adminRawMock.mockResolvedValueOnce({ status: 404, data: {} });
+			adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [] } });
+			adminRawMock.mockResolvedValueOnce({
+				status: 200,
+				data: { docs: [{ _id: 'volunteer:v1', type: 'volunteer' }] }
+			});
+			adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [a1, a2] } });
+			adminRawMock.mockResolvedValue({ status: 200, data: { title: 'งาน' } });
+		};
+		arrange();
+		const picked = await (
+			await GET(makeEvent('TKT-VOL-PERMANENT', '?application=job_application:a2'))
+		).json();
+		expect(picked.ticket.application_id).toBe('job_application:a2');
+		expect(picked.ticket.token).toBe('tok-a2');
+
+		arrange();
+		const foreign = await (
+			await GET(makeEvent('TKT-VOL-PERMANENT', '?application=job_application:someone-else'))
+		).json();
+		expect(foreign.ticket.application_id).toBe('job_application:a1');
 	});
 
 	it('does not treat an internal CouchDB document id as a public ticket credential', async () => {

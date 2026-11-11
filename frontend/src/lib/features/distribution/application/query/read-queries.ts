@@ -20,6 +20,7 @@ import { calculateShiftReconciliation } from '../food-supplies/reconciliation-wo
 import { resolveDispatchedLotExpiry } from '../food-supplies/lot-expiry';
 import { DEFAULT_QUERY_STALE_TIME_MS } from '$lib/db/query-client';
 import { operationsRepository } from '$lib/features/operations';
+import { peopleKeys, peopleRepository } from '$lib/features/people';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import {
 	getBulkReturnPoolOverview,
@@ -31,6 +32,7 @@ import {
 	type BulkReturnPoolOverviewQuery
 } from '../food-supplies/bulk-return-pool-v3-read';
 import { listBulkReturnPoolMissedLoanRefs } from '../food-supplies/bulk-return-pool-v3-missed-loans';
+import { listItemDistributions } from '../../data/food-supplies/item-distributions';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -85,6 +87,54 @@ export const useDistributionLogs = (
 			queryKey: distributionKeys.logs(shelterCode, resolvedFilter),
 			queryFn: () => distributionLogRepository(shelterCode).list(resolvedFilter),
 			enabled: isEnabled
+		};
+	});
+
+/**
+ * Recorded allergies per evacuee for the food desk's household list (#1154 R7), keyed by
+ * evacuee id; an evacuee without a medical record maps to `[]`.
+ */
+export const useEvacueeAllergies = (
+	evacueeIds: MaybeGetter<readonly string[]>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const ids = [...toValue(evacueeIds)].sort();
+		return {
+			// Under the people medical key so the people live query refreshes it on a medical change.
+			queryKey: [...peopleKeys.medicals(), 'distribution_allergies', shelterCode, ids] as const,
+			queryFn: async (): Promise<Record<string, string[]>> => {
+				const repo = peopleRepository(shelterCode);
+				const entries = await Promise.all(
+					ids.map(
+						async (id) => [id, (await repo.getMedicalByEvacuee(id))?.allergies ?? []] as const
+					)
+				);
+				return Object.fromEntries(entries);
+			},
+			enabled: Boolean(toValue(enabled) && shelterCode && ids.length > 0)
+		};
+	});
+
+/** Logs of several recipients at once — every member of a household at the food desk (#1154). */
+export const useRecipientsDistributionLogs = (
+	recipientIds: MaybeGetter<readonly string[]>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const ids = [...toValue(recipientIds)].sort();
+		return {
+			queryKey: distributionKeys.recipientsLogs(shelterCode, ids),
+			queryFn: async () => {
+				const repo = distributionLogRepository(shelterCode);
+				const perRecipient = await Promise.all(ids.map((id) => repo.list({ recipient_id: id })));
+				return perRecipient.flat();
+			},
+			enabled: Boolean(toValue(enabled) && shelterCode && ids.length > 0)
 		};
 	});
 
@@ -380,3 +430,28 @@ export const useReturnOperationState = (
 			refetchInterval: 3000
 		};
 	});
+
+/**
+ * The non-voided `distribution_log` rows of `itemIds`. Reads every `distribution_log` of the shelter, so
+ * it is deliberately NOT under the `logs` prefix: the live query would refetch it on each
+ * distribution. It reloads when the tab opens or the stale time passes; a reload refreshes it sooner.
+ */
+export function useItemDistributions(
+	itemIds: MaybeGetter<readonly string[]>,
+	enabled: MaybeGetter<boolean> = true,
+	shelterCode?: MaybeGetter<string | undefined>
+) {
+	return createQuery(() => {
+		const ids = toValue(itemIds);
+		const code = resolveShelterCode(toValue(shelterCode ?? undefined));
+		return {
+			queryKey: [
+				...distributionKeys.shelter(code),
+				'item-distributions',
+				[...ids].sort().join(',')
+			] as const,
+			queryFn: () => listItemDistributions(code, ids),
+			enabled: toValue(enabled)
+		};
+	});
+}

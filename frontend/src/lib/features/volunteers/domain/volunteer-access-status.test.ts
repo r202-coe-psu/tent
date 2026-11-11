@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+	CLOSE_WAITS_FOR_ROLES_MESSAGE,
+	COORDINATOR_CLOSE_BLOCKED_MESSAGE,
 	accessEndingParts,
+	accountsByVolunteer,
 	closeProfileAccessNotice,
+	closeProfileBlockedReason,
+	rosterAccessStatus,
 	hasVolunteerAccount,
 	volunteerAccessStatus,
 	type VolunteerAccount
@@ -121,6 +126,44 @@ describe('closeProfileAccessNotice (CR-221 FR-20)', () => {
 	});
 });
 
+describe('closeProfileBlockedReason (CR-221 A1-6)', () => {
+	const status = (over: Partial<VolunteerAccount>) => volunteerAccessStatus(vol, [account(over)]);
+	const GRANT = {
+		role: 'kitchen_staff',
+		expires_at: '2026-11-03T16:59:59.999Z',
+		granted_by: 'coord01'
+	};
+
+	it('stops a coordinator closing a profile whose account has a manager-given role', () => {
+		expect(
+			closeProfileBlockedReason(
+				status({ grants: [GRANT], permanent_roles: ['registration_staff'] }),
+				false
+			)
+		).toBe(COORDINATOR_CLOSE_BLOCKED_MESSAGE);
+	});
+
+	it('lets a shelter manager or system admin close it', () => {
+		expect(closeProfileBlockedReason(status({ permanent_roles: ['kitchen_staff'] }), true)).toBe(
+			null
+		);
+	});
+
+	it('lets a coordinator close a profile that holds coordinator grants only', () => {
+		expect(closeProfileBlockedReason(status({ grants: [GRANT] }), false)).toBe(null);
+	});
+
+	it('makes a coordinator wait while the roles are not known yet (fail-closed)', () => {
+		expect(
+			closeProfileBlockedReason({ kind: 'active', loginName: 'a@x.com', roles: null }, false)
+		).toBe(CLOSE_WAITS_FOR_ROLES_MESSAGE);
+		expect(
+			closeProfileBlockedReason({ kind: 'active', loginName: 'a@x.com', roles: null }, true)
+		).toBe(null);
+		expect(closeProfileBlockedReason({ kind: 'none' }, false)).toBe(null);
+	});
+});
+
 describe('accessEndingParts (#1044)', () => {
 	const ending = (over: Record<string, unknown> = {}) => ({
 		role: 'warehouse_staff',
@@ -160,5 +203,34 @@ describe('accessEndingParts (#1044)', () => {
 			}
 		]);
 		expect(s).toEqual({ kind: 'lapsed', loginName: 'a@x.com', lastEnded: ending() });
+	});
+});
+
+describe('rosterAccessStatus (CR-221 FR-25)', () => {
+	const linked = { _id: 'V-011', user_name: 'a@x.com' };
+	const byVolunteer = accountsByVolunteer([
+		account({ permanent_roles: ['kitchen_staff'] }),
+		account({ volunteer_id: 'V-012', name: 'b@x.com', active: false })
+	]);
+
+	it('shows nothing to staff who cannot manage access', () => {
+		expect(rosterAccessStatus(linked, false, byVolunteer)).toBeNull();
+	});
+
+	it('shows nothing while the accounts are not loaded, rather than a guess from user_name', () => {
+		expect(rosterAccessStatus(linked, true, undefined)).toBeNull();
+	});
+
+	it("reads each row's account from the index", () => {
+		expect(rosterAccessStatus(linked, true, byVolunteer)).toMatchObject({
+			kind: 'active',
+			loginName: 'a@x.com'
+		});
+		expect(rosterAccessStatus({ _id: 'V-012' }, true, byVolunteer)).toMatchObject({
+			kind: 'deactivated'
+		});
+		expect(rosterAccessStatus({ _id: 'V-999', user_name: 'z@x.com' }, true, byVolunteer)).toEqual({
+			kind: 'none'
+		});
 	});
 });

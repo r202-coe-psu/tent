@@ -38,6 +38,8 @@ export {
 	validateSiteKindChange,
 	createShelterSchema,
 	updateShelterSchema,
+	subStorageItemSchema,
+	type SubStorageItem,
 	EMPTY_ADMISSION_POLICY,
 	EMPTY_LUGGAGE_POLICY,
 	EMPTY_PARKING_POLICY,

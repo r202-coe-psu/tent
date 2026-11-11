@@ -4,6 +4,9 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { StaffPinEntry, STAFF_PIN_LENGTH } from '../application/staff-pin-entry.svelte';
 	import { verifyKioskStaffPin, type KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 	import KioskNumpadPanel from './kiosk-numpad-panel.svelte';
 
 	const PIN_SLOTS = Array.from({ length: STAFF_PIN_LENGTH }, (_, slot) => slot);
@@ -22,12 +25,13 @@
 
 	let {
 		headingTag = 'h1',
-		description = 'ตรวจบัตรประชาชนกับตัวบุคคลแล้ว กรอก PIN 6 หลักเพื่อดำเนินการต่อ',
+		description,
 		onverified,
 		oncancel,
 		verify = verifyKioskStaffPin
 	}: Props = $props();
 
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current));
 	const id = $props.id();
 	const titleId = `${id}-title`;
 
@@ -67,7 +71,7 @@
 	}
 
 	function focusFirstKey(node: HTMLElement): void {
-		node.querySelector<HTMLButtonElement>('button[aria-label="ตัวเลข 1"]')?.focus();
+		node.querySelector<HTMLButtonElement>(`button[aria-label="${t.numpad.digit('1')}"]`)?.focus();
 	}
 
 	/** Staff start on the keys: focus goes to digit 1 as the panel opens. */
@@ -113,10 +117,10 @@
 					this={headingTag}
 					id={titleId}
 					class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
-					>สำหรับเจ้าหน้าที่</svelte:element
+					>{t.staffPin.heading}</svelte:element
 				>
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
-					{description}
+					{description ?? t.staffPin.defaultDescription}
 				</p>
 			</header>
 		{/snippet}
@@ -124,7 +128,7 @@
 		{#snippet display()}
 			<output
 				class="flex min-h-14 items-center justify-center gap-4 rounded-xl border border-slate-200 bg-white px-4 kiosk-portrait:min-h-20 kiosk-portrait:gap-6 kiosk-portrait:rounded-2xl kiosk-portrait:border-2"
-				aria-label={`กรอก PIN แล้ว ${entry.pin.length} จาก ${STAFF_PIN_LENGTH} หลัก`}
+				aria-label={t.staffPin.entered(entry.pin.length, STAFF_PIN_LENGTH)}
 				data-testid="kiosk-staff-pin-dots"
 			>
 				{#each PIN_SLOTS as slot (slot)}
@@ -152,9 +156,9 @@
 					<span
 						class="inline-block size-5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
 						aria-hidden="true"
-					></span>กำลังตรวจสอบ…
+					></span>{t.staffPin.checking}
 				{:else}
-					ยืนยัน
+					{t.staffPin.confirm}
 				{/if}
 			</Button>
 			<Button
@@ -163,7 +167,7 @@
 				onclick={() => entry.cancel()}
 				class="min-h-12 w-full text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
 			>
-				ยกเลิก
+				{t.staffPin.cancel}
 			</Button>
 		{/snippet}
 
@@ -174,21 +178,21 @@
 						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
 					>
 						<CircleAlert class="size-5 shrink-0" aria-hidden="true" />
-						PIN ไม่ถูกต้อง กรุณาลองใหม่
+						{t.staffPin.wrong}
 					</p>
 				{:else if entry.status.kind === 'error'}
 					<p
 						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
 					>
 						<CircleAlert class="size-5 shrink-0" aria-hidden="true" />
-						ตรวจสอบ PIN ไม่สำเร็จ กรุณาลองใหม่
+						{t.staffPin.failed}
 					</p>
 				{:else if entry.status.kind === 'blocked'}
 					<p
 						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
 					>
 						<CircleAlert class="size-5 shrink-0" aria-hidden="true" />
-						ยังข้ามขั้นตอนนี้ไม่ได้ กรุณาติดต่อผู้ดูแลระบบ
+						{t.staffPin.blocked}
 					</p>
 				{/if}
 			</div>

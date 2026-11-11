@@ -55,6 +55,8 @@ export interface LotRow {
 	isNext: boolean;
 	/** Overdrawn lot (#855): listed last with a warning, never issued from. */
 	isNegative: boolean;
+	/** The shelter bought this lot itself ("ซื้อเอง", schema_v 7). */
+	isSelfPurchased: boolean;
 }
 
 /** Type labels of the configured point a lot sits in; null for a deleted point or no point. */
@@ -76,7 +78,8 @@ export function buildLotRows(
 	lots: readonly StockLotBalance[],
 	points: readonly StoragePointRef[] = [],
 	now: number = Date.now(),
-	itemsById?: ReadonlyMap<string, LotPriorityItem>
+	itemsById?: ReadonlyMap<string, LotPriorityItem>,
+	selfPurchasedRefs?: ReadonlySet<string>
 ): LotRow[] {
 	const ordered = sortStockLotsByConsumptionOrder(
 		lots.filter((l) => qtyGt(l.qty, 0)),
@@ -97,7 +100,8 @@ export function buildLotRows(
 		clockLine: formatLotClockLine(lot, now),
 		reason: 'ล็อตนี้ยอดติดลบ — ต้องแก้ยอด (ห้ามเบิกจากล็อตนี้)',
 		isNext: false,
-		isNegative: true
+		isNegative: true,
+		isSelfPurchased: selfPurchasedRefs?.has(lot.lot_ref) ?? false
 	}));
 	const usable = ordered.map((lot) => {
 		const expiry = lot.lot?.expiry ?? null;
@@ -117,7 +121,8 @@ export function buildLotRows(
 			clockLine: formatLotClockLine(lot, now),
 			reason: lotPriorityReason(lot, itemsById?.get(lot.item_id), now),
 			isNext,
-			isNegative: false
+			isNegative: false,
+			isSelfPurchased: selfPurchasedRefs?.has(lot.lot_ref) ?? false
 		};
 	});
 	return [...usable, ...negatives];

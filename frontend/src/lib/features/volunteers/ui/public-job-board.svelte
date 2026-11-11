@@ -203,8 +203,7 @@
 		const options = { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' } as const;
 		const start = new Date(startTs);
 		const end = new Date(endTs);
-		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
-			return 'ช่วงเวลาที่ตรวจสอบไม่ได้';
+		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return t.conflictTimeUnknown;
 		return (
 			start.toLocaleTimeString('en-GB', options) + ' - ' + end.toLocaleTimeString('en-GB', options)
 		);
@@ -213,7 +212,7 @@
 	function conflictForShift(shift: DisplayShift) {
 		const window = shiftWindow(shift);
 		if (!window) return undefined;
-		const conflict = findBookingConflict(window, existingActivities);
+		const conflict = findBookingConflict(window, existingActivities, languageStore.current);
 		return conflict
 			? {
 					title: conflict.title,
@@ -280,7 +279,7 @@
 					job.shelter_name ||
 					shelterMap[job.shelter_code || ''] ||
 					job.shelter_code ||
-					'ศูนย์พักพิงหลัก';
+					t.defaultShelterName;
 				const isControlled =
 					job.tier === 'staff-capable' ||
 					(job.skills_required?.some((s: string) => isControlledSkill(s)) ?? false);
@@ -776,7 +775,7 @@
 		>
 			<p class="text-xs text-muted-foreground sm:justify-self-start">
 				{t.paginationSummary(
-					(currentPage - 1) * PAGE_SIZE + 1,
+					filteredJobs.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1,
 					Math.min(currentPage * PAGE_SIZE, filteredJobs.length),
 					filteredJobs.length
 				)}
@@ -793,7 +792,7 @@
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />
-								{#each pages as page, index (index)}
+								{#each pages as page, index (page.key ?? `${page.type}-${index}`)}
 									<Pagination.Item>
 										{#if page.type === 'page'}
 											<Pagination.Link {page} isActive={page.value === currentPage} />

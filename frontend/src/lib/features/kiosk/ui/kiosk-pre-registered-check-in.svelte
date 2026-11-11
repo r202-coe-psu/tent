@@ -18,7 +18,9 @@
 		initialSelection,
 		isAllSelected,
 		toExistingReportResults,
-		toggleAllSelection
+		toggleAllSelection,
+		canPrintQr,
+		isQrIssueFailed
 	} from '../domain/household-selection';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
@@ -42,6 +44,9 @@
 	import { KIOSK_CHECK_IN_TICKS } from '../domain/print-label';
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_QR_FLOW_I18N } from './_constants/kiosk-qr-flow.i18n';
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
 	import KioskNoticePanel from './kiosk-notice-panel.svelte';
 	import {
@@ -93,6 +98,8 @@
 		cardPhoto = null
 	}: Props = $props();
 
+	const t = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).checkIn);
+
 	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
 	/** When the current `lookup` succeeded (ISO) — sent with the check-in as the Station 1 start (CR-192). */
 	let lookupAt = '';
@@ -109,6 +116,8 @@
 	let results = $state<KioskCheckInMemberResult[]>([]);
 	let retryableIds = $state<string[]>([]);
 	let qrImages = $state<Record<string, KioskQrImage>>({});
+	/** The payload each cached `qrImages` entry was drawn from: a new QR (reissue) must redraw. */
+	let qrImagePayloads: Record<string, string> = {};
 	let actionError = $state('');
 	let printError = $state('');
 	let printBusy = $state(false);
@@ -148,9 +157,10 @@
 			!canRegister &&
 			(input?.source === 'smart-card' || input?.source === 'thaid')
 	);
-	const successfulResults = $derived(
-		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
-	);
+	/** Members that have (or can be reissued) a QR to print; never a `qr_issue_failed` one (FR-EQR-24). */
+	const successfulResults = $derived(results.filter((result) => canPrintQr(result)));
+	/** Members whose QR entry failed: not printed, the visitor may retry or ask staff. */
+	const qrFailedResults = $derived(results.filter((result) => isQrIssueFailed(result)));
 	const printableResults = $derived(
 		isReprintOnly
 			? successfulResults.filter((result) => printSelectedIds.includes(result.evacuee_id))
@@ -161,7 +171,8 @@
 			(result) =>
 				result.status === 'checked_in' ||
 				result.status === 'already_checked_in' ||
-				result.qr_payload
+				result.qr_payload ||
+				result.qr_issue_failed
 		)
 	);
 	/** Card face check (hold) or ThaiD: step 3 is proving who is at the kiosk, not a plain lookup. */
@@ -225,7 +236,7 @@
 			const found = await lookupPreRegisteredEvacuee(gate);
 			if (generation !== lookupGeneration) return;
 			if (!centerMatchesFor(found.shelter_code)) {
-				lookupError = 'ข้อมูลศูนย์ของเครื่องสแกนไม่ตรงกัน กรุณาติดต่อผู้ดูแลเครื่อง';
+				lookupError = t.errors.centerMismatch;
 				return;
 			}
 			if (found.kind === 'candidates') {
@@ -257,8 +268,7 @@
 				canRegister = error.canRegister;
 				if (error.status === 429) retryAfterSeconds = 60;
 			} else {
-				lookupError =
-					error instanceof Error ? error.message : 'ค้นหาข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง';
+				lookupError = error instanceof Error ? error.message : t.errors.lookupFailed;
 			}
 		} finally {
 			if (generation === lookupGeneration) isLookingUp = false;
@@ -317,8 +327,7 @@
 			results = mergeCheckInResults(results, response.members);
 			retryableIds = response.retryable_evacuee_ids;
 			if (retryableIds.length > 0) {
-				actionError =
-					'บางรายการยังรายงานตัวไม่สำเร็จ ตรวจผลด้านล่างและลองเฉพาะรายการที่เหลืออีกครั้ง';
+				actionError = t.errors.partialFailure;
 			}
 			await prepareQrImages(results);
 		} catch (error) {
@@ -335,7 +344,7 @@
 				actionError = error.message;
 				await prepareQrImages(results);
 			} else {
-				actionError = error instanceof Error ? error.message : 'บันทึกการรายงานตัวไม่สำเร็จ';
+				actionError = error instanceof Error ? error.message : t.errors.checkInFailed;
 			}
 		} finally {
 			isSubmitting = false;
@@ -386,8 +395,12 @@
 		const nextImages: Record<string, KioskQrImage> = { ...qrImages };
 		try {
 			for (const item of items) {
-				if (!item.qr_payload || nextImages[item.evacuee_id]) continue;
+				if (!item.qr_payload) continue;
+				if (nextImages[item.evacuee_id] && qrImagePayloads[item.evacuee_id] === item.qr_payload) {
+					continue;
+				}
 				nextImages[item.evacuee_id] = await prepareKioskQrImage(item.qr_payload);
+				qrImagePayloads[item.evacuee_id] = item.qr_payload;
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
@@ -395,24 +408,21 @@
 		} catch {
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
-			printError = 'สร้าง QR สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+			printError = t.errors.qrPrepareFailed;
 			return false;
 		}
 	}
 
 	/**
-	 * A lookup never carries the unmasked label text, so a reprint fetches it from /check-in when the
-	 * visitor taps print (arriving members are not written again, only returned with their label).
+	 * Ask /check-in for a fresh QR + the unmasked label text of these members. A lookup carries
+	 * neither; arriving members are not written again, only reissued a QR (CR-233 FR-EQR-23).
 	 */
-	async function loadMissingLabels(items: KioskCheckInMemberResult[]): Promise<boolean> {
-		const missing = items
-			.filter((item) => item.qr_payload && !item.label)
-			.map((item) => item.evacuee_id);
-		if (missing.length === 0) return true;
+	async function fetchFreshQr(ids: string[]): Promise<boolean> {
+		if (ids.length === 0) return true;
 		if (!lookup) return false;
 		printError = '';
 		try {
-			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, missing, {
+			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
 				batchLimit: 20
 			});
 			results = mergeCheckInResults(results, response.members);
@@ -421,8 +431,33 @@
 			if (error instanceof KioskPartialCheckInError) {
 				results = mergeCheckInResults(results, error.result.members);
 			}
-			printError = 'โหลดข้อมูลสำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+			printError = t.errors.labelDataFailed;
 			return false;
+		}
+	}
+
+	/**
+	 * Reprint: every print command issues a new QR (FR-EQR-21), so these always refetch. A fresh
+	 * check-in already holds its QR and only lacks the label text when it came from a lookup.
+	 */
+	function loadMissingLabels(items: KioskCheckInMemberResult[]): Promise<boolean> {
+		return fetchFreshQr(
+			items
+				.filter((item) => isReprintOnly || !item.qr_payload || !item.label)
+				.map((item) => item.evacuee_id)
+		);
+	}
+
+	/** Try again to issue the QR of the members it failed for; nothing is printed here. */
+	async function retryQrIssue(): Promise<void> {
+		if (printBusy || isSubmitting) return;
+		isSubmitting = true;
+		try {
+			if (await fetchFreshQr(qrFailedResults.map((result) => result.evacuee_id))) {
+				await prepareQrImages(results);
+			}
+		} finally {
+			isSubmitting = false;
 		}
 	}
 
@@ -433,23 +468,28 @@
 		try {
 			if (!(await loadMissingLabels(printableResults))) return;
 			// Re-read: a member who moved past arriving since the lookup has no QR to reprint any more.
-			const toPrint = printableResults;
+			// A member whose QR could not be issued is never printed (FR-EQR-24).
+			const toPrint = printableResults.filter((result) => result.qr_payload);
 			if (toPrint.length === 0) return;
 			if (!(await prepareQrImages(toPrint))) return;
 			let labels: KioskQrLabel[];
 			try {
 				labels = toLabels(toPrint);
 			} catch {
-				printError = 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+				printError = t.errors.labelRenderFailed;
 				return;
 			}
 			printedCount = toPrint.length;
 			printPhase = 'printing';
 			// No scanner client (dev browser / browser print mode): print the CSS labels instead.
-			const result = await printKioskQrLabels(labels, async () => {
-				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-				window.print();
-			});
+			const result = await printKioskQrLabels(
+				labels,
+				async () => {
+					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+					window.print();
+				},
+				languageStore.current
+			);
 			if (result.kind === 'printed') {
 				printPhase = 'done';
 				window.setTimeout(() => {
@@ -477,34 +517,36 @@
 			return {
 				qrSrc: qr.src,
 				name: labelName(result, person),
+				emergencyPhone: result.label?.emergency_phone,
 				checkedCount: KIOSK_CHECK_IN_TICKS
 			};
 		});
 	}
 
-	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
-		return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ';
+	function fullName(
+		member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>,
+		fallback: string
+	): string {
+		return [member.first_name, member.last_name].filter(Boolean).join(' ') || fallback;
 	}
 
 	/** The printed label carries the unmasked name from /check-in; the screen keeps the masked one. */
 	function labelName(result: KioskCheckInMemberResult, person?: KioskEvacueeSummary): string {
-		return result.label?.name || (person ? fullName(person) : '');
+		// The label is a printout: its fallback stays Thai whatever language the screen is in.
+		return (
+			result.label?.name || (person ? fullName(person, KIOSK_QR_FLOW_I18N.th.checkIn.noName) : '')
+		);
 	}
 
 	function statusLabel(status: string): string {
-		if (status === 'pre_registered') return 'ลงทะเบียนล่วงหน้า';
-		if (status === 'kiosk_registered') return 'ลงทะเบียนที่ตู้ (รอยืนยัน)';
-		if (status === 'arriving') return 'รายงานตัวแล้ว · รอคัดกรอง';
-		if (status === 'room_confirmed') return 'ยืนยันที่พักแล้ว';
-		if (status === 'temporary_leave') return 'ออกไปชั่วคราว';
-		if (status === 'active') return 'เข้าพักแล้ว';
-		if (status === 'cancelled') return 'ยกเลิก';
-		return 'ไม่พร้อมรายงานตัว';
+		return status in t.status && status !== 'unknown'
+			? t.status[status as keyof typeof t.status]
+			: t.status.unknown;
 	}
 </script>
 
 <svelte:head>
-	<title>ตรวจสอบและรายงานตัว — SmartShelter Kiosk</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <section
@@ -513,14 +555,14 @@
 >
 	<KioskCheckInWizard
 		currentStep={wizardStep}
-		step2Label={isThaidGate ? 'สแกนด้วย ThaiD' : undefined}
-		step3Label={verifiesIdentity ? 'ยืนยันตัวตน' : undefined}
+		step2Label={isThaidGate ? t.stepThaid : undefined}
+		step3Label={verifiesIdentity ? t.stepVerify : undefined}
 	/>
 	<div class="no-print flex justify-start">
 		<KioskBackButton
 			href={backUrl}
 			onclick={isPhoneGate ? onreset : undefined}
-			label={isPhoneGate ? 'กลับไปกรอกเบอร์' : 'กลับหน้าเริ่มต้น'}
+			label={isPhoneGate ? t.backToPhone : undefined}
 		/>
 	</div>
 
@@ -532,46 +574,46 @@
 				class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 			>
 				{walkInOffered
-					? 'ยังไม่ได้ลงทะเบียนล่วงหน้า'
+					? t.title.notPreRegistered
 					: alreadyKioskRegistered
-						? 'ลงทะเบียนที่ตู้แล้ว'
+						? t.title.alreadyKioskRegistered
 						: lookupError
-							? 'ค้นหาไม่สำเร็จ'
+							? t.title.lookupFailed
 							: results.length > 0
-								? 'ผลรายงานตัว'
+								? t.title.results
 								: candidates.length > 0
-									? 'เลือกครัวเรือน'
+									? t.title.chooseHousehold
 									: lookup
 										? holdMembers
-											? 'ตรวจสอบตัวตน'
-											: 'เลือกสมาชิก'
+											? t.title.verifyIdentity
+											: t.title.chooseMembers
 										: cardMode && !input
-											? 'รอเสียบบัตร'
-											: 'กำลังค้นหา'}
+											? t.title.waitingForCard
+											: t.title.searching}
 			</h1>
 			{#if cardMode && !input}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					เสียบบัตรเพื่อค้นหา
+					{t.sub.insertCard}
 				</p>
 			{:else if lookup && results.length === 0 && !holdMembers}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					เลือกผู้ที่มาถึง
+					{t.sub.chooseArrived}
 				</p>
 			{:else if candidates.length > 0}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					เลือกครัวเรือนของท่าน
+					{t.sub.chooseHousehold}
 				</p>
 			{:else if isReprintOnly && successfulResults.length > 0}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ · เลือกคนที่จะพิมพ์ QR Code
+					{t.sub.reprintFound}
 				</p>
 			{:else if results.some((result) => result.status === 'already_checked_in')}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ
+					{t.sub.alreadyFound}
 				</p>
 			{:else if results.length > 0}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					ตรวจผล แล้วพิมพ์ QR Code
+					{t.sub.reviewThenPrint}
 				</p>
 			{/if}
 		</header>
@@ -585,7 +627,7 @@
 				<CreditCard
 					class="size-6 text-[#0A2647] kiosk-portrait:size-8"
 					aria-hidden="true"
-				/>รอเสียบบัตร
+				/>{t.waitingForCard}
 			</div>
 		{/if}
 
@@ -598,7 +640,7 @@
 					class="size-7 animate-spin rounded-full border-[3px] border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-8"
 					aria-hidden="true"
 				></span>
-				กำลังค้นหาข้อมูล…
+				{t.searchingData}
 			</div>
 		{/if}
 
@@ -616,11 +658,11 @@
 			<KioskNoticePanel
 				tone="warning"
 				icon={CircleAlert}
-				title="ไม่พบข้อมูลลงทะเบียนล่วงหน้า"
+				title={t.walkInClosed.title}
 				role="alert"
 				data-testid="kiosk-walk-in-closed"
 			>
-				<p>ไม่สามารถลงทะเบียนเพิ่มที่ตู้นี้ได้ กรุณาติดต่อเจ้าหน้าที่</p>
+				<p>{t.walkInClosed.body}</p>
 				{#snippet actions()}
 					<KioskLookupErrorActions
 						{lookupErrorCode}
@@ -657,20 +699,15 @@
 		{/if}
 
 		{#if alreadyKioskRegistered}
-			<KioskNoticePanel
-				tone="warning"
-				icon={UserCheck}
-				title="ไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล"
-				role="status"
-			>
+			<KioskNoticePanel tone="warning" icon={UserCheck} title={t.alreadyKiosk.title} role="status">
 				{#if isThaidGate}
-					<p>ข้อมูลนี้ลงทะเบียนที่ตู้ไว้แล้ว กรุณาติดต่อเจ้าหน้าที่</p>
+					<p>{t.alreadyKiosk.bodyThaid}</p>
 				{:else}
-					<p>บัตรนี้ลงทะเบียนที่ตู้ไว้แล้ว ไม่ต้องลงทะเบียนซ้ำ</p>
+					<p>{t.alreadyKiosk.bodyCard}</p>
 				{/if}
 				{#snippet actions()}
 					<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
-						>กลับหน้าแรก</Button
+						>{t.alreadyKiosk.home}</Button
 					>
 				{/snippet}
 			</KioskNoticePanel>
@@ -703,10 +740,10 @@
 							id="household-title"
 							class="text-lg font-bold text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
 						>
-							สมาชิก
+							{t.members.heading}
 						</h2>
 						<p class="text-base text-slate-600 kiosk-portrait:text-xl">
-							ศูนย์ {lookup.shelter_code}
+							{t.members.shelter(lookup.shelter_code)}
 						</p>
 					</div>
 					{#if selectableMemberCount > 1}
@@ -717,7 +754,7 @@
 							onclick={toggleAllMembers}
 							class="{KIOSK_NOTICE_SECONDARY_ACTION} w-auto shrink-0 kiosk-portrait:px-10"
 						>
-							{allSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+							{allSelected ? t.members.clearAll : t.members.selectAll}
 						</Button>
 					{/if}
 				</div>
@@ -725,7 +762,7 @@
 					<p
 						class="mb-4 rounded-lg bg-sky-50 px-3 py-2 text-base font-medium text-sky-950 kiosk-portrait:mb-5 kiosk-portrait:px-4 kiosk-portrait:py-3 kiosk-portrait:text-xl kiosk-compact:text-sm"
 					>
-						ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว
+						{t.members.nameMasked}
 					</p>
 				{/if}
 
@@ -762,16 +799,18 @@
 									id={`member-name-${member.evacuee_id}`}
 									class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-lg"
 								>
-									{fullName(member)}
+									{fullName(member, t.noName)}
 									{#if input?.source === 'phone' ? member.phone_matched : member.is_primary}<span
 											class="ml-2 rounded-full bg-[#F0F4F8] px-2 py-1 text-sm font-bold text-[#0A2647] kiosk-portrait:px-3 kiosk-portrait:text-lg kiosk-compact:text-xs"
-											>{input?.source === 'phone' ? 'เบอร์ตรง' : 'ผู้ลงทะเบียน'}</span
+											>{input?.source === 'phone'
+												? t.members.phoneMatch
+												: t.members.registrant}</span
 										>{/if}
 								</p>
 								<p
 									class="mt-1 text-base text-slate-600 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
 								>
-									{member.age === null ? 'ไม่ระบุอายุ' : `${member.age} ปี`}
+									{member.age === null ? t.members.ageUnknown : t.members.age(member.age)}
 									<span class="mx-1" aria-hidden="true">·</span>{statusLabel(member.status)}
 								</p>
 							</div>
@@ -783,7 +822,7 @@
 					<p
 						class="mt-4 text-base leading-relaxed text-slate-600 kiosk-portrait:mt-5 kiosk-portrait:text-xl kiosk-compact:text-sm"
 					>
-						เลือก {selectedMembers.length} คน · รายงานตัวแล้วเลือกซ้ำไม่ได้
+						{t.members.selectedNote(selectedMembers.length)}
 					</p>
 				{/if}
 
@@ -804,7 +843,7 @@
 						variant="outline"
 						onclick={onreset}
 						class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto sm:px-10 kiosk-portrait:px-14"
-						>ยกเลิก</Button
+						>{t.members.cancel}</Button
 					>
 					<Button
 						type="button"
@@ -815,15 +854,16 @@
 						{#if isSubmitting}<span
 								class="size-5 animate-spin rounded-full border-2 border-white/40 border-t-white kiosk-portrait:size-6"
 								aria-hidden="true"
-							></span>กำลังบันทึก…{:else}<CheckCircle2 aria-hidden="true" />ยืนยัน · {selectedIds.length}
-							คน{/if}
+							></span>{t.members.saving}{:else}<CheckCircle2
+								aria-hidden="true"
+							/>{t.members.confirm(selectedIds.length)}{/if}
 					</Button>
 				</div>
 				{#if !centerMatches}<p
 						class="mt-3 text-base font-semibold text-rose-800 kiosk-portrait:mt-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
 						role="alert"
 					>
-						ศูนย์บนหน้าจอไม่ตรงกับศูนย์ที่ผูกกับเครื่อง จึงยังยืนยันไม่ได้
+						{t.members.centerMismatch}
 					</p>{/if}
 			</section>
 		{/if}
@@ -850,28 +890,35 @@
 								class="text-lg font-bold text-[#0A2647] sm:text-xl kiosk-portrait:text-3xl"
 							>
 								{retryableIds.length > 0
-									? 'รายงานตัวได้บางส่วน'
+									? t.results.partial
 									: results.some((result) => result.status === 'already_checked_in')
-										? 'รายงานตัวแล้ว'
-										: successfulResults.length > 0
-											? 'บันทึกผลรายงานตัวแล้ว'
-											: 'ไม่มีสมาชิกที่รายงานตัวสำเร็จ'}
+										? t.results.reported
+										: successfulResults.length > 0 || qrFailedResults.length > 0
+											? t.results.saved
+											: t.results.none}
 							</h2>
 							<p
 								class="mt-1 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl"
 							>
 								{#if retryableIds.length > 0}
-									รายงานตัวแล้ว {reportedResults.length} คน · ยังเหลือ {retryableIds.length} คนที่ต้องตรวจผลหรือทำรายการซ้ำ
-									· ศูนย์ {lookup?.shelter_code}
+									{t.results.summaryPartial(
+										reportedResults.length,
+										retryableIds.length,
+										lookup?.shelter_code ?? ''
+									)}
 								{:else}
-									รายงานตัวแล้ว {reportedResults.length} จาก {results.length} คน · ศูนย์ {lookup?.shelter_code}
+									{t.results.summaryAll(
+										reportedResults.length,
+										results.length,
+										lookup?.shelter_code ?? ''
+									)}
 								{/if}
 							</p>
 							{#if lookup?.name_masked}
 								<p
 									class="mt-2 text-base font-medium text-slate-700 kiosk-portrait:mt-3 kiosk-portrait:text-xl"
 								>
-									ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว
+									{t.members.nameMasked}
 								</p>
 							{/if}
 						</div>
@@ -885,9 +932,7 @@
 								onclick={() => void submitCheckInIds(retryableIds)}
 								class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto"
 							>
-								{isSubmitting
-									? 'กำลังบันทึก…'
-									: `ลองรายการที่เหลืออีกครั้ง · ${retryableIds.length} คน`}
+								{isSubmitting ? t.results.saving : t.results.retryRemaining(retryableIds.length)}
 							</Button>
 						{/if}
 						<Button
@@ -897,16 +942,16 @@
 							class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
 						>
 							<Printer aria-hidden="true" />{printBusy || isSubmitting
-								? 'กำลังเตรียม QR…'
+								? t.results.preparingQr
 								: isReprintOnly
-									? `พิมพ์ QR Code · ${printableResults.length} คน`
-									: 'พิมพ์ QR Code'}
+									? t.results.printQrCount(printableResults.length)
+									: t.results.printQr}
 						</Button>
 						<Button
 							type="button"
 							variant="outline"
 							onclick={onreset}
-							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">เสร็จสิ้น</Button
+							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.done}</Button
 						>
 					</div>
 				</div>
@@ -918,11 +963,28 @@
 						{actionError}
 					</p>
 				{/if}
+				{#if qrFailedResults.length > 0}
+					<div
+						class="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 sm:flex-row sm:items-center kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+						role="alert"
+					>
+						<p class="flex-1">
+							{t.results.qrIssueFailed(qrFailedResults.length)}
+						</p>
+						<Button
+							type="button"
+							variant="outline"
+							disabled={isSubmitting || printBusy}
+							onclick={() => void retryQrIssue()}
+							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.retryQrIssue}</Button
+						>
+					</div>
+				{/if}
 				{#if printError}<p
 						class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
 						role="alert"
 					>
-						{printError} ใช้ปุ่มพิมพ์อีกครั้งได้โดยไม่บันทึก check-in ซ้ำ
+						{t.errors.printHint(printError)}
 					</p>{/if}
 				<div class="mt-5 space-y-3 kiosk-portrait:mt-8 kiosk-portrait:space-y-4">
 					{#each results as result (result.evacuee_id)}
@@ -930,15 +992,16 @@
 							(member) => member.evacuee_id === result.evacuee_id
 						)}
 						<svelte:element
-							this={isReprintOnly && result.qr_payload ? 'label' : 'div'}
+							this={isReprintOnly && canPrintQr(result) ? 'label' : 'div'}
 							class="flex items-center gap-3 rounded-xl border kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 {isReprintOnly &&
 							result.qr_payload
 								? 'cursor-pointer'
-								: ''} {result.qr_payload || result.status === 'already_checked_in'
+								: ''} {!isQrIssueFailed(result) &&
+							(result.qr_payload || result.status === 'already_checked_in')
 								? 'border-emerald-200 bg-emerald-50'
 								: 'border-amber-200 bg-amber-50'} p-4 kiosk-compact:p-3"
 						>
-							{#if isReprintOnly && result.qr_payload}<Checkbox
+							{#if isReprintOnly && canPrintQr(result)}<Checkbox
 									checked={printSelectedIds.includes(result.evacuee_id)}
 									onCheckedChange={(checked) => togglePrint(result.evacuee_id, checked)}
 									disabled={printBusy}
@@ -946,7 +1009,7 @@
 									aria-describedby={`result-status-${result.evacuee_id}`}
 									class="size-12 shrink-0 bg-white kiosk-compact:size-10"
 								/>{:else if isReprintOnly}<span class="size-12 shrink-0" aria-hidden="true"
-								></span>{:else if result.qr_payload || result.status === 'already_checked_in'}<CheckCircle2
+								></span>{:else if !isQrIssueFailed(result) && (result.qr_payload || result.status === 'already_checked_in')}<CheckCircle2
 									class="size-6 shrink-0 text-emerald-800 kiosk-portrait:size-8"
 									aria-hidden="true"
 								/>{:else}<CircleAlert
@@ -958,19 +1021,21 @@
 									id={`result-name-${result.evacuee_id}`}
 									class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-base"
 								>
-									{person ? fullName(person) : result.evacuee_id}
+									{person ? fullName(person, t.noName) : result.evacuee_id}
 								</p>
 								<p
 									id={`result-status-${result.evacuee_id}`}
 									class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
 								>
-									{result.status === 'checked_in'
-										? 'รายงานตัวสำเร็จ · รอคัดกรอง'
-										: result.qr_payload
-											? 'รายงานตัวแล้ว · ใช้ QR เดิมเพื่อพิมพ์ซ้ำได้'
-											: result.status === 'already_checked_in'
-												? statusLabel(result.stay_status ?? 'unknown')
-												: 'ไม่สามารถรายงานตัวได้ กรุณาให้เจ้าหน้าที่ตรวจสอบ'}
+									{isQrIssueFailed(result)
+										? t.results.rowQrIssueFailed
+										: result.status === 'checked_in'
+											? t.results.rowCheckedIn
+											: canPrintQr(result)
+												? t.results.rowReprintable
+												: result.status === 'already_checked_in'
+													? statusLabel(result.stay_status ?? 'unknown')
+													: t.results.rowFailed}
 								</p>
 							</div>
 						</svelte:element>
@@ -979,16 +1044,19 @@
 			</section>
 
 			<KioskLabelSheet
-				labels={printableResults.map((result) => ({
-					key: result.evacuee_id,
-					qrSrc: qrImages[result.evacuee_id]?.src,
-					qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
-					name: labelName(
-						result,
-						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
-					),
-					checkedCount: KIOSK_CHECK_IN_TICKS
-				}))}
+				labels={printableResults
+					.filter((result) => result.qr_payload)
+					.map((result) => ({
+						key: result.evacuee_id,
+						qrSrc: qrImages[result.evacuee_id]?.src,
+						qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
+						name: labelName(
+							result,
+							lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
+						),
+						emergencyPhone: result.label?.emergency_phone,
+						checkedCount: KIOSK_CHECK_IN_TICKS
+					}))}
 			/>
 		{/if}
 
@@ -1001,7 +1069,7 @@
 			<ShieldCheck
 				class="size-4 shrink-0 text-[#0A2647] kiosk-portrait:size-6"
 				aria-hidden="true"
-			/>QR ไม่มีข้อมูลส่วนบุคคล
+			/>{t.qrNoPersonalData}
 		</p>
 	</div>
 </section>

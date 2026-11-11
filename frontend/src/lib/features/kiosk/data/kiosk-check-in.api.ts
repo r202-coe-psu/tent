@@ -1,11 +1,21 @@
 import type { ConsentDecision, ConsentMode } from '$lib/features/consent';
+import { languageStore } from '$lib/stores/language.svelte';
+import { getTranslation } from '$lib/utils/i18n';
 import type { KioskPhotoPayload } from '../domain/kiosk-photo';
+import { personQrVerdictMessage } from '$lib/utils/evacuee-qr';
+import {
+	KIOSK_CHECK_IN_MESSAGES_I18N,
+	KIOSK_SERVER_ERROR_EN
+} from './kiosk-check-in-messages.i18n';
 
 export type GateInput =
 	| { source: 'smart-card'; citizen_id: string }
 	| { source: 'qr'; token: string }
 	| { source: 'phone'; phone: string; primary_evacuee_id?: string }
 	| { source: 'thaid'; session_id: string };
+
+/** Unmasked label text from the server; `emergency_phone` only when the evacuee has one. */
+export type KioskLabelIdentity = { name: string; phone: string | null; emergency_phone?: string };
 
 export interface KioskEvacueeSummary {
 	evacuee_id: string;
@@ -42,11 +52,15 @@ export interface KioskCheckInMemberResult {
 	status: 'checked_in' | 'already_checked_in' | 'not_found' | 'not_eligible' | 'failed';
 	stay_status?: string;
 	qr_payload?: string;
+	/** CR-233 FR-EQR-24: the server could not issue a QR; no `qr_payload`, never print. */
+	qr_issue_failed?: boolean;
+	/** Client-side marker from a lookup (arriving member, QR reissued at print time); not a QR. */
+	reprintable?: boolean;
 	/**
 	 * Unmasked name + phone for the printed label; only with a `qr_payload`. A lookup never carries
 	 * it, so a reprint asks /check-in (no write for arriving members) when the visitor taps print.
 	 */
-	label?: { name: string; phone: string | null };
+	label?: KioskLabelIdentity;
 }
 
 export interface KioskCheckInResult {
@@ -60,8 +74,10 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 
 export interface KioskRegistrationResult {
 	evacuee_id: string;
-	qr_payload: string;
-	label: { name: string; phone: string | null };
+	/** `null` with `qr_issue_failed` when the QR entry could not be written (FR-EQR-24). */
+	qr_payload: string | null;
+	qr_issue_failed?: boolean;
+	label: KioskLabelIdentity;
 	consent_ref: string;
 	consent_mode: ConsentMode;
 }
@@ -139,12 +155,14 @@ export type KioskReprintInput = {
 
 export interface KioskReprintMember {
 	evacuee_id: string;
-	qr_payload: string;
+	/** Absent with `qr_issue_failed` when the server could not issue a QR (FR-EQR-24). */
+	qr_payload?: string;
+	qr_issue_failed?: boolean;
 	/**
 	 * `zone` is the member's current zone (short name, else full name), or null before one is
 	 * assigned; `stations_passed` (0–3) is how many checklist boxes the label ticks.
 	 */
-	label: { name: string; phone: string | null; zone: string | null; stations_passed: number };
+	label: KioskLabelIdentity & { zone: string | null; stations_passed: number };
 }
 
 export interface KioskReprintResult {
@@ -178,12 +196,19 @@ export function reprintKioskLabels(
 	);
 }
 
+/** The messages in the language on screen when the error is raised (a visit never switches mid-request). */
+function requestMessages() {
+	return getTranslation(KIOSK_CHECK_IN_MESSAGES_I18N, languageStore.current);
+}
+
 export class KioskRequestError extends Error {
 	constructor(
 		message: string,
 		readonly status: number,
 		readonly code: string | null,
-		readonly canRegister = false
+		readonly canRegister = false,
+		/** CR-233: `KIOSK_QR_EXPIRED` dates (ISO); never personal data. */
+		readonly details: { issued_at: string | null; current_printed_at: string } | null = null
 	) {
 		super(message);
 		this.name = 'KioskRequestError';
@@ -192,9 +217,20 @@ export class KioskRequestError extends Error {
 
 export class KioskPartialCheckInError extends Error {
 	constructor(readonly result: KioskCheckInBatchResult) {
-		super('รายงานตัวได้บางส่วน กรุณาตรวจผลและลองรายการที่เหลืออีกครั้ง');
+		super(requestMessages().partialCheckIn);
 		this.name = 'KioskPartialCheckInError';
 	}
+}
+
+/**
+ * The server words its errors in Thai. In English the code picks the copy, and a code without one
+ * falls back to the generic message rather than showing Thai.
+ */
+function serverMessage(code: unknown, message: unknown): string {
+	if (languageStore.current === 'en') {
+		return (typeof code === 'string' && KIOSK_SERVER_ERROR_EN[code]) || requestMessages().generic;
+	}
+	return typeof message === 'string' ? message : requestMessages().generic;
 }
 
 export async function requestError(response: Response): Promise<KioskRequestError> {
@@ -213,12 +249,30 @@ export async function requestError(response: Response): Promise<KioskRequestErro
 		typeof body?.error === 'object' && body.error !== null && 'code' in body.error
 			? body.error.code
 			: null;
-	const message = typeof nestedMessage === 'string' ? nestedMessage : 'ระบบไม่สามารถทำรายการได้';
+	const expired =
+		nestedCode === 'KIOSK_QR_EXPIRED' && typeof body?.error === 'object' && body.error !== null
+			? (body.error as { issued_at?: unknown; current_printed_at?: unknown })
+			: null;
+	const details =
+		expired && typeof expired.current_printed_at === 'string'
+			? {
+					issued_at: typeof expired.issued_at === 'string' ? expired.issued_at : null,
+					current_printed_at: expired.current_printed_at
+				}
+			: null;
+	const language = languageStore.current;
+	// FR-EQR-33: the visible copy is built here (Asia/Bangkok dates), not taken from the server.
+	const message = details
+		? personQrVerdictMessage({ status: 'expired', ...details }, language)
+		: nestedCode === 'KIOSK_QR_INVALID'
+			? personQrVerdictMessage({ status: 'invalid' }, language)
+			: serverMessage(nestedCode, nestedMessage);
 	return new KioskRequestError(
 		message,
 		response.status,
 		typeof nestedCode === 'string' ? nestedCode : null,
-		body?.can_register === true
+		body?.can_register === true,
+		details
 	);
 }
 
@@ -252,7 +306,7 @@ export async function requestWithTimeout<T>(
 		return await consume(response);
 	} catch (error) {
 		if (error instanceof Error && error.name === 'AbortError') {
-			throw new KioskRequestError('เชื่อมต่อช้า กรุณาลองอีกครั้ง', 0, 'TIMEOUT');
+			throw new KioskRequestError(requestMessages().timeout, 0, 'TIMEOUT');
 		}
 		throw error;
 	} finally {

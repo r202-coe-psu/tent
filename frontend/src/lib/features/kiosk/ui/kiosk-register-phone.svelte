@@ -3,6 +3,9 @@
 	import PhoneOff from '@lucide/svelte/icons/phone-off';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskNumpadPanel from './kiosk-numpad-panel.svelte';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_QR_FLOW_I18N } from './_constants/kiosk-qr-flow.i18n';
 	import {
 		formatPhoneForDisplay,
 		isKioskPhoneSubmittable,
@@ -21,8 +24,11 @@
 
 	let { disabled = false, notice = '', onconfirm }: Props = $props();
 	let phone = $state('');
+	const t = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).registerPhone);
 	const isValid = $derived(isKioskPhoneSubmittable(phone));
-	const footerMessage = $derived(phone.length === 0 && notice ? notice : phoneEntryHint(phone));
+	const footerMessage = $derived(
+		phone.length === 0 && notice ? notice : phoneEntryHint(phone, languageStore.current)
+	);
 	const displayPhone = $derived(formatPhoneForDisplay(phone));
 
 	function confirm(): void {
@@ -54,10 +60,10 @@
 				id="kiosk-register-phone-title"
 				class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl"
 			>
-				เบอร์โทรศัพท์ที่ติดต่อได้
+				{t.heading}
 			</h1>
 			<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
-				เจ้าหน้าที่จะใช้ติดต่อคุณ ถ้าไม่มีเบอร์ กด「ไม่มีเบอร์」ได้เลย
+				{t.hint}
 			</p>
 		</header>
 	{/snippet}
@@ -70,10 +76,10 @@
 					? 'kiosk-portrait:text-4xl'
 					: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
 			]}
-			aria-label="เบอร์โทรศัพท์ที่กรอก"
+			aria-label={t.displayLabel}
 			aria-live="polite"
 		>
-			{displayPhone || 'เบอร์โทรศัพท์'}
+			{displayPhone || t.placeholder}
 		</output>
 	{/snippet}
 
@@ -84,7 +90,7 @@
 			onclick={confirm}
 			class="min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
 		>
-			<Check class="h-5 w-5" aria-hidden="true" />ยืนยันเบอร์นี้
+			<Check class="h-5 w-5" aria-hidden="true" />{t.confirm}
 		</Button>
 		<Button
 			type="button"
@@ -93,7 +99,7 @@
 			onclick={skip}
 			class="min-h-12 w-full gap-2 text-base font-semibold kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
 		>
-			<PhoneOff class="h-5 w-5" aria-hidden="true" />ไม่มีเบอร์
+			<PhoneOff class="h-5 w-5" aria-hidden="true" />{t.skip}
 		</Button>
 	{/snippet}
 

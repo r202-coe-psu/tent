@@ -1,3 +1,4 @@
+import type { LanguageCode } from '$lib/stores/language.svelte';
 import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 import { printKioskLabels } from '../data/kiosk-print.api';
 import { KIOSK_QR_COLOR, kioskQrPrintSize } from '../domain/print-label';
@@ -10,6 +11,8 @@ export type KioskQrLabel = {
 	qrSrc: string;
 	name: string;
 	zone?: string | null;
+	/** Emergency contact phone printed under the zone; none leaves no row. */
+	emergencyPhone?: string | null;
 	/** Intake stations passed: this many checklist boxes are ticked. */
 	checkedCount?: number;
 };
@@ -40,15 +43,18 @@ export async function renderKioskQrLabelPng(
 
 /**
  * Render each label to a PNG (in order) and send them to the kiosk printer. `fallbackPrint` runs
- * only when no scanner client answered (dev browser / browser print mode).
+ * only when no scanner client answered (dev browser / browser print mode). `language` words the
+ * error message shown on screen; the labels themselves stay Thai.
  */
 export function printKioskQrLabels(
 	labels: readonly KioskQrLabel[],
-	fallbackPrint: () => void | Promise<void>
+	fallbackPrint: () => void | Promise<void>,
+	language?: LanguageCode
 ): Promise<KioskPrintFlowResult> {
 	return runKioskPrintFlow({
 		renderLabels: () => Promise.all(labels.map((label) => renderKioskLabelPng(label))),
 		printLabels: printKioskLabels,
-		fallbackPrint
+		fallbackPrint,
+		language
 	});
 }

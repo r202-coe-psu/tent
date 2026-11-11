@@ -18,6 +18,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { languageStore } from '$lib/stores/language.svelte';
+	import { localizeVolunteerMessage } from '$lib/constants/i18n/volunteer-messages';
 	import { skillLabels } from '../domain/skill-label';
 	import {
 		useCancelTicketMutation,
@@ -34,16 +35,21 @@
 	interface Props {
 		token: string;
 		hideQr?: boolean;
+		/** Opens this application of a permanent token instead of the default pick (#973). */
+		applicationId?: string;
 	}
 
-	let { token, hideQr = false }: Props = $props();
+	let { token, hideQr = false, applicationId }: Props = $props();
 
 	let cancelDialogOpen = $state(false);
 
 	const t = $derived(ticketI18n[languageStore.current]);
 	const currentLang = $derived(languageStore.current);
 
-	const query = useVolunteerTicket(() => token);
+	const query = useVolunteerTicket(
+		() => token,
+		() => applicationId
+	);
 	const cancel = useCancelTicketMutation();
 
 	const ticket = $derived(query.data);
@@ -132,7 +138,11 @@
 			cancelDialogOpen = false;
 			toast.success(t.toastCancelSuccess);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : t.toastCancelError);
+			toast.error(
+				err instanceof Error
+					? localizeVolunteerMessage(err.message, languageStore.current)
+					: t.toastCancelError
+			);
 		}
 	}
 </script>
@@ -169,7 +179,9 @@
 			<Card.Content class="flex flex-col items-center gap-3 py-12 text-center">
 				<CircleAlert class="size-8 text-muted-foreground" aria-hidden="true" />
 				<p class="text-sm">
-					{query.error instanceof Error ? query.error.message : t.notFoundError}
+					{query.error instanceof Error
+						? localizeVolunteerMessage(query.error.message, languageStore.current)
+						: t.notFoundError}
 				</p>
 			</Card.Content>
 		</Card.Root>

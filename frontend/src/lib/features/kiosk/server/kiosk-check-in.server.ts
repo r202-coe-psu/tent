@@ -32,9 +32,13 @@ import {
 	type KioskCardImageRef
 } from './kiosk-photo.server';
 import { writeKioskStationLogs } from './kiosk-station-log.server';
+import { evaluatePersonQr, parsePersonQr } from '$lib/utils/evacuee-qr';
+import { getEvacueeQrPrints, issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
 export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
+/** Scanned Person QR payload: `evacuee:{ULID}` or `evacuee:{ULID}@{hex6}` (CR-233 FR-EQR-6, lookup token only). */
+const evacueeQrTokenSchema = z.string().regex(new RegExp(`^evacuee:${ULID}(@[0-9a-f]{6})?$`, 'i'));
 const bareUlidPattern = new RegExp(`^${ULID}$`, 'i');
 
 const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
@@ -44,7 +48,7 @@ export const kioskGateInputSchema = z.discriminatedUnion('source', [
 	z.object({
 		source: z.literal('qr'),
 		// `evacuee:{ULID}` (an arrived evacuee's QR) or a bare ULID (an unassigned ticket's registration id).
-		token: z.union([evacueeIdSchema, z.string().regex(bareUlidPattern)])
+		token: z.union([evacueeQrTokenSchema, z.string().regex(bareUlidPattern)])
 	}),
 	z.object({
 		source: z.literal('phone'),
@@ -120,6 +124,7 @@ export type EvacueeDoc = {
 	first_name?: string;
 	last_name?: string;
 	phone?: string | null;
+	emergency_contact?: { name?: string; phone?: string; relation?: string };
 	gender?: string;
 	age?: number;
 	birth_year?: number;
@@ -145,7 +150,12 @@ export interface KioskEvacueeSummary {
 	selectable: boolean;
 }
 
-export type KioskLabelIdentity = { name: string; phone: string | null };
+export type KioskLabelIdentity = {
+	name: string;
+	phone: string | null;
+	/** Emergency contact phone printed under the zone (CR-151 §16); absent when there is none. */
+	emergency_phone?: string;
+};
 
 export interface KioskLookupResult {
 	shelter_code: string;
@@ -164,6 +174,9 @@ export type KioskLookupOutcome =
 	| ({ kind: 'household'; name_masked: boolean } & KioskLookupResult)
 	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] }
 	| { kind: 'kiosk_registered' }
+	/** CR-233 FR-EQR-32: a superseded Person QR (dates only, no personal data). */
+	| { kind: 'qr_expired'; issued_at: string | null; current_printed_at: string }
+	| { kind: 'qr_invalid' }
 	| { kind: 'not_found'; can_register?: boolean }
 	| { kind: 'too_many' };
 
@@ -194,9 +207,12 @@ export type KioskCheckInMemberResult = {
 	status: 'checked_in' | 'already_checked_in' | 'not_found' | 'not_eligible' | 'failed';
 	stay_status?: string;
 	qr_payload?: string;
+	/** CR-233 FR-EQR-24: the QR entry could not be written; no `qr_payload`, the kiosk must not print. */
+	qr_issue_failed?: true;
 	/**
-	 * Unmasked name + phone for the printed ID-card label: only with a `qr_payload` (just checked
-	 * in, or already arriving), never in a lookup — the lookup screen keeps the masked `last_name`.
+	 * Unmasked name, phone and emergency contact phone (digits only, never the contact's name) for
+	 * the printed ID-card label: only with a `qr_payload` (just checked in, or already arriving),
+	 * never in a lookup — the lookup screen keeps the masked `last_name`.
 	 */
 	label?: KioskLabelIdentity;
 };
@@ -242,15 +258,24 @@ function toSummary(
 	};
 }
 
-/** Unmasked name + phone for the printed label (check-in and a fresh walk-in registration). */
+/**
+ * Unmasked name + phones for the printed label (check-in and a fresh walk-in registration).
+ * `name` is first name, then last name on its own line (`\n`-separated), as on every label.
+ */
 export function toLabelIdentity(
-	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone'>
+	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone' | 'emergency_contact'>
 ): KioskLabelIdentity {
 	const name = [doc.first_name, doc.last_name]
 		.map((part) => part?.trim())
 		.filter(Boolean)
-		.join(' ');
-	return { name, phone: doc.phone?.trim() || null };
+		.join('\n');
+	// Spaces and dashes dropped: the label row has room for the digits only.
+	const emergencyPhone = doc.emergency_contact?.phone?.replace(/[\s-]/g, '');
+	return {
+		name,
+		phone: doc.phone?.trim() || null,
+		...(emergencyPhone ? { emergency_phone: emergencyPhone } : {})
+	};
 }
 
 async function expandHousehold(
@@ -534,9 +559,27 @@ export async function lookupPreRegisteredEvacuee(
 		return householdFromRegistration(shelterCode, registration);
 	}
 	if (input.source === 'qr') {
-		const docId = `evacuee:${input.token.slice('evacuee:'.length).toUpperCase()}`;
+		const parsedQr = parsePersonQr(input.token);
+		if (!parsedQr) return { kind: 'qr_invalid' };
+		const docId = parsedQr.evacuee_id;
 		const doc = await getById(dbName, docId).catch(asLookupUnavailable);
 		candidates = doc ? [doc] : [];
+		if (doc) {
+			// FR-EQR-27/28: compare the scanned hash6 with the stored prints; never hash here.
+			const prints = await getEvacueeQrPrints(shelterCode, docId).catch(asLookupUnavailable);
+			const verdict = evaluatePersonQr(parsedQr.hash6, prints);
+			if (verdict.status === 'expired') {
+				return {
+					kind: 'qr_expired',
+					issued_at: verdict.issued_at,
+					current_printed_at: verdict.current_printed_at
+				};
+			}
+			if (verdict.status === 'invalid') return { kind: 'qr_invalid' };
+		} else if (parsedQr.hash6 !== null) {
+			// A hashed QR with no such evacuee has no log either: row 5.
+			return { kind: 'qr_invalid' };
+		}
 	} else {
 		let result: { docs?: unknown[] };
 		try {
@@ -615,6 +658,28 @@ function isEligiblePrimary(primary: EvacueeDoc, shelterCode: string): boolean {
 
 function notEligible(evacueeIds: string[]): KioskCheckInMemberResult[] {
 	return evacueeIds.map((evacueeId) => ({ evacuee_id: evacueeId, status: 'not_eligible' }));
+}
+
+/**
+ * Issue a fresh Person QR for one member (CR-233 FR-EQR-22/23). Failure never undoes the check-in:
+ * the item just carries `qr_issue_failed` and no `qr_payload`.
+ */
+async function issueMemberQr(
+	shelterCode: string,
+	evacueeId: string,
+	deviceId: string | undefined
+): Promise<{ qr_payload: string } | { qr_issue_failed: true }> {
+	try {
+		const issued = await issueEvacueeQr({
+			shelter_code: shelterCode,
+			evacuee_id: evacueeId,
+			source: 'kiosk_checkin',
+			printed_by: `kiosk:${deviceId ?? 'unknown'}`
+		});
+		return { qr_payload: issued.qr_payload };
+	} catch {
+		return { qr_issue_failed: true };
+	}
 }
 
 /** Report in selected household members independently; only committed writes get a QR token. */
@@ -724,7 +789,10 @@ export async function checkInSelectedMembers(
 				status: isAlreadyCheckedInStatus(stayStatus) ? 'already_checked_in' : 'not_eligible',
 				stay_status: stayStatus,
 				...(stayStatus === 'arriving'
-					? { qr_payload: evacueeId, label: toLabelIdentity(member) }
+					? {
+							...(await issueMemberQr(shelterCode, evacueeId, options.deviceId)),
+							label: toLabelIdentity(member)
+						}
 					: {})
 			});
 			continue;
@@ -749,7 +817,7 @@ export async function checkInSelectedMembers(
 				evacuee_id: evacueeId,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: evacueeId,
+				...(await issueMemberQr(shelterCode, evacueeId, options.deviceId)),
 				label: toLabelIdentity(member)
 			});
 		} catch {
@@ -761,7 +829,10 @@ export async function checkInSelectedMembers(
 					status: 'already_checked_in',
 					stay_status: stayStatus,
 					...(stayStatus === 'arriving'
-						? { qr_payload: evacueeId, label: toLabelIdentity(latest) }
+						? {
+								...(await issueMemberQr(shelterCode, evacueeId, options.deviceId)),
+								label: toLabelIdentity(latest)
+							}
 						: {})
 				});
 			} else {

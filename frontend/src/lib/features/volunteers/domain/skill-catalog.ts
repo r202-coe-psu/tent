@@ -85,9 +85,12 @@ export function resolveSkillOption(
 	value: string,
 	options: readonly SkillOption[]
 ): SkillOption | undefined {
-	const byCode = options.find((option) => option.code === value);
+	if (!value || typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	if (!trimmed) return undefined;
+	const byCode = options.find((option) => option.code === trimmed);
 	if (byCode) return byCode;
-	const needle = normalizeSkillText(value);
+	const needle = normalizeSkillText(trimmed);
 	return options.find(
 		(option) =>
 			normalizeSkillText(option.code) === needle || normalizeSkillText(option.label) === needle
@@ -136,18 +139,36 @@ export function controlledSkillValues(options: readonly SkillOption[]): string[]
  * code first lets current code values and legacy label values meet.
  */
 export function skillMatches(a: string, b: string, options: readonly SkillOption[]): boolean {
+	if (!a || !b) return false;
+	const normA = normalizeSkillText(a);
+	const normB = normalizeSkillText(b);
+	if (normA === normB) return true;
+
 	const left = resolveSkillOption(a, options);
 	const right = resolveSkillOption(b, options);
-	if (left && right) return left.code === right.code;
-	return normalizeSkillText(a) === normalizeSkillText(b);
+	if (left && right && left.code === right.code) return true;
+
+	if (left) {
+		if (normalizeSkillText(left.code) === normB || normalizeSkillText(left.label) === normB) {
+			return true;
+		}
+	}
+	if (right) {
+		if (normalizeSkillText(right.code) === normA || normalizeSkillText(right.label) === normA) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /** Does `have` cover at least one of `required`? Empty `required` reads as "yes". */
 export function hasAnyRequiredSkill(
-	have: readonly string[],
-	required: readonly string[],
+	have: readonly string[] | undefined,
+	required: readonly string[] | undefined,
 	options: readonly SkillOption[]
 ): boolean {
-	if (required.length === 0) return true;
-	return required.some((needed) => have.some((held) => skillMatches(held, needed, options)));
+	const req = required ?? [];
+	if (req.length === 0) return true;
+	const held = have ?? [];
+	return req.some((needed) => held.some((item) => skillMatches(item, needed, options)));
 }

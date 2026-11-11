@@ -1,5 +1,4 @@
 <script lang="ts">
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Check from '@lucide/svelte/icons/check';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -18,6 +17,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
+	import BackLink from '$lib/components/back-link.svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode, resolveShelterCode } from '$lib/db/shelter';
@@ -334,14 +334,7 @@
 
 <div class="min-h-full bg-[#F8FAFC]">
 	<div class="mx-auto max-w-[110rem] space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-		<Button
-			variant="ghost"
-			href={resolve('/back-office/tickets/kitchen')}
-			class="-ml-2 gap-1.5 text-slate-600"
-		>
-			<ArrowLeft class="h-4 w-4" />
-			กลับไปคิวตั๋ว
-		</Button>
+		<BackLink href={resolve('/back-office/tickets/kitchen')} label="กลับไปคิวตั๋ว" class="-ml-2" />
 
 		{#if ticketQuery.isPending}
 			<p class="py-12 text-center text-sm text-muted-foreground">กำลังโหลด...</p>

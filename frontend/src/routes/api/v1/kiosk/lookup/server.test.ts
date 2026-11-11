@@ -127,6 +127,57 @@ describe('POST /api/v1/kiosk/lookup', () => {
 		expect(mockFindShelter).not.toHaveBeenCalled();
 	});
 
+	it('answers 409 KIOSK_QR_EXPIRED with dates only and no household (CR-233 FR-EQR-32)', async () => {
+		mockLookup.mockResolvedValueOnce({
+			kind: 'qr_expired',
+			issued_at: '2026-11-03T02:10:00.000Z',
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		} as never);
+
+		const response = await send({
+			source: 'qr',
+			token: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@289170'
+		});
+
+		expect(response.status).toBe(409);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		const body = await response.json();
+		expect(body.error).toMatchObject({
+			code: 'KIOSK_QR_EXPIRED',
+			issued_at: '2026-11-03T02:10:00.000Z',
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		});
+		expect(body).not.toHaveProperty('members');
+		expect(body).not.toHaveProperty('primary_evacuee_id');
+		expect(mockLookup).toHaveBeenCalledWith('SH001', {
+			source: 'qr',
+			token: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@289170'
+		});
+	});
+
+	it('answers 409 KIOSK_QR_EXPIRED with issued_at null for a pre-change QR (row 2)', async () => {
+		mockLookup.mockResolvedValueOnce({
+			kind: 'qr_expired',
+			issued_at: null,
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		} as never);
+		const response = await send({ source: 'qr', token: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
+		expect(response.status).toBe(409);
+		expect((await response.json()).error.issued_at).toBeNull();
+	});
+
+	it('answers 400 KIOSK_QR_INVALID with no household (FR-EQR-32)', async () => {
+		mockLookup.mockResolvedValueOnce({ kind: 'qr_invalid' } as never);
+		const response = await send({
+			source: 'qr',
+			token: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV@ffffff'
+		});
+		expect(response.status).toBe(400);
+		const body = await response.json();
+		expect(body.error).toMatchObject({ code: 'KIOSK_QR_INVALID', message: 'QR ไม่ถูกต้อง' });
+		expect(body).not.toHaveProperty('members');
+	});
+
 	it('checks the walk-in flag only after a smart-card miss', async () => {
 		mockLookup.mockResolvedValueOnce({ kind: 'not_found', can_register: true } as never);
 

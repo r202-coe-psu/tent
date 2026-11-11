@@ -1,0 +1,211 @@
+#!/bin/bash
+# ==============================================================================
+# Tent print agent - installer for a Raspberry Pi / kiosk machine
+# ------------------------------------------------------------------------------
+# Usage: sudo ./setup_printer_server.sh [--env-file FILE] [options]
+#   ติดตั้งครั้งแรก:  sudo ./setup_printer_server.sh --env-file .env
+#   อัปเดต/ติดตั้งซ้ำ: sudo ./setup_printer_server.sh   (ใช้ <prefix>/.env เดิม)
+#   --env-file FILE     .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers);
+#                       จะถูกวางเป็น <prefix>/.env (600) · ไม่ใส่ = ใช้ <prefix>/.env ที่ติดตั้งไว้แล้ว
+#   --queue NAME        ชื่อ CUPS queue (default: PRINTER_NAME ใน --env-file หรือ tent_xprinter)
+#   --prefix DIR        ที่ติดตั้ง (default: /opt/tent/printer)
+#   --unit-dir DIR      ที่วาง systemd unit (default: /etc/systemd/system)
+#   --dry-run           พิมพ์คำสั่งที่จะรัน แทนการรันจริง (ไม่ต้องเป็น root, ไม่เขียนอะไร)
+#   --status            แสดงสถานะ unit / queue / log 5 บรรทัดล่าสุด แล้วออก (ไม่แก้อะไร)
+# ==============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+SERVICE_USER=tent-printer
+UNIT_NAME=tent-printer.service
+DEFAULT_PREFIX=/opt/tent/printer
+
+BLUE='\033[0;34m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+info() { echo -e "${BLUE}▸ $*${NC}"; }
+ok() { echo -e "${GREEN}✅ $*${NC}"; }
+warn() { echo -e "${YELLOW}⚠️  $*${NC}"; }
+bad() { echo -e "${RED}❌ $*${NC}"; }
+die() {
+    bad "$*" >&2
+    exit 1
+}
+
+DRY_RUN=false
+STATUS_ONLY=false
+ENV_FILE=""
+QUEUE=""
+QUEUE_GIVEN=false
+PREFIX="$DEFAULT_PREFIX"
+UNIT_DIR=/etc/systemd/system
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --dry-run) DRY_RUN=true; shift ;;
+    --status) STATUS_ONLY=true; shift ;;
+    --env-file) ENV_FILE="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
+    --queue) QUEUE="${2-}"; QUEUE_GIVEN=true; shift $(($# > 1 ? 2 : 1)) ;;
+    --prefix) PREFIX="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
+    --unit-dir) UNIT_DIR="${2-}"; shift $(($# > 1 ? 2 : 1)) ;;
+    --allow-cupsenable) die "--allow-cupsenable ถูกถอดออกแล้ว: ห้ามให้ agent อยู่ใน group lpadmin — เปิด queue เองด้วย sudo cupsenable (ดู README)" ;;
+    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+    *) die "ไม่รู้จัก option: $1 (ดู --help)" ;;
+    esac
+done
+
+# Run a mutating command, or only print it with --dry-run.
+run() {
+    if $DRY_RUN; then
+        echo "[dry-run] $*"
+    else
+        "$@"
+    fi
+}
+
+# Thai vowel/tone marks on the boot slip need Pillow built with libraqm; warn (never abort) if not.
+check_raqm() {
+    local py="$1"
+    local probe="import sys; from PIL import features; sys.exit(0 if features.check('raqm') else 1)"
+    if $DRY_RUN; then
+        echo "[dry-run] $py -c \"$probe\"  # raqm check"
+    elif ! "$py" -c "$probe" 2>/dev/null; then
+        warn "Pillow ไม่มี libraqm — สระ/วรรณยุกต์ไทยบนบูตสลิปจะเพี้ยน แก้: sudo apt-get install -y libraqm0 libfribidi0 (หรือ libraqm-dev) แล้วรีสตาร์ท agent"
+    fi
+}
+
+# Value of KEY= in a dotenv-style file (last wins, edge whitespace and one pair of quotes stripped).
+# Prints only that one value - never the rest of the file.
+env_value() {
+    sed -n "s/^$2=//p" "$1" | tail -1 | sed -E "s/^[[:space:]]+//; s/[[:space:]]+\$//; s/^([\"'])(.*)\1\$/\2/"
+}
+
+# --- Validate arguments (before anything is planned or touched) ------------------
+[[ "$PREFIX" =~ ^/[A-Za-z0-9_./-]+$ ]] || die "--prefix ต้องเป็น path เต็มที่ใช้ได้เฉพาะ A-Z a-z 0-9 _ . / -"
+
+if ! $STATUS_ONLY; then
+    # Re-run without --env-file keeps the installed one.
+    if [ -z "$ENV_FILE" ] && [ -f "$PREFIX/.env" ]; then ENV_FILE="$PREFIX/.env"; fi
+    [ -n "$ENV_FILE" ] || die "--env-file จำเป็นตอนติดตั้งครั้งแรก: ระบุไฟล์ .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers)"
+    [ -f "$ENV_FILE" ] || die "ไม่พบไฟล์ --env-file: $ENV_FILE"
+fi
+
+if ! $QUEUE_GIVEN; then
+    for candidate in "$ENV_FILE" "$PREFIX/.env"; do
+        if [ -n "$candidate" ] && [ -r "$candidate" ]; then
+            QUEUE="$(env_value "$candidate" PRINTER_NAME)"
+            break
+        fi
+    done
+    QUEUE="${QUEUE:-tent_xprinter}"
+fi
+[[ "$QUEUE" =~ ^[A-Za-z0-9_][A-Za-z0-9_-]{0,126}$ ]] || die "ชื่อ queue '$QUEUE' ใช้ได้เฉพาะ A-Z a-z 0-9 _ - (ห้ามขึ้นต้นด้วย -, ยาวไม่เกิน 127)"
+
+# --- --status: read-only report ---------------------------------------------------
+if $STATUS_ONLY; then
+    echo -e "${BLUE}=== Tent print agent status (queue: $QUEUE) ===${NC}"
+    unit_state="$(systemctl is-active tent-printer 2>&1 || true)"
+    if [ "$unit_state" = active ]; then ok "tent-printer: $unit_state"; else bad "tent-printer: $unit_state"; fi
+    if queue_line="$(LC_ALL=C lpstat -p "$QUEUE" 2>&1)"; then
+        ok "queue $QUEUE"
+    else
+        bad "queue $QUEUE ไม่พร้อม"
+    fi
+    # shellcheck disable=SC2001 # per-line prefix, not a substring replace
+    sed 's/^/    /' <<<"$queue_line"
+    info "log ล่าสุด 5 บรรทัด"
+    journalctl -u tent-printer -n 5 --no-pager 2>&1 | sed 's/^/    /' || true
+    exit 0
+fi
+
+# Two agents on one DEVICE_ID steal each other's jobs and trip nginx's 2-connection limit (429).
+for state in is-active is-enabled; do
+    if systemctl "$state" --quiet tent-printer-autostart 2>/dev/null; then
+        die "มี tent-printer-autostart ติดตั้งอยู่ ($state) — agent สองตัวจะแย่งงานกัน ถอนออกก่อน: ./setup_autostart.sh --disable"
+    fi
+done
+
+# --- Preflight (real runs only: --dry-run must work anywhere without root) --------
+if ! $DRY_RUN; then
+    [ "$EUID" -eq 0 ] || die "ต้องรันด้วย root: sudo $0 ... (หรือใช้ --dry-run เพื่อดูแผน)"
+    command -v uv >/dev/null || die "ไม่พบ uv — ติดตั้งก่อน: https://docs.astral.sh/uv/"
+    command -v rsync >/dev/null || die "ไม่พบ rsync — sudo apt-get install -y rsync"
+    command -v lpstat >/dev/null || die "ไม่พบ CUPS — รัน kiosk/setup_printer.sh --queue $QUEUE ก่อน"
+    lpstat -p "$QUEUE" >/dev/null 2>&1 || die "ไม่พบ CUPS queue $QUEUE — รัน kiosk/setup_printer.sh --queue $QUEUE ก่อน"
+fi
+
+echo -e "${BLUE}=== Tent print agent setup: prefix $PREFIX, queue $QUEUE ===${NC}"
+
+# 0) Thai font for the boot slip; without one it prints as plain text and Thai shows as boxes.
+if fc-list :lang=th file 2>/dev/null | grep -q .; then
+    ok "มีฟอนต์ไทยแล้ว"
+else
+    info "ติดตั้งฟอนต์ไทย (fonts-thai-tlwg) สำหรับบูตสลิป"
+    # A fresh image's package index is often stale or empty, so refresh it first. A failure here
+    # is only a warning: the slip falls back to plain text, the agent itself works without it.
+    run apt-get update || warn "apt-get update ไม่สำเร็จ — ลองติดตั้งฟอนต์ต่อ"
+    run apt-get install -y fonts-thai-tlwg \
+        || warn "ติดตั้ง fonts-thai-tlwg ไม่สำเร็จ — บูตสลิปจะพิมพ์ภาษาไทยเป็นกล่อง/ตัวอักษรธรรมดา ติดตั้งเองภายหลัง: apt-get install -y fonts-thai-tlwg"
+fi
+
+# 1) Service user (no login, no home; group lp so it can talk to the printer queue)
+info "[1/6] user $SERVICE_USER"
+if id -u "$SERVICE_USER" >/dev/null 2>&1; then
+    ok "user $SERVICE_USER มีอยู่แล้ว"
+else
+    run useradd --system --gid lp --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+fi
+
+# 2) Code + locked dependencies. Code and .venv stay root-owned: the agent cannot rewrite itself.
+#    scripts/ (enqueue.py holds CouchDB admin credentials) is deliberately NOT copied.
+info "[2/6] ติดตั้งโค้ดที่ $PREFIX"
+run install -d -m 0755 "$PREFIX"
+run rsync -a --delete --exclude=__pycache__ "$SCRIPT_DIR/printer/" "$PREFIX/printer/"
+run install -D -m 0644 "$SCRIPT_DIR/pyproject.toml" "$PREFIX/pyproject.toml"
+run install -D -m 0644 "$SCRIPT_DIR/uv.lock" "$PREFIX/uv.lock"
+# only-system: a downloaded interpreter would live under root's home, unreadable by the service user.
+run uv sync --frozen --no-dev --python-preference only-system --project "$PREFIX"
+check_raqm "$PREFIX/.venv/bin/python"
+
+# 3) Secret file: owner = service user, mode 600. Contents are never echoed.
+info "[3/6] วาง .env (600, owner $SERVICE_USER)"
+if [ "$ENV_FILE" -ef "$PREFIX/.env" ]; then # re-run pointing at the installed file: nothing to copy
+    run chown "$SERVICE_USER:lp" "$PREFIX/.env"
+    run chmod 600 "$PREFIX/.env"
+else
+    run install -m 600 -o "$SERVICE_USER" -g lp "$ENV_FILE" "$PREFIX/.env"
+fi
+
+# 4) Error policy: a failed job is dropped, not left blocking the queue
+info "[4/6] error policy"
+run lpadmin -p "$QUEUE" -o printer-error-policy=abort-job
+
+# 5) cupsenable rights: never lpadmin. Queue re-enable stays manual until a hardware test
+#    shows a narrower right (group lp / cupsd.conf policy) is enough.
+info "[5/6] สิทธิ์ cupsenable"
+echo "   ไม่ให้สิทธิ์ cupsenable (ห้าม lpadmin) — queue ถูก disable เมื่อไร agent รายงาน queue_state=disabled; เปิดคืนด้วย sudo cupsenable $QUEUE"
+
+# 6) systemd unit (the shipped unit hardcodes /opt/tent/printer; rewrite it for --prefix)
+info "[6/6] systemd unit"
+UNIT_SRC="$SCRIPT_DIR/systemd/$UNIT_NAME"
+UNIT_DST="$UNIT_DIR/$UNIT_NAME"
+if $DRY_RUN; then
+    echo "[dry-run] sed s#$DEFAULT_PREFIX#$PREFIX#g $UNIT_SRC | install -D -m 0644 /dev/stdin $UNIT_DST"
+else
+    [ -f "$UNIT_SRC" ] || die "ไม่พบ $UNIT_SRC"
+    sed "s#$DEFAULT_PREFIX#$PREFIX#g" "$UNIT_SRC" | install -D -m 0644 /dev/stdin "$UNIT_DST"
+fi
+was_active=false
+if ! $DRY_RUN && systemctl is-active --quiet tent-printer; then was_active=true; fi
+run systemctl daemon-reload
+run systemctl enable --now tent-printer
+if $was_active; then
+    # enable --now leaves a running agent on its old code/.env
+    run systemctl restart tent-printer
+fi
+
+echo
+ok "เสร็จ — ตรวจสถานะ: sudo $0 --status   |   log: journalctl -u tent-printer -f"

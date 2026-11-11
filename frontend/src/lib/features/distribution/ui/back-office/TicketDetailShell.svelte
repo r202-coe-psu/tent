@@ -88,7 +88,7 @@
 					onclick={onClose}
 					class="mt-5 text-xs font-semibold hover:bg-primary-dark"
 				>
-					ปิดหน้าต่าง
+					ปิด
 				</Button>
 			</div>
 		{:else}
@@ -292,7 +292,7 @@
 			<!-- Footer -->
 			<div class="flex justify-end border-t border-slate-200 bg-white px-6 py-3.5">
 				<Button type="button" variant="outline" onclick={onClose} class="text-xs font-semibold">
-					ปิดหน้าต่าง
+					ปิด
 				</Button>
 			</div>
 		{/if}

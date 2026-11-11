@@ -3,23 +3,30 @@ import {
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_LINK_GAP_MM,
+	KIOSK_LABEL_QR_CAPTION,
+	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_ZONE,
 	kioskLabelDots,
 	kioskLabelLayout,
+	labelEmergencyLine,
 	labelZoneLine,
 	mmToDots,
 	type LabelZoneLine,
 	ptToDots,
+	wrapLabelName,
 	wrapLabelText
 } from '../domain/print-label';
 
 export type KioskLabelContent = {
 	/** QR data URL rendered at 1 px per printer dot (see `kioskQrPrintSize`). */
 	qrSrc: string;
+	/** Name parts (first, last) separated by `\n`; each part starts on its own label line. */
 	name: string;
 	/** Current zone name; missing or null leaves a dotted rule to write the zone on. */
 	zone?: string | null;
+	/** Emergency contact phone, printed on its own row under the zone; none leaves no row. */
+	emergencyPhone?: string | null;
 	checklist?: readonly string[];
 	/** Intake stations passed: this many checklist boxes are ticked, top first. */
 	checkedCount?: number;
@@ -29,7 +36,19 @@ export type KioskLabelContent = {
 const INK_THRESHOLD = 160;
 /** Matches the app's typography stack (`$lib/tokens/typography.ts`) so Thai glyphs render
  * instead of the generic sans-serif fallback's tofu boxes on a kiosk without a system Thai font. */
-const FONT_FAMILY = "'IBM Plex Sans Thai', sans-serif";
+const FONT_FAMILY = "'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', sans-serif";
+/** The web font is split by unicode-range; `load()` fetches only the files covering this text. */
+const FONT_SAMPLE = 'กขค Aa0';
+
+/**
+ * Load `font` for canvas drawing. Rejects when the load fails or no face matched (`load()`
+ * resolves `[]`): `fillText` would then silently draw with the fallback face, so a label whose
+ * Thai glyphs are tofu boxes would reach the printer. Nothing is cached, so a retry loads again.
+ */
+async function loadLabelFont(font: string): Promise<void> {
+	const faces = await document.fonts.load(font, FONT_SAMPLE);
+	if (faces.length === 0) throw new Error(`Label font is unavailable: ${font}`);
+}
 
 function loadImage(src: string): Promise<HTMLImageElement> {
 	const image = new Image();
@@ -89,7 +108,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const [qr] = await Promise.all([
 		loadImage(label.qrSrc),
 		document.fonts.ready,
-		...Object.values(fonts).map((font) => document.fonts.load(font).catch(() => undefined))
+		...Object.values(fonts).map(loadLabelFont)
 	]);
 	const layout = kioskLabelLayout(qr.width);
 	const words = segmenter('word');
@@ -110,16 +129,13 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const nameSize = ptToDots(nameStyle.pt);
 	context.font = fonts.name;
 	const measure = (text: string) => context.measureText(text).width;
-	// Break between first and last name when each fits a line; the Thai word segmenter splits
-	// proper names mid-name, so it only cuts a part too wide for the column.
-	const nameSegments = label.name
-		.split(/(\s+)/)
-		.flatMap((part) => (measure(part.trim()) > layout.text.width ? words(part) : [part]));
-	const nameLines = wrapLabelText(
-		nameSegments,
+	// First and last name sit on their own lines (`\n`); the last name always keeps a line.
+	const nameLines = wrapLabelName(
+		label.name,
 		layout.text.width,
 		measure,
 		nameStyle.maxLines,
+		words,
 		graphemes
 	);
 	for (const line of nameLines) {
@@ -129,6 +145,11 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	y += mmToDots(KIOSK_LABEL_ZONE.rowGapMm);
 	drawZone(context, labelZoneLine(label.zone), fonts.zone, layout.text, y, { words, graphemes });
+	const emergency = labelEmergencyLine(label.emergencyPhone);
+	if (emergency) {
+		y += ptToDots(zoneStyle.pt) * zoneStyle.lineHeight + mmToDots(KIOSK_LABEL_ZONE.rowGapMm);
+		drawEmergency(context, emergency, fonts.checklist, layout.text, y);
+	}
 
 	// The checklist sits right above the site address, printed small at the very bottom.
 	const linkRow = ptToDots(linkStyle.pt) * linkStyle.lineHeight;
@@ -141,9 +162,45 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	);
 	context.font = fonts.link;
 	context.fillText(KIOSK_LABEL_LINK, layout.link.x, layout.link.y, layout.text.width);
+	drawQrCaption(context, layout.qr, qr.width, linkStyle);
 
 	binarize(context, width, height);
 	return canvas.toDataURL('image/png').slice('data:image/png;base64,'.length);
+}
+
+/**
+ * The "for use inside the shelter" lines centred under the QR. Left-aligned at a measured x, so
+ * every row on the label keeps the same `textAlign`. Uses the font already set for the link.
+ */
+function drawQrCaption(
+	context: CanvasRenderingContext2D,
+	qr: { x: number; y: number },
+	qrSize: number,
+	style: { pt: number; lineHeight: number }
+): void {
+	const row = ptToDots(style.pt) * style.lineHeight;
+	const centre = qr.x + qrSize / 2;
+	let middle = qr.y + qrSize + mmToDots(KIOSK_LABEL_QR_CAPTION_GAP_MM) + row / 2;
+	for (const line of KIOSK_LABEL_QR_CAPTION) {
+		context.fillText(line, centre - context.measureText(line).width / 2, middle);
+		middle += row;
+	}
+}
+
+/** `ติดต่อฉุกเฉิน:` then the phone, squeezed into the column rather than cut. */
+function drawEmergency(
+	context: CanvasRenderingContext2D,
+	line: { label: string; value: string | null },
+	font: string,
+	column: { x: number; width: number },
+	top: number
+): void {
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.emergency;
+	const middle = top + (ptToDots(pt) * lineHeight) / 2;
+	context.font = font;
+	context.fillText(line.label, column.x, middle, column.width);
+	const x = column.x + context.measureText(line.label).width + mmToDots(KIOSK_LABEL_ZONE.textGapMm);
+	if (line.value) context.fillText(line.value, x, middle, Math.max(1, column.x + column.width - x));
 }
 
 /** `Zone:` then the zone name cut to one line, or a dotted rule to write the zone on by hand. */

@@ -68,6 +68,7 @@ export {
 	useVolunteerJobs,
 	useRespondToDispatchMutation,
 	useVolunteerAccessStatus,
+	useVolunteerApplications,
 	useVolunteerSchedule,
 	useVolunteerTicket,
 	useVolunteerTickets,
@@ -76,5 +77,6 @@ export {
 
 export { default as TicketFinder } from './ui/ticket-finder.svelte';
 export { ticketI18n } from './i18n/ticket.i18n';
+export { accessPortalI18n } from './i18n/access-portal.i18n';
 export { default as DigitalPass } from './ui/digital-pass.svelte';
 export { default as VolunteerAccessPortal } from './ui/volunteer-access-portal.svelte';

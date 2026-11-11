@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminFetch } from '$lib/server/couch-admin';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { getEvacueeQrPrints, issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import {
 	checkInSelectedMembers,
 	KioskInputError,
@@ -9,7 +10,8 @@ import {
 	kioskCheckInInputSchema,
 	kioskGateInputSchema,
 	lookupPreRegisteredEvacuee,
-	saveKioskCheckInCardPhoto
+	saveKioskCheckInCardPhoto,
+	toLabelIdentity
 } from './kiosk-check-in.server';
 import {
 	KioskUnassignedClaimConflictError,
@@ -19,6 +21,10 @@ import {
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
+vi.mock('$lib/server/evacuee-qr-service', () => ({
+	issueEvacueeQr: vi.fn(),
+	getEvacueeQrPrints: vi.fn()
+}));
 vi.mock('$lib/server/fastapi', () => ({
 	fastapiBaseUrl: () => 'http://fastapi.test',
 	fastapiServiceHeaders: (extra: Record<string, string> = {}) => ({
@@ -29,10 +35,22 @@ vi.mock('$lib/server/fastapi', () => ({
 
 const mockAdminFetch = vi.mocked(adminFetch);
 const mockFindShelter = vi.mocked(findMasterByCode);
+const mockIssueQr = vi.mocked(issueEvacueeQr);
+const mockQrPrints = vi.mocked(getEvacueeQrPrints);
+/** The server-issued payload the mock returns: the id plus a fixed hash6 (CR-233). */
+const issuedQr = (evacueeId: string) => `${evacueeId}@a1b2c3`;
 const fetchMock = vi.fn();
 
 // FastAPI (the central queue) defaults to "nobody registered"; tests override per case.
 beforeEach(() => {
+	mockIssueQr.mockReset();
+	mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
+		evacuee_id,
+		qr_payload: issuedQr(evacuee_id),
+		printed_at: '2026-11-06T08:15:30.123Z'
+	}));
+	mockQrPrints.mockReset();
+	mockQrPrints.mockResolvedValue([]);
 	fetchMock.mockReset();
 	fetchMock.mockImplementation(async () => queueResponse(404, notFoundBody));
 	vi.stubGlobal('fetch', fetchMock);
@@ -1174,21 +1192,21 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
-				label: { name: 'สมชาย0 ใจดี', phone }
+				qr_payload: issuedQr(primary._id),
+				label: { name: 'สมชาย0\nใจดี', phone }
 			},
 			{
 				evacuee_id: member._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: member._id,
-				label: { name: 'สมชาย1 ใจดี', phone }
+				qr_payload: issuedQr(member._id),
+				label: { name: 'สมชาย1\nใจดี', phone }
 			},
 			{
 				evacuee_id: apiMember._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: apiMember._id
+				qr_payload: issuedQr(apiMember._id)
 			},
 			{ evacuee_id: unrelated._id, status: 'not_eligible' },
 			{ evacuee_id: otherShelter._id, status: 'not_found' }
@@ -1251,8 +1269,8 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
-				label: { name: 'สมชาย0 ใจดี', phone }
+				qr_payload: issuedQr(primary._id),
+				label: { name: 'สมชาย0\nใจดี', phone }
 			},
 			{ evacuee_id: active._id, status: 'already_checked_in', stay_status: 'active' }
 		]);
@@ -1292,8 +1310,8 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
-				label: { name: 'สมชาย0 ใจดี', phone }
+				qr_payload: issuedQr(primary._id),
+				label: { name: 'สมชาย0\nใจดี', phone }
 			}
 		]);
 		expect(
@@ -1442,8 +1460,8 @@ describe('checkInSelectedMembers kiosk walk-in reprint', () => {
 				evacuee_id: walkIn._id,
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: walkIn._id,
-				label: { name: 'สมชาย0 ใจดี', phone }
+				qr_payload: issuedQr(walkIn._id),
+				label: { name: 'สมชาย0\nใจดี', phone }
 			}
 		]);
 		expect(mockAdminFetch.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
@@ -1503,8 +1521,8 @@ describe('checkInSelectedMembers requiredPrimaryCitizenId', () => {
 				evacuee_id: primary._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id,
-				label: { name: 'สมชาย0 ใจดี', phone }
+				qr_payload: issuedQr(primary._id),
+				label: { name: 'สมชาย0\nใจดี', phone }
 			}
 		]);
 	});
@@ -1661,8 +1679,18 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 				.sort()
 		).toEqual([reservedHouseholdId, first, second].sort());
 		expect(results).toMatchObject([
-			{ evacuee_id: first, status: 'checked_in', stay_status: 'arriving', qr_payload: first },
-			{ evacuee_id: second, status: 'checked_in', stay_status: 'arriving', qr_payload: second }
+			{
+				evacuee_id: first,
+				status: 'checked_in',
+				stay_status: 'arriving',
+				qr_payload: issuedQr(first)
+			},
+			{
+				evacuee_id: second,
+				status: 'checked_in',
+				stay_status: 'arriving',
+				qr_payload: issuedQr(second)
+			}
 		]);
 	});
 
@@ -2453,6 +2481,35 @@ describe('kioskGateInputSchema qr', () => {
 		}
 	});
 
+	it('accepts `…@hex6` on the qr token only (CR-233 FR-EQR-6), any case', () => {
+		for (const token of [`evacuee:${ids[0]}@a1b2c3`, `evacuee:${ids[0]}@A1B2C3`]) {
+			expect(kioskGateInputSchema.safeParse({ source: 'qr', token }).success).toBe(true);
+		}
+		for (const token of [
+			`evacuee:${ids[0]}@a1b2c`,
+			`evacuee:${ids[0]}@a1b2c3d`,
+			`evacuee:${ids[0]}@g1b2c3`,
+			`evacuee:${ids[0]}@`,
+			`${ids[0]}@a1b2c3`
+		]) {
+			expect(kioskGateInputSchema.safeParse({ source: 'qr', token }).success).toBe(false);
+		}
+		// Doc-id fields never take a hash.
+		expect(
+			kioskGateInputSchema.safeParse({
+				source: 'phone',
+				phone,
+				primary_evacuee_id: `evacuee:${ids[0]}@a1b2c3`
+			}).success
+		).toBe(false);
+		expect(
+			kioskCheckInInputSchema.safeParse({
+				primary_evacuee_id: `evacuee:${ids[0]}@a1b2c3`,
+				evacuee_ids: [`evacuee:${ids[0]}`]
+			}).success
+		).toBe(false);
+	});
+
 	it('rejects garbage qr tokens', () => {
 		for (const token of [
 			'',
@@ -2522,5 +2579,179 @@ describe('kioskCheckInInputSchema thaid', () => {
 				thaid_session_id: sessionId
 			}).success
 		).toBe(false);
+	});
+});
+
+describe('lookupPreRegisteredEvacuee QR scan rule (CR-233)', () => {
+	const printsLog = [
+		{ printed_at: '2026-11-03T02:10:00.000Z', hash: '289170' },
+		{ printed_at: '2026-11-05T09:41:12.512Z', hash: '2d23a3' }
+	];
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCouchMocks();
+		evacuees = [evacuee(0, { last_name: 'ใจดี' })];
+	});
+	const scan = (token: string) => lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token });
+
+	it('accepts a legacy QR with no log (row 1) and reads the log of the right shelter', async () => {
+		expect(await scan(`evacuee:${ids[0]}`)).toMatchObject({ kind: 'household' });
+		expect(mockQrPrints).toHaveBeenCalledWith(shelterCode, `evacuee:${ids[0]}`);
+	});
+
+	it('accepts the newest hash (row 3), case-insensitively', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		expect(await scan(`evacuee:${ids[0].toLowerCase()}@2D23A3`)).toMatchObject({
+			kind: 'household'
+		});
+	});
+
+	it('expires a QR without @ once a log exists (row 2): no issued_at', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		expect(await scan(`evacuee:${ids[0]}`)).toEqual({
+			kind: 'qr_expired',
+			issued_at: null,
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		});
+	});
+
+	it('expires an older hash (row 4) with both dates and no household or name', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		const outcome = await scan(`evacuee:${ids[0]}@289170`);
+		expect(outcome).toEqual({
+			kind: 'qr_expired',
+			issued_at: '2026-11-03T02:10:00.000Z',
+			current_printed_at: '2026-11-05T09:41:12.512Z'
+		});
+		expect(JSON.stringify(outcome)).not.toContain('ใจดี');
+	});
+
+	it('rejects an unknown hash (row 5), with or without a log', async () => {
+		mockQrPrints.mockResolvedValue(printsLog);
+		expect(await scan(`evacuee:${ids[0]}@ffffff`)).toEqual({ kind: 'qr_invalid' });
+		mockQrPrints.mockResolvedValue([]);
+		expect(await scan(`evacuee:${ids[0]}@ffffff`)).toEqual({ kind: 'qr_invalid' });
+	});
+
+	it('rejects a hashed QR for an evacuee that does not exist', async () => {
+		expect(await scan(`evacuee:${ids[5]}@a1b2c3`)).toEqual({ kind: 'qr_invalid' });
+	});
+
+	it('does not read the log for a bare ULID registration ticket (FR-EQR-31)', async () => {
+		await scan('01ARZ3NDEKTSV4RRFFQ69G5REG');
+		expect(mockQrPrints).not.toHaveBeenCalled();
+	});
+
+	it('reports an unreachable log as lookup unavailable, never as valid', async () => {
+		mockQrPrints.mockRejectedValue(new Error('couch down'));
+		await expect(scan(`evacuee:${ids[0]}@a1b2c3`)).rejects.toBeInstanceOf(
+			KioskLookupUnavailableError
+		);
+	});
+});
+
+describe('checkInSelectedMembers QR issuing (CR-233)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCheckInCouchMocks();
+	});
+
+	it('issues one kiosk_checkin entry per checked-in member, printed_by the device', async () => {
+		const primary = evacuee(0);
+		const member = evacuee(1);
+		setHousehold([primary, member], primary);
+
+		const results = await checkInSelectedMembers(
+			shelterCode,
+			primary._id,
+			[primary._id, member._id],
+			{
+				deviceId: 'kiosk-sh001-01'
+			}
+		);
+
+		expect(mockIssueQr.mock.calls.map(([arg]) => arg)).toEqual([
+			{
+				shelter_code: shelterCode,
+				evacuee_id: primary._id,
+				source: 'kiosk_checkin',
+				printed_by: 'kiosk:kiosk-sh001-01'
+			},
+			{
+				shelter_code: shelterCode,
+				evacuee_id: member._id,
+				source: 'kiosk_checkin',
+				printed_by: 'kiosk:kiosk-sh001-01'
+			}
+		]);
+		for (const result of results) {
+			expect(result.qr_payload).toMatch(/@a1b2c3$/);
+			expect(result.qr_payload).not.toBe(result.evacuee_id);
+		}
+	});
+
+	it('does not issue for members that are not arriving', async () => {
+		const active = evacuee(0, { current_stay: { status: 'active' } });
+		setHousehold([active], active);
+		await checkInSelectedMembers(shelterCode, active._id, [active._id]);
+		expect(mockIssueQr).not.toHaveBeenCalled();
+	});
+
+	it('flags qr_issue_failed without a payload and keeps the check-in (FR-EQR-24)', async () => {
+		const primary = evacuee(0);
+		const member = evacuee(1);
+		setHousehold([primary, member], primary);
+		mockIssueQr.mockRejectedValueOnce(new Error('CONFLICT'));
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [
+			primary._id,
+			member._id
+		]);
+
+		expect(results[0]).toMatchObject({ status: 'checked_in', qr_issue_failed: true });
+		expect(results[0]).not.toHaveProperty('qr_payload');
+		expect(results[1]).toMatchObject({ status: 'checked_in', qr_payload: issuedQr(member._id) });
+		expect(results[1]).not.toHaveProperty('qr_issue_failed');
+		// The stay write was not undone.
+		expect(mockAdminFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true);
+	});
+
+	it('flags qr_issue_failed for an already-arriving member too', async () => {
+		const primary = evacuee(0, { current_stay: { status: 'arriving' } });
+		setHousehold([primary], primary);
+		mockIssueQr.mockRejectedValueOnce(new Error('down'));
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
+		expect(results[0]).toMatchObject({ status: 'already_checked_in', qr_issue_failed: true });
+		expect(results[0]).not.toHaveProperty('qr_payload');
+	});
+});
+
+describe('toLabelIdentity', () => {
+	const doc = { first_name: 'สมชาย', last_name: 'ใจดี', phone: '0812345678' };
+
+	it('carries the emergency contact phone for the label, without spaces or dashes', () => {
+		expect(
+			toLabelIdentity({
+				...doc,
+				emergency_contact: { name: 'สมหญิง', phone: ' 089-123 4567 ', relation: 'ภรรยา' }
+			})
+		).toEqual({ name: 'สมชาย\nใจดี', phone: '0812345678', emergency_phone: '0891234567' });
+	});
+
+	it('puts the first and last name on separate lines, like the staff Person QR label', () => {
+		expect(toLabelIdentity({ ...doc, last_name: ' ใจดี ' }).name).toBe('สมชาย\nใจดี');
+		expect(toLabelIdentity({ ...doc, last_name: '  ' }).name).toBe('สมชาย');
+		expect(toLabelIdentity({ ...doc, first_name: ' ', last_name: '' }).name).toBe('');
+	});
+
+	it('leaves the emergency phone out when there is none, so the label leaves the row blank', () => {
+		expect(toLabelIdentity(doc)).toEqual({ name: 'สมชาย\nใจดี', phone: '0812345678' });
+		expect(
+			toLabelIdentity({ ...doc, emergency_contact: { name: 'สมหญิง', phone: '  ', relation: '' } })
+		).toEqual({ name: 'สมชาย\nใจดี', phone: '0812345678' });
 	});
 });

@@ -11,6 +11,8 @@
 		 * line staff fill in by hand. Omit for no zone row.
 		 */
 		zone?: { label: string; value: string | null };
+		/** Row under the zone, e.g. the emergency contact phone; omit for none (no blank row). */
+		emergency?: { label: string; value: string | null } | null;
 		/** Small line at the bottom of the text column, e.g. the site address. */
 		footer?: string;
 		/** Large bold badge at the bottom of the text column, above the footer (e.g. เจ้าหน้าที่); omit for none. */
@@ -21,6 +23,8 @@
 		checklist?: readonly string[];
 		/** Stations already passed: this many boxes are ticked, top first. */
 		checkedCount?: number;
+		/** Small centred lines under the QR (e.g. "for use inside the shelter"); omit for none. */
+		qrCaption?: readonly string[];
 		class?: string;
 	};
 
@@ -29,11 +33,13 @@
 		alt,
 		name,
 		zone,
+		emergency,
 		badge,
 		footer,
 		lines = [],
 		checklist = [],
 		checkedCount = 0,
+		qrCaption = [],
 		class: className
 	}: Props = $props();
 
@@ -46,7 +52,11 @@
 
 <div class={cn('flex h-full w-full flex-row text-black', className)}>
 	<div class="flex min-w-0 flex-1 flex-col gap-[1mm]">
-		<p class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere]">{name}</p>
+		<p
+			class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere] whitespace-pre-line"
+		>
+			{name}
+		</p>
 		{#each lines as line (line)}
 			<p class="text-[10pt] leading-[1.3] font-medium [overflow-wrap:anywhere]">{line}</p>
 		{/each}
@@ -60,13 +70,19 @@
 				{/if}
 			</p>
 		{/if}
+		{#if emergency?.value}
+			<p class="flex items-baseline gap-[1.5mm] text-[9pt] leading-[1.3] font-medium">
+				<span class="shrink-0">{emergency.label}</span>
+				<span class="min-w-0 truncate">{emergency.value}</span>
+			</p>
+		{/if}
 		{#if checklist.length > 0}
 			<div
-				class="label-checklist mt-auto flex flex-col items-start gap-[1.5mm] text-[10pt] leading-[1.3] font-medium"
+				class="label-checklist mt-auto flex flex-col items-start gap-[1.2mm] text-[9pt] leading-[1.3] font-medium"
 			>
 				{#each checklist as item, index (item)}
-					<span class="inline-flex items-center gap-[1.5mm]">
-						<span class="size-[3.5mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true">
+					<span class="inline-flex items-center gap-[1.2mm]">
+						<span class="size-[3mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true">
 							{#if index < checkedCount}
 								<svg viewBox="0 0 10 10" class="block size-full">
 									<polyline
@@ -100,10 +116,24 @@
 	<div
 		class="ml-(--label-gap) flex shrink-0 items-center border-l-[0.25mm] border-black pl-(--label-gap)"
 	>
-		{#if src}
-			<img {src} {alt} class="block size-(--qr-size) [image-rendering:pixelated]" />
-		{:else}
-			<div class="grid size-(--qr-size) place-items-center border border-black text-[8pt]">QR</div>
-		{/if}
+		<div class="relative">
+			{#if src}
+				<img {src} {alt} class="block size-(--qr-size) [image-rendering:pixelated]" />
+			{:else}
+				<div class="grid size-(--qr-size) place-items-center border border-black text-[8pt]">
+					QR
+				</div>
+			{/if}
+			{#if qrCaption.length > 0}
+				<!-- Under the QR without moving it off centre; 2 mm keeps the QR's quiet zone. -->
+				<div
+					class="label-qr-caption absolute top-full left-1/2 mt-[2mm] -translate-x-1/2 text-center text-[7pt] leading-[1.3] font-medium whitespace-nowrap"
+				>
+					{#each qrCaption as line (line)}
+						<p>{line}</p>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
 </div>

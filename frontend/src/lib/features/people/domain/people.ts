@@ -13,6 +13,7 @@ import {
 import { ulid } from '$lib/db/ulid';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
+import type { LanguageCode } from '$lib/utils/language';
 // Deep import on purpose: the `$lib/features/shared` barrel re-exports `.svelte` files, which
 // plain `tsx` cannot load — and `scripts/migrate-closed-shelter-checkout.ts` imports this domain.
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared/domain/audit';
@@ -156,6 +157,17 @@ export function genderLabelTh(gender: Gender | null | undefined): string {
 	return 'ไม่ระบุ';
 }
 
+/** `genderLabelTh` with an English mirror — same `null` / legacy `'other'` → "unspecified" rule. */
+export function genderLabel(
+	gender: Gender | null | undefined,
+	language: LanguageCode = 'th'
+): string {
+	if (language === 'th') return genderLabelTh(gender);
+	return peopleLabelsByLanguage.en.gender[
+		gender === 'male' || gender === 'female' ? gender : 'unspecified'
+	];
+}
+
 export const religionSchema = z.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown']);
 export type Religion = z.infer<typeof religionSchema>;
 
@@ -248,10 +260,20 @@ export const SHELTER_CLOSED_REASON = 'shelter_closed';
 /** Display copy for the `shelter_closed` reason (CR-219 FR-21). */
 export const SHELTER_CLOSED_REASON_LABEL = 'ศูนย์ปิด';
 
-/** Display a movement reason: the shelter-close code maps to its Thai label, free text passes through. */
-export function movementReasonLabel(reason: string | null | undefined): string {
+/** English mirror of `SHELTER_CLOSED_REASON_LABEL`. */
+export const SHELTER_CLOSED_REASON_LABEL_EN = 'Shelter closed';
+
+/**
+ * Display a movement reason: the shelter-close code maps to its label (Thai by default), free text
+ * passes through as entered.
+ */
+export function movementReasonLabel(
+	reason: string | null | undefined,
+	language: LanguageCode = 'th'
+): string {
 	if (!reason) return '';
-	return reason === SHELTER_CLOSED_REASON ? SHELTER_CLOSED_REASON_LABEL : reason;
+	if (reason !== SHELTER_CLOSED_REASON) return reason;
+	return language === 'en' ? SHELTER_CLOSED_REASON_LABEL_EN : SHELTER_CLOSED_REASON_LABEL;
 }
 
 export const checkoutDestinationSchema = z.object({
@@ -453,8 +475,62 @@ const PET_SPECIES_LABELS: Record<PetGroup['species'], string> = {
 	other: 'อื่นๆ'
 };
 
-export function petSpeciesLabel(species: PetGroup['species']): string {
-	return PET_SPECIES_LABELS[species];
+export function petSpeciesLabel(
+	species: PetGroup['species'],
+	language: LanguageCode = 'th'
+): string {
+	return peopleLabelsByLanguage[language].petSpecies[species];
+}
+
+/** Display label maps used by staff stations (registration, screening, zoning). */
+export type PeopleLabelSet = {
+	/** `unspecified` covers `null` and the legacy `'other'` value. */
+	gender: Record<Gender | 'unspecified', string>;
+	stayStatus: Record<StayStatus, string>;
+	petSpecies: Record<PetGroup['species'], string>;
+	shelterClosedReason: string;
+};
+
+/**
+ * English mirror of the Thai label maps in this file, for staff surfaces with a language toggle.
+ * The Thai maps stay the source of truth (imports and back-office match on them) — never reword
+ * them to fit a translation. Typed with the same key types so TS forces full coverage.
+ */
+const peopleLabelsEn: PeopleLabelSet = {
+	gender: { male: 'Male', female: 'Female', other: 'Not specified', unspecified: 'Not specified' },
+	stayStatus: {
+		pre_registered: 'Pre-registered',
+		kiosk_registered: 'Registered at kiosk (awaiting confirmation)',
+		arriving: 'Awaiting check-in',
+		active: 'Checked in',
+		room_confirmed: 'Arrival at zone confirmed',
+		temporary_leave: 'On temporary leave',
+		transferred: 'Transferred to another shelter',
+		checked_out: 'Checked out',
+		deceased: 'Deceased',
+		cancelled: 'Cancelled'
+	},
+	petSpecies: { dog: 'Dog', cat: 'Cat', other: 'Other' },
+	shelterClosedReason: SHELTER_CLOSED_REASON_LABEL_EN
+};
+
+export const peopleLabelsByLanguage: Record<LanguageCode, PeopleLabelSet> = {
+	th: {
+		gender: {
+			male: genderLabelTh('male'),
+			female: genderLabelTh('female'),
+			other: genderLabelTh('other'),
+			unspecified: genderLabelTh(null)
+		},
+		stayStatus: STATUS_LABELS,
+		petSpecies: PET_SPECIES_LABELS,
+		shelterClosedReason: SHELTER_CLOSED_REASON_LABEL
+	},
+	en: peopleLabelsEn
+};
+
+export function peopleLabels(language: LanguageCode = 'th'): PeopleLabelSet {
+	return peopleLabelsByLanguage[language];
 }
 
 /**
@@ -2120,11 +2196,14 @@ export function assertMovementAllowed(
  * concurrent write surfaces as a real CouchDB 409 (`ConflictError`) instead
  * of being silently overwritten.
  */
-export function movementConflictMessage(err: unknown): string {
+export function movementConflictMessage(err: unknown, language: LanguageCode = 'th'): string {
+	const en = language === 'en';
 	if (err instanceof ConflictError) {
-		return 'ข้อมูลถูกแก้ไขจากที่อื่นแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง';
+		return en
+			? 'This record was changed elsewhere. Reload and try again.'
+			: 'ข้อมูลถูกแก้ไขจากที่อื่นแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง';
 	}
-	return err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ';
+	return err instanceof Error ? err.message : en ? 'Could not save' : 'บันทึกไม่สำเร็จ';
 }
 
 /** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
@@ -2359,15 +2438,20 @@ export function buildShelterCloseCancelAudit(
 
 // ---------------------------------------------------------------- display helpers
 
+/** First/last name, trimmed; an empty/whitespace last_name (mononym) is omitted. */
+export function personNameParts(person: {
+	first_name: string;
+	last_name?: string | null;
+}): string[] {
+	return [person.first_name, person.last_name ?? ''].map((part) => part.trim()).filter(Boolean);
+}
+
 /** Display name; empty/whitespace last_name (mononym) is omitted — no trailing space. */
 export function formatPersonName(person: {
 	first_name: string;
 	last_name?: string | null;
 }): string {
-	return [person.first_name, person.last_name ?? '']
-		.map((part) => part.trim())
-		.filter(Boolean)
-		.join(' ');
+	return personNameParts(person).join(' ');
 }
 
 export function maskNationalId(id: string | null | undefined): string {
@@ -2659,11 +2743,129 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 	}
 ];
 
-const EWAR_SYMPTOM_LABELS: ReadonlyMap<string, string> = new Map(
-	EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))
-);
+/**
+ * English mirror of `EWAR_SYMPTOM_GROUPS`: same group order, symptom ids and emoji; `sublabel`
+ * keeps only the clinical term (the Thai groups prefix some with a Thai gloss).
+ */
+export const EWAR_SYMPTOM_GROUPS_EN: EwarSymptomGroup[] = [
+	{
+		title: 'General warning signs and other emergencies',
+		symptoms: [
+			{ id: 'high_fever', emoji: '🔥', label: 'High fever above 38.5 °C' },
+			{ id: 'trauma', emoji: '💥', label: 'Injury', sublabel: 'Trauma' },
+			{
+				id: 'chemical_poisoning',
+				emoji: '☠️',
+				label: 'Chemical / toxin exposure',
+				sublabel: 'Chemical poisoning'
+			}
+		]
+	},
+	{
+		title: 'Respiratory symptoms',
+		symptoms: [
+			{
+				id: 'acute_respiratory',
+				emoji: '😷',
+				label: 'Acute respiratory infection (cough, sore throat, difficulty breathing)',
+				sublabel: 'Acute respiratory infection'
+			}
+		]
+	},
+	{
+		title: 'Gastrointestinal symptoms',
+		symptoms: [
+			{
+				id: 'acute_watery_diarrhea',
+				emoji: '💧',
+				label: 'Watery diarrhoea (suspected cholera)',
+				sublabel: 'Acute watery diarrhoea / Cholera'
+			},
+			{
+				id: 'acute_bloody_diarrhea',
+				emoji: '🩸',
+				label: 'Bloody stools (suspected dysentery)',
+				sublabel: 'Acute bloody diarrhoea / Shigellosis'
+			},
+			{ id: 'typhoid', emoji: '🌡️', label: 'Typhoid fever', sublabel: 'Typhoid' }
+		]
+	},
+	{
+		title: 'Vector-borne diseases',
+		symptoms: [
+			{ id: 'dengue', emoji: '🦟', label: 'Dengue fever', sublabel: 'Dengue' },
+			{ id: 'malaria', emoji: '🤒', label: 'Malaria', sublabel: 'Malaria' }
+		]
+	},
+	{
+		title: 'Severe infectious diseases and fever with rash',
+		symptoms: [
+			{ id: 'measles', emoji: '🔴', label: 'Measles (fever with rash)', sublabel: 'Measles' },
+			{
+				id: 'pertussis',
+				emoji: '😮‍💨',
+				label: 'Whooping cough (coughing fits)',
+				sublabel: 'Pertussis'
+			},
+			{
+				id: 'meningitis',
+				emoji: '🧠',
+				label: 'Meningitis (fever, headache, stiff neck)',
+				sublabel: 'Meningitis'
+			},
+			{ id: 'diphtheria', emoji: '🗣️', label: 'Diphtheria', sublabel: 'Diphtheria' }
+		]
+	},
+	{
+		title: 'Liver inflammation symptoms',
+		symptoms: [
+			{
+				id: 'acute_jaundice_syndrome',
+				emoji: '🟡',
+				label: 'Sudden yellowing of the skin and eyes',
+				sublabel: 'Acute jaundice syndrome'
+			},
+			{
+				id: 'Hepatitis A or E',
+				emoji: '🦠',
+				label: 'Viral hepatitis A or E',
+				sublabel: 'Hepatitis A or E'
+			}
+		]
+	},
+	{
+		title: 'Neurological and other symptoms',
+		symptoms: [
+			{
+				id: 'acute_haemorrhagic_fever_syndrome',
+				emoji: '🩸',
+				label: 'Fever with unusual bleeding',
+				sublabel: 'Acute haemorrhagic fever syndrome'
+			},
+			{ id: 'tetanus', emoji: '🩹', label: 'Tetanus', sublabel: 'Tetanus' },
+			{
+				id: 'acute_flaccid_paralysis',
+				emoji: '🦿',
+				label: 'Sudden limb weakness (suspected polio)',
+				sublabel: 'Acute flaccid paralysis / Polio'
+			}
+		]
+	}
+];
 
-/** Plain-Thai label for a persisted `Screening.symptoms` id; unknown ids are shown as-is. */
-export function ewarSymptomLabel(id: string): string {
-	return EWAR_SYMPTOM_LABELS.get(id) ?? id;
+export const ewarSymptomGroupsByLanguage: Record<LanguageCode, EwarSymptomGroup[]> = {
+	th: EWAR_SYMPTOM_GROUPS,
+	en: EWAR_SYMPTOM_GROUPS_EN
+};
+
+const EWAR_SYMPTOM_LABELS_BY_LANGUAGE: Record<LanguageCode, ReadonlyMap<string, string>> = {
+	th: new Map(EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))),
+	en: new Map(
+		EWAR_SYMPTOM_GROUPS_EN.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))
+	)
+};
+
+/** Plain-language label for a persisted `Screening.symptoms` id (Thai by default); unknown ids are shown as-is. */
+export function ewarSymptomLabel(id: string, language: LanguageCode = 'th'): string {
+	return EWAR_SYMPTOM_LABELS_BY_LANGUAGE[language].get(id) ?? id;
 }

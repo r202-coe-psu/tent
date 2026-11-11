@@ -3,7 +3,7 @@ id: CR-232
 title: Export Excel ในแท็บ dashboard ผู้อพยพ — รายชื่อชาวต่างชาติสำหรับกงสุล (PII) + ตัวเลข dashboard
 status: approved
 date: 2026-11-06
-updated: 2026-11-06
+updated: 2026-11-10
 requested_by: Dev Team B (epic #1050 · issue #1206, #1207)
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -41,7 +41,7 @@ affects:
 | ID | Requirement |
 | --- | --- |
 | FR-1 | ปุ่ม export ทั้งสองอยู่ในแท็บ dashboard ของ `/back-office/evacuee-management` และใช้ศูนย์ที่เลือกอยู่ในหน้านั้น |
-| FR-2 | สิทธิ์ใช้ได้เฉพาะ SA และ shelter_manager — ตรวจด้วย `canAccessManagerPages(roles, shelterCode)` (= `isSystemAdmin(roles) \|\| isShelterManager(roles, shelterCode)`); **ไม่อนุญาต `registration_staff`** และห้ามใช้ `requireEvacueeRegistration` / `canAccessEvacueeRegistration` เป็นเงื่อนไขของปุ่ม — ไม่เพิ่ม role; shelter_manager export ได้เฉพาะศูนย์ตนเอง, SA เลือกศูนย์ใดก็ได้ |
+| FR-2 | สิทธิ์ใช้ได้เฉพาะ SA และ shelter_manager — ตรวจด้วย `canAccessManagerPages(roles, shelterCode)` (= `isSystemAdmin(roles) \|\| isShelterManager(roles, shelterCode)`); **ไม่อนุญาต `registration_staff`** และห้ามใช้ `requireEvacueeRegistration` / `canAccessEvacueeRegistration` เป็นเงื่อนไขของปุ่ม — ไม่เพิ่ม role; shelter_manager export ได้เฉพาะศูนย์ตนเอง, SA เลือกศูนย์ใดก็ได้ — **ขอบเขตการบังคับ (owner ยืนยัน 2026-11-10, PR #1233 review B2):** บังคับเฉพาะที่ UI (ปุ่ม export); BFF `/api/back-office/shelter/[code]/dashboard/*` คงใช้ `requireShelterScopeOrSA` เพราะ `registration_staff` ต้องเปิดดู dashboard tab ได้ จึงไม่บังคับ SA/SM ที่ BFF |
 | FR-3 | ไฟล์สร้างใน browser ด้วย `exceljs` จากข้อมูลที่อ่านผ่าน session ของผู้ใช้; ไม่มี endpoint ใหม่, ไม่ใช้ `export_job`, ไม่เพิ่ม Mango index / view |
 | FR-4 | export สำเร็จหรือล้มเหลวแจ้งด้วย toast เท่านั้น (ไม่ใช้ `console.log`) |
 | FR-5 | เวลาในชื่อไฟล์และหัว sheet ใช้ +07 (`Asia/Bangkok`) |
@@ -65,7 +65,7 @@ affects:
 | --- | --- |
 | FR-20 | รวมเฉพาะ evacuee ที่ `country` ตรงกับประเทศที่เลือก (เทียบหลัง trim + uppercase แบบเดียวกับ view `demographics_by_country`) **และ** `current_stay.status` ∈ {`arriving`, `active`, `room_confirmed`, `temporary_leave`, `transferred`, `checked_out`, `deceased`} |
 | FR-21 | ไม่รวม `pre_registered`, `kiosk_registered`, `cancelled` และ doc ที่ `anonymized = true` |
-| FR-22 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` **ยังรวมในไฟล์** (การไม่แสดงในระบบค้นหาญาติคนละเรื่องกับการแจ้งกงสุล) — **รอ DPO ยืนยัน (O-1)** |
+| FR-22 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` **ยังรวมในไฟล์** (การไม่แสดงในระบบค้นหาญาติคนละเรื่องกับการแจ้งกงสุล) — **DPO ยืนยันแล้ว (O-1: approved)** |
 | FR-23 | อ่านด้วย `peopleRepository(shelterCode).listEvacuees()` ผ่าน barrel `$lib/features/people` (ไม่เรียก `allByType('evacuee')` ตรง) แล้วกรองฝั่ง client แบบเดียวกับหน้ารายชื่อ |
 
 **คอลัมน์** — ใช้มาตรฐานเดียวกับ Excel Import Template (`frontend/src/lib/features/people-import/domain/columns.ts`): หัวคอลัมน์ใช้ข้อความ `H.*` เดิม และค่า enum ใช้ label สองภาษาจาก `CARD_TYPE_CHOICES` / `GENDER_CHOICES` / `RELIGION_CHOICES` (เช่น "หนังสือเดินทาง (Passport)", "ชาย (Male)") — ไม่ตั้ง label ใหม่
@@ -91,7 +91,7 @@ affects:
 | --- | --- |
 | FR-50 | ปุ่ม "Export Excel" ที่หัวแท็บ dashboard ใช้ศูนย์และช่วงวันที่เลือกอยู่บนจอ; ถ้า query ใดยังโหลดไม่เสร็จหรือ error ปุ่มกดไม่ได้ |
 | FR-51 | ชื่อไฟล์ `dashboard-{shelter_code}-{YYYYMMDD-HHmm}.xlsx`; ภาษาไทย เป็นตัวเลขอย่างเดียว ไม่มีกราฟ |
-| FR-52 | ไฟล์มี 1 sheet ต่อ 1 ส่วน รวม 6 sheet ชื่อตายตัวตามลำดับ: `KPI` (`dashboard/occupancy`) · `ลงทะเบียนรายวัน` (`dashboard/registration`, ช่วงวันเดียวกับบนจอ) · `ช่วงอายุ` (`dashboard/demographics` `age_groups`) · `สัญชาติ` (`dashboard/demographics` `countries`) · `เวลาบริการต่อจุด` และ `อันดับเจ้าหน้าที่` (`dashboard/station-times`) — S3 (`buildDashboardSheets`) และ S4 (`writeWorkbook`) assert ชื่อเหล่านี้ |
+| FR-52 | ไฟล์มี 1 sheet ต่อ 1 ส่วน รวม 5 sheet ชื่อตายตัวตามลำดับ: `KPI` (`dashboard/occupancy`) · `ลงทะเบียนรายวัน` (`dashboard/registration`, ช่วงวันเดียวกับบนจอ) · `ช่วงอายุ` (`dashboard/demographics` `age_groups`) · `สัญชาติ` (`dashboard/demographics` `countries`) · `เวลาบริการต่อจุด` (`dashboard/station-times`) — **ไม่มี sheet `อันดับเจ้าหน้าที่`** (2026-11-08, review PR #1233 W2: ชีตนั้นแสดงชื่อเจ้าหน้าที่รายบุคคล ขัดกับหัวข้อ C "ไม่มี PII รายบุคคล"; ปิดไว้ก่อน เปิดกลับได้เมื่อ owner ตัดสินเรื่องการเปิดเผยชื่อ) — S3 (`buildDashboardSheets`) และ S4 (`writeWorkbook`) assert ชื่อเหล่านี้ |
 | FR-53 | ทุก sheet มีหัวบอกชื่อและรหัสศูนย์, ช่วงวัน, เวลาที่ export (+07) |
 | FR-54 | ไม่มีข้อมูลรายคน → **ไม่เขียน `audit`** |
 
@@ -123,7 +123,7 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist; `audit` d
 
 | ID | ประเด็น | ผู้ตัดสิน | สถานะ |
 | --- | --- | --- | --- |
-| O-1 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` ต้องอยู่ในไฟล์กงสุลหรือไม่ (FR-22 ตั้งเป็น "รวม") | DPO | owner เลือก Option A (รวม) ไปก่อน — อาจเปลี่ยนตามมติ DPO; ถ้าผลเป็น "ไม่รวม" ให้แก้ FR-22 + S1 ก่อน merge |
+| O-1 | คนที่ `privacy.search_excluded = true` หรือ `consent.mode = basic` ต้องอยู่ในไฟล์กงสุลหรือไม่ (FR-22 ตั้งเป็น "รวม") | DPO | **approved** โดย Jackyzaz (2026-11-08) — ยืนยัน Option A (รวม) ตาม FR-22; ไม่ต้องแก้โค้ด |
 
 ## Decision log
 
@@ -132,3 +132,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist; `audit` d
 - 2026-11-06 — owner: O-1 เลือก Option A (รวมคน `search_excluded` / consent `basic`) ไปก่อน รอ DPO
 - 2026-11-06 — owner: FR-30 ใช้มาตรฐานเดียวกับ Excel Import Template (`people-import/domain/columns.ts`)
 - 2026-11-06 — approved by Soravit Sukkarn (Team Lead) (epic #1050, issue #1206, #1207, PR #1215) — รันหมายเลข CR-232 (หมวด 02-people)
+- 2026-11-08 — O-1 approved โดย Jackyzaz: ยืนยัน Option A (รวมคน `search_excluded` / consent `basic`) ตามที่แจ้งใน PR #1232 — ปิด warning W1
