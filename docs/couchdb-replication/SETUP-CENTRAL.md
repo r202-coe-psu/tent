@@ -1,7 +1,7 @@
 # Setup Central — ฝั่งที่ edge มา sync ด้วย
 
 คู่มือนี้ใช้กับ **เครื่อง central เท่านั้น** (เครื่องที่รัน CouchDB หลักของระบบ) ทำตามลำดับ และตรวจให้ผ่านก่อนไปขั้นถัดไป
-ฝั่ง edge อยู่ที่ [SETUP-EDGE.md](SETUP-EDGE.md) (ต้นไฟล์มี runbook สรุป "ติดตั้ง edge ให้ศูนย์ X ตั้งแต่ต้นจนใช้งานได้" ทั้งฝั่ง central และ edge) · หลักการและเหตุผลของการออกแบบอยู่ที่ [README.md §2](README.md)
+ฝั่ง edge อยู่ที่ [SETUP-EDGE.md](SETUP-EDGE.md) (ขั้นติดตั้งบนเครื่อง edge) · หลักการและเหตุผลของการออกแบบอยู่ที่ [README.md §2](README.md)
 
 > **หลักการข้อเดียวที่ต้องจำ:** edge เป็นฝ่ายเปิด connection หา central เสมอ (edge อยู่หลัง NAT ของศูนย์)
 > job replication ของ edge อยู่ที่ edge ทั้งหมด — หน้าที่ของ central มี 4 อย่าง:
@@ -279,6 +279,24 @@ done
 ```
 
 `--status` แสดง checkpoint ของ service เทียบ `update_seq` ของ `_users`, สถานะ backfill ของศูนย์, และ "edge ดึงข้อมูลล่าสุดเมื่อ" · **exit ≠ 0** เมื่อมี `last_error` หรือ service ตามหลัง `_users` นานเกิน 5 นาที → ดู `docker compose logs edge-users-copy` และตาราง "แก้ปัญหา"
+
+### ล้าง user ค้างใน `edge_users_<code>` — `scripts/edge-users-clean.sh`
+
+**ทำอะไร:** ลบ doc ใน `edge_users_<code>` ที่ user ถูก **hard delete** จาก `_users` ของ central ไปแล้ว (doc และ hash รหัสผ่านของ user จะค้างอยู่ในทุก `edge_users_*` เพราะ `edge-users-copy` ไม่ลบตาม) ·
+รันที่ central ด้วยรหัส central admin (`COUCHDB_USER` / `COUCHDB_PASSWORD` จาก env หรือ `.env` ที่ root ของ repo)
+
+```bash
+scripts/edge-users-clean.sh                 # dry-run ทุกศูนย์ — พิมพ์ "<db> <id>" ของ orphan แต่ละตัว ยังไม่ลบ
+scripts/edge-users-clean.sh SH001 SH002     # dry-run เฉพาะบางศูนย์
+scripts/edge-users-clean.sh SH001 --apply   # ลบจริง
+```
+
+**เพื่ออะไร:** แอปใช้ soft delete (doc ยังอยู่ ตั้ง `deleted_at`) จึงไม่มี orphan จากการใช้งานปกติ — orphan เกิดเฉพาะตอนมีคนลบ user ตรงใน CouchDB (Fauxton / admin API) ·
+edge ได้รับการลบในรอบ pull ถัดไปของ `users_<code>_pull` · script ไม่แตะ `_design/*` และเช็กซ้ำกับ `_users` ของ central ก่อนลบทุกตัว (user ที่เพิ่งสร้างระหว่างรันจะไม่ถูกลบ) ·
+ถ้า `_users` ของ central ว่างทั้งหมด script จะปฏิเสธ (ไม่งั้นทุก doc เป็น orphan) เว้นแต่ใส่ `--allow-empty`
+
+**ตรวจว่าผ่าน:** ดู dry-run ก่อน (บรรทัดท้าย `orphans found: N ... (dry-run, nothing deleted; use --apply to delete)`) → ตรวจรายการ → รันด้วย `--apply` ·
+รันซ้ำอีกครั้งต้องได้ `orphans found: 0` · exit ≠ 0 = มีบางตัวลบไม่สำเร็จ ดูข้อความ `FAIL` ที่ stderr
 
 ---
 

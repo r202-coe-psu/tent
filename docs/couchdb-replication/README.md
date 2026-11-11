@@ -380,7 +380,7 @@ replication user, นาฬิกาของแต่ละเครื่อ�
 | server      | ขั้นตอน                                                                                                                                | ไฟล์                                                                                                |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | A — central | SETUP-CENTRAL ขั้น 1–5 (ข้อมูลศูนย์, `scripts/central-repl-user.sh <CODE>` สร้าง credential ต่อศูนย์, `location /sync/` ใน host nginx) | host nginx (นอก repo) · [`nginx/nginx.conf`](../../nginx/nginx.conf) (stack ที่มี nginx ใน compose) |
-| B — edge    | SETUP-EDGE ขั้น 1–6 (config, `.env`, `up`, ตรวจ sync)                                                                                  | [`docker-compose.edge.yml`](../../docker-compose.edge.yml) + ไฟล์ที่เกี่ยวข้อง                      |
+| B — edge    | SETUP-EDGE ขั้น 1–8 (ต่อ central, config, `.env`, `up`, ตรวจ sync + checklist)                                                         | [`docker-compose.edge.yml`](../../docker-compose.edge.yml) + ไฟล์ที่เกี่ยวข้อง                      |
 
 จากนั้นรันคำสั่งทดสอบทั้งหมดจาก shell ของ **server B**:
 
