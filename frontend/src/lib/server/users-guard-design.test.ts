@@ -39,7 +39,8 @@ const stored = (): Doc => ({
 	edge_shelters: ['SH001'],
 	display_name: 'สมชาย',
 	derived_key: 'k',
-	salt: 's'
+	salt: 's',
+	consent: { agreed: true, agreed_at: '2026-10-28T01:30:00.000Z', version: '1.0' }
 });
 
 const write = (over: Doc, userCtx = SELF, old: Doc | null = stored()) =>
@@ -59,7 +60,12 @@ describe('_users/_design/tent_guard validate_doc_update (FR-11, AC-7)', () => {
 		['adding edge_shelters', { edge_shelters: ['SH001', 'SH002'] }],
 		['changing edge_shelters', { edge_shelters: ['SH002'] }],
 		['setting deleted_at', { deleted_at: '2026-11-01T00:00:00.000Z' }],
-		['setting deleted_by', { deleted_by: 'vol@example.com' }]
+		['setting deleted_by', { deleted_by: 'vol@example.com' }],
+		[
+			'setting consent',
+			{ consent: { agreed: true, agreed_at: '2026-11-09T00:00:00.000Z', version: '1.0' } }
+		],
+		['removing consent', { consent: undefined }]
 	])('refuses a user %s on their own doc', (_label, over) => {
 		expect(() => write(over)).toThrow();
 		try {
