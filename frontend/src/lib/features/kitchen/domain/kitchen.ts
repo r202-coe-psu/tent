@@ -420,7 +420,9 @@ export interface MealServiceReceipt extends BaseDoc {
 }
 
 /** Reads a receipt's outcome, treating a pre-CR-145 doc (no `outcome` field) as 'confirmed'. */
-export function mealServiceReceiptOutcome(receipt: MealServiceReceipt): MealServiceReceiptOutcome {
+export function mealServiceReceiptOutcome(
+	receipt: Pick<MealServiceReceipt, 'outcome'>
+): MealServiceReceiptOutcome {
 	return receipt.outcome ?? 'confirmed';
 }
 
