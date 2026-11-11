@@ -22,6 +22,8 @@
 	import { toast } from 'svelte-sonner';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Check from '@lucide/svelte/icons/check';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import ItemSelector from './recipe/item-selector.svelte';
 
 	let {
@@ -214,7 +216,7 @@
 						variant="outline"
 						size="sm"
 						onclick={addIngredient}
-						class="min-h-9 gap-1.5 rounded-xl border-slate-200 bg-white font-bold text-[#002f6c] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-400"
+						class="min-h-9 gap-1.5 rounded-xl border-slate-200 bg-white font-bold text-[#0A2647] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-400"
 					>
 						<Plus class="h-3.5 w-3.5" />
 						เพิ่มวัตถุดิบ
@@ -294,7 +296,7 @@
 						type="button"
 						variant="outline"
 						onclick={addIngredient}
-						class="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-white text-sm font-bold text-[#002f6c] hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-blue-400 dark:hover:bg-zinc-900"
+						class="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-white text-sm font-bold text-[#0A2647] hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-blue-400 dark:hover:bg-zinc-900"
 					>
 						<Plus class="h-4 w-4" />
 						เพิ่มวัตถุดิบ
@@ -378,12 +380,14 @@
 				</section>
 			{/if}
 
-			<div class="flex items-center gap-3 pt-2">
+			<div
+				class="sticky bottom-0 -mx-4 mt-8 -mb-4 flex flex-col-reverse gap-2.5 border-t border-slate-200/80 bg-white/95 px-6 py-4 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:justify-end sm:gap-3 dark:border-zinc-800 dark:bg-zinc-950/95"
+			>
 				<Button
 					variant="outline"
 					type="button"
 					onclick={onsuccess}
-					class="rounded-xl border border-slate-200 px-6 py-6 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900/50"
+					class="min-h-11 rounded-xl border-slate-300 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:w-auto dark:border-zinc-700 dark:text-zinc-300"
 				>
 					ยกเลิกและย้อนกลับ
 				</Button>
@@ -391,14 +395,14 @@
 				<Button
 					type="submit"
 					disabled={$submitting || isPending}
-					class="flex items-center gap-1.5 rounded-xl bg-[#002f6c] px-7 py-6 text-sm font-bold text-white shadow-md shadow-[#002f6c]/10 hover:bg-[#00204d] dark:shadow-none"
+					class="min-h-11 gap-2 rounded-xl bg-[#0A2647] px-6 text-sm font-semibold text-white shadow-xs hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
 				>
 					{#if $submitting || isPending}
+						<Loader2 class="h-4 w-4 animate-spin" />
 						กำลังบันทึกข้อมูล...
-					{:else if isEdit}
-						บันทึกการแก้ไข
 					{:else}
-						+ เพิ่ม
+						<Check class="h-4 w-4" />
+						{isEdit ? 'บันทึกการแก้ไข' : 'บันทึกสูตรอาหาร'}
 					{/if}
 				</Button>
 			</div>
