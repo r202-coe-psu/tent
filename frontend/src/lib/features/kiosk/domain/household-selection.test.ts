@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+	canPrintQr,
 	initialReprintSelection,
 	initialSelection,
 	isAllSelected,
+	isQrIssueFailed,
 	selectableIds,
 	toExistingReportResults,
 	toggleAllSelection
@@ -49,9 +51,34 @@ describe('toExistingReportResults', () => {
 				evacuee_id: 'evacuee:arriving',
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: 'evacuee:arriving'
+				reprintable: true
 			}
 		]);
+	});
+
+	it('never carries a qr_payload: the bare evacuee id is not a QR any more (CR-233)', () => {
+		for (const result of toExistingReportResults(members)) {
+			expect(result).not.toHaveProperty('qr_payload');
+		}
+	});
+});
+
+describe('canPrintQr / isQrIssueFailed', () => {
+	it('prints a member with a payload or a reissuable marker', () => {
+		expect(canPrintQr({ qr_payload: 'evacuee:a@a1b2c3' })).toBe(true);
+		expect(canPrintQr({ reprintable: true })).toBe(true);
+	});
+
+	it('never prints a qr_issue_failed member, even with a marker or payload', () => {
+		expect(canPrintQr({ qr_issue_failed: true })).toBe(false);
+		expect(canPrintQr({ qr_issue_failed: true, reprintable: true })).toBe(false);
+		expect(canPrintQr({ qr_issue_failed: true, qr_payload: 'x' })).toBe(false);
+		expect(isQrIssueFailed({ qr_issue_failed: true })).toBe(true);
+		expect(isQrIssueFailed({})).toBe(false);
+	});
+
+	it('has nothing to print for a member without a payload or marker', () => {
+		expect(canPrintQr({})).toBe(false);
 	});
 });
 
@@ -63,6 +90,15 @@ describe('initialReprintSelection', () => {
 			{ evacuee_id: 'evacuee:c', is_primary: false, selectable: false, status: 'arriving' }
 		]);
 		expect(initialReprintSelection(results)).toEqual(['evacuee:a', 'evacuee:c']);
+	});
+
+	it('does not tick a member whose QR issue failed', () => {
+		expect(
+			initialReprintSelection([
+				{ evacuee_id: 'evacuee:a', qr_issue_failed: true },
+				{ evacuee_id: 'evacuee:b', qr_payload: 'evacuee:b@a1b2c3' }
+			])
+		).toEqual(['evacuee:b']);
 	});
 });
 

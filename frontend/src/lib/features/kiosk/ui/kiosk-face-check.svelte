@@ -5,6 +5,8 @@
 	import UserRoundSearch from '@lucide/svelte/icons/user-round-search';
 	import UserRoundX from '@lucide/svelte/icons/user-round-x';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import { createBusyReport } from '../application/busy-report';
 	import { openFaceCamera } from '../application/face-camera';
 	import { FaceCheckPinFlow } from '../application/face-check-pin-flow.svelte';
@@ -16,6 +18,7 @@
 		type FaceCheckFlow,
 		type FaceCheckOutcome
 	} from '../domain/face-check';
+	import { KIOSK_FACE_I18N } from './_constants/kiosk-face.i18n';
 	import KioskBiometricConsent from './kiosk-biometric-consent.svelte';
 	import {
 		KIOSK_NOTICE_PRIMARY_ACTION,
@@ -60,6 +63,7 @@
 		verifyStaffPin
 	}: Props = $props();
 	const headingTag = $derived(embedded ? 'h2' : 'h1');
+	const t = $derived(getTranslation(KIOSK_FACE_I18N, languageStore.current).result);
 
 	let video = $state<HTMLVideoElement>();
 	let skipButton = $state<HTMLElement | null>(null);
@@ -110,14 +114,16 @@
 			? session.outcome
 			: null
 	);
-	const notMatchedMessage = $derived(notMatched ? faceOutcomeMessage(notMatched) : null);
+	const notMatchedMessage = $derived(
+		notMatched ? faceOutcomeMessage(notMatched, languageStore.current) : null
+	);
 	/**
 	 * Read out by the always-mounted live line below. The result boxes appear with their text already
 	 * in them, which screen readers may skip, and the live region must not cover the PIN keys.
 	 */
 	const resultAnnouncement = $derived.by(() => {
 		if (pinOpen || !finished) return '';
-		if (session.outcome?.kind === 'match') return 'ยืนยันตัวตนเรียบร้อย';
+		if (session.outcome?.kind === 'match') return t.matched;
 		return notMatchedMessage ? `${notMatchedMessage.title} ${notMatchedMessage.detail}` : '';
 	});
 	// Check-in reads the chip photo during the check, so the card must stay in until it says so.
@@ -202,7 +208,7 @@
 			bare
 			tone="success"
 			icon={CheckCircle2}
-			title="ยืนยันตัวตนเรียบร้อย"
+			title={t.matched}
 			{headingTag}
 			data-testid="kiosk-face-result"
 			data-face-result="match"
@@ -228,13 +234,13 @@
 					bind:ref={continueButton}
 					type="button"
 					onclick={() => pinFlow.openFromResult()}
-					class={KIOSK_NOTICE_PRIMARY_ACTION}>เจ้าหน้าที่ดำเนินการต่อ</Button
+					class={KIOSK_NOTICE_PRIMARY_ACTION}>{t.staffContinue}</Button
 				>
 				<Button
 					type="button"
 					variant="outline"
 					onclick={oncancel}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}>ยกเลิก</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.cancel}</Button
 				>
 			{/snippet}
 		</KioskNoticePanel>

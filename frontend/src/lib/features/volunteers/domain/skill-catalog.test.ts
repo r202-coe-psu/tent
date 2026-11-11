@@ -81,6 +81,12 @@ describe('resolveSkillOption', () => {
 	it('returns undefined for a value master data no longer carries', () => {
 		expect(resolveSkillOption('ทักษะที่เลิกใช้', OPTIONS)).toBeUndefined();
 	});
+
+	it('safely handles Object prototype keys without throwing (S2)', () => {
+		expect(resolveSkillOption('constructor', OPTIONS)).toBeUndefined();
+		expect(resolveSkillOption('toString', OPTIONS)).toBeUndefined();
+		expect(resolveSkillOption('__proto__', OPTIONS)).toBeUndefined();
+	});
 });
 
 describe('resolveSkillLabel / toSkillCode', () => {
@@ -125,11 +131,17 @@ describe('skillMatches', () => {
 		expect(skillMatches('ทักษะลับ', ' ทักษะลับ ', OPTIONS)).toBe(true);
 		expect(skillMatches('ทักษะลับ', 'อื่น', OPTIONS)).toBe(false);
 	});
+
+	it('matches when one side is an option label and the other is raw code', () => {
+		expect(skillMatches('medical', 'การแพทย์ / ปฐมพยาบาล', OPTIONS)).toBe(true);
+	});
 });
 
 describe('hasAnyRequiredSkill', () => {
 	it('reads an empty requirement as satisfied', () => {
 		expect(hasAnyRequiredSkill([], [], OPTIONS)).toBe(true);
+		expect(hasAnyRequiredSkill(undefined, [], OPTIONS)).toBe(true);
+		expect(hasAnyRequiredSkill(['kitchen'], undefined, OPTIONS)).toBe(true);
 	});
 
 	it('matches across the code/label boundary', () => {

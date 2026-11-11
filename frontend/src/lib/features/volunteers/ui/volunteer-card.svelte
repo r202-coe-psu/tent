@@ -24,7 +24,7 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
+	import { canAccessVolunteerBackoffice, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -45,6 +45,7 @@
 	} from '../domain/verification';
 	import {
 		closeProfileAccessNotice,
+		closeProfileBlockedReason,
 		type VolunteerAccessStatus
 	} from '../domain/volunteer-access-status';
 	import type { Volunteer, VolunteerSource } from '../domain/volunteer.schema';
@@ -88,7 +89,7 @@
 		// This map is a local deduplication buffer and is not exposed to the template.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const map = new Map<string, SkillOption>();
-		for (const value of volunteer.skills) {
+		for (const value of volunteer.skills ?? []) {
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {
 				map.set(option.code, option);
@@ -129,6 +130,12 @@
 	// CR-221 FR-20: closing the profile takes the coordinator grants away (worker sweep, about 5
 	// minutes; reopening before it runs keeps them) but not a role a shelter manager gave.
 	const closeNotice = $derived(closeProfileAccessNotice(accessStatus));
+	// CR-221 A1-6: a role a shelter manager gave makes closing the profile the manager's call.
+	const closeBlockedReason = $derived.by(() => {
+		const roles = authStore.user?.roles ?? [];
+		const isManager = isSystemAdmin(roles) || isShelterManager(roles, volunteer.shelter_code);
+		return closeProfileBlockedReason(accessStatus, isManager);
+	});
 	const reactivateMutation = useReactivateVolunteer(queryClient);
 
 	function openQualificationAudit(skillCode?: string) {
@@ -347,12 +354,22 @@
 					variant="outline"
 					class="shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50"
 					aria-label="ปิดใช้งานอาสาสมัคร"
+					aria-describedby={closeBlockedReason
+						? `volunteer-close-blocked-${volunteer._id}`
+						: undefined}
 					onclick={() => (deleteDialogOpen = true)}
-					disabled={deactivateMutation.isPending || volunteer.status === 'inactive'}
+					disabled={deactivateMutation.isPending ||
+						volunteer.status === 'inactive' ||
+						closeBlockedReason !== null}
 				>
 					<Trash2 class="h-4 w-4" />
 				</Button>
 			</div>
+			{#if closeBlockedReason && volunteer.status !== 'inactive'}
+				<p id={`volunteer-close-blocked-${volunteer._id}`} class="text-xs text-muted-foreground">
+					{closeBlockedReason}
+				</p>
+			{/if}
 		</div>
 	</Table.Cell>
 </Table.Row>

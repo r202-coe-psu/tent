@@ -15,6 +15,7 @@ import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 import Database from '@lucide/svelte/icons/database';
 import Flag from '@lucide/svelte/icons/flag';
+import ImageIcon from '@lucide/svelte/icons/image';
 
 type Leaf = {
 	label: string;
@@ -109,6 +110,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						label: 'คำถามที่พบบ่อย (FAQ)',
 						href: resolve(`${base}/public-portal-config`),
 						icon: Megaphone,
+						requiresAdmin: true
+					},
+					{
+						label: 'โลโก้หน่วยงาน',
+						href: resolve(`${base}/partner-logos`),
+						icon: ImageIcon,
 						requiresAdmin: true
 					},
 					{

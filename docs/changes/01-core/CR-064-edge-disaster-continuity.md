@@ -3,7 +3,7 @@ id: CR-064
 title: Edge disaster continuity — network-only LAN cutover + ops status UI (CR-033 follow-up)
 status: approved
 date: 2026-08-12
-updated: 2026-10-18
+updated: 2026-11-11
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (OD lock; CR approve รอ)
 layer: stable
@@ -114,10 +114,11 @@ N/A สำหรับ `schema_v` ในรอบนี้ (ยังไม่ b
   - **A2 — บล็อกการเขียน `_users` ที่ edge (D5)** ด้วย flag `EDGE_MODE`: frontend ที่ edge มี `COUCHDB_ADMIN_URL` (BFF เขียน `_users` ได้)
     แต่ job `_users` เป็น pull ทางเดียว · ทดสอบ CouchDB 3.5: แก้ user ที่ edge 2 ครั้ง + soft delete ที่ central → conflict ที่ edge
     และ login ไม่ได้ (`User document conflicts must be resolved before the document is used for authentication purposes.`) ·
-    edge mode — PR แยก, CR-171 amendment pending
+    edge mode — PR แยก, spec = FR-13–FR-17 ของ [CR-171](CR-171-users-edge-shelters-soft-delete.md) (amend 2026-11-09, #1179)
   - **A3 — login ครั้งแรกที่ edge (`must_change_password`)** ถูกบล็อกเหมือนการเขียนอื่น: บัญชีต้อง activate ที่ central ก่อนเปิดศูนย์
   - **A4 — ไม่สร้าง user ที่ edge** (คง A1 ของ idea doc): เตรียม spare account ที่ provision + activate ที่ central ล่วงหน้า · ผู้จัดการศูนย์ประมาณจำนวน
   - **Gate:** ห้ามติดตั้ง edge ที่ศูนย์จริงจนกว่า PR edge mode (A2) จะ merge · PR #348 merge ได้ตามปกติ
   - **เลื่อน/ไม่ทำ:** VDU ที่ central กัน hard delete / edge_shelters หดตัว (ทำเมื่อพบการแก้ `_users` นอก user-service แม้ครั้งเดียว) ·
     สร้าง user ที่ edge ตอน incident (ต้องมี CR แก้ A1) · เปลี่ยน OD-6 เป็น replication user ต่อศูนย์ (ตาม trigger ข้างบน) ·
     ไม่ทำ: ถอดสิทธิ์ช่วง WAN ล่มไม่ถึง edge (ยอมรับ) · reconcile tombstone ก่อน CR-171 (ยังไม่มี edge ใน prod)
+- 2026-11-11 — **OD-6 ถูกแทนด้วย [CR-247](CR-247-edge-per-shelter-repl-user.md)** (approved โดย kong, #1298 / PR #1304): edge แต่ละศูนย์ sync ด้วยบัญชี `repl_<code>_<suffix>` ของตัวเอง ไม่ถือรหัส central admin อีก · `_users` ลง edge ผ่าน `edge_users_<code>` · trigger "ทบทวน OD-6" ข้างบนปิดแล้ว

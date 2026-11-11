@@ -51,7 +51,13 @@ import {
 	cancelTransfer,
 	disputeTransfer,
 	resumeTransfer,
-	nextLotNos,
+	buildLotNos,
+	lotSeedFindBody,
+	parseLotSeedMax,
+	LOT_NO_PATTERN,
+	lotCounterId,
+	maxLotSeq,
+	nextCounterLast,
 	lotDateStamp,
 	stockLotSchema,
 	type Donation,
@@ -1920,25 +1926,43 @@ describe('lot numbering (CR-088)', () => {
 		expect(lotDateStamp(new Date(2026, 0, 3))).toBe('260103');
 	});
 
-	it('starts a fresh day at 001 and pads the sequence to 3 digits', () => {
-		expect(nextLotNos([], aug25, 2)).toEqual(['L-260825-001', 'L-260825-002']);
+	it('builds consecutive numbers from the first sequence, padded to 3 digits (AC-2, AC-7)', () => {
+		expect(buildLotNos(aug25, 1, 2)).toEqual(['L-260825-001', 'L-260825-002']);
+		expect(buildLotNos(aug25, 8, 3)).toEqual(['L-260825-008', 'L-260825-009', 'L-260825-010']);
 	});
 
-	it('continues after the highest existing lot of the SAME day only', () => {
-		const existing = ['L-260825-001', 'L-260825-007', 'L-260824-099', 'L-260826-050'];
-		expect(nextLotNos(existing, aug25, 1)).toEqual(['L-260825-008']);
-	});
-
-	it('ignores malformed lot numbers instead of throwing', () => {
-		expect(nextLotNos(['L-260825-abc', 'garbage', ''], aug25, 1)).toEqual(['L-260825-001']);
-	});
-
-	it('returns nothing when no lines were counted', () => {
-		expect(nextLotNos([], aug25, 0)).toEqual([]);
+	it('returns nothing for a zero or negative count', () => {
+		expect(buildLotNos(aug25, 1, 0)).toEqual([]);
+		expect(buildLotNos(aug25, 1, -2)).toEqual([]);
 	});
 
 	it('rolls past 999 without truncating (label stays readable, no wrap)', () => {
-		expect(nextLotNos(['L-260825-999'], aug25, 1)).toEqual(['L-260825-1000']);
+		expect(buildLotNos(aug25, 999, 2)).toEqual(['L-260825-999', 'L-260825-1000']);
+		for (const lot of buildLotNos(aug25, 1, 5)) expect(lot).toMatch(LOT_NO_PATTERN);
+	});
+
+	it('derives the counter _id from the day stamp (CR-244 FR-1)', () => {
+		expect(lotCounterId('261102')).toBe('lot_counter:L-261102');
+	});
+
+	it('computes the new counter value as last + count (FR-4)', () => {
+		expect(nextCounterLast(7, 3)).toBe(10);
+		expect(nextCounterLast(0, 1)).toBe(1);
+	});
+
+	it('maxLotSeq takes the highest sequence of the SAME day, ignoring junk (FR-6)', () => {
+		const rows = [
+			'L-260825-001',
+			'L-260825-007',
+			'L-260824-099',
+			'L-260826-050',
+			'L-260825-abc',
+			'x',
+			''
+		];
+		expect(maxLotSeq(rows, '260825')).toBe(7);
+		expect(maxLotSeq([], '260825')).toBe(0);
+		expect(maxLotSeq(['L-260825-1000'], '260825')).toBe(1000);
 	});
 
 	it('accepts a well-formed lot_no and a storage_zone', () => {
@@ -1954,6 +1978,14 @@ describe('lot numbering (CR-088)', () => {
 	it('rejects a lot_no that is not L-YYMMDD-XXX', () => {
 		expect(() => stockLotSchema.parse({ lot_no: 'LOT-1' })).toThrow();
 		expect(() => stockLotSchema.parse({ lot_no: 'L-260825-1' })).toThrow();
+		expect(() => stockLotSchema.parse({ lot_no: 'L-260825-12' })).toThrow();
+		expect(() => stockLotSchema.parse({ lot_no: 'L-260825-12a' })).toThrow();
+		expect(() => stockLotSchema.parse({ lot_no: 'L-26825-001' })).toThrow();
+	});
+
+	it('accepts a 4-digit sequence past 999 (FR-3)', () => {
+		expect(stockLotSchema.parse({ lot_no: 'L-260825-1000' }).lot_no).toBe('L-260825-1000');
+		expect(stockLotSchema.parse({ lot_no: 'L-260825-999' }).lot_no).toBe('L-260825-999');
 	});
 
 	it('carries the lot through createStockLedger onto the persisted doc', () => {
@@ -2829,5 +2861,36 @@ describe('campaign need drop_off_point_id', () => {
 		expect(v3.needs[0].drop_off_point_id ?? null).toBeNull();
 		const edited = editNeed(v3, 'item:rice', { qty_target: '10', drop_off_point_id: 'p-gym' });
 		expect(edited.needs[0].drop_off_point_id).toBe('p-gym');
+	});
+});
+
+describe('lot seed query (CR-244 FR-6)', () => {
+	it('builds one prefix-range _find body for the day', () => {
+		expect(lotSeedFindBody('261102')).toEqual({
+			selector: {
+				type: 'stock_ledger',
+				'lot.lot_no': { $gte: 'L-261102-', $lt: 'L-261102-￰' }
+			},
+			fields: ['lot.lot_no'],
+			limit: 10_000
+		});
+	});
+
+	it('parses the highest sequence of the day from the rows', () => {
+		const rows = [
+			{ lot: { lot_no: 'L-261102-003' } },
+			{ lot: {} },
+			{},
+			{ lot: { lot_no: 'L-261101-009' } }
+		];
+		expect(parseLotSeedMax(rows, '261102')).toBe(3);
+		expect(parseLotSeedMax([], '261102')).toBe(0);
+	});
+
+	it('LOT_NO_PATTERN: 3 digits, or 4+ without a leading zero', () => {
+		for (const ok of ['L-261102-001', 'L-261102-999', 'L-261102-1000', 'L-261102-12345'])
+			expect(LOT_NO_PATTERN.test(ok)).toBe(true);
+		for (const bad of ['L-261102-01', 'L-261102-0011', 'L-261102-0100', 'L-261102-1x'])
+			expect(LOT_NO_PATTERN.test(bad)).toBe(false);
 	});
 });
