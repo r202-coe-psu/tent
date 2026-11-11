@@ -8,11 +8,13 @@
 2. ในโฟลเดอร์ `scanner-client` คัดลอก `.env.example` เป็นไฟล์ชื่อ `.env` (อยู่ข้าง `scanner-client.exe`)
 3. เปิด `.env` ด้วย Notepad แล้วแก้ `SHELTER_URL=` เป็นที่อยู่เว็บศูนย์ฯ เช่น `https://shelter.example.org`
    (ใส่แค่ `https://ชื่อเว็บ` ไม่ต้องมี path)
+4. ดับเบิลคลิก `install-shortcut.bat` → ได้ไอคอน **tent** บน Desktop และใน Start Menu
+   (ไม่ต้องใช้ admin · ถ้าย้ายโฟลเดอร์ `scanner-client` ไปที่อื่น ให้ดับเบิลคลิกไฟล์นี้ใหม่)
 
 **ห้ามใส่รหัสผ่านหรือ secret ใด ๆ ใน `.env`** — ไฟล์นี้มีแต่ค่าตั้งต้นที่เปิดเผยได้ เจ้าหน้าที่ล็อกอินในหน้าเว็บเองตามปกติ
 
 ## ใช้งานครั้งแรก
-1. เสียบเครื่องอ่านบัตร แล้วดับเบิลคลิก `scanner-client.exe`
+1. เสียบเครื่องอ่านบัตร แล้วดับเบิลคลิกไอคอน **tent** (หรือ `scanner-client.exe`)
 2. ถ้า Windows ขึ้น SmartScreen ("Windows protected your PC") ให้กด **More info → Run anyway**
    (โปรแกรมยังไม่ได้ลงลายเซ็นดิจิทัล แจ้งครั้งเดียวต่อเครื่อง/ไฟล์ใหม่)
 3. หน้าต่าง Edge เปิดที่เว็บศูนย์ฯ → ล็อกอิน → เข้าหน้าลงทะเบียน walk-in → เสียบบัตร ข้อมูลจะเติมในฟอร์ม
@@ -43,7 +45,8 @@
   ต้องสั่ง `uv run playwright install msedge` เฉพาะเครื่องที่ยังไม่มี Edge; ถ้าใช้ `BROWSER_CHANNEL=chromium` ต้อง
   `uv run playwright install chromium`
 - Linux (Debian/Ubuntu) รันทีเดียวจบ: `./run-linux.sh` — ติดตั้ง `pcscd`/`libccid` (sudo), uv, deps, Chromium,
-  สร้าง `.env` (ถาม `SHELTER_URL` ครั้งแรก) แล้วเปิดโปรแกรม · รันซ้ำได้ ข้ามขั้นที่ทำแล้ว
+  สร้าง `.env` (ถาม `SHELTER_URL` ครั้งแรก), สร้าง shortcut **tent** ในเมนูแอป + Desktop
+  แล้วเปิดโปรแกรม · รันซ้ำได้ ข้ามขั้นที่ทำแล้ว · ครั้งต่อไปเปิดจาก shortcut ได้เลย
 - test: `uv run pytest`
 - build exe (ต้องทำบน Windows): `powershell -ExecutionPolicy Bypass -File .\build.ps1` → `dist\scanner-client-win64.zip`
   และ `dist\scanner-client-debug-win64.zip` (spec: `scanner-client.spec`, onedir, ไม่ bundle browser)

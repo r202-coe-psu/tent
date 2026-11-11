@@ -54,6 +54,31 @@ if [[ -z "$channel" || "$channel" == "chromium" ]]; then
 	uv run playwright install chromium
 fi
 
-# 5. Run
+# 5. Shortcut (app menu + Desktop). Runs the app directly, not this script: setup is done and
+#    a launcher has no terminal for sudo prompts. Rewritten each run so a moved folder heals.
+say "creating tent shortcut"
+app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$app_dir"
+entry="$app_dir/tent.desktop"
+cat >"$entry" <<EOF
+[Desktop Entry]
+Type=Application
+Name=tent
+Comment=Read Thai ID cards into the shelter walk-in registration page
+Exec="$(command -v uv)" run --project "$PWD" scanner-client
+Path=$PWD
+Icon=scanner
+Terminal=false
+Categories=Utility;
+EOF
+chmod +x "$entry"
+desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
+if [[ -d "$desktop_dir" && "$desktop_dir" != "$HOME" ]]; then
+	install -m 755 "$entry" "$desktop_dir/tent.desktop"
+	# GNOME refuses to launch untrusted Desktop files ("Allow Launching"); best effort elsewhere.
+	gio set "$desktop_dir/tent.desktop" metadata::trusted true 2>/dev/null || true
+fi
+
+# 6. Run
 say "starting scanner-client (close the browser window to quit)"
 exec uv run scanner-client

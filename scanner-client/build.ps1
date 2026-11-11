@@ -8,7 +8,8 @@
   Uses `uv` when installed, otherwise `py -3.12 -m venv` + pip.
   Output (in dist\):
       scanner-client-win64.zip         scanner-client\ (onedir, console-less) + README.md
-                                       (.env.example is inside scanner-client\, next to the .exe)
+                                       (.env.example + install-shortcut.bat are inside
+                                        scanner-client\, next to the .exe)
       scanner-client-debug-win64.zip   scanner-client-debug\ (same code, with a console window)
   Needs the kiosk checkout next to this folder (..\kiosk provides app\scard.py).
 #>
@@ -69,9 +70,12 @@ foreach ($exe in 'dist\scanner-client\scanner-client.exe', 'dist\scanner-client-
     if (-not (Test-Path -LiteralPath $exe)) { throw "Build did not produce $exe" }
 }
 
-# 3. package: the .env is read next to the .exe, so .env.example goes inside the onedir folder
+# 3. package: the .env is read next to the .exe, so .env.example goes inside the onedir folder,
+#    with the shortcut installer (it targets the .exe in its own folder)
 foreach ($folder in 'scanner-client', 'scanner-client-debug') {
-    Copy-Item -LiteralPath '.env.example' -Destination "dist\$folder\.env.example"
+    foreach ($file in '.env.example', 'install-shortcut.bat', 'install-shortcut.ps1') {
+        Copy-Item -LiteralPath $file -Destination "dist\$folder\$file"
+    }
 }
 
 $zip = 'dist\scanner-client-win64.zip'
