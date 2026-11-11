@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -8,9 +9,10 @@
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 
 	import {
+		isM5Referral,
+		M5BatchPanel,
 		ReferralBackLink,
 		ReferralBatchCards,
-		referralDetailPath,
 		useReferralBatch
 	} from '$lib/features/referrals';
 
@@ -19,6 +21,8 @@
 	const members = $derived(batchQuery.data ?? []);
 	// Only present right after a create; gone on refresh.
 	const failed = $derived(page.state.failed ?? []);
+	// An M5 batch is one transfer: send, vehicle-left and withdraw act on the whole batch.
+	const isM5Batch = $derived(members.length > 0 && members.every(isM5Referral));
 </script>
 
 <div class="flex flex-wrap items-center gap-3">
@@ -53,12 +57,16 @@
 		</Card.Content>
 	</Card.Root>
 {:else}
-	<div class="mx-auto w-full max-w-5xl pb-6">
+	<div class="mx-auto w-full max-w-5xl space-y-4 pb-6">
+		{#if isM5Batch}
+			<M5BatchPanel {members} />
+		{/if}
 		<ReferralBatchCards
 			referrals={members}
 			{failed}
 			mode="view"
-			onSelectReferral={(memberId) => goto(referralDetailPath(memberId))}
+			onSelectReferral={(memberId) =>
+				goto(resolve(`/back-office/referrals/${encodeURIComponent(memberId)}`))}
 		/>
 	</div>
 {/if}

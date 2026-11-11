@@ -429,7 +429,8 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				icon: 'ambulance',
 				href: '/back-office/referrals',
 				scope: 'shelter',
-				roles: []
+				// Medical staff: medical-emergency referrals only (M5 draft CR D8, D16).
+				roles: [MED]
 			},
 			{
 				id: 'back-office',

@@ -24,6 +24,8 @@ import {
 	canManagePrinters,
 	canManageScanners,
 	kioskConfinement,
+	hasCapabilityInShelter,
+	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import { fetchAuthStatus, type AuthStatus } from '$lib/features/users';
@@ -132,6 +134,23 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!canAccessManagerPages(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Referrals guard (`/back-office/referrals/**`) — system admin, shelter_manager, or medical_staff
+ * of the selected shelter. Medical staff only ever see and create medical-emergency referrals
+ * (M5 draft CR D8, D16); the BFF enforces that per request.
+ */
+export async function requireReferralAccess(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (
+		!canAccessManagerPages(roles, shelter) &&
+		!hasCapabilityInShelter(roles, shelter, MEDICAL_STAFF)
+	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

@@ -26,3 +26,5 @@ export { default as MedicalReferralForm } from './ui/medical-referral-form.svelt
 export { default as CapacityReferralForm } from './ui/capacity-referral-form.svelte';
 export { default as ResourceReferralForm } from './ui/resource-referral-form.svelte';
 export { default as ShelterCombobox } from './ui/shelter-combobox.svelte';
+export { default as M5BatchPanel } from './ui/m5-batch-panel.svelte';
+export { useIntegrationStatus } from './application/m5-queries';

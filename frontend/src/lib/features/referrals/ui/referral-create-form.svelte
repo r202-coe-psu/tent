@@ -14,6 +14,14 @@
 	import CapacityReferralForm from './capacity-referral-form.svelte';
 	import ResourceReferralForm from './resource-referral-form.svelte';
 	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
+	import M5ReferralForm from './m5-referral-form.svelte';
+	import M5GateAlert from './m5-gate-alert.svelte';
+	import { useIntegrationStatus } from '../application/m5-queries';
+	import type { DispatchMode } from '../domain/referral.schema';
+	import { referralTypesForRoles } from '../domain/referral.authorization';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import Check from '@lucide/svelte/icons/check';
 
 	let {
 		onBatchDone
@@ -38,6 +46,20 @@
 
 	let selectedIds = $state<string[]>([]);
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
+	/** D3: per batch, `tracking` (coordinate yourself) or `m5` (send through M5). */
+	let dispatchMode = $state<DispatchMode>('tracking');
+
+	// Medical staff see medical-emergency only (D8, D16); the BFF enforces the same rule.
+	const allowedTypes = $derived(
+		referralTypesForRoles(authStore.user?.roles ?? [], getShelterCode())
+	);
+	const typeAllowed = (t: 'medical-emergency' | 'capacity' | 'resource') =>
+		allowedTypes === null || allowedTypes.includes(t);
+
+	const statusQuery = useIntegrationStatus();
+	const gateState = $derived(statusQuery.data?.m5.state);
+	const m5Ready = $derived(gateState === 'ready');
+	const useM5 = $derived(selectedType === 'medical-emergency' && dispatchMode === 'm5');
 	let selectionAttempted = $state(false);
 
 	const evacueeError = $derived(
@@ -164,45 +186,95 @@
 						</div>
 					</button>
 
-					<button
-						type="button"
-						onclick={() => (selectedType = 'capacity')}
-						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+					{#if typeAllowed('capacity')}
+						<button
+							type="button"
+							onclick={() => (selectedType = 'capacity')}
+							class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'capacity'
-							? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20'
-							: 'border-border/60 hover:border-border'}"
-					>
-						<div>
-							<div class="flex items-center justify-between">
-								<span class="font-bold text-purple-600 dark:text-purple-400">ย้ายศูนย์พักพิง</span>
-								<span class="text-xs font-semibold uppercase opacity-60">Capacity</span>
+								? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20'
+								: 'border-border/60 hover:border-border'}"
+						>
+							<div>
+								<div class="flex items-center justify-between">
+									<span class="font-bold text-purple-600 dark:text-purple-400">ย้ายศูนย์พักพิง</span
+									>
+									<span class="text-xs font-semibold uppercase opacity-60">Capacity</span>
+								</div>
+								<p class="mt-1 text-xs text-muted-foreground">
+									โอนย้ายผู้เข้าพักไปยังศูนย์พักพิงอื่นเนื่องจากศูนย์เดิมเต็ม
+								</p>
 							</div>
-							<p class="mt-1 text-xs text-muted-foreground">
-								โอนย้ายผู้เข้าพักไปยังศูนย์พักพิงอื่นเนื่องจากศูนย์เดิมเต็ม
-							</p>
-						</div>
-					</button>
+						</button>
+					{/if}
 
-					<button
-						type="button"
-						onclick={() => (selectedType = 'resource')}
-						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+					{#if typeAllowed('resource')}
+						<button
+							type="button"
+							onclick={() => (selectedType = 'resource')}
+							class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'resource'
-							? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
-							: 'border-border/60 hover:border-border'}"
-					>
-						<div>
-							<div class="flex items-center justify-between">
-								<span class="font-bold text-blue-600 dark:text-blue-400">ขอสนับสนุนทรัพยากร</span>
-								<span class="text-xs font-semibold uppercase opacity-60">Resource</span>
+								? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
+								: 'border-border/60 hover:border-border'}"
+						>
+							<div>
+								<div class="flex items-center justify-between">
+									<span class="font-bold text-blue-600 dark:text-blue-400">ขอสนับสนุนทรัพยากร</span>
+									<span class="text-xs font-semibold uppercase opacity-60">Resource</span>
+								</div>
+								<p class="mt-1 text-xs text-muted-foreground">
+									ขอสนับสนุนสิ่งของ ยา เครื่องอุปโภคบริโภค จากองค์กรภายนอก
+								</p>
 							</div>
-							<p class="mt-1 text-xs text-muted-foreground">
-								ขอสนับสนุนสิ่งของ ยา เครื่องอุปโภคบริโภค จากองค์กรภายนอก
-							</p>
-						</div>
-					</button>
+						</button>
+					{/if}
 				</div>
 			</div>
+
+			{#if selectedType === 'medical-emergency'}
+				<div class="space-y-3">
+					<span id="dispatch-mode-label" class="text-sm font-semibold text-foreground"
+						>วิธีส่งต่อ <span class="text-red-600">*</span></span
+					>
+					<div
+						role="radiogroup"
+						aria-labelledby="dispatch-mode-label"
+						class="grid grid-cols-1 gap-3 md:grid-cols-2"
+					>
+						{#each [{ v: 'tracking', t: 'ติดตามอย่างเดียว', d: 'ประสานโรงพยาบาลเอง ไม่มีข้อมูลออกนอกระบบ' }, { v: 'm5', t: 'ส่งผ่าน M5', d: 'ส่งใบส่งต่อให้ สธ. พิจารณาและโรงพยาบาลรับผ่านระบบ M5' }] as const as m (m.v)}
+							<button
+								type="button"
+								role="radio"
+								aria-checked={dispatchMode === m.v}
+								disabled={m.v === 'm5' && !m5Ready}
+								onclick={() => (dispatchMode = m.v)}
+								class="flex min-h-11 items-start gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60
+								{dispatchMode === m.v
+									? 'border-sky-300 bg-sky-50'
+									: 'border-slate-200/80 bg-white hover:border-slate-300'}"
+							>
+								<Check
+									class="mt-0.5 h-4 w-4 shrink-0 {dispatchMode === m.v
+										? 'text-sky-700'
+										: 'text-transparent'}"
+									aria-hidden="true"
+								/>
+								<span>
+									<span class="block text-sm font-semibold text-slate-900">{m.t}</span>
+									<span class="block text-xs text-slate-500">{m.d}</span>
+								</span>
+							</button>
+						{/each}
+					</div>
+					{#if gateState && gateState !== 'ready'}
+						<M5GateAlert
+							state={gateState}
+							checking={statusQuery.isFetching}
+							onRetry={() => statusQuery.refetch()}
+						/>
+					{/if}
+				</div>
+			{/if}
 
 			<hr class="border-border/60" />
 
@@ -210,29 +282,33 @@
 
 			<hr class="border-border/60" />
 
-			<div class="contents" onsubmitcapture={handleSubmitAttempt}>
-				{#key selectedType}
-					{#if selectedType === 'medical-emergency'}
-						<MedicalReferralForm
-							evacueeId={formEvacueeId}
-							onSubmit={handleSubmit}
-							submitting={batchMutation.isPending}
-						/>
-					{:else if selectedType === 'capacity'}
-						<CapacityReferralForm
-							evacueeId={formEvacueeId}
-							onSubmit={handleSubmit}
-							submitting={batchMutation.isPending}
-						/>
-					{:else if selectedType === 'resource'}
-						<ResourceReferralForm
-							evacueeId={formEvacueeId}
-							onSubmit={handleSubmit}
-							submitting={batchMutation.isPending}
-						/>
-					{/if}
-				{/key}
-			</div>
+			{#if useM5}
+				<M5ReferralForm evacueeIds={selectedIds} onDone={(r) => onBatchDone?.(r)} />
+			{:else}
+				<div class="contents" onsubmitcapture={handleSubmitAttempt}>
+					{#key selectedType}
+						{#if selectedType === 'medical-emergency'}
+							<MedicalReferralForm
+								evacueeId={formEvacueeId}
+								onSubmit={handleSubmit}
+								submitting={batchMutation.isPending}
+							/>
+						{:else if selectedType === 'capacity'}
+							<CapacityReferralForm
+								evacueeId={formEvacueeId}
+								onSubmit={handleSubmit}
+								submitting={batchMutation.isPending}
+							/>
+						{:else if selectedType === 'resource'}
+							<ResourceReferralForm
+								evacueeId={formEvacueeId}
+								onSubmit={handleSubmit}
+								submitting={batchMutation.isPending}
+							/>
+						{/if}
+					{/key}
+				</div>
+			{/if}
 		</Card.Content>
 	</Card.Root>
 	{#if pendingSend}

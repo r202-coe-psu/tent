@@ -20,6 +20,7 @@ import {
 	referralTypesForRoles
 } from './referral.authorization';
 import { referralBatchKey } from './referral.batch-group';
+import { getReferralActions } from './referral.bulk-actions';
 import { isReferral, referralSchema, type Referral } from './referral.schema';
 
 const BATCH = '01JC00000000000000000BATCH';
@@ -345,5 +346,27 @@ describe('buildM5TransferPayload', () => {
 		expect(() => buildM5TransferPayload({ ...args, now })).toThrow(
 			expect.objectContaining({ code })
 		);
+	});
+});
+
+describe('row/bulk actions for m5 referrals', () => {
+	const ext = (status: string) => ({ system: 'm5', external_ref: 'x', code: 'y', status });
+
+	it('offers no per-row send for an m5 draft, but lets it be cancelled', () => {
+		expect(getReferralActions(m5Referral(), 'SH001')).toEqual(['cancel_draft']);
+	});
+
+	it('offers withdraw (whole batch, D11) but never accept/reject on a sent m5 referral', () => {
+		const sent = m5Referral({ status: 'sent', external: ext('awaiting_review') });
+		expect(getReferralActions(sent, 'SH001')).toEqual(['withdraw']);
+	});
+
+	it('closes an accepted m5 referral only after M5 arrived or cancelled', () => {
+		expect(
+			getReferralActions(m5Referral({ status: 'accepted', external: ext('in_transit') }), 'SH001')
+		).toEqual([]);
+		expect(
+			getReferralActions(m5Referral({ status: 'accepted', external: ext('arrived') }), 'SH001')
+		).toEqual(['close']);
 	});
 });

@@ -43,6 +43,7 @@ import {
 	requireBannerManagement,
 	requireKioskManagement,
 	requireMedicalScreening,
+	requireReferralAccess,
 	requirePrinterManagement,
 	requireShelterReadiness,
 	requireVolunteerBackoffice,
@@ -167,6 +168,35 @@ describe('requireMedicalScreening (Station 2 route guard)', () => {
 		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff'];
 		expect(await passes(requireMedicalScreening, roles, 'SH001')).toBe(true);
 		expect(await passes(requireMedicalScreening, roles, 'SH002')).toBe(false);
+	});
+});
+
+describe('requireReferralAccess (/back-office/referrals, M5 D8)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA, the shelter manager and medical staff of the selected shelter', async () => {
+		expect(await passes(requireReferralAccess, ['system_admin'])).toBe(true);
+		expect(await passes(requireReferralAccess, ['shelter:SH001', 'SH001:shelter_manager'])).toBe(
+			true
+		);
+		expect(await passes(requireReferralAccess, ['shelter:SH001', 'SH001:medical_staff'])).toBe(
+			true
+		);
+	});
+
+	it('refuses other staff', async () => {
+		for (const cap of ['registration_staff', 'triage_staff', 'kitchen_staff', 'warehouse_staff']) {
+			expect(await passes(requireReferralAccess, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+		}
+	});
+
+	it('is scoped to the selected shelter', async () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:medical_staff'];
+		expect(await passes(requireReferralAccess, roles, 'SH001')).toBe(true);
+		expect(await passes(requireReferralAccess, roles, 'SH002')).toBe(false);
 	});
 });
 

@@ -200,17 +200,27 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(itemIds(dept(views, 'registration'))).toEqual([]);
 	});
 
-	it.each(['triage_staff', 'medical_staff'])(
-		'%s sees only Station 2 under registration (flag on)',
-		(cap) => {
-			const views = menu(staff(cap), ON);
-			expect(deptIds(views)).toEqual(['registration']);
-			expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
-		}
-	);
+	it('triage_staff sees only Station 2 under registration (flag on)', () => {
+		const views = menu(staff('triage_staff'), ON);
+		expect(deptIds(views)).toEqual(['registration']);
+		expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
+	});
 
-	it.each(['triage_staff', 'medical_staff'])('%s sees nothing when the flag is off', (cap) => {
-		expect(menu(staff(cap), OFF)).toEqual([]);
+	it('triage_staff sees nothing when the flag is off', () => {
+		expect(menu(staff('triage_staff'), OFF)).toEqual([]);
+	});
+
+	it('medical_staff sees Station 2 and medical referrals (M5 D8)', () => {
+		const views = menu(staff('medical_staff'), ON);
+		expect(deptIds(views)).toEqual(['registration', 'management']);
+		expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
+		expect(itemIds(dept(views, 'management'))).toEqual(['referrals']);
+	});
+
+	it('medical_staff keeps only referrals when the flag is off', () => {
+		const views = menu(staff('medical_staff'), OFF);
+		expect(deptIds(views)).toEqual(['management']);
+		expect(itemIds(dept(views, 'management'))).toEqual(['referrals']);
 	});
 
 	it('kitchen_staff sees only the kitchen department', () => {

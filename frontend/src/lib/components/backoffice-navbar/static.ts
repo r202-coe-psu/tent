@@ -17,6 +17,8 @@ import {
 	canAccessWarehouse,
 	canManagePrinters,
 	canViewSupply,
+	hasCapabilityInShelter,
+	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -125,7 +127,10 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'การส่งต่อผู้เข้าพัก',
 				href: resolve('/back-office/referrals'),
 				icon: ClipboardList,
-				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
+				// Medical staff too, for medical-emergency referrals only (M5 draft CR D8, D16).
+				visibleTo: ({ roles, shelterCode }) =>
+					canAccessManagerPages(roles, shelterCode) ||
+					hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)
 			}
 		]
 	},
