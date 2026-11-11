@@ -32,9 +32,9 @@ why: edge ทุกเครื่องถือรหัส central admin (OD-
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยน:** job replication ทุกตัวของ edge ใช้บัญชี `repl_<code>_<suffix>` (role `repl:<CODE>`) แทน central admin · `_users` ลง edge ผ่าน DB ใหม่ `edge_users_<code>` ที่ worker ของ central คัดลอกให้ (อ่าน `_users` feed เดียวไม่ว่ามีกี่ศูนย์)
+> - **เปลี่ยน:** job replication ทุกตัวของ edge ใช้บัญชี `repl_<code>_<suffix>` (role `repl:<CODE>`) แทน central admin · `_users` ลง edge ผ่าน DB ใหม่ `edge_users_<code>` ที่ service `edge-users-copy` ของ central คัดลอกให้ (อ่าน `_users` feed เดียวไม่ว่ามีกี่ศูนย์)
 > - **ผล:** รหัส central admin อยู่ที่ central เท่านั้น · เครื่อง edge หายปิดได้ที่ central ทันทีโดยไม่กระทบศูนย์อื่น · lockout ของบัญชีหนึ่งหยุดแค่ศูนย์เดียว
-> - **dev build:** คำสั่ง `scripts/central-repl-user.sh <CODE>` / `scripts/central-repl-user.sh <CODE> --remove` · consumer ใหม่ใน `worker/` · VDU 3 ชุด (`shelter_<code>`, `registry`/`catalog`, `edge_users_<code>`) · แก้ `edge-init.sh` + env ของ edge · runbook
+> - **dev build:** คำสั่ง `scripts/central-repl-user.sh <CODE>` / `scripts/central-repl-user.sh <CODE> --remove` · service ใหม่ `edge-users-copy` (โค้ดใน `worker/`) · VDU 3 ชุด (`shelter_<code>`, `registry`/`catalog`, `edge_users_<code>`) · แก้ `edge-init.sh` + env ของ edge · runbook
 > - **layer: stable** (auth + sync) · ไม่ bump `schema_v` · ขึ้นกับ #1296 (merge แล้ว)
 
 ---
@@ -52,7 +52,7 @@ why: edge ทุกเครื่องถือรหัส central admin (OD-
 | ---------------------- | -------------------------------------- | ------------------------- |
 | ตอนนี้                 | edge ทุกเครื่อง                        | central + edge ทุกเครื่อง |
 | ข้อ 1 อย่างเดียว       | edge ทุกเครื่อง (job `_users`)         | central + edge ทุกเครื่อง |
-| **ข้อ 1 + 2 (CR นี้)** | worker ของ central                     | **central เท่านั้น**      |
+| **ข้อ 1 + 2 (CR นี้)** | `edge-users-copy` ของ central          | **central เท่านั้น**      |
 
 ### ผลตรวจก่อนเริ่ม — user ธรรมดา push เข้า `shelter_<code>` ไม่ผ่าน VDU ปัจจุบัน
 
@@ -71,19 +71,19 @@ why: edge ทุกเครื่องถือรหัส central admin (OD-
 
 ```
 central (admin ใช้ภายใน central เท่านั้น):
-  _users ──[worker: _changes feed เดียว → กระจายตาม edge_shelters, new_edits:false]──► edge_users_<code>   (VDU: เขียนได้เฉพาะ _admin)
+  _users ──[edge-users-copy: _changes feed เดียว → กระจายตาม edge_shelters, new_edits:false]──► edge_users_<code>   (VDU: เขียนได้เฉพาะ _admin)
 
 edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<code>      อ่าน + เขียน
                                                                registry, catalog   อ่านอย่างเดียว (VDU ปฏิเสธ repl:*)
                                                                edge_users_<code>   อ่านอย่างเดียว → _users ของ edge
 ```
 
-|                                  | ก่อน                                                          | หลัง                                                                                  |
-| -------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| credential ฝั่ง central ของ edge | `CENTRAL_REPL_USER` / `CENTRAL_REPL_PASSWORD` = central admin | `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` = `repl_<code>_<suffix>` (ไม่ใช่ admin)       |
-| source ของ `users_<code>_pull`   | `$CEN/_users` + selector `edge_shelters`                      | `$CEN/edge_users_<code>` (selector กรองแค่ `_design/*` — กรอง user แล้วที่ central)   |
-| ตัวกรอง user ต่อศูนย์            | selector ของ job บน edge                                      | worker ของ central เลือกปลายทางจาก `edge_shelters` + `roles` (กฎเดียวกับ CR-171 FR-9) |
-| ปิดเครื่อง edge หนึ่งเครื่อง     | หมุนรหัส admin + แก้ edge ทุกเครื่อง                          | `scripts/central-repl-user.sh <CODE> --remove` ที่ central                            |
+|                                  | ก่อน                                                          | หลัง                                                                                             |
+| -------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| credential ฝั่ง central ของ edge | `CENTRAL_REPL_USER` / `CENTRAL_REPL_PASSWORD` = central admin | `EDGE_REPL_USER` / `EDGE_REPL_PASSWORD` = `repl_<code>_<suffix>` (ไม่ใช่ admin)                  |
+| source ของ `users_<code>_pull`   | `$CEN/_users` + selector `edge_shelters`                      | `$CEN/edge_users_<code>` (selector กรองแค่ `_design/*` — กรอง user แล้วที่ central)              |
+| ตัวกรอง user ต่อศูนย์            | selector ของ job บน edge                                      | `edge-users-copy` ของ central เลือกปลายทางจาก `edge_shelters` + `roles` (กฎเดียวกับ CR-171 FR-9) |
+| ปิดเครื่อง edge หนึ่งเครื่อง     | หมุนรหัส admin + แก้ edge ทุกเครื่อง                          | `scripts/central-repl-user.sh <CODE> --remove` ที่ central                                       |
 
 ### Requirements — บัญชี replication ต่อศูนย์
 
@@ -101,7 +101,7 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - **FR-8** — `edge_users_<code>` มี `_design/readonly`: เขียนได้เฉพาะ `_admin` นอกนั้น `forbidden`
 - **FR-9** — design doc ของ `shelter_<code>` ยังเขียนไม่ได้จาก `repl:*` (CouchDB ให้เฉพาะ db admin เขียน `_design/*` — ไม่ต้องเพิ่มโค้ด แต่ต้องมี test)
 
-### Requirements — `edge_users_<code>` (ตัว copy = worker ของ central)
+### Requirements — `edge_users_<code>` (ตัว copy = service `edge-users-copy` ของ central)
 
 - **FR-10** — `central-repl-user.sh` สร้าง `edge_users_<code>` + `_security` = `{"admins":{"names":[],"roles":[]},"members":{"names":[],"roles":["repl:<CODE>"]}}` (server admin เข้าได้เสมอโดยไม่ต้องอยู่ใน `admins`) + FR-8 **ก่อน** สร้างบัญชีใน FR-1
 - **FR-11** — ตัว copy = service ใหม่ `edge-users-copy` บน **central** · โค้ดอยู่ใน `worker/` (คำสั่ง `uv run --project worker edge-users-copy`) แต่รันเป็น container แยกจาก sync-worker · ใช้ admin ของ central จาก `COUCHDB_USER`/`COUCHDB_PASSWORD` · **ต่อ CouchDB อย่างเดียว** ไม่ต่อ MongoDB และไม่รัน bootstrap ของ sync-worker:
@@ -109,11 +109,11 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
   - ข้าม `_design/*`
   - ปลายทาง = ศูนย์ใน `edge_shelters` ∪ ศูนย์จาก `roles` ที่เป็น `shelter:<CODE>` (กฎเดียวกับ selector ปัจจุบัน — CR-171 FR-9) · เขียนเฉพาะศูนย์ที่มี DB `edge_users_<code>` อยู่ (ศูนย์ที่ไม่มี edge ข้าม)
   - วิธีเขียน: อ่าน revision ที่ชนะด้วย `GET _users/<id>?rev=<rev>&revs=true` แล้ว `POST edge_users_<code>/_bulk_docs` ด้วย `new_edits: false` — revision และประวัติ (`_revisions`) ตรงกับ central ทุกตัว
-  - **เหตุผล (worker แทน `_replicator`):** `_replicator` ต้องมี job ต่อเนื่องหนึ่งตัวต่อศูนย์ และทุก job อ่าน + กรอง `_users` ทั้งก้อนเอง — 100 ศูนย์ = 100 job ต่อเนื่องค้างไว้บน central (เกิน `[replicator] max_jobs` ซึ่ง default = 500 เมื่อไหร่ scheduler จะหมุน job ทำให้การถอดสิทธิ์ถึง edge ช้าลง) และตอน rollout ทุก job ไล่ `_users` จาก seq 0 พร้อมกัน · worker อ่าน feed เดียวแล้วเขียนเฉพาะศูนย์ที่เกี่ยว ไม่ว่ามีกี่ศูนย์
+  - **เหตุผล (`edge-users-copy` แทน `_replicator`):** `_replicator` ต้องมี job ต่อเนื่องหนึ่งตัวต่อศูนย์ และทุก job อ่าน + กรอง `_users` ทั้งก้อนเอง — 100 ศูนย์ = 100 job ต่อเนื่องค้างไว้บน central (เกิน `[replicator] max_jobs` ซึ่ง default = 500 เมื่อไหร่ scheduler จะหมุน job ทำให้การถอดสิทธิ์ถึง edge ช้าลง) และตอน rollout ทุก job ไล่ `_users` จาก seq 0 พร้อมกัน · `edge-users-copy` อ่าน feed เดียวแล้วเขียนเฉพาะศูนย์ที่เกี่ยว ไม่ว่ามีกี่ศูนย์
   - **revision tree ไม่เสีย:** prototype บน CouchDB local (2026-11-11) — edge ที่ดึง `_users` ตรงอยู่แล้วเปลี่ยน source มาเป็น `edge_users_<code>` ที่เขียนด้วย `new_edits: false` → ไม่มี conflict ทุกกรณี (สลับ source, เปลี่ยนรหัส 2 ครั้งแต่คัดลอกแค่ครั้งล่าสุด, ถอด role, soft delete, ประมวลผล change ซ้ำ) · ตัวควบคุมที่เขียนแบบปกติเกิด conflict
   - ถอด role / soft delete / ย้ายศูนย์: `edge_shelters` เป็น append-only (CR-171 FR-2) → revision ใหม่ยังไปถึงศูนย์เดิมเสมอ
   - hard delete (tombstone ไม่มี `edge_shelters`) **นอกขอบเขต** — เหมือนเดิม · ติดตามที่ #1331
-- **FR-11a (backfill)** — เมื่อมี `edge_users_<code>` ใหม่ (FR-10) worker ต้องคัดลอก user ที่มีอยู่แล้วของศูนย์นั้นทั้งหมดด้วยวิธีเดียวกับ FR-11 ภายใน 1 นาทีหลังสร้าง DB · อ่าน `_users` ทีละหน้า (เช่น 500 doc) ห้ามโหลดทั้งก้อน · บันทึกว่าศูนย์ไหน backfill แล้วใน `_users/_local/edge_users_copy` · backfill ซ้ำต้องไม่มีผลเสีย (`new_edits: false` กับ revision ที่มีแล้ว = no-op)
+- **FR-11a (backfill)** — เมื่อมี `edge_users_<code>` ใหม่ (FR-10) `edge-users-copy` ต้องคัดลอก user ที่มีอยู่แล้วของศูนย์นั้นทั้งหมดด้วยวิธีเดียวกับ FR-11 ภายใน 1 นาทีหลังสร้าง DB · อ่าน `_users` ทีละหน้า (เช่น 500 doc) ห้ามโหลดทั้งก้อน · บันทึกว่าศูนย์ไหน backfill แล้วใน `_users/_local/edge_users_copy` · backfill ซ้ำต้องไม่มีผลเสีย (`new_edits: false` กับ revision ที่มีแล้ว = no-op)
 - **FR-12** — `central-repl-user.sh` ทุก action ตรวจ `edge_users_*` ทุก DB บน central: `members.names` ไม่ว่าง หรือ `members.roles` ≠ `["repl:<CODE>"]` พอดี (รวมกรณีว่าง = เปิดสาธารณะ) → หยุดพร้อม error ระบุชื่อ DB
 - **FR-13 (health)** — service FR-11 บันทึกสถานะ (`last_seq` ที่ประมวลผลแล้ว, `last_error`, `updated_at`) ใน `_users/_local/edge_users_copy` · `scripts/central-repl-user.sh <CODE> --status` อ่าน doc นี้ด้วย `curl` แล้วแสดงเทียบกับ `update_seq` ของ `_users` และสถานะ backfill ของศูนย์ (FR-11a) · exit ≠ 0 เมื่อมี `last_error` หรือ service ตามหลัง `_users` นานเกิน 5 นาที · SETUP-CENTRAL.md ระบุให้ใส่ในการตรวจประจำวันของ central
 
@@ -134,7 +134,7 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
   2. reset password ของ staff ทุกคนที่ `edge_shelters` มี `<CODE>` ด้วย reset password ที่มีอยู่ (`user-service.ts` — เปลี่ยนเป็นรหัสชั่วคราวทันที) · **ห้าม**ตั้งแค่ `must_change_password` (รหัสเดิมยัง login ได้)
   3. ตรวจ revision ใน `shelter_<code>` ที่ sync ขึ้นมาหลังเวลาที่เครื่องหาย
   4. ติดตั้ง edge เครื่องใหม่ด้วย `scripts/central-repl-user.sh <CODE>` ใหม่
-- **FR-22** — หลัง deploy CR นี้ครบทุก edge: หมุนรหัส central admin (edge ที่ติดตั้งก่อนหน้ายังมีรหัสเก่าใน `.env`/`_replicator`) แล้วอัปเดต `COUCHDB_PASSWORD` ของ worker ที่ central + restart
+- **FR-22** — หลัง deploy CR นี้ครบทุก edge: หมุนรหัส central admin (edge ที่ติดตั้งก่อนหน้ายังมีรหัสเก่าใน `.env`/`_replicator`) แล้วอัปเดต `COUCHDB_PASSWORD` ของ**ทุก service ที่ central ที่ใช้รหัสนี้** — อย่างน้อย `edge-users-copy` และ sync-worker (`worker`) — แล้ว restart ทั้งหมด · ลืม `edge-users-copy` = คัดลอก user ไม่ได้ (401) และการถอดสิทธิ์ไม่ถึง edge (FR-13 จะเตือน)
 
 ## Acceptance
 
@@ -149,7 +149,7 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - **AC-9** — edge ที่ติดตั้งก่อน CR นี้ เปลี่ยน credential + รัน `edge-init` ใหม่ → `_users` ของ edge ไม่มี conflict
 - **AC-10** — `edge-init` ด้วย credential ที่เป็น admin → `FAILED` (FR-16)
 - **AC-11** — unit test VDU FR-6–FR-8 ครอบ `repl:<CODE>` ตรงศูนย์, ต่างศูนย์, ไม่มี role · `scripts/tests/central-repl-user.test.sh` ครอบ FR-1–FR-4, FR-10, FR-12 บน CouchDB local (แบบเดียวกับ `edge-watchdog.test.sh`) · `worker/tests/` ครอบ FR-11 (เลือกปลายทาง, ข้าม `_design/*`, ข้ามศูนย์ที่ไม่มี DB) และ FR-11a
-- **AC-12** — หยุด worker ระหว่างมี change ค้าง แล้วเปิดใหม่ → change ทั้งหมดถึง `edge_users_<code>` ครบ และไม่มี conflict ที่ edge
+- **AC-12** — หยุด `edge-users-copy` ระหว่างมี change ค้าง แล้วเปิดใหม่ → change ทั้งหมดถึง `edge_users_<code>` ครบ และไม่มี conflict ที่ edge
 - **AC-13** — สร้างศูนย์ใหม่ด้วย `central-repl-user.sh <CODE>` → ภายใน 1 นาที `edge_users_<code>` มี user เดิมทั้งหมดของศูนย์นั้น (FR-11a)
 - **AC-14** — user ที่อยู่ 2 ศูนย์ → change หนึ่งครั้งถึง `edge_users_<code>` ของทั้งสองศูนย์ และไม่ถึงศูนย์อื่น
 
@@ -179,3 +179,4 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - 2026-11-11 — kong: ตัว copy เปลี่ยนเป็น worker ของ central (FR-11, FR-11a, FR-13) — `_replicator` ต้องมี job ต่อศูนย์ ไม่รองรับหลักร้อยศูนย์ · ข้อกังวลเรื่อง revision tree ปิดด้วย `new_edits: false` (prototype 2026-11-11 ไม่มี conflict) · hard delete แยกเป็น #1331 (Phase 4) · ตัด effort ออกจาก CR
 - 2026-11-11 — kong: ตัว copy รันเป็น service แยก `edge-users-copy` (image เดียวกับ sync-worker) และเก็บ checkpoint / สถานะใน `_users/_local/edge_users_copy` แทน MongoDB — การถอดสิทธิ์ที่ edge ไม่พึ่ง MongoDB หรือ sync-worker · `--status` อ่านด้วย `curl` ได้ · backfill ทีละหน้า + `mem_limit` · เพิ่มเงื่อนไข backfill `edge_shelters` ของ CR-171 ใน Migration
 - 2026-11-11 — approved โดย kong · รันเลข CR-247 (#1298 / PR #1304)
+- 2026-11-11 — แก้ตามรีวิว PR #1304: FR-22 หมุนรหัส central admin ต้องอัปเดตทั้ง `edge-users-copy` และ sync-worker · เรียกตัวคัดลอกว่า `edge-users-copy` ทั้ง CR
