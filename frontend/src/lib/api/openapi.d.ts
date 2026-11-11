@@ -335,6 +335,129 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/v1/integrations/status': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Integration Status */
+		get: operations['integration_status_v1_integrations_status_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m5/facilities': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** M5 Facilities */
+		get: operations['m5_facilities_v1_integrations_m5_facilities_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m5/transfers': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** M5 Create Transfer */
+		post: operations['m5_create_transfer_v1_integrations_m5_transfers_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m5/transfers/{code}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** M5 Get Transfer */
+		get: operations['m5_get_transfer_v1_integrations_m5_transfers__code__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m5/transfers/{code}/start': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** M5 Start Transfer */
+		post: operations['m5_start_transfer_v1_integrations_m5_transfers__code__start_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m5/transfers/{code}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** M5 Cancel Transfer */
+		post: operations['m5_cancel_transfer_v1_integrations_m5_transfers__code__cancel_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m5/sync': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * M5 Sync
+		 * @description Worker tick (every `M5_SYNC_INTERVAL_S`). FastAPI runs several processes, so it
+		 *     never polls M5 on its own.
+		 */
+		post: operations['m5_sync_v1_integrations_m5_sync_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/needs': {
 		parameters: {
 			query?: never;
@@ -2268,6 +2391,13 @@ export interface components {
 			/** Pets */
 			pets?: components['schemas']['PetCreated'][];
 		};
+		/**
+		 * IntegrationStatusResponse
+		 * @description One key per integration so M6 can be added without a breaking change.
+		 */
+		IntegrationStatusResponse: {
+			m5: components['schemas']['M5Status'];
+		};
 		/** JobShiftTemplate */
 		JobShiftTemplate: {
 			/**
@@ -2495,6 +2625,196 @@ export interface components {
 			updated_at: string;
 			/** Items */
 			items: components['schemas']['StockItem'][];
+		};
+		/** M5ActionRequest */
+		M5ActionRequest: {
+			/** Actor */
+			actor?: string | null;
+		};
+		/** M5CancelRequest */
+		M5CancelRequest: {
+			/** Reason */
+			reason: string;
+			/** Actor */
+			actor?: string | null;
+		};
+		/** M5FacilitiesResponse */
+		M5FacilitiesResponse: {
+			/** Data */
+			data: components['schemas']['M5Facility'][];
+			/** Total */
+			total: number;
+		};
+		/** M5Facility */
+		M5Facility: {
+			/** Facility Id */
+			facility_id: number;
+			/** Name */
+			name: string;
+			/** Category */
+			category: string;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province: string;
+			/** Latitude */
+			latitude?: number | null;
+			/** Longitude */
+			longitude?: number | null;
+			readiness?: components['schemas']['M5Readiness'] | null;
+		};
+		/** M5OriginIn */
+		M5OriginIn: {
+			/** Location Code */
+			location_code: string;
+			/** Location Name */
+			location_name: string;
+			/** Latitude */
+			latitude: number;
+			/** Longitude */
+			longitude: number;
+		};
+		/** M5PatientIn */
+		M5PatientIn: {
+			/** Referral Id */
+			referral_id: string;
+			/**
+			 * Acuity
+			 * @enum {string}
+			 */
+			acuity: 'red' | 'yellow' | 'green' | 'black';
+			/** Name */
+			name?: string | null;
+			/** National Id */
+			national_id?: string | null;
+			/** Age */
+			age?: number | null;
+			/** Condition */
+			condition?: string | null;
+		};
+		/** M5Readiness */
+		M5Readiness: {
+			/** Beds Surge */
+			beds_surge: number;
+			/** Er Capacity */
+			er_capacity: number;
+			/** Vital */
+			vital: number;
+			/**
+			 * Updated At
+			 * Format: date-time
+			 */
+			updated_at: string;
+		};
+		/** M5RequesterIn */
+		M5RequesterIn: {
+			/** Contact Name */
+			contact_name: string;
+			/** Contact Role */
+			contact_role: string;
+			/** Contact Phone */
+			contact_phone: string;
+		};
+		/** M5Status */
+		M5Status: {
+			/** Configured */
+			configured: boolean;
+			/** Token Ok */
+			token_ok: boolean;
+			/** Reachable */
+			reachable: boolean;
+			/** Checked At */
+			checked_at?: string | null;
+			/** Error */
+			error?: string | null;
+		};
+		/** M5SyncResponse */
+		M5SyncResponse: {
+			/** Skipped */
+			skipped: boolean;
+			/**
+			 * Checked
+			 * @default 0
+			 */
+			checked: number;
+			/**
+			 * Changed
+			 * @default 0
+			 */
+			changed: number;
+		};
+		/** M5TransferCreateRequest */
+		M5TransferCreateRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Batch Id */
+			batch_id: string;
+			/** External Ref */
+			external_ref: string;
+			origin: components['schemas']['M5OriginIn'];
+			requester: components['schemas']['M5RequesterIn'];
+			/** Destination Facility Id */
+			destination_facility_id: number;
+			/**
+			 * Transport Vehicle Type
+			 * @enum {string}
+			 */
+			transport_vehicle_type: 'ambulance' | 'van' | 'helicopter' | 'other';
+			/**
+			 * Transport Note
+			 * @default
+			 */
+			transport_note: string;
+			/**
+			 * Note
+			 * @default
+			 */
+			note: string;
+			/** Patients */
+			patients: components['schemas']['M5PatientIn'][];
+			/** Actor */
+			actor?: string | null;
+		};
+		/** M5TransferCreateResponse */
+		M5TransferCreateResponse: {
+			/** Code */
+			code: string;
+			/** Status */
+			status: string;
+			/** External Ref */
+			external_ref: string;
+			/** Replayed */
+			replayed: boolean;
+		};
+		/**
+		 * M5TransferView
+		 * @description TRF-004 shape as M5 returns it (passed through; extra fields kept).
+		 */
+		M5TransferView: {
+			/** Code */
+			code: string;
+			/** Status */
+			status: string;
+			/** External Ref */
+			external_ref?: string | null;
+			/** Destination */
+			destination?: {
+				[key: string]: unknown;
+			} | null;
+			/** Original Destination */
+			original_destination?: {
+				[key: string]: unknown;
+			} | null;
+			/** Review */
+			review?: {
+				[key: string]: unknown;
+			} | null;
+			/** Activity */
+			activity?: {
+				[key: string]: unknown;
+			}[];
+		} & {
+			[key: string]: unknown;
 		};
 		/** MemberCreated */
 		MemberCreated: {
@@ -5266,6 +5586,211 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['HealthCheckResponse'];
+				};
+			};
+		};
+	};
+	integration_status_v1_integrations_status_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['IntegrationStatusResponse'];
+				};
+			};
+		};
+	};
+	m5_facilities_v1_integrations_m5_facilities_get: {
+		parameters: {
+			query?: {
+				q?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M5FacilitiesResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m5_create_transfer_v1_integrations_m5_transfers_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['M5TransferCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M5TransferCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m5_get_transfer_v1_integrations_m5_transfers__code__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M5TransferView'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m5_start_transfer_v1_integrations_m5_transfers__code__start_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				code: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['M5ActionRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M5TransferView'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m5_cancel_transfer_v1_integrations_m5_transfers__code__cancel_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				code: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['M5CancelRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M5TransferView'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m5_sync_v1_integrations_m5_sync_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M5SyncResponse'];
 				};
 			};
 		};

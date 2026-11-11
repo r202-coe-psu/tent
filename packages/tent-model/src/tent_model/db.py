@@ -33,6 +33,8 @@ from tent_model.shelter_stock import ShelterStock
 from tent_model.sync_checkpoint import SyncCheckpoint
 from tent_model.external_booking import ExternalBooking
 from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+from tent_model.m5_outbound_log import M5OutboundLog
+from tent_model.m5_transfer import M5Transfer
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.third_party_client import ThirdPartyClient
 from tent_model.unassigned_registration import UnassignedRegistration
@@ -68,6 +70,8 @@ ALL_DOCUMENTS = [
     UnassignedRegistration,
     ExternalBooking,
     ExternalBookingIdempotency,
+    M5Transfer,
+    M5OutboundLog,
 ]
 
 _client: AsyncMongoClient | None = None
