@@ -88,6 +88,22 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
+  edge-users-copy:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: edge-users-copy
+    command: ["uv", "run", "--project", "worker", "edge-users-copy"]
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+    mem_limit: 256m
+    restart: unless-stopped
+
   fastapi:
     build:
       context: .
