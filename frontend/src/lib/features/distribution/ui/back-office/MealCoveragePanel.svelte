@@ -1,36 +1,43 @@
 <script lang="ts">
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import Info from '@lucide/svelte/icons/info';
 	import Loader from '@lucide/svelte/icons/loader';
-	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-	import Users from '@lucide/svelte/icons/users';
-	import PaginationControls from '$lib/components/pagination-controls.svelte';
+	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import * as Table from '$lib/components/ui/table/index.js';
+	import { useMealServiceReceipts, useMealServices } from '$lib/features/kitchen';
 	import { useEvacuees, useMovements, zoneLabel } from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
+	import { downloadCsv } from '$lib/utils/download-csv';
 	import { useDistributionLogsByDay } from '../../application/queries';
 	import {
-		MIN_MEALS_PER_DAY,
-		summarizeMealCoverage
+		COVERAGE_MEALS,
+		coverageThreshold,
+		summarizeMealCoverage,
+		unscannedMeals
 	} from '../../domain/food-supplies/meal-coverage';
+	import { coverageCsvFilename, coverageRowsToCsv, mealList } from '../model/meal-coverage-csv';
+	import { servedMealsOfDay } from '../model/meal-coverage-served';
 	import {
 		ALL_ZONES,
+		attachHouseholdRecorded,
 		attachZones,
 		coverageCounts,
+		coverageDayMode,
 		coverageResidents,
 		coverageZones,
 		filterCoverageRows,
 		pageSlice,
 		previousThaiDay,
 		sortCoverageRows,
+		thaiToday,
 		type CoverageFilter
 	} from '../model/meal-coverage-view';
-	import MealCoverageBadges from './MealCoverageBadges.svelte';
+	import MealCoverageAdvisories from './MealCoverageAdvisories.svelte';
 	import MealCoverageFilters from './MealCoverageFilters.svelte';
+	import MealCoverageKpiCards from './MealCoverageKpiCards.svelte';
+	import MealCoverageTable from './MealCoverageTable.svelte';
 
 	interface Props {
 		shelterCode?: string;
@@ -40,89 +47,86 @@
 
 	const PAGE_SIZE = 20;
 
-	// Today is excluded on purpose: its meals are not over yet, so everyone would look short.
-	const latestDay = previousThaiDay();
-	let day = $state(latestDay);
+	// Fixed when the tab opens: a day change at midnight needs a reopen, like the rest of this page.
+	const today = thaiToday();
+	let day = $state(previousThaiDay());
 	let filter = $state<CoverageFilter>('all');
 	let query = $state('');
 	let zone = $state(ALL_ZONES);
 	let pickedPage = $state(1);
 
+	// A cleared or typed-in date can be empty or in the future: show a prompt, never a list.
+	const mode = $derived(coverageDayMode(day, today));
+
 	const evacueesQuery = useEvacuees();
 	const movementsQuery = useMovements();
-	// A cleared or typed-in date can be empty, today or in the future: show a prompt, never a
-	// list, since presence and meals are only meaningful for a finished day.
-	const dayIsValid = $derived(/^\d{4}-\d{2}-\d{2}$/.test(day) && day <= latestDay);
 	const logsQuery = useDistributionLogsByDay(
 		() => shelterCode,
 		() => day,
-		() => dayIsValid
+		() => mode.kind !== 'invalid'
 	);
+	const servicesQuery = useMealServices();
+	const receiptsQuery = useMealServiceReceipts();
 	// Only for zone names: while it loads or if it fails, zoneLabel falls back to the zone code.
 	const shelterQuery = useShelter(() => shelterCode ?? '');
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
+	// Meal services only matter while the day is running; a finished day counts every main meal.
+	const needsServices = $derived(mode.kind === 'today');
 	const isLoading = $derived(
-		evacueesQuery.isLoading || movementsQuery.isLoading || logsQuery.isLoading
+		evacueesQuery.isLoading ||
+			movementsQuery.isLoading ||
+			logsQuery.isLoading ||
+			(needsServices && (servicesQuery.isLoading || receiptsQuery.isLoading))
 	);
-	const isError = $derived(evacueesQuery.isError || movementsQuery.isError || logsQuery.isError);
+	const isError = $derived(
+		evacueesQuery.isError ||
+			movementsQuery.isError ||
+			logsQuery.isError ||
+			(needsServices && (servicesQuery.isError || receiptsQuery.isError))
+	);
 	const skippedCount = $derived(logsQuery.data?.skipped.length ?? 0);
 
+	const servedMeals = $derived(
+		mode.kind === 'today'
+			? servedMealsOfDay(day, servicesQuery.data ?? [], receiptsQuery.data ?? [])
+			: COVERAGE_MEALS
+	);
+	const threshold = $derived(coverageThreshold(servedMeals));
+	const logs = $derived(logsQuery.data?.items ?? []);
+
 	const residents = $derived(
-		dayIsValid
-			? coverageResidents({
+		mode.kind === 'invalid'
+			? []
+			: coverageResidents({
 					day,
 					evacuees: evacueesQuery.data ?? [],
 					movements: movementsQuery.data ?? []
 				})
-			: []
 	);
 	const presentCount = $derived(residents.filter((r) => r.presentAllDay).length);
 	const allRows = $derived(
-		attachZones(
-			summarizeMealCoverage({ day, residents, logs: logsQuery.data?.items ?? [] }),
-			residents
+		attachHouseholdRecorded(
+			attachZones(summarizeMealCoverage({ day, residents, logs, servedMeals }), residents),
+			residents,
+			logs,
+			day
 		)
 	);
+	const unscanned = $derived(
+		presentCount > 0 && threshold > 0 ? unscannedMeals({ day, logs, servedMeals }) : []
+	);
 	const counts = $derived(coverageCounts(allRows));
-	const rows = $derived(sortCoverageRows(filterCoverageRows(allRows, { filter, query, zone })));
+	const showPartial = $derived(threshold >= 2);
+	const activeFilter = $derived(filter === 'partial' && !showPartial ? 'all' : filter);
+	const rows = $derived(
+		sortCoverageRows(filterCoverageRows(allRows, { filter: activeFilter, query, zone }))
+	);
+	const zoneName = (code: string | null) => (code ? zoneLabel(code, shelterZones) : '');
 	const zoneOptions = $derived(
 		coverageZones(allRows).map((code) => ({ value: code, label: zoneLabel(code, shelterZones) }))
 	);
 	const paged = $derived(pageSlice(rows, pickedPage, PAGE_SIZE));
-
-	const cards = $derived([
-		{
-			id: 'all',
-			label: 'อยู่ในศูนย์ตลอดวัน',
-			value: presentCount,
-			hint: `ยังไม่ครบ ${counts.all} คน`,
-			icon: Users,
-			border: 'border-slate-200/80',
-			active: 'border-slate-500 bg-slate-50',
-			iconClass: 'text-slate-500'
-		},
-		{
-			id: 'none',
-			label: 'ยังไม่มีบันทึกเลย',
-			value: counts.none,
-			hint: 'ยังไม่มีบันทึกรับอาหารสักมื้อ',
-			icon: CircleAlert,
-			border: 'border-red-200',
-			active: 'border-red-500 bg-red-50',
-			iconClass: 'text-red-600'
-		},
-		{
-			id: 'partial',
-			label: 'มีบันทึก 1 มื้อ',
-			value: counts.partial,
-			hint: `ยังไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ`,
-			icon: TriangleAlert,
-			border: 'border-amber-200',
-			active: 'border-amber-500 bg-amber-50',
-			iconClass: 'text-amber-600'
-		}
-	] as const satisfies readonly object[]);
 
 	function selectFilter(next: CoverageFilter) {
 		filter = next;
@@ -134,13 +138,22 @@
 		zone = ALL_ZONES;
 		pickedPage = 1;
 	}
+	function exportCsv() {
+		downloadCsv(
+			coverageCsvFilename(shelterCode ?? 'shelter', day),
+			coverageRowsToCsv(rows, zoneName)
+		);
+		toast.success('ส่งออกรายการแล้ว');
+	}
 </script>
 
 <section class="space-y-4" aria-labelledby="meal-coverage-title">
 	<div class="flex flex-wrap items-end justify-between gap-3">
 		<div class="space-y-1">
 			<h3 id="meal-coverage-title" class="text-lg font-bold text-slate-900 sm:text-xl">
-				ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารครบ {MIN_MEALS_PER_DAY} มื้อ
+				{threshold >= 2
+					? `ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารครบ ${threshold} มื้อ`
+					: 'ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารของมื้อที่ให้บริการแล้ว'}
 			</h3>
 			<p class="text-sm text-slate-500">
 				นับมื้อเช้า กลางวัน เย็น จากบันทึกการแจกของผู้ที่อยู่ในศูนย์ตลอดทั้งวัน
@@ -159,27 +172,30 @@
 						pickedPage = 1;
 					}
 				}
-				max={latestDay}
+				max={today}
 				class="h-11 w-44 bg-white sm:h-10"
 			/>
 		</div>
 	</div>
 
-	{#if skippedCount > 0}
-		<div
-			class="flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50 p-3 text-sm text-amber-900"
-			role="alert"
-		>
-			<AlertTriangle class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-			มีบันทึกการแจก {skippedCount} รายการที่อ่านไม่ได้ จำนวนมื้ออาจต่ำกว่าความจริง
-		</div>
+	{#if mode.kind === 'today' && !isLoading && !isError}
+		<p class="flex items-start gap-2 text-sm text-slate-600">
+			<Info class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+			{#if servedMeals.length > 0}
+				วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว: {mealList(servedMeals)}
+			{:else}
+				วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว
+			{/if}
+		</p>
 	{/if}
 
-	{#if !dayIsValid}
+	<MealCoverageAdvisories {skippedCount} unscannedMeals={isLoading || isError ? [] : unscanned} />
+
+	{#if mode.kind === 'invalid'}
 		<div
 			class="rounded-xl border border-slate-200/80 bg-white p-6 text-center text-sm text-slate-600"
 		>
-			เลือกวันที่ที่ผ่านมาแล้ว (ไม่เกินเมื่อวาน)
+			เลือกวันที่ (ไม่เกินวันนี้)
 		</div>
 	{:else if isLoading}
 		<div class="flex items-center gap-2 p-6 text-sm text-slate-500">
@@ -189,50 +205,47 @@
 		<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">
 			โหลดข้อมูลไม่สำเร็จ ลองรีเฟรชหน้านี้อีกครั้ง
 		</div>
+	{:else if mode.kind === 'today' && servedMeals.length === 0}
+		<div
+			class="rounded-xl border border-slate-200/80 bg-white p-6 text-center text-sm text-slate-600"
+		>
+			ยังไม่มีมื้อที่ให้บริการวันนี้
+		</div>
 	{:else if presentCount === 0}
 		<div
 			class="rounded-xl border border-slate-200/80 bg-white p-6 text-center text-sm text-slate-600"
 		>
-			ไม่มีผู้ที่อยู่ในศูนย์ตลอดทั้งวันนี้
+			{mode.kind === 'today'
+				? 'ไม่มีผู้ที่อยู่ในศูนย์ตั้งแต่ 00:00 ถึงตอนนี้'
+				: 'ไม่มีผู้ที่อยู่ในศูนย์ตลอดทั้งวันนี้'}
 		</div>
 	{:else}
-		<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-			{#each cards as card (card.id)}
-				{@const isActive = filter === card.id}
-				<button
-					type="button"
-					aria-pressed={isActive}
-					onclick={() => selectFilter(card.id)}
-					class="min-h-11 cursor-pointer rounded-xl border p-4 text-left shadow-2xs transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-[#0A2647] focus-visible:ring-offset-2 focus-visible:outline-none {isActive
-						? `${card.active} ring-1 ring-slate-300`
-						: `${card.border} bg-white`}"
-				>
-					<div class="flex items-center justify-between gap-2">
-						<span class="text-sm font-semibold text-slate-700">{card.label}</span>
-						<card.icon class="size-5 {card.iconClass}" aria-hidden="true" />
-					</div>
-					<div class="mt-2 text-3xl font-bold text-slate-900 tabular-nums">{card.value}</div>
-					<p class="mt-0.5 text-sm text-slate-500">{card.hint}</p>
-				</button>
-			{/each}
-		</div>
+		<MealCoverageKpiCards
+			filter={activeFilter}
+			{presentCount}
+			{counts}
+			{threshold}
+			onSelect={selectFilter}
+		/>
 
 		{#if allRows.length === 0}
 			<div
 				class="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-sm text-emerald-900"
 			>
 				<CircleCheck class="size-4 shrink-0" aria-hidden="true" />
-				ทุกคนที่อยู่ในศูนย์ตลอดวันมีบันทึกรับอาหารอย่างน้อย {MIN_MEALS_PER_DAY} มื้อ
+				ทุกคนที่อยู่ในศูนย์ตลอดวันมีบันทึกรับอาหารอย่างน้อย {threshold} มื้อ
 			</div>
 		{:else}
 			<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 				<MealCoverageFilters
 					{query}
-					{filter}
+					filter={activeFilter}
 					{zone}
 					zones={zoneOptions}
 					shown={rows.length}
 					total={allRows.length}
+					{showPartial}
+					onExport={exportCsv}
 					onQueryChange={(v) => {
 						query = v;
 						pickedPage = 1;
@@ -251,63 +264,14 @@
 						>
 					</div>
 				{:else}
-					<div class="overflow-x-auto">
-						<Table.Root class="w-full text-left text-sm text-slate-700">
-							<Table.Header class="border-b border-slate-200 bg-slate-50/75 text-xs text-slate-600">
-								<Table.Row>
-									<Table.Head scope="col" class="px-4 py-3 font-semibold">ชื่อ</Table.Head>
-									<Table.Head scope="col" class="px-3 py-3 font-semibold">โซนปัจจุบัน</Table.Head>
-									<Table.Head scope="col" class="px-3 py-3 font-semibold">มื้ออาหาร</Table.Head>
-									<Table.Head scope="col" class="px-3 py-3 font-semibold">สถานะ</Table.Head>
-								</Table.Row>
-							</Table.Header>
-							<Table.Body class="divide-y divide-slate-100">
-								{#each paged.items as row (row.id)}
-									<Table.Row class="hover:bg-slate-50/80">
-										<Table.Cell class="px-4 py-3 font-medium text-slate-900">{row.name}</Table.Cell>
-										<Table.Cell class="px-3 py-3 text-slate-600"
-											>{zoneLabel(row.zone, shelterZones)}</Table.Cell
-										>
-										<Table.Cell class="px-3 py-3">
-											<MealCoverageBadges received={row.received} />
-										</Table.Cell>
-										<Table.Cell class="px-3 py-3 whitespace-nowrap">
-											{#if row.received.length === 0}
-												<span
-													class="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-800"
-												>
-													<CircleAlert class="size-3.5" aria-hidden="true" />
-													ยังไม่มีบันทึก
-												</span>
-											{:else}
-												<span
-													class="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"
-												>
-													<TriangleAlert class="size-3.5" aria-hidden="true" />
-													มีบันทึก 1 มื้อ
-												</span>
-											{/if}
-										</Table.Cell>
-									</Table.Row>
-								{/each}
-							</Table.Body>
-						</Table.Root>
-					</div>
-					<div
-						class="flex flex-col items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row"
-					>
-						<p class="text-sm text-slate-500">
-							แสดง <span class="font-semibold text-slate-800 tabular-nums"
-								>{paged.start}–{paged.end}</span
-							>
-							จาก <span class="font-semibold text-slate-800 tabular-nums">{rows.length}</span> คน
-						</p>
-						<PaginationControls
-							bind:page={() => paged.page, (next) => (pickedPage = next)}
-							count={rows.length}
-							perPage={PAGE_SIZE}
-						/>
-					</div>
+					<MealCoverageTable
+						{paged}
+						total={rows.length}
+						pageSize={PAGE_SIZE}
+						{servedMeals}
+						{zoneName}
+						onPageChange={(next) => (pickedPage = next)}
+					/>
 				{/if}
 			</div>
 		{/if}

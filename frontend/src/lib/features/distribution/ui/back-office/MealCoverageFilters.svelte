@@ -1,5 +1,7 @@
 <script lang="ts">
+	import Download from '@lucide/svelte/icons/download';
 	import Search from '@lucide/svelte/icons/search';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -12,6 +14,9 @@
 		zones: readonly { value: string; label: string }[];
 		shown: number;
 		total: number;
+		/** Whether a "one meal" status exists (it does not when only one record is needed). */
+		showPartial: boolean;
+		onExport: () => void;
 		onQueryChange: (query: string) => void;
 		onFilterChange: (filter: CoverageFilter) => void;
 		onZoneChange: (zone: string) => void;
@@ -24,6 +29,8 @@
 		zones,
 		shown,
 		total,
+		showPartial,
+		onExport,
 		onQueryChange,
 		onFilterChange,
 		onZoneChange
@@ -34,7 +41,9 @@
 		none: 'ยังไม่มีบันทึกเลย',
 		partial: 'มีบันทึก 1 มื้อ'
 	};
-	const FILTERS = Object.keys(FILTER_LABELS) as CoverageFilter[];
+	const FILTERS = $derived(
+		(Object.keys(FILTER_LABELS) as CoverageFilter[]).filter((f) => showPartial || f !== 'partial')
+	);
 
 	const zoneText = $derived(
 		zone === ALL_ZONES ? 'ทุกโซน' : (zones.find((z) => z.value === zone)?.label ?? zone)
@@ -109,7 +118,13 @@
 			</div>
 		{/if}
 	</div>
-	<p class="text-sm text-slate-500 tabular-nums">
-		พบ <span class="font-semibold text-slate-800">{shown}</span> จาก {total} คน
-	</p>
+	<div class="flex flex-wrap items-center gap-3">
+		<p class="text-sm text-slate-500 tabular-nums">
+			พบ <span class="font-semibold text-slate-800">{shown}</span> จาก {total} คน
+		</p>
+		<Button variant="outline" class="h-11 sm:h-10" disabled={shown === 0} onclick={onExport}>
+			<Download class="size-4" aria-hidden="true" />
+			Export CSV
+		</Button>
+	</div>
 </div>
