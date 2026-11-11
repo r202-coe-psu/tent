@@ -230,6 +230,7 @@ export {
 
 export {
 	thailandCalendarDay,
+	thailandDayBounds,
 	THAILAND_UTC_OFFSET_MS,
 	ULID_PATTERN,
 	requisitionTicketIdSchema,

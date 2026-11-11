@@ -43,7 +43,7 @@ export {
 	useRequisitionTickets,
 	useRequisitionTicket,
 	useDistributionLogs,
-	useDistributionLogsWithSkipped,
+	useDistributionLogsByDay,
 	useRecipientsDistributionLogs,
 	useEvacueeAllergies,
 	useItemDistributions,

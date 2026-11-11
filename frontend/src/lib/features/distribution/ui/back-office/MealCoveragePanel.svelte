@@ -12,7 +12,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { useEvacuees, useMovements, zoneLabel } from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
-	import { useDistributionLogsWithSkipped } from '../../application/queries';
+	import { useDistributionLogsByDay } from '../../application/queries';
 	import {
 		MIN_MEALS_PER_DAY,
 		summarizeMealCoverage
@@ -50,7 +50,14 @@
 
 	const evacueesQuery = useEvacuees();
 	const movementsQuery = useMovements();
-	const logsQuery = useDistributionLogsWithSkipped(() => shelterCode);
+	// A cleared or typed-in date can be empty, today or in the future: show a prompt, never a
+	// list, since presence and meals are only meaningful for a finished day.
+	const dayIsValid = $derived(/^\d{4}-\d{2}-\d{2}$/.test(day) && day <= latestDay);
+	const logsQuery = useDistributionLogsByDay(
+		() => shelterCode,
+		() => day,
+		() => dayIsValid
+	);
 	// Only for zone names: while it loads or if it fails, zoneLabel falls back to the zone code.
 	const shelterQuery = useShelter(() => shelterCode ?? '');
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
@@ -61,9 +68,6 @@
 	const isError = $derived(evacueesQuery.isError || movementsQuery.isError || logsQuery.isError);
 	const skippedCount = $derived(logsQuery.data?.skipped.length ?? 0);
 
-	// A cleared or typed-in date can be empty, today or in the future: show a prompt, never a
-	// list, since presence and meals are only meaningful for a finished day.
-	const dayIsValid = $derived(/^\d{4}-\d{2}-\d{2}$/.test(day) && day <= latestDay);
 	const residents = $derived(
 		dayIsValid
 			? coverageResidents({

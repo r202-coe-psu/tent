@@ -91,18 +91,20 @@ export const useDistributionLogs = (
 	});
 
 /**
- * Every distribution log of the shelter plus the docs that failed to parse. The meal coverage
+ * Distribution logs of one Thai calendar day plus the docs that failed to parse. The meal coverage
  * report needs `skipped` so unreadable logs show as a warning instead of silently lowering counts.
  */
-export const useDistributionLogsWithSkipped = (
-	shelterCodeGetter?: MaybeGetter<string | undefined>,
+export const useDistributionLogsByDay = (
+	shelterCodeGetter: MaybeGetter<string | undefined>,
+	day: MaybeGetter<string>,
 	enabled: MaybeGetter<boolean> = true
 ) =>
 	createQuery(() => {
 		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const resolvedDay = toValue(day);
 		return {
-			queryKey: distributionKeys.logsWithSkipped(shelterCode),
-			queryFn: () => distributionLogRepository(shelterCode).listWithSkipped(),
+			queryKey: distributionKeys.logsByDay(shelterCode, resolvedDay),
+			queryFn: () => distributionLogRepository(shelterCode).listByDistributedDay(resolvedDay),
 			enabled: Boolean(toValue(enabled) && shelterCode)
 		};
 	});

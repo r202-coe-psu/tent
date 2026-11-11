@@ -24,7 +24,7 @@ vi.mock('$lib/features/shelters', async (orig) => ({
 	useShelter: () => env.shelter
 }));
 vi.mock('../../application/queries', () => ({
-	useDistributionLogsWithSkipped: () => env.logs
+	useDistributionLogsByDay: () => env.logs
 }));
 vi.mock('../model/meal-coverage-view', async (orig) => ({
 	...(await orig<typeof import('../model/meal-coverage-view')>()),
