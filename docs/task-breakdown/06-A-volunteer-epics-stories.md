@@ -23,7 +23,7 @@ status: stories-draft-complete
 module: A
 source_cr: CR-104
 created: 2026-07-22
-updated: 2026-09-01 # Aligned with CR-104
+updated: 2026-11-06 # CR-228: D-MULTI=D (โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ); 2026-09-01 Aligned with CR-104
 ---
 
 # Module A (CR-104) — Epic Breakdown
@@ -54,7 +54,7 @@ Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR
 - MA-05b: **สร้าง `_users`:** เฉพาะ self-register หรือ SA — **SM สร้าง user ไม่ได้** (D-USER-PROVISION)
 - MA-06: สมัครโปรไฟล์อาสาผ่าน public ได้โดยไม่บังคับ login ตอนสมัคร
 - MA-07: เปิด public surface `/volunteer*` พร้อม Module A (nav + สมัคร; board ตาม sitemap) — ต้อง amend CR-005
-- MA-08: โปรไฟล์อาสาเป็นโปรไฟล์กลาง — สมัคร/ถูกมอบหมายหลายศูนย์จากโปรไฟล์เดียวได้
+- MA-08: โปรไฟล์อาสาเป็นโปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) — สมัคร/ถูกมอบหมายหลายศูนย์ได้
 - MA-09: โปรไฟล์เก็บ skills, availability, ติดต่อ; แก้ไขภายหลังได้; SM ค้น/กรองตามทักษะและช่วงเวลาได้
 - MA-09b: **Digital Ticket & QR Code**: ผู้สมัครรับ URL Ticket + QR Code สำหรับตรวจสอบสถานะและรายงานตัวหน้างาน — ป้องกันสแปมด้วย reCAPTCHA v3 + Rate Limiting (ไม่มีค่าใช้จ่าย SMS OTP)
 - MA-10: มี doc type `job` ต่อศูนย์ — status draft/open/paused/filled/closed; SM สร้าง/แก้/พัก/ปิดได้ตลอด
@@ -89,7 +89,7 @@ Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR
 - Baseline schema ปัจจุบัน: `volunteer` ไม่มี `availability` field ใน §2.8; `shift_assignment` ยังเป็น enum morning/afternoon/night — ต้อง bump ตามมติ
 - Skill master list อิง T-18 / Module B (dependency เดิมของ T-28)
 - SA: skill tag master + shift template presets ทั้งแพลตฟอร์ม
-- Non-goals R3: job lead, SOP→Job auto, payroll, matching เต็มอัตโนมัติโดยไม่มีคน (ยกเว้น auto-accept ตาม F-AUTO), mobile native, cross-province marketplace เกินโปรไฟล์กลาง+สมัครหลายศูนย์
+- Non-goals R3: job lead, SOP→Job auto, payroll, matching เต็มอัตโนมัติโดยไม่มีคน (ยกเว้น auto-accept ตาม F-AUTO), mobile native, cross-province marketplace เกินโปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) + สมัครหลายศูนย์
 
 ### UX Design Requirements
 
@@ -108,7 +108,7 @@ Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR
 
 | ID | Epic | สั้น ๆ |
 | --- | --- | --- |
-| FR-42 | Epic 2 | สมัครโปรไฟล์ + skills + availability (public + กลาง) |
+| FR-42 | Epic 2 | สมัครโปรไฟล์ + skills + availability (public + โปรไฟล์ต่อศูนย์ — CR-228) |
 | FR-43 | Epic 3 (+ Epic 4 สำหรับ staff-capable write) | Job Board + match + กะ; duty window ใน Epic 4 |
 | MA-01 | Epic 3 | SM เจ้าของ job ops |
 | MA-02 | Epic 3 | ไม่มี lead ใน R3 |
@@ -118,7 +118,7 @@ Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR
 | MA-05b | Epic 1 | SM สร้าง user ไม่ได้; สร้างได้แค่ self-reg หรือ SA |
 | MA-06 | Epic 2 | Public สมัครโปรไฟล์ |
 | MA-07 | Epic 2 | เปิด `/volunteer*` + CR-005 |
-| MA-08 | Epic 2 | โปรไฟล์กลางหลายศูนย์ |
+| MA-08 | Epic 2 | โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) |
 | MA-09 | Epic 2 | skills / availability / ค้นกรอง |
 | MA-10 | Epic 3 | doc `job` + lifecycle |
 | MA-11 | Epic 3 | tier operational / staff-capable |
@@ -145,8 +145,8 @@ SM เห็นและกรองได้ว่า user เป็นอา�
 **FRs covered:** MA-03, MA-04, MA-05, MA-05b  
 **บอร์ด:** ส่วนของ T-28 / user admin · **standalone** ก่อน Job Board
 
-### Epic 2: สมัครเป็นอาสาจาก public + โปรไฟล์กลาง
-คนนอกสมัครโปรไฟล์ผ่าน `/volunteer*` ได้โดยไม่ login; มีโปรไฟล์กลาง skills/availability; สมัครงานหลายศูนย์ได้ภายหลัง; PII mask ตาม NFR-20
+### Epic 2: สมัครเป็นอาสาจาก public + โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228)
+คนนอกสมัครโปรไฟล์ผ่าน `/volunteer*` ได้โดยไม่ login; มีโปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) พร้อม skills/availability; สมัครงานหลายศูนย์ได้ภายหลัง; PII mask ตาม NFR-20
 **FRs covered:** FR-42, MA-06, MA-07, MA-08, MA-09 · NFR-5, NFR-20 · UX-DR1, UX-DR5  
 **บอร์ด:** T-28 · ต้อง amend CR-005 + schema volunteer (multi)
 
@@ -229,9 +229,9 @@ So that I can manage each group separately.
 
 ---
 
-## Epic 2: สมัครเป็นอาสาจาก public + โปรไฟล์กลาง
+## Epic 2: สมัครเป็นอาสาจาก public + โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228)
 
-คนนอกสมัครโปรไฟล์ผ่าน `/volunteer*` ได้โดยไม่ login; มีโปรไฟล์กลาง skills/availability; PII mask ตาม NFR-20
+คนนอกสมัครโปรไฟล์ผ่าน `/volunteer*` ได้โดยไม่ login; มีโปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) พร้อม skills/availability; PII mask ตาม NFR-20
 
 **FRs covered:** FR-42, MA-06, MA-07, MA-08 (schema พื้นฐาน), MA-09 · NFR-5, NFR-20 · UX-DR1, UX-DR5  
 **บอร์ด:** T-28  
@@ -247,7 +247,7 @@ So that I can join the volunteer pool without having a login first.
 
 **Given** เปิด public route สมัครอาสา  
 **When** กรอกชื่อ ติดต่อ skills availability แล้วส่ง  
-**Then** สร้าง `volunteer` เป็นโปรไฟล์กลาง (รองรับ D-MULTI=A) ตาม schema ที่ apply แล้ว  
+**Then** สร้าง `volunteer` เป็นโปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228, D-MULTI=D) ตาม schema ที่ apply แล้ว  
 **And** ไม่สร้าง RoleKey และไม่ให้สิทธิ์ใด ๆ จากขั้นตอนนี้  
 **And** availability ถูก persist และใช้กรอง/จัดกะได้ในขั้นถัดไป  
 **And** validation ปฏิเสธข้อมูลไม่ครบหรือไม่ถูกต้อง (MA-06, MA-08, MA-09, FR-42)
@@ -443,17 +443,17 @@ So that plans can change without silently stranding volunteers.
 **And** การลดโควตาต่ำกว่าจำนวนที่รับแล้วบังคับให้จัดการถอนก่อน หรือเลือกคนที่จะถอน — ห้ามเหลือสถานะขัดแย้ง  
 **And** audit/history บันทึกว่าใครแก้อะไรเมื่อไร (MA-18)
 
-### Story 3.10: โปรไฟล์กลางสมัคร job ได้หลายศูนย์
+### Story 3.10: อาสาสมัคร job ได้หลายศูนย์ (โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228))
 
-As a volunteer with one central profile,  
-I want to apply to open jobs at more than one shelter,  
-So that I can help where needed without creating duplicate profiles.
+As a volunteer who helps at more than one shelter,  
+I want to apply to open jobs at each shelter and have staff reuse what another shelter already checked,  
+So that I can help where needed without proving my identity and skills from scratch every time (CR-228).
 
 **Acceptance Criteria:**
 
-**Given** มี `volunteer` โปรไฟล์กลาง (D-MULTI=A) จาก Epic 2 และมี job `open` ในอย่างน้อยสองศูนย์  
-**When** อาสาสมัคร (หรือถูกมอบหมาย) เข้า job ของศูนย์ต่าง ๆ จากโปรไฟล์เดียว  
-**Then** แต่ละศูนย์มี application/assignment ของตนเองโดยไม่ต้องสร้างโปรไฟล์ซ้ำ  
+**Given** มี `volunteer` โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) จาก Epic 2 และมี job `open` ในอย่างน้อยสองศูนย์  
+**When** อาสาสมัคร (หรือถูกมอบหมาย) เข้า job ของศูนย์ต่าง ๆ (แต่ละศูนย์มีโปรไฟล์ของตนเอง)  
+**Then** แต่ละศูนย์มีโปรไฟล์ application และ assignment ของตนเอง และเจ้าหน้าที่ศูนย์นั้นเห็นผลยืนยันตัวตน / รับรองทักษะจากศูนย์อื่นที่เบอร์และเลขบัตรตรงกันให้กดรับ (CR-228)  
 **And** กติกาไม่ซ้อนเวลายังใช้ข้ามศูนย์ (F-OVERLAP)  
 **And** PII ยัง mask ตาม NFR-20; ไม่ขยายสิทธิ์ข้ามศูนย์จากแค่สมัคร (MA-08, MA-13, MA-16)
 
@@ -567,9 +567,9 @@ Epic 1 ∥ Epic 2  →  Epic 3  →  Epic 4 (review gate)
    T-28 ส่วน user     T-28 public      T-29 Job Board     T-29b duty
 ```
 
-1. **ก่อนโค้ดโดเมน Epic 3:** apply field table ใน `schema.md` สำหรับ `job` v1, `job_application` v1, bump `shift_assignment`, และ `volunteer` multi/availability ตาม D-MULTI — **ห้ามเดา field ในโค้ดก่อน spec**
+1. **ก่อนโค้ดโดเมน Epic 3:** apply field table ใน `schema.md` สำหรับ `job` v1, `job_application` v1, bump `shift_assignment`, และ `volunteer` multi/availability ตาม D-MULTI (= D: โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228)) — **ห้ามเดา field ในโค้ดก่อน spec**
 2. **Epic 1** — user admin ป้าย/ฟิลเตอร์/ห้าม SM สร้าง user / SM แก้ RoleKey+ชนิดคน (D-USER-PROVISION)
-3. **Epic 2** — public `/volunteer*` + amend CR-005 + โปรไฟล์กลาง + ค้นกรอง + ผูก login
+3. **Epic 2** — public `/volunteer*` + amend CR-005 + โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) + ค้นกรอง + ผูก login
 4. **Epic 3** — Job Board ตาม 3.1→3.10 (SM-only; ไม่มี lead; ไม่มี SOP→Job)
 5. **Epic 4** — time-bound duty guards; **Lead/pair review ก่อน merge**; อย่าแตะ sync/auth stable core โดยไม่ review
 
@@ -587,12 +587,12 @@ Epic 1 ∥ Epic 2  →  Epic 3  →  Epic 4 (review gate)
 - SOP / daily_calc → สร้างหรือเติม job อัตโนมัติ
 - RoleKey ชื่อ `volunteer` / ใช้ `affiliation_tags` เป็น permission
 - SM สร้าง `_users` (สร้างได้แค่ self-reg หรือ SA)
-- Payroll, mobile native, cross-province marketplace เกินโปรไฟล์กลาง+สมัครหลายศูนย์
+- Payroll, mobile native, cross-province marketplace เกินโปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) + สมัครหลายศูนย์
 - Matching เต็มอัตโนมัติโดยไม่มีคน (ยกเว้น auto-accept ตาม F-AUTO)
 
 ### มติที่ lock แล้ว (อ้างอิงอย่างเดียว — แหล่งความจริง = CR-041)
 
-D-OWNER · D-AFFIL · D-TIER=A · D-DUTY-ACCESS=B · D-LEAD=A · D-REG=A · D-SHIFT=C · D-APP+F-AUTO · D-DEMAND=C · D-MULTI=A · D-PUBLIC=A · F-CLOCK · F-OFFLINE · F-OVERLAP · F-REVOKE · D-USER-PROVISION
+D-OWNER · D-AFFIL · D-TIER=A · D-DUTY-ACCESS=B · D-LEAD=A · D-REG=A · D-SHIFT=C · D-APP+F-AUTO · D-DEMAND=C · D-MULTI=D (CR-228) · D-PUBLIC=A · F-CLOCK · F-OFFLINE · F-OVERLAP · F-REVOKE · D-USER-PROVISION
 
 ### Definition of done ต่อ slice
 
@@ -603,7 +603,7 @@ D-OWNER · D-AFFIL · D-TIER=A · D-DUTY-ACCESS=B · D-LEAD=A · D-REG=A · D-SH
 | จุด | ทำไม |
 | --- | --- |
 | Epic 4 guards | ใกล้ stable core — review ก่อน merge |
-| Schema placement โปรไฟล์กลาง | ระบุใน field table ตอน apply — ห้ามเดา shared vs per-shelter ในโค้ด |
+| Schema placement โปรไฟล์ | ตัดสินแล้ว: โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ (CR-228) — schema.md §2.8 |
 | CR-005 amend | บังคับก่อนเปิด nav `/volunteer*` |
 | Skill master | พึ่ง T-18 / Module B |
 

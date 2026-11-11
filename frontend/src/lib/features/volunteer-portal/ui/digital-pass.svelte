@@ -35,16 +35,21 @@
 	interface Props {
 		token: string;
 		hideQr?: boolean;
+		/** Opens this application of a permanent token instead of the default pick (#973). */
+		applicationId?: string;
 	}
 
-	let { token, hideQr = false }: Props = $props();
+	let { token, hideQr = false, applicationId }: Props = $props();
 
 	let cancelDialogOpen = $state(false);
 
 	const t = $derived(ticketI18n[languageStore.current]);
 	const currentLang = $derived(languageStore.current);
 
-	const query = useVolunteerTicket(() => token);
+	const query = useVolunteerTicket(
+		() => token,
+		() => applicationId
+	);
 	const cancel = useCancelTicketMutation();
 
 	const ticket = $derived(query.data);

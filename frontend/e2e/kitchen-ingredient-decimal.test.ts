@@ -23,11 +23,11 @@ import {
 } from '@playwright/test';
 import { ulid } from '../src/lib/db/ulid';
 import {
-	allDocuments,
 	couchLogin,
 	createCouchUser,
 	deleteCouchUser,
 	deleteDocument,
+	RunChanges,
 	getDocument,
 	putDocument,
 	routeBrowserCouchThroughApp,
@@ -57,6 +57,7 @@ const RECIPE = `E2E สูตรทศนิยม ${RUN}`;
 const SESSION_NAME = `E2E มื้อทศนิยม ${RUN}`;
 
 const ownedIds = new Set<string>();
+const run = new RunChanges();
 const contexts: BrowserContext[] = [];
 let session = '';
 let sessionId = '';
@@ -104,7 +105,7 @@ async function cleanupOwnedDocuments(): Promise<void> {
 	const errors: unknown[] = [];
 	for (const db of [SHELTER_DB, CATALOG_DB]) {
 		for (let pass = 0; pass < 3; pass += 1) {
-			const owned = (await allDocuments(db)).filter(isOwned);
+			const owned = (await run.documents(db)).filter(isOwned);
 			if (owned.length === 0) break;
 			const results = await Promise.allSettled(owned.map((doc) => deleteDocument(db, doc)));
 			for (const result of results) {
@@ -170,6 +171,7 @@ test.describe(
 		test.setTimeout(90_000);
 
 		test.beforeAll(async () => {
+			await run.start([SHELTER_DB, CATALOG_DB]);
 			await createCouchUser(KITCHEN);
 			await seedSecurityQuestion(KITCHEN.name);
 			session = await couchLogin(KITCHEN.name, KITCHEN.password);
@@ -216,7 +218,7 @@ test.describe(
 
 		test.afterAll(async () => {
 			await cleanupOwnedDocuments();
-			const leftovers = [...(await allDocuments(SHELTER_DB)), ...(await allDocuments(CATALOG_DB))]
+			const leftovers = [...(await run.documents(SHELTER_DB)), ...(await run.documents(CATALOG_DB))]
 				.filter(isOwned)
 				.map((d) => d._id);
 			expect(leftovers, 'zero-leak: no documents from this run remain').toEqual([]);
@@ -258,20 +260,27 @@ test.describe(
 			await expect(qtyInput(bom, THIRD)).toHaveValue('0.3333');
 		});
 
-		test('an emptied quantity box is rejected with a toast and opens no ticket', async ({
+		test('an emptied quantity box shows an inline error, blocks submit and opens no ticket', async ({
 			browser
 		}) => {
 			const { page, bom } = await openBoardWithRecipe(browser);
 			const pageErrors: string[] = [];
 			page.on('pageerror', (e) => pageErrors.push(e.message));
 			await expect(qtyInput(bom, EIGHTH)).toBeVisible({ timeout: 15_000 });
+			const submit = page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' });
+			await expect(submit).toBeEnabled();
 
 			await qtyInput(bom, EIGHTH).clear();
-			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 
-			await expect(toast(page, 'กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ')).toBeVisible();
-			await expect(page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' })).toBeEnabled();
-			const tickets = (await allDocuments(SHELTER_DB)).filter(
+			await expect(qtyInput(bom, EIGHTH)).toHaveAccessibleDescription('จำนวนต้องมากกว่า 0');
+			await expect(submit).toBeDisabled();
+
+			await qtyInput(bom, EIGHTH).fill('0.125');
+			await expect(qtyInput(bom, EIGHTH)).not.toHaveAccessibleDescription('จำนวนต้องมากกว่า 0');
+			await expect(submit).toBeEnabled();
+			await qtyInput(bom, EIGHTH).clear();
+			await expect(submit).toBeDisabled();
+			const tickets = (await run.documents(SHELTER_DB)).filter(
 				(d) => d.type === 'requisition_ticket' && d.created_by === KITCHEN.name
 			);
 			expect(tickets, 'no requisition ticket was written').toEqual([]);
@@ -283,7 +292,7 @@ test.describe(
 
 		async function createTicketWithEditedQty(browser: Browser): Promise<CouchDocument> {
 			const before = new Set(
-				(await allDocuments(SHELTER_DB)).filter(isKitchenTicket).map((d) => d._id)
+				(await run.documents(SHELTER_DB)).filter(isKitchenTicket).map((d) => d._id)
 			);
 			const { page, bom } = await openBoardWithRecipe(browser);
 			await expect(qtyInput(bom, EIGHTH)).toHaveValue('0.125', { timeout: 15_000 });
@@ -291,7 +300,7 @@ test.describe(
 			await page.getByRole('button', { name: 'สร้างใบเบิกวัตถุดิบ' }).click();
 			await expect(toast(page, /เปิดตั๋วเบิกวัตถุดิบ .+ แล้ว/)).toBeVisible();
 
-			const created = (await allDocuments(SHELTER_DB)).filter(
+			const created = (await run.documents(SHELTER_DB)).filter(
 				(d) => isKitchenTicket(d) && !before.has(d._id)
 			);
 			expect(created, 'exactly one requisition ticket was written').toHaveLength(1);
