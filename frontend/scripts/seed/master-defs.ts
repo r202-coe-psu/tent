@@ -41,8 +41,8 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 			},
 			{
 				key: 'homeless',
-				label_th: 'ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่',
-				label_en: 'Homeless / no house number'
+				label_th: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)',
+				label_en: 'No fixed residence (no house number or fixed address)'
 			}
 		]
 	},
