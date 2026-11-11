@@ -37,6 +37,7 @@ export {
 	invalidateAuthStatusRequest,
 	updateOwnProfile,
 	submitForceSetup,
+	submitConsent,
 	clearMfaOk,
 	skipMfa,
 	unlinkGoogleMfa,
@@ -70,3 +71,9 @@ export {
 	type ForceSetupErrors,
 	type ForceSetupField
 } from './domain/force-setup';
+export {
+	CURRENT_CONSENT_VERSION,
+	requiresConsent,
+	type UserConsentStatus,
+	type ConsentUserTarget
+} from './domain/consent';

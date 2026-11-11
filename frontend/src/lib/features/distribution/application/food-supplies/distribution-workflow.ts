@@ -56,6 +56,8 @@ export interface FoodDistributionInput {
 	recipient_type: DistributionRecipientType;
 	recipient_id?: string | null;
 	household_id?: string;
+	/** #1154 — household member collecting for `recipient_id`; omit when they collect for themselves. */
+	collected_by_recipient_id?: string;
 	meal_service_id?: string;
 	recipe_id?: string;
 	is_override?: boolean;
@@ -265,6 +267,7 @@ export async function recordFoodDistribution(
 			recipient_type: input.recipient_type,
 			recipient_id: input.recipient_id,
 			household_id: input.household_id,
+			collected_by_recipient_id: input.collected_by_recipient_id,
 			meal: ticket.meal,
 			meal_service_id: input.meal_service_id,
 			recipe_id: input.recipe_id,

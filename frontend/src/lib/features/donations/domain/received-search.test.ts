@@ -77,11 +77,14 @@ describe('normalizeSearchQuery (AC-6a)', () => {
 		}
 	);
 
-	it.each(['L-261029-001', ' l-261029-001 '])('lot %j is accepted, upper-cased', (q) => {
-		expect(normalizeSearchQuery('lot', q)).toEqual({ ok: true, q: 'L-261029-001' });
-	});
+	it.each(['L-261029-001', ' l-261029-001 ', 'L-261029-1000'])(
+		'lot %j is accepted, upper-cased',
+		(q) => {
+			expect(normalizeSearchQuery('lot', q)).toEqual({ ok: true, q: q.trim().toUpperCase() });
+		}
+	);
 
-	it.each(['261029-001', 'L-26102-001', 'L-261029-01', 'L-261029-0011', 'lot'])(
+	it.each(['261029-001', 'L-26102-001', 'L-261029-01', 'L-261029-1x', 'L-261029-0011', 'lot'])(
 		'lot %j is INVALID_LOT',
 		(q) => {
 			expect(normalizeSearchQuery('lot', q)).toMatchObject({ ok: false, code: 'INVALID_LOT' });

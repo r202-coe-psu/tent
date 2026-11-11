@@ -22,7 +22,10 @@ export const prerender = false;
  */
 export const PATCH: RequestHandler = async ({ request, params, url }) => {
 	try {
-		const caller = await authorizeReferral(request.headers.get('cookie'));
+		const caller = await authorizeReferral(
+			request.headers.get('cookie'),
+			url.searchParams.get('shelter_code')
+		);
 		const id = params.id;
 		if (!id) {
 			return json({ error: 'Missing ID parameter' }, { status: 400 });

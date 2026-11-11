@@ -2438,15 +2438,20 @@ export function buildShelterCloseCancelAudit(
 
 // ---------------------------------------------------------------- display helpers
 
+/** First/last name, trimmed; an empty/whitespace last_name (mononym) is omitted. */
+export function personNameParts(person: {
+	first_name: string;
+	last_name?: string | null;
+}): string[] {
+	return [person.first_name, person.last_name ?? ''].map((part) => part.trim()).filter(Boolean);
+}
+
 /** Display name; empty/whitespace last_name (mononym) is omitted — no trailing space. */
 export function formatPersonName(person: {
 	first_name: string;
 	last_name?: string | null;
 }): string {
-	return [person.first_name, person.last_name ?? '']
-		.map((part) => part.trim())
-		.filter(Boolean)
-		.join(' ');
+	return personNameParts(person).join(' ');
 }
 
 export function maskNationalId(id: string | null | undefined): string {
