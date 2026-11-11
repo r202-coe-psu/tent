@@ -21,6 +21,7 @@
 	import DashboardAgeChart from './dashboard-age-chart.svelte';
 	import DashboardNationalityList from './dashboard-nationality-list.svelte';
 	import DashboardStationTimesSection from './dashboard-station-times-section.svelte';
+	import DashboardZoneOccupancyCard from './dashboard-zone-occupancy-card.svelte';
 
 	let { shelterCode }: { shelterCode: string } = $props();
 
@@ -58,6 +59,8 @@
 	{:else if occupancyQuery.data}
 		<DashboardKpiCards occupancy={occupancyQuery.data} />
 	{/if}
+
+	<DashboardZoneOccupancyCard {shelterCode} />
 
 	<DashboardRegistrationCard
 		{shelterCode}

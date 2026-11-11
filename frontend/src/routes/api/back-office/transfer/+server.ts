@@ -18,7 +18,10 @@ export const prerender = false;
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeTransfer(request.headers.get('cookie'));
+		const caller = await authorizeTransfer(
+			request.headers.get('cookie'),
+			url.searchParams.get('shelter_code')
+		);
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
 		const statusParam = url.searchParams.get('status') || undefined;
@@ -44,7 +47,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
  */
 export const POST: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeTransfer(request.headers.get('cookie'));
+		const caller = await authorizeTransfer(
+			request.headers.get('cookie'),
+			url.searchParams.get('shelter_code')
+		);
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
 		const body = await request.json().catch(() => ({}));

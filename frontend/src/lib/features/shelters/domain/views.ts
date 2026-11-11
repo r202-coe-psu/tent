@@ -8,6 +8,15 @@ export const SHELTER_DASHBOARD_VIEWS = {
 			}`,
 			reduce: '_count'
 		},
+		// CR-226 (view manifest v8): per-zone occupancy. Emits every status so the Present rule
+		// lives in the dashboard domain (`toZoneOccupancies`) and can change without a redeploy.
+		occupancy_by_zone: {
+			map: `function (doc) {
+				if (doc.type !== 'evacuee' || !doc.current_stay || !doc.current_stay.zone) return;
+				emit([doc.current_stay.zone, doc.current_stay.status], 1);
+			}`,
+			reduce: '_count'
+		},
 		demographics_by_age: {
 			map: `function (doc) {
 				// In the shelter = active + room_confirmed (CR-170), matching the occupancy KPI.

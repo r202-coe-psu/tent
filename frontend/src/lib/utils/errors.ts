@@ -26,8 +26,12 @@ export class NotFoundError extends AppError {
 
 /** CouchDB 409 — write rejected because `_rev` is stale. */
 export class ConflictError extends AppError {
-	constructor(id?: string) {
+	/** HTTP status that produced this error — `409` only for a real CouchDB conflict. */
+	readonly httpStatus?: number;
+
+	constructor(id?: string, options: { httpStatus?: number } = {}) {
 		super(id ? `Conflict: ${id}` : 'Document conflict', 'CONFLICT');
+		this.httpStatus = options.httpStatus;
 		this.name = 'ConflictError';
 	}
 }
