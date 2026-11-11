@@ -10,7 +10,7 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import { replaceState } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { useShelter } from '$lib/features/shelters';
@@ -49,6 +49,7 @@
 		applyScannedCard,
 		cardToUnifiedMember,
 		scannerCardSchema,
+		type ScannedCardDuplicate,
 		type ScannerCard
 	} from '../../domain/scanner-card';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
@@ -147,6 +148,7 @@
 		onsubmit,
 		onselectshelter,
 		onDirtyChange,
+		findScannedCardDuplicate,
 		/** Increment from parent to clear a stale public join selection (bad token / missing target). */
 		joinResetKey = 0,
 		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
@@ -185,6 +187,11 @@
 		) => Promise<void> | void;
 		onselectshelter?: (shelterCode: string, shelterName?: string) => void;
 		onDirtyChange?: (dirty: boolean) => void;
+		/**
+		 * Duplicate lookup for a scanned card's citizen ID (shelter + central queue), run before the
+		 * card is placed. Resolves null when nobody is found; throws when the lookup fails.
+		 */
+		findScannedCardDuplicate?: (citizenId: string) => Promise<ScannedCardDuplicate | null>;
 		joinResetKey?: number;
 		bookableShelterCodes?: string[];
 		/** Shows the PDPA consent block at the end of the form; its confirm is this form's submit. */
@@ -1305,16 +1312,65 @@
 		const parsed = scannerCardSchema.safeParse((event as CustomEvent).detail);
 		if (!parsed.success) return;
 		event.preventDefault();
-		const placement = applyScannedCard(members, parsed.data);
+		const card = parsed.data;
+		if (applyScannedCard(members, card).kind === 'already-in-form') {
+			toast.info(ts.alreadyInForm);
+			return;
+		}
+		if (!findScannedCardDuplicate) {
+			placeScannedCardAsUsual(card);
+			return;
+		}
+		void checkScannedCardDuplicate(card);
+	}
+
+	/** Ask the page whether this citizen ID is already registered before the card is placed (#1326 D3). */
+	async function checkScannedCardDuplicate(card: ScannerCard) {
+		let duplicate: ScannedCardDuplicate | null;
+		try {
+			duplicate = (await findScannedCardDuplicate?.(card.citizen_id)) ?? null;
+		} catch {
+			toast.warning(ts.duplicateLookupFailed);
+			placeScannedCardAsUsual(card);
+			return;
+		}
+		if (duplicate) {
+			pendingScannerDuplicate = { card, duplicate };
+			return;
+		}
+		placeScannedCardAsUsual(card);
+	}
+
+	/** Fill / already-in-form / ask-overwrite, decided against the members as they are now. */
+	function placeScannedCardAsUsual(card: ScannerCard) {
+		const placement = applyScannedCard(members, card);
 		if (placement.kind === 'already-in-form') {
 			toast.info(ts.alreadyInForm);
 			return;
 		}
 		if (placement.kind === 'ask-overwrite') {
-			pendingScannerCard = parsed.data;
+			pendingScannerCard = card;
 			return;
 		}
-		placeScannedCard(parsed.data, placement.index);
+		placeScannedCard(card, placement.index);
+	}
+
+	/** A scanned card whose citizen ID is already registered, waiting for staff to open that person or continue. */
+	let pendingScannerDuplicate = $state.raw<{
+		card: ScannerCard;
+		duplicate: ScannedCardDuplicate;
+	} | null>(null);
+
+	function goToScannedCardDuplicate() {
+		const pending = pendingScannerDuplicate;
+		pendingScannerDuplicate = null;
+		if (pending) void goto(resolve(pending.duplicate.href as '/'));
+	}
+
+	function continueWithScannedCard() {
+		const pending = pendingScannerDuplicate;
+		pendingScannerDuplicate = null;
+		if (pending) placeScannedCardAsUsual(pending.card);
 	}
 
 	/** A fresh member as staff would add one — same defaults for add-new and overwrite. */
@@ -2304,6 +2360,28 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{t.createNewDialogCancel}</AlertDialog.Cancel>
 			<AlertDialog.Action onclick={confirmCreateNew}>{t.createNewDialogConfirm}</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root
+	open={pendingScannerDuplicate !== null}
+	onOpenChange={(open) => {
+		if (!open) pendingScannerDuplicate = null;
+	}}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{ts.duplicateTitle}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{ts.duplicateDescription(pendingScannerDuplicate?.duplicate.name ?? '')}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer class="sm:flex-wrap">
+			<AlertDialog.Action onclick={goToScannedCardDuplicate}>{ts.goToPerson}</AlertDialog.Action>
+			<AlertDialog.Action onclick={continueWithScannedCard}
+				>{ts.continueRegistering}</AlertDialog.Action
+			>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

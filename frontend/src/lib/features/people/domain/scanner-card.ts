@@ -106,3 +106,6 @@ export function applyScannedCard(
 	if (empty !== -1) return { kind: 'fill', index: empty };
 	return { kind: 'ask-overwrite' };
 }
+
+/** Who a scanned card's citizen ID already belongs to (shelter or central queue), and where to open them. */
+export type ScannedCardDuplicate = { name: string; href: string };

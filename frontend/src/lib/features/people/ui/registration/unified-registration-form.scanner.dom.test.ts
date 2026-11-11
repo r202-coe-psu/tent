@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { QueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
+import { goto } from '$app/navigation';
 import UnifiedRegistrationFormHarness from './__fixtures__/unified-registration-form-harness.svelte';
 
 vi.mock('svelte-sonner', () => ({
@@ -55,7 +56,7 @@ const values = (suffix: string) =>
 	[...document.querySelectorAll<HTMLInputElement>(`input[id$="${suffix}"]`)].map((i) => i.value);
 
 /** Mounted the way the staff walk-in page `/onsite/people/new` mounts it. */
-function renderWalkInForm() {
+function renderWalkInForm(extraProps: Record<string, unknown> = {}) {
 	instance = mount(UnifiedRegistrationFormHarness, {
 		target: document.body,
 		props: {
@@ -64,7 +65,8 @@ function renderWalkInForm() {
 			includeVehiclesAssets: true,
 			shelterCode: 'SH001',
 			onsubmit: vi.fn(),
-			onDirtyChange: vi.fn()
+			onDirtyChange: vi.fn(),
+			...extraProps
 		}
 	});
 	flushSync();
@@ -206,5 +208,94 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 		expect(toast.info).toHaveBeenCalledWith('บัตรนี้อยู่ในฟอร์มแล้ว');
 		expect(values('first-name')).toEqual(['สมหญิง']);
 		expect(buttonByText('เพิ่มเป็นสมาชิกใหม่')).toBeUndefined();
+	});
+
+	describe('duplicate lookup on scan (D3)', () => {
+		const found = { name: 'สมหญิง ใจดี', href: '/onsite/people/evacuee-profile-view/EV-1' };
+
+		it('names the person found and goes to their page, placing nothing', async () => {
+			const lookup = vi.fn(async () => found);
+			renderWalkInForm({ findScannedCardDuplicate: lookup });
+
+			dispatchCardRead(card);
+			await settle();
+
+			expect(lookup).toHaveBeenCalledWith('1234567890123');
+			expect(document.body.textContent).toContain('สมหญิง ใจดี');
+			buttonByText('ไปหน้าคนนั้น')!.click();
+			await settle();
+
+			expect(goto).toHaveBeenCalledWith(found.href);
+			expect(values('first-name')).toEqual(['']);
+			expect(values('card-number')).toEqual(['']);
+		});
+
+		it('places the card as usual when staff choose to continue registering', async () => {
+			renderWalkInForm({ findScannedCardDuplicate: vi.fn(async () => found) });
+
+			dispatchCardRead(card);
+			await settle();
+			expect(values('first-name')).toEqual(['']);
+			buttonByText('ลงทะเบียนต่อ')!.click();
+			await settle();
+
+			expect(goto).not.toHaveBeenCalled();
+			expect(values('first-name')).toEqual(['สมหญิง']);
+			expect(values('card-number')).toEqual(['1234567890123']);
+		});
+
+		it('places nothing and forgets the card when the dialog is closed without choosing', async () => {
+			renderWalkInForm({ findScannedCardDuplicate: vi.fn(async () => found) });
+
+			dispatchCardRead(card);
+			await settle();
+			document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+			await settle();
+
+			expect(buttonByText('ไปหน้าคนนั้น')).toBeUndefined();
+			expect(values('first-name')).toEqual(['']);
+			expect(goto).not.toHaveBeenCalled();
+		});
+
+		it('warns and places the card as usual when the lookup fails', async () => {
+			renderWalkInForm({
+				findScannedCardDuplicate: vi.fn(async () => {
+					throw new Error('offline');
+				})
+			});
+
+			const event = dispatchCardRead(card);
+			await settle();
+
+			expect(event.defaultPrevented).toBe(true);
+			expect(toast.warning).toHaveBeenCalledWith(
+				'ตรวจสอบรายชื่อซ้ำไม่สำเร็จ — ลงทะเบียนต่อได้ตามปกติ'
+			);
+			expect(values('first-name')).toEqual(['สมหญิง']);
+		});
+
+		it('places the card straight away when nobody is found', async () => {
+			renderWalkInForm({ findScannedCardDuplicate: vi.fn(async () => null) });
+
+			dispatchCardRead(card);
+			await settle();
+
+			expect(values('first-name')).toEqual(['สมหญิง']);
+			expect(buttonByText('ไปหน้าคนนั้น')).toBeUndefined();
+		});
+
+		it('does not look up a card that is already in the form', async () => {
+			const lookup = vi.fn(async () => null);
+			renderWalkInForm({ findScannedCardDuplicate: lookup });
+			dispatchCardRead(card);
+			await settle();
+			lookup.mockClear();
+
+			dispatchCardRead(card);
+			await settle();
+
+			expect(lookup).not.toHaveBeenCalled();
+			expect(toast.info).toHaveBeenCalledWith('บัตรนี้อยู่ในฟอร์มแล้ว');
+		});
 	});
 });

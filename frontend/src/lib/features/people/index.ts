@@ -446,7 +446,8 @@ export {
 	applyScannedCard,
 	type ScannerCard,
 	type ScannerCardPhoto,
-	type ScannedCardPlacement
+	type ScannedCardPlacement,
+	type ScannedCardDuplicate
 } from './domain/scanner-card';
 export { default as ThaidActionButton } from './ui/registration/thaid-action-button.svelte';
 export { default as ThaidMemberScanDialog } from './ui/registration/thaid-member-scan-dialog.svelte';

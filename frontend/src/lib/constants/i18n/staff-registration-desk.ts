@@ -105,7 +105,12 @@ const th = {
 		dialogDescription: (name: string) => `จะนำข้อมูลจากบัตรของ ${name} ไปใส่ที่ไหน`,
 		overwriteMember: (position: number) => `ทับคนที่ ${position}`,
 		addAsNewMember: 'เพิ่มเป็นสมาชิกใหม่',
-		cancel: 'ยกเลิก'
+		cancel: 'ยกเลิก',
+		duplicateTitle: 'พบบุคคลนี้ในระบบแล้ว',
+		duplicateDescription: (name: string) => `${name} มีข้อมูลอยู่ในระบบแล้ว`,
+		goToPerson: 'ไปหน้าคนนั้น',
+		continueRegistering: 'ลงทะเบียนต่อ',
+		duplicateLookupFailed: 'ตรวจสอบรายชื่อซ้ำไม่สำเร็จ — ลงทะเบียนต่อได้ตามปกติ'
 	}
 };
 
@@ -220,7 +225,12 @@ const en: typeof th = {
 		dialogDescription: (name: string) => `Where should the data from ${name}'s card go?`,
 		overwriteMember: (position: number) => `Overwrite member ${position}`,
 		addAsNewMember: 'Add as a new member',
-		cancel: 'Cancel'
+		cancel: 'Cancel',
+		duplicateTitle: 'This person is already in the system',
+		duplicateDescription: (name: string) => `${name} already has a record in the system`,
+		goToPerson: 'Go to that person',
+		continueRegistering: 'Continue registering',
+		duplicateLookupFailed: 'Could not check for duplicates — you can keep registering as usual'
 	}
 };
 
