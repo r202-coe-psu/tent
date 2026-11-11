@@ -14,7 +14,8 @@ const env = vi.hoisted(() => ({
 	shelter: { data: undefined as unknown },
 	services: { data: [] as unknown[], isLoading: false, isError: false },
 	receipts: { data: [] as unknown[], isLoading: false, isError: false },
-	downloadCsv: vi.fn()
+	downloadCsv: vi.fn(),
+	dayGetter: undefined as (() => string) | undefined
 }));
 
 vi.mock('$lib/features/people', async (orig) => ({
@@ -33,7 +34,10 @@ vi.mock('$lib/features/kitchen', async (orig) => ({
 }));
 vi.mock('$lib/utils/download-csv', () => ({ downloadCsv: env.downloadCsv }));
 vi.mock('../../application/queries', () => ({
-	useDistributionLogsByDay: () => env.logs
+	useDistributionLogsByDay: (_shelter: () => string | undefined, day: () => string) => {
+		env.dayGetter = day;
+		return env.logs;
+	}
 }));
 
 const person = (id: string, first: string) => ({
@@ -58,6 +62,26 @@ function render() {
 	flushSync();
 	return document.body.textContent ?? '';
 }
+
+const click = (el: Element | null | undefined) => {
+	(el as HTMLElement).click();
+	flushSync();
+};
+const typeInto = (selector: string, value: string) => {
+	const input = document.querySelector(selector) as HTMLInputElement;
+	input.value = value;
+	input.dispatchEvent(new Event('input', { bubbles: true }));
+	flushSync();
+};
+const typeDay = (value: string) => typeInto('input[type="date"]', value);
+const search = (value: string) => typeInto('input[type="search"]', value);
+const bodyText = () => document.body.textContent ?? '';
+const rowTexts = () =>
+	Array.from(document.querySelectorAll('tbody tr')).map((tr) => tr.textContent ?? '');
+const mealBadges = (row: Element) =>
+	Array.from(row.querySelectorAll('li')).map((li) =>
+		(li.textContent ?? '').replace(/\s+/g, ' ').trim()
+	);
 
 beforeEach(() => {
 	// Thai today is 2026-11-10, so the default day is 2026-11-09.
@@ -93,7 +117,12 @@ describe('MealCoveragePanel', () => {
 		expect(text).toContain('สมชาย ใจดี');
 		expect(text).not.toContain('สมหญิง');
 		expect(text).toContain('ยังไม่ครบ 1 คน');
-		expect(text).toContain('1 คน');
+		const row = document.querySelector('tbody tr') as Element;
+		expect(mealBadges(row)).toEqual([
+			'เช้า มีบันทึก',
+			'กลางวัน ยังไม่มีบันทึก',
+			'เย็น ยังไม่มีบันทึก'
+		]);
 	});
 
 	it('shows the empty state when everyone has 2 meals', () => {
@@ -122,20 +151,14 @@ describe('MealCoveragePanel', () => {
 		const text = render();
 		expect(text).toContain('โหลดข้อมูลไม่สำเร็จ');
 		expect(text).not.toContain('อย่างน้อย 2 มื้อ');
+		expect(rowTexts()).toHaveLength(0);
 	});
-
-	function typeDate(value: string) {
-		const input = document.querySelector('input[type="date"]') as HTMLInputElement;
-		input.value = value;
-		input.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		return document.body.textContent ?? '';
-	}
 
 	it('asks for a date instead of listing everyone when the date is cleared', () => {
 		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
 		render();
-		const text = typeDate('');
+		typeDay('');
+		const text = bodyText();
 		expect(text).toContain('เลือกวันที่');
 		expect(text).not.toContain('สมชาย');
 	});
@@ -143,7 +166,8 @@ describe('MealCoveragePanel', () => {
 	it('refuses a future day, whose meals have not happened', () => {
 		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
 		render();
-		const text = typeDate('2026-11-11');
+		typeDay('2026-11-11');
+		const text = bodyText();
 		expect(text).toContain('เลือกวันที่');
 		expect(text).not.toContain('สมชาย');
 	});
@@ -182,8 +206,16 @@ describe('MealCoveragePanel', () => {
 
 	it('sorts the rows by name', () => {
 		env.evacuees.data = [person('evacuee:B', 'ศศิ'), person('evacuee:A', 'กมล')];
-		const text = render();
-		expect(text.indexOf('กมล')).toBeLessThan(text.indexOf('ศศิ'));
+		render();
+		expect(rowTexts()[0]).toContain('กมล');
+		expect(rowTexts()[1]).toContain('ศศิ');
+	});
+
+	it('requests the logs of the day typed into the date field', () => {
+		render();
+		expect(env.dayGetter?.()).toBe('2026-11-09');
+		typeDay('2026-11-05');
+		expect(env.dayGetter?.()).toBe('2026-11-05');
 	});
 
 	describe('paging, filtering and search', () => {
@@ -191,30 +223,18 @@ describe('MealCoveragePanel', () => {
 			Array.from({ length: n }, (_, i) =>
 				person(`evacuee:${i}`, `ชื่อ${String(i).padStart(2, '0')}`)
 			);
-		const rowNames = () =>
-			Array.from(document.querySelectorAll('tbody tr')).map((tr) => tr.textContent ?? '');
-		const click = (el: Element | null | undefined) => {
-			(el as HTMLElement).click();
-			flushSync();
-		};
 		const card = (label: string) =>
 			Array.from(document.querySelectorAll('button[aria-pressed]')).find((b) =>
 				b.textContent?.includes(label)
 			);
-		const search = (value: string) => {
-			const input = document.querySelector('input[type="search"]') as HTMLInputElement;
-			input.value = value;
-			input.dispatchEvent(new Event('input', { bubbles: true }));
-			flushSync();
-		};
 
 		it('shows 20 rows per page and a next-page control reveals the rest', () => {
 			env.evacuees.data = names(45);
 			render();
-			expect(rowNames()).toHaveLength(20);
+			expect(rowTexts()).toHaveLength(20);
 			expect(document.body.textContent).toContain('แสดง 1–20 จาก 45 คน');
 			click(document.querySelector('a[aria-label*="next" i], button[aria-label*="next" i]'));
-			expect(rowNames()).toHaveLength(20);
+			expect(rowTexts()).toHaveLength(20);
 			expect(document.body.textContent).toContain('แสดง 21–40 จาก 45 คน');
 		});
 
@@ -229,19 +249,19 @@ describe('MealCoveragePanel', () => {
 			env.evacuees.data = [person('evacuee:A', 'สมชาย'), person('evacuee:B', 'สมหญิง')];
 			env.logs.data = { items: [log('evacuee:B', 'lunch')], skipped: [] };
 			render();
-			expect(rowNames()).toHaveLength(2);
+			expect(rowTexts()).toHaveLength(2);
 			const red = card('ยังไม่มีบันทึกเลย');
 			click(red);
 			expect(red?.getAttribute('aria-pressed')).toBe('true');
-			expect(rowNames()).toHaveLength(1);
-			expect(rowNames()[0]).toContain('สมชาย');
+			expect(rowTexts()).toHaveLength(1);
+			expect(rowTexts()[0]).toContain('สมชาย');
 		});
 
 		it('lists people with no record before people with one meal', () => {
 			env.evacuees.data = [person('evacuee:A', 'กมล'), person('evacuee:B', 'ศศิ')];
 			env.logs.data = { items: [log('evacuee:A', 'lunch')], skipped: [] };
 			render();
-			expect(rowNames()[0]).toContain('ศศิ');
+			expect(rowTexts()[0]).toContain('ศศิ');
 		});
 
 		it('narrows rows by name search and returns to page 1', () => {
@@ -250,7 +270,7 @@ describe('MealCoveragePanel', () => {
 			click(document.querySelector('a[aria-label*="next" i], button[aria-label*="next" i]'));
 			expect(document.body.textContent).toContain('แสดง 21–40');
 			search('ชื่อ07');
-			expect(rowNames()).toHaveLength(1);
+			expect(rowTexts()).toHaveLength(1);
 			expect(document.body.textContent).toContain('แสดง 1–1 จาก 1 คน');
 		});
 
@@ -264,24 +284,12 @@ describe('MealCoveragePanel', () => {
 					b.textContent?.includes('ล้างตัวกรอง')
 				)
 			);
-			expect(rowNames()).toHaveLength(1);
+			expect(rowTexts()).toHaveLength(1);
 			expect((document.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('');
 		});
 	});
 });
 
-const click = (el: Element | null | undefined) => {
-	(el as HTMLElement).click();
-	flushSync();
-};
-const typeDay = (value: string) => {
-	const input = document.querySelector('input[type="date"]') as HTMLInputElement;
-	input.value = value;
-	input.dispatchEvent(new Event('input', { bubbles: true }));
-	flushSync();
-};
-const rowTexts = () =>
-	Array.from(document.querySelectorAll('tbody tr')).map((tr) => tr.textContent ?? '');
 const todayLog = (id: string, meal: string) => ({
 	...log(id, meal),
 	distributed_at: '2026-11-10T01:00:00Z'
@@ -330,9 +338,22 @@ describe('MealCoveragePanel today', () => {
 		render();
 		typeDay('2026-11-10');
 		const text = document.body.textContent ?? '';
+		expect(text).toContain('ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารของมื้อที่ให้บริการแล้ว');
 		expect(text).not.toContain('ครบ 2 มื้อ');
 		expect(text).not.toContain('มีบันทึก 1 มื้อ');
 		expect(text).toContain('ยังไม่มีบันทึกเลย');
+	});
+
+	it('words today as present since the start of the day, past days as all day', () => {
+		env.services.data = [service('ms:1', 'breakfast')];
+		render();
+		expect(bodyText()).toContain('ของผู้ที่อยู่ในศูนย์ตลอดทั้งวัน');
+		expect(bodyText()).toContain('อยู่ในศูนย์ตลอดวัน');
+		typeDay('2026-11-10');
+		expect(bodyText()).toContain('ของผู้ที่อยู่ในศูนย์ตั้งแต่ต้นวันถึงตอนนี้');
+		expect(bodyText()).not.toContain('ตลอดทั้งวัน');
+		expect(bodyText()).toContain('อยู่ในศูนย์ตั้งแต่ต้นวัน');
+		expect(bodyText()).not.toContain('อยู่ในศูนย์ตลอดวัน');
 	});
 
 	it('keeps the two-meal rule once two meals are served', () => {
@@ -401,21 +422,20 @@ describe('MealCoveragePanel zone, household, advisory and export', () => {
 				current_stay: { status: 'active', since: '2026-11-09T03:00:00Z' }
 			}
 		];
-		expect(render()).not.toContain('ไม่มีบันทึกสแกนมื้อ');
+		const text = render();
+		expect(text).toContain('ไม่มีผู้ที่อยู่ในศูนย์ตลอดทั้งวัน');
+		expect(text).not.toContain('ไม่มีบันทึกสแกนมื้อ');
 	});
 
 	const exportButton = () =>
 		Array.from(document.querySelectorAll('button')).find((b) =>
-			b.textContent?.includes('Export CSV')
+			b.textContent?.includes('ส่งออก CSV')
 		) as HTMLButtonElement;
 
 	it('exports the filtered rows and disables the button when none match', () => {
 		env.evacuees.data = [person('evacuee:A', 'สมชาย'), person('evacuee:B', 'สมหญิง')];
 		render();
-		const search = document.querySelector('input[type="search"]') as HTMLInputElement;
-		search.value = 'สมหญิง';
-		search.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
+		search('สมหญิง');
 		expect(exportButton().disabled).toBe(false);
 		click(exportButton());
 
@@ -427,9 +447,7 @@ describe('MealCoveragePanel zone, household, advisory and export', () => {
 		expect(csv).not.toContain('สมชาย');
 		expect(csv).toContain('"ยังไม่มีบันทึก"');
 
-		search.value = 'ไม่มีใคร';
-		search.dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
+		search('ไม่มีใคร');
 		expect(exportButton().disabled).toBe(true);
 	});
 });
