@@ -98,6 +98,14 @@ const th = {
 		confirming: 'กำลังรับเข้าศูนย์...',
 		confirmClaim: 'ยืนยันรับเข้าศูนย์',
 		petsAlongsideTitle: 'สัตว์เลี้ยงที่จะรับเข้าศูนย์พร้อมกัน'
+	},
+	scanner: {
+		alreadyInForm: 'บัตรนี้อยู่ในฟอร์มแล้ว',
+		dialogTitle: 'สมาชิกทุกคนมีข้อมูลแล้ว',
+		dialogDescription: (name: string) => `จะนำข้อมูลจากบัตรของ ${name} ไปใส่ที่ไหน`,
+		overwriteMember: (position: number) => `ทับคนที่ ${position}`,
+		addAsNewMember: 'เพิ่มเป็นสมาชิกใหม่',
+		cancel: 'ยกเลิก'
 	}
 };
 
@@ -205,6 +213,14 @@ const en: typeof th = {
 		confirming: 'Admitting...',
 		confirmClaim: 'Confirm admission',
 		petsAlongsideTitle: 'Pets to admit at the same time'
+	},
+	scanner: {
+		alreadyInForm: 'This card is already in the form',
+		dialogTitle: 'Every member already has data',
+		dialogDescription: (name: string) => `Where should the data from ${name}'s card go?`,
+		overwriteMember: (position: number) => `Overwrite member ${position}`,
+		addAsNewMember: 'Add as a new member',
+		cancel: 'Cancel'
 	}
 };
 

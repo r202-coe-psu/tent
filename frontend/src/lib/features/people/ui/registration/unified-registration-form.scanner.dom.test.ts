@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { QueryClient } from '@tanstack/svelte-query';
+import { toast } from 'svelte-sonner';
 import UnifiedRegistrationFormHarness from './__fixtures__/unified-registration-form-harness.svelte';
 
 vi.mock('svelte-sonner', () => ({
@@ -69,11 +70,41 @@ function renderWalkInForm() {
 	flushSync();
 }
 
-const dispatchCardRead = () => {
-	const event = new CustomEvent('scanner:card-read', { detail: card, cancelable: true });
+/** A different person, so a second read finds every member already holding data. */
+const otherCard = {
+	...card,
+	citizen_id: '9876543210987',
+	first_name_th: 'สมชาย',
+	last_name_th: 'รักดี',
+	gender: 'male'
+};
+
+const dispatchCardRead = (detail: typeof card = card) => {
+	const event = new CustomEvent('scanner:card-read', { detail, cancelable: true });
 	window.dispatchEvent(event);
 	return event;
 };
+
+const settle = async () => {
+	await tick();
+	flushSync();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	flushSync();
+};
+
+const buttonByText = (text: string) =>
+	[...document.querySelectorAll<HTMLButtonElement>('button')].find(
+		(b) => b.textContent?.trim() === text
+	);
+
+/** First card fills member 1; a second, different card then asks what to do with it. */
+async function readTwoDifferentCards() {
+	renderWalkInForm();
+	dispatchCardRead(card);
+	await settle();
+	dispatchCardRead(otherCard);
+	await settle();
+}
 
 describe('UnifiedRegistrationForm — scanner client card read', () => {
 	it('acknowledges scanner:card-read and fills the first empty member name and ID number', async () => {
@@ -100,5 +131,80 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 
 		expect(values('address-no')).toEqual(['99/1']);
 		expect(values('village-no')).toEqual(['3 ซอย 5']);
+	});
+
+	it('asks which member to overwrite when every member already has data, and overwrite replaces member 1', async () => {
+		await readTwoDifferentCards();
+
+		expect(values('first-name')).toEqual(['สมหญิง']);
+		expect(buttonByText('เพิ่มเป็นสมาชิกใหม่')).toBeDefined();
+		expect(buttonByText('ยกเลิก')).toBeDefined();
+		buttonByText('ทับคนที่ 1')!.click();
+		await settle();
+
+		expect(values('first-name')).toEqual(['สมชาย']);
+		expect(values('last-name')).toEqual(['รักดี']);
+		expect(values('card-number')).toEqual(['9876543210987']);
+	});
+
+	it('overwrite replaces member 1 with a fresh member: the previous person phone and nickname do not carry over', async () => {
+		renderWalkInForm();
+		dispatchCardRead(card);
+		await settle();
+		const typeInto = (suffix: string, value: string) => {
+			const input = document.querySelector<HTMLInputElement>(`input[id$="${suffix}"]`)!;
+			input.value = value;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		};
+		typeInto('phone', '0812345678');
+		typeInto('nickname', 'หญิง');
+		await settle();
+		expect(values('phone')[0]).toBe('0812345678');
+		expect(values('nickname')).toEqual(['หญิง']);
+
+		dispatchCardRead(otherCard);
+		await settle();
+		buttonByText('ทับคนที่ 1')!.click();
+		await settle();
+
+		expect(values('first-name')).toEqual(['สมชาย']);
+		expect(values('card-number')).toEqual(['9876543210987']);
+		expect(values('phone')[0]).toBe('');
+		expect(values('nickname')).toEqual(['']);
+	});
+
+	it('adds the card as a new member when staff choose add-as-new', async () => {
+		await readTwoDifferentCards();
+
+		buttonByText('เพิ่มเป็นสมาชิกใหม่')!.click();
+		await settle();
+
+		expect(values('first-name')).toEqual(['สมหญิง', 'สมชาย']);
+		expect(values('card-number')).toEqual(['1234567890123', '9876543210987']);
+	});
+
+	it('leaves the form unchanged and forgets the card on cancel', async () => {
+		await readTwoDifferentCards();
+
+		buttonByText('ยกเลิก')!.click();
+		await settle();
+
+		expect(values('first-name')).toEqual(['สมหญิง']);
+		expect(values('card-number')).toEqual(['1234567890123']);
+		expect(buttonByText('เพิ่มเป็นสมาชิกใหม่')).toBeUndefined();
+	});
+
+	it('tells staff the card is already in the form and changes nothing', async () => {
+		renderWalkInForm();
+		dispatchCardRead(card);
+		await settle();
+
+		const event = dispatchCardRead(card);
+		await settle();
+
+		expect(event.defaultPrevented).toBe(true);
+		expect(toast.info).toHaveBeenCalledWith('บัตรนี้อยู่ในฟอร์มแล้ว');
+		expect(values('first-name')).toEqual(['สมหญิง']);
+		expect(buttonByText('เพิ่มเป็นสมาชิกใหม่')).toBeUndefined();
 	});
 });

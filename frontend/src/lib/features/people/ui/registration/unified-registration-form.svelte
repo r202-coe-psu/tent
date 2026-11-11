@@ -17,6 +17,7 @@
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
+	import { STAFF_REGISTRATION_DESK_I18N } from '$lib/constants/i18n/staff-registration-desk';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
@@ -47,7 +48,8 @@
 		applyCardAddressToHousehold,
 		applyScannedCard,
 		cardToUnifiedMember,
-		scannerCardSchema
+		scannerCardSchema,
+		type ScannerCard
 	} from '../../domain/scanner-card';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
@@ -198,6 +200,7 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const ts = $derived(getTranslation(STAFF_REGISTRATION_DESK_I18N, langState.current).scanner);
 
 	/** Locks every field/control (pending submit OR explicit read-only view). */
 	const fieldsLocked = $derived(pending || readOnly);
@@ -1290,8 +1293,12 @@
 		}
 	});
 
+	/** A scanned card waiting for staff to choose a member to overwrite; held only while the dialog is open. */
+	let pendingScannerCard = $state.raw<ScannerCard | null>(null);
+
 	/**
 	 * Desktop scanner client (#1326): `scanner:card-read` fills the first empty member and, while the household address is empty, that address.
+	 * A card already on a member changes nothing; when every member has data, staff choose overwrite / add-new / cancel.
 	 * `preventDefault()` is the acknowledgement the scanner client waits for.
 	 */
 	function handleScannerCardRead(event: Event) {
@@ -1299,11 +1306,42 @@
 		if (!parsed.success) return;
 		event.preventDefault();
 		const placement = applyScannedCard(members, parsed.data);
-		if (placement.kind !== 'fill') return;
-		const index = placement.index;
-		members[index] = cardToUnifiedMember(parsed.data, members[index]);
-		household = applyCardAddressToHousehold(household, parsed.data);
+		if (placement.kind === 'already-in-form') {
+			toast.info(ts.alreadyInForm);
+			return;
+		}
+		if (placement.kind === 'ask-overwrite') {
+			pendingScannerCard = parsed.data;
+			return;
+		}
+		placeScannedCard(parsed.data, placement.index);
+	}
+
+	/** A fresh member as staff would add one — same defaults for add-new and overwrite. */
+	const freshReportingInMember = () => ({ ...blankUnifiedMember(), reporting_in: true });
+
+	function placeScannedCard(card: ScannerCard, index: number) {
+		members[index] = cardToUnifiedMember(card, members[index]);
+		household = applyCardAddressToHousehold(household, card);
 		markDirty();
+	}
+
+	function overwriteMemberWithPendingCard(index: number) {
+		const card = pendingScannerCard;
+		pendingScannerCard = null;
+		if (!card) return;
+		// Overwrite = a different person takes this slot: start from a fresh member so none of the
+		// previous person's phone, photo, medical/needs fields carry over.
+		members[index] = freshReportingInMember();
+		placeScannedCard(card, index);
+	}
+
+	function addPendingCardAsNewMember() {
+		const card = pendingScannerCard;
+		pendingScannerCard = null;
+		if (!card) return;
+		members = [...members, freshReportingInMember()];
+		placeScannedCard(card, members.length - 1);
 	}
 
 	$effect(() => {
@@ -2266,6 +2304,37 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{t.createNewDialogCancel}</AlertDialog.Cancel>
 			<AlertDialog.Action onclick={confirmCreateNew}>{t.createNewDialogConfirm}</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root
+	open={pendingScannerCard !== null}
+	onOpenChange={(open) => {
+		if (!open) pendingScannerCard = null;
+	}}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{ts.dialogTitle}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{ts.dialogDescription(
+					pendingScannerCard
+						? `${pendingScannerCard.first_name_th} ${pendingScannerCard.last_name_th}`.trim()
+						: ''
+				)}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer class="sm:flex-wrap">
+			{#each members as member, index (memberFormKey(member))}
+				<AlertDialog.Action onclick={() => overwriteMemberWithPendingCard(index)}>
+					{ts.overwriteMember(index + 1)}
+				</AlertDialog.Action>
+			{/each}
+			<AlertDialog.Action onclick={addPendingCardAsNewMember}
+				>{ts.addAsNewMember}</AlertDialog.Action
+			>
+			<AlertDialog.Cancel>{ts.cancel}</AlertDialog.Cancel>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
