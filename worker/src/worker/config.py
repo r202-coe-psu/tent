@@ -12,6 +12,11 @@ class Settings:
     couchdb_user: str
     couchdb_password: str
     mongodb_uri: str
+    # FastAPI outbound integration plane (draft CR — referral M5 §1). The worker only taps
+    # `POST /v1/integrations/m5/sync`; it never holds M5 credentials.
+    fastapi_url: str = "http://localhost:9000"
+    external_api_secret: str = ""
+    m5_sync_interval_s: float = 45.0
 
     @property
     def couch_base_url(self) -> str:
@@ -28,4 +33,7 @@ def load_settings() -> Settings:
         couchdb_user=user,
         couchdb_password=password,
         mongodb_uri=mongo,
+        fastapi_url=os.environ.get("FASTAPI_INTERNAL_URL", "http://localhost:9000"),
+        external_api_secret=os.environ.get("EXTERNAL_API_SECRET", ""),
+        m5_sync_interval_s=float(os.environ.get("M5_SYNC_INTERVAL_S", "45")),
     )

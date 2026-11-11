@@ -187,6 +187,22 @@ describe('submitM5Batch', () => {
 		expect(repo.docs.get('referral:A')?.status).toBe('sent');
 	});
 
+	it('does not report a member the worker already moved to sent', async () => {
+		const repo = new FakeRepo([m5Doc('A', 'evacuee:A')]);
+		vi.mocked(integrationRequest).mockImplementation(async () => {
+			// The worker applies the new m5_transfers row before the BFF writes.
+			repo.docs.set('referral:A', {
+				...repo.docs.get('referral:A')!,
+				status: 'sent',
+				external: external('awaiting_review')
+			} as Referral);
+			return { code: 'TRF-20261111-0001', status: 'awaiting_review', external_ref: EXTERNAL_REF };
+		});
+		const res = await submitM5Batch(ctx(repo), BATCH);
+		expect(res.failed).toEqual([]);
+		expect(res.referrals.map((r) => r._id)).toEqual(['referral:A']);
+	});
+
 	it('is a no-op when every member is already sent', async () => {
 		const repo = new FakeRepo([
 			m5Doc('A', 'evacuee:A', { status: 'sent', external: external('awaiting_review') })

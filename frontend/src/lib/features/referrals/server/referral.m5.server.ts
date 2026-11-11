@@ -230,10 +230,22 @@ export async function submitM5Batch(
 				}),
 			(m) => m._id
 		);
+		// The sync worker may have repaired a member to `sent` first (D7): not a failure.
+		let stillFailed = failed;
+		if (failed.length) {
+			const fresh = new Map(
+				(await ctx.repo.findByBatchId(batchId, ctx.shelterCode)).map((m) => [m._id, m])
+			);
+			stillFailed = failed.filter((f) => fresh.get(f.id)?.status !== 'sent');
+			for (const f of failed) {
+				const doc = fresh.get(f.id);
+				if (doc?.status === 'sent') written.push(doc);
+			}
+		}
 		return {
 			transfer,
 			referrals: [...active.filter((m) => m.status === 'sent'), ...written],
-			failed
+			failed: stillFailed
 		};
 	} catch (e: unknown) {
 		toBatchError(e);

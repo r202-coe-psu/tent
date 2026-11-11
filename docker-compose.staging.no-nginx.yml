@@ -83,6 +83,10 @@ services:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      # M5 referral sync tick (draft CR — referral M5 §1): worker → FastAPI only.
+      FASTAPI_INTERNAL_URL: http://fastapi:9000
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
+      M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
     restart: unless-stopped
 
   fastapi:
