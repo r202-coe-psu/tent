@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-247
 title: edge แต่ละศูนย์ sync ด้วย replication user ของตัวเอง + DB เก็บ user ต่อศูนย์ (แทน central admin — แก้ OD-6 ของ CR-064)
-status: proposed
+status: approved
 date: 2026-11-09
 updated: 2026-11-11
 requested_by: "#1165 (PO เลือกข้อ 1, 2026-11-07) · #1298"
-decided_by: kong (ขอบเขตข้อ 1 + 2 และวิธีบันทึกเป็น CR, 2026-11-09 · ตัวคัดลอกเป็น worker, 2026-11-11) — รออนุมัติตัว CR
+decided_by: kong (ขอบเขตข้อ 1 + 2 และวิธีบันทึกเป็น CR, 2026-11-09 · ตัวคัดลอกเป็น service แยก, 2026-11-11 · approved 2026-11-11)
 layer: stable
 related:
   - docs/changes/01-core/CR-064-edge-disaster-continuity.md (OD-6 — edge ถือ central admin; decision sync 2026-10-18 B)
@@ -28,7 +28,7 @@ affects:
 why: edge ทุกเครื่องถือรหัส central admin (OD-6) — เครื่องหาย = เสีย admin ทั้งระบบ และรหัสผิด 5 ครั้งของชื่อ admin หยุด replication ของทุก edge พร้อมกัน (#1165)
 ---
 
-# ร่าง CR — edge sync ด้วย replication user ต่อศูนย์ + `edge_users_<code>`
+# CR-247 — edge sync ด้วย replication user ต่อศูนย์ + `edge_users_<code>`
 
 > **สรุป (TL;DR):**
 >
@@ -178,3 +178,4 @@ edge <code> ──(repl_<code>_<suffix>, role repl:<CODE>)──► shelter_<cod
 - 2026-11-09 — proposed (#1298) · ตัวเลือกในร่าง: ตัว copy ใช้ `_replicator` ของ central แทนโค้ดใน `worker/` (FR-11) · ต่อยอด `scripts/central-repl-user.sh` แทนเขียนคำสั่งใหม่ (FR-1)
 - 2026-11-11 — kong: ตัว copy เปลี่ยนเป็น worker ของ central (FR-11, FR-11a, FR-13) — `_replicator` ต้องมี job ต่อศูนย์ ไม่รองรับหลักร้อยศูนย์ · ข้อกังวลเรื่อง revision tree ปิดด้วย `new_edits: false` (prototype 2026-11-11 ไม่มี conflict) · hard delete แยกเป็น #1331 (Phase 4) · ตัด effort ออกจาก CR
 - 2026-11-11 — kong: ตัว copy รันเป็น service แยก `edge-users-copy` (image เดียวกับ sync-worker) และเก็บ checkpoint / สถานะใน `_users/_local/edge_users_copy` แทน MongoDB — การถอดสิทธิ์ที่ edge ไม่พึ่ง MongoDB หรือ sync-worker · `--status` อ่านด้วย `curl` ได้ · backfill ทีละหน้า + `mem_limit` · เพิ่มเงื่อนไข backfill `edge_shelters` ของ CR-171 ใน Migration
+- 2026-11-11 — approved โดย kong · รันเลข CR-247 (#1298 / PR #1304)
