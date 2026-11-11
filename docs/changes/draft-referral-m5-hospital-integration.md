@@ -113,7 +113,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 | `dispatch_mode` | enum(`tracking`,`m5`) | opt | ไม่มีค่า = `tracking` (ใบเดิมทั้งหมด) · `tracking` ใช้กฎ transition เดิมทุกข้อ ไม่ส่งข้อมูลออก · `m5` ส่งผ่าน M5 · เปลี่ยนได้เฉพาะตอน `draft` (D3) |
 | `batch_id` | ulid | opt | บังคับเมื่อ `dispatch_mode = m5` · referral ทุกใบที่มี `batch_id` เดียวกันอยู่ในใบ M5 ใบเดียว (D4) · ใบเดิมไม่ต้อง backfill heuristic `referral.batch-group.ts` ยังใช้กับใบที่ไม่มี `batch_id` |
 | `to_org.m5_facility_id` | int | opt | `facility_id` จาก TRF-001 บังคับเมื่อส่งผ่าน M5 ส่วน `to_org.name` ยังคงเป็น snapshot ชื่อ |
-| `acuity` | enum(`red`,`yellow`,`green`,`black`) | opt | บังคับเมื่อส่งผ่าน M5 UI ตั้งค่าเริ่มต้นจาก `medical_screening.triage_level` ล่าสุด (ไม่มี `black`) แล้วให้ staff ยืนยัน แยกจาก `urgency` |
+| `acuity` | enum(`red`,`yellow`,`green`,`black`) | opt | บังคับเมื่อส่งผ่าน M5 · ค่าเริ่มต้นใน UI มาจาก `medical_screening.triage_level` เก่าถ้ามี (field deprecated ตั้งแต่ CR-106 — screening ใหม่ไม่มีค่านี้) ถ้าไม่มีให้ว่างและ staff ต้องเลือกเอง (D13) · แยกจาก `urgency` |
 | `transport` | {`vehicle_type`: enum(`ambulance`,`van`,`helicopter`,`other`), `note`: str?} | opt | บังคับเมื่อส่งผ่าน M5 พาหนะเป็นของศูนย์เสมอ |
 | `requester_contact` | {`name`: str, `role`: str, `phone`: str} | opt | snapshot ผู้ติดต่อ ณ ตอนส่ง บังคับเมื่อส่งผ่าน M5 `phone` คือช่องทางเดียวที่ สธ. และโรงพยาบาลใช้ติดต่อกลับ |
 | `external` | {`system`: `m5`, `external_ref`: str, `code`: str, `status`: enum M5, `original_m5_facility_id`: int?, `review`: {note, by, at}?, `last_synced_at`: ts} | sys | BFF เขียน `system`, `external_ref` และ `code` ตอนส่งสำเร็จ worker เขียนส่วนที่เหลือ |
@@ -133,7 +133,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - FR-B1 — ฟอร์ม medical referral โหมด `m5` เลือกผู้ป่วยได้หลายคนในฟอร์มเดียว และกรอก `acuity` / `reason` รายคน
 - FR-B2 — BFF ออก `batch_id` (ulid) ครั้งเดียวต่อการสร้าง แล้วสร้าง referral `draft` 1 ใบต่อผู้ป่วย ทุกใบมี `batch_id` เดียวกัน
 - FR-B3 — ปุ่ม "บันทึกร่าง" สร้างชุดเป็น `draft` · ปุ่ม "ส่งข้อมูล" สร้างชุดแล้ว submit ชุดไป M5 ต่อทันทีในการกดครั้งเดียว (ถ้า submit ล้ม ชุดยังอยู่เป็น `draft` ให้กดส่งใหม่ได้)
-- FR-B4 — field ร่วมของชุดแก้ได้ที่ระดับชุดเท่านั้น (ระหว่าง `draft`) · endpoint แก้รายใบ (`[id]`) ปฏิเสธการแก้ field ร่วมของใบที่มี `batch_id` ด้วย `409 BATCH_FIELD`
+- FR-B4 — ~~แก้ field ร่วมระดับชุด~~ ตัดออก (D14): ระบบยังไม่มีการแก้ referral `draft` (`[id]` มีแค่ GET) ถ้าต้องแก้ชุด `draft` ให้ถอนชุด (`closed`) แล้วสร้างใหม่
 - FR-B5 — ใบโหมด `tracking` สร้างแบบเดิม (1 request = 1 ใบ, ไม่มี `batch_id`)
 
 **ค่าใน payload ของ TRF-002 ที่ไม่ได้เก็บใน referral** (อ่านจาก evacuee หรือศูนย์ ณ ตอนส่ง) — `patients[i]` 1 รายการต่อ referral ในชุด:
@@ -193,7 +193,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 9. **ซ่อมใบที่ส่งไม่ครบ (D7):** `m5_transfers.referral_ids` เป็นตัวตั้ง
    - ถ้า BFF ส่ง TRF-002 สำเร็จแต่เขียน `sent` + `external` ลง CouchDB ไม่ครบ worker ต้องเขียน `draft → sent` + `external` ให้ใบที่ขาดก่อน แล้วจึง apply สถานะ M5 ตามตาราง
    - staff กด "ส่ง" ซ้ำได้ — `external_ref` เดิมทำให้ M5 ไม่สร้างใบซ้ำ (idempotent)
-10. **สิทธิ์ (D8):** ทุก action ของ referral `medical-emergency` (ทั้งโหมด `tracking` และ `m5`: สร้าง, ส่ง, แจ้งรถออก, ถอน, ปิด) ทำได้โดย `shelter_manager`, `medical_staff` หรือ `system_admin` ของศูนย์ต้นทาง · referral ประเภทอื่นคงสิทธิ์เดิม (`shelter_manager`, `system_admin`)
+10. **สิทธิ์ (D8):** ทุก action ของ referral `medical-emergency` (ทั้งโหมด `tracking` และ `m5`: สร้าง, ส่ง, แจ้งรถออก, ถอน, ปิด) ทำได้โดย `shelter_manager`, `medical_staff` หรือ `system_admin` ของศูนย์ต้นทาง · referral ประเภทอื่นคงสิทธิ์เดิม (`shelter_manager`, `system_admin`) · list ของ `medical_staff` (ที่ไม่ใช่ manager / SA) แสดงเฉพาะ `medical-emergency` (D16)
 
 **การเขียนพร้อมกันใน `central_ops`:** BFF และ worker เขียน doc เดียวกันได้ ทั้งคู่ต้อง retry ด้วย `_rev` ใหม่เมื่อเจอ 409 (ใช้ `referral.transition-retry.ts` ที่มีอยู่)
 
@@ -215,7 +215,6 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - `GET /api/back-office/integrations/status` (ร่วมกับ M6)
 - `GET /api/back-office/referral/m5/facilities`
 - `POST /api/back-office/referral/batch` — สร้างชุด `draft` (FR-B2) body: field ร่วม + `patients[]: {evacuee_id, acuity, reason}` + `submit?: boolean` (true = submit ต่อทันที, FR-B3)
-- `PATCH /api/back-office/referral/batch/[batch_id]` — แก้ field ร่วมของชุดระหว่าง `draft` (FR-B4)
 - `POST /api/back-office/referral/batch/[batch_id]/m5/submit` — ส่งทั้งชุด (`draft → sent`)
 - `POST /api/back-office/referral/batch/[batch_id]/m5/start` — แจ้งรถออก
 - `POST /api/back-office/referral/batch/[batch_id]/m5/cancel` — ถอนทั้งชุด body `{reason, resubmit_without?: referral_id[]}` · ถ้ามี `resubmit_without` จะสร้างชุดใหม่เป็น `draft` ตาม §4 ข้อ 6
@@ -256,13 +255,17 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
   - (3) ✅ (2026-11-11, owner) ส่ง `origin.latitude` / `longitude` เป็น **Number** — ถ้า M5 ตอบ 400 ที่ฟิลด์นี้ ให้กลับมาทบทวน
   - (4) ✅ (2026-11-11) M5 **ไม่มีแผนทำ webhook** — ใช้ polling ผ่าน `/v1/integrations/m5/sync` ตาม §5 เป็นการถาวร
   - (5) ⏳ ใบเดียวมีผู้ป่วยได้สูงสุดกี่คน (D4) — ระหว่างรอใช้ D12
-- **D6 — ชุดเกิดตอนไหน** ✅ ตัดสินแล้ว (2026-11-11): **ฟอร์มเดียวสร้างทั้งชุด** BFF ออก `batch_id` ครั้งเดียวและสร้าง `draft` รายคน · "ส่งข้อมูล" = สร้างแล้ว submit ต่อทันที · field ร่วมแก้ได้ระดับชุดเท่านั้น (§3 FR-B1–B5) (ตัวเลือกที่ไม่เลือก: สร้างรายคนแล้วมัดชุดทีหลัง, หนึ่งคนหนึ่งชุดก่อน)
+- **D6 — ชุดเกิดตอนไหน** ✅ ตัดสินแล้ว (2026-11-11): **ฟอร์มเดียวสร้างทั้งชุด** BFF ออก `batch_id` ครั้งเดียวและสร้าง `draft` รายคน · "ส่งข้อมูล" = สร้างแล้ว submit ต่อทันที (§3 FR-B1–B5; FR-B4 ตัดออกใน D14) (ตัวเลือกที่ไม่เลือก: สร้างรายคนแล้วมัดชุดทีหลัง, หนึ่งคนหนึ่งชุดก่อน)
 - **D7 — ส่ง M5 สำเร็จแต่เขียน CouchDB ไม่ครบ** ✅ ตัดสินแล้ว (2026-11-11): **worker ซ่อมจาก `m5_transfers`** (§4 ข้อ 9) (ตัวเลือกที่ไม่เลือก: ให้ staff กดส่งซ้ำอย่างเดียว)
 - **D8 — สิทธิ์** ✅ ตัดสินแล้ว (2026-11-11): **เพิ่ม `medical_staff`** ให้ทำทุก action ของ referral `medical-emergency` (§4 ข้อ 10) (ตัวเลือกที่ไม่เลือก: คง `shelter_manager` อย่างเดียว, `medical_staff` สร้าง draft แต่ manager เป็นคนส่ง)
 - **D9 — สถานะการพักของผู้ป่วย** ✅ ตัดสินแล้ว (2026-11-11): **`temporary_leave` เมื่อ M5 = `in_transit`** worker เขียน movement ให้ทุกคนในชุด (§4 ข้อ 8) (ตัวเลือกที่ไม่เลือก: `temporary_leave` ตอน `arrived`, `checked_out` ตอน `arrived`, ไม่แตะแล้วเตือน staff)
 - **D10 — fallback ของ D5-2** ✅ ตัดสินแล้ว (2026-11-11): ผู้ป่วยไม่มีเลขบัตรหรืออายุ **ส่งได้โดยเว้นว่าง** ไม่บล็อก (§3 ตาราง payload) — ทบทวนเมื่อทีม M5 ตอบ (ตัวเลือกที่ไม่เลือก: บล็อกจนกว่าจะกรอก)
 - **D11 — bulk ที่มีใบ `m5`** ✅ ตัดสินแล้ว (2026-11-11): **bulk ถอนทั้งชุดให้** ผ่าน FastAPI พร้อม dialog ที่แสดงทุกคนในชุด (§4 ข้อ 7) (ตัวเลือกที่ไม่เลือก: bulk ข้ามใบ `m5` และให้ใช้ปุ่มถอนรายชุด)
 - **D12 — fallback ของ D5-5** ✅ ตัดสินแล้ว (2026-11-11): **ไม่จำกัดจำนวนผู้ป่วยต่อชุด** ฝั่งระบบเรา ใช้ error ของ M5 เป็นตัวกั้น (§3 กฎของชุด) (ตัวเลือกที่ไม่เลือก: config default 10, หนึ่งคนต่อใบ)
+- **D13 — ค่าเริ่มต้นของ `acuity`** ✅ ตัดสินแล้ว (2026-11-11): ใช้ `triage_level` เก่าถ้ามี ไม่มีให้ว่างและบังคับเลือก (§3) (ตัวเลือกที่ไม่เลือก: ไม่มีค่าเริ่มต้นเลย, map จาก `track`)
+- **D14 — แก้ชุด `draft`** ✅ ตัดสินแล้ว (2026-11-11): **ตัด FR-B4 / `PATCH batch`** ให้ถอนแล้วสร้างใหม่ (§3)
+- **D15 — `schema_v` ของใบ tracking** ✅ ตัดสินแล้ว (2026-11-11): stamp v3 เฉพาะใบ `m5` ใบ `tracking` คง v2 (§Migration)
+- **D16 — list ของ `medical_staff`** ✅ ตัดสินแล้ว (2026-11-11): เห็นเฉพาะ `medical-emergency` ของศูนย์ตัวเอง (§4 ข้อ 10)
 
 ## Impact
 
@@ -291,10 +294,12 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 ## Migration
 
 - `schema_v` 2 → 3 เป็น additive เท่านั้น doc v1/v2 อ่านได้เหมือนเดิมโดยไม่ต้อง backfill
+- writer stamp `schema_v 3` เฉพาะใบโหมด `m5` (มี field ของ M5) · ใบ `tracking` ยังสร้างเป็น v2 (D15)
 - referral ที่ไม่มี `external` ทำงานตามกฎเดิมทุกข้อ
 - deploy สองขั้นแบบเดียวกับ CR-167:
   1. reader รับ v3 ก่อน
   2. จากนั้นเปิด writer v3 และ M5 env
+- **gate ของ production:** ห้ามตั้ง env M5 จนกว่า reader v3 จะ live — read path ทิ้ง doc ที่ parse ไม่ผ่านแบบเงียบ ๆ PWA ที่ใช้ bundle เก่าจะมองไม่เห็นใบ m5
 
 ## Decision log
 
@@ -302,3 +307,4 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - 2026-11-10 — owner ตัดสิน D1 (a) ส่งเลขบัตร + อาการพร้อม log · D2 ทำทันที · D3 staff เลือกโหมด `tracking` / `m5` ต่อใบ · D4 รวมหลายผู้ป่วยในใบเดียว (`batch_id`) และถอนทั้งชุดแล้วส่งใหม่เมื่อต้องเอาคนออก · เพิ่ม `sync` endpoint ให้ worker เคาะ · D5 ยังรอทีม M5 · ยังไม่ approve — รอ owner approve ก่อนเริ่ม implement
 - 2026-11-11 — grill รอบที่ 1: owner ตัดสิน D6 ฟอร์มเดียวสร้างทั้งชุด · D7 worker ซ่อมใบที่ค้าง `draft` จาก `m5_transfers` · D8 เพิ่ม `medical_staff` · D9 `temporary_leave` เมื่อ `in_transit` · D10 ไม่มีเลขบัตร/อายุส่งได้ · D11 bulk ถอนทั้งชุด · D12 ไม่จำกัดจำนวนต่อชุด · แก้ความไม่ตรงกันในร่าง: worker เป็นผู้เคาะ sync (ย้าย interval ไปเป็น `M5_SYNC_INTERVAL_S` ของ worker), `urgency` เป็น field ร่วมของชุด, CR-168 ยังไม่ได้สร้าง · ยังไม่ approve
 - 2026-11-11 — D5 ตอบแล้ว 2 ข้อ: (3) owner ตัดสินส่งพิกัดศูนย์เป็น Number · (4) M5 ไม่มีแผนทำ webhook ใช้ polling ถาวร · เหลือ (1), (2), (5) รอทีม M5 · ยังไม่ approve
+- 2026-11-11 — owner approve แผน implement (เลข CR-NNN ออกหลัง implement เสร็จ) พร้อมคำตัดสิน D13 ค่าเริ่มต้น `acuity` จาก `triage_level` เก่าถ้ามี ไม่มีให้ว่างและบังคับเลือก · D14 ตัด FR-B4 / `PATCH batch` · D15 stamp v3 เฉพาะใบ `m5` · D16 `medical_staff` เห็นเฉพาะ referral `medical-emergency` ใน list · D5 ที่เหลือจะตรวจจาก M5 staging จริง
