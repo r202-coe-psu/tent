@@ -156,6 +156,10 @@ test.describe('Kiosk label sheets under print media', () => {
 		);
 
 		await page.goto('/kiosk?shelter_code=SH001');
+		// Boot lands on the language picker first; Thai keeps the labels below.
+		await expect(page).toHaveURL(/\/kiosk\/language\?shelter_code=SH001$/);
+		await page.locator('[data-language="th"]').click();
+		await expect(page).toHaveURL(/\/kiosk\?shelter_code=SH001$/);
 		await page.getByRole('button', { name: 'ข้อมูลเครื่อง' }).click();
 		for (const digit of '123456') await page.keyboard.press(digit);
 		await page.getByRole('button', { name: 'ยืนยัน', exact: true }).click();

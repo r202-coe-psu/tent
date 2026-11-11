@@ -1321,4 +1321,46 @@ describe('user-service', () => {
 			expect(await findUserByGoogleSubject('g-sub-8')).toBeNull();
 		});
 	});
+
+	describe('repl:* replication accounts (#1298 FR-5)', () => {
+		const sa = { name: 'root-sa', roles: ['system_admin'], isSA: true, shelterCode: null };
+		const replId = 'org.couchdb.user:repl_sh001_ab12cd34';
+
+		beforeEach(() => {
+			fakeUsersDb[replId] = {
+				_id: replId,
+				_rev: '1-a',
+				name: 'repl_sh001_ab12cd34',
+				type: 'user',
+				roles: ['repl:SH001']
+			};
+			fakeUsersDb['org.couchdb.user:normal'] = {
+				_id: 'org.couchdb.user:normal',
+				_rev: '1-a',
+				name: 'normal',
+				type: 'user',
+				roles: ['shelter:SH001', 'registration_staff']
+			};
+		});
+
+		it('is hidden from the user list but normal users remain', async () => {
+			const names = (await listUsers(sa)).map((u) => u.name);
+			expect(names).toContain('normal');
+			expect(names).not.toContain('repl_sh001_ab12cd34');
+		});
+
+		it('cannot be updated, reset or deleted through user-service', async () => {
+			await expect(
+				updateUser('repl_sh001_ab12cd34', { display_name: 'x' }, sa, noCheck)
+			).rejects.toMatchObject({ code: 'VALIDATION' });
+			await expect(resetUserPasswordByAdmin('repl_sh001_ab12cd34', sa)).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+			await expect(deleteUser('repl_sh001_ab12cd34', sa)).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+			expect(fakeUsersDb[replId].roles).toEqual(['repl:SH001']);
+			expect(fakeUsersDb[replId].deleted_at ?? null).toBeNull();
+		});
+	});
 });

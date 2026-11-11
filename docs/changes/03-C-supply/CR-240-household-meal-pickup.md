@@ -3,7 +3,7 @@ id: CR-240
 title: รับอาหารแทนสมาชิกครัวเรือน — distribution_log รายสมาชิก + collected_by_recipient_id
 status: approved
 date: 2026-11-05
-updated: 2026-11-08
+updated: 2026-11-11
 requested_by: feedback อบรมระบบ 2026-11-03 (#1154)
 decided_by: kong
 layer: volatile
@@ -59,6 +59,7 @@ migration: >
 | R7 | เตือนแพ้อาหาร (CR-191) ประเมินรายสมาชิก |
 | R8 | บันทึกได้ไม่ครบ (CouchDB ไม่ atomic ข้ามหลาย doc) → แสดงรายชื่อที่สำเร็จ/ไม่สำเร็จ; ลองใหม่เฉพาะคนที่ไม่สำเร็จ โดยไม่สร้าง log ซ้ำของคนที่สำเร็จแล้ว — ก่อน retry อ่าน log ของแต่ละคนซ้ำ (กติกาเดียวกับ FR-MQW-01/02) แล้วข้ามคนที่มี log มื้อนี้ที่ไม่ `voided` อยู่แล้ว (`_id` เป็น ULID สุ่ม จึงกันซ้ำด้วย `_id` ไม่ได้) |
 | R9 | In-Hand ของตั๋ว = `allocated_qty - sum(distribution_log.qty)` เท่าเดิม → ลดตามจำนวนสมาชิกที่บันทึกสำเร็จ |
+| R10 | ผู้มารับสแกน QR หมดอายุแล้วกดยอมรับความเสี่ยง (CR-233 A1, FR-EQR-44..50) → `recipient_qr_override` บันทึกเฉพาะ log ของผู้มารับเอง (`recipient_id` = ผู้ที่สแกน); log ของสมาชิกคนอื่นที่ถูกรับแทนไม่มี field นี้ เพราะไม่ได้ใช้ QR ของเขา |
 
 **AC:** AC-DST-02.2 คงเดิม. AC-DST-02.1 ปรับจาก "ทุกการกดยืนยัน → `distribution_log` หนึ่งใบ" เป็น "ทุกการกดยืนยัน → `distribution_log` หนึ่งใบต่อสมาชิกที่เลือก" (field อื่นของ AC เดิม — `is_returnable: false`, `status: 'fulfilled'` — เท่าเดิม).
 
@@ -86,3 +87,4 @@ N/A — additive optional field, ไม่ bump `schema_v`, ไม่ backfill.
 - 2026-11-05 — grill สรุปใน #1154 (D1–D8); owner เลือก track แบบไฟล์ CR
 - 2026-11-05 — proposed
 - 2026-11-08 — approved (kong); รันเลข CR-240, ย้ายไป `03-C-supply/`; เพิ่มแถวใน `_index.md`; แก้ schema.md §2.30 กับ CR-121 FR-DST-02/AC-DST-02.1/หน้าจอ 14; ปรับ AC-DST-02.1, immutable, R6 `household_id`, R8 วิธี retry ตามรีวิว PR #1184
+- 2026-11-11 — เพิ่ม R10 (ร่องรอย QR หมดอายุลงเฉพาะ log ของผู้สแกน ตาม CR-233 A1) ตามรีวิว PR #1208; ยืนยันการตีความ (จดเฉพาะ log ของผู้สแกน) แล้วเมื่อ 2026-11-11; ไม่เปลี่ยนพฤติกรรมโค้ด

@@ -5,7 +5,10 @@
 	import Printer from '@lucide/svelte/icons/printer';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Smartphone from '@lucide/svelte/icons/smartphone';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
+	import { KIOSK_METHOD_I18N } from './_constants/kiosk-method.i18n';
 	import {
 		KIOSK_REPRINT_ENTRY,
 		visibleIdentityMethods,
@@ -27,6 +30,7 @@
 		reprintEnabled,
 		thaidCheckInEnabled
 	}: Props = $props();
+	const t = $derived(getTranslation(KIOSK_METHOD_I18N, languageStore.current));
 	const methods = $derived(visibleIdentityMethods({ qrCheckInEnabled, thaidCheckInEnabled }));
 	const columns = $derived(methods.length >= 3 ? 3 : methods.length === 1 ? 1 : 2);
 	const rows = $derived(Math.ceil(methods.length / columns));
@@ -62,10 +66,10 @@
 			id="method-title"
 			class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 		>
-			ลงทะเบียน
+			{t.title}
 		</h1>
 		<p class="mt-1 text-base font-medium text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-			เลือกวิธีค้นหา
+			{t.subtitle}
 		</p>
 	</header>
 
@@ -83,13 +87,13 @@
 				<h2
 					class="text-lg leading-snug font-bold text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
 				>
-					{method.title}
+					{t.methods[method.id].title}
 				</h2>
 				{#if method.description}
 					<p
 						class="method-description mt-1 text-base leading-snug text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl"
 					>
-						{method.description}
+						{t.methods[method.id].description}
 					</p>
 				{/if}
 			</div>
@@ -106,14 +110,14 @@
 		data-single-row={rows === 1 ? '' : undefined}
 		style:--method-rows={rows}
 		style:--method-count={methods.length}
-		aria-label="วิธีค้นหาข้อมูล"
+		aria-label={t.gridLabel}
 	>
 		{#each methods as method (method.id)}
 			{@const MethodIcon = iconFor(method.icon)}
 			{#if method.enabled && method.href}
 				<a
 					href={resolve(`${method.href}${contextQuery}`)}
-					aria-label={`${method.title}${method.description ? ` · ${method.description}` : ''} · ${method.buttonLabel}`}
+					aria-label={`${t.methods[method.id].title}${method.description ? ` · ${t.methods[method.id].description}` : ''} · ${t.methods[method.id].buttonLabel}`}
 					class={`method-card flex flex-col items-center justify-center gap-3 rounded-xl border p-3 text-center no-underline shadow-2xs transition-transform duration-150 ease-out hover:z-10 hover:scale-[1.02] focus-visible:z-10 focus-visible:scale-[1.02] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:focus-visible:scale-100 sm:p-4 kiosk-portrait:flex-row kiosk-portrait:justify-start kiosk-portrait:px-8 ${cardTone(method.id)}`}
 				>
 					{@render methodDetails(method, MethodIcon)}
@@ -124,7 +128,7 @@
 				>
 					{@render methodDetails(method, MethodIcon)}
 					<p class="text-sm font-semibold text-slate-600 kiosk-portrait:text-xl">
-						{method.buttonLabel}
+						{t.methods[method.id].buttonLabel}
 					</p>
 				</article>
 			{/if}
@@ -134,7 +138,7 @@
 	{#if reprintEnabled}
 		<a
 			href={resolve(`${KIOSK_REPRINT_ENTRY.href}${contextQuery}`)}
-			aria-label={`${KIOSK_REPRINT_ENTRY.title} · ${KIOSK_REPRINT_ENTRY.description}`}
+			aria-label={`${t.reprint.title} · ${t.reprint.description}`}
 			class="reprint-link flex min-h-14 w-full items-center justify-center gap-4 rounded-xl border border-slate-300 bg-white px-4 py-2 text-left no-underline shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none kiosk-portrait:min-h-24 kiosk-portrait:gap-6 kiosk-portrait:px-8"
 		>
 			<span
@@ -145,11 +149,11 @@
 			</span>
 			<span class="min-w-0">
 				<span class="block text-lg leading-snug font-bold text-slate-900 kiosk-portrait:text-3xl"
-					>{KIOSK_REPRINT_ENTRY.title}</span
+					>{t.reprint.title}</span
 				>
 				<span
 					class="block text-base leading-snug text-slate-700 kiosk-portrait:mt-1 kiosk-portrait:text-xl"
-					>{KIOSK_REPRINT_ENTRY.description}</span
+					>{t.reprint.description}</span
 				>
 			</span>
 		</a>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { fetchKioskBanners } from '../data/kiosk-banners.api';
 	import type { KioskBannerSlide } from '../domain/kiosk-banner-feed';
@@ -11,20 +12,27 @@
 		mode: 'live' | 'preview';
 		/** `preview` only: the slides to play, in order. */
 		banners?: KioskBannerSlide[];
-		/** `preview` only: called when the overlay is tapped away. */
+		/** Called when the overlay is tapped away (`live`: only while it was actually showing). */
 		onDismiss?: () => void;
+		/** `live` only: the idle window passed while there were no banners to show. */
+		onIdleWithoutBanners?: () => void;
 	};
 
 	/**
 	 * Attract overlay for `/kiosk` (CR-162 FR-KBN-42..47). `live` owns the idle/refresh state
 	 * machine; `preview` (back-office) shows the given slides at once, with no idle or refresh timer.
 	 */
-	let { mode, banners = [], onDismiss }: Props = $props();
+	let { mode, banners = [], onDismiss, onIdleWithoutBanners }: Props = $props();
 
 	// `mode` never changes for a mounted instance.
 	// svelte-ignore state_referenced_locally
 	const controller =
-		mode === 'live' ? new KioskBannerAttractController({ fetch: fetchKioskBanners }) : null;
+		mode === 'live'
+			? new KioskBannerAttractController({
+					fetch: fetchKioskBanners,
+					onIdleWithoutBanners: () => onIdleWithoutBanners?.()
+				})
+			: null;
 
 	let previewIndex = $state(0);
 	let previewDismissed = $state(false);
@@ -45,7 +53,8 @@
 
 	// Lifecycle only: start/stop the live controller, drop a pending click guard, rotate the preview.
 	$effect(() => {
-		controller?.start();
+		// `start()` reads `phase`; tracking it would destroy + restart the controller on every change.
+		untrack(() => controller?.start());
 		return () => {
 			controller?.destroy();
 			cancelSwallow?.();
@@ -65,7 +74,9 @@
 		cancelSwallow?.();
 		cancelSwallow = swallowClick ? swallowNextClick() : null;
 		if (controller) {
+			const wasShowing = controller.phase === 'showing';
 			controller.dismiss();
+			if (wasShowing) onDismiss?.();
 		} else if (!previewDismissed) {
 			previewDismissed = true;
 			onDismiss?.();

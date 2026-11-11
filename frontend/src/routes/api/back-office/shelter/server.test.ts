@@ -8,8 +8,13 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	return {
 		...actual,
 		requireAdmin: vi.fn().mockRejectedValue(new Error('requireAdmin must not gate POST')),
-		requireSystemAdmin: vi.fn()
+		requireSystemAdmin: vi.fn(),
+		requireShelterScopeOrSA: vi.fn()
 	};
+});
+vi.mock('$lib/server/shelters.admin', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/shelters.admin')>();
+	return { ...actual, listShelterMasters: vi.fn() };
 });
 vi.mock('$lib/features/shelters/server/provisioner', () => ({
 	provisionShelter: vi.fn()
@@ -18,8 +23,9 @@ vi.mock('$lib/server/master-data-server', () => ({
 	readMasterDoc: vi.fn()
 }));
 
-import { POST } from './+server';
-import { requireSystemAdmin } from '$lib/server/couch-admin';
+import { GET, POST } from './+server';
+import { requireShelterScopeOrSA, requireSystemAdmin } from '$lib/server/couch-admin';
+import { listShelterMasters } from '$lib/server/shelters.admin';
 import { provisionShelter } from '$lib/features/shelters/server/provisioner';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import type { MasterData } from '$lib/features/master-data/domain';
@@ -101,5 +107,39 @@ describe('POST /api/back-office/shelter — site_kind (CR-198 FR-7)', () => {
 		const res = await callPOST(newShelter);
 		expect(res.status).toBe(422);
 		expect(provisionMock).not.toHaveBeenCalled();
+	});
+});
+
+describe('GET /api/back-office/shelter — visibility (#477)', () => {
+	const masters = ['SH001', 'SH002', 'SH003'].map((code) => ({ code, name: code }));
+
+	async function callGET(roles: string[], isSA = false) {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'u',
+			roles,
+			isSA,
+			shelterCode: roles.find((r) => r.startsWith('shelter:'))?.slice(8) ?? null
+		});
+		vi.mocked(listShelterMasters).mockResolvedValue(masters as never);
+		const request = new Request('http://localhost/api/back-office/shelter', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request } as unknown as Parameters<typeof GET>[0]);
+		return ((await res.json()) as { code: string }[]).map((s) => s.code);
+	}
+
+	it('returns every shelter a multi-shelter user holds, so they can switch', async () => {
+		expect(await callGET(['shelter:SH001', 'shelter:SH002', 'SH002:shelter_manager'])).toEqual([
+			'SH001',
+			'SH002'
+		]);
+	});
+
+	it('returns only the one shelter of a single-shelter user', async () => {
+		expect(await callGET(['shelter:SH003', 'warehouse_staff'])).toEqual(['SH003']);
+	});
+
+	it('returns every shelter to a system admin', async () => {
+		expect(await callGET(['system_admin'], true)).toEqual(['SH001', 'SH002', 'SH003']);
 	});
 });

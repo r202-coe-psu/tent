@@ -44,6 +44,7 @@ import {
 	cancelTicket,
 	canCancelTicket,
 	isTicketCancellable,
+	listTicketApplications,
 	TicketCancelError
 } from './public-ticket';
 
@@ -893,5 +894,65 @@ describe('re-booking after a cancel (CR-220 ledger is per application)', () => {
 		expect(get('job:j1').shifts).toEqual([
 			{ shift_id: 'shift:s1', slots_confirmed: 0, slots_remaining: 1 }
 		]);
+	});
+});
+
+describe('listTicketApplications (#973)', () => {
+	beforeEach(() => seed('confirmed'));
+
+	function addOther() {
+		db.docs.set('volunteer:v2', {
+			_id: 'volunteer:v2',
+			type: 'volunteer',
+			first_name: 'ข',
+			tracking_token_hash: 'OTHERTOKEN-hash'
+		});
+		db.docs.set('job_application:b1', {
+			_id: 'job_application:b1',
+			type: 'job_application',
+			job_id: 'job:j9',
+			volunteer_id: 'volunteer:v2',
+			tracking_token_hash: 'OTHERAPP-hash',
+			status: 'confirmed',
+			selected_shift: { date: FUTURE, start_time: '08:00', end_time: '12:00' }
+		});
+	}
+
+	it('lists only the applications of the permanent token owner, with the cancel verdict', async () => {
+		addOther();
+		const list = await listTicketApplications('VOLTOKEN', NOW);
+		expect(list).toEqual([
+			{
+				application_id: 'job_application:a1',
+				status: 'confirmed',
+				job_id: 'job:j1',
+				shift_id: 'shift:s1',
+				date: FUTURE,
+				can_cancel: true
+			}
+		]);
+	});
+
+	it('says cancel is not offered once the shift started', async () => {
+		const list = await listTicketApplications('VOLTOKEN', AFTER_START);
+		expect(list?.[0].can_cancel).toBe(false);
+	});
+
+	it('an application token lists just its own application', async () => {
+		addOther();
+		const list = await listTicketApplications('APPTOKEN', NOW);
+		expect(list?.map((a) => a.application_id)).toEqual(['job_application:a1']);
+	});
+
+	it('is null for an unknown token', async () => {
+		expect(await listTicketApplications('NOPE', NOW)).toBeNull();
+	});
+
+	it("cannot cancel another volunteer's application with my permanent token", async () => {
+		addOther();
+		await expect(cancelTicket('VOLTOKEN', 'job_application:b1', NOW)).rejects.toMatchObject({
+			httpStatus: 409
+		});
+		expect(get('job_application:b1').status).toBe('confirmed');
 	});
 });

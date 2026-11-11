@@ -3,6 +3,7 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
 	import { fade, fly } from 'svelte/transition';
+	import { formatQty } from '$lib/utils/qty';
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import { getSourceLabel } from '$lib/utils/source';
 	import { TARGET_SEGMENT_LABELS, type FoodSphereStandard } from '../domain/food-sphere';
@@ -73,7 +74,7 @@
 				</div>
 				<div class="flex justify-between">
 					<span class="text-muted-foreground">ปริมาณความต้องการ:</span>
-					<span class="font-mono font-semibold">{standard.daily_demand.toLocaleString()}</span>
+					<span class="font-mono font-semibold">{formatQty(standard.daily_demand)}</span>
 				</div>
 				<div class="flex justify-between">
 					<span class="text-muted-foreground">วันที่มีผลบังคับใช้:</span>

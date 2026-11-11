@@ -69,12 +69,13 @@ Dockerfile). Don't add npm/yarn lockfiles.
 
 **Definition of done (see CONTRIBUTING.md §2):**
 
-- **Lint, type-check, unit tests are enforced by Lefthook** — pre-commit runs Prettier + ESLint on
-  staged files; pre-push runs full `pnpm check` + `pnpm test`. Do **not** run the full suites by
-  hand before committing; while developing run only the tests you touched
-  (`pnpm vitest run <file>`). A green push satisfies these.
-- **Not hooked — you must ensure:** new domain/data logic ships with tests, and every `.svelte`
-  file you touched is run through **`svelte-autofixer`** (Svelte MCP) until clean.
+- **Lint and unit tests are enforced by Lefthook** — pre-commit runs Prettier + ESLint on
+  staged files; pre-push runs full `pnpm test` (and pytest for backend/worker when those trees
+  change). Do **not** re-run the full unit suite by hand before pushing; while developing run only
+  the tests you touched (`pnpm vitest run <file>`). A green push satisfies lint and unit tests.
+- **Not hooked — you must ensure:** `pnpm check` (`svelte-check`) before a PR, new domain/data
+  logic ships with tests, and every `.svelte` file you touched is run through **`svelte-autofixer`**
+  (Svelte MCP) until clean.
 
 ### Infra + public plane (repo root / `backend/` / `worker/`)
 

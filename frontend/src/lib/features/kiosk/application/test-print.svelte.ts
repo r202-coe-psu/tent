@@ -1,11 +1,11 @@
+import type { LanguageCode } from '$lib/stores/language.svelte';
 import { TEST_PRINT_LABEL_NAME, TEST_PRINT_QR_PAYLOAD } from '../domain/test-print';
+import { KIOSK_PRINT_FLOW_I18N } from './kiosk-print-flow.i18n';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
 import type { KioskQrImage, KioskQrLabel } from './kiosk-label-print';
 
 /** How long «printed» stays on screen before the status card goes away. */
 export const TEST_PRINT_DONE_VISIBLE_MS = 2500;
-
-const RENDER_FAILED_MESSAGE = 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ';
 
 export type TestPrintPhase = 'idle' | 'printing' | 'done' | 'error';
 
@@ -13,10 +13,13 @@ export type TestPrintDeps = {
 	prepareQrImage: (payload: string) => Promise<KioskQrImage>;
 	printLabels: (
 		labels: readonly KioskQrLabel[],
-		fallbackPrint: () => void | Promise<void>
+		fallbackPrint: () => void | Promise<void>,
+		language: LanguageCode
 	) => Promise<KioskPrintFlowResult>;
 	/** Runs only when no scanner client answered (dev browser / browser print mode). */
 	fallbackPrint: () => void | Promise<void>;
+	/** The language on screen, read when the label is printed; Thai when not given. */
+	language?: () => LanguageCode;
 };
 
 /**
@@ -66,12 +69,14 @@ export class TestPrint {
 		this.#clearDoneTimer();
 		this.error = '';
 		this.phase = 'printing';
+		const language = this.deps.language?.() ?? 'th';
 		try {
 			const image = await this.deps.prepareQrImage(TEST_PRINT_QR_PAYLOAD);
 			this.qrImage = image;
 			const result = await this.deps.printLabels(
 				[{ qrSrc: image.src, name: TEST_PRINT_LABEL_NAME }],
-				this.deps.fallbackPrint
+				this.deps.fallbackPrint,
+				language
 			);
 			switch (result.kind) {
 				case 'printed':
@@ -89,7 +94,7 @@ export class TestPrint {
 					this.phase = 'error';
 			}
 		} catch {
-			this.error = RENDER_FAILED_MESSAGE;
+			this.error = KIOSK_PRINT_FLOW_I18N[language].qrRenderFailed;
 			this.phase = 'error';
 		}
 	}

@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Delete from '@lucide/svelte/icons/delete';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 
 	interface Props {
 		value?: string;
@@ -11,6 +14,7 @@
 
 	let { value = $bindable(''), maxLength = 10, disabled = false, onsubmit }: Props = $props();
 
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current).numpad);
 	let lastTapAt = 0;
 	const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
@@ -51,12 +55,13 @@
 	}
 </script>
 
-<div class="grid grid-cols-3 gap-1" role="group" aria-label="ปุ่มกดตัวเลข">
+<div class="grid grid-cols-3 gap-1" role="group" aria-label={t.group}>
 	{#each digits as digit (digit)}
 		<Button
 			type="button"
 			variant="outline"
-			aria-label={`ตัวเลข ${digit}`}
+			aria-label={t.digit(digit)}
+			data-digit={digit}
 			disabled={disabled || value.length >= maxLength}
 			onkeydown={handleKeydown}
 			onclick={() => appendDigit(digit, true)}
@@ -68,18 +73,19 @@
 	<Button
 		type="button"
 		variant="outline"
-		aria-label="ล้างทั้งหมด"
+		aria-label={t.clearAllLabel}
 		disabled={disabled || value.length === 0}
 		onkeydown={handleKeydown}
 		onclick={clearValue}
 		class="min-h-16 rounded-lg border-slate-300 bg-slate-50 text-base font-bold text-slate-800 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
 	>
-		ล้าง
+		{t.clear}
 	</Button>
 	<Button
 		type="button"
 		variant="outline"
-		aria-label="ตัวเลข 0"
+		aria-label={t.digit('0')}
+		data-digit="0"
 		disabled={disabled || value.length >= maxLength}
 		onkeydown={handleKeydown}
 		onclick={() => appendDigit('0', true)}
@@ -90,13 +96,13 @@
 	<Button
 		type="button"
 		variant="outline"
-		aria-label="ลบหนึ่งตัว"
+		aria-label={t.deleteOneLabel}
 		disabled={disabled || value.length === 0}
 		onkeydown={handleKeydown}
 		onclick={() => removeDigit(true)}
 		class="min-h-16 rounded-lg border-slate-300 bg-slate-50 text-base font-bold text-slate-800 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
 	>
 		<Delete class="hidden kiosk-portrait:inline" aria-hidden="true" />
-		ลบ
+		{t.delete}
 	</Button>
 </div>

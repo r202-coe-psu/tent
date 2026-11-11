@@ -20,3 +20,4 @@ export * from './bulk-return-pool-v3-void';
 export * from './bulk-return-pool-v3-loan-reopen';
 export * from './bulk-return-pool-v3-read';
 export * from './bulk-return-pool-v3-missed-loans';
+export * from './household-meal-pickup-workflow';

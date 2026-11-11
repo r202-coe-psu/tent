@@ -41,8 +41,11 @@ vi.mock('$lib/features/operations/data/transfer.server-repository', () => {
 function createMockEvent(
 	id: string,
 	body: unknown = null,
-	cookie: string | null = 'test_cookie'
+	cookie: string | null = 'test_cookie',
+	shelterCode?: string
 ): RequestEvent {
+	const url = new URL(`http://localhost/api/back-office/transfer/${id}/transition`);
+	if (shelterCode) url.searchParams.set('shelter_code', shelterCode);
 	return {
 		params: { id },
 		request: {
@@ -51,7 +54,7 @@ function createMockEvent(
 			},
 			json: async () => body
 		},
-		url: new URL(`http://localhost/api/back-office/transfer/${id}/transition`)
+		url
 	} as unknown as RequestEvent;
 }
 
@@ -109,6 +112,51 @@ describe('PATCH /api/back-office/transfer/[id]/transition', () => {
 				notes: '15kg damaged in transit'
 			}
 		);
+	});
+
+	describe('multi-shelter user (#477)', () => {
+		beforeEach(() => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:warehouse_staff'
+				],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+		});
+
+		it('403 when acting as the shelter where they hold no warehouse capability', async () => {
+			const res = await PATCH(
+				createMockEvent('stock_transfer:1', { to: 'shipped' }, 'test_cookie', 'SH001')
+			);
+			expect(res.status).toBe(403);
+			expect(mockTransition).not.toHaveBeenCalled();
+		});
+
+		it('transitions in the chosen shelter where they hold the capability', async () => {
+			mockTransition.mockResolvedValueOnce({ status: 'shipped' } as unknown as StockTransfer);
+			const res = await PATCH(
+				createMockEvent('stock_transfer:1', { to: 'shipped' }, 'test_cookie', 'SH002')
+			);
+			expect(res.status).toBe(200);
+			expect(mockTransition).toHaveBeenCalledWith(
+				'stock_transfer:1',
+				'shipped',
+				'two_shelter_user',
+				'SH002',
+				expect.anything()
+			);
+		});
+
+		it('400 when no shelter is named', async () => {
+			const res = await PATCH(createMockEvent('stock_transfer:1', { to: 'shipped' }));
+			expect(res.status).toBe(400);
+			expect(mockTransition).not.toHaveBeenCalled();
+		});
 	});
 
 	it('returns 422 for invalid transition target status', async () => {
