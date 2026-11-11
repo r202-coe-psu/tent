@@ -602,7 +602,14 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			'อะพาร์ตเมนต์ / หอพัก',
 			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
 		]);
-		await page.keyboard.press('Escape');
+		await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
+		const housing = page.locator('#housing-type');
+		await expect(housing).toHaveAccessibleName('ประเภทที่อยู่อาศัย');
+		await expect(housing).toHaveAccessibleDescription('');
+		await expect(housing.locator('span[title]')).toHaveAttribute(
+			'title',
+			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
+		);
 
 		await page.locator('#province').click();
 		await expect(page.getByRole('button', { name: 'สงขลา', exact: true })).toBeVisible();
@@ -1132,6 +1139,9 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		health
 	}) => {
 		await NO_BANNER(page);
+		await page.route('**/api/public/v1/recaptcha', (route) =>
+			route.fulfill({ json: { enabled: false } })
+		);
 		await openPreRegister(page);
 		await expectUnspecifiedPreselected(primaryCard(page));
 		const bodies = await captureQueueSubmit(page, health);
@@ -1152,6 +1162,9 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		health
 	}) => {
 		await NO_BANNER(page);
+		await page.route('**/api/public/v1/recaptcha', (route) =>
+			route.fulfill({ json: { enabled: false } })
+		);
 		await openPreRegister(page);
 		const bodies = await captureQueueSubmit(page, health);
 		await fillBase(page);
