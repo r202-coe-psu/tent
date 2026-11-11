@@ -96,7 +96,7 @@ beforeEach(() => {
 });
 
 describe('public-application occupation handling (CR-245 / #1152)', () => {
-	it('stamps schema_v 5 and saves trimmed occupation for brand-new volunteer', async () => {
+	it('stamps schema_v 6 and saves trimmed occupation for brand-new volunteer', async () => {
 		mockFindFor([]);
 
 		await applyPublicVolunteerApplication('job:target', {
@@ -109,7 +109,7 @@ describe('public-application occupation handling (CR-245 / #1152)', () => {
 		);
 		expect(volunteerPutCall).toBeDefined();
 		const doc = volunteerPutCall![2] as Record<string, unknown>;
-		expect(doc.schema_v).toBe(5);
+		expect(doc.schema_v).toBe(6);
 		expect(doc.occupation).toBe('พยาบาลวิชาชีพ');
 	});
 
@@ -126,7 +126,7 @@ describe('public-application occupation handling (CR-245 / #1152)', () => {
 		);
 		expect(volunteerPutCall).toBeDefined();
 		const doc = volunteerPutCall![2] as Record<string, unknown>;
-		expect(doc.schema_v).toBe(5);
+		expect(doc.schema_v).toBe(6);
 		expect(doc.occupation).toBeNull();
 	});
 
@@ -153,7 +153,7 @@ describe('public-application occupation handling (CR-245 / #1152)', () => {
 		const volunteerPutCall = state.put.mock.calls.find((call) => call[1] === existingVolunteer._id);
 		expect(volunteerPutCall).toBeDefined();
 		const doc = volunteerPutCall![2] as Record<string, unknown>;
-		expect(doc.schema_v).toBe(5);
+		expect(doc.schema_v).toBe(6);
 		expect(doc.occupation).toBe('วิศวกรโยธา');
 	});
 
@@ -180,7 +180,7 @@ describe('public-application occupation handling (CR-245 / #1152)', () => {
 		const volunteerPutCall = state.put.mock.calls.find((call) => call[1] === existingVolunteer._id);
 		expect(volunteerPutCall).toBeDefined();
 		const doc = volunteerPutCall![2] as Record<string, unknown>;
-		expect(doc.schema_v).toBe(5);
+		expect(doc.schema_v).toBe(6);
 		expect(doc.occupation).toBe('อาจารย์มหาวิทยาลัย');
 	});
 });
