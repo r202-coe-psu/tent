@@ -135,3 +135,50 @@ describe('wasInShelterAllDay (Thai calendar day, from movement history)', () => 
 		expect(wasInShelterAllDay({ day: DAY, movements: [] })).toBe(false);
 	});
 });
+
+describe('wasInShelterAllDay for a day that is still running', () => {
+	// Today is 2026-11-09 and it is only 10:00 Thai (03:00Z): the day has no end yet.
+	const TODAY = '2026-11-09';
+
+	it('counts someone who checked in before today and has not left', () => {
+		expect(
+			wasInShelterAllDay({
+				day: TODAY,
+				movements: [{ action: 'check_in', ...at('2026-11-07T03:00:00Z') }]
+			})
+		).toBe(true);
+	});
+
+	it('does not count someone who checked in this morning', () => {
+		expect(
+			wasInShelterAllDay({
+				day: TODAY,
+				movements: [{ action: 'check_in', ...at('2026-11-09T01:00:00Z') }]
+			})
+		).toBe(false);
+	});
+
+	it('does not count someone who left earlier today', () => {
+		expect(
+			wasInShelterAllDay({
+				day: TODAY,
+				movements: [
+					{ action: 'check_in', ...at('2026-11-07T03:00:00Z') },
+					{ action: 'check_out', ...at('2026-11-09T02:00:00Z') }
+				]
+			})
+		).toBe(false);
+	});
+
+	it('counts someone who only changed zone this morning', () => {
+		expect(
+			wasInShelterAllDay({
+				day: TODAY,
+				movements: [
+					{ action: 'check_in', ...at('2026-11-07T03:00:00Z') },
+					{ action: 'zone_change', ...at('2026-11-09T02:00:00Z') }
+				]
+			})
+		).toBe(true);
+	});
+});

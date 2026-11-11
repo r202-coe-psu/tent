@@ -6,6 +6,9 @@
  * night is still counted for yesterday's meals. Mid-day arrivals, departures and temporary
  * leaves return false (they could not have eaten every meal here).
  *
+ * It also holds for a day that is still running: nothing can happen after now, so someone who
+ * checked in before today and has not left is present and someone who arrived this morning is not.
+ *
  * `zone_change` does not change presence. When an evacuee has no movements at all (the initial
  * check-in movement is best-effort), fall back to `current_stay` when `since` predates the day.
  */
@@ -13,6 +16,12 @@ import { isInShelterStayStatus } from './in-shelter';
 
 const THAILAND_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Epoch-ms bounds `[start, end)` of Thai calendar `day` (`YYYY-MM-DD`). */
+export function thaiDayRangeMs(day: string): { start: number; end: number } {
+	const start = new Date(`${day}T00:00:00.000Z`).getTime() - THAILAND_UTC_OFFSET_MS;
+	return { start, end: start + DAY_MS };
+}
 
 const ENTERS = new Set(['check_in', 'transfer_in', 'return_from_leave', 'confirm_room']);
 const LEAVES = new Set(['check_out', 'transfer_out', 'leave_temporary', 'mark_deceased']);
@@ -30,8 +39,7 @@ export interface PresenceInput {
 }
 
 export function wasInShelterAllDay({ day, movements, current_stay }: PresenceInput): boolean {
-	const dayStart = new Date(`${day}T00:00:00.000Z`).getTime() - THAILAND_UTC_OFFSET_MS;
-	const dayEnd = dayStart + DAY_MS;
+	const { start: dayStart, end: dayEnd } = thaiDayRangeMs(day);
 
 	if (movements.length === 0) {
 		const since = current_stay?.since ? new Date(current_stay.since).getTime() : NaN;
