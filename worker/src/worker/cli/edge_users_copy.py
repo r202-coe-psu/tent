@@ -26,7 +26,6 @@ import logging
 import time
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 
@@ -38,6 +37,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("edge-users-copy")
+# httpx logs every request at INFO: one line per edge DB on each 30 s refresh otherwise.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 USERS_DB = "_users"
 CHECKPOINT_ID = "_local/edge_users_copy"
@@ -47,6 +48,7 @@ ROLE_PREFIX = "shelter:"
 REFRESH_SECONDS = 30.0
 CHANGES_BATCH = 100
 BACKFILL_PAGE = 500
+BULK_GET_CHUNK = 100
 POLL_TIMEOUT_MS = 10_000
 ERROR_BACKOFF_SECONDS = 5.0
 
@@ -82,10 +84,6 @@ def destination_dbs(doc: dict[str, Any], existing_dbs: set[str]) -> set[str]:
         for code in doc_shelter_codes(doc)
         if (name := edge_db_name(code)) in existing_dbs
     }
-
-
-def _users_doc_path(doc_id: str) -> str:
-    return f"/{USERS_DB}/{quote(doc_id, safe='')}"
 
 
 def _is_404(exc: httpx.HTTPStatusError) -> bool:
@@ -132,7 +130,7 @@ class EdgeUsersCopier:
         return {name for name in data if name.startswith(DB_PREFIX)}
 
     async def refresh_dbs(self, *, force: bool = False) -> None:
-        """Re-list ``edge_users_*`` (every 30 s) and backfill any DB that is new."""
+        """Re-list ``edge_users_*`` (every 30 s) and backfill at most one new DB per call."""
         if not force and time.monotonic() - self._last_refresh < REFRESH_SECONDS:
             return
         self.existing_dbs = await self.list_edge_dbs()
@@ -143,6 +141,10 @@ class EdgeUsersCopier:
             try:
                 if await self._couch.get_doc(database, BACKFILL_DONE_ID) is None:
                     await self.backfill(database)
+                    # One backfill per loop turn so a changes batch (revocations) runs between
+                    # backfills; refresh again next turn for the remaining new DBs.
+                    self._last_refresh = float("-inf")
+                    return
             except httpx.HTTPStatusError as exc:
                 if not _is_404(exc):
                     raise
@@ -162,15 +164,14 @@ class EdgeUsersCopier:
             rows = data.get("rows") or []
             if not rows:
                 break
-            batch: list[dict[str, Any]] = []
+            refs: list[tuple[str, str | None]] = []
             for row in rows:
                 doc = row.get("doc")
                 if not doc or str(doc.get("_id", "")).startswith("_design/"):
                     continue
                 if code in doc_shelter_codes(doc):
-                    full = await self.fetch_with_revisions(doc["_id"], doc.get("_rev"))
-                    if full is not None:
-                        batch.append(full)
+                    refs.append((doc["_id"], doc.get("_rev")))
+            batch = await self.fetch_with_revisions(refs)
             if batch:
                 await self._write(database, batch)
                 copied += len(batch)
@@ -186,17 +187,34 @@ class EdgeUsersCopier:
     # --- copy ---------------------------------------------------------------
 
     async def fetch_with_revisions(
-        self, doc_id: str, rev: str | None
-    ) -> dict[str, Any] | None:
-        params: dict[str, Any] = {"revs": "true"}
-        if rev:
-            params["rev"] = rev
-        try:
-            return await self._couch.get_json(_users_doc_path(doc_id), params=params)
-        except httpx.HTTPStatusError as exc:
-            if _is_404(exc):  # rev purged/compacted away — nothing to copy
-                return None
-            raise
+        self, refs: list[tuple[str, str | None]]
+    ) -> list[dict[str, Any]]:
+        """Docs at the given revisions plus ``_revisions``, via ``_bulk_get`` (100 per request).
+
+        A revision that is gone (purged / compacted away, ``not_found``) is skipped.
+        """
+        docs: list[dict[str, Any]] = []
+        for start in range(0, len(refs), BULK_GET_CHUNK):
+            chunk = refs[start : start + BULK_GET_CHUNK]
+            body = {
+                "docs": [
+                    {"id": doc_id, **({"rev": rev} if rev else {})}
+                    for doc_id, rev in chunk
+                ]
+            }
+            # CouchClient has no _bulk_get helper, so post directly (like ``_write``).
+            response = await self._couch._client.post(
+                f"/{USERS_DB}/_bulk_get", params={"revs": "true"}, json=body
+            )
+            response.raise_for_status()
+            for result in response.json().get("results") or []:
+                for entry in result.get("docs") or []:
+                    if "ok" in entry:
+                        docs.append(entry["ok"])
+                    elif (entry.get("error") or {}).get("error") != "not_found":
+                        msg = f"_bulk_get {result.get('id')}: {entry.get('error')}"
+                        raise RuntimeError(msg)
+        return docs
 
     async def _write(self, database: str, docs: list[dict[str, Any]]) -> bool:
         """``new_edits: false`` bulk write. False when the DB is gone (404)."""
@@ -214,7 +232,7 @@ class EdgeUsersCopier:
         return True
 
     async def process_batch(self, changes: list[dict[str, Any]]) -> None:
-        per_db: dict[str, list[dict[str, Any]]] = {}
+        refs: list[tuple[str, str | None]] = []
         for change in changes:
             doc_id = change.get("id", "")
             if doc_id.startswith("_design/"):
@@ -222,9 +240,9 @@ class EdgeUsersCopier:
             revs = change.get("changes") or []
             if not revs:
                 continue
-            doc = await self.fetch_with_revisions(doc_id, revs[0].get("rev"))
-            if doc is None:
-                continue
+            refs.append((doc_id, revs[0].get("rev")))
+        per_db: dict[str, list[dict[str, Any]]] = {}
+        for doc in await self.fetch_with_revisions(refs):
             for database in destination_dbs(doc, self.existing_dbs):
                 per_db.setdefault(database, []).append(doc)
         for database, docs in per_db.items():

@@ -31,6 +31,7 @@ class FakeCouch:
         self.local: dict[str, dict] = {}  # "_users/_local/..." and "<db>/_local/..."
         self.writes: list[tuple[str, list[dict], Any]] = []
         self.users_pages: list[int] = []
+        self.bulk_gets: list[int] = []
         self.changes: list[dict] = []
         self._client = self
         self.status_override: dict[str, int] = {}
@@ -49,10 +50,6 @@ class FakeCouch:
             return {"rows": [{"id": i, "doc": {**self.users[i]}} for i in page]}
         if path == "/_users/_changes":
             return {"results": self.changes, "last_seq": f"{len(self.changes)}-x"}
-        doc_id = path.removeprefix("/_users/").replace("%3A", ":")
-        if doc_id in self.users:
-            assert params.get("revs") == "true"
-            return {**self.users[doc_id], "_revisions": {"start": 1, "ids": ["a"]}}
         raise httpx.HTTPStatusError(
             "nf", request=httpx.Request("GET", "http://x"), response=_resp(404)
         )
@@ -64,7 +61,21 @@ class FakeCouch:
         self.local[f"{database}/{doc['_id']}"] = doc
         return {"ok": True, "rev": "0-1"}
 
-    async def post(self, path: str, json: dict) -> httpx.Response:  # _client.post
+    async def post(
+        self, path: str, json: dict, params: dict | None = None
+    ) -> httpx.Response:  # _client.post
+        if path == "/_users/_bulk_get":
+            assert (params or {}).get("revs") == "true"
+            self.bulk_gets.append(len(json["docs"]))
+            results = []
+            for ref in json["docs"]:
+                doc = self.users.get(ref["id"])
+                if doc is None or ref.get("rev", doc["_rev"]) != doc["_rev"]:
+                    entry = {"error": {"id": ref["id"], "error": "not_found"}}
+                else:
+                    entry = {"ok": {**doc, "_revisions": {"start": 1, "ids": ["a"]}}}
+                results.append({"id": ref["id"], "docs": [entry]})
+            return _resp(200, {"results": results})
         database = path.split("/")[1]
         if database in self.status_override or database not in self.dbs:
             return _resp(self.status_override.get(database, 404))
@@ -174,6 +185,41 @@ async def test_recreated_db_is_backfilled_again():
     couch.writes.clear()
     await copier.refresh_dbs(force=True)
     assert len(couch.writes) == 1
+
+
+async def test_one_backfill_per_turn_lets_changes_run_between():
+    couch = FakeCouch(
+        {"u1": user("u1", roles=["shelter:SH001", "shelter:SH002"])},
+        ["edge_users_sh001", "edge_users_sh002"],
+    )
+    couch.changes = [{"id": "u1", "changes": [{"rev": "1-a"}]}]
+    copier = EdgeUsersCopier(couch)
+
+    await copier.run_once(0)
+    assert "edge_users_sh001/_local/backfill_done" in couch.local
+    assert "edge_users_sh002/_local/backfill_done" not in couch.local
+    # the changes batch was processed in the same turn, for both DBs
+    assert sorted(w[0] for w in couch.writes[1:]) == [
+        "edge_users_sh001",
+        "edge_users_sh002",
+    ]
+
+    await copier.run_once("1-x")  # next turn picks up the remaining DB at once
+    assert "edge_users_sh002/_local/backfill_done" in couch.local
+
+
+async def test_changes_fetched_with_bulk_get_in_chunks(monkeypatch):
+    monkeypatch.setattr(euc, "BULK_GET_CHUNK", 2)
+    users = {f"u{i}": user(f"u{i}", roles=["shelter:SH001"]) for i in range(5)}
+    couch = FakeCouch(users, ["edge_users_sh001"])
+    copier = EdgeUsersCopier(couch)
+    copier.existing_dbs = {"edge_users_sh001"}
+    changes = [{"id": i, "changes": [{"rev": "1-a"}]} for i in sorted(users)]
+    changes.append({"id": "gone", "changes": [{"rev": "2-b"}]})  # purged: skipped
+    await copier.process_batch(changes)
+    assert couch.bulk_gets == [2, 2, 2]
+    assert len(couch.writes) == 1  # one bulk write per destination DB
+    assert [d["_id"] for d in couch.writes[0][1]] == sorted(users)
 
 
 async def test_failure_leaves_checkpoint_and_records_error(monkeypatch):
