@@ -32,6 +32,7 @@
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
 	import { COUNT_ERROR, isCount } from '../domain/count-input';
+	import { shortfallQty } from '../domain/meal-calc';
 	import { CountInputGuard } from './count-input-guard.svelte';
 	import CountFieldError from './count-field-error.svelte';
 
@@ -612,7 +613,7 @@
 						{@const resolved = !recipe.recipe_id.startsWith('item_master:')}
 						{@const shortfall =
 							sourceMode === 'custom' || (sourceMode === 'recipe' && resolved)
-								? recipe.planned_qty - Number(onHand(recipe.recipe_id))
+								? shortfallQty(recipe.planned_qty, onHand(recipe.recipe_id))
 								: 0}
 						<p class="text-sm font-semibold">
 							{meta.label}

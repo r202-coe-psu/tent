@@ -13,7 +13,7 @@
 	import { StoragePointSelect, type StoragePointRef } from '$lib/features/operations';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { ulid } from '$lib/db/ulid';
-	import { qtyStrCoerceSchema } from '$lib/utils/qty';
+	import { qtyIsZero, qtyStrCoerceSchema, subQty } from '$lib/utils/qty';
 	import { yieldTotal, type YieldDraftLine } from '../domain/kitchen-yield-receipt';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -74,7 +74,7 @@
 		)
 	);
 	const mismatch = $derived(
-		expectedTotal !== undefined && expectedTotal !== '' && Number(total) !== Number(expectedTotal)
+		expectedTotal !== undefined && expectedTotal !== '' && !qtyIsZero(subQty(total, expectedTotal))
 	);
 </script>
 
