@@ -30,11 +30,13 @@
 		id = '',
 		isEdit = false,
 		basePath = '/back-office/catalog',
+		compact = false,
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
 		basePath?: string;
+		compact?: boolean;
 		onsuccess?: () => void;
 	} = $props();
 
@@ -165,223 +167,235 @@
 {#if isLoading}
 	<div class="py-12 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลสินค้า...</div>
 {:else}
-	<form method="POST" use:form.enhance class="space-y-6">
-		<div class="space-y-2">
-			<span class="text-sm font-semibold text-slate-800 dark:text-slate-200"> ประเภทข้อมูล </span>
-			<div
-				class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-3.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
-			>
-				สูตรอาหาร
+	<form
+		method="POST"
+		use:form.enhance
+		class={compact ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'space-y-6'}
+	>
+		<div class={compact ? 'min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6' : 'space-y-6'}>
+			<div class="space-y-2">
+				<span class="text-sm font-semibold text-slate-800 dark:text-slate-200"> ประเภทข้อมูล </span>
+				<div
+					class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-3.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
+				>
+					สูตรอาหาร
+				</div>
 			</div>
-		</div>
 
-		<Field.FieldGroup class="space-y-6">
-			<!-- SECTION 1: ข้อมูลสินค้า (Item Details) -->
-			<Form.Field {form} name="label">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-							ชื่อสูตรอาหาร <span class="font-bold text-red-500">*</span>
-						</Form.Label>
-						<Input
-							{...props}
-							bind:value={$formData.label}
-							placeholder="เช่น ข้าวหอมมะลิ 100%, น้ำดื่ม 600ml"
-							class="w-full rounded-xl border border-slate-200/80 px-4 py-6 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
-						/>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-			<!-- SECTION 2: รายการส่วนประกอบ (Ingredients / JSON) -->
-			<section
-				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-			>
-				<div class="flex items-center justify-between">
-					<div class="space-y-1">
-						<h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">
-							รายการส่วนประกอบ (Ingredients / JSON)
-						</h3>
-						<Form.Field {form} name="ingredients">
+			<Field.FieldGroup class="space-y-6">
+				<!-- SECTION 1: ข้อมูลสินค้า (Item Details) -->
+				<Form.Field {form} name="label">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
+								ชื่อสูตรอาหาร <span class="font-bold text-red-500">*</span>
+							</Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.label}
+								placeholder="เช่น ข้าวหอมมะลิ 100%, น้ำดื่ม 600ml"
+								class="w-full rounded-xl border border-slate-200/80 px-4 py-6 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<!-- SECTION 2: รายการส่วนประกอบ (Ingredients / JSON) -->
+				<section
+					class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+				>
+					<div class="flex items-center justify-between">
+						<div class="space-y-1">
+							<h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">
+								รายการส่วนประกอบ (Ingredients / JSON)
+							</h3>
+							<Form.Field {form} name="ingredients">
+								<Form.Control>
+									{#snippet children({ props })}
+										<input type="hidden" {...props} />
+									{/snippet}
+								</Form.Control>
+								<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+							</Form.Field>
+						</div>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onclick={addIngredient}
+							class="min-h-9 gap-1.5 rounded-xl border-slate-200 bg-white font-bold text-[#0A2647] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-400"
+						>
+							<Plus class="h-3.5 w-3.5" />
+							เพิ่มวัตถุดิบ
+						</Button>
+					</div>
+
+					<div class="space-y-3">
+						{#each $formData.ingredients as conv, index (index)}
+							<div
+								class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs sm:flex-row sm:items-end dark:border-zinc-800 dark:bg-zinc-950"
+							>
+								<!-- ค้นหาวัตถุดิบจากคลัง -->
+								<div class="min-w-0 flex-1 space-y-1.5">
+									<span class="text-xs font-bold text-blue-700 dark:text-blue-400"
+										>ค้นหาวัตถุดิบจากคลัง</span
+									>
+									<ItemSelector
+										bind:value={conv.item_master_id}
+										bind:uom={conv.uom}
+										items={(itemMastersQuery.data ?? []).filter(
+											(im) => !im.deactivated || im._id === conv.item_master_id
+										)}
+									/>
+								</div>
+
+								<!-- ปริมาณ -->
+								<div class="w-full shrink-0 space-y-1.5 sm:w-28">
+									<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
+									<Input
+										type="number"
+										step="any"
+										min={0}
+										value={conv.quantity}
+										oninput={(e) => {
+											const val = e.currentTarget.value;
+											conv.quantity = val === '' ? '1' : val;
+										}}
+										class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
+									/>
+								</div>
+
+								<!-- หน่วย -->
+								<div class="w-full shrink-0 space-y-1.5 sm:w-28">
+									<span class="text-xs font-bold text-blue-700 dark:text-blue-400">หน่วย</span>
+									<Input
+										type="text"
+										bind:value={conv.uom}
+										placeholder="kg"
+										class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-semibold dark:border-zinc-800 dark:bg-zinc-950"
+									/>
+									{#if conv.uom && formatUnit(conv.uom, units, langState.current) !== conv.uom}
+										<span class="block text-center text-xs text-slate-500">
+											{formatUnit(conv.uom, units, langState.current)}
+										</span>
+									{/if}
+								</div>
+
+								<!-- Action Buttons -->
+								{#if $formData.ingredients.length > 1}
+									<div class="flex items-center sm:pb-0">
+										<Button
+											type="button"
+											variant="ghost"
+											class="h-12 w-12 shrink-0 rounded-xl border border-slate-100 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
+											onclick={() => removeIngredient(index)}
+											title={`ลบวัตถุดิบแถวที่ ${index + 1}`}
+										>
+											<Trash2 class="h-5 w-5" />
+											<span class="sr-only">ลบวัตถุดิบแถวที่ {index + 1}</span>
+										</Button>
+									</div>
+								{/if}
+							</div>
+						{/each}
+
+						<Button
+							type="button"
+							variant="outline"
+							onclick={addIngredient}
+							class="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-white text-sm font-bold text-[#0A2647] hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-blue-400 dark:hover:bg-zinc-900"
+						>
+							<Plus class="h-4 w-4" />
+							เพิ่มวัตถุดิบ
+						</Button>
+					</div>
+
+					<div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
+						<Form.Field {form} name="standard_portions" class="space-y-1.5">
 							<Form.Control>
 								{#snippet children({ props })}
-									<input type="hidden" {...props} />
+									<Form.Label class="text-xs font-bold text-slate-800 dark:text-slate-200">
+										ยอดกำลังผลิตมาตรฐาน (Portions)
+									</Form.Label>
+									<Input
+										{...props}
+										type="number"
+										placeholder="เช่น 100"
+										value={$formData.standard_portions ?? ''}
+										oninput={(e) => {
+											const val = e.currentTarget.value;
+											$formData.standard_portions = val === '' ? '0' : val;
+										}}
+										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+
+						<Form.Field {form} name="standard_duration_hours" class="space-y-1.5">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-xs font-bold text-slate-800 dark:text-slate-200">
+										ระยะเวลาการผลิตมาตรฐาน (ชั่วโมง)
+									</Form.Label>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										placeholder="เช่น 1"
+										value={$formData.standard_duration_hours ?? ''}
+										oninput={(e) => {
+											const val = e.currentTarget.value;
+											$formData.standard_duration_hours = val === '' ? '0' : val;
+										}}
+										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
+									/>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 						</Form.Field>
 					</div>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onclick={addIngredient}
-						class="min-h-9 gap-1.5 rounded-xl border-slate-200 bg-white font-bold text-[#0A2647] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-400"
-					>
-						<Plus class="h-3.5 w-3.5" />
-						เพิ่มวัตถุดิบ
-					</Button>
-				</div>
-
-				<div class="space-y-3">
-					{#each $formData.ingredients as conv, index (index)}
-						<div
-							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs sm:flex-row sm:items-end dark:border-zinc-800 dark:bg-zinc-950"
-						>
-							<!-- ค้นหาวัตถุดิบจากคลัง -->
-							<div class="min-w-0 flex-1 space-y-1.5">
-								<span class="text-xs font-bold text-blue-700 dark:text-blue-400"
-									>ค้นหาวัตถุดิบจากคลัง</span
-								>
-								<ItemSelector
-									bind:value={conv.item_master_id}
-									bind:uom={conv.uom}
-									items={(itemMastersQuery.data ?? []).filter(
-										(im) => !im.deactivated || im._id === conv.item_master_id
-									)}
-								/>
-							</div>
-
-							<!-- ปริมาณ -->
-							<div class="w-full shrink-0 space-y-1.5 sm:w-28">
-								<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
-								<Input
-									type="number"
-									step="any"
-									min={0}
-									value={conv.quantity}
-									oninput={(e) => {
-										const val = e.currentTarget.value;
-										conv.quantity = val === '' ? '1' : val;
-									}}
-									class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
-								/>
-							</div>
-
-							<!-- หน่วย -->
-							<div class="w-full shrink-0 space-y-1.5 sm:w-28">
-								<span class="text-xs font-bold text-blue-700 dark:text-blue-400">หน่วย</span>
-								<Input
-									type="text"
-									bind:value={conv.uom}
-									placeholder="kg"
-									class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-semibold dark:border-zinc-800 dark:bg-zinc-950"
-								/>
-								{#if conv.uom && formatUnit(conv.uom, units, langState.current) !== conv.uom}
-									<span class="block text-center text-xs text-slate-500">
-										{formatUnit(conv.uom, units, langState.current)}
-									</span>
-								{/if}
-							</div>
-
-							<!-- Action Buttons -->
-							{#if $formData.ingredients.length > 1}
-								<div class="flex items-center sm:pb-0">
-									<Button
-										type="button"
-										variant="ghost"
-										class="h-12 w-12 shrink-0 rounded-xl border border-slate-100 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
-										onclick={() => removeIngredient(index)}
-										title={`ลบวัตถุดิบแถวที่ ${index + 1}`}
-									>
-										<Trash2 class="h-5 w-5" />
-										<span class="sr-only">ลบวัตถุดิบแถวที่ {index + 1}</span>
-									</Button>
-								</div>
-							{/if}
-						</div>
-					{/each}
-
-					<Button
-						type="button"
-						variant="outline"
-						onclick={addIngredient}
-						class="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-white text-sm font-bold text-[#0A2647] hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-blue-400 dark:hover:bg-zinc-900"
-					>
-						<Plus class="h-4 w-4" />
-						เพิ่มวัตถุดิบ
-					</Button>
-				</div>
-
-				<div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
-					<Form.Field {form} name="standard_portions" class="space-y-1.5">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label class="text-xs font-bold text-slate-800 dark:text-slate-200">
-									ยอดกำลังผลิตมาตรฐาน (Portions)
-								</Form.Label>
-								<Input
-									{...props}
-									type="number"
-									placeholder="เช่น 100"
-									value={$formData.standard_portions ?? ''}
-									oninput={(e) => {
-										const val = e.currentTarget.value;
-										$formData.standard_portions = val === '' ? '0' : val;
-									}}
-									class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors class="text-xs font-semibold text-destructive" />
-					</Form.Field>
-
-					<Form.Field {form} name="standard_duration_hours" class="space-y-1.5">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label class="text-xs font-bold text-slate-800 dark:text-slate-200">
-									ระยะเวลาการผลิตมาตรฐาน (ชั่วโมง)
-								</Form.Label>
-								<Input
-									{...props}
-									type="number"
-									step="any"
-									placeholder="เช่น 1"
-									value={$formData.standard_duration_hours ?? ''}
-									oninput={(e) => {
-										const val = e.currentTarget.value;
-										$formData.standard_duration_hours = val === '' ? '0' : val;
-									}}
-									class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors class="text-xs font-semibold text-destructive" />
-					</Form.Field>
-				</div>
-			</section>
-
-			{#if isEdit}
-				<!-- SECTION: สถานะการใช้งาน (Status) -->
-				<section
-					class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
-					<div class="flex items-center justify-between">
-						<div class="space-y-0.5">
-							<label
-								for="recipe-deactivated-toggle"
-								class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
-							>
-								สถานะปิดการใช้งาน
-							</label>
-							<p class="text-xs text-muted-foreground">
-								หากปิดการใช้งาน สูตรอาหารนี้จะไม่แสดงให้เลือกในแผนเตรียมอาหารใหม่
-								แต่ประวัติเก่ายังคงอยู่
-							</p>
-						</div>
-						<Checkbox
-							id="recipe-deactivated-toggle"
-							checked={$formData.deactivated}
-							onCheckedChange={(val) => {
-								$formData.deactivated = !!val;
-							}}
-						/>
-					</div>
 				</section>
-			{/if}
 
+				{#if isEdit}
+					<!-- SECTION: สถานะการใช้งาน (Status) -->
+					<section
+						class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
+					>
+						<div class="flex items-center justify-between">
+							<div class="space-y-0.5">
+								<label
+									for="recipe-deactivated-toggle"
+									class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
+								>
+									สถานะปิดการใช้งาน
+								</label>
+								<p class="text-xs text-muted-foreground">
+									หากปิดการใช้งาน สูตรอาหารนี้จะไม่แสดงให้เลือกในแผนเตรียมอาหารใหม่
+									แต่ประวัติเก่ายังคงอยู่
+								</p>
+							</div>
+							<Checkbox
+								id="recipe-deactivated-toggle"
+								checked={$formData.deactivated}
+								onCheckedChange={(val) => {
+									$formData.deactivated = !!val;
+								}}
+							/>
+						</div>
+					</section>
+				{/if}
+			</Field.FieldGroup>
+		</div>
+
+		<div
+			class={compact
+				? 'shrink-0 border-t border-slate-200/80 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950'
+				: 'sticky bottom-0 -mx-4 mt-8 -mb-4 border-t border-slate-200/80 bg-white/95 px-6 py-4 shadow-xs backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/95'}
+		>
 			<div
-				class="sticky bottom-0 -mx-4 mt-8 -mb-4 flex flex-col-reverse gap-2.5 border-t border-slate-200/80 bg-white/95 px-6 py-4 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:justify-end sm:gap-3 dark:border-zinc-800 dark:bg-zinc-950/95"
+				class="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3"
 			>
 				<Button
 					variant="outline"
@@ -406,6 +420,6 @@
 					{/if}
 				</Button>
 			</div>
-		</Field.FieldGroup>
+		</div>
 	</form>
 {/if}

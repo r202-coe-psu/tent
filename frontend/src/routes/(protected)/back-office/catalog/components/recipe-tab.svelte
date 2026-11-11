@@ -531,13 +531,14 @@
 					{sheetMode === 'edit' ? (selected?.label ?? '') : 'กำหนดวัตถุดิบและยอดผลิตมาตรฐาน'}
 				</Sheet.Description>
 			</Sheet.Header>
-			<div class="min-h-0 flex-1 overflow-y-auto p-4">
+			<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{#if sheetMode === 'create' ? canCreate : !!selected && canModifyRecipe(selected)}
 					{#key `${sheetMode}-${selectedId}`}
 						<RecipeForm
 							id={sheetMode === 'edit' ? selectedId : ''}
 							isEdit={sheetMode === 'edit'}
 							{basePath}
+							compact={true}
 							onsuccess={afterForm}
 						/>
 					{/key}
