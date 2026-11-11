@@ -418,7 +418,7 @@ ${consentVduClause()}
     if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('evacuee_qr:') !== 0) {
       throw { forbidden: 'evacuee_qr _id must start with evacuee_qr:' };
     }
-    if (newDoc.schema_v !== 1) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported evacuee_qr schema version' };
     }
     if (newDoc.shelter_code !== '${code}') {
@@ -451,13 +451,16 @@ ${consentVduClause()}
       if (typeof qp.printed_by !== 'string' || qp.printed_by.length === 0) {
         throw { forbidden: 'evacuee_qr printed_by is required' };
       }
+      if (qp.marker !== undefined && qp.marker !== null && qp.marker !== 'red' && qp.marker !== 'yellow') {
+        throw { forbidden: 'evacuee_qr marker must be red, yellow or null' };
+      }
       if (qi > 0 && !(qp.printed_at > newDoc.prints[qi - 1].printed_at)) {
         throw { forbidden: 'evacuee_qr printed_at must be strictly increasing' };
       }
       if (oldDoc && qi < oldDoc.prints.length) {
         var qo = oldDoc.prints[qi];
         if (qo.printed_at !== qp.printed_at || qo.hash !== qp.hash ||
-            qo.printed_by !== qp.printed_by || qo.source !== qp.source) {
+            qo.printed_by !== qp.printed_by || qo.source !== qp.source || qo.marker !== qp.marker) {
           throw { forbidden: 'evacuee_qr prints is append-only' };
         }
       }
