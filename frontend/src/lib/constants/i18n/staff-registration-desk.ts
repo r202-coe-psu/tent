@@ -110,7 +110,14 @@ const th = {
 		duplicateDescription: (name: string) => `${name} มีข้อมูลอยู่ในระบบแล้ว`,
 		goToPerson: 'ไปหน้าคนนั้น',
 		continueRegistering: 'ลงทะเบียนต่อ',
-		duplicateLookupFailed: 'ตรวจสอบรายชื่อซ้ำไม่สำเร็จ — ลงทะเบียนต่อได้ตามปกติ'
+		duplicateLookupFailed: 'ตรวจสอบรายชื่อซ้ำไม่สำเร็จ — ลงทะเบียนต่อได้ตามปกติ',
+		reading: 'กำลังอ่านบัตร…',
+		filledReadingPhoto: (position: number) =>
+			`เติมข้อมูลสมาชิกคนที่ ${position} แล้ว · กำลังอ่านรูป…`,
+		readDone: 'อ่านบัตรเรียบร้อย',
+		readFailed: 'อ่านบัตรไม่สำเร็จ ลองเสียบใหม่',
+		photoReadFailed: 'อ่านรูปจากบัตรไม่สำเร็จ',
+		photoSaveFailed: 'บันทึกรูปจากบัตรไม่สำเร็จ'
 	}
 };
 
@@ -230,7 +237,13 @@ const en: typeof th = {
 		duplicateDescription: (name: string) => `${name} already has a record in the system`,
 		goToPerson: 'Go to that person',
 		continueRegistering: 'Continue registering',
-		duplicateLookupFailed: 'Could not check for duplicates — you can keep registering as usual'
+		duplicateLookupFailed: 'Could not check for duplicates — you can keep registering as usual',
+		reading: 'Reading the card…',
+		filledReadingPhoto: (position: number) => `Filled in member ${position} · reading the photo…`,
+		readDone: 'Card read',
+		readFailed: 'Could not read the card — please reinsert it',
+		photoReadFailed: 'Could not read the photo from the card',
+		photoSaveFailed: 'Could not save the photo from the card'
 	}
 };
 

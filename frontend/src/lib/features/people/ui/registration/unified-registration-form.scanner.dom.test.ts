@@ -6,9 +6,28 @@ import { toast } from 'svelte-sonner';
 import { goto } from '$app/navigation';
 import UnifiedRegistrationFormHarness from './__fixtures__/unified-registration-form-harness.svelte';
 
-vi.mock('svelte-sonner', () => ({
-	toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
-}));
+/** Every progress-toast call in order, so a test reads as the sequence staff see. */
+const toastLog = vi.hoisted(
+	() => [] as { method: string; message: string | undefined; id: unknown }[]
+);
+vi.mock('svelte-sonner', () => {
+	const logged = (method: string) =>
+		vi.fn((message: string, options?: { id?: unknown }) => {
+			toastLog.push({ method, message, id: options?.id });
+		});
+	return {
+		toast: {
+			loading: logged('loading'),
+			success: logged('success'),
+			error: logged('error'),
+			info: logged('info'),
+			warning: vi.fn(),
+			dismiss: vi.fn((id?: unknown) => {
+				toastLog.push({ method: 'dismiss', message: undefined, id });
+			})
+		}
+	};
+});
 const saveImageSpy = vi.hoisted(() => vi.fn());
 // The CouchDB image adapter is the system boundary: `useSaveImage` reaches it, not the barrel.
 vi.mock('$lib/features/images/data/image.remote', async (importOriginal) => {
@@ -52,6 +71,7 @@ let instance: ReturnType<typeof mount> | null = null;
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	toastLog.length = 0;
 	saveImageSpy.mockReset();
 	vi.stubGlobal(
 		'fetch',
@@ -113,6 +133,19 @@ const buttonByText = (text: string) =>
 	[...document.querySelectorAll<HTMLButtonElement>('button')].find(
 		(b) => b.textContent?.trim() === text
 	);
+
+/** What staff saw, in order. Every call must target one and the same toast: one progress toast per card. */
+const progress = () => {
+	expect(new Set(toastLog.map((entry) => entry.id)).size).toBeLessThanOrEqual(1);
+	return toastLog.map((entry) =>
+		entry.method === 'dismiss' ? 'dismiss' : `${entry.method}: ${entry.message}`
+	);
+};
+const dispatchScannerEvent = (type: string, detail: unknown = {}) => {
+	const event = new CustomEvent(type, { detail, cancelable: true });
+	window.dispatchEvent(event);
+	return event;
+};
 
 /** First card fills member 1; a second, different card then asks what to do with it. */
 async function readTwoDifferentCards() {
@@ -220,9 +253,164 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 		await settle();
 
 		expect(event.defaultPrevented).toBe(true);
-		expect(toast.info).toHaveBeenCalledWith('บัตรนี้อยู่ในฟอร์มแล้ว');
+		expect(progress()).toContain('info: บัตรนี้อยู่ในฟอร์มแล้ว');
 		expect(values('first-name')).toEqual(['สมหญิง']);
 		expect(buttonByText('เพิ่มเป็นสมาชิกใหม่')).toBeUndefined();
+	});
+
+	describe('one progress toast per card', () => {
+		const photoDetail = {
+			citizen_id: card.citizen_id,
+			photo_base64: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=='
+		};
+
+		it('walks reading, filled-into-member, photo-read and done on a single toast', async () => {
+			saveImageSpy.mockResolvedValue({ _id: 'image:card-1' });
+			renderWalkInForm();
+
+			const reading = dispatchScannerEvent('scanner:card-reading');
+			expect(reading.defaultPrevented).toBe(true);
+			dispatchCardRead();
+			await settle();
+			dispatchScannerEvent('scanner:card-photo', photoDetail);
+			await settle();
+
+			expect(progress()).toEqual([
+				'loading: กำลังอ่านบัตร…',
+				'loading: เติมข้อมูลสมาชิกคนที่ 1 แล้ว · กำลังอ่านรูป…',
+				'success: อ่านบัตรเรียบร้อย'
+			]);
+		});
+
+		it('hands the same toast to the already-in-form notice', async () => {
+			renderWalkInForm();
+			dispatchCardRead();
+			await settle();
+			toastLog.length = 0;
+
+			dispatchScannerEvent('scanner:card-reading');
+			dispatchCardRead();
+			await settle();
+
+			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
+		});
+
+		it('dismisses the toast while staff choose in the overwrite dialog, and after cancel', async () => {
+			renderWalkInForm();
+			dispatchCardRead(card);
+			await settle();
+			toastLog.length = 0;
+
+			dispatchScannerEvent('scanner:card-reading');
+			dispatchCardRead(otherCard);
+			await settle();
+			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'dismiss']);
+			buttonByText('ยกเลิก')!.click();
+			await settle();
+
+			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'dismiss']);
+		});
+
+		it('moves on to the member number chosen in the overwrite dialog', async () => {
+			await readTwoDifferentCards();
+			toastLog.length = 0;
+
+			buttonByText('เพิ่มเป็นสมาชิกใหม่')!.click();
+			await settle();
+
+			expect(progress()).toEqual(['loading: เติมข้อมูลสมาชิกคนที่ 2 แล้ว · กำลังอ่านรูป…']);
+		});
+
+		it('dismisses the toast while the duplicate dialog is open', async () => {
+			renderWalkInForm({
+				findScannedCardDuplicate: vi.fn(async () => ({ name: 'สมหญิง ใจดี', href: '/x' }))
+			});
+
+			dispatchScannerEvent('scanner:card-reading');
+			dispatchCardRead();
+			await settle();
+
+			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'dismiss']);
+		});
+
+		it('dismisses the toast when the photo matches nobody in the form', async () => {
+			renderWalkInForm();
+			dispatchCardRead();
+			await settle();
+			toastLog.length = 0;
+
+			dispatchScannerEvent('scanner:card-photo', {
+				...photoDetail,
+				citizen_id: otherCard.citizen_id
+			});
+			await settle();
+
+			expect(progress()).toEqual(['dismiss']);
+		});
+
+		it('dismisses the toast when the member changed before the upload finished', async () => {
+			let finishUpload!: (saved: { _id: string }) => void;
+			saveImageSpy.mockReturnValue(new Promise((resolve) => (finishUpload = resolve)));
+			renderWalkInForm();
+			dispatchCardRead();
+			await settle();
+			toastLog.length = 0;
+
+			dispatchScannerEvent('scanner:card-photo', photoDetail);
+			await settle();
+			const input = document.querySelector<HTMLInputElement>('input[id$="card-number"]')!;
+			input.value = '1111111111111';
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			await settle();
+			finishUpload({ _id: 'image:card-1' });
+			await settle();
+
+			expect(progress()).toEqual(['dismiss']);
+		});
+
+		it('reports a failed photo upload on the same toast', async () => {
+			saveImageSpy.mockRejectedValue(new Error('offline'));
+			renderWalkInForm();
+			dispatchCardRead();
+			await settle();
+			toastLog.length = 0;
+
+			dispatchScannerEvent('scanner:card-photo', photoDetail);
+			await settle();
+
+			expect(progress()).toEqual(['error: บันทึกรูปจากบัตรไม่สำเร็จ']);
+		});
+
+		it('turns a card read failure into an error on the toast', async () => {
+			renderWalkInForm();
+
+			dispatchScannerEvent('scanner:card-reading');
+			const event = dispatchScannerEvent('scanner:card-error', { code: 'READ_FAILED' });
+
+			expect(event.defaultPrevented).toBe(true);
+			expect(progress()).toEqual([
+				'loading: กำลังอ่านบัตร…',
+				'error: อ่านบัตรไม่สำเร็จ ลองเสียบใหม่'
+			]);
+		});
+
+		it('turns a card photo read failure into an error on the toast', async () => {
+			renderWalkInForm();
+
+			const event = dispatchScannerEvent('scanner:card-error', { code: 'PHOTO_FAILED' });
+
+			expect(event.defaultPrevented).toBe(true);
+			expect(progress()).toEqual(['error: อ่านรูปจากบัตรไม่สำเร็จ']);
+		});
+
+		it('ignores a card error with an unknown code without acknowledging it', async () => {
+			renderWalkInForm();
+
+			const event = dispatchScannerEvent('scanner:card-error', { code: 'SOMETHING_NEW' });
+
+			expect(event.defaultPrevented).toBe(false);
+			expect(progress()).toEqual([]);
+		});
 	});
 
 	describe('duplicate lookup on scan (D3)', () => {
@@ -310,7 +498,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			await settle();
 
 			expect(lookup).not.toHaveBeenCalled();
-			expect(toast.info).toHaveBeenCalledWith('บัตรนี้อยู่ในฟอร์มแล้ว');
+			expect(progress()).toContain('info: บัตรนี้อยู่ในฟอร์มแล้ว');
 		});
 	});
 

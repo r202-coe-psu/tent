@@ -48,6 +48,7 @@
 		applyCardAddressToHousehold,
 		applyScannedCard,
 		cardToUnifiedMember,
+		scannerCardErrorSchema,
 		scannerCardPhotoSchema,
 		scannerCardSchema,
 		type ScannedCardDuplicate,
@@ -1304,6 +1305,25 @@
 		}
 	});
 
+	/** One progress toast per card: every scanner step updates this same toast instead of stacking new ones. */
+	const SCANNER_TOAST_ID = 'scanner-card';
+
+	/** `scanner:card-reading`: the client started reading a card. */
+	function handleScannerCardReading(event: Event) {
+		event.preventDefault();
+		toast.loading(ts.reading, { id: SCANNER_TOAST_ID });
+	}
+
+	/** `scanner:card-error`: the client could not read the card or its photo. */
+	function handleScannerCardError(event: Event) {
+		const parsed = scannerCardErrorSchema.safeParse((event as CustomEvent).detail);
+		if (!parsed.success) return;
+		event.preventDefault();
+		toast.error(parsed.data.code === 'READ_FAILED' ? ts.readFailed : ts.photoReadFailed, {
+			id: SCANNER_TOAST_ID
+		});
+	}
+
 	/** A scanned card waiting for staff to choose a member to overwrite; held only while the dialog is open. */
 	let pendingScannerCard = $state.raw<ScannerCard | null>(null);
 
@@ -1318,7 +1338,7 @@
 		event.preventDefault();
 		const card = parsed.data;
 		if (applyScannedCard(members, card).kind === 'already-in-form') {
-			toast.info(ts.alreadyInForm);
+			toast.info(ts.alreadyInForm, { id: SCANNER_TOAST_ID });
 			return;
 		}
 		if (!findScannedCardDuplicate) {
@@ -1339,6 +1359,7 @@
 			return;
 		}
 		if (duplicate) {
+			toast.dismiss(SCANNER_TOAST_ID);
 			pendingScannerDuplicate = { card, duplicate };
 			return;
 		}
@@ -1349,10 +1370,11 @@
 	function placeScannedCardAsUsual(card: ScannerCard) {
 		const placement = applyScannedCard(members, card);
 		if (placement.kind === 'already-in-form') {
-			toast.info(ts.alreadyInForm);
+			toast.info(ts.alreadyInForm, { id: SCANNER_TOAST_ID });
 			return;
 		}
 		if (placement.kind === 'ask-overwrite') {
+			toast.dismiss(SCANNER_TOAST_ID);
 			pendingScannerCard = card;
 			return;
 		}
@@ -1384,6 +1406,7 @@
 		members[index] = cardToUnifiedMember(card, members[index]);
 		household = applyCardAddressToHousehold(household, card);
 		markDirty();
+		toast.loading(ts.filledReadingPhoto(index + 1), { id: SCANNER_TOAST_ID });
 	}
 
 	function overwriteMemberWithPendingCard(index: number) {
@@ -1428,7 +1451,10 @@
 		if (!parsed.success) return;
 		event.preventDefault();
 		const { citizen_id: citizenId, photo_base64: dataUrl } = parsed.data;
-		if (!findMemberByCitizenId(citizenId)) return;
+		if (!findMemberByCitizenId(citizenId)) {
+			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
 		void attachScannerPhoto(citizenId, dataUrl);
 	}
 
@@ -1443,20 +1469,28 @@
 			});
 			photoId = saved._id;
 		} catch {
+			toast.error(ts.photoSaveFailed, { id: SCANNER_TOAST_ID });
 			return;
 		}
-		if (fieldsLocked) return;
-		const member = findMemberByCitizenId(citizenId);
-		if (!member) return;
+		const member = fieldsLocked ? undefined : findMemberByCitizenId(citizenId);
+		if (!member) {
+			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
 		member.photo = photoId;
 		rememberPhotoPreview(photoId, URL.createObjectURL(file));
 		markDirty();
+		toast.success(ts.readDone, { id: SCANNER_TOAST_ID });
 	}
 
 	$effect(() => {
+		window.addEventListener('scanner:card-reading', handleScannerCardReading);
 		window.addEventListener('scanner:card-read', handleScannerCardRead);
 		window.addEventListener('scanner:card-photo', handleScannerCardPhoto);
+		window.addEventListener('scanner:card-error', handleScannerCardError);
 		return () => {
+			window.removeEventListener('scanner:card-reading', handleScannerCardReading);
+			window.removeEventListener('scanner:card-error', handleScannerCardError);
 			window.removeEventListener('scanner:card-read', handleScannerCardRead);
 			window.removeEventListener('scanner:card-photo', handleScannerCardPhoto);
 		};

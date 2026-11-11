@@ -41,6 +41,13 @@ export const scannerCardPhotoSchema = z.object({
 
 export type ScannerCardPhoto = z.infer<typeof scannerCardPhotoSchema>;
 
+/** `scanner:card-error` detail: what the scanner client failed to read. */
+export const scannerCardErrorSchema = z.object({
+	code: z.enum(['READ_FAILED', 'PHOTO_FAILED'])
+});
+
+export type ScannerCardError = z.infer<typeof scannerCardErrorSchema>;
+
 /** Fill a registration member from a scanned card; the card wins for the fields it carries. */
 export function cardToUnifiedMember(
 	card: ScannerCard,

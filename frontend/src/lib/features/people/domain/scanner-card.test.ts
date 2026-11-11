@@ -3,6 +3,7 @@ import {
 	applyCardAddressToHousehold,
 	applyScannedCard,
 	cardToUnifiedMember,
+	scannerCardErrorSchema,
 	scannerCardPhotoSchema,
 	scannerCardSchema,
 	type ScannerCard
@@ -106,6 +107,16 @@ describe('scanner event schemas (external window CustomEvent detail)', () => {
 		);
 		expect(scannerCardPhotoSchema.safeParse({ ...photo, citizen_id: '123' }).success).toBe(false);
 		expect(scannerCardPhotoSchema.safeParse({ ...photo, extra: 1 }).data).toEqual(photo);
+	});
+
+	it('accepts the two known card error codes and rejects anything else', () => {
+		expect(scannerCardErrorSchema.safeParse({ code: 'READ_FAILED' }).data).toEqual({
+			code: 'READ_FAILED'
+		});
+		expect(scannerCardErrorSchema.safeParse({ code: 'PHOTO_FAILED' }).success).toBe(true);
+		for (const bad of [{ code: 'SOMETHING_NEW' }, {}, { code: 1 }, null]) {
+			expect(scannerCardErrorSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+		}
 	});
 });
 
