@@ -210,3 +210,8 @@ export const useSetKioskBannerGroupDevices = (
 		'บันทึกอุปกรณ์ของกลุ่มไม่สำเร็จ',
 		[scannerKeys.allDevices]
 	);
+
+export const useRotateTvCode = (
+	repo: KioskBannerGroupRepository = kioskBannerGroupRemoteRepository
+) =>
+	useGroupMutation((input: { id: string }) => repo.rotateTvCode(input.id), 'ออกรหัสใหม่ไม่สำเร็จ');

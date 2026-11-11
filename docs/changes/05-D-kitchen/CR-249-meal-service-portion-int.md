@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-249
 title: meal_service — actual_yield/served/waste เป็น int (จำนวนจาน) ตามโค้ด และคำนวณ shortfall กับยอดคงคลังด้วย Decimal
-status: proposed
+status: approved
 date: 2026-11-11
+updated: 2026-11-12
 requested_by: "PO decision (#794) — จำนวนจานเป็น int ถูกแล้ว ให้แก้ schema.md; issue #937"
-decided_by: <เจ้าของโครงการ>
+decided_by: kong
+decision_date: 2026-11-12
 layer: volatile
 affects:
   - docs/data/schema.md §2.7 (meal_service — ชนิด field + Migration note CR-084/CR-121)
@@ -45,12 +47,12 @@ migration: ไม่ bump schema_v — doc ที่ persist เป็น JSON i
 
 ### Before → after (spec)
 
-| Field (`meal_service`, §2.7) | Before                                                                                           | After                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `actual_yield`               | `qty_str≥0 \| legacy number` · "อ่านเลขเดิมโดยแปลงเป็น `qty_str`"                                | `int≥0` (จำนวนจาน) · ไม่มีค่า = ยังไม่บันทึกผลผลิต (ไม่ใช่ 0)   |
-| `served`                     | `qty_str≥0` · "legacy number ถูกแปลงตอนอ่าน"                                                     | `int≥0` (จำนวนจาน)                                              |
-| `waste`                      | `qty_str≥0` · "legacy number ถูกแปลงตอนอ่าน"                                                     | `int≥0` (จำนวนจาน)                                              |
-| `yield_items[].actual_yield` | `qty_str>0`                                                                                      | **คงเดิม** `qty_str>0`                                          |
+| Field (`meal_service`, §2.7) | Before                                                                                      | After                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `actual_yield`               | `qty_str≥0 \| legacy number` · "อ่านเลขเดิมโดยแปลงเป็น `qty_str`"                              | `int≥0` (จำนวนจาน) · ไม่มีค่า = ยังไม่บันทึกผลผลิต (ไม่ใช่ 0)     |
+| `served`                     | `qty_str≥0` · "legacy number ถูกแปลงตอนอ่าน"                                                  | `int≥0` (จำนวนจาน)                                      |
+| `waste`                      | `qty_str≥0` · "legacy number ถูกแปลงตอนอ่าน"                                                  | `int≥0` (จำนวนจาน)                                      |
+| `yield_items[].actual_yield` | `qty_str>0`                                                                                 | **คงเดิม** `qty_str>0`                                   |
 | Migration note CR-084/CR-121 | "`actual_yield`/`served`/`waste` ที่เป็น JSON number ให้ reader coercion เป็น string ตาม CR-038" | ตัดประโยคนี้ — ทั้งสาม field เป็น JSON integer ไม่ต้อง coercion |
 
 ### Requirements
@@ -96,4 +98,5 @@ N/A — ไม่ bump `schema_v` (คง 2). doc `meal_service` ที่ persi
 ## Decision log
 
 - PO (#794, ไม่ระบุวันใน issue): จำนวนจานเป็น int ถูกแล้ว ให้แก้ schema.md ตามโค้ด
-- 2026-11-11 — proposed (draft, issue #937) · implement พร้อม draft ใน PR เดียว; PO กำหนดเลข CR ตอน approve
+- 2026-11-11 — proposed (draft, issue #937) · implement พร้อม draft ใน PR เดียว
+- 2026-11-12 — Approved โดย kong กำหนดหมายเลข CR-249 (ต่อจาก CR-248)

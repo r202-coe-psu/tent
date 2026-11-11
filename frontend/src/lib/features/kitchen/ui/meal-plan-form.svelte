@@ -27,7 +27,15 @@
 		type CustomIngredientInput
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
-	import { useRecipes, useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		useRecipes,
+		useItemMasters,
+		formatUnit,
+		useUnitsOfMeasure,
+		useUnitDimensionResolver,
+		qtyInputStep,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
@@ -72,6 +80,9 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
+	const unitDimension = useUnitDimensionResolver();
+	const rowQtyError = (row: { unit: string; qtyPerPerson: number }) =>
+		wholeQtyError(row.qtyPerPerson, unitDimension.resolve(row.unit));
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 	// Filter supply items in "food" category.
@@ -146,6 +157,10 @@
 	}
 
 	const isLockedEdit = $derived(isEdit && sourceMode === 'recipe');
+	const customQtyValid = $derived(
+		!(sourceMode === 'custom' || isLockedEdit) ||
+			!customRows.some((row) => row.itemId && rowQtyError(row))
+	);
 
 	$effect(() => {
 		if (!open) {
@@ -384,6 +399,10 @@
 							{#each customRows as row, i (i)}
 								{@const currentUnresolved =
 									row.itemId && !foodSupplyItems.some((item) => item._id === row.itemId)}
+								{@const rowDim = unitDimension.resolve(row.unit)}
+								{@const qtyMessage = !isQtyValid(row.qtyPerPerson, i)
+									? QTY_ERROR
+									: ((row.itemId ? rowQtyError(row) : undefined) ?? null)}
 								<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 									<select
 										bind:value={row.itemId}
@@ -405,14 +424,12 @@
 											id="mp-qty-{i}"
 											type="number"
 											min="0"
-											step="any"
+											step={qtyInputStep(rowDim)}
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
 											aria-label="ปริมาณต่อคน"
-											aria-invalid={!isQtyValid(row.qtyPerPerson, i)}
-											aria-describedby={isQtyValid(row.qtyPerPerson, i)
-												? undefined
-												: `mp-qty-${i}-error`}
+											aria-invalid={!!qtyMessage}
+											aria-describedby={qtyMessage ? `mp-qty-${i}-error` : undefined}
 											{@attach guard.attach(`mp-qty-${i}`)}
 											bind:value={row.qtyPerPerson}
 										/>
@@ -429,11 +446,7 @@
 										</Button>
 									</div>
 								</div>
-								<CountFieldError
-									{guard}
-									id={`mp-qty-${i}`}
-									message={isQtyValid(row.qtyPerPerson, i) ? null : QTY_ERROR}
-								/>
+								<CountFieldError {guard} id={`mp-qty-${i}`} message={qtyMessage} />
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
@@ -655,6 +668,7 @@
 						!sopProfile.data ||
 						!subCountsValid ||
 						!overrideReasonValid ||
+						!customQtyValid ||
 						(sourceMode === 'recipe' && !isLockedEdit && !recipeId) ||
 						((sourceMode === 'custom' || isLockedEdit) && customIngredients.length === 0)}
 				>

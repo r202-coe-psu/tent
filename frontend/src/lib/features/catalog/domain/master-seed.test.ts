@@ -512,14 +512,14 @@ describe('food sphere seed parameters', () => {
 			{
 				item_id: 'item_master:01HXYZ1234567890ABCDEFGH02',
 				base_uom: 'egg',
-				conversion_factor: 6.3,
-				share_percent: 50
+				conversion_factor: '6.3',
+				share_percent: '50'
 			},
 			{
 				item_id: 'item_master:01HXYZ1234567890ABCDEFGH03',
 				base_uom: 'can',
-				conversion_factor: 17,
-				share_percent: 50
+				conversion_factor: '17',
+				share_percent: '50'
 			}
 		]);
 

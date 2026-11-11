@@ -142,14 +142,14 @@ describe('createBanner', () => {
 		expect(record.order).toBe(4);
 	});
 
-	it('writes a v2 doc carrying the input group', async () => {
+	it('writes a v3 doc carrying the input group', async () => {
 		adminRawMock
 			.mockResolvedValueOnce(FOUND_NONE)
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
 		await createBanner(input, BYTES, CTX, NOW);
 
-		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ schema_v: 2, group_id: GROUP_A });
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ schema_v: 3, group_id: GROUP_A });
 	});
 
 	it('ignores an order smuggled in the input', async () => {
@@ -350,7 +350,7 @@ describe('updateBanner', () => {
 		expect(record.order).toBe(6);
 	});
 
-	it('turns an ungrouped v1 banner into v2 in the chosen group, at the end of its slot', async () => {
+	it('turns an ungrouped v1 banner into v3 in the chosen group, at the end of its slot', async () => {
 		adminRawMock
 			.mockResolvedValueOnce({
 				status: 200,
@@ -368,7 +368,7 @@ describe('updateBanner', () => {
 		const record = await updateBanner('kiosk_banner:b1', '1-a', input, null, NOW);
 
 		expect(adminRawMock.mock.calls[2][2]).toMatchObject({
-			schema_v: 2,
+			schema_v: 3,
 			group_id: GROUP_A,
 			order: 5
 		});
