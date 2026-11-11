@@ -38,7 +38,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Accordion from '$lib/components/ui/accordion';
 	import * as Card from '$lib/components/ui/card';
-	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as Table from '$lib/components/ui/table';
 	import * as Select from '$lib/components/ui/select';
 	import * as Tabs from '$lib/components/ui/tabs';
@@ -58,6 +58,7 @@
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Check from '@lucide/svelte/icons/check';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Pencil from '@lucide/svelte/icons/pencil';
@@ -1022,33 +1023,35 @@
 	</div>
 </div>
 
-<!-- Create Meal Session Modal -->
-<Dialog.Root bind:open={createDialogOpen}>
-	<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
-		<Dialog.Header>
-			<Dialog.Title class="text-base font-bold text-foreground sm:text-lg"
-				>สร้างรอบมื้ออาหารใหม่</Dialog.Title
-			>
-			<Dialog.Description class="text-xs text-muted-foreground sm:text-sm">
+<!-- Create Meal Session Sheet -->
+<Sheet.Root bind:open={createDialogOpen}>
+	<Sheet.Content
+		side="right"
+		class="flex h-[100dvh] w-full flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none md:w-[42rem] md:border-l lg:w-[48rem]"
+	>
+		<Sheet.Header class="shrink-0 border-b border-slate-200/80 p-4 pr-12 text-left sm:px-6">
+			<Sheet.Title class="text-xl font-bold text-slate-900">สร้างรอบมื้ออาหารใหม่</Sheet.Title>
+			<Sheet.Description class="text-sm text-slate-500">
 				ระบุช่วงเวลาและเป้าหมายจำนวนจานสำหรับกลุ่มความต้องการพิเศษ 5 กลุ่ม
-			</Dialog.Description>
-		</Dialog.Header>
+			</Sheet.Description>
+		</Sheet.Header>
 
-		<div class="min-w-0 space-y-4 py-2">
+		<div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
 			<div>
-				<Label for="session-name" class="text-xs font-medium">ชื่อรอบมื้ออาหาร</Label>
-				<Input id="session-name" bind:value={formName} class="mt-1.5 h-9 text-sm" />
+				<Label for="session-name" class="text-xs font-medium text-slate-700">ชื่อรอบมื้ออาหาร</Label
+				>
+				<Input id="session-name" bind:value={formName} class="mt-1.5 h-10 text-sm" />
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<div>
-					<Label for="session-date" class="text-xs font-medium">วันที่</Label>
-					<DatePicker id="session-date" bind:value={formDate} class="mt-1.5 !h-9" />
+					<Label for="session-date" class="text-xs font-medium text-slate-700">วันที่</Label>
+					<DatePicker id="session-date" bind:value={formDate} class="mt-1.5 !h-10" />
 				</div>
 				<div>
-					<Label for="session-meal" class="text-xs font-medium">ช่วงมื้อ</Label>
+					<Label for="session-meal" class="text-xs font-medium text-slate-700">ช่วงมื้อ</Label>
 					<Select.Root type="single" value={formMeal} onValueChange={handleMealChange}>
-						<Select.Trigger id="session-meal" class="mt-1.5 !h-9 w-full text-sm">
+						<Select.Trigger id="session-meal" class="mt-1.5 !h-10 w-full text-sm">
 							<Select.Value placeholder="เลือกช่วงมื้อ">{MEAL_PERIOD_LABELS[formMeal]}</Select.Value
 							>
 						</Select.Trigger>
@@ -1062,88 +1065,108 @@
 				</div>
 			</div>
 
-			<div class="flex gap-2.5 overflow-x-auto" data-testid="shelter-people-counts">
+			<div class="flex gap-2.5 overflow-x-auto pb-1" data-testid="shelter-people-counts">
 				{#each shelterPeopleCards as card (card.key)}
 					<div
-						class="min-w-32 shrink-0 grow rounded-lg border bg-background p-2.5 shadow-2xs"
+						class="min-w-32 shrink-0 grow rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 shadow-2xs"
 						data-testid="shelter-people-{card.key}"
 					>
-						<div class="text-xs font-medium text-muted-foreground">{card.label}</div>
-						<div class="mt-0.5 text-base font-bold text-foreground tabular-nums">
+						<div class="text-xs font-medium text-slate-500">{card.label}</div>
+						<div class="mt-0.5 text-base font-bold text-slate-900 tabular-nums">
 							{card.count ?? '–'}
-							<span class="text-xs font-medium text-muted-foreground">คน</span>
+							<span class="text-xs font-medium text-slate-500">คน</span>
 						</div>
 					</div>
 				{/each}
 			</div>
 
 			<!-- 5-Group Target Headcount Inputs -->
-			<div class="rounded-xl border bg-muted/20 p-3.5 sm:p-4">
+			<div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
 				<div class="mb-3 flex items-center justify-between">
 					<div>
-						<span class="text-xs font-semibold text-foreground"
+						<span class="text-sm font-semibold text-slate-900"
 							>เป้าหมายจำนวนจานแยกกลุ่ม (5 กลุ่ม)</span
 						>
-						<p class="text-xs text-muted-foreground">
-							จัดสรรตามกลุ่มผู้เข้าพักและกำลังพลปฏิบัติงาน
-						</p>
+						<p class="text-xs text-slate-500">จัดสรรตามกลุ่มผู้เข้าพักและกำลังพลปฏิบัติงาน</p>
 					</div>
-					<span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+					<span class="rounded-full bg-[#0A2647]/10 px-3 py-1 text-xs font-bold text-[#0A2647]">
 						รวม {formTotal} จาน
 					</span>
 				</div>
 
-				<div class="space-y-2.5">
+				<div class="space-y-3">
 					<!-- Standard & Staff Groups -->
-					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารทั่วไป</Label>
-							<Input type="number" min="0" bind:value={countRegular} class="mt-1.5 h-8 text-sm" />
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
+							<Label class="text-xs font-medium text-slate-700">อาหารทั่วไป</Label>
+							<Input type="number" min="0" bind:value={countRegular} class="mt-1.5 h-9 text-sm" />
 						</div>
-						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">เจ้าหน้าที่/อาสา</Label>
-							<Input type="number" min="0" bind:value={countVolunteer} class="mt-1.5 h-8 text-sm" />
+						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
+							<Label class="text-xs font-medium text-slate-700">เจ้าหน้าที่/อาสา</Label>
+							<Input type="number" min="0" bind:value={countVolunteer} class="mt-1.5 h-9 text-sm" />
 						</div>
 					</div>
 
 					<!-- Dietary / Vulnerable Groups -->
-					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารฮาลาล</Label>
-							<Input type="number" min="0" bind:value={countHalal} class="mt-1.5 h-8 text-sm" />
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
+							<Label class="text-xs font-medium text-slate-700">อาหารฮาลาล</Label>
+							<Input type="number" min="0" bind:value={countHalal} class="mt-1.5 h-9 text-sm" />
 						</div>
-						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารอ่อน/ผู้สูงอายุ</Label>
-							<Input type="number" min="0" bind:value={countSoftFood} class="mt-1.5 h-8 text-sm" />
+						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
+							<Label class="text-xs font-medium text-slate-700">อาหารอ่อน/ผู้สูงอายุ</Label>
+							<Input type="number" min="0" bind:value={countSoftFood} class="mt-1.5 h-9 text-sm" />
 						</div>
-						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">ทารก/เด็กอ่อน</Label>
-							<Input type="number" min="0" bind:value={countInfant} class="mt-1.5 h-8 text-sm" />
+						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
+							<Label class="text-xs font-medium text-slate-700">ทารก/เด็กอ่อน</Label>
+							<Input type="number" min="0" bind:value={countInfant} class="mt-1.5 h-9 text-sm" />
 						</div>
 					</div>
 				</div>
 			</div>
 
 			<div>
-				<Label for="session-notes" class="text-xs font-medium">หมายเหตุเพิ่มเติม</Label>
+				<Label for="session-notes" class="text-xs font-medium text-slate-700"
+					>หมายเหตุเพิ่มเติม</Label
+				>
 				<Textarea
 					id="session-notes"
 					bind:value={formNotes}
 					placeholder="เช่น วัตถุดิบบริจาคพิเศษ, มื้อพิเศษ..."
-					rows={2}
-					class="mt-1.5 text-xs sm:text-sm"
+					rows={3}
+					class="mt-1.5 text-sm"
 				/>
 			</div>
 		</div>
 
-		<Dialog.Footer class="mt-2 gap-2 sm:gap-2">
-			<Button variant="outline" onclick={() => (createDialogOpen = false)}>ยกเลิก</Button>
-			<Button onclick={handleCreateSession} disabled={createSessionMutation.isPending}>
-				{createSessionMutation.isPending ? 'กำลังสร้าง...' : 'สร้างรอบมื้ออาหาร'}
+		<Sheet.Footer
+			class="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur-xs sm:px-6"
+		>
+			<Button
+				type="button"
+				variant="outline"
+				class="min-h-11 min-w-24 font-medium"
+				onclick={() => (createDialogOpen = false)}
+			>
+				ยกเลิก
 			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+			<Button
+				type="button"
+				class="min-h-11 min-w-36 gap-2 bg-[#0A2647] font-semibold text-white shadow-xs hover:bg-[#051930]"
+				onclick={handleCreateSession}
+				disabled={createSessionMutation.isPending}
+			>
+				{#if createSessionMutation.isPending}
+					<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+					<span>กำลังสร้าง...</span>
+				{:else}
+					<Check class="h-4 w-4" aria-hidden="true" />
+					<span>สร้างรอบมื้ออาหาร</span>
+				{/if}
+			</Button>
+		</Sheet.Footer>
+	</Sheet.Content>
+</Sheet.Root>
 
 <AlertDialog.Root
 	open={pendingDeleteSession !== null}
