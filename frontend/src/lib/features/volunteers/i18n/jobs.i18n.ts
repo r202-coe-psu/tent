@@ -264,7 +264,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		qrUploadNotFound: 'อ่าน QR จากรูปนี้ไม่ได้ — ลองรูปที่ชัดขึ้น หรือครอบให้เห็นเฉพาะ QR',
 		qrUploadNotImage: 'ไฟล์นี้ไม่ใช่รูปภาพ — กรุณาเลือกรูป QR (JPG หรือ PNG)',
 		qrUploadTooLarge: 'รูปใหญ่เกิน 10 MB — กรุณาเลือกรูปที่เล็กกว่านี้',
-		closeModal: 'ปิดหน้าต่าง',
+		closeModal: 'ปิด',
 		// Quick Apply Modal
 		shiftDateLabel: 'กะวันที่',
 		applyStep1Title: '1. ข้อมูลประจำตัวอาสาสมัคร',

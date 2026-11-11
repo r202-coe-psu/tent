@@ -15,7 +15,6 @@ export type {
 } from './data/referral.repository';
 
 export { default as ReferralCreateForm } from './ui/referral-create-form.svelte';
-export { default as ReferralBackLink } from './ui/referral-back-link.svelte';
 export { default as ReferralList } from './ui/referral-list.svelte';
 export { default as ReferralDetail } from './ui/referral-detail.svelte';
 export { default as ReferralBatchCards } from './ui/referral-batch-cards.svelte';
@@ -25,3 +24,4 @@ export { default as MedicalReferralForm } from './ui/medical-referral-form.svelt
 export { default as CapacityReferralForm } from './ui/capacity-referral-form.svelte';
 export { default as ResourceReferralForm } from './ui/resource-referral-form.svelte';
 export { default as ShelterCombobox } from './ui/shelter-combobox.svelte';
+export { REFERRALS_PATH } from './ui/referral.ui-helpers';

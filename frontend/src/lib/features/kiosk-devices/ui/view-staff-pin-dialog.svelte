@@ -220,7 +220,7 @@
 		{/if}
 
 		<Dialog.Footer>
-			<Button class="w-full sm:w-auto" onclick={close}>ปิดหน้าต่าง</Button>
+			<Button class="w-full sm:w-auto" onclick={close}>ปิด</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
