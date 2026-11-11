@@ -177,6 +177,7 @@ function couchReadResponse(
 /**
  * Mirror of the BFF list contract: filter by direction/status (relative to `shelter_code`),
  * newest first, page by an opaque bookmark (the offset). Responds `{ items, bookmark, has_more }`.
+ * `has_more` is exact, like the BFF's probe past the bookmark: a full last page reports `false`.
  */
 function listPage(store: ReferralStore, params: URLSearchParams) {
 	const shelter = params.get('shelter_code');
@@ -193,7 +194,8 @@ function listPage(store: ReferralStore, params: URLSearchParams) {
 		.filter((r) => !status || r.status === status)
 		.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 	const items = rows.slice(offset, offset + limit);
-	return { items, bookmark: String(offset + items.length), has_more: items.length === limit };
+	const end = offset + items.length;
+	return { items, bookmark: String(end), has_more: end < rows.length };
 }
 
 const BUCKET_MS = 2 * 60 * 1000;
