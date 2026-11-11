@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     EXTERNAL_API_SECRET: str = ""
     # Central CouchDB base URL for verifying staff AuthSession cookies (`/staff/v1/*`).
     COUCHDB_URL: str = "http://localhost:5984"
+
+    # Outbound M5 patient-referral API (draft CR — referral M5 integration §1). Backend only;
+    # never a PUBLIC_ var and never in frontend/.env.
+    M5_BASE_URL: str = ""
+    M5_CLIENT_ID: str = ""
+    M5_CLIENT_SECRET: str = ""
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # auth

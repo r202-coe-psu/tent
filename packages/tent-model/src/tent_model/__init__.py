@@ -57,6 +57,13 @@ from tent_model.shelter_stock import M6_TYPE_CODES, ShelterStock
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.external_booking import OPEN_BOOKING_STATES, ExternalBooking
 from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+from tent_model.m5_outbound_log import M5OutboundLog
+from tent_model.m5_transfer import (
+	M5_OPEN_STATUSES,
+	M5_STATUSES,
+	M5Transfer,
+	M5TransferPatient,
+)
 from tent_model.third_party_client import THIRD_PARTY_SCOPES, ThirdPartyClient
 from tent_model.unassigned_registration import (
 	PersonId,
@@ -116,6 +123,11 @@ __all__ = [
 	"ThirdPartyClient",
 	"ExternalBooking",
 	"ExternalBookingIdempotency",
+	"M5_OPEN_STATUSES",
+	"M5_STATUSES",
+	"M5OutboundLog",
+	"M5Transfer",
+	"M5TransferPatient",
 	"OPEN_BOOKING_STATES",
 	"UnassignedHousehold",
 	"UnassignedMember",
