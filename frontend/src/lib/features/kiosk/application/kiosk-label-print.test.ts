@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 describe('renderKioskQrLabelPng', () => {
-	it('sizes the QR for the level bars when the label carries a marker', async () => {
+	it('sizes the QR for the level band when the label carries a marker', async () => {
 		mocks.qrModuleCount.mockResolvedValue(29);
 		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
 		mocks.renderKioskLabelPng.mockResolvedValue('cG5n');
@@ -66,8 +66,8 @@ describe('renderKioskQrLabelPng', () => {
 describe('prepareKioskQrImage', () => {
 	it.each([
 		['red', 198],
-		['yellow', 231]
-	] as const)('sizes the QR for the room the %s level bars leave', async (marker, widthPx) => {
+		['yellow', 198]
+	] as const)('sizes the QR for the room the %s level band leaves', async (marker, widthPx) => {
 		mocks.qrModuleCount.mockResolvedValue(29);
 		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
 

@@ -396,7 +396,7 @@
 		try {
 			for (const item of items) {
 				if (!item.qr_payload) continue;
-				// The level bars shrink the QR, so a changed marker needs a fresh image too.
+				// The level band shrinks the QR, so a changed marker needs a fresh image too.
 				const imageKey = `${item.qr_payload}|${item.label?.marker ?? ''}`;
 				if (nextImages[item.evacuee_id] && qrImagePayloads[item.evacuee_id] === imageKey) {
 					continue;

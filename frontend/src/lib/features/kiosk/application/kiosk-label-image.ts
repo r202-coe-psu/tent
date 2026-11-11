@@ -9,7 +9,7 @@ import {
 	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_ZONE,
-	kioskLabelBars,
+	kioskLabelBandRects,
 	kioskLabelDots,
 	kioskLabelLayout,
 	labelEmergencyLine,
@@ -129,7 +129,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	context.fillRect(layout.divider.x, layout.divider.y, layout.divider.width, layout.divider.height);
 	context.textAlign = 'left';
 	context.textBaseline = 'middle';
-	if (label.marker) drawBars(context, kioskLabelBars(label.marker));
+	if (label.marker) drawBand(context, kioskLabelBandRects(label.marker));
 
 	let y = layout.text.y;
 	if (label.marker) {
@@ -179,15 +179,15 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 }
 
 /**
- * The level bars at the right edge: solid black, full inner height (red two, yellow one), no words.
- * Leaves `fillStyle` black.
+ * The level band at the left edge, full inner height, no words: red solid black, yellow two rails
+ * with diagonal stripes. Leaves `fillStyle` black.
  */
-function drawBars(
+function drawBand(
 	context: CanvasRenderingContext2D,
-	bars: readonly { x: number; y: number; width: number; height: number }[]
+	rects: readonly { x: number; y: number; width: number; height: number }[]
 ): void {
 	context.fillStyle = '#000000';
-	for (const bar of bars) context.fillRect(bar.x, bar.y, bar.width, bar.height);
+	for (const rect of rects) context.fillRect(rect.x, rect.y, rect.width, rect.height);
 }
 
 /**

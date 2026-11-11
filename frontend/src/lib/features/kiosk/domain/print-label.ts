@@ -48,20 +48,14 @@ export function dotsToMm(dots: number): number {
 	return (dots / KIOSK_PRINT_DPI) * MM_PER_INCH;
 }
 
-/** Width (mm) the level bars and their gap to the QR take from the right of the label; 0 for none. */
+/** Width (mm) the level band and its gap to the text take from the left of the label; 0 for none. */
 function markerReserveMm(marker: VulnerabilityMarker | null | undefined): number {
-	if (!marker) return 0;
-	const count = KIOSK_LABEL_BAND.bars[marker];
-	return (
-		count * KIOSK_LABEL_BAND.barMm +
-		(count - 1) * KIOSK_LABEL_BAND.barGapMm +
-		KIOSK_LABEL_BAND.gapMm
-	);
+	return marker ? KIOSK_LABEL_BAND.widthMm + KIOSK_LABEL_BAND.gapMm : 0;
 }
 
 /**
- * Largest square (mm) the QR image may occupy on the right of the text column, after the level
- * bars (and their gap to the QR) for a `marker`.
+ * Largest square (mm) the QR image may occupy on the right of the text column. A `marker`'s level
+ * band pushes the text column right, so the QR gives up that room to keep the text width.
  */
 export function kioskQrBoxMm(marker?: VulnerabilityMarker | null): number {
 	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2;
@@ -133,22 +127,23 @@ export const KIOSK_LABEL_MARKER = {
 	textGapMm: 1.5
 } as const;
 /**
- * Solid black vertical bars at the right edge of the label, inside the padding, so staff see the
- * level at a glance without reading: red two bars, yellow one. Plain black, no words (those stay in
- * the marker row), so they survive the thermal printer's black/white-only output. They span the
- * full inner height; the QR column shifts left and the QR shrinks to make room (`kioskQrBoxMm`).
+ * Level band down the left edge of the label, inside the padding, so staff see the level at a
+ * glance without reading. Yellow: two rails with diagonal stripes between them; red: the same band
+ * filled solid black. Plain black, no words (those stay in the marker row), so it survives the
+ * thermal printer's black/white-only output. It spans the full inner height; the text column
+ * shifts right and the QR shrinks to make room (`kioskQrBoxMm`).
  */
 export const KIOSK_LABEL_BAND = {
-	/** Width of one bar. */
-	barMm: 1.5,
-	/** Between the two red bars. */
-	barGapMm: 1,
-	/**
-	 * Nearest bar → QR image. With the image's 2 margin modules this keeps the 4-module quiet zone,
-	 * as the padding does on the QR's other side.
-	 */
-	gapMm: 2,
-	bars: { red: 2, yellow: 1 }
+	/** Band width, rails included. */
+	widthMm: 4,
+	/** Each yellow rail (left and right edge of the band). */
+	railMm: 0.5,
+	/** Each yellow diagonal stripe, measured along a row. */
+	stripeMm: 0.5,
+	/** Yellow stripe repeat, measured along a row. */
+	pitchMm: 1.5,
+	/** Band → text column. */
+	gapMm: 2
 } as const;
 /** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
@@ -300,7 +295,7 @@ export type KioskLabelLayout = {
 /**
  * Whole-dot geometry of the ID-card label: text column on the left, a divider line, and the QR
  * (`qrPx` square, 1 px = 1 dot) right-aligned and centred vertically, as in `QrIdCard`. With a
- * `marker` the QR sits `KIOSK_LABEL_BAND.gapMm` left of the level bars instead of the padding.
+ * `marker` the text column starts `KIOSK_LABEL_BAND.gapMm` right of the level band.
  */
 export function kioskLabelLayout(
 	qrPx: number,
@@ -311,13 +306,12 @@ export function kioskLabelLayout(
 	const gap = Math.round(mmToDots(KIOSK_LABEL_GAP_MM));
 	const offset = Math.round(mmToDots(KIOSK_LABEL_OFFSET_X_MM));
 	const dividerWidth = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_DIVIDER_MM)));
-	const [firstBar] = marker ? kioskLabelBars(marker) : [];
-	const qrRight = firstBar
-		? firstBar.x - Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm))
-		: width - padding + offset;
-	const qrX = qrRight - qrPx;
+	const band = marker ? kioskLabelBand() : null;
+	const qrX = width - padding + offset - qrPx;
 	const dividerX = qrX - gap - dividerWidth;
-	const textX = padding + offset;
+	const textX = band
+		? band.x + band.width + Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm))
+		: padding + offset;
 	const textY = padding + Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM));
 	const qrY = Math.round((height - qrPx) / 2);
 	const { pt, lineHeight } = KIOSK_LABEL_TEXT.link;
@@ -330,24 +324,48 @@ export function kioskLabelLayout(
 	};
 }
 
-export type KioskLabelBar = { x: number; y: number; width: number; height: number };
+export type KioskLabelRect = { x: number; y: number; width: number; height: number };
 
-/**
- * Whole-dot boxes of the level bars, leftmost first: the last one ends at the right edge of the
- * label padding, each `KIOSK_LABEL_BAND.barMm` wide and `barGapMm` apart, spanning the inner height.
- */
-export function kioskLabelBars(marker: VulnerabilityMarker): KioskLabelBar[] {
-	const { width, height } = kioskLabelDots();
+/** Whole-dot box of the level band: from the left edge of the label padding, full inner height. */
+export function kioskLabelBand(): KioskLabelRect {
+	const { height } = kioskLabelDots();
 	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
 	const offset = Math.round(mmToDots(KIOSK_LABEL_OFFSET_X_MM));
-	const barWidth = Math.round(mmToDots(KIOSK_LABEL_BAND.barMm));
-	const pitch = barWidth + Math.round(mmToDots(KIOSK_LABEL_BAND.barGapMm));
-	const count = KIOSK_LABEL_BAND.bars[marker];
-	const right = width - padding + offset;
-	return Array.from({ length: count }, (_, index) => ({
-		x: right - barWidth - (count - 1 - index) * pitch,
+	return {
+		x: padding + offset,
 		y: padding,
-		width: barWidth,
+		width: Math.round(mmToDots(KIOSK_LABEL_BAND.widthMm)),
 		height: height - padding * 2
-	}));
+	};
+}
+
+/**
+ * Black boxes that print the level band, in whole dots. Red: the band itself. Yellow: the two
+ * rails, then the diagonal stripes between them as one run per stripe per dot row: a dot is black
+ * when (column + row) inside the rails falls in the first `stripeMm` of each `pitchMm`.
+ */
+export function kioskLabelBandRects(marker: VulnerabilityMarker): KioskLabelRect[] {
+	const band = kioskLabelBand();
+	if (marker === 'red') return [band];
+	const rail = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_BAND.railMm)));
+	const stripe = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_BAND.stripeMm)));
+	const pitch = Math.max(stripe + 1, Math.round(mmToDots(KIOSK_LABEL_BAND.pitchMm)));
+	const innerX = band.x + rail;
+	const innerWidth = band.width - rail * 2;
+	const rects: KioskLabelRect[] = [
+		{ ...band, width: rail },
+		{ ...band, x: band.x + band.width - rail, width: rail }
+	];
+	for (let row = 0; row < band.height; row++) {
+		let runStart = -1;
+		for (let column = 0; column <= innerWidth; column++) {
+			const black = column < innerWidth && (column + row) % pitch < stripe;
+			if (black && runStart < 0) runStart = column;
+			if (!black && runStart >= 0) {
+				rects.push({ x: innerX + runStart, y: band.y + row, width: column - runStart, height: 1 });
+				runStart = -1;
+			}
+		}
+	}
+	return rects;
 }

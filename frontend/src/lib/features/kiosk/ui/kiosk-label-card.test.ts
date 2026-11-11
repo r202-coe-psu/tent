@@ -33,8 +33,8 @@ describe('KioskLabelCard QR size beside the level bars', () => {
 
 	it.each([
 		['red', '28.75mm'],
-		['yellow', '31.25mm']
-	] as const)('falls back to the box the %s bars leave', (marker, size) => {
+		['yellow', '28.75mm']
+	] as const)('falls back to the box the %s band leaves', (marker, size) => {
 		const body = render(KioskLabelCard, { props: { label: { ...unsized, marker } } }).body;
 		expect(body).toContain(`--qr-size: ${size}`);
 	});

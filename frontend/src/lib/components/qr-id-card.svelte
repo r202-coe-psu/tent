@@ -51,6 +51,13 @@
 	}: Props = $props();
 
 	/*
+		Diagonal stripes of the yellow band: 0.5 mm black every 1.5 mm along a row, i.e. those widths
+		over √2 across the 45° stripe.
+	*/
+	const YELLOW_STRIPES =
+		'repeating-linear-gradient(135deg, #000 0 0.3536mm, transparent 0.3536mm 1.0607mm)';
+
+	/*
 		80×60 mm thermal label sized by the `--qr-size` / `--label-gap` CSS vars. Sizes mirror
 		KIOSK_LABEL_TEXT / KIOSK_LABEL_CHECKBOX in features/kiosk/domain/print-label.ts, which the
 		kiosk canvas renderer draws from.
@@ -58,6 +65,21 @@
 </script>
 
 <div class={cn('flex h-full w-full flex-row text-black', className)}>
+	{#if marker}
+		<!-- Level band down the card's left edge, 4 mm wide and 2 mm clear of the text (mirrors
+			KIOSK_LABEL_BAND): yellow two 0.5 mm rails with diagonal stripes, red solid black. The QR is
+			sized smaller so the text keeps its width (kioskQrBoxMm). aria-hidden because the marker row
+			already carries the label. -->
+		<div
+			data-marker-band={marker}
+			aria-hidden="true"
+			class={cn(
+				'mr-[2mm] w-[4mm] shrink-0 [print-color-adjust:exact]',
+				marker === 'red' ? 'bg-black' : 'border-x-[0.5mm] border-black'
+			)}
+			style:background-image={marker === 'yellow' ? YELLOW_STRIPES : undefined}
+		></div>
+	{/if}
 	<div class="flex min-w-0 flex-1 flex-col gap-[1mm]">
 		{#if marker}
 			<div
@@ -154,15 +176,4 @@
 			{/if}
 		</div>
 	</div>
-	{#if marker}
-		<!-- Level bars at the card's right edge (red two, yellow one): full inner height, 1.5 mm wide,
-			1 mm apart, 2 mm clear of the QR column (its quiet zone, with the 2 margin modules). The QR
-			is sized smaller to make room (kioskQrBoxMm). aria-hidden because the marker row already
-			carries the label. -->
-		<div data-marker-bars={marker} aria-hidden="true" class="ml-[2mm] flex shrink-0 gap-[1mm]">
-			{#each marker === 'red' ? [0, 1] : [0] as bar (bar)}
-				<div class="w-[1.5mm] bg-black"></div>
-			{/each}
-		</div>
-	{/if}
 </div>

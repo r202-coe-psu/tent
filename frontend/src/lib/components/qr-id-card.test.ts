@@ -169,80 +169,80 @@ describe('QrIdCard', () => {
 		}
 	});
 
-	describe('level bars at the right edge', () => {
-		const barsTag = (body: string, marker: string) =>
-			body.match(new RegExp(`<[^>]*data-marker-bars="${marker}"[^>]*>`))?.[0] ?? '';
-		/** The container's markup, from its opening tag to the end of the card. */
-		const barsHtml = (body: string, marker: string) =>
-			body.slice(body.indexOf(barsTag(body, marker)));
-		const barDivs = (body: string, marker: string) =>
-			barsHtml(body, marker).match(/<div[^>]*bg-black[^>]*>/g) ?? [];
+	describe('level band at the left edge', () => {
+		const bandTag = (body: string, marker: string) =>
+			body.match(new RegExp(`<div[^>]*data-marker-band="${marker}"[^>]*>`))?.[0] ?? '';
+		const bandInner = (body: string, marker: string) => {
+			const tag = bandTag(body, marker);
+			const from = body.indexOf(tag) + tag.length;
+			return body.slice(from, body.indexOf('</div>', from));
+		};
 
-		it('prints red as two solid black vertical bars and yellow as one, aria-hidden', () => {
-			for (const [marker, count] of [
-				['red', 2],
-				['yellow', 1]
-			] as const) {
+		it('prints yellow as a 4 mm band of two 0.5 mm rails with diagonal stripes, aria-hidden', () => {
+			const tag = bandTag(
+				render(QrIdCard, { props: { ...base, marker: 'yellow' } }).body,
+				'yellow'
+			);
+
+			expect(tag).toContain('aria-hidden="true"');
+			expect(tag).toContain('w-[4mm]');
+			expect(tag).toContain('border-x-[0.5mm]');
+			expect(tag).toContain('border-black');
+			expect(tag).toMatch(/background-image: repeating-linear-gradient\(135deg/);
+			expect(tag).not.toContain('bg-black');
+		});
+
+		it('prints red as the same 4 mm band filled solid black, without stripes', () => {
+			const tag = bandTag(render(QrIdCard, { props: { ...base, marker: 'red' } }).body, 'red');
+
+			expect(tag).toContain('aria-hidden="true"');
+			expect(tag).toContain('w-[4mm]');
+			expect(tag).toContain('bg-black');
+			expect(tag).not.toContain('repeating-linear-gradient');
+		});
+
+		it.each(['red', 'yellow'] as const)(
+			'puts the %s band first in the row, 2 mm clear of the text, unshrinkable, printing in colour',
+			(marker) => {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
+				const tag = bandTag(body, marker);
 
-				expect(barsTag(body, marker)).toContain('aria-hidden="true"');
-				const bars = barDivs(body, marker);
-				expect(bars).toHaveLength(count);
-				// Each bar is 1.5 mm wide and as tall as the card's inner height.
-				for (const bar of bars) expect(bar).toContain('w-[1.5mm]');
+				expect(body.indexOf(tag)).toBeLessThan(body.indexOf('data-marker='));
+				expect(body.indexOf(tag)).toBeLessThan(body.indexOf('<img'));
+				expect(tag).toContain('mr-[2mm]');
+				expect(tag).toContain('shrink-0');
+				expect(tag).toContain('[print-color-adjust:exact]');
+				expect(tag).not.toContain('absolute');
+				expect(body).toContain('size-(--qr-size)');
 			}
-		});
+		);
 
-		it('spaces the bars 1 mm apart and keeps them from shrinking', () => {
-			const tag = barsTag(render(QrIdCard, { props: { ...base, marker: 'red' } }).body, 'red');
-
-			expect(tag).toContain('gap-[1mm]');
-			expect(tag).toContain('flex');
-			expect(tag).toContain('shrink-0');
-		});
-
-		it('prints no words in the bars', () => {
+		it('prints no words in the band', () => {
 			for (const marker of ['red', 'yellow'] as const) {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
-				const container = barsTag(body, marker);
-				const inner = barsHtml(body, marker).slice(container.length);
 
-				expect(container).not.toBe('');
-				expect(inner.replace(/<[^>]*>/g, '').trim()).toBe('');
+				expect(bandTag(body, marker)).not.toBe('');
+				expect(
+					bandInner(body, marker)
+						.replace(/<[^>]*>/g, '')
+						.trim()
+				).toBe('');
 			}
 		});
 
-		it('keeps the level words only in the marker row, not as separate band text', () => {
+		it('keeps the level words only in the marker row', () => {
 			const red = render(QrIdCard, { props: { ...base, marker: 'red' } }).body;
 			const yellow = render(QrIdCard, { props: { ...base, marker: 'yellow' } }).body;
 
 			expect(red.match(/ดูแลเร่งด่วน/g)).toHaveLength(2);
 			expect(yellow.match(/ดูแลพิเศษ/g)).toHaveLength(2);
-			expect(red).not.toContain('data-marker-band');
-			expect(yellow).not.toContain('data-marker-band');
 		});
 
-		it.each(['red', 'yellow'] as const)(
-			'puts the %s bars after the QR column, 2 mm clear of it, not above the QR',
-			(marker) => {
-				const body = render(QrIdCard, { props: { ...base, marker } }).body;
-				const at = body.indexOf('data-marker-bars');
-				const tag = barsTag(body, marker);
-
-				expect(at).toBeGreaterThan(body.indexOf('<img'));
-				expect(tag).toContain('ml-[2mm]');
-				// In the row beside the QR column, not floated over the QR.
-				expect(tag).not.toContain('absolute');
-				expect(tag).not.toContain('bottom-full');
-				expect(body).toContain('size-(--qr-size)');
-			}
-		);
-
-		it('prints no bars when there is no level', () => {
+		it('prints no band when there is no level', () => {
 			for (const marker of [null, undefined]) {
 				const body = render(QrIdCard, { props: { ...base, marker } }).body;
 
-				expect(body).not.toContain('data-marker-bars');
+				expect(body).not.toContain('data-marker-band');
 				expect(body).not.toContain('bg-black');
 				expect(body).not.toContain('ดูแลเร่งด่วน');
 				expect(body).not.toContain('ดูแลพิเศษ');

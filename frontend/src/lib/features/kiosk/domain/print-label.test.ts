@@ -23,7 +23,8 @@ import {
 	KIOSK_LABEL_LINK_GAP_MM,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
-	kioskLabelBars,
+	kioskLabelBand,
+	kioskLabelBandRects,
 	kioskLabelDots,
 	kioskLabelLayout,
 	kioskLabelPageCss,
@@ -190,7 +191,7 @@ describe('kioskLabelLayout', () => {
 	});
 });
 
-describe('QR sizing and layout beside the level bars', () => {
+describe('QR sizing and layout with the level band', () => {
 	const moduleCount = QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size;
 	const { width } = kioskLabelDots();
 	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
@@ -202,24 +203,21 @@ describe('QR sizing and layout beside the level bars', () => {
 		expect(kioskQrBoxMm(undefined)).toBeCloseTo(34.75, 6);
 	});
 
-	it('shrinks the QR box by the bars and their 2 mm gap: red 6 mm, yellow 3.5 mm', () => {
+	it('shrinks the QR box by the 4 mm band and its 2 mm gap for either level', () => {
 		expect(kioskQrBoxMm('red')).toBeCloseTo(34.75 - 6, 6);
-		expect(kioskQrBoxMm('yellow')).toBeCloseTo(34.75 - 3.5, 6);
+		expect(kioskQrBoxMm('yellow')).toBeCloseTo(34.75 - 6, 6);
 	});
 
-	it('prints the version-3 QR at 33 / 29 / 24.8 mm (8 / 7 / 6 dots per module) for none / yellow / red', () => {
+	it('prints the version-3 QR at 33 mm (8 dots per module) without a level and 24.8 mm (6) with one', () => {
 		expect(kioskQrPrintSize(moduleCount)).toMatchObject({ widthPx: 264, dotsPerModule: 8 });
 		expect(kioskQrPrintSize(moduleCount, null)).toMatchObject({ widthPx: 264, dotsPerModule: 8 });
-		expect(kioskQrPrintSize(moduleCount, 'yellow')).toMatchObject({
-			widthPx: 231,
-			margin: 2,
-			dotsPerModule: 7
-		});
-		expect(kioskQrPrintSize(moduleCount, 'red')).toMatchObject({
-			widthPx: 198,
-			margin: 2,
-			dotsPerModule: 6
-		});
+		for (const marker of ['red', 'yellow'] as const) {
+			expect(kioskQrPrintSize(moduleCount, marker)).toMatchObject({
+				widthPx: 198,
+				margin: 2,
+				dotsPerModule: 6
+			});
+		}
 	});
 
 	it.each([21, 25, 29, 33, 37])(
@@ -229,8 +227,8 @@ describe('QR sizing and layout beside the level bars', () => {
 				const size = kioskQrPrintSize(modules, marker);
 				expect(size.sizeMm).toBeLessThanOrEqual(kioskQrBoxMm(marker));
 				expect(dotsToMm(modules * size.dotsPerModule)).toBeGreaterThanOrEqual(KIOSK_QR_MIN_MM);
-				// Image margin + the 2 mm gap to the bars.
-				const quiet = size.margin + mmToDots(KIOSK_LABEL_BAND.gapMm) / size.dotsPerModule;
+				// The QR stays at the right padding: image margin + the 2 mm padding.
+				const quiet = size.margin + mmToDots(KIOSK_LABEL_PADDING_MM) / size.dotsPerModule;
 				expect(quiet).toBeGreaterThanOrEqual(KIOSK_QR_QUIET_ZONE_MODULES - 0.05);
 			}
 		}
@@ -240,69 +238,91 @@ describe('QR sizing and layout beside the level bars', () => {
 		const px = kioskQrPrintSize(moduleCount).widthPx;
 		expect(kioskLabelLayout(px, null)).toEqual(kioskLabelLayout(px));
 		expect(kioskLabelLayout(px).qr.x).toBe(width - padding - px);
+		expect(kioskLabelLayout(px).text.x).toBe(padding);
 	});
 
 	it.each(['red', 'yellow'] as const)(
-		'puts the QR 2 mm (16 dots) left of the %s bars, text column and divider shifted with it',
+		'starts the text 2 mm (16 dots) right of the %s band and keeps the QR at the right padding',
 		(marker) => {
 			const px = kioskQrPrintSize(moduleCount, marker).widthPx;
 			const layout = kioskLabelLayout(px, marker);
-			const [firstBar] = kioskLabelBars(marker);
+			const band = kioskLabelBand();
 
-			expect(firstBar!.x - (layout.qr.x + px)).toBe(16);
+			expect(layout.text.x - (band.x + band.width)).toBe(16);
+			expect(layout.qr.x + px).toBe(width - padding);
 			expect(layout.divider.x + layout.divider.width + gapDots).toBe(layout.qr.x);
 			expect(layout.text.x + layout.text.width + gapDots).toBe(layout.divider.x);
 			expect(layout.text.width).toBeGreaterThanOrEqual(mmToDots(KIOSK_LABEL_TEXT_MIN_WIDTH_MM) - 2);
 		}
 	);
 
-	it('pins the final geometry in dots: red QR 198 at x 377, yellow QR 231 at x 364', () => {
-		expect(kioskLabelLayout(198, 'red').qr.x).toBe(377);
-		expect(kioskLabelLayout(231, 'yellow').qr.x).toBe(364);
+	it('pins the final geometry in dots: text at x 64, QR 198 at x 425', () => {
+		for (const marker of ['red', 'yellow'] as const) {
+			const layout = kioskLabelLayout(198, marker);
+			expect(layout.text.x).toBe(64);
+			expect(layout.qr.x).toBe(425);
+		}
 	});
 });
 
-describe('kioskLabelBars', () => {
-	const { width, height } = kioskLabelDots();
+describe('kioskLabelBand', () => {
+	const { height } = kioskLabelDots();
 	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
 
-	it('gives red two vertical bars and yellow one', () => {
-		expect(kioskLabelBars('red')).toHaveLength(2);
-		expect(kioskLabelBars('yellow')).toHaveLength(1);
+	it('is 4 mm (32 dots) wide at the left padding, padding to padding tall', () => {
+		expect(KIOSK_LABEL_BAND.widthMm).toBe(4);
+		expect(kioskLabelBand()).toEqual({
+			x: 16,
+			y: padding,
+			width: 32,
+			height: height - padding * 2
+		});
+	});
+});
+
+describe('kioskLabelBandRects', () => {
+	const band = kioskLabelBand();
+	const inside = (r: { x: number; y: number; width: number; height: number }) =>
+		r.x >= band.x &&
+		r.y >= band.y &&
+		r.x + r.width <= band.x + band.width &&
+		r.y + r.height <= band.y + band.height;
+
+	it('fills the whole band solid black for red', () => {
+		expect(kioskLabelBandRects('red')).toEqual([band]);
 	});
 
-	it.each(['red', 'yellow'] as const)(
-		'ends the last %s bar at the right edge of the label padding',
-		(marker) => {
-			const last = kioskLabelBars(marker).at(-1)!;
-			// 639 dots wide, 16 dots padding: the bar ends at x = 623.
-			expect(last.x + last.width).toBe(width - padding);
-			expect(last.x + last.width).toBe(623);
-		}
-	);
-
-	it('makes every bar 1.5 mm (12 dots) wide', () => {
-		for (const marker of ['red', 'yellow'] as const) {
-			for (const bar of kioskLabelBars(marker)) expect(bar.width).toBe(12);
-		}
+	it('gives yellow two 0.5 mm (4 dot) rails on the band edges, full height', () => {
+		const [left, right] = kioskLabelBandRects('yellow');
+		expect(left).toEqual({ ...band, width: 4 });
+		expect(right).toEqual({ ...band, x: band.x + band.width - 4, width: 4 });
 	});
 
-	it('puts the red bars 1 mm (8 dots) apart, left bar first', () => {
-		const [left, right] = kioskLabelBars('red');
-		expect(right!.x - (left!.x + left!.width)).toBe(8);
-		expect(left!.x).toBe(591);
-		expect(right!.x).toBe(611);
+	it('fills yellow between the rails with 4-dot stripes every 12 dots, stepping one dot per row', () => {
+		const stripes = kioskLabelBandRects('yellow').slice(2);
+		const row = (y: number) =>
+			stripes.filter((r) => r.y === band.y + y).map((r) => [r.x - band.x - 4, r.width]);
+
+		for (const r of stripes) expect(r.height).toBe(1);
+		// 24 dots between the rails; a dot is black when (column + row) % 12 < 4.
+		expect(row(0)).toEqual([
+			[0, 4],
+			[12, 4]
+		]);
+		expect(row(1)).toEqual([
+			[0, 3],
+			[11, 4],
+			[23, 1]
+		]);
+		expect(row(12)).toEqual(row(0));
 	});
 
-	it.each(['red', 'yellow'] as const)(
-		'spans the full inner height of the label, padding to padding, for %s',
-		(marker) => {
-			for (const bar of kioskLabelBars(marker)) {
-				expect(bar.y).toBe(padding);
-				expect(bar.y + bar.height).toBe(height - padding);
-			}
-		}
-	);
+	it('keeps every yellow box inside the band and leaves it about a third black', () => {
+		const rects = kioskLabelBandRects('yellow');
+		for (const r of rects) expect(inside(r)).toBe(true);
+		const stripeDots = rects.slice(2).reduce((sum, r) => sum + r.width, 0);
+		expect(stripeDots / (24 * band.height)).toBeCloseTo(1 / 3, 2);
+	});
 });
 
 describe('KIOSK_LABEL_CHECKLIST', () => {

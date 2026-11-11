@@ -22,7 +22,7 @@ export type KioskQrLabel = {
 
 /**
  * QR payload → data URL sized for the label (module-count based), in the kiosk print colour. Pass
- * the label's `marker`: the level bars at the right edge leave a smaller QR.
+ * the label's `marker`: the level band at the left edge leaves a smaller QR.
  */
 export async function prepareKioskQrImage(
 	qrPayload: string,
