@@ -64,6 +64,12 @@
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 
+	let {
+		embedded = false
+	}: {
+		embedded?: boolean;
+	} = $props();
+
 	const sessions = useMealSessions();
 	const plans = useMealPlans();
 	const services = useMealServices();
@@ -365,35 +371,55 @@
 	};
 </script>
 
-<div class="min-h-full bg-[#F8FAFC]">
-	<div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+<div class={embedded ? 'space-y-6' : 'min-h-full bg-[#F8FAFC]'}>
+	<div
+		class={embedded ? 'space-y-6' : 'mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8'}
+	>
 		<!-- Top Bar -->
-		<div class="border-b border-slate-200/80 pb-6">
-			<div class="flex flex-wrap items-start justify-between gap-3">
+		{#if !embedded}
+			<div class="border-b border-slate-200/80 pb-6">
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647] sm:text-4xl">
+							หน้าสรุปมื้อ
+						</h1>
+						<p class="mt-2 text-base leading-relaxed text-slate-600">
+							บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
+						</p>
+					</div>
+					<div class="flex flex-wrap items-center gap-2 pt-1">
+						<Button
+							variant="outline"
+							href={resolve('/back-office/catalog') + '?tab=recipe'}
+							class="min-h-11 gap-1.5"
+						>
+							<Calendar class="h-3.5 w-3.5" />
+							ฐานสูตร BOM
+						</Button>
+						<Button onclick={openCreateDialog} class="min-h-11 gap-1.5">
+							<Plus class="h-4 w-4" />
+							สร้างมื้อใหม่
+						</Button>
+					</div>
+				</div>
+			</div>
+		{:else}
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 				<div>
-					<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647] sm:text-4xl">
-						หน้าสรุปมื้อ
-					</h1>
-					<p class="mt-2 text-base leading-relaxed text-slate-600">
+					<h2 class="text-lg font-bold text-slate-900">สรุปมื้ออาหาร</h2>
+					<p class="text-sm text-slate-600">
 						บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
 					</p>
 				</div>
-				<div class="flex flex-wrap items-center gap-2 pt-1">
-					<Button
-						variant="outline"
-						href={resolve('/back-office/catalog') + '?tab=recipe'}
-						class="min-h-11 gap-1.5"
-					>
-						<Calendar class="h-3.5 w-3.5" />
-						ฐานสูตร BOM
-					</Button>
-					<Button onclick={openCreateDialog} class="min-h-11 gap-1.5">
-						<Plus class="h-4 w-4" />
-						สร้างมื้อใหม่
-					</Button>
-				</div>
+				<Button
+					onclick={openCreateDialog}
+					class="min-h-11 gap-1.5 bg-[#0A2647] text-white hover:bg-[#051930]"
+				>
+					<Plus class="h-4 w-4" />
+					สร้างมื้อใหม่
+				</Button>
 			</div>
-		</div>
+		{/if}
 
 		<!-- Filter row (search + status + date range) — matches the AI Studio prototype's
 	     Meal Sessions filter bar; client-side only, no new field/query. -->
