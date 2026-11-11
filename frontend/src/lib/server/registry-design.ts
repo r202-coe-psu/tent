@@ -47,11 +47,11 @@ export function buildRegistryValidateDocUpdate(): string {
     throw({ forbidden: 'Only system administrators can write registry documents' });
   }
   if (newDoc.type === 'kiosk_banner' && !newDoc._deleted) {
-    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
-      throw({ forbidden: 'kiosk_banner schema_v must be 1 or 2' });
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2 && newDoc.schema_v !== 3) {
+      throw({ forbidden: 'kiosk_banner schema_v must be 1, 2 or 3' });
     }
     if (
-      newDoc.schema_v === 2 &&
+      newDoc.schema_v >= 2 &&
       (typeof newDoc.group_id !== 'string' || newDoc.group_id.indexOf('kiosk_banner_group:') !== 0)
     ) {
       throw({ forbidden: 'kiosk_banner group_id must be a kiosk_banner_group id' });
@@ -86,9 +86,13 @@ export function buildRegistryValidateDocUpdate(): string {
     if (
       newDoc.screen_type !== undefined &&
       newDoc.screen_type !== 'compact' &&
-      newDoc.screen_type !== 'portrait'
+      newDoc.screen_type !== 'portrait' &&
+      newDoc.screen_type !== 'tv'
     ) {
-      throw({ forbidden: 'kiosk_banner screen_type must be compact or portrait' });
+      throw({ forbidden: 'kiosk_banner screen_type must be compact, portrait or tv' });
+    }
+    if (newDoc.screen_type === 'tv' && newDoc.schema_v !== 3) {
+      throw({ forbidden: 'kiosk_banner screen_type tv requires schema_v 3' });
     }
     var startMs = typeof newDoc.start_at === 'string' ? Date.parse(newDoc.start_at) : NaN;
     var endMs = typeof newDoc.end_at === 'string' ? Date.parse(newDoc.end_at) : NaN;
@@ -100,8 +104,19 @@ export function buildRegistryValidateDocUpdate(): string {
     }
   }
   if (newDoc.type === 'kiosk_banner_group' && !newDoc._deleted) {
-    if (newDoc.schema_v !== 1) {
-      throw({ forbidden: 'kiosk_banner_group schema_v must be 1' });
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
+      throw({ forbidden: 'kiosk_banner_group schema_v must be 1 or 2' });
+    }
+    if (newDoc.schema_v === 2) {
+      var tvCode = newDoc.tv_code;
+      if (typeof tvCode !== 'string' || tvCode.length !== 6) {
+        throw({ forbidden: 'kiosk_banner_group tv_code must be exactly six digits' });
+      }
+      for (var d = 0; d < tvCode.length; d++) {
+        if (tvCode.charAt(d) < '0' || tvCode.charAt(d) > '9') {
+          throw({ forbidden: 'kiosk_banner_group tv_code must be exactly six digits' });
+        }
+      }
     }
     if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('kiosk_banner_group:') !== 0) {
       throw({ forbidden: 'kiosk_banner_group _id must start with kiosk_banner_group:' });
@@ -191,8 +206,23 @@ export const KIOSK_BANNER_MANGO_INDEX = {
 	type: 'json'
 } as const;
 
+/**
+ * Mango index for the system-wide banner group lookup by TV pairing code (`findGroupByTvCode`),
+ * mirroring `{ type, tv_code }` exactly. The explicit `ddoc` lets the query pin it with
+ * `use_index: [ddoc, name]` (without it CouchDB names the design doc by hash).
+ */
+export const KIOSK_BANNER_TV_CODE_MANGO_INDEX = {
+	index: { fields: ['type', 'tv_code'] },
+	ddoc: 'kiosk-banner-group-by-tv-code',
+	name: 'kiosk-banner-group-by-tv-code',
+	type: 'json'
+} as const;
+
 /** Mango indexes deployed with `_design/app`; `POST /_index` is idempotent. */
-export const REGISTRY_MANGO_INDEXES = [KIOSK_BANNER_MANGO_INDEX] as const;
+export const REGISTRY_MANGO_INDEXES = [
+	KIOSK_BANNER_MANGO_INDEX,
+	KIOSK_BANNER_TV_CODE_MANGO_INDEX
+] as const;
 
 /** Path for a single-shelter lookup by code (already URL-encoded). */
 export function registryByCodePath(code: string): string {

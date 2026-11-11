@@ -58,6 +58,7 @@
 		"migrate:closed-shelter-checkout": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-closed-shelter-checkout.ts",
 		"migrate:shelter-closed-at": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter-closed-at.ts",
 		"migrate:volunteer-review": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-volunteer-review.ts",
+		"migrate:prod-cleanup": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/prod-readiness-cleanup.ts",
 		"migrate:volunteer-reapply": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-volunteer-reapply.ts",
 		"redeploy:access": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/redeploy-access.ts",
 		"deploy:shelter-views": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/deploy-shelter-views.ts",

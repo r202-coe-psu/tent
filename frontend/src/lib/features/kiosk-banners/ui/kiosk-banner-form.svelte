@@ -165,7 +165,11 @@
 
 	const previewSlides = $derived.by(() => {
 		const slide = buildFormPreviewSlide($formData, newImageUrl ?? currentImageUrl);
-		const slides: Record<KioskScreenType, KioskBannerSlide[]> = { compact: [], portrait: [] };
+		const slides: Record<KioskScreenType, KioskBannerSlide[]> = {
+			compact: [],
+			portrait: [],
+			tv: []
+		};
 		if (slide) slides[$formData.screen_type].push(slide);
 		return slides;
 	});

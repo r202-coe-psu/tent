@@ -115,7 +115,7 @@ async function readRaw(id: string): Promise<RawBannerDoc> {
 
 /** Fields a mutation may set; `schema_v`/`group_id` are the only ones that differ across versions. */
 type BannerPatch = Partial<Omit<KioskBannerDoc, 'schema_v' | 'group_id'>> & {
-	schema_v?: 2;
+	schema_v?: 3;
 	group_id?: string;
 };
 
@@ -159,8 +159,8 @@ export function updateBanner(
 			status,
 			screen_type,
 			group_id,
-			// Editing a v1 (ungrouped) banner always writes it back as v2.
-			schema_v: 2,
+			// Editing a v1 or v2 banner always writes it back as v3.
+			schema_v: 3,
 			// Order is only set by the reorder page; a banner moved to another group or screen goes to
 			// the end of that slot.
 			order:
