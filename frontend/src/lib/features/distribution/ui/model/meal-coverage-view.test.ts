@@ -251,6 +251,7 @@ describe('coverageDayMode', () => {
 		});
 		expect(coverageDayMode('2026-11-11', '2026-11-10')).toEqual({ kind: 'invalid' });
 		expect(coverageDayMode('', '2026-11-10')).toEqual({ kind: 'invalid' });
+		expect(coverageDayMode('2026-02-31', '2026-11-10')).toEqual({ kind: 'invalid' });
 		expect(coverageDayMode('10/11/2026', '2026-11-10')).toEqual({ kind: 'invalid' });
 	});
 });

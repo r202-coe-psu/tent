@@ -92,15 +92,15 @@ export interface DistributionLogRepository {
 		filter?: DistributionLogListFilter
 	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
 	/**
-	 * Batch get by id (`_all_docs` keys, chunked). Ids with no doc are simply absent from `items`;
-	 * malformed docs are reported in `skipped` instead of failing the read.
-	 */
-	/**
 	 * Logs whose `distributed_at` falls in Thai calendar `day` (`[00:00, 24:00)` UTC+7), read through
 	 * `_find` page by page. A Mango index on `[type, distributed_at]` serves it; without the index
 	 * CouchDB still answers by scanning. Any failed request rejects.
 	 */
 	listByDistributedDay(day: string): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
+	/**
+	 * Batch get by id (`_all_docs` keys, chunked). Ids with no doc are simply absent from `items`;
+	 * malformed docs are reported in `skipped` instead of failing the read.
+	 */
 	getMany(ids: readonly string[]): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
 	/**
 	 * Read -> mutate -> put with `_rev` (409 re-reads and retries). The mutator is synchronous and

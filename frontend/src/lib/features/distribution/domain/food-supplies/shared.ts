@@ -36,10 +36,15 @@ export function thailandCalendarDay(isoTimestampOrDate: string | Date = new Date
 }
 
 /** UTC instants `[start, end)` that bound Thai calendar day `day` (`YYYY-MM-DD`). */
+/** A real `YYYY-MM-DD` date; `2026-02-31` is rejected even though `Date.parse` rolls it over. */
+export function isCalendarDay(day: string): boolean {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+	const ms = Date.parse(`${day}T00:00:00Z`);
+	return !Number.isNaN(ms) && new Date(ms).toISOString().slice(0, 10) === day;
+}
+
 export function thailandDayBounds(day: string): { start: string; end: string } {
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) {
-		throw new RangeError(`Invalid calendar day: ${day}`);
-	}
+	if (!isCalendarDay(day)) throw new RangeError(`Invalid calendar day: ${day}`);
 	const startMs = Date.parse(`${day}T00:00:00Z`) - THAILAND_UTC_OFFSET_MS;
 	return {
 		start: new Date(startMs).toISOString(),

@@ -10,7 +10,7 @@ import {
 	type CoverageResident,
 	type MealCoverageRow
 } from '../../domain/food-supplies/meal-coverage';
-import { thailandCalendarDay, type MealPeriod } from '../../domain/food-supplies';
+import { isCalendarDay, thailandCalendarDay, type MealPeriod } from '../../domain/food-supplies';
 import { historyRecipientNames } from './distribution-history';
 
 interface CoverageEvacuee {
@@ -37,7 +37,7 @@ export type CoverageDayMode =
 	{ kind: 'invalid' } | { kind: 'past'; day: string } | { kind: 'today'; day: string };
 
 export function coverageDayMode(day: string, today: string): CoverageDayMode {
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) return { kind: 'invalid' };
+	if (!isCalendarDay(day) || day > today) return { kind: 'invalid' };
 	return { kind: day === today ? 'today' : 'past', day };
 }
 
