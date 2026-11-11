@@ -239,6 +239,9 @@
 
 	let isLocating = $state(false);
 
+	// The housing label can be long; let it wrap so the full text is readable without a hover tooltip.
+	const housingTriggerWrapClass =
+		'!h-auto min-h-11 whitespace-normal !pb-2.5 sm:!h-auto sm:min-h-9 sm:!pb-1.5';
 	const selectTriggerClass =
 		"flex !h-11 w-full items-start rounded-md border border-input bg-white px-3 !pt-2.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-9 sm:!pt-1.5 dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
 
@@ -339,7 +342,7 @@
 <div class="space-y-4">
 	<!-- Housing type + landmark -->
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-		<div class="space-y-1.5">
+		<div class="min-w-0 space-y-1.5">
 			<Label for="housing-type" class="text-xs font-semibold text-foreground">
 				{t.housingTypeLabel}
 			</Label>
@@ -353,11 +356,11 @@
 			>
 				<Select.Trigger
 					id="housing-type"
-					class={selectTriggerClass}
+					class="{selectTriggerClass} {housingTriggerWrapClass}"
 					aria-invalid={!!errors?.housing_type}
 					aria-describedby={errors?.housing_type ? 'housing-type-error' : undefined}
 				>
-					{housingTypeTriggerLabel}
+					<span class="min-w-0 text-left leading-normal">{housingTypeTriggerLabel}</span>
 				</Select.Trigger>
 				<Select.Content>
 					{#each housingTypeItems as opt (opt.value)}

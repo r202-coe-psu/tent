@@ -439,8 +439,33 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 		});
 	});
 
-	it('ships the received-donation search views in view manifest v7 (#821)', () => {
-		expect(SHELTER_VIEW_MANIFEST.version).toBe(7);
+	describe('occupancy_by_zone (CR-226)', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.occupancy_by_zone.map);
+
+		it('emits [zone, status] for an evacuee with a zone', () => {
+			mapFn({ type: 'evacuee', current_stay: { status: 'temporary_leave', zone: 'A' } }, mockEmit);
+			expect(emitted).toEqual([{ key: ['A', 'temporary_leave'], value: 1 }]);
+		});
+
+		it('skips evacuees without a zone and non-evacuee docs', () => {
+			mapFn({ type: 'evacuee', current_stay: { status: 'active', zone: null } }, mockEmit);
+			mapFn({ type: 'evacuee', current_stay: { status: 'active' } }, mockEmit);
+			mapFn({ type: 'evacuee' }, mockEmit);
+			mapFn({ type: 'movement', current_stay: { status: 'active', zone: 'A' } }, mockEmit);
+			expect(emitted).toEqual([]);
+		});
+
+		it('is reduced with _count', () => {
+			expect(SHELTER_DASHBOARD_VIEWS.views.occupancy_by_zone.reduce).toBe('_count');
+		});
+	});
+
+	it('ships occupancy_by_zone in view manifest v8 (CR-226)', () => {
+		expect(SHELTER_VIEW_MANIFEST.version).toBe(8);
+		expect(Object.keys(SHELTER_VIEW_MANIFEST.views)).toContain('occupancy_by_zone');
+	});
+
+	it('keeps the received-donation search views in the manifest (#821)', () => {
 		expect(Object.keys(SHELTER_VIEW_MANIFEST.views)).toEqual(
 			expect.arrayContaining(['donation_received_by_name', 'donation_received_by_item'])
 		);

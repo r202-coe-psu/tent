@@ -16,6 +16,7 @@ affects:
   - frontend/src/lib/features/dashboard/** (domain + data + application + ui)
   - frontend/src/routes/api/back-office/shelter/[code]/dashboard/zones/+server.ts (+ server.test.ts)
   - frontend/src/routes/(protected)/back-office/evacuee-management/dashboard-tab.svelte
+  - frontend/src/routes/(protected)/back-office/evacuee-management/dashboard-zone-summary-card.svelte (FR-19..FR-21)
 ---
 
 # CR-226 — กราฟความเต็มรายโซน
@@ -65,6 +66,9 @@ affects:
 - FR-16 — แท่งใช้สีตาม `level`: `warning` เป็นสีเหลือง, `full` เป็นสีแดง
 - FR-17 — โซนที่ `closed` แสดงจางพร้อมป้าย "ปิด"
 - FR-18 — widget ใช้ TanStack Query hook ใหม่ใน `features/dashboard/application` และ export ผ่าน barrel `$lib/features/dashboard`
+- FR-19 — ข้าง widget รายโซนมีการ์ด "ภาพรวมความจุ" (gauge) แสดงยอด Present รวม / capacity รวม, `percent`, จำนวนที่ว่าง (`max(0, capacity − present)`) และจำนวนโซนแยกตาม `level` + โซนปิด โดยนับเฉพาะโซนที่**เปิด**อยู่ (โซนปิดนับแค่จำนวนโซน)
+- FR-20 — `level` ของการ์ดใช้เกณฑ์เดียวกับ FR-12 คำนวณจากยอดรวมของโซนที่เปิด
+- FR-21 — ถ้าไม่มีโซนที่เปิดอยู่ (ทุกโซนปิด) `level = null` และการ์ดแสดง empty state "ไม่มีโซนที่เปิดอยู่" (พร้อมจำนวนโซนที่ปิด) แทน gauge — ห้ามแสดง gauge สีแดง 0%
 
 ## Acceptance
 
@@ -76,6 +80,7 @@ affects:
   - domain: rows + zones → `ZoneOccupancy[]` (สถานะที่นับ, เกณฑ์ 80/100%, โซนว่าง, โซนปิด, โซนล้น `percent > 100`, `capacity ≤ 0`)
   - view map: emit `[zone, status]` ถูก และข้าม doc ที่ `zone = null`
   - BFF `server.test.ts`: สิทธิ์และ shelter scope, path ของ view, 500 เมื่อ view ยังไม่ deploy
+- [ ] การ์ดภาพรวมความจุแสดงยอดรวมเฉพาะโซนที่เปิด และศูนย์ที่ทุกโซนปิดแสดง empty state ไม่ใช่ gauge สีแดง
 - [ ] ทุกไฟล์ `.svelte` ที่แก้ผ่าน `svelte-autofixer`
 
 ## Why
@@ -89,12 +94,16 @@ affects:
 
 - นับฝั่ง client ด้วย `useEvacuees()`: โหลดข้อมูลคนทั้งศูนย์
 - แยกแท่ง occupied กับ reserved (`pre_registered` ที่จองโซน): ยังไม่มีที่ไหนนับ reserved รายโซน เก็บไว้เป็นงานถัดไป
-- แถว "ยังไม่จัดโซน" และยอดรวม capacity โซนเทียบศูนย์: ไม่อยู่ในขอบเขตนี้
+- แถว "ยังไม่จัดโซน" และการเทียบยอดรวม capacity โซนกับ capacity ของศูนย์: ไม่อยู่ในขอบเขตนี้ (ยอดรวมของโซนที่เปิดอยู่ใน FR-19)
 
 ## Migration
 
 - CouchDB: ไม่มี doc ต้องแก้ ไม่ bump `schema_v`
-- `_design/app`: CI/CD deploy manifest v8 ให้ทุก `shelter_{code}` ก่อนเปิดใช้ widget ระหว่างนั้น route `dashboard/zones` จะคืน 500 ตาม FR-9 โดยไม่กระทบ widget อื่นในแท็บ
+- `_design/app`: CI/CD deploy manifest v8 ให้ทุก `shelter_{code}` **ก่อน** deploy app รุ่นนี้ (ลำดับเดียวกับ CR-170) — view-version guard เทียบ version แบบตรงตัว ระหว่างที่ `shelter_*` ยังเป็น v7 ทุก route ที่ผ่าน guard จะไม่ทำงาน ไม่ใช่แค่ `dashboard/zones`:
+  - แท็บ "ภาพรวม" ทั้งหน้าคืน 500 (`dashboard/occupancy`, `demographics`, `registrations`, `station-times`, `zones`)
+  - `donations/received/search` (ค้นผ่าน view) คืน 503 `DONATION_INDEX_UNAVAILABLE`
+  - public `shelters/occupancy` และ `transparency/shelters` คืน metric เป็น `null` (ตาม CR-056)
+  - กลับมาปกติเองเมื่อ `_design/app` v8 ขึ้นครบ
 - Mongo / worker: ไม่มี
 
 ## Decision log
@@ -102,3 +111,4 @@ affects:
 - 2026-11-03 — proposed (grill #1135: นับด้วย Present, แท่งแนวนอนต่อโซน, view + BFF, โซนปิดแสดงจาง, track ด้วย CR ไฟล์)
 - 2026-11-03 — approved by Soravit Sukkarn (Team Lead)
 - 2026-11-03 — review PR #1138: เพิ่ม FR-12a (`percent` ไม่ clamp, แท่ง clamp 100%) และ FR-12b (`capacity ≤ 0` fallback)
+- 2026-11-10 — review PR #1313 (W2, W4) — ทีมเสนอ amend รอ owner อนุมัติ: เพิ่ม FR-19..FR-21 (การ์ดภาพรวมความจุ + empty state เมื่อไม่มีโซนเปิด) และแก้ Migration ให้ระบุว่าช่วงที่ `_design/app` ยังเป็น v7 กระทบทั้งแท็บภาพรวม, ค้นของบริจาค และ metric ฝั่ง public
