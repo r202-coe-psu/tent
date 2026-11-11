@@ -57,15 +57,16 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
   - D5: `phone_hash` ว่าง และ `_id = donation:m6-{request_code}`
 - [x] บันทึกคำตัดสินลงร่าง CR ทั้งสอง
 - [x] M5 D5 ข้อ 3–4 ตอบแล้ว (2026-11-11): พิกัดส่งเป็น Number · ไม่มีแผนทำ webhook
-- [ ] ส่งคำถาม M5 D5 ข้อ 1, 2, 5 ให้ทีม M5 และ M6 D6 ให้ทีม M6
+- [x] M5 D5 ข้อ 1, 2, 5 ยืนยันจาก spike บน M5 staging (2026-11-11)
+- [ ] ส่งคำถาม M6 D6 ให้ทีม M6
 - [ ] ขอ credential staging
-  - M5: scope `transfer-write`
+  - [x] M5: scope `transfer-write` (ได้แล้ว, module `M4`)
   - M6: scope `read`, `request`, `confirm` และ `resource_types` ที่ต้องใช้
 - [ ] owner approve CR ทั้งสอง → ให้เลข CR-NNN, ย้ายไฟล์ และเพิ่มใน `docs/changes/_index.md`
 
 ## P1 — API (FastAPI + BFF + worker tick)
 
-ทำบน branch `feat/integrations-m5-m6-api` (แยกจาก `develop`) โดยแบ่งเป็น PR ละเรื่อง endpoint และ error mapping ดูใน CR §5 (M5) และ §6 (M6) ส่วน UI ยังไม่ทำใน phase นี้
+M5 ทำก่อน ทีละ PR แยกจาก `develop`: `feat/m5-fastapi` → `feat/m5-referral-domain` → `feat/m5-referral-bff` → `feat/m5-worker` → `feat/m5-referral-ui` (แผนเต็มอยู่ใน Decision log ของร่าง CR M5) · M6 ทำทีหลัง โดยแบ่งเป็น PR ละเรื่อง endpoint และ error mapping ดูใน CR §5 (M5) และ §6 (M6) ส่วน UI ยังไม่ทำใน phase นี้
 
 ### PR1 — core
 
@@ -189,3 +190,4 @@ browser → SvelteKit BFF → FastAPI /v1/integrations/* → M5 / M6
 - 2026-11-10 — ร่าง CR ทั้งสองและบันทึกคำตัดสิน D1–D4 (M5) และ D1–D5 (M6) ตัดสินให้ P1 เริ่มหลัง CR approve
 - 2026-11-11 — grill CR M5 รอบที่ 1: owner ตัดสิน D6–D12 และบันทึกลงร่าง CR · เริ่มทำ M5 ก่อน M6
 - 2026-11-11 — M5 D5 ข้อ 3 (พิกัดเป็น Number) และข้อ 4 (ไม่มี webhook) ตอบแล้ว
+- 2026-11-11 — owner approve แผน implement M5 (D13–D16) · spike บน M5 staging ปิด D5 ครบ
