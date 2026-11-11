@@ -162,6 +162,27 @@
 	function removeIngredient(index: number) {
 		$formData.ingredients = $formData.ingredients.filter((_, i) => i !== index);
 	}
+
+	function sanitizeQuantity(val: string): string {
+		let cleaned = val.replace(/[^0-9.]/g, '');
+		const parts = cleaned.split('.');
+		if (parts.length > 2) {
+			cleaned = parts[0] + '.' + parts.slice(1).join('');
+		}
+		if (/^0\d/.test(cleaned)) {
+			cleaned = cleaned.replace(/^0+/, '');
+			if (cleaned === '') cleaned = '0';
+		}
+		return cleaned;
+	}
+
+	function sanitizeInteger(val: string): string {
+		let cleaned = val.replace(/[^0-9]/g, '');
+		if (/^0\d/.test(cleaned)) {
+			cleaned = cleaned.replace(/^0+/, '');
+		}
+		return cleaned;
+	}
 </script>
 
 {#if isLoading}
@@ -232,8 +253,12 @@
 
 					<div class="space-y-3">
 						{#each $formData.ingredients as conv, index (index)}
+							{@const unitLocalized = conv.uom
+								? formatUnit(conv.uom, units, langState.current)
+								: ''}
+							{@const showUnitLocalized = !!unitLocalized && unitLocalized !== conv.uom}
 							<div
-								class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs sm:flex-row sm:items-end dark:border-zinc-800 dark:bg-zinc-950"
+								class="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs sm:flex-row sm:items-start dark:border-zinc-800 dark:bg-zinc-950"
 							>
 								<!-- ค้นหาวัตถุดิบจากคลัง -->
 								<div class="min-w-0 flex-1 space-y-1.5">
@@ -249,53 +274,69 @@
 									/>
 								</div>
 
-								<!-- ปริมาณ -->
-								<div class="w-full shrink-0 space-y-1.5 sm:w-28">
-									<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
-									<Input
-										type="number"
-										step="any"
-										min={0}
-										value={conv.quantity}
-										oninput={(e) => {
-											const val = e.currentTarget.value;
-											conv.quantity = val === '' ? '1' : val;
-										}}
-										class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
-									/>
-								</div>
+								<!-- กลุ่ม: ปริมาณ + หน่วย + ปุ่มลบ (บนจอแคบจะอยู่แถวเดียวกัน ไม่ตกบรรทัดคนละแถว) -->
+								<div class="flex items-start gap-2.5 sm:shrink-0">
+									<!-- ปริมาณ -->
+									<div class="min-w-0 flex-1 space-y-1.5 sm:w-28 sm:flex-none">
+										<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
+										<Input
+											type="text"
+											inputmode="decimal"
+											placeholder="1"
+											value={conv.quantity}
+											oninput={(e) => {
+												conv.quantity = sanitizeQuantity(e.currentTarget.value);
+											}}
+											onblur={() => {
+												if (
+													!conv.quantity ||
+													conv.quantity.trim() === '' ||
+													Number(conv.quantity) <= 0
+												) {
+													conv.quantity = '1';
+												}
+											}}
+											class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-medium focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+										/>
+									</div>
 
-								<!-- หน่วย -->
-								<div class="w-full shrink-0 space-y-1.5 sm:w-28">
-									<span class="text-xs font-bold text-blue-700 dark:text-blue-400">หน่วย</span>
-									<Input
-										type="text"
-										bind:value={conv.uom}
-										placeholder="kg"
-										class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-semibold dark:border-zinc-800 dark:bg-zinc-950"
-									/>
-									{#if conv.uom && formatUnit(conv.uom, units, langState.current) !== conv.uom}
-										<span class="block text-center text-xs text-slate-500">
-											{formatUnit(conv.uom, units, langState.current)}
-										</span>
+									<!-- หน่วย -->
+									<div class="min-w-0 flex-1 space-y-1.5 sm:w-28 sm:flex-none">
+										<div class="flex items-center justify-between gap-1 overflow-hidden">
+											<span class="text-xs font-bold text-blue-700 dark:text-blue-400">หน่วย</span>
+											{#if showUnitLocalized}
+												<span
+													class="truncate text-2xs font-medium text-slate-500 dark:text-slate-400"
+													title={unitLocalized}
+												>
+													({unitLocalized})
+												</span>
+											{/if}
+										</div>
+										<Input
+											type="text"
+											bind:value={conv.uom}
+											placeholder="kg"
+											class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-semibold focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+										/>
+									</div>
+
+									<!-- Action Buttons (ปุ่มลบ) -->
+									{#if $formData.ingredients.length > 1}
+										<div class="pt-5.5 sm:pt-5.5">
+											<Button
+												type="button"
+												variant="ghost"
+												class="h-12 w-12 shrink-0 rounded-xl border border-slate-100 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
+												onclick={() => removeIngredient(index)}
+												title={`ลบวัตถุดิบแถวที่ ${index + 1}`}
+											>
+												<Trash2 class="h-5 w-5" />
+												<span class="sr-only">ลบวัตถุดิบแถวที่ {index + 1}</span>
+											</Button>
+										</div>
 									{/if}
 								</div>
-
-								<!-- Action Buttons -->
-								{#if $formData.ingredients.length > 1}
-									<div class="flex items-center sm:pb-0">
-										<Button
-											type="button"
-											variant="ghost"
-											class="h-12 w-12 shrink-0 rounded-xl border border-slate-100 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
-											onclick={() => removeIngredient(index)}
-											title={`ลบวัตถุดิบแถวที่ ${index + 1}`}
-										>
-											<Trash2 class="h-5 w-5" />
-											<span class="sr-only">ลบวัตถุดิบแถวที่ {index + 1}</span>
-										</Button>
-									</div>
-								{/if}
 							</div>
 						{/each}
 
@@ -319,12 +360,20 @@
 									</Form.Label>
 									<Input
 										{...props}
-										type="number"
+										type="text"
+										inputmode="numeric"
 										placeholder="เช่น 100"
 										value={$formData.standard_portions ?? ''}
 										oninput={(e) => {
-											const val = e.currentTarget.value;
-											$formData.standard_portions = val === '' ? '0' : val;
+											$formData.standard_portions = sanitizeInteger(e.currentTarget.value);
+										}}
+										onblur={() => {
+											if (
+												!$formData.standard_portions ||
+												$formData.standard_portions.trim() === ''
+											) {
+												$formData.standard_portions = '100';
+											}
 										}}
 										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
 									/>
@@ -341,13 +390,20 @@
 									</Form.Label>
 									<Input
 										{...props}
-										type="number"
-										step="any"
+										type="text"
+										inputmode="decimal"
 										placeholder="เช่น 1"
 										value={$formData.standard_duration_hours ?? ''}
 										oninput={(e) => {
-											const val = e.currentTarget.value;
-											$formData.standard_duration_hours = val === '' ? '0' : val;
+											$formData.standard_duration_hours = sanitizeQuantity(e.currentTarget.value);
+										}}
+										onblur={() => {
+											if (
+												!$formData.standard_duration_hours ||
+												$formData.standard_duration_hours.trim() === ''
+											) {
+												$formData.standard_duration_hours = '1';
+											}
 										}}
 										class="h-12 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
 									/>
