@@ -75,7 +75,7 @@ function stripSensitiveFields(member: UnifiedMemberWithMeta): UnifiedMemberWithM
 	return {
 		...member,
 		photo: null,
-		person_id: { cardType: member.person_id?.cardType ?? blank.person_id.cardType, number: '' },
+		person_id: { cardType: member.person_id?.cardType ?? 'national_id', number: '' },
 		vulnerable_groups: blank.vulnerable_groups,
 		special_needs: blank.special_needs,
 		disability_other_detail: blank.disability_other_detail,

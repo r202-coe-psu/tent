@@ -127,7 +127,7 @@ describe('registration draft storage (#358)', () => {
 		]);
 		const restored = loadRegistrationDraft(KEY, NOW)?.members[0];
 		expect(restored?.first_name).toBe('สมชาย');
-		expect(restored?.person_id.number).toBe('');
+		expect(restored?.person_id?.number).toBe('');
 	});
 
 	it('restores draft when navigation is a reload or back/forward', () => {
