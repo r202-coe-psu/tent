@@ -4,7 +4,8 @@
  * Covers AC-EQR-12 (print / reprint twice → the older QR is refused on the staff scan page and at
  * the kiosk, the newest one is accepted), AC-EQR-4 (opening the print modal and closing it without
  * printing writes no `evacuee_qr` and the old QR still scans) and AC-EQR-8 (a legacy `evacuee:{ULID}`
- * QR with no `@` stays valid while the evacuee has no print log).
+ * QR with no `@` stays valid while the evacuee has no print log). #1301: a fast-track screening makes
+ * the profile flag the printed card as outdated, and the next print logs `marker: 'red'` (schema_v 2).
  *
  * One serial suite on its own `E2E` shelter (never SH001): the CouchDB server admin provisions the
  * shelter through the staff UI, one kiosk device through the device API and two staff accounts
@@ -36,6 +37,7 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	getDocument,
+	putDocument,
 	registrationStaffRoles,
 	seedSecurityQuestion,
 	type TestUser
@@ -100,7 +102,16 @@ const issued: string[] = [];
 const shelterDb = () => `shelter_${shelterCode!.toLowerCase()}`;
 const qrDocId = () => `evacuee_qr:${evacueeId.slice('evacuee:'.length)}`;
 
-type QrLog = { prints: { printed_at: string; hash: string; source: string; printed_by: string }[] };
+type QrLog = {
+	schema_v: number;
+	prints: {
+		printed_at: string;
+		hash: string;
+		source: string;
+		printed_by: string;
+		marker?: 'red' | 'yellow' | null;
+	}[];
+};
 const readLog = async () => (await getDocument(shelterDb(), qrDocId())) as QrLog | null;
 
 /** One call to the app's own BFF with a session cookie (no browser involved). */
@@ -424,6 +435,51 @@ test.describe(
 			expect(anonymous.status).toBe(401);
 			// Nothing was written by any refused call.
 			expect((await readLog())?.prints).toHaveLength(3);
+		});
+
+		test('#1301: a fast-track screening flags the card as outdated; the next print logs marker red', async () => {
+			test.setTimeout(180_000);
+			const page = desk!;
+			const before = await readLog();
+			expect(before?.prints.every((p) => (p.marker ?? null) === null)).toBe(true);
+
+			// Station 2 outcome, written straight to the shelter DB: the latest screening is fast track.
+			const at = new Date().toISOString();
+			await putDocument(shelterDb(), {
+				_id: `screening:${evacueeId.slice('evacuee:'.length)}`,
+				type: 'screening',
+				schema_v: 2,
+				shelter_code: shelterCode,
+				created_at: at,
+				updated_at: at,
+				created_by: registrar!.name,
+				evacuee_id: evacueeId,
+				symptoms: [],
+				track: 'fast_track',
+				screened_at: at
+			});
+
+			// FR-EQR-57: the last print carried no level, so the profile asks for a reprint.
+			const stale = page.getByText('บัตรล้าสมัย — ระดับความเปราะบางเปลี่ยน');
+			await openQrModal(page);
+			await expect(stale).toBeVisible({ timeout: 20_000 });
+			const payload = await printViaModal(page);
+			expect(issued).not.toContain(payload);
+			issued.push(payload);
+
+			const log = await readLog();
+			expect(log?.schema_v).toBe(2);
+			expect(log?.prints).toHaveLength(before!.prints.length + 1);
+			expect(log?.prints.at(-1)).toMatchObject({ source: 'profile', marker: 'red' });
+			expect(`${evacueeId}@${log!.prints.at(-1)!.hash}`).toBe(payload);
+			// Older entries are never rewritten.
+			expect(log?.prints.slice(0, -1)).toEqual(before!.prints);
+
+			await page.goto(`/onsite/people/evacuee-profile-view/${encodeURIComponent(evacueeId)}`);
+			await expect(page.getByRole('heading', { name: fullName(PERSON) }).first()).toBeVisible({
+				timeout: 30_000
+			});
+			await expect(stale).toHaveCount(0);
 		});
 
 		test('Z teardown leaves no E2E shelter, device or staff of this run', async () => {
