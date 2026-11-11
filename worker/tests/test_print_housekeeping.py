@@ -20,15 +20,12 @@ ENDPOINT = "http://frontend:3000/api/internal/printers/housekeeping"
 OK_FILE = "/tmp/test-print-housekeeping.ok"
 
 
-def make_cfg(**overrides: object) -> HousekeepingConfig:
-    values: dict[str, object] = {
-        "endpoint": ENDPOINT,
-        "token": TOKEN,
-        "interval_ms": 30_000,
-        "ok_file": OK_FILE,
-    }
-    values.update(overrides)
-    return HousekeepingConfig(**values)  # type: ignore[arg-type]
+def make_cfg(
+    *, endpoint: str = ENDPOINT, interval_ms: int = 30_000, ok_file: str = OK_FILE
+) -> HousekeepingConfig:
+    return HousekeepingConfig(
+        endpoint=endpoint, token=TOKEN, interval_ms=interval_ms, ok_file=ok_file
+    )
 
 
 def make_client(handler) -> httpx.AsyncClient:
