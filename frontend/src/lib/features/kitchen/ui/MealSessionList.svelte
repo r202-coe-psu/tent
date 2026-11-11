@@ -33,6 +33,7 @@
 	import { COUNT_ERROR, isCount } from '../domain/count-input';
 	import { CountInputGuard } from './count-input-guard.svelte';
 	import CountFieldError from './count-field-error.svelte';
+	import ShelterHeadcountCard from './shelter-headcount-card.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -414,6 +415,11 @@
 				</div>
 			</div>
 		</div>
+
+		<ShelterHeadcountCard
+			people={mealHeadcount.data?.people}
+			headcount={mealHeadcount.data?.headcount}
+		/>
 
 		<!-- Filter row (search + status + date range) — matches the AI Studio prototype's
 	     Meal Sessions filter bar; client-side only, no new field/query. -->
