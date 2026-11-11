@@ -66,3 +66,18 @@ def test_unhealthy_when_ok_file_is_empty() -> None:
 
 def test_unhealthy_when_ok_file_is_not_a_number() -> None:
     assert is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=reads("not-a-time")) is False
+
+
+SLOW_ENV = {**TOKEN_ENV, "PRINT_HOUSEKEEPING_INTERVAL_MS": "60000"}
+
+
+def test_slow_interval_allows_four_missed_ticks() -> None:
+    # 60 s interval -> limit 240 s; the ok file is 200 s old.
+    assert is_healthy(SLOW_ENV, now_ms=NOW_MS, read_file=reads("1700000000000")) is True
+
+
+def test_slow_interval_is_unhealthy_past_four_ticks() -> None:
+    # 60 s interval -> limit 240 s; the ok file is 241 s old.
+    assert (
+        is_healthy(SLOW_ENV, now_ms=NOW_MS, read_file=reads("1699999959000")) is False
+    )

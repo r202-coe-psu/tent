@@ -10,7 +10,9 @@ from pathlib import Path
 
 from worker.printing.config import load_housekeeping_config
 
-MAX_AGE_MS = 120_000
+MIN_MAX_AGE_MS = 120_000
+# A slower interval would otherwise make every probe fail.
+MISSED_TICKS = 4
 
 
 def is_healthy(
@@ -23,7 +25,8 @@ def is_healthy(
         last_ok_ms = int(read_file(cfg.ok_file).strip())
     except OSError, ValueError:
         return False
-    return now_ms - last_ok_ms <= MAX_AGE_MS
+    max_age_ms = max(MIN_MAX_AGE_MS, MISSED_TICKS * cfg.interval_ms)
+    return now_ms - last_ok_ms <= max_age_ms
 
 
 def _read_text(path: str) -> str:
@@ -31,8 +34,6 @@ def _read_text(path: str) -> str:
 
 
 def main() -> None:
-    import worker.main  # noqa: F401  # keeps the old check that the app imports
-
     healthy = is_healthy(
         os.environ,
         now_ms=time.time_ns() // 1_000_000,
