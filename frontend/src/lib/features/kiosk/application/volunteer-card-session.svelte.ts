@@ -1,5 +1,6 @@
 import type { LanguageCode } from '$lib/stores/language.svelte';
 import { KioskRequestError } from '../data/kiosk-check-in.api';
+import { isKioskClosedError } from '../data/kiosk-closed';
 import { isKioskPhoneSubmittable } from '../domain/phone';
 import type { KioskVolunteerCardResult } from '../data/kiosk-volunteer-card.api';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
@@ -9,6 +10,8 @@ export type VolunteerCardStep = 'phone' | 'confirm' | 'printing' | 'done' | 'pri
 export interface VolunteerCardSessionDeps {
 	lookup(phone: string): Promise<KioskVolunteerCardResult>;
 	print(volunteer: KioskVolunteerCardResult['volunteer']): Promise<KioskPrintFlowResult>;
+	/** The server refused the lookup because the kiosk is closed: the page shows the closed screen. */
+	onClosed?: () => void;
 }
 
 const MESSAGES: Record<
@@ -92,6 +95,12 @@ export class VolunteerCardSession {
 			this.step = 'confirm';
 		} catch (error) {
 			if (generation !== this.generation) return;
+			if (isKioskClosedError(error)) {
+				// A closed kiosk ends the visit; it is not a switched-off method.
+				this.reset();
+				this.deps.onClosed?.();
+				return;
+			}
 			this.error = messageFor(error, this.language());
 		} finally {
 			if (generation === this.generation) this.busy = false;

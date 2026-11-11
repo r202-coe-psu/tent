@@ -83,6 +83,26 @@ describe('registerWalkInCardRead', () => {
 	});
 });
 
+describe('closed kiosk', () => {
+	const refusedAsClosed = () =>
+		vi.fn().mockRejectedValue(new KioskRequestError('ตู้ปิด', 403, 'KIOSK_CLOSED'));
+
+	it('tells a card walk-in the kiosk is closed instead of offering a retry', async () => {
+		await expect(registerWalkInCardRead(card, session, refusedAsClosed())).resolves.toEqual({
+			kind: 'closed'
+		});
+	});
+
+	it('tells a ThaiD walk-in the kiosk is closed instead of offering a retry', async () => {
+		await expect(
+			submitWalkInThaid(
+				{ thaidSessionId: 'a'.repeat(32), consentDecision: decision, phone: null },
+				refusedAsClosed()
+			)
+		).resolves.toEqual({ kind: 'closed' });
+	});
+});
+
 describe('stale consent', () => {
 	const stale = () =>
 		vi

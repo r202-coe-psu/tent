@@ -21,7 +21,7 @@
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION
 	} from './kiosk-notice-actions';
-	import { navigateToKioskHome } from '../application/kiosk-navigation';
+	import { goToKioskClosed, navigateToKioskHome } from '../application/kiosk-navigation';
 	import { ThaidSession } from '../application/thaid-session.svelte';
 	import { walkInSession } from '../application/walk-in-session.svelte';
 	import {
@@ -111,6 +111,11 @@
 		}
 	});
 
+	// An admin closed the kiosk: the closed page, not the home screen (which would still look open).
+	$effect(() => {
+		if (session.errorKind === 'closed') goToKioskClosed(contextQuery);
+	});
+
 	function recordActivity(): void {
 		idleTimeout.recordActivity();
 	}
@@ -184,7 +189,7 @@
 					>
 				{/snippet}
 			</KioskNoticePanel>
-		{:else if session.state === 'error' && session.errorKind !== 'disabled'}
+		{:else if session.state === 'error' && session.errorKind !== 'disabled' && session.errorKind !== 'closed'}
 			<KioskNoticePanel
 				tone="warning"
 				icon={CircleAlert}

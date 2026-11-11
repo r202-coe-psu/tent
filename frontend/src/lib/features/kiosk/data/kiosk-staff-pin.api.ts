@@ -1,3 +1,5 @@
+import { isKioskClosedError } from './kiosk-closed';
+
 export const KIOSK_STAFF_PIN_VERIFY_PATH = '/api/v1/kiosk/staff-pin/verify';
 export const KIOSK_STAFF_PIN_TIMEOUT_MS = 8_000;
 
@@ -6,10 +8,15 @@ export const KIOSK_STAFF_PIN_TIMEOUT_MS = 8_000;
  * credential on the way, so the server checks the PIN of this kiosk only.
  * - `wrong`: the PIN was not right; staff may try again (no limit on tries).
  * - `not_set`: no PIN has been set for this kiosk, so staff cannot bypass here.
+ * - `closed`: an admin closed this kiosk (403 KIOSK_CLOSED); the PIN was not checked.
  * - `error`: anything else (PIN store unavailable, device not recognised, network, timeout).
  */
 export type KioskStaffPinResult =
-	{ kind: 'verified' } | { kind: 'wrong' } | { kind: 'not_set' } | { kind: 'error' };
+	| { kind: 'verified' }
+	| { kind: 'wrong' }
+	| { kind: 'not_set' }
+	| { kind: 'closed' }
+	| { kind: 'error' };
 
 /**
  * Checks a staff PIN with the server. Never throws and never logs the PIN: every failure is a
@@ -43,6 +50,8 @@ export async function verifyKioskStaffPin(
 			return body?.error?.code === 'staff_pin_invalid' ? { kind: 'wrong' } : { kind: 'error' };
 		case 409:
 			return body?.error?.code === 'staff_pin_not_set' ? { kind: 'not_set' } : { kind: 'error' };
+		case 403:
+			return isKioskClosedError(body?.error) ? { kind: 'closed' } : { kind: 'error' };
 		default:
 			return { kind: 'error' };
 	}

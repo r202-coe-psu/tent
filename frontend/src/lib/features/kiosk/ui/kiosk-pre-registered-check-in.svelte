@@ -35,6 +35,8 @@
 		type KioskEvacueeSummary,
 		type KioskLookupResponse
 	} from '../data/kiosk-check-in.api';
+	import { isKioskClosedError } from '../data/kiosk-closed';
+	import { goToKioskClosed } from '../application/kiosk-navigation';
 	import {
 		prepareKioskQrImage,
 		printKioskQrLabels,
@@ -262,6 +264,7 @@
 			selectedIds = initialSelection(gate.source, selectableMembers);
 		} catch (error) {
 			if (generation !== lookupGeneration) return;
+			if (endIfClosed(error)) return;
 			if (error instanceof KioskRequestError) {
 				lookupErrorCode = error.code;
 				lookupError = error.message;
@@ -273,6 +276,16 @@
 		} finally {
 			if (generation === lookupGeneration) isLookingUp = false;
 		}
+	}
+
+	/**
+	 * An admin closed the kiosk: the server refused this call, so show the closed page instead of an
+	 * error (work the server already accepted keeps printing; only this call is cut).
+	 */
+	function endIfClosed(error: unknown): boolean {
+		if (!isKioskClosedError(error)) return false;
+		goToKioskClosed(contextQuery);
+		return true;
 	}
 
 	function centerMatchesFor(serverCode: string): boolean {
@@ -331,6 +344,7 @@
 			}
 			await prepareQrImages(results);
 		} catch (error) {
+			if (endIfClosed(error)) return;
 			if (isThaidGate && isThaidSessionError(error)) {
 				// The verified session is gone or the method was switched off: only a new scan can go on.
 				lookup = null;
@@ -428,6 +442,7 @@
 			results = mergeCheckInResults(results, response.members);
 			return true;
 		} catch (error) {
+			if (endIfClosed(error)) return false;
 			if (error instanceof KioskPartialCheckInError) {
 				results = mergeCheckInResults(results, error.result.members);
 			}
