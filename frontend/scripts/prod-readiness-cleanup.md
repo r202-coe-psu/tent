@@ -49,6 +49,33 @@ Useful flags: `--shelter=SH001` (one shelter; central_ops is only touched with `
 `--only=stock,food` (subset of `people,stock,food,distribution,tickets,donations`),
 `--keep-channels=web,api`.
 
+## 0. Before you start — shelter views
+
+The cleanup never touches `_design/*`. But the dashboard API returns **500 on every widget**
+(`registrations`, `zones`, `occupancy`, `demographics`, `station-times`) when the shelter
+`_design/app` is older than the version the app build expects. Then the dashboard looks broken
+after the cleanup even though the cleanup did not cause it. Check the views in each environment
+before running the cleanup (read-only):
+
+```bash
+pnpm deploy:shelter-views --verify
+```
+
+If any shelter fails `--verify`, deploy the views first (the two phases are separate runs on
+purpose), then run `--verify` again:
+
+```bash
+pnpm deploy:shelter-views --deploy-candidate --write --confirm
+```
+
+```bash
+pnpm deploy:shelter-views --promote --write --confirm
+```
+
+On staging/production the CI deploy normally does this. If you need it by hand, run the same
+three commands through the container command from [§2](#2-staging--3-production), with
+`scripts/deploy-shelter-views.ts` in place of `scripts/prod-readiness-cleanup.ts`.
+
 ## 1. Local
 
 From `frontend/` with `COUCHDB_ADMIN_URL` in `frontend/.env`, worker running
@@ -121,7 +148,9 @@ To undo (same container command):
 
 1. Dry-run prints `Nothing to do.` for every shelter and `central_ops: delete -`.
 2. Staff app, per shelter: dashboard "ในศูนย์" = 0; people list shows only pre-registered
-   (and cancelled) people; stock, kitchen, distribution and ticket pages are empty.
+   (and cancelled) people; stock, kitchen, distribution and ticket pages are empty. Every
+   dashboard widget errors (HTTP 500)? The shelter views are stale, not the data — see
+   [§0](#0-before-you-start--shelter-views).
 3. Public site `/shelters`: occupancy 0 for every shelter; pre-registered people still forecast.
 4. MongoDB, after the worker has caught up (mongo container `tent-mongodb`,
    `tent-mongodb-staging` or `tent-mongodb-production`; database from `DATABASE_URI`):
