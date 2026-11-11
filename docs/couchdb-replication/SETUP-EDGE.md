@@ -41,7 +41,7 @@ curl -s -u '<EDGE_REPL_USER>:<EDGE_REPL_PASSWORD>' $SYNC_URL/shelter_sh001     #
 **ทำอะไร:**
 
 ```bash
-git clone -b feat/edge-couch-replication git@github.com:r202-coe-psu/tent.git
+git clone git@github.com:r202-coe-psu/tent.git
 cd tent
 ```
 
