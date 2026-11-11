@@ -49,6 +49,7 @@ import {
 import { couchReq, displayCouchUrl, env, rawCouchUrl } from './seed/couch';
 import { assertBulkWriteResults, type BulkWriteResult } from './t31-seed-support';
 import { resolveShelterTarget, type CouchReq } from './unseed-stock';
+import { registeredViaSchema } from '$lib/db/model';
 
 export const CATEGORIES = [
 	'people',
@@ -141,6 +142,8 @@ export type ShelterPlan = {
 	evacueesUntouched: number;
 	householdsDeleted: number;
 	householdsUpdated: number;
+	/** Kept evacuees whose `household_id` points at no household (must be 0 after --apply). */
+	danglingHouseholdRefs: number;
 	/** `_id` prefix (`movement`, `stock_ledger`, …) → count of docs deleted. */
 	deletedByType: Record<string, number>;
 	updates: CouchDoc[];
@@ -195,6 +198,7 @@ export function planShelterCleanup(
 		evacueesUntouched: 0,
 		householdsDeleted: 0,
 		householdsUpdated: 0,
+		danglingHouseholdRefs: 0,
 		deletedByType: {},
 		updates: [],
 		deletes: []
@@ -271,6 +275,7 @@ function planPeople(
 	const membersByHousehold = new Map<string, string[]>();
 	for (const doc of evacuees) {
 		if (!keptStay.has(doc._id) || typeof doc.household_id !== 'string') continue;
+		if (!byId.has(doc.household_id)) plan.danglingHouseholdRefs += 1;
 		const list = membersByHousehold.get(doc.household_id) ?? [];
 		list.push(doc._id);
 		membersByHousehold.set(doc.household_id, list);
@@ -360,6 +365,18 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 	if (expectShelters !== null && !(Number.isInteger(expectShelters) && expectShelters >= 0)) {
 		throw new Error(`--expect-shelters must be a whole number, got "${expectRaw}"`);
 	}
+	// An empty or misspelled channel list would silently delete every web/api pre-registration.
+	const keepChannels = listValue(flagValue(argv, 'keep-channels'));
+	if (keepChannels && keepChannels.length === 0) {
+		throw new Error('--keep-channels needs at least one channel');
+	}
+	const channels: readonly string[] = registeredViaSchema.options;
+	const unknownChannels = (keepChannels ?? []).filter((c) => !channels.includes(c));
+	if (unknownChannels.length) {
+		throw new Error(
+			`Unknown --keep-channels: ${unknownChannels.join(', ')} (use ${channels.join(',')})`
+		);
+	}
 	const unknown = (only ?? []).filter((c) => !(CATEGORIES as readonly string[]).includes(c));
 	if (unknown.length) {
 		throw new Error(
@@ -370,7 +387,7 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 		apply: argv.includes('--apply'),
 		shelter: flagValue(argv, 'shelter') ?? 'all',
 		categories: (only as Category[] | null) ?? [...CATEGORIES],
-		keepChannels: listValue(flagValue(argv, 'keep-channels')) ?? [...DEFAULT_KEEP_CHANNELS],
+		keepChannels: keepChannels ?? [...DEFAULT_KEEP_CHANNELS],
 		confirmHost: flagValue(argv, 'confirm-host'),
 		expectShelters,
 		backupDir: flagValue(argv, 'backup-dir'),
@@ -524,7 +541,9 @@ function printPlan(plan: ShelterPlan): void {
 	);
 	console.log(`    delete by via/status: ${formatCounts(plan.evacueesDeleted)}`);
 	console.log(`    reset by via/status:  ${formatCounts(plan.evacueesReset)}`);
-	console.log(`  households: delete ${plan.householdsDeleted} · update ${plan.householdsUpdated}`);
+	console.log(
+		`  households: delete ${plan.householdsDeleted} · update ${plan.householdsUpdated} · dangling refs ${plan.danglingHouseholdRefs}`
+	);
 	console.log(`  docs deleted by type: ${formatCounts(plan.deletedByType)}`);
 }
 

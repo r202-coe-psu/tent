@@ -99,7 +99,8 @@ script (`scripts/redeploy-access.ts`, `scripts/deploy-shelter-views.ts`) in plac
 ## 1. Local
 
 From `frontend/` with `COUCHDB_ADMIN_URL` in `frontend/.env`, worker running
-(`docker compose up -d`). Stop `pnpm dev` (and anything else writing to CouchDB) first:
+(`docker compose up -d`). Stop `pnpm dev` and FastAPI (`docker stop tent-fastapi`) first, and
+start them again after the last dry-run:
 
 ```bash
 pnpm migrate:prod-cleanup
@@ -145,11 +146,17 @@ export NET=<network from above> COUCH_URL='http://<COUCHDB_USER>:<COUCHDB_PASSWO
 
 **Maintenance window.** Nothing may write to CouchDB while the plan is applied. Otherwise, for
 example, a walk-in added to a household the plan deletes ends up pointing at a deleted
-household. Stop the web app (it serves both staff and public writes) and keep the worker
-running (staging shown; production: `tent-frontend-production`, `tent-worker-production`):
+household. Stop both writers that take requests:
+
+- the web app (staff and public writes)
+- FastAPI (claiming an unassigned registration writes evacuees, households and photos to
+  CouchDB)
+
+Keep the worker running. Staging is shown; production uses `tent-frontend-production`,
+`tent-fastapi-production` and `tent-worker-production`:
 
 ```bash
-docker stop tent-frontend-staging
+docker stop tent-frontend-staging tent-fastapi-staging
 ```
 
 Dry-run (do it again right before applying — the plan is a snapshot):
@@ -167,14 +174,14 @@ docker run --rm --network "$NET" -v "$PWD/frontend:/app" -w /app -e COUCHDB_ADMI
 ```
 
 The backup lands in `frontend/backups/prod-cleanup/couchdb-<timestamp>/` on the server. Re-run the
-dry-run command; it must print `Nothing to do.` Start the web app again and do the
-[Verify](#verify) checks:
+dry-run command; it must print `Nothing to do.` and `dangling refs 0` for every shelter. Start
+FastAPI and the web app again and do the [Verify](#verify) checks:
 
 ```bash
-docker start tent-frontend-staging
+docker start tent-fastapi-staging tent-frontend-staging
 ```
 
-To undo (same container command, web app stopped):
+To undo (same container command, web app and FastAPI stopped):
 
 ```text
 ... scripts/prod-readiness-cleanup.ts --restore=backups/prod-cleanup/couchdb-<timestamp>
@@ -183,8 +190,9 @@ To undo (same container command, web app stopped):
 
 ## Verify
 
-1. The dry-run ends with `Nothing to do.` (one line for the whole run) and shows
-   `central_ops: delete -`.
+1. The dry-run ends with `Nothing to do.` (one line for the whole run), shows
+   `central_ops: delete -`, and every shelter's `households:` line ends with `dangling refs 0`
+   (no kept evacuee points at a missing household).
 2. Staff app, per shelter: dashboard "ในศูนย์" = 0; people list shows only pre-registered
    (and cancelled) people; stock, kitchen, distribution and ticket pages are empty. Every
    dashboard widget errors (HTTP 500), or stock-in fails with a 403? The design docs are stale,

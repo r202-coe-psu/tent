@@ -162,6 +162,14 @@ describe('planShelterCleanup — people', () => {
 		expect(plan.householdsUpdated).toBe(1);
 	});
 
+	it('counts kept evacuees whose household is missing', () => {
+		expect(plan.danglingHouseholdRefs).toBe(0);
+		const orphan = evacuee('O1', 'web', 'active', { household_id: 'household:GONE' });
+		expect(planShelterCleanup('shelter_sh001', [...docs, orphan], ALL).danglingHouseholdRefs).toBe(
+			1
+		);
+	});
+
 	it('leaves design docs, volunteers, audits, kept people’s medical/QR and other images alone', () => {
 		const kept = [
 			'_design/app',
@@ -260,6 +268,12 @@ describe('parseCliArgs / assertHostConfirmed', () => {
 		expect(() => parseCliArgs(['--shelter'])).toThrow(/--shelter needs a value/);
 		expect(() => parseCliArgs(['--only=,'])).toThrow(/--only needs at least one/);
 		expect(() => parseCliArgs(['--keep-channels='])).toThrow(/needs a value/);
+		expect(() => parseCliArgs(['--keep-channels=,'])).toThrow(/at least one channel/);
+	});
+
+	it('rejects unknown --keep-channels so a typo cannot delete every web booking', () => {
+		expect(() => parseCliArgs(['--keep-channels=wed'])).toThrow(/Unknown --keep-channels: wed/);
+		expect(parseCliArgs(['--keep-channels=web,kiosk']).keepChannels).toEqual(['web', 'kiosk']);
 	});
 
 	it('parses --expect-shelters as a whole number', () => {
