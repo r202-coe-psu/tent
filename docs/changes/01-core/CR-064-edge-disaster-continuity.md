@@ -3,7 +3,7 @@ id: CR-064
 title: Edge disaster continuity — network-only LAN cutover + ops status UI (CR-033 follow-up)
 status: approved
 date: 2026-08-12
-updated: 2026-10-18
+updated: 2026-11-11
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (OD lock; CR approve รอ)
 layer: stable
@@ -121,3 +121,4 @@ N/A สำหรับ `schema_v` ในรอบนี้ (ยังไม่ b
   - **เลื่อน/ไม่ทำ:** VDU ที่ central กัน hard delete / edge_shelters หดตัว (ทำเมื่อพบการแก้ `_users` นอก user-service แม้ครั้งเดียว) ·
     สร้าง user ที่ edge ตอน incident (ต้องมี CR แก้ A1) · เปลี่ยน OD-6 เป็น replication user ต่อศูนย์ (ตาม trigger ข้างบน) ·
     ไม่ทำ: ถอดสิทธิ์ช่วง WAN ล่มไม่ถึง edge (ยอมรับ) · reconcile tombstone ก่อน CR-171 (ยังไม่มี edge ใน prod)
+- 2026-11-11 — **OD-6 ถูกแทนด้วย [CR-247](CR-247-edge-per-shelter-repl-user.md)** (approved โดย kong, #1298 / PR #1304): edge แต่ละศูนย์ sync ด้วยบัญชี `repl_<code>_<suffix>` ของตัวเอง ไม่ถือรหัส central admin อีก · `_users` ลง edge ผ่าน `edge_users_<code>` · trigger "ทบทวน OD-6" ข้างบนปิดแล้ว

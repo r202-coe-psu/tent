@@ -82,3 +82,28 @@ def test_a_deleted_document_is_removed():
 def test_another_doc_type_is_ignored():
     action, _ = project_volunteer(_doc(type="evacuee"), shelter_code="SH001")
     assert action == "ignore"
+
+
+def test_accepted_from_is_stripped_from_verifications_in_public_plane():
+    doc = _doc(
+        identity_verification={
+            "status": "verified",
+            "accepted_from": {
+                "shelter_code": "SH002",
+                "verified_at": "2026-10-30T00:00:00Z",
+            },
+        },
+        skill_verifications={
+            "medical": {
+                "status": "verified",
+                "accepted_from": {
+                    "shelter_code": "SH002",
+                    "verified_at": "2026-10-30T00:00:00Z",
+                },
+            }
+        },
+    )
+    _, payload = project_volunteer(doc, shelter_code="SH001")
+    assert payload["identity_verification"] == {"status": "verified"}
+    assert payload["skill_verifications"] == {"medical": {"status": "verified"}}
+    assert "accepted_from" not in str(payload)

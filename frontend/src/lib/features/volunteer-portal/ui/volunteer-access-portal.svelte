@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Calendar from '@lucide/svelte/icons/calendar';
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -11,6 +12,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import Phone from '@lucide/svelte/icons/phone';
+	import Ticket from '@lucide/svelte/icons/ticket';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Rocket from '@lucide/svelte/icons/rocket';
 	import X from '@lucide/svelte/icons/x';
@@ -37,12 +39,13 @@
 		useResolvePortalAccessMutation,
 		useRoleCardTokenMutation,
 		useVolunteerAccessStatus,
+		useVolunteerApplications,
 		useVolunteerJobs,
 		useVolunteerProfile,
 		useVolunteerSchedule,
 		useVolunteerTickets
 	} from '../application/queries';
-	import { volunteerPortalKeys } from '../application/queries';
+	import { useCancelTicketMutation, volunteerPortalKeys } from '../application/queries';
 	import JobBoard from '$lib/features/volunteers/ui/public-job-board.svelte';
 	import AccessStatusCard from './access-status-card.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
@@ -69,6 +72,7 @@
 		filterAndSortPortalActivities,
 		mergePortalActivities,
 		parsePortalTimestamp,
+		portalTicketActions,
 		type PortalActivity
 	} from '../domain/schedule-view';
 
@@ -342,6 +346,27 @@
 
 	const scheduleQuery = useVolunteerSchedule(() => session);
 	const ticketsQuery = useVolunteerTickets(() => session);
+	// Per-shift ticket buttons (#973): token sessions only, a phone session never loads these.
+	const applicationsQuery = useVolunteerApplications(() => session);
+	const cancelTicket = useCancelTicketMutation();
+	let pendingCancel = $state<{ activity: PortalActivity; applicationId: string } | null>(null);
+
+	function ticketActionsFor(activity: PortalActivity) {
+		return portalTicketActions(activity, applicationsQuery.data ?? []);
+	}
+
+	async function confirmCancelApplication() {
+		const target = pendingCancel;
+		const token = session?.token;
+		if (!target || !token) return;
+		try {
+			await cancelTicket.mutateAsync({ token, applicationId: target.applicationId });
+			toast.success(t.cancelledSuccess);
+			pendingCancel = null;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : t.cancelFailed);
+		}
+	}
 	/**
 	 * Only for the count on the "งานอาสาสมัครที่เปิดรับ" tab button. The board itself fetches
 	 * with the same key, so this costs no extra request — and the badge counts jobs that
@@ -378,6 +403,51 @@
 					second: '2-digit',
 					timeZone: PORTAL_TIME_ZONE
 				})}${t.clockSuffix}`;
+	}
+
+	function shiftDateFormatted(activity: PortalActivity): string {
+		const locale = langState.current === 'en' ? 'en-US' : 'th-TH';
+		if (activity.startTs) {
+			const start = parsePortalTimestamp(activity.startTs);
+			if (!Number.isNaN(start.getTime())) {
+				return start.toLocaleDateString(locale, {
+					weekday: 'short',
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric',
+					timeZone: PORTAL_TIME_ZONE
+				});
+			}
+		}
+		if (activity.date) {
+			const d = new Date(activity.date + 'T00:00:00Z');
+			if (!Number.isNaN(d.getTime())) {
+				return d.toLocaleDateString(locale, {
+					weekday: 'short',
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric',
+					timeZone: 'UTC'
+				});
+			}
+			return activity.date;
+		}
+		return t.noDate;
+	}
+
+	function shiftTimeFormatted(activity: PortalActivity): string {
+		if (!activity.startTs) return '';
+		const start = parsePortalTimestamp(activity.startTs);
+		if (Number.isNaN(start.getTime())) return '';
+		const locale = langState.current === 'en' ? 'en-US' : 'th-TH';
+		const opts = { hour: '2-digit', minute: '2-digit', timeZone: PORTAL_TIME_ZONE } as const;
+		const from = start.toLocaleTimeString(locale, opts);
+		const end = activity.endTs ? parsePortalTimestamp(activity.endTs) : null;
+		const to =
+			end && !Number.isNaN(end.getTime())
+				? ` – ${end.toLocaleTimeString(locale, opts)}${t.clockSuffix}`
+				: t.clockSuffix;
+		return `${from}${to}`;
 	}
 
 	function timeRange(activity: PortalActivity): string {
@@ -512,7 +582,8 @@
 			Boolean(session?.token) &&
 			Boolean(activity.assignmentId) &&
 			activity.dispatchStatus !== 'dispatched' &&
-			['assigned', 'standby'].includes(activity.status)
+			['assigned', 'standby'].includes(activity.status) &&
+			!ticketActionsFor(activity)?.canCancel
 		);
 	}
 
@@ -1289,24 +1360,35 @@
 											</span>
 										</div>
 
-										<h4 class="text-base font-bold text-foreground">{activity.title}</h4>
+										<h4 class="text-base font-bold text-foreground sm:text-lg">{activity.title}</h4>
 										{#if activity.description}
 											<p class="text-xs leading-relaxed text-muted-foreground">
 												{activity.description}
 											</p>
 										{/if}
 
-										<div
-											class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground"
-										>
-											<span class="flex items-center gap-1 font-medium text-foreground">
-												<MapPin class="size-3 text-primary" />
-												{activity.location}
-											</span>
-											<span class="flex items-center gap-1">
-												<Clock class="size-3" />
-												{timeRange(activity)}
-											</span>
+										<!-- Highlighted Date & Time Box -->
+										<div class="mt-2.5 flex flex-wrap items-center gap-2">
+											<div
+												class="inline-flex items-center gap-1.5 rounded-xl border border-blue-200/90 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-[#0A2647] shadow-2xs sm:text-sm"
+											>
+												<Calendar class="size-4 text-[#0A2647]" />
+												<span class="font-bold">{shiftDateFormatted(activity)}</span>
+												{#if shiftTimeFormatted(activity)}
+													<span class="text-blue-300">•</span>
+													<Clock class="size-4 text-[#0A2647]" />
+													<span class="font-bold text-slate-900 tabular-nums"
+														>{shiftTimeFormatted(activity)}</span
+													>
+												{/if}
+											</div>
+
+											<div
+												class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700"
+											>
+												<MapPin class="size-3.5 text-primary" />
+												<span>{activity.location}</span>
+											</div>
 										</div>
 
 										<!-- Checkin info -->
@@ -1382,8 +1464,33 @@
 											</div>
 										{/if}
 									</div>
-									{#if canCheckIn(activity) || canCheckOut(activity) || canWithdraw(activity)}
+									{#if ticketActionsFor(activity) || canCheckIn(activity) || canCheckOut(activity) || canWithdraw(activity)}
+										{@const actions = ticketActionsFor(activity)}
 										<div class="flex w-full flex-col gap-2 md:w-56">
+											{#if actions}
+												<a
+													href={resolve(
+														`/volunteer/ticket/${encodeURIComponent(session?.token ?? '')}?application=${encodeURIComponent(actions.applicationId)}`
+													)}
+													data-testid="open-ticket"
+													class="flex items-center justify-center gap-2 rounded-xl border border-primary/30 px-4 py-2.5 text-xs font-bold text-primary hover:bg-primary/5"
+												>
+													<Ticket class="size-4" />
+													{t.openTicket}
+												</a>
+												{#if actions.canCancel}
+													<button
+														type="button"
+														data-testid="cancel-application"
+														aria-label={t.cancelShiftAria(activity.title, activity.shiftPeriod)}
+														onclick={() =>
+															(pendingCancel = { activity, applicationId: actions.applicationId })}
+														class="rounded-xl border border-destructive/30 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/5"
+													>
+														{t.cancelShift}
+													</button>
+												{/if}
+											{/if}
 											{#if canCheckIn(activity)}
 												<button
 													type="button"
@@ -1458,6 +1565,48 @@
 							</li>
 						</ul>
 					</div>
+
+					<Dialog.Root
+						open={pendingCancel !== null}
+						onOpenChange={(open) => !open && !cancelTicket.isPending && (pendingCancel = null)}
+					>
+						<Dialog.Content class="sm:max-w-md">
+							<Dialog.Header>
+								<Dialog.Title class="flex items-center gap-2">
+									<CircleAlert class="size-5 text-destructive" />
+									{t.confirmCancelTitle}
+								</Dialog.Title>
+								<Dialog.Description>
+									{t.confirmCancelDescription}
+								</Dialog.Description>
+							</Dialog.Header>
+							{#if pendingCancel}
+								<div class="rounded-2xl border border-border bg-muted/30 p-4">
+									<p class="text-sm font-bold text-foreground">{pendingCancel.activity.title}</p>
+									<p class="mt-1 text-xs text-muted-foreground">
+										{timeRange(pendingCancel.activity)}
+									</p>
+								</div>
+							{/if}
+							<Dialog.Footer class="gap-2">
+								<Button
+									variant="outline"
+									onclick={() => (pendingCancel = null)}
+									disabled={cancelTicket.isPending}
+								>
+									{t.confirmCancelBack}
+								</Button>
+								<Button
+									variant="destructive"
+									data-testid="confirm-cancel-application"
+									onclick={confirmCancelApplication}
+									disabled={cancelTicket.isPending}
+								>
+									{t.confirmCancelConfirm}
+								</Button>
+							</Dialog.Footer>
+						</Dialog.Content>
+					</Dialog.Root>
 
 					<Dialog.Root
 						open={withdrawModalOpen}

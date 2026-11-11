@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_SCANNER_I18N } from '../scanner.i18n';
 	import AlertOctagon from '@lucide/svelte/icons/alert-octagon';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import {
@@ -9,19 +12,14 @@
 		KioskNoticePanel
 	} from '$lib/features/kiosk';
 
-	const steps = [
-		{ title: 'ตรวจว่าเสียบถูกด้าน', hint: 'หงายบัตรขึ้น เอาด้านบาร์โค้ดเข้า แล้วเสียบให้สุด' },
-		{ title: 'ถอดบัตรออก เช็ดชิปให้สะอาด', hint: 'ชิปสีทองต้องไม่เปื้อนหรือมีรอย' },
-		{ title: 'เสียบบัตรใหม่อีกครั้ง', hint: 'รอจนเครื่องเริ่มอ่านบัตร' }
-	];
+	const t = $derived(getTranslation(KIOSK_SCANNER_I18N, languageStore.current));
+	const steps = $derived(t.error.steps);
 	const homeUrl = $derived(`/kiosk${page.url.search}`);
-	const errorMsg = $derived(
-		page.url.searchParams.get('error_msg') || 'ตรวจสอบการเสียบบัตร แล้วลองอีกครั้ง'
-	);
+	const errorMsg = $derived(page.url.searchParams.get('error_msg') || t.error.fallbackMessage);
 </script>
 
 <svelte:head>
-	<title>อ่านบัตรไม่สำเร็จ — SmartShelter Kiosk</title>
+	<title>{t.error.pageTitle} — {t.pageSuffix}</title>
 </svelte:head>
 
 <section class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4">
@@ -30,11 +28,11 @@
 		<KioskBackButton href={homeUrl} />
 	</div>
 
-	<KioskNoticePanel tone="critical" icon={AlertOctagon} headingTag="h1" title="อ่านบัตรไม่สำเร็จ">
+	<KioskNoticePanel tone="critical" icon={AlertOctagon} headingTag="h1" title={t.error.title}>
 		<p class="font-semibold text-red-900" role="alert">{errorMsg}</p>
 		<ol
 			class="mx-auto space-y-3 pt-2 text-left kiosk-portrait:space-y-4 kiosk-portrait:pt-4 kiosk-compact:space-y-1.5 kiosk-compact:pt-0"
-			aria-label="วิธีลองอีกครั้ง"
+			aria-label={t.error.stepsLabel}
 		>
 			{#each steps as step, i (step.title)}
 				<li class="flex items-start gap-3 kiosk-portrait:gap-4">
@@ -51,8 +49,6 @@
 				</li>
 			{/each}
 		</ol>
-		<KioskInlineAlert tone="warning" icon={UserCheck}
-			>ลองแล้วยังไม่ได้ผล? เรียกเจ้าหน้าที่ให้ช่วย</KioskInlineAlert
-		>
+		<KioskInlineAlert tone="warning" icon={UserCheck}>{t.error.help}</KioskInlineAlert>
 	</KioskNoticePanel>
 </section>

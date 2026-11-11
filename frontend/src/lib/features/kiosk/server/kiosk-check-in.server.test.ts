@@ -1193,14 +1193,14 @@ describe('checkInSelectedMembers', () => {
 				status: 'checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0\nใจดี', phone }
 			},
 			{
 				evacuee_id: member._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(member._id),
-				label: { name: 'สมชาย1 ใจดี', phone }
+				label: { name: 'สมชาย1\nใจดี', phone }
 			},
 			{
 				evacuee_id: apiMember._id,
@@ -1270,7 +1270,7 @@ describe('checkInSelectedMembers', () => {
 				status: 'already_checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0\nใจดี', phone }
 			},
 			{ evacuee_id: active._id, status: 'already_checked_in', stay_status: 'active' }
 		]);
@@ -1311,7 +1311,7 @@ describe('checkInSelectedMembers', () => {
 				status: 'already_checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0\nใจดี', phone }
 			}
 		]);
 		expect(
@@ -1461,7 +1461,7 @@ describe('checkInSelectedMembers kiosk walk-in reprint', () => {
 				status: 'already_checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(walkIn._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0\nใจดี', phone }
 			}
 		]);
 		expect(mockAdminFetch.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
@@ -1522,7 +1522,7 @@ describe('checkInSelectedMembers requiredPrimaryCitizenId', () => {
 				status: 'checked_in',
 				stay_status: 'arriving',
 				qr_payload: issuedQr(primary._id),
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0\nใจดี', phone }
 			}
 		]);
 	});
@@ -2739,13 +2739,19 @@ describe('toLabelIdentity', () => {
 				...doc,
 				emergency_contact: { name: 'สมหญิง', phone: ' 089-123 4567 ', relation: 'ภรรยา' }
 			})
-		).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678', emergency_phone: '0891234567' });
+		).toEqual({ name: 'สมชาย\nใจดี', phone: '0812345678', emergency_phone: '0891234567' });
+	});
+
+	it('puts the first and last name on separate lines, like the staff Person QR label', () => {
+		expect(toLabelIdentity({ ...doc, last_name: ' ใจดี ' }).name).toBe('สมชาย\nใจดี');
+		expect(toLabelIdentity({ ...doc, last_name: '  ' }).name).toBe('สมชาย');
+		expect(toLabelIdentity({ ...doc, first_name: ' ', last_name: '' }).name).toBe('');
 	});
 
 	it('leaves the emergency phone out when there is none, so the label leaves the row blank', () => {
-		expect(toLabelIdentity(doc)).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678' });
+		expect(toLabelIdentity(doc)).toEqual({ name: 'สมชาย\nใจดี', phone: '0812345678' });
 		expect(
 			toLabelIdentity({ ...doc, emergency_contact: { name: 'สมหญิง', phone: '  ', relation: '' } })
-		).toEqual({ name: 'สมชาย ใจดี', phone: '0812345678' });
+		).toEqual({ name: 'สมชาย\nใจดี', phone: '0812345678' });
 	});
 });

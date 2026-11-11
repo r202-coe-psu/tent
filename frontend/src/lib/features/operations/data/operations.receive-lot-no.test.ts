@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupplyItem } from '$lib/features/supply';
+import { ConflictError } from '$lib/utils/errors';
 
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
@@ -40,7 +41,16 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 vi.mock('$lib/db/couch-db', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/db/couch-db')>()),
 	getDoc: async (_db: string, id: string) => docs.get(id) ?? null,
-	putDocStrict: async (_db: string, doc: Doc) => doc,
+	// lot_counter reads/writes (CR-244): a tiny `_rev` compare-and-swap store over `docs`.
+	getDocWithConflicts: async (_db: string, id: string) => docs.get(id) ?? null,
+	putDocStrict: async (_db: string, doc: Doc & { _rev?: string }) => {
+		const current = docs.get(doc._id) as (Doc & { _rev?: string }) | undefined;
+		if (current?._rev !== doc._rev) throw new ConflictError();
+		const saved = { ...doc, _rev: `${Number.parseInt(doc._rev ?? '0', 10) + 1}-t` };
+		docs.set(doc._id, saved);
+		return saved;
+	},
+	findDocs: async (_db: string, q: { selector: object }) => find(q),
 	bulkDocs: async (_db: string, batch: Doc[]) => {
 		bulkWritten.push(batch);
 		return batch.map((d) => ({ ...d, _rev: '1-t' }));
@@ -78,6 +88,14 @@ beforeEach(() => {
 });
 
 describe('stock-page receive — optional lot number', () => {
+	it('reserves from the day counter doc and advances it (CR-244)', async () => {
+		await repo.receiveStock(rice, ctx, { issueLotNo: true });
+		const second = await repo.receiveStock(rice, ctx, { issueLotNo: true });
+		expect(second.lot?.lot_no).toBe(`L-${stamp}-002`);
+		expect(docs.get(`lot_counter:L-${stamp}`)).toMatchObject({ type: 'lot_counter', last: 2 });
+		expect(lotLookups()).toHaveLength(1); // seeded once, not per receive
+	});
+
 	it('receiveStock with issueLotNo continues after the day’s existing numbers', async () => {
 		existingLotNos = [`L-${stamp}-007`];
 

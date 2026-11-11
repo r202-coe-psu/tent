@@ -68,6 +68,7 @@ export {
 	useVolunteerJobs,
 	useRespondToDispatchMutation,
 	useVolunteerAccessStatus,
+	useVolunteerApplications,
 	useVolunteerSchedule,
 	useVolunteerTicket,
 	useVolunteerTickets,

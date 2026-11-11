@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { LanguageCode } from '$lib/utils/language';
 
 /** Which kiosk flows run the face check. */
 export const FACE_CHECK_FLOWS = ['check_in', 'walk_in'] as const;
@@ -206,6 +207,9 @@ export const FACE_MATCH_SHOWN_MS = 1_400;
 
 // --- wording ------------------------------------------------------------------------------------
 
+/** Kept local: domain code does not import the app's language store. */
+export type FaceCheckLanguage = LanguageCode;
+
 const HINT_MESSAGES: Record<FaceHint, string> = {
 	ok: 'กรุณามองตรงที่กล้อง และอยู่นิ่งสักครู่',
 	no_face: 'ยังไม่พบใบหน้า กรุณามองตรงที่กล้อง',
@@ -219,16 +223,43 @@ const HINT_MESSAGES: Record<FaceHint, string> = {
 	reference_pending: 'กำลังอ่านรูปจากบัตร กรุณาอย่าดึงบัตรออก'
 };
 
+const HINT_MESSAGES_EN: Record<FaceHint, string> = {
+	ok: 'Please look straight at the camera and hold still',
+	no_face: 'No face found yet. Please look at the camera',
+	multiple_faces: 'Please make sure only one person is in view',
+	too_far: 'Please move a little closer to the camera',
+	too_close: 'Please move back from the camera a little',
+	turn_straight: 'Please look straight at the camera, head level',
+	too_dark: 'Too dark. Please face the light',
+	too_bright: 'Too bright. Please avoid strong light',
+	blurry: 'The picture is blurry. Please hold still',
+	reference_pending: 'Reading the card photo. Please do not remove the card'
+};
+
+const NO_MATCH_RETRY = 'ใบหน้ายังไม่ตรงกับรูปในบัตร กรุณามองตรงที่กล้องแล้วลองอีกครั้ง';
+const NO_MATCH_RETRY_EN =
+	'Your face does not match the card photo yet. Please look straight at the camera and try again';
+
 /** One short instruction for the person at the camera. */
-export function faceHintMessage(hint: FaceHint): string {
-	return HINT_MESSAGES[hint];
+export function faceHintMessage(hint: FaceHint, language: FaceCheckLanguage = 'th'): string {
+	return (language === 'en' ? HINT_MESSAGES_EN : HINT_MESSAGES)[hint];
 }
 
 /** After an attempt that did not match: say what to fix, or just ask for another try. */
-export function faceRetryMessage(hint: FaceHint): string {
-	return hint === 'ok'
-		? 'ใบหน้ายังไม่ตรงกับรูปในบัตร กรุณามองตรงที่กล้องแล้วลองอีกครั้ง'
-		: HINT_MESSAGES[hint];
+export function faceRetryMessage(hint: FaceHint, language: FaceCheckLanguage = 'th'): string {
+	if (hint !== 'ok') return faceHintMessage(hint, language);
+	return language === 'en' ? NO_MATCH_RETRY_EN : NO_MATCH_RETRY;
+}
+
+/**
+ * A camera message the session already holds (it keeps the Thai text, not the hint behind it) in
+ * the wanted language. Text that is not one of ours comes back as it is.
+ */
+export function localizeFaceMessage(message: string, language: FaceCheckLanguage): string {
+	if (language === 'th') return message;
+	if (message === NO_MATCH_RETRY) return NO_MATCH_RETRY_EN;
+	const hint = FACE_HINTS.find((candidate) => HINT_MESSAGES[candidate] === message);
+	return hint ? HINT_MESSAGES_EN[hint] : message;
 }
 
 export type FaceOutcomeMessage = {
@@ -238,32 +269,62 @@ export type FaceOutcomeMessage = {
 	detail: string;
 };
 
+const OUTCOME_MESSAGES: Record<
+	FaceCheckLanguage,
+	Record<FaceOutcomeMessage['tone'], FaceOutcomeMessage>
+> = {
+	th: {
+		not_confirmed: {
+			tone: 'not_confirmed',
+			title: 'ใบหน้าไม่ตรงกับรูปในบัตรประชาชน',
+			detail: 'กรุณาติดต่อเจ้าหน้าที่เพื่อตรวจสอบตัวตน'
+		},
+		declined: {
+			tone: 'declined',
+			title: 'เจ้าหน้าที่จะตรวจบัตรให้ท่าน',
+			detail: 'กรุณาติดต่อเจ้าหน้าที่ ท่านยังรับบริการได้ตามปกติ'
+		},
+		unchecked: {
+			tone: 'unchecked',
+			title: 'ระบบตรวจใบหน้าไม่ได้',
+			detail: 'กรุณาติดต่อเจ้าหน้าที่'
+		}
+	},
+	en: {
+		not_confirmed: {
+			tone: 'not_confirmed',
+			title: 'Your face does not match the ID card photo',
+			detail: 'Please see staff to verify your identity'
+		},
+		declined: {
+			tone: 'declined',
+			title: 'Staff will check your card',
+			detail: 'Please see staff. You can still get service as usual'
+		},
+		unchecked: {
+			tone: 'unchecked',
+			title: 'The face check is not available',
+			detail: 'Please see staff'
+		}
+	}
+};
+
 /**
  * The result screen for an ending that is not a match. Only `not_confirmed` was really
  * compared, so only it says the face does not match; the others never use the word "ไม่ตรง".
  * Declining is the person's right, so its wording is plain service, not a failure.
  */
 export function faceOutcomeMessage(
-	outcome: Exclude<FaceCheckOutcome, { kind: 'match' }>
+	outcome: Exclude<FaceCheckOutcome, { kind: 'match' }>,
+	language: FaceCheckLanguage = 'th'
 ): FaceOutcomeMessage {
+	const messages = OUTCOME_MESSAGES[language];
 	switch (outcome.kind) {
 		case 'not_confirmed':
-			return {
-				tone: 'not_confirmed',
-				title: 'ใบหน้าไม่ตรงกับรูปในบัตรประชาชน',
-				detail: 'กรุณาติดต่อเจ้าหน้าที่เพื่อตรวจสอบตัวตน'
-			};
+			return messages.not_confirmed;
 		case 'declined':
-			return {
-				tone: 'declined',
-				title: 'เจ้าหน้าที่จะตรวจบัตรให้ท่าน',
-				detail: 'กรุณาติดต่อเจ้าหน้าที่ ท่านยังรับบริการได้ตามปกติ'
-			};
+			return messages.declined;
 		default:
-			return {
-				tone: 'unchecked',
-				title: 'ระบบตรวจใบหน้าไม่ได้',
-				detail: 'กรุณาติดต่อเจ้าหน้าที่'
-			};
+			return messages.unchecked;
 	}
 }
