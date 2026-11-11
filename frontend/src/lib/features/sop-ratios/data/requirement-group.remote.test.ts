@@ -57,7 +57,34 @@ describe('RequirementGroupRemoteRepository (#936)', () => {
 		]);
 	});
 
-	it('listAll normalizes legacy numeric docs losslessly and defaults status', async () => {
+	it('replaces the maps and clears a previously persisted share', async () => {
+		let stored: Record<string, unknown> = {
+			_id: 'requirement_group:X',
+			_rev: '1-a',
+			item_maps: [{ item_id: 'i', base_uom: 'kg', conversion_factor: '1', share_percent: '40' }]
+		};
+		vi.mocked(catalog.get).mockImplementation(async () => stored);
+		vi.mocked(catalog.put).mockImplementation(async (doc) => {
+			stored = doc;
+			return doc;
+		});
+		const repo = new RequirementGroupRemoteRepository();
+		await repo.save(
+			'requirement_group:X',
+			{
+				name: 'X',
+				standard_uom: 'kg',
+				status: 'active',
+				source: 'SPHERE_BASELINE',
+				item_maps: [{ item_id: 'i', base_uom: 'kg', conversion_factor: '1' }]
+			},
+			{ createdBy: 'tester' }
+		);
+		const reloaded = await repo.get('requirement_group:X');
+		expect(reloaded?.item_maps?.[0]).not.toHaveProperty('share_percent');
+	});
+
+	it('listAll rounds legacy numeric docs and defaults status', async () => {
 		vi.mocked(catalog.allByType).mockResolvedValue([
 			{
 				_id: 'requirement_group:X',
@@ -70,6 +97,6 @@ describe('RequirementGroupRemoteRepository (#936)', () => {
 		]);
 		const [doc] = await new RequirementGroupRemoteRepository().listAll();
 		expect(doc.status).toBe('active');
-		expect(doc.item_maps?.[0]).toMatchObject({ conversion_factor: '6.33333', share_percent: '50' });
+		expect(doc.item_maps?.[0]).toMatchObject({ conversion_factor: '6.3333', share_percent: '50' });
 	});
 });
