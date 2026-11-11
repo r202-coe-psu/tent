@@ -7,7 +7,7 @@
 # By default it starts a throwaway `couchdb:3.5` container on a random 127.0.0.1 port (removed on exit) so it
 # never touches the dev data under deployment/. To run against an already running CouchDB instead:
 #   TEST_COUCHDB_URL=http://localhost:5984 COUCHDB_USER=admin COUCHDB_PASSWORD=password bash scripts/tests/edge-users-clean.test.sh
-# (uses throwaway DBs edge_users_zzt01 / edge_users_zzt02 and users ect_a / ect_b / ect_c, removed afterwards)
+# (uses throwaway DBs edge_users_zzt01 / edge_users_zzt02 and users ect_a / ect_b / ect_c / ect_d / ect_r, removed afterwards)
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 SCRIPT="$here/../edge-users-clean.sh"
@@ -46,7 +46,7 @@ cleanup() {
 		docker rm -f "$CONTAINER" >/dev/null 2>&1
 	else
 		for d in edge_users_zzt01 edge_users_zzt02; do adm -X DELETE "$URL/$d" >/dev/null 2>&1; done
-		for u in ect_a ect_b ect_c; do
+		for u in ect_a ect_b ect_c ect_d ect_r; do
 			rev=$(adm "$URL/_users/org.couchdb.user:$u" | jget _rev)
 			[ -z "$rev" ] || adm -X DELETE "$URL/_users/org.couchdb.user:$u?rev=$rev" >/dev/null
 		done
@@ -137,6 +137,65 @@ echo "== second run reports 0 orphans"
 run --apply
 eq "rerun exits 0" "$rc" 0
 has "0 orphans" "$out" "orphans found: 0"
+
+echo "== race: user created at central AND copied to the edge DB after the central read is never listed/deleted"
+# A curl shim (PATH-prepended, no hooks in the production script): the first time the script lists
+# edge_users_zzt01/_all_docs, it first creates ect_r in central _users and in that edge DB, i.e. after the
+# script already read the central id set but before the edge listing.
+REAL_CURL=$(command -v curl)
+SHIMDIR=$(mktemp -d)
+cat >"$SHIMDIR/curl" <<EOF
+#!/usr/bin/env bash
+if [ ! -e "$SHIMDIR/fired" ]; then
+	case "\$*" in
+	*/edge_users_zzt01/_all_docs*)
+		: >"$SHIMDIR/fired"
+		"$REAL_CURL" -sS -u "$A" -H 'Content-Type: application/json' -X PUT "$URL/_users/org.couchdb.user:ect_r" \\
+			-d '{"name":"ect_r","password":"x","type":"user","roles":[]}' >/dev/null
+		"$REAL_CURL" -sS -u "$A" -H 'Content-Type: application/json' -X PUT "$URL/edge_users_zzt01/org.couchdb.user:ect_r" \\
+			-d '{"name":"ect_r","type":"user","roles":[]}' >/dev/null
+		;;
+	esac
+fi
+exec "$REAL_CURL" "\$@"
+EOF
+chmod +x "$SHIMDIR/curl"
+del_doc() { # del_doc <path> — hard-delete if present
+	local r
+	r=$(adm "$URL/$1" | jget _rev)
+	[ -z "$r" ] || adm -X DELETE "$URL/$1?rev=$r" >/dev/null
+}
+reset_race() {
+	del_doc _users/org.couchdb.user:ect_r
+	del_doc edge_users_zzt01/org.couchdb.user:ect_r
+	rm -f "$SHIMDIR/fired"
+}
+run_race() { out=$(PATH="$SHIMDIR:$PATH" bash "$SCRIPT" "$@" --url "$URL" 2>&1); rc=$?; }
+# a genuine orphan (hard-deleted at central) must still be found
+adm -X PUT "$URL/_users/org.couchdb.user:ect_d" -d '{"name":"ect_d","password":"x","type":"user","roles":[]}' >/dev/null
+adm -X PUT "$URL/edge_users_zzt01/org.couchdb.user:ect_d" -d '{"name":"ect_d","type":"user","roles":[]}' >/dev/null
+del_doc _users/org.couchdb.user:ect_d
+
+reset_race
+run_race ZZT01
+eq "race dry-run exits 0" "$rc" 0
+[ -e "$SHIMDIR/fired" ] && pass "shim fired (race simulated)" || fail "shim never fired"
+hasnt "dry-run does not list the new user" "$out" "ect_r"
+has "dry-run lists the real orphan" "$out" "edge_users_zzt01 org.couchdb.user:ect_d"
+has "dry-run reports the skipped candidate" "$out" "skipped 1 candidate"
+has "dry-run summary says 1 orphan" "$out" "orphans found: 1"
+
+reset_race
+run_race ZZT01 --apply
+eq "race apply exits 0" "$rc" 0
+[ -e "$SHIMDIR/fired" ] && pass "shim fired again" || fail "shim did not fire for apply"
+hasnt "apply does not list the new user" "$out" "ect_r"
+eq "new user still in edge DB after apply" "$(exists edge_users_zzt01/org.couchdb.user:ect_r)" 200
+eq "new user still in central" "$(exists _users/org.couchdb.user:ect_r)" 200
+eq "real orphan ect_d deleted" "$(exists edge_users_zzt01/org.couchdb.user:ect_d)" 404
+del_doc _users/org.couchdb.user:ect_r
+del_doc edge_users_zzt01/org.couchdb.user:ect_r
+rm -rf "$SHIMDIR"
 
 echo "== empty central _users is refused without --allow-empty"
 for u in ect_a ect_c; do

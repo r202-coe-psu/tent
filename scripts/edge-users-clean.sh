@@ -13,9 +13,10 @@
 #
 # Safety:
 #   - Dry-run is the default; nothing is written without --apply.
-#   - The central _users id set is read BEFORE the edge docs are listed, so a user created in between is never
-#     taken for an orphan. If that set is empty the script refuses to run (it would delete everything) unless
-#     --allow-empty is given.
+#   - The up-front central _users id set is only a cheap pre-filter. Every candidate orphan is re-checked directly
+#     against central _users (POST _all_docs with keys) right before it is reported or deleted, so a user created
+#     at central (and copied to the edge DB) after the first read is never listed or deleted. If the up-front set
+#     is empty the script refuses to run (it would delete everything) unless --allow-empty is given.
 #   - _design/* docs (e.g. _design/readonly) are never touched; _local/* docs are not returned by _all_docs.
 #   - Safe to re-run: a second run finds nothing left to delete. Exit != 0 on any failure.
 #
@@ -118,7 +119,7 @@ for r in rows:
 	done
 }
 
-# 1. central _users first, before any edge doc is listed
+# 1. central _users id set (pre-filter only; candidates are re-verified in step 3)
 list_docs _users >"$TMP/central.tsv" || die "reading central _users failed"
 cut -f1 "$TMP/central.tsv" >"$TMP/central.ids"
 central_n=$(grep -c . "$TMP/central.ids" || true)
@@ -177,9 +178,40 @@ for i in range(0, len(rows), 100):
 	[ "$bad" = 0 ]
 }
 
+# verify_orphans <in.tsv> <out.tsv> — keep only candidates that are really absent from central _users right now
+# (_all_docs?keys: row with error, or value.deleted). Candidates that exist live at central are dropped and counted.
+verify_orphans() {
+	local in="$1" out="$2" payload resp
+	: >"$TMP/exists.ids"
+	while IFS= read -r payload; do
+		resp=$(printf '%s' "$payload" | cj -X POST "$URL/_users/_all_docs" -d @-) || return 1
+		printf '%s' "$resp" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+if not isinstance(d, dict) or "rows" not in d:
+    sys.exit("unexpected response: " + json.dumps(d))
+for r in d["rows"]:
+    v = r.get("value")
+    if "error" not in r and isinstance(v, dict) and not v.get("deleted"):
+        print(r["key"])' >>"$TMP/exists.ids" || return 1
+	done < <(python3 -c '
+import sys, json
+ids = [l.split("\t")[0] for l in open(sys.argv[1]) if l.strip()]
+for i in range(0, len(ids), 500):
+    print(json.dumps({"keys": ids[i:i + 500]}))' "$in")
+	python3 -c '
+import sys
+live = set(l.rstrip("\n") for l in open(sys.argv[1]))
+for l in open(sys.argv[2]):
+    if l.strip() and l.split("\t")[0] not in live:
+        print(l.rstrip("\n"))' "$TMP/exists.ids" "$in" >"$out"
+	skipped=$((skipped + $(grep -c . "$TMP/exists.ids" || true)))
+}
+
 # 3. find (and with --apply delete) the orphans of each DB
 total=0
 failed=0
+skipped=0
 for db in "${dbs[@]}"; do
 	list_docs "$db" >"$TMP/edge.tsv" || die "reading $db failed"
 	python3 -c '
@@ -189,6 +221,8 @@ for l in open(sys.argv[2]):
     l = l.rstrip("\n")
     if l and l.split("\t")[0] not in central:
         print(l)' "$TMP/central.ids" "$TMP/edge.tsv" >"$TMP/orphans.tsv"
+	verify_orphans "$TMP/orphans.tsv" "$TMP/verified.tsv" || die "re-checking candidates of $db against central _users failed"
+	mv "$TMP/verified.tsv" "$TMP/orphans.tsv"
 	n=$(grep -c . "$TMP/orphans.tsv" || true)
 	total=$((total + n))
 	cut -f1 "$TMP/orphans.tsv" | while IFS= read -r id; do [ -z "$id" ] || echo "$db $id"; done
@@ -198,6 +232,7 @@ for l in open(sys.argv[2]):
 done
 
 echo
+[ "$skipped" = 0 ] || echo "skipped $skipped candidate(s) that exist at central _users (created meanwhile)"
 if [ "$APPLY" = 1 ]; then
 	echo "orphans found: $total in ${#dbs[@]} database(s) (applied)"
 	[ "$failed" = 0 ] || die "some deletions failed (see above); re-run to retry"
