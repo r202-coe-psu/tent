@@ -4,6 +4,7 @@ import {
 	addQty,
 	formatQty,
 	parseQty,
+	parseQtyInput,
 	persistQty,
 	qtyAbs,
 	qtyGte,
@@ -112,4 +113,23 @@ describe('toQtyStrLossless (#936)', () => {
 		expect(toQtyStrLossless(NaN)).toBeNaN();
 		expect(toQtyStrLossless(undefined)).toBeUndefined();
 	});
+});
+
+describe('parseQtyInput (#939)', () => {
+	it.each([
+		['0.30000', '0.3'],
+		['1', '1'],
+		['12.5', '12.5'],
+		[' 3 ', '3'],
+		['0.1200', '0.12']
+	])('accepts %s as %s', (raw, expected) => {
+		expect(parseQtyInput(raw)).toBe(expected);
+	});
+
+	it.each(['', '  ', '1e3', '1e21', '0.12345', '-1', '1,5', 'abc', '1.', '.5', 'NaN', 'Infinity'])(
+		'rejects %j',
+		(raw) => {
+			expect(parseQtyInput(raw)).toBeNull();
+		}
+	);
 });
