@@ -337,4 +337,17 @@ describe('banner groups', () => {
 		expect(JSON.parse(init.body as string)).toEqual({ device_ids: ['scanner_device:3'] });
 		expect(updated.device_ids).toEqual(['scanner_device:3']);
 	});
+
+	it('rotateTvCode POSTs to the encoded tv-code sub-route and parses the group with its new code', async () => {
+		fetchMock.mockResolvedValueOnce(
+			respond(200, { ...group, schema_v: 2, tv_code: '048213', _rev: '2-g' })
+		);
+		const rotated = await groupRepo.rotateTvCode('kiosk_banner_group:01G');
+		const { url, init } = lastCall();
+		expect(url).toBe(`${GROUP_BASE}/kiosk_banner_group%3A01G/tv-code`);
+		expect(init.method).toBe('POST');
+		expect(init.body).toBeUndefined();
+		expect(rotated._rev).toBe('2-g');
+		expect('tv_code' in rotated && rotated.tv_code).toBe('048213');
+	});
 });

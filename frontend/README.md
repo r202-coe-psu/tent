@@ -67,18 +67,18 @@ pnpm dev
 
 ## Scripts
 
-| Command               | ทำอะไร                                               |
-| --------------------- | ---------------------------------------------------- |
-| `pnpm dev`            | Vite dev server (port 5173)                          |
-| `pnpm build`          | Build production (static output)                     |
-| `pnpm preview`        | Preview build ที่ build แล้ว                         |
-| `pnpm check`          | `svelte-check` type-check — **รันก่อนจบงานทุกครั้ง** |
-| `pnpm lint`           | `prettier --check` + `eslint`                        |
-| `pnpm format`         | Prettier เขียนทับ                                    |
-| `pnpm test`           | Unit test (Vitest)                                   |
-| `pnpm test:watch`     | Vitest watch mode                                    |
-| `pnpm test:e2e`       | Build แล้วรัน Playwright e2e                         |
-| `pnpm openapi:update` | Regenerate API types จาก OpenAPI spec                |
+| Command               | ทำอะไร                                        |
+| --------------------- | --------------------------------------------- |
+| `pnpm dev`            | Vite dev server (port 5173)                   |
+| `pnpm build`          | Build production (static output)              |
+| `pnpm preview`        | Preview build ที่ build แล้ว                  |
+| `pnpm check`          | `svelte-check` type-check — รันเองก่อนเปิด PR |
+| `pnpm lint`           | `prettier --check` + `eslint`                 |
+| `pnpm format`         | Prettier เขียนทับ                             |
+| `pnpm test`           | Unit test (Vitest)                            |
+| `pnpm test:watch`     | Vitest watch mode                             |
+| `pnpm test:e2e`       | Build แล้วรัน Playwright e2e                  |
+| `pnpm openapi:update` | Regenerate API types จาก OpenAPI spec         |
 
 ## โครงสร้าง
 

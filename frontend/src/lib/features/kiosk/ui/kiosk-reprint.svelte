@@ -56,7 +56,9 @@
 	async function printMembers(
 		members: Parameters<ReprintSessionDeps['print']>[0]
 	): ReturnType<ReprintSessionDeps['print']> {
-		const images = await Promise.all(members.map((m) => prepareKioskQrImage(m.qr_payload ?? '')));
+		const images = await Promise.all(
+			members.map((m) => prepareKioskQrImage(m.qr_payload ?? '', m.label.marker))
+		);
 		sheetLabels = members.map((member, index) => ({
 			key: member.evacuee_id,
 			qrSrc: images[index].src,
@@ -64,7 +66,8 @@
 			name: member.label.name,
 			zone: member.label.zone,
 			emergencyPhone: member.label.emergency_phone,
-			checkedCount: member.label.stations_passed
+			checkedCount: member.label.stations_passed,
+			marker: member.label.marker
 		}));
 		try {
 			return await printKioskQrLabels(
@@ -73,7 +76,8 @@
 					name: member.label.name,
 					zone: member.label.zone,
 					emergencyPhone: member.label.emergency_phone,
-					checkedCount: member.label.stations_passed
+					checkedCount: member.label.stations_passed,
+					marker: member.label.marker
 				})),
 				async () => {
 					// The sheet must be on the page before the browser prints it.

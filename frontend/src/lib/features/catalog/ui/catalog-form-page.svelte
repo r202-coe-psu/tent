@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import ItemCategoryForm from './item-category-form.svelte';
 	import ItemMasterForm from './item-master-form.svelte';
 	import RecipeForm from './recipe-form.svelte';
@@ -11,12 +10,14 @@
 		entity,
 		mode,
 		id = '',
-		basePath = '/back-office/catalog'
+		basePath = '/back-office/catalog',
+		backLabel = 'กลับไปคลังสินค้า'
 	}: {
 		entity: 'item-categories' | 'item-masters' | 'recipe' | 'recipes';
 		mode: 'create' | 'edit';
 		id?: string;
 		basePath?: string;
+		backLabel?: string;
 	} = $props();
 
 	const title = $derived(
@@ -35,14 +36,13 @@
 </script>
 
 <div class="container mx-auto max-w-4xl p-6">
-	<div class="mb-6 flex items-center gap-4">
-		<Button variant="outline" size="icon" onclick={handleBack}>
-			<ChevronLeft class="h-5 w-5" />
-		</Button>
-		<div>
-			<span class="text-xs text-muted-foreground">คลังสินค้า</span>
-			<h1 class="text-2xl font-bold tracking-tight">{title}</h1>
-		</div>
+	<div class="mb-6">
+		<BackLink
+			href={resolve(basePath as '/back-office/catalog')}
+			label={backLabel}
+			class="mb-1 -ml-3"
+		/>
+		<h1 class="text-2xl font-bold tracking-tight">{title}</h1>
 	</div>
 	<div class="rounded-2xl border border-border bg-card p-6 shadow-xs">
 		{#if entity === 'item-categories'}

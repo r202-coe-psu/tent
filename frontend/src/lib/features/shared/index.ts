@@ -30,10 +30,13 @@ export {
 
 export {
 	DEFAULT_KIOSK_SCREEN_TYPE,
+	KIOSK_DEVICE_SCREEN_TYPES,
 	KIOSK_SCREENS,
 	KIOSK_SCREEN_TYPES,
+	kioskDeviceScreenTypeSchema,
 	kioskScreenTypeSchema,
 	screenTypeOf,
+	type KioskDeviceScreenType,
 	type KioskScreenType
 } from './domain/kiosk-screen';
 

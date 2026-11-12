@@ -1,12 +1,36 @@
+import Decimal from 'decimal.js';
+import { parseQty } from '$lib/utils/qty';
 import type { FoodSphereStandard } from './food-sphere';
 import type { RequirementGroup } from './requirement-group';
 import type { ReplenishmentPolicy } from './replenishment-policy';
 import {
-	calculateItemDailyDemand,
+	calculateItemDailyDemandDecimal,
 	calculateReplenishmentAnalysis,
 	type DocAlertStatus
 } from './replenishment-calc';
-import { calculateTotalDailyDemand, type HeadcountBySegment } from './food-sphere-calc';
+import { calculateTotalDailyDemandDecimal, type HeadcountBySegment } from './food-sphere-calc';
+
+/** Thrown when a stock balance string is not a finite number. */
+export class InvalidStockQtyError extends Error {
+	constructor(
+		readonly itemId: string,
+		readonly raw: string
+	) {
+		super(`Invalid stock quantity "${raw}" for item ${itemId}`);
+		this.name = 'InvalidStockQtyError';
+	}
+}
+
+function parseStock(itemId: string, raw: string): Decimal {
+	let d: Decimal;
+	try {
+		d = parseQty(raw);
+	} catch {
+		throw new InvalidStockQtyError(itemId, raw);
+	}
+	if (!d.isFinite()) throw new InvalidStockQtyError(itemId, raw);
+	return Decimal.max(0, d);
+}
 
 export interface FoodSphereTableItem {
 	itemId: string;
@@ -161,7 +185,12 @@ export function buildFoodSphereTable(options: BuildFoodSphereTableOptions): {
 	for (const rg of requirementGroups) {
 		if ((rg.status ?? 'active') === 'inactive') continue;
 		const cleanGroupId = rg._id.replace(/^requirement_group:/, '');
-		const totalGroupDemand = calculateTotalDailyDemand(cleanGroupId, headcounts, standards);
+		const totalGroupDemandDec = calculateTotalDailyDemandDecimal(
+			cleanGroupId,
+			headcounts,
+			standards
+		);
+		const totalGroupDemand = totalGroupDemandDec.toNumber();
 		const groupItems: FoodSphereTableItem[] = [];
 
 		if (rg.item_maps && rg.item_maps.length > 0) {
@@ -174,20 +203,24 @@ export function buildFoodSphereTable(options: BuildFoodSphereTableOptions): {
 					processedItemIds.add(master._id);
 				}
 
-				const sharePercent = map.share_percent ?? 100;
-				const conversionFactor = map.conversion_factor > 0 ? map.conversion_factor : 1;
-				const itemDailyDemand = calculateItemDailyDemand(
-					totalGroupDemand,
-					sharePercent,
-					conversionFactor
+				const shareDec = parseQty(map.share_percent ?? 100);
+				const cfRaw = parseQty(map.conversion_factor);
+				const cfDec = cfRaw.gt(0) ? cfRaw : new Decimal(1);
+				const sharePercent = shareDec.toNumber();
+				const conversionFactor = cfDec.toNumber();
+				const itemDailyDemand = calculateItemDailyDemandDecimal(
+					totalGroupDemandDec,
+					shareDec,
+					cfDec
 				);
 
 				const rawStock =
 					balance.get(map.item_id) ?? (master ? balance.get(master._id) : '0') ?? '0';
-				const stockNum = Math.max(0, parseFloat(rawStock) || 0);
+				const stock = parseStock(map.item_id, rawStock);
+				const stockNum = stock.toNumber();
 
 				const policy = resolveItemPolicy(map.item_id, cleanGroupId, policies);
-				const analysis = calculateReplenishmentAnalysis(stockNum, itemDailyDemand, policy);
+				const analysis = calculateReplenishmentAnalysis(stock, itemDailyDemand, policy);
 
 				tallyStatus(analysis.status);
 
@@ -236,10 +269,11 @@ export function buildFoodSphereTable(options: BuildFoodSphereTableOptions): {
 		if (processedItemIds.has(cleanId)) continue;
 
 		const rawStock = balance.get(im._id) ?? '0';
-		const stockNum = Math.max(0, parseFloat(rawStock) || 0);
+		const stock = parseStock(im._id, rawStock);
+		const stockNum = stock.toNumber();
 
 		const policy = resolveItemPolicy(im._id, 'GENERAL', policies);
-		const analysis = calculateReplenishmentAnalysis(stockNum, 0, policy);
+		const analysis = calculateReplenishmentAnalysis(stock, 0, policy);
 
 		tallyStatus(analysis.status);
 

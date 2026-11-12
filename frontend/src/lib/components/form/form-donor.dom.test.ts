@@ -8,10 +8,16 @@ const toastError = vi.hoisted(() => vi.fn());
 
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: toastError } }));
 vi.mock('$lib/utils/scroll-app-to-top', () => ({ scrollAppToTop: vi.fn() }));
-vi.mock('$lib/features/catalog', async (orig) => ({
-	...(await orig<typeof import('$lib/features/catalog')>()),
-	useUnitsOfMeasure: () => ({ data: [] })
-}));
+vi.mock('$lib/features/catalog', async (orig) => {
+	const actual = await orig<typeof import('$lib/features/catalog')>();
+	return {
+		...actual,
+		useUnitsOfMeasure: () => ({ data: [] }),
+		useUnitDimensionResolver: () => ({
+			resolve: (unit: string) => actual.resolveUnitDimension(unit)
+		})
+	};
+});
 vi.mock('../../../routes/(public)/donations/donation.svelte', async (orig) => ({
 	...(await orig<typeof import('../../../routes/(public)/donations/donation.svelte')>()),
 	getDonationStore: () => h.store
@@ -106,7 +112,7 @@ describe('form-donor quantity (#822)', () => {
 		expect(document.body.textContent).not.toContain(amountMsg(1));
 	});
 
-	it('allows fractional amounts and shows the shortfall hint for need-derived items only', () => {
+	it('shows the shortfall hint for need-derived items only, with a whole-number step for a count unit', () => {
 		store.items = [
 			newDonationItem({ name: 'ไข่ไก่', unit: 'ฟอง', unit_code: 'piece', qty_needed: 365 }),
 			newDonationItem({ name: 'อื่น', unit: 'kg' })
@@ -114,10 +120,86 @@ describe('form-donor quantity (#822)', () => {
 		render();
 		const first = document.getElementById(`amount-${store.items[0].id}`) as HTMLInputElement;
 		expect(first.getAttribute('min')).toBe('0');
-		expect(first.getAttribute('step')).toBe('any');
+		expect(first.getAttribute('step')).toBe('1');
+		expect(first.getAttribute('inputmode')).toBe('numeric');
+		expect((document.getElementById(`amount-${store.items[1].id}`) as HTMLInputElement).step).toBe(
+			'any'
+		);
 		expect(first.value).toBe('0');
 		const hint = document.querySelector(`[data-testid="need-shortage-${store.items[0].id}"]`);
 		expect(hint?.textContent).toContain('ยังขาด 365');
 		expect(document.querySelector(`[data-testid="need-shortage-${store.items[1].id}"]`)).toBeNull();
+	});
+});
+
+describe('form-donor whole quantity for count units (#805)', () => {
+	const amountInput = (i = 0) =>
+		document.getElementById(`amount-${store.items[i].id}`) as HTMLInputElement;
+	const errorOf = (i = 0) =>
+		document.querySelector(`[data-testid="amount-error-${store.items[i].id}"]`);
+	const next = () =>
+		[...document.querySelectorAll('button')].find((b) => b.textContent?.includes(t.nextBtn))!;
+
+	it('shows the error and disables next for 1.5 bottles, even though next is clicked', () => {
+		store.items = [{ ...newDonationItem({ name: 'น้ำดื่ม', unit: 'bottle' }), amount: 1.5 }];
+		render();
+		expect(errorOf()?.textContent?.trim()).toBe(t.editQtyWholeError);
+		expect(amountInput().getAttribute('aria-invalid')).toBe('true');
+		expect(amountInput().getAttribute('aria-describedby')).toBe(
+			`amount-${store.items[0].id}-error`
+		);
+		expect(amountInput().getAttribute('step')).toBe('1');
+		expect(next().disabled).toBe(true);
+		clickNext();
+		expect(store.activeTab).toBe('form');
+	});
+
+	it('accepts 2 bottles', () => {
+		store.items = [{ ...newDonationItem({ name: 'น้ำดื่ม', unit: 'bottle' }), amount: 2 }];
+		render();
+		expect(errorOf()).toBeNull();
+		expect(next().disabled).toBe(false);
+		clickNext();
+		expect(store.activeTab).toBe('time');
+	});
+
+	it('accepts 1.5 kg', () => {
+		store.items = [{ ...newDonationItem({ name: 'ข้าวสาร', unit: 'kg' }), amount: 1.5 }];
+		render();
+		expect(errorOf()).toBeNull();
+		expect(next().disabled).toBe(false);
+		clickNext();
+		expect(store.activeTab).toBe('time');
+	});
+
+	it('clears the error and re-enables next once the box holds a whole number', async () => {
+		store.items = [{ ...newDonationItem({ name: 'น้ำดื่ม', unit: 'bottle' }), amount: 0 }];
+		render();
+		const input = amountInput();
+		input.value = '1.5';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		expect(errorOf()).not.toBeNull();
+		expect(next().disabled).toBe(true);
+		input.value = '2';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		await tick();
+		expect(errorOf()).toBeNull();
+		expect(next().disabled).toBe(false);
+	});
+
+	it('takes the dimension from unit_code when the label is a legacy word', () => {
+		store.items = [
+			{ ...newDonationItem({ name: 'ไข่', unit: 'ฟอง', unit_code: 'piece' }), amount: 1.5 }
+		];
+		render();
+		expect(errorOf()).not.toBeNull();
+	});
+
+	it('enforces no rule for an unknown unit', () => {
+		store.items = [{ ...newDonationItem({ name: 'อื่นๆ', unit: 'zzz' }), amount: 1.5 }];
+		render();
+		expect(errorOf()).toBeNull();
+		expect(next().disabled).toBe(false);
 	});
 });

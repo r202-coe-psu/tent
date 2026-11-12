@@ -260,6 +260,68 @@ test.describe(
 			});
 		});
 
+		test('restores draft after reload and clears draft on submit (#358)', async ({ page }) => {
+			await mockReferenceData(page);
+
+			await page.route('**/api/public/v1/registrations', async (route) => {
+				await route.fulfill({
+					status: 201,
+					contentType: 'application/json',
+					body: JSON.stringify(TICKET)
+				});
+			});
+
+			await openBooking(page);
+
+			await page.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง/ }).click();
+			await page.getByRole('option', { name: /เทศบาลนครหาดใหญ่/ }).click();
+
+			await fillAddress(page);
+			await fillPrimaryMember(page, {
+				firstName: 'สมชาย',
+				lastName: 'ใจดี',
+				phone: '0812345678'
+			});
+
+			// Wait for autosave debounce (500ms) to write draft into sessionStorage
+			await expect
+				.poll(
+					() =>
+						page.evaluate(() =>
+							sessionStorage.getItem('tent.registrationDraft:public-pre-register')
+						),
+					{ timeout: 5000 }
+				)
+				.not.toBeNull();
+
+			// Reload page (simulates browser memory eviction or camera reload)
+			await page.reload();
+			await page.evaluate(() => {
+				(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
+			});
+
+			// Toast should announce restoration
+			await expect(page.getByText(/กู้ข้อมูลที่กรอกไว้ให้แล้ว/)).toBeVisible();
+
+			// Form fields should be restored
+			await expect(page.locator('#member-0-first-name')).toHaveValue('สมชาย');
+			await expect(page.locator('#member-0-last-name')).toHaveValue('ใจดี');
+			await expect(page.locator('#member-0-phone')).toHaveValue('0812345678');
+
+			// Submit the form
+			await acceptFullConsent(page);
+			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
+
+			// Ticket screen shown
+			await expect(page.getByText('สมชาย ใจดี')).toBeVisible();
+
+			// After submit, draft should be wiped from sessionStorage
+			const draftAfter = await page.evaluate(() =>
+				sessionStorage.getItem('tent.registrationDraft:public-pre-register')
+			);
+			expect(draftAfter).toBeNull();
+		});
+
 		test('adds family members and tags CR-112 vulnerable groups', async ({ page }) => {
 			await mockReferenceData(page);
 

@@ -43,6 +43,7 @@
 		seatsLeft,
 		visibleDateCount
 	} from '../domain/shift-picker';
+	import { MAX_OCCUPATION_LENGTH } from '../domain/volunteer.schema';
 	import type {
 		PortalCredential,
 		VolunteerProfile,
@@ -207,6 +208,7 @@
 		nickname: '',
 		phone: '',
 		email: '',
+		occupation: '',
 		skills: [] as string[],
 		consentPdpa: false
 	});
@@ -221,6 +223,7 @@
 		// prefilled mask there passed the empty check and went out as its leftover digits.
 		formData.phone = '';
 		formData.email = applicantProfile.email ?? '';
+		formData.occupation = applicantProfile.occupation ?? '';
 		formData.skills = applicantProfile.skills.map(canonicalSkillId);
 	});
 
@@ -370,6 +373,7 @@
 				last_name: lastName,
 				phone: cleanApplicantPhone(),
 				email: isPortalApplicant ? '' : formData.email.trim(),
+				occupation: formData.occupation.trim() || undefined,
 				skills: formData.skills,
 				shifts: pickedShifts.map(shiftPayload),
 				...(recaptchaToken ? { captchaToken: recaptchaToken } : {})
@@ -445,6 +449,7 @@
 				nickname: '',
 				phone: '',
 				email: '',
+				occupation: '',
 				skills: [],
 				consentPdpa: false
 			};
@@ -540,6 +545,7 @@
 				last_name: formData.lastName.trim(),
 				phone: cleanApplicantPhone(),
 				email: isPortalApplicant ? '' : formData.email.trim(),
+				occupation: formData.occupation.trim() || undefined,
 				skills: formData.skills,
 				// One shift is checked here; several are each judged at apply time (#716).
 				...(pickedShifts.length === 1 ? shiftPayload(pickedShifts[0]) : {})
@@ -935,20 +941,41 @@
 											</p>
 										</div>
 									</div>
-									<div>
-										<label for="email" class="mb-1.5 block text-xs font-bold text-foreground">
-											{t.applyEmail}
-											<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
-										</label>
-										<input
-											id="email"
-											type="email"
-											bind:value={formData.email}
-											readonly={isPortalApplicant}
-											aria-readonly={isPortalApplicant}
-											placeholder="volunteer@example.com"
-											class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
-										/>
+									<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+										<div>
+											<label for="email" class="mb-1.5 block text-xs font-bold text-foreground">
+												{t.applyEmail}
+												<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
+											</label>
+											<input
+												id="email"
+												type="email"
+												bind:value={formData.email}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												placeholder="volunteer@example.com"
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+										</div>
+										<div>
+											<label
+												for="occupation"
+												class="mb-1.5 block text-xs font-bold text-foreground"
+											>
+												{t.applyOccupation}
+												<span class="font-normal text-muted-foreground">{t.applyOptional}</span>
+											</label>
+											<input
+												id="occupation"
+												type="text"
+												maxlength={MAX_OCCUPATION_LENGTH}
+												bind:value={formData.occupation}
+												readonly={isPortalApplicant}
+												aria-readonly={isPortalApplicant}
+												placeholder={t.applyOccupationPlaceholder}
+												class="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-hidden transition-all focus:border-primary focus:ring-1 focus:ring-primary"
+											/>
+										</div>
 									</div>
 								</div>
 							</section>

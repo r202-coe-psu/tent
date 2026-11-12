@@ -16,6 +16,9 @@
 		useUnitsOfMeasure
 	} from '../application/queries';
 	import { formatUnit } from '../domain/unit-of-measure';
+	import { qtyInputStep } from '../domain/unit-quantity';
+	import { useUnitDimensionResolver } from '../application/use-unit-dimension-resolver.svelte';
+	import { recipeIngredientQtyIssues } from './recipe-ingredient-qty';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -49,6 +52,16 @@
 	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const dimensions = useUnitDimensionResolver();
+
+	const wholeQtySchema = recipeInputSchema.superRefine((data, ctx) => {
+		for (const { index, message } of recipeIngredientQtyIssues(
+			data.ingredients,
+			dimensions.resolve
+		)) {
+			ctx.addIssue({ code: 'custom', message, path: ['ingredients', index, 'quantity'] });
+		}
+	});
 
 	const form = superForm(
 		defaults(zod4(recipeInputSchema), {
@@ -63,7 +76,7 @@
 		{
 			SPA: true,
 			dataType: 'json',
-			validators: zod4(recipeInputSchema),
+			validators: zod4(wholeQtySchema),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) return;
@@ -126,6 +139,15 @@
 		}
 	);
 	const { form: formData, submitting } = form;
+
+	const qtyMessages = $derived(
+		new Map(
+			recipeIngredientQtyIssues($formData.ingredients, dimensions.resolve).map((i) => [
+				i.index,
+				i.message
+			])
+		)
+	);
 
 	let populatedId = $state<string | null>(null);
 
@@ -212,7 +234,7 @@
 				<div class="space-y-3">
 					{#each $formData.ingredients as conv, index (index)}
 						<div
-							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:flex-row md:items-end dark:border-zinc-800 dark:bg-zinc-950"
+							class="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:flex-row md:items-start dark:border-zinc-800 dark:bg-zinc-950"
 						>
 							<!-- ค้นหาวัตถุดิบจากคลัง -->
 							<div class="flex-1 space-y-1.5">
@@ -233,15 +255,21 @@
 								<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
 								<Input
 									type="number"
-									step="any"
+									step={qtyInputStep(dimensions.resolve(conv.uom))}
 									min={0}
-									value={conv.quantity}
-									oninput={(e) => {
-										const val = e.currentTarget.value;
-										conv.quantity = val === '' ? '1' : val;
+									bind:value={
+										() => (conv.quantity === '' ? null : Number(conv.quantity)),
+										(v) => (conv.quantity = v == null ? '' : String(v))
+									}
+									aria-invalid={qtyMessages.has(index)}
+									onblur={() => {
+										if (conv.quantity === '') conv.quantity = '1';
 									}}
 									class="h-12 rounded-xl border-slate-200/80 bg-white text-center dark:border-zinc-800 dark:bg-zinc-950"
 								/>
+								{#if qtyMessages.has(index)}
+									<p class="text-xs font-semibold text-destructive">{qtyMessages.get(index)}</p>
+								{/if}
 							</div>
 
 							<!-- หน่วย -->
@@ -260,9 +288,11 @@
 								{/if}
 							</div>
 
-							<!-- Action Buttons -->
-							<div class="mt-4 flex items-center gap-2 md:mt-0">
-								{#if $formData.ingredients.length > 1}
+							{#if $formData.ingredients.length > 1}
+								<div class="space-y-1.5">
+									<span aria-hidden="true" class="invisible hidden text-xs font-bold md:block"
+										>ลบ</span
+									>
 									<Button
 										type="button"
 										variant="ghost"
@@ -270,21 +300,20 @@
 										onclick={() => removeIngredient(index)}
 									>
 										<Trash2 class="h-5 w-5" />
+										<span class="sr-only">ลบวัตถุดิบ</span>
 									</Button>
-								{/if}
-								{#if index === $formData.ingredients.length - 1}
-									<Button
-										type="button"
-										onclick={addIngredient}
-										class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-slate-100 px-5 font-bold text-[#002f6c] hover:bg-slate-200 dark:bg-zinc-800 dark:text-blue-400 dark:hover:bg-zinc-700"
-									>
-										<Plus class="h-4 w-4" />
-										เพิ่ม
-									</Button>
-								{/if}
-							</div>
+								</div>
+							{/if}
 						</div>
 					{/each}
+					<Button
+						type="button"
+						onclick={addIngredient}
+						class="flex h-12 items-center gap-1 rounded-xl bg-slate-100 px-5 font-bold text-[#002f6c] hover:bg-slate-200 dark:bg-zinc-800 dark:text-blue-400 dark:hover:bg-zinc-700"
+					>
+						<Plus class="h-4 w-4" />
+						เพิ่มวัตถุดิบ
+					</Button>
 				</div>
 
 				<div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
@@ -376,7 +405,7 @@
 
 				<Button
 					type="submit"
-					disabled={$submitting || isPending}
+					disabled={$submitting || isPending || qtyMessages.size > 0}
 					class="flex items-center gap-1.5 rounded-xl bg-[#002f6c] px-7 py-6 text-sm font-bold text-white shadow-md shadow-[#002f6c]/10 hover:bg-[#00204d] dark:shadow-none"
 				>
 					{#if $submitting || isPending}

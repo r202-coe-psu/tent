@@ -2,7 +2,7 @@
 title: Contributing — frontend
 status: active
 created: 2026-06-10
-updated: 2026-10-10
+updated: 2026-11-12
 note: decision sync 2026-10-10 — §4 session expiry — 401 = session expired → `needsReauth` + global non-dismissable login modal; 403 or BFF 401 → `needsReauth` only when `GET /_session` confirms anonymous, otherwise treat as permission denied (no modal); network errors = offline banner only (replaces "on 401/403 set needsReauth")
 ---
 
@@ -10,8 +10,9 @@ note: decision sync 2026-10-10 — §4 session expiry — 401 = session expired 
 
 Working agreement for the **`frontend`** package (the SvelteKit frontend of _tent / CouchDB Lab_).
 Read this before opening a PR. It captures the conventions the codebase already enforces — most
-are checked by ESLint, `svelte-check`, tests, and the **Lefthook pre-commit/pre-push hooks** (§1),
-so "the hooks are green" and "this doc is honored" should mean the same thing for lint/check/test.
+are checked by ESLint, tests, and the **Lefthook pre-commit/pre-push hooks** (§1),
+so "the hooks are green" and "this doc is honored" should mean the same thing for lint and unit
+tests. `pnpm check` (`svelte-check`) is a manual step before a PR.
 
 > The stale `agent-role.md` still describes the original sveltekitten template (JWT auth, flat
 > `api.ts`/`queries.ts` features). **This document and the actual `src/` tree win** where they
@@ -54,40 +55,51 @@ Copy `.env.example` to `.env` first. The frontend also needs `frontend/.env` (co
 `frontend/.env.example`) — include `PUBLIC_FASTAPI_PROXY=http://localhost:9000` for Vite
 proxies and `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` for the BFF → FastAPI donation path.
 
-### Pre-commit quality gate (Lefthook)
+### Quality gate (Lefthook)
 
-[`lefthook.yml`](../lefthook.yml) at the repo root is the quality gate for lint, type-check and
-unit tests:
+[`lefthook.yml`](../lefthook.yml) at the repo root is the quality gate for lint and unit tests:
 
-- **pre-commit** (staged files only, fast): `prettier --write` + `eslint --fix` on staged
+- **pre-commit** (staged files only): `prettier --write` + `eslint --fix` on staged
   `frontend/` files; fixes are re-staged automatically.
-- **pre-push** (whole project, sequential): `pnpm check` (`svelte-check`), then `pnpm test`
-  (Vitest). Skipped when the pushed commits touch no `frontend/` source files.
+- **pre-push** (sequential): `pnpm test:changed` (`scripts/test-changed.sh`) — Vitest
+  `--changed origin/develop`, which runs only the test files whose import graph reaches a file
+  changed since the merge-base with `origin/develop` (plus staged/unstaged edits). The whole
+  suite runs instead when a non-test file was deleted or renamed (Vitest cannot find its
+  importers), or on a change to `package.json`, the Vite config, `pnpm-lock.yaml`,
+  `tsconfig.json`, `svelte.config.js`, `src/lib/testing/**` or `src/app.css`
+  (`forceRerunTriggers` in `vite.config.ts`). Skipped when the pushed
+  commits touch no `frontend/` source files. Keep `origin/develop` fetched — a stale ref only
+  widens the selection.
+- **Full unit suite** is manual: run `pnpm test` before opening a PR. The scoped hook misses
+  tests that read a file from disk instead of importing it, and Jenkins does not run the unit
+  suites (it runs deploy + Playwright e2e on `staging`/`main` only — see `ci/README.md`).
+- **Type-check** is manual: run `pnpm check` (`svelte-check`) before opening a PR.
 
 Hooks register automatically via the root `prepare` script when you `pnpm install` at the repo
 root. Backend/worker get the equivalent `ruff` (pre-commit) and `pytest` (pre-push) jobs.
 
-**Strict Rule — No Verification Bypass:** Do **NOT** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` under any circumstances (ห้าม commit หรือ push แบบ no-verify โดยเด็ดขาด). All quality gates (linting, type-checking, tests) must pass before code is committed or pushed. If a check fails, fix the code.
+**Strict Rule — No Verification Bypass:** Do **NOT** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` under any circumstances (ห้าม commit หรือ push แบบ no-verify โดยเด็ดขาด). Hook gates (lint and tests) must pass before code is committed or pushed. Run `pnpm check` and `pnpm test` before a PR. If a check fails, fix the code.
 
 ## 2. Definition of done
 
 A change is not ready until **all** of these hold:
 
-**Enforced by Lefthook (§1) — do not re-run the full suites by hand before committing:**
+**Enforced by Lefthook (§1) — do not re-run tests by hand before each push:**
 
 1. Lint/format clean — Prettier (tabs, single quotes, no trailing comma, printWidth 100) + ESLint
    (pre-commit).
-2. Zero `svelte-check` errors — `pnpm check` (pre-push).
-3. Unit tests green — `pnpm test` (pre-push).
+2. Affected unit tests green — `pnpm test:changed` (pre-push).
 
 While developing, run only the tests for what you changed (`pnpm vitest run <file>`); the
-pre-push hook runs the full `check` + `test` once. A green push means items 1–3 are met.
+pre-push hook runs the tests your branch can affect. A green push means items 1–2 are met.
 
 **Not hooked — your responsibility (reviewers check these):**
 
-4. New domain/data logic ships with tests (see §6). The hook only proves existing tests pass;
+3. Full unit suite green — `pnpm test`, once, before you open a PR.
+4. Zero `svelte-check` errors — `pnpm check`, before you open a PR.
+5. New domain/data logic ships with tests (see §6). The hook only proves existing tests pass;
    it cannot tell that new logic has none.
-5. Every `.svelte` file you touched has been run through the **`svelte-autofixer`** (Svelte MCP)
+6. Every `.svelte` file you touched has been run through the **`svelte-autofixer`** (Svelte MCP)
    until it reports no issues.
 
 Never bypass the hooks (`--no-verify`, `LEFTHOOK=0`) — see the Strict Rule in §1.
@@ -428,9 +440,7 @@ Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12*
 - Vitest's fs module cache (`experimental.fsModuleCache`) persists transforms in
   `node_modules/.experimental-vitest-cache`. Delete that directory if results look stale.
   Set `VITEST_NO_FS_CACHE=1` to disable it for one run (the CLI flag `--experimental.fsModuleCache=false`
-  does not work with `projects`). The pre-push hook runs with `VITEST_NO_FS_CACHE=1` on purpose, because
-  it is the only unit-test gate and an experimental cache must not be the last check; follow-up: run
-  `pnpm test` in Jenkins, then reconsider.
+  does not work with `projects`). Pre-push runs `pnpm test:changed` with the cache left on.
 - E2E is **Playwright** in `e2e/`; `pnpm test:e2e` builds in `test` mode first. `e2e/mock-api.js`
   stands in for the backend during those runs.
 
