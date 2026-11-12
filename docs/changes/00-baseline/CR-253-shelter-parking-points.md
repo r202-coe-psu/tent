@@ -1,15 +1,15 @@
 ---
-id: draft
+id: CR-253
 title: shelter — เพิ่มจุดจอดรถ (`parking_points`) ปักหมุดได้ พร้อมประเภทรถและความจุรายจุด
-status: proposed
+status: approved
 date: 2026-11-12
 requested_by: ทีม — GitHub #1352
-decided_by:
+decided_by: kong
 layer: volatile
 affects:
-  - docs/data/schema.md §3.1 `shelter.parking_points` (field ใหม่) · `parking_policy.supported_vehicles` (legacy) · shelter schema_v 9 → 10
+  - docs/data/schema.md §3.1 `shelter.parking_points` (field ใหม่) · `parking_policy.supported_vehicles` (legacy) · shelter schema_v 10 → 11
   - docs/data/schema-er-diagram.md (SHELTER block)
-  - frontend/src/lib/features/shelters/domain/schema.ts (`parkingPointSchema`, `SHELTER_MASTER_SCHEMA_V`, `migrateV9ToV10`, `normalizeCurrent`, chain ของ `migrateShelterV2ToCurrent`, ฟังก์ชันคำนวณประเภทรถ/ความจุรวมจากจุดจอดรถ) · index.ts
+  - frontend/src/lib/features/shelters/domain/schema.ts (`parkingPointSchema`, `SHELTER_MASTER_SCHEMA_V`, `migrateV10ToV11`, `normalizeCurrent`, chain ของ `migrateShelterV2ToCurrent`, ฟังก์ชันคำนวณประเภทรถ/ความจุรวมจากจุดจอดรถ) · index.ts
   - frontend/src/lib/features/shelters/data (shelters.repository.ts, shelters.remote.ts)
   - frontend/src/routes/api/back-office/shelter/+server.ts · [code]/+server.ts (GET mapping)
   - frontend/src/routes/api/public/v1/transparency/shelters/+server.ts (ตัวกรอง `parking_car` / `parking_motorcycle` / `parking_boat` อ่านจากจุดจอดรถ)
@@ -27,10 +27,10 @@ why: >
   ตอนนี้มีแค่นโยบายยานพาหนะระดับศูนย์ (รับรถประเภทไหน กี่คัน) ไม่มีที่บอกว่าจอดตรงไหน
 migration: >
   additive — doc เดิมที่ไม่มี key อ่านเป็น `parking_points = []` (lazy default-fill) · ไม่มี batch script ·
-  เขียนครั้งถัดไป stamp schema_v 10 · `parking_policy.supported_vehicles` คงไว้เป็นค่า legacy ใช้ต่อจนกว่าศูนย์จะมีจุดจอดรถที่ระบุรถ
+  เขียนครั้งถัดไป stamp schema_v 11 · `parking_policy.supported_vehicles` คงไว้เป็นค่า legacy ใช้ต่อจนกว่าศูนย์จะมีจุดจอดรถที่ระบุรถ
 ---
 
-# draft-shelter-parking-points — จุดจอดรถของศูนย์
+# CR-253 — จุดจอดรถของศูนย์
 
 > **สรุป (TL;DR):**
 >
@@ -40,7 +40,8 @@ migration: >
 > - **build:** หน้าตั้งค่าศูนย์เพิ่มส่วนที่ 10 "จุดจอดรถ" ต่อจากนโยบายยานพาหนะ (ส่วนที่ 9) · import ศูนย์ต้องไม่ลบจุดจอดรถเดิม
 > - **หน้า public:** หน้าค้นหาศูนย์พักพิง (`/shelters`) แสดงจุดจอดรถเป็นหมุด **ไอคอนที่จอดรถ** บนแผนที่ พร้อมชื่อ หมายเหตุ ประเภทรถและความจุ · ทำตามแบบ `donation_points` (CR-205)
 > - **ตัวกรอง public:** ต่อสาย checkbox ที่จอดรถบนหน้า `/shelters` ให้ทำงานจริง (ตอนนี้ไม่ได้ต่อกับข้อมูล) โดยกรองฝั่ง client จาก `parking_vehicle_types` ที่ worker ฉาย
-> - **กระทบ:** shelter schema_v 9 → 10 (additive, lazy) · worker projection field ใหม่ + bump `PROJECTION_VERSION` · FastAPI detail response + OpenAPI · แผนที่และตัวกรองหน้า public
+> - **ลำดับกับ CR-252:** CR-252 ใช้ shelter schema_v 10 และ `PROJECTION_VERSION` 19 ไปแล้ว CR นี้จึงเป็น schema_v 11 และ `PROJECTION_VERSION` 20 (ปรับจาก 10 และ 19 ตอนร่าง ตามแบบ CR-205) · ต้อง merge หลัง CR-252 หรือสลับเลขก่อน merge
+> - **กระทบ:** shelter schema_v 10 → 11 (additive, lazy) · worker projection field ใหม่ + bump `PROJECTION_VERSION` · FastAPI detail response + OpenAPI · แผนที่และตัวกรองหน้า public
 
 ---
 
@@ -55,7 +56,7 @@ migration: >
 - FR-5 — `vehicles`: `[{ type, max_capacity }]` · `type` ∈ `motorcycle`, `car`, `truck`, `boat` · `max_capacity` เป็นจำนวนเต็ม ≥ 0 หรือ `null` · รูปเดียวกับ `parking_policy.supported_vehicles` (ใช้ schema ย่อยเดิม) · default `[]`
 - FR-6 — ภายในจุดเดียวกัน `type` ซ้ำกันไม่ได้ · ซ้ำ → บันทึกไม่ผ่าน
 - FR-7 — `parkingPointSchema` = `foodDistributionPointSchema` ที่เปลี่ยนข้อความ error ของ `name` และเพิ่ม `vehicles` · ไม่สร้างชุด schema ซ้ำสำหรับ lat/lng
-- FR-8 — `SHELTER_MASTER_SCHEMA_V` = 10 · doc ที่ไม่มี `parking_points` อ่านได้ `[]` · จุดที่ไม่มี `vehicles` อ่านได้ `[]` (§Migration)
+- FR-8 — `SHELTER_MASTER_SCHEMA_V` = 11 · doc ที่ไม่มี `parking_points` อ่านได้ `[]` · จุดที่ไม่มี `vehicles` อ่านได้ `[]` (§Migration)
 
 **ค่าที่ใช้จริงของศูนย์ (effective vehicles)** — คำนวณตอนอ่าน ไม่เก็บเป็น field
 
@@ -94,7 +95,7 @@ migration: >
 
 - FR-25 — worker เพิ่ม `project_parking_points` เขียน `public_shelters.parking_points` = `[{ id, name, note, geo: { lat, lng }, vehicles: [{ type, max_capacity }] }]` · ออกจาก staff plane เฉพาะจุดที่มี `id` และ `name` ที่เป็น string และมีพิกัดจริง (ทั้ง `lat` และ `lng` อยู่ในช่วง ไม่ใช่ (0,0)) แบบเดียวกับ `project_donation_points` · จุดที่ยังไม่ปักหมุดไม่ถูกส่งออก (เห็นเฉพาะใน staff) · `note` ว่างหลัง trim → `null` · เอกสารเสีย (`parking_points` ไม่ใช่ list) ทิ้งแค่รายการจุด ไม่ทิ้งทั้ง shelter row
 - FR-26 — ศูนย์ที่ `parking_policy.availability = 'none'` → `public_shelters.parking_points = []` (ไม่แสดงหมุด) ทั้งที่ doc ยังเก็บจุดไว้ (FR-11)
-- FR-27 — bump `PROJECTION_VERSION` +1 ใน PR เดียวกับ projector (ตอนเขียน CR ค่าปัจจุบัน 18 → 19 · เลขจริงให้เทียบกับ `develop` ตอน implement) พร้อมเพิ่มบรรทัดอธิบายในไฟล์ · ศูนย์ที่ไม่มีการแก้ไขได้ field ใหม่จาก bootstrap ตอน deploy
+- FR-27 — bump `PROJECTION_VERSION` +1 ใน PR เดียวกับ projector (ค่าบน `develop` ตอนอนุมัติคือ 18 และ CR-252 จะ bump เป็น 19 · CR นี้จึง bump เป็น 20 ถ้า CR-252 merge ก่อน · เลขจริงให้เทียบกับ `develop` ตอน implement) พร้อมเพิ่มบรรทัดอธิบายในไฟล์ · ศูนย์ที่ไม่มีการแก้ไขได้ field ใหม่จาก bootstrap ตอน deploy
 - FR-28 — `tent_model.public_shelter` เพิ่ม `ParkingPoint` (ข้าง `DonationPoint`) · FastAPI เพิ่ม `ShelterItem.parking_points` ใน **list response** (`GET /public/v1/shelters`) และ `ShelterDetail.parking_points` ใน detail response (ทั้งคู่ default `[]`) · อ่านจาก field ที่ worker ฉาย ไม่อ่านจาก `raw_data` · ไม่เปลี่ยน route path · รัน `pnpm openapi:update` แล้ว commit `fastapi.json` + `openapi.d.ts`
 - FR-29 — หน้าค้นหาศูนย์พักพิง (`/shelters`): แผนที่ (`ShelterMap`) วาดจุดจอดรถเป็นหมุด **ไอคอนที่จอดรถ** (รูปตัว P / รถ) · ขนาดเล็กแบบเดียวกับหมุดจุดรับบริจาค ไม่ใช้หมุดศูนย์และไม่ปนกับหมุดจุดรับบริจาค (สีและไอคอนต่างกัน) · คลิกหมุด → popup แสดงชื่อจุด หมายเหตุ และรายการประเภทรถพร้อมความจุ (หน่วยคันหรือลำ) · ข้อมูลต้องผ่าน `toPublicShelterCard` และชนิด `PublicShelterCardModel` ด้วย (ตัวแปลงนี้ตัดฟิลด์ที่ไม่รู้จักทิ้ง) · BFF `/api/public/v1/shelters` ส่งผ่านทั้งก้อนอยู่แล้ว ไม่ต้องแก้
 - FR-30 — แผนที่หน้าค้นหาวาดหมุดจุดจอดรถ **ของทุกศูนย์ที่อยู่ในผลค้นหาพร้อมกัน** (ไม่ต้องเลือกศูนย์ก่อน) · ข้อมูลมาจาก list response (FR-28) · ศูนย์ที่ถูกกรองออกจากผลค้นหา หมุดจุดจอดรถของศูนย์นั้นหายไปด้วย · เลือกศูนย์ → หมุดจุดจอดรถของศูนย์นั้นเน้นหรือไม่ซ่อนศูนย์อื่น (รายละเอียด UI ตัดสินตอน implement) · ภาระข้อมูล: list ใหญ่ขึ้นตามจำนวนจุดจอดรถที่ปักหมุดของทุกศูนย์ (ดู Q7)
@@ -141,13 +142,13 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 
 - ก่อน: ไม่มี `parking_points` · ประเภทรถและความจุกรอกที่ระดับศูนย์ใน `parking_policy.supported_vehicles`
 - หลัง: `parking_points: [{ id: '01J…', name: 'ลานจอดหน้าอาคารเรียน', note: null, lat: 7.0086, lng: 100.4747, vehicles: [{ type: 'car', max_capacity: 30 }, { type: 'motorcycle', max_capacity: 100 }] }, { id: '01J…', name: 'ท่าน้ำ', note: null, lat: null, lng: null, vehicles: [{ type: 'boat', max_capacity: 10 }] }]` → ค่าที่ใช้จริงของศูนย์: รถยนต์ 30, มอเตอร์ไซค์ 100, เรือ 10
-- shelter schema_v 9 → 10
+- shelter schema_v 10 → 11
 
 ## Acceptance
 
-- [ ] เปิดศูนย์เดิม (schema_v 9 ไม่มี `parking_points`) → ฟอร์มเปิดได้ ไม่มี error · ส่วน "จุดจอดรถ" แสดง "ยังไม่มีจุดจอดรถ…" · ส่วนที่ 9 แสดงประเภทรถเดิมแบบอ่านอย่างเดียว
+- [ ] เปิดศูนย์เดิม (schema_v 10 ไม่มี `parking_points`) → ฟอร์มเปิดได้ ไม่มี error · ส่วน "จุดจอดรถ" แสดง "ยังไม่มีจุดจอดรถ…" · ส่วนที่ 9 แสดงประเภทรถเดิมแบบอ่านอย่างเดียว
 - [ ] ศูนย์เดิมที่มีรถยนต์ 200 คันใน `supported_vehicles` และยังไม่มีจุดจอดรถ → ตัวกรอง `parking_car` ผลเท่าเดิม
-- [ ] เพิ่มจุดจอดรถ ตั้งชื่อ ปักหมุด ใส่รถยนต์ 30 ยืนยัน แล้วบันทึก → โหลดหน้าใหม่ยังเห็นจุดพร้อมพิกัดและรถ · doc เป็น schema_v 10
+- [ ] เพิ่มจุดจอดรถ ตั้งชื่อ ปักหมุด ใส่รถยนต์ 30 ยืนยัน แล้วบันทึก → โหลดหน้าใหม่ยังเห็นจุดพร้อมพิกัดและรถ · doc เป็น schema_v 11
 - [ ] ศูนย์มี 2 จุด (รถยนต์ 30 + มอเตอร์ไซค์ 100 / เรือ 10) → ส่วนที่ 9 แสดงรถยนต์ 30, มอเตอร์ไซค์ 100, เรือ 10 · ตัวกรองทั้งสามประเภทผ่าน · ค่า `supported_vehicles` เดิมไม่ถูกใช้
 - [ ] เพิ่มจุดแต่ยังไม่ระบุรถ (ศูนย์เดิมมีรถยนต์ใน `supported_vehicles`) → ค่าที่ใช้จริงยังเป็นค่าเดิม
 - [ ] `availability = none` → ตัวกรองทุกประเภทรถไม่ผ่าน แม้มีจุดจอดรถ · จุดจอดรถที่บันทึกไว้ไม่ถูกลบ
@@ -158,7 +159,7 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - [ ] `lat` 91 หรือ `lng` 181 → schema ปฏิเสธ · `max_capacity` −1 → ปฏิเสธ
 - [ ] ลบจุดแล้วบันทึก → จุดหายจาก doc · จุดอื่นคง `id` เดิม · ค่าที่ใช้จริงคำนวณใหม่
 - [ ] import ศูนย์ที่มีจุดจอดรถอยู่แล้วด้วย workbook ที่ไม่มีข้อมูลจุดจอดรถ → `parking_points` เดิมอยู่ครบ
-- [ ] doc v6, v7, v8, v9 ผ่าน `migrateShelterV2ToCurrent` → schema_v 10 และ `parking_points = []` · doc v10 ที่ครบแล้วได้ object เดิม (`===`)
+- [ ] doc v6 ถึง v10 ผ่าน `migrateShelterV2ToCurrent` → schema_v 11 และ `parking_points = []` · doc v11 ที่ครบแล้วได้ object เดิม (`===`)
 - [ ] ส่วนที่ 1–9 ของฟอร์มเลขและลำดับเท่าเดิม
 - [ ] worker: ศูนย์ที่มี 2 จุด (จุดแรกปักหมุดแล้ว จุดสองยังไม่ปักหมุด) → `public_shelters.parking_points` มี 1 รายการ (จุดแรก) พร้อม `geo` และ `vehicles` · จุดพิกัด (0,0) หรือเกินช่วง ไม่ถูกส่งออก · `note` ว่างเป็น `null`
 - [ ] worker: `availability = none` → `parking_points = []` · ศูนย์ที่ `parking_points` ใน doc เสีย → row ยังอยู่ ได้ `[]`
@@ -174,7 +175,7 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - [ ] ศูนย์ที่มีแค่ `parking_capacity` = 40 ไม่ระบุประเภทรถและไม่มีจุดจอดรถ → ไม่ผ่านตัวกรอง "รถยนต์" และ "มอเตอร์ไซค์" · `parking_vehicle_types = []`
 - [ ] ศูนย์ที่ `availability = none` → ไม่ผ่านตัวกรองทุกประเภท แม้มีจุดจอดรถ
 - [ ] ตารางกรณี effective vehicles ชุดเดียวกัน ผ่านทั้ง test TypeScript (ฟอร์ม + `transparency/shelters`) และ test Python (worker `parking_vehicle_types`)
-- [ ] Tests: domain (schema bounds, `type` ซ้ำ, ฟังก์ชันคำนวณ effective vehicles ทุกกรณี FR-9–FR-11, migration v9 → v10, chain, identity ของ `normalizeCurrent`) · transparency/shelters (ตัวกรองอ่านจากจุดจอดรถ + legacy) · import-row (FR-23) · worker (`project_parking_points` ทุกกรณี FR-25/26) · backend (detail มี field, list ไม่มี) · shelter-map dom test (หมุดจุดจอดรถ) · e2e shelters (เพิ่ม/ปักหมุด/ลบ/ชื่อว่าง/ใส่รถ) และ e2e หน้า `/shelters` (หมุดจุดจอดรถ)
+- [ ] Tests: domain (schema bounds, `type` ซ้ำ, ฟังก์ชันคำนวณ effective vehicles ทุกกรณี FR-9–FR-11, migration v10 → v11, chain, identity ของ `normalizeCurrent`) · transparency/shelters (ตัวกรองอ่านจากจุดจอดรถ + legacy) · import-row (FR-23) · worker (`project_parking_points` ทุกกรณี FR-25/26) · backend (detail มี field, list ไม่มี) · shelter-map dom test (หมุดจุดจอดรถ) · e2e shelters (เพิ่ม/ปักหมุด/ลบ/ชื่อว่าง/ใส่รถ) และ e2e หน้า `/shelters` (หมุดจุดจอดรถ)
 
 ## Open questions
 
@@ -202,11 +203,11 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 
 ## Migration
 
-- **shelter schema_v 9 → 10 (additive):** `migrateV9ToV10` เติม `parking_points = []` เมื่อไม่มี key · `normalizeCurrent` เติมค่าเดียวกัน (doc ที่ stamp 10 แต่ขาด key ก็อ่านถูก) และเติม `vehicles = []` ให้จุดที่ไม่มี · คืน object เดิมเมื่อไม่มีอะไรขาด (`updateMaster` ใช้ `===` ตัดสินว่าไม่ต้องเขียน) · ไม่มี batch script · เขียนครั้งถัดไป persist `[]` และ stamp 10
+- **shelter schema_v 10 → 11 (additive):** `migrateV10ToV11` เติม `parking_points = []` เมื่อไม่มี key · `normalizeCurrent` เติมค่าเดียวกัน (doc ที่ stamp 10 แต่ขาด key ก็อ่านถูก) และเติม `vehicles = []` ให้จุดที่ไม่มี · คืน object เดิมเมื่อไม่มีอะไรขาด (`updateMaster` ใช้ `===` ตัดสินว่าไม่ต้องเขียน) · ไม่มี batch script · เขียนครั้งถัดไป persist `[]` และ stamp 10
 - **ไม่แตะ `parking_policy.supported_vehicles`:** ไม่ย้าย ไม่ลบ ไม่แปลงค่า · ศูนย์เดิมทุกแห่งอ่านค่าเดิมได้เหมือนเดิม (FR-10, FR-22)
-- **แต่ละขั้นของ chain stamp เลขของตัวเอง** (ตามกติกา CR-205): ตอนนี้ `migrateV8ToV9` stamp `SHELTER_MASTER_SCHEMA_V` → เปลี่ยนให้ stamp `9` ตรงๆ แล้วต่อ `migrateV9ToV10` ท้าย chain ทุก branch ของ `migrateShelterV2ToCurrent` (v2–v8) และเพิ่มกรณี `schema_v === 9`
+- **แต่ละขั้นของ chain stamp เลขของตัวเอง** (ตามกติกา CR-205): สมมติ CR-252 (shelter v9 → 10, #1371) merge ก่อน · ตอนนั้น `migrateV9ToV10` ของ CR-252 stamp `SHELTER_MASTER_SCHEMA_V` → เปลี่ยนให้ stamp `10` ตรงๆ แล้วต่อ `migrateV10ToV11` ท้าย chain ทุก branch ของ `migrateShelterV2ToCurrent` (v2–v9) และเพิ่มกรณี `schema_v === 10` · ถ้า CR นี้ merge ก่อน CR-252 ต้องสลับเลข (CR นี้เป็น 10 · CR-252 เป็น 11) ก่อน merge
 - `scripts/migrate-shelter.ts` และ `provisioner.ts` อ้างค่าคงที่อยู่แล้ว ไม่ต้องแก้
-- **ลำดับ rollout:** deploy code ใหม่ก่อน · doc ถูกเขียนเป็น v10 เฉพาะเมื่อเจ้าหน้าที่แก้ศูนย์ · ก่อน merge ตรวจว่า app และ worker รุ่นเก่ายังอ่าน doc `schema_v: 10` ได้ (worker ไม่ตรวจ `schema_v` ของ shelter; app รุ่นเก่าเข้า branch `>= current` แล้ว normalize)
+- **ลำดับ rollout:** deploy code ใหม่ก่อน · doc ถูกเขียนเป็น v11 เฉพาะเมื่อเจ้าหน้าที่แก้ศูนย์ · ก่อน merge ตรวจว่า app และ worker รุ่นเก่ายังอ่าน doc `schema_v: 11` ได้ (worker ไม่ตรวจ `schema_v` ของ shelter; app รุ่นเก่าเข้า branch `>= current` แล้ว normalize)
 - **rollback:** deploy code รุ่นก่อน · array `parking_points` ที่เขียนไปแล้วถูกละไว้ ไม่ทำให้อ่าน doc ไม่ได้ · **ข้อควรระวังเพิ่ม:** รุ่นก่อนไม่รู้จักจุดจอดรถ จึงตัวกรอง public กลับไปอ่าน `supported_vehicles` เดิมทั้งหมด ศูนย์ที่เคยได้ค่าจากจุดจอดรถจะหายจากตัวกรองจนกว่าจะ roll forward · ก่อน merge ตรวจว่าทางเขียนของรุ่นก่อน (PATCH back-office, import, จุดเก็บของ) เขียนทับเฉพาะ field ที่แก้ ไม่ตัด key ที่ไม่รู้จักทิ้ง
 - **Mongo / worker:** เพิ่ม `public_shelters.parking_points` · bump `PROJECTION_VERSION` (FR-27) → worker รัน full bootstrap หนึ่งครั้งตอน deploy · `raw_data` ยังได้ `parking_points` ทั้งก้อนเอง (รวมจุดที่ไม่ได้ปักหมุด) — FastAPI ห้ามอ่านจาก `raw_data` ไปแสดง ใช้ field ที่ฉายแล้วเท่านั้น
 - **ลำดับ deploy public plane:** worker (field ใหม่ + bootstrap) → backend (อ่าน field ใหม่ · default `[]` เมื่อยังไม่มี จึง deploy ก่อน worker ก็ไม่ error) → frontend · เรียงตามทิศทางข้อมูลใน §4.2 (worker → FastAPI → SPA)
@@ -223,3 +224,4 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - 2026-11-13 — owner เลือก Q6 ตัวเลือก 1: ตัวกรองเลิกเดาจากเลขรวม · เรื่อง import บังคับระบุประเภทรถแยกเป็น CR ต่างหาก
 - 2026-11-13 — owner เลือก Q5: ตั้ง `availability = none` แล้วเก็บจุดจอดรถไว้ ซ่อนจากหน้า public ไม่ลบ
 - 2026-11-13 — owner เลือก Q2: ไม่จำกัดจำนวนจุดจอดรถต่อศูนย์
+- 2026-11-13 — approved โดย kong · รันเลข CR-253 · ย้ายเข้า `00-baseline/` · ปรับเลขรุ่นจาก shelter schema_v 9 → 10 เป็น 10 → 11 และ `PROJECTION_VERSION` เป็น +1 ต่อจาก CR-252 เพราะ CR-252 (approved 2026-11-12) ใช้ v10 และ 19 ไปแล้ว · ส่วนแก้ `schema.md` กับ `schema-er-diagram.md` ยังไม่ทำ ทำใน PR ที่แก้ doc ตามขั้น 5 ของ change-management §5
