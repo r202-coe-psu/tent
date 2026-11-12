@@ -5,7 +5,6 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Ban from '@lucide/svelte/icons/ban';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -56,14 +55,12 @@
 	let {
 		referrals,
 		failed = [],
-		onBack,
 		mode = 'created',
 		onSelectReferral,
 		selectedId = null
 	}: {
 		referrals: Referral[];
 		failed?: ReferralBatchFailure[];
-		onBack?: () => void;
 		/** `created` = post-create result; `view` = open batch from list (selection + bulk actions) */
 		mode?: 'created' | 'view';
 		onSelectReferral?: (id: string) => void;
@@ -270,12 +267,6 @@
 						{/if}
 					</p>
 				</div>
-				{#if onBack}
-					<Button variant="outline" onclick={onBack} class="gap-2">
-						<ArrowLeft class="h-4 w-4" />
-						กลับไปหน้ารายการ
-					</Button>
-				{/if}
 			</div>
 		{:else}
 			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -287,12 +278,6 @@
 						{/if}
 					</p>
 				</div>
-				{#if onBack}
-					<Button variant="outline" size="sm" onclick={onBack} class="gap-2 lg:hidden">
-						<ArrowLeft class="h-4 w-4" />
-						กลับไปหน้ารายการ
-					</Button>
-				{/if}
 			</div>
 		{/if}
 

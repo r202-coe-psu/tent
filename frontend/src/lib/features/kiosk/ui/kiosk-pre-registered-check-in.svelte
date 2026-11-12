@@ -396,11 +396,16 @@
 		try {
 			for (const item of items) {
 				if (!item.qr_payload) continue;
-				if (nextImages[item.evacuee_id] && qrImagePayloads[item.evacuee_id] === item.qr_payload) {
+				// The level band shrinks the QR, so a changed marker needs a fresh image too.
+				const imageKey = `${item.qr_payload}|${item.label?.marker ?? ''}`;
+				if (nextImages[item.evacuee_id] && qrImagePayloads[item.evacuee_id] === imageKey) {
 					continue;
 				}
-				nextImages[item.evacuee_id] = await prepareKioskQrImage(item.qr_payload);
-				qrImagePayloads[item.evacuee_id] = item.qr_payload;
+				nextImages[item.evacuee_id] = await prepareKioskQrImage(
+					item.qr_payload,
+					item.label?.marker
+				);
+				qrImagePayloads[item.evacuee_id] = imageKey;
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
@@ -518,7 +523,8 @@
 				qrSrc: qr.src,
 				name: labelName(result, person),
 				emergencyPhone: result.label?.emergency_phone,
-				checkedCount: KIOSK_CHECK_IN_TICKS
+				checkedCount: KIOSK_CHECK_IN_TICKS,
+				marker: result.label?.marker
 			};
 		});
 	}
@@ -1055,7 +1061,8 @@
 							lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
 						),
 						emergencyPhone: result.label?.emergency_phone,
-						checkedCount: KIOSK_CHECK_IN_TICKS
+						checkedCount: KIOSK_CHECK_IN_TICKS,
+						marker: result.label?.marker
 					}))}
 			/>
 		{/if}

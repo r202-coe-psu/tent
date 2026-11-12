@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { EvacueeProfileView } from '$lib/features/people';
 
@@ -15,20 +14,11 @@
 
 <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
 	<div>
-		<button
-			onclick={() => {
-				const from = page.url.searchParams.get('from');
-				if (from) {
-					goto(from);
-				} else {
-					goto(resolve('/back-office/evacuee-management?tab=evacuee'));
-				}
-			}}
-			class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-		>
-			<ArrowLeft class="size-4" />
-			<span>กลับไปหน้ารายชื่อหลัก</span>
-		</button>
+		<BackLink
+			href={resolve('/back-office/evacuee-management?tab=evacuee')}
+			label="กลับไปรายชื่อผู้เข้าพัก"
+			class="mb-4 -ml-3"
+		/>
 
 		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl dark:text-slate-50">
