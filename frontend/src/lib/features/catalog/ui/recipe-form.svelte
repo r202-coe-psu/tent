@@ -144,6 +144,13 @@
 	);
 	const { form: formData, submitting } = form;
 
+	// Same look as the stock item form (item-master-form.svelte).
+	const sectionClass = $derived(
+		compact
+			? 'space-y-4 rounded-xl border border-border/80 bg-muted/30 p-4'
+			: 'space-y-5 rounded-2xl border border-border/80 bg-muted/30 p-6'
+	);
+
 	const qtyMessages = $derived(
 		new Map(
 			recipeIngredientQtyIssues($formData.ingredients, dimensions.resolve).map((i) => [
@@ -217,9 +224,9 @@
 	>
 		<div class={compact ? 'min-h-0 flex-1 space-y-3.5 overflow-y-auto p-4 sm:p-6' : 'space-y-3.5'}>
 			<div class="space-y-1.5">
-				<span class="text-sm font-semibold text-slate-800 dark:text-slate-200"> ประเภทข้อมูล </span>
+				<span class="text-sm font-semibold"> ประเภทข้อมูล </span>
 				<div
-					class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-2.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
+					class="w-full rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm font-medium text-muted-foreground"
 				>
 					สูตรอาหาร
 				</div>
@@ -230,28 +237,26 @@
 				<Form.Field {form} name="label">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-								ชื่อสูตรอาหาร <span class="font-bold text-red-500">*</span>
+							<Form.Label class="text-sm font-semibold">
+								ชื่อสูตรอาหาร <span class="text-destructive">*</span>
 							</Form.Label>
 							<Input
 								{...props}
 								bind:value={$formData.label}
 								placeholder="เช่น ข้าวหอมมะลิ 100%, น้ำดื่ม 600ml"
-								class="h-10 w-full rounded-xl border border-slate-200/80 px-3.5 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+								class="h-11 sm:h-10"
 							/>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
 				</Form.Field>
 				<!-- SECTION 2: รายการส่วนประกอบ (Ingredients / JSON) -->
-				<section
-					class="space-y-3.5 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
+				<section class={sectionClass}>
 					<div class="flex items-center justify-between">
 						<div class="space-y-1">
-							<h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">
+							<h2 class="text-sm font-bold text-foreground">
 								รายการส่วนประกอบ (Ingredients / JSON)
-							</h3>
+							</h2>
 							<Form.Field {form} name="ingredients">
 								<Form.Control>
 									{#snippet children({ props })}
@@ -266,7 +271,7 @@
 							variant="outline"
 							size="sm"
 							onclick={addIngredient}
-							class="min-h-9 gap-1.5 rounded-xl border-slate-200 bg-white font-bold text-[#0A2647] hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-400"
+							class="h-8 gap-1"
 						>
 							<Plus class="h-3.5 w-3.5" />
 							เพิ่มวัตถุดิบ
@@ -280,11 +285,11 @@
 								: ''}
 							{@const showUnitLocalized = !!unitLocalized && unitLocalized !== conv.uom}
 							<div
-								class="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-2xs sm:flex-row sm:items-start dark:border-zinc-800 dark:bg-zinc-950"
+								class="flex flex-col gap-3 rounded-xl border border-border bg-background p-3 sm:flex-row sm:items-start"
 							>
 								<!-- ค้นหาวัตถุดิบจากคลัง -->
 								<div class="min-w-0 flex-1 space-y-1.5">
-									<span class="text-xs font-bold text-blue-700 dark:text-blue-400"
+									<span class="text-xs font-semibold text-muted-foreground"
 										>ค้นหาวัตถุดิบจากคลัง</span
 									>
 									<ItemSelector
@@ -300,7 +305,7 @@
 								<div class="flex items-start gap-2.5 sm:shrink-0">
 									<!-- ปริมาณ -->
 									<div class="min-w-0 flex-1 space-y-1.5 sm:w-28 sm:flex-none">
-										<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
+										<span class="text-xs font-semibold text-muted-foreground">ปริมาณ</span>
 										<Input
 											type="number"
 											step={qtyInputStep(dimensions.resolve(conv.uom))}
@@ -314,7 +319,7 @@
 											onblur={() => {
 												if (conv.quantity === '') conv.quantity = '1';
 											}}
-											class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-medium focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+											class="h-11 text-center font-medium sm:h-10"
 										/>
 										{#if qtyMessages.has(index)}
 											<p class="text-xs font-semibold text-destructive">{qtyMessages.get(index)}</p>
@@ -324,10 +329,10 @@
 									<!-- หน่วย -->
 									<div class="min-w-0 flex-1 space-y-1.5 sm:w-28 sm:flex-none">
 										<div class="flex items-center justify-between gap-1 overflow-hidden">
-											<span class="text-xs font-bold text-blue-700 dark:text-blue-400">หน่วย</span>
+											<span class="text-xs font-semibold text-muted-foreground">หน่วย</span>
 											{#if showUnitLocalized}
 												<span
-													class="truncate text-2xs font-medium text-slate-500 dark:text-slate-400"
+													class="truncate text-2xs font-medium text-muted-foreground"
 													title={unitLocalized}
 												>
 													({unitLocalized})
@@ -338,7 +343,7 @@
 											type="text"
 											bind:value={conv.uom}
 											placeholder="kg"
-											class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-semibold focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+											class="h-11 text-center font-semibold sm:h-10"
 										/>
 									</div>
 
@@ -348,7 +353,7 @@
 											<Button
 												type="button"
 												variant="ghost"
-												class="h-12 w-12 shrink-0 rounded-xl border border-slate-100 text-destructive hover:bg-destructive/10 dark:border-zinc-800"
+												class="h-11 w-11 shrink-0 text-destructive hover:bg-destructive/10 sm:h-10 sm:w-10"
 												onclick={() => removeIngredient(index)}
 												title={`ลบวัตถุดิบแถวที่ ${index + 1}`}
 											>
@@ -365,7 +370,7 @@
 							type="button"
 							variant="outline"
 							onclick={addIngredient}
-							class="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-white text-sm font-bold text-[#0A2647] hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-blue-400 dark:hover:bg-zinc-900"
+							class="h-10 w-full gap-1.5 border-dashed"
 						>
 							<Plus class="h-4 w-4" />
 							เพิ่มวัตถุดิบ
@@ -376,7 +381,7 @@
 						<Form.Field {form} name="standard_portions" class="space-y-1.5">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-xs font-bold text-slate-800 dark:text-slate-200">
+									<Form.Label class="text-sm font-semibold">
 										ยอดกำลังผลิตมาตรฐาน (Portions)
 									</Form.Label>
 									<Input
@@ -396,7 +401,7 @@
 												$formData.standard_portions = '100';
 											}
 										}}
-										class="h-10 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
+										class="h-11 sm:h-10"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -406,7 +411,7 @@
 						<Form.Field {form} name="standard_duration_hours" class="space-y-1.5">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-xs font-bold text-slate-800 dark:text-slate-200">
+									<Form.Label class="text-sm font-semibold">
 										ระยะเวลาการผลิตมาตรฐาน (ชั่วโมง)
 									</Form.Label>
 									<Input
@@ -426,7 +431,7 @@
 												$formData.standard_duration_hours = '1';
 											}
 										}}
-										class="h-10 rounded-xl border border-slate-200/80 dark:border-zinc-800 dark:bg-zinc-950"
+										class="h-11 sm:h-10"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -437,15 +442,10 @@
 
 				{#if isEdit}
 					<!-- SECTION: สถานะการใช้งาน (Status) -->
-					<section
-						class="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900/30"
-					>
+					<section class={sectionClass}>
 						<div class="flex items-center justify-between">
 							<div class="space-y-0.5">
-								<label
-									for="recipe-deactivated-toggle"
-									class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
-								>
+								<label for="recipe-deactivated-toggle" class="cursor-pointer text-sm font-semibold">
 									สถานะปิดการใช้งาน
 								</label>
 								<p class="text-xs text-muted-foreground">
@@ -468,25 +468,20 @@
 
 		<div
 			class={compact
-				? 'shrink-0 border-t border-slate-200/80 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950'
-				: 'sticky bottom-0 -mx-4 mt-8 -mb-4 border-t border-slate-200/80 bg-white/95 px-6 py-4 shadow-xs backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/95'}
+				? 'shrink-0 border-t border-border bg-background px-6 py-4'
+				: 'sticky bottom-0 -mx-4 mt-8 -mb-4 border-t border-border bg-background/95 px-6 py-4 backdrop-blur-sm'}
 		>
 			<div
 				class="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3"
 			>
-				<Button
-					variant="outline"
-					type="button"
-					onclick={onsuccess}
-					class="min-h-11 rounded-xl border-slate-300 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:w-auto dark:border-zinc-700 dark:text-zinc-300"
-				>
+				<Button variant="outline" type="button" onclick={onsuccess} class="rounded-xl sm:w-auto">
 					ยกเลิกและย้อนกลับ
 				</Button>
 
 				<Button
 					type="submit"
 					disabled={$submitting || isPending || qtyMessages.size > 0}
-					class="min-h-11 gap-2 rounded-xl bg-[#0A2647] px-6 text-sm font-semibold text-white shadow-xs hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+					class="gap-2 sm:w-auto"
 				>
 					{#if $submitting || isPending}
 						<Loader2 class="h-4 w-4 animate-spin" />

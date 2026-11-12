@@ -1217,9 +1217,7 @@
 			</div>
 		</div>
 
-		<Sheet.Footer
-			class="shrink-0 border-t border-slate-200/80 bg-white p-0 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950"
-		>
+		<Sheet.Footer class="shrink-0 border-t border-border bg-background p-0 px-6 py-4">
 			<div
 				class="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3"
 			>
@@ -1227,7 +1225,7 @@
 					variant="outline"
 					type="button"
 					onclick={() => (createDialogOpen = false)}
-					class="min-h-11 rounded-xl border-slate-300 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:w-auto dark:border-zinc-700 dark:text-zinc-300"
+					class="rounded-xl sm:w-auto"
 				>
 					ยกเลิก
 				</Button>
@@ -1235,7 +1233,7 @@
 					type="button"
 					onclick={handleCreateSession}
 					disabled={createSessionMutation.isPending || !countsValid}
-					class="min-h-11 gap-2 rounded-xl bg-[#0A2647] px-6 text-sm font-semibold text-white shadow-xs hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+					class="gap-2 sm:w-auto"
 				>
 					{#if createSessionMutation.isPending}
 						<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
