@@ -1,16 +1,21 @@
 ---
-id: draft
+id: CR-249
 title: การมอบหมายอาสาสมัครเข้าหลายกะพร้อมกัน (Bulk Shift Assignment)
-status: proposed
+status: approved
 date: 2026-11-10
+updated: 2026-11-12
 requested_by: Field study / Issue #1164
-decided_by:
+decided_by: "Soravit Sukkarn (Team Lead)"
+decision_date: 2026-11-12
 layer: volatile
 affects:
-  - frontend/src/lib/features/volunteers
+  - frontend/src/lib/features/volunteers/ui/job-assign-page.svelte (การ์ดกะ multi-select, สรุปผลรายคน)
+  - frontend/src/lib/features/volunteers/domain/bulk-assign.ts (planBulkAssign ตรวจเวลาชน/โควตา)
+  - frontend/src/lib/features/volunteers/domain/bulk-assign.test.ts
+  - frontend/src/lib/features/volunteers/ui/job-assign-page.dom.test.ts
 ---
 
-# การมอบหมายอาสาสมัครเข้าหลายกะพร้อมกัน (Bulk Shift Assignment)
+# CR-249 — การมอบหมายอาสาสมัครเข้าหลายกะพร้อมกัน (Bulk Shift Assignment)
 
 > **สรุป (TL;DR):**
 >
@@ -65,5 +70,6 @@ N/A (ไม่มีการเปลี่ยนแปลงโครงสร
 
 ## Decision Log
 
-- 2026-11-10 — proposed สำหรับ Issue #1164 (PR #1289)
+- 2026-11-10 — proposed สำหรับ [Issue #1164](https://github.com/r202-coe-psu/tent/issues/1164) (อ้างอิงโค้ดจาก [PR #1289](https://github.com/r202-coe-psu/tent/pull/1289))
 - 2026-11-11 — แก้ตาม review PR #1324: เพิ่ม TL;DR, FR/AC รายข้อ, ปรับหัวข้อตามแม่แบบ, แก้พาธเป็น `frontend/…`, ล้าง `decided_by`
+- 2026-11-12 — approved โดย Soravit Sukkarn (Team Lead) ([PR #1324](https://github.com/r202-coe-psu/tent/pull/1324))
