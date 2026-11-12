@@ -73,7 +73,8 @@ done
 # --- Resolve settings ----------------------------------------------------------
 # kiosk/.env on a kiosk, printer/.env on a print-server Pi.
 for env_file in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/../printer/.env"; do
-    [ -z "$QUEUE" ] && [ -f "$env_file" ] || continue
+    if [ -n "$QUEUE" ]; then break; fi
+    if [ ! -f "$env_file" ]; then continue; fi
     QUEUE="$(sed -n 's/^PRINTER_NAME=//p' "$env_file" | tail -1 | tr -d '"'\''[:space:]')"
 done
 QUEUE="${QUEUE:-tent_xprinter}"
