@@ -484,7 +484,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await expect(
 			page.getByRole('img', { name: `QR Code สำหรับ ${HEAD_P3.firstName} ${HEAD_P3.lastName}` })
 		).toBeVisible();
-		await page.getByRole('button', { name: 'ปิดหน้าต่าง' }).click();
+		await page.getByRole('button', { name: 'ปิด', exact: true }).click();
 		await expect(qrTitle).toBeHidden();
 
 		// Finish → household list.
@@ -736,7 +736,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		const pdfPopup = page.waitForEvent('popup');
 		await page.getByRole('button', { name: 'พิมพ์บัตรประจำตัว' }).click();
 		await (await pdfPopup).close();
-		await page.getByRole('button', { name: 'ปิดหน้าต่าง' }).click();
+		await page.getByRole('button', { name: 'ปิด', exact: true }).click();
 		await page.getByRole('button', { name: 'เสร็จสิ้นการลงทะเบียนล่วงหน้า ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 

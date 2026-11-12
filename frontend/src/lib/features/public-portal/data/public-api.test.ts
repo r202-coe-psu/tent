@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { familySearch, getPublicShelter, PublicApiError, publicApiError } from './public-api';
 
+import type { SearchConsent } from '../domain/search-consent';
+
+const CONSENT: SearchConsent = {
+	searcher: { first_name: 'สมชาย', last_name: 'ใจดี', phone: '0812345678' },
+	purpose: 'find_family',
+	consent_accepted: true
+};
 const FALLBACK = 'เกิดข้อผิดพลาดในการค้นหา';
 
 describe('publicApiError', () => {
@@ -56,7 +63,7 @@ describe('familySearch', () => {
 
 	it('turns a network failure into an unavailable PublicApiError', async () => {
 		stubFetch(() => Promise.reject(new TypeError('Failed to fetch')));
-		const err = await familySearch('สมชาย').catch((e: unknown) => e);
+		const err = await familySearch('สมชาย', CONSENT).catch((e: unknown) => e);
 		expect(err).toBeInstanceOf(PublicApiError);
 		expect((err as PublicApiError).kind).toBe('unavailable');
 		expect((err as PublicApiError).message).toBe('ระบบค้นหาไม่พร้อมใช้งานชั่วคราว');
@@ -71,17 +78,28 @@ describe('familySearch', () => {
 					Promise.resolve({ errors: [{ error: { code: 'RATE_LIMITED', message: 'Too many' } }] })
 			})
 		);
-		await expect(familySearch('สมชาย')).rejects.toMatchObject({
+		await expect(familySearch('สมชาย', CONSENT)).rejects.toMatchObject({
 			kind: 'rateLimited',
 			message: 'ค้นหาบ่อยเกินไป ลองใหม่ภายหลัง'
 		});
+	});
+
+	it('sends the searcher, purpose and consent next to the query (CR-231 FR-6)', async () => {
+		const fetchFn = vi.fn(() =>
+			Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ results: [] }) })
+		);
+		vi.stubGlobal('fetch', fetchFn);
+		await familySearch('สมชาย', CONSENT);
+		const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('/api/public/v1/occupants');
+		expect(JSON.parse(init.body as string)).toEqual({ search: 'สมชาย', ...CONSENT });
 	});
 
 	it('returns data on success', async () => {
 		stubFetch(() =>
 			Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ results: [] }) })
 		);
-		await expect(familySearch('สมชาย')).resolves.toEqual({ results: [] });
+		await expect(familySearch('สมชาย', CONSENT)).resolves.toEqual({ results: [] });
 	});
 });
 

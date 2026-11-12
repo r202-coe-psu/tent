@@ -16,6 +16,7 @@ import {
 	createFlow2RequisitionTicket,
 	distributionLogDocSchema,
 	requisitionTicketDocSchema,
+	thailandCalendarDay,
 	type DistributionLog,
 	type MealPeriod,
 	type RequisitionTicket
@@ -242,7 +243,7 @@ function buildTicket(
 		{
 			ticket_no: f.ticket_no,
 			requisition_type: f.requisition_type,
-			...(f.meal ? { meal: f.meal } : {}),
+			...(f.meal ? { meal: f.meal, service_date: thailandCalendarDay() } : {}),
 			source_location: WAREHOUSE,
 			destination_location: destination,
 			items: f.lines.map(([item, qty]) => ticketLine(catalog, item, qty))

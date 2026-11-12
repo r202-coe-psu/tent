@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from pymongo import AsyncMongoClient
 
 from tent_model.api_key import ApiKey
+from tent_model.audit_event import AuditEvent
 from tent_model.donation_buffer import DonationBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
 from tent_model.donation_slot_counter import DonationSlotCounter
@@ -49,6 +50,7 @@ ALL_DOCUMENTS = [
     DonationSlotCounter,
     RetentionAudit,
     SearchAudit,
+    AuditEvent,
     PublicAnnouncement,
     ApiKey,
     PublicJob,

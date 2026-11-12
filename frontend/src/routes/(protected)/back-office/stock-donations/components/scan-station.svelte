@@ -1227,7 +1227,7 @@
 						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
 						<ArrowLeft class="size-4" />
-						{onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
+						{onClose ? 'กลับไปรายการของบริจาค' : 'กลับไปสแกนรับของ'}
 					</Button>
 					<div class="flex flex-wrap items-center gap-3">
 						<span
@@ -1855,7 +1855,7 @@
 						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
 						<ArrowLeft class="size-4" />
-						กลับไปที่รายการของบริจาค
+						กลับไปรายการของบริจาค
 					</Button>
 				{/if}
 				<div class="flex items-center gap-2.5">
@@ -2077,7 +2077,7 @@
 					class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 				>
 					<ArrowLeft class="size-4" />
-					{initialView === 'walkin' && onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
+					{initialView === 'walkin' && onClose ? 'กลับไปรายการของบริจาค' : 'กลับไปสแกนรับของ'}
 				</Button>
 
 				<div class="flex items-center gap-2.5">

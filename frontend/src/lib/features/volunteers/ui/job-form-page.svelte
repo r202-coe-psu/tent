@@ -9,9 +9,9 @@
 	 * from (or a sensible page when they deep-linked straight here). `JobForm` itself
 	 * asks before leaving with unsaved changes.
 	 */
-	import { afterNavigate, goto } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -26,24 +26,20 @@
 	const jobQuery = useJob(() => jobId ?? '');
 	const job = $derived(jobQuery.data ?? null);
 
-	/** False when the page was opened directly (deep link / refresh) — nothing to go back to. */
-	let cameFromApp = false;
-
-	afterNavigate(({ from }) => {
-		cameFromApp = from !== null;
-	});
-
 	// `resolve()` here only prefixes `base`, so ids are interpolated by hand
 	// (same as `job-card.svelte`).
 
+	const backTarget = $derived(
+		jobId
+			? {
+					path: `/back-office/volunteers/jobs/${encodeURIComponent(jobId)}` as '/back-office/volunteers',
+					label: 'กลับไปรายละเอียดงานอาสาสมัคร'
+				}
+			: { path: '/back-office/volunteers' as const, label: 'กลับไปจัดการอาสาสมัคร' }
+	);
+
 	function goBack() {
-		if (cameFromApp) {
-			history.back();
-		} else if (jobId) {
-			void goto(resolve(`/back-office/volunteers/jobs/${encodeURIComponent(jobId)}`));
-		} else {
-			void goto(resolve('/back-office/volunteers'));
-		}
+		void goto(resolve(backTarget.path));
 	}
 
 	function handleSaved(saved: Job) {
@@ -61,11 +57,8 @@
 		: 'กรอกรายละเอียดงานอาสาสมัคร ทักษะที่ต้องการ และตารางกะ แล้วกดบันทึกเพื่อเผยแพร่'}
 	maxWidth="6xl"
 >
-	{#snippet actions()}
-		<Button variant="outline" class="min-h-11 gap-1.5 rounded-xl" onclick={goBack}>
-			<ArrowLeft class="h-4 w-4 shrink-0" />
-			ย้อนกลับ
-		</Button>
+	{#snippet backLink()}
+		<BackLink href={resolve(backTarget.path)} label={backTarget.label} class="-ml-3" />
 	{/snippet}
 
 	{#if !isEdit}
@@ -86,7 +79,7 @@
 		>
 			<p class="text-sm font-medium">ไม่พบงานอาสาสมัครนี้ในศูนย์ที่เลือก</p>
 			<Button variant="outline" size="sm" onclick={() => goto(resolve('/back-office/volunteers'))}>
-				กลับไปหน้ากระดานงานอาสา
+				กลับไปจัดการอาสาสมัคร
 			</Button>
 		</div>
 	{:else}

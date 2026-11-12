@@ -14,7 +14,12 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'retention',
 				title: 'ระยะเวลาการเก็บรักษาข้อมูล',
-				body: 'มหาวิทยาลัยฯ จะเก็บรักษาข้อมูลส่วนบุคคลที่ได้รับผ่านแพลตฟอร์มไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 เมื่อพ้นกำหนดดังกล่าว มหาวิทยาลัยฯ จะลบ ทำลาย หรือทำให้ข้อมูลเป็นข้อมูลที่ไม่สามารถระบุตัวบุคคลได้ เว้นแต่มีกฎหมายกำหนดให้ต้องเก็บรักษาไว้นานกว่านั้น ทั้งนี้ ข้อมูลสถิติในภาพรวมที่ไม่สามารถระบุตัวบุคคลได้อาจถูกเก็บไว้ต่อไปเพื่อการศึกษาและวางแผน'
+				body: 'มหาวิทยาลัยฯ จะเก็บรักษาข้อมูลส่วนบุคคลที่ได้รับผ่านแพลตฟอร์มไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 เมื่อพ้นกำหนดดังกล่าว มหาวิทยาลัยฯ จะลบ ทำลาย หรือทำให้ข้อมูลเป็นข้อมูลที่ไม่สามารถระบุตัวบุคคลได้ เว้นแต่มีกฎหมายกำหนดให้ต้องเก็บรักษาไว้นานกว่านั้น ทั้งนี้ ข้อมูลสถิติในภาพรวมที่ไม่สามารถระบุตัวบุคคลได้อาจถูกเก็บไว้ต่อไปเพื่อการศึกษาและวางแผน ข้อกำหนดนี้ไม่ใช้กับข้อมูลผู้ค้นหาญาติตามหัวข้อ “การค้นหาญาติและข้อมูลผู้ค้นหา” ซึ่งเก็บไว้โดยไม่มีกำหนด'
+			},
+			{
+				id: 'searcher-data',
+				title: 'การค้นหาญาติและข้อมูลผู้ค้นหา',
+				body: 'ก่อนค้นหาผู้อพยพ ผู้ใช้ต้องกรอกชื่อ นามสกุล เบอร์โทรศัพท์ เลือกจุดประสงค์การค้นหา (และระบุเหตุผลหากเลือก “อื่นๆ”) และยินยอมให้เก็บข้อมูลดังกล่าวพร้อมหมายเลข IP ไว้ในฐานข้อมูลฝั่งสาธารณะ ไม่ส่งเข้าระบบศูนย์ เพื่อตรวจสอบย้อนหลังและป้องกันการใช้ระบบค้นหาในทางมิชอบ โดยเก็บไว้ไม่มีกำหนด ผู้ใช้ต้องกรอกข้อมูลตามความจริงและใช้ผลการค้นหาตามจุดประสงค์ที่ระบุเท่านั้น'
 			},
 			{
 				id: 'preparedness',
@@ -66,7 +71,12 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'retention',
 				title: 'Data Retention Period',
-				body: 'The University retains personal data received through the platform until 31 December 2026 (B.E. 2569). After that date, the University will delete, destroy, or anonymise the data, unless the law requires it to be kept longer. Aggregate statistics that cannot identify individuals may be retained for research and planning.'
+				body: 'The University retains personal data received through the platform until 31 December 2026 (B.E. 2569). After that date, the University will delete, destroy, or anonymise the data, unless the law requires it to be kept longer. Aggregate statistics that cannot identify individuals may be retained for research and planning. This does not apply to relative-search user data (see “Relative Search and Searcher Data”), which is kept indefinitely.'
+			},
+			{
+				id: 'searcher-data',
+				title: 'Relative Search and Searcher Data',
+				body: 'Before searching for evacuees, users must enter their first name, last name and phone number, choose a search purpose (and give a reason if they choose “Other”), and consent to this data and their IP address being stored in the public-side database, not sent to the central system, for after-the-fact review and to prevent misuse of the search. It is kept indefinitely. Users must provide truthful information and use search results only for the stated purpose.'
 			},
 			{
 				id: 'preparedness',

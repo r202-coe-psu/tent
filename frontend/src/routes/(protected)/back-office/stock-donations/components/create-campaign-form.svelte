@@ -258,7 +258,7 @@
 			class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 		>
 			<ArrowLeft class="h-3.5 w-3.5" />
-			กลับหน้าจัดการความต้องการ
+			กลับไปจัดการความต้องการ
 		</Button>
 		<div class="flex items-center gap-2.5">
 			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from pymongo import ASCENDING
+from tent_model.audit_event import AUDIT_ID_PREFIX, SEARCH_CONSENT_VERSION, AuditEvent
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 from tent_model.search_audit import SearchAudit
@@ -26,6 +27,7 @@ from .schemas import (
     ExternalSearchResponse,
     ExternalSearchResult,
     FamilyMember,
+    PublicSearchRequest,
     SearchResponse,
     SearchResult,
     ShelterStatus,
@@ -144,8 +146,23 @@ def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> 
 
 
 class EvacueeUseCase:
-    async def search(self, raw_query: str, *, client_ip: str = "unknown") -> SearchResponse:
-        persons = await self._find_and_audit(raw_query, client_ip=client_ip)
+    async def search(
+        self,
+        raw_query: str,
+        *,
+        consent: PublicSearchRequest,
+        client_ip: str = "unknown",
+        request_id: str | None = None,
+    ) -> SearchResponse:
+        """`POST /public/v1/occupants` (CR-231): the audit is fail-closed (503, no results)."""
+        parsed, persons = await self._parse_and_find(raw_query)
+        await self._write_public_audit(
+            parsed=parsed,
+            client_ip=client_ip,
+            result_count=len(persons),
+            consent=consent,
+            request_id=request_id,
+        )
         results = await self.build_results(persons)
         return SearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
 
@@ -153,11 +170,14 @@ class EvacueeUseCase:
         self, raw_query: str, *, client_ip: str = "unknown"
     ) -> ExternalSearchResponse:
         """`/external/v1/occupants`: the public search plus `care_zone` / `zone_name`."""
-        persons = await self._find_and_audit(raw_query, client_ip=client_ip)
+        parsed, persons = await self._parse_and_find(raw_query)
+        await self._write_external_audit(
+            parsed=parsed, client_ip=client_ip, result_count=len(persons)
+        )
         results = await self.build_external_results(persons)
         return ExternalSearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
 
-    async def _find_and_audit(self, raw_query: str, *, client_ip: str) -> list[PublicPerson]:
+    async def _parse_and_find(self, raw_query: str) -> tuple[ParsedSearchQuery, list[PublicPerson]]:
         parsed = parse_search_query(raw_query)
         if parsed is None:
             raise HTTPException(
@@ -169,14 +189,7 @@ class EvacueeUseCase:
                     }
                 },
             )
-
-        persons = await self.find_persons(parsed)
-        await self._write_search_audit(
-            parsed=parsed,
-            client_ip=client_ip,
-            result_count=len(persons),
-        )
-        return persons
+        return parsed, await self.find_persons(parsed)
 
     async def build_results(
         self, persons: list[PublicPerson], *, include_family: bool = True
@@ -211,12 +224,55 @@ class EvacueeUseCase:
             )
         return results
 
-    async def _write_search_audit(
+    async def _write_public_audit(
         self,
         *,
         parsed: ParsedSearchQuery,
         client_ip: str,
         result_count: int,
+        consent: PublicSearchRequest,
+        request_id: str | None = None,
+    ) -> None:
+        """Append a `public.search` row to `audit_events` (CR-231).
+
+        Records the searcher, real client IP, purpose and `consent_version`; a failed write is
+        fail-closed (503 `SEARCH_UNAVAILABLE`, no results).
+        """
+        try:
+            await AuditEvent(
+                id=f"{AUDIT_ID_PREFIX}{new_ulid()}",
+                event_type="public.search",
+                occurred_at=datetime.now(UTC),
+                actor={
+                    "kind": "public_searcher",
+                    "ip_hash": sha256_hex(client_ip),
+                    "client_ip": client_ip,
+                },
+                request_id=request_id,
+                payload={
+                    "query_kind": parsed.kind.value,
+                    "query_hash": sha256_hex(parsed.normalized),
+                    "result_count": result_count,
+                    "searcher": consent.searcher.model_dump(),
+                    "purpose": consent.purpose,
+                    "purpose_note": consent.purpose_note,
+                    "consent_version": SEARCH_CONSENT_VERSION,
+                },
+            ).insert()
+        except Exception:
+            logger.exception("Failed to write audit_event public.search")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": {
+                        "code": "SEARCH_UNAVAILABLE",
+                        "message": "Search is temporarily unavailable",
+                    }
+                },
+            ) from None
+
+    async def _write_external_audit(
+        self, *, parsed: ParsedSearchQuery, client_ip: str, result_count: int
     ) -> None:
         """Append-only audit buffer — never store raw query or IP (hashes only)."""
         try:
