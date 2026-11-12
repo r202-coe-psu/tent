@@ -210,23 +210,3 @@ describe('bulkReturnPoolHref', () => {
 		);
 	});
 });
-
-describe('meal_coverage view (#1300)', () => {
-	it('parses ?view=meal_coverage and drops any pool', () => {
-		expect(parsePoolParams(new URLSearchParams('view=meal_coverage'))).toEqual({
-			view: 'meal_coverage',
-			pool: null
-		});
-		expect(parsePoolParams(new URLSearchParams('view=meal_coverage&pool=01ABC')).view).toBe(
-			'bulk_pools'
-		);
-	});
-
-	it('writes view=meal_coverage and keeps foreign keys', () => {
-		const out = mergePoolParams(new URLSearchParams('shelter=SH1&pool=x'), {
-			view: 'meal_coverage',
-			pool: null
-		});
-		expect(out.toString()).toBe('shelter=SH1&view=meal_coverage');
-	});
-});

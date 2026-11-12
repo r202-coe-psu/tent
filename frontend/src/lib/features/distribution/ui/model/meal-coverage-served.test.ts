@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MealPeriod } from '../../domain/food-supplies';
-import { servedMealsOfDay } from './meal-coverage-served';
+import { preparedPortionsOfDay, servedMealsOfDay } from './meal-coverage-served';
 
 const TODAY = '2026-11-10';
 const service = (id: string, meal: MealPeriod, date = TODAY) => ({ _id: id, date, meal });
@@ -60,5 +60,65 @@ describe('servedMealsOfDay', () => {
 			service('ms:3', 'breakfast')
 		];
 		expect(servedMealsOfDay(TODAY, services, [])).toEqual(['breakfast', 'dinner']);
+	});
+});
+
+describe('preparedPortionsOfDay', () => {
+	const cooked = (
+		id: string,
+		meal: MealPeriod,
+		portions: { actual_yield?: number | null; served?: number },
+		date = TODAY
+	) => ({ ...service(id, meal, date), ...portions });
+
+	it('is null for a meal with no meal_service that day', () => {
+		const services = [cooked('ms:1', 'breakfast', { actual_yield: 10 })];
+		expect(preparedPortionsOfDay(TODAY, services, [])).toEqual({
+			breakfast: 10,
+			lunch: null,
+			dinner: null
+		});
+		expect(preparedPortionsOfDay(TODAY, [], [])).toEqual({
+			breakfast: null,
+			lunch: null,
+			dinner: null
+		});
+	});
+
+	it('uses the recorded yield and falls back to served when there is none', () => {
+		const services = [
+			cooked('ms:1', 'breakfast', { actual_yield: 12, served: 9 }),
+			cooked('ms:2', 'lunch', { actual_yield: null, served: 7 }),
+			cooked('ms:3', 'dinner', { served: 5 })
+		];
+		expect(preparedPortionsOfDay(TODAY, services, [])).toEqual({
+			breakfast: 12,
+			lunch: 7,
+			dinner: 5
+		});
+	});
+
+	it('sums several meal_services of the same meal', () => {
+		const services = [
+			cooked('ms:1', 'lunch', { actual_yield: 10 }),
+			cooked('ms:2', 'lunch', { served: 4 })
+		];
+		expect(preparedPortionsOfDay(TODAY, services, []).lunch).toBe(14);
+	});
+
+	it('leaves out rejected receipts, other days and snacks', () => {
+		const services = [
+			cooked('ms:1', 'breakfast', { actual_yield: 10 }),
+			cooked('ms:2', 'breakfast', { actual_yield: 6 }),
+			cooked('ms:3', 'lunch', { actual_yield: 8 }, '2026-11-09'),
+			cooked('ms:4', 'snack', { actual_yield: 3 })
+		];
+		const result = preparedPortionsOfDay(TODAY, services, [receipt('ms:1', 'rejected')]);
+		expect(result).toEqual({ breakfast: 6, lunch: null, dinner: null });
+	});
+
+	it('is null for a meal whose only meal_service was rejected', () => {
+		const services = [cooked('ms:1', 'dinner', { actual_yield: 10 })];
+		expect(preparedPortionsOfDay(TODAY, services, [receipt('ms:1', 'rejected')]).dinner).toBeNull();
 	});
 });

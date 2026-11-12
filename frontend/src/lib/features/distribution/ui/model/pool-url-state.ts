@@ -9,7 +9,7 @@ import {
 /** Query keys owned by the distribution back-office view switch / pool deep link. */
 export const POOL_PARAM_KEYS = ['view', 'pool'] as const;
 
-export type DistributionView = 'tickets' | 'bulk_pools' | 'meal_coverage';
+export type DistributionView = 'tickets' | 'bulk_pools';
 
 export interface PoolUrlState {
 	view: DistributionView;
@@ -22,13 +22,8 @@ export const DISTRIBUTION_BACK_OFFICE_PATH = '/back-office/distribution';
 /** Read `view` / `pool`. A `pool` param implies the pools view; unknown `view` falls back to tickets. */
 export function parsePoolParams(params: URLSearchParams): PoolUrlState {
 	const pool = params.get('pool')?.trim() || null;
-	const requested = params.get('view');
 	const view: DistributionView =
-		requested === 'bulk_pools' || pool
-			? 'bulk_pools'
-			: requested === 'meal_coverage'
-				? 'meal_coverage'
-				: 'tickets';
+		params.get('view') === 'bulk_pools' || pool ? 'bulk_pools' : 'tickets';
 	return { view, pool: view === 'bulk_pools' ? pool : null };
 }
 
@@ -39,8 +34,6 @@ export function mergePoolParams(base: URLSearchParams, state: PoolUrlState): URL
 	if (state.view === 'bulk_pools') {
 		out.set('view', 'bulk_pools');
 		if (state.pool) out.set('pool', state.pool);
-	} else if (state.view === 'meal_coverage') {
-		out.set('view', 'meal_coverage');
 	}
 	return out;
 }

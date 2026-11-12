@@ -5,7 +5,7 @@ import {
 	type ZoneMovement
 } from '$lib/features/shared';
 import {
-	countingMealsByRecipient,
+	countingLogsByRecipient,
 	type CoverageLog,
 	type CoverageResident,
 	type MealCoverageRow
@@ -45,7 +45,8 @@ export function thaiToday(now: Date = new Date()): string {
 	return thailandCalendarDay(now);
 }
 
-export type CoverageFilter = 'all' | 'none' | 'partial';
+/** `incomplete` is every row below the threshold: `partial` and `none` together. */
+export type CoverageFilter = 'all' | 'complete' | 'incomplete' | 'partial' | 'none';
 
 export interface CoverageListRow extends MealCoverageRow {
 	zone: string | null;
@@ -86,11 +87,6 @@ export function coverageResidents(input: {
 	}));
 }
 
-/** Yesterday in Thailand — the latest day whose meals are all over. */
-export function previousThaiDay(now: Date = new Date()): string {
-	return thailandCalendarDay(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-}
-
 export function attachZones(
 	rows: readonly MealCoverageRow[],
 	residents: readonly CoverageViewResident[]
@@ -109,7 +105,7 @@ export function attachHouseholdRecorded<T extends CoverageListRow>(
 	logs: readonly CoverageLog[],
 	day: string
 ): (T & CoverageViewRow)[] {
-	const mealsBy = countingMealsByRecipient(logs, day);
+	const mealsBy = countingLogsByRecipient(logs, day);
 	const membersByHousehold = new Map<string, string[]>();
 	for (const r of residents) {
 		if (!r.householdId) continue;
@@ -121,15 +117,28 @@ export function attachHouseholdRecorded<T extends CoverageListRow>(
 		const others = householdId
 			? (membersByHousehold.get(householdId) ?? []).filter((id) => id !== row.id)
 			: [];
-		const recorded = new Set(others.flatMap((id) => [...(mealsBy.get(id) ?? [])]));
+		const recorded = new Set(others.flatMap((id) => [...(mealsBy.get(id)?.meals ?? [])]));
 		return { ...row, householdRecorded: row.missing.filter((m) => recorded.has(m)) };
 	});
 }
 
+/** `all` is everyone present; the incomplete rows are `all - complete`. */
 export function coverageCounts(rows: readonly MealCoverageRow[]): Record<CoverageFilter, number> {
-	const none = rows.filter((r) => r.received.length === 0).length;
-	const partial = rows.filter((r) => r.received.length === 1).length;
-	return { all: rows.length, none, partial };
+	return {
+		all: rows.length,
+		complete: rows.filter((r) => r.complete).length,
+		incomplete: rows.filter((r) => !r.complete).length,
+		partial: rows.filter(isPartial).length,
+		none: rows.filter(isNone).length
+	};
+}
+
+function isNone(r: MealCoverageRow): boolean {
+	return !r.complete && r.counted === 0;
+}
+
+function isPartial(r: MealCoverageRow): boolean {
+	return !r.complete && r.counted > 0;
 }
 
 /** `ALL_ZONES`, or a `current_stay.zone` code to keep only that zone. */
@@ -147,16 +156,23 @@ export function filterCoverageRows<T extends MealCoverageRow & { zone?: string |
 ): T[] {
 	const needle = query.trim().toLowerCase();
 	return rows.filter((r) => {
-		if (filter === 'none' && r.received.length !== 0) return false;
-		if (filter === 'partial' && r.received.length !== 1) return false;
+		if (filter === 'complete' && !r.complete) return false;
+		if (filter === 'incomplete' && r.complete) return false;
+		if (filter === 'partial' && !isPartial(r)) return false;
+		if (filter === 'none' && !isNone(r)) return false;
 		if (zone !== ALL_ZONES && r.zone !== zone) return false;
 		return !needle || r.name.toLowerCase().includes(needle);
 	});
 }
 
+function sortGroup(r: MealCoverageRow): number {
+	return r.complete ? 2 : r.counted === 0 ? 0 : 1;
+}
+
+/** Nobody-has-a-record first, then partial, then complete; by name inside each group. */
 export function sortCoverageRows<T extends MealCoverageRow>(rows: readonly T[]): T[] {
 	return [...rows].sort(
-		(a, b) => a.received.length - b.received.length || a.name.localeCompare(b.name, 'th')
+		(a, b) => sortGroup(a) - sortGroup(b) || a.name.localeCompare(b.name, 'th')
 	);
 }
 
@@ -172,4 +188,40 @@ export function pageSlice<T>(rows: readonly T[], page: number, pageSize: number)
 		start: items.length ? from + 1 : 0,
 		end: items.length ? from + items.length : 0
 	};
+}
+
+export interface ZoneCoverage {
+	/** Zone code, or `null` for residents with no zone. */
+	zone: string | null;
+	total: number;
+	complete: number;
+	percent: number;
+}
+
+/** Complete / present per zone, the least covered zone first so staff know where to go. */
+export function coverageByZone(rows: readonly (MealCoverageRow & { zone: string | null })[]) {
+	const byZone = new Map<string | null, { total: number; complete: number }>();
+	for (const r of rows) {
+		const entry = byZone.get(r.zone) ?? { total: 0, complete: 0 };
+		entry.total += 1;
+		if (r.complete) entry.complete += 1;
+		byZone.set(r.zone, entry);
+	}
+	return [...byZone]
+		.map(([zone, e]): ZoneCoverage => ({
+			zone,
+			...e,
+			percent: Math.round((e.complete / e.total) * 100)
+		}))
+		.sort(
+			(a, b) =>
+				a.percent - b.percent || (a.zone ?? '').localeCompare(b.zone ?? '', 'th', { numeric: true })
+		);
+}
+
+export type CoverageLevel = 'good' | 'fair' | 'poor';
+
+/** Share of people covered: 80% and up is good, 50% and up fair, below that poor. */
+export function coverageLevel(percent: number): CoverageLevel {
+	return percent >= 80 ? 'good' : percent >= 50 ? 'fair' : 'poor';
 }

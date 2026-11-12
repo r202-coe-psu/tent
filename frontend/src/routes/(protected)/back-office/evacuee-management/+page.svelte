@@ -5,13 +5,15 @@
 	import Users from '@lucide/svelte/icons/users';
 	import Home from '@lucide/svelte/icons/home';
 	import BarChart2 from '@lucide/svelte/icons/bar-chart-2';
+	import Utensils from '@lucide/svelte/icons/utensils';
 	import EvacueeTab from './evacuee-tab.svelte';
 	import HouseholdTab from './household-tab.svelte';
 	import DashboardTab from './dashboard-tab.svelte';
+	import { MealCoveragePanel } from '$lib/features/distribution';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
-	type TabKey = 'dashboard' | 'evacuee' | 'household';
-	const tabKeys: readonly TabKey[] = ['dashboard', 'evacuee', 'household'];
+	type TabKey = 'dashboard' | 'evacuee' | 'household' | 'meals';
+	const tabKeys: readonly TabKey[] = ['dashboard', 'evacuee', 'household', 'meals'];
 	const activeTab = $derived.by<TabKey>(() => {
 		const requestedTab = page.url.searchParams.get('tab') as TabKey | null;
 		return requestedTab && tabKeys.includes(requestedTab) ? requestedTab : 'dashboard';
@@ -76,6 +78,17 @@
 				<Home class="h-4 w-4" />
 				รายชื่อครัวเรือน
 			</button>
+			<button
+				type="button"
+				onclick={() => selectTab('meals')}
+				class="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+					{activeTab === 'meals'
+					? 'border-primary text-primary'
+					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
+			>
+				<Utensils class="h-4 w-4" />
+				การรับอาหาร
+			</button>
 		</nav>
 	</div>
 
@@ -93,8 +106,18 @@
 			{/if}
 		{:else if activeTab === 'evacuee'}
 			<EvacueeTab />
-		{:else}
+		{:else if activeTab === 'household'}
 			<HouseholdTab />
+		{:else}
+			<div class="p-4 sm:p-6">
+				{#key shelterStore.selectedShelterCode}
+					<MealCoveragePanel
+						shelterCode={shelterStore.selectedShelterCode ?? undefined}
+						onOpenPerson={(id) =>
+							goto(resolve(`/back-office/evacuee-management/edit/evacuee/${id}`))}
+					/>
+				{/key}
+			</div>
 		{/if}
 	</div>
 </div>

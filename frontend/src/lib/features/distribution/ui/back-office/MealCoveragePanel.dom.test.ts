@@ -32,6 +32,18 @@ vi.mock('$lib/features/kitchen', async (orig) => ({
 	useMealServices: () => env.services,
 	useMealServiceReceipts: () => env.receipts
 }));
+// The real picker is a popover calendar; a plain date input stands in so a test can set the day.
+vi.mock('$lib/components/date-picker.svelte', () => ({
+	default: (anchor: Comment, props: { value: string; max?: string; id?: string }) => {
+		const input = document.createElement('input');
+		input.type = 'date';
+		input.id = props.id ?? '';
+		input.max = props.max ?? '';
+		input.value = props.value;
+		input.addEventListener('input', () => (props.value = input.value));
+		anchor.before(input);
+	}
+}));
 vi.mock('$lib/utils/download-csv', () => ({ downloadCsv: env.downloadCsv }));
 vi.mock('../../application/queries', () => ({
 	useDistributionLogsByDay: (_shelter: () => string | undefined, day: () => string) => {
@@ -47,19 +59,23 @@ const person = (id: string, first: string) => ({
 	nickname: null,
 	current_stay: { status: 'active', since: '2026-11-01T00:00:00Z' }
 });
-const log = (id: string, meal: string) => ({
+const log = (id: string, meal: string, by = 'staff1') => ({
 	recipient_type: 'evacuee',
 	recipient_id: id,
 	meal,
 	status: 'fulfilled',
 	is_returnable: false,
-	distributed_at: '2026-11-09T01:00:00Z'
+	distributed_at: '2026-11-09T01:00:00Z',
+	distributed_by: by,
+	qty: '1'
 });
 
 let cmp: ReturnType<typeof mount> | undefined;
-function render() {
+/** The panel opens on today; most cases are about a finished day, so they pick yesterday. */
+function render(day: string | null = '2026-11-09') {
 	cmp = mount(MealCoveragePanel, { target: document.body, props: { shelterCode: 'SH001' } });
 	flushSync();
+	if (day) typeDay(day);
 	return document.body.textContent ?? '';
 }
 
@@ -84,7 +100,7 @@ const mealBadges = (row: Element) =>
 	);
 
 beforeEach(() => {
-	// Thai today is 2026-11-10, so the default day is 2026-11-09.
+	// Thai today is 2026-11-10.
 	vi.useFakeTimers({ toFake: ['Date'] });
 	vi.setSystemTime(new Date('2026-11-10T05:00:00Z'));
 	env.services = { data: [], isLoading: false, isError: false };
@@ -115,14 +131,87 @@ describe('MealCoveragePanel', () => {
 		};
 		const text = render();
 		expect(text).toContain('สมชาย ใจดี');
-		expect(text).not.toContain('สมหญิง');
 		expect(text).toContain('ยังไม่ครบ 1 คน');
+		expect(rowTexts()).toHaveLength(2);
+		expect(rowTexts()[0]).toContain('ยังไม่ถึง 2 มื้อ · 1/2');
+		expect(rowTexts()[1]).toContain('สมหญิง');
+		expect(rowTexts()[1]).toContain('ครบ 2/2 มื้อ');
 		const row = document.querySelector('tbody tr') as Element;
 		expect(mealBadges(row)).toEqual([
 			'เช้า มีบันทึก',
 			'กลางวัน ยังไม่มีบันทึก',
 			'เย็น ยังไม่มีบันทึก'
 		]);
+	});
+
+	const footerCells = (title: string) => {
+		const heading = Array.from(document.querySelectorAll('[id^="ratio-card-"]')).find(
+			(el) => el.textContent?.trim() === title
+		);
+		return Array.from(heading?.closest('[role="group"]')?.querySelectorAll('dl > div') ?? []).map(
+			(el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim()
+		);
+	};
+
+	it('shows how many residents have a record per meal and for 2 meals (#1257)', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย'), person('evacuee:B', 'สมหญิง')];
+		env.logs.data = {
+			items: [
+				log('evacuee:A', 'breakfast'),
+				log('evacuee:B', 'breakfast'),
+				log('evacuee:B', 'lunch')
+			],
+			skipped: []
+		};
+		render();
+		expect(bodyText()).toContain('จากผู้ที่อยู่ในศูนย์ 2 คน');
+		expect(footerCells('ผู้ที่มีบันทึกรับอาหาร')).toEqual([
+			'เช้า 2/2 คน 100%',
+			'กลางวัน 1/2 คน 50%',
+			'เย็น 0/2 คน 0%',
+			'ครบ 2 มื้อ 1/2 คน 50%'
+		]);
+	});
+
+	it('compares portions handed out with portions the kitchen made (#1257)', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย'), person('evacuee:B', 'สมหญิง')];
+		env.logs.data = {
+			items: [
+				log('evacuee:A', 'breakfast'),
+				{ ...log('evacuee:B', 'breakfast'), qty: '2' },
+				log('evacuee:B', 'lunch')
+			],
+			skipped: []
+		};
+		env.services.data = [
+			{ ...service('ms:1', 'breakfast', '2026-11-09'), actual_yield: 6, served: 5 },
+			{ ...service('ms:2', 'lunch', '2026-11-09'), served: 1 }
+		];
+		render();
+		expect(footerCells('อาหารที่แจกแล้ว')).toEqual([
+			'เช้า 3/6 ชุด 50%',
+			'กลางวัน 1/1 ชุด 100%',
+			'เย็น 0 ชุด ไม่มีบันทึกผลผลิตครัว'
+		]);
+	});
+
+	it('shows a percent above 100 when more portions were handed out than the kitchen made', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
+		env.logs.data = {
+			items: [{ ...log('evacuee:A', 'breakfast'), qty: '3' }],
+			skipped: []
+		};
+		env.services.data = [{ ...service('ms:1', 'breakfast', '2026-11-09'), actual_yield: 2 }];
+		render();
+		expect(footerCells('อาหารที่แจกแล้ว')[0]).toBe('เช้า 3/2 ชุด 150%');
+	});
+
+	it('still lists people when the kitchen data fails to load for a past day', () => {
+		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
+		env.services = { data: [], isLoading: false, isError: true };
+		render();
+		expect(rowTexts()).toHaveLength(1);
+		expect(footerCells('อาหารที่แจกแล้ว')[0]).toContain('ไม่มีบันทึกผลผลิตครัว');
 	});
 
 	it('shows the empty state when everyone has 2 meals', () => {
@@ -137,7 +226,7 @@ describe('MealCoveragePanel', () => {
 	it('words the result as "no record", never "did not eat"', () => {
 		env.evacuees.data = [person('evacuee:A', 'สมชาย')];
 		const text = render();
-		expect(text).toContain('ยังไม่มีบันทึกรับอาหาร');
+		expect(text).toContain('ยังไม่มีบันทึก');
 		expect(text).not.toContain('ไม่ได้กิน');
 	});
 
@@ -212,8 +301,8 @@ describe('MealCoveragePanel', () => {
 	});
 
 	it('requests the logs of the day typed into the date field', () => {
-		render();
-		expect(env.dayGetter?.()).toBe('2026-11-09');
+		render(null);
+		expect(env.dayGetter?.()).toBe('2026-11-10');
 		typeDay('2026-11-05');
 		expect(env.dayGetter?.()).toBe('2026-11-05');
 	});
@@ -316,9 +405,22 @@ describe('MealCoveragePanel today', () => {
 		render();
 		typeDay('2026-11-10');
 		expect(document.body.textContent).toContain('วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว: เช้า');
-		expect(rowTexts()).toHaveLength(1);
+		expect(rowTexts()).toHaveLength(2);
 		expect(rowTexts()[0]).toContain('สมหญิง');
 		expect(rowTexts()[0]).toContain('ยังไม่ถึงมื้อ');
+		expect(rowTexts()[1]).toContain('สมชาย');
+		expect(rowTexts()[1]).toContain('ครบ 1/1 มื้อ');
+	});
+
+	it('keeps the count of a meal that is not over yet next to the pending note', () => {
+		env.services.data = [service('ms:1', 'breakfast')];
+		env.logs.data = {
+			items: [todayLog('evacuee:A', 'breakfast'), todayLog('evacuee:B', 'lunch')],
+			skipped: []
+		};
+		render();
+		typeDay('2026-11-10');
+		expect(bodyText()).toContain('ยังไม่ถึงมื้อ · มีบันทึก 1 คน');
 	});
 
 	it('does not count a meal_service whose receipt was rejected', () => {
@@ -338,10 +440,11 @@ describe('MealCoveragePanel today', () => {
 		render();
 		typeDay('2026-11-10');
 		const text = document.body.textContent ?? '';
-		expect(text).toContain('ผู้พักพิงที่ยังไม่มีบันทึกรับอาหารของมื้อที่ให้บริการแล้ว');
-		expect(text).not.toContain('ครบ 2 มื้อ');
+		expect(text).toContain('รายชื่อผู้พักพิงและบันทึกรับอาหาร');
 		expect(text).not.toContain('มีบันทึก 1 มื้อ');
 		expect(text).toContain('ยังไม่มีบันทึกเลย');
+		expect(text).toContain('ยังไม่ถึง 1 มื้อ');
+		expect(text).toContain('วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว (1 มื้อ)');
 	});
 
 	it('words today as present since the start of the day, past days as all day', () => {
@@ -399,8 +502,9 @@ describe('MealCoveragePanel zone, household, advisory and export', () => {
 		env.evacuees.data = [withHousehold('evacuee:A', 'สมชาย'), withHousehold('evacuee:B', 'สมหญิง')];
 		env.logs.data = { items: [log('evacuee:B', 'lunch'), log('evacuee:B', 'dinner')], skipped: [] };
 		render();
-		expect(rowTexts()).toHaveLength(1);
+		expect(rowTexts()).toHaveLength(2);
 		expect(rowTexts()[0]).toContain('สมชาย');
+		expect(rowTexts()[0]).toContain('ยังไม่มีบันทึก');
 		expect(rowTexts()[0]).toContain('ครัวเรือนมีบันทึกรับ: กลางวัน, เย็น');
 	});
 
@@ -445,9 +549,141 @@ describe('MealCoveragePanel zone, household, advisory and export', () => {
 		expect(csv.split('\r\n')).toHaveLength(2);
 		expect(csv).toContain('"สมหญิง ใจดี"');
 		expect(csv).not.toContain('สมชาย');
-		expect(csv).toContain('"ยังไม่มีบันทึก"');
+		expect(csv).toContain('"ยังไม่ถึง 2 มื้อ · 0/2"');
 
 		search('ไม่มีใคร');
 		expect(exportButton().disabled).toBe(true);
+	});
+});
+
+describe('MealCoveragePanel overview and roster', () => {
+	const tile = (label: string) =>
+		Array.from(document.querySelectorAll('button[aria-pressed]')).find((b) =>
+			b.textContent?.includes(label)
+		) as HTMLElement;
+	const tileText = (label: string) => (tile(label).textContent ?? '').replace(/\s+/g, ' ').trim();
+	const cells = (tr: Element) =>
+		Array.from(tr.querySelectorAll('td')).map((td) =>
+			(td.textContent ?? '').replace(/\s+/g, ' ').trim()
+		);
+
+	beforeEach(() => {
+		env.evacuees.data = [
+			person('evacuee:A', 'กนก'),
+			person('evacuee:B', 'ขวัญ'),
+			person('evacuee:C', 'คม'),
+			person('evacuee:D', 'งาม')
+		];
+		env.logs.data = {
+			items: [
+				log('evacuee:A', 'breakfast', 'amy'),
+				log('evacuee:A', 'lunch', 'zed'),
+				log('evacuee:A', 'dinner', 'amy'),
+				log('evacuee:B', 'lunch', 'bob'),
+				{ ...log('evacuee:B', 'dinner', 'voider'), status: 'voided' },
+				log('evacuee:C', 'breakfast', 'cat'),
+				log('evacuee:C', 'dinner', 'dan')
+			],
+			skipped: []
+		};
+	});
+
+	it('shows the four tiles with counts and percents of the people present', () => {
+		render();
+		expect(tileText('อยู่ในศูนย์ตลอดวัน')).toContain('4');
+		expect(tileText('อยู่ในศูนย์ตลอดวัน')).toContain('ยังไม่ครบ 2 คน');
+		expect(tileText('ได้รับครบ')).toContain('2');
+		expect(tileText('ได้รับครบ')).toContain('50% ของผู้อยู่ในศูนย์');
+		expect(tileText('มีบันทึก 1 มื้อ')).toContain('25%');
+		expect(tileText('ยังไม่มีบันทึกเลย')).toContain('25%');
+	});
+
+	it('writes the gauge legend so colour is not the only signal', () => {
+		render();
+		const text = bodyText().replace(/\s+/g, ' ');
+		expect(text).toContain('ได้รับครบ 2 มื้อ 2 คน 50%');
+		expect(text).toContain('มีบันทึก 1 มื้อ 1 คน 25%');
+		expect(text).toContain('ยังไม่มีบันทึกเลย 1 คน 25%');
+	});
+
+	it('filters to the people who got everything when the complete tile is pressed', () => {
+		render();
+		click(tile('ได้รับครบ'));
+		expect(tile('ได้รับครบ').getAttribute('aria-pressed')).toBe('true');
+		expect(rowTexts()).toHaveLength(2);
+		expect(rowTexts().every((t) => t.includes('ครบ 2/2 มื้อ'))).toBe(true);
+	});
+
+	it('calls out how many people are under the threshold and filters to them on request', () => {
+		render();
+		const text = bodyText();
+		expect(text).toContain('2 คน');
+		expect(text).toContain('ยังไม่ถึง 2 มื้อ จากผู้ที่อยู่ในศูนย์ 4 คน');
+		click(
+			Array.from(document.querySelectorAll('button')).find((b) =>
+				b.textContent?.includes('ดูเฉพาะรายชื่อนี้')
+			)
+		);
+		expect(rowTexts()).toHaveLength(2);
+		expect(rowTexts().every((t) => t.includes('ยังไม่ถึง 2 มื้อ'))).toBe(true);
+		expect(bodyText()).toContain('ดูทุกคน');
+	});
+
+	it('hides a fully served person under the none and partial tiles', () => {
+		render();
+		click(tile('ยังไม่มีบันทึกเลย'));
+		expect(rowTexts()).toHaveLength(1);
+		expect(rowTexts()[0]).toContain('งาม');
+		click(tile('มีบันทึก 1 มื้อ'));
+		expect(rowTexts()).toHaveLength(1);
+		expect(rowTexts()[0]).toContain('ขวัญ');
+	});
+
+	it('orders none, then partial, then complete by name', () => {
+		render();
+		const names = rowTexts().map((t) => ['งาม', 'ขวัญ', 'กนก', 'คม'].find((n) => t.includes(n)));
+		expect(names).toEqual(['งาม', 'ขวัญ', 'กนก', 'คม']);
+	});
+
+	it('shows who handed the meals out, distinct and without voided logs', () => {
+		render();
+		const header = Array.from(document.querySelectorAll('thead th')).map((th) =>
+			th.textContent?.trim()
+		);
+		expect(header).toEqual(['ชื่อ', 'โซน', 'มื้ออาหาร', 'ผู้แจก', 'สถานะ']);
+		const byName = Object.fromEntries(
+			Array.from(document.querySelectorAll('tbody tr')).map((tr) => {
+				const c = cells(tr);
+				return [c[0], c[3]];
+			})
+		);
+		expect(byName['กนก ใจดี']).toBe('amy, zed');
+		expect(byName['ขวัญ ใจดี']).toBe('bob');
+		expect(byName['งาม ใจดี']).toBe('–');
+	});
+
+	it('exports the ผู้แจก column for the rows that match the filter', () => {
+		render();
+		click(tile('ได้รับครบ'));
+		click(
+			Array.from(document.querySelectorAll('button')).find((b) =>
+				b.textContent?.includes('ส่งออก CSV')
+			)
+		);
+		const [, csv] = env.downloadCsv.mock.calls[0] as [string, string];
+		const lines = csv.split('\r\n');
+		expect(lines).toHaveLength(3);
+		expect(lines[0]).toContain('"ผู้แจก"');
+		expect(lines[1]).toContain('"amy, zed"');
+		expect(csv).not.toContain('งาม');
+	});
+
+	it('falls back to all when the partial filter is active but a single meal counts', () => {
+		env.services.data = [service('ms:1', 'breakfast')];
+		render();
+		click(tile('มีบันทึก 1 มื้อ'));
+		typeDay('2026-11-10');
+		expect(tile('มีบันทึก 1 มื้อ')).toBeUndefined();
+		expect(tile('อยู่ในศูนย์ตั้งแต่ต้นวัน').getAttribute('aria-pressed')).toBe('true');
 	});
 });

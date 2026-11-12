@@ -8,10 +8,11 @@ import {
 	coverageZones,
 	filterCoverageRows,
 	pageSlice,
-	previousThaiDay,
 	sortCoverageRows,
 	thaiToday,
-	type CoverageListRow
+	type CoverageListRow,
+	coverageByZone,
+	coverageLevel
 } from './meal-coverage-view';
 
 const person = (id: string, status: string, since: string) => ({
@@ -68,23 +69,25 @@ describe('coverageResidents', () => {
 	});
 });
 
-describe('previousThaiDay', () => {
-	it('is the Thai calendar day before now', () => {
-		// 2026-11-09T18:00Z is already 10 Nov in Thailand
-		expect(previousThaiDay(new Date('2026-11-09T18:00:00Z'))).toBe('2026-11-09');
-	});
-});
-
-const row = (id: string, name: string, received: CoverageListRow['received']): CoverageListRow => ({
+const row = (
+	id: string,
+	name: string,
+	received: CoverageListRow['received'],
+	complete = false
+): CoverageListRow => ({
 	id,
 	name,
 	received,
 	missing: [],
+	counted: received.length,
+	complete,
+	distributedBy: [],
 	zone: null
 });
 const none = row('a', 'ศศิ', []);
 const partial = row('b', 'กมล', ['lunch']);
 const partial2 = row('c', 'Anna', ['dinner']);
+const complete = row('e', 'บุญ', ['breakfast', 'lunch'], true);
 
 describe('coverageResidents zone', () => {
 	it('carries the current stay zone and attachZones joins it onto coverage rows', () => {
@@ -101,8 +104,24 @@ describe('coverageResidents zone', () => {
 		});
 		const rows = attachZones(
 			[
-				{ id: 'evacuee:A', name: 'A', received: [], missing: [] },
-				{ id: 'evacuee:B', name: 'B', received: [], missing: [] }
+				{
+					id: 'evacuee:A',
+					name: 'A',
+					received: [],
+					missing: [],
+					counted: 0,
+					complete: false,
+					distributedBy: []
+				},
+				{
+					id: 'evacuee:B',
+					name: 'B',
+					received: [],
+					missing: [],
+					counted: 0,
+					complete: false,
+					distributedBy: []
+				}
 			],
 			residents
 		);
@@ -111,20 +130,42 @@ describe('coverageResidents zone', () => {
 });
 
 describe('coverageCounts', () => {
-	it('counts all, none and partial', () => {
-		expect(coverageCounts([none, partial, partial2])).toEqual({ all: 3, none: 1, partial: 2 });
+	it('counts all, complete, partial and none', () => {
+		expect(coverageCounts([none, partial, partial2, complete])).toEqual({
+			all: 4,
+			complete: 1,
+			incomplete: 3,
+			partial: 2,
+			none: 1
+		});
+	});
+	it('does not count a complete row with one meal as partial (threshold 1)', () => {
+		const one = row('f', 'ก', ['lunch'], true);
+		expect(coverageCounts([one])).toEqual({
+			all: 1,
+			complete: 1,
+			incomplete: 0,
+			partial: 0,
+			none: 0
+		});
 	});
 	it('is zero for no rows', () => {
-		expect(coverageCounts([])).toEqual({ all: 0, none: 0, partial: 0 });
+		expect(coverageCounts([])).toEqual({ all: 0, complete: 0, incomplete: 0, partial: 0, none: 0 });
 	});
 });
 
 describe('filterCoverageRows', () => {
-	const rows = [none, partial, partial2];
+	const rows = [none, partial, partial2, complete];
 	it('filters by meals recorded', () => {
 		expect(filterCoverageRows(rows, { filter: 'none', query: '' })).toEqual([none]);
 		expect(filterCoverageRows(rows, { filter: 'partial', query: '' })).toEqual([partial, partial2]);
+		expect(filterCoverageRows(rows, { filter: 'complete', query: '' })).toEqual([complete]);
 		expect(filterCoverageRows(rows, { filter: 'all', query: '' })).toEqual(rows);
+	});
+	it('keeps a complete one-meal row out of partial', () => {
+		const one = row('f', 'ก', ['lunch'], true);
+		expect(filterCoverageRows([one], { filter: 'partial', query: '' })).toEqual([]);
+		expect(filterCoverageRows([one], { filter: 'complete', query: '' })).toEqual([one]);
 	});
 	it('matches the name case-insensitively and ignores surrounding whitespace', () => {
 		expect(filterCoverageRows(rows, { filter: 'all', query: '  anNA ' })).toEqual([partial2]);
@@ -136,11 +177,17 @@ describe('filterCoverageRows', () => {
 });
 
 describe('sortCoverageRows', () => {
-	it('puts fewest meals first, then Thai name order, without mutating', () => {
-		const input = [partial, none, row('d', 'กก', [])];
+	it('orders none, partial, complete, then Thai name order, without mutating', () => {
+		const input = [
+			complete,
+			partial,
+			none,
+			row('d', 'กก', []),
+			row('g', 'กข', ['breakfast', 'lunch'], true)
+		];
 		const sorted = sortCoverageRows(input);
-		expect(sorted.map((r) => r.id)).toEqual(['d', 'a', 'b']);
-		expect(input.map((r) => r.id)).toEqual(['b', 'a', 'd']);
+		expect(sorted.map((r) => r.id)).toEqual(['d', 'a', 'b', 'g', 'e']);
+		expect(input.map((r) => r.id)).toEqual(['e', 'b', 'a', 'd', 'g']);
 	});
 });
 
@@ -173,6 +220,9 @@ describe('zone filter', () => {
 		name: id,
 		received: [],
 		missing: [],
+		counted: 0,
+		complete: false,
+		distributedBy: [],
 		zone
 	});
 	const rows = [row('a', 'Z2'), row('b', 'Z1'), row('c', null), row('d', 'Z2')];
@@ -278,6 +328,7 @@ describe('attachHouseholdRecorded', () => {
 		status: 'fulfilled',
 		is_returnable: false,
 		distributed_at: '2026-11-09T01:00:00Z',
+		distributed_by: 'staff1',
 		...extra
 	});
 	const listed = (id: string, received: string[], missing: string[]) => ({
@@ -285,6 +336,8 @@ describe('attachHouseholdRecorded', () => {
 		name: id,
 		received,
 		missing,
+		complete: false,
+		distributedBy: [],
 		zone: null
 	});
 	const attach = (rows: unknown[], residents: unknown[], logs: unknown[]) =>
@@ -335,5 +388,44 @@ describe('attachHouseholdRecorded', () => {
 			[log('B', 'breakfast')]
 		);
 		expect(out[0].householdRecorded).toEqual(['breakfast']);
+	});
+});
+
+describe('coverageByZone', () => {
+	const r = (zone: string | null, complete: boolean) => ({
+		id: Math.random().toString(),
+		name: 'n',
+		received: [],
+		missing: [],
+		counted: complete ? 2 : 0,
+		complete,
+		distributedBy: [],
+		zone
+	});
+
+	it('counts complete over present per zone and lists the least covered zone first', () => {
+		const rows = [r('Z1', true), r('Z1', true), r('Z2', false), r('Z2', true), r(null, false)];
+		expect(coverageByZone(rows)).toEqual([
+			{ zone: null, total: 1, complete: 0, percent: 0 },
+			{ zone: 'Z2', total: 2, complete: 1, percent: 50 },
+			{ zone: 'Z1', total: 2, complete: 2, percent: 100 }
+		]);
+	});
+
+	it('is empty for no rows', () => {
+		expect(coverageByZone([])).toEqual([]);
+	});
+});
+
+describe('coverageLevel', () => {
+	it('is good from 80, fair from 50, poor below', () => {
+		expect([100, 80, 79, 50, 49, 0].map(coverageLevel)).toEqual([
+			'good',
+			'good',
+			'fair',
+			'fair',
+			'poor',
+			'poor'
+		]);
 	});
 });
