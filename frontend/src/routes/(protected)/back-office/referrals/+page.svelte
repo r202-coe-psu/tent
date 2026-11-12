@@ -16,14 +16,18 @@
 	// Tab, status, search and page live in the URL so back, refresh and share keep them.
 	const params = $derived(parseReferralListParams(page.url.searchParams));
 
+	let listSection = $state<HTMLElement>();
+
 	// Filters replace the history entry; page turns push one so browser back steps to the previous
-	// page, and scroll to the top so the new page starts at its first row.
-	function updateParams(next: Partial<typeof params>, { pageTurn = false } = {}) {
-		void goto(buildReferralListHref({ ...params, ...next }), {
+	// page, scroll to the top and move focus to the list so keyboard users start at its first row
+	// instead of on the pager button at the bottom.
+	async function updateParams(next: Partial<typeof params>, { pageTurn = false } = {}) {
+		await goto(buildReferralListHref({ ...params, ...next }), {
 			replaceState: !pageTurn,
 			keepFocus: true,
 			noScroll: !pageTurn
 		});
+		if (pageTurn) listSection?.focus({ preventScroll: true });
 	}
 
 	const listQuery = useReferralPages(() => ({
@@ -41,7 +45,7 @@
 	// to the page actually shown instead of leaving the URL and the footer disagreeing.
 	$effect(() => {
 		if (listQuery.isSuccess && !listQuery.isFetching && params.page > pages.length) {
-			updateParams({ page: pages.length });
+			void updateParams({ page: pages.length });
 		}
 	});
 
@@ -60,7 +64,7 @@
 		) {
 			return;
 		}
-		updateParams({ page: nextPage }, { pageTurn: true });
+		void updateParams({ page: nextPage }, { pageTurn: true });
 	}
 </script>
 
@@ -86,7 +90,12 @@
 	</a>
 </div>
 
-<section aria-label="รายการส่งตัวทั้งหมด" class="space-y-3">
+<section
+	bind:this={listSection}
+	tabindex="-1"
+	aria-label="รายการส่งตัวทั้งหมด"
+	class="space-y-3 outline-none"
+>
 	<ReferralList
 		{referrals}
 		direction={params.direction}

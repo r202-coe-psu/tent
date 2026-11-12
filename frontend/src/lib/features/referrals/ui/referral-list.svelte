@@ -367,7 +367,10 @@
 			class="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-4 sm:flex-row"
 		>
 			<div class="space-y-0.5 text-center font-sans text-xs text-muted-foreground sm:text-left">
-				<div role="status" class="tabular-nums">หน้า {page} · แสดง {shownCount} รายการ</div>
+				<!-- Only the page number is live: the row count changes on every search keystroke. -->
+				<div class="tabular-nums">
+					<span role="status">หน้า {page}</span> · แสดง {shownCount} รายการ
+				</div>
 				{#if isNextError}
 					<div role="alert" class="font-medium text-red-700">โหลดหน้าถัดไปไม่สำเร็จ</div>
 				{/if}

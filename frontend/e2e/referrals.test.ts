@@ -116,8 +116,9 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(page.getByRole('link', { name: /ลำดับ 0\b/ })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'ถัดไป' })).toBeDisabled();
 
-		// A page turn starts the new page at the top, not at the pager.
+		// A page turn starts the new page at the top, not at the pager, and focus follows.
 		await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+		await expect(page.getByRole('region', { name: 'รายการส่งตัวทั้งหมด' })).toBeFocused();
 
 		await page.getByRole('button', { name: 'ก่อนหน้า' }).click();
 		await expect(page.getByText('หน้า 1 · แสดง 50 รายการ')).toBeVisible();

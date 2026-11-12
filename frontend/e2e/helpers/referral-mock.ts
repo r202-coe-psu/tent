@@ -20,7 +20,7 @@ export interface ReferralStore {
 	referrals: Record<string, ReferralRow>;
 	/** Make GET /api/back-office/referral return 500. */
 	listFail: boolean;
-	/** Make GET /api/back-office/referral return 500 only for bookmark (load-more) requests. */
+	/** Make GET /api/back-office/referral return 500 only for bookmark (next-page) requests. */
 	pageFail: boolean;
 	/** Make GET /api/back-office/referral/:id return 500. */
 	detailFail: boolean;

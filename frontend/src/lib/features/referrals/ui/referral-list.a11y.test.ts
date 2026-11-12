@@ -125,7 +125,8 @@ describe('referral-list accessibility', () => {
 			const end = nav(html).indexOf(label);
 			return nav(html).slice(nav(html).lastIndexOf('<button', end), end);
 		};
-		expect(body).toContain('หน้า 1 · แสดง 1 รายการ');
+		// Only the page number is live; the row count changes with search and must not re-announce.
+		expect(body).toContain('<span role="status">หน้า 1</span> · แสดง 1 รายการ');
 		expect(button(body, 'ก่อนหน้า')).toMatch(DISABLED_ATTR);
 		expect(button(body, 'ถัดไป')).toMatch(DISABLED_ATTR);
 
@@ -172,7 +173,7 @@ describe('referral-list accessibility', () => {
 			}
 		});
 		expect(html.match(/aria-disabled="true"/g)).toHaveLength(2);
-		expect(html).toMatch(/role="status"[^>]*>หน้า 2/);
+		expect(html).toMatch(/role="status"[^>]*>หน้า 2</);
 	});
 
 	it('shows a role=alert next-page error while keeping the button', () => {

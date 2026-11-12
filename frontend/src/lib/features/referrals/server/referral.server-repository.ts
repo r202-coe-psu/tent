@@ -326,15 +326,19 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		const rawDocs = data.docs || [];
 		let hasMore = false;
 		if (rawDocs.length === parsed.limit && data.bookmark) {
-			const probe = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
-				selector,
-				sort,
-				limit: 1,
-				bookmark: data.bookmark
-			});
-			// A failed probe keeps "next" on rather than hiding rows that may exist; the next page
-			// request then surfaces the real error.
-			hasMore = probe.status !== HTTP_OK || (probe.data?.docs ?? []).length > 0;
+			// A failed probe (bad status or network error) keeps "next" on rather than hiding rows
+			// that may exist; the next page request then surfaces the real error.
+			try {
+				const probe = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
+					selector,
+					sort,
+					limit: 1,
+					bookmark: data.bookmark
+				});
+				hasMore = probe.status !== HTTP_OK || (probe.data?.docs ?? []).length > 0;
+			} catch {
+				hasMore = true;
+			}
 		}
 		return {
 			items: rawDocs.filter((d): d is Referral => isReferral(d)),
