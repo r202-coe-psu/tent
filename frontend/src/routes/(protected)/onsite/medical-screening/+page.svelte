@@ -430,11 +430,12 @@
 							{/if}
 						</div>
 					{:else}
-						<ul class="divide-y divide-border md:hidden" data-testid="screening-cards">
+						<ul role="list" class="divide-y divide-border md:hidden" data-testid="screening-cards">
 							{#each pagedRows.items as evacuee (evacuee._id)}
 								<li class="space-y-2 px-4 py-3">
 									<button
 										type="button"
+										tabindex="-1"
 										class="block w-full min-w-0 text-left"
 										onclick={() => openScreeningForm(evacuee._id)}
 									>

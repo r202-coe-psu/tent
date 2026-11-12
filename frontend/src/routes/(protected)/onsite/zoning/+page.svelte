@@ -804,6 +804,7 @@
 		<button
 			type="button"
 			onclick={() => setActiveTab('pending')}
+			aria-pressed={activeTab === 'pending'}
 			class="group flex flex-col items-stretch gap-1 rounded-xl border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:gap-3 sm:p-4 {activeTab ===
 			'pending'
 				? 'border-amber-300 bg-amber-50/50 shadow-2xs ring-2 ring-amber-500/20'
@@ -833,6 +834,7 @@
 		<button
 			type="button"
 			onclick={() => setActiveTab('awaiting_confirm')}
+			aria-pressed={activeTab === 'awaiting_confirm'}
 			class="group flex flex-col items-stretch gap-1 rounded-xl border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:gap-3 sm:p-4 {activeTab ===
 			'awaiting_confirm'
 				? 'border-emerald-300 bg-emerald-50/50 shadow-2xs ring-2 ring-emerald-500/20'
@@ -862,6 +864,7 @@
 		<button
 			type="button"
 			onclick={() => setActiveTab('assigned')}
+			aria-pressed={activeTab === 'assigned'}
 			class="group flex flex-col items-stretch gap-1 rounded-xl border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:gap-3 sm:p-4 {activeTab ===
 			'assigned'
 				? 'border-sky-300 bg-sky-50/50 shadow-2xs ring-2 ring-sky-500/20'
@@ -898,6 +901,7 @@
 				<button
 					type="button"
 					onclick={() => setActiveTab('pending')}
+					aria-pressed={activeTab === 'pending'}
 					class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 					'pending'
 						? 'border-primary text-primary'
@@ -912,6 +916,7 @@
 				<button
 					type="button"
 					onclick={() => setActiveTab('awaiting_confirm')}
+					aria-pressed={activeTab === 'awaiting_confirm'}
 					class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 					'awaiting_confirm'
 						? 'border-primary text-primary'
@@ -926,6 +931,7 @@
 				<button
 					type="button"
 					onclick={() => setActiveTab('assigned')}
+					aria-pressed={activeTab === 'assigned'}
 					class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 					'assigned'
 						? 'border-primary text-primary'
@@ -1026,7 +1032,17 @@
 					</p>
 				</div>
 			{:else}
-				<ul class="divide-y divide-slate-200/80 md:hidden" data-testid="zoning-cards">
+				<label
+					class="flex min-h-11 items-center gap-3 border-b border-slate-200/80 px-4 text-sm text-slate-700 md:hidden"
+				>
+					<Checkbox
+						checked={allPageSelected}
+						indeterminate={somePageSelected}
+						onCheckedChange={toggleSelectAll}
+					/>
+					{t.selectAllAria}
+				</label>
+				<ul role="list" class="divide-y divide-slate-200/80 md:hidden" data-testid="zoning-cards">
 					{#each pagedRows.items as row, index (row._id)}
 						{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
 						{@const ewarSymptoms = ewarSymptomsByEvacuee.get(row._id)}
@@ -1034,15 +1050,22 @@
 						<li
 							class="space-y-2.5 px-4 py-3 {selected ? 'bg-[var(--shelter-accent-blue-bg)]' : ''}"
 						>
-							<div class="flex items-start gap-3">
-								<Checkbox
-									class="mt-0.5"
-									checked={selected}
-									onCheckedChange={(checked) => onCheckboxChange(row._id, index, checked)}
-									aria-label={t.selectRowAria(formatPersonName(row))}
-								/>
+							<div class="flex items-start gap-1">
+								<label class="-mt-3 -ml-3 flex size-11 shrink-0 items-center justify-center">
+									<Checkbox
+										checked={selected}
+										onCheckedChange={(checked) => onCheckboxChange(row._id, index, checked)}
+										aria-label={t.selectRowAria(formatPersonName(row))}
+									/>
+								</label>
 								<div class="min-w-0 flex-1">
-									<p class="font-semibold break-words text-slate-900">{formatPersonName(row)}</p>
+									<button
+										type="button"
+										class="text-left font-semibold break-words text-slate-900 underline-offset-2 hover:underline"
+										onclick={() => openDetail(row._id)}
+									>
+										{formatPersonName(row)}
+									</button>
 									<p class="text-xs text-slate-600 tabular-nums">
 										{t.colCard}: {maskNationalId(row.person_id?.number)}
 									</p>

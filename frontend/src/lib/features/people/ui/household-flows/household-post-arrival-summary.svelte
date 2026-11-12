@@ -14,6 +14,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
+	import HouseholdMemberCards from './household-member-cards.svelte';
 
 	// Icons
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
@@ -102,6 +103,22 @@
 	const groupedPets = $derived(groupPetsBySpecies(createdHousehold.pets ?? []));
 	const hasVehicles = $derived(
 		!!(createdHousehold.vehicles && createdHousehold.vehicles.length > 0)
+	);
+
+	const memberCards = $derived(
+		selectedMembers.map((m) => ({
+			id: m._id,
+			name: `${m.first_name} ${m.last_name}`,
+			nickname: m.nickname,
+			isHead: m._id === createdHousehold.head_evacuee_id,
+			idMasked: maskNationalId(m.person_id?.number),
+			phone: m.phone,
+			needs: (m.special_needs ?? []).map((need: string) => ({
+				key: need,
+				emoji: SPECIAL_NEED_CHIPS[need]?.emoji || '⚠️',
+				label: SPECIAL_NEED_CHIPS[need]?.label || need
+			}))
+		}))
 	);
 </script>
 
@@ -260,55 +277,7 @@
 			</h3>
 		</div>
 
-		<ul class="divide-y rounded-xl border md:hidden" data-testid="household-member-cards">
-			{#each selectedMembers as m (m._id)}
-				{@const isHead = m._id === createdHousehold.head_evacuee_id}
-				<li class="space-y-2 p-3 text-sm">
-					<div class="flex items-start justify-between gap-2">
-						<p class="min-w-0 font-bold break-words text-slate-900 dark:text-slate-100">
-							{m.first_name}
-							{m.last_name}
-							{#if m.nickname}
-								<span class="text-xs font-normal text-muted-foreground">({m.nickname})</span>
-							{/if}
-						</p>
-						{#if isHead}
-							<span
-								class="shrink-0 rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary"
-							>
-								หัวหน้าครอบครัว
-							</span>
-						{:else}
-							<span
-								class="shrink-0 rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
-							>
-								ลูกบ้าน
-							</span>
-						{/if}
-					</div>
-					<div class="font-mono text-xs">
-						<span>ID: {maskNationalId(m.person_id?.number)}</span>
-						{#if m.phone}
-							<span class="opacity-75"> · {m.phone}</span>
-						{/if}
-					</div>
-					<div class="flex flex-wrap gap-1">
-						{#if m.special_needs?.length > 0}
-							{#each m.special_needs as need (need)}
-								<span
-									class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
-								>
-									{SPECIAL_NEED_CHIPS[need]?.emoji || '⚠️'}
-									{SPECIAL_NEED_CHIPS[need]?.label || need}
-								</span>
-							{/each}
-						{:else}
-							<span class="text-xs text-muted-foreground italic">ไม่มีกลุ่มช่วยเหลือพิเศษ</span>
-						{/if}
-					</div>
-				</li>
-			{/each}
-		</ul>
+		<HouseholdMemberCards members={memberCards} />
 		<div class="hidden overflow-x-auto rounded-xl border border-border md:block">
 			<table class="w-full border-collapse text-left text-sm">
 				<thead>
@@ -381,11 +350,11 @@
 			💡 จัดกลุ่มครอบครัวสำเร็จแล้ว
 			สมาชิกทุกคนจะผูกอยู่กับครัวเรือนนี้และมีสถานะเช็คอินอยู่ในโซนที่ระบุ
 		</p>
-		<div class="flex items-center gap-2 self-end sm:self-auto">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 			{#if selectedHead}
 				<Button
 					variant="outline"
-					class="h-11 px-6 font-semibold"
+					class="h-11 w-full px-6 font-semibold sm:w-auto"
 					onclick={() => (showQrModal = true)}
 				>
 					ออกและพิมพ์ QR ประจำตัว
@@ -393,7 +362,7 @@
 			{/if}
 			<Button
 				onclick={onFinish}
-				class="h-11 bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700"
+				class="h-11 w-full bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700 sm:w-auto"
 			>
 				เสร็จสิ้นการจัดกลุ่มครอบครัว ✔
 			</Button>

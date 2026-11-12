@@ -55,7 +55,11 @@
 	{/if}
 {/snippet}
 
-<ul class="divide-y rounded-xl border border-border md:hidden" data-testid="import-preview-cards">
+<ul
+	role="list"
+	class="divide-y rounded-xl border border-border md:hidden"
+	data-testid="import-preview-cards"
+>
 	{#each validations as v (v.row)}
 		{@const duplicate = duplicates.get(v.row)}
 		<li class="space-y-2 p-3 {v.ok ? '' : 'bg-destructive/5'}">

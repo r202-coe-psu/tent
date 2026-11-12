@@ -70,6 +70,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { COUNTRIES } from '$lib/utils/country';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
+	import HouseholdMemberCards from './household-member-cards.svelte';
 
 	let {
 		createdHousehold,
@@ -293,6 +294,22 @@
 		if (h.postal_code) parts.push(h.postal_code);
 		return parts.join(' ');
 	}
+
+	const memberCards = $derived(
+		householdMembers.map((m) => ({
+			id: m._id,
+			name: formatPersonName(m),
+			nickname: m.nickname,
+			isHead: m._id === createdHousehold.head_evacuee_id,
+			idMasked: maskNationalId(m.person_id?.number),
+			phone: m.phone,
+			needs: (m.vulnerable_groups ?? []).map((need: string) => ({
+				key: need,
+				emoji: VULNERABLE_GROUP_CHIPS[need]?.emoji || '⚠️',
+				label: VULNERABLE_GROUP_CHIPS[need]?.label || need
+			}))
+		}))
+	);
 </script>
 
 <div class="mx-auto w-full max-w-4xl space-y-6">
@@ -361,54 +378,7 @@
 				</Button>
 			</div>
 
-			<ul class="divide-y rounded-xl border md:hidden" data-testid="household-member-cards">
-				{#each householdMembers as m (m._id)}
-					{@const isHead = m._id === createdHousehold.head_evacuee_id}
-					<li class="space-y-2 p-3 text-sm">
-						<div class="flex items-start justify-between gap-2">
-							<p class="min-w-0 font-bold break-words text-slate-900 dark:text-slate-100">
-								{formatPersonName(m)}
-								{#if m.nickname}
-									<span class="text-xs font-normal text-muted-foreground">({m.nickname})</span>
-								{/if}
-							</p>
-							{#if isHead}
-								<span
-									class="shrink-0 rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary"
-								>
-									หัวหน้าครอบครัว
-								</span>
-							{:else}
-								<span
-									class="shrink-0 rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
-								>
-									ลูกบ้าน
-								</span>
-							{/if}
-						</div>
-						<div class="font-mono text-xs">
-							<span>ID: {maskNationalId(m.person_id?.number)}</span>
-							{#if m.phone}
-								<span class="opacity-75"> · {m.phone}</span>
-							{/if}
-						</div>
-						<div class="flex flex-wrap gap-1">
-							{#if m.vulnerable_groups?.length > 0}
-								{#each m.vulnerable_groups as need (need)}
-									<span
-										class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
-									>
-										{VULNERABLE_GROUP_CHIPS[need]?.emoji}
-										{VULNERABLE_GROUP_CHIPS[need]?.label ?? need}
-									</span>
-								{/each}
-							{:else}
-								<span class="text-xs text-muted-foreground italic">ไม่มีกลุ่มช่วยเหลือพิเศษ</span>
-							{/if}
-						</div>
-					</li>
-				{/each}
-			</ul>
+			<HouseholdMemberCards members={memberCards} />
 			<div class="hidden overflow-x-auto rounded-xl border md:block">
 				<table class="w-full border-collapse text-left text-sm">
 					<thead>
@@ -457,7 +427,7 @@
 												<span
 													class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
 												>
-													{VULNERABLE_GROUP_CHIPS[need]?.emoji}
+													{VULNERABLE_GROUP_CHIPS[need]?.emoji || '⚠️'}
 													{VULNERABLE_GROUP_CHIPS[need]?.label ?? need}
 												</span>
 											{/each}
