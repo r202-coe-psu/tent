@@ -22,6 +22,7 @@
 		CUSTOM_DESTINATION_SENTINEL
 	} from '../model/destination-selector';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
@@ -379,15 +380,15 @@
 					</p>
 
 					<div class="space-y-1 pt-3">
-						<label for="service-date" class="text-sm font-semibold text-slate-800">
+						<label for="service-date" class="block text-sm font-semibold text-slate-800">
 							วันที่แจก <span class="text-red-500">*</span>
 						</label>
-						<Input
+						<DatePicker
 							id="service-date"
-							type="date"
 							min={today}
 							bind:value={serviceDate}
-							class="w-full sm:w-56"
+							format={(iso) => formatServiceDay(iso, today)}
+							class="!h-10 bg-white sm:w-56"
 						/>
 						{#if serviceDate}
 							<p class="text-xs text-amber-800/80">

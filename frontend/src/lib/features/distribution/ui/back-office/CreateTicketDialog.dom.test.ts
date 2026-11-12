@@ -20,7 +20,7 @@ const BEFORE_MIDNIGHT = new Date('2026-11-09T15:00:00.000Z');
 const AFTER_MIDNIGHT = new Date('2026-11-09T17:05:00.000Z');
 
 let instance: ReturnType<typeof mount> | null = null;
-const dateInput = () => document.querySelector<HTMLInputElement>('#service-date');
+const dateButton = () => document.querySelector<HTMLButtonElement>('#service-date');
 
 async function settle() {
 	for (let i = 0; i < 10; i++) {
@@ -41,15 +41,14 @@ afterEach(() => {
 });
 
 describe('CreateTicketDialog service date', () => {
-	it('defaults to today and blocks earlier days', async () => {
+	it('defaults to today', async () => {
 		vi.setSystemTime(BEFORE_MIDNIGHT);
 		instance = mount(Host, { target: document.body });
 		await settle();
 		instance.show();
 		await settle();
 
-		expect(dateInput()?.value).toBe('2026-11-09');
-		expect(dateInput()?.min).toBe('2026-11-09');
+		expect(dateButton()?.textContent).toContain('วันนี้ (9 พ.ย.)');
 	});
 
 	it('takes the new Thailand day when the dialog opens after midnight', async () => {
@@ -61,7 +60,6 @@ describe('CreateTicketDialog service date', () => {
 		instance.show();
 		await settle();
 
-		expect(dateInput()?.value).toBe('2026-11-10');
-		expect(dateInput()?.min).toBe('2026-11-10');
+		expect(dateButton()?.textContent).toContain('วันนี้ (10 พ.ย.)');
 	});
 });
