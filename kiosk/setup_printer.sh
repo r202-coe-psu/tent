@@ -10,7 +10,7 @@
 # Usage: ./setup_printer.sh [printer-driver-xprinter_*.deb] [options]
 #   --label WxH      ขนาด label เป็น mm (default: KIOSK_LABEL_MM ใน frontend label-size.ts)
 #   --gap N          ระยะ gap ระหว่าง label ของม้วนจริง (mm, 0–10, default: 2)
-#   --queue NAME     ชื่อ CUPS queue (default: PRINTER_NAME ใน .env หรือ tent_xprinter)
+#   --queue NAME     ชื่อ CUPS queue (default: PRINTER_NAME ใน kiosk/.env หรือ printer/.env หรือ tent_xprinter)
 #   --test           พิมพ์ label ทดสอบ 1 ดวงหลังตั้งค่าเสร็จ (รันผ่าน SSH ได้)
 #   --force          ยอมให้รันบนเครื่องที่ไม่ใช่ Raspberry Pi (จะลบ queue อื่นของ XP-365B!)
 #   --status         แสดงสถานะการตั้งค่าแล้วออก (ไม่แก้อะไร)
@@ -71,9 +71,11 @@ while [ $# -gt 0 ]; do
 done
 
 # --- Resolve settings ----------------------------------------------------------
-if [ -z "$QUEUE" ] && [ -f "$SCRIPT_DIR/.env" ]; then
-    QUEUE="$(sed -n 's/^PRINTER_NAME=//p' "$SCRIPT_DIR/.env" | tail -1 | tr -d '"'\''[:space:]')"
-fi
+# kiosk/.env on a kiosk, printer/.env on a print-server Pi.
+for env_file in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/../printer/.env"; do
+    [ -z "$QUEUE" ] && [ -f "$env_file" ] || continue
+    QUEUE="$(sed -n 's/^PRINTER_NAME=//p' "$env_file" | tail -1 | tr -d '"'\''[:space:]')"
+done
 QUEUE="${QUEUE:-tent_xprinter}"
 [[ "$QUEUE" =~ ^[A-Za-z0-9_.-]+$ ]] || die "ชื่อ queue '$QUEUE' ใช้ได้เฉพาะ A-Z a-z 0-9 _ . -"
 

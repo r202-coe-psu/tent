@@ -160,6 +160,7 @@ cd ~/tent/kiosk
 ./setup_printer.sh ~/printer-driver-xprinter_*.deb --queue tent_xprinter --test
 ```
 
+ถ้าเขียน `printer/.env` (ขั้นที่ 4) ไว้ก่อน ไม่ต้องใส่ `--queue` สคริปต์อ่าน `PRINTER_NAME` จากไฟล์นั้นเอง
 ถ้า `--test` พิมพ์ label ทดสอบออกมา 1 ใบ แปลว่า CUPS พร้อมแล้ว
 ถ้าขึ้น `ไม่พบ XP-365B บน USB` ให้ตรวจสายและไฟ แล้วดูว่า `lsusb | grep 1fc9` เห็น `1fc9:2016` หรือไม่
 
@@ -189,14 +190,14 @@ nano .env
 
 ```bash
 cd ~/tent/printer
-sudo ./setup_printer_server.sh --env-file .env --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
-sudo ./setup_printer_server.sh --env-file .env
+sudo ./setup_printer_server.sh --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
+sudo ./setup_printer_server.sh             # อ่าน .env ในโฟลเดอร์นี้เอง ไม่ต้องใส่ --env-file
 rm .env             # ติดตั้งแล้ว ค่าจริงอยู่ที่ /opt/tent/printer/.env ไม่ต้องเก็บสำเนา secret ไว้ใน repo
 ```
 
 | ตัวเลือก | ความหมาย |
 |---|---|
-| `--env-file FILE` | `.env` ของ agent ถูกคัดลอกไปเป็น `<prefix>/.env` · บังคับตอนติดตั้งครั้งแรก ครั้งต่อไปไม่ใส่ก็ได้ จะใช้ `<prefix>/.env` เดิม |
+| `--env-file FILE` | `.env` ของ agent ถูกคัดลอกไปเป็น `<prefix>/.env` · ไม่ใส่ = ใช้ `<prefix>/.env` ที่ติดตั้งไว้แล้ว ถ้ายังไม่มีใช้ `printer/.env` ข้างสคริปต์ |
 | `--queue NAME` | ชื่อ CUPS queue (default: `PRINTER_NAME` ใน `--env-file`) |
 | `--prefix DIR` | ที่ติดตั้ง (default `/opt/tent/printer`) |
 | `--dry-run` | พิมพ์คำสั่งที่จะรัน ไม่เขียนอะไร และไม่ต้องเป็น root |
