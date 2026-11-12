@@ -107,10 +107,18 @@ $iscc = @(
 ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
 if (-not $iscc) {
     $innoDir = Join-Path $PSScriptRoot '.tools\inno'
-    $innoSetup = Join-Path $PSScriptRoot '.tools\innosetup.exe'
+    # Pinned release asset: jrsoftware.org/download.php/is.exe redirects to an HTML page.
+    $innoUrl = 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe'
+    $innoSha256 = 'A549929319F9120716677C685535CA4671E4B937B5FDC87E2585F32D8EB30E8C'
+    $innoSetup = Join-Path $PSScriptRoot '.tools\innosetup-6.7.4.exe'
     Write-Host ">> installing Inno Setup into $innoDir"
     [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
-    Invoke-WebRequest -UseBasicParsing -Uri 'https://jrsoftware.org/download.php/is.exe' -OutFile $innoSetup
+    Invoke-WebRequest -UseBasicParsing -Uri $innoUrl -OutFile $innoSetup
+    $hash = (Get-FileHash -LiteralPath $innoSetup -Algorithm SHA256).Hash
+    if ($hash -ne $innoSha256) {
+        Remove-Item -LiteralPath $innoSetup -Force
+        throw "Inno Setup download checksum mismatch ($hash)"
+    }
     $p = Start-Process -FilePath $innoSetup -Wait -PassThru -ArgumentList @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/NOICONS', "/DIR=`"$innoDir`"")
     if ($p.ExitCode -ne 0) { throw "Inno Setup install failed with exit code $($p.ExitCode)" }
