@@ -1,7 +1,9 @@
 ﻿; Inno Setup script for scanner-client. build.ps1 compiles it after PyInstaller:
 ;   ISCC.exe /DAppVersion=0.1.0 installer.iss   ->  dist\scanner-client-setup.exe
-; Per-user install (no admin). Asks for SHELTER_URL and writes .env next to the .exe;
-; an existing .env is kept on upgrade. Unsigned: Smart App Control must be off (README).
+; Per-user install (no admin). Payload is build\embed (see build.ps1 step 4): the python.org
+; embeddable runtime, which is PSF-signed, so Smart App Control can let it run; the
+; PyInstaller .exe is unsigned and gets blocked. Asks for SHELTER_URL and writes {app}\.env
+; (read by scanner_client.main next to the package); an existing .env is kept on upgrade.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -20,7 +22,7 @@ PrivilegesRequired=lowest
 OutputDir=dist
 OutputBaseFilename=scanner-client-setup
 SetupIconFile=assets\tent.ico
-UninstallDisplayIcon={app}\scanner-client.exe
+UninstallDisplayIcon={app}\tent.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -28,19 +30,23 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
-Source: "dist\scanner-client\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "install-shortcut.*"
-Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "build\embed\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+; left by 0.1.0 installers, which shipped the PyInstaller onedir build
+Type: filesandordirs; Name: "{app}\_internal"
+Type: files; Name: "{app}\scanner-client.exe"
 
 [Icons]
-Name: "{autoprograms}\tent"; Filename: "{app}\scanner-client.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\tent"; Filename: "{app}\scanner-client.exe"; WorkingDir: "{app}"
+Name: "{autoprograms}\tent"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; WorkingDir: "{app}"; IconFilename: "{app}\tent.ico"
+Name: "{autodesktop}\tent"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; WorkingDir: "{app}"; IconFilename: "{app}\tent.ico"
 
 [Run]
-Filename: "{app}\scanner-client.exe"; Description: "เปิดโปรแกรมเลย"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; Description: "เปิดโปรแกรมเลย"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; written by [Code], so the uninstaller does not know about it otherwise
-Type: files; Name: "{app}\.env"
+; .env is written by [Code] and __pycache__ by Python, so the uninstaller does not track them
+Type: filesandordirs; Name: "{app}"
 
 [Code]
 var

@@ -97,7 +97,58 @@ $debugZip = 'dist\scanner-client-debug-win64.zip'
 Compress-Archive -LiteralPath 'dist\scanner-client', 'README.md' -DestinationPath $zip -Force
 Compress-Archive -LiteralPath 'dist\scanner-client-debug' -DestinationPath $debugZip -Force
 
-# 4. installer (Inno Setup): ISCC from PATH / a normal install, else a private copy in .tools\
+# 4. installer payload (build\embed): Smart App Control blocks the unsigned PyInstaller .exe, so
+#    the installer ships the python.org embeddable runtime (PSF-signed pythonw.exe + DLLs) and our
+#    code as plain .py files. Only two PyPI .pyd files (pyscard, greenlet) stay unsigned.
+#      build\embed\python\         embeddable Python, python313._pth points at .. and ..\site-packages
+#      build\embed\site-packages\  runtime deps from uv.lock (Windows wheels)
+#      build\embed\scanner_client\ + app\scard.py (kiosk)   -> pythonw.exe -m scanner_client.main
+$embedVersion = '3.13.17'
+$embedSha256 = '9E35319BFFEDAB8B36AD44D8F377CB4F1733BCEC257A0B6D04D94F01486DDB38'
+$embedZip = Join-Path $PSScriptRoot ".tools\python-$embedVersion-embed-amd64.zip"
+if (-not (Test-Path -LiteralPath $embedZip)) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $embedZip) | Out-Null
+    [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+    Invoke-WebRequest -UseBasicParsing -OutFile $embedZip `
+        -Uri "https://www.python.org/ftp/python/$embedVersion/python-$embedVersion-embed-amd64.zip"
+}
+$hash = (Get-FileHash -LiteralPath $embedZip -Algorithm SHA256).Hash
+if ($hash -ne $embedSha256) {
+    Remove-Item -LiteralPath $embedZip -Force
+    throw "Python embeddable checksum mismatch ($hash)"
+}
+
+$stage = 'build\embed'
+Expand-Archive -LiteralPath $embedZip -DestinationPath "$stage\python" -Force
+# ._pth paths are relative to python\; it also keeps PYTHONPATH and user site-packages out.
+Set-Content -LiteralPath "$stage\python\python313._pth" -Encoding ascii -Value @(
+    'python313.zip', '.', '..', '..\site-packages')
+
+Invoke-Checked $uv @('export', '--frozen', '--no-dev', '--no-emit-project', '--no-hashes',
+    '--quiet', '-o', 'build\requirements.txt')
+Invoke-Checked $uv @('pip', 'install', '--quiet', '--target', "$stage\site-packages",
+    '-r', 'build\requirements.txt', '--only-binary', ':all:',
+    '--python-platform', 'x86_64-pc-windows-msvc', '--python-version', '3.13')
+Remove-Item -LiteralPath "$stage\site-packages\greenlet\tests" -Recurse -Force -ErrorAction SilentlyContinue
+
+Copy-Item -LiteralPath 'scanner_client' -Destination "$stage\scanner_client" -Recurse
+New-Item -ItemType Directory -Force -Path "$stage\app" | Out-Null
+foreach ($file in '__init__.py', 'scard.py') {
+    Copy-Item -LiteralPath "..\kiosk\app\$file" -Destination "$stage\app\$file"
+}
+Get-ChildItem -LiteralPath $stage -Recurse -Directory -Filter '__pycache__' |
+    Remove-Item -Recurse -Force
+foreach ($file in '.env.example', 'README.md', 'assets\tent.ico') {
+    Copy-Item -LiteralPath $file -Destination $stage
+}
+
+# smoke test: the embedded runtime must import the app and every native dependency
+Invoke-Checked "$stage\python\python.exe" @('-c',
+    'import scanner_client.main, app.scard, smartcard.scard, greenlet, playwright.async_api')
+Get-ChildItem -LiteralPath $stage -Recurse -Directory -Filter '__pycache__' |
+    Remove-Item -Recurse -Force
+
+# 5. installer (Inno Setup): ISCC from PATH / a normal install, else a private copy in .tools\
 $iscc = @(
     (Get-Command iscc -ErrorAction SilentlyContinue | ForEach-Object Source),
     (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),

@@ -6,7 +6,7 @@
 ## ดาวน์โหลด
 ตอนนี้ยังไม่มีหน้าดาวน์โหลดกลาง — ขอไฟล์จากทีมพัฒนา (ทีมส่งให้ทาง Drive/LINE หรือแฟลชไดรฟ์)
 - **`scanner-client-setup.exe`** — ตัวติดตั้ง (ใช้ไฟล์นี้)
-- `scanner-client-win64.zip` — แบบไม่ต้องติดตั้ง (สำรอง)
+- `scanner-client-win64.zip` — แบบไม่ต้องติดตั้ง (สำรอง · เป็น `.exe` ที่ไม่มีลายเซ็น Smart App Control บล็อกแน่นอน)
 - `scanner-client-debug-win64.zip` — ไว้ดู error ตอนแก้ปัญหาเท่านั้น
 
 ถ้าโหลดผ่าน Edge/Chrome แล้วขึ้น "isn't commonly downloaded" / "could harm your device" ให้กด **⋯ → Keep →
@@ -15,9 +15,10 @@ Keep anyway** (เพราะไฟล์ยังไม่มีลายเ�
 ทีมพัฒนา: ได้ไฟล์ทั้งสามจาก `build.bat` ในโฟลเดอร์ `dist\` (ดู "สำหรับนักพัฒนา" ด้านล่าง)
 
 ## ติดตั้ง
-### 0. ปิด Smart App Control (Windows 11 เท่านั้น ทำครั้งเดียวต่อเครื่อง)
-โปรแกรมนี้ยังไม่มีลายเซ็นดิจิทัล (code signing) ถ้าเครื่องเปิด **Smart App Control** ไว้ Windows จะบล็อกตัวติดตั้ง
-และตัวโปรแกรมทันที โดย**ไม่มี**ปุ่ม "Run anyway" และเลือกยกเว้นเฉพาะโปรแกรมนี้ไม่ได้
+### 0. Smart App Control (Windows 11) — ทำเฉพาะเมื่อโดนบล็อก
+ตัวติดตั้งรันโปรแกรมด้วย Python ทางการจาก python.org (มีลายเซ็นดิจิทัล) จึง**ควร**ผ่าน Smart App Control ได้โดยไม่ต้อง
+ปิด — ลองติดตั้งก่อน ถ้ายังขึ้น "Smart App Control blocked" หรือ "An Application Control policy has blocked this
+file" (มีไฟล์ประกอบสองตัวจาก PyPI ที่ยังไม่มีลายเซ็น) ให้ปิดตามนี้ — ไม่มีปุ่ม "Run anyway" และยกเว้นเฉพาะโปรแกรมนี้ไม่ได้
 1. Start → พิมพ์ **Smart App Control** → เปิด **Smart App Control settings**
    (หรือ Windows Security → App & browser control → Smart App Control settings)
 2. ถ้าขึ้น **On** หรือ **Evaluation** ให้เลือก **Off**
@@ -35,7 +36,8 @@ Windows 10 ไม่มี Smart App Control ข้ามขั้นนี้�
 4. กด Next จนจบ → ได้ไอคอน **tent** บน Desktop และใน Start Menu
 
 ติดตั้งไว้ที่ `%LocalAppData%\Programs\tent-scanner-client` · ติดตั้งเวอร์ชันใหม่ทับได้เลย (ไม่ถาม URL ซ้ำ ใช้ `.env` เดิม)
-· แก้ค่าอื่นใน `.env` ที่โฟลเดอร์นั้นได้ (ดู `.env.example`)
+· แก้ค่าอื่นใน `.env` ที่โฟลเดอร์นั้นได้ (ดู `.env.example`) · ไอคอน **tent** เรียก
+`python\pythonw.exe -m scanner_client.main` ในโฟลเดอร์นั้น (ไม่มี `scanner-client.exe` ในแบบติดตั้ง)
 
 ### ติดตั้งแบบ zip (สำรอง)
 1. แตกไฟล์ `scanner-client-win64.zip` ไว้ที่ไหนก็ได้ (เช่น `C:\Tools`) ได้โฟลเดอร์ `scanner-client`
@@ -47,7 +49,7 @@ Windows 10 ไม่มี Smart App Control ข้ามขั้นนี้�
 **ห้ามใส่รหัสผ่านหรือ secret ใด ๆ ใน `.env`** — ไฟล์นี้มีแต่ค่าตั้งต้นที่เปิดเผยได้ เจ้าหน้าที่ล็อกอินในหน้าเว็บเองตามปกติ
 
 ## ใช้งานครั้งแรก
-1. เสียบเครื่องอ่านบัตร แล้วดับเบิลคลิกไอคอน **tent** (หรือ `scanner-client.exe`)
+1. เสียบเครื่องอ่านบัตร แล้วดับเบิลคลิกไอคอน **tent** (แบบ zip: `scanner-client.exe`)
 2. ถ้า Windows ขึ้น SmartScreen ("Windows protected your PC") ให้กด **More info → Run anyway**
    (แจ้งครั้งเดียวต่อเครื่อง/ไฟล์ใหม่) · ถ้าขึ้นว่า **Smart App Control blocked** ให้ทำข้อ 0 ด้านบน
 3. หน้าต่าง Edge เปิดที่เว็บศูนย์ฯ → ล็อกอิน → เข้าหน้าลงทะเบียน walk-in → เสียบบัตร ข้อมูลจะเติมในฟอร์ม
@@ -68,7 +70,7 @@ Windows 10 ไม่มี Smart App Control ข้ามขั้นนี้�
 | เลือกเครื่องอ่านผิด (เช่น Windows Hello / virtual smart card) | ตั้ง `CARD_READER_NAME=` เป็นส่วนหนึ่งของชื่อเครื่องอ่านจริง เช่น `ACS` |
 | Edge ถูกบล็อกด้วยนโยบายองค์กร | ตั้ง `BROWSER_CHANNEL=chromium` — **ต้องใช้ build ที่ bundle Chromium** (build มาตรฐานนี้ไม่มี) หรือลอง `chrome` |
 | ต้องล็อกอินใหม่ทุกครั้ง | ตั้ง `KEEP_LOGIN=true` (เก็บโปรไฟล์ใน `%LocalAppData%\ScannerClient\profile`) |
-| ต้องดูข้อความ error สด ๆ | ใช้ `scanner-client-debug.exe` (เปิดพร้อมหน้าต่าง console) จาก `scanner-client-debug-win64.zip` |
+| ต้องดูข้อความ error สด ๆ | แบบติดตั้ง: เปิด Command Prompt แล้ว `cd /d %LocalAppData%\Programs\tent-scanner-client` → `python\python.exe -m scanner_client.main` · แบบ zip: `scanner-client-debug.exe` จาก `scanner-client-debug-win64.zip` |
 
 ตัวแปรอื่น ๆ (`START_PATH` หน้าแรกที่เปิด ค่าเริ่มต้น `/admin-login`, `WALK_IN_PATH`, `POLL_INTERVAL`) ดูคำอธิบายใน `.env.example`
 
@@ -87,5 +89,7 @@ Windows 10 ไม่มี Smart App Control ข้ามขั้นนี้�
 - build exe (ต้องทำบน Windows ที่ต่อเน็ตได้ ไม่ต้องลง Python/uv เอง): ดับเบิลคลิก `build.bat`
   (หรือ `powershell -ExecutionPolicy Bypass -File .\build.ps1`) — ถ้าไม่มี `uv` ใน PATH สคริปต์จะโหลด uv ไว้ใน
   `.tools\` แล้ว uv โหลด Python ให้เอง (Inno Setup ก็เช่นกัน โหลดไว้ใน `.tools\inno`)
-  → `dist\scanner-client-setup.exe` (installer จาก `installer.iss`), `dist\scanner-client-win64.zip`
+  → `dist\scanner-client-setup.exe` (installer จาก `installer.iss` · payload คือ `build\embed\` = Python embeddable
+  จาก python.org + deps จาก `uv.lock` + โค้ดเป็น `.py` ไม่ใช่ PyInstaller เพื่อให้ผ่าน Smart App Control),
+  `dist\scanner-client-win64.zip`
   และ `dist\scanner-client-debug-win64.zip` (spec: `scanner-client.spec`, onedir, ไม่ bundle browser)
