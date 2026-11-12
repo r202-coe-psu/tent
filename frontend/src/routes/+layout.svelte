@@ -15,6 +15,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { afterNavigate } from '$app/navigation';
 	import { asset } from '$app/paths';
+	import { page } from '$app/state';
 	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import { Toaster } from '$lib/components/ui/sonner/index.js';
 	import { PUBLIC_APP_TITLE } from '$env/static/public';
@@ -23,6 +24,10 @@
 	import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
 
 	let { children, data } = $props();
+
+	// The TV announcement screen (/banner/<shelter>/internal) is fullscreen media with no chrome:
+	// a system banner would sit on top of the slideshow and shrink the viewport.
+	const showSystemBanner = $derived(!page.url.pathname.startsWith('/banner/'));
 
 	/**
 	 * Drop cached data when a session ends, so one user's records are not sitting in
@@ -74,5 +79,7 @@
 
 <QueryClientProvider client={data.queryClient}>
 	{@render children?.()}
-	<SystemBannerHost />
+	{#if showSystemBanner}
+		<SystemBannerHost />
+	{/if}
 </QueryClientProvider>

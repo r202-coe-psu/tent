@@ -227,3 +227,49 @@ async def test_refresh_shelter_stock_drops_rows_when_the_database_is_gone(
     assert await refresh_shelter_stock(couch, "SH932") == 0
 
     assert await ShelterStock.get("SH932:item_master:rice") is None
+
+
+async def test_refresh_shelter_stock_drops_items_whose_ledger_is_gone(
+    db: None,
+) -> None:
+    """Purged ledger rows (prod-readiness cleanup) must take their projection with them,
+    while an item whose ledger nets to 0 keeps its row."""
+    await _stock("SH933", "item_master:rice").insert()
+    await _stock("SH933", "item_master:water").insert()
+    await _stock("SH934", "item_master:rice").insert()
+    couch = _fake_couch(
+        shelter_docs=[
+            {
+                "_id": "stock_ledger:in",
+                "type": "stock_ledger",
+                "item_id": "item_master:water",
+                "qty": "5",
+            },
+            {
+                "_id": "stock_ledger:out",
+                "type": "stock_ledger",
+                "item_id": "item_master:water",
+                "qty": "-5",
+            },
+        ],
+        catalog_docs=[],
+    )
+
+    assert await refresh_shelter_stock(couch, "SH933") == 1
+
+    assert await ShelterStock.get("SH933:item_master:rice") is None
+    water = await ShelterStock.get("SH933:item_master:water")
+    assert water is not None
+    assert water.quantity_on_hand == 0
+    assert await ShelterStock.get("SH934:item_master:rice") is not None
+
+
+async def test_refresh_shelter_stock_drops_every_row_when_no_ledger_is_left(
+    db: None,
+) -> None:
+    await _stock("SH935", "item_master:rice").insert()
+    couch = _fake_couch(shelter_docs=[], catalog_docs=[])
+
+    assert await refresh_shelter_stock(couch, "SH935") == 0
+
+    assert await ShelterStock.find(ShelterStock.shelter_code == "SH935").count() == 0

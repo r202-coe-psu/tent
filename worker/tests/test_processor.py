@@ -360,6 +360,35 @@ async def test_non_donation_ledger_row_skips_the_quota_reconcile():
 
 
 @pytest.mark.asyncio
+async def test_process_deleted_donation_campaign_reprojects_needs():
+    """A purged campaign must take its open needs off the public board, even when no
+    donation tombstone follows it (prod-readiness cleanup)."""
+    couch = AsyncMock()
+    change = {"seq": 44, "id": "donation_campaign:01TEST", "deleted": True}
+
+    with (
+        patch(
+            "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
+        ) as save_cp,
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.apply_donation", new_callable=AsyncMock
+        ) as apply_don,
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as project_needs,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    project_needs.assert_awaited_once_with(couch, "SH001")
+    apply_don.assert_not_awaited()
+    save_cp.assert_awaited_once_with("shelter_sh001", 44)
+
+
+@pytest.mark.asyncio
 async def test_process_deleted_stock_ledger_raises_the_ceiling_back():
     """A delete row carries no doc, so the branch keys off the id prefix instead — and
     with no reason to read, a removed donation row is assumed and reconciled."""

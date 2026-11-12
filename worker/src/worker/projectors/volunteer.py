@@ -71,6 +71,7 @@ def project_volunteer(
         "email": doc.get("email"),
         "volunteer_code": str(doc.get("volunteer_code") or ""),
         "skills": [str(s) for s in (doc.get("skills") or [])],
+        "occupation": doc.get("occupation"),
         "organization": doc.get("organization"),
         "identity_verified": bool(doc.get("identity_verified")),
         "identity_verification": _strip_accepted_from(doc.get("identity_verification")),
