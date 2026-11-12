@@ -14,7 +14,11 @@
 	import { toast } from 'svelte-sonner';
 	import { useWarehouses, useWarehouseStock } from '../application/central-warehouse-queries';
 	import type { WithdrawalCartState } from '../application/withdrawal-cart.svelte';
-	import type { StockItem, Warehouse as WarehouseRow } from '../domain/central-warehouse.schema';
+	import {
+		filterWarehouses,
+		type StockItem,
+		type Warehouse as WarehouseRow
+	} from '../domain/central-warehouse.schema';
 	import { formatQty, warehouseMapHref } from './central-warehouse.ui';
 
 	let {
@@ -38,6 +42,9 @@
 	const warehousesQuery = useWarehouses(() => enabled);
 	const warehouses = $derived(warehousesQuery.data ?? []);
 	const selected = $derived(warehouses.find((w) => w.warehouse_code === selectedCode) ?? null);
+
+	let warehouseSearch = $state('');
+	const shownWarehouses = $derived(filterWarehouses(warehouses, warehouseSearch));
 
 	const stockQuery = useWarehouseStock(() => (enabled ? selectedCode : null));
 	const stockItems = $derived(stockQuery.data?.data ?? []);
@@ -114,8 +121,29 @@
 		{:else if warehouses.length === 0}
 			<p class="text-sm text-slate-500">ไม่พบคลังที่ใช้งานได้</p>
 		{:else}
-			<ul class="space-y-1.5">
-				{#each warehouses as w (w.warehouse_code)}
+			<div class="relative space-y-1.5">
+				<Label for="m6-warehouse-search" class="text-sm font-semibold text-slate-700">
+					ค้นหาคลัง
+				</Label>
+				<Search class="absolute top-[2.4rem] left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
+				<Input
+					id="m6-warehouse-search"
+					type="search"
+					placeholder="ชื่อคลัง อำเภอ หรือรหัส"
+					bind:value={warehouseSearch}
+					class="h-11 pl-9 sm:h-10"
+				/>
+			</div>
+			<p class="text-xs text-slate-500 tabular-nums" aria-live="polite">
+				{warehouseSearch.trim()
+					? `พบ ${shownWarehouses.length} จาก ${warehouses.length} คลัง`
+					: `ทั้งหมด ${warehouses.length} คลัง`}
+			</p>
+			{#if shownWarehouses.length === 0}
+				<p class="text-sm text-slate-500">ไม่พบคลังที่ตรงกับ "{warehouseSearch.trim()}"</p>
+			{/if}
+			<ul class="space-y-1.5 lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
+				{#each shownWarehouses as w (w.warehouse_code)}
 					{@const map = warehouseMapHref(w)}
 					<li>
 						<div
@@ -220,6 +248,10 @@
 						ลองใหม่
 					</Button>
 				</div>
+			{:else if stockItems.length === 0}
+				<p class="text-sm text-slate-500">
+					คลังนี้ยังไม่มีสิ่งของที่เบิกได้ในประเภทที่ศูนย์ได้รับสิทธิ์
+				</p>
 			{:else if filtered.length === 0}
 				<p class="text-sm text-slate-500">ไม่พบสิ่งของที่ตรงกับการค้นหา</p>
 			{:else}

@@ -16,6 +16,21 @@ export const warehouseSchema = z.object({
 });
 export type Warehouse = z.infer<typeof warehouseSchema>;
 
+/**
+ * Warehouses whose name, district or code contains the query (case-insensitive, trimmed).
+ * M6 lists every warehouse the key can see — 200+ on staging — so staff need to narrow it.
+ */
+export function filterWarehouses<T extends Pick<Warehouse, 'warehouse_code' | 'name' | 'district'>>(
+	warehouses: readonly T[],
+	query: string
+): T[] {
+	const q = query.trim().toLowerCase();
+	if (!q) return [...warehouses];
+	return warehouses.filter((w) =>
+		[w.name, w.district ?? '', w.warehouse_code].some((f) => f.toLowerCase().includes(q))
+	);
+}
+
 export const warehouseListSchema = z.object({
 	data: z.array(warehouseSchema),
 	total: z.number().optional()

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	M6_STATUSES,
 	catalogItemSchema,
+	filterWarehouses,
 	isCancellable,
 	needsM6Coordination,
 	stockItemSchema,
@@ -126,5 +127,24 @@ describe('shownFulfilled', () => {
 			requested: 7,
 			fulfilled: 0
 		});
+	});
+});
+
+describe('filterWarehouses', () => {
+	const list = [
+		{ warehouse_code: '002', name: 'คลัง B สำหรับทดสอบ 002', district: 'Hatyai' },
+		{ warehouse_code: 'WH-0044', name: 'อำเภอหาดใหญ่', district: 'หาดใหญ่' },
+		{ warehouse_code: 'WH-0002', name: 'คลัง E วัดเขากลอย', district: null }
+	];
+	it('keeps everything for a blank query', () => {
+		expect(filterWarehouses(list, '  ')).toHaveLength(3);
+	});
+	it('matches name, district and code, ignoring case and spaces around', () => {
+		expect(filterWarehouses(list, ' หาดใหญ่ ').map((w) => w.warehouse_code)).toEqual(['WH-0044']);
+		expect(filterWarehouses(list, 'hatyai').map((w) => w.warehouse_code)).toEqual(['002']);
+		expect(filterWarehouses(list, 'wh-0002').map((w) => w.warehouse_code)).toEqual(['WH-0002']);
+	});
+	it('returns nothing when no warehouse matches', () => {
+		expect(filterWarehouses(list, 'ไม่มีคลังนี้')).toEqual([]);
 	});
 });
