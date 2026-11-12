@@ -905,15 +905,17 @@
 {/if}
 
 <!-- Action Row Step 4 -->
-<div class="mt-8 flex items-center justify-between border-t border-border pt-4">
+<div
+	class="mt-8 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"
+>
 	<p class="text-xs text-muted-foreground">
 		💡 บันทึกสมาชิกสำเร็จแล้ว สมาชิกทุกคนจะผูกอยู่กับครัวเรือนนี้
 	</p>
-	<div class="flex items-center gap-2">
+	<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 		{#if createdHead}
 			<Button
 				variant="outline"
-				class="h-11 px-6 font-semibold"
+				class="h-11 w-full px-6 font-semibold sm:w-auto"
 				onclick={() => (showQrModal = true)}
 			>
 				ออกและพิมพ์ QR ประจำตัว
@@ -921,7 +923,7 @@
 		{/if}
 		<Button
 			onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
-			class="h-11 bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700"
+			class="h-11 w-full bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700 sm:w-auto"
 		>
 			เสร็จสิ้นการลงทะเบียนล่วงหน้า ✔
 		</Button>
