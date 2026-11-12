@@ -294,7 +294,9 @@
 						: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}"
 				>
 					<span class="tabular-nums">{index + 1}.</span>
-					<span class="max-w-40 truncate">{memberTabLabel(member, index)}</span>
+					<span class="max-w-40 text-left break-words sm:truncate"
+						>{memberTabLabel(member, index)}</span
+					>
 					{#if hasMemberErrors(index)}
 						<span
 							class="rounded-full border border-red-200 bg-red-50 px-1.5 text-xs font-semibold text-red-900"
