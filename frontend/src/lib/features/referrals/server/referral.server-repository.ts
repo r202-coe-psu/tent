@@ -34,7 +34,7 @@ const HTTP_CREATED = 201;
 const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;
 
-/** #1343: 422 when the destination shelter switched referral intake off (read from the registry). */
+/** CR-251 FR-18/FR-18a: 422 when the destination shelter switched referral intake off (read from the registry). */
 export async function assertDestinationAcceptsReferrals(toShelterCode: string): Promise<void> {
 	const master = await findMasterByCode(toShelterCode);
 	if (master && !isShelterAcceptingReferrals(master)) {
@@ -492,6 +492,11 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		}
 
 		const nowIso = new Date().toISOString();
+
+		// CR-251 FR-18a: refuse to send to a destination that closed intake (status stays draft).
+		if (to === 'sent' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
+			await assertDestinationAcceptsReferrals(latest.to_shelter_code);
+		}
 
 		// Capacity accept: cross-DB transfer BEFORE marking referral accepted (fail-fast).
 		// Only reachable when actorShelter === to_shelter_code (asserted above).

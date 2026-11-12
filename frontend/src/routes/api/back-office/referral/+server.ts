@@ -74,7 +74,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
  * POST /api/back-office/referral
  * Create a new draft referral
  *
- * Admin/debug path — SPA create uses session remote (`referral.remote.ts`).
+ * The SPA creates referrals through this route (`ReferralRemoteRepository`).
  */
 export const POST: RequestHandler = async ({ request, url }) => {
 	try {

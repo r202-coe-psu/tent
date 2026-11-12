@@ -360,7 +360,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 			expect(data.error).toBe('ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้');
 		});
 
-		it('returns 422 when the capacity destination no longer accepts referrals (#1343 FR-17)', async () => {
+		it('returns 422 when the capacity destination no longer accepts referrals (CR-251 FR-17)', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 				name: 'sm_user',
 				roles: ['shelter_manager', 'shelter:SH001'],
@@ -391,7 +391,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 			expect(adminRaw).not.toHaveBeenCalled();
 		});
 
-		it('checks destination intake only for capacity referrals (#1343 FR-20)', async () => {
+		it('checks destination intake only for capacity referrals (CR-251 FR-20)', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 				name: 'sm_user',
 				roles: ['shelter_manager', 'shelter:SH001'],

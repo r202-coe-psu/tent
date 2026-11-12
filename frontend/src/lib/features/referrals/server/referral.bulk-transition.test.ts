@@ -129,7 +129,7 @@ describe('bulkTransition', () => {
 		expect(store.get('referral:foreign')?.status).toBe('sent');
 	});
 
-	it('#1343 FR-18 bulk accept of a capacity referral fails when the destination closed intake', async () => {
+	it('CR-251 FR-18 bulk accept of a capacity referral fails when the destination closed intake', async () => {
 		findMasterByCode.mockResolvedValue({
 			code: 'SH002',
 			feature_flags: { accepts_referrals: false }
@@ -143,6 +143,29 @@ describe('bulkTransition', () => {
 		expect(result.succeeded).toEqual([]);
 		expect(result.failed).toEqual([{ id: 'referral:cap', error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' }]);
 		expect(store.get('referral:cap')?.status).toBe('sent');
+	});
+
+	it('CR-251 FR-18a bulk send fails per item for a closed-intake destination, others pass', async () => {
+		findMasterByCode.mockResolvedValue({
+			code: 'SH002',
+			feature_flags: { accepts_referrals: false }
+		});
+		const { store } = fakeCouch([
+			makeReferral('cap', { status: 'draft', referral_type: 'capacity', to_shelter_code: 'SH002' }),
+			makeReferral('med', { status: 'draft' })
+		]);
+
+		const result = await bulkTransition(
+			['referral:cap', 'referral:med'],
+			'sent',
+			undefined,
+			'sm_user',
+			'SH001'
+		);
+
+		expect(result.succeeded.map((d) => d._id)).toEqual(['referral:med']);
+		expect(result.failed).toEqual([{ id: 'referral:cap', error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' }]);
+		expect(store.get('referral:cap')?.status).toBe('draft');
 	});
 
 	it('keeps response_reason when closing an accepted referral', async () => {

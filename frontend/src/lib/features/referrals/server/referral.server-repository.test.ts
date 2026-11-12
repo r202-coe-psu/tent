@@ -689,7 +689,7 @@ describe('CouchDbReferralServerRepository.getBatchFor', () => {
 	});
 });
 
-describe('draft-shelter-visibility-referral-intake (#1343) — destination intake gate', () => {
+describe('CR-251 shelter visibility + referral intake — destination intake gate', () => {
 	const capacityRejected: Referral = { ...capacitySent, status: 'rejected' };
 	let repo: CouchDbReferralServerRepository;
 
@@ -826,6 +826,75 @@ describe('draft-shelter-visibility-referral-intake (#1343) — destination intak
 
 		expect(result.status).toBe('closed');
 		expect(findMasterByCode).not.toHaveBeenCalled();
+	});
+
+	describe('FR-18a draft → sent gate', () => {
+		const capacityDraft: Referral = { ...capacitySent, status: 'draft', timeline: {} };
+
+		beforeEach(() => {
+			repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		});
+
+		it('closed-intake destination → 422, referral stays draft (no write)', async () => {
+			registryDoc({ feature_flags: { accepts_referrals: false } });
+			mockDb(() => capacityDraft);
+
+			await expect(
+				repo.transition('referral:01CAPACITY', 'sent', 'Staff A', undefined, 'SH001')
+			).rejects.toMatchObject({ status: 422, message: 'ศูนย์ปลายทางปิดรับการส่งต่อ' });
+
+			expect(findMasterByCode).toHaveBeenCalledWith('SH002');
+			expect(putCalls()).toHaveLength(0);
+		});
+
+		it.each([
+			['accepting', { feature_flags: { accepts_referrals: true } }],
+			['missing from registry', null]
+		])('%s destination → sent', async (_name, doc) => {
+			registryDoc(doc);
+			mockDb(() => capacityDraft);
+
+			const result = await repo.transition(
+				'referral:01CAPACITY',
+				'sent',
+				'Staff A',
+				undefined,
+				'SH001'
+			);
+			expect(result.status).toBe('sent');
+		});
+
+		it('non-capacity referral is untouched (no registry read)', async () => {
+			mockDb(() => ({
+				...capacityDraft,
+				referral_type: 'medical-emergency',
+				to_shelter_code: undefined
+			}));
+
+			const result = await repo.transition(
+				'referral:01CAPACITY',
+				'sent',
+				'Staff A',
+				undefined,
+				'SH001'
+			);
+			expect(result.status).toBe('sent');
+			expect(findMasterByCode).not.toHaveBeenCalled();
+		});
+
+		it('draft → closed still passes without a registry read', async () => {
+			mockDb(() => capacityDraft);
+
+			const result = await repo.transition(
+				'referral:01CAPACITY',
+				'closed',
+				'Staff A',
+				'ยกเลิก',
+				'SH001'
+			);
+			expect(result.status).toBe('closed');
+			expect(findMasterByCode).not.toHaveBeenCalled();
+		});
 	});
 
 	it('FR-18 the state matrix still runs first: accept on a rejected referral is 422 Invalid transition, not the intake message', async () => {
