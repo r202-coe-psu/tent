@@ -26,6 +26,7 @@ import { acceptFullConsent } from './helpers/consent';
 import { CONSENT_COPY } from '../src/lib/features/consent/domain/consent-notice.i18n';
 import { injectSession, clearSession } from './helpers/login';
 import { mockCouchRoutes, SHELTER_DB } from './helpers/mock-couch';
+import { expectFitsViewport } from './helpers/mobile';
 
 const RUN_ID = Date.now().toString(36);
 
@@ -750,11 +751,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			});
 			await page.waitForLoadState('networkidle');
 
-			const dimensions = await page.evaluate(() => ({
-				scrollWidth: document.documentElement.scrollWidth,
-				clientWidth: document.documentElement.clientWidth
-			}));
-			expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+			await expectFitsViewport(page);
 		});
 	}
 });

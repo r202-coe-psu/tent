@@ -1,7 +1,8 @@
 /**
- * E2E: registration back-office pages on a phone (#1347) — mocked Couch + mocked overview API;
- * `@regression`. At 390x844 the household flows and the pre-registration overview stay inside
- * the viewport, and the pre-registration list renders cards instead of a 9-column table.
+ * E2E: registration back-office pages on a phone (#1347) — mocked Couch data + mocked overview
+ * API; `@regression`. Login uses short-lived users created on the real CouchDB (`_users`).
+ * At 390x844 the household flows and the pre-registration overview stay inside the viewport,
+ * and the pre-registration list renders cards instead of a 9-column table.
  *
  * Run (rebuild first — matches package.json test:e2e):
  *   pnpm exec vite build --mode test && pnpm playwright test e2e/registration-mobile.test.ts
@@ -18,6 +19,7 @@ import {
 } from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
 import { mockCouchRoutes } from './helpers/mock-couch';
+import { expectFitsViewport } from './helpers/mobile';
 
 const RUN_ID = Date.now().toString(36);
 
@@ -119,14 +121,6 @@ async function mockOverviewApi(page: Page) {
 	});
 }
 
-async function expectNoSidewaysOverflow(page: Page) {
-	const dimensions = await page.evaluate(() => ({
-		scrollWidth: document.documentElement.scrollWidth,
-		clientWidth: document.documentElement.clientWidth
-	}));
-	expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
-}
-
 test.describe('Registration pages on mobile (#1347)', { tag: ['@regression'] }, () => {
 	let adminSession: string;
 	let managerSession: string;
@@ -160,7 +154,7 @@ test.describe('Registration pages on mobile (#1347)', { tag: ['@regression'] }, 
 		await expect(cards).toHaveCount(PRE_REG_ITEMS.length, { timeout: 15_000 });
 		await expect(cards.first()).toBeVisible();
 		await expect(page.locator('table')).toBeHidden();
-		await expectNoSidewaysOverflow(page);
+		await expectFitsViewport(page);
 	});
 
 	test('pre-registration list keeps the table on desktop', async ({ page }) => {
@@ -184,7 +178,7 @@ test.describe('Registration pages on mobile (#1347)', { tag: ['@regression'] }, 
 
 		await page.goto('/system-management/pre-registrations/unassigned/prereg-1');
 		await expect(page.getByText(`${LONG_NAME} จูเนียร์`)).toBeVisible({ timeout: 15_000 });
-		await expectNoSidewaysOverflow(page);
+		await expectFitsViewport(page);
 	});
 
 	for (const path of [
@@ -201,7 +195,7 @@ test.describe('Registration pages on mobile (#1347)', { tag: ['@regression'] }, 
 			await expect(page.getByRole('main')).toBeVisible({ timeout: 15_000 });
 			await page.waitForLoadState('networkidle');
 			expect(new URL(page.url()).pathname).toBe(path);
-			await expectNoSidewaysOverflow(page);
+			await expectFitsViewport(page);
 		});
 	}
 });
