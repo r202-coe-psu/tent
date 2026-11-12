@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
-import { isShelterCancelled, type ShelterMaster } from '$lib/features/shelters/server';
+import { isShelterPublicVisible, type ShelterMaster } from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
 import {
@@ -51,7 +51,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 	try {
 		masters = await listShelterMasters();
 		// draft-shelter-cancelled-status: a cancelled shelter is not public at all.
-		masters = masters.map(migrate).filter((m) => !isShelterCancelled(m));
+		masters = masters.map(migrate).filter((m) => isShelterPublicVisible(m));
 	} catch (e) {
 		console.error('Failed to load shelter masters', e);
 	}
