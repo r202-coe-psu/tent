@@ -508,7 +508,7 @@ class UnassignedRegistrationsUseCase:
 
         _ensure_pet_ids(doc)
 
-        existing_person_ids, existing_phones = _existing_identity_keys(doc.members)
+        existing_person_ids, _ = _existing_identity_keys(doc.members)
         new_members = _build_members(payload.members)
         for member in new_members:
             key = (

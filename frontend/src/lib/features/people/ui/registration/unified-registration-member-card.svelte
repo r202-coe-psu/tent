@@ -299,6 +299,44 @@
 		}
 	}
 
+	$effect(() => {
+		if (
+			(channel !== 'onsite' && channel !== 'public') ||
+			fieldsDisabled ||
+			isAlreadyReported ||
+			member._id
+		)
+			return;
+		const cardType = member.person_id?.cardType;
+		const rawNumber = member.person_id?.number ?? '';
+
+		if (cardDebounceTimer) {
+			clearTimeout(cardDebounceTimer);
+			cardDebounceTimer = undefined;
+		}
+
+		if (!isValidThaiIdCandidate(rawNumber, cardType)) {
+			isCheckingCard = false;
+			return;
+		}
+
+		const cleanId = rawNumber.trim().replace(/\D/g, '');
+		if (dismissedThaiIds.has(cleanId) || lastCheckedThaiId === cleanId) {
+			return;
+		}
+
+		cardDebounceTimer = setTimeout(() => {
+			void runInstantCardDuplicateCheck(cleanId);
+		}, 400);
+
+		return () => {
+			if (cardDebounceTimer) {
+				clearTimeout(cardDebounceTimer);
+				cardDebounceTimer = undefined;
+			}
+		};
+	});
+
 	function handleCardNumberBlur() {
 		if (
 			(channel !== 'onsite' && channel !== 'public') ||

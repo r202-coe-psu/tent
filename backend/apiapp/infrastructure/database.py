@@ -56,8 +56,11 @@ class BeanieClient:
         try:
             await self.database["unassigned_registrations"].drop_index("uniq_open_phones")
             logger.info("Dropped legacy unique index uniq_open_phones")
-        except OperationFailure:
-            pass  # already gone (index/namespace not found)
+        except OperationFailure as exc:
+            # 26 NamespaceNotFound / 27 IndexNotFound: already gone, nothing to do.
+            if exc.code not in (26, 27):
+                logger.error(f"Failed to drop legacy index uniq_open_phones: {exc}")
+                raise
 
     async def close(self):
         """Close MongoDB connection"""
