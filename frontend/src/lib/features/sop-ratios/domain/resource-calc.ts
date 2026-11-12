@@ -12,7 +12,7 @@
  */
 
 import Decimal from 'decimal.js';
-import { parseQty, qtyGte, roundQtyNumber, subQty } from '$lib/utils/qty';
+import { parseQty, qtyGte, qtyLte, roundQtyNumber, subQty, type QtyValue } from '$lib/utils/qty';
 import type { TrendSeries } from './trend';
 
 export type ResourceCategory = 'food' | 'supply' | 'volunteer';
@@ -76,23 +76,27 @@ export interface ResourceCalcSnapshot {
 	trend: TrendSeries[];
 }
 
-export function computeGap(need: number, have: number): number {
+export function computeGap(need: QtyValue, have: QtyValue): number {
 	const gap = subQty(need, have);
 	return qtyGte(gap, 0) ? roundQtyNumber(gap) : 0;
 }
 
 /** have/need clamped to [0, 1]; a zero/negative need counts as fully covered. */
-export function coverage(need: number, have: number): number {
+export function coverage(need: QtyValue, have: QtyValue): number {
+	return coverageDecimal(need, have).toNumber();
+}
+
+function coverageDecimal(need: QtyValue, have: QtyValue): Decimal {
 	const n = parseQty(need);
-	if (n.lte(0)) return 1;
+	if (n.lte(0)) return new Decimal(1);
 	const ratio = parseQty(have).div(n);
-	return Decimal.max(0, Decimal.min(1, ratio)).toNumber();
+	return Decimal.max(0, Decimal.min(1, ratio));
 }
 
 /** ok when nothing is short; critical under 50% coverage; otherwise low. */
-export function severityOf(need: number, have: number): Severity {
-	if (computeGap(need, have) <= 0) return 'ok';
-	return coverage(need, have) < 0.5 ? 'critical' : 'low';
+export function severityOf(need: QtyValue, have: QtyValue): Severity {
+	if (qtyLte(computeGap(need, have), 0)) return 'ok';
+	return coverageDecimal(need, have).lt(0.5) ? 'critical' : 'low';
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, low: 1, ok: 2 };
@@ -117,15 +121,19 @@ export function summarizeByCategory(rows: GapRow[]): CategorySummary[] {
 	return RESOURCE_CATEGORIES.map((category) => {
 		const items = rows.filter((r) => r.category === category);
 		const short = items.filter((r) => r.gap > 0);
-		const worstCoverage = items.reduce((min, r) => Math.min(min, coverage(r.need, r.have)), 1);
-		const severity: Severity = short.length === 0 ? 'ok' : worstCoverage < 0.5 ? 'critical' : 'low';
+		const worstCoverage = items.reduce(
+			(min, r) => Decimal.min(min, coverageDecimal(r.need, r.have)),
+			new Decimal(1)
+		);
+		const severity: Severity =
+			short.length === 0 ? 'ok' : worstCoverage.lt(0.5) ? 'critical' : 'low';
 
 		return {
 			category,
 			label: RESOURCE_CATEGORY_LABEL[category],
 			total_items: items.length,
 			short_items: short.length,
-			coverage: worstCoverage,
+			coverage: worstCoverage.toNumber(),
 			severity
 		};
 	});

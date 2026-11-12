@@ -1,6 +1,9 @@
 <script lang="ts">
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_FACE_I18N } from './_constants/kiosk-face.i18n';
 	import {
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION
@@ -14,6 +17,8 @@
 	}
 
 	let { onagree, ondecline, headingTag = 'h1' }: Props = $props();
+
+	const t = $derived(getTranslation(KIOSK_FACE_I18N, languageStore.current).consent);
 
 	// Button sets whitespace-nowrap and a fixed height: long Thai labels must wrap inside the card.
 	const wrapLabel = 'h-auto min-w-0 whitespace-normal py-3 text-center sm:flex-1';
@@ -34,29 +39,24 @@
 			headingTag === 'h2' && 'kiosk-compact:hidden'
 		]}
 	>
-		<ScanFace class="size-4 kiosk-portrait:size-5" aria-hidden="true" />ตรวจสอบตัวตน
+		<ScanFace class="size-4 kiosk-portrait:size-5" aria-hidden="true" />{t.badge}
 	</div>
 	<svelte:element
 		this={headingTag}
 		id="face-consent-title"
 		class="text-2xl font-bold text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl kiosk-compact:text-2xl"
 	>
-		ตรวจใบหน้าเทียบกับรูปในบัตร
+		{t.heading}
 	</svelte:element>
 	<div
 		class="mt-4 space-y-3 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:space-y-4 kiosk-portrait:text-xl kiosk-compact:mt-1.5 kiosk-compact:space-y-1 kiosk-compact:leading-snug"
 	>
+		<p>{t.purpose}</p>
 		<p>
-			ตู้จะถ่ายภาพใบหน้าของท่านจากกล้อง
-			เพื่อเทียบกับรูปถ่ายในชิปบัตรประชาชนว่าเป็นบุคคลเดียวกันหรือไม่
+			<strong class="text-slate-900">{t.notKeptStrong}</strong>
+			{t.notKeptRest}
 		</p>
-		<p>
-			<strong class="text-slate-900">ภาพใบหน้าจะไม่ถูกบันทึก</strong>
-			ระบบเก็บเฉพาะผลการตรวจ (ยืนยันได้ หรือ ยืนยันไม่ได้)
-		</p>
-		<p class="font-semibold text-slate-900">
-			หากไม่ยินยอม ท่านยังรับบริการได้ตามปกติ เจ้าหน้าที่จะตรวจสอบตัวตนให้แทน
-		</p>
+		<p class="font-semibold text-slate-900">{t.declineOk}</p>
 	</div>
 	<div
 		class="mt-7 flex flex-col-reverse gap-3 sm:flex-row kiosk-portrait:mt-10 kiosk-portrait:gap-4 kiosk-compact:mt-3"
@@ -65,14 +65,12 @@
 			type="button"
 			variant="outline"
 			onclick={ondecline}
-			class={`${wrapLabel} ${KIOSK_NOTICE_SECONDARY_ACTION} ${labelSize}`}
-			>ไม่ยินยอม ให้เจ้าหน้าที่ตรวจแทน</Button
+			class={`${wrapLabel} ${KIOSK_NOTICE_SECONDARY_ACTION} ${labelSize}`}>{t.decline}</Button
 		>
 		<Button
 			type="button"
 			onclick={onagree}
-			class={`${wrapLabel} ${KIOSK_NOTICE_PRIMARY_ACTION} ${labelSize}`}
-			>ยินยอม เริ่มตรวจใบหน้า</Button
+			class={`${wrapLabel} ${KIOSK_NOTICE_PRIMARY_ACTION} ${labelSize}`}>{t.agree}</Button
 		>
 	</div>
 </div>

@@ -15,7 +15,15 @@
 		PUBLIC_DONATION_CATEGORIES,
 		donorUnitOptions
 	} from '$lib/features/donations';
-	import { FALLBACK_UNIT_DEFINITIONS, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		FALLBACK_UNIT_DEFINITIONS,
+		formatUnit,
+		qtyInputStep,
+		requiresWholeQty,
+		useUnitDimensionResolver,
+		useUnitsOfMeasure,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
@@ -23,6 +31,7 @@
 
 	const donationStore = getDonationStore();
 	const unitsQuery = useUnitsOfMeasure();
+	const unitDimension = useUnitDimensionResolver();
 	const units = $derived(unitsQuery.data ?? []);
 	// A donor is anonymous and cannot read the `catalog` database, so the query comes back
 	// empty on the public site; the bundled master keeps the picker filled.
@@ -74,6 +83,12 @@
 		return qtyStrCoercePositiveSchema.safeParse(amount).success;
 	}
 
+	const itemDimension = (item: { unit: string; unit_code?: string }) =>
+		unitDimension.resolve(item.unit_code ?? item.unit);
+	const hasWholeQtyError = $derived(
+		donationStore.items.some((item) => wholeQtyError(item.amount, itemDimension(item)))
+	);
+
 	function handleNext() {
 		validationErrors = [];
 
@@ -100,13 +115,18 @@
 				if (!isPositiveAmount(item.amount)) {
 					validationErrors.push(t.valItemAmount.replace('{index}', String(index + 1)));
 				}
+				if (wholeQtyError(item.amount, itemDimension(item))) {
+					validationErrors.push(t.editQtyWholeError);
+				}
 				if (!item.unit || !item.unit.trim()) {
 					validationErrors.push(t.valItemUnit.replace('{index}', String(index + 1)));
 				}
 			});
 		}
 
-		const firstBadAmount = donationStore.items.find((item) => !isPositiveAmount(item.amount));
+		const firstBadAmount = donationStore.items.find(
+			(item) => !isPositiveAmount(item.amount) || wholeQtyError(item.amount, itemDimension(item))
+		);
 
 		if (validationErrors.length === 0) {
 			donationStore.goToStep('time');
@@ -209,6 +229,8 @@
 
 		<div class="space-y-4">
 			{#each donationStore.items as item (item.id)}
+				{@const dimension = itemDimension(item)}
+				{@const wholeError = wholeQtyError(item.amount, dimension)}
 				<div
 					class="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-[#f8f9fa] p-5"
 				>
@@ -285,10 +307,22 @@
 								type="number"
 								id="amount-{item.id}"
 								min="0"
-								step="any"
+								step={qtyInputStep(dimension)}
+								inputmode={requiresWholeQty(dimension) ? 'numeric' : 'decimal'}
 								bind:value={item.amount}
+								aria-invalid={wholeError ? true : undefined}
+								aria-describedby={wholeError ? `amount-${item.id}-error` : undefined}
 								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 							/>
+							{#if wholeError}
+								<p
+									id="amount-{item.id}-error"
+									class="mt-1 text-xs font-medium text-red-700"
+									data-testid="amount-error-{item.id}"
+								>
+									{t.editQtyWholeError}
+								</p>
+							{/if}
 							{#if item.needQty}
 								<p
 									class="mt-1 text-xs font-medium text-slate-500"
@@ -406,6 +440,7 @@
 		<button
 			type="button"
 			onclick={handleNext}
+			disabled={hasWholeQtyError}
 			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"
 		>
 			{t.nextBtn}

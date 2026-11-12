@@ -27,10 +27,21 @@
 		type CustomIngredientInput
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
-	import { useRecipes, useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		useRecipes,
+		useItemMasters,
+		formatUnit,
+		useUnitsOfMeasure,
+		useUnitDimensionResolver,
+		qtyInputStep,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
+	import { COUNT_ERROR, isCount } from '../domain/count-input';
+	import { CountInputGuard } from './count-input-guard.svelte';
+	import CountFieldError from './count-field-error.svelte';
 
 	// Edit draft if plan present; create if absent.
 	let {
@@ -68,6 +79,9 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
+	const unitDimension = useUnitDimensionResolver();
+	const rowQtyError = (row: { unit: string; qtyPerPerson: number }) =>
+		wholeQtyError(row.qtyPerPerson, unitDimension.resolve(row.unit));
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 	// Filter supply items in "food" category.
@@ -142,6 +156,10 @@
 	}
 
 	const isLockedEdit = $derived(isEdit && sourceMode === 'recipe');
+	const customQtyValid = $derived(
+		!(sourceMode === 'custom' || isLockedEdit) ||
+			!customRows.some((row) => row.itemId && rowQtyError(row))
+	);
 
 	$effect(() => {
 		if (!open) {
@@ -191,6 +209,24 @@
 		soft_food: softFood,
 		infant
 	});
+
+	const guard = new CountInputGuard();
+	const totalError = $derived(isCount(total, 1) ? null : 'ต้องมากกว่า 0');
+	const subCountErrors = $derived({
+		halal: isCount(halal, 0) ? null : COUNT_ERROR,
+		softFood: isCount(softFood, 0) ? null : COUNT_ERROR,
+		infant: isCount(infant, 0) ? null : COUNT_ERROR
+	});
+	// An empty per-person box counts as 0 and the row is skipped; a negative or unparsable value is
+	// an error. Unlike the headcounts, a per-person amount may be a decimal.
+	const QTY_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
+	const isQtyValid = (qty: number | null, i: number) =>
+		!guard.unparsed[`mp-qty-${i}`] && Number.isFinite(qty ?? 0) && (qty ?? 0) >= 0;
+	const numbersValid = $derived(
+		totalError === null &&
+			Object.values(subCountErrors).every((e) => e === null) &&
+			customRows.every((row, i) => isQtyValid(row.qtyPerPerson, i))
+	);
 
 	// Validate sub-counts do not exceed total.
 	const subCountsValid = $derived(halal <= total && softFood <= total && infant <= total);
@@ -362,6 +398,10 @@
 							{#each customRows as row, i (i)}
 								{@const currentUnresolved =
 									row.itemId && !foodSupplyItems.some((item) => item._id === row.itemId)}
+								{@const rowDim = unitDimension.resolve(row.unit)}
+								{@const qtyMessage = !isQtyValid(row.qtyPerPerson, i)
+									? QTY_ERROR
+									: ((row.itemId ? rowQtyError(row) : undefined) ?? null)}
 								<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 									<select
 										bind:value={row.itemId}
@@ -380,11 +420,16 @@
 									</select>
 									<div class="flex items-center gap-2">
 										<Input
+											id="mp-qty-{i}"
 											type="number"
 											min="0"
-											step="any"
+											step={qtyInputStep(rowDim)}
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
+											aria-label="ปริมาณต่อคน"
+											aria-invalid={!!qtyMessage}
+											aria-describedby={qtyMessage ? `mp-qty-${i}-error` : undefined}
+											{@attach guard.attach(`mp-qty-${i}`)}
 											bind:value={row.qtyPerPerson}
 										/>
 										<Button
@@ -400,6 +445,7 @@
 										</Button>
 									</div>
 								</div>
+								<CountFieldError {guard} id={`mp-qty-${i}`} message={qtyMessage} />
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
@@ -470,7 +516,17 @@
 
 			<div class="space-y-1.5">
 				<Label for="mp-total">จำนวนผู้พักพิงทั้งหมด (คน)</Label>
-				<Input id="mp-total" type="number" min="1" bind:value={total} required />
+				<Input
+					id="mp-total"
+					type="number"
+					min="1"
+					bind:value={total}
+					required
+					aria-invalid={totalError !== null}
+					aria-describedby={totalError ? 'mp-total-error' : undefined}
+					{@attach guard.attach('mp-total')}
+				/>
+				<CountFieldError {guard} id="mp-total" message={totalError} />
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -482,7 +538,11 @@
 						min="0"
 						class="min-h-11 sm:min-h-9"
 						bind:value={halal}
+						aria-invalid={subCountErrors.halal !== null}
+						aria-describedby={subCountErrors.halal ? 'mp-halal-error' : undefined}
+						{@attach guard.attach('mp-halal')}
 					/>
+					<CountFieldError {guard} id="mp-halal" message={subCountErrors.halal} />
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-soft" class="text-xs">อาหารอ่อน</Label>
@@ -492,7 +552,11 @@
 						min="0"
 						class="min-h-11 sm:min-h-9"
 						bind:value={softFood}
+						aria-invalid={subCountErrors.softFood !== null}
+						aria-describedby={subCountErrors.softFood ? 'mp-soft-error' : undefined}
+						{@attach guard.attach('mp-soft')}
 					/>
+					<CountFieldError {guard} id="mp-soft" message={subCountErrors.softFood} />
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-infant" class="text-xs">ทารก</Label>
@@ -502,7 +566,11 @@
 						min="0"
 						class="min-h-11 sm:min-h-9"
 						bind:value={infant}
+						aria-invalid={subCountErrors.infant !== null}
+						aria-describedby={subCountErrors.infant ? 'mp-infant-error' : undefined}
+						{@attach guard.attach('mp-infant')}
 					/>
+					<CountFieldError {guard} id="mp-infant" message={subCountErrors.infant} />
 				</div>
 			</div>
 
@@ -595,10 +663,11 @@
 					class="min-h-11 w-full sm:w-auto"
 					disabled={createCalc.isPending ||
 						updateCalc.isPending ||
-						total <= 0 ||
+						!numbersValid ||
 						!sopProfile.data ||
 						!subCountsValid ||
 						!overrideReasonValid ||
+						!customQtyValid ||
 						(sourceMode === 'recipe' && !isLockedEdit && !recipeId) ||
 						((sourceMode === 'custom' || isLockedEdit) && customIngredients.length === 0)}
 				>

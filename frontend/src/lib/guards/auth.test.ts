@@ -25,13 +25,18 @@ vi.mock('$lib/stores/shelter.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/features/users', () => ({
-	fetchAuthStatus: async () => ({
-		must_change_password: false,
-		has_security_question: true,
-		pending_mfa: false
-	})
-}));
+vi.mock('$lib/features/users', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features/users')>();
+	return {
+		...actual,
+		fetchAuthStatus: async () => ({
+			must_change_password: false,
+			has_security_question: true,
+			pending_mfa: false,
+			consent: { agreed: true, version: '1.0' }
+		})
+	};
+});
 
 import {
 	confineKioskStaffOnly,
@@ -80,12 +85,13 @@ describe('resolvePostLoginDestination (CR-124)', () => {
 		).toBe('/mfa-challenge');
 	});
 
-	it('lands on portal when not pending MFA', () => {
+	it('lands on portal when not pending MFA and consent is clear', () => {
 		expect(
 			resolvePostLoginDestination({
 				must_change_password: false,
 				has_security_question: true,
-				pending_mfa: false
+				pending_mfa: false,
+				consent: { agreed: true, version: '1.0' }
 			})
 		).toBe(LANDING_ROUTE);
 	});
@@ -106,6 +112,32 @@ describe('resolvePostLoginDestination (CR-124)', () => {
 				must_change_password: true,
 				has_security_question: false,
 				pending_mfa: true
+			})
+		).toBe(LANDING_ROUTE);
+	});
+
+	it('sends to /consent when volunteer or staff has not agreed to current consent version', () => {
+		expect(
+			resolvePostLoginDestination({
+				roles: ['volunteer'],
+				personnel_type: 'volunteer',
+				must_change_password: false,
+				has_security_question: true,
+				pending_mfa: false,
+				consent: null
+			})
+		).toBe('/consent');
+	});
+
+	it('lands on portal when consent is already agreed', () => {
+		expect(
+			resolvePostLoginDestination({
+				roles: ['volunteer'],
+				personnel_type: 'volunteer',
+				must_change_password: false,
+				has_security_question: true,
+				pending_mfa: false,
+				consent: { agreed: true, version: '1.0' }
 			})
 		).toBe(LANDING_ROUTE);
 	});

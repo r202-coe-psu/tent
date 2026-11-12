@@ -16,6 +16,9 @@
 		useUnitsOfMeasure
 	} from '../application/queries';
 	import { formatUnit } from '../domain/unit-of-measure';
+	import { qtyInputStep } from '../domain/unit-quantity';
+	import { useUnitDimensionResolver } from '../application/use-unit-dimension-resolver.svelte';
+	import { recipeIngredientQtyIssues } from './recipe-ingredient-qty';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -53,6 +56,16 @@
 	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const dimensions = useUnitDimensionResolver();
+
+	const wholeQtySchema = recipeInputSchema.superRefine((data, ctx) => {
+		for (const { index, message } of recipeIngredientQtyIssues(
+			data.ingredients,
+			dimensions.resolve
+		)) {
+			ctx.addIssue({ code: 'custom', message, path: ['ingredients', index, 'quantity'] });
+		}
+	});
 
 	const form = superForm(
 		defaults(zod4(recipeInputSchema), {
@@ -67,7 +80,7 @@
 		{
 			SPA: true,
 			dataType: 'json',
-			validators: zod4(recipeInputSchema),
+			validators: zod4(wholeQtySchema),
 			resetForm: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) return;
@@ -130,6 +143,15 @@
 		}
 	);
 	const { form: formData, submitting } = form;
+
+	const qtyMessages = $derived(
+		new Map(
+			recipeIngredientQtyIssues($formData.ingredients, dimensions.resolve).map((i) => [
+				i.index,
+				i.message
+			])
+		)
+	);
 
 	let populatedId = $state<string | null>(null);
 
@@ -280,24 +302,23 @@
 									<div class="min-w-0 flex-1 space-y-1.5 sm:w-28 sm:flex-none">
 										<span class="text-xs font-bold text-blue-700 dark:text-blue-400">ปริมาณ</span>
 										<Input
-											type="text"
-											inputmode="decimal"
+											type="number"
+											step={qtyInputStep(dimensions.resolve(conv.uom))}
+											min={0}
 											placeholder="1"
-											value={conv.quantity}
-											oninput={(e) => {
-												conv.quantity = sanitizeQuantity(e.currentTarget.value);
-											}}
+											bind:value={
+												() => (conv.quantity === '' ? null : Number(conv.quantity)),
+												(v) => (conv.quantity = v == null ? '' : String(v))
+											}
+											aria-invalid={qtyMessages.has(index)}
 											onblur={() => {
-												if (
-													!conv.quantity ||
-													conv.quantity.trim() === '' ||
-													Number(conv.quantity) <= 0
-												) {
-													conv.quantity = '1';
-												}
+												if (conv.quantity === '') conv.quantity = '1';
 											}}
 											class="h-12 rounded-xl border-slate-200/80 bg-white text-center font-medium focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
 										/>
+										{#if qtyMessages.has(index)}
+											<p class="text-xs font-semibold text-destructive">{qtyMessages.get(index)}</p>
+										{/if}
 									</div>
 
 									<!-- หน่วย -->
@@ -464,7 +485,7 @@
 
 				<Button
 					type="submit"
-					disabled={$submitting || isPending}
+					disabled={$submitting || isPending || qtyMessages.size > 0}
 					class="min-h-11 gap-2 rounded-xl bg-[#0A2647] px-6 text-sm font-semibold text-white shadow-xs hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
 				>
 					{#if $submitting || isPending}

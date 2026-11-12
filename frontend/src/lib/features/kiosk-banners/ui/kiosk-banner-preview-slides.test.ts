@@ -80,7 +80,11 @@ describe('buildListPreviewSlides', () => {
 	});
 
 	it('is empty when nothing is active', () => {
-		expect(buildListPreviewSlides([], now, imageUrl)).toEqual({ compact: [], portrait: [] });
+		expect(buildListPreviewSlides([], now, imageUrl)).toEqual({
+			compact: [],
+			portrait: [],
+			tv: []
+		});
 	});
 });
 

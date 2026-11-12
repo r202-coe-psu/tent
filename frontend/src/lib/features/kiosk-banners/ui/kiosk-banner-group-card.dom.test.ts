@@ -19,6 +19,7 @@ const summaries = (
 ): Record<KioskScreenType, ScreenSummary> => ({
 	compact: summary(),
 	portrait: summary(),
+	tv: summary(),
 	...over
 });
 
@@ -81,13 +82,18 @@ describe('KioskBannerGroupCard', () => {
 		render({
 			summaries: summaries({
 				compact: summary({ active: 2, scheduled: 1 }),
-				portrait: summary({ active: 4 })
+				portrait: summary({ active: 4 }),
+				tv: summary({ active: 1 })
 			})
 		});
 
 		const rows = [...document.body.querySelectorAll('[data-testid="screen-summary"]')].map((el) =>
 			el.textContent?.replace(/\s+/g, ' ').trim()
 		);
-		expect(rows).toEqual(['ตู้เล็ก 1024×600 แสดงอยู่ 2 รอแสดง 1', 'ตู้ใหญ่ 1080×1920 แสดงอยู่ 4']);
+		expect(rows).toEqual([
+			'ตู้เล็ก 1024×600 แสดงอยู่ 2 รอแสดง 1',
+			'ตู้ใหญ่ 1080×1920 แสดงอยู่ 4',
+			'จอ TV 1920×1080 แสดงอยู่ 1'
+		]);
 	});
 });

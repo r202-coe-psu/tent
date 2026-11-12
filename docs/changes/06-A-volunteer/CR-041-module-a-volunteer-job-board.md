@@ -3,7 +3,7 @@ id: CR-041
 title: "Module A expand — Volunteer Job Board, configurable shifts, affiliation tracking (volunteer vs staff)"
 status: approved
 date: 2026-07-15
-updated: 2026-08-21
+updated: 2026-11-06
 approved_on: 2026-07-22
 requested_by: project owner
 decided_by: project owner
@@ -28,7 +28,7 @@ affects:
 
 ## สรุป (TL;DR)
 
-- **เปลี่ยนอะไร:** ขยาย Module A เป็น **Job Board ต่อศูนย์ + กะ template/override + application (± auto-accept) + Digital Ticket/QR (No SMS OTP) + reCAPTCHA v3 anti-spam + On-site QR Check-in + โปรไฟล์อาสากลาง + public `/volunteer*` + แยก job tier + สิทธิ์เขียนตามกะ + ป้ายอาสา/staff**
+- **เปลี่ยนอะไร:** ขยาย Module A เป็น **Job Board ต่อศูนย์ + กะ template/override + application (± auto-accept) + Digital Ticket/QR (No SMS OTP) + reCAPTCHA v3 anti-spam + On-site QR Check-in + โปรไฟล์อาสากลาง (แทนที่โดย [CR-228](CR-228-cross-shelter-verification-reference.md): โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ) + public `/volunteer*` + แยก job tier + สิทธิ์เขียนตามกะ + ป้ายอาสา/staff**
 - **เพื่อใคร/ทำไม:** SM จัดกำลังอาสา; อาสาสมัครโปรไฟล์/งานจาก public; แยกอาสา vs staff ประจำ; staff-capable ใช้ flow หน้าที่ได้เฉพาะในกะ
 - **dev ต้อง build:** Job Board · application · shifts · affiliation UI · public volunteer · digital ticket & QR checkin · **time-bound duty access**
 - **กระทบ schema/scope:** `job` / `job_application` ใหม่; bump `shift_assignment` (v2); `volunteer` เพิ่ม tracking_token; **ไม่ผูก SOP→Job ใน R3** (D-DEMAND=C) · **`approved` 2026-07-22** (ปิดดีเทล 2026-08-21)
@@ -52,7 +52,7 @@ affects:
 | 8 | **D-SHIFT** | **C** — preset template + override ต่อ job · duty window = เวลาหลัง override | 2026-07-22 |
 | 9 | **D-APP** | **A + optional auto-accept** · default = รออนุมัติ · setting เปิดได้ · รายละเอียด = **F-AUTO** | 2026-07-22 |
 | 10 | **D-DEMAND** | **C — ไม่ผูก** SOP/T-31 → Job ใน R3 · คนละจอ; SM สร้าง job มือ · เลื่อน handoff FR-45→43 | 2026-07-22 |
-| 11 | **D-MULTI** | **A — โปรไฟล์กลาง** · อาสาหนึ่งโปรไฟล์สมัคร/ถูกมอบหมายหลายศูนย์ได้ | 2026-07-22 |
+| 11 | **D-MULTI** | **D** — โปรไฟล์ต่อศูนย์ (ตามโค้ดปัจจุบัน) + แสดงผลยืนยันจากศูนย์อื่นที่เบอร์และเลขบัตรตรงกันให้เจ้าหน้าที่กดรับ เฉพาะผลที่ตรวจตรง ([CR-228](CR-228-cross-shelter-verification-reference.md)) · บัญชีระบบ 1 บัญชีต่อคนข้ามศูนย์อยู่ใน CR-221 Part B · _เดิม A — โปรไฟล์กลาง อาสาหนึ่งคนหนึ่งโปรไฟล์ (2026-07-22)_ | 2026-11-04 |
 | 12 | **D-PUBLIC** | **A — เปิด `/volunteer*` พร้อม Module A** · ต้อง amend CR-005 · มี nav/surface สมัคร (+ board ตาม sitemap) | 2026-07-22 |
 | 13 | **F-AUTO** | auto-accept **ต่อ job** · เมื่อเปิด: มีโควตาว่าง + (opt) skill match · **staff-capable: default ห้ามเปิด** · ค่าเริ่มต้นทุก job = ปิด | 2026-07-22 |
 | 14 | **F-CLOCK** | เวลาอ้างอิง = **shelter local** · ยอมรับ clock skew **±5 นาที** รอบขอบกะ | 2026-07-22 |
@@ -75,7 +75,7 @@ affects:
 
 | | Before | After |
 | --- | --- | --- |
-| FR-42 | ลงทะเบียนอาสา + skills + availability | **คง** + public สมัคร + โปรไฟล์กลาง + Job Board entry + D-AFFIL เมื่อมี login |
+| FR-42 | ลงทะเบียนอาสา + skills + availability | **คง** + public สมัคร + โปรไฟล์กลาง (แทนที่โดย [CR-228](CR-228-cross-shelter-verification-reference.md): โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ) + Job Board entry + D-AFFIL เมื่อมี login |
 | FR-43 | Skill match + กะ enum | Job Board + application (± auto-accept) + template/override + tier + time-bound duty · **ไม่** auto จาก SOP ใน R3 |
 | Owner | SM | SM เท่านั้น (D-OWNER / D-LEAD=A) |
 
@@ -87,7 +87,7 @@ affects:
 4. Job ต้องระบุ tier `operational` \| `staff-capable`; ถ้า staff-capable ต้องมี required RoleKey/capability
 5. อาสาที่ถือ assignment ของ job staff-capable ใช้ write path ตาม capability ได้ **เฉพาะช่วงกะ active**; นอกกะ write = ปฏิเสธ · ห้ามเช็ค permission จาก tag `volunteer`
 6. Public `/volunteer*` เปิดพร้อม Module A — สมัครโปรไฟล์ได้โดยไม่ login
-7. โปรไฟล์อาสา **กลาง** — สมัครงานหลายศูนย์จากโปรไฟล์เดียว
+7. โปรไฟล์อาสาต่อศูนย์ — สมัครงานหลายศูนย์ได้ (โปรไฟล์ต่อศูนย์) และใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ ([CR-228](CR-228-cross-shelter-verification-reference.md); เดิม: โปรไฟล์อาสา **กลาง** — สมัครงานหลายศูนย์จากโปรไฟล์เดียว)
 8. กะ = template + override; duty window จากเวลาที่มีผล
 9. Application รออนุมัติเป็นค่าเริ่มต้น; auto-accept ต่อ job ตาม F-AUTO
 10. **ไม่มี** สร้าง/เติม job อัตโนมัติจาก SOP demand ใน R3 (D-DEMAND=C)
@@ -97,7 +97,7 @@ affects:
 
 | Doc | สถานะ | หมายเหตุ |
 | --- | --- | --- |
-| `volunteer:{ulid}` | มีแล้ว — **อาจ bump** | โปรไฟล์กลาง (D-MULTI=A); สร้างจาก public; ผูก login เมื่อมี |
+| `volunteer:{ulid}` | มีแล้ว — **อาจ bump** | โปรไฟล์กลาง (D-MULTI=A) (แทนที่โดย [CR-228](CR-228-cross-shelter-verification-reference.md): โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ); สร้างจาก public; ผูก login เมื่อมี |
 | `shift_assignment:{ulid}` | bump | `job_id` + เวลาจาก template±override; ฐาน duty window; ผูก shelter ของ job |
 | `job:{ulid}` | ใหม่ v1 | ต่อศูนย์; tier; required roles; templates/overrides; `auto_accept` (default false; staff-capable จำกัดตาม F-AUTO) |
 | `job_application:{ulid}` | ใหม่ v1 | สมัครเข้า job; auto-accept ตาม setting |
@@ -112,7 +112,7 @@ affects:
 
 | Task | ทิศทาง |
 | --- | --- |
-| **T-28** | public สมัคร + โปรไฟล์กลาง + skills/availability + D-AFFIL เมื่อ login |
+| **T-28** | public สมัคร + โปรไฟล์กลาง (แทนที่โดย [CR-228](CR-228-cross-shelter-verification-reference.md): โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ) + skills/availability + D-AFFIL เมื่อ login |
 | **T-29** | Job Board + template/override + application ± auto-accept + skill match + assign · **ตัด** DoD “demand จาก T-31 สร้างงาน” ออกจาก R3 (เลื่อน) |
 | task ย่อยแนะนำ | (1) schema job/* + volunteer multi (2) public `/volunteer*` + CR-005 (3) **time-bound duty / guards** |
 
@@ -151,7 +151,7 @@ affects:
 
 - `job` / `job_application` = v1 หลัง approve; pre-prod re-seed ได้ตามนโยบาย
 - `shift_assignment` bump ตาม D-SHIFT=C
-- `volunteer` โปรไฟล์กลาง: migration/วางที่เก็บ (shared vs per-shelter) ระบุตอนเขียน schema — **ห้ามเดาในโค้ดก่อน spec**
+- `volunteer` โปรไฟล์กลาง: migration/วางที่เก็บ (shared vs per-shelter) ระบุตอนเขียน schema — **ห้ามเดาในโค้ดก่อน spec** (แทนที่โดย [CR-228](CR-228-cross-shelter-verification-reference.md): โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ — ไม่มีโปรไฟล์กลางและไม่ย้ายข้อมูล; migration ของ CR-228 คือ `volunteer` schema_v 4 → 5)
 - D-AFFIL: ไม่ auto-tag จาก RoleKey
 - D-DUTY-ACCESS=B: ไม่ auto-แปลง RoleKey ถาวรเป็น grant ตามกะ
 - D-DEMAND=C: ไม่มี migrate จาก daily_calc → job
@@ -176,8 +176,9 @@ affects:
 - 2026-07-22 — lock D-TIER=A · D-DUTY-ACCESS=B
 - 2026-07-22 — lock D-LEAD=A · D-REG=A · D-SHIFT=C · D-APP=A+opt auto-accept
 - 2026-07-22 — lock F-AUTO (ต่อ job; โควตา+(opt) skill match; staff-capable default ห้ามเปิด)
-- 2026-07-22 — lock D-DEMAND=C · D-MULTI=A · D-PUBLIC=A
+- 2026-07-22 — lock D-DEMAND=C · D-MULTI=A · D-PUBLIC=A (D-MULTI แทนที่โดย [CR-228](CR-228-cross-shelter-verification-reference.md) — ดู 2026-11-04)
 - 2026-07-22 — lock F-CLOCK / F-OFFLINE / F-OVERLAP / F-REVOKE ตามข้อเสนอ · **workshop ปิดครบ**
 - 2026-07-22 — **approved** โดย project owner · เริ่มแตก epic/stories สำหรับ handoff
 - 2026-07-22 — lock **D-USER-PROVISION**: สร้าง `_users` = self-register หรือ SA เท่านั้น; SM สร้างไม่ได้ แต่แก้ RoleKey + ชนิดคนได้ (รวมให้อาสาถือ RoleKey นอก Job Board)
 - 2026-08-21 — lock **D-TICKET / D-CHECKIN / D-ANTISPAM**: สรุป Digital Ticket URL/QR, On-site QR check-in, และ reCAPTCHA v3 + zero SMS cost model
+- 2026-11-04 — **D-MULTI A → D** ตาม [CR-228](CR-228-cross-shelter-verification-reference.md) (approved โดย Soravit Sukkarn, Team Lead, PR #1118): คงโปรไฟล์ต่อศูนย์ แสดงผลยืนยันตัวตน / รับรองทักษะจากศูนย์อื่นที่ `phone_hash` + `national_id_hash` ตรงกันให้เจ้าหน้าที่กดรับ · ปรับข้อ 11 ตาราง decision และ Consequence ข้อ 7

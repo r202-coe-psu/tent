@@ -107,7 +107,8 @@ describe('reprintKioskLabels', () => {
 		mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
 			evacuee_id,
 			qr_payload: issuedQr(evacuee_id),
-			printed_at: '2026-11-06T08:15:30.123Z'
+			printed_at: '2026-11-06T08:15:30.123Z',
+			marker: null
 		}));
 		mockAdminFetch.mockImplementation(async (path, init) => {
 			if (path.endsWith('/_find')) {
@@ -134,12 +135,12 @@ describe('reprintKioskLabels', () => {
 			{
 				evacuee_id: ids[0],
 				qr_payload: issuedQr(ids[0]),
-				label: { name: 'สมชาย0 ใจดี', phone, zone: null, stations_passed: 1 }
+				label: { name: 'สมชาย0\nใจดี', phone, marker: null, zone: null, stations_passed: 1 }
 			},
 			{
 				evacuee_id: ids[1],
 				qr_payload: issuedQr(ids[1]),
-				label: { name: 'สมชาย1 ใจดี', phone: null, zone: null, stations_passed: 1 }
+				label: { name: 'สมชาย1\nใจดี', phone: null, marker: null, zone: null, stations_passed: 1 }
 			}
 		]);
 		expect(writes()).toEqual([]);
@@ -186,6 +187,29 @@ describe('reprintKioskLabels', () => {
 		expect(members[0]).not.toHaveProperty('qr_payload');
 		expect(members[1]).toMatchObject({ qr_payload: issuedQr(ids[1]) });
 		expect(members[1]).not.toHaveProperty('qr_issue_failed');
+	});
+
+	it('carries the issued vulnerability marker on each label, null passing through (#1301)', async () => {
+		docs = [evacuee(0), evacuee(1, { current_stay: { status: 'active' } })];
+		mockIssueQr.mockImplementation(async ({ evacuee_id }) => ({
+			evacuee_id,
+			qr_payload: issuedQr(evacuee_id),
+			printed_at: '2026-11-06T08:15:30.123Z',
+			marker: evacuee_id === ids[0] ? 'red' : null
+		}));
+
+		const members = await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0], ids[1]] }));
+
+		expect(members[0].label.marker).toBe('red');
+		expect(members[1].label.marker).toBeNull();
+	});
+
+	it('leaves the marker off the label when the entry failed (#1301)', async () => {
+		docs = [evacuee(0)];
+		mockIssueQr.mockRejectedValueOnce(new Error('CONFLICT'));
+		const [member] = await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0]] }));
+		expect(member).toMatchObject({ qr_issue_failed: true });
+		expect(member.label).not.toHaveProperty('marker');
 	});
 
 	it('returns the labels when a staff PIN is accepted, even if the primary has no citizen id', async () => {

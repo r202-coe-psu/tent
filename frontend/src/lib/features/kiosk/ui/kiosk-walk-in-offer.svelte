@@ -2,6 +2,9 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_WALK_IN_I18N } from './_constants/kiosk-walk-in.i18n';
 	import {
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION
@@ -24,29 +27,26 @@
 		onregister,
 		onretry
 	}: Props = $props();
+
+	const t = $derived(getTranslation(KIOSK_WALK_IN_I18N, languageStore.current).offer);
 </script>
 
 <!--
 	A card with no pre-registration is not an error: this is the way in for people who walked in.
 	Registering here is the one obvious next step; searching again stays available but quiet.
 -->
-<KioskNoticePanel
-	tone="info"
-	icon={UserPlus}
-	title="ลงทะเบียนที่ตู้นี้ได้เลย"
-	data-testid="kiosk-walk-in-offer"
->
+<KioskNoticePanel tone="info" icon={UserPlus} title={t.title} data-testid="kiosk-walk-in-offer">
 	<p>
 		{#if source === 'thaid'}
-			ระบบจะใช้ข้อมูลที่ยืนยันผ่าน ThaiD (ไม่มีรูปถ่าย)
+			{t.fromThaid}
 		{:else}
-			ระบบจะใช้ข้อมูลจากบัตรประชาชนที่เสียบอยู่
+			{t.fromCard}
 		{/if}
-		เมื่อเสร็จแล้วกรุณาไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล
+		{t.afterwards}
 	</p>
 	{#snippet actions()}
 		<Button type="button" onclick={onregister} class={KIOSK_NOTICE_PRIMARY_ACTION}>
-			<UserPlus aria-hidden="true" />ลงทะเบียนที่ตู้นี้<ChevronRight aria-hidden="true" />
+			<UserPlus aria-hidden="true" />{t.register}<ChevronRight aria-hidden="true" />
 		</Button>
 		<Button
 			type="button"
@@ -56,11 +56,11 @@
 			class={KIOSK_NOTICE_SECONDARY_ACTION}
 		>
 			{#if retryAfterSeconds > 0}
-				ค้นหาอีกครั้งได้ใน <span class="tabular-nums">{retryAfterSeconds}</span> วินาที
+				{t.retryInBefore} <span class="tabular-nums">{retryAfterSeconds}</span> {t.retryInAfter}
 			{:else if isLookingUp}
-				กำลังค้นหา…
+				{t.searching}
 			{:else}
-				ลงทะเบียนล่วงหน้าไว้แล้ว? ค้นหาอีกครั้ง
+				{t.retry}
 			{/if}
 		</Button>
 	{/snippet}

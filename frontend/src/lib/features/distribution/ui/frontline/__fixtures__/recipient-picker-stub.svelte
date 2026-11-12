@@ -31,6 +31,24 @@
 >
 	pick evacuee with expired QR
 </button>
+<!--
+	No-household variants: an evacuee with a `household_id` gets the household member list on the
+	food card (#1154), not the single-recipient stepper these cases exercise.
+-->
+<button
+	type="button"
+	data-testid="pick-solo-evacuee"
+	onclick={() => (value = { ...base, householdId: undefined })}
+>
+	pick evacuee without household
+</button>
+<button
+	type="button"
+	data-testid="pick-solo-evacuee-qr-override"
+	onclick={() => (value = { ...base, householdId: undefined, qrOverride })}
+>
+	pick evacuee without household, expired QR
+</button>
 <button
 	type="button"
 	data-testid="pick-outside"

@@ -37,6 +37,8 @@ import { publicShelter, teardownShelter } from './helpers/public-cleanup';
 import { createShelterViaUi } from './helpers/staff-ui';
 
 const FIXTURE = sheltersFixture();
+/** GPS fix + filter commit + the `/shelters` load it triggers, on a cold preview server. */
+const GPS_URL_TIMEOUT_MS = 15_000;
 const { marker: MARKER, hostNear: HOST_NEAR, evacFar: EVAC_FAR } = FIXTURE;
 const USER_LOCATION = { latitude: 7.0086, longitude: 100.4968 };
 
@@ -55,7 +57,8 @@ test.describe(
 	() => {
 		test('R1 the directory shell and filter panel are rendered', async ({ page }) => {
 			await page.goto('/shelters');
-			await expect(page).toHaveURL(/distance=5/);
+			// First visit: GPS → URL commit → page load re-runs before the URL changes (~3 s locally).
+			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toBeVisible();
@@ -118,7 +121,8 @@ test.describe(
 		test('filters the list by shelter name', async ({ page }) => {
 			test.setTimeout(75_000); // outlasts the 60 s projection wait below
 			await page.goto('/shelters');
-			await expect(page).toHaveURL(/distance=5/);
+			// First visit: GPS → URL commit → page load re-runs before the URL changes (~3 s locally).
+			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 
 			// These shelters were just created — the worker's registry listener only
@@ -138,7 +142,7 @@ test.describe(
 
 		test('widens and narrows the GPS radius', async ({ page }) => {
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}`);
-			await expect(page).toHaveURL(/distance=5/);
+			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
 			await page.getByRole('button', { name: '10 กม' }).click();

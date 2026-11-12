@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LOT_NO_PATTERN, lotDateStamp } from '$lib/features/operations/server';
 import { createInMemoryRepository } from '$lib/db/in-memory-repository';
+import { ConflictError } from '$lib/utils/errors';
 
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
@@ -26,7 +27,16 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 			const saved = [];
 			for (const doc of docs) saved.push(await memoryRepo.put(doc));
 			return saved;
-		}
+		},
+		// lot_counter reads/writes (CR-244) and the once-a-day seed lookup go through couch-db.
+		getDocWithConflicts: async (_dbName: string, id: string) => memoryRepo.get(id),
+		putDocStrict: async (_dbName: string, doc: { _id: string; _rev?: string }) => {
+			const current = await memoryRepo.get<{ _id: string; _rev?: string }>(doc._id);
+			if (current?._rev !== doc._rev) throw new ConflictError();
+			return memoryRepo.put(doc);
+		},
+		findDocs: async (_dbName: string, query: { selector: Record<string, unknown> }) =>
+			memoryRepo.find(query)
 	};
 });
 
@@ -38,12 +48,16 @@ vi.mock('$lib/features/operations', async () => {
 	const domain = await import('../../operations/domain/operations');
 	const lotStorage = await import('../../operations/domain/lot-storage');
 	const ledgerId = await import('../../operations/domain/deterministic-ledger-id');
+	const reservation = await import('../../operations/data/lot-reservation');
+	const couchConnector = await import('../../operations/data/lot-reservation.couch');
 	return {
 		createStockLedger: domain.createStockLedger,
 		deriveDeterministicLedgerId: ledgerId.deriveDeterministicLedgerId,
 		storageLotFields: lotStorage.storageLotFields,
 		stockBalance: domain.stockBalance,
-		isStockLedger: domain.isStockLedger
+		isStockLedger: domain.isStockLedger,
+		reserveLotNos: reservation.reserveLotNos,
+		createSessionLotCounterConnector: couchConnector.createSessionLotCounterConnector
 	};
 });
 

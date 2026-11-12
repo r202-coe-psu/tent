@@ -14,9 +14,10 @@ x-edge-job-env: &edge-job-env
   COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
   SHELTER_CODE: ${SHELTER_CODE:?SHELTER_CODE is required}
   SYNC_URL: ${SYNC_URL:?SYNC_URL is required}
-  # Central CouchDB admin — used by every replication job, including the filtered _users pull
-  CENTRAL_REPL_USER: ${CENTRAL_REPL_USER:?CENTRAL_REPL_USER is required}
-  CENTRAL_REPL_PASSWORD: ${CENTRAL_REPL_PASSWORD:?CENTRAL_REPL_PASSWORD is required}
+  # Per-shelter central user (role repl:<SHELTER_CODE>, never an admin) — used by every replication job,
+  # including the _users pull from edge_users_<code>. Create on central: scripts/central-repl-user.sh <CODE>
+  EDGE_REPL_USER: ${EDGE_REPL_USER:?EDGE_REPL_USER is required}
+  EDGE_REPL_PASSWORD: ${EDGE_REPL_PASSWORD:?EDGE_REPL_PASSWORD is required}
 
 services:
   couchdb:
@@ -125,6 +126,9 @@ services:
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
       # node:cluster workers for BFF/SPA (clamped to CPUs)
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      # CR-171 FR-13: _users replicates central → edge only; BFF rejects every _users write here.
+      # Central leaves EDGE_MODE unset (= off). Do not make this configurable per edge.
+      EDGE_MODE: 'true'
       # Server-only — never bundled into the browser; points at this edge's CouchDB
       COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
       # No FASTAPI_INTERNAL_URL / EXTERNAL_API_SECRET / COUCHDB_PUBLIC_WRITER_URL /

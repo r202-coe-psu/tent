@@ -381,7 +381,11 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	const dailySopRoleContract = DAILY_SOP_ROLE_VDU_CONTRACT;
 	return `function (newDoc, oldDoc, userCtx) {
-  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1;
+  // #1298 (edge per-shelter replication user): the role repl:<CODE> of THIS database's shelter counts
+  // exactly like _admin everywhere below, so an edge can push shelter_<code> without holding the
+  // central admin. repl:<other code> gets nothing. The rules above the _admin bypass still apply.
+  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1 ||
+    userCtx.roles.indexOf('repl:${code}') !== -1;
   var isRoleAssessmentWrite = newDoc.type === 'daily_sop_role_assessment' ||
     (oldDoc && oldDoc.type === 'daily_sop_role_assessment');
   if (isRoleAssessmentWrite && newDoc._deleted === true) {
@@ -414,7 +418,7 @@ ${consentVduClause()}
     if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('evacuee_qr:') !== 0) {
       throw { forbidden: 'evacuee_qr _id must start with evacuee_qr:' };
     }
-    if (newDoc.schema_v !== 1) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported evacuee_qr schema version' };
     }
     if (newDoc.shelter_code !== '${code}') {
@@ -447,13 +451,16 @@ ${consentVduClause()}
       if (typeof qp.printed_by !== 'string' || qp.printed_by.length === 0) {
         throw { forbidden: 'evacuee_qr printed_by is required' };
       }
+      if (qp.marker !== undefined && qp.marker !== null && qp.marker !== 'red' && qp.marker !== 'yellow') {
+        throw { forbidden: 'evacuee_qr marker must be red, yellow or null' };
+      }
       if (qi > 0 && !(qp.printed_at > newDoc.prints[qi - 1].printed_at)) {
         throw { forbidden: 'evacuee_qr printed_at must be strictly increasing' };
       }
       if (oldDoc && qi < oldDoc.prints.length) {
         var qo = oldDoc.prints[qi];
         if (qo.printed_at !== qp.printed_at || qo.hash !== qp.hash ||
-            qo.printed_by !== qp.printed_by || qo.source !== qp.source) {
+            qo.printed_by !== qp.printed_by || qo.source !== qp.source || qo.marker !== qp.marker) {
           throw { forbidden: 'evacuee_qr prints is append-only' };
         }
       }
@@ -462,6 +469,34 @@ ${consentVduClause()}
       throw { forbidden: 'evacuee_qr prints is append-only' };
     }
     return;
+  }
+  // CR-244 FR-12: lot_counter is the per-day lot-number counter. These rules run BEFORE the _admin
+  // bypass (like evacuee_qr above) so even the BFF admin credential and the edge replication user
+  // can only move the counter forward on a well-formed _id. Only a couch admin may delete (unseed/reset;
+  // a re-created counter is re-seeded from the ledger, so a delete never makes numbers repeat).
+  if (typeof newDoc._id === 'string' && newDoc._id.indexOf('lot_counter:') === 0 &&
+      newDoc._deleted !== true && newDoc.type !== 'lot_counter') {
+    throw { forbidden: 'The lot_counter: _id prefix is reserved for lot_counter documents' };
+  }
+  if (newDoc.type === 'lot_counter' || (oldDoc && oldDoc.type === 'lot_counter')) {
+    if (newDoc._deleted === true) {
+      if (!isCouchAdmin) throw { forbidden: 'Cannot delete lot_counter documents' };
+    } else {
+      if (oldDoc && oldDoc._deleted !== true && oldDoc.type !== 'lot_counter') {
+        throw { forbidden: 'Cannot change type of lot_counter document' };
+      }
+      if (typeof newDoc._id !== 'string' || !/^lot_counter:L-\\d{6}$/.test(newDoc._id)) {
+        throw { forbidden: 'lot_counter _id must match lot_counter:L-YYMMDD' };
+      }
+      if (typeof newDoc.last !== 'number' || !isFinite(newDoc.last) ||
+          Math.floor(newDoc.last) !== newDoc.last || newDoc.last < 0) {
+        throw { forbidden: 'lot_counter last must be an integer >= 0' };
+      }
+      if (oldDoc && oldDoc._deleted !== true && typeof oldDoc.last === 'number' &&
+          !(newDoc.last > oldDoc.last)) {
+        throw { forbidden: 'lot_counter last must only increase' };
+      }
+    }
   }
   if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
@@ -707,7 +742,7 @@ ${consentVduClause()}
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log', 'station_log', 'evacuee_qr',
-    'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
+    'donation', 'donation_campaign', 'stock_ledger', 'lot_counter', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'referral',
     'meal_session', 'kitchen_counter',
     'meal_plan', 'kitchen_requisition', 'meal_service',
@@ -1374,6 +1409,14 @@ ${consentVduClause()}
       if (zoneChangeEligibleStatuses.indexOf(oldDoc.current_stay.status) === -1) {
         throw { forbidden: 'zone_change requires current_stay.status active or room_confirmed' };
       }
+    }
+  }
+  // CR-244 FR-13: whoever may receive stock (stock_ledger receipt) may reserve lot numbers.
+  // distribution_staff is excluded (loan returns mint no lot number).
+  if (newDoc.type === 'lot_counter') {
+    if (!isRole('warehouse_staff') && !isRole('supply_coordinator') &&
+        !isRole('shelter_manager') && !isRole('donation_staff')) {
+      throw { forbidden: 'Only stock-receiving staff can write lot_counter' };
     }
   }
   // 3. only warehouse staff / managers may write stock
@@ -2446,10 +2489,13 @@ ${consentVduClause()}
     if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
       throw { forbidden: 'outside recipients must not carry recipient_id' };
     }
+    if (typeof newDoc.collected_by_recipient_id !== 'undefined' && (newDoc.recipient_type !== 'evacuee' || typeof newDoc.collected_by_recipient_id !== 'string' || newDoc.collected_by_recipient_id.indexOf('evacuee:') !== 0 || newDoc.collected_by_recipient_id === newDoc.recipient_id)) {
+      throw { forbidden: 'collected_by_recipient_id must be another evacuee collecting for an evacuee' };
+    }
     if (oldDoc) {
       var immutableLogFields = [
         '_id', 'type', 'shelter_code', 'ticket_id', 'item_id', 'qty',
-        'recipient_type', 'recipient_id', 'household_id', 'is_returnable',
+        'recipient_type', 'recipient_id', 'household_id', 'collected_by_recipient_id', 'is_returnable',
         'distributed_at', 'distributed_by', 'created_at', 'created_by'
       ];
       for (var lf = 0; lf < immutableLogFields.length; lf++) {

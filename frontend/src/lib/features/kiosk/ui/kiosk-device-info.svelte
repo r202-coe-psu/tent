@@ -7,16 +7,21 @@
 	import Printer from '@lucide/svelte/icons/printer';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { KIOSK_SCREENS } from '$lib/features/shared';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 	import { DeviceInfoSession } from '../application/device-info.svelte';
 	import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
 	import { TestPrint } from '../application/test-print.svelte';
 	import { fetchKioskDeviceInfo } from '../data/kiosk-device-info.api';
 	import { fetchKioskHostInfo } from '../data/kiosk-host-info.api';
+	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
 	import KioskLabelSheet from './kiosk-label-sheet.svelte';
 	import KioskPrintStatus from './kiosk-print-status.svelte';
 	import KioskStaffPinEntry from './kiosk-staff-pin-entry.svelte';
+
+	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current).deviceInfo);
 
 	const session = untrack(
 		() =>
@@ -38,7 +43,8 @@
 			new TestPrint({
 				prepareQrImage: prepareKioskQrImage,
 				printLabels: printKioskQrLabels,
-				fallbackPrint: browserPrint
+				fallbackPrint: browserPrint,
+				language: () => languageStore.current
 			})
 	);
 
@@ -71,9 +77,7 @@
 			: ''
 	);
 
-	const pinLabel = $derived(
-		!info ? '' : info.staffPin.isDefault ? 'ยังเป็นค่าเริ่มต้น' : 'ตั้งแล้ว'
-	);
+	const pinLabel = $derived(!info ? '' : info.staffPin.isDefault ? t.pinDefault : t.pinSet);
 
 	const pinUpdated = $derived.by(() => {
 		const pin = info?.staffPin;
@@ -85,7 +89,7 @@
 			dateStyle: 'medium',
 			timeStyle: 'short'
 		});
-		return `อัปเดต ${when}`;
+		return t.updated(when);
 	});
 
 	/** The panel is modal: keyboard focus starts inside it, on the safe way out. */
@@ -139,7 +143,7 @@
 <!-- Staff only: small and out of the way; the PIN is asked first. -->
 <button
 	type="button"
-	aria-label="ข้อมูลเครื่อง"
+	aria-label={t.openLabel}
 	data-testid="kiosk-device-info-button"
 	bind:this={trigger}
 	disabled={session.phase !== 'idle'}
@@ -154,14 +158,14 @@
 		class="no-print fixed inset-0 z-40 flex flex-col overflow-y-auto bg-[#F8FAFC] px-3 py-2 kiosk-portrait:px-6 kiosk-portrait:py-6"
 		role="dialog"
 		aria-modal="true"
-		aria-label="PIN เจ้าหน้าที่สำหรับดูข้อมูลเครื่อง"
+		aria-label={t.pinDialogLabel}
 		data-testid="kiosk-device-info-pin"
 	>
 		<!-- my-auto: centred on the screen, yet still scrolls from the top when it does not fit. -->
 		<div class="my-auto w-full">
 			<KioskStaffPinEntry
 				headingTag="h2"
-				description="กรอก PIN 6 หลักเพื่อดูข้อมูลเครื่อง"
+				description={t.pinDescription}
 				verify={(pin) => session.verify(pin)}
 				onverified={() => {
 					pinVisible = false;
@@ -190,7 +194,7 @@
 				id={titleId}
 				class="text-center text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 			>
-				ข้อมูลเครื่อง
+				{t.title}
 			</h2>
 
 			<dl
@@ -199,7 +203,7 @@
 				<div
 					class="flex justify-between gap-4 py-2 kiosk-portrait:py-4 kiosk-compact:border-b kiosk-compact:border-slate-100 kiosk-compact:py-1.5"
 				>
-					<dt class="text-slate-600">ชื่อเครื่อง</dt>
+					<dt class="text-slate-600">{t.deviceName}</dt>
 					<dd class="text-right font-semibold text-[#0A2647]">
 						{info.name}
 						<span
@@ -229,19 +233,19 @@
 				<div
 					class="flex justify-between gap-4 py-2 kiosk-portrait:py-4 kiosk-compact:border-b kiosk-compact:border-slate-100 kiosk-compact:py-1.5"
 				>
-					<dt class="text-slate-600">ศูนย์พักพิง</dt>
+					<dt class="text-slate-600">{t.shelter}</dt>
 					<dd class="text-right font-semibold text-[#0A2647]">{shelterLabel}</dd>
 				</div>
 				<div
 					class="flex justify-between gap-4 py-2 kiosk-portrait:py-4 kiosk-compact:border-b kiosk-compact:border-slate-100 kiosk-compact:py-1.5"
 				>
-					<dt class="text-slate-600">จุดบริการ</dt>
+					<dt class="text-slate-600">{t.station}</dt>
 					<dd class="text-right font-semibold text-[#0A2647]">{info.stationName}</dd>
 				</div>
 				<div
 					class="flex justify-between gap-4 py-2 kiosk-portrait:py-4 kiosk-compact:border-b kiosk-compact:border-slate-100 kiosk-compact:py-1.5"
 				>
-					<dt class="text-slate-600">PIN เจ้าหน้าที่</dt>
+					<dt class="text-slate-600">{t.staffPin}</dt>
 					<dd class="text-right font-semibold text-[#0A2647]">
 						{#if session.pin}
 							<span class="flex items-center justify-end gap-2">
@@ -250,7 +254,7 @@
 								</span>
 								<button
 									type="button"
-									aria-label={pinVisible ? 'ซ่อน PIN' : 'แสดง PIN'}
+									aria-label={pinVisible ? t.hidePin : t.showPin}
 									aria-pressed={pinVisible}
 									onclick={() => (pinVisible = !pinVisible)}
 									class="flex size-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-[#0A2647] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none kiosk-portrait:size-14"
@@ -276,25 +280,27 @@
 				>
 					<dt class="text-slate-600">Banner group</dt>
 					<dd class="text-right font-semibold text-[#0A2647]">
-						{info.bannerGroup?.name ?? 'ไม่ได้อยู่ในกลุ่ม'}
+						{info.bannerGroup?.name ?? t.noGroup}
 					</dd>
 				</div>
 				<div
 					class="flex justify-between gap-4 py-2 kiosk-portrait:py-4 kiosk-compact:border-b kiosk-compact:border-slate-100 kiosk-compact:py-1.5"
 				>
-					<dt class="text-slate-600">หน้าจอ</dt>
+					<dt class="text-slate-600">{t.screen}</dt>
 					<dd
 						class="text-right font-semibold text-[#0A2647]"
 						data-testid="kiosk-device-info-screen"
 					>
-						{KIOSK_SCREENS[info.screenType].label} · {KIOSK_SCREENS[info.screenType].size}
+						{info.screenType === 'portrait' ? t.screenPortrait : t.screenCompact} · {KIOSK_SCREENS[
+							info.screenType
+						].size}
 					</dd>
 				</div>
 			</dl>
 
 			{#if testPrint.phase === 'error'}
 				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert" class="mx-0 max-w-none">
-					<span>ทดสอบการพิมพ์ไม่สำเร็จ: {testPrint.error}</span>
+					<span>{t.testPrintFailed(testPrint.error)}</span>
 				</KioskInlineAlert>
 			{/if}
 
@@ -309,7 +315,7 @@
 					class="min-h-12 flex-1 gap-2 text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-20 kiosk-portrait:text-2xl kiosk-compact:min-h-11"
 				>
 					<Printer class="size-5 kiosk-portrait:size-7" aria-hidden="true" />
-					ทดสอบการพิมพ์
+					{t.testPrint}
 				</Button>
 				<Button
 					type="button"
@@ -319,7 +325,7 @@
 					{@attach focusOnMount}
 					class="min-h-12 flex-1 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-20 kiosk-portrait:text-2xl kiosk-compact:min-h-11"
 				>
-					ปิด
+					{t.close}
 				</Button>
 			</div>
 		</div>

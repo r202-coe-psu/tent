@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { WHOLE_QTY_MESSAGE } from '$lib/features/catalog';
 import { THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
 import ScanStation from './scan-station.svelte';
 
@@ -23,14 +24,22 @@ vi.mock('$lib/features/shelters', async (importOriginal) => ({
 		isLoading: false
 	})
 }));
-vi.mock('$lib/features/catalog', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/features/catalog')>()),
-	useItemMasters: () => empty,
-	useUnitsOfMeasure: () => empty
-}));
+vi.mock('$lib/features/catalog', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features/catalog')>();
+	const { resolveUnitDimension } = actual;
+	return {
+		...actual,
+		useItemMasters: () => empty,
+		useUnitsOfMeasure: () => empty,
+		useUnitDimensionResolver: () => ({
+			resolve: (unit: string) => resolveUnitDimension(unit)
+		})
+	};
+});
 const storagePointList = vi.hoisted(() => ({ current: [] as { id: string; name: string }[] }));
 vi.mock('$lib/features/operations', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/operations')>()),
+	ItemCombobox: (await import('./__fixtures__/item-combobox.fixture.svelte')).default,
 	useStoragePoints: () => ({
 		get points() {
 			return storagePointList.current;
@@ -665,5 +674,118 @@ describe('scan-station vehicle plate (CR-209 FR-3b, AC-8)', () => {
 		await open({ delivery_method: 'self_dropoff', vehicle: 'car' });
 		expect(document.body.textContent).toContain('วิธีส่ง / ยานพาหนะ');
 		expect(document.body.textContent).not.toContain('ทะเบียน ');
+	});
+});
+
+describe('scan-station whole quantity for count units (#805)', () => {
+	const qtyBox = (idx: number) => document.getElementById(`item-qty-${idx}`) as HTMLInputElement;
+	const qtyError = (idx: number) =>
+		document.querySelector(`[data-testid="scan-line-${idx}-qty-error"]`);
+	const walkinQty = () => document.querySelector<HTMLInputElement>('[id^="walkin-qty-"]')!;
+	const walkinError = () => document.querySelector('[data-testid="walkin-qty-error"]');
+	const pick = async (which: 'bottle' | 'kg') => {
+		document
+			.querySelector<HTMLButtonElement>(
+				`[data-testid$="-pick-${which}"][data-testid^="walkin-item-"]`
+			)!
+			.click();
+		await settle();
+	};
+
+	describe('receive against a booking', () => {
+		const open = async (unit: string) => {
+			const fetchMock = stubApi(
+				splitBooking({ items: [{ item_id: 'item:water', qty: '24', unit }] })
+			);
+			await openBooking();
+			buttonIn(line(0), 'ผ่านการตรวจสอบแล้ว').click();
+			await settle();
+			return fetchMock;
+		};
+
+		it('shows the error live and disables submit for 1.5 bottles', async () => {
+			const fetchMock = await open('bottle');
+			expect(qtyBox(0).getAttribute('inputmode')).toBe('numeric');
+			expect(qtyBox(0).getAttribute('step')).toBe('1');
+			expect(submit().disabled).toBe(false);
+
+			await type('item-qty-0', '1.5');
+
+			expect(qtyError(0)?.textContent?.trim()).toBe(WHOLE_QTY_MESSAGE);
+			expect(qtyBox(0).getAttribute('aria-invalid')).toBe('true');
+			expect(qtyBox(0).getAttribute('aria-describedby')).toBe(qtyError(0)!.id);
+			expect(submit().disabled).toBe(true);
+			submit().click();
+			await settle();
+			expect(postBody(fetchMock)).toBeNull();
+
+			await type('item-qty-0', '2');
+			expect(qtyError(0)).toBeNull();
+			expect(qtyBox(0).getAttribute('aria-invalid')).toBeNull();
+			expect(submit().disabled).toBe(false);
+			submit().click();
+			await settle();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(postBody(fetchMock)!.body.items[0]).toMatchObject({ qty: '2', unit: 'bottle' });
+		});
+
+		it('accepts 1.5 kg and keeps decimal input', async () => {
+			const fetchMock = await open('kg');
+			expect(qtyBox(0).getAttribute('inputmode')).toBe('decimal');
+			expect(qtyBox(0).getAttribute('step')).toBe('any');
+
+			await type('item-qty-0', '1.5');
+
+			expect(qtyError(0)).toBeNull();
+			expect(submit().disabled).toBe(false);
+			submit().click();
+			await settle();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(postBody(fetchMock)!.body.items[0]).toMatchObject({ qty: '1.5', unit: 'kg' });
+		});
+	});
+
+	describe('walk-in', () => {
+		const fillDonor = async () => {
+			await type('donor-name-input', 'สมชาย');
+			await type('donor-phone-input', '0891234567');
+		};
+
+		it('shows the error and disables save for 1.5 bottles, then accepts 2', async () => {
+			const fetchMock = vi.fn();
+			vi.stubGlobal('fetch', fetchMock);
+			await render();
+			await fillDonor();
+			await pick('bottle');
+			expect(walkinQty().getAttribute('inputmode')).toBe('numeric');
+			expect(walkinQty().getAttribute('step')).toBe('1');
+
+			await type(walkinQty().id, '1.5');
+
+			expect(walkinError()?.textContent?.trim()).toBe(WHOLE_QTY_MESSAGE);
+			expect(walkinQty().getAttribute('aria-invalid')).toBe('true');
+			expect(walkinQty().getAttribute('aria-describedby')).toBe(walkinError()!.id);
+			expect(save().disabled).toBe(true);
+			save().click();
+			await settle();
+			expect(fetchMock).not.toHaveBeenCalled();
+
+			await type(walkinQty().id, '2');
+			expect(walkinError()).toBeNull();
+			expect(save().disabled).toBe(false);
+		});
+
+		it('accepts 1.5 kg', async () => {
+			vi.stubGlobal('fetch', vi.fn());
+			await render();
+			await pick('kg');
+			expect(walkinQty().getAttribute('inputmode')).toBe('decimal');
+			expect(walkinQty().getAttribute('step')).toBe('any');
+
+			await type(walkinQty().id, '1.5');
+
+			expect(walkinError()).toBeNull();
+			expect(save().disabled).toBe(false);
+		});
 	});
 });

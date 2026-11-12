@@ -39,7 +39,8 @@ export const SHELTER_VIEW_MANIFEST: ShelterViewManifest = {
 	// v5 (CR-192): adds the station_logs_by_station view (station_log start/complete events).
 	// v6 (#658): bulk_return_pool_item_totals (entry / move / void).
 	// v7 (#821): donation_received_by_name / donation_received_by_item (received-donation search).
-	version: 7,
+	// v8 (CR-226): occupancy_by_zone (per-zone occupancy widget).
+	version: 8,
 	designName: 'app',
 	views: SHELTER_DASHBOARD_VIEWS.views
 };

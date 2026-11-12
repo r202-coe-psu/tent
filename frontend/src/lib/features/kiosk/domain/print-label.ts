@@ -1,3 +1,7 @@
+import {
+	VULNERABILITY_MARKER_TEXT,
+	type VulnerabilityMarker
+} from '$lib/utils/vulnerability-marker';
 import { KIOSK_LABEL_MM, KIOSK_PRINT_DPI, kioskLabelDots, mmToDots } from '$lib/utils/label-size';
 
 // Label size lives in a shared pure module so other features (printers) need not reach into kiosk.
@@ -44,26 +48,37 @@ export function dotsToMm(dots: number): number {
 	return (dots / KIOSK_PRINT_DPI) * MM_PER_INCH;
 }
 
-/** Largest square (mm) the QR image may occupy on the right of the text column. */
-export function kioskQrBoxMm(): number {
+/** Width (mm) the level band and its gap to the text take from the left of the label; 0 for none. */
+function markerReserveMm(marker: VulnerabilityMarker | null | undefined): number {
+	return marker ? KIOSK_LABEL_BAND.widthMm + KIOSK_LABEL_BAND.gapMm : 0;
+}
+
+/**
+ * Largest square (mm) the QR image may occupy on the right of the text column. A `marker`'s level
+ * band pushes the text column right, so the QR gives up that room to keep the text width.
+ */
+export function kioskQrBoxMm(marker?: VulnerabilityMarker | null): number {
 	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2;
 	const innerHeight = KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2;
 	const besideText =
 		innerWidth - KIOSK_LABEL_TEXT_MIN_WIDTH_MM - KIOSK_LABEL_GAP_MM * 2 - KIOSK_LABEL_DIVIDER_MM;
-	return Math.min(innerHeight, besideText);
+	return Math.min(innerHeight, besideText - markerReserveMm(marker));
 }
 
 /**
  * Size a QR (moduleCount = modules per side, e.g. 29 for version 3) so every module is a whole
  * number of printer dots (at most KIOSK_QR_MAX_DOTS_PER_MODULE) and it fits the QR box.
  */
-export function kioskQrPrintSize(moduleCount: number): KioskQrPrintSize {
+export function kioskQrPrintSize(
+	moduleCount: number,
+	marker?: VulnerabilityMarker | null
+): KioskQrPrintSize {
 	const paddingDots = mmToDots(KIOSK_LABEL_PADDING_MM);
 	let size: KioskQrPrintSize | undefined;
 	// Widen the in-image margin until image margin + label padding reach the 4-module quiet zone.
 	for (let margin = KIOSK_QR_MARGIN_MODULES; margin <= KIOSK_QR_QUIET_ZONE_MODULES; margin++) {
 		const totalModules = moduleCount + margin * 2;
-		const maxDotsToFit = Math.floor(mmToDots(kioskQrBoxMm()) / totalModules);
+		const maxDotsToFit = Math.floor(mmToDots(kioskQrBoxMm(marker)) / totalModules);
 		// Largest whole-dot module that fits the box, capped so the text column keeps the rest.
 		const dotsPerModule = Math.max(1, Math.min(KIOSK_QR_MAX_DOTS_PER_MODULE, maxDotsToFit));
 		const widthPx = totalModules * dotsPerModule;
@@ -84,12 +99,51 @@ export function kioskLabelPageCss(): string {
  * Mirrors `QrIdCard`: bold name, zone, then the checklist and the small site address at the bottom.
  */
 export const KIOSK_LABEL_TEXT = {
-	name: { pt: 16, lineHeight: 1.3, weight: 700, maxLines: 3 },
+	name: { pt: 12, lineHeight: 1.3, weight: 700, maxLines: 3 },
 	zone: { pt: 12, lineHeight: 1.3, weight: 700 },
 	/** Emergency contact row under the zone; same face as the checklist, so no extra font load. */
 	emergency: { pt: 9, lineHeight: 1.3, weight: 500 },
 	checklist: { pt: 9, lineHeight: 1.3, weight: 500 },
 	link: { pt: 7, lineHeight: 1.3, weight: 500 }
+} as const;
+/**
+ * Vulnerability marker row at the top of the text column (above the name). Plain black on white,
+ * no band or outline, printed in the emergency row's face (9 pt, `KIOSK_LABEL_TEXT.emergency`) so
+ * the font load already covers its Thai words. Red is a filled square and yellow a hollow triangle
+ * before the level word and its meaning: they survive the thermal printer's black/white-only
+ * output and read apart without colour.
+ */
+export const KIOSK_LABEL_MARKER = {
+	text: VULNERABILITY_MARKER_TEXT,
+	/** Space between the marker row and the name. */
+	gapMm: 1,
+	/** Glyph before the word (red: filled square, yellow: hollow triangle): side as a fraction of the row height. */
+	glyphRatio: 0.6,
+	/** Glyph raised this many dots (negative = up) from the row middle; the words stay centred. */
+	glyphOffsetYDots: -1,
+	/** Stroke of the yellow triangle. */
+	triangleStrokeMm: 0.4,
+	/** Glyph → word. */
+	textGapMm: 1.5
+} as const;
+/**
+ * Level band down the left edge of the label, inside the padding, so staff see the level at a
+ * glance without reading. Yellow: two rails with diagonal stripes between them; red: the same band
+ * filled solid black. Plain black, no words (those stay in the marker row), so it survives the
+ * thermal printer's black/white-only output. It spans the full inner height; the text column
+ * shifts right and the QR shrinks to make room (`kioskQrBoxMm`).
+ */
+export const KIOSK_LABEL_BAND = {
+	/** Band width, rails included. */
+	widthMm: 4,
+	/** Each yellow rail (left and right edge of the band). */
+	railMm: 0.5,
+	/** Each yellow diagonal stripe, measured along a row. */
+	stripeMm: 0.5,
+	/** Yellow stripe repeat, measured along a row. */
+	pitchMm: 1.5,
+	/** Band → text column. */
+	gapMm: 2
 } as const;
 /** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
@@ -200,6 +254,36 @@ export function wrapLabelText(
 	return kept;
 }
 
+/**
+ * Wraps a label name whose parts (first name, last name) are separated by `\n`: each part starts
+ * on its own line, and a part never takes the lines the later parts still need, so a long first
+ * name cannot push the last name off the label. Within a part, `words` splits Thai words only
+ * when the part is wider than the line (the segmenter would otherwise split names mid-name).
+ */
+export function wrapLabelName(
+	name: string,
+	maxWidth: number,
+	measure: (text: string) => number,
+	maxLines: number,
+	splitWords: (text: string) => string[],
+	splitGraphemes: (text: string) => string[] = (text) => Array.from(text)
+): string[] {
+	const parts = name
+		.split('\n')
+		.map((part) => part.trim())
+		.filter(Boolean);
+	const lines: string[] = [];
+	parts.forEach((part, index) => {
+		const reserved = parts.length - index - 1;
+		const available = Math.max(1, maxLines - lines.length - reserved);
+		const segments = part
+			.split(/(\s+)/)
+			.flatMap((piece) => (measure(piece.trim()) > maxWidth ? splitWords(piece) : [piece]));
+		lines.push(...wrapLabelText(segments, maxWidth, measure, available, splitGraphemes));
+	});
+	return lines;
+}
+
 export type KioskLabelLayout = {
 	qr: { x: number; y: number };
 	divider: { x: number; y: number; width: number; height: number };
@@ -210,17 +294,24 @@ export type KioskLabelLayout = {
 
 /**
  * Whole-dot geometry of the ID-card label: text column on the left, a divider line, and the QR
- * (`qrPx` square, 1 px = 1 dot) right-aligned and centred vertically, as in `QrIdCard`.
+ * (`qrPx` square, 1 px = 1 dot) right-aligned and centred vertically, as in `QrIdCard`. With a
+ * `marker` the text column starts `KIOSK_LABEL_BAND.gapMm` right of the level band.
  */
-export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
+export function kioskLabelLayout(
+	qrPx: number,
+	marker?: VulnerabilityMarker | null
+): KioskLabelLayout {
 	const { width, height } = kioskLabelDots();
 	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
 	const gap = Math.round(mmToDots(KIOSK_LABEL_GAP_MM));
 	const offset = Math.round(mmToDots(KIOSK_LABEL_OFFSET_X_MM));
 	const dividerWidth = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_DIVIDER_MM)));
-	const qrX = width - padding - qrPx + offset;
+	const band = marker ? kioskLabelBand() : null;
+	const qrX = width - padding + offset - qrPx;
 	const dividerX = qrX - gap - dividerWidth;
-	const textX = padding + offset;
+	const textX = band
+		? band.x + band.width + Math.round(mmToDots(KIOSK_LABEL_BAND.gapMm))
+		: padding + offset;
 	const textY = padding + Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM));
 	const qrY = Math.round((height - qrPx) / 2);
 	const { pt, lineHeight } = KIOSK_LABEL_TEXT.link;
@@ -231,4 +322,50 @@ export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
 		text: { x: textX, y: textY, width: dividerX - gap - textX, bottom: height - padding },
 		link: { x: textX, y: Math.round(linkY) }
 	};
+}
+
+export type KioskLabelRect = { x: number; y: number; width: number; height: number };
+
+/** Whole-dot box of the level band: from the left edge of the label padding, full inner height. */
+export function kioskLabelBand(): KioskLabelRect {
+	const { height } = kioskLabelDots();
+	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
+	const offset = Math.round(mmToDots(KIOSK_LABEL_OFFSET_X_MM));
+	return {
+		x: padding + offset,
+		y: padding,
+		width: Math.round(mmToDots(KIOSK_LABEL_BAND.widthMm)),
+		height: height - padding * 2
+	};
+}
+
+/**
+ * Black boxes that print the level band, in whole dots. Red: the band itself. Yellow: the two
+ * rails, then the diagonal stripes between them as one run per stripe per dot row: a dot is black
+ * when (column + row) inside the rails falls in the first `stripeMm` of each `pitchMm`.
+ */
+export function kioskLabelBandRects(marker: VulnerabilityMarker): KioskLabelRect[] {
+	const band = kioskLabelBand();
+	if (marker === 'red') return [band];
+	const rail = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_BAND.railMm)));
+	const stripe = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_BAND.stripeMm)));
+	const pitch = Math.max(stripe + 1, Math.round(mmToDots(KIOSK_LABEL_BAND.pitchMm)));
+	const innerX = band.x + rail;
+	const innerWidth = band.width - rail * 2;
+	const rects: KioskLabelRect[] = [
+		{ ...band, width: rail },
+		{ ...band, x: band.x + band.width - rail, width: rail }
+	];
+	for (let row = 0; row < band.height; row++) {
+		let runStart = -1;
+		for (let column = 0; column <= innerWidth; column++) {
+			const black = column < innerWidth && (column + row) % pitch < stripe;
+			if (black && runStart < 0) runStart = column;
+			if (!black && runStart >= 0) {
+				rects.push({ x: innerX + runStart, y: band.y + row, width: column - runStart, height: 1 });
+				runStart = -1;
+			}
+		}
+	}
+	return rects;
 }

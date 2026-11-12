@@ -323,7 +323,7 @@ function normAddr(value: string | null | undefined): string {
  * Residence address match.
  * - Default: house no + village_no when present on the query + subdistrict +
  *   district + province.
- * - Homeless / no house number: landmark + province/district/subdistrict.
+ * - No fixed residence (no house number): landmark + province/district/subdistrict.
  * Same address ≠ same Household — suggestions only; create always remains available.
  */
 export function matchesResidenceAddress(

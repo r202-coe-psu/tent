@@ -26,7 +26,12 @@ import {
 	kioskConfinement,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
-import { fetchAuthStatus, type AuthStatus } from '$lib/features/users';
+import {
+	fetchAuthStatus,
+	requiresConsent,
+	type AuthStatus,
+	type UserConsentStatus
+} from '$lib/features/users';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/portal';
@@ -43,16 +48,24 @@ export const FORCE_SETUP_ROUTE = '/force-setup';
 /** CR-124 Google step-up challenge. */
 export const MFA_CHALLENGE_ROUTE = '/mfa-challenge';
 
+/** PDPA and Non-disclosure consent gate (issue #1246). */
+export const CONSENT_ROUTE = '/consent';
+
 export type PostLoginDestination =
-	typeof FORCE_SETUP_ROUTE | typeof MFA_CHALLENGE_ROUTE | typeof LANDING_ROUTE;
+	| typeof FORCE_SETUP_ROUTE
+	| typeof MFA_CHALLENGE_ROUTE
+	| typeof CONSENT_ROUTE
+	| typeof LANDING_ROUTE;
 
 /**
- * Post-password gate order (CR-105 then CR-124):
- * force-setup → MFA challenge → portal.
+ * Post-password gate order (CR-105 then CR-124 then #1246):
+ * force-setup → MFA challenge → consent → portal.
  */
 export function resolvePostLoginDestination(
 	status: Pick<AuthStatus, 'must_change_password' | 'has_security_question' | 'pending_mfa'> & {
 		roles?: readonly string[];
+		personnel_type?: 'staff' | 'volunteer' | null;
+		consent?: UserConsentStatus | null;
 	}
 ): PostLoginDestination {
 	if (status.roles?.includes(COUCH_ADMIN)) {
@@ -63,6 +76,9 @@ export function resolvePostLoginDestination(
 	}
 	if (status.pending_mfa) {
 		return MFA_CHALLENGE_ROUTE;
+	}
+	if (requiresConsent(status)) {
+		return CONSENT_ROUTE;
 	}
 	return LANDING_ROUTE;
 }
@@ -102,6 +118,9 @@ export async function requireAuth(fetchFn?: typeof fetch) {
 		}
 		if (dest === MFA_CHALLENGE_ROUTE) {
 			throw redirect(302, resolve(MFA_CHALLENGE_ROUTE));
+		}
+		if (dest === CONSENT_ROUTE) {
+			throw redirect(302, resolve(CONSENT_ROUTE));
 		}
 	} catch (e) {
 		if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 302) {

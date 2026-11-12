@@ -91,7 +91,7 @@ describe('PendingReviewDetail readonly (a received donation)', () => {
 		expect(labels).not.toContain('บันทึกผล');
 		expect(document.body.querySelector('#internal-review-memo')).toBeNull();
 		// Back is the one way out.
-		expect(labels).toContain('กลับหน้าตรวจรับบริจาค');
+		expect(labels).toContain('กลับไปตรวจรับบริจาค');
 	});
 
 	it('names a line that carries only an item_id from the catalog, not the raw id (walk-in)', () => {

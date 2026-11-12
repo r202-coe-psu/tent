@@ -21,7 +21,7 @@
 # "Restart" = delete the job doc, then re-run edge-init.sh (idempotent) which recreates it from the
 # current environment.
 #
-# Env (same as edge-init): COUCHDB_USER COUCHDB_PASSWORD SHELTER_CODE SYNC_URL CENTRAL_*; plus optional
+# Env (same as edge-init): COUCHDB_USER COUCHDB_PASSWORD SHELTER_CODE SYNC_URL EDGE_REPL_USER EDGE_REPL_PASSWORD; plus optional
 #   WATCHDOG_INTERVAL=60  WATCHDOG_MIN_ERRORS=3  WATCHDOG_COOLDOWN=300
 #   WATCHDOG_DRY_RUN=1 (log only)   WATCHDOG_ONCE=1 (single pass, then exit)
 set -u
