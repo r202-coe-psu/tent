@@ -18,8 +18,9 @@ affects:
   - frontend/e2e/shelters.test.ts
   - worker/src/worker/projectors/shelter.py (`project_parking_points` ใหม่ → `public_shelters.parking_points`) · worker/src/worker/projection_version.py (bump `PROJECTION_VERSION`) · worker/tests
   - backend/apiapp/modules/shelter/schemas.py · use_case.py (`ShelterItem.parking_points` + `ShelterDetail.parking_points`, ฟิลเตอร์/มาตรฐาน list) · packages/tent-model/src/tent_model/public_shelter.py (`ParkingPoint` ใหม่ ข้าง `DonationPoint`) · backend/tests
-  - frontend/src/lib/api/fastapi.json · openapi.d.ts (`pnpm openapi:update`)
+  - frontend/src/lib/api-specs/fastapi.json · frontend/src/lib/api/openapi.d.ts (`pnpm openapi:update`)
   - frontend/src/lib/features/public-portal (ui/shelter-map.svelte หมุดจุดจอดรถ, หน้ารายละเอียดศูนย์, barrel index.ts) · frontend/src/routes/(public)/shelters/+page.svelte
+  - frontend/src/lib/features/public-portal/domain/mappers.ts (`toPublicShelterCard` หยิบเฉพาะฟิลด์ที่รู้จัก ต้องส่ง `parking_points` และ `parking_vehicle_types` ต่อ) · ชนิด `PublicShelterCardModel`
   - frontend/src/lib/features/public-portal/ui/shelter-filter-panel.svelte (ต่อ state/URL ของ checkbox ที่จอดรถ) · frontend/src/routes/(public)/shelters/+page.ts (อ่าน `parking_*` และกรองฝั่ง client) · page.test.ts
 why: >
   เจ้าหน้าที่ต้องบันทึกที่จอดรถจริงของแต่ละศูนย์พร้อมตำแหน่งบนแผนที่ และต้องรู้ว่าแต่ละจุดจอดรถอะไรได้กี่คัน
@@ -77,15 +78,10 @@ migration: >
 - FR-19 — ชื่อว่าง หรือประเภทรถซ้ำในจุดเดียวกันตอนบันทึก → แสดง error ที่จุดนั้น และเมนูนำทางทำเครื่องหมายส่วน "จุดจอดรถ" ว่ามีส่วนที่ต้องแก้ไข
 - FR-20 — สิทธิ์แก้ไขเท่าฟอร์มศูนย์เดิม ไม่เพิ่ม role/permission
 
-**ตัวกรองที่จอดรถ — ต่อสายบนหน้า `/shelters` และปรับ route `transparency/shelters`**
+**ตัวกรองที่จอดรถ — route `transparency/shelters`**
 
 - FR-21 — route `transparency/shelters` ที่คำนวณ `parking_car`, `parking_motorcycle`, `parking_boat` อ่านจากค่าที่ใช้จริงตาม FR-9/FR-10 (ใช้ฟังก์ชันคำนวณเดียวกับฟอร์ม ไม่เขียน logic ซ้ำ)
 - FR-22 — ศูนย์ที่ยังไม่มีจุดจอดรถที่ระบุรถ ใช้ `supported_vehicles` เดิมกรอง · **ต่างจากเดิมข้อเดียว:** ศูนย์ที่มีแค่ `parking_capacity > 0` โดยไม่ระบุประเภทรถ ไม่ผ่านตัวกรอง `parking_car` / `parking_motorcycle` อีก (route `transparency/shelters` ไม่มีหน้าไหนเรียก จึงไม่กระทบผู้ใช้ตอนนี้)
-- FR-33 — **ต่อสายตัวกรองบนหน้า `/shelters`** (ปัจจุบัน checkbox ไม่ได้ต่อกับข้อมูล: `buildFilterParams` ไม่ใส่ `parking_*` ลง URL, `+page.ts` ไม่อ่านและไม่ส่งใน `filters`) · `shelter-filter-panel.svelte` เพิ่ม state ของ checkbox ทั้งสาม (รถยนต์ มอเตอร์ไซค์ เรือ) และใส่ `parking_car` / `parking_motorcycle` / `parking_boat` = `on` ลง URL ผ่าน `buildFilterParams` เมื่อติ๊ก · `+page.ts` อ่าน param และคืนค่าใน `filters` (ให้ checkbox แสดงสถานะที่ติ๊กไว้หลังโหลดหน้าใหม่)
-- FR-34 — กรองฝั่ง client ใน `+page.ts` แบบเดียวกับ `q` / `type` / `hide_full` ที่กรองอยู่แล้ว (ไม่ส่ง parameter ไป FastAPI) · ติ๊กหลายประเภทพร้อมกัน = ศูนย์ต้องรองรับ **ทุกประเภทที่ติ๊ก** (AND) · ไม่ติ๊กเลย = ไม่กรอง · ศูนย์ที่ไม่ผ่านถูกตัดออกจากทั้งรายการและแผนที่ (รวมหมุดจุดจอดรถของศูนย์นั้น ตาม FR-30) · `count` และ `shelters_open` ใน summary นับหลังกรอง
-- FR-35 — worker ฉาย `public_shelters.parking_vehicle_types` = รายการประเภทรถที่ศูนย์รองรับ (`motorcycle` / `car` / `truck` / `boat` ไม่ซ้ำ เรียงตามลำดับนี้) คำนวณตามกติกา FR-9/FR-10/FR-11 · `availability = 'none'` → `[]` · ใช้ค่าจากจุดจอดรถที่ **ปักหมุดหรือไม่ก็ได้** (ศูนย์รองรับรถประเภทนั้นเมื่อมีจุดใดระบุไว้) ต่างจาก `parking_points` ที่ฉายเฉพาะจุดที่ปักหมุดแล้ว (FR-25) · ศูนย์ที่ยังไม่มีจุดที่ระบุรถ → ใช้ `parking_policy.supported_vehicles` · ศูนย์ที่มีแค่ `common_areas.parking_capacity` ไม่ระบุประเภทรถ → `parking_vehicle_types = []` ไม่ใช้เลขรวมเดาประเภท (Q6 ตัวเลือก 1)
-- FR-36 — FastAPI เพิ่ม `ShelterItem.parking_vehicle_types` ใน list response และ `ShelterDetail.parking_vehicle_types` ใน detail (default `[]`) · เหตุที่ต้องมีใน list: ฝั่ง client กรองได้เฉพาะข้อมูลที่ list ส่งมา และศูนย์เดิมที่ยังไม่มีหมุดต้องกรองจาก `supported_vehicles` ได้ด้วย (ซึ่ง list ไม่มี) · OpenAPI regen ตาม FR-28
-- FR-37 — กติกา effective vehicles มี 2 ภาษา: TypeScript (ฟอร์ม + `transparency/shelters`) และ Python (worker) · ทั้งสองต้องผ่านชุดกรณีทดสอบเดียวกัน (ตารางกรณีเดียวกันใส่ใน test ทั้งสองฝั่ง) เพื่อไม่ให้ค่าที่ฟอร์มแสดงกับค่าที่ฉายไป public ต่างกัน
 
 **import ข้อมูลศูนย์** (`shelter-import`)
 
@@ -100,10 +96,18 @@ migration: >
 - FR-26 — ศูนย์ที่ `parking_policy.availability = 'none'` → `public_shelters.parking_points = []` (ไม่แสดงหมุด) ทั้งที่ doc ยังเก็บจุดไว้ (FR-11)
 - FR-27 — bump `PROJECTION_VERSION` +1 ใน PR เดียวกับ projector (ตอนเขียน CR ค่าปัจจุบัน 18 → 19 · เลขจริงให้เทียบกับ `develop` ตอน implement) พร้อมเพิ่มบรรทัดอธิบายในไฟล์ · ศูนย์ที่ไม่มีการแก้ไขได้ field ใหม่จาก bootstrap ตอน deploy
 - FR-28 — `tent_model.public_shelter` เพิ่ม `ParkingPoint` (ข้าง `DonationPoint`) · FastAPI เพิ่ม `ShelterItem.parking_points` ใน **list response** (`GET /public/v1/shelters`) และ `ShelterDetail.parking_points` ใน detail response (ทั้งคู่ default `[]`) · อ่านจาก field ที่ worker ฉาย ไม่อ่านจาก `raw_data` · ไม่เปลี่ยน route path · รัน `pnpm openapi:update` แล้ว commit `fastapi.json` + `openapi.d.ts`
-- FR-29 — หน้าค้นหาศูนย์พักพิง (`/shelters`): แผนที่ (`ShelterMap`) วาดจุดจอดรถเป็นหมุด **ไอคอนที่จอดรถ** (รูปตัว P / รถ) · ขนาดเล็กแบบเดียวกับหมุดจุดรับบริจาค ไม่ใช้หมุดศูนย์และไม่ปนกับหมุดจุดรับบริจาค (สีและไอคอนต่างกัน) · คลิกหมุด → popup แสดงชื่อจุด หมายเหตุ และรายการประเภทรถพร้อมความจุ (หน่วยคันหรือลำ)
+- FR-29 — หน้าค้นหาศูนย์พักพิง (`/shelters`): แผนที่ (`ShelterMap`) วาดจุดจอดรถเป็นหมุด **ไอคอนที่จอดรถ** (รูปตัว P / รถ) · ขนาดเล็กแบบเดียวกับหมุดจุดรับบริจาค ไม่ใช้หมุดศูนย์และไม่ปนกับหมุดจุดรับบริจาค (สีและไอคอนต่างกัน) · คลิกหมุด → popup แสดงชื่อจุด หมายเหตุ และรายการประเภทรถพร้อมความจุ (หน่วยคันหรือลำ) · ข้อมูลต้องผ่าน `toPublicShelterCard` และชนิด `PublicShelterCardModel` ด้วย (ตัวแปลงนี้ตัดฟิลด์ที่ไม่รู้จักทิ้ง) · BFF `/api/public/v1/shelters` ส่งผ่านทั้งก้อนอยู่แล้ว ไม่ต้องแก้
 - FR-30 — แผนที่หน้าค้นหาวาดหมุดจุดจอดรถ **ของทุกศูนย์ที่อยู่ในผลค้นหาพร้อมกัน** (ไม่ต้องเลือกศูนย์ก่อน) · ข้อมูลมาจาก list response (FR-28) · ศูนย์ที่ถูกกรองออกจากผลค้นหา หมุดจุดจอดรถของศูนย์นั้นหายไปด้วย · เลือกศูนย์ → หมุดจุดจอดรถของศูนย์นั้นเน้นหรือไม่ซ่อนศูนย์อื่น (รายละเอียด UI ตัดสินตอน implement) · ภาระข้อมูล: list ใหญ่ขึ้นตามจำนวนจุดจอดรถที่ปักหมุดของทุกศูนย์ (ดู Q7)
 - FR-31 — หน้ารายละเอียดศูนย์ (`/shelters/{id}`) แสดงรายการจุดจอดรถ (ชื่อ หมายเหตุ ประเภทรถ+ความจุ) ถ้ามี · ไม่มี → ไม่แสดงส่วนนี้ · ข้อความใหม่ทุกข้อมีทั้งไทยและอังกฤษ: หมุดและ popup ใน `lib/constants/i18n/public-shelter-map.ts` (`PUBLIC_SHELTER_MAP_I18N` ใช้กับ `langState.current`), หน้ารายละเอียดใน `lib/constants/i18n/public-shelter-details.ts`
 - FR-32 — `parking_points` ที่ฉายออก public ไม่ใช่ข้อมูลลับ (ชื่อ หมายเหตุ พิกัดสาธารณะของที่จอดรถ ความจุ) · เจ้าหน้าที่ต้องไม่ใส่ข้อมูลส่วนบุคคลในช่อง `note` — ให้ข้อความกำกับใต้ช่อง "หมายเหตุ" ในฟอร์มว่าข้อความนี้แสดงต่อสาธารณะ
+
+**ตัวกรองที่จอดรถบนหน้า `/shelters`** (ต่อสายให้ทำงานจริง · ดู Q8)
+
+- FR-33 — **ต่อสายตัวกรองบนหน้า `/shelters`** (ปัจจุบัน checkbox ไม่ได้ต่อกับข้อมูล: `buildFilterParams` ไม่ใส่ `parking_*` ลง URL, `+page.ts` ไม่อ่านและไม่ส่งใน `filters`) · `shelter-filter-panel.svelte` เพิ่ม state ของ checkbox ทั้งสาม (รถยนต์ มอเตอร์ไซค์ เรือ) และใส่ `parking_car` / `parking_motorcycle` / `parking_boat` = `on` ลง URL ผ่าน `buildFilterParams` เมื่อติ๊ก · `+page.ts` อ่าน param และคืนค่าใน `filters` · กรองจากฟิลด์ที่ผ่านตัวแปลง `toPublicShelterCard` มาแล้ว (ให้ checkbox แสดงสถานะที่ติ๊กไว้หลังโหลดหน้าใหม่)
+- FR-34 — กรองฝั่ง client ใน `+page.ts` แบบเดียวกับ `q` / `type` / `hide_full` ที่กรองอยู่แล้ว (ไม่ส่ง parameter ไป FastAPI) · ติ๊กหลายประเภทพร้อมกัน = ศูนย์ต้องรองรับ **ทุกประเภทที่ติ๊ก** (AND) · ไม่ติ๊กเลย = ไม่กรอง · ศูนย์ที่ไม่ผ่านถูกตัดออกจากทั้งรายการและแผนที่ (รวมหมุดจุดจอดรถของศูนย์นั้น ตาม FR-30) · `count` และ `shelters_open` ใน summary นับหลังกรอง
+- FR-35 — worker ฉาย `public_shelters.parking_vehicle_types` = รายการประเภทรถที่ศูนย์รองรับ (`motorcycle` / `car` / `truck` / `boat` ไม่ซ้ำ เรียงตามลำดับนี้) คำนวณตามกติกา FR-9/FR-10/FR-11 · `availability = 'none'` → `[]` · ใช้ค่าจากจุดจอดรถที่ **ปักหมุดหรือไม่ก็ได้** (ศูนย์รองรับรถประเภทนั้นเมื่อมีจุดใดระบุไว้) ต่างจาก `parking_points` ที่ฉายเฉพาะจุดที่ปักหมุดแล้ว (FR-25) · ศูนย์ที่ยังไม่มีจุดที่ระบุรถ → ใช้ `parking_policy.supported_vehicles` · ศูนย์ที่มีแค่ `common_areas.parking_capacity` ไม่ระบุประเภทรถ → `parking_vehicle_types = []` ไม่ใช้เลขรวมเดาประเภท (Q6 ตัวเลือก 1)
+- FR-36 — FastAPI เพิ่ม `ShelterItem.parking_vehicle_types` ใน list response และ `ShelterDetail.parking_vehicle_types` ใน detail (default `[]`) · เหตุที่ต้องมีใน list: ฝั่ง client กรองได้เฉพาะข้อมูลที่ list ส่งมา และศูนย์เดิมที่ยังไม่มีหมุดต้องกรองจาก `supported_vehicles` ได้ด้วย (ซึ่ง list ไม่มี) · OpenAPI regen ตาม FR-28
+- FR-37 — กติกา effective vehicles มี 2 ภาษา: TypeScript (ฟอร์ม + `transparency/shelters`) และ Python (worker) · ทั้งสองต้องผ่านชุดกรณีทดสอบเดียวกัน (ตารางกรณีเดียวกันใส่ใน test ทั้งสองฝั่ง) เพื่อไม่ให้ค่าที่ฟอร์มแสดงกับค่าที่ฉายไป public ต่างกัน
 
 ## Change (before → after)
 
@@ -205,7 +209,7 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - **ลำดับ rollout:** deploy code ใหม่ก่อน · doc ถูกเขียนเป็น v10 เฉพาะเมื่อเจ้าหน้าที่แก้ศูนย์ · ก่อน merge ตรวจว่า app และ worker รุ่นเก่ายังอ่าน doc `schema_v: 10` ได้ (worker ไม่ตรวจ `schema_v` ของ shelter; app รุ่นเก่าเข้า branch `>= current` แล้ว normalize)
 - **rollback:** deploy code รุ่นก่อน · array `parking_points` ที่เขียนไปแล้วถูกละไว้ ไม่ทำให้อ่าน doc ไม่ได้ · **ข้อควรระวังเพิ่ม:** รุ่นก่อนไม่รู้จักจุดจอดรถ จึงตัวกรอง public กลับไปอ่าน `supported_vehicles` เดิมทั้งหมด ศูนย์ที่เคยได้ค่าจากจุดจอดรถจะหายจากตัวกรองจนกว่าจะ roll forward · ก่อน merge ตรวจว่าทางเขียนของรุ่นก่อน (PATCH back-office, import, จุดเก็บของ) เขียนทับเฉพาะ field ที่แก้ ไม่ตัด key ที่ไม่รู้จักทิ้ง
 - **Mongo / worker:** เพิ่ม `public_shelters.parking_points` · bump `PROJECTION_VERSION` (FR-27) → worker รัน full bootstrap หนึ่งครั้งตอน deploy · `raw_data` ยังได้ `parking_points` ทั้งก้อนเอง (รวมจุดที่ไม่ได้ปักหมุด) — FastAPI ห้ามอ่านจาก `raw_data` ไปแสดง ใช้ field ที่ฉายแล้วเท่านั้น
-- **ลำดับ deploy public plane:** worker (field ใหม่ + bootstrap) → backend (อ่าน field ใหม่ · default `[]` เมื่อยังไม่มี จึง deploy ก่อน worker ก็ไม่ error) → frontend · เรียงตามกติกา §4.2
+- **ลำดับ deploy public plane:** worker (field ใหม่ + bootstrap) → backend (อ่าน field ใหม่ · default `[]` เมื่อยังไม่มี จึง deploy ก่อน worker ก็ไม่ error) → frontend · เรียงตามทิศทางข้อมูลใน §4.2 (worker → FastAPI → SPA)
 - **rollback public plane:** ไม่ลด `PROJECTION_VERSION` · backend/frontend รุ่นก่อนไม่รู้จัก field ใหม่และละไว้ · หมุดจุดจอดรถหายจากหน้า public จนกว่าจะ roll forward · ไม่มีข้อมูลเสียหาย
 
 ## Decision log
