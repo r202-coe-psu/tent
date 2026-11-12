@@ -1,4 +1,6 @@
 import { adminRaw } from '$lib/server/couch-admin';
+import { findMasterByCode } from '$lib/server/shelters.admin';
+import { isShelterAcceptingReferrals } from '$lib/features/shelters/server';
 import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
 import { shelterDbName, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
 import { isEvacuee, type Evacuee, type Movement } from '$lib/features/people/domain/people';
@@ -31,6 +33,14 @@ const HTTP_OK = 200;
 const HTTP_CREATED = 201;
 const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;
+
+/** #1343: 422 when the destination shelter switched referral intake off (read from the registry). */
+export async function assertDestinationAcceptsReferrals(toShelterCode: string): Promise<void> {
+	const master = await findMasterByCode(toShelterCode);
+	if (master && !isShelterAcceptingReferrals(master)) {
+		throw new CouchDbReferralError('ศูนย์ปลายทางปิดรับการส่งต่อ', 422);
+	}
+}
 
 export class CouchDbReferralError extends Error {
 	constructor(
@@ -486,6 +496,7 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		// Capacity accept: cross-DB transfer BEFORE marking referral accepted (fail-fast).
 		// Only reachable when actorShelter === to_shelter_code (asserted above).
 		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
+			await assertDestinationAcceptsReferrals(latest.to_shelter_code);
 			try {
 				await this.completeCapacityTransfer(latest, actor, nowIso, reason);
 			} catch (e: unknown) {

@@ -2,7 +2,10 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authorizeReferral, resolveShelterCode, handleEndpointError } from './_auth';
-import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
+import {
+	assertDestinationAcceptsReferrals,
+	CouchDbReferralServerRepository
+} from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
 	referralListQuerySchema
@@ -114,6 +117,10 @@ export const POST: RequestHandler = async ({ request, url }) => {
 				{ error: 'ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้' },
 				{ status: 422 }
 			);
+		}
+
+		if (parsed.data.referral_type === 'capacity' && parsed.data.to_shelter_code) {
+			await assertDestinationAcceptsReferrals(parsed.data.to_shelter_code);
 		}
 
 		const db = `shelter_${shelterCode.toLowerCase()}`;

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CouchDbReferralServerRepository } from './referral.server-repository';
+import {
+	CouchDbReferralServerRepository,
+	CouchDbReferralError
+} from './referral.server-repository';
+import { findMasterByCode } from '$lib/server/shelters.admin';
 import type { Referral } from '../domain/referral.schema';
 import type { Evacuee } from '$lib/features/people/domain/people';
 
@@ -7,6 +11,10 @@ const adminRaw = vi.fn();
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: (...args: unknown[]) => adminRaw(...args)
+}));
+
+vi.mock('$lib/server/shelters.admin', () => ({
+	findMasterByCode: vi.fn().mockResolvedValue(null)
 }));
 
 function activeEvacuee(overrides: Partial<Evacuee> = {}): Evacuee {
@@ -678,5 +686,155 @@ describe('CouchDbReferralServerRepository.getBatchFor', () => {
 		adminRaw.mockResolvedValue({ status: 500, data: {} });
 		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
 		await expect(repo.getBatchFor(anchor)).rejects.toThrow('_find');
+	});
+});
+
+describe('draft-shelter-visibility-referral-intake (#1343) — destination intake gate', () => {
+	const capacityRejected: Referral = { ...capacitySent, status: 'rejected' };
+	let repo: CouchDbReferralServerRepository;
+
+	function putCalls() {
+		return adminRaw.mock.calls.filter((c) => c[1] === 'PUT' && c[2] !== undefined);
+	}
+
+	function shelterReads() {
+		return adminRaw.mock.calls.filter((c) =>
+			decodeURIComponent(String(c[0])).includes('/shelter_')
+		);
+	}
+
+	/** Registry doc for the destination; `null` = not found in the registry. */
+	function registryDoc(doc: unknown) {
+		vi.mocked(findMasterByCode).mockResolvedValueOnce(doc as never);
+	}
+
+	function mockDb(referral: () => Referral) {
+		adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded.includes('referral:01CAPACITY')) {
+				return { status: 200, data: referral() };
+			}
+			if (method === 'GET' && decoded.includes('/shelter_sh001/evacuee:')) {
+				return { status: 200, data: activeEvacuee() };
+			}
+			if (method === 'GET' && decoded.includes('/shelter_sh002/evacuee:')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
+			if (method === 'GET' && decoded.includes('/movement:capacity_')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
+			if (method === 'PUT') {
+				const id = (body as { _id?: string } | undefined)?._id;
+				return { status: 201, data: { ok: true, id, rev: '2-new' } };
+			}
+			return { status: 500, data: { error: 'unexpected', path, method } };
+		});
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		repo = new CouchDbReferralServerRepository('central_ops', 'SH002');
+	});
+
+	it('FR-18 accept on a sent capacity referral to a shelter with accepts_referrals=false → 422, no transfer, referral unchanged', async () => {
+		registryDoc({ _id: 'shelter:SH002', feature_flags: { accepts_referrals: false } });
+		mockDb(() => capacitySent);
+
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'ok', 'SH002')
+		).rejects.toMatchObject({
+			status: 422,
+			message: 'ศูนย์ปลายทางปิดรับการส่งต่อ'
+		});
+
+		expect(findMasterByCode).toHaveBeenCalledWith('SH002');
+		expect(shelterReads()).toHaveLength(0);
+		expect(putCalls()).toHaveLength(0);
+	});
+
+	it('FR-18 the 422 is a CouchDbReferralError so the BFF maps it to the response status', async () => {
+		registryDoc({ feature_flags: { accepts_referrals: false } });
+		mockDb(() => capacitySent);
+
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'ok', 'SH002')
+		).rejects.toBeInstanceOf(CouchDbReferralError);
+	});
+
+	it('FR-18 accept passes the gate when the destination is not in the registry (null master)', async () => {
+		registryDoc(null);
+		mockDb(() => capacitySent);
+
+		const result = await repo.transition(
+			'referral:01CAPACITY',
+			'accepted',
+			'Staff B',
+			'ok',
+			'SH002'
+		);
+
+		expect(result.status).toBe('accepted');
+		expect(
+			putCalls().some(
+				(c) => (c[2] as { _id?: string })._id === 'movement:capacity_transfer_in:01CAPACITY'
+			)
+		).toBe(true);
+	});
+
+	it('FR-18 accept passes the gate when accepts_referrals is missing (default true)', async () => {
+		registryDoc({ feature_flags: { accepts_pre_registration: true } });
+		mockDb(() => capacitySent);
+
+		const result = await repo.transition(
+			'referral:01CAPACITY',
+			'accepted',
+			'Staff B',
+			'ok',
+			'SH002'
+		);
+
+		expect(result.status).toBe('accepted');
+	});
+
+	it('FR-19 destination may still reject a sent referral while intake is off, without reading the registry', async () => {
+		mockDb(() => capacitySent);
+
+		const result = await repo.transition(
+			'referral:01CAPACITY',
+			'rejected',
+			'Staff B',
+			'full',
+			'SH002'
+		);
+
+		expect(result.status).toBe('rejected');
+		expect(findMasterByCode).not.toHaveBeenCalled();
+		expect(shelterReads()).toHaveLength(0);
+	});
+
+	it('FR-19 source may still close a sent referral while destination intake is off', async () => {
+		mockDb(() => capacitySent);
+		repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+
+		const result = await repo.transition(
+			'referral:01CAPACITY',
+			'closed',
+			'Staff A',
+			'ส่งผิด',
+			'SH001'
+		);
+
+		expect(result.status).toBe('closed');
+		expect(findMasterByCode).not.toHaveBeenCalled();
+	});
+
+	it('FR-18 the state matrix still runs first: accept on a rejected referral is 422 Invalid transition, not the intake message', async () => {
+		registryDoc({ feature_flags: { accepts_referrals: false } });
+		mockDb(() => capacityRejected);
+
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'late', 'SH002')
+		).rejects.toMatchObject({ status: 422, message: 'Invalid referral transition' });
+		expect(putCalls()).toHaveLength(0);
 	});
 });
