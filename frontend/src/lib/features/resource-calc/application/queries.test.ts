@@ -2,7 +2,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
 
-vi.mock('$lib/db/shelter', () => ({ getShelterDb: () => 'shelter_sh001' }));
+let mockShelter = 'SH001';
+vi.mock('$lib/db/shelter', () => ({
+	getShelterDb: () => 'shelter_sh001',
+	getShelterCode: () => mockShelter
+}));
 
 const mockGet = vi.fn();
 const mockRunOnDemand = vi.fn();
@@ -118,5 +122,20 @@ describe('startDailyCalcLiveQuery', () => {
 		expect(shelter.keysForType('daily_calc')).toEqual([calcKeys.all]);
 		expect(shelter.keysForType('sop_override')).toEqual([calcKeys.all]);
 		expect(shelter.keysForType('donation')).toEqual([]);
+	});
+});
+
+describe('calcKeys shelter scope (#518)', () => {
+	it("keeps one shelter's snapshot out of another's cache entry", () => {
+		mockShelter = 'SH001';
+		const a = calcKeys.byDate('2026-01-01');
+		const aRange = calcKeys.range('2026-01-01', '2026-01-07');
+		mockShelter = 'SH002';
+		expect(calcKeys.byDate('2026-01-01')).not.toEqual(a);
+		expect(calcKeys.range('2026-01-01', '2026-01-07')).not.toEqual(aRange);
+		expect(a).toEqual(expect.arrayContaining(['SH001']));
+		// invalidation by prefix still reaches every shelter's entries
+		expect(a.slice(0, calcKeys.all.length)).toEqual([...calcKeys.all]);
+		mockShelter = 'SH001';
 	});
 });
