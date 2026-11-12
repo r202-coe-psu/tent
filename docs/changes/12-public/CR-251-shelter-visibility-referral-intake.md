@@ -106,6 +106,7 @@ affects:
 ## Open questions
 
 - Q-1 — picker: ตัดศูนย์ที่ปิดรับออก (FR-16, ตาม precedent `cancelled`) หรือแสดงแบบ disabled พร้อมเหตุผล「ปิดรับการส่งต่อ」?
+  - **ตัดสินแล้ว 2026-11-12 (kong):** ตัดออกจาก picker ตาม FR-16
 - Q-2 — ศูนย์ `closed` ที่ถูกซ่อน: ยอมให้ลบแถว `public_shelters` (ขัด CR-183 soft-delete สำหรับ partner) หรือ worker ควรคงแถว closed ไว้?
 - Q-3 — การส่ง (`draft → sent`) ไปศูนย์ที่ปิดรับ: block 422 ด้วยหรือไม่ (ร่างนี้ block เฉพาะ create และ accept)?
 - Q-4 — ปิด `accepts_referrals` ควรเตือนเมื่อมีใบ `sent` ค้างเข้าศูนย์หรือไม่?
@@ -126,3 +127,4 @@ affects:
 - 2026-11-12 — proposed สำหรับ [Issue #1343](https://github.com/r202-coe-psu/tent/issues/1343) ([PR #1372](https://github.com/r202-coe-psu/tent/pull/1372))
 - 2026-11-12 — แก้ตาม review: FR-8 อ้าง `classify_registry_shelter` → `RetentionPhase.HIDDEN` แทน `is_shelter_open` ที่ไม่มีแล้ว; `PROJECTION_VERSION` 18 → 19
 - 2026-11-12 — approved โดย kong กำหนดหมายเลข CR-251 (ต่อจาก CR-250 ที่ PR #1351 จองไว้)
+- 2026-11-12 — ตอบ Q-1: ตัดศูนย์ที่ปิดรับออกจาก picker ตามร่าง (FR-16) · Q-2..Q-6 ยังเปิด
