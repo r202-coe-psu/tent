@@ -25,26 +25,27 @@
 		useItemMasters,
 		useUnitsOfMeasure,
 		useDeleteRecipe,
-		useUpdateRecipe,
-		RecipeForm,
-		canWriteShelterRecipe,
-		MasterBadge,
-		MasterFilterBar,
-		MasterPager,
-		useMasterPaging,
+		useUpdateRecipe
+	} from '../application/queries';
+	import RecipeForm from './recipe-form.svelte';
+	import { canWriteShelterRecipe } from '../domain/catalog-permissions';
+	import MasterBadge from './master/master-badge.svelte';
+	import MasterFilterBar from './master/master-filter-bar.svelte';
+	import MasterPager from './master/master-pager.svelte';
+	import { useMasterPaging } from './master/use-master-paging.svelte';
+	import {
 		filterRecipes,
 		hiddenDeactivatedRecipes,
 		ingredientSummary,
 		pageSlice,
-		catalogOrigin,
-		formatUnit,
 		MASTER_PAGE_SIZE,
 		ORIGIN_LABELS,
 		ORIGIN_TONES,
 		type CatalogOriginKey,
-		type OriginFilter,
-		type Recipe
-	} from '$lib/features/catalog';
+		type OriginFilter
+	} from './master/master-view';
+	import { catalogOrigin, type Recipe } from '../domain/catalog';
+	import { formatUnit } from '../domain/unit-of-measure';
 
 	let {
 		basePath = '/back-office/catalog'

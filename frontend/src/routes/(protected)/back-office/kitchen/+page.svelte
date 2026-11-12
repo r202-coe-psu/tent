@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { MealSessionList } from '$lib/features/kitchen';
-	import RecipeTab from '../catalog/components/recipe-tab.svelte';
+	import { RecipeTab } from '$lib/features/catalog';
 
 	// Live query subscribers (kitchen + operations) are already registered globally
 	// via STAFF_LIVE_QUERY_STARTERS in the (protected) layout — no per-page subscription needed.

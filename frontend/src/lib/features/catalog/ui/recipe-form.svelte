@@ -16,6 +16,7 @@
 		useUnitsOfMeasure
 	} from '../application/queries';
 	import { formatUnit } from '../domain/unit-of-measure';
+	import { sanitizeInteger, sanitizeQuantity } from '../domain/recipe-input';
 	import { qtyInputStep } from '../domain/unit-quantity';
 	import { useUnitDimensionResolver } from '../application/use-unit-dimension-resolver.svelte';
 	import { recipeIngredientQtyIssues } from './recipe-ingredient-qty';
@@ -190,27 +191,6 @@
 
 	function removeIngredient(index: number) {
 		$formData.ingredients = $formData.ingredients.filter((_, i) => i !== index);
-	}
-
-	function sanitizeQuantity(val: string): string {
-		let cleaned = val.replace(/[^0-9.]/g, '');
-		const parts = cleaned.split('.');
-		if (parts.length > 2) {
-			cleaned = parts[0] + '.' + parts.slice(1).join('');
-		}
-		if (/^0\d/.test(cleaned)) {
-			cleaned = cleaned.replace(/^0+/, '');
-			if (cleaned === '') cleaned = '0';
-		}
-		return cleaned;
-	}
-
-	function sanitizeInteger(val: string): string {
-		let cleaned = val.replace(/[^0-9]/g, '');
-		if (/^0\d/.test(cleaned)) {
-			cleaned = cleaned.replace(/^0+/, '');
-		}
-		return cleaned;
 	}
 </script>
 
@@ -393,14 +373,6 @@
 										oninput={(e) => {
 											$formData.standard_portions = sanitizeInteger(e.currentTarget.value);
 										}}
-										onblur={() => {
-											if (
-												!$formData.standard_portions ||
-												$formData.standard_portions.trim() === ''
-											) {
-												$formData.standard_portions = '100';
-											}
-										}}
 										class="h-11 sm:h-10"
 									/>
 								{/snippet}
@@ -422,14 +394,6 @@
 										value={$formData.standard_duration_hours ?? ''}
 										oninput={(e) => {
 											$formData.standard_duration_hours = sanitizeQuantity(e.currentTarget.value);
-										}}
-										onblur={() => {
-											if (
-												!$formData.standard_duration_hours ||
-												$formData.standard_duration_hours.trim() === ''
-											) {
-												$formData.standard_duration_hours = '1';
-											}
 										}}
 										class="h-11 sm:h-10"
 									/>

@@ -412,3 +412,12 @@ describe('navLeafHrefs', () => {
 		expect(hrefs.every((h) => typeof h === 'string')).toBe(true);
 	});
 });
+
+describe('activeNavHref — trailing slash before the query string', () => {
+	it('matches a tab link when the current URL has a slash before ?', () => {
+		const hrefs = ['/back-office/supply?tab=catalog', '/back-office/supply'];
+		expect(activeNavHref('/back-office/supply/?tab=catalog', hrefs)).toBe(
+			'/back-office/supply?tab=catalog'
+		);
+	});
+});

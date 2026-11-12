@@ -269,7 +269,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
 
-const stripTrailingSlash = (path: string): string => path.replace(/\/$/, '');
+/** Drops a trailing slash from the path part only (`/x/?tab=a` → `/x?tab=a`). */
+const stripTrailingSlash = (path: string): string => {
+	const q = path.indexOf('?');
+	const base = q === -1 ? path : path.slice(0, q);
+	const query = q === -1 ? '' : path.slice(q);
+	return base.replace(/\/$/, '') + query;
+};
 
 /** Every non-null nav href in the tree (groups included), depth-first. */
 export function navLeafHrefs(
