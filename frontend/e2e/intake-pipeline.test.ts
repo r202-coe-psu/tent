@@ -719,7 +719,9 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		await expect(page.getByText(/จัดโซน|Zoning|พร้อมจัดโซน/i).first()).toBeVisible({
 			timeout: 15_000
 		});
-		await expect(page.getByText('สมศักดิ์ มีอยู่แล้ว')).toBeVisible({ timeout: 10_000 });
+		await expect(page.getByRole('cell', { name: 'สมศักดิ์ มีอยู่แล้ว', exact: true })).toBeVisible({
+			timeout: 10_000
+		});
 		await expect(page.getByText(/ต้องผ่านคัดกรองแพทย์ก่อน/)).toHaveCount(0);
 	});
 

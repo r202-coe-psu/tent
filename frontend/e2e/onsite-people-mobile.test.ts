@@ -160,4 +160,26 @@ test.describe('Station 1 queue on mobile (#1347)', { tag: ['@onsite', '@regressi
 		// Cards stay in the DOM but are display:none from md up.
 		await expect(page.getByTestId('queue-card').first()).toBeHidden();
 	});
+
+	for (const station of [
+		{ path: '/onsite/medical-screening', cards: 'screening-cards', medical: true },
+		{ path: '/onsite/zoning', cards: 'zoning-cards', medical: false }
+	]) {
+		test(`${station.path} shows cards and stays within a 390px viewport`, async ({ page }) => {
+			await page.setViewportSize({ width: 390, height: 844 });
+			await mockCouchRoutes(page, {
+				withRegistryShelter: true,
+				enableMedicalScreening: station.medical,
+				seedDocs: SEED_DOCS
+			});
+			await injectSession(page, MANAGER, managerSession);
+
+			await page.goto(station.path);
+			// Inactive tab panels stay mounted, so look at the visible list only.
+			const cards = page.locator(`[data-testid="${station.cards}"]:visible > li`);
+			await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+			await expect(page.locator('table:visible')).toHaveCount(0);
+			await expectNoSidewaysOverflow(page);
+		});
+	}
 });
