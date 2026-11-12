@@ -722,4 +722,37 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		await expect(page.getByText('สมศักดิ์ มีอยู่แล้ว')).toBeVisible({ timeout: 10_000 });
 		await expect(page.getByText(/ต้องผ่านคัดกรองแพทย์ก่อน/)).toHaveCount(0);
 	});
+
+	// ── #1347: registration form + report-in fit a 390px phone ───────────────
+
+	for (const target of [
+		{ name: 'walk-in form', path: () => '/onsite/people/new', reportIn: false },
+		{
+			name: 'unassigned report-in',
+			path: () => reportInUrl([OPEN_PET_DOG.pet_id]),
+			reportIn: true
+		},
+		{
+			name: 'pre-registered report-in',
+			path: () => `/onsite/people/${REPORT_IN_EVACUEE._id}/report-in`,
+			reportIn: true
+		}
+	]) {
+		test(`${target.name} stays within a 390px viewport (#1347)`, async ({ page }) => {
+			await page.setViewportSize({ width: 390, height: 844 });
+			if (target.reportIn) await setupReportInPage(page, staffSession);
+			else await setupPage(page, STAFF, staffSession);
+			await page.goto(target.path());
+			await expect(page.getByRole('navigation', { name: 'ขั้นตอนการลงทะเบียน' })).toBeVisible({
+				timeout: 15_000
+			});
+			await page.waitForLoadState('networkidle');
+
+			const dimensions = await page.evaluate(() => ({
+				scrollWidth: document.documentElement.scrollWidth,
+				clientWidth: document.documentElement.clientWidth
+			}));
+			expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+		});
+	}
 });
