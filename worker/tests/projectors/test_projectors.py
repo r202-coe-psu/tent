@@ -279,6 +279,69 @@ def test_project_shelter_cancelled_deletes_by_code():
     assert project_shelter(doc) == ("delete", {"_id": "SH009"})
 
 
+def _registry_shelter(**overrides):
+    doc = {
+        "_id": "shelter:01VIS",
+        "type": "shelter",
+        "code": "SH011",
+        "name": "ศูนย์ทดสอบ",
+        "operation_status": "active",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_project_shelter_public_visible_false_deletes_by_code():
+    """draft-shelter-visibility-referral-intake FR-7 (#1343) — hidden leaves the public plane
+    like cancelled; the `_id` lets the caller purge its shelter-scoped projections."""
+    doc = _registry_shelter(feature_flags={"public_visible": False})
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
+def test_project_shelter_public_hidden_wins_over_status_and_closed_retention():
+    """A hidden shelter is removed even when its status would otherwise soft-retain it (E-1)."""
+    doc = _registry_shelter(
+        operation_status="closed", feature_flags={"public_visible": False}
+    )
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
+def test_project_shelter_public_visible_true_upserts():
+    doc = _registry_shelter(feature_flags={"public_visible": True})
+    action, payload = project_shelter(doc)
+    assert action == "upsert"
+    assert payload is not None and payload["_id"] == "SH011"
+
+
+def test_project_shelter_missing_public_visible_key_upserts():
+    """FR-2 — a stored flags object without the key (or no flags at all) stays visible."""
+    action, payload = project_shelter(
+        _registry_shelter(feature_flags={"allow_pets": True})
+    )
+    assert action == "upsert"
+    assert payload is not None and payload["_id"] == "SH011"
+
+    action, payload = project_shelter(_registry_shelter())
+    assert action == "upsert"
+
+
+def test_project_shelter_only_boolean_false_hides():
+    """FR-2 — only a real boolean false takes effect; a string "false" does not."""
+    action, _ = project_shelter(
+        _registry_shelter(feature_flags={"public_visible": "false"})
+    )
+    assert action == "upsert"
+
+
+def test_project_shelter_cancelled_still_deletes_when_public_visible_true():
+    """FR-6 / regression — the cancelled branch is unaffected by the new flag."""
+    doc = _registry_shelter(
+        operation_status="cancelled", feature_flags={"public_visible": True}
+    )
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
 def test_project_shelter_malformed_doc_deletes():
     """Only malformed/non-shelter docs hard-delete here — the true archive signal (a
     CouchDB tombstone) is handled separately via `apply_shelter_deactivate`."""
@@ -340,6 +403,24 @@ def test_classify_registry_shelter_variants():
     assert phase({"operation_status": "standby"}) is RetentionPhase.OPEN
     assert phase({"status": "open"}) is RetentionPhase.OPEN
     assert phase({"operation_status": "cancelled"}) is RetentionPhase.HIDDEN
+    # #1343 FR-8: hidden (public_visible false) is never bootstrapped/listened; missing = open
+    hidden = {"operation_status": "active", "feature_flags": {"public_visible": False}}
+    assert phase(hidden) is RetentionPhase.HIDDEN
+    assert not phase(hidden).is_listened and not phase(hidden).is_bootstrapped
+    assert (
+        phase(
+            {"operation_status": "closed", "feature_flags": {"public_visible": False}}
+        )
+        is RetentionPhase.HIDDEN
+    )
+    assert (
+        phase({"operation_status": "active", "feature_flags": {"public_visible": True}})
+        is RetentionPhase.OPEN
+    )
+    assert (
+        phase({"operation_status": "active", "feature_flags": {}})
+        is RetentionPhase.OPEN
+    )
     assert phase({"operation_status": "closed"}) is RetentionPhase.CLOSED_WITHOUT_DATE
     assert (
         phase(

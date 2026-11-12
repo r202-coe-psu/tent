@@ -35,6 +35,13 @@ def is_shelter_cancelled(doc: dict[str, Any]) -> bool:
     return resolve_operation_status(doc) in CANCELLED_STATUSES
 
 
+def is_shelter_public_hidden(doc: dict[str, Any]) -> bool:
+    """Staff switched the shelter off the public plane (`feature_flags.public_visible`
+    explicitly false; missing = visible). Handled like `cancelled`."""
+    flags = doc.get("feature_flags")
+    return isinstance(flags, dict) and flags.get("public_visible") is False
+
+
 DEFAULT_RETENTION_MONTHS_AFTER_CLOSE = 3
 
 
@@ -95,6 +102,9 @@ def classify_retention(
 def classify_registry_shelter(
     doc: dict[str, Any], *, retention_months: int, now: datetime
 ) -> RetentionPhase:
+    # #1343 FR-8: a hidden shelter is never bootstrapped or listened to (like cancelled).
+    if is_shelter_public_hidden(doc):
+        return RetentionPhase.HIDDEN
     return classify_retention(
         status=resolve_operation_status(doc),
         closed_at=_parse_timestamp(doc.get("closed_at")),
@@ -258,7 +268,7 @@ def project_shelter(
     if not code:
         return ("delete", None)
 
-    if is_shelter_cancelled(doc):
+    if is_shelter_cancelled(doc) or is_shelter_public_hidden(doc):
         return ("delete", {"_id": code})
 
     registry_id = doc.get("_id")
