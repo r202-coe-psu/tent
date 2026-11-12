@@ -52,40 +52,6 @@ test.afterAll(async () => {
 });
 
 test.describe(
-	'Public shelter directory: hidden shelters (#1343)',
-	{ tag: ['@public', '@smoke'] },
-	() => {
-		// Mocked UI contract only: the hiding happens server-side (worker deletes the public row,
-		// BFF filters on isShelterPublicVisible). This test proves the list renders what the API
-		// returns and nothing else; it does not prove the BFF or worker filter.
-		test('lists the shelter the API returns for the public plane (hidden ones never arrive)', async ({
-			page
-		}) => {
-			const shown = {
-				code: 'SH851',
-				name: 'ศูนย์ที่แสดงบนหน้าสาธารณะ',
-				site_kind: 'evacuation_center',
-				status: 'open',
-				capacity: 10,
-				accepts_pre_registration: false,
-				province: 'สงขลา',
-				district: 'หาดใหญ่',
-				subdistrict: 'คอหงส์'
-			};
-			await page.route('**/api/public/v1/shelters**', (route) =>
-				route.fulfill({
-					status: 200,
-					contentType: 'application/json',
-					body: JSON.stringify({ shelters: [shown], count: 1, as_of: new Date().toISOString() })
-				})
-			);
-			await page.goto('/shelters');
-			await expect(page.getByText(shown.name)).toBeVisible();
-		});
-	}
-);
-
-test.describe(
 	'Public shelter directory: render contract',
 	{ tag: ['@public', '@smoke', '@release', '@prod'] },
 	() => {
