@@ -7,6 +7,7 @@ import {
 	authorizeDonation,
 	findDonationByQuery,
 	isInCallerScope,
+	m6NotRefusableResponse,
 	routeErrorResponse as toRouteError,
 	toCountedItems
 } from '$lib/server/donation-intake';
@@ -526,6 +527,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// FR-12 — nothing kept means the booking is refused, not received.
 		const allRejected = !receipt && rejections.length > 0 && rejections.every(Boolean);
+		// Turning away every line would reject the booking — not for goods sent by M6.
+		if (allRejected) {
+			const m6 = m6NotRefusableResponse(donation);
+			if (m6) return m6;
+		}
 		if (
 			(allRejected && !canTransitionDonation(donation.status, 'rejected')) ||
 			(receipt && withReceipt(donation, receipt) === null)
