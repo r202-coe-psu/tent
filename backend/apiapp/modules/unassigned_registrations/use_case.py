@@ -211,7 +211,7 @@ def _normalize_person_id(person_id: PersonIdInput | None) -> PersonId | None:
 def _open_identity_keys(
     members: list[UnassignedMember],
 ) -> tuple[list[str], list[str]]:
-    """Person-id numbers and phones for members still `open` (unique indexes)."""
+    """Person-id numbers (unique index) and phones (plain index) for members still `open`."""
     person_ids: list[str] = []
     phones: list[str] = []
     seen_ids: set[str] = set()
@@ -230,13 +230,9 @@ def _open_identity_keys(
                 seen_ids.add(key)
                 person_ids.append(key)
         if member.phone:
+            # Phones may be shared (#1049): dedupe only, never reject.
             phone = normalize_phone(member.phone)
-            if phone:
-                if phone in seen_phones:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail={"error": "DUPLICATE_OPEN_IDENTITY"},
-                    )
+            if phone and phone not in seen_phones:
                 seen_phones.add(phone)
                 phones.append(phone)
     return person_ids, phones
@@ -521,11 +517,6 @@ class UnassignedRegistrationsUseCase:
                 else ""
             )
             if key and key in existing_person_ids:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={"error": "DUPLICATE_OPEN_IDENTITY"},
-                )
-            if member.phone and member.phone in existing_phones:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={"error": "DUPLICATE_OPEN_IDENTITY"},
