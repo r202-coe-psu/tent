@@ -458,6 +458,130 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/v1/integrations/m6/warehouses': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** M6 Warehouses */
+		get: operations['m6_warehouses_v1_integrations_m6_warehouses_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m6/warehouses/{code}/stock': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** M6 Stock */
+		get: operations['m6_stock_v1_integrations_m6_warehouses__code__stock_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m6/catalog/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** M6 Catalog Search */
+		get: operations['m6_catalog_search_v1_integrations_m6_catalog_search_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m6/withdrawals': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** M6 List Withdrawals */
+		get: operations['m6_list_withdrawals_v1_integrations_m6_withdrawals_get'];
+		put?: never;
+		/** M6 Create Withdrawal */
+		post: operations['m6_create_withdrawal_v1_integrations_m6_withdrawals_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m6/withdrawals/{request_code}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** M6 Get Withdrawal */
+		get: operations['m6_get_withdrawal_v1_integrations_m6_withdrawals__request_code__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m6/withdrawals/{request_code}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** M6 Cancel Withdrawal */
+		post: operations['m6_cancel_withdrawal_v1_integrations_m6_withdrawals__request_code__cancel_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/integrations/m6/sync': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * M6 Sync
+		 * @description Worker tick (every `M6_SYNC_INTERVAL_S`). FastAPI runs several processes, so it
+		 *     never polls M6 on its own.
+		 */
+		post: operations['m6_sync_v1_integrations_m6_sync_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/needs': {
 		parameters: {
 			query?: never;
@@ -2397,6 +2521,7 @@ export interface components {
 		 */
 		IntegrationStatusResponse: {
 			m5: components['schemas']['M5Status'];
+			m6: components['schemas']['M6Status'];
 		};
 		/** JobShiftTemplate */
 		JobShiftTemplate: {
@@ -2815,6 +2940,288 @@ export interface components {
 			}[];
 		} & {
 			[key: string]: unknown;
+		};
+		/** M6ActorIn */
+		M6ActorIn: {
+			/** Name */
+			name: string;
+			/** Username */
+			username?: string | null;
+		};
+		/** M6CancelRequest */
+		M6CancelRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Reason */
+			reason: string;
+			actor: components['schemas']['M6ActorIn'];
+		};
+		/** M6CatalogItem */
+		M6CatalogItem: {
+			/** Reference Id */
+			reference_id: number | string;
+			/** Name Th */
+			name_th: string;
+			/** Name En */
+			name_en?: string | null;
+			/** Type Code */
+			type_code: string;
+			/** Base Unit */
+			base_unit?: string | null;
+			/**
+			 * Warehouses Count
+			 * @default 0
+			 */
+			warehouses_count: number;
+			/** Item Code */
+			item_code?: string | null;
+			/** In Warehouse */
+			in_warehouse?: boolean | null;
+		};
+		/** M6CatalogResponse */
+		M6CatalogResponse: {
+			/** Data */
+			data: components['schemas']['M6CatalogItem'][];
+			/** Cursor */
+			cursor?: string | null;
+			/**
+			 * Total
+			 * @default 0
+			 */
+			total: number;
+		};
+		/** M6DestinationIn */
+		M6DestinationIn: {
+			/** Location Code */
+			location_code: string;
+			/** Name */
+			name: string;
+			/** Type */
+			type: string;
+			/** Lat */
+			lat: number;
+			/** Lng */
+			lng: number;
+			/** Address */
+			address: string;
+		};
+		/** M6LineIn */
+		M6LineIn: {
+			/** Item Code */
+			item_code: string;
+			/** Name */
+			name: string;
+			/** Unit */
+			unit: string;
+			/** Type Code */
+			type_code?: string | null;
+			/** Qty */
+			qty: number;
+		};
+		/** M6LineView */
+		M6LineView: {
+			/** Item Code */
+			item_code: string;
+			/** Name */
+			name: string;
+			/** Unit */
+			unit: string;
+			/** Type Code */
+			type_code?: string | null;
+			/** Qty */
+			qty: number;
+			/** Qty Fulfilled */
+			qty_fulfilled?: number | null;
+		};
+		/** M6PersonView */
+		M6PersonView: {
+			/** Name */
+			name: string;
+			/** Username */
+			username?: string | null;
+		};
+		/** M6RequesterIn */
+		M6RequesterIn: {
+			/** Location Code */
+			location_code: string;
+			/** Location Type */
+			location_type: string;
+			/** Location Name */
+			location_name: string;
+			/** Contact Name */
+			contact_name: string;
+			/** Contact Role */
+			contact_role: string;
+			/** Contact Phone */
+			contact_phone: string;
+			/** External Ref */
+			external_ref: string;
+		};
+		/** M6Status */
+		M6Status: {
+			/** Configured */
+			configured: boolean;
+			/** Token Ok */
+			token_ok: boolean;
+			/** Reachable */
+			reachable: boolean;
+			/** Resource Types */
+			resource_types?: string[];
+			/** Scopes */
+			scopes?: string[];
+			/** Checked At */
+			checked_at?: string | null;
+			/** Error */
+			error?: string | null;
+		};
+		/** M6StockItem */
+		M6StockItem: {
+			/** Item Code */
+			item_code: string;
+			/** Reference Id */
+			reference_id?: number | string | null;
+			/** Name */
+			name: string;
+			/** Type Code */
+			type_code: string;
+			/** Unit */
+			unit: string;
+			/** On Hand */
+			on_hand: number;
+			/** Available */
+			available: number;
+		};
+		/** M6StockResponse */
+		M6StockResponse: {
+			/** Warehouse Code */
+			warehouse_code: string;
+			/** Data */
+			data: components['schemas']['M6StockItem'][];
+			/** Total */
+			total: number;
+		};
+		/** M6SyncResponse */
+		M6SyncResponse: {
+			/**
+			 * Polled
+			 * @default 0
+			 */
+			polled: number;
+			/**
+			 * Changed
+			 * @default 0
+			 */
+			changed: number;
+			/**
+			 * Confirmed
+			 * @default 0
+			 */
+			confirmed: number;
+			/**
+			 * Confirm Failed
+			 * @default 0
+			 */
+			confirm_failed: number;
+		};
+		/** M6Warehouse */
+		M6Warehouse: {
+			/** Warehouse Code */
+			warehouse_code: string;
+			/** Name */
+			name: string;
+			/** District */
+			district?: string | null;
+			/** Lat */
+			lat?: number | null;
+			/** Lng */
+			lng?: number | null;
+		};
+		/** M6WarehousesResponse */
+		M6WarehousesResponse: {
+			/** Data */
+			data: components['schemas']['M6Warehouse'][];
+			/** Total */
+			total: number;
+		};
+		/** M6WithdrawalCreateRequest */
+		M6WithdrawalCreateRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** External Ref */
+			external_ref: string;
+			/** Source Warehouse Code */
+			source_warehouse_code: string;
+			/** Source Warehouse Name */
+			source_warehouse_name?: string | null;
+			requester: components['schemas']['M6RequesterIn'];
+			destination: components['schemas']['M6DestinationIn'];
+			/** Reason */
+			reason: string;
+			/** Lines */
+			lines: components['schemas']['M6LineIn'][];
+			actor: components['schemas']['M6ActorIn'];
+		};
+		/** M6WithdrawalListResponse */
+		M6WithdrawalListResponse: {
+			/** Data */
+			data: components['schemas']['M6WithdrawalView'][];
+			/** Total */
+			total: number;
+		};
+		/** M6WithdrawalView */
+		M6WithdrawalView: {
+			/** External Ref */
+			external_ref: string;
+			/** Request Code */
+			request_code: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Status */
+			status: string;
+			/** Source Warehouse Code */
+			source_warehouse_code: string;
+			/** Source Warehouse Name */
+			source_warehouse_name?: string | null;
+			/** Lines */
+			lines: components['schemas']['M6LineView'][];
+			/** Reason */
+			reason: string;
+			requested_by: components['schemas']['M6PersonView'];
+			/** Contact Role */
+			contact_role?: string | null;
+			/** Contact Phone */
+			contact_phone?: string | null;
+			/** Submitted At */
+			submitted_at?: string | null;
+			/** Approved At */
+			approved_at?: string | null;
+			/** Completed At */
+			completed_at?: string | null;
+			/** Cancelled At */
+			cancelled_at?: string | null;
+			/** Cancel Reason */
+			cancel_reason?: string | null;
+			/** Donation Id */
+			donation_id?: string | null;
+			/** Confirmed At */
+			confirmed_at?: string | null;
+			/** Confirm Error */
+			confirm_error?: string | null;
+			/**
+			 * Fetched At
+			 * Format: date-time
+			 */
+			fetched_at: string;
+			/**
+			 * Created At
+			 * Format: date-time
+			 */
+			created_at: string;
+			/**
+			 * Live
+			 * @default false
+			 */
+			live: boolean;
 		};
 		/** MemberCreated */
 		MemberCreated: {
@@ -5791,6 +6198,248 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['M5SyncResponse'];
+				};
+			};
+		};
+	};
+	m6_warehouses_v1_integrations_m6_warehouses_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6WarehousesResponse'];
+				};
+			};
+		};
+	};
+	m6_stock_v1_integrations_m6_warehouses__code__stock_get: {
+		parameters: {
+			query?: {
+				type_code?: string | null;
+				search?: string | null;
+			};
+			header?: never;
+			path: {
+				code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6StockResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m6_catalog_search_v1_integrations_m6_catalog_search_get: {
+		parameters: {
+			query?: {
+				q?: string | null;
+				type_code?: string | null;
+				warehouse_code?: string | null;
+				cursor?: string | null;
+				limit?: number | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6CatalogResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m6_list_withdrawals_v1_integrations_m6_withdrawals_get: {
+		parameters: {
+			query: {
+				shelter_code: string;
+				status?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6WithdrawalListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m6_create_withdrawal_v1_integrations_m6_withdrawals_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['M6WithdrawalCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6WithdrawalView'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m6_get_withdrawal_v1_integrations_m6_withdrawals__request_code__get: {
+		parameters: {
+			query: {
+				shelter_code: string;
+			};
+			header?: never;
+			path: {
+				request_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6WithdrawalView'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m6_cancel_withdrawal_v1_integrations_m6_withdrawals__request_code__cancel_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				request_code: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['M6CancelRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6WithdrawalView'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	m6_sync_v1_integrations_m6_sync_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['M6SyncResponse'];
 				};
 			};
 		};
