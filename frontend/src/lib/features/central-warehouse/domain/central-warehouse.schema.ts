@@ -149,15 +149,32 @@ export function needsM6Coordination(status: string): boolean {
 	return status === 'issued';
 }
 
+/**
+ * Statuses where M6 has not dispatched anything, so `qty_fulfilled` means nothing yet.
+ * M6 staging answers `qty_fulfilled: 0` (not null) while a request is still pending.
+ */
+const NOT_DISPATCHED = new Set(['pending', 'rejected', 'cancelled']);
+
+/** The fulfilled quantity to show for a line: `null` (shown as "–") until M6 dispatches. */
+export function shownFulfilled(
+	status: string,
+	qtyFulfilled: number | null | undefined
+): number | null {
+	if (NOT_DISPATCHED.has(status)) return null;
+	return qtyFulfilled ?? null;
+}
+
 /** Total requested vs fulfilled across lines (fulfilled is `null` until M6 answers). */
-export function withdrawalTotals(w: Pick<WithdrawalView, 'lines'>): {
+export function withdrawalTotals(w: Pick<WithdrawalView, 'lines'> & { status?: string }): {
 	requested: number;
 	fulfilled: number | null;
 } {
 	const requested = w.lines.reduce((sum, l) => sum + l.qty, 0);
-	const anyFulfilled = w.lines.some((l) => l.qty_fulfilled != null);
-	const fulfilled = anyFulfilled
-		? w.lines.reduce((sum, l) => sum + (l.qty_fulfilled ?? 0), 0)
+	const shown = w.lines.map((l) =>
+		w.status === undefined ? (l.qty_fulfilled ?? null) : shownFulfilled(w.status, l.qty_fulfilled)
+	);
+	const fulfilled = shown.some((q) => q != null)
+		? shown.reduce<number>((sum, q) => sum + (q ?? 0), 0)
 		: null;
 	return { requested, fulfilled };
 }

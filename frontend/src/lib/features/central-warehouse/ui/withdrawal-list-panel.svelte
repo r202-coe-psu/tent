@@ -15,6 +15,7 @@
 	import {
 		isCancellable,
 		needsM6Coordination,
+		shownFulfilled,
 		withdrawalTotals,
 		type WithdrawalView
 	} from '../domain/central-warehouse.schema';
@@ -130,7 +131,7 @@
 											{formatQty(l.qty)}
 										</td>
 										<td class="px-3 py-2 text-right font-semibold text-slate-900 tabular-nums">
-											{formatQty(l.qty_fulfilled)}
+											{formatQty(shownFulfilled(w.status, l.qty_fulfilled))}
 										</td>
 										<td class="px-3 py-2 text-slate-700">{l.unit}</td>
 									</tr>
@@ -154,7 +155,7 @@
 					<dl class="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
 						<div>
 							<dt class="text-xs font-semibold text-slate-500">ส่งคำขอ</dt>
-							<dd class="text-slate-800 tabular-nums">{when(w.submitted_at)}</dd>
+							<dd class="text-slate-800 tabular-nums">{when(w.submitted_at ?? w.created_at)}</dd>
 						</div>
 						<div>
 							<dt class="text-xs font-semibold text-slate-500">M6 อนุมัติ</dt>

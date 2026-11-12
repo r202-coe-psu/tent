@@ -6,6 +6,7 @@ import {
 	needsM6Coordination,
 	stockItemSchema,
 	withdrawalStatusMeta,
+	shownFulfilled,
 	withdrawalTotals,
 	withdrawalViewSchema
 } from './central-warehouse.schema';
@@ -98,5 +99,32 @@ describe('wire schemas', () => {
 				available: 8
 			}).available
 		).toBe(8);
+	});
+});
+
+describe('shownFulfilled', () => {
+	it('hides the zero M6 sends before dispatch', () => {
+		expect(shownFulfilled('pending', 0)).toBeNull();
+		expect(shownFulfilled('cancelled', 0)).toBeNull();
+		expect(shownFulfilled('rejected', 0)).toBeNull();
+	});
+	it('shows the quantity once M6 dispatches', () => {
+		expect(shownFulfilled('in_transit', 18)).toBe(18);
+		expect(shownFulfilled('received', 0)).toBe(0);
+		expect(shownFulfilled('approved', null)).toBeNull();
+	});
+	it('totals follow the status', () => {
+		const lines = [
+			{ item_code: 'A', name: 'A', unit: 'u', qty: 5, qty_fulfilled: 0 },
+			{ item_code: 'B', name: 'B', unit: 'u', qty: 2, qty_fulfilled: 0 }
+		];
+		expect(withdrawalTotals({ status: 'pending', lines } as never)).toEqual({
+			requested: 7,
+			fulfilled: null
+		});
+		expect(withdrawalTotals({ status: 'in_transit', lines } as never)).toEqual({
+			requested: 7,
+			fulfilled: 0
+		});
 	});
 });
