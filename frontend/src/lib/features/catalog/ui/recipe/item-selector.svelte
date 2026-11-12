@@ -66,13 +66,13 @@
 			onfocus={() => (isOpen = true)}
 			onblur={handleBlur}
 			placeholder="ค้นหาชื่อวัตถุดิบ..."
-			class="h-12 rounded-xl border-slate-200/80 bg-white pl-10 text-sm focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+			class="h-11 pl-10 sm:h-10"
 		/>
 	</div>
 
 	{#if isOpen && filtered.length > 0}
 		<ul
-			class="absolute top-full left-0 z-50 mt-1 max-h-56 w-full min-w-[16rem] overflow-y-auto rounded-xl border border-slate-200/80 bg-popover py-1.5 text-popover-foreground shadow-lg dark:border-zinc-800"
+			class="absolute top-full left-0 z-50 mt-1 max-h-56 w-full min-w-[16rem] overflow-y-auto rounded-xl border border-border bg-popover py-1.5 text-popover-foreground shadow-lg"
 		>
 			{#each filtered as item (item._id)}
 				<li>
@@ -81,12 +81,12 @@
 						class="w-full cursor-pointer px-4 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
 						onmousedown={() => handleSelect(item)}
 					>
-						<span class="font-bold text-slate-700 dark:text-slate-200">{item.name}</span>
+						<span class="font-bold text-foreground">{item.name}</span>
 						{#if item.sku}
 							<span class="ml-1 text-xs text-muted-foreground">({item.sku})</span>
 						{/if}
 						<span
-							class="ml-2 rounded-lg bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
+							class="ml-2 rounded-lg bg-muted px-2 py-0.5 text-2xs font-bold text-muted-foreground"
 						>
 							{formatUnit(item.base_unit, units, langState.current)}
 						</span>
@@ -96,7 +96,7 @@
 		</ul>
 	{:else if isOpen}
 		<div
-			class="absolute top-full left-0 z-50 mt-1 w-full min-w-[16rem] rounded-xl border border-slate-200/80 bg-popover px-4 py-3 text-center text-xs font-semibold text-muted-foreground shadow-lg dark:border-zinc-800"
+			class="absolute top-full left-0 z-50 mt-1 w-full min-w-[16rem] rounded-xl border border-border bg-popover px-4 py-3 text-center text-xs font-semibold text-muted-foreground shadow-lg"
 		>
 			ไม่พบข้อมูลวัตถุดิบ
 		</div>
