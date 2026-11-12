@@ -857,6 +857,48 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(doc.received_summary?.items?.[0]).not.toHaveProperty('rejected');
 		});
 
+		// #1166 — a booking reviewed before the split still carries `not_needed`; the counter
+		// must keep receiving it (the receive schema keeps the full code set).
+		it('receives a line rejected with the legacy not_needed code and keeps the code', async () => {
+			mockCouch({
+				...withItems([
+					{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+					{
+						item_id: 'item:milk',
+						qty: '2',
+						unit: 'ลัง',
+						review_status: 'rejected',
+						review_reason_code: 'not_needed',
+						review_reason: 'ไม่ตรงเกณฑ์การรับ / เกินความต้องการ'
+					}
+				]),
+				status: 'verifying'
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						rice,
+						{
+							item_id: 'item:milk',
+							qty: '0',
+							unit: 'ลัง',
+							rejected: true,
+							reject_reason_code: 'not_needed',
+							reject_note: 'เกินความต้องการ'
+						}
+					]
+				})
+			);
+
+			expect(response.status).toBe(200);
+			expect(savedDoc().received_summary?.items?.[1]).toMatchObject({
+				rejected: true,
+				reject_reason_code: 'not_needed'
+			});
+		});
+
 		// The counter matches a typed-in line to a stock item; the donor's words are not the
 		// item id, and comparing by them recorded the whole line as short (W-R5-1).
 		it('compares a typed-in line under the item it was matched to', async () => {
