@@ -5,7 +5,11 @@ import { toast } from 'svelte-sonner';
 import type { ScannerDevice } from '../domain/scanner.schema';
 import ScannerList from './scanner-list.svelte';
 
-const updateMutation = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+const updateMutation = vi.hoisted(() => ({
+	mutate: vi.fn(),
+	isPending: false,
+	variables: undefined as { deviceId: string } | undefined
+}));
 vi.mock('../application/queries', () => ({
 	useDeleteScannerDevice: () => ({ mutate: vi.fn(), isPending: false }),
 	useUpdateScannerDevice: () => updateMutation
@@ -53,6 +57,7 @@ const hasBadge = (label: string) =>
 beforeEach(() => {
 	vi.clearAllMocks();
 	updateMutation.isPending = false;
+	updateMutation.variables = undefined;
 });
 afterEach(async () => {
 	if (instance) unmount(instance);
@@ -117,10 +122,12 @@ describe('ScannerList service switch', () => {
 		);
 	});
 
-	it('disables the switch while the update is pending', async () => {
+	it('disables only the switch of the row being saved', async () => {
 		updateMutation.isPending = true;
-		await render([device('a')]);
-		expect(switchByLabel('เปิดให้บริการ')?.hasAttribute('disabled')).toBe(true);
+		updateMutation.variables = { deviceId: 'a' };
+		await render([device('a'), device('b')]);
+		expect(document.getElementById('service-open-a')?.hasAttribute('disabled')).toBe(true);
+		expect(document.getElementById('service-open-b')?.hasAttribute('disabled')).toBe(false);
 	});
 
 	it('leaves the switch enabled when nothing is pending', async () => {

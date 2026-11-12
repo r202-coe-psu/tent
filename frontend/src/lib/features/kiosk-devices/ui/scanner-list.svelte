@@ -203,15 +203,17 @@
 									<Switch
 										id="service-open-{device.device_id}"
 										bind:checked={() => device.service_open, (next) => setServiceOpen(device, next)}
-										disabled={updateMutation.isPending}
+										disabled={updateMutation.isPending &&
+											updateMutation.variables?.deviceId === device.device_id}
 									/>
 									<label
 										for="service-open-{device.device_id}"
 										class="text-xs font-semibold text-slate-700">เปิดให้บริการ</label
 									>
 								</div>
-								{#if !device.service_open && closedNote(device)}
-									<p class="mt-1 text-xs text-slate-500">{closedNote(device)}</p>
+								{@const note = device.service_open ? null : closedNote(device)}
+								{#if note}
+									<p class="mt-1 text-xs text-slate-500">{note}</p>
 								{/if}
 							{/if}
 						</td>
