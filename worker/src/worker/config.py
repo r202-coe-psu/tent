@@ -17,6 +17,8 @@ class Settings:
     fastapi_url: str = "http://localhost:9000"
     external_api_secret: str = ""
     m5_sync_interval_s: float = 45.0
+    # Same for M6 central warehouse (`/v1/integrations/m6/sync`, draft CR — M6 §1).
+    m6_sync_interval_s: float = 45.0
 
     @property
     def couch_base_url(self) -> str:
@@ -36,4 +38,5 @@ def load_settings() -> Settings:
         fastapi_url=os.environ.get("FASTAPI_INTERNAL_URL", "http://localhost:9000"),
         external_api_secret=os.environ.get("EXTERNAL_API_SECRET", ""),
         m5_sync_interval_s=float(os.environ.get("M5_SYNC_INTERVAL_S", "45")),
+        m6_sync_interval_s=float(os.environ.get("M6_SYNC_INTERVAL_S", "45")),
     )

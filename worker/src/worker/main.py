@@ -15,6 +15,7 @@ from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
 from worker.inbound.external_bookings import run_external_booking_inbound_loop
 from worker.inbound.m5_transfers import run_m5_transfer_loop
+from worker.inbound.m6_withdrawals import run_m6_withdrawal_loop
 from worker.inbound.search_audit import run_search_audit_inbound_loop
 from worker.inbound.shift_responses import run_shift_response_inbound_loop
 from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
@@ -55,6 +56,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     schedule_action_task: asyncio.Task[None] | None = None
     external_booking_task: asyncio.Task[None] | None = None
     m5_transfer_task: asyncio.Task[None] | None = None
+    m6_withdrawal_task: asyncio.Task[None] | None = None
 
     try:
         await maybe_bootstrap(couch, force=force_bootstrap or bootstrap_only)
@@ -95,6 +97,10 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             run_m5_transfer_loop(couch, settings, stop_event=stop),
             name="inbound-m5-transfers",
         )
+        m6_withdrawal_task = asyncio.create_task(
+            run_m6_withdrawal_loop(couch, settings, stop_event=stop),
+            name="inbound-m6-withdrawals",
+        )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
@@ -110,6 +116,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             schedule_action_task,
             external_booking_task,
             m5_transfer_task,
+            m6_withdrawal_task,
         ):
             if task:
                 task.cancel()

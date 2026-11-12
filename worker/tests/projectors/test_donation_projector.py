@@ -283,3 +283,13 @@ def test_project_donation_never_carries_the_point_receipts_staff_remarks():
     assert payload["received_summary"]["closed_reason"] == "all_points"
     assert "SECRET" not in repr(payload)
     assert summary["remarks"] == "ลังบุบ SECRET"
+
+
+def test_project_donation_skips_m6_channel():
+    """Central-warehouse (M6) donations never reach the public plane (CR D4)."""
+    assert project_donation(
+        _donation(channel="m6", status="verifying"), shelter_code="SH001"
+    ) == ("delete", None)
+    # Other channels still project.
+    action, _ = project_donation(_donation(channel="public"), shelter_code="SH001")
+    assert action == "upsert"
