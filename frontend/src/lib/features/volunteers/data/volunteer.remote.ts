@@ -11,6 +11,7 @@ import {
 	type VolunteerInput,
 	type VolunteerStatus
 } from '../domain/volunteer.schema';
+import { VolunteerPhoneTakenError } from '../domain/phone-errors';
 import {
 	formatMintedTicketToken,
 	trackingTokenHashFromPayload,
@@ -95,12 +96,15 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		return docs.filter(isVolunteer)[0] ?? null;
 	}
 
-	async getByPhoneHash(phoneHash: string): Promise<Volunteer | null> {
+	async listByPhoneHash(phoneHash: string): Promise<Volunteer[]> {
 		const docs = await this.repo.find<Volunteer>({
 			selector: { type: 'volunteer', phone_hash: phoneHash },
-			limit: 1
+			limit: 100
 		});
-		return docs.filter(isVolunteer)[0] ?? null;
+		// `merged_into` is filtered in JS: Mango `$ne` skips docs where the field is absent (most
+		// profiles) and the in-memory test repo has no `$ne`. A shelter holding >100 profiles on one
+		// phone is not a realistic case, so the 100-doc cap is accepted.
+		return docs.filter(isVolunteer).filter((v) => !v.merged_into);
 	}
 
 	async create(
@@ -108,13 +112,21 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		ctx: AuthorContext,
 		fields?: { status?: VolunteerStatus }
 	): Promise<Volunteer> {
+		const phoneHash = await phoneHashOf(input.phone);
+		if (phoneHash) {
+			const duplicates = await this.listByPhoneHash(phoneHash);
+			if (duplicates.length > 0) {
+				throw VolunteerPhoneTakenError.fromVolunteers(duplicates);
+			}
+		}
+
 		const existing = await this.repo.allByType('volunteer', isVolunteer);
 		const volunteer_code = nextVolunteerCode(existing.map((v) => v.volunteer_code));
 		const doc = makeVolunteer(input, ctx, { volunteer_code, status: fields?.status });
 		const trackingToken = input.source === 'public_apply' ? null : mintTrackingToken();
 		return this.save({
 			...doc,
-			phone_hash: await phoneHashOf(doc.phone),
+			phone_hash: phoneHash,
 			tracking_token_hash: trackingToken ? await sha256Hex(trackingToken) : null
 		});
 	}
@@ -122,8 +134,33 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 	async update(volunteer: Volunteer): Promise<Volunteer> {
 		const latest = await this.repo.get<Volunteer>(volunteer._id);
 		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${volunteer._id}`);
+
+		const newPhoneHash = await phoneHashOf(volunteer.phone);
+		// Only a real phone change is checked: a legacy profile (null/stale `phone_hash`) that already
+		// shares its phone must stay editable, so compare against the hash of the stored phone too.
+		const phoneChanged =
+			newPhoneHash !== null &&
+			newPhoneHash !== latest.phone_hash &&
+			newPhoneHash !== (await phoneHashOf(latest.phone));
+		if (phoneChanged && newPhoneHash) {
+			const duplicates = (await this.listByPhoneHash(newPhoneHash)).filter(
+				(v) => v._id !== volunteer._id
+			);
+			if (duplicates.length > 0) {
+				throw VolunteerPhoneTakenError.fromVolunteers(duplicates);
+			}
+		}
+
 		return this.save(
-			touch({ ...volunteer, phone_hash: await phoneHashOf(volunteer.phone), _rev: latest._rev })
+			touch({
+				...volunteer,
+				phone_hash: newPhoneHash,
+				merged_into: volunteer.merged_into ?? latest.merged_into ?? null,
+				merged_at: volunteer.merged_at ?? latest.merged_at ?? null,
+				merged_by: volunteer.merged_by ?? latest.merged_by ?? null,
+				migration_run_id: volunteer.migration_run_id ?? latest.migration_run_id ?? null,
+				_rev: latest._rev
+			})
 		);
 	}
 
