@@ -398,13 +398,15 @@
 	>
 		<!-- Top Bar -->
 		{#if !embedded}
-			<div class="border-b border-slate-200/80 pb-6">
+			<div class="border-b border-border/80 pb-6">
 				<div class="flex flex-wrap items-start justify-between gap-3">
 					<div>
-						<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647] sm:text-4xl">
+						<h1
+							class="text-3xl font-extrabold tracking-tight text-[var(--brand-primary)] sm:text-4xl"
+						>
 							รายการมื้ออาหาร
 						</h1>
-						<p class="mt-2 text-base leading-relaxed text-slate-600">
+						<p class="mt-2 text-base leading-relaxed text-muted-foreground">
 							บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
 						</p>
 					</div>
@@ -427,14 +429,14 @@
 		{:else}
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 				<div>
-					<h2 class="text-lg font-bold text-slate-900">รายการมื้ออาหาร</h2>
-					<p class="text-sm text-slate-600">
+					<h2 class="text-lg font-bold text-foreground">รายการมื้ออาหาร</h2>
+					<p class="text-sm text-muted-foreground">
 						บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
 					</p>
 				</div>
 				<Button
 					onclick={openCreateDialog}
-					class="min-h-11 gap-1.5 bg-[#0A2647] text-white hover:bg-[#051930]"
+					class="min-h-11 gap-1.5 bg-[var(--brand-primary)] text-white hover:bg-[var(--brand-primary-hover)]"
 				>
 					<Plus class="h-4 w-4" />
 					สร้างมื้อใหม่
@@ -445,11 +447,11 @@
 		<!-- Filter row (search + status + date range) — matches the AI Studio prototype's
 	     Meal Sessions filter bar; client-side only, no new field/query. -->
 		<div
-			class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+			class="flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-card p-3 shadow-2xs"
 		>
 			<div class="relative min-w-0 flex-1">
 				<Search
-					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
 				/>
 				<Input
 					bind:value={search}
@@ -591,7 +593,7 @@
 									<span
 										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold {progress.totalCount ===
 										0
-											? 'bg-slate-100 text-slate-600'
+											? 'bg-muted text-muted-foreground'
 											: progress.isAllCompleted
 												? 'bg-green-100 text-green-800'
 												: 'bg-amber-100 text-amber-800'}"
@@ -605,7 +607,7 @@
 									<!-- Status Badge -->
 									{#if effStatus === 'completed'}
 										<span
-											class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+											class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground"
 										>
 											เสร็จสิ้นแล้ว
 										</span>
@@ -708,7 +710,7 @@
 															<Table.Cell class="px-3 py-2 text-right">—</Table.Cell>
 															<Table.Cell class="px-3 py-2 text-center">
 																<span
-																	class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600"
+																	class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
 																>
 																	ไม่มีเป้าหมาย
 																</span>
@@ -1049,27 +1051,28 @@
 		side="right"
 		class="flex h-[100dvh] w-full flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none md:w-[42rem] md:border-l lg:w-[48rem]"
 	>
-		<Sheet.Header class="shrink-0 border-b border-slate-200/80 p-4 pr-12 text-left sm:px-6">
-			<Sheet.Title class="text-xl font-bold text-slate-900">สร้างรอบมื้ออาหารใหม่</Sheet.Title>
-			<Sheet.Description class="text-sm text-slate-500">
+		<Sheet.Header class="shrink-0 border-b border-border/80 p-4 pr-12 text-left sm:px-6">
+			<Sheet.Title class="text-xl font-bold text-foreground">สร้างรอบมื้ออาหารใหม่</Sheet.Title>
+			<Sheet.Description class="text-sm text-muted-foreground">
 				ระบุช่วงเวลาและเป้าหมายจำนวนจานสำหรับกลุ่มความต้องการพิเศษ 5 กลุ่ม
 			</Sheet.Description>
 		</Sheet.Header>
 
 		<div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
 			<div>
-				<Label for="session-name" class="text-xs font-medium text-slate-700">ชื่อรอบมื้ออาหาร</Label
+				<Label for="session-name" class="text-xs font-medium text-foreground"
+					>ชื่อรอบมื้ออาหาร</Label
 				>
 				<Input id="session-name" bind:value={formName} class="mt-1.5 h-10 text-sm" />
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<div>
-					<Label for="session-date" class="text-xs font-medium text-slate-700">วันที่</Label>
+					<Label for="session-date" class="text-xs font-medium text-foreground">วันที่</Label>
 					<DatePicker id="session-date" bind:value={formDate} class="mt-1.5 !h-10" />
 				</div>
 				<div>
-					<Label for="session-meal" class="text-xs font-medium text-slate-700">ช่วงมื้อ</Label>
+					<Label for="session-meal" class="text-xs font-medium text-foreground">ช่วงมื้อ</Label>
 					<Select.Root type="single" value={formMeal} onValueChange={handleMealChange}>
 						<Select.Trigger id="session-meal" class="mt-1.5 !h-10 w-full text-sm">
 							<Select.Value placeholder="เลือกช่วงมื้อ">{MEAL_PERIOD_LABELS[formMeal]}</Select.Value
@@ -1088,28 +1091,32 @@
 			<div class="flex gap-2.5 overflow-x-auto pb-1" data-testid="shelter-people-counts">
 				{#each shelterPeopleCards as card (card.key)}
 					<div
-						class="min-w-32 shrink-0 grow rounded-lg border border-slate-200 bg-slate-50/50 p-2.5 shadow-2xs"
+						class="min-w-32 shrink-0 grow rounded-lg border border-border bg-muted/50 p-2.5 shadow-2xs"
 						data-testid="shelter-people-{card.key}"
 					>
-						<div class="text-xs font-medium text-slate-500">{card.label}</div>
-						<div class="mt-0.5 text-base font-bold text-slate-900 tabular-nums">
+						<div class="text-xs font-medium text-muted-foreground">{card.label}</div>
+						<div class="mt-0.5 text-base font-bold text-foreground tabular-nums">
 							{card.count ?? '–'}
-							<span class="text-xs font-medium text-slate-500">คน</span>
+							<span class="text-xs font-medium text-muted-foreground">คน</span>
 						</div>
 					</div>
 				{/each}
 			</div>
 
 			<!-- 5-Group Target Headcount Inputs -->
-			<div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+			<div class="rounded-xl border border-border bg-muted/60 p-4">
 				<div class="mb-3 flex items-center justify-between">
 					<div>
-						<span class="text-sm font-semibold text-slate-900"
+						<span class="text-sm font-semibold text-foreground"
 							>เป้าหมายจำนวนจานแยกกลุ่ม (5 กลุ่ม)</span
 						>
-						<p class="text-xs text-slate-500">จัดสรรตามกลุ่มผู้เข้าพักและกำลังพลปฏิบัติงาน</p>
+						<p class="text-xs text-muted-foreground">
+							จัดสรรตามกลุ่มผู้เข้าพักและกำลังพลปฏิบัติงาน
+						</p>
 					</div>
-					<span class="rounded-full bg-[#0A2647]/10 px-3 py-1 text-xs font-bold text-[#0A2647]">
+					<span
+						class="rounded-full bg-[var(--brand-primary)]/10 px-3 py-1 text-xs font-bold text-[var(--brand-primary)]"
+					>
 						รวม {formTotal} จาน
 					</span>
 				</div>
@@ -1117,8 +1124,8 @@
 				<div class="space-y-3">
 					<!-- Standard & Staff Groups -->
 					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-							<Label for="count-regular" class="text-xs font-medium text-slate-700"
+						<div class="rounded-lg border border-border bg-card p-3 shadow-2xs">
+							<Label for="count-regular" class="text-xs font-medium text-foreground"
 								>อาหารทั่วไป</Label
 							>
 							<Input
@@ -1133,8 +1140,8 @@
 							/>
 							<CountFieldError {guard} id="count-regular" message={countErrors.regular} />
 						</div>
-						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-							<Label for="count-volunteer" class="text-xs font-medium text-slate-700"
+						<div class="rounded-lg border border-border bg-card p-3 shadow-2xs">
+							<Label for="count-volunteer" class="text-xs font-medium text-foreground"
 								>เจ้าหน้าที่/อาสา</Label
 							>
 							<Input
@@ -1153,8 +1160,9 @@
 
 					<!-- Dietary / Vulnerable Groups -->
 					<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-							<Label for="count-halal" class="text-xs font-medium text-slate-700">อาหารฮาลาล</Label>
+						<div class="rounded-lg border border-border bg-card p-3 shadow-2xs">
+							<Label for="count-halal" class="text-xs font-medium text-foreground">อาหารฮาลาล</Label
+							>
 							<Input
 								id="count-halal"
 								type="number"
@@ -1167,8 +1175,8 @@
 							/>
 							<CountFieldError {guard} id="count-halal" message={countErrors.halal} />
 						</div>
-						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-							<Label for="count-soft-food" class="text-xs font-medium text-slate-700"
+						<div class="rounded-lg border border-border bg-card p-3 shadow-2xs">
+							<Label for="count-soft-food" class="text-xs font-medium text-foreground"
 								>อาหารอ่อน/ผู้สูงอายุ</Label
 							>
 							<Input
@@ -1183,8 +1191,8 @@
 							/>
 							<CountFieldError {guard} id="count-soft-food" message={countErrors.softFood} />
 						</div>
-						<div class="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-							<Label for="count-infant" class="text-xs font-medium text-slate-700"
+						<div class="rounded-lg border border-border bg-card p-3 shadow-2xs">
+							<Label for="count-infant" class="text-xs font-medium text-foreground"
 								>ทารก/เด็กอ่อน</Label
 							>
 							<Input
@@ -1204,7 +1212,7 @@
 			</div>
 
 			<div>
-				<Label for="session-notes" class="text-xs font-medium text-slate-700"
+				<Label for="session-notes" class="text-xs font-medium text-foreground"
 					>หมายเหตุเพิ่มเติม</Label
 				>
 				<Textarea

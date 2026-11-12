@@ -32,10 +32,10 @@
 
 	function tabClass(active: boolean) {
 		return [
-			'-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-[3px] px-3.5 text-base transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none md:px-4',
+			'-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-[3px] px-3.5 text-base transition-colors focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:outline-none md:px-4',
 			active
-				? 'border-[#0A2647] font-bold text-[#0A2647]'
-				: 'border-transparent font-semibold text-slate-600 hover:text-slate-900'
+				? 'border-[var(--brand-primary)] font-bold text-[var(--brand-primary)]'
+				: 'border-transparent font-semibold text-muted-foreground hover:text-foreground'
 		].join(' ');
 	}
 </script>
@@ -48,15 +48,15 @@
 
 <div class="flex w-full flex-1 flex-col gap-4 bg-[#F8FAFC] p-3.5 sm:gap-6 sm:p-6">
 	<header class="space-y-1">
-		<h1 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">ครัวกลางและอาหาร</h1>
-		<p class="text-base text-slate-600 sm:text-lg">
+		<h1 class="text-2xl font-bold tracking-tight text-[var(--brand-primary)] sm:text-3xl">
+			ครัวกลางและอาหาร
+		</h1>
+		<p class="text-base text-muted-foreground sm:text-lg">
 			บริหารจัดการเป้าหมายการผลิตอาหารและสูตรอาหารมาตรฐานของศูนย์
 		</p>
 	</header>
 
-	<div
-		class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-slate-200"
-	>
+	<div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border">
 		<nav
 			class="flex min-w-0 scrollbar-none items-center gap-1 overflow-x-auto"
 			aria-label="แท็บครัว"
