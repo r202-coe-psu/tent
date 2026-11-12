@@ -3,7 +3,7 @@ id: CR-165
 title: ย้ายการจัดการเครื่องสแกน/Kiosk (scanner_device) จาก System Management ไป Back Office — SA ทุกศูนย์ + shelter_manager / kiosk_staff เฉพาะศูนย์ตัวเอง · ย้าย API `/api/v1/scanner/*` → `/api/v1/kiosk/*`
 status: approved
 date: 2026-10-12
-updated: 2026-11-11
+updated: 2026-11-12
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team LEAD)
 layer: volatile
@@ -319,7 +319,7 @@ path ในตารางนี้เป็น path หลังย้าย (�
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review PR #491): `kiosk_staff` แทน `banner_staff` ของ CR-162 ใน CR นี้ — ใช้ช่องบทบาทที่ 11 เดิม ไม่เพิ่มบทบาทที่ 12 · `kiosk_staff` ได้สิทธิ์หน้าแบนเนอร์ตาม FR-KBN-24 (§3.6, FR-SBO-39..42)
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review PR #491): คงสิทธิ์ลบเครื่องและ reveal PIN ของ `kiosk_staff` ตามที่ตกลงกับ Team Lead · คงชื่อเมนูลูก「จัดการอุปกรณ์」
 - 2026-10-12 — approved · อนุมัติโดย Soravit Sukkarn (Team LEAD) — กำหนดรหัส CR-165, ย้ายเข้า docs/changes/14-kiosk/CR-165-kiosk-management-back-office.md
-- 2026-11-11 — **ข้อเสนอทีม kiosk (amend, รอ PO อนุมัติใน PR)** issue #1302 ปิดให้บริการรายเครื่อง: field ใหม่ `service_open` แยกจาก `status` · รายเครื่องเท่านั้น ไม่มีสวิตช์ศูนย์ · ปิดทุก flow · server ตอบ `403 KIOSK_CLOSED` · staff PIN ข้ามไม่ได้ · ไม่มี key / อ่าน config ไม่ได้ = เปิด · Switch บนแถวไม่มี confirm · ตัดกลาง flow ที่ action ถัดไป · latency ~30 วิ (poll) · audit แค่คน + เวลาล่าสุด (username) · หน้าปิดยังเข้า device info/ทดสอบพิมพ์ได้ · เช็กปิดก่อนหน้าเลือกภาษา · งานที่บันทึกแล้วพิมพ์ต่อจนจบ · `inactive` → `active` คง `service_open` เดิม (§2.5, §3.7)
+- 2026-11-11 — **ข้อเสนอทีม kiosk (amend, รอ Team Lead อนุมัติใน PR)** issue #1302 ปิดให้บริการรายเครื่อง: field ใหม่ `service_open` แยกจาก `status` · รายเครื่องเท่านั้น ไม่มีสวิตช์ศูนย์ · ปิดทุก flow · server ตอบ `403 KIOSK_CLOSED` · staff PIN ข้ามไม่ได้ · ไม่มี key / อ่าน config ไม่ได้ = เปิด · Switch บนแถวไม่มี confirm · ตัดกลาง flow ที่ action ถัดไป · latency ~30 วิ (poll) · audit แค่คน + เวลาล่าสุด (username) · หน้าปิดยังเข้า device info/ทดสอบพิมพ์ได้ · เช็กปิดก่อนหน้าเลือกภาษา · งานที่บันทึกแล้วพิมพ์ต่อจนจบ · `inactive` → `active` คง `service_open` เดิม (§2.5, §3.7)
 - ทีม kiosk เคาะตัดทิ้ง (2026-11-11): สวิตช์ปิดทั้งศูนย์ · ตั้งเวลาเปิด/ปิดอัตโนมัติ · ข้อความกำหนดเอง · banner บนหน้าปิด · history การเปิด/ปิด · realtime push · ใช้ `inactive` แทน
 - ทีม kiosk เคาะตัดทิ้ง: ย้ายเฉพาะ `/api/v1/scanner/kiosk/*` (คง `bootstrap`, `draft`, `devices` ไว้ใต้ `scanner`) — API ของระบบเดียวกันจะแยกอยู่สอง prefix
 - ทีม kiosk เคาะตัดทิ้ง: รับทั้ง path เดิมและใหม่ชั่วคราว (alias) ระหว่างอัปเดตตู้
