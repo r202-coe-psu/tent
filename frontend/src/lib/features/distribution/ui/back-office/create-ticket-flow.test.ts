@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RequisitionTicketInput } from '../../domain/food-supplies';
-import { createFlow2RequisitionTicket } from '../../domain/food-supplies';
+import { createFlow2RequisitionTicket, thailandCalendarDay } from '../../domain/food-supplies';
 import {
 	isEligibleDistributionCatalogItem,
 	READY_MEAL_CATEGORY_ID,
@@ -60,6 +60,7 @@ describe('Create Ticket Flow Invariants & Boundary Validation (Slice 5.1 §42)',
 				ticket_no: 'TKT-FOOD-1001',
 				requisition_type: 'food',
 				meal: 'lunch',
+				service_date: thailandCalendarDay(),
 				source_location: 'ครัวกลาง',
 				destination_location: 'เต็นท์ A',
 				items: [
@@ -154,6 +155,7 @@ describe('Create Ticket Flow Invariants & Boundary Validation (Slice 5.1 §42)',
 				ticket_no: 'TKT-FOOD-1003',
 				requisition_type: 'food',
 				meal: 'breakfast',
+				service_date: thailandCalendarDay(),
 				source_location: 'ครัวกลาง',
 				destination_location: 'เต็นท์ B',
 				items: [
@@ -184,6 +186,7 @@ describe('Create Ticket Flow Invariants & Boundary Validation (Slice 5.1 §42)',
 				ticket_no: 'TKT-FOOD-1004',
 				requisition_type: 'food' as const,
 				meal: 'dinner' as const,
+				service_date: thailandCalendarDay(),
 				source_location: 'ครัวกลาง',
 				destination_location: 'เต็นท์ C',
 				items: [
@@ -205,6 +208,7 @@ describe('Create Ticket Flow Invariants & Boundary Validation (Slice 5.1 §42)',
 				ticket_no: 'TKT-FOOD-1005',
 				requisition_type: 'food' as const,
 				meal: 'dinner' as const,
+				service_date: thailandCalendarDay(),
 				source_location: 'ครัวกลาง',
 				destination_location: 'เต็นท์ C',
 				items: []
@@ -220,6 +224,7 @@ describe('Create Ticket Flow Invariants & Boundary Validation (Slice 5.1 §42)',
 				ticket_no: 'TKT-FOOD-1006',
 				requisition_type: 'food',
 				meal: 'lunch',
+				service_date: thailandCalendarDay(),
 				source_location: 'ครัวกลาง',
 				destination_location: 'เต็นท์ D',
 				items: [

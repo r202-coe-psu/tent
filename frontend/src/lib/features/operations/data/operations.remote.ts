@@ -45,6 +45,7 @@ import {
 	projectStockLotBalances,
 	usableStockByItem,
 	assertLotWriteOffsFit,
+	assertCountedLotsExist,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
@@ -1087,8 +1088,15 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				}
 				assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
 			}
+			// Every counted lot must exist in THIS shelter's ledger — a surplus row carries no
+			// `lot_ref`, so a count started on another shelter's lots would otherwise pass (#518).
+			const ledgerNow = await this.listLedger();
+			assertCountedLotsExist(
+				ledgerNow,
+				pending.map(({ index }) => submission.lines[index])
+			);
 			if (entries.some((entry) => entry.lot_ref && qtyLte(entry.qty, 0))) {
-				assertLotWriteOffsFit(await this.listLedger(), entries);
+				assertLotWriteOffsFit(ledgerNow, entries);
 			}
 			const writeOffs = new Map<string, string>();
 			for (const entry of entries) {

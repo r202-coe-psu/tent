@@ -9,8 +9,10 @@ import {
 	flow2RequisitionTypeSchema,
 	isFlow2RequisitionTicket,
 	requisitionTicketDocSchema,
-	requisitionTicketInputSchema
+	requisitionTicketInputSchema,
+	ticketServiceDay
 } from './requisition-ticket';
+import { thailandCalendarDay } from './shared';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff:flow2' };
 const ULID = '01J00000000000000000000000';
@@ -28,7 +30,9 @@ function ticketInput(requisition_type: 'food' | 'supplies' = 'food') {
 	return {
 		ticket_no: requisition_type === 'food' ? 'TKT-FOOD-0001' : 'TKT-SUPPLIES-0001',
 		requisition_type,
-		...(requisition_type === 'food' ? { meal: 'lunch' as const } : {}),
+		...(requisition_type === 'food'
+			? { meal: 'lunch' as const, service_date: thailandCalendarDay() }
+			: {}),
 		source_location: 'warehouse:main',
 		destination_location: 'distribution_point:zone-a',
 		items: [ticketItem]
@@ -43,7 +47,7 @@ describe('Food & Supplies RequisitionTicket contract ', () => {
 		expect(food).toMatchObject({
 			_id: TICKET_ID,
 			type: 'requisition_ticket',
-			schema_v: 1,
+			schema_v: 2,
 			status: 'PENDING_PICK',
 			requested_by: ctx.createdBy,
 			requisition_type: 'food'
@@ -52,14 +56,17 @@ describe('Food & Supplies RequisitionTicket contract ', () => {
 	});
 
 	it('keeps shared parsing broad but rejects Kitchen and Transfer at the Flow 2 boundary', () => {
-		const food = createFlow2RequisitionTicket(ticketInput(), ctx, ULID);
+		// Supplies base: a food ticket's service_date may not ride along onto kitchen/transfer.
+		const food = createFlow2RequisitionTicket(ticketInput('supplies'), ctx, ULID);
 		const kitchen = requisitionTicketDocSchema.parse({
 			...food,
+			schema_v: 1,
 			requisition_type: 'kitchen',
 			ticket_no: 'TKT-KITCHEN-0001'
 		});
 		const transfer = requisitionTicketDocSchema.parse({
 			...food,
+			schema_v: 1,
 			requisition_type: 'transfer',
 			ticket_no: 'TKT-TRANSFER-0001'
 		});
@@ -223,5 +230,87 @@ describe('Food & Supplies RequisitionTicket contract ', () => {
 				amendments: [{ ...amendment, item_id: 'item:missing' }]
 			})
 		).toThrow(/unknown item_id/);
+	});
+});
+
+describe('service_date (draft-food-ticket-service-date)', () => {
+	function addDays(day: string, delta: number): string {
+		const d = new Date(`${day}T00:00:00.000Z`);
+		d.setUTCDate(d.getUTCDate() + delta);
+		return d.toISOString().slice(0, 10);
+	}
+	const today = thailandCalendarDay();
+
+	it('stores the chosen day on a food ticket, including a later day', () => {
+		const tomorrow = addDays(today, 1);
+		const food = createFlow2RequisitionTicket(
+			{ ...ticketInput('food'), service_date: tomorrow },
+			ctx,
+			ULID
+		);
+		expect(food.service_date).toBe(tomorrow);
+		expect(ticketServiceDay(food)).toBe(tomorrow);
+	});
+
+	it('requires a valid service_date on a food ticket', () => {
+		const withoutDay: Record<string, unknown> = { ...ticketInput('food') };
+		delete withoutDay.service_date;
+		expect(requisitionTicketInputSchema.safeParse(withoutDay).success).toBe(false);
+		expect(
+			requisitionTicketInputSchema.safeParse({ ...ticketInput('food'), service_date: '2026-02-30' })
+				.success
+		).toBe(false);
+	});
+
+	it('refuses a food ticket for a day already past', () => {
+		expect(() =>
+			createFlow2RequisitionTicket(
+				{ ...ticketInput('food'), service_date: addDays(today, -1) },
+				ctx,
+				ULID
+			)
+		).toThrow(/past/);
+	});
+
+	it('keeps the service day fixed once the ticket exists', () => {
+		const food = createFlow2RequisitionTicket(ticketInput('food'), ctx, ULID);
+		expect(() =>
+			assertRequisitionTicketMutation(food, { ...food, service_date: addDays(today, 1) })
+		).toThrow(/service_date is immutable/);
+	});
+
+	it('keeps kitchen and transfer tickets on schema_v 1', () => {
+		const supplies = createFlow2RequisitionTicket(ticketInput('supplies'), ctx, ULID);
+		expect(
+			requisitionTicketDocSchema.safeParse({
+				...supplies,
+				requisition_type: 'transfer',
+				ticket_no: 'TKT-TRANSFER-0001'
+			}).success
+		).toBe(false);
+	});
+
+	it('keeps service_date off supplies tickets', () => {
+		expect(
+			requisitionTicketInputSchema.safeParse({ ...ticketInput('supplies'), service_date: today })
+				.success
+		).toBe(false);
+		expect(createFlow2RequisitionTicket(ticketInput('supplies'), ctx, ULID).service_date).toBe(
+			undefined
+		);
+	});
+
+	it('still reads a schema_v 1 food ticket without service_date by its creation day', () => {
+		const v1: Record<string, unknown> = {
+			...createFlow2RequisitionTicket(ticketInput('food'), ctx, ULID)
+		};
+		delete v1.service_date;
+		const legacy = requisitionTicketDocSchema.parse({
+			...v1,
+			schema_v: 1,
+			created_at: '2026-10-06T18:00:00.000Z'
+		});
+		expect(ticketServiceDay(legacy)).toBe('2026-10-07');
+		expect(requisitionTicketDocSchema.safeParse({ ...v1, schema_v: 2 }).success).toBe(false);
 	});
 });

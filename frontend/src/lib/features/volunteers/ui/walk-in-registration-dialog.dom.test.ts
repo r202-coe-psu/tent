@@ -4,6 +4,8 @@ import { flushSync, mount, tick, unmount } from 'svelte';
 import type { Evacuee } from '$lib/features/people';
 import { toast } from 'svelte-sonner';
 import WalkInRegistrationDialog from './walk-in-registration-dialog.svelte';
+import Harness from './walk-in-registration-dialog-harness.test-fixture.svelte';
+import { VolunteerPhoneTakenError } from '../domain/phone-errors';
 
 const MANAGER = ['shelter:SH001', 'SH001:shelter_manager'];
 const REGISTRATION = ['shelter:SH001', 'SH001:registration_staff'];
@@ -19,7 +21,8 @@ const mocks = vi.hoisted(() => ({
 	gate: null as { query: () => string; enabled: () => boolean } | null,
 	hookCalls: 0,
 	searchError: false,
-	createMutateAsync: vi.fn()
+	createMutateAsync: vi.fn(),
+	fetchVolunteer: vi.fn()
 }));
 
 // happy-dom's <form> reports no method, which trips kit's dev-only `enhance` guard. Keep the
@@ -88,7 +91,12 @@ vi.mock('../application/queries', () => ({
 	useSkillOptions: () => ({ options: [] }),
 	useJobs: () => ({ data: [] }),
 	useShiftAssignments: () => ({ data: [] }),
-	todayDateString: () => '2026-11-02'
+	todayDateString: () => '2026-11-02',
+	fetchVolunteer: (_qc: unknown, id: string) => mocks.fetchVolunteer(id)
+}));
+// The real manage dialog pulls in the whole mutation layer; its own DOM test covers it.
+vi.mock('./volunteer-manage-dialog.svelte', async () => ({
+	default: (await import('./volunteer-manage-dialog-stub.test-fixture.svelte')).default
 }));
 
 const somchai = {
@@ -167,9 +175,12 @@ beforeEach(() => {
 	mocks.createMutateAsync.mockResolvedValue({ _id: 'volunteer:9', volunteer_code: 'V-009' });
 });
 
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui restores the body style 24ms after the dialog's scroll lock goes; let that timer run
+	// here, or it fires after the file's DOM is torn down ("document is not defined").
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 
@@ -455,5 +466,112 @@ describe('WalkInRegistrationDialog — who may search evacuees (#1062)', () => {
 			first_name: 'มานะ',
 			source: 'walk_in'
 		});
+	});
+});
+
+describe('WalkInRegistrationDialog — duplicate phone rejection (CR-239)', () => {
+	const holder = {
+		_id: 'volunteer:01TEST',
+		volunteer_code: 'V-012',
+		first_name: 'สมชาย',
+		last_name: 'ใจดี',
+		status: 'active' as const
+	};
+
+	async function submitWithTakenPhone(target?: ReturnType<typeof mount>) {
+		mocks.roles = COORDINATOR;
+		mocks.createMutateAsync.mockRejectedValueOnce(new VolunteerPhoneTakenError([holder]));
+		if (!target) await render();
+		await typeInto(field('first_name'), 'สมศักดิ์');
+		await typeInto(field('last_name'), 'รักชาติ');
+		await typeInto(field('phone'), '0812345678');
+		submitForm();
+		await vi.waitFor(() => expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1));
+		await settle();
+	}
+
+	const openHolderButton = () =>
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+			b.textContent?.includes('เปิดโปรไฟล์ V-012')
+		);
+
+	it('shows the conflict panel with the open button and no toast (Suggestion 6)', async () => {
+		await submitWithTakenPhone();
+
+		expect(document.body.textContent).toContain('พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์');
+		expect(openHolderButton()).toBeDefined();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+
+	it('closes the walk-in dialog before opening the holder, so two modals are never stacked', async () => {
+		mocks.fetchVolunteer.mockResolvedValue({ ...holder });
+		const harness = mount(Harness, { target: document.body });
+		instance = harness;
+		await settle();
+		await submitWithTakenPhone(harness);
+
+		openHolderButton()!.click();
+		await vi.waitFor(() =>
+			expect(document.body.querySelector('[data-testid="manage-dialog-stub"]')).not.toBeNull()
+		);
+		await settle();
+
+		expect(mocks.fetchVolunteer).toHaveBeenCalledWith('volunteer:01TEST');
+		expect(harness.getOpen()).toBe(false);
+		expect(field('first_name')).toBeNull();
+		expect(document.body.querySelector('[data-testid="manage-dialog-stub"]')!.textContent).toBe(
+			'V-012'
+		);
+	});
+
+	it('clears the conflict panel and the swapped-in profile when the dialog is reopened', async () => {
+		mocks.fetchVolunteer.mockResolvedValue({ ...holder });
+		const harness = mount(Harness, { target: document.body });
+		instance = harness;
+		await settle();
+		await submitWithTakenPhone(harness);
+		openHolderButton()!.click();
+		await vi.waitFor(() => expect(harness.getOpen()).toBe(false));
+		await settle();
+
+		harness.reopen();
+		await settle();
+
+		expect(document.body.textContent).not.toContain('พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์');
+		expect(document.body.querySelector('[data-testid="manage-dialog-stub"]')).toBeNull();
+	});
+});
+
+describe('WalkInRegistrationDialog — form reset behavior', () => {
+	it('resets form fields when reopened after submit succeeds', async () => {
+		mocks.roles = COORDINATOR;
+		mocks.createMutateAsync.mockResolvedValueOnce({
+			_id: 'volunteer:001',
+			volunteer_code: 'V-001',
+			first_name: 'มานะ',
+			last_name: 'อดทน'
+		});
+
+		const harness = mount(Harness, { target: document.body });
+		instance = harness;
+		await settle();
+
+		await typeInto(field('first_name'), 'มานะ');
+		await typeInto(field('last_name'), 'อดทน');
+		await typeInto(field('phone'), '0891234567');
+		submitForm();
+
+		await vi.waitFor(() => expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1));
+		await settle();
+
+		expect(harness.getOpen()).toBe(false);
+
+		harness.reopen();
+		await settle();
+
+		expect(harness.getOpen()).toBe(true);
+		expect(field('first_name').value).toBe('');
+		expect(field('last_name').value).toBe('');
+		expect(field('phone').value).toBe('');
 	});
 });
