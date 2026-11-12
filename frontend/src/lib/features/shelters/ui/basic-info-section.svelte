@@ -511,9 +511,8 @@
 				<label for="public-visible" class="text-sm font-semibold text-slate-800">
 					แสดงศูนย์นี้บนหน้าสาธารณะ
 				</label>
-				<p class="text-xs text-slate-500">
-					เปิด: ประชาชนเห็นศูนย์นี้ในหน้าค้นหาศูนย์ · ปิด: ประชาชนและหน่วยงานภายนอกจะไม่เห็นศูนย์นี้
-					และจำนวนผู้พักอาศัย (ค่าเริ่มต้นเปิด)
+				<p id="public-visible-desc" class="text-xs text-slate-500">
+					เปิด: ประชาชนเห็นศูนย์นี้ในหน้าค้นหาศูนย์ · ปิด: ประชาชนและหน่วยงานภายนอกจะไม่เห็นศูนย์นี้และจำนวนผู้พักอาศัย (ค่าเริ่มต้นเปิด)
 				</p>
 			</div>
 			<Switch
@@ -522,7 +521,7 @@
 					() => $formData.feature_flags?.public_visible ?? true, (v) => setPublicVisible(v === true)
 				}
 				{disabled}
-				aria-label="แสดงศูนย์นี้บนหน้าสาธารณะ"
+				aria-describedby="public-visible-desc"
 			/>
 		</div>
 
@@ -533,7 +532,7 @@
 				<label for="accepts-referrals" class="text-sm font-semibold text-slate-800">
 					รับผู้ประสบภัยที่ส่งต่อมาจากศูนย์อื่น (Referral)
 				</label>
-				<p class="text-xs text-slate-500">
+				<p id="accepts-referrals-desc" class="text-xs text-slate-500">
 					เปิด: ศูนย์อื่นส่งผู้ประสบภัยมาที่นี่ได้ · ปิด: ศูนย์อื่นส่งมาไม่ได้
 					และใบส่งต่อที่รออยู่จะกดรับไม่ได้ (ยังกดปฏิเสธได้) (ค่าเริ่มต้นเปิด)
 				</p>
@@ -543,7 +542,7 @@
 				checked={$formData.feature_flags?.accepts_referrals ?? true}
 				onCheckedChange={(v) => setAcceptsReferrals(v === true)}
 				{disabled}
-				aria-label="รับผู้ประสบภัยที่ส่งต่อมาจากศูนย์อื่น (Referral)"
+				aria-describedby="accepts-referrals-desc"
 			/>
 		</div>
 

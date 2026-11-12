@@ -82,6 +82,19 @@ describe('BasicInfoSection — CR-251 public_visible / accepts_referrals switche
 		expect(sw('accepts-referrals').getAttribute('aria-checked')).toBe('true');
 	});
 
+	it('links each description to its switch and has no duplicate aria-label', () => {
+		setup({});
+
+		for (const id of ['public-visible', 'accepts-referrals']) {
+			expect(sw(id).hasAttribute('aria-label')).toBe(false);
+			expect(sw(id).getAttribute('aria-describedby')).toBe(`${id}-desc`);
+			expect(document.getElementById(`${id}-desc`)).not.toBeNull();
+		}
+		expect(document.getElementById('public-visible-desc')?.textContent?.trim()).toBe(
+			'เปิด: ประชาชนเห็นศูนย์นี้ในหน้าค้นหาศูนย์ · ปิด: ประชาชนและหน่วยงานภายนอกจะไม่เห็นศูนย์นี้และจำนวนผู้พักอาศัย (ค่าเริ่มต้นเปิด)'
+		);
+	});
+
 	it('reflects stored false values in both switches', () => {
 		setup({ public_visible: false, accepts_referrals: false });
 
