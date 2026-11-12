@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-252
 title: ศูนย์จากระบบภายนอก (External shelter) — `is_external`, `external_url`, สถานะ `unknown`
-status: proposed
+status: approved
 date: 2026-11-12
 requested_by: Dev Team B — GitHub #1242
-decided_by:
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 shelter (เพิ่ม `is_external`, `external_url`; `operation_status` +`unknown`; `capacity` req→opt เมื่อ External) · §9.1 `public_shelters` (เพิ่ม `is_external`, `external_url`; `status`/`location_status` +`unknown`; `capacity` = `0` เมื่อ External)
@@ -21,7 +21,7 @@ affects:
   - backend/apiapp/modules/shelter/schemas.py (`ShelterItem`/`ShelterDetail` +`is_external: bool = False`, `external_url: str | None = None`) · backend/apiapp/modules/shelter/use_case.py (`status_ui`) · utils/shelter_booking.py (`accepts_booking`) · modules/thirdparty_locations · modules/thirdparty_bookings
 ---
 
-# draft-external-shelter — ศูนย์จากระบบภายนอก
+# CR-252 — ศูนย์จากระบบภายนอก (External shelter)
 
 > **สรุป (TL;DR):**
 >
@@ -30,7 +30,7 @@ affects:
 > - **dev ต้อง build:** Zod invariant + guard `system_admin` · ฟอร์มแบบย่อ · worker/projector/FastAPI รองรับ `unknown` · Public UI (chip, pin, filter, ข้อความ i18n) · Excel import 2 คอลัมน์ · Partner API contract
 > - **กระทบ:** shelter `schema_v` 9→10 · `PROJECTION_VERSION` 18→19 · role matrix · ADR 0002 (EXT-002/003/008) · amends CR-039 / CR-077
 
-> **Tracking:** CR ใบเดียวครอบทั้งหมด (ตามที่ตกลงใน #1242). CR นี้อยู่สถานะ `proposed` — ยังไม่ approve, ยังไม่แก้ `schema.md` / โค้ด.
+> **Tracking:** CR ใบเดียวครอบทั้งหมด (ตามที่ตกลงใน #1242). สถานะ `approved` โดย Soravit Sukkarn (Team Lead) — ลำดับถัดไปเตรียมแก้ `schema.md`, role matrix และ code.
 
 ---
 
@@ -69,7 +69,7 @@ affects:
 
 ### Public UI
 
-- FR-20 — ศูนย์ External แสดง chip สถานะ "ไม่ทราบสถานะ" สีเทา/เหลือง + icon ลิงก์ออกนอก; ลิงก์ไป `external_url` (ถ้ามี) เปิดแท็บใหม่ด้วย `target="_blank" rel="noopener noreferrer"`.
+- FR-20 — ศูนย์ External แสดง chip สถานะ "ไม่ทราบสถานะ" สีเทา (Slate/Neutral) + icon ลิงก์ออกนอก; ลิงก์ไป `external_url` (ถ้ามี) เปิดแท็บใหม่ด้วย `target="_blank" rel="noopener noreferrer"`.
 - FR-21 — แทนที่ตัวเลข capacity/occupancy ด้วยข้อความ "ติดต่อ ณ ศูนย์พักพิง" (i18n string คงที่ ไม่ใช่ field ใน doc).
 - FR-22 — ซ่อนปุ่มจองและลงทะเบียนล่วงหน้า.
 - FR-23 — pin บนแผนที่ใช้สีเดียวกับ chip; ตัวกรองสถานะมีตัวเลือก "ไม่ทราบสถานะ".
@@ -143,7 +143,5 @@ Team Lead PO Meeting 2026-11-07 (#1242, labels: priority:high, Before Floods): �
 ## Decision log
 
 - 2026-11-07 — ตกลงสเปกจาก grilling ใน #1242 (Team Lead PO Meeting); เลือก track ด้วย CR ใบเดียว
-- 2026-11-12 — proposed (draft) — รอเจ้าของโครงการ approve ก่อนรันเลข `CR-NNN`, bump `schema_v` และแก้ schema.md / role matrix
-
-> [NEEDS DECISION: chip สถานะ "ไม่ทราบสถานะ" ใช้สีเทาหรือเหลือง — issue ระบุ "เทา/เหลือง" ยังไม่เลือก]
-> [NEEDS DECISION: หมวด CR ใต้ `docs/changes/<หมวด>/` ตอน approve — เสนอ `12-public` หรือ `00-baseline`]
+- 2026-11-12 — proposed (draft) — บันทึกร่าง CR ใน PR #1371
+- 2026-11-12 — approved โดย Soravit Sukkarn (Team Lead) กำหนดหมายเลข CR-252; เลือกหมวด `00-baseline` (ตาม CR-205 / CR-039 / CR-077 ที่แก้ shelter schema); เคาะ chip สถานะ "ไม่ทราบสถานะ" ใช้สีเทา (Slate/Neutral) ไม่ซ้ำกับสีเหลืองของ standby
