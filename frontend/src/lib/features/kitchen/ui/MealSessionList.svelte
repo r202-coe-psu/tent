@@ -1218,30 +1218,34 @@
 		</div>
 
 		<Sheet.Footer
-			class="sticky bottom-0 z-20 flex shrink-0 items-center justify-end gap-3 border-t border-slate-200/80 bg-white/95 px-4 py-3 backdrop-blur-xs sm:px-6"
+			class="shrink-0 border-t border-slate-200/80 bg-white p-0 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950"
 		>
-			<Button
-				type="button"
-				variant="outline"
-				class="min-h-11 min-w-24 font-medium"
-				onclick={() => (createDialogOpen = false)}
+			<div
+				class="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3"
 			>
-				ยกเลิก
-			</Button>
-			<Button
-				type="button"
-				class="min-h-11 min-w-36 gap-2 bg-[#0A2647] font-semibold text-white shadow-xs hover:bg-[#051930]"
-				onclick={handleCreateSession}
-				disabled={createSessionMutation.isPending || !countsValid}
-			>
-				{#if createSessionMutation.isPending}
-					<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
-					<span>กำลังสร้าง...</span>
-				{:else}
-					<Check class="h-4 w-4" aria-hidden="true" />
-					<span>สร้างรอบมื้ออาหาร</span>
-				{/if}
-			</Button>
+				<Button
+					variant="outline"
+					type="button"
+					onclick={() => (createDialogOpen = false)}
+					class="min-h-11 rounded-xl border-slate-300 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:w-auto dark:border-zinc-700 dark:text-zinc-300"
+				>
+					ยกเลิก
+				</Button>
+				<Button
+					type="button"
+					onclick={handleCreateSession}
+					disabled={createSessionMutation.isPending || !countsValid}
+					class="min-h-11 gap-2 rounded-xl bg-[#0A2647] px-6 text-sm font-semibold text-white shadow-xs hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+				>
+					{#if createSessionMutation.isPending}
+						<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+						<span>กำลังสร้าง...</span>
+					{:else}
+						<Check class="h-4 w-4" aria-hidden="true" />
+						<span>สร้างรอบมื้ออาหาร</span>
+					{/if}
+				</Button>
+			</div>
 		</Sheet.Footer>
 	</Sheet.Content>
 </Sheet.Root>
