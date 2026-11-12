@@ -166,6 +166,6 @@ export function toBootstrapDevice(
 		station_name: principal.station_name,
 		status,
 		last_seen_at,
-		service_open: principal.service_open !== false
+		service_open: principal.service_open
 	};
 }
