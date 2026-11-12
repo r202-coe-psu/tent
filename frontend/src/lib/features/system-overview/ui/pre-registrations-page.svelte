@@ -53,6 +53,67 @@
 	}
 </script>
 
+{#snippet statusBadge(item: PreRegistrationListItem)}
+	{@const status = getPreRegStatusInfo(item.stay_status, item.queue_status, !!item.shelter_code)}
+	<span
+		class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${status.className}`}
+		title={status.description}
+	>
+		<span class={`size-1.5 rounded-full ${status.dotColor}`}></span>
+		{status.label}
+	</span>
+{/snippet}
+
+{#snippet household(item: PreRegistrationListItem)}
+	{#if item.household_name}
+		<span title={item.household_id ?? undefined}>{item.household_name}</span>
+	{:else if item.household_id}
+		<span class="font-mono text-xs text-slate-500">{item.household_id}</span>
+	{:else}
+		<span class="text-slate-400">—</span>
+	{/if}
+{/snippet}
+
+{#snippet shelter(item: PreRegistrationListItem)}
+	{#if item.shelter_name}
+		<div class="flex flex-col">
+			<span class="text-sm font-medium text-slate-900">{item.shelter_name}</span>
+			{#if item.shelter_code}
+				<span class="font-mono text-xs text-slate-500">[{item.shelter_code}]</span>
+			{/if}
+		</div>
+	{:else if item.shelter_code}
+		<span class="font-mono text-sm font-medium text-slate-900">[{item.shelter_code}]</span>
+	{:else}
+		<span class="text-sm text-slate-400">ยังไม่ผูกศูนย์</span>
+	{/if}
+{/snippet}
+
+{#snippet sourceBadge(item: PreRegistrationListItem)}
+	{#if item.source === 'unassigned'}
+		<span
+			class="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+		>
+			ส่วนกลาง
+		</span>
+	{:else}
+		<span
+			class="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-700"
+		>
+			{item.shelter_code ?? 'ผูกศูนย์'}
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet nameLink(item: PreRegistrationListItem)}
+	<a
+		href={resolve(item.profile_href as '/system-management/pre-registrations')}
+		class="font-medium break-words text-[#0284C7] hover:underline"
+	>
+		{item.display_name}
+	</a>
+{/snippet}
+
 <StaffPageShell
 	title="ลงทะเบียนล่วงหน้า"
 	description="ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง"
@@ -69,7 +130,7 @@
 
 	<div class={spatial.container.staffPageCard}>
 		<div
-			class="flex flex-row items-center justify-between gap-3 border-b border-slate-200/80 p-4 sm:p-6"
+			class="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 p-4 sm:p-6"
 		>
 			<div>
 				<h2 class="text-lg font-bold text-slate-900">รายการทั้งหมด</h2>
@@ -111,7 +172,36 @@
 			{:else if items.length === 0}
 				<p class="py-8 text-center text-sm text-slate-500">ไม่พบรายการ</p>
 			{:else}
-				<div class="overflow-x-auto rounded-xl border border-slate-200/80">
+				<ul
+					class="divide-y rounded-xl border border-slate-200/80 md:hidden"
+					data-testid="prereg-cards"
+				>
+					{#each items as item (item.id)}
+						<li class="space-y-2 p-3 text-sm">
+							<div class="flex flex-wrap items-start justify-between gap-2">
+								<div class="min-w-0">{@render nameLink(item)}</div>
+								{@render statusBadge(item)}
+							</div>
+							<dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-slate-700">
+								<dt class="text-slate-500">ครอบครัว</dt>
+								<dd class="break-words">{@render household(item)}</dd>
+								<dt class="text-slate-500">ศูนย์พักพิง</dt>
+								<dd class="break-words">{@render shelter(item)}</dd>
+								<dt class="text-slate-500">ต้นทาง</dt>
+								<dd class="break-words">{originLabel(item)}</dd>
+								<dt class="text-slate-500">ประเทศ</dt>
+								<dd>{item.country ?? '—'}</dd>
+								<dt class="text-slate-500">ช่วงอายุ</dt>
+								<dd>{AGE_BUCKET_LABELS[item.age_band] ?? item.age_band}</dd>
+								<dt class="text-slate-500">ลงทะเบียน</dt>
+								<dd class="tabular-nums">{formatWhen(item.registered_at)}</dd>
+								<dt class="text-slate-500">แหล่งข้อมูล</dt>
+								<dd>{@render sourceBadge(item)}</dd>
+							</dl>
+						</li>
+					{/each}
+				</ul>
+				<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 md:block">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
@@ -130,52 +220,16 @@
 							{#each items as item (item.id)}
 								<Table.Row>
 									<Table.Cell>
-										<a
-											href={resolve(item.profile_href as '/system-management/pre-registrations')}
-											class="font-medium text-[#0284C7] hover:underline"
-										>
-											{item.display_name}
-										</a>
+										{@render nameLink(item)}
 									</Table.Cell>
 									<Table.Cell class="text-sm font-medium text-slate-800">
-										{#if item.household_name}
-											<span title={item.household_id ?? undefined}>{item.household_name}</span>
-										{:else if item.household_id}
-											<span class="font-mono text-xs text-slate-500">{item.household_id}</span>
-										{:else}
-											<span class="text-slate-400">—</span>
-										{/if}
+										{@render household(item)}
 									</Table.Cell>
 									<Table.Cell>
-										{@const status = getPreRegStatusInfo(
-											item.stay_status,
-											item.queue_status,
-											!!item.shelter_code
-										)}
-										<span
-											class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${status.className}`}
-											title={status.description}
-										>
-											<span class={`size-1.5 rounded-full ${status.dotColor}`}></span>
-											{status.label}
-										</span>
+										{@render statusBadge(item)}
 									</Table.Cell>
 									<Table.Cell>
-										{#if item.shelter_name}
-											<div class="flex flex-col">
-												<span class="text-sm font-medium text-slate-900">{item.shelter_name}</span>
-												{#if item.shelter_code}
-													<span class="font-mono text-xs text-slate-500">[{item.shelter_code}]</span
-													>
-												{/if}
-											</div>
-										{:else if item.shelter_code}
-											<span class="font-mono text-sm font-medium text-slate-900"
-												>[{item.shelter_code}]</span
-											>
-										{:else}
-											<span class="text-sm text-slate-400">ยังไม่ผูกศูนย์</span>
-										{/if}
+										{@render shelter(item)}
 									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">{originLabel(item)}</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">{item.country ?? '—'}</Table.Cell>
@@ -186,19 +240,7 @@
 										{formatWhen(item.registered_at)}
 									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-600">
-										{#if item.source === 'unassigned'}
-											<span
-												class="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-											>
-												ส่วนกลาง
-											</span>
-										{:else}
-											<span
-												class="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-700"
-											>
-												{item.shelter_code ?? 'ผูกศูนย์'}
-											</span>
-										{/if}
+										{@render sourceBadge(item)}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
