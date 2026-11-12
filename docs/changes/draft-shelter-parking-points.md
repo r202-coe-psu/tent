@@ -59,9 +59,9 @@ migration: >
 **ค่าที่ใช้จริงของศูนย์ (effective vehicles)** — คำนวณตอนอ่าน ไม่เก็บเป็น field
 
 - FR-9 — **ใช้ค่าจากจุดจอดรถ** เมื่อมีอย่างน้อยหนึ่งจุดที่ `vehicles` ไม่ว่าง · ประเภทรถที่รองรับ = ประเภทที่ปรากฏในจุดใดจุดหนึ่ง · ความจุของแต่ละประเภท = ผลรวม `max_capacity` ของจุดที่มีประเภทนั้น (ข้ามค่า `null`) · ถ้าทุกจุดของประเภทนั้นเป็น `null` ความจุรวมเป็น `null`
-- FR-10 — **ใช้ค่าเดิม** `parking_policy.supported_vehicles` เมื่อไม่มีจุดจอดรถที่ `vehicles` ไม่ว่างเลย (ศูนย์เดิม หรือเพิ่มจุดแล้วแต่ยังไม่ระบุรถ) · ตัวกรอง `parking_capacity > 0` เดิมของฝั่ง legacy คงเดิม
+- FR-10 — **ใช้ค่าเดิม** `parking_policy.supported_vehicles` เมื่อไม่มีจุดจอดรถที่ `vehicles` ไม่ว่างเลย (ศูนย์เดิม หรือเพิ่มจุดแล้วแต่ยังไม่ระบุรถ) · ตัวกรองไม่ใช้ `common_areas.parking_capacity` ตัดสินประเภทรถอีกต่อไป (Q6)
 - FR-11 — `parking_policy.availability = 'none'` → ศูนย์ไม่มีที่จอดรถ ไม่ว่ามีจุดจอดรถหรือไม่ · ไม่ลบจุดจอดรถที่บันทึกไว้ (ดู Q5)
-- FR-12 — `common_areas.parking_capacity` ไม่แก้ในรอบนี้ (ดู Q6)
+- FR-12 — `common_areas.parking_capacity` ไม่แก้ในรอบนี้ · import ยังเขียนต่อ (FR-24) · ตัวกรองไม่อ่านค่านี้แล้ว (Q6)
 
 **หน้าตั้งค่าศูนย์ — ส่วนที่ 9 นโยบายยานพาหนะ**
 
@@ -80,10 +80,10 @@ migration: >
 **ตัวกรองที่จอดรถ — ต่อสายบนหน้า `/shelters` และปรับ route `transparency/shelters`**
 
 - FR-21 — route `transparency/shelters` ที่คำนวณ `parking_car`, `parking_motorcycle`, `parking_boat` อ่านจากค่าที่ใช้จริงตาม FR-9/FR-10 (ใช้ฟังก์ชันคำนวณเดียวกับฟอร์ม ไม่เขียน logic ซ้ำ)
-- FR-22 — ศูนย์ที่ยังไม่มีจุดจอดรถที่ระบุรถ ได้ผลตัวกรองของ route `transparency/shelters` เท่าเดิมทุกประการ
+- FR-22 — ศูนย์ที่ยังไม่มีจุดจอดรถที่ระบุรถ ใช้ `supported_vehicles` เดิมกรอง · **ต่างจากเดิมข้อเดียว:** ศูนย์ที่มีแค่ `parking_capacity > 0` โดยไม่ระบุประเภทรถ ไม่ผ่านตัวกรอง `parking_car` / `parking_motorcycle` อีก (route `transparency/shelters` ไม่มีหน้าไหนเรียก จึงไม่กระทบผู้ใช้ตอนนี้)
 - FR-33 — **ต่อสายตัวกรองบนหน้า `/shelters`** (ปัจจุบัน checkbox ไม่ได้ต่อกับข้อมูล: `buildFilterParams` ไม่ใส่ `parking_*` ลง URL, `+page.ts` ไม่อ่านและไม่ส่งใน `filters`) · `shelter-filter-panel.svelte` เพิ่ม state ของ checkbox ทั้งสาม (รถยนต์ มอเตอร์ไซค์ เรือ) และใส่ `parking_car` / `parking_motorcycle` / `parking_boat` = `on` ลง URL ผ่าน `buildFilterParams` เมื่อติ๊ก · `+page.ts` อ่าน param และคืนค่าใน `filters` (ให้ checkbox แสดงสถานะที่ติ๊กไว้หลังโหลดหน้าใหม่)
 - FR-34 — กรองฝั่ง client ใน `+page.ts` แบบเดียวกับ `q` / `type` / `hide_full` ที่กรองอยู่แล้ว (ไม่ส่ง parameter ไป FastAPI) · ติ๊กหลายประเภทพร้อมกัน = ศูนย์ต้องรองรับ **ทุกประเภทที่ติ๊ก** (AND) · ไม่ติ๊กเลย = ไม่กรอง · ศูนย์ที่ไม่ผ่านถูกตัดออกจากทั้งรายการและแผนที่ (รวมหมุดจุดจอดรถของศูนย์นั้น ตาม FR-30) · `count` และ `shelters_open` ใน summary นับหลังกรอง
-- FR-35 — worker ฉาย `public_shelters.parking_vehicle_types` = รายการประเภทรถที่ศูนย์รองรับ (`motorcycle` / `car` / `truck` / `boat` ไม่ซ้ำ เรียงตามลำดับนี้) คำนวณตามกติกา FR-9/FR-10/FR-11 · `availability = 'none'` → `[]` · ใช้ค่าจากจุดจอดรถที่ **ปักหมุดหรือไม่ก็ได้** (ศูนย์รองรับรถประเภทนั้นเมื่อมีจุดใดระบุไว้) ต่างจาก `parking_points` ที่ฉายเฉพาะจุดที่ปักหมุดแล้ว (FR-25) · ศูนย์ที่ยังไม่มีจุดที่ระบุรถ → ใช้ `parking_policy.supported_vehicles` และคงกติกาเดิมของ `transparency/shelters` ที่ `common_areas.parking_capacity > 0` ทำให้ผ่านทั้ง `car` และ `motorcycle` (ดู Q6)
+- FR-35 — worker ฉาย `public_shelters.parking_vehicle_types` = รายการประเภทรถที่ศูนย์รองรับ (`motorcycle` / `car` / `truck` / `boat` ไม่ซ้ำ เรียงตามลำดับนี้) คำนวณตามกติกา FR-9/FR-10/FR-11 · `availability = 'none'` → `[]` · ใช้ค่าจากจุดจอดรถที่ **ปักหมุดหรือไม่ก็ได้** (ศูนย์รองรับรถประเภทนั้นเมื่อมีจุดใดระบุไว้) ต่างจาก `parking_points` ที่ฉายเฉพาะจุดที่ปักหมุดแล้ว (FR-25) · ศูนย์ที่ยังไม่มีจุดที่ระบุรถ → ใช้ `parking_policy.supported_vehicles` · ศูนย์ที่มีแค่ `common_areas.parking_capacity` ไม่ระบุประเภทรถ → `parking_vehicle_types = []` ไม่ใช้เลขรวมเดาประเภท (Q6 ตัวเลือก 1)
 - FR-36 — FastAPI เพิ่ม `ShelterItem.parking_vehicle_types` ใน list response และ `ShelterDetail.parking_vehicle_types` ใน detail (default `[]`) · เหตุที่ต้องมีใน list: ฝั่ง client กรองได้เฉพาะข้อมูลที่ list ส่งมา และศูนย์เดิมที่ยังไม่มีหมุดต้องกรองจาก `supported_vehicles` ได้ด้วย (ซึ่ง list ไม่มี) · OpenAPI regen ตาม FR-28
 - FR-37 — กติกา effective vehicles มี 2 ภาษา: TypeScript (ฟอร์ม + `transparency/shelters`) และ Python (worker) · ทั้งสองต้องผ่านชุดกรณีทดสอบเดียวกัน (ตารางกรณีเดียวกันใส่ใน test ทั้งสองฝั่ง) เพื่อไม่ให้ค่าที่ฟอร์มแสดงกับค่าที่ฉายไป public ต่างกัน
 
@@ -167,6 +167,7 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - [ ] หน้า `/shelters`: ติ๊ก "รถยนต์" → URL มี `parking_car=on` · รายการและแผนที่เหลือเฉพาะศูนย์ที่รองรับรถยนต์ · รีเฟรชแล้ว checkbox ยังติ๊กอยู่
 - [ ] ติ๊ก "รถยนต์" และ "เรือ" พร้อมกัน → เหลือเฉพาะศูนย์ที่รองรับทั้งสองประเภท · เอาติ๊กออกทั้งหมด → กลับมาครบ
 - [ ] ศูนย์เดิมที่มี `supported_vehicles` รถยนต์ (ไม่มีหมุด) → ผ่านตัวกรอง "รถยนต์" · ศูนย์ที่มีหมุดรถยนต์แต่ยังไม่ปักพิกัด → ผ่านตัวกรอง "รถยนต์" แต่ไม่มีหมุดบนแผนที่
+- [ ] ศูนย์ที่มีแค่ `parking_capacity` = 40 ไม่ระบุประเภทรถและไม่มีจุดจอดรถ → ไม่ผ่านตัวกรอง "รถยนต์" และ "มอเตอร์ไซค์" · `parking_vehicle_types = []`
 - [ ] ศูนย์ที่ `availability = none` → ไม่ผ่านตัวกรองทุกประเภท แม้มีจุดจอดรถ
 - [ ] ตารางกรณี effective vehicles ชุดเดียวกัน ผ่านทั้ง test TypeScript (ฟอร์ม + `transparency/shelters`) และ test Python (worker `parking_vehicle_types`)
 - [ ] Tests: domain (schema bounds, `type` ซ้ำ, ฟังก์ชันคำนวณ effective vehicles ทุกกรณี FR-9–FR-11, migration v9 → v10, chain, identity ของ `normalizeCurrent`) · transparency/shelters (ตัวกรองอ่านจากจุดจอดรถ + legacy) · import-row (FR-23) · worker (`project_parking_points` ทุกกรณี FR-25/26) · backend (detail มี field, list ไม่มี) · shelter-map dom test (หมุดจุดจอดรถ) · e2e shelters (เพิ่ม/ปักหมุด/ลบ/ชื่อว่าง/ใส่รถ) และ e2e หน้า `/shelters` (หมุดจุดจอดรถ)
@@ -178,7 +179,7 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - **Q3 — แสดงในหน้า public:** ✅ ตัดสินแล้ว (2026-11-13) — owner สั่งให้ทำใน CR นี้ ไม่แยก CR · หมุดบนหน้าค้นหาศูนย์ใช้ไอคอนที่จอดรถ (FR-25–FR-32)
 - **Q4 — import:** ✅ ตัดสินแล้ว (2026-11-12) — ไม่เพิ่ม sheet จุดจอดรถใน template รอบนี้ (FR-24)
 - **Q5 — `availability = none` กับจุดจอดรถที่บันทึกไว้:** ร่างนี้ไม่ลบจุด แค่ถือว่าศูนย์ไม่มีที่จอดรถ (FR-11) เพราะลบแล้วกู้พิกัดไม่ได้ · ยืนยันไหม
-- **Q6 — `common_areas.parking_capacity`:** ซ้ำกับความจุรวมที่คำนวณได้แล้ว และไม่มีช่องกรอกในฟอร์ม แต่ import ยังเขียน และตัวกรอง legacy ยังอ่าน (`> 0` ทำให้ผ่านทั้งรถยนต์และมอเตอร์ไซค์) · ร่างนี้ไม่แตะ (FR-12) · ต้องการเลิกใช้ใน CR ถัดไปไหม
+- **Q6 — `common_areas.parking_capacity`:** ✅ ตัดสินแล้ว (2026-11-13) — ตัวกรองเลิกใช้เลขรวมเดาประเภทรถ (FR-10, FR-22, FR-35) · ศูนย์ที่มีแต่เลขรวมโดยไม่ระบุประเภทรถ จะไม่ผ่านตัวกรองจนกว่าจะระบุประเภท · import ยังเขียนเลขรวมต่อ (FR-24) · งานต่อแยก CR: ให้ import ตรวจว่ากรอกเลขรวมต้องระบุประเภทรถด้วย
 - **Q7 — หมุดจุดจอดรถบนหน้าค้นหา แสดงของศูนย์ไหน:** ✅ ตัดสินแล้ว (2026-11-13) — แสดงของทุกศูนย์พร้อมกัน (FR-30) · ต้องเพิ่ม `parking_points` ใน list response ทำให้ payload ของรายการศูนย์ใหญ่ขึ้น · ถ้าพบว่าช้าตอนข้อมูลจริงมาก ค่อยตัดสินใหม่ (เช่น ตัด `note` ออกจาก list)
 - **Q8 — ตัวกรอง "ที่จอดรถ" บนหน้า `/shelters`:** ✅ ตัดสินแล้ว (2026-11-13) — ต่อสายในรอบนี้ (FR-33–FR-37) · ที่มา: ตรวจพบว่า checkbox ยานพาหนะไม่ได้ต่อกับข้อมูลจริงก่อน CR นี้ (`buildFilterParams` ไม่ใส่ `parking_*`, `+page.ts` ไม่อ่าน, `listPublicShelters` ไม่ส่ง) · route `transparency/shelters` ซึ่งเป็นตัวเดียวที่คำนวณตัวกรอง ไม่มีหน้าไหนเรียก
 
@@ -193,7 +194,7 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - ใช้รูปเดียวกับจุดแจกอาหารทุก field และรูปเดียวกับ `supported_vehicles` ในส่วน `vehicles` เพื่อใช้ schema, หน้าต่างแผนที่ และรูปแบบ test เดิมได้
 - เพิ่มเป็นส่วนที่ 10 ต่อท้าย แทนการแทรกถัดจากส่วนที่ 3/4 เพราะเลข "ส่วนที่ N" ของแต่ละส่วนเขียนตายตัวในแต่ละ component · ต่อท้ายจึงไม่ต้องเลื่อนเลขส่วนอื่น และยังอยู่ติดกับนโยบายยานพาหนะ
 - import: ทำแค่ "ไม่ลบข้อมูลเดิม" เพราะ sheet ใหม่ต้องแก้คอลัมน์ parser template job store UI และ test จำนวนมาก โดยยังไม่มีใครขอ
-- งานต่อที่บันทึกไว้: (1) นี่เป็นรายการปักหมุดชุดที่ 3 (จุดแจกอาหาร, จุดเก็บของ, จุดจอดรถ) ควรแยก section ปักหมุดที่ใช้ร่วมกันใน PR refactor ต่างหาก (2) เลิกใช้ `parking_capacity` และ `supported_vehicles` เมื่อศูนย์ย้ายมาใช้จุดจอดรถครบ (Q6)
+- งานต่อที่บันทึกไว้: (1) นี่เป็นรายการปักหมุดชุดที่ 3 (จุดแจกอาหาร, จุดเก็บของ, จุดจอดรถ) ควรแยก section ปักหมุดที่ใช้ร่วมกันใน PR refactor ต่างหาก (2) เลิกใช้ `parking_capacity` และ `supported_vehicles` เมื่อศูนย์ย้ายมาใช้จุดจอดรถครบ (3) CR แยกให้ import บังคับระบุประเภทรถเมื่อกรอกเลขรวม (Q6)
 
 ## Migration
 
@@ -215,3 +216,4 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - 2026-11-13 — owner ตอบ Q7: แสดงหมุดจุดจอดรถของทุกศูนย์พร้อมกันบนหน้าค้นหา · เพิ่ม `parking_points` ใน list response ของ FastAPI
 
 - 2026-11-13 — owner สั่ง: ต่อสายตัวกรองที่จอดรถบนหน้า `/shelters` ใน CR นี้ (Q8) · ตรวจพบก่อนหน้านี้ว่า checkbox ไม่ได้ต่อกับข้อมูลจริง
+- 2026-11-13 — owner เลือก Q6 ตัวเลือก 1: ตัวกรองเลิกเดาจากเลขรวม · เรื่อง import บังคับระบุประเภทรถแยกเป็น CR ต่างหาก
