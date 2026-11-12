@@ -2,10 +2,11 @@
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { toast } from 'svelte-sonner';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { previewImageAsPdf } from '$lib/utils/pdf';
 	import { cn } from '$lib/utils/shadcn';
-	import type { Evacuee } from '$lib/features/people';
+	import type { Evacuee, VulnerabilityMarker } from '$lib/features/people';
 	import {
 		buildEvacueeQrLabel,
 		formatPersonName,
@@ -23,6 +24,9 @@
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
 
 	const t = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
+
+	// Refreshes the stale-card warning after a print (#1301).
+	const queryClient = useQueryClient();
 
 	let {
 		show,
@@ -98,6 +102,7 @@
 		return buildEvacueeQrLabel(evacuee, {
 			zones: shelterQuery.data?.zones,
 			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
+			screenings: screeningsQuery.data,
 			qrPayload
 		});
 	}
@@ -119,13 +124,14 @@
 	 */
 	async function renderIssuedLabelPng(): Promise<string> {
 		let payload: string | undefined;
+		let marker: VulnerabilityMarker | null = null;
 		try {
-			const issued = await issueQrPayloads({
-				shelterCode,
-				source: qrSource,
-				evacueeIds: [evacuee._id]
-			});
+			const issued = await issueQrPayloads(
+				{ shelterCode, source: qrSource, evacueeIds: [evacuee._id] },
+				{ queryClient }
+			);
 			payload = issued.payloads.get(evacuee._id);
+			marker = issued.markers.get(evacuee._id) ?? null;
 		} catch {
 			payload = undefined;
 		}
@@ -135,7 +141,8 @@
 		}
 		issuedPayload = payload;
 		const { qrPayload, label } = labelContent(payload);
-		return renderKioskQrLabelPng(qrPayload, label);
+		// The printed card carries the marker the server recorded for this print, not the preview's.
+		return renderKioskQrLabelPng(qrPayload, { ...label, marker });
 	}
 
 	async function renderStationLabels(): Promise<string[]> {

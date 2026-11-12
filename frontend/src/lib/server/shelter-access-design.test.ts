@@ -1231,7 +1231,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 		const qrDoc = (prints: Doc[]): Doc => ({
 			...envelope,
-			schema_v: 1,
+			schema_v: 2,
 			_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
 			type: 'evacuee_qr',
 			evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
@@ -1291,6 +1291,50 @@ describe('buildValidateDocUpdate', () => {
 				() => compile()(qrDoc([e1, entry('2026-11-06T09:00:00.000Z', '289170')]), one, COUCH_ADMIN),
 				/unique/
 			);
+		});
+
+		it('accepts schema_v 1 (pre-marker docs) and 2, rejects other versions', () => {
+			expect(() => compile()({ ...one, schema_v: 1 }, null, COUCH_ADMIN)).not.toThrow();
+			expect(() => compile()({ ...one, schema_v: 2 }, null, COUCH_ADMIN)).not.toThrow();
+			expectForbidden(
+				() => compile()({ ...one, schema_v: 3 }, null, COUCH_ADMIN),
+				/Unsupported evacuee_qr schema version/
+			);
+		});
+
+		it('accepts marker red, yellow, null or absent on an entry (#1301)', () => {
+			for (const marker of ['red', 'yellow', null]) {
+				expect(() =>
+					compile()(
+						qrDoc([entry(e1.printed_at as string, '289170', { marker })]),
+						null,
+						COUCH_ADMIN
+					)
+				).not.toThrow();
+			}
+		});
+
+		it('rejects a marker outside red/yellow/null (#1301)', () => {
+			for (const marker of ['green', 'RED', '', 1]) {
+				expectForbidden(
+					() =>
+						compile()(
+							qrDoc([entry(e1.printed_at as string, '289170', { marker })]),
+							null,
+							COUCH_ADMIN
+						),
+					/marker must be/
+				);
+			}
+		});
+
+		it('keeps an existing entry marker append-only (#1301)', () => {
+			const red = qrDoc([entry(e1.printed_at as string, '289170', { marker: 'red' })]);
+			const next = (marker: unknown) =>
+				qrDoc([entry(e1.printed_at as string, '289170', { marker }), e2]);
+			expect(() => compile()(next('red'), red, COUCH_ADMIN)).not.toThrow();
+			expectForbidden(() => compile()(next('yellow'), red, COUCH_ADMIN), /append-only/);
+			expectForbidden(() => compile()(next(null), red, COUCH_ADMIN), /append-only/);
 		});
 
 		it('requires a source from the enum', () => {

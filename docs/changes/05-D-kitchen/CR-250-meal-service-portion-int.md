@@ -1,11 +1,11 @@
 ---
-id: CR-249
+id: CR-250
 title: meal_service — actual_yield/served/waste เป็น int (จำนวนจาน) ตามโค้ด และคำนวณ shortfall กับยอดคงคลังด้วย Decimal
 status: approved
 date: 2026-11-11
 updated: 2026-11-12
 requested_by: "PO decision (#794) — จำนวนจานเป็น int ถูกแล้ว ให้แก้ schema.md; issue #937"
-decided_by: kong
+decided_by: "Soravit Sukkarn (Team Lead)"
 decision_date: 2026-11-12
 layer: volatile
 affects:
@@ -15,11 +15,11 @@ affects:
   - frontend/src/lib/features/kitchen/ui/meal-plan-list.svelte
   - frontend/src/lib/features/kitchen/ui/meal-plan-form.svelte
   - frontend/src/lib/features/kitchen/ui/yield-receipt-lines.svelte
-why: schema.md บอกว่า meal_service.actual_yield/served/waste เป็น qty_str แต่โค้ดและ doc ที่ persist เป็น int มาตลอด; หน้าแผนครัวคำนวณ shortfall และเทียบยอดผลผลิตด้วย float ทำให้ได้ 5.5e-17 แทน 0
+why: schema.md บอกว่า meal_service.actual_yield/served/waste เป็น qty_str แต่โค้ดและ doc ที่ persist เป็น int มาตลอด; หน้าแผนครัวคำนวณ shortfall และเทียบยอดผลผลิตด้วย float ทำให้ได้ 1.14e-13 แทน 0
 migration: ไม่ bump schema_v — doc ที่ persist เป็น JSON integer อยู่แล้ว ไม่มี backfill
 ---
 
-# meal_service — actual_yield/served/waste เป็น int และคำนวณ shortfall ด้วย Decimal
+# CR-250 — meal_service — actual_yield/served/waste เป็น int และคำนวณ shortfall ด้วย Decimal
 
 อ้างอิง: [CR-038](01-core/CR-038-decimal-qty-strings.md) (qty_str),
 [CR-084](03-C-supply/CR-084-catalog-schema-reconciliation.md) (`actual_yield`),
@@ -40,7 +40,7 @@ migration: ไม่ bump schema_v — doc ที่ persist เป็น JSON i
 - ค่าทั้งสามเป็น "จำนวนจาน" (portion) ซึ่งเป็นจำนวนนับ ไม่ใช่ปริมาณที่มีเศษ PO ตัดสิน (#794) ว่า int ถูกต้อง
   ให้แก้ spec ตามโค้ด แทนการย้ายโค้ดไป `qty_str`
 - ยอดคงคลัง (`stockBalance`) เป็น `qty_str` แต่หน้าแผนครัวแปลงด้วย `Number()` แล้วลบ/คูณเป็น float
-  → stock `"0.3"` × ratio ที่ควรพอดีกับแผน ได้ shortfall `5.5e-17` แทน `0`; ยอดรวมบรรทัดผลผลิต
+  → stock `"1.001"` kg เทียบแผน 1001 g (ratio 1000) ได้ shortfall `1.14e-13` แทน `0`; ยอดรวมบรรทัดผลผลิต
   `"0.1" + "0.2"` เทียบกับ expected `"0.3"` แล้วขึ้นว่าไม่ตรง
 
 ## Change
@@ -75,7 +75,7 @@ migration: ไม่ bump schema_v — doc ที่ persist เป็น JSON i
 
 ## Acceptance
 
-- **AC-1** — stock `"0.3"` × ratio ที่ทำให้ได้พอดีกับ `planned_qty` → shortfall = `0` (ไม่ใช่ `5.5e-17`)
+- **AC-1** — stock `"1.001"` kg เทียบแผน 1001 g (ratio 1000) → shortfall = `0` (ไม่ใช่ `1.14e-13`); stock `"0.3"` kg เทียบแผน 300 g → shortfall = `0`
 - **AC-2** — ยอดรวมบรรทัดผลผลิต `"0.1" + "0.2"` เทียบ expected `"0.3"` → ไม่ขึ้นว่าไม่ตรง
 - **AC-3** — มี unit test ของ helper shortfall ครอบ AC-1, กรณีของพอ (= 0) และกรณีขาดจริง
 - **AC-4** — ทุก `.svelte` ที่แก้ผ่าน `svelte-autofixer`; `pnpm check` ผ่าน
@@ -99,4 +99,4 @@ N/A — ไม่ bump `schema_v` (คง 2). doc `meal_service` ที่ persi
 
 - PO (#794, ไม่ระบุวันใน issue): จำนวนจานเป็น int ถูกแล้ว ให้แก้ schema.md ตามโค้ด
 - 2026-11-11 — proposed (draft, issue #937) · implement พร้อม draft ใน PR เดียว
-- 2026-11-12 — Approved โดย kong กำหนดหมายเลข CR-249 (ต่อจาก CR-248)
+- 2026-11-12 — Approved โดย Soravit Sukkarn (Team Lead) กำหนดหมายเลข CR-250 (ต่อจาก CR-249)

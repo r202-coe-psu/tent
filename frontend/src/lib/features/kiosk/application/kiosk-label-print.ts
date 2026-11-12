@@ -1,3 +1,4 @@
+import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 import type { LanguageCode } from '$lib/stores/language.svelte';
 import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 import { printKioskLabels } from '../data/kiosk-print.api';
@@ -15,11 +16,19 @@ export type KioskQrLabel = {
 	emergencyPhone?: string | null;
 	/** Intake stations passed: this many checklist boxes are ticked. */
 	checkedCount?: number;
+	/** Vulnerability level printed as a marker row above the name; none leaves no row. */
+	marker?: VulnerabilityMarker | null;
 };
 
-/** QR payload → data URL sized for the label (module-count based), in the kiosk print colour. */
-export async function prepareKioskQrImage(qrPayload: string): Promise<KioskQrImage> {
-	const size = kioskQrPrintSize(await qrModuleCount(qrPayload));
+/**
+ * QR payload → data URL sized for the label (module-count based), in the kiosk print colour. Pass
+ * the label's `marker`: the level band at the left edge leaves a smaller QR.
+ */
+export async function prepareKioskQrImage(
+	qrPayload: string,
+	marker?: VulnerabilityMarker | null
+): Promise<KioskQrImage> {
+	const size = kioskQrPrintSize(await qrModuleCount(qrPayload), marker);
 	const src = await generateQrDataUrl(qrPayload, {
 		width: size.widthPx,
 		margin: size.margin,
@@ -37,7 +46,7 @@ export async function renderKioskQrLabelPng(
 	qrPayload: string,
 	label: Omit<KioskLabelContent, 'qrSrc'>
 ): Promise<string> {
-	const image = await prepareKioskQrImage(qrPayload);
+	const image = await prepareKioskQrImage(qrPayload, label.marker);
 	return renderKioskLabelPng({ ...label, qrSrc: image.src });
 }
 

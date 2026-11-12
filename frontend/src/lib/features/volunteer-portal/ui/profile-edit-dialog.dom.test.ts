@@ -40,6 +40,7 @@ const profile: VolunteerProfile = {
 	nickname: null,
 	phone_masked: 'xxx-xxx-2222',
 	email: null,
+	occupation: 'Nurse',
 	volunteer_code: '',
 	skills: ['cook'],
 	organization: null,
@@ -75,6 +76,7 @@ describe('ProfileEditDialog', () => {
 		const text = open('en');
 		expect(text).toContain('Edit volunteer profile');
 		expect(text).toContain('No volunteer code yet');
+		expect(text).toContain('Occupation: Nurse');
 		expect(text).toContain('Verified');
 		expect(text).toContain('Shelters with a profile: SH001 · SH002');
 		expect(text).toContain(
@@ -100,6 +102,7 @@ describe('ProfileEditDialog', () => {
 		const text = open('th');
 		expect(text).toContain('แก้ไขโปรไฟล์จิตอาสา');
 		expect(text).toContain('ยังไม่มีรหัสอาสา');
+		expect(text).toContain('อาชีพ: Nurse');
 		expect(text).toContain('ยืนยันตัวตนแล้ว');
 		expect(text).toContain('ศูนย์ที่มีโปรไฟล์: SH001 · SH002');
 		expect(text).toContain('ทักษะของฉัน');
@@ -107,5 +110,10 @@ describe('ProfileEditDialog', () => {
 		expect(text).toContain('ทำอาหาร');
 		expect(text).toContain('(ควบคุม)');
 		expect(text).toContain('บันทึกการเปลี่ยนแปลง');
+	});
+
+	it('renders fallback dash when occupation is null', () => {
+		const text = open('th', { ...profile, occupation: null });
+		expect(text).toContain('อาชีพ: —');
 	});
 });
