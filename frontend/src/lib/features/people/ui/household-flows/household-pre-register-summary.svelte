@@ -321,7 +321,7 @@
 				</div>
 			</div>
 
-			<div class="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm">
+			<div class="mt-6 grid grid-cols-1 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-2">
 				<div>
 					<span class="text-xs text-muted-foreground">ชื่อครัวเรือน</span>
 					<p class="font-semibold text-slate-800 dark:text-slate-200">
@@ -334,7 +334,7 @@
 						{createdHead ? formatPersonName(createdHead) : '—'}
 					</p>
 				</div>
-				<div class="col-span-2">
+				<div class="sm:col-span-2">
 					<span class="text-xs text-muted-foreground">ที่อยู่เดิม</span>
 					<p class="font-medium text-slate-800 dark:text-slate-200">
 						{formatAddress(createdHousehold)}
@@ -345,7 +345,7 @@
 
 		<!-- Member List Card -->
 		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
-			<div class="mb-4 flex items-center justify-between gap-4">
+			<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 				<h3 class="flex items-center gap-2 text-base font-bold text-slate-800 dark:text-slate-200">
 					<Users class="size-5 text-primary" />
 					รายชื่อสมาชิกในบ้าน ({householdMembers.length} คน)
@@ -361,7 +361,55 @@
 				</Button>
 			</div>
 
-			<div class="overflow-x-auto rounded-xl border">
+			<ul class="divide-y rounded-xl border md:hidden" data-testid="household-member-cards">
+				{#each householdMembers as m (m._id)}
+					{@const isHead = m._id === createdHousehold.head_evacuee_id}
+					<li class="space-y-2 p-3 text-sm">
+						<div class="flex items-start justify-between gap-2">
+							<p class="min-w-0 font-bold break-words text-slate-900 dark:text-slate-100">
+								{formatPersonName(m)}
+								{#if m.nickname}
+									<span class="text-xs font-normal text-muted-foreground">({m.nickname})</span>
+								{/if}
+							</p>
+							{#if isHead}
+								<span
+									class="shrink-0 rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary"
+								>
+									หัวหน้าครอบครัว
+								</span>
+							{:else}
+								<span
+									class="shrink-0 rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+								>
+									ลูกบ้าน
+								</span>
+							{/if}
+						</div>
+						<div class="font-mono text-xs">
+							<span>ID: {maskNationalId(m.person_id?.number)}</span>
+							{#if m.phone}
+								<span class="opacity-75"> · {m.phone}</span>
+							{/if}
+						</div>
+						<div class="flex flex-wrap gap-1">
+							{#if m.vulnerable_groups?.length > 0}
+								{#each m.vulnerable_groups as need (need)}
+									<span
+										class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
+									>
+										{VULNERABLE_GROUP_CHIPS[need]?.emoji}
+										{VULNERABLE_GROUP_CHIPS[need]?.label ?? need}
+									</span>
+								{/each}
+							{:else}
+								<span class="text-xs text-muted-foreground italic">ไม่มีกลุ่มช่วยเหลือพิเศษ</span>
+							{/if}
+						</div>
+					</li>
+				{/each}
+			</ul>
+			<div class="hidden overflow-x-auto rounded-xl border md:block">
 				<table class="w-full border-collapse text-left text-sm">
 					<thead>
 						<tr class="border-b bg-muted/40">
@@ -720,7 +768,7 @@
 						</Form.Field>
 					</div>
 
-					<div class="grid grid-cols-2 gap-4">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<Form.Field form={memberForm} name="country">
 							<Form.Control>
 								{#snippet children({ props })}
