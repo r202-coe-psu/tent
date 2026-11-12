@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------
 # Usage: sudo ./setup_printer_server.sh [--env-file FILE] [options]
 #   ติดตั้งครั้งแรก:  sudo ./setup_printer_server.sh   (อ่าน ./.env)
-#   ไม่ใส่ --env-file:  ใช้ <prefix>/.env ที่ติดตั้งไว้แล้ว ถ้าไม่มีใช้ .env ข้างสคริปต์นี้
+#   ไม่ใส่ --env-file:  ใช้ .env ข้างสคริปต์นี้ ถ้าไม่มีใช้ <prefix>/.env ที่ติดตั้งไว้แล้ว
 #   --env-file FILE     .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers);
 #                       จะถูกวางเป็น <prefix>/.env (600)
 #   --queue NAME        ชื่อ CUPS queue (default: PRINTER_NAME ใน --env-file หรือ tent_xprinter)
@@ -87,9 +87,9 @@ env_value() {
 [[ "$PREFIX" =~ ^/[A-Za-z0-9_./-]+$ ]] || die "--prefix ต้องเป็น path เต็มที่ใช้ได้เฉพาะ A-Z a-z 0-9 _ . / -"
 
 if ! $STATUS_ONLY; then
-    # No --env-file: keep the installed one, else take the .env next to this script.
+    # No --env-file: the .env next to this script wins, else keep the installed one.
     if [ -z "$ENV_FILE" ]; then
-        for candidate in "$PREFIX/.env" "$SCRIPT_DIR/.env"; do
+        for candidate in "$SCRIPT_DIR/.env" "$PREFIX/.env"; do
             if [ -f "$candidate" ]; then ENV_FILE="$candidate"; break; fi
         done
         [ -n "$ENV_FILE" ] && info "ใช้ env จาก $ENV_FILE"

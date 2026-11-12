@@ -192,12 +192,11 @@ nano .env
 cd ~/tent/printer
 sudo ./setup_printer_server.sh --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
 sudo ./setup_printer_server.sh             # อ่าน .env ในโฟลเดอร์นี้เอง ไม่ต้องใส่ --env-file
-rm .env             # ติดตั้งแล้ว ค่าจริงอยู่ที่ /opt/tent/printer/.env ไม่ต้องเก็บสำเนา secret ไว้ใน repo
 ```
 
 | ตัวเลือก | ความหมาย |
 |---|---|
-| `--env-file FILE` | `.env` ของ agent ถูกคัดลอกไปเป็น `<prefix>/.env` · ไม่ใส่ = ใช้ `<prefix>/.env` ที่ติดตั้งไว้แล้ว ถ้ายังไม่มีใช้ `printer/.env` ข้างสคริปต์ |
+| `--env-file FILE` | `.env` ของ agent ถูกคัดลอกไปเป็น `<prefix>/.env` · ไม่ใส่ = ใช้ `printer/.env` ข้างสคริปต์ ถ้าไม่มีใช้ `<prefix>/.env` ที่ติดตั้งไว้แล้ว |
 | `--queue NAME` | ชื่อ CUPS queue (default: `PRINTER_NAME` ใน `--env-file`) |
 | `--prefix DIR` | ที่ติดตั้ง (default `/opt/tent/printer`) |
 | `--dry-run` | พิมพ์คำสั่งที่จะรัน ไม่เขียนอะไร และไม่ต้องเป็น root |
@@ -222,8 +221,8 @@ cd ~/tent && git pull
 cd printer && sudo ./setup_printer_server.sh
 ```
 
-สคริปต์รันซ้ำได้ ใช้ `.env` เดิมที่ `/opt/tent/printer/.env` แล้วลงฟอนต์ไทย / dependency ใหม่และ restart service ให้เอง
-ถ้าเพิ่ง rotate secret ใน back-office ให้แก้ `DEVICE_SECRET` ด้วย `sudo nano /opt/tent/printer/.env` แล้ว `sudo systemctl restart tent-printer`
+สคริปต์รันซ้ำได้ ใช้ `printer/.env` (ถ้าไม่มีใช้ `/opt/tent/printer/.env` เดิม) แล้วลงฟอนต์ไทย / dependency ใหม่และ restart service ให้เอง
+ถ้าเพิ่ง rotate secret ใน back-office ให้แก้ `DEVICE_SECRET` ใน `printer/.env` แล้วรัน `sudo ./setup_printer_server.sh` ใหม่
 
 ถ้ารัน `kiosk/setup_printer.sh` ใหม่ (เช่นเปลี่ยนม้วน) ให้ `sudo systemctl restart tent-printer` ด้วย
 
