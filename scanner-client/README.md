@@ -48,5 +48,7 @@
   สร้าง `.env` (ถาม `SHELTER_URL` ครั้งแรก), สร้าง shortcut **tent** ในเมนูแอป + Desktop
   แล้วเปิดโปรแกรม · รันซ้ำได้ ข้ามขั้นที่ทำแล้ว · ครั้งต่อไปเปิดจาก shortcut ได้เลย
 - test: `uv run pytest`
-- build exe (ต้องทำบน Windows): `powershell -ExecutionPolicy Bypass -File .\build.ps1` → `dist\scanner-client-win64.zip`
+- build exe (ต้องทำบน Windows ที่ต่อเน็ตได้ ไม่ต้องลง Python/uv เอง): ดับเบิลคลิก `build.bat`
+  (หรือ `powershell -ExecutionPolicy Bypass -File .\build.ps1`) — ถ้าไม่มี `uv` ใน PATH สคริปต์จะโหลด uv ไว้ใน
+  `.tools\` แล้ว uv โหลด Python ให้เอง → `dist\scanner-client-win64.zip`
   และ `dist\scanner-client-debug-win64.zip` (spec: `scanner-client.spec`, onedir, ไม่ bundle browser)

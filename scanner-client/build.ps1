@@ -3,9 +3,9 @@
   Build scanner-client for Windows: venv -> pytest -> pyinstaller (normal + debug) -> zip.
 
 .DESCRIPTION
-  Run manually on a Windows machine (PyInstaller does not cross-compile):
+  Run on a Windows machine (PyInstaller does not cross-compile): double-click build.bat, or
       powershell -ExecutionPolicy Bypass -File .\build.ps1
-  Uses `uv` when installed, otherwise `py -3.12 -m venv` + pip.
+  Needs internet only: uses `uv` from PATH, else downloads it into .tools\; uv fetches Python.
   Output (in dist\):
       scanner-client-win64.zip         scanner-client\ (onedir, console-less) + README.md
                                        (.env.example + install-shortcut.bat are inside
@@ -32,21 +32,29 @@ if (-not (Test-Path -LiteralPath '..\kiosk\app\scard.py')) {
     throw 'Missing ..\kiosk\app\scard.py (scanner-client reuses the kiosk card reader module).'
 }
 
-$useUv = $null -ne (Get-Command uv -ErrorAction SilentlyContinue)
-if ($useUv) {
-    Invoke-Checked 'uv' @('sync', '--group', 'build')
-    $run = { param([string[]]$a) Invoke-Checked 'uv' (@('run', '--group', 'build') + $a) }
-} else {
-    if (-not (Test-Path -LiteralPath '.venv\Scripts\python.exe')) {
-        Invoke-Checked 'py' @('-3.12', '-m', 'venv', '.venv')
+# uv on PATH wins; otherwise a private copy in .tools\ (downloaded once, no admin, PATH untouched).
+# uv then fetches a managed Python itself, so the build machine needs neither uv nor Python.
+$uv = (Get-Command uv -ErrorAction SilentlyContinue).Source
+if (-not $uv) {
+    $toolsDir = Join-Path $PSScriptRoot '.tools'
+    $uv = Join-Path $toolsDir 'uv.exe'
+    if (-not (Test-Path -LiteralPath $uv)) {
+        Write-Host ">> installing uv into $toolsDir"
+        # Windows PowerShell 5.1 may default to TLS 1.0, which astral.sh rejects
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $env:UV_INSTALL_DIR = $toolsDir
+        $env:UV_NO_MODIFY_PATH = '1'
+        try {
+            Invoke-RestMethod 'https://astral.sh/uv/install.ps1' | Invoke-Expression
+        } finally {
+            Remove-Item Env:\UV_INSTALL_DIR, Env:\UV_NO_MODIFY_PATH -ErrorAction SilentlyContinue
+        }
+        if (-not (Test-Path -LiteralPath $uv)) { throw "uv install did not produce $uv" }
     }
-    $py = (Resolve-Path -LiteralPath '.venv\Scripts\python.exe').Path
-    Invoke-Checked $py @('-m', 'pip', 'install', '--upgrade', 'pip')
-    Invoke-Checked $py @('-m', 'pip', 'install', '-e', '.', 'pytest>=8.0', 'pyinstaller>=6.0')
-    $scripts = Split-Path -Parent $py
-    # $a[0] is the tool name (pytest / pyinstaller), the rest its arguments
-    $run = { param([string[]]$a) Invoke-Checked (Join-Path $scripts "$($a[0]).exe") $a[1..($a.Count - 1)] }
 }
+
+Invoke-Checked $uv @('sync', '--group', 'build')
+$run = { param([string[]]$a) Invoke-Checked $uv (@('run', '--group', 'build') + $a) }
 
 # 1. tests must pass before anything is packaged
 & $run @('pytest', '-q')
