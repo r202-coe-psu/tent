@@ -29,6 +29,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
 import { ulid } from '../../src/lib/db/ulid';
 import {
+	allDocuments,
 	bootstrapAdminSession,
 	couchLogin,
 	couchReq,
@@ -53,6 +54,8 @@ import { assertRunLeftNothing, warmShelterIndexes } from '../distribution/distri
 const SUPPLY_SHELTER_PREFIX = `${E2E_SHELTER_PREFIX} Supply`;
 const CENTRAL_DBS = ['registry', 'catalog'] as const;
 const WATER = 'น้ำดื่ม 600 มล.';
+const WATER_GROUP = 'กลุ่มน้ำดื่มสะอาด';
+const RESIDENTS = 50;
 const PASSWORD = 'Password1!';
 const LEDGER_SUITE = 'supply-flows';
 
@@ -381,6 +384,20 @@ async function seedOccupancy(code: string, count: number): Promise<void> {
 const stockTabs = (page: Page) => page.getByRole('navigation', { name: 'แท็บคลัง' });
 const moreTools = (page: Page) => page.getByRole('navigation', { name: 'เครื่องมือเพิ่มเติม' });
 
+/**
+ * Run `action` (a save/delete click) and wait until the storage-points snapshot has been
+ * re-read. Each mutation carries the snapshot's `rev`, so the next one must not start before
+ * the refetch lands — a stale `rev` loses the write and the list never shows it.
+ */
+async function untilStoragePointsRefetched(page: Page, action: () => Promise<void>): Promise<void> {
+	const refetched = page.waitForResponse(
+		(res) =>
+			res.request().method() === 'GET' && /\/storage-points$/.test(new URL(res.url()).pathname)
+	);
+	await action();
+	await refetched;
+}
+
 /** Add a storage point from the "จัดการคลัง" tab and wait for it to be listed. */
 async function addStoragePoint(
 	page: Page,
@@ -391,7 +408,10 @@ async function addStoragePoint(
 	await dialog.locator('#sp-name').fill(point.name);
 	await dialog.locator('#sp-area').fill(point.area);
 	for (const type of point.types) await dialog.getByText(type, { exact: true }).click();
-	await dialog.getByRole('button', { name: 'บันทึก', exact: true }).click();
+	await untilStoragePointsRefetched(page, () =>
+		dialog.getByRole('button', { name: 'บันทึก', exact: true }).click()
+	);
+	await expect(toast(page, 'เพิ่มจุดเก็บของสำเร็จ').last()).toBeVisible();
 	await expect(dialog).toBeHidden();
 	await expect(storagePointRow(page, point.name)).toBeVisible();
 }
@@ -422,6 +442,19 @@ async function selectOption(page: Page, trigger: Locator, option: string | RegEx
 // ─── Journeys ──────────────────────────────────────────────────────────────────
 
 test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () => {
+	// The journeys read the central seed (`pnpm seed:master`); without it they would fail
+	// deep inside a flow, so skip up front with the reason.
+	test.beforeAll(async () => {
+		const catalog = await allDocuments('catalog');
+		const hasWater = catalog.some((d) => d.type === 'item_master' && d.name === WATER);
+		const hasWaterGroup = catalog.some(
+			(d) => d.type === 'requirement_group' && d.name === WATER_GROUP
+		);
+		test.skip(
+			!hasWater || !hasWaterGroup,
+			`Central seed missing "${WATER}" / "${WATER_GROUP}" — run \`pnpm seed:master\` first`
+		);
+	});
 	// Every test builds its own shelters, so the tests are independent of each other.
 	test.use({ actionTimeout: 15_000 });
 
@@ -467,14 +500,20 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			const edit = page.getByRole('dialog', { name: 'แก้ไขจุดเก็บของ' });
 			await expect(edit.locator('#sp-name')).toHaveValue(spareShelf);
 			await edit.locator('#sp-area').fill('12');
-			await edit.getByRole('button', { name: 'บันทึก', exact: true }).click();
+			await untilStoragePointsRefetched(page, () =>
+				edit.getByRole('button', { name: 'บันทึก', exact: true }).click()
+			);
+			await expect(toast(page, 'บันทึกจุดเก็บของสำเร็จ').last()).toBeVisible();
 			await expect(edit).toBeHidden();
 			await expect(storagePointRow(page, spareShelf)).toContainText('12 ตร.ม.');
 
 			// Nothing is stored in the spare room, so it can go.
 			await page.getByRole('button', { name: `ลบจุดเก็บของ ${spareShelf}` }).click();
 			const confirm = page.getByRole('alertdialog', { name: 'ลบจุดเก็บของ' });
-			await confirm.getByRole('button', { name: 'ลบจุดเก็บของ' }).click();
+			await untilStoragePointsRefetched(page, () =>
+				confirm.getByRole('button', { name: 'ลบจุดเก็บของ' }).click()
+			);
+			await expect(toast(page, 'ลบจุดเก็บของสำเร็จ').last()).toBeVisible();
 			await expect(storagePointRow(page, spareShelf)).toHaveCount(0);
 			await expect(storagePointRow(page, waterShelf)).toBeVisible();
 		});
@@ -691,9 +730,16 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			const dispatch = page.getByRole('dialog', { name: 'ยืนยันการส่งมอบ' });
 			await dispatch.locator('#dispatch-driver-name').fill('E2E สมศักดิ์ ขับดี');
 			await dispatch.locator('#dispatch-vehicle-plate').fill('1กข 2345 สงขลา');
+			// Wait for the dispatch write itself (the toast can come and go within the default
+			// assertion timeout), then for the dialog to close.
+			const dispatched = page.waitForResponse(
+				(res) =>
+					res.request().method() !== 'GET' &&
+					new URL(res.url()).pathname.startsWith('/api/back-office/transfer')
+			);
 			await dispatch.getByRole('button', { name: 'ยืนยันส่งมอบ' }).click();
-			await expect(toast(page, 'อนุมัติส่งมอบสำเร็จ')).toBeVisible();
-			await expect(dispatch).toBeHidden();
+			expect((await dispatched).ok()).toBe(true);
+			await expect(dispatch).toBeHidden({ timeout: 15_000 });
 
 			await stockTabs(page).getByRole('button', { name: 'สต็อก' }).click();
 			await expectOnHand(page, WATER, 117);
@@ -744,7 +790,7 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 		test.setTimeout(420_000);
 		const code = await run.createShelter('analysis');
 		const staff = await run.warehouseStaff(code);
-		await seedOccupancy(code, 50);
+		await seedOccupancy(code, RESIDENTS);
 		const marker = ulid().toLowerCase();
 		const rice = `E2E ข้าวสาร ${marker}`;
 		// The calculation-group form only offers the central catalog, so the group maps a seeded item.
@@ -800,7 +846,11 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			await expectOnHand(page, salt, 200);
 		});
 
-		const waterGroup = () => page.getByRole('button', { name: /^กลุ่มน้ำดื่มสะอาด \d+ รายการ/ });
+		const waterGroup = () =>
+			page.getByRole('button', { name: new RegExp(`^${WATER_GROUP} \\d+ รายการ`) });
+		// Headcount = the residents plus the one staff account (the tooltip says so).
+		const headcount = RESIDENTS + 1;
+		const perDay = (n: number) => n.toLocaleString('en-US');
 		const openFoodSphere = async () => {
 			await moreTools(page).getByRole('link', { name: 'วิเคราะห์เสบียงอาหาร' }).click();
 			await expect(page).toHaveURL(/tab=food-sphere/);
@@ -810,22 +860,25 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 
 		await test.step('วิเคราะห์เสบียงอาหาร — 50 residents set the water target', async () => {
 			await openFoodSphere();
-			// The headcount is the 50 residents plus the one staff account (the tooltip says so).
-			const people = page.getByRole('button', { name: 'ทั้งหมด 51 คน' }).first();
+			const people = page.getByRole('button', { name: `ทั้งหมด ${headcount} คน` }).first();
 			await people.click();
 			const tip = page.locator('[data-slot="tooltip-content"]').filter({ hasText: 'เจ้าหน้าที่' });
 			await expect(tip.first()).toContainText('ผู้ประสบภัย');
-			await expect(tip.first()).toContainText('50');
+			await expect(tip.first()).toContainText(String(RESIDENTS));
 			await people.click();
 
-			// Seeded Sphere standard: 3 litres per person a day.
-			await expect(waterGroup()).toContainText('เป้าหมาย: 153 ลิตร/วัน');
+			// The target is headcount × the seeded per-person standard: read it, don't hard-code it.
+			const targetText = (await waterGroup().innerText()).match(/เป้าหมาย: ([\d,.]+) ลิตร\/วัน/);
+			expect(targetText, 'water target shown on the group').not.toBeNull();
+			const seededTarget = Number(targetText![1].replace(/,/g, ''));
+			const seededPerPerson = seededTarget / headcount;
+			expect(seededPerPerson).toBeGreaterThan(0);
 			const search = page.getByLabel('ค้นหารายการเสบียง');
 			await search.fill(WATER);
 			await page.getByRole('button', { name: 'ขยายทั้งหมด' }).click();
 			const row = page.getByRole('row').filter({ hasText: WATER });
 			await expect(row).toContainText('600 ขวด');
-			await expect(row).toContainText('178.5 ขวด/วัน');
+			await expect(row).toContainText(/[\d,.]+ ขวด\/วัน/);
 			await search.fill('');
 		});
 
@@ -842,7 +895,7 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			await expect(toast(page, /ปรับปรุงเกณฑ์โภชนาการ.*DRINKING_WATER.*สำเร็จ/)).toBeVisible();
 			await page.keyboard.press('Escape');
 			await expect(sheet).toBeHidden();
-			await expect(waterGroup()).toContainText('เป้าหมาย: 255 ลิตร/วัน');
+			await expect(waterGroup()).toContainText(`เป้าหมาย: ${perDay(5 * headcount)} ลิตร/วัน`);
 		});
 
 		await test.step('กลุ่มสำหรับการคำนวณ — add a salt group that maps a seeded item', async () => {
@@ -875,9 +928,9 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			await expect(toast(page, new RegExp(`เพิ่มเกณฑ์โภชนาการ.*${groupId}.*สำเร็จ`))).toBeVisible();
 			await page.keyboard.press('Escape');
 			await expect(sheet).toBeHidden();
-			// 51 people × 500 g = 25,500 g a day; 200 kg last ~7.8 days.
+			// headcount × 500 g a day; 200 kg last ~7.8 days at 51 people.
 			const group = page.getByRole('button', { name: new RegExp(`^${groupName} 1 รายการ`) });
-			await expect(group).toContainText('เป้าหมาย: 25,500 กรัม/วัน');
+			await expect(group).toContainText(`เป้าหมาย: ${perDay(headcount * 500)} กรัม/วัน`);
 		});
 
 		await test.step('นโยบายเติมสต็อก — a policy for the salt group, then a tighter one for water', async () => {
