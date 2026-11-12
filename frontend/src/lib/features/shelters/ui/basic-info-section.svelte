@@ -200,7 +200,7 @@
 		});
 	}
 
-	// #1343 FR-25: hiding the shelter is confirmed first; turning it back on applies at once.
+	// CR-251 FR-25: hiding the shelter is confirmed first; turning it back on applies at once.
 	let confirmHideOpen = $state(false);
 
 	function setPublicVisible(checked: boolean) {

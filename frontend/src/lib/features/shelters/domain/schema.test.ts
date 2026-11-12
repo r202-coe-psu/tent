@@ -1120,7 +1120,7 @@ describe('isShelterBookable', () => {
 	});
 });
 
-describe('draft-shelter-visibility-referral-intake (#1343) — public_visible / accepts_referrals', () => {
+describe('CR-251 shelter visibility + referral intake — public_visible / accepts_referrals', () => {
 	it('FR-1 defaults both new flags to true in the schema and the default object', () => {
 		expect(DEFAULT_SHELTER_FEATURE_FLAGS.public_visible).toBe(true);
 		expect(DEFAULT_SHELTER_FEATURE_FLAGS.accepts_referrals).toBe(true);

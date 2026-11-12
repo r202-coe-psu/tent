@@ -51,7 +51,7 @@ function mountPicker() {
 	flushSync();
 }
 
-describe('shelter-combobox — #1343 accepts_referrals filter (FR-16)', () => {
+describe('shelter-combobox — CR-251 accepts_referrals filter (FR-16)', () => {
 	it('omits shelters whose accepts_referrals is false and keeps the rest', async () => {
 		shelters.push(
 			shelter('SH001', 'ศูนย์เปิดรับ', { accepts_referrals: true }),

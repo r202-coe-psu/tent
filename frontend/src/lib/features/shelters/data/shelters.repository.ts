@@ -30,7 +30,7 @@ export interface ShelterBasic {
 	operation_status: OperationStatus;
 	province: string | null;
 	capacity: number;
-	/** `feature_flags.accepts_referrals` — undefined/true = accepting (#1343). */
+	/** `feature_flags.accepts_referrals` — undefined/true = accepting (CR-251). */
 	accepts_referrals?: boolean;
 }
 

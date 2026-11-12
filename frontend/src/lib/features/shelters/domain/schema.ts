@@ -90,7 +90,7 @@ export function isShelterPublicVisible(doc: unknown): boolean {
 	return !isShelterCancelled(doc) && readFlag(doc, 'public_visible') !== false;
 }
 
-/** Does this shelter take new referrals? Missing flag = accepting (#1343). */
+/** Does this shelter take new referrals? Missing flag = accepting (CR-251). */
 export function isShelterAcceptingReferrals(doc: unknown): boolean {
 	return readFlag(doc, 'accepts_referrals') !== false;
 }

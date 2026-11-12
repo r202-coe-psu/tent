@@ -293,7 +293,7 @@ def _registry_shelter(**overrides):
 
 
 def test_project_shelter_public_visible_false_deletes_by_code():
-    """draft-shelter-visibility-referral-intake FR-7 (#1343) — hidden leaves the public plane
+    """CR-251 FR-7 — hidden leaves the public plane
     like cancelled; the `_id` lets the caller purge its shelter-scoped projections."""
     doc = _registry_shelter(feature_flags={"public_visible": False})
     assert project_shelter(doc) == ("delete", {"_id": "SH011"})
@@ -403,7 +403,7 @@ def test_classify_registry_shelter_variants():
     assert phase({"operation_status": "standby"}) is RetentionPhase.OPEN
     assert phase({"status": "open"}) is RetentionPhase.OPEN
     assert phase({"operation_status": "cancelled"}) is RetentionPhase.HIDDEN
-    # #1343 FR-8: hidden (public_visible false) is never bootstrapped/listened; missing = open
+    # CR-251 FR-8: hidden (public_visible false) is never bootstrapped/listened; missing = open
     hidden = {"operation_status": "active", "feature_flags": {"public_visible": False}}
     assert phase(hidden) is RetentionPhase.HIDDEN
     assert not phase(hidden).is_listened and not phase(hidden).is_bootstrapped

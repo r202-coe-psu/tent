@@ -102,7 +102,7 @@ def classify_retention(
 def classify_registry_shelter(
     doc: dict[str, Any], *, retention_months: int, now: datetime
 ) -> RetentionPhase:
-    # #1343 FR-8: a hidden shelter is never bootstrapped or listened to (like cancelled).
+    # CR-251 FR-8: a hidden shelter is never bootstrapped or listened to (like cancelled).
     if is_shelter_public_hidden(doc):
         return RetentionPhase.HIDDEN
     return classify_retention(

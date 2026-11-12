@@ -74,7 +74,7 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
-describe('BasicInfoSection — #1343 public_visible / accepts_referrals switches', () => {
+describe('BasicInfoSection — CR-251 public_visible / accepts_referrals switches', () => {
 	it('FR-23 both switches render on when the stored doc has no keys (missing = true)', () => {
 		setup({});
 
