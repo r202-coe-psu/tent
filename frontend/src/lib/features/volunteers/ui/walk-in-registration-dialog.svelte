@@ -74,6 +74,7 @@
 	} from '../domain/volunteer.schema';
 	import {
 		isVolunteerPhoneTakenError,
+		phoneTakenReactivateHint,
 		type ExistingVolunteerSummary
 	} from '../domain/phone-errors';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
@@ -221,6 +222,7 @@
 	const { form: formData, errors, submitting, reset: superReset } = form;
 
 	let phoneConflictExisting = $state<ExistingVolunteerSummary[]>([]);
+	const reactivateHint = $derived(phoneTakenReactivateHint(phoneConflictExisting));
 	let conflictVolunteer = $state<Volunteer | null>(null);
 	let conflictManageOpen = $state(false);
 
@@ -358,6 +360,7 @@
 								class="mt-2 space-y-1.5 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive"
 							>
 								<p class="font-medium">พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์</p>
+								{#if reactivateHint}<p>{reactivateHint}</p>{/if}
 								<div class="flex flex-wrap gap-1.5">
 									{#each phoneConflictExisting as ex (ex._id)}
 										<Button

@@ -26,6 +26,17 @@ export function formatVolunteerPhoneTakenMessage(existing: ExistingVolunteerSumm
 }
 
 /**
+ * CR-239 FR-12 / AC-3 — when the phone already belongs to a closed (`inactive`) profile, staff
+ * should reopen that one ("เปิดใช้งานอีกครั้ง" on its card) rather than create a duplicate.
+ * Null when every holder is active.
+ */
+export function phoneTakenReactivateHint(existing: ExistingVolunteerSummary[]): string | null {
+	return existing.some((v) => v.status === 'inactive')
+		? 'โปรไฟล์เดิมถูกปิดใช้งานอยู่ — เปิดโปรไฟล์นั้นแล้วกด "เปิดใช้งานอีกครั้ง" แทนการสร้างใหม่'
+		: null;
+}
+
+/**
  * Thrown when trying to create or update a volunteer profile with a phone number
  * that already belongs to another non-merged volunteer in the same shelter (CR-239).
  */

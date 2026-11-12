@@ -290,6 +290,27 @@ describe('VolunteerRemoteRepository', () => {
 			}
 		});
 
+		it.each(['+66 81-234-5678', '081-234-5678', '66812345678'])(
+			'create() treats %s as the same number as 0812345678 (AC-1, FR-1)',
+			async (variant) => {
+				const repo = createVolunteerRepositoryForTest('shelter_sh001');
+				await repo.create(baseInput, ctx);
+
+				await expect(
+					repo.create({ ...baseInput, first_name: 'สมศรี', phone: variant }, ctx)
+				).rejects.toThrow(VolunteerPhoneTakenError);
+			}
+		);
+
+		it('update() saves a profile that keeps its own phone (AC-5, FR-8)', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const created = await repo.create(baseInput, ctx);
+
+			const updated = await repo.update({ ...created, phone: '081-234-5678' });
+
+			expect(updated._id).toBe(created._id);
+		});
+
 		it('create() allows creating multiple volunteers without a phone (null phone)', async () => {
 			const repo = createVolunteerRepositoryForTest('shelter_sh001');
 			const v1 = await repo.create({ ...baseInput, phone: null }, ctx);
