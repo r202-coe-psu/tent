@@ -775,7 +775,7 @@
 		>
 			<p class="text-xs text-muted-foreground sm:justify-self-start">
 				{t.paginationSummary(
-					(currentPage - 1) * PAGE_SIZE + 1,
+					filteredJobs.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1,
 					Math.min(currentPage * PAGE_SIZE, filteredJobs.length),
 					filteredJobs.length
 				)}
@@ -792,7 +792,7 @@
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />
-								{#each pages as page, index (index)}
+								{#each pages as page, index (page.key ?? `${page.type}-${index}`)}
 									<Pagination.Item>
 										{#if page.type === 'page'}
 											<Pagination.Link {page} isActive={page.value === currentPage} />

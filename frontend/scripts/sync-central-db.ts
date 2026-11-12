@@ -184,6 +184,12 @@ async function syncCatalogAccessDesign(
 	dryRun: boolean
 ): Promise<'already_current' | 'created' | 'updated'> {
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
+  // #1298 FR-7: per-shelter edge replication accounts (role repl:<CODE>) read catalog, never write.
+  for (var replIndex = 0; replIndex < userCtx.roles.length; replIndex++) {
+    if (userCtx.roles[replIndex].indexOf('repl:') === 0) {
+      throw({ forbidden: 'Replication accounts cannot write catalog documents' });
+    }
+  }
   if (userCtx.roles.indexOf('_admin') !== -1) {
     return;
   }

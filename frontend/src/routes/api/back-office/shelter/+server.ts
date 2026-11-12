@@ -16,6 +16,7 @@ import {
 	validateSiteKindChange,
 	type ShelterMaster
 } from '$lib/features/shelters/server';
+import { shelterCodesFromRoles } from '$lib/auth/roles';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import { migrate, listShelterMasters } from '$lib/server/shelters.admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
@@ -47,8 +48,10 @@ export const GET: RequestHandler = async ({ request }) => {
 	try {
 		const caller = await requireShelterScopeOrSA(request.headers.get('cookie'));
 		const masters = await listShelterMasters();
-		// SA sees every shelter; a shelter-scoped user only sees their own.
-		const visible = caller.isSA ? masters : masters.filter((m) => m.code === caller.shelterCode);
+		// SA sees every shelter; a shelter-scoped user sees every shelter they hold a
+		// `shelter:{code}` role for (not just the first), so a multi-shelter user can switch (#477).
+		const own = new Set(shelterCodesFromRoles(caller.roles));
+		const visible = caller.isSA ? masters : masters.filter((m) => own.has(m.code));
 		return json(
 			visible.map((m) => {
 				const migrated = migrate(m as ShelterMaster);

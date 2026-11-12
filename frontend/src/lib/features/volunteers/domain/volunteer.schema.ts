@@ -3,6 +3,8 @@
  * and CR-095 (schema.md §2.8, `volunteer` schema_v 2 → 3 — `personnel_type`).
  * schema_v 3 → 4 (draft-volunteer-role-card-checkin.md) adds `tracking_token_hash`,
  * additive — existing schema_v 3 rows stay valid and read the field as absent.
+ * schema_v 4 → 5 (CR-228) adds `accepted_from` to `identity_verification` and to each
+ * `skill_verifications` entry, additive and not backfilled — v3 / v4 rows stay valid.
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -37,9 +39,12 @@ export const nationalIdSchema = z
 // Document schema
 // ---------------------------------------------------------------------------
 
+/** The `schema_v` every volunteer write stamps (CR-228). */
+export const VOLUNTEER_SCHEMA_V = 5;
+
 export interface Volunteer extends BaseDoc {
 	type: 'volunteer';
-	schema_v: 3 | 4;
+	schema_v: 3 | 4 | 5;
 	first_name: string;
 	last_name: string;
 	nickname?: string;
@@ -91,7 +96,7 @@ export const volunteerSchema = z.object({
 	_id: z.string().startsWith('volunteer:'),
 	_rev: z.string().optional(),
 	type: z.literal('volunteer'),
-	schema_v: z.union([z.literal(3), z.literal(4)]),
+	schema_v: z.union([z.literal(3), z.literal(4), z.literal(5)]),
 	shelter_code: z.string().min(1),
 	created_at: z.string(),
 	updated_at: z.string(),
@@ -182,7 +187,7 @@ export function makeVolunteer(
 	const d = volunteerInputSchema.parse(input);
 	return makeDoc(
 		'volunteer',
-		4,
+		VOLUNTEER_SCHEMA_V,
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,

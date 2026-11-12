@@ -42,7 +42,8 @@ vi.mock('../application/queries', () => ({
 	useLedger: () => q(mocks.ledger ?? RICE_LEDGER),
 	useCrossShelterStockBalances: () => q([]),
 	useCrossShelterLedger: () => q([]),
-	useIncomingStock: () => mocks.incoming ?? q(undefined)
+	useIncomingStock: () => mocks.incoming ?? q(undefined),
+	useAdjustStock: () => ({ mutateAsync: vi.fn(), isPending: false })
 }));
 vi.mock('$lib/features/supply', () => ({
 	useSupplyItems: () => q([]),
@@ -71,7 +72,8 @@ vi.mock('$lib/features/catalog', async (importOriginal) => ({
 			}
 		]),
 	useItemCategories: () => q([]),
-	useUnitsOfMeasure: () => q([])
+	useUnitsOfMeasure: () => q([]),
+	useUnitDimensionResolver: () => ({ resolve: () => undefined })
 }));
 vi.mock('$lib/features/shelters', () => ({ useShelters: () => q([]) }));
 vi.mock('../application/use-storage-points.svelte', () => ({

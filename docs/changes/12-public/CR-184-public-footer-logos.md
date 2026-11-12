@@ -16,7 +16,7 @@ affects:
   - frontend/src/lib/features/public-portal/ui/footer-logos-section.svelte · footer-logo-dialog.svelte · footer-logo-action.ts · index.ts
   - frontend/src/lib/server/public-portal/footer-logos.server.ts (+ test) — read/mutate doc, decode รูป, public list, image bytes
   - frontend/src/lib/server/couch-admin.ts (+ `adminAttachment`, `serviceErrorStatus`)
-  - frontend/src/routes/(protected)/system-management/public-portal-config/+page.server.ts (+ page.server.test.ts) — default action → `?/save` (คง `footer_logos` + `_attachments`); actions ใหม่ `createLogo` · `updateLogo` · `toggleLogo` · `moveLogo` · `deleteLogo`
+  - frontend/src/routes/(protected)/system-management/public-portal-config/+page.server.ts (+ page.server.test.ts) — default action → `?/save` (คง `footer_logos` + `_attachments`); actions ใหม่ `createLogo` · `updateLogo` · `toggleLogo` · `moveLogo` · `deleteLogo` (**decision sync 2026-11-10 (#1314): 5 actions ย้ายไป `system-management/partner-logos/+page.server.ts`**)
   - frontend/src/routes/api/public/v1/config/faqs/+server.ts (+ `footer_logos` ใน response)
   - frontend/src/routes/api/public/v1/config/footer-logos/[id]/image/+server.ts (ใหม่ — public image delivery)
   - frontend/src/routes/(public)/+layout.ts (`PublicLayoutConfig.footer_logos`)
@@ -28,7 +28,7 @@ affects:
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** public portal แสดงแถบโลโก้หน่วยงาน (แยกเหนือ footer) (PSU, วช, หน่วยงานอื่น) ที่ SA เพิ่ม/แก้/ลบ/เรียง/ซ่อนได้จากหน้า `public-portal-config` โดยไม่ต้อง deploy
+> - **เปลี่ยนอะไร:** public portal แสดงแถบโลโก้หน่วยงาน (แยกเหนือ footer) (PSU, วช, หน่วยงานอื่น) ที่ SA เพิ่ม/แก้/ลบ/เรียง/ซ่อนได้จากหน้า `partner-logos` (ตั้งค่าระบบ → โลโก้หน่วยงาน; เดิมอยู่ใน `public-portal-config` — decision sync 2026-11-10) โดยไม่ต้อง deploy
 > - **เก็บที่:** metadata ใน `config:public_portal.footer_logos[]` + รูปเป็น CouchDB attachment `footer_logo_{id}` บน doc เดียวกัน
 > - **build:** Zod schema + section CRUD ในหน้า admin (SA-only) · BFF ส่ง `footer_logos` ไปกับ config เดิม · route ใหม่ส่งรูปสาธารณะ · footer render
 > - **กระทบ:** schema.md เพิ่มหัวข้อ `config:public_portal` (ไม่ bump `schema_v`) · worker ตัด `footer_logos`/`_attachments` ออกจาก projection (`PROJECTION_VERSION` 5→6) · ไม่แตะ FastAPI
@@ -51,9 +51,9 @@ affects:
 - FR-4 — ทุก entry ใน `footer_logos` ต้องมี attachment `footer_logo_{id}` คู่กัน และ attachment `footer_logo_*` ทุกตัวต้องมี entry คู่กัน (ไม่มีรูปกำพร้า/entry ไร้รูป).
 - FR-5 — รูป: `image/png` · `image/jpeg` · `image/webp` · ≤512 KB หลัง decode (Q1) · `content_type` มาจาก magic bytes ที่ server ตรวจ (reuse `decodeBannerImage` ของ CR-162) · ไม่รับ SVG.
 
-**Admin (SA-only) — `/system-management/public-portal-config`**
+**Admin (SA-only) — `/system-management/partner-logos`** (เดิม `/system-management/public-portal-config` — ย้ายตาม decision sync 2026-11-10, #1314)
 
-- FR-6 — เพิ่ม section/tab「โลโก้หน่วยงาน (Footer)」ในหน้าเดิม: รายการโลโก้พร้อม thumbnail, alt, link, สถานะ, ปุ่ม เพิ่ม · แก้ไข · ลบ · เปิด/ปิดแสดง · ↑↓ จัดลำดับ.
+- FR-6 — หน้า「โลโก้หน่วยงาน」ใต้เมนูตั้งค่าระบบ (เดิมเป็น tab ในหน้า FAQ `public-portal-config`): รายการโลโก้พร้อม thumbnail, alt, link, สถานะ, ปุ่ม เพิ่ม · แก้ไข · ลบ · เปิด/ปิดแสดง · ↑↓ จัดลำดับ.
 - FR-7 — ทุก action ของโลโก้ตรวจ `caller.isSA` ฝั่ง server; role อื่น → `403` (หน้า System Management เป็น SA-only ตาม CR-049) และ UI ซ่อนปุ่มแก้ไข.
 - FR-8 — แต่ละ operation (create · update · delete · toggle · reorder) เป็น **form action แยก** (multipart) — default action เดิมของหน้าเปลี่ยนชื่อเป็น `?/save` (SvelteKit ห้ามมี default action คู่กับ named action — Q5) และเขียน doc ด้วย PUT ครั้งเดียวแบบ atomic (metadata + attachment ใน request เดียว); `_rev` ไม่ตรง → `409` → toast「มีผู้อื่นแก้ไขการตั้งค่านี้ โปรดโหลดใหม่」.
 - FR-9 — create ต้องมีรูป; update โดยไม่เลือกรูปใหม่ = คงรูปเดิม (ส่ง stub กลับ); delete = ลบ entry + attachment ใน PUT เดียวกัน.
@@ -147,3 +147,4 @@ feedback หน้างาน (#631): footer ยังไม่มีโลโ�
 - 2026-10-21 — proposed (draft จาก #631)
 - 2026-10-22 — kong (review PR #731): Q2 → projector ตัด `footer_logos`/`_attachments` + `PROJECTION_VERSION` 5→6; Q6 → preview โลโก้ที่ซ่อนเป็น SA-only
 - 2026-10-22 — approved โดย kong (CR-184): Q1 singleton + เพดานรูป 512 KB · Q3 12 · Q4 project owner จัดหาไฟล์, ไม่ seed · Q5 `?/save` · Q7 แถบแยกเหนือ footer · Q8 การ์ดกรอบ (ใช้ token) · Q9 `max-age=3600`
+- 2026-11-10 — decision sync (#1314, decided_by: kong): ย้ายการจัดการโลโก้จาก tab ในหน้า FAQ `public-portal-config` ไปหน้าเฉพาะ `/system-management/partner-logos` (เมนู ตั้งค่าระบบ → โลโก้หน่วยงาน) — **เปลี่ยนตำแหน่ง UI/route เท่านั้น**: FR-7 คงเดิม (SA-only; `load` ของหน้าใหม่ตอบ 403 สำหรับ non-SA ให้ตรงกับเมนู `requiresAdmin`), ไม่แตะ `schema_v`, `PROJECTION_VERSION`, โครงสร้าง `footer_logos`/`_attachments`, BFF; FR-8/FR-10 คงเดิม (`?/save` ของหน้า FAQ ยังคง `footer_logos` + `_attachments`)

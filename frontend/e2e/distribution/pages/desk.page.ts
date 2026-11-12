@@ -35,10 +35,11 @@ const MODE_NAME: Record<DeskMode, RegExp> = {
 	supplies: /^สิ่งของ/
 };
 
-const TICKET_SELECT_LABEL: Partial<Record<DeskTab, string>> = {
-	food: 'เลือกตั๋วอาหารที่ใช้งาน',
-	supplies: 'เลือกตั๋วพัสดุที่ใช้งาน',
-	reconciliation: 'เลือกตั๋วที่ต้องการปิดรอบหรือกระทบยอด'
+/** Trigger id of each tab's searchable ticket picker (TicketPicker). */
+const TICKET_PICKER_ID: Partial<Record<DeskTab, string>> = {
+	food: 'food-ticket',
+	supplies: 'supplies-ticket',
+	reconciliation: 'reconciliation-ticket'
 };
 
 export function escapeRegExp(value: string): string {
@@ -77,7 +78,7 @@ export class DeskPage {
 
 	/** Restrict tabs 2/3/5 to one distribution point (the scenario's own). */
 	async selectPoint(point: string): Promise<void> {
-		const trigger = this.page.getByLabel('เลือกจุดแจก');
+		const trigger = this.page.locator('#point-select');
 		// Open with the keyboard: a mouse click's pointerup can land on an option of the list
 		// before bits-ui positions it (long point lists in a full run) and select that option.
 		await trigger.focus();
@@ -88,17 +89,53 @@ export class DeskPage {
 		await expect(trigger).toContainText(point);
 	}
 
-	/** Pick a ticket in the active tab's selector (rendered only when there are 2+ tickets). */
+	/** The open ticket picker's popover (shadcn popover content; it has no dialog role). */
+	ticketPickerPopover(): Locator {
+		return this.page
+			.locator('[data-slot="popover-content"]')
+			.filter({ has: this.page.getByRole('searchbox', { name: /^ค้นหาตั๋ว/ }) });
+	}
+
+	/**
+	 * Pick a ticket in the active tab's picker (rendered only when there are 2+ tickets). On the
+	 * close-out tab the ticket may sit in another status group, so each group is tried in turn.
+	 */
 	async selectTicket(tab: DeskTab, ticket: SeededTicket): Promise<void> {
-		const label = TICKET_SELECT_LABEL[tab];
-		if (!label) throw new Error(`Tab ${tab} has no ticket selector`);
-		const selector = this.page.getByLabel(label);
-		if ((await selector.count()) === 0) return;
-		await selector.click();
-		await this.page
-			.getByRole('option', { name: new RegExp(escapeRegExp(ticket.ticketNo)) })
-			.click();
-		await expect(selector).toContainText(ticket.ticketNo);
+		const id = TICKET_PICKER_ID[tab];
+		if (!id) throw new Error(`Tab ${tab} has no ticket picker`);
+		if (tab !== 'reconciliation') {
+			await this.pickInPicker(id, ticket);
+			return;
+		}
+		if (await this.reconciliationCard(ticket).isVisible()) return;
+		const groups = this.page.getByRole('group', { name: 'สถานะตั๋ว' }).getByRole('button');
+		for (let i = 0; i < (await groups.count()); i += 1) {
+			const group = groups.nth(i);
+			if (await group.isDisabled()) continue;
+			await group.click();
+			if (await this.reconciliationCard(ticket).isVisible()) return;
+			if (await this.pickInPicker(id, ticket)) return;
+		}
+		await expect(this.reconciliationCard(ticket)).toBeVisible();
+	}
+
+	/** Search the picker for the ticket number and pick it; false when it is not listed. */
+	private async pickInPicker(id: string, ticket: SeededTicket): Promise<boolean> {
+		const trigger = this.page.locator(`#${id}`);
+		if ((await trigger.count()) === 0) return false;
+		await trigger.click();
+		const popover = this.ticketPickerPopover();
+		await popover.getByRole('searchbox').fill(ticket.ticketNo);
+		const option = popover.getByRole('button', {
+			name: new RegExp(escapeRegExp(ticket.ticketNo))
+		});
+		if ((await option.count()) === 0) {
+			await this.page.keyboard.press('Escape');
+			return false;
+		}
+		await option.click();
+		await expect(trigger).toContainText(ticket.ticketNo);
+		return true;
 	}
 
 	// ── Tab 1 ────────────────────────────────────────────────────────────────
@@ -107,7 +144,7 @@ export class DeskPage {
 	receiveCard(ticket: SeededTicket): Locator {
 		return this.page
 			.getByText(ticket.ticketNo, { exact: true })
-			.locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
+			.locator('xpath=ancestor::article[1]');
 	}
 
 	async receive(ticket: SeededTicket): Promise<void> {
@@ -122,9 +159,14 @@ export class DeskPage {
 
 	// ── Shared handover controls (tabs 2–4) ──────────────────────────────────
 
-	/** Item button on the food / supplies card (`aria-pressed` toggle). */
+	/**
+	 * Item button on the food / supplies card (`aria-pressed` toggle). The ticket picker trigger
+	 * also names its items, so only the toggle buttons match.
+	 */
 	itemButton(itemName: string): Locator {
-		return this.page.getByRole('button', { name: new RegExp(escapeRegExp(itemName)) });
+		return this.page
+			.getByRole('button', { name: new RegExp(escapeRegExp(itemName)) })
+			.and(this.page.locator('[aria-pressed]'));
 	}
 
 	selectedRecipientCard(recipient: SeededRecipient): Locator {
@@ -271,20 +313,19 @@ export class DeskPage {
 
 	// ── Tab 5 ────────────────────────────────────────────────────────────────
 
-	reconciliationHeading(ticket: SeededTicket): Locator {
-		return this.page.getByRole('heading', {
-			name: new RegExp(`ใบเบิก ${escapeRegExp(ticket.ticketNo)}`)
+	/** The close-out card, a region named after its ticket number. */
+	reconciliationCard(ticket: SeededTicket): Locator {
+		return this.page.getByRole('region', {
+			name: new RegExp(`เลขตั๋ว ${escapeRegExp(ticket.ticketNo)}`)
 		});
 	}
 
-	reconciliationCard(ticket: SeededTicket): Locator {
-		return this.reconciliationHeading(ticket).locator(
-			'xpath=ancestor::div[contains(@class, "rounded-2xl")][1]'
-		);
-	}
-
 	returnQtyInput(itemName: string): Locator {
-		return this.page.getByLabel(`จำนวนส่งคืน ${itemName}`);
+		// The card renders a phone and a table layout; only one is visible. Match the accessible
+		// name ("จำนวนส่งคืน {item} ({unit})"): the label is visible text plus an sr-only item name.
+		return this.page
+			.getByRole('textbox', { name: new RegExp(`^จำนวนส่งคืน ${escapeRegExp(itemName)}`) })
+			.filter({ visible: true });
 	}
 
 	async closeShift(returns: Record<string, string>): Promise<void> {

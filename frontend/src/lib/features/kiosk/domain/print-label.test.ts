@@ -10,6 +10,7 @@ import {
 	KIOSK_QR_MAX_DOTS_PER_MODULE,
 	KIOSK_QR_MIN_MM,
 	KIOSK_QR_QUIET_ZONE_MODULES,
+	KIOSK_LABEL_BAND,
 	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_CHECK_IN_TICKS,
@@ -22,6 +23,8 @@ import {
 	KIOSK_LABEL_LINK_GAP_MM,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
+	kioskLabelBand,
+	kioskLabelBandRects,
 	kioskLabelDots,
 	kioskLabelLayout,
 	kioskLabelPageCss,
@@ -30,6 +33,7 @@ import {
 	labelZoneLine,
 	mmToDots,
 	ptToDots,
+	wrapLabelName,
 	wrapLabelText
 } from './print-label';
 
@@ -119,7 +123,8 @@ describe('kiosk label canvas', () => {
 
 	it('converts pt to printer dots', () => {
 		expect(ptToDots(72)).toBe(203);
-		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(45.11, 2);
+		expect(KIOSK_LABEL_TEXT.name.pt).toBe(12);
+		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(33.83, 2);
 	});
 
 	it('fits a 3-line name, the zone, the emergency row, one checklist row per item and the link', () => {
@@ -186,6 +191,140 @@ describe('kioskLabelLayout', () => {
 	});
 });
 
+describe('QR sizing and layout with the level band', () => {
+	const moduleCount = QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size;
+	const { width } = kioskLabelDots();
+	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
+	const gapDots = Math.round(mmToDots(KIOSK_LABEL_GAP_MM));
+
+	it('leaves the QR box unchanged without a marker', () => {
+		expect(kioskQrBoxMm()).toBeCloseTo(34.75, 6);
+		expect(kioskQrBoxMm(null)).toBeCloseTo(34.75, 6);
+		expect(kioskQrBoxMm(undefined)).toBeCloseTo(34.75, 6);
+	});
+
+	it('shrinks the QR box by the 4 mm band and its 2 mm gap for either level', () => {
+		expect(kioskQrBoxMm('red')).toBeCloseTo(34.75 - 6, 6);
+		expect(kioskQrBoxMm('yellow')).toBeCloseTo(34.75 - 6, 6);
+	});
+
+	it('prints the version-3 QR at 33 mm (8 dots per module) without a level and 24.8 mm (6) with one', () => {
+		expect(kioskQrPrintSize(moduleCount)).toMatchObject({ widthPx: 264, dotsPerModule: 8 });
+		expect(kioskQrPrintSize(moduleCount, null)).toMatchObject({ widthPx: 264, dotsPerModule: 8 });
+		for (const marker of ['red', 'yellow'] as const) {
+			expect(kioskQrPrintSize(moduleCount, marker)).toMatchObject({
+				widthPx: 198,
+				margin: 2,
+				dotsPerModule: 6
+			});
+		}
+	});
+
+	it.each([21, 25, 29, 33, 37])(
+		'keeps %i-module codes inside the shrunk box, at least the minimum and with a 4-module quiet zone',
+		(modules) => {
+			for (const marker of ['red', 'yellow'] as const) {
+				const size = kioskQrPrintSize(modules, marker);
+				expect(size.sizeMm).toBeLessThanOrEqual(kioskQrBoxMm(marker));
+				expect(dotsToMm(modules * size.dotsPerModule)).toBeGreaterThanOrEqual(KIOSK_QR_MIN_MM);
+				// The QR stays at the right padding: image margin + the 2 mm padding.
+				const quiet = size.margin + mmToDots(KIOSK_LABEL_PADDING_MM) / size.dotsPerModule;
+				expect(quiet).toBeGreaterThanOrEqual(KIOSK_QR_QUIET_ZONE_MODULES - 0.05);
+			}
+		}
+	);
+
+	it('lays out the QR exactly as before without a marker', () => {
+		const px = kioskQrPrintSize(moduleCount).widthPx;
+		expect(kioskLabelLayout(px, null)).toEqual(kioskLabelLayout(px));
+		expect(kioskLabelLayout(px).qr.x).toBe(width - padding - px);
+		expect(kioskLabelLayout(px).text.x).toBe(padding);
+	});
+
+	it.each(['red', 'yellow'] as const)(
+		'starts the text 2 mm (16 dots) right of the %s band and keeps the QR at the right padding',
+		(marker) => {
+			const px = kioskQrPrintSize(moduleCount, marker).widthPx;
+			const layout = kioskLabelLayout(px, marker);
+			const band = kioskLabelBand();
+
+			expect(layout.text.x - (band.x + band.width)).toBe(16);
+			expect(layout.qr.x + px).toBe(width - padding);
+			expect(layout.divider.x + layout.divider.width + gapDots).toBe(layout.qr.x);
+			expect(layout.text.x + layout.text.width + gapDots).toBe(layout.divider.x);
+			expect(layout.text.width).toBeGreaterThanOrEqual(mmToDots(KIOSK_LABEL_TEXT_MIN_WIDTH_MM) - 2);
+		}
+	);
+
+	it('pins the final geometry in dots: text at x 64, QR 198 at x 425', () => {
+		for (const marker of ['red', 'yellow'] as const) {
+			const layout = kioskLabelLayout(198, marker);
+			expect(layout.text.x).toBe(64);
+			expect(layout.qr.x).toBe(425);
+		}
+	});
+});
+
+describe('kioskLabelBand', () => {
+	const { height } = kioskLabelDots();
+	const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
+
+	it('is 4 mm (32 dots) wide at the left padding, padding to padding tall', () => {
+		expect(KIOSK_LABEL_BAND.widthMm).toBe(4);
+		expect(kioskLabelBand()).toEqual({
+			x: 16,
+			y: padding,
+			width: 32,
+			height: height - padding * 2
+		});
+	});
+});
+
+describe('kioskLabelBandRects', () => {
+	const band = kioskLabelBand();
+	const inside = (r: { x: number; y: number; width: number; height: number }) =>
+		r.x >= band.x &&
+		r.y >= band.y &&
+		r.x + r.width <= band.x + band.width &&
+		r.y + r.height <= band.y + band.height;
+
+	it('fills the whole band solid black for red', () => {
+		expect(kioskLabelBandRects('red')).toEqual([band]);
+	});
+
+	it('gives yellow two 0.5 mm (4 dot) rails on the band edges, full height', () => {
+		const [left, right] = kioskLabelBandRects('yellow');
+		expect(left).toEqual({ ...band, width: 4 });
+		expect(right).toEqual({ ...band, x: band.x + band.width - 4, width: 4 });
+	});
+
+	it('fills yellow between the rails with 4-dot stripes every 12 dots, stepping one dot per row', () => {
+		const stripes = kioskLabelBandRects('yellow').slice(2);
+		const row = (y: number) =>
+			stripes.filter((r) => r.y === band.y + y).map((r) => [r.x - band.x - 4, r.width]);
+
+		for (const r of stripes) expect(r.height).toBe(1);
+		// 24 dots between the rails; a dot is black when (column + row) % 12 < 4.
+		expect(row(0)).toEqual([
+			[0, 4],
+			[12, 4]
+		]);
+		expect(row(1)).toEqual([
+			[0, 3],
+			[11, 4],
+			[23, 1]
+		]);
+		expect(row(12)).toEqual(row(0));
+	});
+
+	it('keeps every yellow box inside the band and leaves it about a third black', () => {
+		const rects = kioskLabelBandRects('yellow');
+		for (const r of rects) expect(inside(r)).toBe(true);
+		const stripeDots = rects.slice(2).reduce((sum, r) => sum + r.width, 0);
+		expect(stripeDots / (24 * band.height)).toBeCloseTo(1 / 3, 2);
+	});
+});
+
 describe('KIOSK_LABEL_CHECKLIST', () => {
 	it('ships the ID card checklist in Thai with English in brackets', () => {
 		expect(KIOSK_LABEL_CHECKLIST).toEqual([
@@ -245,6 +384,48 @@ describe('wrapLabelText', () => {
 
 	it('returns no lines for empty text', () => {
 		expect(wrapLabelText([], 5, measure, 2)).toEqual([]);
+	});
+});
+
+describe('wrapLabelName', () => {
+	const measure = (text: string) => text.length;
+	const words = (text: string) => text.split(/(?<= )/);
+
+	it('puts each \\n-separated part on its own line even when both fit one line', () => {
+		expect(wrapLabelName('สมชาย\nใจดี', 20, measure, 3, words)).toEqual(['สมชาย', 'ใจดี']);
+	});
+
+	it('keeps a single-line name on one line', () => {
+		expect(wrapLabelName('สมชาย ใจดี', 20, measure, 3, words)).toEqual(['สมชาย ใจดี']);
+	});
+
+	it('wraps a part that is too wide within its own share of the lines', () => {
+		expect(wrapLabelName('aa\nbb cc dd', 5, measure, 3, words)).toEqual(['aa', 'bb cc', 'dd']);
+	});
+
+	it('keeps the last name on the label when the first name overflows', () => {
+		const lines = wrapLabelName('aaaaaaaaaaaaaaaaaaaa\nbbb', 5, measure, 3, words);
+		expect(lines).toHaveLength(3);
+		expect(lines[0]).toBe('aaaaa');
+		expect(lines[1]).toMatch(/…$/);
+		expect(lines[2]).toBe('bbb');
+	});
+
+	it('clips a long last name with an ellipsis once the first name has used its lines', () => {
+		const lines = wrapLabelName('aa bb\ncc dd ee ff gg', 5, measure, 3, words);
+		expect(lines).toEqual(['aa bb', 'cc dd', 'ee f…']);
+	});
+
+	it('gives the last name one line when maxLines is 2 and the first name is long', () => {
+		expect(wrapLabelName('aa bb cc\ndd', 5, measure, 2, words)).toEqual(['aa b…', 'dd']);
+	});
+
+	it('ignores blank parts', () => {
+		expect(wrapLabelName('\n  \nสมชาย\n', 20, measure, 3, words)).toEqual(['สมชาย']);
+	});
+
+	it('returns no lines for an empty name', () => {
+		expect(wrapLabelName('', 20, measure, 3, words)).toEqual([]);
 	});
 });
 

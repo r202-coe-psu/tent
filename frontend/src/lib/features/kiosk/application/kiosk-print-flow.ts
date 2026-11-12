@@ -1,4 +1,6 @@
+import type { LanguageCode } from '$lib/stores/language.svelte';
 import { KioskPrintError, type KioskPrintOutcome } from '../data/kiosk-print.api';
+import { KIOSK_PRINT_FLOW_I18N } from './kiosk-print-flow.i18n';
 
 export type KioskPrintFlowResult =
 	{ kind: 'printed'; printed: number } | { kind: 'fallback' } | { kind: 'error'; message: string };
@@ -8,6 +10,8 @@ export type KioskPrintFlowDeps = {
 	printLabels: (labels: readonly string[]) => Promise<KioskPrintOutcome>;
 	/** Runs when no scanner client answered the print endpoint (dev browser / browser print mode). */
 	fallbackPrint: () => void | Promise<void>;
+	/** Language of the error message shown on screen; the printed labels do not follow it. */
+	language?: LanguageCode;
 };
 
 /**
@@ -23,12 +27,18 @@ export async function runKioskPrintFlow(deps: KioskPrintFlowDeps): Promise<Kiosk
 		await deps.fallbackPrint();
 		return { kind: 'fallback' };
 	} catch (error) {
-		const message =
-			error instanceof KioskPrintError
-				? error.printed > 0
-					? `${error.message} (พิมพ์ออกแล้ว ${error.printed} ดวง)`
-					: error.message
-				: 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+		const t = KIOSK_PRINT_FLOW_I18N[deps.language ?? 'th'];
+		let message: string = t.renderFailed;
+		if (error instanceof KioskPrintError) {
+			// The printer's own message is kept as it came; only our stock wording follows the language.
+			const text =
+				error.code === 'connection'
+					? t.connection
+					: error.code === 'send-failed'
+						? t.sendFailed
+						: error.message;
+			message = error.printed > 0 ? t.printedSoFar(text, error.printed) : text;
+		}
 		return { kind: 'error', message };
 	}
 }

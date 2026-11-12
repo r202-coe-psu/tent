@@ -12,10 +12,17 @@ export function evacueeQrDocId(evacueeId: string): string {
 function toPrintRefs(prints: unknown): EvacueeQrPrintRef[] {
 	if (!Array.isArray(prints)) return [];
 	return prints.flatMap((p): EvacueeQrPrintRef[] => {
-		const entry = p as { printed_at?: unknown; hash?: unknown } | null;
-		return typeof entry?.printed_at === 'string' && typeof entry.hash === 'string'
-			? [{ printed_at: entry.printed_at, hash: entry.hash.toLowerCase() }]
-			: [];
+		const entry = p as { printed_at?: unknown; hash?: unknown; marker?: unknown } | null;
+		if (typeof entry?.printed_at !== 'string' || typeof entry.hash !== 'string') return [];
+		const ref: EvacueeQrPrintRef = {
+			printed_at: entry.printed_at,
+			hash: entry.hash.toLowerCase()
+		};
+		// #1301: the level printed on that card; anything else is dropped (legacy / malformed).
+		if (entry.marker === 'red' || entry.marker === 'yellow' || entry.marker === null) {
+			ref.marker = entry.marker;
+		}
+		return [ref];
 	});
 }
 

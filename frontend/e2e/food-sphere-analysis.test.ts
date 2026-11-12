@@ -539,6 +539,7 @@ test.describe(
 			await expect(central.getByRole('button', { name: 'ปิดใช้งาน' })).toHaveCount(0);
 			await central.getByRole('button', { name: 'แก้ไข' }).click();
 			await sheet.getByRole('textbox', { name: /ชื่อกลุ่มความต้องการ/ }).fill(RENAMED);
+			await sheet.locator('#item-map-share-0').fill('40');
 			await sheet.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
 
 			await expect(toast(page, 'บันทึกกลุ่มความต้องการสำเร็จ')).toBeVisible();
@@ -555,6 +556,25 @@ test.describe(
 				(await getDocument('catalog', groupDocId(GROUP_ID)))?.name,
 				'the central group is not modified'
 			).toBe(GROUP_NAME);
+
+			// Clearing a previously saved value must remove it, not retain 40.
+			await row.getByRole('button', { name: 'แก้ไข' }).click();
+			await expect(sheet.locator('#item-map-share-0')).toHaveValue('40');
+			await sheet.locator('#item-map-share-0').clear();
+			await sheet.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+			await expect
+				.poll(
+					async () =>
+						(
+							(await getDocument(cudDb(), groupDocId(GROUP_ID)))?.item_maps as Array<
+								Record<string, unknown>
+							>
+						)?.[0]?.share_percent
+				)
+				.toBeUndefined();
+			await row.getByRole('button', { name: 'แก้ไข' }).click();
+			await expect(sheet.locator('#item-map-share-0')).toHaveValue('');
+			await sheet.getByRole('button', { name: /ยกเลิก/ }).click();
 
 			// the analysis behind the sheet picked the change up without a reload
 			await closeSheet(page);

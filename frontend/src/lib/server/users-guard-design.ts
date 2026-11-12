@@ -26,11 +26,12 @@ export const USERS_GUARDED_FIELDS = [
 	'volunteer_id',
 	'edge_shelters',
 	'deleted_at',
-	'deleted_by'
+	'deleted_by',
+	'consent'
 ] as const;
 
 /** Bump when the validation changes so a deployer can tell a stale design doc from a current one. */
-export const USERS_GUARD_DESIGN_VERSION = 2;
+export const USERS_GUARD_DESIGN_VERSION = 3;
 
 export interface UsersGuardDesignDoc {
 	_id: string;

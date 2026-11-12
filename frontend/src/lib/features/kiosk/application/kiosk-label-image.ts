@@ -1,12 +1,15 @@
+import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 import {
 	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_LINK_GAP_MM,
+	KIOSK_LABEL_MARKER,
 	KIOSK_LABEL_QR_CAPTION,
 	KIOSK_LABEL_QR_CAPTION_GAP_MM,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_ZONE,
+	kioskLabelBandRects,
 	kioskLabelDots,
 	kioskLabelLayout,
 	labelEmergencyLine,
@@ -14,12 +17,14 @@ import {
 	mmToDots,
 	type LabelZoneLine,
 	ptToDots,
+	wrapLabelName,
 	wrapLabelText
 } from '../domain/print-label';
 
 export type KioskLabelContent = {
 	/** QR data URL rendered at 1 px per printer dot (see `kioskQrPrintSize`). */
 	qrSrc: string;
+	/** Name parts (first, last) separated by `\n`; each part starts on its own label line. */
 	name: string;
 	/** Current zone name; missing or null leaves a dotted rule to write the zone on. */
 	zone?: string | null;
@@ -28,6 +33,8 @@ export type KioskLabelContent = {
 	checklist?: readonly string[];
 	/** Intake stations passed: this many checklist boxes are ticked, top first. */
 	checkedCount?: number;
+	/** Vulnerability level printed as a marker row above the name; none leaves no row. */
+	marker?: VulnerabilityMarker | null;
 };
 
 /** Thermal heads print dots, not greys: anything darker than this becomes black. */
@@ -108,7 +115,7 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 		document.fonts.ready,
 		...Object.values(fonts).map(loadLabelFont)
 	]);
-	const layout = kioskLabelLayout(qr.width);
+	const layout = kioskLabelLayout(qr.width, label.marker);
 	const words = segmenter('word');
 	const graphemes = segmenter('grapheme');
 
@@ -122,21 +129,23 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	context.fillRect(layout.divider.x, layout.divider.y, layout.divider.width, layout.divider.height);
 	context.textAlign = 'left';
 	context.textBaseline = 'middle';
+	if (label.marker) drawBand(context, kioskLabelBandRects(label.marker));
 
 	let y = layout.text.y;
+	if (label.marker) {
+		y += drawMarker(context, label.marker, fonts.checklist, layout.text, y);
+		y += mmToDots(KIOSK_LABEL_MARKER.gapMm);
+	}
 	const nameSize = ptToDots(nameStyle.pt);
 	context.font = fonts.name;
 	const measure = (text: string) => context.measureText(text).width;
-	// Break between first and last name when each fits a line; the Thai word segmenter splits
-	// proper names mid-name, so it only cuts a part too wide for the column.
-	const nameSegments = label.name
-		.split(/(\s+)/)
-		.flatMap((part) => (measure(part.trim()) > layout.text.width ? words(part) : [part]));
-	const nameLines = wrapLabelText(
-		nameSegments,
+	// First and last name sit on their own lines (`\n`); the last name always keeps a line.
+	const nameLines = wrapLabelName(
+		label.name,
 		layout.text.width,
 		measure,
 		nameStyle.maxLines,
+		words,
 		graphemes
 	);
 	for (const line of nameLines) {
@@ -167,6 +176,69 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	binarize(context, width, height);
 	return canvas.toDataURL('image/png').slice('data:image/png;base64,'.length);
+}
+
+/**
+ * The level band at the left edge, full inner height, no words: red solid black, yellow two rails
+ * with diagonal stripes. Leaves `fillStyle` black.
+ */
+function drawBand(
+	context: CanvasRenderingContext2D,
+	rects: readonly { x: number; y: number; width: number; height: number }[]
+): void {
+	context.fillStyle = '#000000';
+	for (const rect of rects) context.fillRect(rect.x, rect.y, rect.width, rect.height);
+}
+
+/**
+ * The vulnerability marker row at `top`, as wide as the text column. Returns its height. Plain
+ * black: red a filled square, yellow a hollow triangle, then the level word and its meaning.
+ * Uses the emergency row's font (passed in, already loaded) and leaves `fillStyle` black.
+ */
+function drawMarker(
+	context: CanvasRenderingContext2D,
+	marker: VulnerabilityMarker,
+	font: string,
+	column: { x: number; width: number },
+	top: number
+): number {
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.emergency;
+	const height = Math.round(ptToDots(pt) * lineHeight);
+	const left = Math.round(column.x);
+	const middle = top + height / 2;
+	const side = Math.round(height * KIOSK_LABEL_MARKER.glyphRatio);
+	const glyphTop = Math.round(middle - side / 2) + KIOSK_LABEL_MARKER.glyphOffsetYDots;
+	const textGap = mmToDots(KIOSK_LABEL_MARKER.textGapMm);
+	context.font = font;
+	context.fillStyle = '#000000';
+	let glyphEnd: number;
+	if (marker === 'red') {
+		context.fillRect(left, glyphTop, side, side);
+		glyphEnd = left + side;
+	} else {
+		// The stroke is centred on the path: inset by it so the triangle stays inside the column.
+		const stroke = Math.max(1, Math.round(mmToDots(KIOSK_LABEL_MARKER.triangleStrokeMm)));
+		const triangleX = left + stroke;
+		const base = glyphTop + side - stroke / 2;
+		context.strokeStyle = '#000000';
+		context.lineWidth = stroke;
+		context.lineJoin = 'miter';
+		context.beginPath();
+		context.moveTo(triangleX, base);
+		context.lineTo(triangleX + side / 2, glyphTop + stroke / 2);
+		context.lineTo(triangleX + side, base);
+		context.closePath();
+		context.stroke();
+		glyphEnd = triangleX + side + stroke;
+	}
+	const textX = glyphEnd + textGap;
+	context.fillText(
+		KIOSK_LABEL_MARKER.text[marker],
+		textX,
+		middle,
+		Math.max(1, left + column.width - textX)
+	);
+	return height;
 }
 
 /**

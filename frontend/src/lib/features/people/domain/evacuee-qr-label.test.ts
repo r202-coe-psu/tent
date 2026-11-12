@@ -46,10 +46,11 @@ describe('buildEvacueeQrLabel', () => {
 		).toEqual({
 			qrPayload: EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 			label: {
-				name: 'สมชาย ใจดี',
+				name: 'สมชาย\nใจดี',
 				zone: 'เอ',
 				emergencyPhone: null,
-				checkedCount: 3
+				checkedCount: 3,
+				marker: null
 			}
 		});
 	});
@@ -87,5 +88,66 @@ describe('buildEvacueeQrLabel', () => {
 		} as Evacuee;
 		const { label } = buildEvacueeQrLabel(evacuee, { zones: ZONES, hasScreening: true });
 		expect(label.emergencyPhone).toBe('0812345678');
+	});
+
+	it('marks the preview label red when the latest screening is fast_track (#1301)', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'active', zone: 'A' }), {
+			zones: ZONES,
+			hasScreening: true,
+			screenings: [
+				{ track: 'normal', screened_at: '2026-09-03T01:00:00.000Z' },
+				{ track: 'fast_track', screened_at: '2026-09-03T02:00:00.000Z' }
+			]
+		});
+		expect(label.marker).toBe('red');
+	});
+
+	it('marks the preview label yellow for vulnerable groups on a normal screening (#1301)', () => {
+		const evacuee = { ...ev({ status: 'active' }), vulnerable_groups: ['elderly'] } as Evacuee;
+		const { label } = buildEvacueeQrLabel(evacuee, {
+			hasScreening: true,
+			screenings: [{ track: 'normal', screened_at: '2026-09-03T01:00:00.000Z' }]
+		});
+		expect(label.marker).toBe('yellow');
+	});
+
+	it('leaves the preview marker null with no fast track and no vulnerable groups (#1301)', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'active' }), {
+			hasScreening: true,
+			screenings: [{ track: 'normal', screened_at: '2026-09-03T01:00:00.000Z' }]
+		});
+		expect(label.marker).toBeNull();
+	});
+
+	it('prints the first name alone when there is no last name', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '' }), {
+			zones: ZONES,
+			hasScreening: false
+		});
+		expect(label.name).toBe('สมชาย');
+	});
+
+	it('omits a whitespace-only last name', () => {
+		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '   ' }), {
+			zones: ZONES,
+			hasScreening: false
+		});
+		expect(label.name).toBe('สมชาย');
+	});
+
+	it('gives an empty name when both names are blank', () => {
+		const { label } = buildEvacueeQrLabel(
+			ev({ status: 'arriving', first_name: ' ', last_name: '' }),
+			{ zones: ZONES, hasScreening: false }
+		);
+		expect(label.name).toBe('');
+	});
+
+	it('trims each name part before joining', () => {
+		const { label } = buildEvacueeQrLabel(
+			ev({ status: 'arriving', first_name: ' สมชาย ', last_name: ' ใจดี ' }),
+			{ zones: ZONES, hasScreening: false }
+		);
+		expect(label.name).toBe('สมชาย\nใจดี');
 	});
 });

@@ -81,11 +81,12 @@ describe('volunteerSchema', () => {
 		);
 	});
 
-	it('accepts schema_v 3 or 4, rejects anything else', () => {
+	it('accepts schema_v 3, 4 or 5, rejects anything else', () => {
 		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 2 }).success).toBe(false);
 		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 3 }).success).toBe(true);
 		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 4 }).success).toBe(true);
-		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 5 }).success).toBe(false);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 5 }).success).toBe(true);
+		expect(volunteerSchema.safeParse({ ...validVolunteerDoc(), schema_v: 6 }).success).toBe(false);
 	});
 
 	it('national_id is optional (F13) — a document without the key at all is still valid', () => {
@@ -158,6 +159,44 @@ describe('volunteerSchema', () => {
 	});
 });
 
+describe('accepted_from (CR-228 FR-15)', () => {
+	const verified = { status: 'verified' as const, reviewed_at: '2026-11-01T03:00:00.000Z' };
+
+	it('reads a v4 record without accepted_from as a check made here', () => {
+		const doc = {
+			...validVolunteerDoc(),
+			schema_v: 4 as const,
+			identity_verification: verified,
+			skill_verifications: { medical: verified }
+		};
+		const parsed = volunteerSchema.parse(doc);
+		expect(parsed.identity_verification?.accepted_from).toBeUndefined();
+	});
+
+	it('accepts accepted_from on identity and skill records, with or without a date', () => {
+		const doc = {
+			...validVolunteerDoc(),
+			schema_v: 5 as const,
+			identity_verification: {
+				...verified,
+				accepted_from: { shelter_code: 'SH001', verified_at: '2026-10-30T02:00:00.000Z' }
+			},
+			skill_verifications: {
+				medical: { ...verified, accepted_from: { shelter_code: 'SH001', verified_at: null } }
+			}
+		};
+		expect(volunteerSchema.safeParse(doc).success).toBe(true);
+	});
+
+	it('rejects accepted_from without a shelter', () => {
+		const doc = {
+			...validVolunteerDoc(),
+			identity_verification: { ...verified, accepted_from: { shelter_code: '', verified_at: null } }
+		};
+		expect(volunteerSchema.safeParse(doc).success).toBe(false);
+	});
+});
+
 describe('isVolunteer', () => {
 	it('is true for a valid document', () => {
 		expect(isVolunteer(validVolunteerDoc())).toBe(true);
@@ -170,11 +209,11 @@ describe('isVolunteer', () => {
 });
 
 describe('makeVolunteer', () => {
-	it('stamps volunteer: id prefix, schema_v 4, and CR-094 §6 migration defaults', () => {
+	it('stamps volunteer: id prefix, schema_v 5, and CR-094 §6 migration defaults', () => {
 		const v = makeVolunteer(baseInput, ctx, { volunteer_code: 'V-001' });
 		expect(v._id).toMatch(/^volunteer:/);
 		expect(v.type).toBe('volunteer');
-		expect(v.schema_v).toBe(4);
+		expect(v.schema_v).toBe(5);
 		expect(v.checked_in).toBe(false);
 		expect(v.identity_verified).toBe(false);
 		expect(v.current_shelter_code).toBeNull();
