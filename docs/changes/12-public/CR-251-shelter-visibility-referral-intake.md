@@ -47,7 +47,7 @@ affects:
 - FR-8 — `classify_registry_shelter()` คืน `RetentionPhase.HIDDEN` เมื่อ `feature_flags.public_visible is False` (กลุ่มเดียวกับ `cancelled`) → `list_listened_shelters` ไม่รวมศูนย์นี้ bootstrap ไม่ scan DB `shelter_{code}` และ listener ของ DB นั้นหยุดในรอบ reconcile ถัดไป.
 - FR-9 — change จาก DB `shelter_{code}` ของศูนย์ที่ซ่อนอยู่ต้องไม่ project อะไร แต่ยัง save checkpoint (กลไกเดียวกับ cancelled FR-6).
 - FR-10 — เปิด `public_visible` กลับเป็น `true` → registry upsert สร้างแถว `public_shelters` ใหม่ และ rescan DB `shelter_{code}` ด้วย `bootstrap_database` (กลไกเดียวกับ cancelled FR-7 — ไม่มีแถวเดิมก่อน upsert).
-- FR-11 — bump `PROJECTION_VERSION` 18 → 19 (ค่าบน develop ตอนร่าง = 18) พร้อม comment อ้าง draft นี้.
+- FR-11 — bump `PROJECTION_VERSION` 18 → 19 (ค่าบน develop ตอนร่าง = 18) พร้อม comment อ้าง CR-251.
 - ไม่ลบ: `public_job_applications`, `public_shift_assignments`, `public_volunteers`, `public_donations` (เหมือน cancelled).
 
 **FastAPI (public / external)**
@@ -63,7 +63,7 @@ affects:
 
 - FR-15 — `useSearchShelters` ต้องคืน `feature_flags` (อย่างน้อย `accepts_referrals`) ให้ picker ใช้.
 - FR-16 — `shelter-combobox` ไม่เสนอศูนย์ที่ `isShelterAcceptingReferrals() === false` (กรองเหมือน `closed` / `cancelled`).
-- FR-17 — `POST /api/back-office/referral` อ่าน shelter ปลายทางจาก registry; ปลายทางไม่รับการส่งต่อ → 422 `{ error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' }` และไม่เขียน doc. การสร้างจาก SPA ผ่าน `referral.remote.ts` ตรงไป CouchDB ไม่ผ่าน route นี้ จึงไม่ถูกบล็อกที่ server ในรอบนี้ — กันที่ picker (FR-16) และจุดรับ (FR-18); ดู Q-6.
+- FR-17 — `POST /api/back-office/referral` อ่าน shelter ปลายทางจาก registry; ปลายทางไม่รับการส่งต่อ → 422 `{ error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' }` และไม่เขียน doc. SPA สร้างใบผ่าน route นี้อยู่แล้ว (`referralRepository()` คืน `ReferralRemoteRepository` → `POST /api/back-office/referral`) จึงถูกบล็อกที่ server; ดู Q-6.
 - FR-18 — `transition(→ accepted)` ตรวจ registry ของปลายทางใหม่ทุกครั้ง **ก่อน** cross-DB transfer; ปลายทางไม่รับการส่งต่อ → `CouchDbReferralError` 422 ข้อความเดียวกับ FR-17; ไม่ย้ายผู้อพยพ ไม่เปลี่ยนสถานะ referral. ครอบคลุม `/referral/[id]/transition` และ `/referral/bulk-transition` (bulk = ล้มเป็นรายใบ).
 - FR-18a — `transition(→ sent)` ของ referral `capacity` ที่มี `to_shelter_code` ตรวจ registry ของปลายทางก่อนเปลี่ยนสถานะ; ปลายทางไม่รับการส่งต่อ → `CouchDbReferralError` 422 ข้อความเดียวกับ FR-17 ใบคงเป็น `draft` และผู้ใช้เห็นข้อความทันทีตอนกดส่ง. ครอบคลุม `/referral/[id]/transition` และ `/referral/bulk-transition` (bulk = ล้มเป็นรายใบ). `draft → closed` ยังทำได้.
 - FR-19 — `→ rejected` และ `→ closed` ยังทำได้ตามเดิมเมื่อปลายทางปิดรับ.
@@ -116,8 +116,8 @@ affects:
   - **ตัดสินแล้ว 2026-11-12 (kong):** ไม่เตือน ตามร่าง
 - Q-5 — ซ่อนศูนย์ควรตัด `public_donations` / `public_volunteers` / ใบสมัครงานที่ผูกศูนย์ด้วยหรือไม่ (ร่างนี้คงไว้ตาม cancelled)?
   - **ตัดสินแล้ว 2026-11-12 (kong):** คงข้อมูลไว้ ไม่ตัด ตามร่าง (เหมือน `cancelled`)
-- Q-6 — การสร้าง referral จาก SPA เขียน CouchDB ตรง (ไม่ผ่าน BFF): ร่างนี้ไม่บล็อกที่ server (คนที่เรียก CouchDB ตรงยังสร้างใบไปศูนย์ที่ปิดรับได้ แต่ accept ไม่ได้ตาม FR-18). ต้องบังคับที่ชั้นสร้างด้วยหรือไม่ (ต้องย้ายการสร้างมาผ่าน BFF หรือเพิ่ม validate ใน CouchDB)?
-  - **ตัดสินแล้ว 2026-11-12 (kong):** ยอมรับช่องนี้ไว้ก่อน (ไม่บล็อกการสร้างจาก SPA ที่ server); ปิดช่องภายหลังถ้าจำเป็น
+- Q-6 — การสร้าง referral จาก SPA ถูกบล็อกที่ server หรือไม่ (ตอนร่างเข้าใจว่า SPA เขียน CouchDB ตรงไม่ผ่าน BFF)?
+  - **แก้ข้อเท็จจริง 2026-11-12:** ตรวจโค้ดแล้ว SPA สร้างและส่งผ่าน BFF (`ReferralRemoteRepository`) ทั้งหมด จึงไม่มีช่องที่ต้องยอมรับ; ช่องที่เหลือมีเฉพาะผู้ที่เรียก CouchDB ตรงนอก SPA (สร้างใบได้ แต่ส่งและรับไม่ได้ตาม FR-18a / FR-18) — ยอมรับไว้ก่อน (kong)
 
 ## Why
 
@@ -136,3 +136,4 @@ affects:
 - 2026-11-12 — ตอบ Q-1: ตัดศูนย์ที่ปิดรับออกจาก picker ตามร่าง (FR-16)
 - 2026-11-12 — ตอบ Q-2 (ซ่อนเฉพาะเมื่อกด `public_visible = false`), Q-4, Q-5 ตามร่าง, Q-6 ยอมรับช่องนี้ไว้ก่อน
 - 2026-11-12 — ตอบ Q-3: ห้าม `draft → sent` ไปศูนย์ที่ปิดรับด้วย เพิ่ม FR-18a (ครบ Q-1..Q-6)
+- 2026-11-12 — แก้ข้อเท็จจริง Q-6/FR-17: SPA สร้าง/ส่งผ่าน BFF อยู่แล้ว ไม่ใช่ CouchDB ตรง (คอมเมนต์ใน `referral/+server.ts` ล้าสมัย — แก้ตอนลงมือทำ)
