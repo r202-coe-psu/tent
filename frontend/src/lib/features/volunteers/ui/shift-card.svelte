@@ -113,7 +113,7 @@
 				aria-invalid={error ? true : undefined}
 				bind:value={
 					() => (shift.quota > 0 ? shift.quota : null),
-					(quota) => onchange({ quota: quota === null || quota === '' ? 0 : Number(quota) })
+					(quota) => onchange({ quota: quota ? Number(quota) : 0 })
 				}
 				oninput={(e) => {
 					const val = e.currentTarget.value;

@@ -79,7 +79,7 @@
 			toast.error(`สร้างกะไม่ได้ — ${blocker}`);
 			return;
 		}
-		if (!canGenerate) return;
+		if (!canGenerate || seats === null) return;
 		try {
 			const rows = generateBatchShifts(
 				{
