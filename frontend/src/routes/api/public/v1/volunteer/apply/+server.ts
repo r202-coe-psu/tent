@@ -21,6 +21,7 @@ const applySchema = z.object({
 		last_name: z.string().trim().min(1, 'กรุณาระบุนามสกุล'),
 		phone: z.string().trim().min(1, 'กรุณาระบุเบอร์โทรศัพท์').pipe(volunteerMobileSchema),
 		email: z.string().email().nullable().optional(),
+		occupation: z.string().trim().max(100).optional(),
 		skills: z.array(z.string().trim().min(1)).default([])
 	}),
 	selected_shift: z
@@ -83,6 +84,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			last_name: applicant.last_name,
 			phone: applicant.phone,
 			email: applicant.email ?? '',
+			occupation: applicant.occupation,
 			skills: applicant.skills,
 			shift_id: selected_shift?.shift_id,
 			shift_date: selected_shift?.date,

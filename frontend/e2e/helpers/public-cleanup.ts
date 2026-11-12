@@ -15,7 +15,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync
 import { dirname } from 'node:path';
 import { nextClosedAt } from '../../src/lib/features/shelters/domain/closed-at';
 import { bootstrapAdminSession, couchReq } from './couch';
-import { appBaseUrl, IS_REMOTE } from './e2e-env';
+import { ALLOW_PERMANENT_AUDIT_ROWS, appBaseUrl, IS_REMOTE } from './e2e-env';
 
 /** Public BFF of the app under test (see `appBaseUrl`). */
 const bffBase = () => `${appBaseUrl()}/api/public/v1`;
@@ -129,10 +129,24 @@ export interface PublicSearchHit {
 
 /** Public search hits for `query` via the BFF — the `public_persons` projection as the public sees it. */
 export async function publicSearchHits(query: string): Promise<PublicSearchHit[]> {
+	if (!ALLOW_PERMANENT_AUDIT_ROWS) {
+		throw new Error(
+			'publicSearchHits writes a permanent audit_events row per call; set E2E_ALLOW_AUDIT_ROWS=true ' +
+				'only for a throw-away remote Mongo (e2e/README.md).'
+		);
+	}
 	const res = await fetch(`${bffBase()}/occupants`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ search: query })
+		body: JSON.stringify({
+			search: query,
+			// CR-231: every public search carries the searcher, purpose and consent. Each call
+			// appends a permanent audit_events row — point E2E at a throw-away Mongo (e2e/README.md).
+			searcher: { first_name: 'E2E', last_name: 'Cleanup', phone: '0812345678' },
+			purpose: 'other',
+			purpose_note: 'e2e helper',
+			consent_accepted: true
+		})
 	});
 	if (!res.ok) throw new Error(`search HTTP ${res.status}`);
 	return ((await res.json()) as { results: PublicSearchHit[] }).results;

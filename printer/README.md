@@ -49,8 +49,9 @@ PRINT_HOUSEKEEPING_TOKEN=<openssl rand -hex 32>
 | ตัวแปร | service | ค่า |
 |---|---|---|
 | `COUCHDB_PRINTING_SERVICE_URL` | `frontend` | `http://printing_service:<รหัส>@couchdb:5984` (ใช้ `couchdb` ไม่ใช่ `localhost` และเป็น `http://` เพราะคุยกันใน docker network) |
-| `PRINT_HOUSEKEEPING_TOKEN` | `frontend`, `print-housekeeping` | ส่งต่อจาก root `.env` |
-| `PRINT_HOUSEKEEPING_URL` | `print-housekeeping` | `http://frontend:3000` |
+| `PRINT_HOUSEKEEPING_TOKEN` | `frontend`, `worker` | ส่งต่อจาก root `.env` (frontend ตรวจ, worker ส่งเป็น Bearer) |
+| `PRINT_HOUSEKEEPING_URL` | `worker` | `http://frontend:3000` |
+| `PRINT_HOUSEKEEPING_INTERVAL_MS` | `worker` | ไม่ต้องตั้ง (ค่าเริ่มต้น 30 000 · healthcheck ยอมให้สำเร็จล่าสุดเก่าได้ max(2 นาที, 4 × interval)) |
 
 `frontend/.env` ไม่ถูกใช้ใน container ของ staging / prod
 
@@ -66,9 +67,15 @@ docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm red
 **nginx** มีใน repo แล้ว ไม่ต้องตั้งเพิ่ม: `/api/internal/printers/` ถูกปิดจากภายนอก (404) และ `/api/v1/printer/*` จำกัด 2 connection ต่อเครื่อง
 ควรมี HTTPS อยู่หน้า server เพราะ Pi ต่อแค่ `https://` เป็นค่าเริ่มต้น (ถ้าไม่มี ดู `TENT_ALLOW_HTTP` ในขั้นที่ตั้ง `.env`)
 
+**deploy ครั้งแรกหลังย้าย housekeeping เข้า `worker`:** ใส่ `--remove-orphans` เพื่อลบ container `print-housekeeping` เดิม (ถ้าไม่ลบ ตัวเดิมจะรันซ้อนกับ `worker`)
+
+```bash
+docker compose -f docker-compose.staging.no-nginx.yml up -d --build --remove-orphans   # prod ใช้ docker-compose.production.no-nginx.yml
+```
+
 **ตรวจหลัง deploy:**
 
-1. container `print-housekeeping` ขึ้น `healthy`
+1. container `worker` ขึ้น `healthy` (healthcheck ดูว่า housekeeping เรียกสำเร็จภายใน 2 นาที — ถ้า unhealthy ดู log ของ `worker` หา `print housekeeping`: `401` = token สองฝั่งไม่ตรง, `503` = frontend ไม่มี token, `ConnectError` = frontend ยังไม่ขึ้น) และ `docker ps` ไม่มี container `print-housekeeping` เหลือ
 2. back-office → **จัดการเครื่องพิมพ์** เปิดได้และไม่ขึ้น 503
 3. ลงทะเบียนเครื่อง (ขั้นที่ 1) แล้วกด **พิมพ์ทดสอบ** ด้วย user ที่มี `system_admin` หรือ `shelter:{CODE}` + `{CODE}:shelter_manager`
    (`admin` ของ CouchDB มีแค่ role `_admin` ซึ่งพิมพ์ไม่ได้ และจะขึ้น "คุณไม่มีสิทธิ์ในการทำรายการนี้")
@@ -153,6 +160,7 @@ cd ~/tent/kiosk
 ./setup_printer.sh ~/printer-driver-xprinter_*.deb --queue tent_xprinter --test
 ```
 
+ถ้าเขียน `printer/.env` (ขั้นที่ 4) ไว้ก่อน ไม่ต้องใส่ `--queue` สคริปต์อ่าน `PRINTER_NAME` จากไฟล์นั้นเอง
 ถ้า `--test` พิมพ์ label ทดสอบออกมา 1 ใบ แปลว่า CUPS พร้อมแล้ว
 ถ้าขึ้น `ไม่พบ XP-365B บน USB` ให้ตรวจสายและไฟ แล้วดูว่า `lsusb | grep 1fc9` เห็น `1fc9:2016` หรือไม่
 
@@ -182,14 +190,13 @@ nano .env
 
 ```bash
 cd ~/tent/printer
-sudo ./setup_printer_server.sh --env-file .env --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
-sudo ./setup_printer_server.sh --env-file .env
-rm .env             # ติดตั้งแล้ว ค่าจริงอยู่ที่ /opt/tent/printer/.env ไม่ต้องเก็บสำเนา secret ไว้ใน repo
+sudo ./setup_printer_server.sh --dry-run   # ดูแผนก่อน ยังไม่แก้อะไร
+sudo ./setup_printer_server.sh             # อ่าน .env ในโฟลเดอร์นี้เอง ไม่ต้องใส่ --env-file
 ```
 
 | ตัวเลือก | ความหมาย |
 |---|---|
-| `--env-file FILE` | `.env` ของ agent ถูกคัดลอกไปเป็น `<prefix>/.env` · บังคับตอนติดตั้งครั้งแรก ครั้งต่อไปไม่ใส่ก็ได้ จะใช้ `<prefix>/.env` เดิม |
+| `--env-file FILE` | `.env` ของ agent ถูกคัดลอกไปเป็น `<prefix>/.env` · ไม่ใส่ = ใช้ `printer/.env` ข้างสคริปต์ ถ้าไม่มีใช้ `<prefix>/.env` ที่ติดตั้งไว้แล้ว |
 | `--queue NAME` | ชื่อ CUPS queue (default: `PRINTER_NAME` ใน `--env-file`) |
 | `--prefix DIR` | ที่ติดตั้ง (default `/opt/tent/printer`) |
 | `--dry-run` | พิมพ์คำสั่งที่จะรัน ไม่เขียนอะไร และไม่ต้องเป็น root |
@@ -214,8 +221,8 @@ cd ~/tent && git pull
 cd printer && sudo ./setup_printer_server.sh
 ```
 
-สคริปต์รันซ้ำได้ ใช้ `.env` เดิมที่ `/opt/tent/printer/.env` แล้วลงฟอนต์ไทย / dependency ใหม่และ restart service ให้เอง
-ถ้าเพิ่ง rotate secret ใน back-office ให้แก้ `DEVICE_SECRET` ด้วย `sudo nano /opt/tent/printer/.env` แล้ว `sudo systemctl restart tent-printer`
+สคริปต์รันซ้ำได้ ใช้ `printer/.env` (ถ้าไม่มีใช้ `/opt/tent/printer/.env` เดิม) แล้วลงฟอนต์ไทย / dependency ใหม่และ restart service ให้เอง
+ถ้าเพิ่ง rotate secret ใน back-office ให้แก้ `DEVICE_SECRET` ใน `printer/.env` แล้วรัน `sudo ./setup_printer_server.sh` ใหม่
 
 ถ้ารัน `kiosk/setup_printer.sh` ใหม่ (เช่นเปลี่ยนม้วน) ให้ `sudo systemctl restart tent-printer` ด้วย
 

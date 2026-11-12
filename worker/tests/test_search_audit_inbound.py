@@ -38,3 +38,13 @@ async def test_persist_search_audit_marks_synced():
     assert doc["query_hash"] == "abc"
     assert audit.synced_to_couch is True
     audit.save.assert_awaited_once()
+
+
+def test_inbound_search_audit_ignores_audit_events():
+    """CR-231 S2: only the hash-only `SearchAudit` buffer is synced to `central_ops`.
+
+    Public `audit_events` rows hold searcher PII and must never be read by this worker module.
+    """
+    import worker.inbound.search_audit as module
+
+    assert not hasattr(module, "AuditEvent")

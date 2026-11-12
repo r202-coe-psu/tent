@@ -61,18 +61,28 @@ FACE_CHECK_MODES = ("off", "on")
 FACE_CHECK_FLOWS = ("check_in", "walk_in")
 
 
+def is_loopback_host(hostname: str) -> bool:
+    """localhost / 127.0.0.0/8 / ::1 — origins Chromium treats as secure even over plain HTTP."""
+    if hostname.lower() in LOOPBACK_HOSTNAMES:
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
 def _is_trusted_plaintext_host(hostname: str) -> bool:
     """HTTP is only auto-allowed for loopback / private-LAN hosts — the on-site edge
     fallback and dev boxes. A DNS hostname (e.g. a public domain) must use HTTPS unless
     ALLOW_INSECURE_HTTP is set, so a typo'd scheme cannot silently send the device secret,
     citizen IDs and photos in cleartext on a network that is not actually private."""
-    if hostname in LOOPBACK_HOSTNAMES:
+    if is_loopback_host(hostname):
         return True
     try:
         address = ipaddress.ip_address(hostname)
     except ValueError:
         return False
-    return address.is_loopback or address.is_private or address.is_link_local
+    return address.is_private or address.is_link_local
 
 
 def load_config(

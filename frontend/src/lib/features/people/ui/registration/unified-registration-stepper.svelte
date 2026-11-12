@@ -57,7 +57,7 @@
 					<button
 						type="button"
 						onclick={() => onNavigate(section.id)}
-						class="group flex min-w-0 items-center gap-2 text-left transition-colors focus-visible:outline-none"
+						class="group flex min-w-0 flex-col items-center gap-1 text-center transition-colors focus-visible:outline-none sm:flex-row sm:gap-2 sm:text-left"
 						aria-current={isCurrent ? 'step' : undefined}
 					>
 						<span
@@ -81,7 +81,7 @@
 								{t.stepN(index + 1)}
 							</span>
 							<span
-								class="block truncate text-xs font-semibold {isCurrent
+								class="block text-2xs leading-tight font-semibold break-words sm:truncate sm:text-xs {isCurrent
 									? 'text-primary'
 									: isCompleted
 										? 'text-foreground'

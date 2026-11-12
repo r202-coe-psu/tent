@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
 import {
+	assertCountedLotsExist,
 	assertLotWriteOffsFit,
 	createStockLedger,
 	LotWriteOffError,
@@ -134,5 +135,24 @@ describe('projectLotsByItem (#569)', () => {
 		const bad = (qty: string) =>
 			({ ...inbound('item:rice', qty), occurred_at: undefined }) as unknown as StockLedger;
 		expect(() => projectLotsByItem([bad('5'), bad('1')])).toThrow(TypeError);
+	});
+});
+
+describe('assertCountedLotsExist (#518)', () => {
+	const lot = inbound('item:rice', '5');
+	const line = (l: StockLedger, unit = l.unit) => ({ item_id: l.item_id, unit, lot_ref: l._id });
+
+	it('accepts lots present in the ledger', () => {
+		expect(() => assertCountedLotsExist([lot], [line(lot)])).not.toThrow();
+	});
+
+	it("refuses a lot that is not in this ledger (another shelter's lot)", () => {
+		const foreign = inbound('item:rice', '5');
+		expect(() => assertCountedLotsExist([lot], [line(foreign)])).toThrow(LotWriteOffError);
+		expect(() => assertCountedLotsExist([], [line(lot)])).toThrow(LotWriteOffError);
+	});
+
+	it('refuses a lot recorded under another unit', () => {
+		expect(() => assertCountedLotsExist([lot], [line(lot, 'ถุง')])).toThrow(LotWriteOffError);
 	});
 });

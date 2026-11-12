@@ -75,7 +75,7 @@
 				<div
 					class="flex flex-wrap items-end gap-2 rounded-lg border border-border/60 bg-slate-50/50 p-2.5"
 				>
-					<div class="w-[140px] shrink-0 space-y-1">
+					<div class="w-full space-y-1 sm:w-[140px] sm:shrink-0">
 						<Label class="text-2xs text-muted-foreground">{t.vehicleTypeLabel}</Label>
 						<Select.Root
 							type="single"

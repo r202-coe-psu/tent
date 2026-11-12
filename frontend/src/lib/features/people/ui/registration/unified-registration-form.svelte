@@ -1677,7 +1677,7 @@
 							</div>
 						</div>
 						<div class="flex shrink-0 flex-col items-end gap-1.5">
-							<div class="flex items-center gap-2">
+							<div class="flex flex-wrap items-center justify-end gap-2">
 								{#if card.canJoin}
 									<Button type="button" size="sm" disabled={fieldsLocked} onclick={card.onJoin}>
 										{t.joinFamilyCta}
