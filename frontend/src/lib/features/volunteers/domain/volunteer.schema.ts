@@ -90,6 +90,11 @@ export interface Volunteer extends BaseDoc {
 	source: VolunteerSource;
 	/** CR-095 — backs the "ชนิดบุคคล" toggle, default `'volunteer'`. */
 	personnel_type: PersonnelType;
+	/** CR-239: target volunteer._id if this profile was merged (#694) */
+	merged_into?: string | null;
+	merged_at?: string | null;
+	merged_by?: string | null;
+	migration_run_id?: string | null;
 }
 
 export const volunteerSchema = z.object({
@@ -129,7 +134,11 @@ export const volunteerSchema = z.object({
 	identity_verification: verificationRecordSchema.nullable().optional(),
 	skill_verifications: z.record(z.string(), verificationRecordSchema).optional(),
 	source: volunteerSourceSchema,
-	personnel_type: personnelTypeSchema
+	personnel_type: personnelTypeSchema,
+	merged_into: z.string().nullable().optional(),
+	merged_at: z.string().nullable().optional(),
+	merged_by: z.string().nullable().optional(),
+	migration_run_id: z.string().nullable().optional()
 });
 
 export const isVolunteer = (d: unknown): d is Volunteer => volunteerSchema.safeParse(d).success;
