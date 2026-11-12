@@ -35,6 +35,7 @@
 	import {
 		useReviewVolunteerIdentity,
 		useUpdateVolunteer,
+		fetchVolunteer,
 		useSkillOptions
 	} from '../application/queries';
 	import { optionalVolunteerMobileSchema, VOLUNTEER_PHONE_MESSAGE } from '../domain/phone';
@@ -58,7 +59,6 @@
 		phoneTakenReactivateHint,
 		type ExistingVolunteerSummary
 	} from '../domain/phone-errors';
-	import { volunteerRepository } from '../data/volunteer.remote';
 
 	let {
 		open = $bindable(false),
@@ -109,6 +109,9 @@
 
 	// Rehydrate from the volunteer prop each time the dialog opens on a
 	// (possibly different) row — the same per-row rehydrate guard dialogs in this feature use.
+	// Does not loop: `lastOpenedId` is set to the current id at the end of the run, so the re-run it
+	// triggers (it is read below) hits the early return; the other writes are plain `$state` that the
+	// effect only assigns and never reads.
 	let lastOpenedId = $state<string | null>(null);
 	$effect(() => {
 		if (!open) {
@@ -129,7 +132,7 @@
 	});
 
 	async function openConflictVolunteer(id: string) {
-		const v = await volunteerRepository().get(id);
+		const v = await fetchVolunteer(queryClient, id);
 		if (v) {
 			overrideVolunteer = v;
 			phoneConflictExisting = [];
@@ -169,7 +172,7 @@
 			// action button follow the review.
 			if (overrideVolunteer) {
 				overrideVolunteer =
-					(await volunteerRepository().get(overrideVolunteer._id)) ?? overrideVolunteer;
+					(await fetchVolunteer(queryClient, overrideVolunteer._id)) ?? overrideVolunteer;
 			}
 			toast.success(
 				status === 'verified' ? 'ยืนยันตัวตนอาสาสมัครแล้ว' : 'ส่งกลับไปรอตรวจตัวตนแล้ว'
@@ -211,14 +214,9 @@
 		} catch (err) {
 			if (isVolunteerPhoneTakenError(err)) {
 				phoneConflictExisting = err.existing;
-				toast.error(err.message, {
-					action: err.existing[0]
-						? {
-								label: `เปิด ${err.existing[0].volunteer_code || 'โปรไฟล์'}`,
-								onClick: () => void openConflictVolunteer(err.existing[0]._id)
-							}
-						: undefined
-				});
+				// No field error in this dialog, so the toast carries the message; the panel below
+				// holds the buttons that open the holder.
+				toast.error(err.message);
 				return;
 			}
 			toast.error(err instanceof Error ? err.message : 'บันทึกข้อมูลไม่สำเร็จ');

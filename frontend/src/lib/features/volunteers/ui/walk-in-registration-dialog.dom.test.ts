@@ -21,7 +21,8 @@ const mocks = vi.hoisted(() => ({
 	gate: null as { query: () => string; enabled: () => boolean } | null,
 	hookCalls: 0,
 	searchError: false,
-	createMutateAsync: vi.fn()
+	createMutateAsync: vi.fn(),
+	fetchVolunteer: vi.fn()
 }));
 
 // happy-dom's <form> reports no method, which trips kit's dev-only `enhance` guard. Keep the
@@ -90,7 +91,12 @@ vi.mock('../application/queries', () => ({
 	useSkillOptions: () => ({ options: [] }),
 	useJobs: () => ({ data: [] }),
 	useShiftAssignments: () => ({ data: [] }),
-	todayDateString: () => '2026-11-02'
+	todayDateString: () => '2026-11-02',
+	fetchVolunteer: (_qc: unknown, id: string) => mocks.fetchVolunteer(id)
+}));
+// The real manage dialog pulls in the whole mutation layer; its own DOM test covers it.
+vi.mock('./volunteer-manage-dialog.svelte', async () => ({
+	default: (await import('./volunteer-manage-dialog-stub.test-fixture.svelte')).default
 }));
 
 const somchai = {
@@ -464,35 +470,75 @@ describe('WalkInRegistrationDialog — who may search evacuees (#1062)', () => {
 });
 
 describe('WalkInRegistrationDialog — duplicate phone rejection (CR-239)', () => {
-	it('shows error and duplicate volunteer button when phone is taken', async () => {
-		mocks.roles = COORDINATOR;
-		mocks.createMutateAsync.mockRejectedValueOnce(
-			new VolunteerPhoneTakenError([
-				{
-					_id: 'volunteer:01TEST',
-					volunteer_code: 'V-012',
-					first_name: 'สมชาย',
-					last_name: 'ใจดี',
-					status: 'active'
-				}
-			])
-		);
+	const holder = {
+		_id: 'volunteer:01TEST',
+		volunteer_code: 'V-012',
+		first_name: 'สมชาย',
+		last_name: 'ใจดี',
+		status: 'active' as const
+	};
 
-		await render();
+	async function submitWithTakenPhone(target?: ReturnType<typeof mount>) {
+		mocks.roles = COORDINATOR;
+		mocks.createMutateAsync.mockRejectedValueOnce(new VolunteerPhoneTakenError([holder]));
+		if (!target) await render();
 		await typeInto(field('first_name'), 'สมศักดิ์');
 		await typeInto(field('last_name'), 'รักชาติ');
 		await typeInto(field('phone'), '0812345678');
 		submitForm();
+		await vi.waitFor(() => expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1));
+		await settle();
+	}
 
-		await vi.waitFor(() => {
-			expect(toast.error).toHaveBeenCalledWith(
-				expect.stringContaining('เบอร์นี้มีอยู่แล้วในศูนย์: V-012 สมชาย ใจดี'),
-				expect.anything()
-			);
-		});
+	const openHolderButton = () =>
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+			b.textContent?.includes('เปิดโปรไฟล์ V-012')
+		);
+
+	it('shows the conflict panel with the open button and no toast (Suggestion 6)', async () => {
+		await submitWithTakenPhone();
 
 		expect(document.body.textContent).toContain('พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์');
-		expect(document.body.textContent).toContain('เปิดโปรไฟล์ V-012');
+		expect(openHolderButton()).toBeDefined();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+
+	it('closes the walk-in dialog before opening the holder, so two modals are never stacked', async () => {
+		mocks.fetchVolunteer.mockResolvedValue({ ...holder });
+		const harness = mount(Harness, { target: document.body });
+		instance = harness;
+		await settle();
+		await submitWithTakenPhone(harness);
+
+		openHolderButton()!.click();
+		await vi.waitFor(() =>
+			expect(document.body.querySelector('[data-testid="manage-dialog-stub"]')).not.toBeNull()
+		);
+		await settle();
+
+		expect(mocks.fetchVolunteer).toHaveBeenCalledWith('volunteer:01TEST');
+		expect(harness.getOpen()).toBe(false);
+		expect(field('first_name')).toBeNull();
+		expect(document.body.querySelector('[data-testid="manage-dialog-stub"]')!.textContent).toBe(
+			'V-012'
+		);
+	});
+
+	it('clears the conflict panel and the swapped-in profile when the dialog is reopened', async () => {
+		mocks.fetchVolunteer.mockResolvedValue({ ...holder });
+		const harness = mount(Harness, { target: document.body });
+		instance = harness;
+		await settle();
+		await submitWithTakenPhone(harness);
+		openHolderButton()!.click();
+		await vi.waitFor(() => expect(harness.getOpen()).toBe(false));
+		await settle();
+
+		harness.reopen();
+		await settle();
+
+		expect(document.body.textContent).not.toContain('พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์');
+		expect(document.body.querySelector('[data-testid="manage-dialog-stub"]')).toBeNull();
 	});
 });
 

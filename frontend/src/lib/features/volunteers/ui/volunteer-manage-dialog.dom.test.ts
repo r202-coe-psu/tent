@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import type { Volunteer } from '../domain/volunteer.schema';
 import { VolunteerPhoneTakenError } from '../domain/phone-errors';
+import { toast } from 'svelte-sonner';
 import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 
 const MEDICAL = 'medical';
@@ -18,13 +19,11 @@ vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), inf
 vi.mock('../application/queries', () => ({
 	useReviewVolunteerIdentity: () => ({ mutateAsync: mocks.reviewIdentity, isPending: false }),
 	useUpdateVolunteer: () => ({ mutateAsync: mocks.update, isPending: false }),
+	fetchVolunteer: (_qc: unknown, id: string) => mocks.get(id),
 	useSkillOptions: () => ({
 		options: [{ code: MEDICAL, label: 'การแพทย์', description: '', icon: '🩺', controlled: true }],
 		controlledValues: [MEDICAL, 'การแพทย์']
 	})
-}));
-vi.mock('../data/volunteer.remote', () => ({
-	volunteerRepository: () => ({ get: mocks.get })
 }));
 
 const base = {
@@ -103,6 +102,7 @@ beforeEach(() => {
 	mocks.update.mockReset();
 	mocks.reviewIdentity.mockReset();
 	mocks.get.mockReset();
+	vi.mocked(toast.error).mockClear();
 });
 
 afterEach(async () => {
@@ -118,6 +118,15 @@ describe('VolunteerManageDialog — phone already taken (CR-239 FR-11, FR-12)', 
 		expect(bodyText()).toContain('พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์');
 		expect(button('เปิดโปรไฟล์ V-002')?.textContent).toContain('(ปิดใช้งานอยู่)');
 		expect(bodyText()).toContain('เปิดใช้งานอีกครั้ง');
+	});
+
+	it('shows the conflict as one toast (message only) plus the panel with the open button (Suggestion 6)', async () => {
+		await openWithConflict();
+		expect(toast.error).toHaveBeenCalledTimes(1);
+		expect(toast.error).toHaveBeenCalledWith(
+			expect.stringContaining('เบอร์นี้มีอยู่แล้วในศูนย์: V-002 สมหญิง ใจดี')
+		);
+		expect(button('เปิดโปรไฟล์ V-002')).toBeDefined();
 	});
 
 	it('after switching to the other profile, every part shows that profile and none of the first', async () => {

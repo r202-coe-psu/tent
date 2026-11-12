@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
 	/**
 	 * "ลงทะเบียนอาสาสมัคร Walk-in ด่วน" (CR-094 FR-VOL-10.1/10.5, owner-approved
 	 * mockup 2026-08-28).
@@ -47,6 +46,7 @@
 	 * person at the desk — also flagged for the CR (should `source: 'walk_in'`
 	 * / `'staff_entry'` auto-verify identity?).
 	 */
+	import { untrack } from 'svelte';
 	import { defaults, superForm, setError } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { useQueryClient } from '@tanstack/svelte-query';
@@ -78,7 +78,6 @@
 		type ExistingVolunteerSummary
 	} from '../domain/phone-errors';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
-	import { volunteerRepository } from '../data/volunteer.remote';
 	import { shiftKindFor } from '../domain/assign-roster';
 	import { isWithinDutyWindow } from '../domain/duty-window';
 	import { toSkillCode } from '../domain/skill-catalog';
@@ -89,7 +88,8 @@
 		useCreateWalkInVolunteer,
 		useSkillOptions,
 		useAssignVolunteers,
-		useCheckIn
+		useCheckIn,
+		fetchVolunteer
 	} from '../application/queries';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
@@ -210,15 +210,8 @@
 			} catch (err) {
 				if (isVolunteerPhoneTakenError(err)) {
 					setError(validated, 'phone', err.message);
+					// Field error + the panel below (with its buttons); no toast, it would be a third copy.
 					phoneConflictExisting = err.existing;
-					toast.error(err.message, {
-						action: err.existing[0]
-							? {
-									label: `เปิด ${err.existing[0].volunteer_code || 'โปรไฟล์'}`,
-									onClick: () => void openConflictVolunteer(err.existing[0]._id)
-								}
-							: undefined
-					});
 					return;
 				}
 				const message = err instanceof Error ? err.message : 'ลงทะเบียนไม่สำเร็จ';
@@ -236,10 +229,13 @@
 	let conflictManageOpen = $state(false);
 
 	async function openConflictVolunteer(id: string) {
-		const v = await volunteerRepository().get(id);
+		const v = await fetchVolunteer(queryClient, id);
 		if (v) {
 			conflictVolunteer = v;
 			conflictManageOpen = true;
+			// Close this dialog first so two modals are never stacked; closing programmatically does
+			// not run `reset()`, so the conflict profile above survives until the dialog reopens.
+			open = false;
 		} else {
 			toast.error('ไม่พบข้อมูลโปรไฟล์ดังกล่าว');
 		}
@@ -275,6 +271,8 @@
 		jobShiftSelection = null;
 		instantCheckIn = true;
 		phoneConflictExisting = [];
+		conflictVolunteer = null;
+		conflictManageOpen = false;
 	}
 
 	$effect(() => {
