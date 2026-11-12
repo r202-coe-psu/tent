@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-11-12 # draft-shelter-parking-points — SHELTER `parking_points`; 2026-11-01 CR-218 audit action privacy_change (+ created ที่ขาดไป); 2026-10-08 CR-155 — shelter_incident replaces shelter_report
+updated: 2026-11-01 # CR-218 audit action privacy_change (+ created ที่ขาดไป); 2026-10-08 CR-155 — shelter_incident replaces shelter_report
 source: docs/data/schema.md
 ---
 
@@ -504,7 +504,6 @@ erDiagram
         json location "address lat lng"
         json contact "name phone"
         json food_distribution_points "จุดแจกอาหาร — id name note lat lng (schema_v 6, staff-only)"
-        json parking_points "จุดจอดรถ — id name note lat lng (schema_v 10, staff-only)"
         string edge_url "nullable sys"
         datetime opened_at "sys"
         datetime closed_at "nullable sys"
