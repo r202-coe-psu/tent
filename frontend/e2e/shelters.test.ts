@@ -327,7 +327,7 @@ test.describe('Shelter Form — Edit', () => {
 		});
 
 		await injectSession(page, SA, sessions[SA.name]);
-		await page.goto(`http://localhost:4173/back-office/shelters/edit/${CODE}`);
+		await page.goto(`/back-office/shelters/edit/${CODE}`);
 
 		const publicVisible = page.locator('#public-visible');
 		const acceptsReferrals = page.locator('#accepts-referrals');
