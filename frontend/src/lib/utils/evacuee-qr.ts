@@ -5,6 +5,7 @@
  * `prints[].hash` the server stored. Usable on http LAN where `crypto.subtle` is unavailable.
  */
 import type { LanguageCode } from './language';
+import type { VulnerabilityMarker } from './vulnerability-marker';
 
 export const EVACUEE_QR_SOURCES = [
 	'kiosk_checkin',
@@ -14,8 +15,15 @@ export const EVACUEE_QR_SOURCES = [
 ] as const;
 export type EvacueeQrSource = (typeof EVACUEE_QR_SOURCES)[number];
 
-/** Subset of an `evacuee_qr.prints[]` entry the scan rule needs. */
-export type EvacueeQrPrintRef = { printed_at: string; hash: string };
+/**
+ * Subset of an `evacuee_qr.prints[]` entry the scan rule needs. `marker` is the vulnerability level
+ * printed on that card (#1301); absent on entries written before it existed.
+ */
+export type EvacueeQrPrintRef = {
+	printed_at: string;
+	hash: string;
+	marker?: VulnerabilityMarker | null;
+};
 
 // Crockford base32 ULID: first char 0-7, no I L O U.
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';

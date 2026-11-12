@@ -65,11 +65,17 @@ vi.mock('../application/use-storage-points.svelte', () => ({
 vi.mock('../application/use-destination-options.svelte', () => ({
 	useDestinationOptions: () => ({ options: ['ครัวกลาง'] })
 }));
-vi.mock('$lib/features/catalog', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/features/catalog')>()),
-	useUnitsOfMeasure: () => ({ data: [] }),
-	useItemMasters: () => ({ data: [] })
-}));
+vi.mock('$lib/features/catalog', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features/catalog')>();
+	return {
+		...actual,
+		useUnitsOfMeasure: () => ({ data: [] }),
+		useUnitDimensionResolver: () => ({
+			resolve: (unit: string) => actual.resolveUnitDimension(unit)
+		}),
+		useItemMasters: () => ({ data: [] })
+	};
+});
 vi.mock('$lib/features/supply', () => ({
 	useSupplyItems: () => ({ data: [] }),
 	useThresholdOverrides: () => ({ data: [] })
@@ -172,6 +178,27 @@ describe('distribute form: one batch, many lines (#837)', () => {
 		await type(qtyInputs()[0], '4');
 		expect(document.body.textContent).not.toContain('ยอดที่ใช้ได้ไม่พอ');
 		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(false);
+	});
+
+	it('holds back a fractional quantity of a counted unit with the whole-number message (#805)', async () => {
+		await render({ preselectedItemId: RICE._id });
+
+		await type(qtyInputs()[0], '2.5');
+		expect(document.body.textContent).toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
+		expect(qtyInputs()[0].step).toBe('1');
+		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(true);
+		expect(qtyInputs()[0].getAttribute('aria-invalid')).toBe('true');
+
+		await type(qtyInputs()[0], '3');
+		expect(document.body.textContent).not.toContain('หน่วยนับต้องเป็นจำนวนเต็ม');
+		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(false);
+	});
+
+	it('"ทั้งหมด" on a legacy fractional lot offers the whole units that fit (#805)', async () => {
+		ledgerRows = [inbound('RICE1', RICE._id, '2.5', 'ถุง')];
+		await render({ preselectedItemId: RICE._id });
+
+		expect(button('ทั้งหมด')!.textContent).toContain('(2)');
 	});
 
 	it('the summary under "เพิ่มรายการ" lists every ready line with its lot, expiry and balance', async () => {

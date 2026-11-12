@@ -7,17 +7,29 @@ import { createHash } from 'node:crypto';
 import { adminRaw, ServiceError, serviceErrorFromCouch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { EVACUEE_ID, type EvacueeQrPrintRef, type EvacueeQrSource } from '$lib/utils/evacuee-qr';
+import {
+	vulnerabilityMarker,
+	type MarkerScreening,
+	type VulnerabilityMarker
+} from '$lib/utils/vulnerability-marker';
 
 export const EVACUEE_QR_MAX_ATTEMPTS = 5;
 
-/** A stored `prints[]` entry (schema.md §1.9). */
-export type EvacueeQrPrint = EvacueeQrPrintRef & { printed_by: string; source: EvacueeQrSource };
+/**
+ * A stored `prints[]` entry (schema.md §1.9). `marker` is the vulnerability level printed on that
+ * card (#1301); entries written at schema_v 1 lack it and stay as-is (append-only).
+ */
+export type EvacueeQrPrint = EvacueeQrPrintRef & {
+	printed_by: string;
+	source: EvacueeQrSource;
+	marker?: VulnerabilityMarker | null;
+};
 
 export type EvacueeQrDoc = {
 	_id: string;
 	_rev?: string;
 	type: 'evacuee_qr';
-	schema_v: 1;
+	schema_v: 1 | 2;
 	shelter_code: string;
 	evacuee_id: string;
 	prints: EvacueeQrPrint[];
@@ -33,7 +45,12 @@ export type IssueEvacueeQrInput = {
 	printed_by: string;
 };
 
-export type IssuedEvacueeQr = { evacuee_id: string; qr_payload: string; printed_at: string };
+export type IssuedEvacueeQr = {
+	evacuee_id: string;
+	qr_payload: string;
+	printed_at: string;
+	marker: VulnerabilityMarker | null;
+};
 
 /** FR-EQR-3: first 6 hex chars of SHA-1 over the UTF-8 `printed_at` string. */
 export function hash6Of(printedAt: string): string {
@@ -101,6 +118,19 @@ export async function issueEvacueeQr(input: IssueEvacueeQrInput): Promise<Issued
 	if (ev.status === 404) throw new ServiceError('NOT_FOUND', 'Evacuee not found');
 	if (ev.status >= 400) throw couchFailure('read evacuee', ev.status, ev.data);
 
+	// #1301: the server derives the level printed on the card (never from the request body).
+	const groups = (ev.data as { vulnerable_groups?: unknown }).vulnerable_groups;
+	const found = await adminRaw(`/${db}/_find`, 'POST', {
+		selector: { type: 'screening', evacuee_id },
+		fields: ['track', 'screened_at']
+	});
+	if (found.status >= 400) throw couchFailure('read screenings', found.status, found.data);
+	const screenings = (found.data as { docs?: MarkerScreening[] }).docs ?? [];
+	const marker = vulnerabilityMarker(
+		{ vulnerable_groups: Array.isArray(groups) ? (groups as string[]) : [] },
+		screenings
+	);
+
 	const docId = evacueeQrDocId(evacuee_id);
 	for (let attempt = 0; attempt < EVACUEE_QR_MAX_ATTEMPTS; attempt++) {
 		const existing = await readDoc(db, docId);
@@ -113,14 +143,20 @@ export async function issueEvacueeQr(input: IssueEvacueeQrInput): Promise<Issued
 			printed_at: stamp.printed_at,
 			hash: stamp.hash,
 			printed_by,
-			source
+			source,
+			marker
 		};
 		const doc: EvacueeQrDoc = existing
-			? { ...existing, prints: [...existing.prints, entry], updated_at: stamp.printed_at }
+			? {
+					...existing,
+					schema_v: 2,
+					prints: [...existing.prints, entry],
+					updated_at: stamp.printed_at
+				}
 			: {
 					_id: docId,
 					type: 'evacuee_qr',
-					schema_v: 1,
+					schema_v: 2,
 					shelter_code,
 					evacuee_id,
 					prints: [entry],
@@ -131,7 +167,12 @@ export async function issueEvacueeQr(input: IssueEvacueeQrInput): Promise<Issued
 		const res = await adminRaw(`/${db}/${encodeURIComponent(docId)}`, 'PUT', doc);
 		if (res.status === 409) continue; // FR-EQR-19: re-read, re-stamp, retry
 		if (res.status >= 400) throw couchFailure('issue evacuee QR', res.status, res.data);
-		return { evacuee_id, qr_payload: `${evacuee_id}@${stamp.hash}`, printed_at: stamp.printed_at };
+		return {
+			evacuee_id,
+			qr_payload: `${evacuee_id}@${stamp.hash}`,
+			printed_at: stamp.printed_at,
+			marker
+		};
 	}
 	throw new ServiceError('CONFLICT', 'Could not issue QR: too many concurrent writes, retry');
 }

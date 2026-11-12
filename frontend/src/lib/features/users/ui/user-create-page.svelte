@@ -17,7 +17,7 @@
 	import { safeReturnPath } from '../domain/user-edit-path';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Check from '@lucide/svelte/icons/check';
@@ -66,28 +66,31 @@
 		return rolesFromAssignments([{ shelter_code: code, capabilities: caps }]);
 	}
 
-	function goBack() {
+	const backTarget = $derived.by(() => {
 		const from = safeReturnPath(page.url.searchParams.get('from'), '');
-		if (from.startsWith('/back-office/shelters/edit/')) {
-			const path = from.split('?')[0] ?? '';
-			const id = path.slice('/back-office/shelters/edit/'.length);
-			if (from.includes('view=users')) {
-				return goto(resolve(`/back-office/shelters/edit/${id}?view=users`));
-			}
-			return goto(resolve(`/back-office/shelters/edit/${id}`));
+		for (const prefix of [
+			'/back-office/shelters/edit/',
+			'/system-management/shelters/edit/'
+		] as const) {
+			if (!from.startsWith(prefix)) continue;
+			const id = (from.split('?')[0] ?? '').slice(prefix.length);
+			const suffix = from.includes('view=users') ? '?view=users' : '';
+			return {
+				path: `${prefix}${id}${suffix}` as '/back-office/shelters',
+				label: 'กลับไปแก้ไขศูนย์พักพิง'
+			};
 		}
-		if (from.startsWith('/system-management/shelters/edit/')) {
-			const path = from.split('?')[0] ?? '';
-			const id = path.slice('/system-management/shelters/edit/'.length);
-			if (from.includes('view=users')) {
-				return goto(resolve(`/system-management/shelters/edit/${id}?view=users`));
-			}
-			return goto(resolve(`/system-management/shelters/edit/${id}`));
-		}
-		if (backHref === '/system-management/users') {
-			return goto(resolve('/system-management/users'));
-		}
-		return goto(resolve('/back-office/users'));
+		return {
+			path:
+				backHref === '/system-management/users'
+					? ('/system-management/users' as '/back-office/users')
+					: ('/back-office/users' as const),
+			label: 'กลับไปรายชื่อผู้ใช้งาน'
+		};
+	});
+
+	function goBack() {
+		return goto(resolve(backTarget.path));
 	}
 
 	async function handleCreate(input: CreateUserInput) {
@@ -146,14 +149,12 @@
 </svelte:head>
 
 <div class="container mx-auto max-w-[1200px] p-4 sm:p-6">
-	<button
-		type="button"
-		class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:underline"
-		onclick={() => goBack()}
-	>
-		<ArrowLeft class="size-4" />
-		<span>กลับไปหน้ารายชื่อผู้ใช้งาน</span>
-	</button>
+	<BackLink
+		href={resolve(backTarget.path)}
+		label={backTarget.label}
+		fromParam={false}
+		class="mb-4 -ml-3"
+	/>
 
 	<div class="mb-6 flex items-center gap-4">
 		<div class="text-blue-900/80">

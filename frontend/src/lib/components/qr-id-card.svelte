@@ -1,11 +1,17 @@
 <script lang="ts">
 	import { cn } from '$lib/utils/shadcn';
+	import {
+		VULNERABILITY_MARKER_TEXT,
+		type VulnerabilityMarker
+	} from '$lib/utils/vulnerability-marker';
 
 	type Props = {
 		/** QR data URL; empty renders the placeholder. */
 		src: string | null | undefined;
 		alt: string;
 		name: string;
+		/** Vulnerability level row at the top of the text column (#1301); omit or null for none. */
+		marker?: VulnerabilityMarker | null;
 		/**
 		 * Zone row under the name: `value` is the assigned zone's name, or null for a blank dotted
 		 * line staff fill in by hand. Omit for no zone row.
@@ -32,6 +38,7 @@
 		src,
 		alt,
 		name,
+		marker,
 		zone,
 		emergency,
 		badge,
@@ -44,6 +51,13 @@
 	}: Props = $props();
 
 	/*
+		Diagonal stripes of the yellow band: 0.5 mm black every 1.5 mm along a row, i.e. those widths
+		over √2 across the 45° stripe.
+	*/
+	const YELLOW_STRIPES =
+		'repeating-linear-gradient(135deg, #000 0 0.3536mm, transparent 0.3536mm 1.0607mm)';
+
+	/*
 		80×60 mm thermal label sized by the `--qr-size` / `--label-gap` CSS vars. Sizes mirror
 		KIOSK_LABEL_TEXT / KIOSK_LABEL_CHECKBOX in features/kiosk/domain/print-label.ts, which the
 		kiosk canvas renderer draws from.
@@ -51,9 +65,35 @@
 </script>
 
 <div class={cn('flex h-full w-full flex-row text-black', className)}>
+	{#if marker}
+		<!-- Level band down the card's left edge, 4 mm wide and 2 mm clear of the text (mirrors
+			KIOSK_LABEL_BAND): yellow two 0.5 mm rails with diagonal stripes, red solid black. The QR is
+			sized smaller so the text keeps its width (kioskQrBoxMm). aria-hidden because the marker row
+			already carries the label. -->
+		<div
+			data-marker-band={marker}
+			aria-hidden="true"
+			class={cn(
+				'mr-[2mm] w-[4mm] shrink-0 [print-color-adjust:exact]',
+				marker === 'red' ? 'bg-black' : 'border-x-[0.5mm] border-black'
+			)}
+			style:background-image={marker === 'yellow' ? YELLOW_STRIPES : undefined}
+		></div>
+	{/if}
 	<div class="flex min-w-0 flex-1 flex-col gap-[1mm]">
+		{#if marker}
+			<div
+				data-marker={marker}
+				role="img"
+				aria-label="ระดับความเปราะบาง: {VULNERABILITY_MARKER_TEXT[marker]}"
+				class="flex items-center gap-[1.5mm] text-[9pt] leading-[1.3] font-medium"
+			>
+				<span class="relative -top-px">{marker === 'red' ? '■' : '△'}</span>
+				<span>{VULNERABILITY_MARKER_TEXT[marker]}</span>
+			</div>
+		{/if}
 		<p
-			class="line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere] whitespace-pre-line"
+			class="line-clamp-3 text-[12pt] leading-[1.3] font-bold [overflow-wrap:anywhere] whitespace-pre-line"
 		>
 			{name}
 		</p>

@@ -92,6 +92,27 @@ describe('checkDistributeBatch: balance per line (#837)', () => {
 		expect(water.baseQty).toBe('24');
 	});
 
+	it('holds a fractional quantity in a count unit back, but not in other units (#805)', () => {
+		const lines = [line({ item_id: WATER, qty: '1.5', unit: 'ขวด' })];
+		const dimensions = { ขวด: 'count', กก: 'mass' } as const;
+		const unitDimension = (unit: string) => dimensions[unit as keyof typeof dimensions];
+
+		const held = checkDistributeBatch(lines, ctx({ unitDimension }));
+		expect(held.verdicts[0]).toEqual({ kind: 'incomplete', missing: 'whole' });
+		expect(held.canSave).toBe(false);
+
+		expect(
+			checkDistributeBatch(
+				[line({ item_id: WATER, qty: '2', unit: 'ขวด' })],
+				ctx({ unitDimension })
+			).verdicts[0].kind
+		).toBe('ok');
+		expect(checkDistributeBatch(lines, ctx({ unitDimension: () => 'mass' })).verdicts[0].kind).toBe(
+			'ok'
+		);
+		expect(checkDistributeBatch(lines, ctx()).verdicts[0].kind).toBe('ok');
+	});
+
 	it('converts the typed unit to the base unit before comparing with the balance', () => {
 		const check = checkDistributeBatch([line({ item_id: WATER, qty: '9', unit: 'แพ็ค' })], ctx());
 		expect(check.verdicts[0]).toMatchObject({ kind: 'short', requested: '108', available: '100' });

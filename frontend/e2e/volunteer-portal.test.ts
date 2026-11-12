@@ -786,7 +786,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		expect(await page.evaluate(() => window.scrollY)).toBe(before);
 
 		await page
-			.getByRole('button', { name: 'ปิดหน้าต่าง', exact: true })
+			.getByRole('button', { name: 'ปิด', exact: true })
 			.click({ position: { x: 8, y: 8 } });
 		await expect(page.locator('#firstName')).toHaveCount(0);
 		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');

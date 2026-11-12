@@ -788,7 +788,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 				await dialog.dismiss();
 				return message;
 			});
-			await page.getByRole('button', { name: 'ย้อนกลับ', exact: true }).click();
+			await page.getByRole('link', { name: 'กลับไปรายละเอียดงานอาสาสมัคร' }).click();
 			expect(await leaveWarning).toContain('ยังไม่ได้บันทึก');
 			await expect(page).toHaveURL(/\/edit$/);
 

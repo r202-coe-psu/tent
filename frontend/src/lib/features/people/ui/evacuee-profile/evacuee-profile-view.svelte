@@ -15,6 +15,8 @@
 		useHouseholds,
 		useMedicalByEvacuee,
 		useScreeningsByEvacuee,
+		useEvacueeQrPrints,
+		vulnerabilityMarker,
 		useMovementsByEvacuee,
 		useCreateMedical,
 		usePatchMedical,
@@ -70,6 +72,7 @@
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
 	import EvacueeStatusModal from './evacuee-status-modal.svelte';
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
+	import EvacueeQrStaleAlert from './evacuee-qr-stale-alert.svelte';
 	import EvacueeHandoverSlipModal from './evacuee-handover-slip-modal.svelte';
 	import EvacueeAddressModal from './evacuee-address-modal.svelte';
 	import EvacueeAssetsModal from './evacuee-assets-modal.svelte';
@@ -193,6 +196,8 @@
 	);
 	const medicalQuery = useMedicalByEvacuee(() => evacueeId);
 	const screeningsQuery = useScreeningsByEvacuee(() => evacueeId);
+	// Silent on error: the warning is advisory, the profile works without it (#1301).
+	const qrPrintsQuery = useEvacueeQrPrints(() => evacueeId);
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const movementsQuery = useMovementsByEvacuee(() => evacueeId);
 	const patchEvacueeMutation = usePatchEvacuee();
@@ -758,6 +763,14 @@
 				onOpenEmergencyEdit={() => (showEmergencyModal = true)}
 			/>
 		</div>
+
+		{#if qrPrintsQuery.data && screeningsQuery.data}
+			<EvacueeQrStaleAlert
+				current={vulnerabilityMarker(evacuee, screeningsQuery.data)}
+				prints={qrPrintsQuery.data}
+				onReprint={() => (showQrModal = true)}
+			/>
+		{/if}
 
 		<div class="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
 			<!-- Desktop sticky identity rail — cell must stretch (no items-start) so sticky has room -->

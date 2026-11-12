@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PUT } from './+server';
 import type { RequestEvent } from './$types';
 import { readSessionUserCtx, ServiceError } from '$lib/server/session-auth';
-import { getGroup, setGroupDevices } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
+import {
+	ensureGroupTvCode,
+	getGroup,
+	setGroupDevices
+} from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 import type { KioskBannerGroupRecord } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
@@ -17,12 +21,18 @@ vi.mock('$lib/server/kiosk-banners/kiosk-banner-group.server', async () => {
 	const actual = await vi.importActual<
 		typeof import('$lib/server/kiosk-banners/kiosk-banner-group.server')
 	>('$lib/server/kiosk-banners/kiosk-banner-group.server');
-	return { ...actual, getGroup: vi.fn(), setGroupDevices: vi.fn() };
+	return {
+		...actual,
+		getGroup: vi.fn(),
+		setGroupDevices: vi.fn(),
+		ensureGroupTvCode: vi.fn()
+	};
 });
 
 const mockSession = vi.mocked(readSessionUserCtx);
 const mockGet = vi.mocked(getGroup);
 const mockSet = vi.mocked(setGroupDevices);
+const mockEnsure = vi.mocked(ensureGroupTvCode);
 
 const ID = '01HZZ';
 const DOC_ID = `kiosk_banner_group:${ID}`;
@@ -64,6 +74,7 @@ describe('PUT /api/back-office/kiosk-banner-groups/[id]/devices', () => {
 		mockSession.mockResolvedValue(SESSIONS.managerA);
 		mockGet.mockResolvedValue(record('SH001'));
 		mockSet.mockResolvedValue(record('SH001', ['kiosk-01', 'kiosk-02']));
+		mockEnsure.mockImplementation(async (group) => ({ ...group, schema_v: 2, tv_code: '555555' }));
 	});
 
 	it('sets the group devices as the caller and returns the updated record', async () => {
@@ -72,6 +83,12 @@ describe('PUT /api/back-office/kiosk-banner-groups/[id]/devices', () => {
 		expect((await response.json()).device_ids).toEqual(['kiosk-01', 'kiosk-02']);
 		expect(mockGet).toHaveBeenCalledWith(DOC_ID);
 		expect(mockSet).toHaveBeenCalledWith(record('SH001'), ['kiosk-01', 'kiosk-02'], 'sm-a');
+	});
+
+	it('returns the group with its tv_code backfilled (FR-KBT-12)', async () => {
+		const response = await put({ device_ids: ['kiosk-01', 'kiosk-02'] });
+		expect(mockEnsure).toHaveBeenCalledWith(record('SH001', ['kiosk-01', 'kiosk-02']));
+		expect(await response.json()).toMatchObject({ schema_v: 2, tv_code: '555555' });
 	});
 
 	it('lets pr_staff set devices of a group in their own shelter, 404 for another', async () => {
