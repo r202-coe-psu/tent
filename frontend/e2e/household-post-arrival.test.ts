@@ -578,7 +578,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		const pdfPopup = page.waitForEvent('popup');
 		await page.getByRole('button', { name: 'พิมพ์บัตรประจำตัว' }).click();
 		await (await pdfPopup).close();
-		await page.getByRole('button', { name: 'ปิดหน้าต่าง' }).click();
+		await page.getByRole('button', { name: 'ปิด', exact: true }).click();
 		await page.getByRole('button', { name: 'เสร็จสิ้นการจัดกลุ่มครอบครัว ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 

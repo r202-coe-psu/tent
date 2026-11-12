@@ -300,6 +300,20 @@ chmod 600 .env
 
 อย่า commit หรือส่งไฟล์นี้ให้ผู้อื่น และอย่าใช้ค่าใน `.env.example` เป็น credential จริง
 
+#### ชี้ edge บน LAN แบบ HTTP
+
+เมื่อ central เข้าไม่ได้และตู้ต้องชี้ edge บน LAN ที่ไม่มี HTTPS ให้ตั้ง `TENT_BASE_URL` เป็น `http://` ได้:
+
+```env
+TENT_BASE_URL=http://192.168.1.50
+```
+
+- **HTTP ที่ใช้ได้:** loopback (`localhost` / `127.0.0.0/8` / `::1`), IP ส่วนตัว และ link-local ใช้ได้เลย · hostname อื่น (เช่น `http://edge.local`) ต้องตั้ง `ALLOW_INSECURE_HTTP=true` ด้วย ไม่อย่างนั้นโปรแกรมหยุดตอนตรวจ config — ตั้งเฉพาะบนเครือข่ายภายในที่เชื่อถือได้ เพราะ device secret, เลขบัตร และรูปจะวิ่งแบบไม่เข้ารหัส
+- **ผลต่อกล้อง:** Chromium เปิดกล้องได้เฉพาะ secure context (HTTPS หรือ loopback) ถ้า `TENT_BASE_URL` เป็น HTTP ที่ไม่ใช่ loopback **และ** ตู้ใช้กล้อง (`KIOSK_FACE_CHECK=on` หรือ `KIOSK_QR_CHECK_IN=on` กับ `KIOSK_QR_INPUT=camera|both`) launcher จะส่ง `--unsafely-treat-insecure-origin-as-secure=<origin>` ให้ Chromium ทั้งโหมด kiosk และ `DEBUG=true` · origin คือ `scheme://host[:port]` ไม่มี path (เช่น `http://192.168.1.50:8080/kiosk/` → `http://192.168.1.50:8080`) และให้สิทธิ์กล้องแก่ origin เดียวกันโดยไม่มี prompt
+- **ไม่มี flag:** HTTPS, loopback และตู้ที่ไม่ใช้กล้อง (reader อย่างเดียวหรือปิด QR check-in และปิด face check)
+- **log เตือน:** ทุกครั้งที่ส่ง flag จะมี `WARNING` `TENT_BASE_URL is plain HTTP; treating <origin> as secure so the camera can open` — ใช้ยืนยันว่าตู้ชี้ edge แบบ HTTP อยู่
+- flag อ่านจาก `.env` ทุกครั้งที่ launch เปลี่ยน IP ของ edge หรือกลับไปใช้ HTTPS แค่แก้ `.env` แล้วรีสตาร์ต ไม่ต้องใช้ sudo และไม่มี Chromium policy ค้างในระบบ
+
 ---
 
 ### Step 7: ทดสอบรันระบบ

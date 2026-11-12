@@ -189,7 +189,7 @@
 				<p class="text-xs text-muted-foreground italic">{t.summaryNoAddress}</p>
 			{/if}
 			{#if household.residence_landmark}
-				<p class="truncate text-2xs text-muted-foreground">
+				<p class="text-2xs break-words text-muted-foreground">
 					{t.summaryLandmark}
 					{household.residence_landmark}
 				</p>

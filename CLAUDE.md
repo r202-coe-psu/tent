@@ -70,10 +70,12 @@ Dockerfile). Don't add npm/yarn lockfiles.
 **Definition of done (see CONTRIBUTING.md §2):**
 
 - **Lint and unit tests are enforced by Lefthook** — pre-commit runs Prettier + ESLint on
-  staged files; pre-push runs full `pnpm test` (and pytest for backend/worker when those trees
-  change). Do **not** re-run the full unit suite by hand before pushing; while developing run only
-  the tests you touched (`pnpm vitest run <file>`). A green push satisfies lint and unit tests.
-- **Not hooked — you must ensure:** `pnpm check` (`svelte-check`) before a PR, new domain/data
+  staged files; pre-push runs `pnpm test:changed` — only the Vitest files whose import graph
+  reaches a file changed vs `origin/develop` (config/lockfile/setup changes re-run everything) —
+  and pytest for backend/worker when those trees change. Do **not** re-run tests by hand before
+  each push; while developing run only the tests you touched (`pnpm vitest run <file>`).
+- **Not hooked — you must ensure:** the full `pnpm test` and `pnpm check` (`svelte-check`) once
+  before a PR (Jenkins runs only deploy + e2e on `staging`/`main`, never the unit suites; the scoped hook can miss tests that read files from disk), new domain/data
   logic ships with tests, and every `.svelte` file you touched is run through **`svelte-autofixer`**
   (Svelte MCP) until clean.
 
