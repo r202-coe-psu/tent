@@ -96,6 +96,14 @@ if ! $STATUS_ONLY; then
     fi
     [ -n "$ENV_FILE" ] || die "ไม่พบ .env ของ agent: สร้าง $SCRIPT_DIR/.env (cp .env.example .env แล้วใส่ DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers) หรือระบุ --env-file"
     [ -f "$ENV_FILE" ] || die "ไม่พบไฟล์ --env-file: $ENV_FILE"
+    # DEVICE_SECRET lives here; the installed copy is fixed to 600 below, the source is not.
+    if [ $((8#$(stat -c %a "$ENV_FILE") & 8#077)) -ne 0 ] && ! [ "$ENV_FILE" -ef "$PREFIX/.env" ]; then
+        warn "$ENV_FILE มี DEVICE_SECRET แต่ user อื่นอ่านได้ — แก้: chmod 600 $ENV_FILE"
+    fi
+    # An edit made straight in the installed file would otherwise vanish without notice.
+    if [ -r "$PREFIX/.env" ] && ! [ "$ENV_FILE" -ef "$PREFIX/.env" ] && ! cmp -s "$ENV_FILE" "$PREFIX/.env"; then
+        warn "จะทับ $PREFIX/.env ด้วย $ENV_FILE (ค่าต่างกัน)"
+    fi
 fi
 
 if ! $QUEUE_GIVEN; then
