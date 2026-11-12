@@ -9,8 +9,8 @@ layer: volatile
 affects:
   - docs/data/schema.md §3.1 shelter `feature_flags` (+`public_visible`, +`accepts_referrals`)
   - no schema_v bump (additive key; precedent `accepts_pre_registration`)
-  - worker PROJECTION_VERSION 17 → 18 (worker/src/worker/projection_version.py)
-  - worker/src/worker/projectors/shelter.py · couch/processor.py · couch/bootstrap.py (`is_shelter_open`)
+  - worker PROJECTION_VERSION 18 → 19 (worker/src/worker/projection_version.py)
+  - worker/src/worker/projectors/shelter.py (`project_shelter`, `classify_registry_shelter` → `RetentionPhase.HIDDEN`) · couch/bootstrap.py · couch/processor.py (ใช้ผ่าน `HIDDEN` / `delete` เดิม ไม่ต้องแก้ logic)
   - frontend/src/lib/features/shelters/domain/schema.ts (`shelterFeatureFlagsSchema`, `DEFAULT_SHELTER_FEATURE_FLAGS`, `isShelterBookable`, + `isShelterPublicVisible`, `isShelterAcceptingReferrals`)
   - frontend/src/lib/features/shelters/ui/basic-info-section.svelte · shelter-form-page.svelte
   - frontend BFF /api/v1/shelters · /api/v1/shelters/{code}/risk (+ /public/v1 alias) · /api/public/v1/transparency/shelters · /api/public/v1/config/shelter-policy
@@ -25,7 +25,7 @@ affects:
 > - **เปลี่ยนอะไร:** หน้าตั้งค่าศูนย์เพิ่ม 2 toggle เก็บใน `shelter.feature_flags`: `public_visible` (default `true`) และ `accepts_referrals` (default `true`)
 > - **ผล:** `public_visible = false` → ศูนย์หายจาก public plane และ external API ทั้งหมด (ใช้ทางเดียวกับ `cancelled`); `accepts_referrals = false` → เลือกศูนย์เป็นปลายทาง referral ไม่ได้, สร้างใหม่และรับใบที่รออยู่ตอบ 422
 > - **build:** domain flags + helper · worker คืน `delete` เมื่อซ่อน + rescan เมื่อเปิดกลับ · BFF กรอง registry · referral picker/POST/accept ตรวจ flag · UI 2 switch
-> - **กระทบ:** schema.md `feature_flags` (ไม่ bump `schema_v`) · worker `PROJECTION_VERSION` 17→18 · ไม่แก้ FastAPI
+> - **กระทบ:** schema.md `feature_flags` (ไม่ bump `schema_v`) · worker `PROJECTION_VERSION` 18→19 · ไม่แก้ FastAPI
 
 ---
 
@@ -43,10 +43,10 @@ affects:
 **Worker (CouchDB → Mongo)**
 
 - FR-7 — `project_shelter()` คืน `("delete", {"_id": code})` เมื่อ `feature_flags.public_visible is False` — branch เดียวกับ `cancelled`; caller ลบแถว `public_shelters` แล้วเรียก `delete_{persons,occupants,needs,stocks,jobs}_for_shelter(code)`.
-- FR-8 — `is_shelter_open()` คืน `false` เมื่อ `public_visible is False` → bootstrap ไม่ scan DB `shelter_{code}` และ listener ของ DB นั้นหยุดในรอบ reconcile ถัดไป.
+- FR-8 — `classify_registry_shelter()` คืน `RetentionPhase.HIDDEN` เมื่อ `feature_flags.public_visible is False` (กลุ่มเดียวกับ `cancelled`) → `list_listened_shelters` ไม่รวมศูนย์นี้ bootstrap ไม่ scan DB `shelter_{code}` และ listener ของ DB นั้นหยุดในรอบ reconcile ถัดไป.
 - FR-9 — change จาก DB `shelter_{code}` ของศูนย์ที่ซ่อนอยู่ต้องไม่ project อะไร แต่ยัง save checkpoint (กลไกเดียวกับ cancelled FR-6).
 - FR-10 — เปิด `public_visible` กลับเป็น `true` → registry upsert สร้างแถว `public_shelters` ใหม่ และ rescan DB `shelter_{code}` ด้วย `bootstrap_database` (กลไกเดียวกับ cancelled FR-7 — ไม่มีแถวเดิมก่อน upsert).
-- FR-11 — bump `PROJECTION_VERSION` 17 → 18 พร้อม comment อ้าง draft นี้.
+- FR-11 — bump `PROJECTION_VERSION` 18 → 19 (ค่าบน develop ตอนร่าง = 18) พร้อม comment อ้าง draft นี้.
 - ไม่ลบ: `public_job_applications`, `public_shift_assignments`, `public_volunteers`, `public_donations` (เหมือน cancelled).
 
 **FastAPI (public / external)**
@@ -118,4 +118,4 @@ affects:
 ## Migration
 
 - CouchDB: ไม่มี — key ใหม่ optional, doc เดิมอ่านเป็น `true`, ไม่ bump `schema_v` (precedent `accepts_pre_registration`).
-- Mongo: `PROJECTION_VERSION` 18 → worker full bootstrap ครั้งเดียวหลัง deploy (ยังไม่มีศูนย์ที่ `public_visible = false` จึงไม่มีข้อมูลต้องลบ).
+- Mongo: `PROJECTION_VERSION` 19 → worker full bootstrap ครั้งเดียวหลัง deploy (ยังไม่มีศูนย์ที่ `public_visible = false` จึงไม่มีข้อมูลต้องลบ).
