@@ -266,7 +266,7 @@
 					</Button>
 					<div class="flex flex-col gap-2 sm:flex-row">
 						<Button type="button" variant="outline" class="min-h-11" onclick={close}>
-							{generatedPin ? 'ปิดหน้าต่าง' : 'ยกเลิก'}
+							{generatedPin ? 'ปิด' : 'ยกเลิก'}
 						</Button>
 						<Button type="submit" class="min-h-11" disabled={busy}>
 							{busy ? 'กำลังบันทึก…' : 'บันทึก PIN'}

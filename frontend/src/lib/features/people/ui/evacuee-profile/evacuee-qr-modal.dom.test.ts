@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
+import { QueryClient } from '@tanstack/svelte-query';
 import type { Evacuee } from '$lib/features/people';
 
 vi.mock('$lib/features/printers', async () => ({
@@ -27,13 +28,14 @@ vi.mock('$lib/features/people', async (importOriginal) => ({
 	useScreeningsByEvacuee: () => ({ data: [] })
 }));
 
-import EvacueeQrModal from './evacuee-qr-modal.svelte';
+import Harness from './__fixtures__/evacuee-qr-modal-harness.svelte';
 
 const evacuee = {
 	_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
 	type: 'evacuee',
 	first_name: 'สุนิตา',
 	last_name: 'บางค้างพลู',
+	vulnerable_groups: [],
 	current_stay: { status: 'arriving', zone: null, since: '2026-10-24T10:00:00.000Z' },
 	household_id: 'household:test-1',
 	shelter_code: 'SH001'
@@ -43,9 +45,15 @@ let instance: ReturnType<typeof mount> | null = null;
 
 function render(props: Record<string, unknown> = {}) {
 	const onClose = vi.fn();
-	instance = mount(EvacueeQrModal, {
+	instance = mount(Harness, {
 		target: document.body,
-		props: { show: true, evacuee, onClose, ...props }
+		props: {
+			client: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+			show: true,
+			evacuee,
+			onClose,
+			...props
+		}
 	});
 	flushSync();
 	return onClose;
@@ -58,7 +66,7 @@ const stationRetryHeld = () =>
 /** The modal's own close buttons (X and the bottom one), by their accessible name. */
 const closeButtons = () =>
 	[...document.querySelectorAll<HTMLButtonElement>('button')].filter(
-		(b) => b.textContent?.trim() === 'ปิดหน้าต่าง'
+		(b) => b.textContent?.trim() === 'ปิด'
 	);
 const pressEscape = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 

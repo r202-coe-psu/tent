@@ -10,7 +10,6 @@
 		abandonWalkIn,
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
-		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
 		KIOSK_NOTICE_SECONDARY_ACTION,
@@ -28,10 +27,13 @@
 		type KioskHardware
 	} from '$lib/features/kiosk';
 	import type { SmartCardData } from '$lib/features/kiosk-devices';
-	const displayContext = $derived(
-		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_REGISTER_CARD_I18N } from './card-page.i18n';
+	const contextQuery = $derived(
+		buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams))
 	);
-	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	const t = $derived(getTranslation(KIOSK_REGISTER_CARD_I18N, languageStore.current));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	let ready = $state(false);
 	/** kiosk is reading the chip; pulling the card now loses the photo. */
@@ -68,7 +70,7 @@
 			cardReading = false;
 			reading = false;
 			idleTimeout.setPaused(false);
-			error = 'อ่านข้อมูลบัตรไม่สำเร็จ กรุณานำบัตรออกแล้วเสียบใหม่';
+			error = t.readFailed;
 		};
 		window.addEventListener('kiosk:smart-card-reading', onCardReading);
 		window.addEventListener('kiosk:smart-card-full-read', onCardRead);
@@ -132,13 +134,13 @@
 	}
 </script>
 
-<svelte:head><title>เสียบบัตรประชาชน — SmartShelter Kiosk</title></svelte:head>
+<svelte:head><title>{t.pageTitle}</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div
 	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3"
 	data-kiosk-register-ready={ready ? 'true' : 'false'}
 >
-	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
+	<KioskCheckInWizard currentStep={3} step2Label={t.wizardStep} />
 	<div class="flex justify-start">
 		<KioskBackButton href={homeUrl} onclick={leave} disabled={busy} />
 	</div>
@@ -146,20 +148,15 @@
 		tone="info"
 		icon={CreditCard}
 		headingTag="h1"
-		title={busy ? 'กำลังอ่านข้อมูลบัตร' : 'เสียบบัตรประชาชน'}
+		title={busy ? t.titleBusy : t.title}
 	>
 		{#if busy}
-			<KioskBusyStatus data-testid="kiosk-register-card-busy">กรุณารอสักครู่</KioskBusyStatus>
+			<KioskBusyStatus data-testid="kiosk-register-card-busy">{t.pleaseWait}</KioskBusyStatus>
 			{#if cardReading}
-				<KioskInlineAlert tone="warning" icon={CircleAlert}
-					>อย่าดึงบัตรออก จนกว่าระบบจะอ่านเสร็จ</KioskInlineAlert
-				>
+				<KioskInlineAlert tone="warning" icon={CircleAlert}>{t.doNotRemove}</KioskInlineAlert>
 			{/if}
 		{:else}
-			<p>
-				เสียบบัตรของผู้ที่ต้องการลงทะเบียน (หากเสียบค้างอยู่แล้ว ไม่ต้องถอด)
-				ระบบจะอ่านข้อมูลจากชิปโดยอัตโนมัติ
-			</p>
+			<p>{t.insert}</p>
 		{/if}
 		{#if error}
 			<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert">{error}</KioskInlineAlert>
@@ -170,7 +167,7 @@
 				variant="outline"
 				onclick={returnHome}
 				disabled={busy}
-				class={KIOSK_NOTICE_SECONDARY_ACTION}>ยกเลิก</Button
+				class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.cancel}</Button
 			>
 		{/snippet}
 	</KioskNoticePanel>

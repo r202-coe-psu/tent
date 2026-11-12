@@ -188,6 +188,7 @@ export const volunteerApplySchema = z.object({
 	phone: phoneField,
 	national_id: nationalIdField,
 	email: z.union([z.literal(''), z.email('อีเมลไม่ถูกต้อง')]).optional(),
+	occupation: z.string().trim().max(100, 'อาชีพต้องไม่เกิน 100 ตัวอักษร').optional(),
 	skills: z.array(z.string().trim().min(1)).default([]),
 	shift_id: z.string().trim().min(1, 'กรุณาเลือกกะ').optional(),
 	shift_date: z.string().trim().optional(),
@@ -298,6 +299,7 @@ export type VolunteerProfile = {
 	nickname: string | null;
 	phone_masked: string;
 	email: string | null;
+	occupation: string | null;
 	volunteer_code: string;
 	skills: string[];
 	organization: string | null;

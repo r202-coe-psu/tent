@@ -3,6 +3,7 @@ import type { LanguageCode } from '$lib/stores/language.svelte';
 /** Copy for the volunteer's own profile editor (skills only; identity is shown read-only). */
 export interface ProfileEditTranslations {
 	title: string;
+	occupationLabel: string;
 	noProfile: string;
 	noVolunteerCode: string;
 	verified: string;
@@ -22,6 +23,7 @@ export interface ProfileEditTranslations {
 export const profileEditI18n: Record<LanguageCode, ProfileEditTranslations> = {
 	th: {
 		title: 'แก้ไขโปรไฟล์จิตอาสา',
+		occupationLabel: 'อาชีพ',
 		noProfile:
 			'ยังไม่พบโปรไฟล์ของคุณในระบบ — ลองจองงานอาสาสมัครสักงานก่อน แล้วกลับมาแก้ไขได้ที่นี่',
 		noVolunteerCode: 'ยังไม่มีรหัสอาสา',
@@ -42,6 +44,7 @@ export const profileEditI18n: Record<LanguageCode, ProfileEditTranslations> = {
 	},
 	en: {
 		title: 'Edit volunteer profile',
+		occupationLabel: 'Occupation',
 		noProfile:
 			'We could not find your profile yet — book a volunteer job first, then come back here to edit it',
 		noVolunteerCode: 'No volunteer code yet',

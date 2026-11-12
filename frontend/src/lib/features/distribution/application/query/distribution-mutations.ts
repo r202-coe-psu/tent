@@ -18,6 +18,11 @@ import {
 	type FoodDistributionInput,
 	type SuppliesDistributionInput
 } from '../food-supplies/distribution-workflow';
+import {
+	recordHouseholdMealPickup,
+	type HouseholdMealPickupInput,
+	type HouseholdMealPickupResult
+} from '../food-supplies/household-meal-pickup-workflow';
 
 export interface FoodDistributionMutationInput {
 	ticketId: string;
@@ -55,6 +60,37 @@ export const useRecordFoodDistribution = () => {
 		},
 		retry: false,
 		onSuccess: (_data, variables) => {
+			const shelterCode = resolveShelterCode(variables.shelterCode);
+			invalidateDistributionLogs(queryClient, shelterCode);
+			invalidateTicket(queryClient, shelterCode, variables.ticketId);
+			invalidateShiftReconciliation(queryClient, shelterCode, variables.ticketId);
+		}
+	}));
+};
+
+export interface HouseholdMealPickupMutationInput {
+	ticketId: string;
+	input: HouseholdMealPickupInput;
+	shelterCode?: string;
+}
+
+/**
+ * 8b. recordHouseholdMealPickup (#1154) — one member collects for several. Resolves with a
+ * result per member; partial writes still land, so caches refresh on every settle.
+ */
+export const useRecordHouseholdMealPickup = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			ticketId,
+			input,
+			shelterCode
+		}: HouseholdMealPickupMutationInput): Promise<HouseholdMealPickupResult[]> => {
+			const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+			return recordHouseholdMealPickup(ticketId, input, ctx);
+		},
+		retry: false,
+		onSettled: (_data, _error, variables) => {
 			const shelterCode = resolveShelterCode(variables.shelterCode);
 			invalidateDistributionLogs(queryClient, shelterCode);
 			invalidateTicket(queryClient, shelterCode, variables.ticketId);

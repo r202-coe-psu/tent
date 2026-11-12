@@ -34,6 +34,7 @@ import {
 import { writeKioskStationLogs } from './kiosk-station-log.server';
 import { evaluatePersonQr, parsePersonQr } from '$lib/utils/evacuee-qr';
 import { getEvacueeQrPrints, issueEvacueeQr } from '$lib/server/evacuee-qr-service';
+import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
 export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
@@ -153,6 +154,11 @@ export interface KioskEvacueeSummary {
 export type KioskLabelIdentity = {
 	name: string;
 	phone: string | null;
+	/**
+	 * Vulnerability marker the issued QR was logged with (#1301), so the printed card matches the
+	 * log. Only with a `qr_payload`; the marker colour only, never group names or screening details.
+	 */
+	marker?: VulnerabilityMarker | null;
 	/** Emergency contact phone printed under the zone (CR-151 §16); absent when there is none. */
 	emergency_phone?: string;
 };
@@ -258,14 +264,17 @@ function toSummary(
 	};
 }
 
-/** Unmasked name + phones for the printed label (check-in and a fresh walk-in registration). */
+/**
+ * Unmasked name + phones for the printed label (check-in and a fresh walk-in registration).
+ * `name` is first name, then last name on its own line (`\n`-separated), as on every label.
+ */
 export function toLabelIdentity(
 	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone' | 'emergency_contact'>
 ): KioskLabelIdentity {
 	const name = [doc.first_name, doc.last_name]
 		.map((part) => part?.trim())
 		.filter(Boolean)
-		.join(' ');
+		.join('\n');
 	// Spaces and dashes dropped: the label row has room for the digits only.
 	const emergencyPhone = doc.emergency_contact?.phone?.replace(/[\s-]/g, '');
 	return {
@@ -664,8 +673,13 @@ function notEligible(evacueeIds: string[]): KioskCheckInMemberResult[] {
 async function issueMemberQr(
 	shelterCode: string,
 	evacueeId: string,
-	deviceId: string | undefined
-): Promise<{ qr_payload: string } | { qr_issue_failed: true }> {
+	deviceId: string | undefined,
+	doc: Parameters<typeof toLabelIdentity>[0]
+): Promise<
+	| { qr_payload: string; label: KioskLabelIdentity }
+	| { qr_issue_failed: true; label: KioskLabelIdentity }
+> {
+	const identity = toLabelIdentity(doc);
 	try {
 		const issued = await issueEvacueeQr({
 			shelter_code: shelterCode,
@@ -673,9 +687,9 @@ async function issueMemberQr(
 			source: 'kiosk_checkin',
 			printed_by: `kiosk:${deviceId ?? 'unknown'}`
 		});
-		return { qr_payload: issued.qr_payload };
+		return { qr_payload: issued.qr_payload, label: { ...identity, marker: issued.marker } };
 	} catch {
-		return { qr_issue_failed: true };
+		return { qr_issue_failed: true, label: identity };
 	}
 }
 
@@ -786,10 +800,7 @@ export async function checkInSelectedMembers(
 				status: isAlreadyCheckedInStatus(stayStatus) ? 'already_checked_in' : 'not_eligible',
 				stay_status: stayStatus,
 				...(stayStatus === 'arriving'
-					? {
-							...(await issueMemberQr(shelterCode, evacueeId, options.deviceId)),
-							label: toLabelIdentity(member)
-						}
+					? await issueMemberQr(shelterCode, evacueeId, options.deviceId, member)
 					: {})
 			});
 			continue;
@@ -814,8 +825,7 @@ export async function checkInSelectedMembers(
 				evacuee_id: evacueeId,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				...(await issueMemberQr(shelterCode, evacueeId, options.deviceId)),
-				label: toLabelIdentity(member)
+				...(await issueMemberQr(shelterCode, evacueeId, options.deviceId, member))
 			});
 		} catch {
 			const latest = await getById(dbName, member._id).catch(() => null);
@@ -826,10 +836,7 @@ export async function checkInSelectedMembers(
 					status: 'already_checked_in',
 					stay_status: stayStatus,
 					...(stayStatus === 'arriving'
-						? {
-								...(await issueMemberQr(shelterCode, evacueeId, options.deviceId)),
-								label: toLabelIdentity(latest)
-							}
+						? await issueMemberQr(shelterCode, evacueeId, options.deviceId, latest)
 						: {})
 				});
 			} else {

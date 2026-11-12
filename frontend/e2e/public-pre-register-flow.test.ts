@@ -600,9 +600,19 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			'บ้านเช่า',
 			'คอนโด',
 			'อะพาร์ตเมนต์ / หอพัก',
-			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง'
+			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
 		]);
-		await page.keyboard.press('Escape');
+		await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
+		const housing = page.locator('#housing-type');
+		await expect(housing).toHaveAccessibleName('ประเภทที่อยู่อาศัย');
+		await expect(housing).toHaveAccessibleDescription('');
+		// The full label wraps inside the trigger, so it is readable without a hover-only tooltip.
+		await expect(housing).toHaveText(
+			'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง (ไม่มีบ้านเลขที่หรือที่อยู่ที่แน่ชัด)'
+		);
+		await expect(housing.locator('[title]')).toHaveCount(0);
+		const label = housing.locator('span').first();
+		expect(await label.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 
 		await page.locator('#province').click();
 		await expect(page.getByRole('button', { name: 'สงขลา', exact: true })).toBeVisible();
@@ -1027,7 +1037,7 @@ const ERROR_ROWS: ErrorRow[] = [
 		prepare: async (page) => {
 			await fillBase(page, { address: false });
 			await page.locator('#housing-type').click();
-			await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
+			await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
 		},
 		field: (page) => page.locator('#residence-landmark')
 	},
@@ -1132,6 +1142,9 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		health
 	}) => {
 		await NO_BANNER(page);
+		await page.route('**/api/public/v1/recaptcha', (route) =>
+			route.fulfill({ json: { enabled: false } })
+		);
 		await openPreRegister(page);
 		await expectUnspecifiedPreselected(primaryCard(page));
 		const bodies = await captureQueueSubmit(page, health);
@@ -1152,6 +1165,9 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		health
 	}) => {
 		await NO_BANNER(page);
+		await page.route('**/api/public/v1/recaptcha', (route) =>
+			route.fulfill({ json: { enabled: false } })
+		);
 		await openPreRegister(page);
 		const bodies = await captureQueueSubmit(page, health);
 		await fillBase(page);

@@ -33,6 +33,9 @@
 	import KioskStaffPinEntry from './kiosk-staff-pin-entry.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import ReprintMemberList from './reprint-member-list.svelte';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { KIOSK_REPRINT_I18N } from './_constants/kiosk-reprint.i18n';
 
 	interface Props {
 		contextQuery: KioskContextQuery;
@@ -41,6 +44,7 @@
 	}
 
 	let { contextQuery, deps }: Props = $props();
+	const t = $derived(getTranslation(KIOSK_REPRINT_I18N, languageStore.current));
 
 	const LAST4_SLOTS = Array.from({ length: REPRINT_LAST4_LENGTH }, (_, slot) => slot);
 	const PRIMARY_BUTTON =
@@ -52,7 +56,9 @@
 	async function printMembers(
 		members: Parameters<ReprintSessionDeps['print']>[0]
 	): ReturnType<ReprintSessionDeps['print']> {
-		const images = await Promise.all(members.map((m) => prepareKioskQrImage(m.qr_payload ?? '')));
+		const images = await Promise.all(
+			members.map((m) => prepareKioskQrImage(m.qr_payload ?? '', m.label.marker))
+		);
 		sheetLabels = members.map((member, index) => ({
 			key: member.evacuee_id,
 			qrSrc: images[index].src,
@@ -60,7 +66,8 @@
 			name: member.label.name,
 			zone: member.label.zone,
 			emergencyPhone: member.label.emergency_phone,
-			checkedCount: member.label.stations_passed
+			checkedCount: member.label.stations_passed,
+			marker: member.label.marker
 		}));
 		try {
 			return await printKioskQrLabels(
@@ -69,14 +76,16 @@
 					name: member.label.name,
 					zone: member.label.zone,
 					emergencyPhone: member.label.emergency_phone,
-					checkedCount: member.label.stations_passed
+					checkedCount: member.label.stations_passed,
+					marker: member.label.marker
 				})),
 				async () => {
 					// The sheet must be on the page before the browser prints it.
 					await tick();
 					await new Promise<void>((done) => requestAnimationFrame(() => done()));
 					window.print();
-				}
+				},
+				languageStore.current
 			);
 		} finally {
 			sheetLabels = [];
@@ -85,19 +94,22 @@
 
 	const session = untrack(
 		() =>
-			new ReprintSession({
-				lookup: (input) => lookupPreRegisteredEvacuee(input),
-				reprint: (input) => reprintKioskLabels(input),
-				print: printMembers,
-				...deps
-			})
+			new ReprintSession(
+				{
+					lookup: (input) => lookupPreRegisteredEvacuee(input),
+					reprint: (input) => reprintKioskLabels(input),
+					print: printMembers,
+					...deps
+				},
+				() => languageStore.current
+			)
 	);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 
 	const printQrUrl = $derived(resolve(`/kiosk/print-qr${contextQuery}`));
 	const reprintUrl = $derived(resolve(`/kiosk/reprint${contextQuery}`));
 	const displayPhone = $derived(formatPhoneForDisplay(session.phone));
-	const entryHint = $derived(phoneEntryHint(session.phone));
+	const entryHint = $derived(phoneEntryHint(session.phone, languageStore.current));
 	const inFlow = $derived(session.step !== 'phone');
 	// Not sent home while the labels come out; resuming restarts the idle countdown.
 	const printing = $derived(session.step === 'printing');
@@ -125,7 +137,7 @@
 </script>
 
 <svelte:head>
-	<title>พิมพ์ QR — SmartShelter Kiosk</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
@@ -146,19 +158,17 @@
 		<KioskNoticePanel
 			tone="success"
 			icon={CheckCircle2}
-			title="พิมพ์ QR เรียบร้อย"
+			title={t.done.title}
 			headingTag="h1"
 			role="status"
 		>
-			<p>รับ QR Code {session.printedCount} ดวงที่ช่องพิมพ์ แล้วไปที่จุดคัดกรอง</p>
+			<p>{t.done.body(session.printedCount)}</p>
 			{#if session.qrIssueFailedCount > 0}
-				<p role="alert">
-					ออก QR ไม่สำเร็จ {session.qrIssueFailedCount} คน (ยังไม่ได้พิมพ์) กรุณาลองพิมพ์ใหม่หรือติดต่อเจ้าหน้าที่
-				</p>
+				<p role="alert">{t.done.qrIssueFailed(session.qrIssueFailedCount)}</p>
 			{/if}
 			{#snippet actions()}
 				<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
-					>กลับหน้าแรก</Button
+					>{t.done.home}</Button
 				>
 			{/snippet}
 		</KioskNoticePanel>
@@ -168,23 +178,23 @@
 		<KioskNoticePanel
 			tone="warning"
 			icon={CircleAlert}
-			title="พิมพ์ไม่สำเร็จ"
+			title={t.failed.title}
 			headingTag="h1"
 			role="alert"
 		>
-			<p>{session.error} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่</p>
+			<p>{t.failed.body(session.error)}</p>
 			{#snippet actions()}
 				<Button
 					type="button"
 					onclick={() => void session.retryPrint()}
 					disabled={session.busy}
-					class={KIOSK_NOTICE_PRIMARY_ACTION}><Printer aria-hidden="true" />พิมพ์อีกครั้ง</Button
+					class={KIOSK_NOTICE_PRIMARY_ACTION}><Printer aria-hidden="true" />{t.failed.retry}</Button
 				>
 				<Button
 					type="button"
 					variant="outline"
 					onclick={returnHome}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}>กลับหน้าแรก</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.failed.home}</Button
 				>
 			{/snippet}
 		</KioskNoticePanel>
@@ -198,7 +208,7 @@
 			{#if inFlow}
 				<KioskBackButton
 					href={reprintUrl}
-					label="ย้อนกลับ"
+					label={t.back}
 					disabled={printing || session.busy}
 					onclick={() => session.back()}
 				/>
@@ -223,10 +233,10 @@
 								id="reprint-phone-title"
 								class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 							>
-								พิมพ์ QR
+								{t.phone.heading}
 							</h1>
 							<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
-								กรอกเบอร์โทรที่ลงทะเบียนไว้
+								{t.phone.hint}
 							</p>
 						</header>
 					{/snippet}
@@ -239,10 +249,10 @@
 									? 'kiosk-portrait:text-4xl'
 									: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
 							]}
-							aria-label="เบอร์โทรศัพท์ที่กรอก"
+							aria-label={t.phone.displayLabel}
 							aria-live="polite"
 						>
-							{displayPhone || 'เบอร์โทรศัพท์'}
+							{displayPhone || t.phone.placeholder}
 						</output>
 					{/snippet}
 
@@ -257,9 +267,9 @@
 								<span
 									class="inline-block size-5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
 									aria-hidden="true"
-								></span>กำลังค้นหา…
+								></span>{t.phone.searching}
 							{:else}
-								<Search class="h-5 w-5" aria-hidden="true" />ค้นหา
+								<Search class="h-5 w-5" aria-hidden="true" />{t.phone.search}
 							{/if}
 						</Button>
 					{/snippet}
@@ -277,7 +287,7 @@
 							<p
 								class="kiosk-numpad-panel-note text-center text-sm leading-snug text-slate-600 kiosk-portrait:text-lg"
 							>
-								ยังไม่เคยลงทะเบียน? ใช้ QR บัตรประชาชน หรือ ThaiD ที่หน้าแรก
+								{t.phone.notRegistered}
 							</p>
 						{/if}
 					{/snippet}
@@ -298,7 +308,7 @@
 				<KioskNoticePanel
 					tone="warning"
 					icon={CircleAlert}
-					title="ยังไม่มี QR ให้พิมพ์"
+					title={t.members.blockedTitle}
 					headingTag="h1"
 					role="status"
 				>
@@ -308,7 +318,7 @@
 							type="button"
 							variant="outline"
 							onclick={() => session.back()}
-							class={KIOSK_NOTICE_SECONDARY_ACTION}>ย้อนกลับ</Button
+							class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.back}</Button
 						>
 					{/snippet}
 				</KioskNoticePanel>
@@ -328,7 +338,9 @@
 						onclick={() => session.continueToVerify()}
 						class={PRIMARY_BUTTON}
 					>
-						<Printer class="h-5 w-5" aria-hidden="true" />ต่อไป · {session.selectedIds.length} คน
+						<Printer class="h-5 w-5" aria-hidden="true" />{t.members.next(
+							session.selectedIds.length
+						)}
 					</Button>
 				</div>
 			{/if}
@@ -337,7 +349,7 @@
 				class="flex min-h-0 flex-1 flex-col gap-3 kiosk-portrait:mt-4 kiosk-portrait:justify-start"
 			>
 				<KioskStaffPinEntry
-					description="ตรวจบัตรประชาชนกับตัวบุคคลแล้ว กรอก PIN 6 หลักเพื่อพิมพ์ QR"
+					description={t.staffPin.description}
 					verify={(pin) => session.verifyStaffPin(pin)}
 					onverified={() => void session.onStaffPinVerified()}
 					oncancel={() => session.cancelStaffPin()}
@@ -360,7 +372,7 @@
 								id="reprint-verify-title"
 								class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 							>
-								กรอกเลขบัตรประชาชน 4 ตัวท้ายของเจ้าของเบอร์
+								{t.verify.heading}
 							</h1>
 						</header>
 					{/snippet}
@@ -368,7 +380,7 @@
 					{#snippet display()}
 						<output
 							class="flex min-h-14 items-center justify-center gap-4 rounded-xl border border-slate-200 bg-white px-4 kiosk-portrait:min-h-20 kiosk-portrait:gap-6 kiosk-portrait:rounded-2xl kiosk-portrait:border-2"
-							aria-label={`กรอกแล้ว ${session.idLast4.length} จาก ${REPRINT_LAST4_LENGTH} หลัก`}
+							aria-label={t.verify.digitsLabel(session.idLast4.length, REPRINT_LAST4_LENGTH)}
 						>
 							{#each LAST4_SLOTS as slot (slot)}
 								<span
@@ -395,9 +407,9 @@
 								<span
 									class="inline-block size-5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
 									aria-hidden="true"
-								></span>กำลังตรวจสอบ…
+								></span>{t.verify.checking}
 							{:else}
-								<KeyRound class="h-5 w-5" aria-hidden="true" />ยืนยันและพิมพ์
+								<KeyRound class="h-5 w-5" aria-hidden="true" />{t.verify.confirm}
 							{/if}
 						</Button>
 						<Button
@@ -407,7 +419,7 @@
 							onclick={() => session.openStaffPin()}
 							class="min-h-12 w-full text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
 						>
-							ให้เจ้าหน้าที่ยืนยันด้วย PIN
+							{t.verify.staffPin}
 						</Button>
 					{/snippet}
 

@@ -21,6 +21,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Phone from '@lucide/svelte/icons/phone';
+	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
@@ -89,7 +90,7 @@
 		// This map is a local deduplication buffer and is not exposed to the template.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const map = new Map<string, SkillOption>();
-		for (const value of volunteer.skills) {
+		for (const value of volunteer.skills ?? []) {
 			const option = resolveSkillOption(value, skillOptions);
 			if (option && !map.has(option.code)) {
 				map.set(option.code, option);
@@ -228,6 +229,12 @@
 							เบอร์ไม่ใช่มือถือ 10 หลัก
 						</Badge>
 					{/if}
+				{/if}
+				{#if volunteer.occupation}
+					<p class="flex items-center gap-1.5 text-xs text-muted-foreground">
+						<Briefcase class="h-3.5 w-3.5 shrink-0" />
+						<span>{volunteer.occupation}</span>
+					</p>
 				{/if}
 			</div>
 		</div>

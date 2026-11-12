@@ -14,10 +14,17 @@ export const KIOSK_PRINT_MAX_LABELS_PER_REQUEST = 8;
 
 export type KioskPrintOutcome = { kind: 'printed'; printed: number } | { kind: 'unavailable' };
 
+/**
+ * Which stock message a `KioskPrintError` carries, so the screen can word it in the visitor's
+ * language. Absent when the message came from the printer itself.
+ */
+export type KioskPrintErrorCode = 'connection' | 'send-failed';
+
 export class KioskPrintError extends Error {
 	constructor(
 		message: string,
-		readonly printed: number
+		readonly printed: number,
+		readonly code?: KioskPrintErrorCode
 	) {
 		super(message);
 		this.name = 'KioskPrintError';
@@ -44,14 +51,18 @@ export async function printKioskLabels(
 			outcome = await printKioskLabelChunk(chunk, fetchFn);
 		} catch (error) {
 			if (error instanceof KioskPrintError) {
-				throw new KioskPrintError(error.message, printed + error.printed);
+				throw new KioskPrintError(error.message, printed + error.printed, error.code);
 			}
 			throw error;
 		}
 		if (outcome.kind === 'unavailable') {
 			// No scanner client at all: let the caller fall back to the browser print dialog.
 			if (printed === 0) return outcome;
-			throw new KioskPrintError('เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง', printed);
+			throw new KioskPrintError(
+				'เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง',
+				printed,
+				'connection'
+			);
 		}
 		printed += outcome.printed;
 	}
@@ -72,7 +83,7 @@ async function printKioskLabelChunk(
 			signal: AbortSignal.timeout(KIOSK_PRINT_TIMEOUT_MS)
 		});
 	} catch {
-		throw new KioskPrintError('เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง', 0);
+		throw new KioskPrintError('เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง', 0, 'connection');
 	}
 	if (response.status === 404) return { kind: 'unavailable' };
 
@@ -85,7 +96,8 @@ async function printKioskLabelChunk(
 		const message = body?.error?.message;
 		throw new KioskPrintError(
 			typeof message === 'string' ? message : 'ส่งงานพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง',
-			printed
+			printed,
+			typeof message === 'string' ? undefined : 'send-failed'
 		);
 	}
 	return { kind: 'printed', printed };

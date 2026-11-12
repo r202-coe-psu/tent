@@ -6721,6 +6721,10 @@
 					"email": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Email" },
 					"volunteer_code": { "type": "string", "title": "Volunteer Code", "default": "" },
 					"skills": { "items": { "type": "string" }, "type": "array", "title": "Skills" },
+					"occupation": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Occupation"
+					},
 					"organization": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Organization"

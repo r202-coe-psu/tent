@@ -60,6 +60,7 @@ const ADMIN = {
 const JOB_TITLE = `ช่วยแจกจ่ายอาหาร E2E ${RUN_ID}`;
 const FULL_NAME = 'เก่งกล้า อาสา';
 const APPLICANT_PHONE = '0891112222';
+const APPLICANT_OCCUPATION = 'วิศวกร';
 
 const SHELTER_DOC = {
 	_id: 'shelter:SH001',
@@ -349,6 +350,7 @@ function toPortalProfile(volunteer: Doc) {
 		first_name: volunteer.first_name,
 		last_name: volunteer.last_name,
 		nickname: null,
+		occupation: volunteer.occupation ?? null,
 		phone_masked: `xxx-xxx-${phone.slice(-4)}`,
 		email: volunteer.email ?? null,
 		volunteer_code: volunteer.volunteer_code,
@@ -442,6 +444,7 @@ async function mockPublicApi(page: Page, world: World): Promise<void> {
 			first_name?: string;
 			last_name?: string;
 			phone?: string;
+			occupation?: string;
 			skills?: string[];
 		};
 		const job = world.get(jobId);
@@ -459,13 +462,14 @@ async function mockPublicApi(page: Page, world: World): Promise<void> {
 			volunteer = {
 				_id: `volunteer:e2eflow${RUN_ID}${++volunteerCounter}`,
 				type: 'volunteer',
-				schema_v: 4,
+				schema_v: 6,
 				shelter_code: job.shelter_code,
 				created_at: now,
 				updated_at: now,
 				created_by: 'public',
 				first_name: body.first_name ?? '',
 				last_name: body.last_name ?? '',
+				occupation: body.occupation?.trim() || null,
 				phone,
 				phone_hash: await sha256Hex(phone),
 				email: null,
@@ -784,7 +788,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 				await dialog.dismiss();
 				return message;
 			});
-			await page.getByRole('button', { name: 'ย้อนกลับ', exact: true }).click();
+			await page.getByRole('link', { name: 'กลับไปรายละเอียดงานอาสาสมัคร' }).click();
 			expect(await leaveWarning).toContain('ยังไม่ได้บันทึก');
 			await expect(page).toHaveURL(/\/edit$/);
 
@@ -806,6 +810,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await form.locator('#firstName').fill('เก่งกล้า');
 			await form.locator('#lastName').fill('อาสา');
 			await form.locator('#phone').fill(APPLICANT_PHONE);
+			await form.locator('#occupation').fill(APPLICANT_OCCUPATION);
 			await form.getByRole('button', { name: SKILL_ITEMS[0].label_th }).click();
 			await form.locator('label', { hasText: 'PDPA' }).getByRole('checkbox').check();
 			await form.getByRole('button', { name: /ยืนยันการสมัครและรับตั๋วดิจิทัล/ }).click();
@@ -823,6 +828,9 @@ test.describe('Volunteer end-to-end operational flow', () => {
 
 			const application = world.all('job_application').find((a) => a.job_id === jobId);
 			expect(application?.status).toBe('pending_review');
+			expect(world.all('volunteer').find((v) => v.phone === APPLICANT_PHONE)?.occupation).toBe(
+				APPLICANT_OCCUPATION
+			);
 		});
 
 		await test.step("3. Admin verifies the volunteer's identity on the People tab", async () => {
@@ -900,6 +908,11 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await expect(page.getByRole('button', { name: 'ออกจากระบบ / ลืมเครื่องนี้' })).toBeVisible();
 			// The shift assigned in step 5 already shows up on the volunteer's own schedule.
 			await expect(page.getByText(JOB_TITLE).first()).toBeVisible();
+
+			// CR-245 — the occupation entered on the public form is shown read-only on the profile.
+			await page.getByRole('button', { name: 'แก้ไขโปรไฟล์' }).click();
+			await expect(page.getByRole('dialog').getByText(APPLICANT_OCCUPATION)).toBeVisible();
+			await page.keyboard.press('Escape');
 
 			await page.getByRole('button', { name: /งานจิตอาสา/ }).click();
 			await expect(page).toHaveURL(/\/openings$/);

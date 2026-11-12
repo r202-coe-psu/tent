@@ -194,7 +194,7 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 // public_volunteers — โปรไฟล์จิตอาสาสำหรับหน้า "แก้ไขโปรไฟล์" ใน Access Portal
 // lookup ด้วย phone_hash เท่านั้น (คีย์เดียวกับ schedule / ticket find)
 { _id: "volunteer:01H...", shelter_code, phone_hash, first_name, last_name, nickname,
-  phone_masked, email, volunteer_code, skills: [...], organization,
+  phone_masked, email, volunteer_code, skills: [...], occupation (CR-245), organization,
   identity_verified, personnel_type, status: "active", updated_at }
 // projector: status != active → ลบ doc (ไม่ project เป็น inactive)
 // ไม่มี: national_id, เบอร์ดิบ, user_name, tracking_token — ไม่ project เด็ดขาด

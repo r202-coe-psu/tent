@@ -7,7 +7,12 @@
 	import { ServiceRequestError } from '$lib/api/service';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { FORCE_SETUP_ROUTE, LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
+	import {
+		FORCE_SETUP_ROUTE,
+		LANDING_ROUTE,
+		resolvePostLoginDestination,
+		type PostLoginDestination
+	} from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
 	import PasswordRuleChecklist from '$lib/components/password-rule-checklist.svelte';
@@ -87,7 +92,7 @@
 			}
 
 			toast.success('บันทึกการตั้งค่าความปลอดภัยเรียบร้อยแล้ว!');
-			let dest: '/portal' | '/force-setup' | '/mfa-challenge' = LANDING_ROUTE;
+			let dest: PostLoginDestination = LANDING_ROUTE;
 			try {
 				const status = await fetchAuthStatus();
 				dest = resolvePostLoginDestination(status);

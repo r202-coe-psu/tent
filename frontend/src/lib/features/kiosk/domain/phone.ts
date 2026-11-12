@@ -1,3 +1,5 @@
+import type { LanguageCode } from '$lib/utils/language';
+
 const CANONICAL = /^0\d{9}$/;
 
 /** Canonical Thai phone: digits only, leading 0, 10-digit mobile (CR-210 — no landlines). */
@@ -35,7 +37,9 @@ export function isKioskPhoneSubmittable(phone: string): boolean {
  * Why the search button is still disabled — null when nothing is typed yet or the number is
  * ready, so the kiosk only nags after the visitor has started entering digits.
  */
-export function phoneEntryHint(phone: string): string | null {
+export function phoneEntryHint(phone: string, language: LanguageCode = 'th'): string | null {
 	if (phone.length === 0 || isKioskPhoneSubmittable(phone)) return null;
-	return 'กรอกให้ครบ 10 หลัก ขึ้นต้นด้วย 0';
+	return language === 'en'
+		? 'Enter all 10 digits, starting with 0'
+		: 'กรอกให้ครบ 10 หลัก ขึ้นต้นด้วย 0';
 }

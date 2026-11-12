@@ -4576,6 +4576,8 @@ export interface components {
 			volunteer_code: string;
 			/** Skills */
 			skills?: string[];
+			/** Occupation */
+			occupation?: string | null;
 			/** Organization */
 			organization?: string | null;
 			/**

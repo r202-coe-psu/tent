@@ -2,7 +2,7 @@
 title: "Feature Flow — Volunteer Job Board, Registration, Shifts & Self Check-in (V10)"
 status: active
 created: 2026-07-14
-updated: 2026-09-01 # อัปเดตสอดคล้อง CR-104 (Job Board Model, Self Check-in, 10-Role Taxonomy, Compound Scoped Roles)
+updated: 2026-11-06 # CR-228: D-MULTI = D (โปรไฟล์ต่อศูนย์ + ใช้ผลยืนยันจากศูนย์อื่นแบบกดรับ); 2026-09-01 อัปเดตสอดคล้อง CR-104 (Job Board Model, Self Check-in, 10-Role Taxonomy, Compound Scoped Roles)
 module: A
 audience: team + developer implementation
 note: >
@@ -670,7 +670,7 @@ flowchart TB
 | **D-SHIFT** | โมเดลกะ | A) คง enum 3 กะ + ตั้งชื่อ station เป็น job · B) เวลาเริ่ม-จบอิสระต่อ job · C) template มาตรฐาน + override ต่อ job | schema `shift_assignment` bump |
 | **D-APP** | การเข้า job | A) สมัครแล้วรออนุมัติ · B) auto-accept ถ้า skill match · C) SM assign อย่างเดียว (ไม่มี self-apply) | UX อาสา vs ภาระ SM |
 | **D-DEMAND** | SOP → Job | A) auto-สร้าง draft job · B) แสดง demand ให้ SM กดสร้าง · C) แยกคนละจอ ไม่ผูก auto | Module B integration |
-| **D-MULTI** | อาสาอยู่หลายศูนย์ได้ไหม? | A) โปรไฟล์กลางสมัครหลายศูนย์ · B) 1 โปรไฟล์ต่อศูนย์ | data model, PII |
+| **D-MULTI** | อาสาอยู่หลายศูนย์ได้ไหม? | ✅ **เคาะแล้ว (D, [CR-228](../changes/06-A-volunteer/CR-228-cross-shelter-verification-reference.md) 2026-11-04 — แทน A ของ CR-041):** โปรไฟล์ต่อศูนย์ (ตามโค้ดปัจจุบัน) + แสดงผลยืนยันตัวตน / รับรองทักษะจากศูนย์อื่นที่เบอร์และเลขบัตรตรงกันให้เจ้าหน้าที่กดรับ เฉพาะผลที่ตรวจตรง · ทางเลือกเดิม: A) โปรไฟล์กลางสมัครหลายศูนย์ · B) 1 โปรไฟล์ต่อศูนย์ | data model, PII |
 | **D-PUBLIC** | เปิด nav อาสาบน public portal เมื่อใด? | A) พร้อม Module A · B) หลัง gate · C) เฉพาะ deep link | CR-005 |
 
 > **ข้อเสนอแนะเพื่อคุย (ไม่ใช่มติ):** R3 เริ่มด้วย **D-TIER = A หรือ B** + **D-DUTY-ACCESS = A หรือ C** ก่อน — เลื่อน B (time-bound) ถ้าทีมยังไม่พร้อมแตะ RBAC ลึก; intuition "สิทธิ์เฉพาะในกะ" = เฟสถัดไปเมื่อ A ใช้จริงแล้วเจ็บจุด

@@ -8,7 +8,10 @@ import {
 	readJsonObject,
 	requireBannerManager
 } from '$lib/server/kiosk-banners/kiosk-banner-access';
-import { setGroupDevices } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
+import {
+	ensureGroupTvCode,
+	setGroupDevices
+} from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 
 export const prerender = false;
 
@@ -20,7 +23,7 @@ export const PUT: RequestHandler = async ({ request, params }) => {
 		const { device_ids } = parseBody(devicesBodySchema, await readJsonObject(request));
 
 		const group = await loadGroupInScope(caller, params.id);
-		return json(await setGroupDevices(group, device_ids, caller.name));
+		return json(await ensureGroupTvCode(await setGroupDevices(group, device_ids, caller.name)));
 	} catch (error) {
 		return bannerErrorResponse(error);
 	}
