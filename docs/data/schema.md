@@ -1307,7 +1307,7 @@ Guard ไม่ใช่ receipt history; receipt history มาจาก commit
 `closing_operation_id` และ `pending_claims` ต้องว่าง. Gate ประสานการรับ issue กับการปิด batch
 เท่านั้น ไม่ใช่ยอดแจกหรือ stock truth.
 
-### 2.29 `requisition_ticket` — `requisition_ticket:{ulid}` · **schema_v 1** (CR-121)
+### 2.29 `requisition_ticket` — `requisition_ticket:{ulid}` · **schema_v ต่อประเภท: `food`/`supplies` = 2, `kitchen`/`transfer` = 1** (CR-121, CR-241)
 
 เอกสารตั๋วเบิกจ่ายกลางใน `shelter_{shelter_code}` สำหรับ 4 ประเภท
 `kitchen`, `food`, `supplies`, `transfer`. ตั๋วใหม่ใช้ ULID Crockford 26 ตัวและ common envelope
@@ -1319,6 +1319,7 @@ Guard ไม่ใช่ receipt history; receipt history มาจาก commit
 | `requisition_type`                              | enum(`kitchen`,`food`,`supplies`,`transfer`)                                                                                                             | req | ประเภทตั๋ว                                                   |
 | `status`                                        | enum(`PENDING_PICK`,`READY_FOR_DISPATCH`,`IN_TRANSIT`,`DISTRIBUTING`,`SHIFT_CLOSED`,`RETURN_PENDING_RECEIPT`,`RETURN_COMPLETED`,`COMPLETED`,`CANCELLED`) | req | สถานะตาม lifecycle 7 ขั้นตอน                                 |
 | `meal`                                          | enum(`breakfast`,`lunch`,`dinner`,`snack`)                                                                                                               | opt | มื้อที่เกี่ยวข้องกับตั๋วอาหาร/ครัว                           |
+| `service_date`                                  | str `YYYY-MM-DD`                                                                                                                                         | opt* | วันที่แจก ตามวันปฏิทิน Asia/Bangkok — req เมื่อ `requisition_type = food` และ `schema_v ≥ 2`; ห้ามมีในประเภทอื่น (CR-241). ตอนสร้างต้อง ≥ วันนี้ (ไทย); immutable หลังสร้าง. ตั๋ว schema_v 1 ไม่มีฟิลด์นี้ → อ่านวันจาก `thailandCalendarDay(created_at)` (FR-MQW-03 A เดิม) |
 | `source_location`                               | str                                                                                                                                                      | req | ต้นทาง เช่น `warehouse:main`                                 |
 | `destination_location`                          | str                                                                                                                                                      | req | `kitchen`, `distribution_point:{zone}` หรือ `shelter:{code}` |
 | `driver_name` / `license_plate`                 | str / str                                                                                                                                                | opt | ข้อมูลขนส่งเมื่อเป็น transfer (CR-089)                       |
