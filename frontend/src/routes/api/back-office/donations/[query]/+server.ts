@@ -17,6 +17,7 @@ import {
 	combineLineRejectReasons,
 	donorRejectMessage,
 	hasLineReview,
+	isM6Donation,
 	isReceivedByPoint,
 	rejectRemainingLines,
 	type DonationRejectReasonCode,
@@ -519,7 +520,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				closedReason: 'all_points',
 				now: nowStr
 			});
-			if (closed.status === 'rejected' && !canTransitionDonation(doc.status, 'rejected')) {
+			if (
+				closed.status === 'rejected' &&
+				(!canTransitionDonation(doc.status, 'rejected') || isM6Donation(doc))
+			) {
 				return null;
 			}
 			return { ...next, ...closed };
@@ -527,8 +531,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// FR-12 — nothing kept means the booking is refused, not received.
 		const allRejected = !receipt && rejections.length > 0 && rejections.every(Boolean);
-		// Turning away every line would reject the booking — not for goods sent by M6.
-		if (allRejected) {
+		// Turning away every line would reject the booking — not for goods sent by M6 (D19),
+		// whether in one go or by the drop-off point receipt that closes the booking.
+		if (allRejected || (receipt && withReceipt(donation, receipt) === null)) {
 			const m6 = m6NotRefusableResponse(donation);
 			if (m6) return m6;
 		}
