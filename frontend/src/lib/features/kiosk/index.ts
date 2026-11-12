@@ -36,7 +36,7 @@ export {
 	navigateToKioskHome,
 	returnToKioskLanguagePicker
 } from './application/kiosk-navigation';
-export { isKioskHomePath, KIOSK_LANGUAGE_PATH } from './domain/identity-method';
+export { isKioskHomePath, KIOSK_CLOSED_PATH, KIOSK_LANGUAGE_PATH } from './domain/identity-method';
 export {
 	registerKioskWalkIn,
 	reprintKioskLabels,
@@ -45,7 +45,11 @@ export {
 	type KioskReprintMember,
 	type KioskReprintResult
 } from './data/kiosk-check-in.api';
-export { fetchKioskConfig, readKioskServiceOpen } from './data/kiosk-config.api';
+export {
+	fetchKioskConfig,
+	readKioskServiceGate,
+	readKioskServiceOpen
+} from './data/kiosk-config.api';
 export { fetchKioskBanners } from './data/kiosk-banners.api';
 export { fetchInternalBanners, type InternalBannersResult } from './data/internal-banners.api';
 export {

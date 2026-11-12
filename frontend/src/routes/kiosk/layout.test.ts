@@ -116,4 +116,19 @@ describe('kiosk layout closure gate', () => {
 		const fresh = await visit('/kiosk', config);
 		expect(isRedirect(fresh) && fresh.location).toBe('/kiosk/language');
 	});
+
+	it('after an unreadable config, the next navigations do not wait on another read', async () => {
+		const failing = configFetch(new Error('offline'));
+		const navigate = (path: string) =>
+			load({
+				url: new URL(`http://kiosk.test${path}`),
+				fetch: failing
+			} as unknown as Parameters<typeof load>[0]);
+
+		await navigate('/kiosk/qr');
+		await navigate('/kiosk/register/phone');
+		await navigate('/kiosk/done');
+
+		expect(failing).toHaveBeenCalledTimes(1);
+	});
 });

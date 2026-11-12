@@ -1,7 +1,7 @@
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import type { KioskContextQuery } from '../domain/display-context';
-import { KIOSK_LANGUAGE_PATH } from '../domain/identity-method';
+import { KIOSK_CLOSED_PATH, KIOSK_LANGUAGE_PATH } from '../domain/identity-method';
 import { kioskLanguageSession } from './kiosk-language-session.svelte';
 
 /**
@@ -21,5 +21,5 @@ export function returnToKioskLanguagePicker(contextQuery: KioskContextQuery): vo
 
 /** A work request was refused because the kiosk is closed (403 KIOSK_CLOSED): show the closed page. */
 export function goToKioskClosed(contextQuery: KioskContextQuery = ''): void {
-	void goto(resolve(`/kiosk/closed${contextQuery}`), { replaceState: true });
+	void goto(resolve(`${KIOSK_CLOSED_PATH}${contextQuery}`), { replaceState: true });
 }

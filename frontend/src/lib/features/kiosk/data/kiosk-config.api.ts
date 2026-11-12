@@ -2,6 +2,9 @@ export const KIOSK_CONFIG_TIMEOUT_MS = 3_000;
 /** How long a successful config fetch is reused before the kiosk home screen re-fetches — avoids
  * blocking every return-to-home on a round trip, while still picking up an admin toggle promptly. */
 export const KIOSK_CONFIG_CACHE_TTL_MS = 30_000;
+/** How long the layout's closure gate trusts a failed read before asking again: on a flaky link every
+ * navigation would otherwise wait up to KIOSK_CONFIG_TIMEOUT_MS just to end up "open" anyway. */
+export const KIOSK_SERVICE_GATE_FAILURE_TTL_MS = 15_000;
 
 export type KioskConfig = {
 	phoneCheckInEnabled: boolean;
@@ -21,10 +24,12 @@ const FAIL_CLOSED_CONFIG: KioskConfig = {
 };
 
 let cachedConfig: { config: KioskConfig; fetchedAt: number } | null = null;
+let lastFailedAt: number | null = null;
 
 /** Test-only: clears the in-memory cache so each test starts from a clean slate. */
 export function resetKioskConfigCache(): void {
 	cachedConfig = null;
+	lastFailedAt = null;
 }
 
 /** Fail closed: any error, timeout or non-2xx response keeps the phone method hidden (FR-KPT-21).
@@ -53,6 +58,19 @@ export async function readKioskServiceOpen(fetchFn: typeof fetch = fetch): Promi
 	return config === null ? null : config.serviceOpen;
 }
 
+/** The layout's closure gate (FR-SBO-47), run on every kiosk navigation: `false` only when the server
+ * said closed. Reuses a fresh successful read, and after a failed read answers "open" without asking
+ * again for KIOSK_SERVICE_GATE_FAILURE_TTL_MS (work endpoints still answer 403 KIOSK_CLOSED). The
+ * failure memo is for this gate only: `fetchKioskConfig` never caches failures. */
+export async function readKioskServiceGate(fetchFn: typeof fetch = fetch): Promise<boolean> {
+	const now = Date.now();
+	if (cachedConfig && now - cachedConfig.fetchedAt < KIOSK_CONFIG_CACHE_TTL_MS) {
+		return cachedConfig.config.serviceOpen;
+	}
+	if (lastFailedAt !== null && now - lastFailedAt < KIOSK_SERVICE_GATE_FAILURE_TTL_MS) return true;
+	return (await requestKioskConfig(fetchFn))?.serviceOpen ?? true;
+}
+
 /** One config round trip. `null` = could not read; a successful read also refreshes the cache. */
 async function requestKioskConfig(fetchFn: typeof fetch): Promise<KioskConfig | null> {
 	try {
@@ -61,7 +79,7 @@ async function requestKioskConfig(fetchFn: typeof fetch): Promise<KioskConfig | 
 			cache: 'no-store',
 			signal: AbortSignal.timeout(KIOSK_CONFIG_TIMEOUT_MS)
 		});
-		if (!response.ok) return null;
+		if (!response.ok) return failedRead();
 		const body = (await response.json()) as {
 			phone_check_in_enabled?: unknown;
 			walk_in_registration_enabled?: unknown;
@@ -75,8 +93,14 @@ async function requestKioskConfig(fetchFn: typeof fetch): Promise<KioskConfig | 
 			serviceOpen: body.service_open !== false
 		};
 		cachedConfig = { config, fetchedAt: Date.now() };
+		lastFailedAt = null;
 		return config;
 	} catch {
-		return null;
+		return failedRead();
 	}
+}
+
+function failedRead(): null {
+	lastFailedAt = Date.now();
+	return null;
 }

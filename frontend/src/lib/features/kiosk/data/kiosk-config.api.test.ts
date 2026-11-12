@@ -3,6 +3,8 @@ import {
 	fetchKioskConfig,
 	KIOSK_CONFIG_CACHE_TTL_MS,
 	KIOSK_CONFIG_TIMEOUT_MS,
+	KIOSK_SERVICE_GATE_FAILURE_TTL_MS,
+	readKioskServiceGate,
 	readKioskServiceOpen,
 	resetKioskConfigCache
 } from './kiosk-config.api';
@@ -225,5 +227,62 @@ describe('readKioskServiceOpen', () => {
 		expect(fetchFn).toHaveBeenCalledTimes(2);
 		expect(fresh).toBe(false);
 		expect(cached.serviceOpen).toBe(false);
+	});
+});
+
+describe('readKioskServiceGate', () => {
+	const json = (body: object) => new Response(JSON.stringify(body), { status: 200 });
+
+	beforeEach(() => {
+		resetKioskConfigCache();
+		vi.useRealTimers();
+	});
+
+	it('answers the server value and reuses it within the cache TTL', async () => {
+		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(json({ service_open: false }));
+
+		await expect(readKioskServiceGate(fetchFn)).resolves.toBe(false);
+		await expect(readKioskServiceGate(fetchFn)).resolves.toBe(false);
+
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+	});
+
+	it('after a failed read answers open without asking again until the failure TTL passes', async () => {
+		vi.useFakeTimers();
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockRejectedValueOnce(new Error('offline'))
+			.mockResolvedValueOnce(json({ service_open: false }));
+
+		await expect(readKioskServiceGate(fetchFn)).resolves.toBe(true);
+		vi.advanceTimersByTime(KIOSK_SERVICE_GATE_FAILURE_TTL_MS - 1);
+		await expect(readKioskServiceGate(fetchFn)).resolves.toBe(true);
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+
+		vi.advanceTimersByTime(1);
+		await expect(readKioskServiceGate(fetchFn)).resolves.toBe(false);
+		expect(fetchFn).toHaveBeenCalledTimes(2);
+	});
+
+	it('remembers a non-ok response as a failure too', async () => {
+		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));
+
+		await readKioskServiceGate(fetchFn);
+		await readKioskServiceGate(fetchFn);
+
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not make fetchKioskConfig cache failures', async () => {
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockRejectedValueOnce(new Error('offline'))
+			.mockResolvedValueOnce(json({ phone_check_in_enabled: true }));
+
+		await readKioskServiceGate(fetchFn);
+		const config = await fetchKioskConfig(fetchFn);
+
+		expect(fetchFn).toHaveBeenCalledTimes(2);
+		expect(config.phoneCheckInEnabled).toBe(true);
 	});
 });
