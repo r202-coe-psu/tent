@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { validateShiftEdit, applyShiftEdit, type ShiftEditDraft } from './shift-edit';
+import {
+	validateShiftEdit,
+	applyShiftEdit,
+	sanitizeCountTyping,
+	type ShiftEditDraft
+} from './shift-edit';
 import type { JobShift } from './job.schema';
 
 function draft(overrides: Partial<ShiftEditDraft> = {}): ShiftEditDraft {
@@ -92,5 +97,24 @@ describe('applyShiftEdit', () => {
 			quota: 8
 		});
 		expect(original.quota).toBe(5);
+	});
+});
+
+describe('sanitizeCountTyping (#1162)', () => {
+	it('strips leading zeros from numbers while preserving single zero and empty input', () => {
+		expect(sanitizeCountTyping('08')).toBe('8');
+		expect(sanitizeCountTyping('023')).toBe('23');
+		expect(sanitizeCountTyping('007')).toBe('7');
+		expect(sanitizeCountTyping('0')).toBe('0');
+		expect(sanitizeCountTyping('')).toBe('');
+		expect(sanitizeCountTyping('5')).toBe('5');
+		expect(sanitizeCountTyping('10')).toBe('10');
+	});
+
+	it('strips spaces from typed or pasted input', () => {
+		expect(sanitizeCountTyping(' 08 ')).toBe('8');
+		expect(sanitizeCountTyping(' 023 ')).toBe('23');
+		expect(sanitizeCountTyping('  15  ')).toBe('15');
+		expect(sanitizeCountTyping('   ')).toBe('');
 	});
 });

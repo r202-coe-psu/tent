@@ -17,6 +17,7 @@ sync-worker = "worker.main:main"
 donation-quota = "worker.cli.donation_quota:main"
 e2e-partner-janitor = "worker.cli.e2e_partner_janitor:main"
 edge-users-copy = "worker.cli.edge_users_copy:main"
+worker-healthcheck = "worker.printing.healthcheck:main"
 
 [build-system]
 requires = ["hatchling"]

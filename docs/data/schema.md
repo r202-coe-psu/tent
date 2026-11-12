@@ -820,8 +820,9 @@ doc ตลอดไป ตอนนี้อนุญาตให้บันท
 > เดิมที่เขียนไปแล้วใน production ยังอยู่ใน CouchDB (append-only ห้ามลบ) แต่แอปไม่อ่าน/เขียนอีกต่อไป —
 > orphan, cleanup นอก scope นี้.
 
-### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 5**
+### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 6**
 
+> **schema_v 6** — เพิ่ม `occupation` ([CR-245](../changes/06-A-volunteer/CR-245-volunteer-occupation.md), #1152): เก็บข้อมูลอาชีพของอาสาสมัครแบบไม่บังคับกรอก (free text ≤ 100 ตัวอักษร) แสดงในโปรไฟล์จิตอาสาบน portal แบบอ่านอย่างเดียว (additive migration รองรับ v3/v4/v5 เดิม).
 > **schema_v 5** — เพิ่ม accepted_from ใน identity_verification / skill_verifications (CR-228)
 > **schema_v 4** — เพิ่ม `tracking_token_hash` สำหรับ role-card token ถาวรของอาสาสมัคร (สร้างครั้งเดียวต่อ volunteer และใช้ซ้ำกับ digital pass, portal login และ on-site check-in); เก็บเฉพาะ hash ใน CouchDB สำหรับเอกสารใหม่. เอกสาร `schema_v 3` เดิมยังอ่านได้แบบ additive compatibility.
 > **schema_v 3** — ทะเบียนประวัติจิตอาสาและบุคลากรปฏิบัติงาน (CR-104). เพิ่ม `phone`, `national_id`, `personnel_type`, `checked_in`, `current_shelter_code`, `volunteer_code`, `identity_verified`, `source` และลิงก์ `user_name` กรณีเป็น Staff-Capable Volunteer.
@@ -833,6 +834,7 @@ doc ตลอดไป ตอนนี้อนุญาตให้บันท
 | `first_name`            | str                                                                                        | req     | ชื่อจริง (ตัดช่องว่างหัวท้าย)                                                                                                             |
 | `last_name`             | str                                                                                        | req     | นามสกุล                                                                                                                                   |
 | `nickname`              | str                                                                                        | opt     | ชื่อเล่น (ตัดช่องว่างหัวท้าย)                                                                                                             |
+| `occupation`            | str\|null                                                                                  | opt     | ข้อมูลอาชีพของอาสาสมัคร (free text ≤ 100 ตัวอักษร, ไม่ผูก master data; เจ้าหน้าที่บันทึก/แก้ไขได้, แสดงใน portal แบบ read-only)          |
 | `phone`                 | str\|null                                                                                  | req     | เบอร์โทรศัพท์สำหรับติดต่อและระบุตัวตน — มือถือ 10 หลัก (CR-210); public apply ต้องมีค่า; walk-in / staff entry เว้นได้ (`null`, ห้ามใส่ "ไม่มี"/"-"); เอกสาร legacy ที่เป็นเบอร์ 9 หลักยังอ่านได้ แต่ต้องแก้ก่อนออกสิทธิ์ใช้งานระบบ                                 |
 | `phone_hash`            | str\|null                                                                                  | opt     | SHA-256 hash ของเบอร์โทรเพื่อค้นหาแบบไม่เปิดเผยตัวตน / deduplication                                                                      |
 | `email`                 | str\|null                                                                                  | opt     | อีเมลติดต่อ                                                                                                                               |
@@ -858,6 +860,8 @@ doc ตลอดไป ตอนนี้อนุญาตให้บันท
 **Additive migration:** เอกสารเก่าที่ไม่มี review fields เติม `identity_verification` จาก `identity_verified` และเติม `skill_verifications: {}`; ไม่เปลี่ยน `identity_verified` และไม่ลบทักษะเดิม. ใช้ `pnpm migrate:volunteer-review --write --confirm` ใน `frontend/`.
 
 **Migration schema_v 4 → 5 (CR-228, additive):** เพิ่ม `accepted_from?` ใน `identity_verification` และ `skill_verifications[code]` · **ไม่ backfill** · เอกสารที่ไม่มี `accepted_from` (รวม v4 ทั้งหมด) = ผลตรวจตรงที่ศูนย์นี้ และเป็นต้นทางข้ามศูนย์ได้ · เอกสารที่เขียนใหม่เป็น v5 · Zod รับ v3 / v4 / v5 · `pnpm migrate:volunteer-review` เดิมไม่ต้องแก้ (ไม่เติม `accepted_from`).
+
+**Migration schema_v 5 → 6 (CR-245, additive):** เพิ่ม `occupation?` (`str|null`, max 100) ใน `volunteer` · **ไม่ backfill** · เอกสารที่ไม่มี field นี้ (รวม v3/v4/v5 ทั้งหมด) ถือว่า `occupation = null` · เอกสารที่เขียนใหม่ stamp `schema_v: 6` · Zod parser รับ `3 | 4 | 5 | 6`.
 
 **Index:** `(phone)` · `(phone_hash)` · `(tracking_token_hash)` · `(status)` · `(personnel_type)` · `(checked_in)`
 
@@ -1303,7 +1307,7 @@ Guard ไม่ใช่ receipt history; receipt history มาจาก commit
 `closing_operation_id` และ `pending_claims` ต้องว่าง. Gate ประสานการรับ issue กับการปิด batch
 เท่านั้น ไม่ใช่ยอดแจกหรือ stock truth.
 
-### 2.29 `requisition_ticket` — `requisition_ticket:{ulid}` · **schema_v 1** (CR-121)
+### 2.29 `requisition_ticket` — `requisition_ticket:{ulid}` · **schema_v ต่อประเภท: `food`/`supplies` = 2, `kitchen`/`transfer` = 1** (CR-121, CR-241)
 
 เอกสารตั๋วเบิกจ่ายกลางใน `shelter_{shelter_code}` สำหรับ 4 ประเภท
 `kitchen`, `food`, `supplies`, `transfer`. ตั๋วใหม่ใช้ ULID Crockford 26 ตัวและ common envelope
@@ -1315,6 +1319,7 @@ Guard ไม่ใช่ receipt history; receipt history มาจาก commit
 | `requisition_type`                              | enum(`kitchen`,`food`,`supplies`,`transfer`)                                                                                                             | req | ประเภทตั๋ว                                                   |
 | `status`                                        | enum(`PENDING_PICK`,`READY_FOR_DISPATCH`,`IN_TRANSIT`,`DISTRIBUTING`,`SHIFT_CLOSED`,`RETURN_PENDING_RECEIPT`,`RETURN_COMPLETED`,`COMPLETED`,`CANCELLED`) | req | สถานะตาม lifecycle 7 ขั้นตอน                                 |
 | `meal`                                          | enum(`breakfast`,`lunch`,`dinner`,`snack`)                                                                                                               | opt | มื้อที่เกี่ยวข้องกับตั๋วอาหาร/ครัว                           |
+| `service_date`                                  | str `YYYY-MM-DD`                                                                                                                                         | opt* | วันที่แจก ตามวันปฏิทิน Asia/Bangkok — req เมื่อ `requisition_type = food` และ `schema_v ≥ 2`; ห้ามมีในประเภทอื่น (CR-241). ตอนสร้างต้อง ≥ วันนี้ (ไทย); immutable หลังสร้าง. ตั๋ว schema_v 1 ไม่มีฟิลด์นี้ → อ่านวันจาก `thailandCalendarDay(created_at)` (FR-MQW-03 A เดิม) |
 | `source_location`                               | str                                                                                                                                                      | req | ต้นทาง เช่น `warehouse:main`                                 |
 | `destination_location`                          | str                                                                                                                                                      | req | `kitchen`, `distribution_point:{zone}` หรือ `shelter:{code}` |
 | `driver_name` / `license_plate`                 | str / str                                                                                                                                                | opt | ข้อมูลขนส่งเมื่อเป็น transfer (CR-089)                       |
@@ -2757,6 +2762,10 @@ VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไ�
 
 ### 5.1 `search_audit` — `search_audit:{ulid}` · **append-only**
 
+> **CR-231:** public search (`POST /public/v1/occupants`) **ไม่เขียน `search_audit` อีกแล้ว** — เขียน Mongo `audit_events` (§5.1a) แทน
+> (ไม่เขียนคู่, ไม่ migrate/backfill; collection `search_audits` เดิมคงไว้อ่านอย่างเดียว). `/external/v1/occupants` ไม่เปลี่ยน:
+> ยังเขียน `search_audit` แบบ hash เท่านั้น, fail-open (ND-1).
+
 | Field          | ชนิด                                          | req | หมายเหตุ                                                                  |
 | -------------- | --------------------------------------------- | --- | ------------------------------------------------------------------------- |
 | `query_kind`   | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public occupants search (CR-044, path CR-065) |
@@ -2764,6 +2773,29 @@ VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไ�
 | `ip_hash`      | str                                           | req | —                                                                         |
 | `result_count` | int≥0                                         | req | —                                                                         |
 | `occurred_at`  | ts                                            | req | —                                                                         |
+
+### 5.1a `audit_events` — Mongo `audit_events` (public log, single collection, schema_v 1) · **append-only** · CR-231
+
+เก็บที่ **Mongo เท่านั้น — ไม่ sync เข้า CouchDB** (PII อยู่ที่ public plane). `_id` = `audit_event:{ULID}`.
+ไม่มี retention / TTL — เก็บถาวร (#1213). Index: `{event_type: 1, occurred_at: -1}`. Append-only ที่ระดับ application code (ไม่ update/delete).
+
+| Field | req | หมายเหตุ |
+| --- | --- | --- |
+| `_id` | req | `audit_event:{ULID}` |
+| `schema_v` | req | `1` |
+| `event_type` | req | dotted string; registry อยู่ที่เดียวใน `packages/tent-model` (`EVENT_REGISTRY`); ตอนนี้มี `public.search` |
+| `occurred_at` | req | ts (UTC) |
+| `actor` | req | `{kind: "public_searcher", ip_hash, client_ip?}` — `client_ip` **PII** ค่าจริงจาก `X-Real-IP` |
+| `request_id` | opt | จาก header `X-Request-ID` ถ้ามี — ผูกกับ log ของ FastAPI/nginx |
+| `subject` | opt | `{kind, id}` เมื่อ event ชี้ entity; `public.search` ไม่มี |
+| `payload` | req | validate ต่อ `event_type` (ห้าม key นอก model) |
+
+`public.search` `payload`: `query_kind` · `query_hash` (SHA-256; คำค้นไม่เก็บตรง) · `result_count` (int≥0) ·
+`searcher {first_name 1–100, last_name 0–100 (ว่าง = ''), phone มือถือไทย 10 หลัก normalize แล้ว}` (**PII**) ·
+`purpose` (`find_family`/`find_acquaintance`/`coordinate_aid`/`other`) · `purpose_note` (**PII** free text; มีเฉพาะ `purpose=other`, 1–200) ·
+`consent_version` (`"search-v1"`). API ที่อ่าน `audit_events` ต้อง project `actor.client_ip` และ `payload.searcher`/`purpose_note` ออกโดย default.
+
+> สิทธิ์ Mongo แบบ append-only ที่ระดับ DB ไม่ได้บังคับ (Mongo ทุก compose ยังไม่มี auth) — ต้องควบคุมสิทธิ์เข้าถึง Mongo ให้เหมาะกับ PII ที่เก็บถาวร (CR-231 FR-18)
 
 ### 5.2 `export_job` — `export_job:{ulid}`
 

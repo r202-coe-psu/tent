@@ -50,6 +50,13 @@ import type { MemberForm, ShelterForm } from './staff-ui';
 export const IS_REMOTE = Boolean(process.env.E2E_BASE_URL);
 
 /**
+ * Public family search appends a permanent `audit_events` row (CR-231) that cannot be deleted.
+ * Remote targets must opt in explicitly, so polling never fills a shared staging Mongo by accident.
+ */
+export const ALLOW_PERMANENT_AUDIT_ROWS =
+	!IS_REMOTE || process.env.E2E_ALLOW_AUDIT_ROWS?.trim() === 'true';
+
+/**
  * Explicit opt-in for a remote target to accept live writes — set in the
  * `tent-staging-e2e-env` Jenkins credential (see `e2e/.env.example`), never
  * `tent-prod-e2e-env`. A credential change the secret's owner controls, not a

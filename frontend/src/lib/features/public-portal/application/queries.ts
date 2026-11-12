@@ -7,6 +7,7 @@ import {
 	getPublicShelter,
 	listPublicShelters
 } from '../data/public-api';
+import type { SearchConsent } from '../domain/search-consent';
 import type { ListPublicSheltersParams } from '../domain/types';
 
 const LABEL_STALE_MS = 5 * 60 * 1000;
@@ -43,7 +44,8 @@ export function usePublicShelter(code: () => string | null | undefined) {
 
 export function useFamilySearchMutation() {
 	return createMutation(() => ({
-		mutationFn: (query: string) => familySearch(query)
+		mutationFn: (input: { query: string; consent: SearchConsent }) =>
+			familySearch(input.query, input.consent)
 	}));
 }
 
