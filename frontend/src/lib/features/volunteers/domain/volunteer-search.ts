@@ -16,16 +16,21 @@ export interface VolunteerSearchFields {
 	nickname?: string | null;
 	phone?: string | null;
 	code?: string | null;
+	occupation?: string | null;
 }
 
 export function volunteerSearchFields(
-	volunteer: Pick<Volunteer, 'first_name' | 'last_name' | 'nickname' | 'phone' | 'volunteer_code'>
+	volunteer: Pick<
+		Volunteer,
+		'first_name' | 'last_name' | 'nickname' | 'phone' | 'volunteer_code'
+	> & { occupation?: string | null }
 ): VolunteerSearchFields {
 	return {
 		name: `${volunteer.first_name} ${volunteer.last_name}`.trim(),
 		nickname: volunteer.nickname,
 		phone: volunteer.phone,
-		code: volunteer.volunteer_code
+		code: volunteer.volunteer_code,
+		occupation: volunteer.occupation
 	};
 }
 
@@ -45,5 +50,6 @@ export function matchesVolunteerSearch(person: VolunteerSearchFields, query: str
 	if (person.name?.toLowerCase().includes(needle)) return true;
 	if (person.nickname?.toLowerCase().includes(needle)) return true;
 	if (person.code && matchesVolunteerCode(person.code, needle)) return true;
+	if (person.occupation?.toLowerCase().includes(needle)) return true;
 	return !!person.phone && matchesPhone(person.phone, needle);
 }

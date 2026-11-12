@@ -71,6 +71,19 @@ describe('volunteerApplySchema', () => {
 	it('normalises +66 mobiles for ticket lookup', () => {
 		expect(ticketFindSchema.parse({ phone: '+66 81-234-5678' }).phone).toBe('0812345678');
 	});
+
+	it('accepts occupation as optional string and trims it', () => {
+		expect(volunteerApplySchema.parse(base).occupation).toBeUndefined();
+		expect(volunteerApplySchema.parse({ ...base, occupation: '  แพทย์  ' }).occupation).toBe(
+			'แพทย์'
+		);
+	});
+
+	it('rejects occupation longer than 100 characters', () => {
+		expect(volunteerApplySchema.safeParse({ ...base, occupation: 'a'.repeat(101) }).success).toBe(
+			false
+		);
+	});
 });
 
 describe('ticketStatusLabel', () => {
@@ -384,6 +397,7 @@ describe('volunteerProfileUpdateSchema', () => {
 		// even though the credential reaching it (a phone number) is guessable.
 		const parsed = volunteerProfileUpdateSchema.safeParse({
 			skills: ['ครัว'],
+			occupation: 'doctor',
 			identity_verified: true,
 			volunteer_code: 'V-999',
 			status: 'inactive'

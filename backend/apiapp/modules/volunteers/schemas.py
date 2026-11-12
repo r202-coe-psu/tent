@@ -306,6 +306,7 @@ class VolunteerProfile(BaseModel):
     email: str | None = None
     volunteer_code: str = ""
     skills: list[str] = Field(default_factory=list)
+    occupation: str | None = None
     organization: str | None = None
     #: Staff decision — the portal renders it read-only.
     identity_verified: bool = False

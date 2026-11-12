@@ -1272,6 +1272,7 @@ async def _profile_row(
     shelter_code: str = "SH001",
     phone: str = "0812345678",
     skills: list[str] | None = None,
+    occupation: str | None = None,
     identity_verified: bool = False,
     updated_at: datetime | None = None,
     tracking_token_hash: str | None = None,
@@ -1286,6 +1287,7 @@ async def _profile_row(
         phone_masked="xxx-xxx-5678",
         volunteer_code="V-001",
         skills=skills if skills is not None else ["ครัว"],
+        occupation=occupation,
         identity_verified=identity_verified,
         updated_at=updated_at or datetime.now(UTC),
     )
@@ -1348,6 +1350,42 @@ async def test_profile_merges_every_shelter_the_person_helps_at(
     assert profile["skills"] == ["ขับรถ", "ครัว"]
     assert profile["identity_verified"] is True
     assert sorted(profile["shelter_codes"]) == ["SH001", "SH002"]
+
+
+async def test_profile_returns_occupation_when_set(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await _profile_row(occupation="พยาบาลวิชาชีพ")
+    response = await _get_profile(client, auth_headers, phone="0812345678")
+    assert response.status_code == 200
+    assert response.json()["profile"]["occupation"] == "พยาบาลวิชาชีพ"
+
+
+async def test_profile_occupation_defaults_to_null(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await _profile_row()
+    response = await _get_profile(client, auth_headers, phone="0812345678")
+    assert response.json()["profile"]["occupation"] is None
+
+
+async def test_merged_profile_keeps_the_latest_non_empty_occupation(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    await _profile_row(
+        volunteer_id="volunteer:01A",
+        shelter_code="SH001",
+        occupation="พยาบาล",
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    await _profile_row(
+        volunteer_id="volunteer:01B",
+        shelter_code="SH002",
+        occupation=None,
+        updated_at=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+    response = await _get_profile(client, auth_headers, phone="0812345678")
+    assert response.json()["profile"]["occupation"] == "พยาบาล"
 
 
 async def test_updating_skills_queues_one_write_per_profile_and_shows_it_at_once(
