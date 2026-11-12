@@ -532,12 +532,12 @@
 			<div
 				class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
 			>
-				<div class="flex flex-wrap items-center gap-3">
-					<div class="flex items-center gap-1.5 text-xs text-slate-600">
+				<div class="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+					<div class="flex w-full min-w-0 items-center gap-1.5 text-xs text-slate-600 sm:w-auto">
 						<span class="font-medium">{t.statusFilter}</span>
 						<select
 							bind:value={allStatusFilter}
-							class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
+							class="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden sm:h-8 sm:flex-none"
 						>
 							<option value="all">{t.allStatuses}</option>
 							<option value={IN_SHELTER_FILTER}>{t.inShelterOption}</option>
@@ -555,11 +555,11 @@
 					</div>
 
 					{#if availableZones.length > 0}
-						<div class="flex items-center gap-1.5 text-xs text-slate-600">
+						<div class="flex w-full min-w-0 items-center gap-1.5 text-xs text-slate-600 sm:w-auto">
 							<span class="font-medium">{t.zoneFilter}</span>
 							<select
 								bind:value={allZoneFilter}
-								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
+								class="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden sm:h-8 sm:flex-none"
 							>
 								<option value="all">{t.allZones}</option>
 								{#each availableZones as z (z)}

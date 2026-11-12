@@ -278,7 +278,7 @@
 		<div
 			role="tablist"
 			aria-label={t.memberTabsAria}
-			class="mb-4 flex gap-1.5 overflow-x-auto border-b border-slate-200 pb-2"
+			class="mb-4 flex flex-wrap gap-1.5 border-b border-slate-200 pb-2 sm:flex-nowrap sm:overflow-x-auto"
 		>
 			{#each members as member, index (member._id ?? index)}
 				{@const selected = index === activeMemberTab}

@@ -35,7 +35,7 @@
 		type="submit"
 		disabled={pending || submitDisabled}
 		aria-describedby={describedBy}
-		class="h-auto min-h-11 w-full gap-2 rounded-xl py-2 text-base font-semibold whitespace-normal shadow-xs sm:w-auto sm:min-w-56 sm:px-8"
+		class="h-auto min-h-11 w-full gap-2 rounded-xl py-2 text-sm font-semibold whitespace-normal shadow-xs sm:w-auto sm:min-w-56 sm:px-8 sm:text-base"
 	>
 		{#if pending}
 			<Loader2 class="size-4 animate-spin" />
