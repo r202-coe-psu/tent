@@ -83,6 +83,7 @@
 					maxlength={SEARCH_NAME_MAX}
 					autocomplete="given-name"
 					aria-invalid={errors.first_name ? 'true' : undefined}
+					aria-describedby={errors.first_name ? 'consent-err-first_name' : undefined}
 				/>
 				{@render fieldError('first_name', t.consentErrorFirstName)}
 			</div>
@@ -97,6 +98,7 @@
 					maxlength={SEARCH_NAME_MAX}
 					autocomplete="family-name"
 					aria-invalid={errors.last_name ? 'true' : undefined}
+					aria-describedby={errors.last_name ? 'consent-err-last_name' : undefined}
 				/>
 				{@render fieldError('last_name', t.consentErrorLastName)}
 			</div>
@@ -110,12 +112,17 @@
 					bind:value={phone}
 					autocomplete="tel"
 					aria-invalid={errors.phone ? 'true' : undefined}
+					aria-describedby={errors.phone
+						? 'consent-err-phone consent-phone-hint'
+						: 'consent-phone-hint'}
 				/>
-				<p class="mt-1 text-xs text-muted-foreground">{t.consentPhoneHint}</p>
+				<p id="consent-phone-hint" class="mt-1 text-xs text-muted-foreground">
+					{t.consentPhoneHint}
+				</p>
 				{@render fieldError('phone', t.consentErrorPhone)}
 			</div>
 
-			<fieldset>
+			<fieldset aria-describedby={errors.purpose ? 'consent-err-purpose' : undefined}>
 				<legend class="mb-1 text-sm font-medium">{t.consentPurposeLegend}</legend>
 				<div class="space-y-2">
 					{#each SEARCH_PURPOSES as value (value)}
@@ -144,6 +151,7 @@
 						bind:value={purposeNote}
 						maxlength={SEARCH_PURPOSE_NOTE_MAX}
 						aria-invalid={errors.purpose_note ? 'true' : undefined}
+						aria-describedby={errors.purpose_note ? 'consent-err-purpose_note' : undefined}
 					/>
 					{@render fieldError('purpose_note', t.consentErrorPurposeNote)}
 				</div>
@@ -155,6 +163,8 @@
 						id="consent-accept"
 						type="checkbox"
 						bind:checked={accepted}
+						aria-invalid={errors.consent_accepted ? 'true' : undefined}
+						aria-describedby={errors.consent_accepted ? 'consent-err-consent_accepted' : undefined}
 						class="mt-0.5 size-4 accent-primary"
 					/>
 					<label for="consent-accept">

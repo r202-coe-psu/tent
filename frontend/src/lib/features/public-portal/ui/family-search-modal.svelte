@@ -10,6 +10,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { formatDate, getTranslation } from '$lib/utils/i18n';
 	import {
+		clearConfirmedSearchConsent,
 		getConfirmedSearchConsent,
 		storeConfirmedSearchConsent
 	} from '../application/search-consent-session';
@@ -82,6 +83,12 @@
 			if (e instanceof PublicApiError) {
 				isHint = e.kind === 'validation';
 				message = e.kind === 'validation' ? 'incompletePhone' : e.kind;
+				if (e.kind === 'validation') {
+					// The query passed client validation, so a 422 here may be a stale/rejected
+					// consent: drop it and ask again instead of looping on 422.
+					clearConfirmedSearchConsent();
+					consentOpen = true;
+				}
 			} else {
 				isHint = false;
 				message = 'networkError';

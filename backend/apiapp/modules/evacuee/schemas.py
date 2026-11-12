@@ -9,6 +9,8 @@ from typing import Literal, Self
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 from tent_model.audit_event import SearchPurpose
 
+from ...utils.masking import normalize_phone
+
 
 class SearchRequest(BaseModel):
     search: str = Field(
@@ -19,8 +21,9 @@ class SearchRequest(BaseModel):
     )
 
 
-#: Same rule as `isThaiMobilePhone` (frontend `$lib/db/model`); checked before `normalize_phone`.
-_THAI_MOBILE = re.compile(r"0\d{9}")
+#: Same rule as `isThaiMobilePhone` (frontend `$lib/db/model`). ASCII digits only: `\d` would also
+#: accept Thai/Arabic-Indic digits, which the frontend (`/^0\d{9}$/`, JS = ASCII) rejects.
+_THAI_MOBILE = re.compile(r"0[0-9]{9}")
 
 
 class Searcher(BaseModel):
@@ -55,7 +58,7 @@ class Searcher(BaseModel):
     def _phone(cls, value: str) -> str:
         if not _THAI_MOBILE.fullmatch(value):
             raise ValueError("phone must be a Thai mobile number (0 + 9 digits)")
-        return value
+        return normalize_phone(value)
 
 
 class PublicSearchRequest(SearchRequest):

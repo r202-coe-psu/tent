@@ -52,7 +52,7 @@ export const PUBLIC_SEARCH_I18N = {
 		of: 'จาก',
 		consentTitle: 'ยืนยันตัวตนก่อนค้นหา',
 		consentDesc:
-			'เพื่อคุ้มครองข้อมูลผู้พักพิง กรุณาระบุข้อมูลของท่านและจุดประสงค์ในการค้นหา ระบบจะบันทึกข้อมูลนี้ไว้ตรวจสอบย้อนหลัง',
+			'เพื่อคุ้มครองข้อมูลผู้พักพิง กรุณาระบุข้อมูลของท่านและจุดประสงค์ในการค้นหา ระบบจะบันทึกชื่อ นามสกุล เบอร์โทรศัพท์ จุดประสงค์ และหมายเลข IP ของท่านไว้ตรวจสอบย้อนหลัง โดยเก็บไว้โดยไม่มีกำหนด',
 		consentFirstName: 'ชื่อ',
 		consentLastName: 'นามสกุล (ถ้ามี)',
 		consentPhone: 'เบอร์โทรศัพท์มือถือ',
@@ -63,7 +63,8 @@ export const PUBLIC_SEARCH_I18N = {
 		consentPurposeCoordinateAid: 'ประสานความช่วยเหลือ',
 		consentPurposeOther: 'อื่นๆ',
 		consentPurposeNote: 'โปรดระบุเหตุผล',
-		consentAccept: 'ข้าพเจ้ายินยอมให้เก็บและใช้ข้อมูลข้างต้นเพื่อการตรวจสอบการค้นหา ตาม',
+		consentAccept:
+			'ข้าพเจ้ายินยอมให้เก็บและใช้ข้อมูลข้างต้นรวมถึงหมายเลข IP ของข้าพเจ้า โดยเก็บไว้โดยไม่มีกำหนดเพื่อการตรวจสอบการค้นหา ตาม',
 		consentPolicyLink: 'นโยบายความเป็นส่วนตัว',
 		consentConfirm: 'ยืนยันและค้นหา',
 		consentCancel: 'ยกเลิก',
@@ -128,7 +129,7 @@ export const PUBLIC_SEARCH_I18N = {
 		of: 'of',
 		consentTitle: 'Confirm before searching',
 		consentDesc:
-			'To protect shelter residents, please tell us who you are and why you are searching. This is recorded for audit.',
+			'To protect shelter residents, please tell us who you are and why you are searching. We record your name, phone number, purpose and IP address for after-the-fact audit. This is kept indefinitely.',
 		consentFirstName: 'First name',
 		consentLastName: 'Last name (optional)',
 		consentPhone: 'Mobile phone',
@@ -140,7 +141,7 @@ export const PUBLIC_SEARCH_I18N = {
 		consentPurposeOther: 'Other',
 		consentPurposeNote: 'Please state the reason',
 		consentAccept:
-			'I consent to the collection and use of the information above for search auditing, under the',
+			'I consent to the collection and use of the information above, including my IP address, kept indefinitely for search auditing, under the',
 		consentPolicyLink: 'privacy policy',
 		consentConfirm: 'Confirm and search',
 		consentCancel: 'Cancel',

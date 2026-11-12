@@ -431,7 +431,8 @@ How they obey §4:
   and the `public-cleanup.ts` polling helper — appends a `public.search` row (searcher `E2E …`, phone `0812345678`)
   to Mongo `audit_events`. That collection is append-only with no retention, so **these rows cannot be removed** and
   **contain test PII**. Run the suite against a throw-away Mongo (local `docker compose`, never a shared staging
-  database) and keep the searcher name prefixed `E2E` so the rows stay recognisable.
+  database) and keep the searcher name prefixed `E2E` so the rows stay recognisable. The polling helper refuses to run against a remote target (`E2E_BASE_URL`) unless
+  `E2E_ALLOW_AUDIT_ROWS=true`.
 - **EXT-012 (person search, #736).** E12-1…5 search by CID only (every booking in the run shares the same name and phone,
   so name / phone / passport searches are covered by `backend/tests/test_thirdparty_person_search.py`): a
   `pre_registered` hit is masked, has no `family_members` / `phone` / `passport` and never echoes the CID, the response is

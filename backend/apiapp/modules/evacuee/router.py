@@ -36,7 +36,7 @@ async def search_evacuees(
     response.headers["Cache-Control"] = "no-store"
     return await use_case.search(
         payload.search,
-        client_ip=ip,
         consent=payload,
+        client_ip=ip,
         request_id=audit_request_id(request),
     )

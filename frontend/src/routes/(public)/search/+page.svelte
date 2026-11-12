@@ -8,6 +8,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import {
+		clearConfirmedSearchConsent,
 		familySearch,
 		getConfirmedSearchConsent,
 		normalizeFamilySearchQuery,
@@ -97,6 +98,10 @@
 			} else if (e.kind === 'validation') {
 				error = t.errorIncompletePhone;
 				isHint = true;
+				// The query passed client validation, so a 422 here may be a stale/rejected consent
+				// (e.g. an old cached bundle): drop it and ask again instead of looping on 422.
+				clearConfirmedSearchConsent();
+				consentOpen = true;
 			} else if (e.kind === 'rateLimited') {
 				error = t.errorRateLimited;
 			} else if (e.kind === 'unavailable') {

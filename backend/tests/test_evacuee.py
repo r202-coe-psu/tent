@@ -451,6 +451,7 @@ async def test_evacuee_search_writes_audit_event(
     auth_headers: dict[str, str],
 ):
     from tent_model.audit_event import AuditEvent
+    from tent_model.search_audit import SearchAudit
 
     from apiapp.utils.masking import sha256_hex
 
@@ -512,6 +513,9 @@ async def test_evacuee_search_writes_audit_event(
         "consent_version": "search-v1",
     }
     assert audit.request_id is None
+    # CR-231 S2: a public search never lands in the hash-only `search_audits` buffer the worker
+    # syncs to CouchDB `central_ops`.
+    assert await SearchAudit.find_all().to_list() == []
 
 
 async def test_evacuee_search_returns_shelter_address_and_no_zone_keys(
@@ -1131,6 +1135,14 @@ def _without(payload: dict, *keys: str) -> dict:
             "bad phone",
             public_search_payload(
                 "0812345678", searcher={"first_name": "ก", "last_name": "", "phone": "12345"}
+            ),
+            "phone",
+        ),
+        (
+            "thai digits phone not allowed",
+            public_search_payload(
+                "0812345678",
+                searcher={"first_name": "ก", "last_name": "", "phone": "0๘๑๒๓๔๕๖๗๘๙"},
             ),
             "phone",
         ),
