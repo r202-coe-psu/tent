@@ -34,18 +34,21 @@ if (-not (Test-Path -LiteralPath '..\kiosk\app\scard.py')) {
 
 # uv on PATH wins; otherwise a private copy in .tools\ (downloaded once, no admin, PATH untouched).
 # uv then fetches a managed Python itself, so the build machine needs neither uv nor Python.
-$uv = (Get-Command uv -ErrorAction SilentlyContinue).Source
-if (-not $uv) {
+$uvCmd = Get-Command uv -ErrorAction SilentlyContinue
+if ($uvCmd) {
+    $uv = $uvCmd.Source
+} else {
     $toolsDir = Join-Path $PSScriptRoot '.tools'
     $uv = Join-Path $toolsDir 'uv.exe'
     if (-not (Test-Path -LiteralPath $uv)) {
         Write-Host ">> installing uv into $toolsDir"
-        # Windows PowerShell 5.1 may default to TLS 1.0, which astral.sh rejects
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $env:UV_INSTALL_DIR = $toolsDir
         $env:UV_NO_MODIFY_PATH = '1'
         try {
-            Invoke-RestMethod 'https://astral.sh/uv/install.ps1' | Invoke-Expression
+            # Separate process: the installer must not inherit this script's StrictMode.
+            # Windows PowerShell 5.1 may default to TLS 1.0, which astral.sh rejects.
+            Invoke-Checked 'powershell' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+                "[Net.ServicePointManager]::SecurityProtocol = 'Tls12'; irm https://astral.sh/uv/install.ps1 | iex")
         } finally {
             Remove-Item Env:\UV_INSTALL_DIR, Env:\UV_NO_MODIFY_PATH -ErrorAction SilentlyContinue
         }
