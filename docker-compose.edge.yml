@@ -14,9 +14,10 @@ x-edge-job-env: &edge-job-env
   COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
   SHELTER_CODE: ${SHELTER_CODE:?SHELTER_CODE is required}
   SYNC_URL: ${SYNC_URL:?SYNC_URL is required}
-  # Central CouchDB admin — used by every replication job, including the filtered _users pull
-  CENTRAL_REPL_USER: ${CENTRAL_REPL_USER:?CENTRAL_REPL_USER is required}
-  CENTRAL_REPL_PASSWORD: ${CENTRAL_REPL_PASSWORD:?CENTRAL_REPL_PASSWORD is required}
+  # Per-shelter central user (role repl:<SHELTER_CODE>, never an admin) — used by every replication job,
+  # including the _users pull from edge_users_<code>. Create on central: scripts/central-repl-user.sh <CODE>
+  EDGE_REPL_USER: ${EDGE_REPL_USER:?EDGE_REPL_USER is required}
+  EDGE_REPL_PASSWORD: ${EDGE_REPL_PASSWORD:?EDGE_REPL_PASSWORD is required}
 
 services:
   couchdb:

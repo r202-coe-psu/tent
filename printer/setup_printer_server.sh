@@ -3,10 +3,10 @@
 # Tent print agent - installer for a Raspberry Pi / kiosk machine
 # ------------------------------------------------------------------------------
 # Usage: sudo ./setup_printer_server.sh [--env-file FILE] [options]
-#   ติดตั้งครั้งแรก:  sudo ./setup_printer_server.sh --env-file .env
-#   อัปเดต/ติดตั้งซ้ำ: sudo ./setup_printer_server.sh   (ใช้ <prefix>/.env เดิม)
+#   ติดตั้งครั้งแรก:  sudo ./setup_printer_server.sh   (อ่าน ./.env)
+#   ไม่ใส่ --env-file:  ใช้ .env ข้างสคริปต์นี้ ถ้าไม่มีใช้ <prefix>/.env ที่ติดตั้งไว้แล้ว
 #   --env-file FILE     .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers);
-#                       จะถูกวางเป็น <prefix>/.env (600) · ไม่ใส่ = ใช้ <prefix>/.env ที่ติดตั้งไว้แล้ว
+#                       จะถูกวางเป็น <prefix>/.env (600)
 #   --queue NAME        ชื่อ CUPS queue (default: PRINTER_NAME ใน --env-file หรือ tent_xprinter)
 #   --prefix DIR        ที่ติดตั้ง (default: /opt/tent/printer)
 #   --unit-dir DIR      ที่วาง systemd unit (default: /etc/systemd/system)
@@ -87,10 +87,23 @@ env_value() {
 [[ "$PREFIX" =~ ^/[A-Za-z0-9_./-]+$ ]] || die "--prefix ต้องเป็น path เต็มที่ใช้ได้เฉพาะ A-Z a-z 0-9 _ . / -"
 
 if ! $STATUS_ONLY; then
-    # Re-run without --env-file keeps the installed one.
-    if [ -z "$ENV_FILE" ] && [ -f "$PREFIX/.env" ]; then ENV_FILE="$PREFIX/.env"; fi
-    [ -n "$ENV_FILE" ] || die "--env-file จำเป็นตอนติดตั้งครั้งแรก: ระบุไฟล์ .env ของ agent (DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers)"
+    # No --env-file: the .env next to this script wins, else keep the installed one.
+    if [ -z "$ENV_FILE" ]; then
+        for candidate in "$SCRIPT_DIR/.env" "$PREFIX/.env"; do
+            if [ -f "$candidate" ]; then ENV_FILE="$candidate"; break; fi
+        done
+        [ -n "$ENV_FILE" ] && info "ใช้ env จาก $ENV_FILE"
+    fi
+    [ -n "$ENV_FILE" ] || die "ไม่พบ .env ของ agent: สร้าง $SCRIPT_DIR/.env (cp .env.example .env แล้วใส่ DEVICE_ID / DEVICE_SECRET จากหน้า back-office Printers) หรือระบุ --env-file"
     [ -f "$ENV_FILE" ] || die "ไม่พบไฟล์ --env-file: $ENV_FILE"
+    # DEVICE_SECRET lives here; the installed copy is fixed to 600 below, the source is not.
+    if [ $((8#$(stat -c %a "$ENV_FILE") & 8#077)) -ne 0 ] && ! [ "$ENV_FILE" -ef "$PREFIX/.env" ]; then
+        warn "$ENV_FILE มี DEVICE_SECRET แต่ user อื่นอ่านได้ — แก้: chmod 600 $ENV_FILE"
+    fi
+    # An edit made straight in the installed file would otherwise vanish without notice.
+    if [ -r "$PREFIX/.env" ] && ! [ "$ENV_FILE" -ef "$PREFIX/.env" ] && ! cmp -s "$ENV_FILE" "$PREFIX/.env"; then
+        warn "จะทับ $PREFIX/.env ด้วย $ENV_FILE (ค่าต่างกัน)"
+    fi
 fi
 
 if ! $QUEUE_GIVEN; then

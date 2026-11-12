@@ -1,7 +1,7 @@
 export const EVACUEE_QR_MODAL_I18N = {
 	th: {
 		cardTitle: 'บัตรประจำตัวผู้ประสบภัย',
-		closeWindow: 'ปิดหน้าต่าง',
+		closeWindow: 'ปิด',
 		backOrRegisterNew: 'ย้อนกลับ / ลงทะเบียนคนใหม่',
 		generatingPdf: 'กำลังสร้าง PDF...',
 		printIdCard: 'พิมพ์บัตรประจำตัว',
@@ -19,7 +19,7 @@ export const EVACUEE_QR_MODAL_I18N = {
 	},
 	en: {
 		cardTitle: 'Evacuee Identity Card',
-		closeWindow: 'Close Window',
+		closeWindow: 'Close',
 		backOrRegisterNew: 'Back / Register New Evacuee',
 		generatingPdf: 'Generating PDF...',
 		printIdCard: 'Print ID Card',

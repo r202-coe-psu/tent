@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi import Request
+
+#: Same shape nginx / most tracing tools emit; anything else is client noise we do not store.
+_REQUEST_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 
 def client_ip(request: Request) -> str:
@@ -22,3 +27,13 @@ def client_ip(request: Request) -> str:
     if request.client:
         return request.client.host
     return "unknown"
+
+
+def audit_request_id(request: Request) -> str | None:
+    """`X-Request-ID` for tying an audit row to FastAPI / nginx logs, or `None`.
+
+    The header is client-controlled on public routes and the audit log is permanent, so only a
+    short, plain token is kept; a missing or malformed value yields `None` (never an error).
+    """
+    value = request.headers.get("x-request-id", "").strip()
+    return value if _REQUEST_ID.fullmatch(value) else None

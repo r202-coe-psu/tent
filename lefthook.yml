@@ -25,7 +25,11 @@ pre-commit:
 pre-push:
   # Sequential: vitest + pytest in parallel starve RAM and run slower overall.
   # glob is matched relative to `root`; a job is skipped when no pushed file matches.
-  # svelte-check (`pnpm check`) is manual before a PR. Vitest keeps its fs module cache.
+  # svelte-check (`pnpm check`) and the full `pnpm test` are manual before a PR.
+  # Frontend runs only the test files whose import graph reaches a file changed since the
+  # merge-base with origin/develop; deleted/renamed files and config/lockfile/setup changes
+  # re-run everything (frontend/scripts/test-changed.sh, forceRerunTriggers in vite.config.ts).
+  # Vitest keeps its fs module cache.
   parallel: false
   commands:
     worker-test:
@@ -41,4 +45,4 @@ pre-push:
     frontend-test:
       root: frontend/
       glob: "**/*.{ts,js,svelte,json,css,yaml}"
-      run: pnpm test
+      run: pnpm test:changed

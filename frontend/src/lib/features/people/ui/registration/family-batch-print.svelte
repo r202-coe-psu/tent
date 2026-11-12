@@ -81,11 +81,10 @@
 
 		let issued: Awaited<ReturnType<typeof issueQrPayloads>>;
 		try {
-			issued = await issueQrPayloads({
-				shelterCode,
-				source: 'family_batch',
-				evacueeIds: ordered.map((m) => m._id)
-			});
+			issued = await issueQrPayloads(
+				{ shelterCode, source: 'family_batch', evacueeIds: ordered.map((m) => m._id) },
+				{ queryClient }
+			);
 		} catch {
 			toast.error(qrT.issueFailedToast);
 			throw new ReportedRenderError('QR was not issued');
@@ -111,9 +110,14 @@
 				const { qrPayload, label } = buildEvacueeQrLabel(member, {
 					zones,
 					hasScreening: screenings.length > 0,
+					screenings,
 					qrPayload: issued.payloads.get(member._id)
 				});
-				return renderKioskQrLabelPng(qrPayload, label);
+				// The printed card carries the marker the server recorded for this print.
+				return renderKioskQrLabelPng(qrPayload, {
+					...label,
+					marker: issued.markers.get(member._id) ?? null
+				});
 			})
 		);
 	}

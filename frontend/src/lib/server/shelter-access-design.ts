@@ -381,7 +381,11 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	const dailySopRoleContract = DAILY_SOP_ROLE_VDU_CONTRACT;
 	return `function (newDoc, oldDoc, userCtx) {
-  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1;
+  // #1298 (edge per-shelter replication user): the role repl:<CODE> of THIS database's shelter counts
+  // exactly like _admin everywhere below, so an edge can push shelter_<code> without holding the
+  // central admin. repl:<other code> gets nothing. The rules above the _admin bypass still apply.
+  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1 ||
+    userCtx.roles.indexOf('repl:${code}') !== -1;
   var isRoleAssessmentWrite = newDoc.type === 'daily_sop_role_assessment' ||
     (oldDoc && oldDoc.type === 'daily_sop_role_assessment');
   if (isRoleAssessmentWrite && newDoc._deleted === true) {
@@ -414,7 +418,7 @@ ${consentVduClause()}
     if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('evacuee_qr:') !== 0) {
       throw { forbidden: 'evacuee_qr _id must start with evacuee_qr:' };
     }
-    if (newDoc.schema_v !== 1) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported evacuee_qr schema version' };
     }
     if (newDoc.shelter_code !== '${code}') {
@@ -447,13 +451,16 @@ ${consentVduClause()}
       if (typeof qp.printed_by !== 'string' || qp.printed_by.length === 0) {
         throw { forbidden: 'evacuee_qr printed_by is required' };
       }
+      if (qp.marker !== undefined && qp.marker !== null && qp.marker !== 'red' && qp.marker !== 'yellow') {
+        throw { forbidden: 'evacuee_qr marker must be red, yellow or null' };
+      }
       if (qi > 0 && !(qp.printed_at > newDoc.prints[qi - 1].printed_at)) {
         throw { forbidden: 'evacuee_qr printed_at must be strictly increasing' };
       }
       if (oldDoc && qi < oldDoc.prints.length) {
         var qo = oldDoc.prints[qi];
         if (qo.printed_at !== qp.printed_at || qo.hash !== qp.hash ||
-            qo.printed_by !== qp.printed_by || qo.source !== qp.source) {
+            qo.printed_by !== qp.printed_by || qo.source !== qp.source || qo.marker !== qp.marker) {
           throw { forbidden: 'evacuee_qr prints is append-only' };
         }
       }
@@ -2152,8 +2159,20 @@ ${consentVduClause()}
   // 12. CR-121: requisition_ticket validation (Rule 12) — food/supplies/transfer only
   // (kitchen is handled entirely by rule 11 above and never reaches this branch).
   if (newDoc.type === 'requisition_ticket' && newDoc.requisition_type !== 'kitchen') {
-    if (newDoc.schema_v !== 1) {
+    if (newDoc.schema_v !== 1 && !(newDoc.schema_v === 2 && newDoc.requisition_type !== 'transfer')) {
       throw { forbidden: 'Unsupported requisition_ticket schema version' };
+    }
+    // draft-food-ticket-service-date: food tickets from schema_v 2 carry a YYYY-MM-DD service day;
+    // other types never do. Set at creation only (immutableTicketFields below).
+    if (newDoc.requisition_type === 'food') {
+      if (newDoc.schema_v === 2 && typeof newDoc.service_date !== 'string') {
+        throw { forbidden: 'Food requisition_ticket requires service_date' };
+      }
+      if (newDoc.service_date !== undefined && !/^\\d{4}-\\d{2}-\\d{2}$/.test(newDoc.service_date)) {
+        throw { forbidden: 'requisition_ticket.service_date must be YYYY-MM-DD' };
+      }
+    } else if (newDoc.service_date !== undefined) {
+      throw { forbidden: 'Only food requisition_ticket carries service_date' };
     }
     if (!/^requisition_ticket:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
       throw { forbidden: 'requisition_ticket id must be requisition_ticket:{ulid}' };
@@ -2186,7 +2205,8 @@ ${consentVduClause()}
     }
     if (oldDoc) {
       var immutableTicketFields = [
-        '_id', 'type', 'schema_v', 'shelter_code', 'ticket_no', 'requisition_type', 'created_at', 'created_by', 'requested_by'
+        '_id', 'type', 'schema_v', 'shelter_code', 'ticket_no', 'requisition_type', 'created_at', 'created_by', 'requested_by',
+        'service_date'
       ];
       for (var f = 0; f < immutableTicketFields.length; f++) {
         var tf = immutableTicketFields[f];

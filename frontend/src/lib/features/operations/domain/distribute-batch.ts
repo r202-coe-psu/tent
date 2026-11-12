@@ -7,7 +7,13 @@
  * a (possibly partial) run back into the draft so a retry only touches what is left.
  */
 
-import { defaultIssueUom, qtyToBaseUnit, type PackagingSource } from '$lib/features/catalog';
+import {
+	defaultIssueUom,
+	qtyToBaseUnit,
+	wholeQtyError,
+	type Dimension,
+	type PackagingSource
+} from '$lib/features/catalog';
 import { addQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import { distributeInputSchema, type StockLotBalance } from './operations';
 import { isLotExpired, rankLotsForIssue, type LotPriorityItem } from './lot-priority';
@@ -103,6 +109,8 @@ export interface DistributeCheckContext {
 	occupancy: number;
 	/** Epoch milliseconds. */
 	now: number;
+	/** Dimension of the unit a line is typed in; unknown units are not held to the whole-number rule. */
+	unitDimension?: (unit: string) => Dimension | undefined;
 }
 
 export interface LowStockWarning {
@@ -112,7 +120,8 @@ export interface LowStockWarning {
 	coverDays: number | null;
 }
 
-export type IncompleteReason = 'item' | 'qty' | 'unit' | 'lot';
+/** `whole`: a fractional quantity typed in a count unit (#805). */
+export type IncompleteReason = 'item' | 'qty' | 'whole' | 'unit' | 'lot';
 
 export type DistributeLineVerdict =
 	/** Already written; skipped by the check and by the next run. */
@@ -198,6 +207,9 @@ function checkLine(
 	const qty = line.qty.trim();
 	if (qty === '' || !Number.isFinite(Number(qty)) || !qtyGt(qty, 0)) {
 		return { kind: 'incomplete', missing: 'qty' };
+	}
+	if (wholeQtyError(qty, ctx.unitDimension?.(line.unit))) {
+		return { kind: 'incomplete', missing: 'whole' };
 	}
 	let baseQty: string;
 	try {

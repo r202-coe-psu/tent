@@ -10,7 +10,8 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import { goto, replaceState } from '$app/navigation';
+	import { beforeNavigate, goto, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { useShelter } from '$lib/features/shelters';
@@ -119,6 +120,12 @@
 	import { useSaveImage } from '$lib/features/images';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { rememberPhotoPreview } from './registration-photo-preview';
+	import {
+		clearRegistrationDraft,
+		loadRegistrationDraft,
+		saveRegistrationDraft
+	} from '../../data/registration-draft.storage';
+	import { hasRegistrationDraftContent } from '../../domain/registration-draft';
 
 	type FormSectionId = 'address' | 'pets' | 'vehicles' | 'members';
 	type ActiveRegistrationItem = { kind: 'member' | 'pet'; index: number; total: number };
@@ -156,6 +163,7 @@
 		findScannedCardDuplicate,
 		/** Increment from parent to clear a stale public join selection (bad token / missing target). */
 		joinResetKey = 0,
+		draftKey = '',
 		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
 		bookableShelterCodes = [],
 		consent,
@@ -198,6 +206,11 @@
 		 */
 		findScannedCardDuplicate?: (citizenId: string) => Promise<ScannedCardDuplicate | null>;
 		joinResetKey?: number;
+		/**
+		 * Public pre-register (#358): keep the form in `sessionStorage` under this key, so a phone
+		 * camera that drops the tab does not empty it. Cleared once the form is sent.
+		 */
+		draftKey?: string;
 		bookableShelterCodes?: string[];
 		/** Shows the PDPA consent block at the end of the form; its confirm is this form's submit. */
 		consent?: RegistrationConsentConfig;
@@ -297,7 +310,15 @@
 		return [blankUnifiedMember()];
 	}
 
-	let members = $state<UnifiedMemberWithMeta[]>(untrack(() => buildInitialMembers()));
+	// A draft only stands in for a blank form, never for the household a page passes in.
+	const restoredDraft = untrack(() =>
+		draftKey && !initialHousehold && !initialMembers?.length
+			? loadRegistrationDraft(draftKey)
+			: null
+	);
+	let members = $state<UnifiedMemberWithMeta[]>(
+		untrack(() => restoredDraft?.members ?? buildInitialMembers())
+	);
 
 	const consentBlock = untrack(() =>
 		consent
@@ -315,9 +336,53 @@
 	);
 	const consentHasMedicalInput = $derived(members.some(hasMedicalInput));
 	let household = $state<UnifiedRegistrationInput['household']>(
-		untrack(() => buildInitialHousehold())
+		untrack(() => restoredDraft?.household ?? buildInitialHousehold())
 	);
-	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
+	// Not state: once the form is sent, the effect below must not write the draft back.
+	let draftSent = false;
+
+	// Drop the draft when navigating away — to another route or off the site (`to` is null) — so no
+	// personal data is left in sessionStorage.
+	beforeNavigate(({ to }) => {
+		if (draftKey && (!to || to.url.pathname !== page.url.pathname)) {
+			clearRegistrationDraft(draftKey);
+		}
+	});
+
+	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+	$effect(() => {
+		if (!draftKey || readOnly) return;
+		const currentHousehold = {
+			...household,
+			assets: assetDescription.trim()
+				? { description: assetDescription.trim(), image_url: null }
+				: null
+		};
+		const current = $state.snapshot({ household: currentHousehold, members });
+		if (draftSent) return;
+		// Only autosave when the user has actually edited the form, preventing mount-time
+		// re-saving of restored drafts which slides the 2-hour TTL indefinitely.
+		if (!touched) return;
+		if (autosaveTimer) clearTimeout(autosaveTimer);
+		autosaveTimer = setTimeout(() => {
+			if (draftSent) return;
+			saveRegistrationDraft(draftKey, current.household, current.members);
+		}, 500);
+		return () => {
+			if (autosaveTimer) clearTimeout(autosaveTimer);
+		};
+	});
+	onMount(() => {
+		if (restoredDraft && hasRegistrationDraftContent(restoredDraft)) {
+			toast.info(t.draftRestored);
+		}
+	});
+	let assetDescription = $state(
+		untrack(
+			() =>
+				restoredDraft?.household?.assets?.description ?? initialHousehold?.assets?.description ?? ''
+		)
+	);
 	/** What `children` and the acknowledgement see: vehicles/assets only where the form shows them. */
 	const visibleHousehold = $derived({
 		...household,
@@ -1772,6 +1837,12 @@
 				consent: registrationConsent
 			});
 			clearDirty();
+			draftSent = true;
+			if (autosaveTimer) {
+				clearTimeout(autosaveTimer);
+				autosaveTimer = null;
+			}
+			if (draftKey) clearRegistrationDraft(draftKey);
 		} catch {
 			// Caller surfaces save errors.
 		}

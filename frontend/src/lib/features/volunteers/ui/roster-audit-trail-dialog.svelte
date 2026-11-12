@@ -258,7 +258,7 @@
 		</div>
 
 		<div class="flex justify-end border-t border-border px-6 py-3">
-			<Button variant="outline" onclick={() => (open = false)}>ปิดหน้าต่าง</Button>
+			<Button variant="outline" onclick={() => (open = false)}>ปิด</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

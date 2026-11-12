@@ -104,6 +104,8 @@ export interface JobsTranslations {
 	applyPhone: string;
 	applyPhoneLimitHint: string;
 	applyEmail: string;
+	applyOccupation: string;
+	applyOccupationPlaceholder: string;
 	applyShiftsAvailable: string;
 	/** Multi-shift picker (#716). */
 	applyPickShiftsHint: string;
@@ -264,7 +266,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		qrUploadNotFound: 'อ่าน QR จากรูปนี้ไม่ได้ — ลองรูปที่ชัดขึ้น หรือครอบให้เห็นเฉพาะ QR',
 		qrUploadNotImage: 'ไฟล์นี้ไม่ใช่รูปภาพ — กรุณาเลือกรูป QR (JPG หรือ PNG)',
 		qrUploadTooLarge: 'รูปใหญ่เกิน 10 MB — กรุณาเลือกรูปที่เล็กกว่านี้',
-		closeModal: 'ปิดหน้าต่าง',
+		closeModal: 'ปิด',
 		// Quick Apply Modal
 		shiftDateLabel: 'กะวันที่',
 		applyStep1Title: '1. ข้อมูลประจำตัวอาสาสมัคร',
@@ -278,6 +280,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyPhone: 'เบอร์โทรศัพท์มือถือ',
 		applyPhoneLimitHint: '1 เบอร์ต่อ 1 สิทธิ์การสมัครงานนี้',
 		applyEmail: 'อีเมล',
+		applyOccupation: 'อาชีพ',
+		applyOccupationPlaceholder: 'เช่น พยาบาล, ช่างไฟฟ้า, ค้าขาย (ไม่บังคับ)',
 		applyShiftsAvailable: 'กะให้เลือก',
 		applyPickShiftsHint: 'เลือกได้หลายกะ กดกะที่เลือกแล้วอีกครั้งเพื่อเอาออก',
 		applyShiftConflict: 'เวลาชน',
@@ -455,6 +459,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyPhone: 'Mobile Phone Number',
 		applyPhoneLimitHint: '1 application per phone number for this job',
 		applyEmail: 'Email',
+		applyOccupation: 'Occupation',
+		applyOccupationPlaceholder: 'e.g. Nurse, Electrician, Trader (Optional)',
 		applyShiftsAvailable: 'shifts available',
 		applyPickShiftsHint: 'You can pick several shifts. Tap a picked shift again to remove it.',
 		applyShiftConflict: 'Clashes',

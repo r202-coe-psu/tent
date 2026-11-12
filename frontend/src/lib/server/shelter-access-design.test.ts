@@ -1231,7 +1231,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 		const qrDoc = (prints: Doc[]): Doc => ({
 			...envelope,
-			schema_v: 1,
+			schema_v: 2,
 			_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
 			type: 'evacuee_qr',
 			evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
@@ -1293,6 +1293,50 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
+		it('accepts schema_v 1 (pre-marker docs) and 2, rejects other versions', () => {
+			expect(() => compile()({ ...one, schema_v: 1 }, null, COUCH_ADMIN)).not.toThrow();
+			expect(() => compile()({ ...one, schema_v: 2 }, null, COUCH_ADMIN)).not.toThrow();
+			expectForbidden(
+				() => compile()({ ...one, schema_v: 3 }, null, COUCH_ADMIN),
+				/Unsupported evacuee_qr schema version/
+			);
+		});
+
+		it('accepts marker red, yellow, null or absent on an entry (#1301)', () => {
+			for (const marker of ['red', 'yellow', null]) {
+				expect(() =>
+					compile()(
+						qrDoc([entry(e1.printed_at as string, '289170', { marker })]),
+						null,
+						COUCH_ADMIN
+					)
+				).not.toThrow();
+			}
+		});
+
+		it('rejects a marker outside red/yellow/null (#1301)', () => {
+			for (const marker of ['green', 'RED', '', 1]) {
+				expectForbidden(
+					() =>
+						compile()(
+							qrDoc([entry(e1.printed_at as string, '289170', { marker })]),
+							null,
+							COUCH_ADMIN
+						),
+					/marker must be/
+				);
+			}
+		});
+
+		it('keeps an existing entry marker append-only (#1301)', () => {
+			const red = qrDoc([entry(e1.printed_at as string, '289170', { marker: 'red' })]);
+			const next = (marker: unknown) =>
+				qrDoc([entry(e1.printed_at as string, '289170', { marker }), e2]);
+			expect(() => compile()(next('red'), red, COUCH_ADMIN)).not.toThrow();
+			expectForbidden(() => compile()(next('yellow'), red, COUCH_ADMIN), /append-only/);
+			expectForbidden(() => compile()(next(null), red, COUCH_ADMIN), /append-only/);
+		});
+
 		it('requires a source from the enum', () => {
 			expectForbidden(
 				() =>
@@ -1334,6 +1378,67 @@ describe('buildValidateDocUpdate', () => {
 				/must match _id/
 			);
 			expectForbidden(() => compile('SH002')(one, null, COUCH_ADMIN), /shelter_code must be SH002/);
+		});
+	});
+
+	describe('repl:<CODE> edge replication role (#1298 FR-6)', () => {
+		const REPL_SAME: UserCtx = { name: 'repl_sh001_ab12cd34', roles: ['repl:SH001'] };
+		const REPL_OTHER: UserCtx = { name: 'repl_sh002_ab12cd34', roles: ['repl:SH002'] };
+		const qrDoc = (): Doc => ({
+			...envelope,
+			schema_v: 1,
+			_id: 'evacuee_qr:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			type: 'evacuee_qr',
+			evacuee_id: 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0',
+			prints: [
+				{
+					printed_at: '2026-11-06T08:00:00.000Z',
+					hash: '289170',
+					printed_by: 'staff01',
+					source: 'profile'
+				}
+			]
+		});
+		const simulation = (): Doc => ({
+			...envelope,
+			_id: 'simulation:01K1ABCDEFGHJKMNPQRSTVWXYZ',
+			type: 'simulation',
+			schema_v: 1,
+			created_by: 'sm',
+			result: simulationResult()
+		});
+
+		it('lets repl:<same code> write evacuee_qr like _admin', () => {
+			expect(() => compile()(qrDoc(), null, REPL_SAME)).not.toThrow();
+		});
+
+		it('lets repl:<same code> push a doc whose created_by is not the pusher', () => {
+			expect(() => compile()(simulation(), null, REPL_SAME)).not.toThrow();
+			expectForbidden(
+				() => compile()(simulation(), null, REPL_OTHER),
+				/shelter managers or system admins/
+			);
+		});
+
+		it('rejects repl:<other code> and a user with no repl role', () => {
+			expectForbidden(() => compile()(qrDoc(), null, REPL_OTHER), /server only/);
+			expectForbidden(() => compile('SH002')(qrDoc(), null, REPL_SAME), /server only/);
+			expectForbidden(
+				() => compile()(qrDoc(), null, { name: 'x', roles: ['shelter:SH001'] }),
+				/server only/
+			);
+		});
+
+		it('keeps the pre-bypass rules: evacuee_qr never deleted, role assessments never deleted', () => {
+			expectForbidden(
+				() => compile()({ _id: qrDoc()._id, _rev: '1-a', _deleted: true }, qrDoc(), REPL_SAME),
+				/Cannot delete evacuee_qr/
+			);
+			const assessment = makeRoleAssessment('REG', '2026-09-30', 'reg');
+			expectForbidden(
+				() => compile()({ ...assessment, _deleted: true }, assessment, REPL_SAME),
+				/cannot be deleted/
+			);
 		});
 	});
 
@@ -4103,6 +4208,70 @@ describe('buildValidateDocUpdate', () => {
 
 			it('allows creating valid requisition_ticket in PENDING_PICK', () => {
 				expect(() => compile()(validTicket, null, WAREHOUSE)).not.toThrow();
+			});
+
+			describe('service_date (draft-food-ticket-service-date)', () => {
+				const v2Food = { ...validTicket, schema_v: 2, service_date: '2026-09-02' };
+
+				it('accepts a schema_v 2 food ticket with its service day', () => {
+					expect(() => compile()(v2Food, null, WAREHOUSE)).not.toThrow();
+				});
+
+				it('requires a well-formed service day on a schema_v 2 food ticket', () => {
+					const { service_date: _omit, ...missing } = v2Food;
+					void _omit;
+					expectForbidden(
+						() => compile()(missing, null, WAREHOUSE),
+						/Food requisition_ticket requires service_date/
+					);
+					expectForbidden(
+						() => compile()({ ...v2Food, service_date: '2/9/2026' }, null, WAREHOUSE),
+						/must be YYYY-MM-DD/
+					);
+				});
+
+				it('keeps transfer tickets on schema_v 1', () => {
+					const { service_date: _omit, ...noDay } = v2Food;
+					void _omit;
+					expectForbidden(
+						() =>
+							compile()(
+								{
+									...noDay,
+									ticket_no: 'TKT-TRANSFER-0001',
+									requisition_type: 'transfer',
+									meal: undefined
+								},
+								null,
+								WAREHOUSE
+							),
+						/Unsupported requisition_ticket schema version/
+					);
+				});
+
+				it('keeps service_date off non-food tickets', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								{
+									...v2Food,
+									ticket_no: 'TKT-SUPPLIES-0001',
+									requisition_type: 'supplies',
+									meal: undefined
+								},
+								null,
+								WAREHOUSE
+							),
+						/Only food requisition_ticket carries service_date/
+					);
+				});
+
+				it('keeps the service day fixed once the ticket exists', () => {
+					expectForbidden(
+						() => compile()({ ...v2Food, service_date: '2026-09-03' }, v2Food, WAREHOUSE),
+						/requisition_ticket.service_date is immutable/
+					);
+				});
 			});
 
 			it('rejects creating ticket with non-PENDING_PICK status', () => {

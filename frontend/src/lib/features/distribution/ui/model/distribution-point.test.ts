@@ -121,6 +121,21 @@ describe('ticketCardSummary', () => {
 		).toBe('พรุ่งนี้ (7 พ.ย.)');
 	});
 
+	it('reads the service day from service_date when the ticket has one', () => {
+		expect(
+			ticketCardSummary(
+				{
+					requisition_type: 'food',
+					meal: 'breakfast',
+					created_at: '2026-11-06T13:00:00.000Z',
+					service_date: '2026-11-07',
+					destination_location: 'จุด A'
+				},
+				today
+			).day
+		).toBe('พรุ่งนี้ (7 พ.ย.)');
+	});
+
 	it('has no meal for a supplies ticket, even one carrying a stray meal', () => {
 		expect(
 			ticketCardSummary(

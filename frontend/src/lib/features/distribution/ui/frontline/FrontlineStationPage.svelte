@@ -23,7 +23,11 @@
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
 	import { compareByReconciliationProgress } from '../model/ticket-status';
 	import Lock from '@lucide/svelte/icons/lock';
-	import { ticketServiceDay, type RequisitionTicket } from '../../domain/food-supplies';
+	import {
+		thailandCalendarDay,
+		ticketServiceDay,
+		type RequisitionTicket
+	} from '../../domain/food-supplies';
 	import {
 		ALL_POINTS,
 		distributionPointOptions,
@@ -48,9 +52,10 @@
 	import { DeskDrafts } from '../model/desk-draft';
 	import { incomingLinkAction } from '../model/desk-link-gate';
 	import {
+		ALL_SERVICE_DAYS,
 		filterTicketsByServiceDay,
-		resolveServiceDay,
-		serviceDayOptions
+		formatServiceDay,
+		resolveServiceDay
 	} from '../model/service-day';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
 	import InTransitTicketCard from './InTransitTicketCard.svelte';
@@ -75,6 +80,7 @@
 	import ShiftReconciliationCard from './ShiftReconciliationCard.svelte';
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { formatDistributionError } from '../model/distribution-error';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -362,10 +368,9 @@
 		filterTicketsByPoint(allDistributingSupplies, point)
 	);
 
-	// Food tickets are filtered by service day (derived from created_at — FR-MQW-03 A). Defaults to
-	// today when any ticket is for today, otherwise every day, so older open tickets stay visible.
+	// Food tickets are filtered by service day (CR-241 R5: any calendar day, or every day). Defaults
+	// to today when any ticket is for today, otherwise every day, so older open tickets stay visible.
 	let pickedFoodDay = $state<string | null>(null);
-	const foodDayOptions = $derived(serviceDayOptions(distributingFoodTickets));
 	const foodDay = $derived(resolveServiceDay(pickedFoodDay, distributingFoodTickets));
 	const visibleFoodTickets = $derived(filterTicketsByServiceDay(distributingFoodTickets, foodDay));
 
@@ -728,35 +733,46 @@
 	{:else if activeTab === 'food'}
 		<!-- TAB 2: Food Handover Surface-->
 		<div class="space-y-4">
-			{#if showPointFilter || foodDayOptions.length > 2 || visibleFoodTickets.length > 1}
+			{#if showPointFilter || distributingFoodTickets.length > 0}
 				<div class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-					{#if showPointFilter || foodDayOptions.length > 2}
-						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-							{#if showPointFilter}
-								{@render pointSelect()}
-							{/if}
-							{#if foodDayOptions.length > 2}
-								<div class="space-y-2">
-									<p id="food-day-label" class="text-sm font-semibold text-slate-700">วันที่แจก</p>
-									<div class="flex flex-wrap gap-2" role="group" aria-labelledby="food-day-label">
-										{#each foodDayOptions as option (option.value)}
-											{@const isOn = option.value === foodDay}
-											<button
-												type="button"
-												aria-pressed={isOn}
-												onclick={() => (pickedFoodDay = option.value)}
-												class="h-12 rounded-lg border px-4 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {isOn
-													? 'border-sky-500 bg-sky-50 text-sky-900'
-													: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}"
-											>
-												{option.label}
-											</button>
-										{/each}
-									</div>
+					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						{#if showPointFilter}
+							{@render pointSelect()}
+						{/if}
+						{#if distributingFoodTickets.length > 0}
+							{@const allDays = foodDay === ALL_SERVICE_DAYS}
+							<div class="space-y-2">
+								<Label
+									id="food-day-label"
+									for="food-day"
+									class="text-sm font-semibold text-slate-700"
+								>
+									วันที่แจก
+								</Label>
+								<div class="flex gap-2" role="group" aria-labelledby="food-day-label">
+									<DatePicker
+										id="food-day"
+										class="!h-12 min-w-0 flex-1 rounded-lg bg-white text-sm font-medium text-slate-900 shadow-2xs"
+										format={(iso) => formatServiceDay(iso, thailandCalendarDay())}
+										bind:value={
+											() => (allDays ? '' : foodDay), (v) => (pickedFoodDay = v || ALL_SERVICE_DAYS)
+										}
+									/>
+									<Button
+										type="button"
+										variant="outline"
+										aria-pressed={allDays}
+										onclick={() => (pickedFoodDay = ALL_SERVICE_DAYS)}
+										class="h-12 shrink-0 rounded-lg px-4 text-sm font-semibold shadow-2xs {allDays
+											? 'border-sky-500 bg-sky-50 text-sky-900 hover:bg-sky-50 hover:text-sky-900'
+											: 'bg-white text-slate-700'}"
+									>
+										ทุกวัน
+									</Button>
 								</div>
-							{/if}
-						</div>
-					{/if}
+							</div>
+						{/if}
+					</div>
 					{#if visibleFoodTickets.length > 1}
 						<TicketPicker
 							id="food-ticket"
@@ -788,6 +804,16 @@
 							<span>ไปยังแท็บรับของเพื่อตรวจรับตั๋วอาหารเข้าจุดแจก</span>
 						</Button>
 					{/if}
+				</div>
+			{:else if visibleFoodTickets.length === 0}
+				<div
+					class="flex flex-col items-center justify-center rounded-2xl border border-slate-200/80 bg-white p-12 text-center shadow-xs"
+				>
+					<UtensilsCrossed class="mb-3 h-12 w-12 text-slate-300" />
+					<h3 class="text-sm font-bold text-slate-800">ไม่มีตั๋วอาหารของวันที่เลือก</h3>
+					<p class="mt-1 max-w-md text-xs text-slate-500">
+						เลือกวันอื่น หรือกด "ทุกวัน" เพื่อดูตั๋วอาหารที่เปิดแจกทั้งหมด
+					</p>
 				</div>
 			{:else if activeFoodTicket}
 				<FoodDistributionCard ticket={activeFoodTicket} shelterCode={currentShelterCode} {drafts} />
@@ -966,7 +992,7 @@
 		<Select.Root type="single" bind:value={() => point, (v) => (pickedPoint = v)}>
 			<Select.Trigger
 				id="point-select"
-				class="h-12 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-2xs"
+				class="w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-2xs data-[size=default]:h-12"
 			>
 				<span class="truncate">{point === ALL_POINTS ? 'ทุกจุด' : point}</span>
 			</Select.Trigger>
