@@ -5,7 +5,8 @@ import logging
 import logging.handlers
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +14,9 @@ from platformdirs import user_data_dir
 from playwright.async_api import async_playwright
 
 from scanner_client.card_session import CardSession
-from scanner_client.config import ConfigError, Settings, load_settings
+from scanner_client.config import ConfigError, Settings, load_settings, save_shelter_url
 from scanner_client.reader_watch import CardReaderWatcher
+from scanner_client.url_prompt import ask_shelter_origin
 
 APP_NAME = "ScannerClient"
 LOG_FILE_NAME = "scanner-client.log"
@@ -88,8 +90,14 @@ async def run_app(
     start_playwright: Callable[[], Any] = async_playwright,
     watcher_factory: Callable[[Settings, Callable[[Any], Any]], Any] = _default_watcher_factory,
     card_session_factory: Callable[[Settings], Any] = _default_card_session_factory,
+    ask_origin: Callable[[Any, str], Awaitable[str | None]] | None = None,
+    on_origin_chosen: Callable[[str], None] = lambda origin: None,
 ) -> None:
-    """Open the browser at START_PATH, watch the reader until the user closes the window."""
+    """Open the browser at START_PATH, watch the reader until the user closes the window.
+
+    With `ask_origin`, the window first asks which shelter to open (prefilled with
+    settings.shelter_origin); the answer replaces it and goes to `on_origin_chosen`.
+    """
     stop = asyncio.Event()
     channel = (
         {} if settings.browser_channel == "chromium" else {"channel": settings.browser_channel}
@@ -114,6 +122,14 @@ async def run_app(
         context.on("close", lambda *_: stop.set())
         page.on("close", lambda *_: stop.set())
 
+        if ask_origin is not None:
+            origin = await _until_stopped(ask_origin(page, settings.shelter_origin), stop)
+            if origin is None:  # window closed before an answer
+                await _close_all(context, browser)
+                return
+            settings = replace(settings, shelter_origin=origin)
+            on_origin_chosen(origin)
+
         session = card_session_factory(settings)
 
         async def handle_card(reader: Any) -> None:
@@ -132,12 +148,28 @@ async def run_app(
         finally:
             stop.set()
             await watcher_task
-            for closable in (context, browser):
-                if closable is not None:
-                    try:
-                        await closable.close()
-                    except Exception:  # already closed by the user
-                        pass
+            await _close_all(context, browser)
+
+
+async def _until_stopped(asking: Awaitable[str | None], stop: asyncio.Event) -> str | None:
+    """The prompt's answer, or None as soon as the window is closed."""
+    ask_task = asyncio.ensure_future(asking)
+    stop_task = asyncio.create_task(stop.wait())
+    await asyncio.wait({ask_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+    stop_task.cancel()
+    if not ask_task.done():
+        ask_task.cancel()
+        return None
+    return ask_task.result()
+
+
+async def _close_all(*closables: Any) -> None:
+    for closable in closables:
+        if closable is not None:
+            try:
+                await closable.close()
+            except Exception:  # already closed by the user
+                pass
 
 
 def main(
@@ -148,17 +180,32 @@ def main(
     runner: Callable[..., Any] = run_app,
 ) -> int:
     data_dir = data_dir or default_data_dir()
+    env_path = env_path or default_env_path()
     handlers = _configure_logging(data_dir)
     try:
         try:
             settings = load_settings(
-                env_path or default_env_path(), os.environ if environ is None else environ
+                env_path, os.environ if environ is None else environ, require_shelter_url=False
             )
         except ConfigError as exc:
             log.error("invalid configuration: %s", exc)
             return 2
+
+        def remember(origin: str) -> None:
+            try:
+                save_shelter_url(env_path, origin)
+            except OSError as exc:  # read-only folder: still run, just ask again next time
+                log.warning("could not save SHELTER_URL: %s", type(exc).__name__)
+
         try:
-            asyncio.run(runner(settings, data_dir=data_dir))
+            asyncio.run(
+                runner(
+                    settings,
+                    data_dir=data_dir,
+                    ask_origin=ask_shelter_origin,
+                    on_origin_chosen=remember,
+                )
+            )
         except Exception as exc:
             log.error("scanner client stopped: %s", type(exc).__name__)
             return 1

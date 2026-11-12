@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from scanner_client.config import ConfigError, load_settings
+from scanner_client.config import ConfigError, load_settings, parse_shelter_origin, save_shelter_url
 
 
 def write_env(tmp_path: Path, text: str) -> Path:
@@ -240,3 +240,42 @@ def test_start_path_must_stay_on_the_shelter_origin(tmp_path):
         load(
             tmp_path, "SHELTER_URL=https://a.example\nSTART_PATH=//evil.example\n", platform="linux"
         )
+
+
+def test_shelter_url_can_be_left_for_the_startup_prompt(tmp_path):
+    for text in ("", "SHELTER_URL=http://example.org\n"):
+        settings = load(tmp_path, text, platform="linux", require_shelter_url=False)
+
+        assert settings.shelter_origin == ""
+        assert settings.walk_in_path == "/onsite/people/new"
+
+
+def test_other_bad_keys_still_fail_when_the_shelter_url_is_optional(tmp_path):
+    with pytest.raises(ConfigError, match="POLL_INTERVAL"):
+        load(tmp_path, "POLL_INTERVAL=abc\n", platform="linux", require_shelter_url=False)
+
+
+def test_parse_shelter_origin_is_the_same_rule_as_the_env_file():
+    assert parse_shelter_origin(" https://Shelter.Example:443/ ") == "https://shelter.example"
+    with pytest.raises(ConfigError, match="SHELTER_URL"):
+        parse_shelter_origin("http://example.org")
+
+
+def test_save_shelter_url_rewrites_only_that_key(tmp_path):
+    path = write_env(tmp_path, "# note\nSHELTER_URL=https://old.example\nKEEP_LOGIN=true\n")
+
+    save_shelter_url(path, "http://192.168.1.10")
+
+    text = path.read_text(encoding="utf-8")
+    assert "SHELTER_URL=http://192.168.1.10\n" in text
+    assert "old.example" not in text
+    assert "# note\n" in text and "KEEP_LOGIN=true\n" in text
+    assert load_settings(path, {}, platform="linux").shelter_origin == "http://192.168.1.10"
+
+
+def test_save_shelter_url_creates_a_missing_env_file(tmp_path):
+    path = tmp_path / ".env"
+
+    save_shelter_url(path, "https://shelter.example")
+
+    assert load_settings(path, {}, platform="linux").shelter_origin == "https://shelter.example"

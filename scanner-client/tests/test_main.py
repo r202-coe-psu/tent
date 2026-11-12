@@ -325,8 +325,10 @@ class RecordingRunner:
         self.error = error
         self.handlers = []
 
-    async def __call__(self, settings, *, data_dir):
+    async def __call__(self, settings, *, data_dir, ask_origin=None, on_origin_chosen=None):
         self.calls.append((settings, data_dir))
+        self.ask_origin = ask_origin
+        self.on_origin_chosen = on_origin_chosen
         self.handlers = list(logging.getLogger().handlers)
         if self.error:
             raise self.error
@@ -334,7 +336,7 @@ class RecordingRunner:
 
 def test_invalid_config_is_logged_and_exits_non_zero_without_opening_the_browser(tmp_path):
     env_path = tmp_path / ".env"
-    env_path.write_text("SHELTER_URL=http://shelter.example\n")
+    env_path.write_text("SHELTER_URL=https://shelter.example\nPOLL_INTERVAL=abc\n")
     runner = RecordingRunner()
 
     code = main(env_path=env_path, environ={}, data_dir=tmp_path / "data", runner=runner)
@@ -343,7 +345,7 @@ def test_invalid_config_is_logged_and_exits_non_zero_without_opening_the_browser
     assert runner.calls == []
     log_file = tmp_path / "data" / "logs" / "scanner-client.log"
     log = log_file.read_text()
-    assert "SHELTER_URL must use https unless the host is loopback or a LAN IP" in log
+    assert "POLL_INTERVAL must be a number of seconds" in log
 
 
 def test_valid_config_runs_the_app_logs_to_a_rotating_file_and_exits_zero(tmp_path):
@@ -381,3 +383,94 @@ def test_env_file_sits_next_to_the_exe_when_frozen_else_next_to_the_package(tmp_
     assert default_env_path(frozen=True, executable=str(exe)) == tmp_path / "dist" / ".env"
     package_parent = Path(__file__).resolve().parent.parent
     assert default_env_path(frozen=False, executable="/usr/bin/python") == package_parent / ".env"
+
+
+def test_a_missing_or_bad_shelter_url_still_starts_and_leaves_it_to_the_prompt(tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("SHELTER_URL=http://shelter.example\n")
+    runner = RecordingRunner()
+
+    code = main(env_path=env_path, environ={}, data_dir=tmp_path / "data", runner=runner)
+
+    assert code == 0
+    [(settings, _)] = runner.calls
+    assert settings.shelter_origin == ""
+
+
+def test_main_asks_for_the_url_and_saves_the_answer_to_the_env_file(tmp_path):
+    from scanner_client.url_prompt import ask_shelter_origin
+
+    env_path = tmp_path / ".env"
+    env_path.write_text("SHELTER_URL=https://old.example\nKEEP_LOGIN=true\n")
+    runner = RecordingRunner()
+
+    main(env_path=env_path, environ={}, data_dir=tmp_path / "data", runner=runner)
+    runner.on_origin_chosen("http://192.168.1.10")
+
+    assert runner.ask_origin is ask_shelter_origin
+    assert env_path.read_text() == "SHELTER_URL=http://192.168.1.10\nKEEP_LOGIN=true\n"
+
+
+def run_with_prompt(tmp_path, answer, *, settings=None, block=False):
+    """run_app with a fake prompt; returns (harness, chosen origins, watcher factory calls)."""
+    harness = Harness(tmp_path, **(settings or {}))
+    page = harness.playwright.page
+    chosen = []
+    watcher_settings = []
+    session_settings = []
+
+    async def ask_origin(prompt_page, initial):
+        assert prompt_page is page
+        assert watcher_settings == []  # no card is handled while staff choose the shelter
+        page.asked_with = initial
+        if block:
+            await asyncio.Event().wait()
+        return answer
+
+    def watcher_factory(settings, handle):
+        watcher_settings.append(settings)
+        return harness.watcher
+
+    def session_factory(settings):
+        session_settings.append(settings)
+        return object()
+
+    async def go():
+        asyncio.get_running_loop().call_later(0.05, page.fire, "close")
+        await asyncio.wait_for(
+            run_app(
+                harness.settings,
+                data_dir=harness.data_dir,
+                start_playwright=harness.playwright.start,
+                watcher_factory=watcher_factory,
+                card_session_factory=session_factory,
+                ask_origin=ask_origin,
+                on_origin_chosen=chosen.append,
+            ),
+            timeout=5,
+        )
+
+    asyncio.run(go())
+    return harness, chosen, watcher_settings, session_settings
+
+
+def test_the_chosen_origin_is_saved_opened_and_used_for_cards(tmp_path):
+    harness, chosen, watcher_settings, session_settings = run_with_prompt(
+        tmp_path, "http://192.168.1.10", settings={"shelter_origin": "https://last.example"}
+    )
+
+    assert harness.playwright.page.asked_with == "https://last.example"
+    assert chosen == ["http://192.168.1.10"]
+    assert harness.playwright.page.gotos == ["http://192.168.1.10/admin-login"]
+    assert [s.shelter_origin for s in session_settings] == ["http://192.168.1.10"]
+    assert len(watcher_settings) == 1
+
+
+@pytest.mark.parametrize("block", [False, True], ids=["prompt gave up", "window closed"])
+def test_no_answer_ends_the_app_without_opening_the_shelter_or_the_reader(tmp_path, block):
+    harness, chosen, watcher_settings, _ = run_with_prompt(tmp_path, None, block=block)
+
+    assert chosen == []
+    assert harness.playwright.page.gotos == []
+    assert watcher_settings == []
+    assert harness.playwright.chromium.context.closed

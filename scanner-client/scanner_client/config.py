@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 DEFAULT_WALK_IN_PATH = "/onsite/people/new"
 # First page the browser opens: the staff login (frontend/src/routes/admin-login).
@@ -66,7 +66,9 @@ def _allows_plain_http(host: str) -> bool:
     return ip.is_loopback or any(ip in net for net in _LAN_NETWORKS)
 
 
-def _shelter_origin(raw: str) -> str:
+def parse_shelter_origin(raw: str) -> str:
+    """Validate SHELTER_URL (env file or the startup prompt) and return the bare origin."""
+    raw = raw.strip()
     if not raw:
         raise ConfigError("SHELTER_URL is required")
     bad = ConfigError("SHELTER_URL must be an origin only: http(s)://host[:port]")
@@ -136,17 +138,32 @@ def _poll_interval(raw: str) -> float:
 
 
 def load_settings(
-    env_path: Path, environ: Mapping[str, str], platform: str = sys.platform
+    env_path: Path,
+    environ: Mapping[str, str],
+    platform: str = sys.platform,
+    *,
+    require_shelter_url: bool = True,
 ) -> Settings:
-    """Read `env_path` as defaults, let `environ` override, validate, return Settings."""
+    """Read `env_path` as defaults, let `environ` override, validate, return Settings.
+
+    With `require_shelter_url=False` a missing or bad SHELTER_URL becomes "" (the startup
+    prompt asks for it); every other key is still validated.
+    """
     file_values = {k: v for k, v in dotenv_values(env_path).items() if v is not None}
     config = {**file_values, **environ}
 
     def get(key: str) -> str:
         return str(config.get(key) or "").strip()
 
+    try:
+        shelter_origin = parse_shelter_origin(get("SHELTER_URL"))
+    except ConfigError:
+        if require_shelter_url:
+            raise
+        shelter_origin = ""
+
     return Settings(
-        shelter_origin=_shelter_origin(get("SHELTER_URL")),
+        shelter_origin=shelter_origin,
         walk_in_path=_walk_in_path(get("WALK_IN_PATH")),
         start_path=_start_path(get("START_PATH")),
         browser_channel=_browser_channel(get("BROWSER_CHANNEL"), platform),
@@ -154,3 +171,9 @@ def load_settings(
         keep_login=_keep_login(get("KEEP_LOGIN")),
         poll_interval=_poll_interval(get("POLL_INTERVAL")),
     )
+
+
+def save_shelter_url(env_path: Path, origin: str) -> None:
+    """Write SHELTER_URL into `env_path` (created if missing), keeping every other line."""
+    env_path.touch(exist_ok=True)
+    set_key(env_path, "SHELTER_URL", origin, quote_mode="never")
