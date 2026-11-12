@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	combineLineRejectReasons,
+	DONATION_REJECT_REASON_SELECTABLE_CODES,
+	donationRejectReasonCodeSchema,
 	donorRejectMessage,
 	rejectDonationInputSchema,
 	REJECT_REASON_MAX
@@ -19,6 +21,21 @@ describe('donorRejectMessage (CR-172)', () => {
 		expect(donorRejectMessage('other', 'ศูนย์ปิดรับชั่วคราว')).toBe('ศูนย์ปิดรับชั่วคราว');
 	});
 
+	it('reads the split codes (#1166)', () => {
+		expect(donorRejectMessage('not_eligible')).toBe('ไม่ตรงเกณฑ์การรับ');
+		expect(donorRejectMessage('over_need', 'ของซ้ำ')).toBe('เกินความต้องการ — ของซ้ำ');
+	});
+
+	it('still reads the legacy not_needed code on old documents (#1166)', () => {
+		expect(donorRejectMessage('not_needed')).toBe('ไม่ตรงเกณฑ์การรับ / เกินความต้องการ');
+	});
+
+	it('offers only the new codes for selection (#1166)', () => {
+		expect(DONATION_REJECT_REASON_SELECTABLE_CODES).not.toContain('not_needed');
+		expect(DONATION_REJECT_REASON_SELECTABLE_CODES).toContain('not_eligible');
+		expect(DONATION_REJECT_REASON_SELECTABLE_CODES).toContain('over_need');
+	});
+
 	it('never exceeds the field limit', () => {
 		expect(donorRejectMessage('other', 'ก'.repeat(900)).length).toBe(REJECT_REASON_MAX);
 	});
@@ -26,10 +43,16 @@ describe('donorRejectMessage (CR-172)', () => {
 
 describe('rejectDonationInputSchema (FR-6, AC-4)', () => {
 	it('accepts a preset with or without a detail', () => {
-		expect(rejectDonationInputSchema.safeParse({ reason_code: 'not_needed' }).success).toBe(true);
+		expect(rejectDonationInputSchema.safeParse({ reason_code: 'not_eligible' }).success).toBe(true);
+		expect(rejectDonationInputSchema.safeParse({ reason_code: 'over_need' }).success).toBe(true);
 		expect(
 			rejectDonationInputSchema.safeParse({ reason_code: 'expired', note: 'ล็อตเก่า' }).success
 		).toBe(true);
+	});
+
+	it('refuses the legacy not_needed on input but still reads it (#1166)', () => {
+		expect(rejectDonationInputSchema.safeParse({ reason_code: 'not_needed' }).success).toBe(false);
+		expect(donationRejectReasonCodeSchema.safeParse('not_needed').success).toBe(true);
 	});
 
 	it('refuses "other" without a detail, and an unknown code', () => {
@@ -42,6 +65,27 @@ describe('rejectDonationInputSchema (FR-6, AC-4)', () => {
 });
 
 describe('combineLineRejectReasons (FR-12)', () => {
+	it('falls back to other for the two split codes, and for legacy + new (#1166)', () => {
+		expect(
+			combineLineRejectReasons([
+				{ reject_reason: 'ไม่ตรงเกณฑ์การรับ', reject_reason_code: 'not_eligible' },
+				{ reject_reason: 'เกินความต้องการ', reject_reason_code: 'over_need' }
+			])
+		).toEqual({ reject_reason: 'ไม่ตรงเกณฑ์การรับ; เกินความต้องการ', reject_reason_code: 'other' });
+		expect(
+			combineLineRejectReasons([
+				{ reject_reason: 'x', reject_reason_code: 'not_needed' },
+				{ reject_reason: 'y', reject_reason_code: 'over_need' }
+			]).reject_reason_code
+		).toBe('other');
+		expect(
+			combineLineRejectReasons([
+				{ reject_reason: 'เกินความต้องการ', reject_reason_code: 'over_need' },
+				{ reject_reason: 'เกินความต้องการ', reject_reason_code: 'over_need' }
+			])
+		).toEqual({ reject_reason: 'เกินความต้องการ', reject_reason_code: 'over_need' });
+	});
+
 	it('keeps the shared code when every line agrees, and says each reason once', () => {
 		expect(
 			combineLineRejectReasons([
