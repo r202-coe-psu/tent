@@ -69,14 +69,14 @@ migration: >
 
 **CouchDB `shelter`** (field ใหม่ ระดับเดียวกับ `food_distribution_points`)
 
-| field | ชนิด | ค่าเมื่อ doc ไม่มี key | กติกา |
-| --- | --- | --- | --- |
-| `parking_points` | `[{ id, name, note, lat, lng }]` | `[]` | — |
-| `parking_points[].id` | str | — | ไม่ว่าง · ULID |
-| `parking_points[].name` | str | — | trim · ไม่ว่าง |
-| `parking_points[].note` | str \| null | `null` | — |
-| `parking_points[].lat` | num \| null | `null` | −90..90 |
-| `parking_points[].lng` | num \| null | `null` | −180..180 |
+| field                   | ชนิด                             | ค่าเมื่อ doc ไม่มี key | กติกา          |
+| ----------------------- | -------------------------------- | ---------------------- | -------------- |
+| `parking_points`        | `[{ id, name, note, lat, lng }]` | `[]`                   | —              |
+| `parking_points[].id`   | str                              | —                      | ไม่ว่าง · ULID |
+| `parking_points[].name` | str                              | —                      | trim · ไม่ว่าง |
+| `parking_points[].note` | str \| null                      | `null`                 | —              |
+| `parking_points[].lat`  | num \| null                      | `null`                 | −90..90        |
+| `parking_points[].lng`  | num \| null                      | `null`                 | −180..180      |
 
 - ก่อน: ไม่มี field
 - หลัง: `parking_points: [{ id: '01J…', name: 'ลานจอดหน้าอาคารเรียน', note: 'จอดได้เฉพาะรถยนต์', lat: 7.0086, lng: 100.4747 }]`
