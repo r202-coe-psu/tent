@@ -40,13 +40,30 @@ class Settings:
     poll_interval: float
 
 
-def _is_loopback_host(host: str) -> bool:
+# Plain http is tolerated on the shelter LAN, where the edge stack serves http only
+# (nginx-edge listens on :80). Listed explicitly: ipaddress.is_private also covers 0.0.0.0/8,
+# documentation and reserved ranges.
+_LAN_NETWORKS = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "fc00::/7",
+        "fe80::/10",
+    )
+)
+
+
+def _allows_plain_http(host: str) -> bool:
     if host == "localhost":
         return True
     try:
-        return ipaddress.ip_address(host).is_loopback
+        ip = ipaddress.ip_address(host)
     except ValueError:
         return False
+    return ip.is_loopback or any(ip in net for net in _LAN_NETWORKS)
 
 
 def _shelter_origin(raw: str) -> str:
@@ -65,8 +82,8 @@ def _shelter_origin(raw: str) -> str:
         raise bad
     if "@" in parts.netloc or parts.path not in ("", "/"):
         raise bad
-    if parts.scheme == "http" and not _is_loopback_host(host):
-        raise ConfigError("SHELTER_URL must use https unless the host is loopback")
+    if parts.scheme == "http" and not _allows_plain_http(host):
+        raise ConfigError("SHELTER_URL must use https unless the host is loopback or a LAN IP")
     shown_host = f"[{host}]" if ":" in host else host
     if port is None or port == _DEFAULT_PORTS[parts.scheme]:
         return f"{parts.scheme}://{shown_host}"

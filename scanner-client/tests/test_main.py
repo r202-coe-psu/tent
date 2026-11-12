@@ -342,7 +342,8 @@ def test_invalid_config_is_logged_and_exits_non_zero_without_opening_the_browser
     assert code != 0
     assert runner.calls == []
     log_file = tmp_path / "data" / "logs" / "scanner-client.log"
-    assert "SHELTER_URL must use https unless the host is loopback" in log_file.read_text()
+    log = log_file.read_text()
+    assert "SHELTER_URL must use https unless the host is loopback or a LAN IP" in log
 
 
 def test_valid_config_runs_the_app_logs_to_a_rotating_file_and_exits_zero(tmp_path):

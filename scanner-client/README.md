@@ -7,7 +7,8 @@
 1. แตกไฟล์ `scanner-client-win64.zip` ไว้ที่ไหนก็ได้ (เช่น `C:\Tools`) ได้โฟลเดอร์ `scanner-client`
 2. ในโฟลเดอร์ `scanner-client` คัดลอก `.env.example` เป็นไฟล์ชื่อ `.env` (อยู่ข้าง `scanner-client.exe`)
 3. เปิด `.env` ด้วย Notepad แล้วแก้ `SHELTER_URL=` เป็นที่อยู่เว็บศูนย์ฯ เช่น `https://shelter.example.org`
-   (ใส่แค่ `https://ชื่อเว็บ` ไม่ต้องมี path)
+   (ใส่แค่ `https://ชื่อเว็บ` ไม่ต้องมี path · เครื่อง edge ในวง LAN ใช้ `http://` ได้เฉพาะเมื่อใส่เป็น IP
+   วงภายใน เช่น `http://192.168.1.10` — ชื่อโฮสต์หรือ IP สาธารณะต้องเป็น `https://`)
 4. ดับเบิลคลิก `install-shortcut.bat` → ได้ไอคอน **tent** บน Desktop และใน Start Menu
    (ไม่ต้องใช้ admin · ถ้าย้ายโฟลเดอร์ `scanner-client` ไปที่อื่น ให้ดับเบิลคลิกไฟล์นี้ใหม่)
 

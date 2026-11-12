@@ -73,6 +73,39 @@ def test_http_is_allowed_for_loopback_hosts(tmp_path, url, origin):
     assert load(tmp_path, f"SHELTER_URL={url}\n", platform="linux").shelter_origin == origin
 
 
+# Edge CouchDB stack on the shelter LAN serves plain http (nginx-edge listens on :80 only).
+@pytest.mark.parametrize(
+    ("url", "origin"),
+    [
+        ("http://10.0.0.5", "http://10.0.0.5"),
+        ("http://172.16.1.1", "http://172.16.1.1"),
+        ("http://172.31.255.1:5984", "http://172.31.255.1:5984"),
+        ("http://192.168.1.10:8080/", "http://192.168.1.10:8080"),
+        ("http://169.254.10.20", "http://169.254.10.20"),
+        ("http://[fd12:3456::1]", "http://[fd12:3456::1]"),
+        ("http://[fe80::1]", "http://[fe80::1]"),
+    ],
+)
+def test_http_is_allowed_for_private_lan_ips(tmp_path, url, origin):
+    assert load(tmp_path, f"SHELTER_URL={url}\n", platform="linux").shelter_origin == origin
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://172.32.0.1",
+        "http://8.8.8.8",
+        "http://100.64.0.1",
+        "http://0.0.0.0",
+        "http://[2001:db8::1]",
+        "http://192.168.1.10.nip.io",
+    ],
+)
+def test_http_is_rejected_for_public_ips_and_named_hosts(tmp_path, url):
+    with pytest.raises(ConfigError, match="SHELTER_URL must use https"):
+        load(tmp_path, f"SHELTER_URL={url}\n", platform="linux")
+
+
 @pytest.mark.parametrize(
     ("url", "origin"),
     [
