@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { PREVIEW_FRAMES, fitScale } from './kiosk-banner-preview-frame';
 
 describe('PREVIEW_FRAMES', () => {
-	it('are the two kiosk screens (FR-KBN-29)', () => {
+	it('are the two kiosk screens and the TV (FR-KBN-29)', () => {
 		expect(PREVIEW_FRAMES.map((f) => [f.id, f.width, f.height])).toEqual([
 			['compact', 1024, 600],
-			['portrait', 1080, 1920]
+			['portrait', 1080, 1920],
+			['tv', 1920, 1080]
 		]);
 	});
 });

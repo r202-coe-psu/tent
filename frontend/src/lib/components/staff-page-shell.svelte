@@ -15,6 +15,7 @@
 		description,
 		maxWidth = 'full',
 		class: className = '',
+		backLink,
 		meta,
 		actions,
 		children
@@ -23,6 +24,7 @@
 		description?: string;
 		maxWidth?: keyof typeof maxWidthClass;
 		class?: string;
+		backLink?: Snippet;
 		meta?: Snippet;
 		actions?: Snippet;
 		children: Snippet;
@@ -37,6 +39,9 @@
 		)}
 	>
 		<div class="min-w-0 space-y-2">
+			{#if backLink}
+				<div>{@render backLink()}</div>
+			{/if}
 			<h1 class={typography.scale.h1Staff.classes}>{title}</h1>
 			{#if description}
 				<p class="text-base text-slate-600">{description}</p>

@@ -1,4 +1,5 @@
 import type { EvacueeQrSource } from '$lib/utils/evacuee-qr';
+import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 
 /** Sources a staff client may request (`kiosk_*` are issued by kiosk endpoints only). */
 export type StaffEvacueeQrSource = Extract<EvacueeQrSource, 'profile' | 'family_batch'>;
@@ -9,6 +10,8 @@ export type EvacueeQrIssueItem = {
 	status: string;
 	qr_payload?: string;
 	printed_at?: string;
+	/** Vulnerability level the server recorded for this print (#1301); the card must show this one. */
+	marker?: VulnerabilityMarker | null;
 };
 
 export type EvacueeQrIssueInput = {
@@ -46,7 +49,8 @@ export async function issueEvacueeQrs(input: EvacueeQrIssueInput): Promise<Evacu
 				evacuee_id: item.evacuee_id,
 				status: item.status,
 				qr_payload: typeof item.qr_payload === 'string' ? item.qr_payload : undefined,
-				printed_at: typeof item.printed_at === 'string' ? item.printed_at : undefined
+				printed_at: typeof item.printed_at === 'string' ? item.printed_at : undefined,
+				marker: item.marker === 'red' || item.marker === 'yellow' ? item.marker : null
 			}
 		];
 	});

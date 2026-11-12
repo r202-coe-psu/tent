@@ -29,7 +29,11 @@ export function buildListPreviewSlides(
 	imageUrl: (id: string, rev?: string) => string,
 	groupId?: string
 ): Record<KioskScreenType, KioskBannerSlide[]> {
-	const grouped: Record<KioskScreenType, KioskBannerSlide[]> = { compact: [], portrait: [] };
+	const grouped: Record<KioskScreenType, KioskBannerSlide[]> = {
+		compact: [],
+		portrait: [],
+		tv: []
+	};
 	for (const banner of sortBanners(
 		banners.filter((b) => isActiveAt(b, now) && (groupId === undefined || b.group_id === groupId))
 	)) {

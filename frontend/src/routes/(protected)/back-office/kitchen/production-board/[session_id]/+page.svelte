@@ -44,6 +44,10 @@
 		useUnitsOfMeasure,
 		useCreateRecipe,
 		useUpdateRecipe,
+		useUnitDimensionResolver,
+		qtyInputStep,
+		requiresWholeQty,
+		wholeQtyError,
 		customRecipeInput,
 		findRecipeByLabel,
 		isSameRecipeInput,
@@ -99,6 +103,7 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
+	const dimensions = useUnitDimensionResolver();
 	const supplyItems = useSupplyItems();
 	const stock = useStockBalance();
 
@@ -399,11 +404,17 @@
 
 		return (recipe.ingredients ?? []).map((ing) => {
 			const itemMaster = (itemMasters.data ?? []).find((m) => m._id === ing.item_master_id);
+			const unit = ing.uom || itemMaster?.base_unit || 'kg';
 			return {
 				item_id: ing.item_master_id,
 				name: itemMaster?.name || ing.item_master_id,
-				needed: scaleRecipeIngredientQty(ing.quantity, recipe.standard_portions, portions),
-				unit: ing.uom || itemMaster?.base_unit || 'kg'
+				needed: scaleRecipeIngredientQty(
+					ing.quantity,
+					recipe.standard_portions,
+					portions,
+					requiresWholeQty(dimensions.resolve(unit))
+				),
+				unit
 			};
 		});
 	}
@@ -425,6 +436,16 @@
 		showAddIngredient = false;
 		toast.info('คืนค่าวัตถุดิบตามสูตรและจำนวนจานเรียบร้อยแล้ว');
 	}
+
+	const INGREDIENT_WHOLE_QTY_MESSAGE = 'จำนวนวัตถุดิบหน่วยนับต้องเป็นจำนวนเต็ม';
+	const ingredientQtyError = (ing: IngredientRow) =>
+		wholeQtyError(ing.needed, dimensions.resolve(ing.unit));
+	const hasIngredientQtyError = $derived(ingredientsList.some((ing) => !!ingredientQtyError(ing)));
+	const newQtyStep = $derived(qtyInputStep(dimensions.resolve(newUnit)));
+	const newQtyError = $derived(wholeQtyError(newQty, dimensions.resolve(newUnit)));
+	const ingredientQtyMessage = (ing: IngredientRow) =>
+		isPositiveQty(ing.needed) ? (ingredientQtyError(ing) ?? null) : QTY_ERROR;
+	const newQtyMessage = $derived(newQtyValid ? (newQtyError ?? null) : QTY_ERROR);
 
 	function removeIngredient(index: number) {
 		isIngredientsManuallyEdited = true;
@@ -450,6 +471,10 @@
 	function confirmAddIngredient() {
 		if (!newItemId || !isPositiveQty(newQty)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
+			return;
+		}
+		if (newQtyError) {
+			toast.error(newQtyError);
 			return;
 		}
 		const master = (itemMasters.data ?? []).find((m) => m._id === newItemId);
@@ -545,6 +570,10 @@
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
 		}
+		if (ingredientsList.some((ing) => ingredientQtyError(ing))) {
+			toast.error(INGREDIENT_WHOLE_QTY_MESSAGE);
+			return;
+		}
 		const willSaveRecipe = canSaveAsRecipe && saveAsRecipe;
 		if (willSaveRecipe && !menuLabel.trim()) {
 			toast.error('กรุณาระบุชื่อเมนูที่แสดง เพื่อใช้เป็นชื่อสูตร');
@@ -638,6 +667,10 @@
 		}
 		if (!ingredientsValid) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
+			return;
+		}
+		if (ingredientsList.some((ing) => ingredientQtyError(ing))) {
+			toast.error(INGREDIENT_WHOLE_QTY_MESSAGE);
 			return;
 		}
 
@@ -1174,17 +1207,17 @@
 											<div class="flex items-center justify-end gap-1">
 												<Input
 													type="number"
-													step="any"
+													step={qtyInputStep(dimensions.resolve(ing.unit))}
 													min="0"
 													bind:value={ing.needed}
 													oninput={() => {
 														isIngredientsManuallyEdited = true;
 													}}
 													aria-label="จำนวน {ing.name}"
-													aria-invalid={!isPositiveQty(ing.needed)}
-													aria-describedby={isPositiveQty(ing.needed)
-														? undefined
-														: `ing-qty-${ing.item_id}-error`}
+													aria-invalid={!!ingredientQtyMessage(ing)}
+													aria-describedby={ingredientQtyMessage(ing)
+														? `ing-qty-${ing.item_id}-error`
+														: undefined}
 													{@attach guard.attach(`ing-qty-${ing.item_id}`)}
 													class="h-8 w-24 [appearance:textfield] text-right text-sm font-semibold tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 												/>
@@ -1195,7 +1228,7 @@
 											<CountFieldError
 												{guard}
 												id={`ing-qty-${ing.item_id}`}
-												message={isPositiveQty(ing.needed) ? null : QTY_ERROR}
+												message={ingredientQtyMessage(ing)}
 											/>
 										</Table.Cell>
 										<Table.Cell class="text-right text-slate-700 tabular-nums">
@@ -1259,20 +1292,16 @@
 									<Input
 										id="new-ingredient-qty"
 										type="number"
-										step="any"
+										step={newQtyStep}
 										min="0"
 										bind:value={newQty}
 										placeholder="0"
-										aria-invalid={!newQtyValid}
-										aria-describedby={newQtyValid ? undefined : 'new-ingredient-qty-error'}
+										aria-invalid={!!newQtyMessage}
+										aria-describedby={newQtyMessage ? 'new-ingredient-qty-error' : undefined}
 										{@attach guard.attach('new-ingredient-qty')}
 										class="mt-1 h-8 text-xs font-bold"
 									/>
-									<CountFieldError
-										{guard}
-										id="new-ingredient-qty"
-										message={newQtyValid ? null : QTY_ERROR}
-									/>
+									<CountFieldError {guard} id="new-ingredient-qty" message={newQtyMessage} />
 								</div>
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
@@ -1302,7 +1331,7 @@
 									size="sm"
 									class="h-7 gap-1 text-xs"
 									onclick={confirmAddIngredient}
-									disabled={!newItemId || !newQtyValid}
+									disabled={!newItemId || !!newQtyMessage}
 								>
 									<Plus class="h-3 w-3" />
 									เพิ่มวัตถุดิบนี้
@@ -1350,7 +1379,11 @@
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={!ticketsFresh || isOpeningRequisition || !targetValid || !ingredientsValid}
+					disabled={!ticketsFresh ||
+						isOpeningRequisition ||
+						!targetValid ||
+						!ingredientsValid ||
+						hasIngredientQtyError}
 				>
 					<Sparkles class="h-4 w-4" />
 					{isOpeningRequisition ? 'กำลังเปิดตั๋วเบิก...' : 'สร้างใบเบิกวัตถุดิบ'}
@@ -1364,7 +1397,8 @@
 					disabled={updateTicketItemsMutation.isPending ||
 						updateConfirmedMealPlanMutation.isPending ||
 						!targetValid ||
-						!ingredientsValid}
+						!ingredientsValid ||
+						hasIngredientQtyError}
 				>
 					<Check class="h-4 w-4" />
 					{updateTicketItemsMutation.isPending || updateConfirmedMealPlanMutation.isPending

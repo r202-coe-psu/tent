@@ -68,7 +68,8 @@ describe('POST /api/v1/evacuee-qr/issue', () => {
 		vi.mocked(service.issueEvacueeQr).mockResolvedValue({
 			evacuee_id: ID_A,
 			qr_payload: `${ID_A}@abcdef`,
-			printed_at: 't1'
+			printed_at: 't1',
+			marker: null
 		});
 		expect((await call(good)).status).toBe(200);
 	});
@@ -87,13 +88,24 @@ describe('POST /api/v1/evacuee-qr/issue', () => {
 
 	it('issues per id with printed_by from the session, reporting per-item status', async () => {
 		vi.mocked(service.issueEvacueeQr)
-			.mockResolvedValueOnce({ evacuee_id: ID_A, qr_payload: `${ID_A}@abcdef`, printed_at: 't1' })
+			.mockResolvedValueOnce({
+				evacuee_id: ID_A,
+				qr_payload: `${ID_A}@abcdef`,
+				printed_at: 't1',
+				marker: null
+			})
 			.mockRejectedValueOnce(new ServiceError('NOT_FOUND', 'Evacuee not found'));
 		const res = await call({ ...good, source: 'family_batch', evacuee_ids: [ID_A, ID_B] });
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({
 			items: [
-				{ evacuee_id: ID_A, status: 'issued', qr_payload: `${ID_A}@abcdef`, printed_at: 't1' },
+				{
+					evacuee_id: ID_A,
+					status: 'issued',
+					qr_payload: `${ID_A}@abcdef`,
+					printed_at: 't1',
+					marker: null
+				},
 				{ evacuee_id: ID_B, status: 'not_found' }
 			]
 		});

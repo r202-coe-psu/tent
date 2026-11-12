@@ -3,7 +3,13 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		formatUnit,
+		requiresWholeQty,
+		useUnitDimensionResolver,
+		useUnitsOfMeasure,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -39,6 +45,7 @@
 	const ledgerQuery = useLedger();
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
+	const unitDimension = useUnitDimensionResolver();
 	const applyMutation = useApplyCycleCount();
 
 	const itemsById = $derived(new Map(stockItems.items.map((i) => [i._id, i])));
@@ -70,8 +77,21 @@
 	const summary = $derived(summarizeCycleCount(entries));
 	const submission = $derived(planCycleCount(entries, countId, note));
 	const isSaving = $derived(applyMutation.isPending);
+	/**
+	 * A count that matches the system writes nothing, so a legacy fractional balance counted
+	 * "as is" is fine; only a count that would be saved must be whole in a count unit (#805).
+	 */
+	function wholeError(entry: CycleCountEntry): string | undefined {
+		if (classifyCycleCount(entry) === 'match') return undefined;
+		return wholeQtyError(entry.counted_qty, unitDimension.resolve(entry.unit));
+	}
+	const wholeErrorCount = $derived(entries.filter((entry) => wholeError(entry)).length);
 	const canSave = $derived(
-		!offline && !isSaving && summary.invalid === 0 && submission.lines.length > 0
+		!offline &&
+			!isSaving &&
+			summary.invalid === 0 &&
+			wholeErrorCount === 0 &&
+			submission.lines.length > 0
 	);
 
 	function itemName(itemId: string): string {
@@ -239,8 +259,10 @@
 		>
 			<span>นับแล้ว <strong>{summary.counted}/{summary.total}</strong></span>
 			<span class="text-rose-600">ไม่ตรง <strong>{summary.mismatched}</strong></span>
-			{#if summary.invalid > 0}
-				<span class="text-destructive">กรอกผิด <strong>{summary.invalid}</strong></span>
+			{#if summary.invalid + wholeErrorCount > 0}
+				<span class="text-destructive"
+					>กรอกผิด <strong>{summary.invalid + wholeErrorCount}</strong></span
+				>
 			{/if}
 			<Button
 				type="button"
@@ -274,11 +296,13 @@
 							<Input
 								id={inputId}
 								type="text"
-								inputmode="decimal"
+								inputmode={requiresWholeQty(unitDimension.resolve(entry.unit))
+									? 'numeric'
+									: 'decimal'}
 								placeholder="นับได้"
 								autocomplete="off"
 								bind:value={entry.counted_qty}
-								aria-invalid={classifyCycleCount(entry) === 'invalid'}
+								aria-invalid={classifyCycleCount(entry) === 'invalid' || !!wholeError(entry)}
 								class="min-h-11 bg-white pr-12 font-mono text-base font-bold"
 							/>
 							<span
@@ -290,6 +314,11 @@
 					</div>
 					{#if varianceLabel(entry)}
 						<p class="mt-2 text-xs font-semibold">{varianceLabel(entry)}</p>
+					{/if}
+					{#if wholeError(entry)}
+						<p class="mt-1 text-xs font-semibold text-destructive" role="alert">
+							{wholeError(entry)}
+						</p>
 					{/if}
 				</li>
 			{/each}

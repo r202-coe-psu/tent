@@ -135,5 +135,9 @@ export const kioskBannerGroupRemoteRepository: KioskBannerGroupRepository = {
 	async setDevices(id: string, deviceIds: string[]) {
 		const url = `${groupPath(id)}/devices`;
 		return parseGroup(await request(url, jsonInit('PUT', { device_ids: deviceIds })));
+	},
+
+	async rotateTvCode(id: string) {
+		return parseGroup(await request(`${groupPath(id)}/tv-code`, { method: 'POST' }));
 	}
 };

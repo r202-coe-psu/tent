@@ -257,7 +257,7 @@
 		{/if}
 
 		<Dialog.Footer>
-			<Button class="w-full sm:w-auto" onclick={() => handleOpenChange(false)}>ปิดหน้าต่าง</Button>
+			<Button class="w-full sm:w-auto" onclick={() => handleOpenChange(false)}>ปิด</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

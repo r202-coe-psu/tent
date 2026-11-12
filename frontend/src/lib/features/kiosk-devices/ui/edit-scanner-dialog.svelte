@@ -15,6 +15,7 @@
 	import { resolve } from '$app/paths';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
+	import { KIOSK_DEVICE_SCREEN_TYPES } from '$lib/features/shared/domain/kiosk-screen';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Key from '@lucide/svelte/icons/key';
@@ -197,7 +198,11 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label class="text-sm font-semibold text-slate-700">ขนาดหน้าจอ</Form.Label>
-							<KioskScreenPicker {...props} bind:value={$formData.screen_type} />
+							<KioskScreenPicker
+								{...props}
+								types={KIOSK_DEVICE_SCREEN_TYPES}
+								bind:value={$formData.screen_type}
+							/>
 						{/snippet}
 					</Form.Control>
 					<Form.Description class="text-xs text-slate-500">

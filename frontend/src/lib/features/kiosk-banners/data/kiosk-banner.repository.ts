@@ -82,4 +82,6 @@ export interface KioskBannerGroupRepository {
 	remove(id: string, rev: string): Promise<void>;
 	/** Replaces the kiosks that belong to the group. */
 	setDevices(id: string, deviceIds: string[]): Promise<KioskBannerGroupSummary>;
+	/** Issues a fresh tv code; the old one stops working at once. */
+	rotateTvCode(id: string): Promise<KioskBannerGroupSummary>;
 }

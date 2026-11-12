@@ -94,6 +94,19 @@ export default defineConfig(({ mode }) => {
 			// The CLI flag `--experimental.fsModuleCache=false` is NOT honoured: projects
 			// (`extends: true`) take the value from this file.
 			experimental: { fsModuleCache: process.env.VITEST_NO_FS_CACHE !== '1' },
+			// `--changed` (pre-push `pnpm test:changed`) runs only tests whose import graph reaches a
+			// changed file. A change matching one of these runs the whole suite instead: inputs every
+			// test depends on without importing them. The first two are Vitest's defaults.
+			forceRerunTriggers: [
+				'**/package.json/**',
+				'**/{vitest,vite}.config.*/**',
+				'**/pnpm-lock.yaml',
+				'**/svelte.config.js',
+				'**/tsconfig.json',
+				'**/src/lib/testing/**',
+				// Read from disk (not imported) by colors/kiosk-layout tests.
+				'**/src/app.css'
+			],
 			projects: [
 				{
 					extends: true,
