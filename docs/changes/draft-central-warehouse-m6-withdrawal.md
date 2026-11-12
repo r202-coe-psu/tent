@@ -7,17 +7,22 @@ requested_by: project owner
 decided_by: project owner (approve แผน 2026-11-12 · เลข CR ออกหลังทดสอบ)
 layer: stable # เพิ่ม outbound integration plane (ใช้ร่วมกับ draft-referral-m5-hospital-integration) + worker สร้าง donation จากระบบภายนอก — ต้อง review ก่อน
 affects:
-  - docs/data/schema.md §2.3 (donation — enum `channel` เพิ่ม `m6`, field ใหม่ `external`, ข้อยกเว้น `expires_at`)
+  - docs/data/schema.md §2.3 (donation — enum `channel` เพิ่ม `m6`, field ใหม่ `external`, `received_summary.nothing_received` (D20), ข้อยกเว้น `expires_at` / `tracking_token_hash` / `phone_hash` / `_id`)
   - schema_v donation 11 → 12 (additive)
-  - docs/data/schema.md §9 (Mongo collection ใหม่ `m6_withdrawals`, `m6_outbound_logs`, `m6_confirm_outbox`)
-  - docs/data/api-contract.md (BFF `/api/back-office/central-warehouse/*`, `/api/back-office/integrations/status`; FastAPI `/v1/integrations/m6/*`)
+  - docs/data/schema.md §9 (Mongo collection ใหม่ `m6_withdrawals`, `m6_confirm_outbox`, `m6_outbound_logs` — §9.11–9.13)
+  - docs/data/api-contract.md (BFF `/api/back-office/central-warehouse/*` §2.11, `/api/back-office/integrations/status` §2.10; FastAPI `/v1/integrations/m6/*` §5.4; donation reject / redirect / receive / close ของใบ `m6` — D19, D20)
   - docs/prd/role-permission-matrix.md (สิทธิ์ดูคลังกลาง / ขอเบิก / ยกเลิก)
   - docs/sitemap.md (หน้าใหม่ `/back-office/onedata/m6` — D18)
-  - docs/adr/0002-partner-integration-architecture.md (เพิ่มทิศ outbound — tent เรียก M6; ADR เดิมครอบคลุมเฉพาะ M6 อ่านข้อมูล tent)
-  - backend/apiapp/modules/integrations_m6 (ใหม่) + integrations status (ร่วมกับ M5)
-  - worker/src/worker/inbound (loop ใหม่ `m6_withdrawals` → donation, donation received → `m6_confirm_outbox`)
-  - worker/src/worker/donation_status.py (ไม่ expire donation channel `m6`)
-  - frontend/src/lib/features/central-warehouse (feature ใหม่) + frontend/src/lib/features/donations (reader/UI รองรับ channel `m6`)
+  - docs/adr/0003-outbound-integration-plane.md (outbound plane ร่วมกับ M5 — แทนการแก้ ADR-0002)
+  - docs/task-breakdown/04-donation.md (T-16 DoD — donation channel `m6`, D19, D20)
+  - packages/tent-model (Beanie `M6Withdrawal`, `M6ConfirmOutbox`, `M6OutboundLog`)
+  - backend/apiapp/modules/integrations_m6 (ใหม่) + integrations status (ร่วมกับ M5 — route อยู่ใน `integrations_m5/router.py`)
+  - worker/src/worker/inbound/m6_withdrawals.py (loop ใหม่ `m6_withdrawals` → donation, donation received → `m6_confirm_outbox`, tick `/v1/integrations/m6/sync`) + `worker/src/worker/inbound/donations.py` (stamp `schema_v` 12)
+  - worker/src/worker/quota/expiry.py (ไม่ expire donation channel `m6`)
+  - worker/src/worker/projectors/donation.py (ไม่ project donation channel `m6` — D4)
+  - worker config (`M6_SYNC_INTERVAL_S`) + backend env `M6_BASE_URL` / `M6_CLIENT_ID` / `M6_CLIENT_SECRET`
+  - frontend/src/lib/features/central-warehouse (feature ใหม่) + frontend/src/lib/features/integrations (health gate ร่วม M5/M6) + frontend/src/lib/features/donations (reader/UI รองรับ channel `m6`, `domain/m6.ts`)
+  - frontend/src/lib/server/donation-intake.ts + frontend/src/routes/api/back-office/donations/[query]/{+server,reject,redirect,close} (D19 `M6_NOT_REFUSABLE`, D20 ปิดใบไม่ได้รับของ)
   - frontend/src/routes/(protected)/back-office/onedata/m6 (ใหม่ — D18) + frontend/src/routes/api/back-office/central-warehouse (BFF)
 related:
   - draft-referral-m5-hospital-integration (ใช้ outbound plane และ health gate ร่วมกัน)
@@ -40,8 +45,9 @@ source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Gui
 - **Health gate ใช้ตัวเดียวกับ M5** ถ้าติดต่อไม่ได้จะแสดง "เชื่อมต่อกับระบบกลางไม่ได้" และปิดทุก action
 - **schema:** donation `schema_v` 11 → 12 แบบ additive
 - **สิทธิ์:** SA, `shelter_manager` และ `warehouse_staff` ของศูนย์ (D2)
+- **ใบ `m6` ปฏิเสธ / ส่งต่อไม่ได้ (D19)** ของที่ไม่ครบบันทึกเป็น "รับไม่ครบ" · ของไม่มาเลย → "ปิดใบ — ไม่ได้รับของ" (D20)
 
-**สถานะการตัดสิน:** owner ตัดสิน D1–D5 (2026-11-10) และ approve แผน implement พร้อม D18 (2026-11-12) · D6 ใช้ค่าเริ่มต้นจนกว่าทีม M6 ตอบ
+**สถานะการตัดสิน:** owner ตัดสิน D1–D5 (2026-11-10) และ approve แผน implement พร้อม D18 (2026-11-12) · D19, D20 (2026-11-12) · D6 ใช้ค่าเริ่มต้นจนกว่าทีม M6 ตอบ (spike M6 staging 2026-11-12 ยืนยันบางข้อแล้ว)
 
 ## Why
 
@@ -145,19 +151,22 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 | `external` | ใหม่ · sys · {`system`: `m6`, `request_code`: str, `external_ref`: str, `source_warehouse_code`: str, `source_warehouse_name`: str?, `confirmed_at`: ts?, `confirm_error`: str?} | worker เขียนตอนสร้าง และเขียน `confirmed_at` / `confirm_error` หลังเรียก RES-007 |
 | `donor` | ค่าเมื่อ `channel = m6` | `{name: "คลังกลาง M6 · {ชื่อคลัง}", phone: null, phone_hash: ""}` ไม่มี PII · `phone_hash` ว่างได้เฉพาะ `channel = m6` (D5) |
 | `items[]` | ค่าเมื่อ `channel = m6` | 1 รายการต่อ `lines[]` ที่ `qty_fulfilled > 0` · `qty = qty_fulfilled` (qty_str) · `unit` = หน่วยของ M6 · `item_id` จาก mapping (D3) ถ้าไม่พบใช้ `free_text = name` (ต้องจับคู่ตอนรับตาม CR-143) · `review_status = approved` |
-| `status` | เริ่มที่ `verifying` | M6 อนุมัติแล้ว ไม่ต้องผ่าน `pending_review` |
+| `status` | เริ่มที่ `verifying` · ไปได้แค่ `received` (D19) | M6 อนุมัติแล้ว ไม่ต้องผ่าน `pending_review` · ห้าม `rejected` / `redirected` |
+| `received_summary` | ใหม่ `nothing_received`: bool? (D20) | `true` เมื่อ staff ปิดใบโดยไม่มีจุดใดบันทึกรับ · `total_items: 0` · ทุกรายการเป็น shortfall (`counted` 0) |
 | `logistics` | ไม่ใส่ | `logistics` บังคับเฉพาะ `channel = public` |
-| `expires_at` | ไม่ตั้ง หรือ worker `donation_status` ข้าม channel `m6` | ของระหว่างขนส่งอาจเกิน TTL 72 ชม. |
+| `expires_at` | ไม่ตั้ง · worker `quota/expiry.py` ข้าม channel `m6` | ของระหว่างขนส่งอาจเกิน TTL 72 ชม. |
 | `tracking_token_hash` / `booking_ref` | `booking_ref` = `request_code` · ไม่มี tracking token | ไม่มีหน้าติดตามสำหรับ donor |
 
 **Invariant ใหม่:**
 - `channel = m6` → ต้องมี `external.system = m6`
 - 1 `request_code` = donation ไม่เกิน 1 ใบ: ใช้ `_id` deterministic `donation:m6-{request_code}` เพื่อให้ worker สร้างซ้ำได้ปลอดภัย (D5) — เป็นข้อยกเว้นของ pattern `donation:{ulid}` เฉพาะ `channel = m6`
 - `channel = m6` → `phone_hash` ว่างได้ (ข้อยกเว้นของ req เดิมใน §2.3)
+- `channel = m6` → ไม่มี `rejected` / `redirected` (D19): BFF ตอบ `422 M6_NOT_REFUSABLE` ที่ `…/reject`, `…/redirect` และการตรวจรับที่ไม่รับทุกบรรทัด
+- `channel = m6` + ยังเปิดอยู่ (`declared` / `pending_review` / `verifying`) + ไม่มี `point_receipts` → `…/close` ได้ (D20) เป็น `received` + `received_summary.nothing_received: true`
 
 **การยืนยันกลับ (RES-007):**
-- **เงื่อนไข:** donation `m6` เปลี่ยนเป็น `received` โดยปิดครบทุกจุด หรือ staff ปิดใบ
-- **payload:** `received_by = [{name, username}]` ของผู้รับคนสุดท้าย และ `note` = สรุป `received_summary.shortfalls` / รายการที่ไม่รับ (ถ้าไม่มีให้ใส่ "รับครบ")
+- **เงื่อนไข:** donation `m6` เปลี่ยนเป็น `received` โดยปิดครบทุกจุด, staff ปิดใบ หรือ staff ปิดใบแบบไม่ได้รับของ (D20)
+- **payload:** `received_by = [{name, username}]` ของผู้รับคนสุดท้าย และ `note` = สรุป `received_summary.shortfalls` / รายการที่ไม่รับ (ถ้าไม่มีให้ใส่ "รับครบ") · `nothing_received` → `note` = "ไม่ได้รับของ" (D20)
 - **error:**
   - `request_not_in_transit` → ถือว่าสำเร็จถ้า RES-006 บอกว่า `received` อยู่แล้ว
   - error อื่น → เก็บ `confirm_error` และ retry แบบ backoff
@@ -192,14 +201,16 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 
 | M6 | FastAPI ตอบ |
 |---|---|
-| `item_not_in_warehouse` / `unit_mismatch` (มี `expected_unit`) / `reference_not_found` | `422` + code เดิม |
+| `item_not_in_warehouse` / `unit_mismatch` (มี `expected_unit`) / `reference_not_found` | `422 M6_ITEM_NOT_IN_WAREHOUSE` / `M6_UNIT_MISMATCH` (+`expected_unit`) / `M6_REFERENCE_NOT_FOUND` |
+| 4xx อื่นที่ไม่รู้จัก | `422 M6_BAD_REQUEST` |
 | `resource_type_not_allowed` / 403 อื่น | `403 M6_FORBIDDEN` ไม่ retry |
-| `request_not_cancellable` | `409` |
-| `stock_insufficient` / `insufficient_available` | `409` |
-| `withdrawal not found` / `warehouse … not found` | `404` |
-| 401 | ต่ออายุแล้วลองซ้ำ 1 ครั้ง |
-| `invalid_client` | `503 M6_CREDENTIAL_INVALID` และเปิด circuit |
+| `request_not_cancellable` | `409 M6_NOT_CANCELLABLE` (FastAPI ดึง RES-006 อัปเดต snapshot ก่อนตอบ) |
+| `stock_insufficient` / `insufficient_available` | `409 M6_STOCK_INSUFFICIENT` |
+| `withdrawal not found` / `warehouse … not found` | `404 M6_NOT_FOUND` |
+| 401 | ต่ออายุแล้วลองซ้ำ 1 ครั้ง · 401 ซ้ำติดกัน = `503 M6_CREDENTIAL_INVALID` + เปิด circuit |
+| `invalid_client` | `503 M6_CREDENTIAL_INVALID` และเปิด circuit 5 นาที |
 | timeout / 5xx | `503 M6_UNAVAILABLE` |
+| ไม่ตั้ง env | `503 M6_NOT_CONFIGURED` |
 
 ### 7. Mongo (FastAPI เป็นเจ้าของ)
 
@@ -228,7 +239,19 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
   6. key ใบเดียวของ tent ใช้ขอเบิกแทนหลายศูนย์ได้หรือไม่ (M6 ต้องแยกศูนย์จาก `requester.location_code`)
   - **ค่าเริ่มต้นระหว่างรอ (2026-11-12):** ข้อ 1 ส่ง `{cancelled_by: {name}, reason}` · ข้อ 2 ส่ง `received_by` เป็น Array `[{name, username}]` ตามหัวข้อ 5 · ข้อ 3 ส่งครบทุกฟิลด์ที่บังคับ · ข้อ 4 รับทั้ง int และ float แล้วปัดเป็นจำนวนเต็มเมื่อไม่มีเศษ · ข้อ 5 poll ต่อ · ข้อ 6 ใช้ key เดียว แยกศูนย์ด้วย `requester.location_code` · ยืนยันด้วย spike บน M6 staging แล้วแก้ client ถ้าไม่ตรง
   - **ข้อสังเกตจาก guide v2.1:** RES-006 `lines[]` มีแค่ `item_code`, `qty`, `qty_fulfilled` ไม่มี `name` / `unit` จึงเก็บ `name` / `unit` จากตอนขอเบิก (RES-005) ไว้ใน `m6_withdrawals.lines[]` และใช้ค่านั้นตอนสร้าง donation · M6 ไม่มี endpoint list ใบเบิก sync จึงเรียก RES-006 รายใบ
+  - **spike บน M6 staging (2026-11-12):** AUTH-001, AUTH-002 (refresh token หมุนทุกครั้ง), RES-001, RES-002, RES-003 ผ่าน · ข้อ 4: qty มาเป็น float จริง (เช่น `469.0`) — FastAPI แปลงเป็นจำนวนเต็ม · `district` ของคลังเป็น `null` ได้ · `resource_types` มีค่า `genaral` (สะกดตาม M6) · ทดสอบผ่านหน้าจอจริง: RES-005 สร้างใบ (`REQ-20261112-5AB8`, `REQ-20261112-5D9D`), RES-006 ผ่าน sync worker, RES-008 ยกเลิกด้วย body `{cancelled_by, reason}` สำเร็จ (ข้อ 1 ใช้ได้) · RES-006 ส่ง `qty_fulfilled: 0` (ไม่ใช่ `null`) ระหว่าง `pending` · RES-007 ยังไม่ได้ยิงจริง (ต้องให้ M6 ส่งของเป็น `in_transit` ก่อน)
 - **D18 — path หน้าคลังกลาง** ✅ ตัดสินแล้ว (2026-11-12): **`/back-office/onedata/m6`** ให้ตรงกับ D17 ของ M5 (`/back-office/onedata/m5`) · BFF คง `/api/back-office/central-warehouse/*` (ตัวเลือกที่ไม่เลือก: `/back-office/central-warehouse` ตามร่างเดิม)
+- **D19 — ใบ `m6` ปฏิเสธหรือส่งต่อไม่ได้** ✅ ตัดสินแล้ว (2026-11-12):
+  - **owner ตัดสิน:** donation `channel = m6` ห้าม `rejected` / `redirected` และห้ามตรวจรับแบบไม่รับทุกบรรทัด · BFF ตอบ `422 M6_NOT_REFUSABLE` (`{ success: false, error_code, error }`) ที่ `POST …/donations/[query]/reject`, `…/redirect` และ `POST …/donations/[query]` เมื่อทุกบรรทัดเป็น "ไม่รับ"
+  - **เหตุผล:** worker ยืนยันกลับ M6 (RES-007) เฉพาะใบที่ `received` · ใบที่ถูกปฏิเสธจะค้าง `in_transit` ฝั่ง M6 โดยไม่มีทางปิด
+  - ของที่มาไม่ครบหรือเสียหายบันทึกเป็น "รับไม่ครบ" / ไม่รับรายบรรทัด (ยังมีบรรทัดที่รับ ≥ 1) แล้ว `note` ของ RES-007 สรุปให้ M6
+  - (ตัวเลือกที่ไม่เลือก: ให้ปฏิเสธได้แล้วส่ง RES-007 พร้อม note ว่าไม่รับ)
+- **D20 — ปิดใบ m6 ที่ไม่ได้รับของ** ✅ ตัดสินแล้ว (2026-11-12):
+  - **owner ตัดสิน:** staff กด "ปิดใบ — ไม่ได้รับของ" ได้เมื่อใบ `m6` ยังเปิด (`declared` / `pending_review` / `verifying`) และยังไม่มีจุดใดบันทึกรับ (`point_receipts` ว่าง) — ข้อยกเว้นของ CR-206 FR-MP-28 เฉพาะ `m6`
+  - ผล: `status: received`, `received_summary.nothing_received: true`, `total_items: 0`, ทุกรายการเป็น shortfall (`counted` 0), `closed_reason: staff_close` · ไม่มีแถว `stock_ledger`
+  - worker ส่ง RES-007 ด้วย `note` = "ไม่ได้รับของ"
+  - ใบที่มีจุดบันทึกรับแล้วปิดด้วย "ปิดใบ" เดิม (CR-206) ได้ผล `received` เสมอ
+> [NEEDS DECISION: ใบเบิกที่ M6 เป็น `in_transit` แต่ไม่มีบรรทัดใด `qty_fulfilled > 0` → worker ไม่สร้าง donation (หัวข้อ 5 `items[]`) จึงไม่มีใบให้ "ปิดใบ — ไม่ได้รับของ" (D20) และไม่มี RES-007 · ใบค้าง `in_transit` ฝั่ง M6 และ sync poll ต่อไม่สิ้นสุด]
 
 ## นอก scope (CR แยกถ้าต้องการ)
 
@@ -242,15 +265,16 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
   - `api-contract.md`
   - `role-permission-matrix.md` (D2: SA / `shelter_manager` / `warehouse_staff`)
   - `sitemap.md`
-  - ADR-0002 (outbound) หรือ ADR-0003 ร่วมกับ M5
+  - ADR-0003 ร่วมกับ M5 (เขียนแล้ว)
+  - `04-donation.md` T-16 DoD
 - **backend:**
-  - `integrations_m6`: client (httpx), token + refresh, cache, poller, outbox consumer, router, schemas
+  - `integrations_m6`: client (httpx), token + refresh, cache, router, schemas, use case (sync = poll RES-006 + ส่ง outbox RES-007 — ไม่มี poller ในตัว)
   - integrations status ร่วม
   - tests mock M6 ครบ error ในหัวข้อ 6
 - **worker:**
   - loop `m6_withdrawals` → donation (idempotent)
   - loop donation `m6` received → outbox
-  - `donation_status` ข้าม channel `m6`
+  - `quota/expiry.py` ข้าม channel `m6` · projector donation ข้าม `m6`
 - **frontend:**
   - feature ใหม่ `central-warehouse` (domain / data / application / ui ตาม CONVENTIONS)
   - route ใหม่
@@ -260,7 +284,8 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 
 ## Migration
 
-- donation `schema_v` 11 → 12 เป็น additive (ค่า enum `channel` ใหม่ + field `external`)
+- donation `schema_v` 11 → 12 เป็น additive (ค่า enum `channel` ใหม่ + field `external` + `received_summary.nothing_received`)
+- writer ทุกตัว stamp 12: worker channel `m6`, worker channel `public` (`inbound/donations.py` — ให้ตรงกับ walk-in) และ walk-in / donor edit ฝั่ง frontend (`DONATION_SCHEMA_V`)
 - doc เดิมไม่ต้อง backfill
 - reader ที่ไม่รู้จัก `m6` ต้องไม่ล้ม: deploy reader v12 ก่อน แล้วจึงเปิด worker loop และ M6 env
 
@@ -269,3 +294,6 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 - 2026-11-10 — proposed (ร่างจาก M6 Integration Guide v3.1 เทียบกับ flow donation และสต็อกปัจจุบัน; รอ D1–D6)
 - 2026-11-10 — owner ตัดสิน D1 สร้าง donation ตอน `in_transit` · D2 SA + `shelter_manager` + `warehouse_staff` · D3 จับคู่ด้วย `sku` + `free_text` ตอนรับ · D4 ไม่แสดงบน public plane · D5 `phone_hash` ว่าง + `_id = donation:m6-{request_code}` · เพิ่ม `sync` endpoint ให้ worker เคาะ · D6 ยังรอทีม M6 · ยังไม่ approve — รอ owner approve ก่อนเริ่ม implement
 - 2026-11-12 — owner approve แผน implement (เลข CR-NNN ออกหลังทดสอบบน staging) · D18 หน้าอยู่ที่ `/back-office/onedata/m6` · ยืนยัน D2 3 บทบาท ไม่รวม `supply_coordinator` · D6 ใช้ค่าเริ่มต้นจนกว่าทีม M6 ตอบ · ทำบน branch `feat/m6-central-warehouse` (แตกจาก `feat/m5-referral`)
+- 2026-11-12 — spike บน M6 staging: AUTH-001/002 (refresh token หมุน), RES-001/002/003 ผ่าน · qty มาเป็น float (`469.0`) · `district` เป็น `null` ได้ · `resource_types` มี `genaral` · ทดสอบ RES-005/006/008 ผ่านหน้าจอจริงบน staging (RES-007 ยังไม่ได้ยิง) · ปิดช่อง D19 ที่การรับทีละจุด: จุดสุดท้ายที่ทำให้ใบ `m6` ถูกปฏิเสธทั้งใบได้ 422 `M6_NOT_REFUSABLE`
+- 2026-11-12 — owner ตัดสิน D19 ใบ `m6` ปฏิเสธ / ส่งต่อ / ไม่รับทุกบรรทัดไม่ได้ (`422 M6_NOT_REFUSABLE`) — ของที่ขาดบันทึกเป็น "รับไม่ครบ" · D20 "ปิดใบ — ไม่ได้รับของ" ได้ผล `received` + `received_summary.nothing_received: true` และ RES-007 note "ไม่ได้รับของ"
+- 2026-11-12 — implement บน branch `feat/m6-central-warehouse` (Mongo models, FastAPI `integrations_m6`, BFF `central-warehouse`, worker loop + expiry + projector, donation v12 + UI, หน้า `/back-office/onedata/m6`) และ sync docs (`schema.md` §2.3 §9.11–9.13, `api-contract.md` §2.10 §2.11 §5.4, ADR-0003, sitemap, role matrix, `04-donation.md`) · เปลี่ยนจากร่าง: error ของ M6 ใช้ code ขึ้นต้น `M6_` ทุกตัว (§6) · ไม่มี outbound infra ร่วมกับ M5 (client แยกเพราะ M6 ใช้ refresh grant) · route status ร่วมอยู่ใน `integrations_m5/router.py` · donation `public` ก็ stamp v12 · worker สร้าง donation ทั้งตอน `in_transit` และ `received` (กรณีพลาดสถานะ `in_transit`) · ยังไม่ได้ `pnpm openapi:update`, ทดสอบ RES-005–008 กับ M6 staging, e2e และเลข CR

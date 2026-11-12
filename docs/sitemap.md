@@ -2,7 +2,7 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-11-11 # draft CR referral-m5 D17 — `/back-office/onedata/m5` (OneData Platform menu)
+updated: 2026-11-12 # draft CR central-warehouse-m6 (2026-11-12, implemented on `feat/m6-central-warehouse`, CR number pending) — `/back-office/onedata/m6` คลังกลาง (D18; SA, SM, `warehouse_staff`) · draft CR referral-m5 D17 — `/back-office/onedata/m5` (OneData Platform menu)
 note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-155 route `/back-office/incidents` (แทน `/reports` ของ CR-040)
 ---
 
@@ -127,7 +127,8 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------- |
 | `/back-office/incidents` (`/new`, `/{id}`) | บันทึกเหตุการณ์ประจำวัน — เฉพาะ SO / SM ของศูนย์ / SA (CR-155 amend 2026-10-20) · เข้าจาก portal tile `security-incidents` (ฝ่ายรักษาความปลอดภัย) | FR-47 | `put`/`update shelter_incident:{ulid}` (state machine, append timeline) · `GET /api/v1/shelters/{code}/staff?capabilities=` |
 | `/referrals`                               | ส่งต่อหน่วยงานภายนอก (SM เท่านั้น) — SM เห็น flag medical-emergency แต่ **medical detail = null**                                                 | FR-48 | `put referral` (state `draft→sent→accepted                                                                                  | rejected→closed`) |
-| `/back-office/onedata/m5` (`/new`, `/{id}`) | **OneData Platform → OneData ระบบส่งต่อผู้ป่วย (M5)** — รายการเฉพาะชุดที่ส่งผ่าน M5 + ฟอร์มส่งผู้ป่วยไปโรงพยาบาลให้ สธ. พิจารณา (SA, SM, `medical_staff`) · เมนู M6 "OneData ระบบบริหารทรัพยากร (M6)" ยังเป็น "เร็วๆ นี้" | draft CR referral-m5 D17 | `GET /api/back-office/referral?dispatch_mode=m5`, `POST /api/back-office/referral/batch` (api-contract §2.10) |
+| `/back-office/onedata/m5` (`/new`, `/{id}`) | **OneData Platform → OneData ระบบส่งต่อผู้ป่วย (M5)** — รายการเฉพาะชุดที่ส่งผ่าน M5 + ฟอร์มส่งผู้ป่วยไปโรงพยาบาลให้ สธ. พิจารณา (SA, SM, `medical_staff`) · เมนู M6 ดูแถวถัดไป | draft CR referral-m5 D17 | `GET /api/back-office/referral?dispatch_mode=m5`, `POST /api/back-office/referral/batch` (api-contract §2.10) |
+| `/back-office/onedata/m6` | **OneData Platform → OneData ระบบบริหารทรัพยากร (M6)** — 4 แท็บ: คลังกลาง (คลัง + สต็อก), ค้นหาของ, ตะกร้าขอเบิก, คำขอของศูนย์ (ติดตามสถานะ / ยกเลิกใบ `pending`) · SA, SM, `warehouse_staff` เท่านั้น — ไม่รวม `supply_coordinator` (guard `requireCentralWarehouseAccess`) · health gate ไม่ `ready` = ปิดทุก action · ของที่ M6 ส่งออกมาเป็น donation `channel: m6` รับที่ `/back-office/stock-donations` | draft CR central-warehouse-m6 D2, D18 | `GET /api/back-office/integrations/status`, `/api/back-office/central-warehouse/*` (api-contract §2.11) |
 
 ### 2.9 Administration — SA, SM (ตาม scope ศูนย์)
 
