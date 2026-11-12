@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/svelte-query';
+import { peopleKeys } from './queries';
 import { EVACUEE_QR_ISSUE_MAX_IDS, issueQrPayloads } from './evacuee-qr-issue';
 
 const id = (n: number) =>
@@ -24,6 +26,21 @@ describe('issueQrPayloads', () => {
 			source: 'profile',
 			evacuee_ids: ULIDS
 		});
+	});
+
+	it('carries the server-issued marker of each issued item (#1301)', async () => {
+		const issue = vi.fn().mockResolvedValue([
+			{ evacuee_id: ULIDS[0], status: 'issued', qr_payload: `${ULIDS[0]}@683508`, marker: 'red' },
+			{ evacuee_id: ULIDS[1], status: 'issued', qr_payload: `${ULIDS[1]}@683508`, marker: null }
+		]);
+		const result = await issueQrPayloads(
+			{ shelterCode: 'SH001', source: 'profile', evacueeIds: ULIDS },
+			{ issue }
+		);
+		expect([...result.markers]).toEqual([
+			[ULIDS[0], 'red'],
+			[ULIDS[1], null]
+		]);
 	});
 
 	it('fails an issued item whose payload is missing or belongs to someone else', async () => {
@@ -65,5 +82,22 @@ describe('issueQrPayloads', () => {
 		await expect(
 			issueQrPayloads({ shelterCode: 'SH001', source: 'profile', evacueeIds: ULIDS }, { issue })
 		).rejects.toThrow('offline');
+	});
+
+	it('marks the prints log of each issued evacuee stale so the QR card warning refreshes (#1301)', async () => {
+		const client = new QueryClient();
+		for (const id of ULIDS) client.setQueryData(peopleKeys.evacueeQrPrints(id), []);
+		const issue = vi.fn().mockResolvedValue([
+			{ evacuee_id: ULIDS[0], status: 'issued', qr_payload: `${ULIDS[0]}@683508` },
+			{ evacuee_id: ULIDS[1], status: 'not_found' }
+		]);
+		await issueQrPayloads(
+			{ shelterCode: 'SH001', source: 'family_batch', evacueeIds: ULIDS },
+			{ issue, queryClient: client }
+		);
+		const invalidated = (id: string) =>
+			client.getQueryState(peopleKeys.evacueeQrPrints(id))?.isInvalidated;
+		expect(invalidated(ULIDS[0])).toBe(true);
+		expect(invalidated(ULIDS[1])).toBe(false);
 	});
 });

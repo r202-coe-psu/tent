@@ -35,6 +35,19 @@ beforeEach(() => {
 });
 
 describe('renderKioskQrLabelPng', () => {
+	it('sizes the QR for the level band when the label carries a marker', async () => {
+		mocks.qrModuleCount.mockResolvedValue(29);
+		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
+		mocks.renderKioskLabelPng.mockResolvedValue('cG5n');
+
+		await renderKioskQrLabelPng('PAYLOAD', { name: 'สมชาย ใจดี', marker: 'red' });
+
+		expect(mocks.generateQrDataUrl).toHaveBeenCalledWith(
+			'PAYLOAD',
+			expect.objectContaining({ width: 198 })
+		);
+	});
+
 	it('renders the kiosk label for a QR payload, as sent to the kiosk printer', async () => {
 		mocks.qrModuleCount.mockResolvedValue(33);
 		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
@@ -51,6 +64,23 @@ describe('renderKioskQrLabelPng', () => {
 });
 
 describe('prepareKioskQrImage', () => {
+	it.each([
+		['red', 198],
+		['yellow', 198]
+	] as const)('sizes the QR for the room the %s level band leaves', async (marker, widthPx) => {
+		mocks.qrModuleCount.mockResolvedValue(29);
+		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
+
+		const image = await prepareKioskQrImage('PAYLOAD', marker);
+
+		expect(mocks.generateQrDataUrl).toHaveBeenCalledWith(
+			'PAYLOAD',
+			expect.objectContaining({ width: widthPx })
+		);
+		expect(image.sizeMm).toBe(kioskQrPrintSize(29, marker).sizeMm);
+		expect(image.sizeMm).toBeLessThan(kioskQrPrintSize(29).sizeMm);
+	});
+
 	it('renders the payload with the kiosk QR colour at the size for its module count', async () => {
 		mocks.qrModuleCount.mockResolvedValue(33);
 		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');

@@ -24,6 +24,7 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Lock from '@lucide/svelte/icons/lock';
 	import Check from '@lucide/svelte/icons/check';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -45,7 +46,12 @@
 		VERIFICATION_STATUS_LABEL,
 		type VerificationStatus
 	} from '../domain/verification';
-	import type { PersonnelType, Volunteer } from '../domain/volunteer.schema';
+	import {
+		MAX_OCCUPATION_LENGTH,
+		OCCUPATION_TOO_LONG_MESSAGE,
+		type PersonnelType,
+		type Volunteer
+	} from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
 
 	let {
@@ -85,6 +91,7 @@
 
 	let fullName = $state('');
 	let phone = $state('');
+	let occupation = $state('');
 	let selectedSkills = $state<string[]>([]);
 	let personnelType = $state<PersonnelType>('volunteer');
 	let assignedShift = $state<ShiftKind | 'unset'>('unset');
@@ -101,6 +108,7 @@
 		if (lastOpenedId === volunteer._id) return;
 		fullName = `${volunteer.first_name} ${volunteer.last_name}`.trim();
 		phone = volunteer.phone ?? '';
+		occupation = volunteer.occupation ?? '';
 		selectedSkills = toSkillCodes(volunteer.skills, skillsList);
 		personnelType = volunteer.personnel_type;
 		assignedShift = todayShift ?? 'unset';
@@ -153,6 +161,10 @@
 			toast.error(VOLUNTEER_PHONE_MESSAGE);
 			return;
 		}
+		if (occupation.trim().length > MAX_OCCUPATION_LENGTH) {
+			toast.error(OCCUPATION_TOO_LONG_MESSAGE);
+			return;
+		}
 
 		try {
 			await updateMutation.mutateAsync({
@@ -160,6 +172,7 @@
 				first_name: name.slice(0, spaceIndex).trim(),
 				last_name: name.slice(spaceIndex + 1).trim(),
 				phone: parsedPhone.data,
+				occupation: occupation.trim() || null,
 				skills: selectedSkills,
 				personnel_type: personnelType
 			});
@@ -228,16 +241,30 @@
 				</div>
 				<p class="text-xs text-muted-foreground">สังกัดศูนย์: {shelterLine}</p>
 				<div class="flex flex-wrap items-center gap-2 pt-1">
-					<Button
-						type="button"
-						size="sm"
-						class="h-9 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
-						disabled={identityReviewMutation.isPending}
-						onclick={() => reviewIdentity(identityActionStatus)}
-					>
-						<Check class="h-3.5 w-3.5" />
-						{identityActionLabel}
-					</Button>
+					{#if identityStatus === 'verified'}
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							class="h-9 gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/40"
+							disabled={identityReviewMutation.isPending}
+							onclick={() => reviewIdentity(identityActionStatus)}
+						>
+							<RotateCcw class="h-3.5 w-3.5" />
+							{identityActionLabel}
+						</Button>
+					{:else}
+						<Button
+							type="button"
+							size="sm"
+							class="h-9 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+							disabled={identityReviewMutation.isPending}
+							onclick={() => reviewIdentity(identityActionStatus)}
+						>
+							<Check class="h-3.5 w-3.5" />
+							{identityActionLabel}
+						</Button>
+					{/if}
 					{#if identityStatus !== 'rejected'}
 						<Button
 							type="button"
@@ -276,6 +303,15 @@
 						<Label for="vm-phone">เบอร์มือถือ</Label>
 						<Input id="vm-phone" bind:value={phone} class="h-11" />
 					</div>
+				</div>
+				<div class="space-y-1.5">
+					<Label for="vm-occupation">อาชีพ (ทางเลือก / Optional)</Label>
+					<Input
+						id="vm-occupation"
+						bind:value={occupation}
+						placeholder="เช่น พยาบาล, วิศวกร, ค้าขาย (ไม่บังคับ)"
+						class="h-11"
+					/>
 				</div>
 			</div>
 

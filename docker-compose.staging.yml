@@ -82,6 +82,10 @@ services:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      # Print housekeeping task (CR-222 FR-17) — POSTs the frontend internal endpoint every 30 s
+      PRINT_HOUSEKEEPING_URL: http://frontend:3000
+      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:?PRINT_HOUSEKEEPING_TOKEN is required}
+      PRINT_HOUSEKEEPING_INTERVAL_MS: ${PRINT_HOUSEKEEPING_INTERVAL_MS:-}
     restart: unless-stopped
 
   fastapi:
@@ -137,7 +141,7 @@ services:
       # courier PATCH). putAsPublicWriter fails closed without it outside dev.
       COUCHDB_PUBLIC_WRITER_URL: http://${COUCHDB_PUBLIC_WRITER_USER:-public_writer}:${COUCHDB_PUBLIC_WRITER_PASSWORD}@couchdb:5984
       COUCHDB_PRINTING_SERVICE_URL: http://${COUCHDB_PRINTING_SERVICE_USER:-printing_service}:${COUCHDB_PRINTING_SERVICE_PASSWORD:-}@couchdb:5984
-      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:-}
+      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:?PRINT_HOUSEKEEPING_TOKEN is required}
       # BFF donations/needs → FastAPI on the compose network (not localhost)
       FASTAPI_INTERNAL_URL: http://fastapi:9000
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
@@ -185,24 +189,6 @@ services:
     command: ["pnpm", "import-worker"]
     healthcheck:
       disable: true
-    restart: unless-stopped
-
-  print-housekeeping:
-    container_name: tent-print-housekeeping-staging
-    image: tent/frontend:latest
-    depends_on:
-      frontend:
-        condition: service_healthy
-    environment:
-      PRINT_HOUSEKEEPING_URL: http://frontend:3000
-      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:-}
-    command: ["pnpm", "print-housekeeping"]
-    healthcheck:
-      test: ["CMD", "node", "-e", "const t=Number(require('fs').readFileSync('/tmp/print-housekeeping.ok','utf8'));process.exit(Date.now()-t<=120000?0:1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 2
-      start_period: 60s
     restart: unless-stopped
 
   nginx:

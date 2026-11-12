@@ -365,6 +365,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		memberBadgeAddingMore: 'กำลังเพิ่มอีก',
 		joinFamilyMatchesTitle: 'พบครอบครัวที่ลงทะเบียนแล้ว — เลือกครอบครัวที่ถูกต้องหนึ่งรายการ',
 		joinFamilyMatchesHint: 'ที่อยู่ใกล้กันอาจไม่ใช่บ้านเดียวกัน',
+		draftRestored: 'กู้ข้อมูลที่กรอกไว้ให้แล้ว กรุณาแนบรูปถ่ายใหม่อีกครั้ง',
 		joinFamilyCta: 'เข้าร่วมครอบครัวนี้',
 		joinFamilyCtaQueueHint: 'เพิ่มชื่อเข้าคิวกลางใบเดิม (ยังไม่เข้าศูนย์อัตโนมัติ)',
 		joinFamilySelectedTitle: 'จะเข้าร่วมครอบครัวที่มีอยู่แล้ว',
@@ -879,6 +880,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		memberBadgeAddingMore: 'Adding',
 		joinFamilyMatchesTitle: 'Matching families found — choose the correct one',
 		joinFamilyMatchesHint: 'A similar address may not be the same household',
+		draftRestored: 'Your entries were restored. Please attach the photos again.',
 		joinFamilyCta: 'Join this family',
 		joinFamilyCtaQueueHint:
 			'Adds names to the existing central queue (does not auto-check into a shelter)',

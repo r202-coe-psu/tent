@@ -34,4 +34,32 @@ describe('readEvacueeQrPrints', () => {
 			{ printed_at: 'c', hash: 'bbbbbb' }
 		]);
 	});
+
+	it('keeps the marker (#1301) of a stored entry when it is red, yellow or null', async () => {
+		get.mockResolvedValue({
+			prints: [
+				{ printed_at: 'a', hash: 'aaaaaa', marker: 'red' },
+				{ printed_at: 'b', hash: 'bbbbbb', marker: 'yellow' },
+				{ printed_at: 'c', hash: 'cccccc', marker: null }
+			]
+		});
+		expect(await readEvacueeQrPrints(ID)).toEqual([
+			{ printed_at: 'a', hash: 'aaaaaa', marker: 'red' },
+			{ printed_at: 'b', hash: 'bbbbbb', marker: 'yellow' },
+			{ printed_at: 'c', hash: 'cccccc', marker: null }
+		]);
+	});
+
+	it('drops a marker that is not red, yellow or null', async () => {
+		get.mockResolvedValue({
+			prints: [
+				{ printed_at: 'a', hash: 'aaaaaa', marker: 'green' },
+				{ printed_at: 'b', hash: 'bbbbbb', marker: 7 }
+			]
+		});
+		expect(await readEvacueeQrPrints(ID)).toEqual([
+			{ printed_at: 'a', hash: 'aaaaaa' },
+			{ printed_at: 'b', hash: 'bbbbbb' }
+		]);
+	});
 });

@@ -86,6 +86,14 @@ describe('scanner.schema', () => {
 			);
 		});
 
+		it('rejects the TV screen type: a TV is not a kiosk device', () => {
+			const base = { device_id: 'SCAN-01', name: 'ตู้ 1', shelter_code: 'SH001' };
+			expect(scannerDeviceInputSchema.safeParse({ ...base, screen_type: 'tv' }).success).toBe(
+				false
+			);
+			expect(scannerDevicePatchSchema.safeParse({ screen_type: 'tv' }).success).toBe(false);
+		});
+
 		it('rejects invalid device_id with spaces or special characters', () => {
 			const invalid = {
 				device_id: 'SCAN SH001 @!',
@@ -198,6 +206,9 @@ describe('scanner.schema', () => {
 			expect(
 				scannerDevicePersistedSchema.safeParse({ ...v2Doc, screen_type: 'wide' }).success
 			).toBe(false);
+			expect(scannerDevicePersistedSchema.safeParse({ ...v2Doc, screen_type: 'tv' }).success).toBe(
+				false
+			);
 		});
 
 		it('keeps screen_type in the summary but out of the bootstrap payload', () => {

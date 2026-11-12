@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { shelterCodeSchema } from '$lib/db/model';
 import {
 	DEFAULT_KIOSK_SCREEN_TYPE,
-	kioskScreenTypeSchema,
+	kioskDeviceScreenTypeSchema,
 	screenTypeOf
 } from '$lib/features/shared/domain/kiosk-screen';
 
@@ -33,7 +33,7 @@ export const scannerDeviceInputSchema = z
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').default('จุดคัดกรองทั่วไป'),
 		status: deviceStatusSchema.default('active'),
 		/** Which kiosk screen the device drives; picks which banners it is fed. */
-		screen_type: kioskScreenTypeSchema.default(DEFAULT_KIOSK_SCREEN_TYPE)
+		screen_type: kioskDeviceScreenTypeSchema.default(DEFAULT_KIOSK_SCREEN_TYPE)
 	})
 	.strict();
 export type ScannerDeviceInput = z.infer<typeof scannerDeviceInputSchema>;
@@ -142,7 +142,7 @@ const scannerDevicePersistedBaseShape = {
 	/** Banner group the kiosk is fed from; absent or null = no group, no banners. */
 	banner_group_id: z.string().min(1).nullable().optional(),
 	/** Absent = `compact` (additive field, no `schema_v` bump). */
-	screen_type: kioskScreenTypeSchema.optional(),
+	screen_type: kioskDeviceScreenTypeSchema.optional(),
 	/** Service closure ("ปิดให้บริการ"): absent = open (additive field, no `schema_v` bump). */
 	service_open: z.boolean().optional(),
 	service_open_changed_at: z.string().min(1).nullable().optional(),
@@ -224,7 +224,7 @@ export const scannerDeviceSummarySchema = z
 		/** Banner group the kiosk is fed from (stored absent = `null`: no group, no banners). */
 		banner_group_id: z.string().min(1).nullable(),
 		/** Which kiosk screen the device drives (stored absent = `compact`). */
-		screen_type: kioskScreenTypeSchema,
+		screen_type: kioskDeviceScreenTypeSchema,
 		/** Service closure flag (stored absent = open). */
 		service_open: z.boolean(),
 		service_open_changed_at: z.string().min(1).nullable(),
@@ -247,7 +247,7 @@ export const scannerDevicePatchSchema = z
 		name: scannerDeviceInputSchema.shape.name.optional(),
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').optional(),
 		status: deviceStatusSchema.optional(),
-		screen_type: kioskScreenTypeSchema.optional(),
+		screen_type: kioskDeviceScreenTypeSchema.optional(),
 		service_open: z.boolean().optional()
 	})
 	.strict()

@@ -85,21 +85,24 @@ fixed bug in shelter
 The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`).
 Hooks are installed when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
 
-| Hook       | When it runs                            | Command                                       | What it catches                     |
-| ---------- | --------------------------------------- | --------------------------------------------- | ----------------------------------- |
-| pre-commit | staged `frontend/` files match          | `prettier --write`, then `eslint --fix`       | formatting drift, ESLint violations |
-| pre-push   | pushed commits touch `frontend/` source | `pnpm test` (Vitest, fs module cache left on) | broken domain/data logic            |
+| Hook       | When it runs                            | Command                                                           | What it catches                     |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
+| pre-commit | staged `frontend/` files match          | `prettier --write`, then `eslint --fix`                           | formatting drift, ESLint violations |
+| pre-push   | pushed commits touch `frontend/` source | `pnpm test:changed` (Vitest `--changed origin/develop`, fs cache) | broken domain/data logic            |
 
 Backend and worker use `ruff` on pre-commit and `pytest` on pre-push the same way. Pre-push jobs
-run one after another. `pnpm check` (`svelte-check`) stays a manual step before you open a PR.
+run one after another. The frontend job runs only tests whose import graph reaches a changed file;
+config, lockfile and test-setup changes re-run everything (`CONTRIBUTING.md` §1). `pnpm check`
+(`svelte-check`) and the full `pnpm test` stay manual steps before you open a PR.
 
 - **Scope:** the frontend pre-commit job runs when `frontend/` files are staged. A docs-only
   commit at the repo root skips it. The frontend pre-push job runs when the push includes
   matching `frontend/` files.
 - **Strict Rule — No Bypass:** **Never** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` (ห้าม commit/push แบบ no-verify โดยเด็ดขาด). All quality gates must pass cleanly. Always fix the errors rather than bypassing.
 
-A green pre-commit covers definition-of-done lint/format. A green pre-push covers unit tests.
-`pnpm check` and `svelte-autofixer` stay manual (`CONTRIBUTING.md` §2).
+A green pre-commit covers definition-of-done lint/format. A green pre-push covers the unit tests
+your change can affect. The full `pnpm test`, `pnpm check` and `svelte-autofixer` stay manual
+(`CONTRIBUTING.md` §2).
 
 ---
 
@@ -740,11 +743,12 @@ features/public-portal/
 
 ```ts
 // data/public-api.ts — browser → BFF only (CR-063)
-export async function familySearch(query: string) {
+export async function familySearch(query: string, consent: SearchConsent) {
 	const response = await fetch('/api/public/v1/occupants', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ search: query })
+		// CR-231: searcher + purpose + consent_accepted are required, else 422
+		body: JSON.stringify({ search: query, ...consent })
 	});
 	const data = await response.json().catch(() => null);
 	if (!response.ok || !data) throw new Error(/* unwrap error */);

@@ -526,6 +526,13 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await expect(options.getByRole('button', { name: new RegExp(older.ticketNo) })).toHaveCount(0);
 		await page.keyboard.press('Escape');
 
+		// CR-241 R5: "ทุกวัน" brings the older open ticket back.
+		const dayFilter = page.getByRole('group', { name: 'วันที่แจก' });
+		await dayFilter.getByRole('button', { name: 'ทุกวัน' }).click();
+		await page.locator('#food-ticket').click();
+		await expect(options.getByRole('button', { name: new RegExp(older.ticketNo) })).toBeVisible();
+		await page.keyboard.press('Escape');
+
 		await desk.selectTicket('food', todayDinner);
 		await expect(page.getByText('มื้อเย็น', { exact: true }).first()).toBeVisible();
 	});
