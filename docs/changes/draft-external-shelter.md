@@ -7,18 +7,18 @@ requested_by: Dev Team B — GitHub #1242
 decided_by:
 layer: volatile
 affects:
-  - docs/data/schema.md §3.1 shelter (เพิ่ม `is_external`, `external_url`; `operation_status` +`unknown`; `capacity` req→opt เมื่อ External) · §9.1 `public_shelters`
+  - docs/data/schema.md §3.1 shelter (เพิ่ม `is_external`, `external_url`; `operation_status` +`unknown`; `capacity` req→opt เมื่อ External) · §9.1 `public_shelters` (เพิ่ม `is_external`, `external_url`; `status`/`location_status` +`unknown`; `capacity` = `0` เมื่อ External)
   - schema_v 9 → 10 (shelter; additive, doc เดิมไม่ต้อง backfill)
   - worker PROJECTION_VERSION 18 → 19 (worker/src/worker/projection_version.py)
-  - docs/prd/role-permission-matrix.md §3 (แถว Shelter registry — ตั้ง/แก้ `is_external` เฉพาะ `system_admin`)
+  - docs/prd/role-permission-matrix.md §3 (เพิ่มแถวใหม่ "Shelter registry / Profile management" — ตั้ง `is_external` ตอนสร้างเฉพาะ `system_admin`; `shelter_manager` แก้ศูนย์ External ไม่ได้ (FR-10))
   - docs/adr/0002-partner-integration-architecture.md (EXT-002/003/008 contract change)
   - amends CR-039 (shelter Excel import) · CR-077 (import full schema coverage)
   - frontend/src/lib/features/shelters/domain/schema.ts · shelters/ui (ฟอร์ม system-management, badge)
-  - frontend/src/lib/features/shelter-import/domain/columns.ts · import-row.ts · template/sample-row · e2e/shelter-import.test.ts
+  - frontend/src/lib/features/shelter-import/domain/columns.ts · import-row.ts · duplicates.ts (`ExistingShelter` +`is_external?: boolean`) · template/sample-row · e2e/shelter-import.test.ts
   - frontend/src/lib/features/public-portal (chip/pin/ตัวกรอง/i18n) · lib/features/{users,transfers,donation,needs,kiosk} (ตัวเลือกศูนย์)
   - frontend BFF /api/** route jobs (shelter import) · worker route · provisioner
-  - worker/src/worker/projectors/shelter.py · couch/processor.py · couch/bootstrap.py
-  - backend/apiapp/modules/shelter/use_case.py (`status_ui`) · utils/shelter_booking.py (`accepts_booking`) · modules/thirdparty_locations · modules/thirdparty_bookings
+  - worker/src/worker/projectors/shelter.py (+`is_external`/`external_url`; `backfill_capacity()` คืน `0` เมื่อ External แทน fallback 100) · couch/processor.py · couch/bootstrap.py
+  - backend/apiapp/modules/shelter/schemas.py (`ShelterItem`/`ShelterDetail` +`is_external: bool = False`, `external_url: str | None = None`) · backend/apiapp/modules/shelter/use_case.py (`status_ui`) · utils/shelter_booking.py (`accepts_booking`) · modules/thirdparty_locations · modules/thirdparty_bookings
 ---
 
 # draft-external-shelter — ศูนย์จากระบบภายนอก
@@ -39,10 +39,10 @@ affects:
 ### Schema / domain
 
 - FR-1 — shelter doc เพิ่ม `is_external` (bool, default `false`).
-- FR-2 — shelter doc เพิ่ม `external_url` (str\|null, optional). ถ้ามีค่า ต้องขึ้นต้น `https://` เท่านั้น; `http:`, `javascript:` และ scheme อื่น = reject.
+- FR-2 — shelter doc เพิ่ม `external_url` (str\|null, optional). ถ้ามีค่า ต้องขึ้นต้น `https://` เท่านั้น; `http:`, `javascript:` และ scheme อื่น = reject. สตริงว่าง / whitespace ล้วนแปลงเป็น `null` ก่อน validate (ไม่ถือว่า error).
 - FR-3 — `operation_status` เพิ่มค่า `unknown` (label "ไม่ทราบสถานะ"); enum = `standby | active | full_capacity | closed | cancelled | unknown`.
 - FR-4 — เมื่อ `is_external = true` ต้อง `operation_status = unknown` เสมอ (ฟอร์มล็อกค่า). ข้อยกเว้นเดียว: `system_admin` เปลี่ยนเป็น `cancelled` ได้เพื่อถอดออกจาก public.
-- FR-5 — เมื่อ `is_external = false` เลือก `unknown` ไม่ได้ (Zod + `validate_doc_update`).
+- FR-5 — เมื่อ `is_external = false` เลือก `unknown` ไม่ได้. บังคับที่ Zod (client) และ BFF `/api/**` (Zod ซ้ำฝั่ง server — shelter doc เขียนผ่าน admin credentials ทั้งหมด) ไม่เพิ่ม `validate_doc_update`; `registry-design.ts` / `REGISTRY_DESIGN_VERSION` ไม่เปลี่ยน.
 - FR-6 — `capacity` เป็น optional เมื่อ `is_external = true`; ศูนย์ปกติยังบังคับ `int > 0` ตามเดิม.
 - FR-7 — bump shelter `schema_v` 9 → 10; doc เดิมอ่านได้โดย `is_external` = `false` (ไม่มี backfill).
 
@@ -58,7 +58,7 @@ affects:
 - FR-12 — worker ข้าม listener, bootstrap และ occupancy ของศูนย์ `is_external`.
 - FR-13 — projector map `unknown` เป็นสถานะ public ที่ถูกต้อง: ไม่ใช่ HIDDEN และไม่ใช่ `open`. ศูนย์ External ยัง project เข้า `public_shelters` (ต่างจาก `cancelled`).
 - FR-14 — bump `PROJECTION_VERSION` 18 → 19.
-- FR-15 — FastAPI `status_ui` map `unknown` เป็นค่าของตัวเอง ห้าม fallback เป็น `CLOSED`.
+- FR-15 — FastAPI `status_ui` map `unknown` → `"UNKNOWN"` (ค่าของตัวเอง) ห้าม fallback เป็น `CLOSED`; ใช้สตริงเดียวกันใน OpenAPI และ `toUiShelterStatus` (`mappers.ts`).
 
 ### พฤติกรรมของศูนย์ External
 
@@ -69,7 +69,7 @@ affects:
 
 ### Public UI
 
-- FR-20 — ศูนย์ External แสดง chip สถานะ "ไม่ทราบสถานะ" สีเทา/เหลือง + icon ลิงก์ออกนอก; ลิงก์ไป `external_url` (ถ้ามี).
+- FR-20 — ศูนย์ External แสดง chip สถานะ "ไม่ทราบสถานะ" สีเทา/เหลือง + icon ลิงก์ออกนอก; ลิงก์ไป `external_url` (ถ้ามี) เปิดแท็บใหม่ด้วย `target="_blank" rel="noopener noreferrer"`.
 - FR-21 — แทนที่ตัวเลข capacity/occupancy ด้วยข้อความ "ติดต่อ ณ ศูนย์พักพิง" (i18n string คงที่ ไม่ใช่ field ใน doc).
 - FR-22 — ซ่อนปุ่มจองและลงทะเบียนล่วงหน้า.
 - FR-23 — pin บนแผนที่ใช้สีเดียวกับ chip; ตัวกรองสถานะมีตัวเลือก "ไม่ทราบสถานะ".
@@ -85,7 +85,7 @@ affects:
 - FR-27 — ชีตหลักเพิ่ม 2 คอลัมน์: "ศูนย์จากระบบภายนอก" (ใช่/ไม่ใช่; ว่าง = ไม่ใช่) และ "ลิงก์ศูนย์ภายนอก". ไฟล์เก่าที่ไม่มีคอลัมน์ยังใช้ได้.
 - FR-28 — เพิ่ม dropdown ใน `lists`, ชีต "คำแนะนำ", และแถวตัวอย่าง External ใน sample template.
 - FR-29 — แถว External: ไม่บังคับ capacity; คอลัมน์สถานะต้องว่าง (ระบบใส่ `unknown`).
-- FR-30 — แถว External ที่มีข้อมูลในชีตโซน / ผู้จัดส่งอาหาร หรือคอลัมน์ policy / สาธารณูปโภคที่ผูกกับแถวนั้น = `validation_error`.
+- FR-30 — แถว External ที่มีข้อมูลในชีตโซน / จุดแจกอาหาร หรือคอลัมน์ policy / สาธารณูปโภคที่ผูกกับแถวนั้น = `validation_error`.
 - FR-31 — จับซ้ำตามชื่อ + `duplicateAction=update`: ถ้าชนิดไม่ตรงกับ doc เดิม = `validation_error` "เปลี่ยนชนิดไม่ได้"; บังคับทั้ง preview และ worker.
 
 ---
@@ -100,7 +100,7 @@ affects:
 - EXT-002/003 คืน `location_status='unknown'` + `is_external=true`; EXT-008 → 409 `location_not_bookable` แม้มี `booking-bypass`.
 - ศูนย์ External ไม่ปรากฏใน combobox ปฏิบัติการ (user scope, transfer, donation/needs, kiosk, import) แต่ปรากฏในรายการ system-management พร้อม badge.
 - Import: ไฟล์เก่าผ่านเหมือนเดิม; แถว External ที่มีข้อมูลโซน/policy → `validation_error`; เปลี่ยนชนิดผ่าน `duplicateAction=update` → `validation_error`.
-- Test (ตามที่ตกลง): Vitest (Zod invariant, mapper, guard SA, `import-row` / `template` / `sample-row`, route jobs) · pytest (projector, use_case, `accepts_booking`, EXT API) · Playwright `@regression` mock (public UI 1 ชุด + ปรับ `e2e/shelter-import.test.ts`); ไม่เขียน live e2e ใหม่.
+- Test (ตามที่ตกลง): Vitest (Zod invariant, mapper / `toUiShelterStatus`, guard SA, `duplicates.ts`, `import-row` / `template` / `sample-row`, route jobs) · pytest (projector, use_case, `accepts_booking`, EXT API) · Playwright `@regression` mock (public UI 1 ชุด + ปรับ `e2e/shelter-import.test.ts`); ไม่เขียน live e2e ใหม่.
 
 ---
 
@@ -136,7 +136,7 @@ Team Lead PO Meeting 2026-11-07 (#1242, labels: priority:high, Before Floods): �
 ## Migration
 
 - shelter `schema_v` 9 → 10: additive. doc เดิมไม่มี `is_external` → อ่านเป็น `false`; `external_url` → `null`. ไม่มี batch migration script.
-- Zod (client) และ `validate_doc_update` ต้อง generate ตาม schema v10 (invariant FR-4/5/6/9).
+- Zod (client + BFF) ต้องอัปเดตตาม schema v10 (invariant FR-4/5/6/9). ไม่แตะ `validate_doc_update` / `REGISTRY_DESIGN_VERSION` (คงที่ 9).
 - `PROJECTION_VERSION` 18 → 19 → worker re-project `public_shelters` ครั้งเดียวหลัง deploy.
 - ไม่ต้องรัน `pnpm openapi:update` ซ้ำนอกเหนือจากที่ `status_ui` / EXT schema เปลี่ยน — commit `fastapi.json` + `openapi.d.ts` ตาม workflow §4.2.
 
