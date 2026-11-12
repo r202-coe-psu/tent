@@ -73,6 +73,28 @@ export function isShelterCancelled(doc: unknown): boolean {
 	return resolveOperationStatus(doc) === 'cancelled';
 }
 
+/** Reads one `feature_flags` key off an untyped shelter doc. */
+function readFlag(
+	doc: unknown,
+	key: 'public_visible' | 'accepts_referrals' | 'accepts_pre_registration'
+): unknown {
+	if (!doc || typeof doc !== 'object') return undefined;
+	return (doc as { feature_flags?: Record<string, unknown> }).feature_flags?.[key];
+}
+
+/**
+ * Is this shelter shown on the public plane? Not cancelled and `public_visible` not false.
+ * Mirrors `project_shelter` in the worker, which purges hidden shelters like cancelled ones.
+ */
+export function isShelterPublicVisible(doc: unknown): boolean {
+	return !isShelterCancelled(doc) && readFlag(doc, 'public_visible') !== false;
+}
+
+/** Does this shelter take new referrals? Missing flag = accepting (#1343). */
+export function isShelterAcceptingReferrals(doc: unknown): boolean {
+	return readFlag(doc, 'accepts_referrals') !== false;
+}
+
 /**
  * Can the public book a place here? (CR-070 FR-72 / T-71 validation.)
  *
@@ -85,9 +107,8 @@ export function isShelterBookable(doc: unknown): boolean {
 	const status = resolveOperationStatus(doc);
 	if (status === null) return false;
 	if (status === 'closed' || status === 'cancelled') return false;
-	if (!doc || typeof doc !== 'object') return false;
-	const flags = (doc as { feature_flags?: { accepts_pre_registration?: unknown } }).feature_flags;
-	return flags?.accepts_pre_registration === true;
+	if (!isShelterPublicVisible(doc)) return false;
+	return readFlag(doc, 'accepts_pre_registration') === true;
 }
 
 export const zoneTypeSchema = z.enum([
@@ -495,7 +516,9 @@ export const shelterFeatureFlagsSchema = z.object({
 	accepts_pre_registration: z.boolean().default(false),
 	kiosk_phone_check_in_enabled: z.boolean().default(false),
 	kiosk_thaid_check_in_enabled: z.boolean().default(false),
-	kiosk_walk_in_registration_enabled: z.boolean().default(false)
+	kiosk_walk_in_registration_enabled: z.boolean().default(false),
+	public_visible: z.boolean().default(true),
+	accepts_referrals: z.boolean().default(true)
 });
 export type ShelterFeatureFlags = z.infer<typeof shelterFeatureFlagsSchema>;
 
@@ -508,7 +531,9 @@ export const DEFAULT_SHELTER_FEATURE_FLAGS: ShelterFeatureFlags = {
 	accepts_pre_registration: false,
 	kiosk_phone_check_in_enabled: false,
 	kiosk_thaid_check_in_enabled: false,
-	kiosk_walk_in_registration_enabled: false
+	kiosk_walk_in_registration_enabled: false,
+	public_visible: true,
+	accepts_referrals: true
 };
 
 // ===== Main shelter schemas (CR-008 + CR-023 v4/v4.1) =====
