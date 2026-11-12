@@ -743,11 +743,12 @@ features/public-portal/
 
 ```ts
 // data/public-api.ts — browser → BFF only (CR-063)
-export async function familySearch(query: string) {
+export async function familySearch(query: string, consent: SearchConsent) {
 	const response = await fetch('/api/public/v1/occupants', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ search: query })
+		// CR-231: searcher + purpose + consent_accepted are required, else 422
+		body: JSON.stringify({ search: query, ...consent })
 	});
 	const data = await response.json().catch(() => null);
 	if (!response.ok || !data) throw new Error(/* unwrap error */);

@@ -2762,6 +2762,10 @@ VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไ�
 
 ### 5.1 `search_audit` — `search_audit:{ulid}` · **append-only**
 
+> **CR-231:** public search (`POST /public/v1/occupants`) **ไม่เขียน `search_audit` อีกแล้ว** — เขียน Mongo `audit_events` (§5.1a) แทน
+> (ไม่เขียนคู่, ไม่ migrate/backfill; collection `search_audits` เดิมคงไว้อ่านอย่างเดียว). `/external/v1/occupants` ไม่เปลี่ยน:
+> ยังเขียน `search_audit` แบบ hash เท่านั้น, fail-open (ND-1).
+
 | Field          | ชนิด                                          | req | หมายเหตุ                                                                  |
 | -------------- | --------------------------------------------- | --- | ------------------------------------------------------------------------- |
 | `query_kind`   | enum(`name`,`phone`,`national_id`,`passport`) | req | ชนิด query ที่ parse ได้จาก public occupants search (CR-044, path CR-065) |
@@ -2769,6 +2773,29 @@ VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไ�
 | `ip_hash`      | str                                           | req | —                                                                         |
 | `result_count` | int≥0                                         | req | —                                                                         |
 | `occurred_at`  | ts                                            | req | —                                                                         |
+
+### 5.1a `audit_events` — Mongo `audit_events` (public log, single collection, schema_v 1) · **append-only** · CR-231
+
+เก็บที่ **Mongo เท่านั้น — ไม่ sync เข้า CouchDB** (PII อยู่ที่ public plane). `_id` = `audit_event:{ULID}`.
+ไม่มี retention / TTL — เก็บถาวร (#1213). Index: `{event_type: 1, occurred_at: -1}`. Append-only ที่ระดับ application code (ไม่ update/delete).
+
+| Field | req | หมายเหตุ |
+| --- | --- | --- |
+| `_id` | req | `audit_event:{ULID}` |
+| `schema_v` | req | `1` |
+| `event_type` | req | dotted string; registry อยู่ที่เดียวใน `packages/tent-model` (`EVENT_REGISTRY`); ตอนนี้มี `public.search` |
+| `occurred_at` | req | ts (UTC) |
+| `actor` | req | `{kind: "public_searcher", ip_hash, client_ip?}` — `client_ip` **PII** ค่าจริงจาก `X-Real-IP` |
+| `request_id` | opt | จาก header `X-Request-ID` ถ้ามี — ผูกกับ log ของ FastAPI/nginx |
+| `subject` | opt | `{kind, id}` เมื่อ event ชี้ entity; `public.search` ไม่มี |
+| `payload` | req | validate ต่อ `event_type` (ห้าม key นอก model) |
+
+`public.search` `payload`: `query_kind` · `query_hash` (SHA-256; คำค้นไม่เก็บตรง) · `result_count` (int≥0) ·
+`searcher {first_name 1–100, last_name 0–100 (ว่าง = ''), phone มือถือไทย 10 หลัก normalize แล้ว}` (**PII**) ·
+`purpose` (`find_family`/`find_acquaintance`/`coordinate_aid`/`other`) · `purpose_note` (**PII** free text; มีเฉพาะ `purpose=other`, 1–200) ·
+`consent_version` (`"search-v1"`). API ที่อ่าน `audit_events` ต้อง project `actor.client_ip` และ `payload.searcher`/`purpose_note` ออกโดย default.
+
+> สิทธิ์ Mongo แบบ append-only ที่ระดับ DB ไม่ได้บังคับ (Mongo ทุก compose ยังไม่มี auth) — ต้องควบคุมสิทธิ์เข้าถึง Mongo ให้เหมาะกับ PII ที่เก็บถาวร (CR-231 FR-18)
 
 ### 5.2 `export_job` — `export_job:{ulid}`
 
