@@ -1,12 +1,15 @@
 <#
 .SYNOPSIS
-  Build scanner-client for Windows: venv -> pytest -> pyinstaller (normal + debug) -> zip.
+  Build scanner-client for Windows: venv -> pytest -> pyinstaller (normal + debug) -> zip + installer.
 
 .DESCRIPTION
   Run on a Windows machine (PyInstaller does not cross-compile): double-click build.bat, or
       powershell -ExecutionPolicy Bypass -File .\build.ps1
   Needs internet only: uses `uv` from PATH, else downloads it into .tools\; uv fetches Python.
+  Same for Inno Setup (ISCC.exe), downloaded into .tools\inno when not installed.
   Output (in dist\):
+      scanner-client-setup.exe         per-user installer (Inno Setup, installer.iss); asks
+                                       SHELTER_URL, adds shortcuts + an uninstall entry
       scanner-client-win64.zip         scanner-client\ (onedir, console-less) + README.md
                                        (.env.example + install-shortcut.bat are inside
                                         scanner-client\, next to the .exe)
@@ -94,7 +97,32 @@ $debugZip = 'dist\scanner-client-debug-win64.zip'
 Compress-Archive -LiteralPath 'dist\scanner-client', 'README.md' -DestinationPath $zip -Force
 Compress-Archive -LiteralPath 'dist\scanner-client-debug' -DestinationPath $debugZip -Force
 
-foreach ($z in $zip, $debugZip) {
+# 4. installer (Inno Setup): ISCC from PATH / a normal install, else a private copy in .tools\
+$iscc = @(
+    (Get-Command iscc -ErrorAction SilentlyContinue | ForEach-Object Source),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+    (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
+    (Join-Path $PSScriptRoot '.tools\inno\ISCC.exe')
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+if (-not $iscc) {
+    $innoDir = Join-Path $PSScriptRoot '.tools\inno'
+    $innoSetup = Join-Path $PSScriptRoot '.tools\innosetup.exe'
+    Write-Host ">> installing Inno Setup into $innoDir"
+    [Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+    Invoke-WebRequest -UseBasicParsing -Uri 'https://jrsoftware.org/download.php/is.exe' -OutFile $innoSetup
+    $p = Start-Process -FilePath $innoSetup -Wait -PassThru -ArgumentList @(
+        '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/NOICONS', "/DIR=`"$innoDir`"")
+    if ($p.ExitCode -ne 0) { throw "Inno Setup install failed with exit code $($p.ExitCode)" }
+    $iscc = Join-Path $innoDir 'ISCC.exe'
+    if (-not (Test-Path -LiteralPath $iscc)) { throw "Inno Setup install did not produce $iscc" }
+}
+$version = (Select-String -LiteralPath 'pyproject.toml' -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+Invoke-Checked $iscc @("/DAppVersion=$version", 'installer.iss')
+$setup = 'dist\scanner-client-setup.exe'
+if (-not (Test-Path -LiteralPath $setup)) { throw "Build did not produce $setup" }
+
+foreach ($z in $setup, $zip, $debugZip) {
     $mb = [math]::Round((Get-Item -LiteralPath $z).Length / 1MB, 1)
     Write-Host "OK  $z  ($mb MB)"
 }
