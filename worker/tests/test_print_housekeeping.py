@@ -13,6 +13,7 @@ from worker.printing.config import HousekeepingConfig, load_housekeeping_config
 from worker.printing.housekeeping import (
     run_housekeeping_tick,
     run_print_housekeeping_loop,
+    start_print_housekeeping,
 )
 
 TOKEN = "s3cret-token-value"
@@ -199,3 +200,37 @@ async def test_malformed_url_does_not_raise_or_write(
     assert writes.calls == []
     assert "InvalidURL" in caplog.text
     assert TOKEN not in caplog.text
+
+
+async def test_loop_removes_stale_ok_file_from_previous_run(tmp_path) -> None:
+    ok_file = tmp_path / "hk.ok"
+    ok_file.write_text("1")
+    stop = asyncio.Event()
+    stop.set()
+
+    await run_print_housekeeping_loop(
+        stop_event=stop,
+        cfg=make_cfg(ok_file=str(ok_file)),
+        client=make_client(lambda request: httpx.Response(204)),
+    )
+
+    assert not ok_file.exists()
+
+
+async def test_start_returns_none_without_token() -> None:
+    assert start_print_housekeeping({}, asyncio.Event()) is None
+
+
+async def test_start_creates_named_task_when_token_is_set(tmp_path) -> None:
+    stop = asyncio.Event()
+    stop.set()
+    env = {
+        "PRINT_HOUSEKEEPING_TOKEN": TOKEN,
+        "PRINT_HOUSEKEEPING_OK_FILE": str(tmp_path / "hk.ok"),
+    }
+
+    task = start_print_housekeeping(env, stop)
+
+    assert task is not None
+    assert task.get_name() == "print-housekeeping"
+    await asyncio.wait_for(task, 1)

@@ -10,12 +10,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import httpx
 
-from worker.printing.config import HousekeepingConfig
+from worker.printing.config import HousekeepingConfig, load_housekeeping_config
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ async def run_housekeeping_tick(
 ) -> bool:
     """POST the housekeeping endpoint once.
 
-    Never raises (only cancellation propagates): a failure is logged (status or error name, never the token or the response
-    body) and reported as ``False``.
+    Never raises (only cancellation propagates): a failure is logged (status or
+    error name, never the token or the response body) and reported as ``False``.
     """
     try:
         response = await client.post(
@@ -68,6 +68,8 @@ async def run_print_housekeeping_loop(
     logger.info(
         "print housekeeping: posting %s every %s ms", cfg.endpoint, cfg.interval_ms
     )
+    # /tmp survives `docker restart`; a stale stamp would make the first probes lie.
+    Path(cfg.ok_file).unlink(missing_ok=True)
     try:
         while not stop_event.is_set():
             await run_housekeeping_tick(
@@ -84,3 +86,17 @@ async def run_print_housekeeping_loop(
         if owns_client:
             await client.aclose()
     logger.info("print housekeeping: stopped")
+
+
+def start_print_housekeeping(
+    env: Mapping[str, str], stop_event: asyncio.Event
+) -> asyncio.Task[None] | None:
+    """Start the loop as a task, or return ``None`` when no token is set."""
+    cfg = load_housekeeping_config(env)
+    if cfg is None:
+        logger.info("print housekeeping disabled: PRINT_HOUSEKEEPING_TOKEN is not set")
+        return None
+    return asyncio.create_task(
+        run_print_housekeeping_loop(stop_event=stop_event, cfg=cfg),
+        name="print-housekeeping",
+    )
