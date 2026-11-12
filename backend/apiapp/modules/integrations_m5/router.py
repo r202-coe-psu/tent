@@ -5,11 +5,13 @@ Draft CR — referral M5 integration §5. Not exposed through nginx (only `/exte
 
 from __future__ import annotations
 
+import asyncio
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 
 from ...core.security import verify_external_secret
+from ..integrations_m6.use_case import M6UseCase, get_m6_use_case
 from .client import M5CredentialInvalid, M5Error, M5NotConfigured, M5Unavailable
 from .schemas import (
     IntegrationStatusResponse,
@@ -64,9 +66,12 @@ _M5_FAILURES = (M5NotConfigured, M5CredentialInvalid, M5Unavailable, M5Error)
 async def integration_status(
     response: Response,
     use_case: M5UseCase = Depends(get_m5_use_case),  # noqa: B008
+    m6_use_case: M6UseCase = Depends(get_m6_use_case),  # noqa: B008
 ) -> IntegrationStatusResponse:
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.status()
+    # Concurrent: the BFF gives this call 3 s, so two slow probes must not add up.
+    m5, m6 = await asyncio.gather(use_case.status(), m6_use_case.status())
+    return IntegrationStatusResponse(m5=m5, m6=m6)
 
 
 @router.get("/m5/facilities", response_model=M5FacilitiesResponse)

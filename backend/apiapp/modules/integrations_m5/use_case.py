@@ -24,7 +24,6 @@ from .client import (
     get_m5_client,
 )
 from .schemas import (
-    IntegrationStatusResponse,
     M5FacilitiesResponse,
     M5Status,
     M5SyncResponse,
@@ -98,11 +97,11 @@ class M5UseCase:
 
     # --- health gate --------------------------------------------------------------------
 
-    async def status(self) -> IntegrationStatusResponse:
+    async def status(self) -> M5Status:
         global _status_cache
         now = self._clock()
         if _status_cache and now - _status_cache[0] < _STATUS_CACHE_SECONDS:
-            return IntegrationStatusResponse(m5=_status_cache[1])
+            return _status_cache[1]
 
         checked_at = datetime.now(UTC)
         if not self._client.configured:
@@ -134,7 +133,7 @@ class M5UseCase:
                     error="unavailable",
                 )
         _status_cache = (now, m5)
-        return IntegrationStatusResponse(m5=m5)
+        return m5
 
     # --- TRF-001 ------------------------------------------------------------------------
 

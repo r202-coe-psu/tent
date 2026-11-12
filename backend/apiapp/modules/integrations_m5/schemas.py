@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..integrations_m6.schemas import M6Status
+
 Acuity = Literal["red", "yellow", "green", "black"]
 VehicleType = Literal["ambulance", "van", "helicopter", "other"]
 
@@ -24,6 +26,7 @@ class IntegrationStatusResponse(BaseModel):
     """One key per integration so M6 can be added without a breaking change."""
 
     m5: M5Status
+    m6: M6Status
 
 
 class M5Readiness(BaseModel):

@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     M5_BASE_URL: str = ""
     M5_CLIENT_ID: str = ""
     M5_CLIENT_SECRET: str = ""
+    # Outbound M6 central-warehouse API (draft CR — central warehouse M6 §3). Backend only.
+    M6_BASE_URL: str = ""
+    M6_CLIENT_ID: str = ""
+    M6_CLIENT_SECRET: str = ""
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # auth

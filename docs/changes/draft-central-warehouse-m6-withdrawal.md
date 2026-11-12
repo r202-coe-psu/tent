@@ -4,7 +4,7 @@ title: คลังกลาง (M6) — หน้าดูคลัง/ขอ�
 status: proposed
 date: 2026-11-10
 requested_by: project owner
-decided_by: project owner (รอ approve)
+decided_by: project owner (approve แผน 2026-11-12 · เลข CR ออกหลังทดสอบ)
 layer: stable # เพิ่ม outbound integration plane (ใช้ร่วมกับ draft-referral-m5-hospital-integration) + worker สร้าง donation จากระบบภายนอก — ต้อง review ก่อน
 affects:
   - docs/data/schema.md §2.3 (donation — enum `channel` เพิ่ม `m6`, field ใหม่ `external`, ข้อยกเว้น `expires_at`)
@@ -12,13 +12,13 @@ affects:
   - docs/data/schema.md §9 (Mongo collection ใหม่ `m6_withdrawals`, `m6_outbound_logs`, `m6_confirm_outbox`)
   - docs/data/api-contract.md (BFF `/api/back-office/central-warehouse/*`, `/api/back-office/integrations/status`; FastAPI `/v1/integrations/m6/*`)
   - docs/prd/role-permission-matrix.md (สิทธิ์ดูคลังกลาง / ขอเบิก / ยกเลิก)
-  - docs/sitemap.md (หน้าใหม่ `/back-office/central-warehouse`)
+  - docs/sitemap.md (หน้าใหม่ `/back-office/onedata/m6` — D18)
   - docs/adr/0002-partner-integration-architecture.md (เพิ่มทิศ outbound — tent เรียก M6; ADR เดิมครอบคลุมเฉพาะ M6 อ่านข้อมูล tent)
   - backend/apiapp/modules/integrations_m6 (ใหม่) + integrations status (ร่วมกับ M5)
   - worker/src/worker/inbound (loop ใหม่ `m6_withdrawals` → donation, donation received → `m6_confirm_outbox`)
   - worker/src/worker/donation_status.py (ไม่ expire donation channel `m6`)
   - frontend/src/lib/features/central-warehouse (feature ใหม่) + frontend/src/lib/features/donations (reader/UI รองรับ channel `m6`)
-  - frontend/src/routes/(protected)/back-office/central-warehouse (ใหม่)
+  - frontend/src/routes/(protected)/back-office/onedata/m6 (ใหม่ — D18) + frontend/src/routes/api/back-office/central-warehouse (BFF)
 related:
   - draft-referral-m5-hospital-integration (ใช้ outbound plane และ health gate ร่วมกัน)
 source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Guide" v3.1 (20–24 ส.ค. 2569, ทีม M6; ไม่ได้เก็บใน repo)
@@ -28,7 +28,7 @@ source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Gui
 
 ## สรุป (TL;DR)
 
-เพิ่มหน้าใหม่ `/back-office/central-warehouse` ให้เจ้าหน้าที่ศูนย์ทำ 3 อย่าง:
+เพิ่มหน้าใหม่ `/back-office/onedata/m6` (เมนู OneData ระบบบริหารทรัพยากร (M6) — D18) ให้เจ้าหน้าที่ศูนย์ทำ 3 อย่าง:
 
 1. ดูคลังกลางและสต็อกของ M6 (RES-001/002/003)
 2. ส่งคำขอเบิก (RES-005)
@@ -41,7 +41,7 @@ source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Gui
 - **schema:** donation `schema_v` 11 → 12 แบบ additive
 - **สิทธิ์:** SA, `shelter_manager` และ `warehouse_staff` ของศูนย์ (D2)
 
-**สถานะการตัดสิน:** owner ตัดสิน D1–D5 แล้ว (2026-11-10) เหลือ D6 ที่รอทีม M6 ตอบ
+**สถานะการตัดสิน:** owner ตัดสิน D1–D5 (2026-11-10) และ approve แผน implement พร้อม D18 (2026-11-12) · D6 ใช้ค่าเริ่มต้นจนกว่าทีม M6 ตอบ
 
 ## Why
 
@@ -55,7 +55,7 @@ source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Gui
 ### 1. Flow
 
 ```
-[/back-office/central-warehouse]
+[/back-office/onedata/m6]
  1. ดูคลังกลาง          RES-001 คลัง · RES-002 สต็อก · RES-003 ค้นของ
  2. ตะกร้า → ขอเบิก     RES-005 → pending
  3. ติดตามสถานะ         poll RES-006:
@@ -77,7 +77,7 @@ source: A_M6_API_Services_External.docx — "M6 Resource API — Integration Gui
 
 **สถานะ `issued`** ใช้กับการจ่ายภายในคลังเดียวกันที่ไม่มีการขนส่ง ไม่น่าเกิดกับคำขอที่ปลายทางเป็นศูนย์ ถ้าเกิดขึ้น ให้ถือเป็นใบจบโดยไม่สร้าง donation และแสดง "M6 ปิดใบโดยไม่มีการจัดส่ง ประสาน M6"
 
-### 2. หน้าใหม่ `/back-office/central-warehouse`
+### 2. หน้าใหม่ `/back-office/onedata/m6`
 
 | แท็บ | เนื้อหา | API |
 |---|---|---|
@@ -215,7 +215,7 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 ## เรื่องที่ต้องตัดสิน (ก่อน approve)
 
 - **D1 — จุดที่สร้าง donation** ✅ ตัดสินแล้ว: **ตอน `in_transit`** (เหตุผลในหัวข้อ 1) ไม่เลือก: สร้างตอน `approved` แล้วแก้จำนวนภายหลัง ซึ่งต้องยกเว้นกฎ CR-196
-- **D2 — สิทธิ์** ✅ ตัดสินแล้ว: **SA, `shelter_manager` และ `warehouse_staff` ของศูนย์** ดูคลังกลาง ขอเบิก และยกเลิกได้ ไม่มีขั้นอนุมัติภายในศูนย์ก่อนส่ง M6 ต้องแก้ `role-permission-matrix.md`
+- **D2 — สิทธิ์** ✅ ตัดสินแล้ว: **SA, `shelter_manager` และ `warehouse_staff` ของศูนย์** ดูคลังกลาง ขอเบิก และยกเลิกได้ ไม่มีขั้นอนุมัติภายในศูนย์ก่อนส่ง M6 ต้องแก้ `role-permission-matrix.md` · ยืนยันซ้ำ 2026-11-12: **ไม่รวม `supply_coordinator`** (แม้ guard คลังเดิม `canAccessWarehouse` จะรวม) จึงใช้ guard ใหม่ที่เช็ก 3 บทบาทตรงตัว และเอา `supply_coordinator` ออกจากเมนู M6 ที่ D17 เคยแสดงเป็น "เร็วๆ นี้"
 - **D3 — การจับคู่ของ M6 กับ `item_master`** ✅ ตัดสินแล้ว: **จับจาก `item_master.sku` = `item_code`** ถ้าไม่พบให้ staff จับคู่ `free_text` ตอนรับด้วย flow เดิม ตาราง mapping ถาวร (`item_master.m6_reference_id`) เลื่อนไป catalog alignment CR ที่ ADR-0002 รอไว้
 - **D4 — Public plane** ✅ ตัดสินแล้ว: **ไม่แสดง** donation `m6` ไม่ขึ้น transparency และไม่นับใน needs
 - **D5 — รายละเอียด schema** ✅ ตัดสินแล้ว: **`phone_hash` ว่าง** เมื่อ `channel = m6` และ **`_id = donation:m6-{request_code}`** แบบ deterministic (ไม่เลือก: ulid + unique check ผ่าน `m6_withdrawals.donation_id`)
@@ -226,6 +226,9 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
   4. qty ใน response เป็น int หรือ float (`20.0`)
   5. M6 มีแผนทำ webhook แทน polling หรือไม่
   6. key ใบเดียวของ tent ใช้ขอเบิกแทนหลายศูนย์ได้หรือไม่ (M6 ต้องแยกศูนย์จาก `requester.location_code`)
+  - **ค่าเริ่มต้นระหว่างรอ (2026-11-12):** ข้อ 1 ส่ง `{cancelled_by: {name}, reason}` · ข้อ 2 ส่ง `received_by` เป็น Array `[{name, username}]` ตามหัวข้อ 5 · ข้อ 3 ส่งครบทุกฟิลด์ที่บังคับ · ข้อ 4 รับทั้ง int และ float แล้วปัดเป็นจำนวนเต็มเมื่อไม่มีเศษ · ข้อ 5 poll ต่อ · ข้อ 6 ใช้ key เดียว แยกศูนย์ด้วย `requester.location_code` · ยืนยันด้วย spike บน M6 staging แล้วแก้ client ถ้าไม่ตรง
+  - **ข้อสังเกตจาก guide v2.1:** RES-006 `lines[]` มีแค่ `item_code`, `qty`, `qty_fulfilled` ไม่มี `name` / `unit` จึงเก็บ `name` / `unit` จากตอนขอเบิก (RES-005) ไว้ใน `m6_withdrawals.lines[]` และใช้ค่านั้นตอนสร้าง donation · M6 ไม่มี endpoint list ใบเบิก sync จึงเรียก RES-006 รายใบ
+- **D18 — path หน้าคลังกลาง** ✅ ตัดสินแล้ว (2026-11-12): **`/back-office/onedata/m6`** ให้ตรงกับ D17 ของ M5 (`/back-office/onedata/m5`) · BFF คง `/api/back-office/central-warehouse/*` (ตัวเลือกที่ไม่เลือก: `/back-office/central-warehouse` ตามร่างเดิม)
 
 ## นอก scope (CR แยกถ้าต้องการ)
 
@@ -265,3 +268,4 @@ worker ─► donation channel m6 ที่เพิ่ง received ─► m6_co
 
 - 2026-11-10 — proposed (ร่างจาก M6 Integration Guide v3.1 เทียบกับ flow donation และสต็อกปัจจุบัน; รอ D1–D6)
 - 2026-11-10 — owner ตัดสิน D1 สร้าง donation ตอน `in_transit` · D2 SA + `shelter_manager` + `warehouse_staff` · D3 จับคู่ด้วย `sku` + `free_text` ตอนรับ · D4 ไม่แสดงบน public plane · D5 `phone_hash` ว่าง + `_id = donation:m6-{request_code}` · เพิ่ม `sync` endpoint ให้ worker เคาะ · D6 ยังรอทีม M6 · ยังไม่ approve — รอ owner approve ก่อนเริ่ม implement
+- 2026-11-12 — owner approve แผน implement (เลข CR-NNN ออกหลังทดสอบบน staging) · D18 หน้าอยู่ที่ `/back-office/onedata/m6` · ยืนยัน D2 3 บทบาท ไม่รวม `supply_coordinator` · D6 ใช้ค่าเริ่มต้นจนกว่าทีม M6 ตอบ · ทำบน branch `feat/m6-central-warehouse` (แตกจาก `feat/m5-referral`)

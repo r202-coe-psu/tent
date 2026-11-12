@@ -35,6 +35,9 @@ from tent_model.external_booking import ExternalBooking
 from tent_model.external_booking_idempotency import ExternalBookingIdempotency
 from tent_model.m5_outbound_log import M5OutboundLog
 from tent_model.m5_transfer import M5Transfer
+from tent_model.m6_confirm_outbox import M6ConfirmOutbox
+from tent_model.m6_outbound_log import M6OutboundLog
+from tent_model.m6_withdrawal import M6Withdrawal
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.third_party_client import ThirdPartyClient
 from tent_model.unassigned_registration import UnassignedRegistration
@@ -72,6 +75,9 @@ ALL_DOCUMENTS = [
     ExternalBookingIdempotency,
     M5Transfer,
     M5OutboundLog,
+    M6Withdrawal,
+    M6OutboundLog,
+    M6ConfirmOutbox,
 ]
 
 _client: AsyncMongoClient | None = None

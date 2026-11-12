@@ -64,6 +64,15 @@ from tent_model.m5_transfer import (
 	M5Transfer,
 	M5TransferPatient,
 )
+from tent_model.m6_confirm_outbox import M6ConfirmOutbox
+from tent_model.m6_outbound_log import M6OutboundLog
+from tent_model.m6_withdrawal import (
+	M6_OPEN_STATUSES,
+	M6_STATUSES,
+	M6Person,
+	M6Withdrawal,
+	M6WithdrawalLine,
+)
 from tent_model.third_party_client import THIRD_PARTY_SCOPES, ThirdPartyClient
 from tent_model.unassigned_registration import (
 	PersonId,
@@ -128,6 +137,13 @@ __all__ = [
 	"M5OutboundLog",
 	"M5Transfer",
 	"M5TransferPatient",
+	"M6_OPEN_STATUSES",
+	"M6_STATUSES",
+	"M6ConfirmOutbox",
+	"M6OutboundLog",
+	"M6Person",
+	"M6Withdrawal",
+	"M6WithdrawalLine",
 	"OPEN_BOOKING_STATES",
 	"UnassignedHousehold",
 	"UnassignedMember",

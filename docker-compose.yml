@@ -85,6 +85,7 @@ services:
       FASTAPI_INTERNAL_URL: http://fastapi:9000
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
       M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
+      M6_SYNC_INTERVAL_S: ${M6_SYNC_INTERVAL_S:-45}
     restart: unless-stopped
 
   edge-users-copy:
@@ -121,6 +122,9 @@ services:
       M5_BASE_URL: ${M5_BASE_URL:-}
       M5_CLIENT_ID: ${M5_CLIENT_ID:-}
       M5_CLIENT_SECRET: ${M5_CLIENT_SECRET:-}
+      M6_BASE_URL: ${M6_BASE_URL:-}
+      M6_CLIENT_ID: ${M6_CLIENT_ID:-}
+      M6_CLIENT_SECRET: ${M6_CLIENT_SECRET:-}
       THIRDPARTY_JWT_SIGNING_KEY: ${THIRDPARTY_JWT_SIGNING_KEY:-dev-thirdparty-jwt-signing-key}
       THIRDPARTY_SECRET_SALT: ${THIRDPARTY_SECRET_SALT:-salt-change-this-on-prod}
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
