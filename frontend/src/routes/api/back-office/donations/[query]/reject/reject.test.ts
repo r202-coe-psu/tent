@@ -125,7 +125,7 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		mockCouch(baseDonation);
 
 		const response = await POST(
-			postEvent({ reason_code: 'not_needed', note: 'พื้นที่จัดเก็บไม่พอ' })
+			postEvent({ reason_code: 'not_eligible', note: 'พื้นที่จัดเก็บไม่พอ' })
 		);
 
 		expect(response.status).toBe(200);
@@ -179,6 +179,17 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		}
 	});
 
+	// #1166 — `not_needed` was split; old documents keep it but staff can no longer send it.
+	it('refuses the legacy not_needed code with REASON_REQUIRED', async () => {
+		mockCouch(baseDonation);
+
+		const response = await POST(postEvent({ reason_code: 'not_needed' }));
+
+		expect(response.status).toBe(422);
+		expect((await response.json()).error_code).toBe('REASON_REQUIRED');
+		expect(putBody()).toBeUndefined();
+	});
+
 	// CR-174 FR-12 / AC-15 — approved campaign lines go with the booking.
 	it('rejects every line of a per-line reviewed booking, keeping earlier line reasons', async () => {
 		mockCouch({
@@ -196,7 +207,7 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			]
 		} as unknown as PublicDonationDoc);
 
-		await POST(postEvent({ reason_code: 'not_needed' }));
+		await POST(postEvent({ reason_code: 'over_need' }));
 
 		const items = putBody()?.items as { review_status: string; review_reason?: string }[];
 		expect(items.map((i) => i.review_status)).toEqual(['rejected', 'rejected']);
