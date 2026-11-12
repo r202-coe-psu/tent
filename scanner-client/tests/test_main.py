@@ -155,7 +155,7 @@ def test_keep_login_false_launches_headed_channel_and_a_fresh_non_persistent_con
 
     chromium = harness.playwright.chromium
     assert chromium.launch_calls == [
-        {"channel": "msedge", "headless": False, "args": ["--start-maximized"]}
+        {"channel": "msedge", "headless": False, "args": ["--start-fullscreen"]}
     ]
     assert chromium.browser.new_context_calls == [{"no_viewport": True}]
     assert chromium.persistent_calls == []
@@ -172,7 +172,7 @@ def test_keep_login_true_uses_a_persistent_profile_under_the_data_dir(tmp_path):
             "user_data_dir": str(harness.data_dir / "profile"),
             "channel": "chrome",
             "headless": False,
-            "args": ["--start-maximized"],
+            "args": ["--start-fullscreen"],
             "no_viewport": True,
         }
     ]
@@ -183,7 +183,7 @@ def test_chromium_channel_means_bundled_chromium_without_a_channel_kwarg(tmp_pat
     harness = Harness(tmp_path, keep_login=False, browser_channel="chromium")
     harness.run()
     assert harness.playwright.chromium.launch_calls == [
-        {"headless": False, "args": ["--start-maximized"]}
+        {"headless": False, "args": ["--start-fullscreen"]}
     ]
 
     persistent = Harness(tmp_path, keep_login=True, browser_channel="chromium")

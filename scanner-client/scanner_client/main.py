@@ -21,8 +21,9 @@ LOG_FILE_NAME = "scanner-client.log"
 LOG_MAX_BYTES = 1_000_000
 LOG_BACKUP_COUNT = 3
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
-# Follow the real window size (Playwright pins a 1280x720 viewport by default); open maximized.
-WINDOW_ARGS = ["--start-maximized"]
+# Follow the real window size (Playwright pins a 1280x720 viewport by default); open fullscreen
+# like F11 (staff press F11 to get the window back, Alt+F4 closes it).
+WINDOW_ARGS = ["--start-fullscreen"]
 
 log = logging.getLogger(__name__)
 
