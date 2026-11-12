@@ -129,7 +129,11 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		);
 
 		expect(response.status).toBe(200);
-		expect(putBody()).toMatchObject({ status: 'rejected' });
+		expect(putBody()).toMatchObject({
+			status: 'rejected',
+			reject_reason: 'ไม่ตรงเกณฑ์การรับ — พื้นที่จัดเก็บไม่พอ',
+			reject_reason_code: 'not_eligible'
+		});
 	});
 
 	it('rejects a delivery already open on the counter, and writes no stock', async () => {

@@ -194,6 +194,7 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			);
 
 			expect(response.status).toBe(422);
+			expect((await response.json()).error_code).toBe('INVALID_REVIEW');
 			expect(putBody()).toBeUndefined();
 		});
 

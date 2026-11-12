@@ -895,7 +895,9 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(response.status).toBe(200);
 			expect(savedDoc().received_summary?.items?.[1]).toMatchObject({
 				rejected: true,
-				reject_reason_code: 'not_needed'
+				reject_reason_code: 'not_needed',
+				// The doc's own review text wins over the request's note.
+				reject_reason: 'ไม่ตรงเกณฑ์การรับ / เกินความต้องการ'
 			});
 		});
 
