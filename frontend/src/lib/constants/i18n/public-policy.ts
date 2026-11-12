@@ -4,7 +4,7 @@ export const PUBLIC_POLICY_I18N = {
 		ownerLine: 'แพลตฟอร์ม Smart Shelters · มหาวิทยาลัยสงขลานครินทร์',
 		title: 'นโยบายความเป็นส่วนตัว',
 		intro:
-			'นโยบายนี้อธิบายว่ามหาวิทยาลัยสงขลานครินทร์ (ต่อไปเรียกว่า “มหาวิทยาลัยฯ”) ใช้ข้อมูลส่วนบุคคลของท่านในแพลตฟอร์ม Smart Shelters อย่างไร โดยสรุปคือ มหาวิทยาลัยฯ เก็บชื่อ เลขประจำตัวประชาชน ที่อยู่ เบอร์โทรศัพท์ สมาชิกในครอบครัว ความต้องการสิ่งของ และข้อมูลสุขภาพเท่าที่จำเป็น เพื่อลงทะเบียนเข้าศูนย์พักพิง จัดที่พัก อาหารและสิ่งของ ดูแลผู้ป่วยและกลุ่มเปราะบาง และช่วยให้ญาติตามหากันได้ ข้อมูลจะส่งต่อเฉพาะหน่วยงานช่วยเหลือ สถานพยาบาล และหน่วยงานเยียวยาเท่าที่จำเป็น และไม่นำไปใช้เพื่อการค้า มหาวิทยาลัยฯ เก็บข้อมูลไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 แล้วจึงลบหรือทำให้ระบุตัวบุคคลไม่ได้ ท่านขอดู ขอแก้ไข ขอลบ หรือถอนความยินยอมได้ทุกเมื่อ',
+			'นโยบายนี้อธิบายว่ามหาวิทยาลัยสงขลานครินทร์ (ต่อไปเรียกว่า “มหาวิทยาลัยฯ”) ใช้ข้อมูลส่วนบุคคลของท่านในแพลตฟอร์ม Smart Shelters อย่างไร โดยสรุปคือ มหาวิทยาลัยฯ เก็บชื่อ เลขประจำตัวประชาชน ที่อยู่ เบอร์โทรศัพท์ สมาชิกในครอบครัว ความต้องการสิ่งของ และข้อมูลสุขภาพเท่าที่จำเป็น เพื่อลงทะเบียนเข้าศูนย์พักพิง จัดที่พัก อาหารและสิ่งของ ดูแลผู้ป่วยและกลุ่มเปราะบาง และช่วยให้ญาติตามหากันได้ ข้อมูลจะส่งต่อเฉพาะหน่วยงานช่วยเหลือ สถานพยาบาล และหน่วยงานเยียวยาเท่าที่จำเป็น และไม่นำไปใช้เพื่อการค้า มหาวิทยาลัยฯ เก็บข้อมูลไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 แล้วจึงลบหรือทำให้ระบุตัวบุคคลไม่ได้ (ยกเว้นข้อมูลผู้ค้นหาญาติ ซึ่งเก็บไว้โดยไม่มีกำหนด) ท่านขอดู ขอแก้ไข ขอลบ หรือถอนความยินยอมได้ทุกเมื่อ (ยกเว้นข้อมูลผู้ค้นหาญาติที่ลบไม่ได้)',
 		collectionIntro: 'รายละเอียดแต่ละเรื่องมีดังนี้',
 		sections: [
 			{
@@ -38,14 +38,19 @@ export const PUBLIC_POLICY_I18N = {
 				body: 'เพื่อให้ญาติตามหาท่านได้ ระบบค้นหาญาติจะแสดงชื่อของท่านและศูนย์พักพิงที่ท่านพักอยู่ โดยปิดบังนามสกุลและที่อยู่บางส่วน หากท่านไม่ต้องการให้ชื่อของท่านปรากฏในระบบค้นหาญาติ แจ้งเจ้าหน้าที่ประจำศูนย์เพื่อซ่อนชื่อของท่านได้'
 			},
 			{
+				id: 'searcher-data',
+				title: 'ข้อมูลผู้ค้นหาญาติ',
+				body: 'เมื่อท่านใช้ระบบค้นหาญาติ ระบบจะบันทึกชื่อ นามสกุล เบอร์โทรศัพท์ที่ท่านกรอก หมายเลข IP ของท่าน จุดประสงค์การค้นหา และเหตุผล (กรณีเลือก "อื่นๆ") พร้อมการยืนยันความยินยอมของท่าน เพื่อตรวจสอบย้อนหลังและป้องกันการใช้ระบบค้นหาในทางมิชอบ ข้อมูลนี้เก็บในฐานข้อมูล ไม่ถูกส่งเข้าระบบศูนย์ และเก็บไว้โดยไม่มีกำหนดเพื่อเป็นหลักฐานตรวจสอบย้อนหลัง เนื่องจากเป็นบันทึกต่อท้ายเท่านั้น จึงไม่สามารถลบได้'
+			},
+			{
 				id: 'retention',
 				title: 'ระยะเวลาเก็บรักษาข้อมูล',
-				body: 'มหาวิทยาลัยฯ เก็บข้อมูลไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 เมื่อพ้นกำหนดจะลบหรือทำให้ข้อมูลระบุตัวบุคคลไม่ได้ เว้นแต่กฎหมายกำหนดให้ต้องเก็บไว้นานกว่านั้น ข้อมูลสถิติภาพรวมที่ระบุตัวบุคคลไม่ได้อาจเก็บไว้ต่อเพื่อการศึกษาและวางแผน'
+				body: 'มหาวิทยาลัยฯ เก็บข้อมูลไว้จนถึงวันที่ 31 ธันวาคม พ.ศ. 2569 เมื่อพ้นกำหนดจะลบหรือทำให้ข้อมูลระบุตัวบุคคลไม่ได้ เว้นแต่กฎหมายกำหนดให้ต้องเก็บไว้นานกว่านั้น ข้อมูลสถิติภาพรวมที่ระบุตัวบุคคลไม่ได้อาจเก็บไว้ต่อเพื่อการศึกษาและวางแผน ทั้งนี้ ข้อกำหนดนี้ไม่ใช้กับข้อมูลผู้ค้นหาญาติ (ดูหัวข้อ “ข้อมูลผู้ค้นหาญาติ”) ซึ่งเก็บไว้โดยไม่มีกำหนด'
 			},
 			{
 				id: 'rights',
 				title: 'สิทธิของท่าน',
-				body: 'ท่านมีสิทธิขอดู ขอแก้ไข ขอลบ ขอให้ระงับการใช้ คัดค้านการใช้ และถอนความยินยอมเกี่ยวกับข้อมูลของท่านได้ทุกเมื่อ โดยไม่มีค่าใช้จ่ายและไม่ต้องระบุเหตุผล การถอนความยินยอมไม่กระทบการใช้ข้อมูลที่ทำไปแล้วโดยชอบด้วยกฎหมาย ท่านใช้สิทธิได้ที่จุดลงทะเบียนของศูนย์พักพิง หรือทางอีเมล Thanathip.l@psu.ac.th'
+				body: 'ท่านมีสิทธิขอดู ขอแก้ไข ขอลบ ขอให้ระงับการใช้ คัดค้านการใช้ และถอนความยินยอมเกี่ยวกับข้อมูลของท่านได้ทุกเมื่อ โดยไม่มีค่าใช้จ่ายและไม่ต้องระบุเหตุผล การถอนความยินยอมไม่กระทบการใช้ข้อมูลที่ทำไปแล้วโดยชอบด้วยกฎหมาย ทั้งนี้ ข้อมูลผู้ค้นหาญาติ (ดูหัวข้อ “ข้อมูลผู้ค้นหาญาติ”) เป็นหลักฐานตรวจสอบแบบบันทึกต่อท้ายเท่านั้น จึงไม่สามารถลบหรือแก้ไขได้ ท่านใช้สิทธิได้ที่จุดลงทะเบียนของศูนย์พักพิง หรือทางอีเมล Thanathip.l@psu.ac.th'
 			},
 			{
 				id: 'contact',
@@ -53,7 +58,8 @@ export const PUBLIC_POLICY_I18N = {
 				body: 'หากมีคำถามเกี่ยวกับข้อมูลส่วนบุคคล ติดต่อมหาวิทยาลัยฯ ได้ทางอีเมล Thanathip.l@psu.ac.th หรือติดต่อด้วยตนเองที่จุดลงทะเบียนของศูนย์พักพิง'
 			}
 		],
-		closing: 'ท่านเปลี่ยนใจหรือถอนความยินยอมได้ทุกเมื่อที่จุดลงทะเบียนของศูนย์พักพิง',
+		closing:
+			'ท่านเปลี่ยนใจหรือถอนความยินยอมได้ทุกเมื่อที่จุดลงทะเบียนของศูนย์พักพิง (ยกเว้นข้อมูลผู้ค้นหาญาติที่บันทึกไปแล้ว)',
 		footerLink: 'นโยบายความเป็นส่วนตัว'
 	},
 	en: {
@@ -61,7 +67,7 @@ export const PUBLIC_POLICY_I18N = {
 		ownerLine: 'Smart Shelters platform · Prince of Songkla University',
 		title: 'Privacy Policy',
 		intro:
-			'This policy explains how Prince of Songkla University (the “University”) uses your personal data on the Smart Shelters platform. In short, the University collects your name, national ID number, address, phone number, family members, needs for supplies, and health information only as needed. It uses them to register you at a shelter, arrange accommodation, food and supplies, care for patients and vulnerable people, and help relatives find each other. Data is shared only with relief agencies, healthcare providers, and compensation agencies as needed, and is never used commercially. The University keeps the data until 31 December 2026 (B.E. 2569), then deletes it or makes it anonymous. You can ask to see, correct, or delete your data, or withdraw consent, at any time.',
+			'This policy explains how Prince of Songkla University (the “University”) uses your personal data on the Smart Shelters platform. In short, the University collects your name, national ID number, address, phone number, family members, needs for supplies, and health information only as needed. It uses them to register you at a shelter, arrange accommodation, food and supplies, care for patients and vulnerable people, and help relatives find each other. Data is shared only with relief agencies, healthcare providers, and compensation agencies as needed, and is never used commercially. The University keeps the data until 31 December 2026 (B.E. 2569), then deletes it or makes it anonymous (except relative-search user data, which is kept indefinitely). You can ask to see, correct, or delete your data, or withdraw consent, at any time (except relative-search user data, which cannot be deleted).',
 		collectionIntro: 'The details are as follows.',
 		sections: [
 			{
@@ -95,14 +101,19 @@ export const PUBLIC_POLICY_I18N = {
 				body: 'So that relatives can find you, the relative search shows your name and the shelter where you are staying, with your surname and address partly hidden. If you do not want your name to appear in the relative search, tell the shelter staff and they can hide it.'
 			},
 			{
+				id: 'searcher-data',
+				title: 'Relative-search user data',
+				body: 'When you use the relative search, the system records the first name, last name and phone number you enter, your IP address, your search purpose, and your reason (if you choose “Other”), together with your consent. This is kept for after-the-fact review and to prevent misuse of the search. It is stored in the public-side database, is not sent to the central system, and is kept indefinitely as audit evidence. Because it is an append-only audit record, it cannot be deleted.'
+			},
+			{
 				id: 'retention',
 				title: 'How long we keep data',
-				body: 'The University keeps the data until 31 December 2026 (B.E. 2569). After that date it deletes the data or makes it anonymous, unless the law requires it to be kept longer. Overall statistics that cannot identify anyone may be kept for research and planning.'
+				body: 'The University keeps the data until 31 December 2026 (B.E. 2569). After that date it deletes the data or makes it anonymous, unless the law requires it to be kept longer. Overall statistics that cannot identify anyone may be kept for research and planning. This does not apply to relative-search user data (see “Relative-search user data”), which is kept indefinitely.'
 			},
 			{
 				id: 'rights',
 				title: 'Your rights',
-				body: 'You have the right to see, correct, or delete your data, to ask the University to restrict or stop using it, and to withdraw your consent, at any time, free of charge and without giving a reason. Withdrawing consent does not affect use of your data that was lawfully carried out before. You can use these rights at the shelter registration desk or by email at Thanathip.l@psu.ac.th.'
+				body: 'You have the right to see, correct, or delete your data, to ask the University to restrict or stop using it, and to withdraw your consent, at any time, free of charge and without giving a reason. Withdrawing consent does not affect use of your data that was lawfully carried out before. The exception is relative-search user data (see “Relative-search user data”): it is an append-only audit record and cannot be deleted or edited. You can use these rights at the shelter registration desk or by email at Thanathip.l@psu.ac.th.'
 			},
 			{
 				id: 'contact',
@@ -111,7 +122,7 @@ export const PUBLIC_POLICY_I18N = {
 			}
 		],
 		closing:
-			'You can change your mind or withdraw consent at any time at the shelter registration desk.',
+			'You can change your mind or withdraw consent at any time at the shelter registration desk (except for relative-search user data already recorded).',
 		footerLink: 'Privacy Policy'
 	}
 } as const;

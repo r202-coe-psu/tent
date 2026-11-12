@@ -1433,6 +1433,30 @@ export function assertLotWriteOffsFit(
 	}
 }
 
+/**
+ * A count line names the lot it counted, whether it is short or over (#518). The lot list a
+ * walker counts from is read before the save, so after a shelter switch it can belong to
+ * ANOTHER shelter; a surplus carries no `lot_ref` on its row, so nothing else would notice.
+ * Each counted lot must exist in this ledger with the same item and unit.
+ */
+export function assertCountedLotsExist(
+	ledger: readonly StockLedger[],
+	lines: readonly { item_id: string; unit: string; lot_ref: string }[]
+): void {
+	if (lines.length === 0) return;
+	const itemIds = new Set(lines.map((l) => l.item_id));
+	const { lots } = projectLotsByItem(ledger.filter((row) => itemIds.has(row.item_id)));
+	const known = new Map(lots.map((lot) => [lot.lot_ref, lot]));
+	for (const line of lines) {
+		const lot = known.get(line.lot_ref);
+		if (!lot || lot.item_id !== line.item_id || lot.unit !== line.unit) {
+			throw new LotWriteOffError(
+				'ไม่พบล็อตที่นับในคลังของศูนย์นี้ — ข้อมูลอาจเปลี่ยนไปหรือสลับศูนย์ กรุณาโหลดใหม่แล้วนับอีกครั้ง'
+			);
+		}
+	}
+}
+
 /** A lot-bound write-off that does not fit its lot (`assertLotWriteOffsFit`). */
 export class LotWriteOffError extends Error {
 	constructor(message: string) {

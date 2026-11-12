@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
+from tent_model.audit_event import AuditEvent
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 from tent_model.search_audit import SearchAudit
@@ -419,6 +420,7 @@ async def test_no_search_audit_and_log_holds_no_query(
 
     # ThirdPartyAccessLog is the only audit trail — public search's buffer stays untouched.
     assert await SearchAudit.find_all().to_list() == []
+    assert await AuditEvent.find_all().to_list() == []
 
     logs = await ThirdPartyAccessLog.find_all().to_list()
     assert len(logs) == 1

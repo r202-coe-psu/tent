@@ -284,6 +284,7 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 		nickname: 'อรุณ',
 		phone: '0821111111',
 		email: null,
+		occupation: 'เจ้าหน้าที่ประสานงาน',
 		// Store the Master Data codes, matching job.skills_required and the live
 		// walk-in/profile forms. Labels are resolved by the UI at render time.
 		skills: masterCodes(master, 'volunteer_skills', 'reception'),
@@ -296,6 +297,7 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 		last_name: 'ยิ้มแย้ม',
 		phone: '0822222222',
 		email: null,
+		occupation: 'พ่อครัว',
 		skills: masterCodes(master, 'volunteer_skills', 'cooking', 'logistics'),
 		organization: null,
 		national_id: null,
@@ -327,6 +329,7 @@ export async function seedVolunteers(master: MasterLookup): Promise<void> {
 		nickname: 'หมอนิด',
 		phone: '0825555555',
 		email: null,
+		occupation: 'พยาบาลวิชาชีพ',
 		// The master's own controlled item — this is what makes `initialStatusForSkills`
 		// hold the seeded application at `pending_review`.
 		skills: masterCodes(master, 'volunteer_skills', 'medical'),

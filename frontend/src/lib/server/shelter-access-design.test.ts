@@ -4210,6 +4210,70 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(validTicket, null, WAREHOUSE)).not.toThrow();
 			});
 
+			describe('service_date (draft-food-ticket-service-date)', () => {
+				const v2Food = { ...validTicket, schema_v: 2, service_date: '2026-09-02' };
+
+				it('accepts a schema_v 2 food ticket with its service day', () => {
+					expect(() => compile()(v2Food, null, WAREHOUSE)).not.toThrow();
+				});
+
+				it('requires a well-formed service day on a schema_v 2 food ticket', () => {
+					const { service_date: _omit, ...missing } = v2Food;
+					void _omit;
+					expectForbidden(
+						() => compile()(missing, null, WAREHOUSE),
+						/Food requisition_ticket requires service_date/
+					);
+					expectForbidden(
+						() => compile()({ ...v2Food, service_date: '2/9/2026' }, null, WAREHOUSE),
+						/must be YYYY-MM-DD/
+					);
+				});
+
+				it('keeps transfer tickets on schema_v 1', () => {
+					const { service_date: _omit, ...noDay } = v2Food;
+					void _omit;
+					expectForbidden(
+						() =>
+							compile()(
+								{
+									...noDay,
+									ticket_no: 'TKT-TRANSFER-0001',
+									requisition_type: 'transfer',
+									meal: undefined
+								},
+								null,
+								WAREHOUSE
+							),
+						/Unsupported requisition_ticket schema version/
+					);
+				});
+
+				it('keeps service_date off non-food tickets', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								{
+									...v2Food,
+									ticket_no: 'TKT-SUPPLIES-0001',
+									requisition_type: 'supplies',
+									meal: undefined
+								},
+								null,
+								WAREHOUSE
+							),
+						/Only food requisition_ticket carries service_date/
+					);
+				});
+
+				it('keeps the service day fixed once the ticket exists', () => {
+					expectForbidden(
+						() => compile()({ ...v2Food, service_date: '2026-09-03' }, v2Food, WAREHOUSE),
+						/requisition_ticket.service_date is immutable/
+					);
+				});
+			});
+
 			it('rejects creating ticket with non-PENDING_PICK status', () => {
 				expectForbidden(
 					() => compile()({ ...validTicket, status: 'DISTRIBUTING' }, null, WAREHOUSE),

@@ -5,6 +5,7 @@ import {
 	RequisitionTicketRemoteRepository,
 	type RequisitionTicketRepository
 } from './requisition-ticket.repository';
+import { thailandCalendarDay } from '../../domain/food-supplies';
 
 const couch = await vi.hoisted(async () => {
 	const { createInMemoryCouch } = await import('$lib/testing/in-memory-couch');
@@ -40,6 +41,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 				ticket_no: 'TKT-FOOD-0001',
 				requisition_type: 'food',
 				meal: 'lunch',
+				service_date: thailandCalendarDay(),
 				source_location: 'warehouse:main',
 				destination_location: 'distribution_point:tent_a',
 				items: [
@@ -58,7 +60,8 @@ describe('RequisitionTicketRemoteRepository', () => {
 		expect(ticket._id).toMatch(/^requisition_ticket:[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(ticket.type).toBe('requisition_ticket');
 		expect(ticket.status).toBe('PENDING_PICK');
-		expect(ticket.schema_v).toBe(1);
+		expect(ticket.schema_v).toBe(2);
+		expect(ticket.service_date).toBe(thailandCalendarDay());
 		expect(ticket.shelter_code).toBe('SH001');
 		expect(ticket.meal).toBe('lunch');
 
@@ -126,6 +129,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 				ticket_no: 'TKT-FOOD-0001',
 				requisition_type: 'food',
 				meal: 'lunch',
+				service_date: thailandCalendarDay(),
 				source_location: 'warehouse:main',
 				destination_location: 'distribution_point:hall_a',
 				items: [
@@ -174,9 +178,11 @@ describe('RequisitionTicketRemoteRepository', () => {
 		// Transfer ticket — same Ticket shape, completes at the warehouse (IN_TRANSIT → COMPLETED).
 		const foodWithoutMeal: Record<string, unknown> = { ...food };
 		delete foodWithoutMeal.meal;
+		delete foodWithoutMeal.service_date;
 		const transferId = 'requisition_ticket:01JTRANSFER000000000000000';
 		store.set(transferId, {
 			...foodWithoutMeal,
+			schema_v: 1,
 			_id: transferId,
 			ticket_no: 'TKT-TRANSFER-0001',
 			requisition_type: 'transfer'
@@ -199,6 +205,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 				ticket_no: 'TKT-FOOD-0002',
 				requisition_type: 'food',
 				meal: 'dinner',
+				service_date: thailandCalendarDay(),
 				source_location: 'warehouse:main',
 				destination_location: 'distribution_point:c',
 				items: [
@@ -246,6 +253,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 				ticket_no: 'TKT-FOOD-0003',
 				requisition_type: 'food',
 				meal: 'breakfast',
+				service_date: thailandCalendarDay(),
 				source_location: 'warehouse:main',
 				destination_location: 'point:a',
 				items: [
@@ -273,6 +281,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 				ticket_no: 'TKT-FOOD-0004',
 				requisition_type: 'food',
 				meal: 'lunch',
+				service_date: thailandCalendarDay(),
 				source_location: 'warehouse:main',
 				destination_location: 'point:a',
 				items: [
@@ -317,6 +326,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 				ticket_no: 'TKT-FOOD-0005',
 				requisition_type: 'food',
 				meal: 'lunch',
+				service_date: thailandCalendarDay(),
 				source_location: 'warehouse:main',
 				destination_location: 'point:a',
 				items: [
@@ -357,6 +367,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 				ticket_no: 'TKT-FOOD-0006',
 				requisition_type: 'food',
 				meal: 'dinner',
+				service_date: thailandCalendarDay(),
 				source_location: 'warehouse:main',
 				destination_location: 'point:a',
 				items: [
