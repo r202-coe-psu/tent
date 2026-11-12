@@ -986,7 +986,7 @@ Content-Type: application/json
 
 #### 2.9.4 Internal — `POST /api/internal/printers/housekeeping`
 
-**Internal (compose network เท่านั้น — nginx ตอบ `404` ที่ `/api/internal/printers/`):** container `print-housekeeping` (image เดียวกับ frontend)
+**Internal (compose network เท่านั้น — nginx ตอบ `404` ที่ `/api/internal/printers/`):** sync worker (`worker`, task `print-housekeeping`)
 เรียกทุก 30 วิ (`PRINT_HOUSEKEEPING_INTERVAL_MS`) · BFF ไม่ตั้ง timer เอง.
 
 | Method | Path                                  | Auth                                                         | สำเร็จ                                         |
