@@ -24,7 +24,7 @@ affects:
 > **สรุป (TL;DR):**
 >
 > - **เปลี่ยนอะไร:** หน้าตั้งค่าศูนย์เพิ่ม 2 toggle เก็บใน `shelter.feature_flags`: `public_visible` (default `true`) และ `accepts_referrals` (default `true`)
-> - **ผล:** `public_visible = false` → ศูนย์หายจาก public plane และ external API ทั้งหมด (ใช้ทางเดียวกับ `cancelled`); `accepts_referrals = false` → เลือกศูนย์เป็นปลายทาง referral ไม่ได้, สร้างใหม่และรับใบที่รออยู่ตอบ 422
+> - **ผล:** `public_visible = false` → ศูนย์หายจาก public plane และ external API ทั้งหมด (ใช้ทางเดียวกับ `cancelled`); `accepts_referrals = false` → เลือกศูนย์เป็นปลายทาง referral ไม่ได้, สร้างใหม่ ส่ง (`draft → sent`) และรับใบที่รออยู่ตอบ 422
 > - **build:** domain flags + helper · worker คืน `delete` เมื่อซ่อน + rescan เมื่อเปิดกลับ · BFF กรอง registry · referral picker/POST/accept ตรวจ flag · UI 2 switch
 > - **กระทบ:** schema.md `feature_flags` (ไม่ bump `schema_v`) · worker `PROJECTION_VERSION` 18→19 · ไม่แก้ FastAPI
 
@@ -65,6 +65,7 @@ affects:
 - FR-16 — `shelter-combobox` ไม่เสนอศูนย์ที่ `isShelterAcceptingReferrals() === false` (กรองเหมือน `closed` / `cancelled`).
 - FR-17 — `POST /api/back-office/referral` อ่าน shelter ปลายทางจาก registry; ปลายทางไม่รับการส่งต่อ → 422 `{ error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' }` และไม่เขียน doc. การสร้างจาก SPA ผ่าน `referral.remote.ts` ตรงไป CouchDB ไม่ผ่าน route นี้ จึงไม่ถูกบล็อกที่ server ในรอบนี้ — กันที่ picker (FR-16) และจุดรับ (FR-18); ดู Q-6.
 - FR-18 — `transition(→ accepted)` ตรวจ registry ของปลายทางใหม่ทุกครั้ง **ก่อน** cross-DB transfer; ปลายทางไม่รับการส่งต่อ → `CouchDbReferralError` 422 ข้อความเดียวกับ FR-17; ไม่ย้ายผู้อพยพ ไม่เปลี่ยนสถานะ referral. ครอบคลุม `/referral/[id]/transition` และ `/referral/bulk-transition` (bulk = ล้มเป็นรายใบ).
+- FR-18a — `transition(→ sent)` ของ referral `capacity` ที่มี `to_shelter_code` ตรวจ registry ของปลายทางก่อนเปลี่ยนสถานะ; ปลายทางไม่รับการส่งต่อ → `CouchDbReferralError` 422 ข้อความเดียวกับ FR-17 ใบคงเป็น `draft` และผู้ใช้เห็นข้อความทันทีตอนกดส่ง. ครอบคลุม `/referral/[id]/transition` และ `/referral/bulk-transition` (bulk = ล้มเป็นรายใบ). `draft → closed` ยังทำได้.
 - FR-19 — `→ rejected` และ `→ closed` ยังทำได้ตามเดิมเมื่อปลายทางปิดรับ.
 - FR-20 — referral ประเภท `resource` / `medical-emergency` ไม่ถูกกระทบ.
 
@@ -90,7 +91,7 @@ affects:
 
 - E-1 — ศูนย์ `cancelled` หรือ `closed` ที่ `public_visible = false`: `cancelled` ถูกลบอยู่แล้ว (ไม่เปลี่ยนผล); `closed` + ซ่อน → แถว `public_shelters` ถูกลบ (ยกเว้นต่อ CR-183 soft-delete) — ดู Q-2.
 - E-2 — PATCH แทน `feature_flags` ทั้ง object: client ที่ส่ง `feature_flags` แบบไม่มีสอง key ใหม่ → Zod default เติม `true` (ไม่ซ่อน/ไม่ปิดรับโดยไม่ตั้งใจ).
-- E-3 — referral ที่สถานะ `draft`/`sent` อยู่แล้วตอนปิดรับ: ไม่ถูกเปลี่ยนสถานะอัตโนมัติ; accept ได้ 422 จนกว่าจะเปิดรับ; reject/close ได้.
+- E-3 — referral ที่สถานะ `draft`/`sent` อยู่แล้วตอนปิดรับ: ไม่ถูกเปลี่ยนสถานะอัตโนมัติ; `draft` กดส่งได้ 422 (FR-18a), `sent` กดรับได้ 422 จนกว่าจะเปิดรับ; reject/close ได้.
 - E-4 — สลับ `public_visible` ถี่ ๆ: แต่ละครั้ง worker ลบหรือ rescan ทั้งศูนย์; ผลสุดท้ายตาม revision ล่าสุดของ registry doc.
 - E-5 — ซ่อนศูนย์ไม่กระทบ staff plane: เจ้าหน้าที่ยังเห็น/ใช้งานศูนย์ตามปกติ และยังเป็นปลายทาง referral ได้ถ้า `accepts_referrals = true`.
 
@@ -99,7 +100,7 @@ affects:
 - [ ] doc ศูนย์เดิม (ไม่มี key) แสดงบน public และรับ referral ได้เหมือนเดิม.
 - [ ] ปิด `public_visible` (ผ่าน dialog ยืนยัน) → หลัง worker ประมวลผล ศูนย์ไม่ปรากฏใน public ทุกหน้า (ค้นหาศูนย์, needs, transparency, ค้นหาผู้พักพิง, งานอาสา) และ external API; `/api/public/v1/shelters/{code}` 404; จอง/ลงทะเบียนล่วงหน้าไม่ได้.
 - [ ] เปิด `public_visible` กลับ → ศูนย์และข้อมูลราย shelter กลับมาใน public หลัง worker rescan.
-- [ ] ปิด `accepts_referrals` → ศูนย์ไม่อยู่ใน referral picker; `POST /api/back-office/referral` ไป shelter นั้นตอบ 422; accept ใบ `sent` ที่ค้างอยู่ตอบ 422 และผู้อพยพไม่ถูกย้าย; reject/close ใบเดิมสำเร็จ.
+- [ ] ปิด `accepts_referrals` → ศูนย์ไม่อยู่ใน referral picker; `POST /api/back-office/referral` ไป shelter นั้นตอบ 422; ส่งใบ `draft` ไปศูนย์นั้นตอบ 422 และใบคงเป็น `draft`; accept ใบ `sent` ที่ค้างอยู่ตอบ 422 และผู้อพยพไม่ถูกย้าย; reject/close ใบเดิมสำเร็จ.
 - [ ] ผู้ที่ไม่ใช่ `system_admin` / `shelter_manager` ของศูนย์ PATCH flag ได้ 403.
 - [ ] Tests: domain (defaults, doc เดิมอ่านเป็น `true`, `isShelterBookable`, helper ใหม่) · form DOM (2 switch + dialog) · worker (projector delete, processor gate, rescan เมื่อเปิดกลับ) · BFF (list filter, risk/shelter-policy 404, referral POST 422, accept 422, reject/close ผ่าน, bulk ล้มรายใบ) · combobox filter · e2e shelters / referrals / public shelters.
 
@@ -110,6 +111,7 @@ affects:
 - Q-2 — ศูนย์ `closed` ที่ถูกซ่อน: ยอมให้ลบแถว `public_shelters` (ขัด CR-183 soft-delete สำหรับ partner) หรือ worker ควรคงแถว closed ไว้?
   - **ตัดสินแล้ว 2026-11-12 (kong):** ศูนย์ `closed` ยังแสดงตามกฎ CR-183 ตามปกติ; จะหายจาก public เฉพาะเมื่อกด `public_visible = false` (ตามร่าง E-1)
 - Q-3 — การส่ง (`draft → sent`) ไปศูนย์ที่ปิดรับ: block 422 ด้วยหรือไม่ (ร่างนี้ block เฉพาะ create และ accept)?
+  - **ตัดสินแล้ว 2026-11-12 (kong):** ห้ามตอนส่งด้วย — ส่งไม่ได้จะได้รู้ทันที (เพิ่ม FR-18a)
 - Q-4 — ปิด `accepts_referrals` ควรเตือนเมื่อมีใบ `sent` ค้างเข้าศูนย์หรือไม่?
   - **ตัดสินแล้ว 2026-11-12 (kong):** ไม่เตือน ตามร่าง
 - Q-5 — ซ่อนศูนย์ควรตัด `public_donations` / `public_volunteers` / ใบสมัครงานที่ผูกศูนย์ด้วยหรือไม่ (ร่างนี้คงไว้ตาม cancelled)?
@@ -132,4 +134,5 @@ affects:
 - 2026-11-12 — แก้ตาม review: FR-8 อ้าง `classify_registry_shelter` → `RetentionPhase.HIDDEN` แทน `is_shelter_open` ที่ไม่มีแล้ว; `PROJECTION_VERSION` 18 → 19
 - 2026-11-12 — approved โดย kong กำหนดหมายเลข CR-251 (ต่อจาก CR-250 ที่ PR #1351 จองไว้)
 - 2026-11-12 — ตอบ Q-1: ตัดศูนย์ที่ปิดรับออกจาก picker ตามร่าง (FR-16)
-- 2026-11-12 — ตอบ Q-2 (ซ่อนเฉพาะเมื่อกด `public_visible = false`), Q-4, Q-5 ตามร่าง, Q-6 ยอมรับช่องนี้ไว้ก่อน · Q-3 ยังเปิด
+- 2026-11-12 — ตอบ Q-2 (ซ่อนเฉพาะเมื่อกด `public_visible = false`), Q-4, Q-5 ตามร่าง, Q-6 ยอมรับช่องนี้ไว้ก่อน
+- 2026-11-12 — ตอบ Q-3: ห้าม `draft → sent` ไปศูนย์ที่ปิดรับด้วย เพิ่ม FR-18a (ครบ Q-1..Q-6)
