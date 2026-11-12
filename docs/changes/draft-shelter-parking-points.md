@@ -17,7 +17,7 @@ affects:
   - frontend/src/lib/features/shelter-import/domain/import-row.ts (import ต้องไม่ลบ `parking_points` เดิม)
   - frontend/e2e/shelters.test.ts
   - worker/src/worker/projectors/shelter.py (`project_parking_points` ใหม่ → `public_shelters.parking_points`) · worker/src/worker/projection_version.py (bump `PROJECTION_VERSION`) · worker/tests
-  - backend/apiapp/modules/shelter/schemas.py · use_case.py (`ParkingPoint`, `ShelterDetail.parking_points`) · backend/tests
+  - backend/apiapp/modules/shelter/schemas.py · use_case.py (`ShelterItem.parking_points` + `ShelterDetail.parking_points`, ฟิลเตอร์/มาตรฐาน list) · packages/tent-model/src/tent_model/public_shelter.py (`ParkingPoint` ใหม่ ข้าง `DonationPoint`) · backend/tests
   - frontend/src/lib/api/fastapi.json · openapi.d.ts (`pnpm openapi:update`)
   - frontend/src/lib/features/public-portal (ui/shelter-map.svelte หมุดจุดจอดรถ, หน้ารายละเอียดศูนย์, barrel index.ts) · frontend/src/routes/(public)/shelters/+page.svelte
 why: >
@@ -92,9 +92,9 @@ migration: >
 - FR-25 — worker เพิ่ม `project_parking_points` เขียน `public_shelters.parking_points` = `[{ id, name, note, geo: { lat, lng }, vehicles: [{ type, max_capacity }] }]` · ออกจาก staff plane เฉพาะจุดที่มี `id` และ `name` ที่เป็น string และมีพิกัดจริง (ทั้ง `lat` และ `lng` อยู่ในช่วง ไม่ใช่ (0,0)) แบบเดียวกับ `project_donation_points` · จุดที่ยังไม่ปักหมุดไม่ถูกส่งออก (เห็นเฉพาะใน staff) · `note` ว่างหลัง trim → `null` · เอกสารเสีย (`parking_points` ไม่ใช่ list) ทิ้งแค่รายการจุด ไม่ทิ้งทั้ง shelter row
 - FR-26 — ศูนย์ที่ `parking_policy.availability = 'none'` → `public_shelters.parking_points = []` (ไม่แสดงหมุด) ทั้งที่ doc ยังเก็บจุดไว้ (FR-11)
 - FR-27 — bump `PROJECTION_VERSION` +1 ใน PR เดียวกับ projector (ตอนเขียน CR ค่าปัจจุบัน 18 → 19 · เลขจริงให้เทียบกับ `develop` ตอน implement) พร้อมเพิ่มบรรทัดอธิบายในไฟล์ · ศูนย์ที่ไม่มีการแก้ไขได้ field ใหม่จาก bootstrap ตอน deploy
-- FR-28 — FastAPI เพิ่ม `ParkingPoint` และ `ShelterDetail.parking_points` (default `[]`) เหมือน `donation_points` · **เฉพาะ detail response ไม่ใส่ใน list** · อ่านจาก field ที่ worker ฉาย ไม่อ่านจาก `raw_data` · ไม่เปลี่ยน route path · รัน `pnpm openapi:update` แล้ว commit `fastapi.json` + `openapi.d.ts`
+- FR-28 — `tent_model.public_shelter` เพิ่ม `ParkingPoint` (ข้าง `DonationPoint`) · FastAPI เพิ่ม `ShelterItem.parking_points` ใน **list response** (`GET /public/v1/shelters`) และ `ShelterDetail.parking_points` ใน detail response (ทั้งคู่ default `[]`) · อ่านจาก field ที่ worker ฉาย ไม่อ่านจาก `raw_data` · ไม่เปลี่ยน route path · รัน `pnpm openapi:update` แล้ว commit `fastapi.json` + `openapi.d.ts`
 - FR-29 — หน้าค้นหาศูนย์พักพิง (`/shelters`): แผนที่ (`ShelterMap`) วาดจุดจอดรถเป็นหมุด **ไอคอนที่จอดรถ** (รูปตัว P / รถ) · ขนาดเล็กแบบเดียวกับหมุดจุดรับบริจาค ไม่ใช้หมุดศูนย์และไม่ปนกับหมุดจุดรับบริจาค (สีและไอคอนต่างกัน) · คลิกหมุด → popup แสดงชื่อจุด หมายเหตุ และรายการประเภทรถพร้อมความจุ (หน่วยคันหรือลำ)
-- FR-30 — หมุดจุดจอดรถแสดงเฉพาะศูนย์ที่ผู้ใช้เลือกอยู่ (`selectedId`) · ข้อมูลมาจาก detail response (FR-28) เมื่อเลือกศูนย์ · ไม่ขยาย list response และไม่โหลดจุดจอดรถของทุกศูนย์พร้อมกัน (ดู Q7)
+- FR-30 — แผนที่หน้าค้นหาวาดหมุดจุดจอดรถ **ของทุกศูนย์ที่อยู่ในผลค้นหาพร้อมกัน** (ไม่ต้องเลือกศูนย์ก่อน) · ข้อมูลมาจาก list response (FR-28) · ศูนย์ที่ถูกกรองออกจากผลค้นหา หมุดจุดจอดรถของศูนย์นั้นหายไปด้วย · เลือกศูนย์ → หมุดจุดจอดรถของศูนย์นั้นเน้นหรือไม่ซ่อนศูนย์อื่น (รายละเอียด UI ตัดสินตอน implement) · ภาระข้อมูล: list ใหญ่ขึ้นตามจำนวนจุดจอดรถที่ปักหมุดของทุกศูนย์ (ดู Q7)
 - FR-31 — หน้ารายละเอียดศูนย์ (`/shelters/{id}`) แสดงรายการจุดจอดรถ (ชื่อ หมายเหตุ ประเภทรถ+ความจุ) ถ้ามี · ไม่มี → ไม่แสดงส่วนนี้ · ข้อความใหม่ทุกข้อต้องมีทั้งภาษาไทยและอังกฤษใน `lib/constants/i18n.ts` ตามที่หน้า public ใช้อยู่
 - FR-32 — `parking_points` ที่ฉายออก public ไม่ใช่ข้อมูลลับ (ชื่อ หมายเหตุ พิกัดสาธารณะของที่จอดรถ ความจุ) · เจ้าหน้าที่ต้องไม่ใส่ข้อมูลส่วนบุคคลในช่อง `note` — ให้ข้อความกำกับใต้ช่อง "หมายเหตุ" ในฟอร์มว่าข้อความนี้แสดงต่อสาธารณะ
 
@@ -123,7 +123,7 @@ migration: >
 | `parking_points[].note`     | str \| null                           | `null`        | trim · ว่าง → `null`           |
 | `parking_points[].vehicles` | `[{ type, max_capacity }]`            | `[]`          | ตามจุดใน CouchDB               |
 
-FastAPI `GET /public/v1/shelters/{id}` → `shelter.parking_points` (detail เท่านั้น) · `availability = none` → `[]`
+FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `GET /public/v1/shelters/{id}` → `shelter.parking_points` · `availability = none` → `[]`
 
 **`parking_policy.supported_vehicles`**: ไม่เปลี่ยน shape · เปลี่ยนสถานะเป็น legacy — ฟอร์มไม่เขียนแล้ว (import ยังเขียนได้) · ใช้เมื่อไม่มีจุดจอดรถที่ระบุรถ (FR-10)
 
@@ -151,9 +151,9 @@ FastAPI `GET /public/v1/shelters/{id}` → `shelter.parking_points` (detail เ�
 - [ ] worker: ศูนย์ที่มี 2 จุด (จุดแรกปักหมุดแล้ว จุดสองยังไม่ปักหมุด) → `public_shelters.parking_points` มี 1 รายการ (จุดแรก) พร้อม `geo` และ `vehicles` · จุดพิกัด (0,0) หรือเกินช่วง ไม่ถูกส่งออก · `note` ว่างเป็น `null`
 - [ ] worker: `availability = none` → `parking_points = []` · ศูนย์ที่ `parking_points` ใน doc เสีย → row ยังอยู่ ได้ `[]`
 - [ ] bump `PROJECTION_VERSION` แล้ว bootstrap เติม `parking_points` ให้ศูนย์ที่ไม่มีการแก้ไข
-- [ ] FastAPI: `GET /public/v1/shelters/{id}` มี `parking_points` · list response ไม่มี · ศูนย์ที่ยังไม่มี field ใน Mongo ได้ `[]` ไม่ error · `fastapi.json` + `openapi.d.ts` ตรงกับ backend
-- [ ] หน้า `/shelters`: เลือกศูนย์ที่มีจุดจอดรถ → เห็นหมุดไอคอนที่จอดรถบนแผนที่ · สีและไอคอนต่างจากหมุดศูนย์และหมุดจุดรับบริจาค · คลิกหมุด → popup ชื่อ หมายเหตุ ประเภทรถ+ความจุ
-- [ ] หน้า `/shelters`: เลือกศูนย์ที่ไม่มีจุดจอดรถ หรือยังไม่เลือก → ไม่มีหมุดจุดจอดรถ
+- [ ] FastAPI: `GET /public/v1/shelters` ทุกรายการมี `parking_points` และ `GET /public/v1/shelters/{id}` มี `parking_points` · ศูนย์ที่ยังไม่มี field ใน Mongo ได้ `[]` ไม่ error · `fastapi.json` + `openapi.d.ts` ตรงกับ backend
+- [ ] หน้า `/shelters`: หมุดจุดจอดรถใช้ไอคอนที่จอดรถ · สีและไอคอนต่างจากหมุดศูนย์และหมุดจุดรับบริจาค · คลิกหมุด → popup ชื่อ หมายเหตุ ประเภทรถ+ความจุ
+- [ ] หน้า `/shelters`: เปิดหน้าโดยไม่เลือกศูนย์ → เห็นหมุดไอคอนที่จอดรถของทุกศูนย์ในผลค้นหาที่มีจุดจอดรถ · ศูนย์ที่ไม่มีจุดจอดรถไม่มีหมุดจุดจอดรถ · กรองจนศูนย์หนึ่งหลุดจากผลค้นหา → หมุดจุดจอดรถของศูนย์นั้นหายด้วย
 - [ ] หน้ารายละเอียดศูนย์: แสดงรายการจุดจอดรถเมื่อมี · ไม่มี → ไม่แสดงส่วนนี้ · สลับภาษาไทย/อังกฤษได้
 - [ ] ฟอร์มศูนย์: ใต้ช่อง "หมายเหตุ" ของจุดจอดรถมีข้อความว่าแสดงต่อสาธารณะ
 - [ ] Tests: domain (schema bounds, `type` ซ้ำ, ฟังก์ชันคำนวณ effective vehicles ทุกกรณี FR-9–FR-11, migration v9 → v10, chain, identity ของ `normalizeCurrent`) · transparency/shelters (ตัวกรองอ่านจากจุดจอดรถ + legacy) · import-row (FR-23) · worker (`project_parking_points` ทุกกรณี FR-25/26) · backend (detail มี field, list ไม่มี) · shelter-map dom test (หมุดจุดจอดรถ) · e2e shelters (เพิ่ม/ปักหมุด/ลบ/ชื่อว่าง/ใส่รถ) และ e2e หน้า `/shelters` (หมุดจุดจอดรถ)
@@ -166,7 +166,7 @@ FastAPI `GET /public/v1/shelters/{id}` → `shelter.parking_points` (detail เ�
 - **Q4 — import:** ✅ ตัดสินแล้ว (2026-11-12) — ไม่เพิ่ม sheet จุดจอดรถใน template รอบนี้ (FR-24)
 - **Q5 — `availability = none` กับจุดจอดรถที่บันทึกไว้:** ร่างนี้ไม่ลบจุด แค่ถือว่าศูนย์ไม่มีที่จอดรถ (FR-11) เพราะลบแล้วกู้พิกัดไม่ได้ · ยืนยันไหม
 - **Q6 — `common_areas.parking_capacity`:** ซ้ำกับความจุรวมที่คำนวณได้แล้ว และไม่มีช่องกรอกในฟอร์ม แต่ import ยังเขียน และตัวกรอง legacy ยังอ่าน (`> 0` ทำให้ผ่านทั้งรถยนต์และมอเตอร์ไซค์) · ร่างนี้ไม่แตะ (FR-12) · ต้องการเลิกใช้ใน CR ถัดไปไหม
-- **Q7 — หมุดจุดจอดรถบนหน้าค้นหา แสดงของศูนย์ไหน:** ร่างนี้แสดงเฉพาะศูนย์ที่เลือกอยู่ (FR-30) เพราะ list response ไม่มีจุดจอดรถ และไม่ทำให้แผนที่รกเมื่อมีหลายศูนย์ · ทางเลือก: แสดงจุดจอดรถของทุกศูนย์พร้อมกัน ต้องเพิ่ม `parking_points` ใน list response ซึ่งทำให้ payload ของรายการศูนย์ใหญ่ขึ้นทุกศูนย์ · ยืนยันไหม
+- **Q7 — หมุดจุดจอดรถบนหน้าค้นหา แสดงของศูนย์ไหน:** ✅ ตัดสินแล้ว (2026-11-13) — แสดงของทุกศูนย์พร้อมกัน (FR-30) · ต้องเพิ่ม `parking_points` ใน list response ทำให้ payload ของรายการศูนย์ใหญ่ขึ้น · ถ้าพบว่าช้าตอนข้อมูลจริงมาก ค่อยตัดสินใหม่ (เช่น ตัด `note` ออกจาก list)
 
 ## Why
 
@@ -175,7 +175,7 @@ FastAPI `GET /public/v1/shelters/{id}` → `shelter.parking_points` (detail เ�
 - **ความจุรายจุดเป็นตัวจริง** เพื่อไม่ให้มีค่าความจุสามที่ขัดกัน (`parking_capacity`, `supported_vehicles`, รายจุด) · ค่าระดับศูนย์จึงคำนวณ ไม่กรอกซ้ำ
 - ไม่ migrate `supported_vehicles` เข้าจุดจอดรถ เพราะศูนย์เดิมไม่มีพิกัด สร้างจุดให้เองไม่ได้ · จึงให้ค่าเดิมใช้ต่อจนกว่าจะมีจุดที่ระบุรถ ตัวกรองหน้า public ไม่ว่างระหว่างช่วงเปลี่ยนผ่าน
 - เงื่อนไขสลับค่า (FR-9/FR-10) ใช้ "มีจุดที่ระบุรถ" ไม่ใช่ "มีจุดแรก" เพื่อไม่ให้ศูนย์หลุดจากตัวกรองทันทีที่เพิ่มจุดที่ยังไม่กรอกรถ
-- แสดงบนหน้า public ใน CR เดียวกัน (owner สั่ง) โดยทำตามแบบ `donation_points` (CR-205) ที่มีทั้ง worker projector, FastAPI detail field และหมุดบนแผนที่อยู่แล้ว · ส่งออกเฉพาะจุดที่ปักหมุดแล้ว เพราะจุดที่ไม่มีพิกัดวาดบนแผนที่ไม่ได้ · ไม่ใส่ใน list response เพื่อไม่ขยาย payload ของรายการศูนย์
+- แสดงบนหน้า public ใน CR เดียวกัน (owner สั่ง) โดยทำตามแบบ `donation_points` (CR-205) ที่มี worker projector, FastAPI field และหมุดบนแผนที่อยู่แล้ว · ส่งออกเฉพาะจุดที่ปักหมุดแล้ว เพราะจุดที่ไม่มีพิกัดวาดบนแผนที่ไม่ได้ · ต่างจาก `donation_points` ตรงที่ใส่ใน list response ด้วย เพราะ owner ต้องการเห็นหมุดจุดจอดรถของทุกศูนย์บนแผนที่ค้นหาพร้อมกัน
 - ใช้รูปเดียวกับจุดแจกอาหารทุก field และรูปเดียวกับ `supported_vehicles` ในส่วน `vehicles` เพื่อใช้ schema, หน้าต่างแผนที่ และรูปแบบ test เดิมได้
 - เพิ่มเป็นส่วนที่ 10 ต่อท้าย แทนการแทรกถัดจากส่วนที่ 3/4 เพราะเลข "ส่วนที่ N" ของแต่ละส่วนเขียนตายตัวในแต่ละ component · ต่อท้ายจึงไม่ต้องเลื่อนเลขส่วนอื่น และยังอยู่ติดกับนโยบายยานพาหนะ
 - import: ทำแค่ "ไม่ลบข้อมูลเดิม" เพราะ sheet ใหม่ต้องแก้คอลัมน์ parser template job store UI และ test จำนวนมาก โดยยังไม่มีใครขอ
@@ -198,3 +198,4 @@ FastAPI `GET /public/v1/shelters/{id}` → `shelter.parking_points` (detail เ�
 - 2026-11-12 — proposed (draft) จาก GitHub #1352 · รูปข้อมูล = รูปของจุดแจกอาหาร · import ทำแค่กันข้อมูลหาย
 - 2026-11-12 — owner ตอบ open questions: Q1 ย้ายความจุและประเภทรถลงรายจุด (ค่ารวมคำนวณจากผลรวม) · ศูนย์เดิมใช้ `supported_vehicles` ต่อจนมีจุดที่ระบุรถ (ตัวเลือก ก) · ส่วนที่ 9 แสดงค่าเดิมอ่านอย่างเดียว · จุดจอดรถไม่ต้องมีพิกัด · Q3 ต้องการแสดงหน้า public (CR แยก) · Q4 ไม่ทำ sheet · วิธีติดตาม = แก้ไฟล์ CR นี้ใน PR #1374
 - 2026-11-13 — owner สั่ง Q3: ไม่แยก CR แสดงผลหน้า public ทำใน CR นี้เลย · หมุดในหน้าค้นหาศูนย์พักพิงใช้ไอคอนที่จอดรถ · ช่องรายละเอียดของจุดจอดรถคงเดิม: ชื่อ หมายเหตุ พิกัด ประเภทรถ+ความจุ (หมายเหตุเป็นช่องข้อความอิสระ)
+- 2026-11-13 — owner ตอบ Q7: แสดงหมุดจุดจอดรถของทุกศูนย์พร้อมกันบนหน้าค้นหา · เพิ่ม `parking_points` ใน list response ของ FastAPI
