@@ -311,6 +311,22 @@ async function expectSummary(page: Page, memberCount: number) {
 	).toBeVisible();
 }
 
+/** #1347: on a phone the member table becomes cards and nothing scrolls sideways. */
+async function expectMemberCardsOnPhone(page: Page, memberCount: number) {
+	const desktop = page.viewportSize();
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(page.getByTestId('household-member-cards').getByRole('listitem')).toHaveCount(
+		memberCount
+	);
+	await expect(page.locator('table')).toBeHidden();
+	const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+		scrollWidth: document.documentElement.scrollWidth,
+		clientWidth: document.documentElement.clientWidth
+	}));
+	expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+	if (desktop) await page.setViewportSize(desktop);
+}
+
 // ─── Suite ─────────────────────────────────────────────────────────────────────
 
 test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quarantine'] }, () => {
@@ -461,6 +477,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		for (const p of [HEAD, MEMBER, MOVER]) {
 			await expect(page.getByRole('row').filter({ hasText: fullName(p) })).toBeVisible();
 		}
+		await expectMemberCardsOnPhone(page, 3);
 		await page.getByRole('button', { name: 'เสร็จสิ้นการจัดกลุ่มครอบครัว ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
@@ -578,7 +595,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		const pdfPopup = page.waitForEvent('popup');
 		await page.getByRole('button', { name: 'พิมพ์บัตรประจำตัว' }).click();
 		await (await pdfPopup).close();
-		await page.getByRole('button', { name: 'ปิด', exact: true }).click();
+		await page.getByRole('button', { name: 'ปิด', exact: true }).first().click();
 		await page.getByRole('button', { name: 'เสร็จสิ้นการจัดกลุ่มครอบครัว ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 

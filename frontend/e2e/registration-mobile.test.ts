@@ -66,12 +66,51 @@ function preRegItem(id: string, source: 'unassigned' | 'bound') {
 
 const PRE_REG_ITEMS = [preRegItem('prereg-1', 'unassigned'), preRegItem('prereg-2', 'bound')];
 
+const PRE_REG_PROFILE = {
+	source: 'unassigned',
+	display_name: LONG_NAME,
+	person_id_masked: '123***123',
+	phone: '0811111111',
+	country: 'TH',
+	birth_year: 1990,
+	age: 36,
+	vulnerable_groups: ['elderly'],
+	special_needs: [],
+	queue_status: 'pending',
+	shelter_code: null,
+	shelter_name: null,
+	shelter_href: null,
+	registered_via: 'web',
+	registered_at: '2026-09-09T03:00:00.000Z',
+	residence: {
+		housing_type: 'house',
+		landmark: `ใกล้${LONG_NAME}`,
+		address_no: '99/999',
+		province: 'สงขลา',
+		district: 'หาดใหญ่',
+		subdistrict: 'คอหงส์'
+	},
+	members: [
+		{ id: 'm1', display_name: LONG_NAME, status: 'open', country: 'TH', birth_year: 1990 },
+		{
+			id: 'm2',
+			display_name: `${LONG_NAME} จูเนียร์`,
+			status: 'open',
+			country: 'TH',
+			birth_year: 2015
+		}
+	]
+};
+
 async function mockOverviewApi(page: Page) {
 	await page.route('**/api/back-office/overview/**', async (route) => {
-		const url = new URL(route.request().url());
-		const body = url.pathname.endsWith('/overview/pre-registrations')
-			? { items: PRE_REG_ITEMS, total: PRE_REG_ITEMS.length, limit: 50, offset: 0 }
-			: { items: [] };
+		const { pathname } = new URL(route.request().url());
+		let body: unknown = { items: [] };
+		if (pathname.endsWith('/overview/pre-registrations')) {
+			body = { items: PRE_REG_ITEMS, total: PRE_REG_ITEMS.length, limit: 50, offset: 0 };
+		} else if (pathname.includes('/overview/pre-registrations/unassigned/')) {
+			body = PRE_REG_PROFILE;
+		}
 		await route.fulfill({
 			status: 200,
 			contentType: 'application/json',
@@ -135,6 +174,17 @@ test.describe('Registration pages on mobile (#1347)', { tag: ['@regression'] }, 
 			timeout: 15_000
 		});
 		await expect(page.getByTestId('prereg-cards')).toBeHidden();
+	});
+
+	test('pre-registration profile stays within a 390px viewport', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await mockCouchRoutes(page, { withRegistryShelter: true });
+		await mockOverviewApi(page);
+		await injectSession(page, ADMIN, adminSession);
+
+		await page.goto('/system-management/pre-registrations/unassigned/prereg-1');
+		await expect(page.getByText(`${LONG_NAME} จูเนียร์`)).toBeVisible({ timeout: 15_000 });
+		await expectNoSidewaysOverflow(page);
 	});
 
 	for (const path of [

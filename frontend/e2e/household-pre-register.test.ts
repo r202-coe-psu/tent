@@ -315,6 +315,22 @@ async function expectSummary(page: Page, memberCount: number) {
 	).toBeVisible({ timeout: 15_000 });
 }
 
+/** #1347: on a phone the member table becomes cards and nothing scrolls sideways. */
+async function expectMemberCardsOnPhone(page: Page, memberCount: number) {
+	const desktop = page.viewportSize();
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(page.getByTestId('household-member-cards').getByRole('listitem')).toHaveCount(
+		memberCount
+	);
+	await expect(page.locator('table')).toBeHidden();
+	const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+		scrollWidth: document.documentElement.scrollWidth,
+		clientWidth: document.documentElement.clientWidth
+	}));
+	expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+	if (desktop) await page.setViewportSize(desktop);
+}
+
 // ─── Suite ─────────────────────────────────────────────────────────────────────
 
 test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantine'] }, () => {
@@ -467,7 +483,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 			.getByRole('textbox', { name: 'ชื่อ (First Name) *' })
 			.fill(MEMBER_P3.firstName);
 		await memberForm.getByRole('textbox', { name: 'นามสกุล (Last Name)' }).fill(MEMBER_P3.lastName);
-		await memberForm.getByRole('button', { name: 'เพศ *' }).click();
+		await memberForm.getByRole('button', { name: 'เพศ', exact: true }).click();
 		await page.getByRole('option', { name: 'หญิง (Female)' }).click();
 		await memberForm.getByRole('checkbox', { name: 'ไม่มีเบอร์โทร' }).check();
 		await memberForm.getByRole('button', { name: 'เพิ่มสมาชิกเข้าร่วมครัวเรือน' }).click();
@@ -476,6 +492,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await expect(
 			page.getByRole('row').filter({ hasText: `${MEMBER_P3.firstName} ${MEMBER_P3.lastName}` })
 		).toContainText('ลูกบ้าน');
+		await expectMemberCardsOnPhone(page, 2);
 
 		// QR for the head.
 		await page.getByRole('button', { name: 'ออกและพิมพ์ QR ประจำตัว' }).click();
@@ -484,7 +501,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await expect(
 			page.getByRole('img', { name: `QR Code สำหรับ ${HEAD_P3.firstName} ${HEAD_P3.lastName}` })
 		).toBeVisible();
-		await page.getByRole('button', { name: 'ปิด', exact: true }).click();
+		await page.getByRole('button', { name: 'ปิด', exact: true }).first().click();
 		await expect(qrTitle).toBeHidden();
 
 		// Finish → household list.
@@ -722,7 +739,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 			.fill(MEMBER_P7.firstName);
 		await memberForm.getByRole('textbox', { name: 'นามสกุล (Last Name)' }).fill(MEMBER_P7.lastName);
 		await memberForm.getByRole('textbox', { name: 'อายุ' }).fill('58');
-		await memberForm.getByRole('button', { name: 'เพศ *' }).click();
+		await memberForm.getByRole('button', { name: 'เพศ', exact: true }).click();
 		await page.getByRole('option', { name: 'หญิง (Female)' }).click();
 		await memberForm
 			.getByRole('textbox', { name: 'เบอร์โทรศัพท์ยืนยันตัวตน *' })
@@ -736,7 +753,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		const pdfPopup = page.waitForEvent('popup');
 		await page.getByRole('button', { name: 'พิมพ์บัตรประจำตัว' }).click();
 		await (await pdfPopup).close();
-		await page.getByRole('button', { name: 'ปิด', exact: true }).click();
+		await page.getByRole('button', { name: 'ปิด', exact: true }).first().click();
 		await page.getByRole('button', { name: 'เสร็จสิ้นการลงทะเบียนล่วงหน้า ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
