@@ -169,11 +169,16 @@ export {
 export {
 	DONATION_REJECT_REASON_CODES,
 	DONATION_REJECT_REASON_LABELS,
+	DONATION_REJECT_REASON_SELECTABLE_CODES,
 	REJECT_NOTE_MAX,
 	donorRejectMessage,
 	rejectDonationInputSchema
 } from './domain/reject-reason';
-export type { DonationRejectReasonCode, RejectDonationInput } from './domain/reject-reason';
+export type {
+	DonationRejectReasonCode,
+	RejectDonationInput,
+	SelectableDonationRejectReasonCode
+} from './domain/reject-reason';
 
 // Domain — shared PURE computation (needs board + POST donations). Server-side
 // doc fetching lives in $lib/server/donation-docs (kept out of the client barrel).
