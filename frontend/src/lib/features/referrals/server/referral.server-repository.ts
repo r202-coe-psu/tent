@@ -35,6 +35,7 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;
 
 /** CR-251 FR-18/FR-18a: 422 when the destination shelter switched referral intake off (read from the registry). */
+// shortcut: registry read and write are not transactional, a toggle between them lets one accept through, acceptable until referrals get a revision check
 export async function assertDestinationAcceptsReferrals(toShelterCode: string): Promise<void> {
 	const master = await findMasterByCode(toShelterCode);
 	if (master && !isShelterAcceptingReferrals(master)) {
