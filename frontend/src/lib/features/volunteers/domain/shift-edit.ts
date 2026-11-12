@@ -87,3 +87,11 @@ export function applyShiftEdit(
 		quota: draft.quota
 	};
 }
+
+/**
+ * Strip spaces and leading zeros from a positive integer input (e.g. shift quota / seats).
+ * '08' -> '8', '023' -> '23', ' 08 ' -> '8', '0' -> '0', '' -> ''
+ */
+export function sanitizeCountTyping(value: string): string {
+	return value.replace(/\s+/g, '').replace(/^0+(?=\d)/, '');
+}

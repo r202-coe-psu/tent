@@ -15,6 +15,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import type { JobShift } from '../domain/job.schema';
+	import { sanitizeCountTyping } from '../domain/shift-edit';
 
 	let {
 		shift,
@@ -110,7 +111,18 @@
 				class="!h-11 tabular-nums"
 				{disabled}
 				aria-invalid={error ? true : undefined}
-				bind:value={() => shift.quota, (quota) => onchange({ quota: Number(quota) })}
+				bind:value={
+					() => (shift.quota > 0 ? shift.quota : null),
+					(quota) => onchange({ quota: quota === null || quota === '' ? 0 : Number(quota) })
+				}
+				oninput={(e) => {
+					const val = e.currentTarget.value;
+					const cleaned = sanitizeCountTyping(val);
+					if (val !== cleaned) {
+						e.currentTarget.value = cleaned;
+						onchange({ quota: cleaned === '' ? 0 : Number(cleaned) });
+					}
+				}}
 			/>
 		</div>
 	</div>
