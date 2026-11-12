@@ -108,10 +108,14 @@ affects:
 - Q-1 — picker: ตัดศูนย์ที่ปิดรับออก (FR-16, ตาม precedent `cancelled`) หรือแสดงแบบ disabled พร้อมเหตุผล「ปิดรับการส่งต่อ」?
   - **ตัดสินแล้ว 2026-11-12 (kong):** ตัดออกจาก picker ตาม FR-16
 - Q-2 — ศูนย์ `closed` ที่ถูกซ่อน: ยอมให้ลบแถว `public_shelters` (ขัด CR-183 soft-delete สำหรับ partner) หรือ worker ควรคงแถว closed ไว้?
+  - **ตัดสินแล้ว 2026-11-12 (kong):** ศูนย์ `closed` ยังแสดงตามกฎ CR-183 ตามปกติ; จะหายจาก public เฉพาะเมื่อกด `public_visible = false` (ตามร่าง E-1)
 - Q-3 — การส่ง (`draft → sent`) ไปศูนย์ที่ปิดรับ: block 422 ด้วยหรือไม่ (ร่างนี้ block เฉพาะ create และ accept)?
 - Q-4 — ปิด `accepts_referrals` ควรเตือนเมื่อมีใบ `sent` ค้างเข้าศูนย์หรือไม่?
+  - **ตัดสินแล้ว 2026-11-12 (kong):** ไม่เตือน ตามร่าง
 - Q-5 — ซ่อนศูนย์ควรตัด `public_donations` / `public_volunteers` / ใบสมัครงานที่ผูกศูนย์ด้วยหรือไม่ (ร่างนี้คงไว้ตาม cancelled)?
+  - **ตัดสินแล้ว 2026-11-12 (kong):** คงข้อมูลไว้ ไม่ตัด ตามร่าง (เหมือน `cancelled`)
 - Q-6 — การสร้าง referral จาก SPA เขียน CouchDB ตรง (ไม่ผ่าน BFF): ร่างนี้ไม่บล็อกที่ server (คนที่เรียก CouchDB ตรงยังสร้างใบไปศูนย์ที่ปิดรับได้ แต่ accept ไม่ได้ตาม FR-18). ต้องบังคับที่ชั้นสร้างด้วยหรือไม่ (ต้องย้ายการสร้างมาผ่าน BFF หรือเพิ่ม validate ใน CouchDB)?
+  - **ตัดสินแล้ว 2026-11-12 (kong):** ยอมรับช่องนี้ไว้ก่อน (ไม่บล็อกการสร้างจาก SPA ที่ server); ปิดช่องภายหลังถ้าจำเป็น
 
 ## Why
 
@@ -127,4 +131,5 @@ affects:
 - 2026-11-12 — proposed สำหรับ [Issue #1343](https://github.com/r202-coe-psu/tent/issues/1343) ([PR #1372](https://github.com/r202-coe-psu/tent/pull/1372))
 - 2026-11-12 — แก้ตาม review: FR-8 อ้าง `classify_registry_shelter` → `RetentionPhase.HIDDEN` แทน `is_shelter_open` ที่ไม่มีแล้ว; `PROJECTION_VERSION` 18 → 19
 - 2026-11-12 — approved โดย kong กำหนดหมายเลข CR-251 (ต่อจาก CR-250 ที่ PR #1351 จองไว้)
-- 2026-11-12 — ตอบ Q-1: ตัดศูนย์ที่ปิดรับออกจาก picker ตามร่าง (FR-16) · Q-2..Q-6 ยังเปิด
+- 2026-11-12 — ตอบ Q-1: ตัดศูนย์ที่ปิดรับออกจาก picker ตามร่าง (FR-16)
+- 2026-11-12 — ตอบ Q-2 (ซ่อนเฉพาะเมื่อกด `public_visible = false`), Q-4, Q-5 ตามร่าง, Q-6 ยอมรับช่องนี้ไว้ก่อน · Q-3 ยังเปิด
