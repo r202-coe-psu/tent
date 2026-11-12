@@ -4,6 +4,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Archive from '@lucide/svelte/icons/archive';
 	import Check from '@lucide/svelte/icons/check';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import CircleX from '@lucide/svelte/icons/circle-x';
@@ -47,10 +48,13 @@
 		isLoading = false,
 		isError = false,
 		onRetry,
-		hasMore = false,
-		isFetchingMore = false,
-		isLoadMoreError = false,
-		onLoadMore
+		page = 1,
+		hasPrev = false,
+		hasNext = false,
+		isFetchingNext = false,
+		isNextError = false,
+		onPrev,
+		onNext
 	}: {
 		referrals: Referral[];
 		/** Server query inputs — the parent owns them (URL) and refetches on change. */
@@ -58,16 +62,20 @@
 		onDirectionChange?: (next: ReferralDirectionFilter) => void;
 		status?: StatusTab;
 		onStatusChange?: (next: StatusTab) => void;
-		/** Client-side filter over loaded rows; the parent mirrors it into the URL. */
+		/** Client-side filter over the current page; the parent mirrors it into the URL. */
 		search?: string;
 		onSearchChange?: (next: string) => void;
 		isLoading?: boolean;
 		isError?: boolean;
 		onRetry?: () => void;
-		hasMore?: boolean;
-		isFetchingMore?: boolean;
-		isLoadMoreError?: boolean;
-		onLoadMore?: () => void;
+		/** 1-based server page shown; each page is one API call (bookmark), not a UI slice. */
+		page?: number;
+		hasPrev?: boolean;
+		hasNext?: boolean;
+		isFetchingNext?: boolean;
+		isNextError?: boolean;
+		onPrev?: () => void;
+		onNext?: () => void;
 	} = $props();
 
 	/** Names come from the referral's own `evacuee_summary` snapshot — no evacuee roster is loaded. */
@@ -135,6 +143,11 @@
 		if (direction === 'incoming') return referral.shelter_code || '-';
 		return referral.to_shelter_code || referral.to_org?.name || '-';
 	}
+
+	// Both are off while the next page loads, so a late response cannot land on a page the user left.
+	const prevEnabled = $derived(hasPrev && !isFetchingNext);
+	const nextEnabled = $derived(hasNext && !isFetchingNext);
+	const pagerOff = 'aria-disabled:cursor-not-allowed aria-disabled:opacity-50';
 
 	const counterpartHeader = $derived(direction === 'incoming' ? 'ต้นทาง' : 'ปลายทาง');
 
@@ -348,36 +361,53 @@
 		</ul>
 	{/if}
 
-	<!-- Footer: load more -->
-	{#if !isLoading && !isError && referrals.length > 0}
+	<!-- Footer: server pages (bookmark cursor, so previous/next only — no total) -->
+	{#if !isLoading && !isError && (referrals.length > 0 || hasPrev)}
 		<div
 			class="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-4 sm:flex-row"
 		>
 			<div class="space-y-0.5 text-center font-sans text-xs text-muted-foreground sm:text-left">
-				<div>แสดง {shownCount} รายการ</div>
-				{#if isLoadMoreError}
-					<div role="alert" class="font-medium text-red-700">โหลดรายการเพิ่มไม่สำเร็จ</div>
+				<!-- Only the page number is live: the row count changes on every search keystroke. -->
+				<div class="tabular-nums">
+					<span role="status">หน้า {page}</span> · แสดง {shownCount} รายการ
+				</div>
+				{#if isNextError}
+					<div role="alert" class="font-medium text-red-700">โหลดหน้าถัดไปไม่สำเร็จ</div>
 				{/if}
-				{#if hasMore && searchInput.trim()}
-					<div role="status">ค้นหาเฉพาะรายการที่โหลดแล้ว</div>
+				{#if (hasPrev || hasNext) && searchInput.trim()}
+					<div role="status">ค้นหาเฉพาะรายการในหน้านี้</div>
 				{/if}
 			</div>
 
-			{#if hasMore}
+			<!-- aria-disabled, not disabled: a disabled button drops keyboard focus at the last page. -->
+			<nav aria-label="เปลี่ยนหน้ารายการส่งต่อ" class="flex items-center gap-2">
 				<Button
 					variant="outline"
-					onclick={() => onLoadMore?.()}
-					disabled={isFetchingMore}
-					class="h-11 gap-2"
+					aria-disabled={!prevEnabled}
+					onclick={() => {
+						if (prevEnabled) onPrev?.();
+					}}
+					class="h-11 gap-1 {pagerOff}"
 				>
-					{#if isFetchingMore}
-						<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
-					{/if}
-					โหลดเพิ่ม
+					<ChevronLeft class="h-4 w-4" aria-hidden="true" />
+					ก่อนหน้า
 				</Button>
-			{:else}
-				<span class="text-xs text-muted-foreground">ไม่มีรายการเพิ่มเติม</span>
-			{/if}
+				<Button
+					variant="outline"
+					aria-disabled={!nextEnabled}
+					onclick={() => {
+						if (nextEnabled) onNext?.();
+					}}
+					class="h-11 gap-1 {pagerOff}"
+				>
+					ถัดไป
+					{#if isFetchingNext}
+						<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+					{:else}
+						<ChevronRight class="h-4 w-4" aria-hidden="true" />
+					{/if}
+				</Button>
+			</nav>
 		</div>
 	{/if}
 </div>

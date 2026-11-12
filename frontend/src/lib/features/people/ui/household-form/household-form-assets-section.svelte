@@ -48,8 +48,8 @@
 		{:else}
 			<div class="space-y-2">
 				{#each vehicleRows as vehicle (vehicle.id)}
-					<div class="flex items-end gap-2">
-						<div class="w-[140px] shrink-0 space-y-1.5">
+					<div class="flex flex-wrap items-end gap-2 sm:flex-nowrap">
+						<div class="w-full space-y-1.5 sm:w-[140px] sm:shrink-0">
 							<Label class="text-xs font-semibold text-muted-foreground">ประเภท</Label>
 							<Select.Root type="single" bind:value={vehicle.type}>
 								<Select.Trigger class="h-10 w-full bg-background text-sm">
@@ -62,7 +62,7 @@
 								</Select.Content>
 							</Select.Root>
 						</div>
-						<div class="flex-1 space-y-1.5">
+						<div class="min-w-0 flex-1 space-y-1.5">
 							<Label class="text-xs font-semibold text-muted-foreground">เลขทะเบียนรถ</Label>
 							<Input
 								type="text"

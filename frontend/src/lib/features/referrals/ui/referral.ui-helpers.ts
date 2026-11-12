@@ -222,6 +222,8 @@ export type ReferralListParams = {
 	direction: ReferralDirectionFilter;
 	status: 'all' | ReferralStatus;
 	q: string;
+	/** 1-based server page; bookmarks live in the query cache, so a cold load clamps to page 1. */
+	page: number;
 };
 
 const LIST_STATUSES: readonly string[] = ['draft', 'sent', 'accepted', 'rejected', 'closed'];
@@ -232,7 +234,8 @@ export function parseReferralListParams(params: URLSearchParams): ReferralListPa
 	return {
 		direction: params.get('dir') === 'in' ? 'incoming' : 'outgoing',
 		status: LIST_STATUSES.includes(status) ? (status as ReferralStatus) : 'all',
-		q: params.get('q') ?? ''
+		q: params.get('q') ?? '',
+		page: Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1)
 	};
 }
 
@@ -243,6 +246,7 @@ export function buildReferralListHref(state: Partial<ReferralListParams>): strin
 	if (state.status && state.status !== 'all') qs.set('status', state.status);
 	const q = state.q?.trim();
 	if (q) qs.set('q', q);
+	if (state.page && state.page > 1) qs.set('page', String(state.page));
 	const text = qs.toString();
 	return text ? `${REFERRALS_PATH}?${text}` : REFERRALS_PATH;
 }

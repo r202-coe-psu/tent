@@ -62,6 +62,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { expectMemberCardsOnPhone } from './helpers/mobile';
 import {
 	couchReq,
 	createCouchUser,
@@ -461,6 +462,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		for (const p of [HEAD, MEMBER, MOVER]) {
 			await expect(page.getByRole('row').filter({ hasText: fullName(p) })).toBeVisible();
 		}
+		await expectMemberCardsOnPhone(page, 3);
 		await page.getByRole('button', { name: 'เสร็จสิ้นการจัดกลุ่มครอบครัว ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
@@ -578,7 +580,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		const pdfPopup = page.waitForEvent('popup');
 		await page.getByRole('button', { name: 'พิมพ์บัตรประจำตัว' }).click();
 		await (await pdfPopup).close();
-		await page.getByRole('button', { name: 'ปิด', exact: true }).click();
+		await page.getByRole('button', { name: 'ปิด', exact: true }).first().click();
 		await page.getByRole('button', { name: 'เสร็จสิ้นการจัดกลุ่มครอบครัว ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
