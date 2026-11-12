@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { untrack } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -221,6 +221,23 @@
 		return formatDisplayDateTime(iso, langState.current) || iso;
 	}
 
+	function zoneText(row: Evacuee): string {
+		return row.current_stay?.zone
+			? t.zoneName(zoneLabel(row.current_stay.zone, shelterZones))
+			: '—';
+	}
+
+	function householdLabel(row: Evacuee): string {
+		return (row.household_id ? householdMap.get(row.household_id)?.label : null) ?? '—';
+	}
+
+	function nextQueueFor(row: Evacuee) {
+		return nextQueueLabel(row, {
+			enableMedicalScreening: enableMedical,
+			hasScreening: screenedIds.has(row._id)
+		});
+	}
+
 	function nextQueueBadgeVariant(
 		next: string
 	): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -231,6 +248,120 @@
 		return 'outline';
 	}
 </script>
+
+<!-- Row pieces shared by the desktop table cells and the mobile cards (below md). -->
+{#snippet profileButton(row: Evacuee, card: boolean)}
+	<Button
+		size="sm"
+		variant="outline"
+		class="gap-1.5 rounded-lg border-slate-200 px-3 font-semibold text-slate-700 {card
+			? 'min-h-11 w-full'
+			: ''}"
+		onclick={(e) => {
+			e.stopPropagation();
+			onProfile(row);
+		}}
+	>
+		<Eye class="size-3.5" />
+		<span>{t.viewProfile}</span>
+	</Button>
+{/snippet}
+
+{#snippet reportInButton(row: Evacuee, card: boolean)}
+	<Button
+		size="sm"
+		class="gap-1.5 rounded-lg bg-blue-600 px-3 font-semibold text-white shadow-2xs hover:bg-blue-700 {card
+			? 'min-h-11 w-full'
+			: ''}"
+		onclick={(e) => {
+			e.stopPropagation();
+			onReportIn(row);
+		}}
+	>
+		<Zap class="size-3.5" />
+		<span>{t.reportIn}</span>
+	</Button>
+{/snippet}
+
+{#snippet medicalStatus(row: Evacuee)}
+	{@const screening = screeningByEvacuee.get(row._id)}
+	{#if screening}
+		<span class="inline-flex items-center gap-1 font-medium text-emerald-700">
+			<CheckCircle2 class="size-3.5 shrink-0 text-emerald-600" />
+			{t.screened}{#if screening.triage_level}
+				({t.triage[screening.triage_level] ?? screening.triage_level}){/if}
+		</span>
+	{:else}
+		<span class="font-medium text-amber-700">{t.awaitingScreening}</span>
+	{/if}
+{/snippet}
+
+{#snippet arrivingNextBadge(row: Evacuee, card: boolean)}
+	<Badge
+		variant={nextQueueBadgeVariant(nextQueueFor(row))}
+		class="font-semibold {card ? 'h-auto whitespace-normal' : ''}"
+	>
+		{nextQueueLabelText(nextQueueFor(row), langState.current)}
+	</Badge>
+{/snippet}
+
+{#snippet screeningButton(row: Evacuee, card: boolean)}
+	{#if canMedical && nextQueueFor(row) === 'รอแพทย์' && onGoMedical}
+		<Button
+			size="sm"
+			variant="outline"
+			class="gap-1 border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 {card
+				? 'min-h-11 w-full'
+				: ''}"
+			onclick={(e) => {
+				e.stopPropagation();
+				onGoMedical(row);
+			}}
+		>
+			<Stethoscope class="size-3.5" />
+			<span>{t.screeningButton}</span>
+		</Button>
+	{/if}
+{/snippet}
+
+{#snippet zoningButton(row: Evacuee, card: boolean)}
+	{#if canZoning && (nextQueueFor(row) === 'รอโซน' || !enableMedical || screenedIds.has(row._id)) && onGoZoning}
+		<Button
+			size="sm"
+			class="gap-1 bg-[#0A2647] text-white hover:bg-[#051930] {card ? 'min-h-11 w-full' : ''}"
+			onclick={(e) => {
+				e.stopPropagation();
+				onGoZoning(row);
+			}}
+		>
+			<MapPin class="size-3.5" />
+			<span>{t.zoningButton}</span>
+		</Button>
+	{/if}
+{/snippet}
+
+{#snippet allNextBadge(row: Evacuee, card: boolean)}
+	<Badge variant="secondary" class="text-xs {card ? 'h-auto whitespace-normal' : ''}">
+		{nextQueueLabelText(nextQueueFor(row), langState.current)}
+	</Badge>
+{/snippet}
+
+{#snippet nameWithNickname(row: Evacuee)}
+	{formatPersonName(row)}
+	{#if row.nickname}
+		<span class="text-xs font-normal text-slate-500">({row.nickname})</span>
+	{/if}
+{/snippet}
+
+{#snippet cardTitle(row: Evacuee, name: Snippet)}
+	<button
+		type="button"
+		class="min-h-11 w-full min-w-0 text-left text-base font-bold break-words text-slate-900"
+		onclick={() => onOpenRow(row)}
+	>
+		{@render name()}
+	</button>
+{/snippet}
 
 <!-- Queue Stat Summary Cards -->
 <section aria-label={t.summaryAria} class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
@@ -401,12 +532,12 @@
 			<div
 				class="flex flex-col gap-3 border-b border-slate-200/80 bg-white px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
 			>
-				<div class="flex flex-wrap items-center gap-3">
-					<div class="flex items-center gap-1.5 text-xs text-slate-600">
+				<div class="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+					<div class="flex w-full min-w-0 items-center gap-1.5 text-xs text-slate-600 sm:w-auto">
 						<span class="font-medium">{t.statusFilter}</span>
 						<select
 							bind:value={allStatusFilter}
-							class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
+							class="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden sm:h-8 sm:flex-none"
 						>
 							<option value="all">{t.allStatuses}</option>
 							<option value={IN_SHELTER_FILTER}>{t.inShelterOption}</option>
@@ -424,11 +555,11 @@
 					</div>
 
 					{#if availableZones.length > 0}
-						<div class="flex items-center gap-1.5 text-xs text-slate-600">
+						<div class="flex w-full min-w-0 items-center gap-1.5 text-xs text-slate-600 sm:w-auto">
 							<span class="font-medium">{t.zoneFilter}</span>
 							<select
 								bind:value={allZoneFilter}
-								class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
+								class="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden sm:h-8 sm:flex-none"
 							>
 								<option value="all">{t.allZones}</option>
 								{#each availableZones as z (z)}
@@ -450,7 +581,44 @@
 					<p class="font-medium text-slate-700">{t.noMatch}</p>
 				</div>
 			{:else}
-				<div class="overflow-x-auto">
+				<!-- Mobile card list (< md) -->
+				<div class="space-y-3 p-3 md:hidden">
+					{#each pagedRows.items as row (row._id)}
+						<article
+							data-testid="queue-card"
+							class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs"
+						>
+							{#snippet allName()}{formatPersonName(row)}{/snippet}
+							{@render cardTitle(row, allName)}
+							<dl class="mt-2 grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+								<dt class="text-slate-500">{t.colStatus}</dt>
+								<dd class="min-w-0">
+									<StayStatusBadge status={row.current_stay?.status} size="sm" />
+								</dd>
+								<dt class="text-slate-500">{t.colZone}</dt>
+								<dd class="min-w-0 break-words text-slate-700">{zoneText(row)}</dd>
+								<dt class="text-slate-500">{t.colFamily}</dt>
+								<dd class="min-w-0 break-words text-slate-700">{householdLabel(row)}</dd>
+								<dt class="text-slate-500">{t.colSpecialNeeds}</dt>
+								<dd class="min-w-0 break-words text-slate-700">
+									{specialNeedsShort(row.special_needs)}
+								</dd>
+								<dt class="text-slate-500">{t.colUpdated}</dt>
+								<dd class="min-w-0 break-words text-slate-700 tabular-nums">
+									{formatUpdated(row.updated_at)}
+								</dd>
+								<dt class="text-slate-500">{t.colNextQueue}</dt>
+								<dd class="min-w-0">{@render allNextBadge(row, true)}</dd>
+							</dl>
+							<div class="mt-3 flex flex-col gap-2">
+								{@render profileButton(row, true)}
+							</div>
+						</article>
+					{/each}
+				</div>
+
+				<!-- Desktop table (md+) -->
+				<div class="hidden overflow-x-auto md:block">
 					<Table.Root>
 						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
 							<Table.Row class="border-b-0 hover:bg-transparent">
@@ -462,7 +630,6 @@
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
 									>{t.colZone}</Table.Head
-								>
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
 									>{t.colFamily}</Table.Head
@@ -483,11 +650,6 @@
 						</Table.Header>
 						<Table.Body>
 							{#each pagedRows.items as row (row._id)}
-								{@const next = nextQueueLabel(row, {
-									enableMedicalScreening: enableMedical,
-									hasScreening: screenedIds.has(row._id)
-								})}
-								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
 								<Table.Row
 									class="cursor-pointer hover:bg-slate-50/80"
 									onclick={() => onOpenRow(row)}
@@ -499,12 +661,10 @@
 										<StayStatusBadge status={row.current_stay?.status} size="sm" />
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs font-medium">
-										{row.current_stay?.zone
-											? t.zoneName(zoneLabel(row.current_stay.zone, shelterZones))
-											: '—'}
+										{zoneText(row)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs text-slate-600">
-										{hh?.label ?? '—'}
+										{householdLabel(row)}
 									</Table.Cell>
 									<Table.Cell class="max-w-[14rem] truncate px-3 py-3 text-xs text-slate-600">
 										{specialNeedsShort(row.special_needs)}
@@ -513,23 +673,10 @@
 										{formatUpdated(row.updated_at)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
-										<Badge variant="secondary" class="text-xs"
-											>{nextQueueLabelText(next, langState.current)}</Badge
-										>
+										{@render allNextBadge(row, false)}
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">
-										<Button
-											size="sm"
-											variant="outline"
-											class="gap-1.5 rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
-											onclick={(e) => {
-												e.stopPropagation();
-												onProfile(row);
-											}}
-										>
-											<Eye class="size-3.5" />
-											<span>{t.viewProfile}</span>
-										</Button>
+										{@render profileButton(row, false)}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -628,7 +775,53 @@
 					</Button>
 				</div>
 			{:else}
-				<div class="overflow-x-auto">
+				<!-- Mobile card list (< md) -->
+				<div class="space-y-3 p-3 md:hidden">
+					{#each pagedRows.items as row (row._id)}
+						<article
+							data-testid="queue-card"
+							class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs"
+						>
+							{#snippet preRegName()}{@render nameWithNickname(row)}{/snippet}
+							{@render cardTitle(row, preRegName)}
+							<dl class="mt-2 grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+								<dt class="text-slate-500">{t.colDocNo}</dt>
+								<dd class="min-w-0 font-mono break-words text-slate-700">
+									{maskNationalId(row.person_id?.number)}
+								</dd>
+								<dt class="text-slate-500">{t.colChannel}</dt>
+								<dd class="min-w-0">
+									<RegisteredViaBadge
+										via={row.registered_via}
+										hasCardSnapshot={!!row.card_snapshot}
+										size="sm"
+									/>
+								</dd>
+								<dt class="text-slate-500">{t.colPhone}</dt>
+								<dd class="min-w-0 break-words text-slate-700 tabular-nums">
+									{row.phone || '—'}
+								</dd>
+								<dt class="text-slate-500">{t.colFamily}</dt>
+								<dd class="min-w-0 break-words text-slate-700">{householdLabel(row)}</dd>
+								<dt class="text-slate-500">{t.colSpecialNeeds}</dt>
+								<dd class="min-w-0 break-words text-slate-700">
+									{specialNeedsShort(row.special_needs)}
+								</dd>
+								<dt class="text-slate-500">{t.colStatus}</dt>
+								<dd class="min-w-0">
+									<StayStatusBadge status={row.current_stay.status} size="sm" />
+								</dd>
+							</dl>
+							<div class="mt-3 flex flex-col gap-2">
+								{@render reportInButton(row, true)}
+								{@render profileButton(row, true)}
+							</div>
+						</article>
+					{/each}
+				</div>
+
+				<!-- Desktop table (md+) -->
+				<div class="hidden overflow-x-auto md:block">
 					<Table.Root>
 						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
 							<Table.Row class="border-b-0 hover:bg-transparent">
@@ -660,16 +853,12 @@
 						</Table.Header>
 						<Table.Body>
 							{#each pagedRows.items as row (row._id)}
-								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
 								<Table.Row
 									class="cursor-pointer hover:bg-slate-50/80"
 									onclick={() => onOpenRow(row)}
 								>
 									<Table.Cell class="py-3 pl-5 font-semibold text-slate-900">
-										{formatPersonName(row)}
-										{#if row.nickname}
-											<span class="text-xs font-normal text-slate-500">({row.nickname})</span>
-										{/if}
+										{@render nameWithNickname(row)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 font-mono text-xs text-slate-600">
 										{maskNationalId(row.person_id?.number)}
@@ -685,7 +874,7 @@
 										{row.phone || '—'}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs font-medium text-slate-700">
-										{hh?.label ?? '—'}
+										{householdLabel(row)}
 									</Table.Cell>
 									<Table.Cell class="max-w-[14rem] truncate px-3 py-3 text-xs text-slate-600">
 										{specialNeedsShort(row.special_needs)}
@@ -695,29 +884,8 @@
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">
 										<div class="flex justify-end gap-1.5">
-											<Button
-												size="sm"
-												variant="outline"
-												class="gap-1.5 rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
-												onclick={(e) => {
-													e.stopPropagation();
-													onProfile(row);
-												}}
-											>
-												<Eye class="size-3.5" />
-												<span>{t.viewProfile}</span>
-											</Button>
-											<Button
-												size="sm"
-												class="gap-1.5 rounded-lg bg-blue-600 px-3 font-semibold text-white shadow-2xs hover:bg-blue-700"
-												onclick={(e) => {
-													e.stopPropagation();
-													onReportIn(row);
-												}}
-											>
-												<Zap class="size-3.5" />
-												<span>{t.reportIn}</span>
-											</Button>
+											{@render profileButton(row, false)}
+											{@render reportInButton(row, false)}
 										</div>
 									</Table.Cell>
 								</Table.Row>
@@ -791,7 +959,40 @@
 					<p class="text-xs text-slate-500">{t.allSettled}</p>
 				</div>
 			{:else}
-				<div class="overflow-x-auto">
+				<!-- Mobile card list (< md) -->
+				<div class="space-y-3 p-3 md:hidden">
+					{#each pagedRows.items as row (row._id)}
+						<article
+							data-testid="queue-card"
+							class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs"
+						>
+							{#snippet arrivingName()}{formatPersonName(row)}{/snippet}
+							{@render cardTitle(row, arrivingName)}
+							<dl class="mt-2 grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+								<dt class="text-slate-500">{t.colDocNo}</dt>
+								<dd class="min-w-0 font-mono break-words text-slate-700">
+									{maskNationalId(row.person_id?.number)}
+								</dd>
+								<dt class="text-slate-500">{t.colFamily}</dt>
+								<dd class="min-w-0 break-words text-slate-700">{householdLabel(row)}</dd>
+								{#if enableMedical}
+									<dt class="text-slate-500">{t.colMedical}</dt>
+									<dd class="min-w-0 break-words">{@render medicalStatus(row)}</dd>
+								{/if}
+								<dt class="text-slate-500">{t.colNextQueue}</dt>
+								<dd class="min-w-0">{@render arrivingNextBadge(row, true)}</dd>
+							</dl>
+							<div class="mt-3 flex flex-col gap-2">
+								{@render screeningButton(row, true)}
+								{@render zoningButton(row, true)}
+								{@render profileButton(row, true)}
+							</div>
+						</article>
+					{/each}
+				</div>
+
+				<!-- Desktop table (md+) -->
+				<div class="hidden overflow-x-auto md:block">
 					<Table.Root>
 						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
 							<Table.Row class="border-b-0 hover:bg-transparent">
@@ -819,12 +1020,6 @@
 						</Table.Header>
 						<Table.Body>
 							{#each pagedRows.items as row (row._id)}
-								{@const next = nextQueueLabel(row, {
-									enableMedicalScreening: enableMedical,
-									hasScreening: screenedIds.has(row._id)
-								})}
-								{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
-								{@const screening = screeningByEvacuee.get(row._id)}
 								<Table.Row
 									class="cursor-pointer hover:bg-slate-50/80"
 									onclick={() => onOpenRow(row)}
@@ -836,67 +1031,21 @@
 										{maskNationalId(row.person_id?.number)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs text-slate-700">
-										{hh?.label ?? '—'}
+										{householdLabel(row)}
 									</Table.Cell>
 									{#if enableMedical}
 										<Table.Cell class="px-3 py-3 text-xs">
-											{#if screening}
-												<span class="inline-flex items-center gap-1 font-medium text-emerald-700">
-													<CheckCircle2 class="size-3.5 text-emerald-600" />
-													{t.screened}{#if screening.triage_level}
-														({t.triage[screening.triage_level] ?? screening.triage_level}){/if}
-												</span>
-											{:else}
-												<span class="font-medium text-amber-700">{t.awaitingScreening}</span>
-											{/if}
+											{@render medicalStatus(row)}
 										</Table.Cell>
 									{/if}
 									<Table.Cell class="px-3 py-3">
-										<Badge variant={nextQueueBadgeVariant(next)} class="font-semibold">
-											{nextQueueLabelText(next, langState.current)}
-										</Badge>
+										{@render arrivingNextBadge(row, false)}
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">
 										<div class="flex justify-end gap-1.5">
-											{#if canMedical && next === 'รอแพทย์' && onGoMedical}
-												<Button
-													size="sm"
-													variant="outline"
-													class="gap-1 border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
-													onclick={(e) => {
-														e.stopPropagation();
-														onGoMedical(row);
-													}}
-												>
-													<Stethoscope class="size-3.5" />
-													<span>{t.screeningButton}</span>
-												</Button>
-											{/if}
-											{#if canZoning && (next === 'รอโซน' || !enableMedical || screenedIds.has(row._id)) && onGoZoning}
-												<Button
-													size="sm"
-													class="gap-1 bg-[#0A2647] text-white hover:bg-[#051930]"
-													onclick={(e) => {
-														e.stopPropagation();
-														onGoZoning(row);
-													}}
-												>
-													<MapPin class="size-3.5" />
-													<span>{t.zoningButton}</span>
-												</Button>
-											{/if}
-											<Button
-												size="sm"
-												variant="outline"
-												class="gap-1.5 rounded-lg border-slate-200 px-3 font-semibold text-slate-700"
-												onclick={(e) => {
-													e.stopPropagation();
-													onProfile(row);
-												}}
-											>
-												<Eye class="size-3.5" />
-												<span>{t.viewProfile}</span>
-											</Button>
+											{@render screeningButton(row, false)}
+											{@render zoningButton(row, false)}
+											{@render profileButton(row, false)}
 										</div>
 									</Table.Cell>
 								</Table.Row>

@@ -51,7 +51,7 @@ async function settle() {
 	flushSync();
 }
 
-async function render(accessStatus: VolunteerAccessStatus) {
+async function render(accessStatus: VolunteerAccessStatus, volunteerOverride?: Partial<Volunteer>) {
 	// The row is a <tr>: give it a table to live in.
 	const table = document.createElement('table');
 	const body = document.createElement('tbody');
@@ -60,7 +60,7 @@ async function render(accessStatus: VolunteerAccessStatus) {
 	instance = mount(VolunteerCard, {
 		target: body,
 		props: {
-			volunteer,
+			volunteer: { ...volunteer, ...volunteerOverride },
 			shelterName: 'ศูนย์ 1',
 			shelterType: null,
 			todayAssignment: null,
@@ -163,5 +163,17 @@ describe('VolunteerCard account badge when the role here ended', () => {
 		expect(badge).toContain('เคยเป็น เจ้าหน้าที่คลัง');
 		expect(badge).toContain('ถูกถอนเพราะปิดโปรไฟล์');
 		expect(badge).toContain('· เมื่อ');
+	});
+});
+
+describe('VolunteerCard occupation display (CR-245)', () => {
+	it('renders occupation when present', async () => {
+		await render({ kind: 'none' }, { occupation: 'พยาบาลวิชาชีพ' });
+		expect(document.body.textContent).toContain('พยาบาลวิชาชีพ');
+	});
+
+	it('omits occupation when null or undefined', async () => {
+		await render({ kind: 'none' }, { occupation: null });
+		expect(document.body.textContent).not.toContain('พยาบาลวิชาชีพ');
 	});
 });

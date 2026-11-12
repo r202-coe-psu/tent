@@ -47,7 +47,7 @@ describe('VolunteerRemoteRepository', () => {
 		const volunteer = await repo.create(baseInput, ctx);
 
 		expect(volunteer._id).toMatch(/^volunteer:/);
-		expect(volunteer.schema_v).toBe(5);
+		expect(volunteer.schema_v).toBe(6);
 		expect(volunteer.checked_in).toBe(false);
 		expect(volunteer.identity_verified).toBe(false);
 		expect(volunteer.current_shelter_code).toBeNull();
@@ -123,12 +123,12 @@ describe('VolunteerRemoteRepository', () => {
 	describe("accepting another shelter's result (CR-228)", () => {
 		const fromSh001 = { shelter_code: 'SH001', verified_at: '2026-11-01T03:00:00.000Z' };
 
-		it('marks an accepted identity and skill with accepted_from and stamps schema_v 5', async () => {
+		it('marks an accepted identity and skill with accepted_from and stamps schema_v 6', async () => {
 			const repo = createVolunteerRepositoryForTest('shelter_sh002');
 			const created = await repo.create({ ...baseInput, skills: ['medical'] }, ctx);
 
 			const identity = await repo.reviewIdentity(created._id, 'verified', 'sm02', null, fromSh001);
-			expect(identity.schema_v).toBe(5);
+			expect(identity.schema_v).toBe(6);
 			expect(identity.identity_verified).toBe(true);
 			expect(identity.identity_verification).toMatchObject({
 				status: 'verified',

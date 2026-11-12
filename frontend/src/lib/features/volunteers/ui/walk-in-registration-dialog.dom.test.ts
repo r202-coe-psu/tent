@@ -276,6 +276,26 @@ describe('WalkInRegistrationDialog — search shelter evacuees (#1062)', () => {
 		});
 	});
 
+	it('sends the trimmed occupation (CR-245)', async () => {
+		await render();
+		await typeInto(field('first_name'), 'มานะ');
+		await typeInto(field('last_name'), 'อดทน');
+		await typeInto(field('occupation'), '  วิศวกร  ');
+		submitForm();
+		await vi.waitFor(() => expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1));
+		expect(mocks.createMutateAsync.mock.calls[0][0]).toMatchObject({ occupation: 'วิศวกร' });
+	});
+
+	it('sends null occupation when it is left blank (CR-245)', async () => {
+		await render();
+		await typeInto(field('first_name'), 'มานะ');
+		await typeInto(field('last_name'), 'อดทน');
+		await typeInto(field('occupation'), '   ');
+		submitForm();
+		await vi.waitFor(() => expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1));
+		expect(mocks.createMutateAsync.mock.calls[0][0]).toMatchObject({ occupation: null });
+	});
+
 	it('does not enable the query for fewer than 2 characters', async () => {
 		await render();
 		await typeInto(searchBox()!, 'ส');

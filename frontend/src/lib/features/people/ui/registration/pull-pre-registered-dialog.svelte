@@ -91,7 +91,7 @@
 
 <Dialog.Root bind:open>
 	<Dialog.Content
-		class="flex max-h-[85vh] w-full max-w-2xl flex-col gap-0 overflow-hidden rounded-2xl p-0"
+		class="flex max-h-[85vh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-2xl"
 	>
 		<!-- Header -->
 		<Dialog.Header class="border-b border-slate-200/80 px-5 py-4 text-left sm:px-6">
@@ -206,7 +206,7 @@
 								<EvacueePhoto photoId={photoRef} size="sm" class="shrink-0 rounded-xl" />
 								<div class="min-w-0 space-y-1">
 									<div class="flex flex-wrap items-center gap-1.5">
-										<p class="truncate text-sm font-bold text-slate-900">
+										<p class="text-sm font-bold break-words text-slate-900">
 											{formatPersonName(evacuee)}
 										</p>
 										{#if evacuee.nickname}

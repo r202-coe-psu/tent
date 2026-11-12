@@ -81,6 +81,14 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      # Print housekeeping task (CR-222 FR-17) — dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the
+      # PRINT_HOUSEKEEPING_TOKEN in frontend/.env. Not PRINT_HOUSEKEEPING_TOKEN: the root .env
+      # carries a staging placeholder that would switch the task on against a token-less pnpm dev.
+      PRINT_HOUSEKEEPING_URL: ${PRINT_HOUSEKEEPING_URL:-http://host.docker.internal:5173}
+      PRINT_HOUSEKEEPING_TOKEN: ${DEV_PRINT_HOUSEKEEPING_TOKEN:-}
+      PRINT_HOUSEKEEPING_INTERVAL_MS: ${PRINT_HOUSEKEEPING_INTERVAL_MS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   edge-users-copy:
@@ -136,24 +144,6 @@ services:
     command: ["pnpm", "import-worker"]
     healthcheck:
       disable: true
-    restart: unless-stopped
-
-  # Print server housekeeping (FR-17) — opt-in for dev: `docker compose --profile printing up -d`
-  print-housekeeping:
-    image: tent/frontend:local
-    profiles: ["printing"]
-    environment:
-      PRINT_HOUSEKEEPING_URL: ${PRINT_HOUSEKEEPING_URL:-http://host.docker.internal:5173}
-      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:-}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["pnpm", "print-housekeeping"]
-    healthcheck:
-      test: ["CMD", "node", "-e", "const t=Number(require('fs').readFileSync('/tmp/print-housekeeping.ok','utf8'));process.exit(Date.now()-t<=120000?0:1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 2
-      start_period: 60s
     restart: unless-stopped
 
 networks:

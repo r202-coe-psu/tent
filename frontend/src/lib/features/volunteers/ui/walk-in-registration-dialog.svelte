@@ -114,7 +114,15 @@
 	const skillsList = $derived(skillCatalog.options);
 
 	function emptyValues(): WalkInVolunteerFormValues {
-		return { first_name: '', last_name: '', nickname: '', phone: '', email: '', national_id: '' };
+		return {
+			first_name: '',
+			last_name: '',
+			nickname: '',
+			phone: '',
+			email: '',
+			national_id: '',
+			occupation: ''
+		};
 	}
 
 	let selectedSkills = $state<string[]>([]);
@@ -167,6 +175,7 @@
 					nickname: data.nickname || undefined,
 					phone: data.phone || null,
 					email: data.email || null,
+					occupation: data.occupation ? data.occupation.trim() : null,
 					skills: selectedSkills,
 					organization: null,
 					national_id: data.national_id || null,
@@ -422,6 +431,20 @@
 								inputmode="numeric"
 								maxlength={13}
 								placeholder="X-XXXX-XXXXX-XX-X (ไม่บังคับ)"
+								class="h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="occupation">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>อาชีพ (ทางเลือก / Optional)</Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.occupation}
+								placeholder="เช่น พยาบาล, วิศวกร, ค้าขาย (ไม่บังคับ)"
 								class="h-11"
 							/>
 						{/snippet}

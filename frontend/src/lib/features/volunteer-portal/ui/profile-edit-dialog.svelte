@@ -134,6 +134,10 @@
 							<p class="mt-0.5 text-2xs text-muted-foreground">
 								{profile.volunteer_code || t.noVolunteerCode} · {profile.phone_masked}
 							</p>
+							<p class="mt-0.5 text-2xs text-muted-foreground">
+								<span class="font-medium text-foreground">{t.occupationLabel}:</span>
+								{profile.occupation || '—'}
+							</p>
 						</div>
 						{#if profile.identity_verified}
 							<span

@@ -21,7 +21,7 @@ RUN uv sync --project worker --no-dev \
 
 USER app
 
-HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
-	CMD uv run --project worker python -c "import worker.main"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=2 \
+	CMD ["/app/.venv/bin/worker-healthcheck"]
 
 CMD ["uv", "run", "--project", "worker", "sync-worker"]

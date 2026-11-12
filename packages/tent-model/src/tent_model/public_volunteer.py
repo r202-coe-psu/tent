@@ -35,6 +35,7 @@ class PublicVolunteer(Document):
     email: str | None = None
     volunteer_code: str = ""
     skills: list[str] = Field(default_factory=list)
+    occupation: str | None = None
     organization: str | None = None
     #: Set by staff only — the portal renders it as a badge and never offers to edit it.
     identity_verified: bool = False
