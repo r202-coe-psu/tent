@@ -311,6 +311,52 @@ describe('VolunteerRemoteRepository', () => {
 			expect(updated._id).toBe(created._id);
 		});
 
+		describe('profiles that already share a phone (pre-#708 data)', () => {
+			/** Two profiles with the same phone, written straight into the store (create() would block it). */
+			async function seedSharedPhone() {
+				const repo = createVolunteerRepositoryForTest('shelter_sh001');
+				const a = await repo.create(baseInput, ctx);
+				const b = await repo.create(
+					{ ...baseInput, first_name: 'สมหญิง', phone: '0899999999' },
+					ctx
+				);
+				const bLegacy = await memoryRepo.put({ ...b, phone: '0812345678', phone_hash: null });
+				return { repo, a, b: bLegacy };
+			}
+
+			it('listByPhoneHash returns both profiles that share a hash (AC-6)', async () => {
+				const { repo, a, b } = await seedSharedPhone();
+				await memoryRepo.put({ ...b, phone_hash: await sha256Hex('0812345678') });
+				const found = await repo.listByPhoneHash(await sha256Hex('0812345678'));
+				expect(found.map((v) => v._id).sort()).toEqual([a._id, b._id].sort());
+			});
+
+			it('renaming a profile with a null phone_hash whose phone is already taken succeeds (AC-5, FR-8)', async () => {
+				const { repo, b } = await seedSharedPhone();
+				const updated = await repo.update({ ...b, first_name: 'ชื่อใหม่' });
+				expect(updated.first_name).toBe('ชื่อใหม่');
+				expect(updated.phone_hash).toBe(await sha256Hex('0812345678'));
+			});
+
+			it('renaming the profile that holds the stored hash still succeeds even though another shares it', async () => {
+				const { repo, a, b } = await seedSharedPhone();
+				await memoryRepo.put({ ...b, phone_hash: await sha256Hex('0812345678') });
+				const updated = await repo.update({ ...a, first_name: 'ชื่อใหม่' });
+				expect(updated.first_name).toBe('ชื่อใหม่');
+			});
+
+			it('changing the phone of a legacy profile to a number another profile holds is rejected', async () => {
+				const { repo, b } = await seedSharedPhone();
+				const other = await repo.create(
+					{ ...baseInput, first_name: 'คนที่สาม', phone: '0877777777' },
+					ctx
+				);
+				await expect(repo.update({ ...b, phone: other.phone })).rejects.toThrow(
+					VolunteerPhoneTakenError
+				);
+			});
+		});
+
 		it('create() allows creating multiple volunteers without a phone (null phone)', async () => {
 			const repo = createVolunteerRepositoryForTest('shelter_sh001');
 			const v1 = await repo.create({ ...baseInput, phone: null }, ctx);

@@ -8,6 +8,12 @@ export interface ExistingVolunteerSummary {
 	status: VolunteerStatus;
 }
 
+function sortByVolunteerCode(existing: ExistingVolunteerSummary[]): ExistingVolunteerSummary[] {
+	return [...existing].sort((a, b) =>
+		(a.volunteer_code || '').localeCompare(b.volunteer_code || '')
+	);
+}
+
 /**
  * Format Thai error message for duplicate volunteer phone (CR-239 FR-9).
  * Message format:
@@ -15,9 +21,7 @@ export interface ExistingVolunteerSummary {
  * Inactive profiles append ` (ปิดใช้งานอยู่)`
  */
 export function formatVolunteerPhoneTakenMessage(existing: ExistingVolunteerSummary[]): string {
-	const sorted = [...existing].sort((a, b) =>
-		(a.volunteer_code || '').localeCompare(b.volunteer_code || '')
-	);
+	const sorted = sortByVolunteerCode(existing);
 	const names = sorted.map((v) => {
 		const base = `${v.volunteer_code || ''} ${v.first_name} ${v.last_name}`.trim();
 		return v.status === 'inactive' ? `${base} (ปิดใช้งานอยู่)` : base;
@@ -45,12 +49,22 @@ export class VolunteerPhoneTakenError extends Error {
 	readonly existing: ExistingVolunteerSummary[];
 
 	constructor(existing: ExistingVolunteerSummary[]) {
-		const sorted = [...existing].sort((a, b) =>
-			(a.volunteer_code || '').localeCompare(b.volunteer_code || '')
-		);
-		super(formatVolunteerPhoneTakenMessage(sorted));
+		super(formatVolunteerPhoneTakenMessage(existing));
 		this.name = 'VolunteerPhoneTakenError';
-		this.existing = sorted;
+		this.existing = sortByVolunteerCode(existing);
+	}
+
+	/** Build the error from full volunteer docs, keeping only the summary fields. */
+	static fromVolunteers(volunteers: ExistingVolunteerSummary[]): VolunteerPhoneTakenError {
+		return new VolunteerPhoneTakenError(
+			volunteers.map((d) => ({
+				_id: d._id,
+				volunteer_code: d.volunteer_code,
+				first_name: d.first_name,
+				last_name: d.last_name,
+				status: d.status
+			}))
+		);
 	}
 }
 
