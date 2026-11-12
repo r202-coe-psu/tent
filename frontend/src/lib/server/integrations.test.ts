@@ -9,7 +9,7 @@ vi.mock('$app/server', () => ({
 	}
 }));
 
-const { IntegrationError, getIntegrationStatus, integrationRequest, mapM5State } =
+const { IntegrationError, getIntegrationStatus, integrationRequest, mapM5State, mapM6State } =
 	await import('./integrations');
 
 const fetchMock = vi.fn();
@@ -64,6 +64,19 @@ describe('integrationRequest', () => {
 		});
 	});
 
+	it('carries M6 expected_unit from errors[0] into extra', async () => {
+		fetchMock.mockResolvedValue(
+			jsonResponse(422, {
+				errors: [{ code: 'M6_UNIT_MISMATCH', message: 'หน่วยไม่ตรง', expected_unit: 'ลัง' }]
+			})
+		);
+		await expect(integrationRequest('POST', '/x', {})).rejects.toMatchObject({
+			status: 422,
+			code: 'M6_UNIT_MISMATCH',
+			extra: { expected_unit: 'ลัง' }
+		});
+	});
+
 	it('reports a FastAPI 5xx as 503', async () => {
 		fetchMock.mockResolvedValue(
 			jsonResponse(503, { errors: [{ code: 'M5_UNAVAILABLE', message: 'down' }] })
@@ -94,21 +107,69 @@ describe('integration status gate (CR §2)', () => {
 		expect(mapM5State(m5)).toBe(state);
 	});
 
-	it('reports central_unreachable when FastAPI does not answer', async () => {
+	it.each([
+		[
+			{ configured: false, token_ok: false, reachable: false, error: 'not_configured' },
+			'm6_not_configured'
+		],
+		[
+			{ configured: true, token_ok: false, reachable: true, error: 'credential_invalid' },
+			'm6_credential_invalid'
+		],
+		[
+			{ configured: true, token_ok: false, reachable: false, error: 'unavailable' },
+			'm6_unavailable'
+		],
+		[
+			{ configured: true, token_ok: true, reachable: true, error: null, resource_types: ['food'] },
+			'ready'
+		],
+		[
+			{ configured: true, token_ok: true, reachable: true, error: null, resource_types: [] },
+			'm6_credential_invalid'
+		],
+		[{ configured: true, token_ok: true, reachable: true, error: null }, 'm6_credential_invalid']
+	] as const)('maps M6 %o to %s', (m6, state) => {
+		expect(mapM6State(m6)).toBe(state);
+	});
+
+	it('reports central_unreachable for both systems when FastAPI does not answer', async () => {
 		fetchMock.mockRejectedValue(new DOMException('timeout', 'TimeoutError'));
 		await expect(getIntegrationStatus()).resolves.toEqual({
-			m5: { state: 'central_unreachable', checked_at: null }
+			m5: { state: 'central_unreachable', checked_at: null },
+			m6: { state: 'central_unreachable', checked_at: null, resource_types: [] }
 		});
 	});
 
-	it('passes the FastAPI check time through', async () => {
+	it('passes both systems and the M6 resource types through', async () => {
+		fetchMock.mockResolvedValue(
+			jsonResponse(200, {
+				m5: { configured: true, token_ok: true, reachable: true, checked_at: 't', error: null },
+				m6: {
+					configured: true,
+					token_ok: true,
+					reachable: true,
+					checked_at: 't6',
+					resource_types: ['food', 'water'],
+					scopes: ['read'],
+					error: null
+				}
+			})
+		);
+		await expect(getIntegrationStatus()).resolves.toEqual({
+			m5: { state: 'ready', checked_at: 't' },
+			m6: { state: 'ready', checked_at: 't6', resource_types: ['food', 'water'] }
+		});
+	});
+
+	it('reports a missing m6 block as not configured', async () => {
 		fetchMock.mockResolvedValue(
 			jsonResponse(200, {
 				m5: { configured: true, token_ok: true, reachable: true, checked_at: 't', error: null }
 			})
 		);
-		await expect(getIntegrationStatus()).resolves.toEqual({
-			m5: { state: 'ready', checked_at: 't' }
-		});
+		const status = await getIntegrationStatus();
+		expect(status.m5.state).toBe('ready');
+		expect(status.m6.state).toBe('m6_not_configured');
 	});
 });

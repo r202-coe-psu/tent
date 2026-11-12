@@ -11,6 +11,7 @@ import {
 	canAccessManagerPages,
 	canAccessDonations,
 	canAccessWarehouse,
+	canAccessCentralWarehouse,
 	canViewSupply,
 	canAccessKitchen,
 	canAccessTickets,
@@ -268,6 +269,19 @@ export async function requireWarehouseAccess(
 	const shelter = activeShelterCode(roles);
 	if (!canAccessWarehouse(roles, shelter)) {
 		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
+	}
+}
+
+/**
+ * Central warehouse (M6) guard (`/back-office/onedata/m6`) — system_admin, or in the active shelter
+ * shelter_manager / warehouse_staff (draft CR M6 D2). `supply_coordinator` is NOT admitted, unlike
+ * {@link requireWarehouseAccess}. UX gate; the BFF re-checks per request.
+ */
+export async function requireCentralWarehouseAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessCentralWarehouse(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
 

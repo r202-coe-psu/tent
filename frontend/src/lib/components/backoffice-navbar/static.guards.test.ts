@@ -34,6 +34,7 @@ vi.mock('$lib/features/users', () => ({
 }));
 
 import {
+	requireCentralWarehouseAccess,
 	requireEvacueeRegistration,
 	requireBannerManagement,
 	requireDonationAccess,
@@ -67,6 +68,7 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/volunteers/accounts': requireVolunteerBackoffice,
 	'/back-office/referrals': requireReferralAccess,
 	'/back-office/onedata/m5': requireReferralAccess,
+	'/back-office/onedata/m6': requireCentralWarehouseAccess,
 	'/back-office/supply': requireSupplyView,
 	'/back-office/stock-donations': requireDonationAccess,
 	'/back-office/distribution': requireWarehouseAccess,

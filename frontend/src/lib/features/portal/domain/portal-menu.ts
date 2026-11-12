@@ -8,7 +8,7 @@
  *  - `scope: 'system'` items are SA-only.
  *  - `shelter_manager` of the *selected* shelter sees every `scope: 'shelter'` item.
  *  - otherwise an item is visible when the user holds one of its capabilities in the selected
- *    shelter (`hasCapabilityInShelter`); `warehouse_staff` counts as `supply_coordinator`.
+ *    shelter (`hasCapabilityInShelter`); `warehouse_staff` counts as `supply_coordinator` (not the reverse).
  *  - unknown / empty roles see nothing.
  * Items gated by a shelter feature flag (`requires`) additionally follow {@link PortalFeatures}
  * for everyone, SA/SM included. A department with no visible item is not rendered at all.
@@ -74,6 +74,7 @@ export type PortalCapability =
 	| 'medical_staff'
 	| 'kitchen_staff'
 	| 'supply_coordinator'
+	| 'warehouse_staff'
 	| 'volunteer_coordinator'
 	| 'security_officer'
 	| 'facility_staff'
@@ -145,6 +146,7 @@ const TRG = 'triage_staff';
 const MED = 'medical_staff';
 const KS = 'kitchen_staff';
 const SC = 'supply_coordinator';
+const WH = 'warehouse_staff';
 const VC = 'volunteer_coordinator';
 const SO = 'security_officer';
 const FAC = 'facility_staff';
@@ -467,11 +469,12 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				label: 'OneData ระบบบริหารทรัพยากร (M6)',
 				desc: 'ขอเบิกของจากคลังกลาง',
 				icon: 'package',
-				// Placeholder until the M6 central-warehouse page ships (draft CR M6).
-				href: null,
+				href: '/back-office/onedata/m6',
 				scope: 'shelter',
-				// M6 D2: SA, SM and warehouse staff (`supply_coordinator` covers warehouse_staff here).
-				roles: [SC]
+				// M6 D2: SA, SM and `warehouse_staff` only. `SC` is NOT listed: elsewhere in the portal
+				// `warehouse_staff` counts as `supply_coordinator`, but never the reverse here — the
+				// exact `warehouse_staff` capability is checked (see `holdsCapability`).
+				roles: [WH]
 			}
 		]
 	},
@@ -559,7 +562,9 @@ function holdsCapability(
 	shelterCode: string | null | undefined,
 	capability: PortalCapability
 ): boolean {
-	// warehouse_staff is an alias of supply_coordinator in the portal (matrix §1.1).
+	// warehouse_staff is an alias of supply_coordinator in the portal (matrix §1.1): an item listing
+	// `supply_coordinator` admits both. The reverse does not hold — an item listing `warehouse_staff`
+	// (OneData M6, D2) admits the exact capability only, so supply_coordinator stays out.
 	if (capability === 'supply_coordinator') return isWarehouseStaff(roles, shelterCode);
 	return hasCapabilityInShelter(roles, shelterCode, capability);
 }

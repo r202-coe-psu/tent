@@ -18,7 +18,7 @@ import {
 	canManagePrinters,
 	canViewSupply,
 	hasCapabilityInShelter,
-	isWarehouseStaff,
+	canAccessCentralWarehouse,
 	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
@@ -216,12 +216,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)
 			},
 			{
-				// Placeholder until the M6 central-warehouse page ships. M6 D2: SA, SM, warehouse staff.
+				// M6 D2: SA, SM, warehouse_staff — not supply_coordinator (`canAccessWarehouse` would admit it).
 				label: 'OneData ระบบบริหารทรัพยากร (M6)',
-				href: null,
+				href: resolve('/back-office/onedata/m6'),
 				icon: Boxes,
-				visibleTo: ({ roles, shelterCode }) =>
-					canAccessManagerPages(roles, shelterCode) || isWarehouseStaff(roles, shelterCode)
+				visibleTo: ({ roles, shelterCode }) => canAccessCentralWarehouse(roles, shelterCode)
 			}
 		]
 	},

@@ -141,7 +141,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	const registry = 'จัดการผู้เข้าพัก';
 	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีจิตอาสา'];
 	const referrals = 'การส่งต่อผู้เข้าพัก';
-	/** Draft CR M5 D17: OneData shortcuts. M5 = referral audience; M6 = SA, SM, warehouse staff. */
+	/** Draft CR M5 D17: OneData shortcuts. M5 = referral audience; M6 = SA, SM, warehouse_staff (not supply_coordinator). */
 	const oneDataM5 = 'OneData ระบบส่งต่อผู้ป่วย (M5)';
 	const oneDataM6 = 'OneData ระบบบริหารทรัพยากร (M6)';
 	const warehouse = ['คลัง', 'บริจาค', 'จัดการเบิกจ่ายพัสดุและอาหาร', 'คลังสินค้า'];
@@ -204,14 +204,17 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(visibleLeafLabels(ctx(sh('medical_staff')))).toEqual(labelsFor(referrals, oneDataM5));
 	});
 
-	it.each(['supply_coordinator', 'warehouse_staff'])(
-		'%s sees warehouse menus and kitchen requisitions, not the central kitchen (#842)',
-		(cap) => {
-			expect(visibleLeafLabels(ctx(sh(cap)))).toEqual(
-				labelsFor(warehouse, kitchenTickets, oneDataM6)
-			);
-		}
-	);
+	it('supply_coordinator sees warehouse menus and kitchen requisitions, not the central kitchen or OneData M6 (M6 D2) (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('supply_coordinator')))).toEqual(
+			labelsFor(warehouse, kitchenTickets)
+		);
+	});
+
+	it('warehouse_staff sees warehouse menus, kitchen requisitions and OneData M6, not the central kitchen (M6 D2) (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('warehouse_staff')))).toEqual(
+			labelsFor(warehouse, kitchenTickets, oneDataM6)
+		);
+	});
 
 	it('puts the volunteer accounts page under the volunteer menu (CR-221 FR-5)', () => {
 		const group = backofficeNavbarGroups

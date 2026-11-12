@@ -7,15 +7,6 @@ import { getShelterCode } from '$lib/db/shelter';
 import { isReferral, type Referral } from '../domain/referral.schema';
 import type { M5BatchInput } from '../domain/referral.m5';
 
-export type IntegrationState =
-	| 'ready'
-	| 'central_unreachable'
-	| 'm5_unavailable'
-	| 'm5_not_configured'
-	| 'm5_credential_invalid';
-
-export type IntegrationStatus = { m5: { state: IntegrationState; checked_at: string | null } };
-
 export type M5Facility = {
 	facility_id: number;
 	name: string;
@@ -65,10 +56,6 @@ async function bff<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 const referrals = (items: unknown): Referral[] =>
 	(Array.isArray(items) ? items : []).filter((d): d is Referral => isReferral(d));
-
-export function fetchIntegrationStatus(): Promise<IntegrationStatus> {
-	return bff('/api/back-office/integrations/status');
-}
 
 export async function fetchM5Facilities(q: string): Promise<M5Facility[]> {
 	const path = `/api/back-office/referral/m5/facilities${q ? `?q=${encodeURIComponent(q)}` : ''}`;

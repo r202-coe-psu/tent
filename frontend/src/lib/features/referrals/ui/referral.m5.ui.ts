@@ -2,16 +2,16 @@
  * Labels and messages for the M5 dispatch mode (draft CR — referral M5 integration §2, §4).
  * Status is always shown as text + icon, never by colour alone.
  */
-import type { IntegrationState } from '../data/referral.m5.remote';
+import { INTEGRATION_GATE_MESSAGES, type M5State } from '$lib/features/integrations';
 import { M5RequestError } from '../data/referral.m5.remote';
 import type { Acuity, M5TransferStatus, VehicleType } from '../domain/referral.schema';
 
-/** User-facing text of each health-gate state (CR §2 table). `ready` has none. */
-export const M5_GATE_MESSAGES: Record<Exclude<IntegrationState, 'ready'>, string> = {
-	central_unreachable: 'เชื่อมต่อกับระบบกลางไม่ได้',
-	m5_unavailable: 'เชื่อมต่อ OneData ระบบส่งต่อผู้ป่วย (M5) ไม่ได้ ชั่วคราว',
-	m5_not_configured: 'OneData ระบบส่งต่อผู้ป่วย (M5) ยังไม่พร้อม ติดต่อผู้ดูแลระบบ',
-	m5_credential_invalid: 'OneData ระบบส่งต่อผู้ป่วย (M5) ยังไม่พร้อม ติดต่อผู้ดูแลระบบ'
+/** User-facing text of each M5 health-gate state (CR §2 table). `ready` has none. */
+export const M5_GATE_MESSAGES: Record<Exclude<M5State, 'ready'>, string> = {
+	central_unreachable: INTEGRATION_GATE_MESSAGES.central_unreachable,
+	m5_unavailable: INTEGRATION_GATE_MESSAGES.m5_unavailable,
+	m5_not_configured: INTEGRATION_GATE_MESSAGES.m5_not_configured,
+	m5_credential_invalid: INTEGRATION_GATE_MESSAGES.m5_credential_invalid
 };
 
 export type M5StatusTone = 'sky' | 'emerald' | 'red' | 'amber' | 'muted';

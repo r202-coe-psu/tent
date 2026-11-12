@@ -2,11 +2,9 @@
  * TanStack Query hooks for the M5 dispatch mode (draft CR — referral M5 integration §2).
  */
 import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { getShelterCode } from '$lib/db/shelter';
 import {
 	cancelM5BatchRemote,
 	createM5BatchRemote,
-	fetchIntegrationStatus,
 	fetchM5Facilities,
 	startM5BatchRemote,
 	submitM5BatchRemote
@@ -14,22 +12,14 @@ import {
 import type { M5BatchInput } from '../domain/referral.m5';
 import { referralKeys } from './queries';
 
-/** Health gate refresh (CR §2): every 30 s, no retries — a failure is a gate state. */
-const STATUS_REFETCH_MS = 30_000;
 const FACILITIES_STALE_MS = 60_000;
 
 export const m5Keys = {
-	status: () => ['integrations', 'status', getShelterCode()] as const,
 	facilities: (q: string) => ['integrations', 'm5', 'facilities', q] as const
 };
 
-export const useIntegrationStatus = () =>
-	createQuery(() => ({
-		queryKey: m5Keys.status(),
-		queryFn: fetchIntegrationStatus,
-		refetchInterval: STATUS_REFETCH_MS,
-		retry: false
-	}));
+/** The shared health gate (`$lib/features/integrations`); re-exported for the M5 UI. */
+export { useIntegrationStatus } from '$lib/features/integrations';
 
 export const useM5Facilities = (q: () => string, enabled: () => boolean = () => true) =>
 	createQuery(() => ({

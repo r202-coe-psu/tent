@@ -1,7 +1,7 @@
 /**
  * Server-only client for FastAPI's outbound integration plane (`/v1/integrations/*`).
  *
- * Draft CR — referral M5 integration §1, §2. The browser never talks to FastAPI or M5: BFF
+ * Draft CR — referral M5 integration §1, §2; central warehouse M6 §4. The browser never talks to FastAPI or M5: BFF
  * routes call these helpers with the Bearer `EXTERNAL_API_SECRET`. M5 credentials live in
  * FastAPI only.
  */
@@ -78,15 +78,25 @@ export async function integrationRequest<T>(
 }
 
 /** Gate state per integration (CR §2 table). */
-export type IntegrationState =
+export type M5State =
 	| 'ready'
 	| 'central_unreachable'
 	| 'm5_unavailable'
 	| 'm5_not_configured'
 	| 'm5_credential_invalid';
 
+export type M6State =
+	| 'ready'
+	| 'central_unreachable'
+	| 'm6_unavailable'
+	| 'm6_not_configured'
+	| 'm6_credential_invalid';
+
+export type IntegrationState = M5State | M6State;
+
 export type IntegrationStatus = {
-	m5: { state: IntegrationState; checked_at: string | null };
+	m5: { state: M5State; checked_at: string | null };
+	m6: { state: M6State; checked_at: string | null; resource_types: string[] };
 };
 
 type FastapiM5Status = {
@@ -97,24 +107,56 @@ type FastapiM5Status = {
 	error?: string | null;
 };
 
-export function mapM5State(m5: FastapiM5Status): IntegrationState {
+type FastapiM6Status = FastapiM5Status & {
+	resource_types?: readonly string[] | null;
+	scopes?: readonly string[] | null;
+};
+
+export function mapM5State(m5: FastapiM5Status): M5State {
 	if (!m5.configured || m5.error === 'not_configured') return 'm5_not_configured';
 	if (m5.error === 'credential_invalid') return 'm5_credential_invalid';
 	if (m5.token_ok && m5.reachable) return 'ready';
 	return 'm5_unavailable';
 }
 
+/**
+ * M6 gate (draft CR M6 §4). A key that reaches M6 but holds no resource type may not request
+ * anything, so an empty `resource_types` is the same gate state as a rejected credential.
+ */
+export function mapM6State(m6: FastapiM6Status): M6State {
+	if (!m6.configured || m6.error === 'not_configured') return 'm6_not_configured';
+	if (m6.error === 'credential_invalid') return 'm6_credential_invalid';
+	if (m6.token_ok && m6.reachable) {
+		return (m6.resource_types ?? []).length === 0 ? 'm6_credential_invalid' : 'ready';
+	}
+	return 'm6_unavailable';
+}
+
+const UNREACHABLE_STATUS: IntegrationStatus = {
+	m5: { state: 'central_unreachable', checked_at: null },
+	m6: { state: 'central_unreachable', checked_at: null, resource_types: [] }
+};
+
 /** Never throws: an unreachable FastAPI is a gate state, not an error. */
 export async function getIntegrationStatus(): Promise<IntegrationStatus> {
 	try {
-		const data = await integrationRequest<{ m5: FastapiM5Status }>(
+		const data = await integrationRequest<{ m5: FastapiM5Status; m6?: FastapiM6Status }>(
 			'GET',
 			'/v1/integrations/status',
 			undefined,
 			STATUS_TIMEOUT_MS
 		);
-		return { m5: { state: mapM5State(data.m5), checked_at: data.m5.checked_at ?? null } };
+		return {
+			m5: { state: mapM5State(data.m5), checked_at: data.m5.checked_at ?? null },
+			m6: data.m6
+				? {
+						state: mapM6State(data.m6),
+						checked_at: data.m6.checked_at ?? null,
+						resource_types: [...(data.m6.resource_types ?? [])]
+					}
+				: { state: 'm6_not_configured', checked_at: null, resource_types: [] }
+		};
 	} catch {
-		return { m5: { state: 'central_unreachable', checked_at: null } };
+		return structuredClone(UNREACHABLE_STATUS);
 	}
 }
