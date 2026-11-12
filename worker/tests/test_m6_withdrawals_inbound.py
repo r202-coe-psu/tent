@@ -203,6 +203,18 @@ def test_confirm_note_all_received() -> None:
     assert m6.confirm_note({}) == "รับครบ"
 
 
+def test_confirm_note_nothing_received() -> None:
+    donation = {
+        "received_summary": {
+            "nothing_received": True,
+            "shortfalls": [
+                {"item_id": "item_master:rice", "declared": "18", "counted": "0"}
+            ],
+        }
+    }
+    assert m6.confirm_note(donation) == "ไม่ได้รับของ"
+
+
 def test_confirm_note_lists_shortfalls_and_rejected() -> None:
     donation = {
         "items": [{"item_id": "item_master:rice", "qty": "18", "unit": "ถุง"}],

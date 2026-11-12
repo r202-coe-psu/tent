@@ -34,6 +34,7 @@ from tent_model import M6ConfirmOutbox, M6Withdrawal
 
 from worker.config import Settings
 from worker.couch.client import CouchClient
+from worker.inbound.donations import DONATION_SCHEMA_V
 from worker.inbound.external_bookings import FailureTracker, _ExceptionTypeOnly
 from worker.masking import shelter_db_name
 from worker.timeutil import iso_utc
@@ -47,11 +48,14 @@ POLL_INTERVAL_SECONDS = 5
 SYNC_TIMEOUT_SECONDS = 60
 WORKER_ACTOR = "m6:worker"
 #: `donation` schema_v once it carries `channel: m6` / `external` (CR §5).
-M6_DONATION_SCHEMA_V = 12
+M6_DONATION_SCHEMA_V = DONATION_SCHEMA_V
 
 #: M6 statuses whose goods are on the way (or arrived) and so owe the shelter a donation.
 DONATION_STATUSES = ("in_transit", "received")
 ALL_RECEIVED_NOTE = "รับครบ"
+#: D20 — staff closed the m6 donation because nothing arrived
+#: (`received_summary.nothing_received` set by the close route).
+NOTHING_RECEIVED_NOTE = "ไม่ได้รับของ"
 
 #: sku → ``item_master`` id, per shelter.
 ItemMap = dict[str, str]
@@ -202,8 +206,13 @@ def names_by_item_id(row: dict[str, Any], donation: dict[str, Any]) -> dict[str,
 
 
 def confirm_note(donation: dict[str, Any], names: dict[str, str] | None = None) -> str:
-    """RES-007 ``note``: shortfalls and turned-away lines, else ``รับครบ``. Pure."""
+    """RES-007 ``note``: shortfalls and turned-away lines, else ``รับครบ``. Pure.
+
+    D20: a donation closed with ``received_summary.nothing_received`` means nothing arrived.
+    """
     names = names or {}
+    if (donation.get("received_summary") or {}).get("nothing_received"):
+        return NOTHING_RECEIVED_NOTE
     summary = donation.get("received_summary") or {}
     by_id = {
         item["item_id"]: item
