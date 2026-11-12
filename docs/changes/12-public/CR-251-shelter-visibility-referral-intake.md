@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-251
 title: Shelter toggles `public_visible` + `accepts_referrals` — ซ่อนศูนย์จาก public plane และปิดรับการส่งต่อ
-status: proposed
+status: approved
 date: 2026-11-12
 requested_by: ทีม — GitHub #1343 (priority:high, Before It Floods)
-decided_by:
+decided_by: kong
+decision_date: 2026-11-12
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 shelter `feature_flags` (+`public_visible`, +`accepts_referrals`)
@@ -18,7 +19,7 @@ affects:
   - frontend/src/routes/api/back-office/referral/+server.ts (POST) · referral/[id]/transition · referral/bulk-transition
 ---
 
-# draft-shelter-visibility-referral-intake — toggle「แสดงบนหน้าสาธารณะ」และ「รับการส่งต่อ」
+# CR-251 — toggle「แสดงบนหน้าสาธารณะ」และ「รับการส่งต่อ」
 
 > **สรุป (TL;DR):**
 >
@@ -119,3 +120,9 @@ affects:
 
 - CouchDB: ไม่มี — key ใหม่ optional, doc เดิมอ่านเป็น `true`, ไม่ bump `schema_v` (precedent `accepts_pre_registration`).
 - Mongo: `PROJECTION_VERSION` 19 → worker full bootstrap ครั้งเดียวหลัง deploy (ยังไม่มีศูนย์ที่ `public_visible = false` จึงไม่มีข้อมูลต้องลบ).
+
+## Decision log
+
+- 2026-11-12 — proposed สำหรับ [Issue #1343](https://github.com/r202-coe-psu/tent/issues/1343) ([PR #1372](https://github.com/r202-coe-psu/tent/pull/1372))
+- 2026-11-12 — แก้ตาม review: FR-8 อ้าง `classify_registry_shelter` → `RetentionPhase.HIDDEN` แทน `is_shelter_open` ที่ไม่มีแล้ว; `PROJECTION_VERSION` 18 → 19
+- 2026-11-12 — approved โดย kong กำหนดหมายเลข CR-251 (ต่อจาก CR-250 ที่ PR #1351 จองไว้)
