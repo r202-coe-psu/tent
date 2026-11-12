@@ -62,7 +62,7 @@ affects:
 
 - FR-15 — `useSearchShelters` ต้องคืน `feature_flags` (อย่างน้อย `accepts_referrals`) ให้ picker ใช้.
 - FR-16 — `shelter-combobox` ไม่เสนอศูนย์ที่ `isShelterAcceptingReferrals() === false` (กรองเหมือน `closed` / `cancelled`).
-- FR-17 — `POST /api/back-office/referral` อ่าน shelter ปลายทางจาก registry; ปลายทางไม่รับการส่งต่อ → 422 `{ error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' }` และไม่เขียน doc.
+- FR-17 — `POST /api/back-office/referral` อ่าน shelter ปลายทางจาก registry; ปลายทางไม่รับการส่งต่อ → 422 `{ error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' }` และไม่เขียน doc. การสร้างจาก SPA ผ่าน `referral.remote.ts` ตรงไป CouchDB ไม่ผ่าน route นี้ จึงไม่ถูกบล็อกที่ server ในรอบนี้ — กันที่ picker (FR-16) และจุดรับ (FR-18); ดู Q-6.
 - FR-18 — `transition(→ accepted)` ตรวจ registry ของปลายทางใหม่ทุกครั้ง **ก่อน** cross-DB transfer; ปลายทางไม่รับการส่งต่อ → `CouchDbReferralError` 422 ข้อความเดียวกับ FR-17; ไม่ย้ายผู้อพยพ ไม่เปลี่ยนสถานะ referral. ครอบคลุม `/referral/[id]/transition` และ `/referral/bulk-transition` (bulk = ล้มเป็นรายใบ).
 - FR-19 — `→ rejected` และ `→ closed` ยังทำได้ตามเดิมเมื่อปลายทางปิดรับ.
 - FR-20 — referral ประเภท `resource` / `medical-emergency` ไม่ถูกกระทบ.
@@ -98,7 +98,7 @@ affects:
 - [ ] doc ศูนย์เดิม (ไม่มี key) แสดงบน public และรับ referral ได้เหมือนเดิม.
 - [ ] ปิด `public_visible` (ผ่าน dialog ยืนยัน) → หลัง worker ประมวลผล ศูนย์ไม่ปรากฏใน public ทุกหน้า (ค้นหาศูนย์, needs, transparency, ค้นหาผู้พักพิง, งานอาสา) และ external API; `/api/public/v1/shelters/{code}` 404; จอง/ลงทะเบียนล่วงหน้าไม่ได้.
 - [ ] เปิด `public_visible` กลับ → ศูนย์และข้อมูลราย shelter กลับมาใน public หลัง worker rescan.
-- [ ] ปิด `accepts_referrals` → ศูนย์ไม่อยู่ใน referral picker; POST create ไป shelter นั้นตอบ 422; accept ใบ `sent` ที่ค้างอยู่ตอบ 422 และผู้อพยพไม่ถูกย้าย; reject/close ใบเดิมสำเร็จ.
+- [ ] ปิด `accepts_referrals` → ศูนย์ไม่อยู่ใน referral picker; `POST /api/back-office/referral` ไป shelter นั้นตอบ 422; accept ใบ `sent` ที่ค้างอยู่ตอบ 422 และผู้อพยพไม่ถูกย้าย; reject/close ใบเดิมสำเร็จ.
 - [ ] ผู้ที่ไม่ใช่ `system_admin` / `shelter_manager` ของศูนย์ PATCH flag ได้ 403.
 - [ ] Tests: domain (defaults, doc เดิมอ่านเป็น `true`, `isShelterBookable`, helper ใหม่) · form DOM (2 switch + dialog) · worker (projector delete, processor gate, rescan เมื่อเปิดกลับ) · BFF (list filter, risk/shelter-policy 404, referral POST 422, accept 422, reject/close ผ่าน, bulk ล้มรายใบ) · combobox filter · e2e shelters / referrals / public shelters.
 
@@ -109,6 +109,7 @@ affects:
 - Q-3 — การส่ง (`draft → sent`) ไปศูนย์ที่ปิดรับ: block 422 ด้วยหรือไม่ (ร่างนี้ block เฉพาะ create และ accept)?
 - Q-4 — ปิด `accepts_referrals` ควรเตือนเมื่อมีใบ `sent` ค้างเข้าศูนย์หรือไม่?
 - Q-5 — ซ่อนศูนย์ควรตัด `public_donations` / `public_volunteers` / ใบสมัครงานที่ผูกศูนย์ด้วยหรือไม่ (ร่างนี้คงไว้ตาม cancelled)?
+- Q-6 — การสร้าง referral จาก SPA เขียน CouchDB ตรง (ไม่ผ่าน BFF): ร่างนี้ไม่บล็อกที่ server (คนที่เรียก CouchDB ตรงยังสร้างใบไปศูนย์ที่ปิดรับได้ แต่ accept ไม่ได้ตาม FR-18). ต้องบังคับที่ชั้นสร้างด้วยหรือไม่ (ต้องย้ายการสร้างมาผ่าน BFF หรือเพิ่ม validate ใน CouchDB)?
 
 ## Why
 
