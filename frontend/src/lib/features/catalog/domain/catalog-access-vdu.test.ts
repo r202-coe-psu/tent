@@ -61,3 +61,28 @@ describe.each(Object.entries(VDUS))('catalog VDU (%s) — CR-227 donation_staff'
 		expect(() => vdu(item, null, other)).toThrow();
 	});
 });
+
+describe.each(Object.entries(VDUS))('catalog VDU (%s) — #832 compound roles', (_name, vdu) => {
+	it.each(['shelter_manager', 'warehouse_staff'])('accepts compound SH001:%s', (role) => {
+		const user: UserCtx = { name: 'u', roles: ['shelter:SH001', `SH001:${role}`] };
+		expect(() => vdu(item, null, user)).not.toThrow();
+	});
+
+	it.each(['shelter_manager', 'warehouse_staff'])('accepts bare %s', (role) => {
+		const user: UserCtx = { name: 'u', roles: ['shelter:SH001', role] };
+		expect(() => vdu(item, null, user)).not.toThrow();
+	});
+
+	it.each(['shelter_manager', 'warehouse_staff'])(
+		'rejects compound %s of another shelter',
+		(role) => {
+			const user: UserCtx = { name: 'u', roles: ['shelter:SH001', `SH002:${role}`] };
+			expect(() => vdu(item, null, user)).toThrow();
+		}
+	);
+
+	it('rejects a compound role without shelter scope', () => {
+		const user: UserCtx = { name: 'u', roles: ['SH001:shelter_manager'] };
+		expect(() => vdu(item, null, user)).toThrow();
+	});
+});
