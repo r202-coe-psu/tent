@@ -108,7 +108,7 @@ describe('EvacueeQueueView mobile cards', () => {
 		const text = card.textContent ?? '';
 		expect(text).toContain('สมหญิง ศรีสุวรรณพิทักษ์');
 		expect(text).toContain('(หญิง)');
-		expect(text).toContain('เลขที่เอกสาร');
+		expect(text).toContain('เลขบัตร');
 		expect(text).toContain('123***123');
 		expect(text).toContain('ออนไลน์ Web');
 		expect(text).toContain('0812345678');
