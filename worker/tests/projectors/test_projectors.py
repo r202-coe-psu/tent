@@ -1289,3 +1289,169 @@ async def test_project_needs_for_shelter_visible_on_home_and_urgency():
     assert payload["qty_target"] == Decimal(1000)
     assert payload["qty_needed"] == Decimal(1000)
     assert payload["urgency"] == "critical"
+
+
+# --- CR-253: parking_points + parking_vehicle_types ---
+
+
+def _parking_shelter(points=None, availability="available", legacy=(), **extra):
+    action, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "operation_status": "active",
+            "parking_policy": {
+                "availability": availability,
+                "supported_vehicles": list(legacy),
+            },
+            "parking_points": points,
+            "updated_at": "2026-01-01T00:00:00.000Z",
+            **extra,
+        }
+    )
+    assert action == "upsert" and payload is not None
+    return payload
+
+
+def _pp(point_id, name="ลานจอด", vehicles=(), **over):
+    return {"id": point_id, "name": name, "vehicles": list(vehicles), **over}
+
+
+def test_parking_points_only_pinned_points_leave_the_staff_plane():
+    payload = _parking_shelter(
+        [
+            _pp(
+                "a",
+                lat=7.0086,
+                lng=100.4747,
+                note="  ประตู 2 ",
+                vehicles=[{"type": "car", "max_capacity": 30}],
+            ),
+            _pp("b"),  # not pinned yet
+            _pp("c", lat=0, lng=0),  # (0,0) is not a pin
+            _pp("d", lat=91, lng=100),  # out of range
+        ]
+    )
+    assert payload["parking_points"] == [
+        {
+            "id": "a",
+            "name": "ลานจอด",
+            "note": "ประตู 2",
+            "geo": {"lat": 7.0086, "lng": 100.4747},
+            "vehicles": [{"type": "car", "max_capacity": 30}],
+        }
+    ]
+
+
+def test_parking_points_blank_note_is_null_and_bad_vehicles_are_dropped():
+    payload = _parking_shelter(
+        [
+            _pp(
+                "a",
+                lat=7,
+                lng=100,
+                note="  ",
+                vehicles=[
+                    {"type": "car", "max_capacity": -1},
+                    {"type": "car", "max_capacity": 9},  # duplicate type: first wins
+                    {"type": "plane", "max_capacity": 1},
+                    "junk",
+                ],
+            )
+        ]
+    )
+    [point] = payload["parking_points"]
+    assert point["note"] is None
+    assert point["vehicles"] == [{"type": "car", "max_capacity": None}]
+
+
+def test_parking_points_hidden_when_availability_is_none():
+    payload = _parking_shelter([_pp("a", lat=7, lng=100)], availability="none")
+    assert payload["parking_points"] == []
+
+
+@pytest.mark.parametrize(
+    "bad", [None, "x", {"a": 1}, [None, "x", 3], [{"id": 1, "name": "x"}]]
+)
+def test_parking_fields_survive_a_corrupt_doc(bad):
+    payload = _parking_shelter(bad)
+    assert payload["parking_points"] == []
+    assert payload["parking_vehicle_types"] == []
+
+
+def test_parking_fields_survive_a_corrupt_policy():
+    _, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH001",
+            "name": "x",
+            "parking_policy": "junk",
+            "updated_at": "2026-01-01",
+        }
+    )
+    assert payload["parking_points"] == [] and payload["parking_vehicle_types"] == []
+
+
+_LEGACY_CAR = [{"type": "car", "max_capacity": 200}]
+
+
+@pytest.mark.parametrize(
+    ("points", "availability", "legacy", "expected"),
+    [
+        # Same cases as the TS table in schema.test.ts ('effective vehicles').
+        (
+            [
+                _pp("a", vehicles=[{"type": "car", "max_capacity": 30}]),
+                _pp(
+                    "b",
+                    vehicles=[
+                        {"type": "car"},
+                        {"type": "boat"},
+                        {"type": "motorcycle"},
+                    ],
+                ),
+            ],
+            "available",
+            _LEGACY_CAR,
+            ["motorcycle", "car", "boat"],
+        ),
+        (
+            [_pp("a", vehicles=[{"type": "car", "max_capacity": None}])],
+            "available",
+            [],
+            ["car"],
+        ),
+        (
+            [_pp("a")],
+            "available",
+            _LEGACY_CAR,
+            ["car"],
+        ),  # points without vehicles -> legacy
+        ([], "available", _LEGACY_CAR, ["car"]),  # no points -> legacy
+        (
+            [_pp("a", vehicles=[{"type": "car", "max_capacity": 5}])],
+            "none",
+            _LEGACY_CAR,
+            [],
+        ),
+        (
+            [_pp("a", vehicles=[{"type": "boat", "max_capacity": 2}])],
+            None,
+            [],
+            ["boat"],
+        ),
+        # An unpinned point still counts: it passes the filter without a pin on the map (FR-34).
+        ([_pp("a", vehicles=[{"type": "truck"}])], "available", [], ["truck"]),
+    ],
+)
+def test_parking_vehicle_types_follow_the_effective_vehicle_rule(
+    points, availability, legacy, expected
+):
+    payload = _parking_shelter(points, availability=availability, legacy=legacy)
+    assert payload["parking_vehicle_types"] == expected
+
+
+def test_parking_capacity_total_never_decides_a_vehicle_type():
+    payload = _parking_shelter([], common_areas={"parking_capacity": 40})
+    assert payload["parking_vehicle_types"] == []

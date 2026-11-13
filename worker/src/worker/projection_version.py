@@ -44,4 +44,6 @@ per deploy, so batch related projector changes into one bump per release when po
 #: ``on_hand`` / ``reserved`` are ``Decimal128`` (were ``double``), computed in ``Decimal``
 #: and rounded to four places half-up before the ``<= 0`` delete.
 #: 18 — CR-245 (#1152): ``public_volunteers.occupation`` (free text string|null).
-PROJECTION_VERSION: int = 18
+#: 19 — CR-253: ``public_shelters.parking_points`` (pinned points with per-point vehicles) and
+#: ``public_shelters.parking_vehicle_types`` (effective vehicle types for the list filter).
+PROJECTION_VERSION: int = 19
