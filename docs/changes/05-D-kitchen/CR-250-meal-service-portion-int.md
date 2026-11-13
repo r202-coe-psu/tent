@@ -3,7 +3,7 @@ id: CR-250
 title: meal_service — actual_yield/served/waste เป็น int (จำนวนจาน) ตามโค้ด และคำนวณ shortfall กับยอดคงคลังด้วย Decimal
 status: approved
 date: 2026-11-11
-updated: 2026-11-12
+updated: 2026-11-13
 requested_by: "PO decision (#794) — จำนวนจานเป็น int ถูกแล้ว ให้แก้ schema.md; issue #937"
 decided_by: "Soravit Sukkarn (Team Lead)"
 decision_date: 2026-11-12
@@ -94,6 +94,24 @@ migration: ไม่ bump schema_v — doc ที่ persist เป็น JSON i
 
 N/A — ไม่ bump `schema_v` (คง 2). doc `meal_service` ที่ persist แล้วเก็บสาม field เป็น JSON integer
 ตาม Zod schema มาตลอด การเปลี่ยนนี้แก้ spec ให้ตรงข้อมูลจริง ไม่เปลี่ยนรูป doc จึงไม่มี backfill
+
+## Amendment — 2026-11-13 (review PR #1351)
+
+แก้ข้อเท็จจริงเรื่องหน้ารับผลผลิต ข้อความเดิมด้านบนคงไว้เป็นประวัติ — **section นี้มีผลเหนือข้อความเดิม** ในข้อที่ระบุ
+
+### Amends — ข้อความเดิมที่ถูกแก้
+
+- **Why:** "ยอดรวมบรรทัดผลผลิต `"0.1" + "0.2"` เทียบกับ expected `"0.3"` แล้วขึ้นว่าไม่ตรง"
+  → ไม่เคยเกิด `yieldTotal()` บวกด้วย Decimal (`addQty`) อยู่แล้วก่อน CR นี้ จึงได้สตริง `"0.3"` และ
+  `Number("0.3") === 0.3` ส่วนค่า `qty_str` มีทศนิยมไม่เกิน 4 ตำแหน่ง (`QTY_DECIMALS`) สองค่าที่ต่างกันจึงแปลงเป็น
+  number ได้ค่าต่างกันในช่วงค่าที่ใช้จริง ทำให้การเทียบด้วย `Number()` แบบเดิมถูกต้องอยู่แล้ว บั๊ก float ของ CR นี้มีเฉพาะ shortfall ในหน้าแผนครัว
+- **FR-5:** ยังทำตามเดิม แต่เป็นการทำให้ทุกจุดคำนวณด้วย Decimal เหมือนกัน ไม่ใช่การแก้บั๊ก เงื่อนไขย้ายไปอยู่ใน
+  `yieldTotalMismatch(total, expected)` ใน `features/kitchen/domain/kitchen-yield-receipt.ts` และ
+  `yield-receipt-lines.svelte` เรียกฟังก์ชันนี้
+- **AC-2:** "ยอดรวมบรรทัดผลผลิต `"0.1" + "0.2"` เทียบ expected `"0.3"` → ไม่ขึ้นว่าไม่ตรง"
+  → `yieldTotalMismatch` มี unit test ใน `kitchen-yield-receipt.test.ts` ครอบสามกรณี: ยอดรวม `"0.1" + "0.2"`
+  เทียบ expected `"0.3"` → ไม่ mismatch, เทียบ `"0.4"` → mismatch, และไม่มี expected (`undefined` / `''`)
+  → ไม่ mismatch AC นี้ยืนยันพฤติกรรมเท่านั้น ไม่ได้ยืนยันว่าแก้บั๊ก เพราะการเทียบด้วย `Number()` แบบเดิมก็ผ่าน test เดียวกัน
 
 ## Decision log
 
