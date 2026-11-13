@@ -1,5 +1,6 @@
 export const PUBLIC_SHELTER_DETAILS_I18N = {
 	th: {
+		parkingPoints: 'จุดจอดรถ',
 		openAdmission: 'เปิดรับผู้อพยพ',
 		unnamedShelter: 'ไม่มีชื่อศูนย์',
 		addressNotSpecified: 'ไม่ระบุที่อยู่',
@@ -93,6 +94,7 @@ export const PUBLIC_SHELTER_DETAILS_I18N = {
 		shelterDetailFallback: 'ข้อมูลศูนย์พักพิง'
 	},
 	en: {
+		parkingPoints: 'Parking',
 		openAdmission: 'Open for Admission',
 		unnamedShelter: 'Unnamed Shelter',
 		addressNotSpecified: 'Address Not Specified',
