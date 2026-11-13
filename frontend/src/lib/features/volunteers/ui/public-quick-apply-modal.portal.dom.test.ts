@@ -28,6 +28,7 @@ const profile: VolunteerProfile = {
 	nickname: null,
 	phone_masked: 'xxx-xxx-2222',
 	email: null,
+	occupation: null,
 	volunteer_code: 'V-1001',
 	skills: [],
 	organization: null,
@@ -39,14 +40,14 @@ const profile: VolunteerProfile = {
 
 let instance: ReturnType<typeof mount> | null = null;
 
-function open(language: 'th' | 'en', signedIn = true) {
+function open(language: 'th' | 'en', signedIn = true, occupation: string | null = null) {
 	langState.current = language;
 	instance = mount(PublicQuickApplyModal, {
 		target: document.body,
 		props: {
 			job,
 			isOpen: true,
-			applicantProfile: signedIn ? profile : null,
+			applicantProfile: signedIn ? { ...profile, occupation } : null,
 			applicantCredential: signedIn ? { token: 'TKT-VOL-ABCDEF', portal_id: 'p1' } : null
 		}
 	});
@@ -95,5 +96,18 @@ describe('PublicQuickApplyModal for a signed-in portal volunteer', () => {
 		expect(placeholders).toContain('เช่น เก่งกล้า');
 		expect(placeholders).toContain('เช่น งานอาสา');
 		expect(placeholders).toContain('เช่น กล้า, พิมพ์');
+	});
+
+	it('does not show the occupation field to a portal applicant — staff own it (CR-245)', () => {
+		open('th', true, 'วิศวกร');
+		expect(document.body.querySelector('#occupation')).toBeNull();
+	});
+
+	it('lets a public applicant type an occupation (CR-245)', () => {
+		open('th', false);
+		const input = document.body.querySelector<HTMLInputElement>('#occupation');
+		expect(input).not.toBeNull();
+		expect(input?.readOnly).toBe(false);
+		expect(input?.maxLength).toBe(100);
 	});
 });

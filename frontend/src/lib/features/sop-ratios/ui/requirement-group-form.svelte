@@ -9,8 +9,13 @@
 	import {
 		STANDARD_UOM_OPTIONS,
 		type RequirementGroup,
-		type ItemMap
+		type ItemMap,
+		itemMapSchema,
+		sumSharePercent,
+		isShareSumOff
 	} from '../domain/requirement-group';
+	import { qtyStrCoerceSchema } from '$lib/utils/qty';
+	import { isPositiveQty } from '../domain/qty-input';
 	import { resolveSource, type Source } from '$lib/utils/source';
 	import { useSaveRequirementGroup } from '../application/requirement-group-queries';
 	import { toast } from 'svelte-sonner';
@@ -46,7 +51,11 @@
 	let formName = $state('');
 	let formStandardUom = $state('');
 	let formStatus = $state<'active' | 'inactive'>('active');
-	let formItemMaps = $state<ItemMap[]>([]);
+	type FormItemMap = Omit<ItemMap, 'conversion_factor' | 'share_percent'> & {
+		conversion_factor: string | number | null;
+		share_percent?: string | number | null;
+	};
+	let formItemMaps = $state<FormItemMap[]>([]);
 	let formErrors = $state<Record<string, string>>({});
 
 	const itemMasters = $derived(itemMastersQuery.data ?? []);
@@ -87,12 +96,14 @@
 		}
 	}
 
-	const sharePercentSum = $derived(
-		formItemMaps.reduce((sum, item) => sum + (Number(item.share_percent) || 0), 0)
+	const validShares = $derived(
+		formItemMaps.map((item) => {
+			const parsed = qtyStrCoerceSchema.safeParse(item.share_percent);
+			return { share_percent: parsed.success ? parsed.data : undefined };
+		})
 	);
-	const showShareWarning = $derived(
-		formItemMaps.length > 0 && Math.abs(sharePercentSum - 100) > 0.01
-	);
+	const sharePercentSum = $derived(sumSharePercent(validShares));
+	const showShareWarning = $derived(formItemMaps.length > 0 && isShareSumOff(validShares));
 
 	$effect(() => {
 		if (group) {
@@ -128,7 +139,7 @@
 	function addItemMap() {
 		formItemMaps = [
 			...formItemMaps,
-			{ item_id: '', base_uom: '', conversion_factor: 1, share_percent: 0 }
+			{ item_id: '', base_uom: '', conversion_factor: '1', share_percent: '0' }
 		];
 	}
 
@@ -160,12 +171,13 @@
 			if (!item.base_uom.trim()) {
 				formErrors[`item_${i}_uom`] = 'กรุณาระบุหน่วยนับ';
 			}
-			if (Number(item.conversion_factor) <= 0) {
-				formErrors[`item_${i}_cf`] = 'ตัวคูณแปลงค่าต้อง > 0';
+			if (!isPositiveQty(item.conversion_factor ?? undefined)) {
+				formErrors[`item_${i}_cf`] = 'ตัวคูณแปลงค่าต้องไม่น้อยกว่า 0.0001';
 			}
 			if (
-				item.share_percent !== undefined &&
-				(Number(item.share_percent) < 0 || Number(item.share_percent) > 100)
+				item.share_percent != null &&
+				item.share_percent !== '' &&
+				!itemMapSchema.shape.share_percent.safeParse(item.share_percent).success
 			) {
 				formErrors[`item_${i}_share`] = 'สัดส่วนต้องอยู่ระหว่าง 0-100%';
 			}
@@ -188,8 +200,10 @@
 					item_maps: formItemMaps.map((im) => ({
 						item_id: im.item_id.trim(),
 						base_uom: im.base_uom.trim(),
-						conversion_factor: Number(im.conversion_factor),
-						share_percent: im.share_percent !== undefined ? Number(im.share_percent) : undefined
+						conversion_factor: qtyStrCoerceSchema.parse(im.conversion_factor),
+						...(im.share_percent == null || im.share_percent === ''
+							? {}
+							: { share_percent: qtyStrCoerceSchema.parse(im.share_percent) })
 					})),
 					shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 				},
@@ -434,6 +448,7 @@
 												id={`item-map-cf-${index}`}
 												type="number"
 												step="any"
+												min="0.0001"
 												bind:value={itemMap.conversion_factor}
 												placeholder="1"
 											/>

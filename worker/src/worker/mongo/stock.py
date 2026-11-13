@@ -103,7 +103,8 @@ async def refresh_shelter_stock(couch: CouchClient, shelter_code: str) -> int:
 
     Full rescan on each relevant change, same pattern as `refresh_on_hand` — items
     are never deleted here even at zero balance (a 0 on-hand figure is itself useful
-    to a partner, unlike a public donation "need")."""
+    to a partner, unlike a public donation "need"); only an item with no ledger entry
+    left at all loses its row."""
     database = shelter_db_name(shelter_code)
     if not await couch.database_exists(database):
         # The shelter DB is gone, so its projection must not outlive it (a late ledger
@@ -124,6 +125,12 @@ async def refresh_shelter_stock(couch: CouchClient, shelter_code: str) -> int:
     occupancy = shelter.occupancy_total if shelter is not None else 0
 
     payloads = compute_shelter_stocks(ledgers, catalog, overrides, occupancy=occupancy)
+    # Rows whose item no longer has any ledger entry (purged by an admin cleanup) go;
+    # an item whose ledger nets to 0 still has a payload and keeps its row.
+    keep = [f"{shelter_code}:{payload['item_id']}" for payload in payloads]
+    await ShelterStock.find(
+        {"shelter_code": shelter_code, "_id": {"$nin": keep}}
+    ).delete()
     now = datetime.now(UTC)
     for payload in payloads:
         item_id = payload["item_id"]

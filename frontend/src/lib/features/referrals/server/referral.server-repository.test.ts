@@ -447,6 +447,14 @@ describe('CouchDbReferralServerRepository listPage()', () => {
 		expect(body).not.toHaveProperty('skip');
 	});
 
+	it('dispatch_mode m5: adds it to the selector and keeps the outgoing index sort (D17)', async () => {
+		stubFind([]);
+		await repo.listPage({ direction: 'outgoing', dispatch_mode: 'm5' });
+		const body = findBody();
+		expect(body.selector).toEqual({ type: 'referral', shelter_code: 'SH001', dispatch_mode: 'm5' });
+		expect(body.sort).toEqual([{ type: 'desc' }, { shelter_code: 'desc' }, { created_at: 'desc' }]);
+	});
+
 	it('incoming: selects on to_shelter_code and sorts asc when created_at_asc', async () => {
 		stubFind([]);
 		await repo.listPage({ direction: 'incoming', sort: 'created_at_asc' });
@@ -472,11 +480,77 @@ describe('CouchDbReferralServerRepository listPage()', () => {
 		expect(page.hasMore).toBe(false);
 	});
 
-	it('hasMore is true when a full page comes back, even if a malformed doc is dropped', async () => {
-		stubFind([capacitySent, { _id: 'referral:broken', type: 'referral' }]);
+	/**
+	 * First `_find` returns `docs`; the probe (`limit: 1`) returns `probeDocs` with `probeStatus`,
+	 * or rejects like a network error when `probeStatus` is `'throw'`.
+	 */
+	function stubFindWithProbe(
+		docs: unknown[],
+		probeDocs: unknown[],
+		probeStatus: number | 'throw' = 200
+	) {
+		adminRaw.mockImplementation(async (path: string, _m: string, body: { limit: number }) => {
+			if (!path.endsWith('/_find')) return { status: 201, data: { ok: true } };
+			if (body.limit !== 1) return { status: 200, data: { docs, bookmark: 'bm' } };
+			if (probeStatus === 'throw') throw new TypeError('fetch failed');
+			return { status: probeStatus, data: probeStatus === 200 ? { docs: probeDocs } : {} };
+		});
+	}
+	const findCalls = () => adminRaw.mock.calls.filter((c) => String(c[0]).endsWith('/_find'));
+
+	it('probes after a full raw page even if a malformed doc is dropped', async () => {
+		stubFindWithProbe([capacitySent, { _id: 'referral:broken', type: 'referral' }], []);
 		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
 		expect(page.items).toHaveLength(1);
+		expect(findCalls()).toHaveLength(2);
+		expect(page.hasMore).toBe(false);
+	});
+
+	it('hasMore is true when the probe finds only a malformed row', async () => {
+		stubFindWithProbe([capacitySent, capacitySent], [{ _id: 'referral:broken', type: 'referral' }]);
+		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
 		expect(page.hasMore).toBe(true);
+	});
+
+	it('keeps the fetched rows and hasMore true when the probe throws', async () => {
+		stubFindWithProbe([capacitySent, capacitySent], [], 'throw');
+		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
+		expect(page.items).toHaveLength(2);
+		expect(page.hasMore).toBe(true);
+	});
+
+	it('hasMore is false when a full page is the last one (exactly 2 of limit 2)', async () => {
+		stubFindWithProbe([capacitySent, capacitySent], []);
+		const page = await repo.listPage({ direction: 'outgoing', status: 'sent', limit: 2 });
+		expect(page.items).toHaveLength(2);
+		expect(page.hasMore).toBe(false);
+		const [first, probe] = findCalls().map((c) => c[2] as Record<string, unknown>);
+		expect(probe).toEqual({
+			selector: first.selector,
+			sort: first.sort,
+			limit: 1,
+			bookmark: 'bm'
+		});
+	});
+
+	it('hasMore is true when the probe finds a row past the bookmark', async () => {
+		stubFindWithProbe([capacitySent, capacitySent], [capacitySent]);
+		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
+		expect(page.hasMore).toBe(true);
+	});
+
+	it('keeps hasMore true when the probe fails, so rows are never hidden', async () => {
+		stubFindWithProbe([capacitySent, capacitySent], [], 500);
+		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
+		expect(page.items).toHaveLength(2);
+		expect(page.hasMore).toBe(true);
+	});
+
+	it('does not probe a short page', async () => {
+		stubFindWithProbe([capacitySent], []);
+		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
+		expect(page.hasMore).toBe(false);
+		expect(findCalls()).toHaveLength(1);
 	});
 
 	it('hasMore is false on an empty last page that still carries a bookmark', async () => {

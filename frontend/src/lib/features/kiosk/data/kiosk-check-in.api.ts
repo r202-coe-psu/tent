@@ -3,6 +3,7 @@ import { languageStore } from '$lib/stores/language.svelte';
 import { getTranslation } from '$lib/utils/i18n';
 import type { KioskPhotoPayload } from '../domain/kiosk-photo';
 import { personQrVerdictMessage } from '$lib/utils/evacuee-qr';
+import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 import {
 	KIOSK_CHECK_IN_MESSAGES_I18N,
 	KIOSK_SERVER_ERROR_EN
@@ -14,8 +15,17 @@ export type GateInput =
 	| { source: 'phone'; phone: string; primary_evacuee_id?: string }
 	| { source: 'thaid'; session_id: string };
 
-/** Unmasked label text from the server; `emergency_phone` only when the evacuee has one. */
-export type KioskLabelIdentity = { name: string; phone: string | null; emergency_phone?: string };
+/**
+ * Unmasked label text from the server; `emergency_phone` only when the evacuee has one. `marker`
+ * is the vulnerability level the issued QR was logged with (#1301): only with a QR, null when the
+ * person has none.
+ */
+export type KioskLabelIdentity = {
+	name: string;
+	phone: string | null;
+	emergency_phone?: string;
+	marker?: VulnerabilityMarker | null;
+};
 
 export interface KioskEvacueeSummary {
 	evacuee_id: string;

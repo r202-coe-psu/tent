@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { ItemMaster } from '$lib/features/catalog';
-	import type { Flow2RequisitionType, MealPeriod } from '../../domain/food-supplies';
+	import {
+		thailandCalendarDay,
+		type Flow2RequisitionType,
+		type MealPeriod
+	} from '../../domain/food-supplies';
 	import { useCreateRequisitionTicket } from '../../application/queries';
 	import { useShelter } from '$lib/features/shelters';
 	import { MEAL_PERIOD_LABELS } from '../model/ticket-status';
@@ -11,12 +15,14 @@
 	} from '../model/catalog-eligibility';
 	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { formatServiceDay } from '../model/service-day';
 	import {
 		buildDestinationOptionGroups,
 		resolveDestinationSelection,
 		CUSTOM_DESTINATION_SENTINEL
 	} from '../model/destination-selector';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
@@ -55,6 +61,14 @@
 	let destinationSelection = $state('');
 	let customDestinationText = $state('');
 	let meal = $state<MealPeriod | undefined>('breakfast');
+	// The page may stay open past midnight, so the Thailand day is read again each time the dialog
+	// opens (`open` is the dependency) rather than once when the page loaded.
+	const today = $derived.by(() => {
+		void open;
+		return thailandCalendarDay();
+	});
+	// Follows `today`, so it starts on the new day when reopened; the user's pick overrides it.
+	let serviceDate = $derived(today);
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
 	let pickerOpen = $state(false);
@@ -109,6 +123,7 @@
 		destinationSelection = '';
 		customDestinationText = '';
 		meal = 'breakfast';
+		serviceDate = thailandCalendarDay();
 		notes = '';
 		selectedItems = [];
 		pickerOpen = false;
@@ -125,6 +140,12 @@
 		// 2. Validation: Meal
 		if (requisitionType === 'food' && !meal) {
 			toast.error('ตั๋วเบิกจ่ายอาหารต้องระบุมื้ออาหาร (เช้า, กลางวัน, เย็น, อาหารว่าง)');
+			return;
+		}
+
+		// 2b. Validation: Service day (today or later — draft-food-ticket-service-date)
+		if (requisitionType === 'food' && (!serviceDate || serviceDate < thailandCalendarDay())) {
+			toast.error('วันที่แจกต้องเป็นวันนี้หรือวันถัดไป');
 			return;
 		}
 
@@ -164,7 +185,7 @@
 		const input = {
 			ticket_no: ticketNo,
 			requisition_type: requisitionType,
-			...(requisitionType === 'food' && meal ? { meal } : {}),
+			...(requisitionType === 'food' && meal ? { meal, service_date: serviceDate } : {}),
 			source_location: sourceLocation,
 			destination_location: destination,
 			items: selectedItems.map(buildCreateTicketItem),
@@ -357,6 +378,24 @@
 					<p class="mt-1 text-xs text-amber-800/80">
 						ระบบใช้มื้ออาหารในการตรวจสอบสิทธิ์รับอาหารซ้ำของผู้พักพิงในรอบวัน
 					</p>
+
+					<div class="space-y-1 pt-3">
+						<label for="service-date" class="block text-sm font-semibold text-slate-800">
+							วันที่แจก <span class="text-red-500">*</span>
+						</label>
+						<DatePicker
+							id="service-date"
+							min={today}
+							bind:value={serviceDate}
+							format={(iso) => formatServiceDay(iso, today)}
+							class="!h-10 bg-white sm:w-56"
+						/>
+						{#if serviceDate}
+							<p class="text-xs text-amber-800/80">
+								ตั๋วนี้จะอยู่ในรอบแจก {formatServiceDay(serviceDate, today)} ของจุดแจก
+							</p>
+						{/if}
+					</div>
 				</fieldset>
 			{/if}
 

@@ -14,6 +14,7 @@
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
+	import LotFractionWriteOff from './stock/lot-fraction-write-off.svelte';
 	import DisabledReason from './stock/disabled-reason.svelte';
 	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import { buildLotRows } from './stock/lot-view';
@@ -64,6 +65,7 @@
 	const lotRows = $derived(
 		buildLotRows(lots, storagePoints.points, Date.now(), itemsById, selfPurchasedRefs)
 	);
+	const balanceByLotRef = $derived(new Map(lots.map((l) => [l.lot_ref, l])));
 
 	// "ซื้อเอง" switch of the lots tab. A choice is remembered for that item only; otherwise the
 	// switch follows the table's filter.
@@ -281,6 +283,12 @@
 											>
 												{lot.isExpired || lot.isNegative ? '' : `ลำดับที่ ${order}: `}{lot.reason}
 											</p>
+											{#if canChange && !lot.isNegative}
+												{@const balance = balanceByLotRef.get(lot.lotRef)}
+												{#if balance}
+													<LotFractionWriteOff lot={balance} {offline} />
+												{/if}
+											{/if}
 										</li>
 									{/each}
 								</ul>

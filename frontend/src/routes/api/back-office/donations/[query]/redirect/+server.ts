@@ -8,6 +8,7 @@ import {
 	listShelterCodes,
 	shelterDb,
 	routeErrorResponse as toRouteError,
+	m6NotRefusableResponse,
 	staleDecisionResponse
 } from '$lib/server/donation-intake';
 import { hasKeyedDonationStock } from '$lib/server/donation-docs';
@@ -56,6 +57,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const { donation, dbName } = found;
+		const m6 = m6NotRefusableResponse(donation);
+		if (m6) return m6;
 		const body = await request.json().catch(() => ({}));
 		const stale = staleDecisionResponse(body, donation);
 		if (stale) return stale;

@@ -237,6 +237,30 @@ describe('applyCycleCount (#347)', () => {
 		expect(bulkCalls).toHaveLength(0);
 	});
 
+	it("refuses a count whose lots are not in this shelter's ledger, even a surplus (#518)", async () => {
+		// the walker's lot list came from another shelter: same item, lot that is not here
+		const foreign = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '10',
+				unit: 'kg',
+				reason: 'donation',
+				ref_id: 'donation:x',
+				lot: SHELF
+			},
+			{ shelterCode: 'SH002', createdBy: 'counter' }
+		);
+		const lots = buildCycleCountLots([foreign]).lots;
+		const surplus = planCycleCount(
+			lots.map((lot) => ({ ...lot, counted_qty: '15' })),
+			'c-foreign'
+		);
+		expect(surplus.lines[0].qty).toBe('5');
+		await expect(repo.applyCycleCount(surplus, ctx)).rejects.toBeInstanceOf(LotWriteOffError);
+		expect(bulkCalls).toHaveLength(0);
+		expect(ledgerRows().filter((r) => r.reason === 'adjust')).toHaveLength(0);
+	});
+
 	it('refuses an unknown item or a unit mismatch before writing anything', async () => {
 		const submission = planCycleCount(keyedEntries({ 'item:rice': '8', 'item:salt': '5' }), 'c');
 		mockGetItem.mockImplementation(async (id) =>

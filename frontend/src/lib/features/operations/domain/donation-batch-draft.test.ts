@@ -65,6 +65,17 @@ describe('draftProblem', () => {
 		expect(draftProblem(draft({ qty: '-1' }), false)).toBe('qty');
 	});
 
+	it('flags a fractional quantity in a count unit but not in a measured unit (#805)', () => {
+		expect(draftProblem(draft({ qty: '1.5' }), false, 'count')).toBe('whole');
+		expect(draftProblem(draft({ qty: '2' }), false, 'count')).toBeNull();
+		expect(draftProblem(draft({ qty: '1.5' }), false, 'mass')).toBeNull();
+		expect(draftProblem(draft({ qty: '1.5' }), false, undefined)).toBeNull();
+	});
+
+	it('does not re-flag a line already saved to the ledger (#805)', () => {
+		expect(draftProblem(draft({ qty: '1.5', locked: true }), false, 'count')).toBeNull();
+	});
+
 	it('flags a received line that is not matched to an item (FR-B2)', () => {
 		expect(draftProblem(draft({ item_id: '' }), false)).toBe('item');
 	});

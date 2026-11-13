@@ -46,6 +46,7 @@
 	 * person at the desk — also flagged for the CR (should `source: 'walk_in'`
 	 * / `'staff_entry'` auto-verify identity?).
 	 */
+	import { untrack } from 'svelte';
 	import { defaults, superForm, setError } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { useQueryClient } from '@tanstack/svelte-query';
@@ -68,8 +69,15 @@
 	import { canAccessEvacueeRegistration } from '$lib/auth/roles';
 	import {
 		walkInVolunteerFormSchema,
-		type WalkInVolunteerFormValues
+		type WalkInVolunteerFormValues,
+		type Volunteer
 	} from '../domain/volunteer.schema';
+	import {
+		isVolunteerPhoneTakenError,
+		phoneTakenReactivateHint,
+		type ExistingVolunteerSummary
+	} from '../domain/phone-errors';
+	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
 	import { shiftKindFor } from '../domain/assign-roster';
 	import { isWithinDutyWindow } from '../domain/duty-window';
 	import { toSkillCode } from '../domain/skill-catalog';
@@ -80,7 +88,8 @@
 		useCreateWalkInVolunteer,
 		useSkillOptions,
 		useAssignVolunteers,
-		useCheckIn
+		useCheckIn,
+		fetchVolunteer
 	} from '../application/queries';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
@@ -105,7 +114,15 @@
 	const skillsList = $derived(skillCatalog.options);
 
 	function emptyValues(): WalkInVolunteerFormValues {
-		return { first_name: '', last_name: '', nickname: '', phone: '', email: '', national_id: '' };
+		return {
+			first_name: '',
+			last_name: '',
+			nickname: '',
+			phone: '',
+			email: '',
+			national_id: '',
+			occupation: ''
+		};
 	}
 
 	let selectedSkills = $state<string[]>([]);
@@ -146,7 +163,7 @@
 		SPA: true,
 		dataType: 'json',
 		validators: zod4(walkInVolunteerFormSchema),
-		resetForm: false,
+		resetForm: true,
 		onUpdate: async ({ form: validated }) => {
 			if (!validated.valid) return;
 			const data = validated.data;
@@ -158,6 +175,7 @@
 					nickname: data.nickname || undefined,
 					phone: data.phone || null,
 					email: data.email || null,
+					occupation: data.occupation ? data.occupation.trim() : null,
 					skills: selectedSkills,
 					organization: null,
 					national_id: data.national_id || null,
@@ -190,6 +208,12 @@
 				reset();
 				open = false;
 			} catch (err) {
+				if (isVolunteerPhoneTakenError(err)) {
+					setError(validated, 'phone', err.message);
+					// Field error + the panel below (with its buttons); no toast, it would be a third copy.
+					phoneConflictExisting = err.existing;
+					return;
+				}
 				const message = err instanceof Error ? err.message : 'ลงทะเบียนไม่สำเร็จ';
 				setError(validated, message);
 				toast.error(message);
@@ -197,7 +221,25 @@
 		}
 	});
 
-	const { form: formData, errors, submitting } = form;
+	const { form: formData, errors, submitting, reset: superReset } = form;
+
+	let phoneConflictExisting = $state<ExistingVolunteerSummary[]>([]);
+	const reactivateHint = $derived(phoneTakenReactivateHint(phoneConflictExisting));
+	let conflictVolunteer = $state<Volunteer | null>(null);
+	let conflictManageOpen = $state(false);
+
+	async function openConflictVolunteer(id: string) {
+		const v = await fetchVolunteer(queryClient, id);
+		if (v) {
+			conflictVolunteer = v;
+			conflictManageOpen = true;
+			// Close this dialog first so two modals are never stacked; closing programmatically does
+			// not run `reset()`, so the conflict profile above survives until the dialog reopens.
+			open = false;
+		} else {
+			toast.error('ไม่พบข้อมูลโปรไฟล์ดังกล่าว');
+		}
+	}
 
 	/** What the last pick wrote, so a second pick does not leave the first person's data behind. */
 	let lastPrefill: WalkInPrefill = {};
@@ -223,11 +265,23 @@
 
 	function reset() {
 		lastPrefill = {};
+		superReset({ data: emptyValues() });
 		$formData = emptyValues();
 		selectedSkills = [];
 		jobShiftSelection = null;
 		instantCheckIn = true;
+		phoneConflictExisting = [];
+		conflictVolunteer = null;
+		conflictManageOpen = false;
 	}
+
+	$effect(() => {
+		if (open) {
+			untrack(() => {
+				reset();
+			});
+		}
+	});
 
 	const isPending = $derived(
 		$submitting ||
@@ -308,6 +362,29 @@
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
+						{#if phoneConflictExisting.length > 0}
+							<div
+								class="mt-2 space-y-1.5 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive"
+							>
+								<p class="font-medium">พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์</p>
+								{#if reactivateHint}<p>{reactivateHint}</p>{/if}
+								<div class="flex flex-wrap gap-1.5">
+									{#each phoneConflictExisting as ex (ex._id)}
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											class="h-7 bg-background text-xs text-foreground hover:bg-muted"
+											onclick={() => void openConflictVolunteer(ex._id)}
+										>
+											เปิดโปรไฟล์ {ex.volunteer_code || 'ดูข้อมูล'}{ex.status === 'inactive'
+												? ' (ปิดใช้งานอยู่)'
+												: ''}
+										</Button>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</Form.Field>
 					<Form.Field {form} name="nickname">
 						<Form.Control>
@@ -352,6 +429,20 @@
 								inputmode="numeric"
 								maxlength={13}
 								placeholder="X-XXXX-XXXXX-XX-X (ไม่บังคับ)"
+								class="h-11"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="occupation">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>อาชีพ (ทางเลือก / Optional)</Form.Label>
+							<Input
+								{...props}
+								bind:value={$formData.occupation}
+								placeholder="เช่น พยาบาล, วิศวกร, ค้าขาย (ไม่บังคับ)"
 								class="h-11"
 							/>
 						{/snippet}
@@ -484,3 +575,12 @@
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
+
+{#if conflictVolunteer}
+	<VolunteerManageDialog
+		bind:open={conflictManageOpen}
+		volunteer={conflictVolunteer}
+		shelterLine={shelterLabel}
+		todayShift={null}
+	/>
+{/if}

@@ -11,6 +11,7 @@ import {
 	canAccessManagerPages,
 	canAccessDonations,
 	canAccessWarehouse,
+	canAccessCentralWarehouse,
 	canViewSupply,
 	canAccessKitchen,
 	canAccessTickets,
@@ -24,6 +25,8 @@ import {
 	canManagePrinters,
 	canManageScanners,
 	kioskConfinement,
+	hasCapabilityInShelter,
+	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import {
@@ -156,6 +159,23 @@ export async function requireManager(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Referrals guard (`/back-office/referrals/**`) — system admin, shelter_manager, or medical_staff
+ * of the selected shelter. Medical staff only ever see and create medical-emergency referrals
+ * (M5 draft CR D8, D16); the BFF enforces that per request.
+ */
+export async function requireReferralAccess(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (
+		!canAccessManagerPages(roles, shelter) &&
+		!hasCapabilityInShelter(roles, shelter, MEDICAL_STAFF)
+	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Shelter readiness guard (`/back-office/shelters/readiness/[id]`, #478) — system admin, or
  * shelter_manager of the shelter named in the URL. Checked against `code`, not the selected
  * shelter, so editing the URL cannot open another shelter's assessments.
@@ -249,6 +269,19 @@ export async function requireWarehouseAccess(
 	const shelter = activeShelterCode(roles);
 	if (!canAccessWarehouse(roles, shelter)) {
 		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
+	}
+}
+
+/**
+ * Central warehouse (M6) guard (`/back-office/onedata/m6`) — system_admin, or in the active shelter
+ * shelter_manager / warehouse_staff (draft CR M6 D2). `supply_coordinator` is NOT admitted, unlike
+ * {@link requireWarehouseAccess}. UX gate; the BFF re-checks per request.
+ */
+export async function requireCentralWarehouseAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessCentralWarehouse(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
 

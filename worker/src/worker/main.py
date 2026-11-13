@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 
 from tent_model import close_db, init_db
@@ -14,12 +15,15 @@ from worker.couch.bootstrap import maybe_bootstrap
 from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
 from worker.inbound.external_bookings import run_external_booking_inbound_loop
+from worker.inbound.m5_transfers import run_m5_transfer_loop
+from worker.inbound.m6_withdrawals import run_m6_withdrawal_loop
 from worker.inbound.search_audit import run_search_audit_inbound_loop
 from worker.inbound.shift_responses import run_shift_response_inbound_loop
 from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
 from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
 from worker.inbound.volunteer_schedule_actions import run_volunteer_schedule_action_loop
 from worker.listeners.registry import ListenerManager
+from worker.printing.housekeeping import start_print_housekeeping
 from worker.retention.job import run_retention_loop
 
 logging.basicConfig(
@@ -53,8 +57,15 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     profile_update_task: asyncio.Task[None] | None = None
     schedule_action_task: asyncio.Task[None] | None = None
     external_booking_task: asyncio.Task[None] | None = None
+    m5_transfer_task: asyncio.Task[None] | None = None
+    m6_withdrawal_task: asyncio.Task[None] | None = None
+    print_housekeeping_task: asyncio.Task[None] | None = None
 
     try:
+        # Before bootstrap: a full re-projection can outlast the healthcheck start-period,
+        # and the task needs neither Couch nor Mongo.
+        if not bootstrap_only:
+            print_housekeeping_task = start_print_housekeeping(os.environ, stop)
         await maybe_bootstrap(couch, force=force_bootstrap or bootstrap_only)
         if bootstrap_only:
             logger.info("Bootstrap-only complete — exiting")
@@ -89,6 +100,14 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             run_external_booking_inbound_loop(couch, stop_event=stop),
             name="inbound-external-bookings",
         )
+        m5_transfer_task = asyncio.create_task(
+            run_m5_transfer_loop(couch, settings, stop_event=stop),
+            name="inbound-m5-transfers",
+        )
+        m6_withdrawal_task = asyncio.create_task(
+            run_m6_withdrawal_loop(couch, settings, stop_event=stop),
+            name="inbound-m6-withdrawals",
+        )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
@@ -103,6 +122,9 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             profile_update_task,
             schedule_action_task,
             external_booking_task,
+            m5_transfer_task,
+            m6_withdrawal_task,
+            print_housekeeping_task,
         ):
             if task:
                 task.cancel()
