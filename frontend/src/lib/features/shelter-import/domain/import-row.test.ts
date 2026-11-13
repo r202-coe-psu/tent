@@ -894,10 +894,10 @@ describe('validateRow — external shelter (CR-252)', () => {
 		}
 	});
 
-	it('rejects a link on a normal row', () => {
+	it('ignores a link on a normal row (no error, not stored)', () => {
 		const r = validateRow(baseRow({ [H.external_url]: 'https://example.org' }), 1, emptyLookups());
-		expect(r.ok).toBe(false);
-		expect(r.errors.map((e) => e.column)).toContain(H.external_url);
+		expect(r.errors.map((e) => e.column)).not.toContain(H.external_url);
+		expect(r.shelter?.external_url ?? null).toBeNull();
 	});
 
 	it('rejects zone and food-point rows on an external shelter, with their line', () => {

@@ -641,9 +641,6 @@ export function validateRow(
 	}
 	const status = isExternal ? 'unknown' : statusCell;
 	const externalUrlCell = cell(raw, H.external_url);
-	if (!isExternal && externalUrlCell !== '') {
-		sink.push(H.external_url, 'ใส่ลิงก์ได้เฉพาะศูนย์จากระบบภายนอก');
-	}
 	// CR-252 FR-30: an external shelter carries basic info only — no zones, food points,
 	// facilities, utilities, risk or policy data.
 	if (isExternal) {
