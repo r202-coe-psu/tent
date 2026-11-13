@@ -13,11 +13,18 @@ COLLECTION = "unassigned_registrations"
 
 async def test_init_drops_legacy_unique_index(settings: Settings, db_client):
     coll = db_client[_database_name(settings.DATABASE_URI)][COLLECTION]
+    # Clear any stale index (possibly with a different spec) so create_index
+    # can't fail with IndexKeySpecsConflict. 26 = NamespaceNotFound, 27 = IndexNotFound.
+    try:
+        await coll.drop_index("uniq_open_phones")
+    except OperationFailure as exc:
+        if exc.code not in (26, 27):
+            raise
     await coll.create_index(
         [("open_phones", 1)],
         name="uniq_open_phones",
         unique=True,
-        partialFilterExpression={"open_phones": {"$exists": True}},
+        partialFilterExpression={"open_phones.0": {"$exists": True}},
     )
 
     beanie_client = BeanieClient()
