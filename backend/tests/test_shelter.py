@@ -520,3 +520,44 @@ async def test_shelter_list_has_no_donation_points(
     assert response.status_code == 200
     item = next(s for s in response.json()["shelters"] if s["code"] == "SH203")
     assert "donation_points" not in item
+
+
+# --- CR-252: external shelter -------------------------------------------------------------
+
+
+async def test_external_shelter_list_and_detail(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _shelter_doc("SH301", "unknown", {"accepts_pre_registration": True})
+    doc.update(is_external=True, external_url="https://example.org/s", capacity=0)
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    listing = await client.get("/public/v1/shelters", headers=auth_headers)
+    (item,) = [s for s in listing.json()["shelters"] if s["code"] == "SH301"]
+    assert item["status"] == "unknown"
+    assert item["is_external"] is True
+    assert item["external_url"] == "https://example.org/s"
+    assert item["accepts_pre_registration"] is False
+
+    detail = await client.get("/public/v1/shelters/SH301", headers=auth_headers)
+    shelter = detail.json()["shelter"]
+    assert shelter["status"] == "UNKNOWN"  # never falls back to CLOSED
+    assert shelter["is_external"] is True
+    assert shelter["external_url"] == "https://example.org/s"
+    assert shelter["accepts_pre_registration"] is False
+
+
+async def test_regular_shelter_is_not_external(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _insert_shelter_doc(db_client, settings, _shelter_doc("SH302"))
+    detail = await client.get("/public/v1/shelters/SH302", headers=auth_headers)
+    shelter = detail.json()["shelter"]
+    assert shelter["is_external"] is False
+    assert shelter["external_url"] is None

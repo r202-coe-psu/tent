@@ -6,6 +6,7 @@ date: 2026-11-12
 requested_by: Dev Team B — GitHub #1242
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
+updated: 2026-11-13 # decision sync: ศูนย์ External กรอก/แสดงความจุสูงสุด (FR-6 / FR-19 / FR-21 แก้) — ไม่เปิด CR ใหม่ ไม่ bump schema_v
 affects:
   - docs/data/schema.md §3.1 shelter (เพิ่ม `is_external`, `external_url`; `operation_status` +`unknown`; `capacity` req→opt เมื่อ External) · §9.1 `public_shelters` (เพิ่ม `is_external`, `external_url`; `status`/`location_status` +`unknown`; `capacity` = `0` เมื่อ External)
   - schema_v 9 → 10 (shelter; additive, doc เดิมไม่ต้อง backfill)
@@ -43,7 +44,7 @@ affects:
 - FR-3 — `operation_status` เพิ่มค่า `unknown` (label "ไม่ทราบสถานะ"); enum = `standby | active | full_capacity | closed | cancelled | unknown`.
 - FR-4 — เมื่อ `is_external = true` ต้อง `operation_status = unknown` เสมอ (ฟอร์มล็อกค่า). ข้อยกเว้นเดียว: `system_admin` เปลี่ยนเป็น `cancelled` ได้เพื่อถอดออกจาก public.
 - FR-5 — เมื่อ `is_external = false` เลือก `unknown` ไม่ได้. บังคับที่ Zod (client) และ BFF `/api/**` (Zod ซ้ำฝั่ง server — shelter doc เขียนผ่าน admin credentials ทั้งหมด) ไม่เพิ่ม `validate_doc_update`; `registry-design.ts` / `REGISTRY_DESIGN_VERSION` ไม่เปลี่ยน.
-- FR-6 — `capacity` เป็น optional เมื่อ `is_external = true`; ศูนย์ปกติยังบังคับ `int > 0` ตามเดิม.
+- FR-6 — `capacity` เป็น optional เมื่อ `is_external = true` (กรอกได้แค่ความจุสูงสุด — ถ้ากรอกต้อง `int > 0`; ช่องว่าง = ไม่กรอก ไม่ใช่ `0`); ศูนย์ปกติยังบังคับ `int > 0` ตามเดิม. _(decision sync 2026-11-13)_
 - FR-7 — bump shelter `schema_v` 9 → 10; doc เดิมอ่านได้โดย `is_external` = `false` (ไม่มี backfill).
 
 ### สิทธิ์
@@ -65,12 +66,12 @@ affects:
 - FR-16 — ไม่นับ capacity / occupancy; ไม่รับ pre-registration, booking, donation.
 - FR-17 — `accepts_booking = false` เสมอ ทั้งฟังก์ชัน Python (`shelter_booking.py`) และ Mongo filter.
 - FR-18 — ซ่อนจากตัวเลือกศูนย์ใน flow ปฏิบัติการทั้งหมด: scope ผู้ใช้, โอนย้าย, donation/needs, kiosk, import. แสดงเฉพาะรายการ system-management พร้อม badge "External".
-- FR-19 — ฟอร์ม system-management เมื่อเปิด toggle External: ซ่อน zones/facilities, food, storage, utilities, risk, policy และ capacity; เหลือ basic-info (ชื่อ, ที่ตั้ง, ติดต่อ, URL).
+- FR-19 — ฟอร์ม system-management เมื่อเปิด toggle External: ซ่อน zones/facilities, food, storage, utilities, risk, policy และ section ความจุเชิงพื้นที่; เหลือ basic-info (ชื่อ, ที่ตั้ง, ติดต่อ, URL) + ช่อง **ความจุสูงสุด** (optional) ช่องเดียว. _(decision sync 2026-11-13: เดิมซ่อน capacity ด้วย)_
 
 ### Public UI
 
 - FR-20 — ศูนย์ External แสดง chip สถานะ "ไม่ทราบสถานะ" สีเทา (Slate/Neutral) + icon ลิงก์ออกนอก; ลิงก์ไป `external_url` (ถ้ามี) เปิดแท็บใหม่ด้วย `target="_blank" rel="noopener noreferrer"`.
-- FR-21 — แทนที่ตัวเลข capacity/occupancy ด้วยข้อความ "ติดต่อ ณ ศูนย์พักพิง" (i18n string คงที่ ไม่ใช่ field ใน doc).
+- FR-21 — แทนที่ occupancy ด้วยข้อความ "ติดต่อ ณ ศูนย์พักพิง" (i18n string คงที่ ไม่ใช่ field ใน doc) และ **แสดงความจุสูงสุด** ของศูนย์ (ถ้า `> 0`) เหนือข้อความนั้น; ไม่มี capacity ⇒ แสดงเฉพาะข้อความ. `public_shelters.capacity` = ค่าที่กรอก (ไม่ fallback zones/100; `0` = ไม่ได้กรอก). _(decision sync 2026-11-13: เดิมแทนที่ตัวเลข capacity ด้วยข้อความ + `capacity = 0`)_
 - FR-22 — ซ่อนปุ่มจองและลงทะเบียนล่วงหน้า.
 - FR-23 — pin บนแผนที่ใช้สีเดียวกับ chip; ตัวกรองสถานะมีตัวเลือก "ไม่ทราบสถานะ".
 
@@ -144,4 +145,5 @@ Team Lead PO Meeting 2026-11-07 (#1242, labels: priority:high, Before Floods): �
 
 - 2026-11-07 — ตกลงสเปกจาก grilling ใน #1242 (Team Lead PO Meeting); เลือก track ด้วย CR ใบเดียว
 - 2026-11-12 — proposed (draft) — บันทึกร่าง CR ใน PR #1371
+- 2026-11-13 — decision sync (ติดตามด้วย note ใน CR นี้ ไม่เปิด CR ใหม่ ตามที่เจ้าของงานเลือก · #1242): ศูนย์ External กรอกความจุสูงสุดได้ (optional) และ public แสดงความจุนั้น — แก้ FR-6 / FR-19 / FR-21 · `public_shelters.capacity` ของศูนย์ External = ค่าที่กรอก (`backfill_capacity()` ไม่ fallback; เดิมคืน `0`) · ไม่ bump `schema_v` (10) และ `PROJECTION_VERSION` (19 ยังไม่ปล่อย) · occupancy ยังไม่นับ, accepts_booking ยังเป็น false
 - 2026-11-12 — approved โดย Soravit Sukkarn (Team Lead) กำหนดหมายเลข CR-252; เลือกหมวด `00-baseline` (ตาม CR-205 / CR-039 / CR-077 ที่แก้ shelter schema); เคาะ chip สถานะ "ไม่ทราบสถานะ" ใช้สีเทา (Slate/Neutral) ไม่ซ้ำกับสีเหลืองของ standby

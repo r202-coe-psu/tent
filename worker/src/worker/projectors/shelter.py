@@ -31,6 +31,20 @@ def resolve_operation_status(doc: dict[str, Any]) -> str | None:
     return None
 
 
+def is_shelter_external(doc: dict[str, Any]) -> bool:
+    """CR-252: a shelter run in another system — listed publicly, never operated here."""
+    return doc.get("is_external") is True
+
+
+def resolve_external_url(doc: dict[str, Any]) -> str | None:
+    """``external_url`` only when it is a non-blank ``https://`` link (CR-252 FR-2)."""
+    raw = doc.get("external_url") if is_shelter_external(doc) else None
+    if not isinstance(raw, str):
+        return None
+    url = raw.strip()
+    return url if url.lower().startswith("https://") else None
+
+
 def is_shelter_cancelled(doc: dict[str, Any]) -> bool:
     return resolve_operation_status(doc) in CANCELLED_STATUSES
 
@@ -48,6 +62,9 @@ class RetentionPhase(StrEnum):
     CLOSED_WITHOUT_DATE = "closed_without_date"
     # Cancelled, or no status at all: never part of the public plane.
     HIDDEN = "hidden"
+    # CR-252: external shelter — no shelter DB content here, so no listener, no
+    # bootstrap, no occupancy (FR-12).
+    EXTERNAL = "external"
 
     @property
     def is_listened(self) -> bool:
@@ -73,6 +90,7 @@ def classify_retention(
     closed_at: datetime | None,
     retention_months: int,
     now: datetime,
+    is_external: bool = False,
 ) -> RetentionPhase:
     """Classify a shelter by its status and close time.
 
@@ -80,6 +98,8 @@ def classify_retention(
     projected ``public_shelters.status``; both spell a closed shelter ``closed``."""
     if status is None or status in CANCELLED_STATUSES:
         return RetentionPhase.HIDDEN
+    if is_external:
+        return RetentionPhase.EXTERNAL
     if status not in CLOSED_STATUSES:
         return RetentionPhase.OPEN
     if closed_at is None:
@@ -100,6 +120,7 @@ def classify_registry_shelter(
         closed_at=_parse_timestamp(doc.get("closed_at")),
         retention_months=retention_months,
         now=now,
+        is_external=is_shelter_external(doc),
     )
 
 
@@ -120,6 +141,10 @@ def map_public_shelter_status(doc: dict[str, Any]) -> str:
         return "full"
     if status == "standby":
         return "standby"
+    if status == "unknown":
+        # CR-252: external shelter, real status not known here — a status of its own,
+        # neither hidden nor "open".
+        return "unknown"
     # active / legacy "open"
     return "open"
 
@@ -135,6 +160,10 @@ def backfill_capacity(doc: dict[str, Any]) -> int:
     capacity = doc.get("capacity")
     if isinstance(capacity, (int, float)) and capacity > 0:
         return int(capacity)
+    if is_shelter_external(doc):
+        # CR-252 (decision sync 2026-11-13): an external shelter shows its own optional
+        # max capacity, but never falls back to zones / 100 — 0 means "not given".
+        return 0
     zones = doc.get("zones") or []
     zone_sum = sum(int(z.get("capacity") or 0) for z in zones if isinstance(z, dict))
     if zone_sum > 0:
@@ -290,6 +319,8 @@ def project_shelter(
         # Own stored field mirroring `status` — see PublicShelter.location_status.
         "location_status": mapped_status,
         "is_active": True,
+        "is_external": is_shelter_external(doc),
+        "external_url": resolve_external_url(doc),
         "location_type": "shelter",
         "location_subtype": doc.get("shelter_type"),
         "capacity": backfill_capacity(doc),

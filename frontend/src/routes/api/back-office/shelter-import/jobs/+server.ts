@@ -148,6 +148,19 @@ export const POST: RequestHandler = async ({ request }) => {
 					message: 'นำเข้าศูนย์สถานะ "ปิดศูนย์" ไม่ได้ — ปิดศูนย์จากหน้าจัดการศูนย์'
 				});
 			}
+			// CR-252 FR-30: a stale or hand-rolled client must not import zones / food points on an
+			// external shelter (the preview check is advisory; this one is authoritative).
+			if (
+				parsed?.success &&
+				parsed.data.is_external === true &&
+				((parsed.data.zones?.length ?? 0) > 0 ||
+					(parsed.data.food_distribution_points?.length ?? 0) > 0)
+			) {
+				errors.push({
+					column: 'is_external',
+					message: 'ศูนย์จากระบบภายนอกห้ามมีโซนหรือจุดแจกอาหาร'
+				});
+			}
 			const input = parsed?.success && errors.length === 0 ? parsed.data : undefined;
 			return {
 				row: row.row,

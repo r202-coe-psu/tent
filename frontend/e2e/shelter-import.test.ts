@@ -367,6 +367,53 @@ for (const typeHeader of ['ประเภทอาคาร', 'ประเภ�
 	});
 }
 
+test('imports an external shelter without capacity and rejects one carrying facility data (CR-252)', async ({
+	page
+}) => {
+	await mockMasterData(page);
+	const registry = await mockRegistry(page);
+	const created = await mockShelterImportJob(page, registry);
+	await injectSession(page, SA, session);
+	await page.goto(`${BASE}${IMPORT_PATH}`);
+
+	const extraHeaders = ['ศูนย์จากระบบภายนอก', 'ลิงก์ศูนย์ภายนอก', 'ห้องน้ำชาย (ห้อง)'];
+	const row = (name: string, url: string, toilets: string) => {
+		const cells = Array(HEADERS.length + extraHeaders.length).fill('');
+		cells[0] = name;
+		cells[HEADERS.length] = 'ใช่';
+		cells[HEADERS.length + 1] = url;
+		cells[HEADERS.length + 2] = toilets;
+		return cells;
+	};
+	await page.locator('input[type="file"]').setInputFiles({
+		name: 'external.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: await workbook(
+			[
+				row('ศูนย์ E2E ภายนอก', 'https://example.org/ext', ''),
+				row('ศูนย์ E2E ภายนอกมีห้องน้ำ', '', '4')
+			],
+			[...HEADERS, ...extraHeaders]
+		)
+	});
+
+	await expect(page.getByText(/พร้อมนำเข้า 1 · ผิดพลาด 1/)).toBeVisible();
+	await expect(page.getByText('ศูนย์จากระบบภายนอกห้ามมีข้อมูลในส่วนนี้')).toBeVisible();
+	await page.getByRole('button', { name: 'นำเข้า 1 ศูนย์' }).click();
+	await expect(page.getByRole('dialog')).toBeVisible();
+	expect(created.bodies[0].rows).toEqual([
+		expect.objectContaining({
+			row: 1,
+			shelter: expect.objectContaining({
+				is_external: true,
+				operation_status: 'unknown',
+				external_url: 'https://example.org/ext'
+			})
+		}),
+		expect.objectContaining({ row: 2 })
+	]);
+});
+
 test('records a server error and continues importing later valid rows', async ({ page }) => {
 	await mockMasterData(page);
 	const registry = await mockRegistry(page);

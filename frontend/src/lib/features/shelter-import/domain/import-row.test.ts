@@ -843,3 +843,88 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 		expect(payload.food_distribution_points).toEqual(importedPoints);
 	});
 });
+
+describe('validateRow — external shelter (CR-252)', () => {
+	const ext = (over: Partial<RawRow> = {}): RawRow => ({
+		[H.name]: 'ศูนย์ภายนอก',
+		[H.is_external]: 'ใช่',
+		...over
+	});
+
+	it('treats a blank or ไม่ใช่ column as a normal shelter (old files keep working)', () => {
+		expect(validateRow(baseRow(), 1, emptyLookups()).shelter?.is_external).toBe(false);
+		const no = validateRow(baseRow({ [H.is_external]: 'ไม่ใช่' }), 1, emptyLookups());
+		expect(no.ok).toBe(true);
+		expect(no.shelter?.is_external).toBe(false);
+		expect(no.isExternal).toBe(false);
+	});
+
+	it('accepts an external row without capacity and sets status unknown', () => {
+		const r = validateRow(ext({ [H.external_url]: 'https://example.org/x' }), 1, emptyLookups());
+		expect(r.errors).toEqual([]);
+		expect(r.ok).toBe(true);
+		expect(r.isExternal).toBe(true);
+		expect(r.shelter?.is_external).toBe(true);
+		expect(r.shelter?.operation_status).toBe('unknown');
+		expect(r.shelter?.external_url).toBe('https://example.org/x');
+		expect(r.shelter?.capacity).toBeUndefined();
+	});
+
+	it('still requires capacity on a normal row', () => {
+		const r = validateRow({ [H.name]: 'ศูนย์ปกติ' }, 1, emptyLookups());
+		expect(r.ok).toBe(false);
+		expect(r.errors.map((e) => e.column)).toContain(H.capacity);
+	});
+
+	it('rejects a non-empty status cell on an external row', () => {
+		const r = validateRow(
+			ext({ [H.operation_status]: 'เปิดรับผู้อพยพ (Active)' }),
+			1,
+			emptyLookups()
+		);
+		expect(r.ok).toBe(false);
+		expect(r.errors.map((e) => e.column)).toContain(H.operation_status);
+	});
+
+	it('rejects non-https links', () => {
+		for (const url of ['http://example.org', 'javascript:alert(1)']) {
+			const r = validateRow(ext({ [H.external_url]: url }), 1, emptyLookups());
+			expect(r.ok).toBe(false);
+			expect(r.errors.map((e) => e.column)).toContain(H.external_url);
+		}
+	});
+
+	it('rejects a link on a normal row', () => {
+		const r = validateRow(baseRow({ [H.external_url]: 'https://example.org' }), 1, emptyLookups());
+		expect(r.ok).toBe(false);
+		expect(r.errors.map((e) => e.column)).toContain(H.external_url);
+	});
+
+	it('rejects zone and food-point rows on an external shelter, with their line', () => {
+		const zone: RawSheetRow = {
+			ref: '1',
+			line: 4,
+			cells: { [H.zone_code]: 'A', [H.zone_name]: 'โซน A', [H.zone_capacity]: '10' }
+		};
+		const food: RawSheetRow = { ref: '1', line: 2, cells: { [H.food_point_name]: 'จุด 1' } };
+		const r = validateRow(ext(), 1, emptyLookups(), [zone], [food]);
+		expect(r.ok).toBe(false);
+		expect(r.errors).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ column: H.zone_code, line: 4 }),
+				expect.objectContaining({ column: H.food_point_name, line: 2 })
+			])
+		);
+	});
+
+	it.each([
+		[H.toilets_male, '3'],
+		[H.power_source, 'ไฟฟ้านครหลวง/ภูมิภาค (City Grid)'],
+		[H.elevation_m, '12'],
+		[H.pet_policy, 'ไม่อนุญาตให้นำสัตว์เลี้ยงเข้าศูนย์ (No Pets Allowed)']
+	])('rejects data in the %s column of an external row', (header, value) => {
+		const r = validateRow(ext({ [header]: value }), 1, emptyLookups());
+		expect(r.ok).toBe(false);
+		expect(r.errors.map((e) => e.column)).toContain(header);
+	});
+});

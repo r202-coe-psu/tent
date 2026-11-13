@@ -1,6 +1,7 @@
 export { default as PublicShelterCard } from './ui/public-shelter-card.svelte';
 export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-card.svelte';
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
+export { default as ExternalShelterChip } from './ui/external-shelter-chip.svelte';
 export { default as ShelterMap } from './ui/shelter-map.svelte';
 export { default as DonationNeedsMap } from './ui/donation-needs-map.svelte';
 export { default as DropOffShelterMap } from './ui/drop-off-shelter-map.svelte';
@@ -39,6 +40,7 @@ export type {
 } from './domain/types';
 export {
 	isShelterClosed,
+	safeExternalUrl,
 	searchResultKey,
 	toPublicShelterCard,
 	toUiShelterStatus

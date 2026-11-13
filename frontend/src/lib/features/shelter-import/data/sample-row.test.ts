@@ -144,4 +144,15 @@ describe('buildSampleWorkbook', () => {
 		expect(vehicles.map((v) => v.type).sort()).toEqual(['car', 'motorcycle', 'truck']);
 		expect(vehicles.find((v) => v.type === 'motorcycle')?.max_capacity).toBe(20);
 	});
+
+	it('ships an external example row that passes validateRow (CR-252 FR-28)', () => {
+		const sample = buildSampleWorkbook(mastersWithShelterType());
+		const result = validateRow(toRawRow(sample.externalShelter), 2, lookupsWithShelterType());
+
+		expect(result.errors).toEqual([]);
+		expect(result.ok).toBe(true);
+		expect(result.shelter?.is_external).toBe(true);
+		expect(result.shelter?.operation_status).toBe('unknown');
+		expect(result.shelter?.external_url).toMatch(/^https:\/\//);
+	});
 });

@@ -61,7 +61,8 @@ function match(rowNo: number, existingSiteKind: string): DuplicateMatch {
 		name: `ศูนย์ ${rowNo}`,
 		existingCode: 'SH001',
 		existingName: `ศูนย์ ${rowNo}`,
-		existingSiteKind
+		existingSiteKind,
+		existingIsExternal: false
 	};
 }
 

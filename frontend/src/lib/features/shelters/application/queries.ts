@@ -25,7 +25,8 @@ import {
 	type StoragePointInput
 } from '../data/shelters.api';
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
-import type { Shelter } from '../domain/schema';
+import { withoutExternalShelters, type Shelter } from '../domain/schema';
+import type { ShelterBasic, ShelterSummary } from '../data/shelters.repository';
 
 export const sheltersKeys = {
 	all: ['shelters'] as const,
@@ -36,16 +37,27 @@ export const sheltersKeys = {
 	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const
 };
 
-export const useShelters = () =>
+export interface ShelterListOptions {
+	/**
+	 * CR-252 FR-18: external shelters (run in another system) are hidden from every operational
+	 * picker. Only the system-management list opts in. Filtering is a `select`, so all callers
+	 * share one cached list.
+	 */
+	includeExternal?: boolean;
+}
+
+export const useShelters = (opts: ShelterListOptions = {}) =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.list(),
-		queryFn: () => sheltersRepository().listShelters()
+		queryFn: () => sheltersRepository().listShelters(),
+		select: (all: ShelterSummary[]) => (opts.includeExternal ? all : withoutExternalShelters(all))
 	}));
 
-export const useSearchShelters = () =>
+export const useSearchShelters = (opts: ShelterListOptions = {}) =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.search(),
-		queryFn: () => sheltersRepository().searchShelters()
+		queryFn: () => sheltersRepository().searchShelters(),
+		select: (all: ShelterBasic[]) => (opts.includeExternal ? all : withoutExternalShelters(all))
 	}));
 
 export const useShelter = (code: () => string, enabled: () => boolean = () => true) =>

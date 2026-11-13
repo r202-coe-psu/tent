@@ -34,6 +34,11 @@ import type { TemplateMasters } from './template';
 export interface SampleWorkbook {
 	/** header -> value, covering all four 1:1 sheets. A missing key means the cell is left blank. */
 	shelter: Record<string, string | number>;
+	/**
+	 * CR-252 FR-28: an example external shelter — basic info only, written to the main sheet's
+	 * second data row (`ลำดับที่` 2). A missing key means the cell is left blank.
+	 */
+	externalShelter: Record<string, string | number>;
 	/** one entry per zone row, header -> value. */
 	zones: Record<string, string | number>[];
 	/** one entry per food distribution point row, header -> value. */
@@ -179,5 +184,21 @@ export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
 		}
 	];
 
-	return { shelter, zones, foodDistributionPoints };
+	const externalShelter: Record<string, string | number> = {
+		[H.name]: 'ศูนย์พักพิงตัวอย่าง (ระบบภายนอก)',
+		...(siteKindLabel ? { [H.site_kind]: siteKindLabel } : {}),
+		[H.is_external]: YES,
+		[H.external_url]: 'https://example.org/shelters/external-001',
+		[H.address]: '12 หมู่ที่ 5 ตำบลบ้านพรุ อำเภอหาดใหญ่ จังหวัดสงขลา 90250',
+		[H.lat]: 6.9942,
+		[H.lng]: 100.4631,
+		[H.province]: 'สงขลา',
+		[H.district]: 'หาดใหญ่',
+		[H.subdistrict]: 'บ้านพรุ',
+		[H.postal_code]: '90250',
+		[H.contact_name]: 'ผู้ประสานงานระบบภายนอก',
+		[H.contact_phone]: '0891234567'
+	};
+
+	return { shelter, externalShelter, zones, foodDistributionPoints };
 }

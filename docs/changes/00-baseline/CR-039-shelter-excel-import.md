@@ -139,5 +139,13 @@ affects:
 3. Excel library → **exceljs**.
 4. วิธี track → **CR file** (เอกสารนี้).
 
+## Amendment — CR-252 (2026-11-12)
+
+> [CR-252](CR-252-external-shelter.md) (approved, #1242) amends this CR's import contract (FR-27..31 there). ไม่เปลี่ยนความหมายของ requirement เดิม — เพิ่มเท่านั้น; ไฟล์เก่าที่ไม่มีคอลัมน์ใหม่ยังนำเข้าได้เหมือนเดิม.
+> - ชีต `ข้อมูลศูนย์` เพิ่ม 2 คอลัมน์: "ศูนย์จากระบบภายนอก" (ใช่/ไม่ใช่, ว่าง = ไม่ใช่) และ "ลิงก์ศูนย์ภายนอก" (https เท่านั้น); `lists` เพิ่ม dropdown ใช่/ไม่ใช่, ชีต "คำแนะนำ" อธิบายกฎ, template ตัวอย่างมีแถว External
+> - แถว External: ไม่บังคับ `capacity`; คอลัมน์สถานะต้องว่าง (ระบบใส่ `unknown`); มีข้อมูลในชีตโซน / จุดแจกอาหาร / สิ่งอำนวยความสะดวก / สาธารณูปโภคและความเสี่ยง / นโยบาย = `validation_error`
+> - `duplicateAction=update` ที่ทำให้ชนิดเปลี่ยน (External ↔ ปกติ) = `validation_error` "เปลี่ยนชนิดไม่ได้" — บังคับทั้ง preview และ worker
+
 ## Decision log
 - 2026-07-14 — approved by เจ้าของโครงการ (อนุมัติให้แก้ไข schema.md และเริ่มเขียนโค้ดได้)
+- 2026-11-12 — amended โดย [CR-252](CR-252-external-shelter.md) (external shelter columns + validation; approved)

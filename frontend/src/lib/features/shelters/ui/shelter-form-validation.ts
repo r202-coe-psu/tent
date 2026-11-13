@@ -13,6 +13,8 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 		'name',
 		'site_kind',
 		'operation_status',
+		'is_external',
+		'external_url',
 		'shelter_type',
 		'floor_count',
 		'project_level',

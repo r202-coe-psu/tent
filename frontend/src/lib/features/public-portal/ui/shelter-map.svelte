@@ -13,6 +13,7 @@
 	import type { PublicSiteKind } from '../domain/types';
 	import type { DonationMapPoint, MapPointFocus } from '../domain/donation-map';
 	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
+	import { safeExternalUrl } from '../domain/mappers';
 	import { useShelterTypeLabelMap, useSiteKinds } from '../application/queries';
 	import {
 		HOST_HOUSE_SITE_KIND,
@@ -52,6 +53,10 @@
 		admin_type?: string | null;
 		geo?: ShelterGeo | null;
 		accepts_pre_registration?: boolean;
+		/** CR-252: run in another system — chip/pin in the unknown colour, no capacity, no booking. */
+		is_external?: boolean;
+		/** CR-252: vetted `https://` link of an external shelter (see `safeExternalUrl`). */
+		external_url?: string | null;
 		/** Draws a numbered pin in these colours instead of the status-coloured glyph pin. */
 		pin?: { label: string; fill: string; text: string };
 	}
@@ -225,6 +230,8 @@
 				return '#F59E0B'; // Civic warning
 			case 'CLOSED':
 				return '#94A3B8'; // Civic muted
+			case 'UNKNOWN':
+				return '#64748B'; // CR-252 FR-23: Slate/Neutral — same family as the chip
 			default:
 				return '#94A3B8';
 		}
@@ -240,6 +247,8 @@
 				return t.statusStandby;
 			case 'CLOSED':
 				return t.statusClosed;
+			case 'UNKNOWN':
+				return t.statusUnknown;
 			default:
 				return t.statusClosed;
 		}
@@ -484,7 +493,11 @@
 					: getShelterPinSvg(shelter.site_kind, color);
 				const shelterId = shelter.id || shelter.code || '';
 				const shelterCode = shelter.code || shelter.id || '';
+				const isExternal = shelter.is_external === true;
+				// CR-252 FR-20: only a vetted https link ever reaches the popup's href.
+				const externalHref = isExternal ? safeExternalUrl(shelter.external_url) : null;
 				const canBook =
+					!isExternal &&
 					Boolean(shelterCode) &&
 					shelter.status !== 'CLOSED' &&
 					shelter.accepts_pre_registration === true;
@@ -519,12 +532,19 @@
 					}
 				});
 
-				const bookingButtonHtml = canBook
-					? `<a href="/pre-register?shelter=${encodeURIComponent(shelterCode)}"
+				const bookingButtonHtml = isExternal
+					? externalHref
+						? `<a href="${new URL(externalHref).href}" target="_blank" rel="noopener noreferrer"
+						style="display:flex;align-items:center;justify-content:center;gap:6px;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;padding:6px 12px;border-radius:8px;font-weight:bold;font-size:0.75rem;text-decoration:none;margin-top:8px;">
+						${t.externalLink} ↗
+					</a>`
+						: ''
+					: canBook
+						? `<a href="/pre-register?shelter=${encodeURIComponent(shelterCode)}"
 						style="display:flex;align-items:center;justify-content:center;gap:6px;background:${CERULEAN};color:#ffffff;padding:6px 12px;border-radius:8px;font-weight:bold;font-size:0.75rem;text-decoration:none;margin-top:8px;box-shadow:0 1px 2px rgba(2,132,199,0.25);">
 						${t.preRegister}
 					</a>`
-					: `<div style="margin-top:8px;text-align:center;font-size:0.7rem;color:#94a3b8;font-weight:600;padding:4px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+						: `<div style="margin-top:8px;text-align:center;font-size:0.7rem;color:#94a3b8;font-weight:600;padding:4px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
 						${t.shelterClosed}
 					</div>`;
 
@@ -552,13 +572,16 @@
 								<strong style="color:${color};">${getStatusText(shelter.status)}</strong>
 							</div>
 							${
-								shelter.capacity != null
+								isExternal && !((shelter.capacity ?? 0) > 0)
 									? `
+							<div style="margin-bottom:2px;font-weight:600;">${t.contactAtShelter}</div>`
+									: shelter.capacity != null
+										? `
 							<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
 								<span>${t.capacity}</span>
 								<strong>${shelter.capacity} ${t.people}</strong>
 							</div>`
-									: ''
+										: ''
 							}
 							${
 								shelter.distance != null && shelter.distance > 0
@@ -840,6 +863,10 @@
 			<div class="flex items-center gap-1.5">
 				<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#94A3B8] shadow-xs"></div>
 				<span class="text-muted-foreground">{t.statusClosed}</span>
+			</div>
+			<div class="flex items-center gap-1.5">
+				<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#64748B] shadow-xs"></div>
+				<span class="text-muted-foreground">{t.statusUnknown}</span>
 			</div>
 		</div>
 	</div>

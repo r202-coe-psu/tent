@@ -272,3 +272,72 @@ describe('GET /api/back-office/shelter/[code]', () => {
 		expect((await res.json())._rev).toBe('4-abc');
 	});
 });
+
+describe('PATCH /api/back-office/shelter/[code] — external shelter (CR-252 FR-4/5/9/10)', () => {
+	const saCaller = { name: 'sa', roles: ['system_admin'], isSA: true, shelterCode: null };
+
+	async function patchAgainst(stored: Record<string, unknown>, body: unknown, sa = false) {
+		if (sa) mgrMock.mockResolvedValue(saCaller);
+		let patch: Record<string, unknown> | undefined;
+		updateMock.mockImplementation(async (_code, mutator) => {
+			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
+			return { id: 'shelter:SH001', rev: '3-new' };
+		});
+		const res = await callPATCH('SH001', body);
+		return { res, patch };
+	}
+
+	const external = { is_external: true, operation_status: 'unknown' };
+	const regular = { operation_status: 'active' };
+
+	it.each([
+		['regular to external', regular, true],
+		['external to regular', external, false]
+	])('403 when the PATCH switches %s (FR-9)', async (_n, stored, next) => {
+		const { res } = await patchAgainst(stored, { is_external: next }, true);
+		expect(res.status).toBe(403);
+	});
+
+	it('accepts resending the unchanged is_external and status (the edit form does)', async () => {
+		const { res, patch } = await patchAgainst(
+			external,
+			{ is_external: true, operation_status: 'unknown', name: 'x' },
+			false
+		);
+		expect(res.status).toBe(200);
+		expect(patch).toMatchObject({ is_external: true, operation_status: 'unknown', name: 'x' });
+	});
+
+	it('403 when a shelter_manager changes the status of an external shelter (FR-10)', async () => {
+		const { res } = await patchAgainst(external, { operation_status: 'cancelled' });
+		expect(res.status).toBe(403);
+	});
+
+	it('lets a system_admin cancel an external shelter (FR-4)', async () => {
+		const { res } = await patchAgainst(external, { operation_status: 'cancelled' }, true);
+		expect(res.status).toBe(200);
+	});
+
+	it.each(['active', 'closed', 'standby'])(
+		'422 when a system_admin sets an external shelter to %s',
+		async (status) => {
+			const { res } = await patchAgainst(external, { operation_status: status }, true);
+			expect(res.status).toBe(422);
+		}
+	);
+
+	it('422 when a regular shelter is set to unknown (FR-5)', async () => {
+		const { res } = await patchAgainst(regular, { operation_status: 'unknown' });
+		expect(res.status).toBe(422);
+	});
+
+	it('rejects a non-https external_url', async () => {
+		const { res } = await patchAgainst(external, { external_url: 'http://x.example' }, true);
+		expect(res.status).toBe(422);
+	});
+
+	it('stores a blank external_url as null', async () => {
+		const { patch } = await patchAgainst(external, { external_url: '  ' }, true);
+		expect(patch).toMatchObject({ external_url: null });
+	});
+});

@@ -2603,6 +2603,11 @@ export interface components {
 			closed_at: string | null;
 			/** Is Active */
 			is_active: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
 			/** Occupancy Total */
 			occupancy_total: number;
 			/**
@@ -2670,6 +2675,11 @@ export interface components {
 			closed_at: string | null;
 			/** Is Active */
 			is_active: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
 			/** Occupancy Total */
 			occupancy_total: number;
 			/**
@@ -4147,6 +4157,13 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
+			/** External Url */
+			external_url?: string | null;
 			/** Donation Points */
 			donation_points?: components['schemas']['DonationPoint'][];
 		};
@@ -4229,6 +4246,13 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
+			/** External Url */
+			external_url?: string | null;
 			/** Readiness Status */
 			readiness_status?: string | null;
 			/** Readiness Tier */

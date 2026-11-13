@@ -190,6 +190,30 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 		expect(rows[0].errors).toContainEqual(expect.objectContaining({ column: 'operation_status' }));
 	});
 
+	it('passes a clean external row through and rejects one that carries zones (CR-252 FR-30)', async () => {
+		const post = (shelter: object) =>
+			POST({
+				request: request(
+					JSON.stringify({
+						filename: 'shelters.xlsx',
+						duplicate_action: 'skip',
+						rows: [{ row: 1, name: 'ศูนย์ภายนอก', shelter }]
+					})
+				)
+			} as unknown as Parameters<typeof POST>[0]);
+
+		await post({ name: 'ศูนย์ภายนอก', is_external: true, operation_status: 'unknown', zones: [] });
+		let [{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({ valid: true });
+		expect(rows[0].input).toMatchObject({ is_external: true });
+
+		createImportJobMock.mockClear();
+		await post({ name: 'ศูนย์ภายนอก', is_external: true, zones: [{ code: 'A' }] });
+		[{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({ valid: false });
+		expect(rows[0].errors).toContainEqual(expect.objectContaining({ column: 'is_external' }));
+	});
+
 	it('returns 422 for malformed JSON instead of a generic server error', async () => {
 		const response = await POST({
 			request: request('{not-json}')

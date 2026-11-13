@@ -26,6 +26,7 @@ function masterToBasic(master: ShelterMaster): ShelterBasic {
 		name: master.name,
 		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		operation_status: master.operation_status ?? 'standby',
+		is_external: master.is_external === true,
 		capacity: master.capacity ?? 0,
 		province: master.province ?? null
 	};
@@ -39,6 +40,8 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		db: shelterDbName(master.code),
 		operation_status: master.operation_status ?? 'standby',
+		is_external: master.is_external === true,
+		external_url: master.external_url ?? null,
 		capacity: master.capacity ?? 0,
 		shelter_type: master.shelter_type ?? null,
 		floor_count: master.floor_count ?? null,

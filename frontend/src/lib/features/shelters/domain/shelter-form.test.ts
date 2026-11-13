@@ -31,6 +31,42 @@ describe('shelterFormSchema (CR-230 A1)', () => {
 	});
 });
 
+describe('shelterFormSchema external invariants (CR-252)', () => {
+	const base = {
+		name: 'x',
+		site_kind: 'evacuation_center',
+		facilities: {},
+		common_areas: {},
+		utilities: {},
+		risk: {},
+		zones: []
+	};
+
+	it('accepts an external form without capacity, locked at unknown', () => {
+		const r = shelterFormSchema.safeParse({
+			...base,
+			is_external: true,
+			operation_status: 'unknown'
+		});
+		expect(r.success).toBe(true);
+	});
+
+	it('rejects an external form with a normal status', () => {
+		expect(
+			shelterFormSchema.safeParse({ ...base, is_external: true, operation_status: 'active' })
+				.success
+		).toBe(false);
+	});
+
+	it('rejects a regular form without capacity or at unknown', () => {
+		expect(shelterFormSchema.safeParse({ ...base, capacity: 10 }).success).toBe(true);
+		expect(shelterFormSchema.safeParse({ ...base }).success).toBe(false);
+		expect(
+			shelterFormSchema.safeParse({ ...base, capacity: 10, operation_status: 'unknown' }).success
+		).toBe(false);
+	});
+});
+
 describe('withoutFormMeta', () => {
 	it('strips _rev and _loaded_sub_storage and keeps every stored field', () => {
 		const fields = withoutFormMeta(formData());

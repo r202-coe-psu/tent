@@ -10,7 +10,24 @@ export function toUiShelterStatus(status: string | null | undefined): string {
 	// Mongo `standby` (schema §9.1) + legacy prepare labels → PREPARE UI chip
 	if (s === 'standby' || s === 'prepare' || s === 'preparing' || s === 'ready') return 'PREPARE';
 	if (s === 'closed') return 'CLOSED';
+	// CR-252 FR-15: an external shelter's real status is not known — never CLOSED, never OPEN.
+	if (s === 'unknown') return 'UNKNOWN';
 	return status.toUpperCase();
+}
+
+/**
+ * CR-252 FR-2 / FR-20: the link of an external shelter, only if it is a plain `https://` URL.
+ * The API already enforces this; the UI re-checks so a bad value never becomes an `href`.
+ */
+export function safeExternalUrl(url: string | null | undefined): string | null {
+	if (typeof url !== 'string') return null;
+	const trimmed = url.trim();
+	if (!/^https:\/\//i.test(trimmed)) return null;
+	try {
+		return new URL(trimmed).protocol === 'https:' ? trimmed : null;
+	} catch {
+		return null;
+	}
 }
 
 /** CR-183: a closed shelter keeps its people searchable for the retention window. */
@@ -36,6 +53,8 @@ export function toPublicShelterCard(
 	const parts = [subdistrict, district, province].filter(Boolean);
 	const address = parts.length > 0 ? parts.join(' ') : code || name;
 
+	const isExternal = item?.is_external === true;
+
 	const rawId = (item as Record<string, unknown> | null | undefined)?.id;
 	const itemId = typeof rawId === 'string' ? rawId : '';
 
@@ -47,6 +66,7 @@ export function toPublicShelterCard(
 		status: toUiShelterStatus(item?.status),
 		address,
 		distance: typeof distance === 'number' && !isNaN(distance) ? distance : 0,
+		// CR-252 (decision sync 2026-11-13): an external shelter shows its own max capacity when given.
 		capacity: typeof item?.capacity === 'number' ? item.capacity : 0,
 		province,
 		district,
@@ -55,7 +75,10 @@ export function toPublicShelterCard(
 		vulnerable_groups: Array.isArray(item?.vulnerable_groups) ? item.vulnerable_groups : null,
 		admin_type: item?.admin_type ?? null,
 		geo: item?.geo ?? null,
-		accepts_pre_registration: item?.accepts_pre_registration === true
+		// CR-252 FR-22: an external shelter never takes pre-registration.
+		accepts_pre_registration: !isExternal && item?.accepts_pre_registration === true,
+		is_external: isExternal,
+		external_url: isExternal ? safeExternalUrl(item?.external_url) : null
 	};
 }
 

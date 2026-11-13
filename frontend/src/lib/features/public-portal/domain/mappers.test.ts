@@ -3,6 +3,7 @@ import {
 	isShelterClosed,
 	searchResultKey,
 	toPublicShelterCard,
+	safeExternalUrl,
 	toUiShelterStatus
 } from './mappers';
 import type { FamilySearchResult, PublicShelterItem } from './types';
@@ -144,5 +145,60 @@ describe('isShelterClosed', () => {
 	it('is false when the shelter status is unknown or absent', () => {
 		expect(isShelterClosed({ shelter_status: null })).toBe(false);
 		expect(isShelterClosed({})).toBe(false);
+	});
+});
+
+describe('external shelters (CR-252)', () => {
+	it('maps unknown to its own UI status, never CLOSED or OPEN', () => {
+		expect(toUiShelterStatus('unknown')).toBe('UNKNOWN');
+		expect(toUiShelterStatus('UNKNOWN')).toBe('UNKNOWN');
+		expect(toUiShelterStatus(' Unknown ')).toBe('UNKNOWN');
+	});
+
+	it('accepts only plain https links', () => {
+		expect(safeExternalUrl('https://example.org/a?b=1')).toBe('https://example.org/a?b=1');
+		expect(safeExternalUrl('  https://example.org  ')).toBe('https://example.org');
+		for (const bad of [
+			'http://example.org',
+			'javascript:alert(1)',
+			'ftp://x',
+			'',
+			null,
+			undefined
+		]) {
+			expect(safeExternalUrl(bad)).toBeNull();
+		}
+	});
+
+	it('builds an external card: own capacity, no booking, vetted link', () => {
+		const card = toPublicShelterCard({
+			code: 'EXT1',
+			name: 'ศูนย์ภายนอก',
+			status: 'unknown',
+			capacity: 99,
+			accepts_pre_registration: true,
+			is_external: true,
+			external_url: 'https://example.org/x'
+		} as never);
+		expect(card.status).toBe('UNKNOWN');
+		expect(card.is_external).toBe(true);
+		expect(card.capacity).toBe(99);
+		expect(card.accepts_pre_registration).toBe(false);
+		expect(card.external_url).toBe('https://example.org/x');
+	});
+
+	it('drops an unsafe link and leaves a normal shelter untouched', () => {
+		const ext = toPublicShelterCard({ is_external: true, external_url: 'javascript:x' } as never);
+		expect(ext.external_url).toBeNull();
+		const normal = toPublicShelterCard({
+			code: 'S1',
+			capacity: 50,
+			accepts_pre_registration: true,
+			external_url: 'https://example.org'
+		} as never);
+		expect(normal.is_external).toBe(false);
+		expect(normal.external_url).toBeNull();
+		expect(normal.capacity).toBe(50);
+		expect(normal.accepts_pre_registration).toBe(true);
 	});
 });

@@ -15,6 +15,11 @@ import {
 	isShelterBookable,
 	isShelterCancelled,
 	operationStatusSchema,
+	isExternalShelter,
+	withoutExternalShelters,
+	externalInvariantIssues,
+	externalUrlSchema,
+	UNKNOWN_STATUS_LABEL,
 	validateSiteKindChange,
 	DEFAULT_SITE_KIND,
 	SHELTER_MASTER_SCHEMA_V,
@@ -1337,7 +1342,7 @@ describe('CR-205 — storage point drop-off fields', () => {
 	});
 });
 
-describe('CR-205 — migrate to schema_v 9', () => {
+describe('CR-205 — migrate to the current schema_v', () => {
 	const doc = (schema_v: number, sub_storage: unknown[]) =>
 		({
 			_id: 'shelter:x',
@@ -1355,15 +1360,15 @@ describe('CR-205 — migrate to schema_v 9', () => {
 			updated_at: '2024-01-01T00:00:00Z'
 		}) as unknown as ShelterMasterV2;
 
-	it('is schema_v 9', () => {
-		expect(SHELTER_MASTER_SCHEMA_V).toBe(9);
+	it('is schema_v 10 (CR-252)', () => {
+		expect(SHELTER_MASTER_SCHEMA_V).toBe(10);
 	});
 
 	it('v8 → v9 fills the defaults (AC-1)', () => {
 		const m = migrateShelterV2ToCurrent(
 			doc(8, [{ id: 's1', name: 'คลังยา', types: ['medical_supplies'] }])
 		);
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(10);
 		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
 	});
 
@@ -1377,13 +1382,13 @@ describe('CR-205 — migrate to schema_v 9', () => {
 				{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'] }
 			])
 		);
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(10);
 		expect(m.common_areas?.sub_storage?.map((p) => p.id)).toEqual(['legacy-0', 's2']);
 	});
 
 	it('v8 with a single legacy `type` gets types[]', () => {
 		const m = migrateShelterV2ToCurrent(doc(8, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(10);
 		expect(m.common_areas?.sub_storage?.[0]).toEqual({
 			id: 's1',
 			name: 'คลังยา',
@@ -1397,14 +1402,14 @@ describe('CR-205 — migrate to schema_v 9', () => {
 		delete bare.site_kind;
 		delete bare.food_distribution_points;
 		const m = migrateShelterV2ToCurrent(bare as unknown as ShelterMasterV2);
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(10);
 		expect(m.site_kind).toBe('evacuation_center');
 		expect(m.food_distribution_points).toEqual([]);
 	});
 
 	it('v7 with a single `type` ends at v9 with types[] and the defaults (AC-10)', () => {
 		const m = migrateShelterV2ToCurrent(doc(7, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(10);
 		expect(m.common_areas?.sub_storage?.[0]).toEqual({
 			id: 's1',
 			name: 'คลังยา',
@@ -1415,7 +1420,7 @@ describe('CR-205 — migrate to schema_v 9', () => {
 
 	it('v6 without ids ends at v9 with legacy ids, types[] and the defaults', () => {
 		const m = migrateShelterV2ToCurrent(doc(6, [{ name: 'คลังยา', type: 'food_dry' }]));
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(10);
 		expect(m.common_areas?.sub_storage?.[0]).toEqual({
 			id: 'legacy-0',
 			name: 'คลังยา',
@@ -1452,5 +1457,169 @@ describe('CR-205 — migrate to schema_v 9', () => {
 		expect(m).not.toBe(stamped);
 		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
 		expect(migrateShelterV2ToCurrent(m)).toBe(m);
+	});
+});
+
+describe('CR-252 external shelter', () => {
+	const external = {
+		name: 'ศูนย์ภายนอก',
+		site_kind: 'evacuation_center',
+		is_external: true,
+		operation_status: 'unknown',
+		facilities: {},
+		common_areas: {},
+		utilities: {},
+		risk: {},
+		zones: []
+	};
+
+	it('operation_status gains unknown, labelled ไม่ทราบสถานะ', () => {
+		expect(operationStatusSchema.options).toContain('unknown');
+		expect(UNKNOWN_STATUS_LABEL).toBe('ไม่ทราบสถานะ');
+	});
+
+	it('is_external defaults to false and external_url to null (FR-1/2)', () => {
+		const s = shelterSchema.parse(validShelterInput);
+		expect(s.is_external).toBe(false);
+		expect(s.external_url).toBeNull();
+	});
+
+	it('accepts an external shelter without capacity or url (FR-6)', () => {
+		const s = shelterSchema.parse(external);
+		expect(s.capacity).toBeUndefined();
+		expect(s.external_url).toBeNull();
+	});
+
+	it('requires capacity for a regular shelter (FR-6)', () => {
+		const rest: Partial<typeof validShelterInput> = { ...validShelterInput };
+		delete rest.capacity;
+		const r = shelterSchema.safeParse(rest);
+		expect(r.success).toBe(false);
+		expect(r.error?.issues[0].path).toEqual(['capacity']);
+	});
+
+	it("treats a cleared capacity input ('' / null) as absent for an external shelter", () => {
+		for (const blank of ['', null]) {
+			const r = shelterSchema.safeParse({ ...external, capacity: blank });
+			expect(r.success).toBe(true);
+			if (r.success) expect(r.data.capacity).toBeUndefined();
+		}
+	});
+
+	it('still requires capacity for a regular shelter when the input is cleared', () => {
+		expect(
+			shelterSchema.safeParse({ ...validShelterInput, is_external: false, capacity: '' }).success
+		).toBe(false);
+	});
+
+	it('keeps capacity > 0 when given for an external shelter', () => {
+		expect(shelterSchema.safeParse({ ...external, capacity: 0 }).success).toBe(false);
+		expect(shelterSchema.safeParse({ ...external, capacity: 5 }).success).toBe(true);
+	});
+
+	it.each(['standby', 'active', 'full_capacity', 'closed'])(
+		'external shelter cannot be %s (FR-4)',
+		(status) => {
+			const r = shelterSchema.safeParse({ ...external, operation_status: status });
+			expect(r.success).toBe(false);
+			expect(r.error?.issues[0].path).toEqual(['operation_status']);
+		}
+	);
+
+	it('external shelter may be unknown or cancelled (FR-4 takedown)', () => {
+		expect(shelterSchema.safeParse({ ...external, operation_status: 'cancelled' }).success).toBe(
+			true
+		);
+	});
+
+	it('a regular shelter cannot be unknown (FR-5)', () => {
+		const r = shelterSchema.safeParse({ ...validShelterInput, operation_status: 'unknown' });
+		expect(r.success).toBe(false);
+		expect(r.error?.issues[0].path).toEqual(['operation_status']);
+	});
+
+	it('createShelterSchema enforces the same invariants', () => {
+		expect(
+			createShelterSchema.safeParse({ ...validShelterInput, operation_status: 'unknown' }).success
+		).toBe(false);
+	});
+
+	describe('external_url (FR-2)', () => {
+		it.each(['https://example.org', 'HTTPS://example.org/a?b=1'])('accepts %s', (url) => {
+			expect(externalUrlSchema.safeParse(url).success).toBe(true);
+		});
+		it.each([
+			'http://example.org',
+			'javascript:alert(1)',
+			'ftp://example.org',
+			'example.org',
+			'https://'
+		])('rejects %s', (url) => {
+			expect(externalUrlSchema.safeParse(url).success).toBe(false);
+		});
+		it.each(['', '   ', '\t\n'])('turns blank %j into null', (url) => {
+			expect(externalUrlSchema.parse(url)).toBeNull();
+		});
+		it('trims before validating', () => {
+			expect(externalUrlSchema.parse('  https://example.org ')).toBe('https://example.org');
+		});
+		it('is wired into the shelter schema', () => {
+			expect(shelterSchema.safeParse({ ...external, external_url: 'http://x.org' }).success).toBe(
+				false
+			);
+			expect(shelterSchema.parse({ ...external, external_url: ' ' }).external_url).toBeNull();
+		});
+	});
+
+	it('updateShelterSchema parses a partial body (invariants are the PATCH route job)', () => {
+		expect(updateShelterSchema.safeParse({ is_external: true }).success).toBe(true);
+		expect(updateShelterSchema.safeParse({ external_url: 'http://x.org' }).success).toBe(false);
+	});
+
+	it('externalInvariantIssues checks only the supplied fields', () => {
+		expect(externalInvariantIssues({ operation_status: 'unknown' })).toEqual([]);
+		expect(
+			externalInvariantIssues({ is_external: false, operation_status: 'unknown' })
+		).toHaveLength(1);
+		expect(externalInvariantIssues({ is_external: true, operation_status: 'active' })).toHaveLength(
+			1
+		);
+		expect(externalInvariantIssues({ is_external: false }, { requireCapacity: true })).toHaveLength(
+			1
+		);
+	});
+
+	it('isExternalShelter reads a missing flag as false', () => {
+		expect(isExternalShelter({ is_external: true })).toBe(true);
+		expect(isExternalShelter({})).toBe(false);
+		expect(isExternalShelter(null)).toBe(false);
+		expect(isExternalShelter({ is_external: 'true' })).toBe(false);
+	});
+
+	it('withoutExternalShelters hides external ones from operational lists (FR-18)', () => {
+		const list = [
+			{ code: 'A' },
+			{ code: 'B', is_external: true },
+			{ code: 'C', is_external: false }
+		];
+		expect(withoutExternalShelters(list).map((s) => s.code)).toEqual(['A', 'C']);
+	});
+
+	it('migrates a v9 doc to v10 reading is_external as false (FR-7)', () => {
+		const v9 = {
+			_id: 'shelter:1',
+			type: 'shelter',
+			schema_v: 9,
+			code: 'SH001',
+			name: 'x',
+			site_kind: 'evacuation_center',
+			capacity: 10,
+			food_distribution_points: [],
+			created_at: '2024-01-01T00:00:00Z',
+			updated_at: '2024-01-01T00:00:00Z'
+		} as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(v9);
+		expect(m.schema_v).toBe(10);
+		expect(isExternalShelter(m)).toBe(false);
 	});
 });

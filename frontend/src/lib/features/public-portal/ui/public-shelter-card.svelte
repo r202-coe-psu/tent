@@ -10,6 +10,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
+	import ExternalShelterChip from './external-shelter-chip.svelte';
 
 	import type { PublicShelterCardModel } from '../domain/types';
 	import { resolveMasterLabel, shelterTypeLabel, toLabelMap } from '../domain/master-labels';
@@ -48,8 +49,10 @@
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 
+	// CR-252 FR-22: an external shelter never offers booking / pre-registration.
 	let canBook = $derived(
-		Boolean(shelter.code) &&
+		!shelter.is_external &&
+			Boolean(shelter.code) &&
 			shelter.status !== 'CLOSED' &&
 			shelter.accepts_pre_registration === true
 	);
@@ -180,15 +183,24 @@
 				{siteKindLabel(shelter.site_kind, siteKindsQuery.data, langState.current)}
 			</div>
 		</div>
-		<span
-			class="shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-bold {getStatusColor(
-				shelter.status
-			)}"
-		>
-			<span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current"></span>{getStatusText(
-				shelter.status
-			)}
-		</span>
+		{#if shelter.is_external}
+			<ExternalShelterChip
+				class="shrink-0"
+				label={t.statusUnknown}
+				href={shelter.external_url}
+				linkLabel={`${t.externalLink} ${t.externalLinkNewTab}`}
+			/>
+		{:else}
+			<span
+				class="shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-bold {getStatusColor(
+					shelter.status
+				)}"
+			>
+				<span class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-current"></span>{getStatusText(
+					shelter.status
+				)}
+			</span>
+		{/if}
 	</div>
 
 	<!-- Address (when location parts exist; otherwise code is shown with distance below) -->
@@ -219,17 +231,42 @@
 	</div>
 
 	<div class="flex flex-col gap-1.5 rounded-xl bg-muted/40 p-2.5 ring-1 ring-border/50">
-		<div class="flex items-center justify-between">
-			<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-				<Users class="h-3.5 w-3.5" />
-				{t.maxCapacity}
+		{#if shelter.is_external}
+			<!-- CR-252: max capacity when given (no occupancy) + constant contact text -->
+			{#if (shelter.capacity ?? 0) > 0}
+				<div class="flex items-center justify-between" data-testid="external-capacity">
+					<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+						<Users class="h-3.5 w-3.5" />
+						{t.maxCapacity}
+					</div>
+					<div class="font-bold text-foreground">
+						<span class="text-sm">{shelter.capacity}</span>
+						<span class="ml-0.5 text-xs font-bold text-muted-foreground">{t.people}</span>
+					</div>
+				</div>
+			{/if}
+			{#if !((shelter.capacity ?? 0) > 0)}
+				<div
+					class="flex items-center gap-1.5 text-sm font-semibold text-foreground"
+					data-testid="external-contact-note"
+				>
+					<Users class="h-3.5 w-3.5 text-muted-foreground" />
+					{t.contactAtShelter}
+				</div>
+			{/if}
+		{:else}
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+					<Users class="h-3.5 w-3.5" />
+					{t.maxCapacity}
+				</div>
+				<div class="font-bold text-foreground">
+					<span class="text-sm">{shelter.capacity ?? 0}</span>
+					<span class="ml-0.5 text-xs font-bold text-muted-foreground">{t.people}</span>
+				</div>
 			</div>
-			<div class="font-bold text-foreground">
-				<span class="text-sm">{shelter.capacity ?? 0}</span>
-				<span class="ml-0.5 text-xs font-bold text-muted-foreground">{t.people}</span>
-			</div>
-		</div>
-		{#if shelter.pet_policy || visibleVulnerableGroups.length > 0}
+		{/if}
+		{#if !shelter.is_external && (shelter.pet_policy || visibleVulnerableGroups.length > 0)}
 			<div class="flex flex-col gap-1.5 border-t border-border/60 pt-2">
 				{#if visibleVulnerableGroups.length > 0}
 					<div class="flex flex-col gap-1">
@@ -286,7 +323,7 @@
 
 	<!-- Actions -->
 	<div class="mt-auto flex flex-col gap-1.5 pt-1">
-		{#if onPreRegister}
+		{#if onPreRegister && !shelter.is_external}
 			<Button
 				type="button"
 				size="sm"

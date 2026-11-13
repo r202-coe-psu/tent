@@ -1155,7 +1155,8 @@ class ThirdPartyBookingsUseCase:
         # (EOC) skips it, so bypass is only "used" when the rule actually fails. The 404 above
         # still wins: an unknown / inactive shelter is never bookable, bypass or not.
         bookable = accepts_booking(shelter)
-        bypass = not bookable and _BYPASS_SCOPE in claims.scopes
+        # CR-252 FR-25: an external shelter is never bookable — `booking-bypass` included.
+        bypass = not bookable and not shelter.is_external and _BYPASS_SCOPE in claims.scopes
         if not bookable and not bypass:
             raise await self._deny(
                 endpoint=endpoint,

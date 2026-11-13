@@ -88,6 +88,7 @@ def _to_item(doc: PublicShelter) -> LocationItem:
         opened_at=doc.opened_at,
         closed_at=doc.closed_at,
         is_active=doc.is_active,
+        is_external=doc.is_external,
         occupancy_total=doc.occupancy_total,
         updated_at=doc.updated_at,
     )

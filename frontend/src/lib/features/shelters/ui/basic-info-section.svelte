@@ -2,7 +2,12 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import { DEFAULT_SHELTER_FEATURE_FLAGS, type Shelter, type ProjectLevel } from '../domain/schema';
+	import {
+		DEFAULT_SHELTER_FEATURE_FLAGS,
+		UNKNOWN_STATUS_LABEL,
+		type Shelter,
+		type ProjectLevel
+	} from '../domain/schema';
 	import {
 		applyAllowAssets,
 		applyAllowPets,
@@ -30,7 +35,9 @@
 		formData,
 		disabled = false,
 		canClose = true,
-		storedStatus
+		storedStatus,
+		isSystemAdmin = false,
+		isEdit = false
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
@@ -39,21 +46,48 @@
 		canClose?: boolean;
 		/** Operation status as stored (edit mode); undefined while creating. */
 		storedStatus?: string;
+		/** CR-252 FR-8: only system_admin may mark a shelter external, and only while creating. */
+		isSystemAdmin?: boolean;
+		isEdit?: boolean;
 	} = $props();
+
+	// CR-252: an external shelter is run in another system — a basic-info-only form, locked at
+	// `unknown`. The type is immutable once created (FR-9), so the switch is create-mode only.
+	const isExternal = $derived($formData.is_external === true);
+	const canSetExternal = $derived(isSystemAdmin && !isEdit);
+	// FR-4: the one status change an external shelter allows is the system_admin takedown.
+	const canCancelExternal = $derived(isSystemAdmin && isEdit);
+
+	function setExternal(on: boolean) {
+		$formData.is_external = on;
+		$formData.operation_status = on ? 'unknown' : 'standby';
+		if (!on) $formData.external_url = null;
+	}
 
 	const operationStatusOptions: { value: Shelter['operation_status']; label: string }[] = [
 		{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
 		{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 		{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
 		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' },
-		{ value: 'cancelled', label: 'ยกเลิกศูนย์ (Cancelled)' }
+		{ value: 'cancelled', label: 'ยกเลิกศูนย์ (Cancelled)' },
+		{ value: 'unknown', label: `${UNKNOWN_STATUS_LABEL} (Unknown)` }
 	];
 
 	const visibleOperationStatusOptions = $derived(
-		selectableOperationStatuses(operationStatusOptions, { canClose, currentStatus: storedStatus })
+		isExternal
+			? operationStatusOptions.filter(
+					(o) => o.value === 'unknown' || (o.value === 'cancelled' && canCancelExternal)
+				)
+			: selectableOperationStatuses(
+					operationStatusOptions.filter((o) => o.value !== 'unknown'),
+					{ canClose, currentStatus: storedStatus }
+				)
 	);
 	// FR-23: a closed shelter shows its value read-only to anyone who cannot reopen/close it.
-	const operationStatusLocked = $derived(!canClose && storedStatus === 'closed');
+	// FR-4: an external shelter's status is locked unless the system_admin edits it (takedown).
+	const operationStatusLocked = $derived(
+		isExternal ? !canCancelExternal : !canClose && storedStatus === 'closed'
+	);
 
 	// draft-shelter-cancelled-status: cancelling hides the shelter from every public page and the
 	// external API, so the switch to `cancelled` is confirmed first. Other changes apply at once.
@@ -276,6 +310,80 @@
 		<Form.FieldErrors />
 	</Form.Field>
 
+	{#if canSetExternal}
+		<div
+			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs"
+		>
+			<div class="space-y-0.5">
+				<label for="is-external-switch" class="text-sm font-semibold text-slate-800">
+					ศูนย์จากระบบภายนอก (External)
+				</label>
+				<p class="text-xs text-slate-500">
+					ศูนย์ที่บริหารในระบบอื่น — แสดงให้สาธารณะเห็นพร้อมลิงก์ แต่ไม่นับความจุ
+					ไม่รับจอง/ลงทะเบียน/บริจาค เลือกได้ตอนสร้างเท่านั้น และเปลี่ยนภายหลังไม่ได้
+				</p>
+			</div>
+			<Switch
+				id="is-external-switch"
+				checked={isExternal}
+				onCheckedChange={setExternal}
+				{disabled}
+			/>
+		</div>
+	{:else if isExternal}
+		<p
+			class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"
+			data-testid="external-locked-note"
+		>
+			ศูนย์จากระบบภายนอก (External) — เปลี่ยนชนิดภายหลังไม่ได้
+		</p>
+	{/if}
+
+	{#if isExternal}
+		<Form.Field {form} name="external_url">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>ลิงก์ไปยังระบบต้นทาง (External URL)</Form.Label>
+					<Input
+						{...props}
+						type="url"
+						inputmode="url"
+						bind:value={() => $formData.external_url ?? '', (v) => ($formData.external_url = v)}
+						{disabled}
+						placeholder="https://"
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.Description>ต้องขึ้นต้นด้วย https:// (เว้นว่างได้)</Form.Description>
+			<Form.FieldErrors />
+		</Form.Field>
+
+		<Form.Field {form} name="capacity">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>ความจุสูงสุด (Max Capacity)</Form.Label>
+					<div class="flex">
+						<Input
+							{...props}
+							type="number"
+							min="1"
+							bind:value={$formData.capacity}
+							{disabled}
+							placeholder="เช่น 150 (เว้นว่างได้)"
+							class="rounded-r-none"
+						/>
+						<span
+							class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+							>คน</span
+						>
+					</div>
+				{/snippet}
+			</Form.Control>
+			<Form.Description>ไม่นับ occupancy — ใช้เป็นข้อมูลอ้างอิงเท่านั้น</Form.Description>
+			<Form.FieldErrors />
+		</Form.Field>
+	{/if}
+
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 		<Form.Field {form} name="site_kind">
 			<Form.Control>
@@ -373,216 +481,220 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<Form.Field {form} name="floor_count">
+		{#if !isExternal}
+			<Form.Field {form} name="floor_count">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>จำนวนชั้น</Form.Label>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								min="1"
+								step="1"
+								value={$formData.floor_count ?? ''}
+								oninput={(e) =>
+									($formData.floor_count =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="เช่น 1 หรือ 2"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ชั้น</span
+							>
+						</div>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		{/if}
+	</div>
+
+	{#if !isExternal}
+		<Form.Field {form} name="project_level">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>จำนวนชั้น</Form.Label>
-					<div class="flex">
-						<Input
-							{...props}
-							type="number"
-							min="1"
-							step="1"
-							value={$formData.floor_count ?? ''}
-							oninput={(e) =>
-								($formData.floor_count =
-									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-							{disabled}
-							placeholder="เช่น 1 หรือ 2"
-							class="rounded-r-none"
-						/>
-						<span
-							class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
-							>ชั้น</span
-						>
-					</div>
+					<Form.Label>ระดับโครงการ (Project Level)</Form.Label>
+					<Select.Root
+						type="single"
+						bind:value={
+							() => $formData.project_level ?? '',
+							(v) => ($formData.project_level = (v || null) as ProjectLevel | null)
+						}
+						{disabled}
+					>
+						<Select.Trigger {...props} class={selectTriggerClass}>
+							{projectLevelOptions.find((o) => o.value === $formData.project_level)?.label ??
+								'— เลือกระดับ —'}
+						</Select.Trigger>
+						<Select.Content>
+							{#each projectLevelOptions as opt (opt.value)}
+								<Select.Item value={opt.value} label={opt.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
-	</div>
 
-	<Form.Field {form} name="project_level">
-		<Form.Control>
-			{#snippet children({ props })}
-				<Form.Label>ระดับโครงการ (Project Level)</Form.Label>
-				<Select.Root
-					type="single"
-					bind:value={
-						() => $formData.project_level ?? '',
-						(v) => ($formData.project_level = (v || null) as ProjectLevel | null)
-					}
-					{disabled}
-				>
-					<Select.Trigger {...props} class={selectTriggerClass}>
-						{projectLevelOptions.find((o) => o.value === $formData.project_level)?.label ??
-							'— เลือกระดับ —'}
-					</Select.Trigger>
-					<Select.Content>
-						{#each projectLevelOptions as opt (opt.value)}
-							<Select.Item value={opt.value} label={opt.label} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
-			{/snippet}
-		</Form.Control>
-		<Form.FieldErrors />
-	</Form.Field>
+		<!-- Operational feature flags (CR-016 registration steps + CR-106 Station 2) -->
+		<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
+			คุณสมบัติการปฏิบัติการ (Feature Flags)
+		</h3>
 
-	<!-- Operational feature flags (CR-016 registration steps + CR-106 Station 2) -->
-	<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
-		คุณสมบัติการปฏิบัติการ (Feature Flags)
-	</h3>
-
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-		<div
-			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
-		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="accepts-pre-registration" class="text-sm font-semibold text-slate-800">
-					รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ
-				</label>
-				<p class="text-xs text-slate-500">
-					เปิด: แสดงปุ่มลงทะเบียนบน /shelters และให้เลือกศูนย์นี้ใน /pre-register · ปิด:
-					ศูนย์ยังปรากฏในรายการ แต่จองผ่านหน้าสาธารณะไม่ได้ (ค่าเริ่มต้นปิด)
-				</p>
-			</div>
-			<Switch
-				id="accepts-pre-registration"
-				checked={$formData.feature_flags?.accepts_pre_registration ?? false}
-				onCheckedChange={(v) => setAcceptsPreRegistration(v === true)}
-				{disabled}
-				aria-label="รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ"
-			/>
-		</div>
-
-		<div
-			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
-		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="kiosk-walk-in-registration" class="text-sm font-medium text-card-foreground">
-					อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: แสดงปุ่มลงทะเบียนใหม่เมื่อไม่พบข้อมูลในศูนย์นี้ · ปิด: ซ่อนช่องทางนี้
-					(ค่าเริ่มต้นปิด)
-				</p>
-			</div>
-			<Switch
-				id="kiosk-walk-in-registration"
-				checked={$formData.feature_flags?.kiosk_walk_in_registration_enabled ?? false}
-				onCheckedChange={(v) => setKioskWalkInRegistration(v === true)}
-				{disabled}
-				aria-label="อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk"
-			/>
-		</div>
-
-		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
-		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="kiosk-phone-check-in" class="text-sm font-medium text-card-foreground">
-					เปิดพิมพ์ QR ด้วยเบอร์โทร
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: ตู้ Kiosk แสดงเมนู «พิมพ์ QR» ให้พิมพ์ QR Code ใหม่ด้วยเบอร์โทร · ปิด: ซ่อนเมนูนี้
-					(ค่าเริ่มต้นปิด)
-				</p>
-			</div>
-			<Switch
-				id="kiosk-phone-check-in"
-				checked={$formData.feature_flags?.kiosk_phone_check_in_enabled ?? false}
-				onCheckedChange={(v) => setKioskPhoneCheckIn(v === true)}
-				{disabled}
-				aria-label="เปิดพิมพ์ QR ด้วยเบอร์โทร"
-			/>
-		</div>
-
-		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
-		>
-			<div class="min-w-0 flex-1 space-y-1">
-				<label for="kiosk-thaid-check-in" class="text-sm font-medium text-card-foreground">
-					รายงานตัวด้วย ThaiD ที่ตู้ kiosk
-				</label>
-				<p class="text-xs text-muted-foreground">
-					เปิด: ผู้ประสบภัยยืนยันตัวตนด้วยแอป ThaiD บนมือถือของตนเอง · ต้องเปิด ThaiD ระดับระบบที่
-					/system-management/security ด้วย และมือถือผู้ประสบภัยต้องมีอินเทอร์เน็ต · ปิด:
-					ซ่อนช่องทางนี้ (ค่าเริ่มต้นปิด)
-				</p>
-			</div>
-			<Switch
-				id="kiosk-thaid-check-in"
-				checked={$formData.feature_flags?.kiosk_thaid_check_in_enabled ?? false}
-				onCheckedChange={(v) => setKioskThaidCheckIn(v === true)}
-				{disabled}
-				aria-label="รายงานตัวด้วย ThaiD ที่ตู้ kiosk"
-			/>
-		</div>
-
-		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
-		>
-			<label
-				for="enable-medical-screening"
-				class="min-w-0 flex-1 text-sm font-semibold text-slate-800"
+		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
 			>
-				เปิดคัดกรองผู้เข้าพัก (Station 2)
-			</label>
-			<Switch
-				id="enable-medical-screening"
-				checked={$formData.feature_flags?.enable_medical_screening ?? false}
-				onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
-				{disabled}
-				aria-label="เปิดคัดกรองผู้เข้าพัก Station 2"
-			/>
-		</div>
+				<div class="min-w-0 flex-1 space-y-1">
+					<label for="accepts-pre-registration" class="text-sm font-semibold text-slate-800">
+						รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ
+					</label>
+					<p class="text-xs text-slate-500">
+						เปิด: แสดงปุ่มลงทะเบียนบน /shelters และให้เลือกศูนย์นี้ใน /pre-register · ปิด:
+						ศูนย์ยังปรากฏในรายการ แต่จองผ่านหน้าสาธารณะไม่ได้ (ค่าเริ่มต้นปิด)
+					</p>
+				</div>
+				<Switch
+					id="accepts-pre-registration"
+					checked={$formData.feature_flags?.accepts_pre_registration ?? false}
+					onCheckedChange={(v) => setAcceptsPreRegistration(v === true)}
+					{disabled}
+					aria-label="รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ"
+				/>
+			</div>
 
-		<div
-			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
-		>
-			<label for="allow-pets" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
-				บันทึกสัตว์เลี้ยงตอนลงทะเบียน
-			</label>
-			<Switch
-				id="allow-pets"
-				checked={$formData.feature_flags?.allow_pets ?? false}
-				onCheckedChange={(v) => setAllowPets(v === true)}
-				{disabled}
-				aria-label="บันทึกสัตว์เลี้ยงตอนลงทะเบียน"
-			/>
-		</div>
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
+			>
+				<div class="min-w-0 flex-1 space-y-1">
+					<label for="kiosk-walk-in-registration" class="text-sm font-medium text-card-foreground">
+						อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk
+					</label>
+					<p class="text-xs text-muted-foreground">
+						เปิด: แสดงปุ่มลงทะเบียนใหม่เมื่อไม่พบข้อมูลในศูนย์นี้ · ปิด: ซ่อนช่องทางนี้
+						(ค่าเริ่มต้นปิด)
+					</p>
+				</div>
+				<Switch
+					id="kiosk-walk-in-registration"
+					checked={$formData.feature_flags?.kiosk_walk_in_registration_enabled ?? false}
+					onCheckedChange={(v) => setKioskWalkInRegistration(v === true)}
+					{disabled}
+					aria-label="อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk"
+				/>
+			</div>
 
-		<div
-			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
-		>
-			<label for="allow-assets" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
-				บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
-			</label>
-			<Switch
-				id="allow-assets"
-				checked={$formData.feature_flags?.allow_assets ?? false}
-				onCheckedChange={(v) => setAllowAssets(v === true)}
-				{disabled}
-				aria-label="บันทึกทรัพย์สินสัมภาระตอนลงทะเบียน"
-			/>
-		</div>
+			<div
+				class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			>
+				<div class="min-w-0 flex-1 space-y-1">
+					<label for="kiosk-phone-check-in" class="text-sm font-medium text-card-foreground">
+						เปิดพิมพ์ QR ด้วยเบอร์โทร
+					</label>
+					<p class="text-xs text-muted-foreground">
+						เปิด: ตู้ Kiosk แสดงเมนู «พิมพ์ QR» ให้พิมพ์ QR Code ใหม่ด้วยเบอร์โทร · ปิด: ซ่อนเมนูนี้
+						(ค่าเริ่มต้นปิด)
+					</p>
+				</div>
+				<Switch
+					id="kiosk-phone-check-in"
+					checked={$formData.feature_flags?.kiosk_phone_check_in_enabled ?? false}
+					onCheckedChange={(v) => setKioskPhoneCheckIn(v === true)}
+					{disabled}
+					aria-label="เปิดพิมพ์ QR ด้วยเบอร์โทร"
+				/>
+			</div>
 
-		<div
-			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
-		>
-			<label for="allow-vehicles" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
-				บันทึกยานพาหนะตอนลงทะเบียน
-			</label>
-			<Switch
-				id="allow-vehicles"
-				checked={$formData.feature_flags?.allow_vehicles ?? false}
-				onCheckedChange={(v) => setAllowVehicles(v === true)}
-				{disabled}
-				aria-label="บันทึกยานพาหนะตอนลงทะเบียน"
-			/>
+			<div
+				class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			>
+				<div class="min-w-0 flex-1 space-y-1">
+					<label for="kiosk-thaid-check-in" class="text-sm font-medium text-card-foreground">
+						รายงานตัวด้วย ThaiD ที่ตู้ kiosk
+					</label>
+					<p class="text-xs text-muted-foreground">
+						เปิด: ผู้ประสบภัยยืนยันตัวตนด้วยแอป ThaiD บนมือถือของตนเอง · ต้องเปิด ThaiD ระดับระบบที่
+						/system-management/security ด้วย และมือถือผู้ประสบภัยต้องมีอินเทอร์เน็ต · ปิด:
+						ซ่อนช่องทางนี้ (ค่าเริ่มต้นปิด)
+					</p>
+				</div>
+				<Switch
+					id="kiosk-thaid-check-in"
+					checked={$formData.feature_flags?.kiosk_thaid_check_in_enabled ?? false}
+					onCheckedChange={(v) => setKioskThaidCheckIn(v === true)}
+					{disabled}
+					aria-label="รายงานตัวด้วย ThaiD ที่ตู้ kiosk"
+				/>
+			</div>
+
+			<div
+				class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			>
+				<label
+					for="enable-medical-screening"
+					class="min-w-0 flex-1 text-sm font-semibold text-slate-800"
+				>
+					เปิดคัดกรองผู้เข้าพัก (Station 2)
+				</label>
+				<Switch
+					id="enable-medical-screening"
+					checked={$formData.feature_flags?.enable_medical_screening ?? false}
+					onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
+					{disabled}
+					aria-label="เปิดคัดกรองผู้เข้าพัก Station 2"
+				/>
+			</div>
+
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
+			>
+				<label for="allow-pets" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
+					บันทึกสัตว์เลี้ยงตอนลงทะเบียน
+				</label>
+				<Switch
+					id="allow-pets"
+					checked={$formData.feature_flags?.allow_pets ?? false}
+					onCheckedChange={(v) => setAllowPets(v === true)}
+					{disabled}
+					aria-label="บันทึกสัตว์เลี้ยงตอนลงทะเบียน"
+				/>
+			</div>
+
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
+			>
+				<label for="allow-assets" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
+					บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
+				</label>
+				<Switch
+					id="allow-assets"
+					checked={$formData.feature_flags?.allow_assets ?? false}
+					onCheckedChange={(v) => setAllowAssets(v === true)}
+					{disabled}
+					aria-label="บันทึกทรัพย์สินสัมภาระตอนลงทะเบียน"
+				/>
+			</div>
+
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
+			>
+				<label for="allow-vehicles" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
+					บันทึกยานพาหนะตอนลงทะเบียน
+				</label>
+				<Switch
+					id="allow-vehicles"
+					checked={$formData.feature_flags?.allow_vehicles ?? false}
+					onCheckedChange={(v) => setAllowVehicles(v === true)}
+					{disabled}
+					aria-label="บันทึกยานพาหนะตอนลงทะเบียน"
+				/>
+			</div>
 		</div>
-	</div>
+	{/if}
 
 	<Form.Field {form} name="location.address">
 		<Form.Control>
@@ -818,45 +930,47 @@
 		</Form.Field>
 	</div>
 
-	<!-- Key personnel (CR-023 FR-23-2/3) -->
-	<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
-		ข้อมูลบุคลากรหลัก (Key Personnel)
-	</h3>
+	{#if !isExternal}
+		<!-- Key personnel (CR-023 FR-23-2/3) -->
+		<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
+			ข้อมูลบุคลากรหลัก (Key Personnel)
+		</h3>
 
-	<div class="space-y-3">
-		{#each personnelRows as row (row.key)}
-			<div class="grid grid-cols-1 items-end gap-3 md:grid-cols-[1fr_1fr]">
-				<div class="space-y-1">
-					<span class="text-sm font-medium">{row.label}</span>
-					<Input
-						bind:value={
-							() => $formData.key_personnel?.[row.key]?.name ?? '',
-							(value) => {
-								ensureKeyPersonnel();
-								$formData.key_personnel![row.key] = {
-									...$formData.key_personnel![row.key],
-									name: value || null
-								};
+		<div class="space-y-3">
+			{#each personnelRows as row (row.key)}
+				<div class="grid grid-cols-1 items-end gap-3 md:grid-cols-[1fr_1fr]">
+					<div class="space-y-1">
+						<span class="text-sm font-medium">{row.label}</span>
+						<Input
+							bind:value={
+								() => $formData.key_personnel?.[row.key]?.name ?? '',
+								(value) => {
+									ensureKeyPersonnel();
+									$formData.key_personnel![row.key] = {
+										...$formData.key_personnel![row.key],
+										name: value || null
+									};
+								}
 							}
-						}
+							{disabled}
+							placeholder="ชื่อ-สกุล"
+						/>
+					</div>
+					<Input
+						type="tel"
+						value={$formData.key_personnel?.[row.key]?.phone ?? ''}
+						oninput={(e) => {
+							ensureKeyPersonnel();
+							$formData.key_personnel![row.key] = {
+								...$formData.key_personnel![row.key],
+								phone: e.currentTarget.value || null
+							};
+						}}
 						{disabled}
-						placeholder="ชื่อ-สกุล"
+						placeholder="เบอร์โทร"
 					/>
 				</div>
-				<Input
-					type="tel"
-					value={$formData.key_personnel?.[row.key]?.phone ?? ''}
-					oninput={(e) => {
-						ensureKeyPersonnel();
-						$formData.key_personnel![row.key] = {
-							...$formData.key_personnel![row.key],
-							phone: e.currentTarget.value || null
-						};
-					}}
-					{disabled}
-					placeholder="เบอร์โทร"
-				/>
-			</div>
-		{/each}
-	</div>
+			{/each}
+		</div>
+	{/if}
 </section>

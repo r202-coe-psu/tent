@@ -3955,3 +3955,17 @@ async def test_release_with_the_own_lease_removes_the_row(client: AsyncClient) -
     assert await _key_doc("guard-2") is None
     # already gone (e.g. an earlier attempt's ack was lost): still reported as released
     assert await use_case._release_key(doc["_id"], doc["created_at"], "BK-GUARD-2") is True
+
+
+# --- CR-252 FR-25: external shelter is never bookable, bypass included --------------------
+
+
+@pytest.mark.parametrize("headers", [GRANTED, BYPASS], ids=["booking-write", "bypass"])
+async def test_external_shelter_is_not_bookable_even_with_bypass(
+    client: AsyncClient, headers: dict[str, str]
+) -> None:
+    await _shelter("SH001", status="unknown", is_external=True)
+    response = await client.post(URL, json=_payload(), headers=headers)
+    assert response.status_code == 409
+    assert response.json()["code"] == "location_not_bookable"
+    assert await _log_statuses() == ["denied_location_not_bookable"]
