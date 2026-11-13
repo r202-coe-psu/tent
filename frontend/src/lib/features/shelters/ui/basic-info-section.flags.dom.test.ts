@@ -90,7 +90,9 @@ describe('BasicInfoSection — CR-251 public_visible / accepts_referrals switche
 			expect(sw(id).getAttribute('aria-describedby')).toBe(`${id}-desc`);
 			expect(document.getElementById(`${id}-desc`)).not.toBeNull();
 		}
-		expect(document.getElementById('public-visible-desc')?.textContent?.trim()).toBe(
+		expect(
+			document.getElementById('public-visible-desc')?.textContent?.replace(/\s+/g, ' ').trim()
+		).toBe(
 			'เปิด: ประชาชนเห็นศูนย์นี้ในหน้าค้นหาศูนย์ · ปิด: ประชาชนและหน่วยงานภายนอกจะไม่เห็นศูนย์นี้และจำนวนผู้พักอาศัย (ค่าเริ่มต้นเปิด)'
 		);
 	});
