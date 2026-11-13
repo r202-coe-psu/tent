@@ -42,6 +42,12 @@ export const REFERRAL_MANGO_INDEXES = [
 		type: 'json' as const
 	},
 	{
+		// M5 batches (schema_v 3): every member of one `batch_id` (draft CR — referral M5 §3).
+		index: { fields: ['type', 'batch_id'] },
+		name: 'referral-type-batch-idx',
+		type: 'json' as const
+	},
+	{
 		index: { fields: [{ type: 'desc' }, { created_at: 'desc' }] },
 		name: 'referral-list-created-desc-idx',
 		type: 'json' as const
@@ -2159,8 +2165,20 @@ ${consentVduClause()}
   // 12. CR-121: requisition_ticket validation (Rule 12) — food/supplies/transfer only
   // (kitchen is handled entirely by rule 11 above and never reaches this branch).
   if (newDoc.type === 'requisition_ticket' && newDoc.requisition_type !== 'kitchen') {
-    if (newDoc.schema_v !== 1) {
+    if (newDoc.schema_v !== 1 && !(newDoc.schema_v === 2 && newDoc.requisition_type !== 'transfer')) {
       throw { forbidden: 'Unsupported requisition_ticket schema version' };
+    }
+    // draft-food-ticket-service-date: food tickets from schema_v 2 carry a YYYY-MM-DD service day;
+    // other types never do. Set at creation only (immutableTicketFields below).
+    if (newDoc.requisition_type === 'food') {
+      if (newDoc.schema_v === 2 && typeof newDoc.service_date !== 'string') {
+        throw { forbidden: 'Food requisition_ticket requires service_date' };
+      }
+      if (newDoc.service_date !== undefined && !/^\\d{4}-\\d{2}-\\d{2}$/.test(newDoc.service_date)) {
+        throw { forbidden: 'requisition_ticket.service_date must be YYYY-MM-DD' };
+      }
+    } else if (newDoc.service_date !== undefined) {
+      throw { forbidden: 'Only food requisition_ticket carries service_date' };
     }
     if (!/^requisition_ticket:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
       throw { forbidden: 'requisition_ticket id must be requisition_ticket:{ulid}' };
@@ -2193,7 +2211,8 @@ ${consentVduClause()}
     }
     if (oldDoc) {
       var immutableTicketFields = [
-        '_id', 'type', 'schema_v', 'shelter_code', 'ticket_no', 'requisition_type', 'created_at', 'created_by', 'requested_by'
+        '_id', 'type', 'schema_v', 'shelter_code', 'ticket_no', 'requisition_type', 'created_at', 'created_by', 'requested_by',
+        'service_date'
       ];
       for (var f = 0; f < immutableTicketFields.length; f++) {
         var tf = immutableTicketFields[f];

@@ -11,6 +11,9 @@
 	import {
 		donationActionRef,
 		donationRefLabel,
+		isM6Donation,
+		M6ConfirmStatus,
+		M6SourceBadge,
 		type PendingDonationRow,
 		type ReceivedSearchBy,
 		type ReceivedSearchTerm
@@ -142,16 +145,21 @@
 </script>
 
 {#snippet contact(row: PendingDonationRow)}
-	<span class="flex items-center gap-1.5 tabular-nums">
-		<Phone class="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
-		<span class="sr-only">เบอร์โทร</span>
-		{row.donor_phone ?? 'ไม่ระบุเบอร์โทร'}
-	</span>
-	<span class="flex items-center gap-1.5 break-all">
-		<Mail class="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
-		<span class="sr-only">อีเมล</span>
-		{row.donor_email ?? 'ไม่ระบุอีเมล'}
-	</span>
+	{#if isM6Donation(row)}
+		<!-- No donor to call: what staff need is whether M6 has been told the goods arrived. -->
+		<M6ConfirmStatus {row} />
+	{:else}
+		<span class="flex items-center gap-1.5 tabular-nums">
+			<Phone class="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+			<span class="sr-only">เบอร์โทร</span>
+			{row.donor_phone ?? 'ไม่ระบุเบอร์โทร'}
+		</span>
+		<span class="flex items-center gap-1.5 break-all">
+			<Mail class="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+			<span class="sr-only">อีเมล</span>
+			{row.donor_email ?? 'ไม่ระบุอีเมล'}
+		</span>
+	{/if}
 {/snippet}
 
 {#snippet receivedStamp(row: PendingDonationRow, dotClass: string, textClass: string)}
@@ -271,7 +279,11 @@
 		{#each rows as row (donationActionRef(row) ?? row.received_at)}
 			<article class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 				<div>
-					<div class="text-base font-bold text-slate-900">{row.donor_name || 'ไม่ระบุชื่อ'}</div>
+					{#if isM6Donation(row)}
+						<M6SourceBadge {row} showCode={false} />
+					{:else}
+						<div class="text-base font-bold text-slate-900">{row.donor_name || 'ไม่ระบุชื่อ'}</div>
+					{/if}
 					<div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
 						<Badge variant="outline" class="text-xs font-bold {RECEIVED_BADGE}">รับแล้ว</Badge>
 						<span class="font-semibold text-slate-500">{donationRefLabel(row)}</span>
@@ -344,7 +356,13 @@
 				{#each rows as row (donationActionRef(row) ?? row.received_at)}
 					<Table.Row class="transition-colors hover:bg-muted/10">
 						<Table.Cell class="min-w-[240px] px-6 py-4">
-							<div class="text-sm font-bold text-foreground">{row.donor_name || 'ไม่ระบุชื่อ'}</div>
+							{#if isM6Donation(row)}
+								<M6SourceBadge {row} showCode={false} />
+							{:else}
+								<div class="text-sm font-bold text-foreground">
+									{row.donor_name || 'ไม่ระบุชื่อ'}
+								</div>
+							{/if}
 							<div class="mt-1.5 flex flex-wrap items-center gap-2 text-2xs">
 								<Badge variant="outline" class="text-2xs font-bold {RECEIVED_BADGE}">รับแล้ว</Badge>
 								<span class="font-semibold text-muted-foreground">{donationRefLabel(row)}</span>

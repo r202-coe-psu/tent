@@ -3,7 +3,7 @@ id: CR-222
 title: Station print server — staff สั่งพิมพ์ label QR ผ่าน BFF ไปเครื่องพิมพ์ที่ต่อ Raspberry Pi
 status: approved
 date: 2026-10-27
-updated: 2026-11-07
+updated: 2026-11-11
 requested_by: Project Owner
 decided_by: Project Owner (review รอบ 3 PR #932, 2026-10-31)
 layer: stable-core
@@ -15,9 +15,9 @@ affects:
   - frontend/src/lib/server/printers/** · frontend/src/lib/server/device-auth/** (ใหม่, ใช้ร่วมกับ scanners) · frontend/src/routes/api/{v1/printer,staff/v1/printers,staff/v1/print-jobs,back-office/printers,internal/printers}/**
   - frontend/src/lib/features/printers/** (feature ใหม่) · frontend/src/routes/(protected)/back-office/printers/**
   - frontend/src/lib/features/people/ui/registration/family-batch-print.svelte · ui/evacuee-profile/evacuee-qr-modal.svelte · domain/evacuee-qr-label.ts
-  - frontend/src/hooks.server.ts (เลิกตั้ง housekeeping timer) · docker-compose*.yml (container `print-housekeeping`) · nginx/snippets/rate-limit.conf (`limit_conn` ของ Pi)
+  - frontend/src/hooks.server.ts (เลิกตั้ง housekeeping timer) · docker-compose*.yml (env ของ `worker` + `PRINT_HOUSEKEEPING_TOKEN` แบบ `:?`) · nginx/snippets/rate-limit.conf (`limit_conn` ของ Pi)
   - printer/** (Pi agent ใหม่, Python, systemd `tent-printer`)
-  - frontend/src/lib/utils/label-size.ts (ย้าย `kioskLabelDots` / `KIOSK_LABEL_MM` ออกจาก feature `kiosk` ให้ printers ใช้ร่วม — kiosk re-export ชื่อเดิม) · frontend/src/lib/server/couch-printing-service.ts · couch-as-user.ts · ensure-printing-service.ts (+ `frontend/scripts/seed/users.ts`, `frontend/scripts/redeploy-access.ts`) · frontend/scripts/close-shelter-printing.ts · frontend/server/print-housekeeping.mjs · frontend/eslint.config.js (ห้าม route ของ printer import server admin) · nginx/nginx.conf (block `/api/internal/printers/`)
+  - frontend/src/lib/utils/label-size.ts (ย้าย `kioskLabelDots` / `KIOSK_LABEL_MM` ออกจาก feature `kiosk` ให้ printers ใช้ร่วม — kiosk re-export ชื่อเดิม) · frontend/src/lib/server/couch-printing-service.ts · couch-as-user.ts · ensure-printing-service.ts (+ `frontend/scripts/seed/users.ts`, `frontend/scripts/redeploy-access.ts`) · frontend/scripts/close-shelter-printing.ts · worker/src/worker/printing/** (task housekeeping + healthcheck ใน sync worker) · worker/Dockerfile (HEALTHCHECK) · frontend/eslint.config.js (ห้าม route ของ printer import server admin) · nginx/nginx.conf (block `/api/internal/printers/`)
 related:
   - review PR #932 โดย net-lynx (2026-10-27) รอบ 1 (ความเสี่ยง 15 ข้อ) + รอบ 2 (ใช้ user credential เป็นหลัก)
 ---
@@ -28,7 +28,7 @@ related:
 >
 > - **เปลี่ยนอะไร:** staff กด "พิมพ์ทั้งครอบครัว" / "พิมพ์ที่ <เครื่อง>" แล้ว label QR 80×60 mm ออกที่เครื่องพิมพ์ของจุดนั้นทันที ไม่มี print dialog ไม่ต้องลง driver บน tablet
 > - **ทำงานยังไง:** tablet ส่ง PNG ไปที่ staff BFF → BFF ตรวจแล้ว **เขียนงานด้วย cookie ของ staff** ลง DB ของศูนย์ **`printing_{shelter_code}`** (VDU บังคับ) → Pi agent (`printer/`) long-poll device BFF → BFF claim งานด้วย service user **`printing_service`** และตรวจ label ซ้ำก่อนส่ง → พิมพ์ผ่าน CUPS → รายงานผล
-> - **build:** DB `printing_devices` (เครื่อง, service user เท่านั้น) + `printing_{shelter_code}` (งาน, staff ของศูนย์ + VDU) · route 4 กลุ่ม (Pi / staff / back-office / internal) · container `print-housekeeping` · feature `printers` · Pi agent · สิทธิ์จัดการเครื่อง = SA + `shelter_manager`
+> - **build:** DB `printing_devices` (เครื่อง, service user เท่านั้น) + `printing_{shelter_code}` (งาน, staff ของศูนย์ + VDU) · route 4 กลุ่ม (Pi / staff / back-office / internal) · task housekeeping ใน sync worker (`worker`) · feature `printers` · Pi agent · สิทธิ์จัดการเครื่อง = SA + `shelter_manager`
 > - **ข้อจำกัด:** WAN ล่ม → พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ ใช้พรีวิว PDF เดิมแทน · staff ในศูนย์เดียวกันอ่านงานพิมพ์ของกันได้ผ่าน `/couch` (FR-31)
 > - **ก่อน merge PR โค้ด:** O-5 (`cupsenable`) ได้รับการอนุมัติ waive โดย Project Owner (2026-11-05) ให้เลื่อนการทดสอบ granular privileges / sudoers ไปเป็นงานติดตามหลัง merge (as-built ปลอดภัยแบบ fail-closed) · O-10 ทดสอบแล้ว 2026-11-01 (VDU เห็น `length` → FR-51 บังคับ ≤ 64 KB)
 > - **ทดสอบ local 2026-11-04:** Pi + XP-365B พิมพ์ได้ end-to-end · O-5 เลื่อนเป็น post-merge operation
@@ -42,7 +42,7 @@ related:
 > - **จำกัดสองชั้น:** VDU กันตอนเขียน (FR-51) + BFF ตรวจ label/เวลาซ้ำตอน claim ด้วยนาฬิกา server (FR-12a) — เพราะ staff เขียน DB ตรงผ่าน `/couch` ได้โดยไม่ผ่าน BFF และ VDU อ่าน byte ของ PNG ไม่ได้
 > - **PNG (รอบ 1 ข้อ 1):** ตรวจ IHDR ให้ตรงขนาด label เป๊ะ ทั้งที่ BFF ตอนสร้างและตอน claim (FR-29, FR-12a)
 > - **สิทธิ์สั่งพิมพ์ตาม `source` (รอบ 1 ข้อ 8, O-2):** FR-29a
-> - **housekeeping (รอบ 1 ข้อ 4):** ย้ายจาก timer ใน `hooks.server.ts` ไป container `print-housekeeping` + `last_run_at` + healthcheck (FR-17, FR-17a)
+> - **housekeeping (รอบ 1 ข้อ 4):** ย้ายจาก timer ใน `hooks.server.ts` ไป container `print-housekeeping` + `last_run_at` + healthcheck (FR-17, FR-17a) — _2026-11-11 ย้ายต่อเข้า task ใน sync worker (`worker`) เพื่อลด RAM_
 > - **Pi:** `TENT_BASE_URL` เป็น `https://` ยกเว้น loopback หรือเปิด `TENT_ALLOW_HTTP=1` สำหรับ edge ที่ไม่มี HTTPS (รอบ 1 ข้อ 2, O-9 · ปรับ 2026-11-06) · nginx `limit_conn` ≤ 2 ต่อคู่ `x-device-id` + IP ของ client (ข้อ 7) · สิทธิ์ `cupsenable` ต้องทดสอบบน Pi (ข้อ 12, O-5) · เครื่องพิมพ์ในตู้ kiosk มี 2 credential แยก (ข้อ 14)
 > - **เอกสาร:** §Impact รูป label ค้างได้ ~1 ชม. หลังงานจบ (ข้อ 9) · FR-31 อ่อนลง · เพิ่ม FR-49 (`_changes` เส้นเดียวต่อ process) · Acceptance load test · §Compromise
 
@@ -105,8 +105,8 @@ related:
 
 ### Housekeeping / retention (PDPA)
 
-- **FR-17** — container `print-housekeeping` (image เดียวกับ frontend แบบ `import-worker`) เรียก `POST /api/internal/printers/housekeeping` ทุก 30 วิ (`SWEEP_INTERVAL_SEC`) ด้วย `Authorization: Bearer <PRINT_HOUSEKEEPING_TOKEN>` (env ฝั่ง server เท่านั้น) · BFF **ไม่ตั้ง timer เอง** (`hooks.server.ts` ไม่มี `init` ของ printer) เพื่อไม่ให้รันซ้ำทุก process / replica · route วนทุก `printing_{code}` ตาม registry `printing_db:*` (FR-4): `printing` ที่เลย `lease_until` → `failed (lease_expired)`; `pending` ที่หมดอายุตาม FR-12a → `expired`. sweep เฉพาะ DB ของเครื่องตอน Pi poll ยังคงไว้. _(ปรับ 2026-10-29)_
-- **FR-17a** — บันทึก `last_run_at` / `last_retention_at` / `last_error` ลง doc `print_housekeeping` ใน `printing_devices` · container healthcheck = unhealthy เมื่อเรียกสำเร็จครั้งล่าสุดเกิน 2 นาที (กัน purge หยุดเงียบ). _(ใหม่ 2026-10-29)_
+- **FR-17** — asyncio task `print-housekeeping` ใน sync worker (`worker`, Python) เรียก `POST /api/internal/printers/housekeeping` ทุก 30 วิ (`PRINT_HOUSEKEEPING_INTERVAL_MS`, ต่ำกว่า 1 000 / ไม่ใช่ตัวเลข → 30 000) ด้วย `Authorization: Bearer <PRINT_HOUSEKEEPING_TOKEN>` (env ฝั่ง server เท่านั้น — worker ได้แค่ token ไม่มี credential `printing_service`) · timeout 25 วิ / ไม่ throw: non-2xx / error ใด ๆ (รวม URL ผิดรูปแบบ) → log status หรือชื่อ error (ไม่ log token / body) แล้วรอรอบถัดไป · token ว่าง → task ไม่เริ่ม · dev (`docker-compose.yml`) เป็น opt-in: อ่าน token จาก `DEV_PRINT_HOUSEKEEPING_TOKEN` ไม่ใช่ `PRINT_HOUSEKEEPING_TOKEN` ของ root `.env` (ซึ่งมี placeholder ของ staging) · staging / prod บังคับ token ด้วย `:?` ทั้ง `worker` และ `frontend` · logic sweep / retention อยู่ฝั่ง TypeScript ชุดเดียว · BFF **ไม่ตั้ง timer เอง** (`hooks.server.ts` ไม่มี `init` ของ printer) เพื่อไม่ให้รันซ้ำทุก process / replica · route วนทุก `printing_{code}` ตาม registry `printing_db:*` (FR-4): `printing` ที่เลย `lease_until` → `failed (lease_expired)`; `pending` ที่หมดอายุตาม FR-12a → `expired`. sweep เฉพาะ DB ของเครื่องตอน Pi poll ยังคงไว้. _(ปรับ 2026-10-29 · ผู้เรียกเปลี่ยนเป็น sync worker 2026-11-11)_
+- **FR-17a** — บันทึก `last_run_at` / `last_retention_at` / `last_error` ลง doc `print_housekeeping` ใน `printing_devices` · หลังเรียกสำเร็จ (2xx) worker เขียน epoch ms ลง `PRINT_HOUSEKEEPING_OK_FILE` (ค่าเริ่มต้น `/tmp/print-housekeeping.ok`) · healthcheck ของ container `worker` (`worker-healthcheck`, ทุก 30 วิ × 2) = unhealthy เมื่อเรียกสำเร็จครั้งล่าสุดเกิน max(2 นาที, 4 × interval) (กัน purge หยุดเงียบ) · ไม่ได้ตั้ง token → healthy · probe import แค่ config (ไม่โหลด `worker.main` / `httpx`) เพื่อไม่กิน RAM ทุก 30 วิ. _(ใหม่ 2026-10-29 · ย้ายเข้า `worker` 2026-11-11)_
 - **FR-18** — retention ทุกชั่วโมง ต่อ `printing_{code}`: ลบงาน terminal ที่ `finished_at` เก่ากว่า **7 วัน** (O-1) ด้วย `printing_service` ผ่าน `_bulk_docs` (`_deleted: true`) ทีละ ≤ 100 doc, สูงสุด 50 รอบต่อครั้ง · ไม่ใช้ `_purge` เพราะ CouchDB 3.5 ต้องใช้ server admin · tombstone เหลือแค่ `_id` / `_rev` ไม่มีข้อมูลบุคคล. _(ปรับ 2026-11-01 — ทีมเสนอ)_
 - **FR-19** — หลังลบต้องสั่ง `_compact` **เสมอ** (แม้ไม่มีอะไรถูกลบหรือการลบล้มเหลว) เพราะ revision ก่อน terminal write ยังมีรูป label · compact `printing_devices` ทุกชั่วโมงด้วย (revision ของ heartbeat). _(ปรับ 2026-10-29)_
 - **FR-20** — sweep / retention ที่ล้มเหลวไม่ทำให้ request ของ Pi ล้ม; รอบถัดไปลองใหม่; DB หนึ่งล้มไม่หยุด DB อื่น.
@@ -365,7 +365,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    T([container print-housekeeping ทุก 30 วิ<br/>POST /api/internal/printers/housekeeping + token]) --> A{token ถูก?}
+    T([task print-housekeeping ใน sync worker ทุก 30 วิ<br/>POST /api/internal/printers/housekeeping + token]) --> A{token ถูก?}
     A -- ไม่ --> X([401])
     A -- ใช่ --> P{มี printing_devices แล้ว?}
     P -- ยัง --> Z([ข้าม ไม่สร้าง DB])
@@ -398,7 +398,7 @@ flowchart TD
 - [ ] **role ของศูนย์อื่น:** user ที่มี `shelter:SH001` + `SH002:registration_staff` (ไม่มี `SH001:registration_staff`) PUT `print_job` `source: walk_in` ลง `printing_sh001` → VDU reject · ผ่าน BFF → 403
 - [ ] `test` ด้วย `{CODE}:registration_staff` (ไม่มี `{CODE}:shelter_manager`) → VDU reject
 - [ ] งานที่จบแล้วไม่มี `_attachments`; งานที่จบเกิน 7 วันถูกลบ (FR-18) และ DB ถูก compact
-- [ ] housekeeping รันครั้งเดียวต่อรอบแม้ frontend มีหลาย process / replica · หยุด container `print-housekeeping` เกิน 2 นาที → healthcheck เป็น unhealthy · `hooks.server.ts` ไม่ตั้ง timer ของ printer
+- [ ] housekeeping รันครั้งเดียวต่อรอบแม้ frontend มีหลาย process / replica · housekeeping เรียกไม่สำเร็จเกิน 2 นาที (เช่น frontend ล่ม) → healthcheck ของ `worker` เป็น unhealthy แต่งาน sync อื่นยังเดิน · `hooks.server.ts` ไม่ตั้ง timer ของ printer
 - [ ] heartbeat ไม่ทำให้ `update_seq` ของ `printing_{code}` ขยับตอนไม่มีงาน
 - [ ] สั่งพิมพ์ไปเครื่อง offline → ปฏิเสธทันที ไม่เกิดงาน
 - [ ] agent ตั้ง `TENT_BASE_URL=http://192.168.x.x` → ไม่ start (config error) · `http://127.0.0.1` ได้ · `http://192.168.x.x` + `TENT_ALLOW_HTTP=1` → start และ log เตือน
@@ -421,14 +421,14 @@ flowchart TD
 | doc type       | —                                               | `print_device` v1, `printing_db` v1, `print_housekeeping` v1 (ใน `printing_devices`) · `print_job` v1 (ใน `printing_{code}`)                        |
 | API            | —                                               | `/api/v1/printer/*` · `/api/staff/v1/printers` · `/api/staff/v1/print-jobs*` · `/api/back-office/printers*` · `/api/internal/printers/housekeeping` |
 | สิทธิ์         | —                                               | `PRINTER_MANAGER_CAPABILITIES = [shelter_manager]` (+ SA) · สั่งพิมพ์ตาม `source` (FR-29a) · CouchDB user `printing_service`                        |
-| Ops            | —                                               | Raspberry Pi + CUPS + XP-365B + agent `tent-printer` · container `print-housekeeping` · nginx `limit_conn` ที่ `/api/v1/printer/`                   |
+| Ops            | —                                               | Raspberry Pi + CUPS + XP-365B + agent `tent-printer` · task housekeeping ใน `worker` · nginx `limit_conn` ที่ `/api/v1/printer/`                   |
 
 ## Impact
 
 - **ข้อมูลส่วนบุคคล:** label มีชื่อ-นามสกุล, โซน, checklist การรับเข้า และ QR (`evacuee._id`) — รูปอยู่ใน `printing_{code}` ระหว่างงานยังไม่จบ (≤ 120 วิ + lease) และยังค้างใน revision เก่า**สูงสุดประมาณ 1 ชม. หลังงานจบ** จนกว่า compact รอบถัดไป (FR-19); doc ที่ไม่มีรูปเก็บ 7 วัน · ระหว่างนั้น staff ที่มี role `shelter:{CODE}` อ่านได้ผ่าน `/couch` (FR-31). _(ปรับ 2026-10-29)_
 - **Security:** browser เขียน `printing_{code}` ได้ตรง (ภายใต้ VDU) — การตรวจที่ VDU ทำไม่ได้ย้ายไปบังคับตอน claim (FR-12a) · ถ้าโค้ด printer ถูกเจาะ ได้แค่สิทธิ์ของ `printing_service` ไม่ถึง DB อื่น.
 - **ไม่กระทบ** DB อื่น, worker, MongoDB, public plane, kiosk scanner flow (นอกจากย้าย hash/compare secret ไป helper กลางแบบไม่เปลี่ยนพฤติกรรม).
-- **Ops:** ต้องติดตั้ง Pi ต่อจุดบริการ + ส่ง `.env` ให้เครื่อง · ตั้ง user `printing_service` + `COUCHDB_PRINTING_SERVICE_PASSWORD` + `PRINT_HOUSEKEEPING_TOKEN` ใน `.env` ของ server + container `print-housekeeping` (compose ใช้ `:-` ไม่บังคับ — ไม่ได้ตั้ง → route printer ตอบ 503 ตาม Acceptance, ส่วน service อื่นยัง restart ได้; ปรับ 2026-11-05) · server ที่ไม่มีเครื่องพิมพ์ไม่ถูกสร้าง DB · checklist ปิดศูนย์ (`closed` / `cancelled`) เพิ่ม 3 ขั้น: เครื่องทั้งหมดเป็น `inactive` → ลบ `printing_{code}` → ลบ `printing_db:{code}` ทำทันทีไม่รอ DB ว่าง (FR-4, O-11).
+- **Ops:** ต้องติดตั้ง Pi ต่อจุดบริการ + ส่ง `.env` ให้เครื่อง · ตั้ง user `printing_service` + `COUCHDB_PRINTING_SERVICE_PASSWORD` + `PRINT_HOUSEKEEPING_TOKEN` ใน `.env` ของ server (compose ใช้ `:-` กับ `COUCHDB_PRINTING_SERVICE_PASSWORD` — ไม่ได้ตั้ง → route printer ตอบ 503 ตาม Acceptance; ปรับ 2026-11-05 · `PRINT_HOUSEKEEPING_TOKEN` เปลี่ยนเป็น `:?` บังคับ 2026-11-11 — ไม่มี token compose ไม่ยอมขึ้น) · server ที่ไม่มีเครื่องพิมพ์ไม่ถูกสร้าง DB · checklist ปิดศูนย์ (`closed` / `cancelled`) เพิ่ม 3 ขั้น: เครื่องทั้งหมดเป็น `inactive` → ลบ `printing_{code}` → ลบ `printing_db:{code}` ทำทันทีไม่รอ DB ว่าง (FR-4, O-11).
 - **WAN ล่ม:** พิมพ์ผ่านเครื่องพิมพ์ไม่ได้ (BFF อยู่ central) — ใช้พรีวิว PDF.
 
 ## Migration
@@ -509,3 +509,5 @@ flowchart TD
 | 2026-11-07 | แก้ตาม review ของ team lead (PR #1182 รอบ 5) — team lead approve แล้ว: **W1** ล็อก retry ปลดเองเมื่อเครื่องที่ล็อกหายจากรายการ active (FR-43) ไม่ให้ modal / family batch ติดจน reload · **W2** ตัดวลี "ระบบจะไม่ส่งฉลากซ้ำ" จากข้อความผลไม่ทราบ / ยกเลิก และ FR-45 · ข้อความ `printer_inactive` / `printer_deleted` เตือนแบบมีเงื่อนไข · §Compromise ระบุว่า `failOpenJobs` fail งาน `pending` ด้วย · **S1** chunk ที่ล็อกปลดเฉพาะ `PRINTER_OFFLINE` / `PRINTER_NOT_FOUND` / `INVALID_LABELS` / `FORBIDDEN` (FR-47 แทน "4xx ปลดล็อก") + 401 บอกให้เข้าสู่ระบบใหม่ · **S2** เครื่องที่ล็อกหาย → ออก `job_id` ใหม่ก่อนส่ง · **S3** ยกเลิกระหว่างสร้างภาพฉลากหยุดทันที + ข้อความ "ยังไม่ได้ส่งงานพิมพ์" |
 | 2026-11-06 | แก้ตาม review ของ team lead (PR #1182 รอบ 4) — team lead approve แล้ว: **B1** กดยกเลิกหลังส่งงานแล้วถือเป็นผลไม่ทราบ เก็บ `job_id` และเครื่องเดิมไว้ตาม (FR-47) รวมกรณี chunk เดียว + ข้อความ toast ยกเลิก · **W1 / S1** modal และปุ่มออกจากหน้า family batch ถูก disable ระหว่างรอตามผลด้วย (FR-43) · **W2** owner เลือกทาง (b): บันทึกใน §Compromise ว่า sweeper fail งาน `printing` ด้วย `printed = 0` อาจซ้ำได้ ≤ `label_count` ใบ + แก้ toast ให้ตรวจที่เครื่องแทน "งานถูกยกเลิก" · **W3** ฟอนต์ label (IBM Plex Sans Thai / Looped) self-host ด้วย `@fontsource` แทน Google Fonts — `loadLabelFont` ยัง fail closed แต่ไม่ล้มตอนเข้าถึง Google ไม่ได้ จึงพรีวิว PDF ยังใช้ได้ตอน WAN ล่ม (O-4) · **S2** เครื่อง offline ยังตอบงานเดิมของ `job_id` (FR-29) และเครื่องที่ล็อกไว้ offline ยัง retry ได้ (FR-47) · §Compromise เพิ่ม replay 7 วัน |
 | 2026-11-06 | แก้ตาม review ของ team lead (PR #1182 รอบ 3) — team lead approve แล้ว: **B1** ผลไม่ทราบ / ครบเวลา retry ด้วย `job_id` เดิมและเครื่องเดิม แล้ว poll งานเดิมต่อจนจบ (FR-47 แทนข้อเสนอ "ต่อจาก `printed` ล่าสุด" ของรอบ 2 ที่ตัดไม่ได้จริง) + ข้อความ FR-45 · **W1** modal ปิดไม่ได้ระหว่างพิมพ์, reload ยังเสี่ยง (§Compromise) · **W2** family batch มีปุ่มพิมพ์ชุดเดียว (FR-43) · **W3** ศูนย์ปิด / ไม่มีในทะเบียนตอนสร้างหรือเปิดเครื่อง → 422 `SHELTER_CLOSED` (FR-32, `api-contract.md` §2.9.3) |
+| 2026-11-11 | ทีมเสนอ — team lead approve แล้ว: FR-17 / FR-17a ย้าย housekeeping จาก container `print-housekeeping` (Node, ~50 MiB ต่อ environment) เข้า asyncio task ใน sync worker (`worker`) ที่เรียก endpoint เดิมด้วย token เดิม — endpoint และ logic ฝั่ง TypeScript ไม่เปลี่ยน · healthcheck ของ `worker` สะท้อนสถานะ housekeeping (unhealthy เมื่อสำเร็จล่าสุดเกิน 2 นาที, interval 30 วิ × 2, start-period 120 วิ) · staging / prod บังคับ `PRINT_HOUSEKEEPING_TOKEN` ด้วย `:?` ทั้ง `worker` และ `frontend` (เดิม `:-`) · interval ต้องไม่เกิน 120 000 ms · ไม่ย้าย `import-worker` ในรอบนี้ · ลบ container เดิมตอน deploy เป็นหน้าที่คน deploy |
+| 2026-11-11 | ทีมแก้ตาม local review ของ PR โค้ด (ยังไม่ได้ให้ team lead ยืนยัน): เกณฑ์ healthcheck เป็น max(2 นาที, 4 × interval) แทน 2 นาทีตายตัว — interval > 120 000 ไม่ทำให้ unhealthy ตลอด (เปลี่ยนจากที่ตกลงตอน grill) · probe ไม่ import `worker.main` (เดิม ~58 MB / 0.8 วิ ต่อครั้ง → ~15 MB / 0.1 วิ) · tick จับ error ทุกชนิด (เช่น `httpx.InvalidURL`) ไม่ให้ task ตาย · dev อ่าน token จาก `DEV_PRINT_HOUSEKEEPING_TOKEN` · compose ส่ง `PRINT_HOUSEKEEPING_INTERVAL_MS` ต่อให้ `worker` · `printer/README.md` ระบุ `--remove-orphans` ตอน deploy ครั้งแรก |

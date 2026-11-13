@@ -239,7 +239,7 @@
 					/>
 				</div>
 
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<Form.Field {form} name="municipalityZone">
 						<Form.Control>
 							{#snippet children({ props })}
@@ -271,7 +271,7 @@
 			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
 				ที่อยู่ครัวเรือนเดิม (ก่อนอพยพ)
 			</h3>
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<Form.Field {form} name="housingType">
 					<Form.Control>
 						{#snippet children({ props })}

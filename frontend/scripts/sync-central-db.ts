@@ -270,8 +270,11 @@ async function syncCatalogAccessDesign(
   }
   if (newDoc.shelter_code) {
     var hasScope = userCtx.roles.indexOf('shelter:' + newDoc.shelter_code) !== -1;
-    var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
-    var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
+    // CR-093 (#832): accept the bare role and the compound {shelter_code}:{role} of THIS doc's shelter.
+    var isManager = userCtx.roles.indexOf('shelter_manager') !== -1 ||
+      userCtx.roles.indexOf(newDoc.shelter_code + ':shelter_manager') !== -1;
+    var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1 ||
+      userCtx.roles.indexOf(newDoc.shelter_code + ':warehouse_staff') !== -1;
     // CR-227: donation_staff writes its own shelter's catalog docs (compound role only).
     var isDonationStaff = userCtx.roles.indexOf(newDoc.shelter_code + ':donation_staff') !== -1;
     if (hasScope && (isManager || isWS || isDonationStaff)) {

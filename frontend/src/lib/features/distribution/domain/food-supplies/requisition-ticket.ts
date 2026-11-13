@@ -69,15 +69,50 @@ export const ticketAmendmentSchema = z.object({
 });
 export type TicketAmendment = z.infer<typeof ticketAmendmentSchema>;
 
+/** Flow 2 tickets carry `service_date` from schema_v 2 (draft-food-ticket-service-date). */
+export const REQUISITION_TICKET_SCHEMA_V = 2;
+
+/** Thailand calendar day (`YYYY-MM-DD`) the food ticket is served on. */
+const serviceDateSchema = z.iso.date();
+
+const isFlow2Type = (type: RequisitionType) => type === 'food' || type === 'supplies';
+
+/** `service_date` belongs to food tickets only; `required` is false for pre-v2 tickets. */
+function checkServiceDate(
+	ticket: { requisition_type: RequisitionType; service_date?: string },
+	ctx: z.RefinementCtx,
+	required: boolean
+): void {
+	if (ticket.requisition_type !== 'food') {
+		if (ticket.service_date !== undefined) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['service_date'],
+				message: 'Only food requisition tickets carry service_date'
+			});
+		}
+		return;
+	}
+	if (required && !ticket.service_date) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['service_date'],
+			message: 'Food requisition tickets require service_date'
+		});
+	}
+}
+
 export const requisitionTicketDocSchema = z
 	.object({
 		_id: requisitionTicketIdSchema,
 		type: z.literal('requisition_ticket'),
 		...foodSuppliesBaseDocShape,
+		schema_v: z.union([z.literal(1), z.literal(REQUISITION_TICKET_SCHEMA_V)]),
 		ticket_no: z.string().trim().min(1),
 		requisition_type: requisitionTypeSchema,
 		status: requisitionTicketStatusSchema,
 		meal: mealPeriodSchema.optional(),
+		service_date: serviceDateSchema.optional(),
 		source_location: z.string().trim().min(1),
 		destination_location: z.string().trim().min(1),
 		driver_name: z.string().trim().min(1).optional(),
@@ -101,6 +136,15 @@ export const requisitionTicketDocSchema = z
 				});
 			}
 			itemIds.add(item.item_id);
+		}
+
+		checkServiceDate(ticket, ctx, ticket.schema_v >= REQUISITION_TICKET_SCHEMA_V);
+		if (ticket.schema_v === REQUISITION_TICKET_SCHEMA_V && !isFlow2Type(ticket.requisition_type)) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['schema_v'],
+				message: 'Only food and supplies tickets use schema_v 2'
+			});
 		}
 
 		const amendmentIds = new Set<string>();
@@ -127,6 +171,7 @@ export const requisitionTicketInputSchema = z
 		ticket_no: flow2TicketNumberSchema,
 		requisition_type: flow2RequisitionTypeSchema,
 		meal: mealPeriodSchema.optional(),
+		service_date: serviceDateSchema.optional(),
 		source_location: z.string().trim().min(1),
 		destination_location: z.string().trim().min(1),
 		items: z.array(ticketItemInputSchema).min(1),
@@ -160,6 +205,7 @@ export const requisitionTicketInputSchema = z
 				message: 'Food requisition tickets require meal'
 			});
 		}
+		checkServiceDate(ticket, ctx, true);
 	});
 export type RequisitionTicketInput = z.input<typeof requisitionTicketInputSchema>;
 
@@ -170,15 +216,16 @@ export function createFlow2RequisitionTicket(
 	id?: string
 ): Flow2RequisitionTicket {
 	const parsed = requisitionTicketInputSchema.parse(input);
-	return requisitionTicketDocSchema.parse(
+	const ticket = requisitionTicketDocSchema.parse(
 		makeDoc(
 			'requisition_ticket',
-			1,
+			REQUISITION_TICKET_SCHEMA_V,
 			{
 				ticket_no: parsed.ticket_no,
 				requisition_type: parsed.requisition_type,
 				status: 'PENDING_PICK' as const,
 				...(parsed.meal ? { meal: parsed.meal } : {}),
+				...(parsed.service_date ? { service_date: parsed.service_date } : {}),
 				source_location: parsed.source_location,
 				destination_location: parsed.destination_location,
 				requested_by: ctx.createdBy,
@@ -189,6 +236,10 @@ export function createFlow2RequisitionTicket(
 			id
 		)
 	) as Flow2RequisitionTicket;
+	if (ticket.service_date && ticket.service_date < thailandCalendarDay(ticket.created_at)) {
+		throw new Error('Food ticket service_date cannot be in the past');
+	}
+	return ticket;
 }
 
 export function isFlow2RequisitionTicket(
@@ -246,7 +297,8 @@ const IMMUTABLE_TICKET_FIELDS = [
 	'ticket_no',
 	'requisition_type',
 	'created_at',
-	'created_by'
+	'created_by',
+	'service_date'
 ] as const;
 
 const POST_DISTRIBUTION_STATUSES = new Set<RequisitionTicketStatus>([
@@ -317,10 +369,11 @@ export function assertRequisitionTicketMutation(
 export { mealPeriodSchema, type MealPeriod };
 
 /**
- * Service day of a ticket as a Thailand calendar day (`YYYY-MM-DD`), derived from `created_at`
- * (`draft-meal-quota-window` FR-MQW-03 option A — no `service_date` field yet). A ticket opened
- * the day before its service lands on the earlier day.
+ * Service day of a ticket as a Thailand calendar day (`YYYY-MM-DD`): its `service_date`, or for a
+ * schema_v 1 ticket without one, the day it was created (CR-159 FR-MQW-03 option A).
  */
-export function ticketServiceDay(ticket: Pick<RequisitionTicket, 'created_at'>): string {
-	return thailandCalendarDay(ticket.created_at);
+export function ticketServiceDay(
+	ticket: Pick<RequisitionTicket, 'created_at' | 'service_date'>
+): string {
+	return ticket.service_date ?? thailandCalendarDay(ticket.created_at);
 }
