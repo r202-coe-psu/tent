@@ -144,6 +144,8 @@ export type DonationCloseResult = {
 		closed_reason: DonationCloseReason;
 		shortfalls: { item_id: string; declared: string; counted: string; short: string }[];
 		items: ClosedSummaryItem[];
+		/** D20, m6 only: closed as received with nothing received — the worker tells M6 so. */
+		nothing_received?: boolean;
 	};
 };
 
