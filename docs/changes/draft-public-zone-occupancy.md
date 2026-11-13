@@ -12,7 +12,8 @@ affects:
   - docs/data/couchdb-mongodb-sync.md — `refresh_occupancy` เขียน `occupancy_by_zone` เพิ่ม
   - docs/task-breakdown/12-public.md — งานใหม่ (ต่อจาก T-58) หน้า `/shelters/[id]`
   - worker/src/worker/projectors/occupancy.py (+ `count_zone_stay_statuses`)
-  - worker/src/worker/mongo/shelter.py (`refresh_occupancy`) + Beanie model `PublicShelter`
+  - packages/tent-model/src/tent_model/public_shelter.py (Beanie model `PublicShelter` + `occupancy_by_zone` — แพ็กเกจกลางที่ worker และ backend ใช้ร่วมกัน)
+  - worker/src/worker/mongo/shelter.py (`refresh_occupancy`)
   - worker/src/worker/projection_version.py (`PROJECTION_VERSION` 17 → 18)
   - backend/apiapp/modules/shelter/schemas.py (`ShelterZoneDetail`) + use_case.py (map zones) + tests
   - frontend/src/lib/api/fastapi.json + openapi.d.ts (`pnpm openapi:update`)
@@ -59,8 +60,8 @@ affects:
 **Frontend**
 
 - FR-12 — รัน `pnpm openapi:update` และ commit `fastapi.json` + `openapi.d.ts`
-- FR-13 — เพิ่มฟังก์ชัน pure ใน `features/public-portal/domain` รับ zone (`present`, `capacity`, `status`) แล้วคืน `percent` (`round(present / capacity × 100)`, ไม่ clamp) และ `level` (`normal` | `warning` | `full`) ด้วยเกณฑ์เดียวกับ CR-226 FR-12 (`full` ≥ 100%, `warning` ≥ 80%) · `capacity ≤ 0` → `percent = 0`, `level = 'full'` (CR-226 FR-12b)
-- FR-14 — `shelter-zones.svelte` แสดงต่อโซน: `present / capacity คน` + แท่งความเต็ม (ความกว้าง clamp 100%) สีตาม `level`
+- FR-13 — เพิ่มฟังก์ชัน pure ใน `features/public-portal/domain` รับ zone (`present`, `capacity`, `status`) แล้วคืน `percent` (`round(present / capacity × 100)`, ไม่ clamp) และ `level` (`normal` | `warning` | `full`) ด้วยเกณฑ์เดียวกับ CR-226 FR-12 (`full` ≥ 100%, `warning` ≥ 80%) · `capacity ≤ 0` → `percent = 0`, `level = 'full'` (CR-226 FR-12b) · `capacity = null` (ไม่ระบุ) → `percent = null`, `level = null` — ห้ามหารด้วย null/0 จนได้ `NaN`
+- FR-14 — `shelter-zones.svelte` แสดงต่อโซน: `present / capacity คน` + แท่งความเต็ม (ความกว้าง clamp 100%) สีตาม `level` · โซนที่ `capacity = null` แสดงเฉพาะ `present คน` โดยไม่มีแท่งและป้ายระดับ
 - FR-15 — โซน `status = closed` แสดงจางพร้อมป้าย "ปิด" และไม่แสดงสีเตือน
 - FR-16 — เมื่อ `present = null` ซ่อนยอดและแท่ง แสดงเฉพาะข้อมูลโซนเดิม (ชื่อ ประเภท capacity พื้นที่)
 - FR-17 — ข้อความใหม่ทั้งหมดอยู่ใน `PUBLIC_SHELTER_DETAILS_I18N` ครบทุกภาษาที่ไฟล์รองรับ
@@ -75,8 +76,8 @@ affects:
 - [ ] Tests:
   - worker: นับ `{zone: {status: count}}` ถูก, ข้าม `zone = null`, นับคน `search_excluded`, `refresh_occupancy` เขียน field
   - backend: `present` กรองเฉพาะ Present, โซนว่าง = 0, `occupancy_by_zone = null` → `null`, zone code ไม่ตรง = ไม่นับ, `status` default `active`
-  - frontend domain: `percent`/`level` (80/100%, ล้นเกิน 100, `capacity ≤ 0`, โซนปิด)
-  - frontend component (dom test): แสดงยอด, ซ่อนเมื่อ `null`, โซนปิด
+  - frontend domain: `percent`/`level` (80/100%, ล้นเกิน 100, `capacity ≤ 0`, `capacity = null`, โซนปิด)
+  - frontend component (dom test): แสดงยอด, ซ่อนเมื่อ `present = null`, ไม่มีแท่งเมื่อ `capacity = null`, โซนปิด
 - [ ] ทุกไฟล์ `.svelte` ที่แก้ผ่าน `svelte-autofixer`
 
 ## เรื่องที่ต้องตัดสิน (ก่อน approve)
@@ -104,7 +105,8 @@ affects:
 | ส่วน        | กระทบ                                                                                                                                                                                                                                       |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Docs        | `schema.md` §9.1 (+ `occupancy_by_zone`) · `api-contract.md` แถว `GET /public/v1/shelters/{code}` และ `/external/v1/shelters/{code}` · `couchdb-mongodb-sync.md` (`refresh_occupancy`) · `task-breakdown/12-public.md` (งานใหม่ต่อจาก T-58) |
-| Worker      | `projectors/occupancy.py` (+ ฟังก์ชันนับ `{zone: {status: count}}`) · `mongo/shelter.py` `refresh_occupancy` + model `PublicShelter` · `projection_version.py` 17 → 18 · pytest                                                             |
+| Model       | `packages/tent-model/src/tent_model/public_shelter.py` (`PublicShelter` + field `occupancy_by_zone`) — แพ็กเกจกลางที่ worker และ backend ใช้ร่วมกัน                                                                                         |
+| Worker      | `projectors/occupancy.py` (+ ฟังก์ชันนับ `{zone: {status: count}}`) · `mongo/shelter.py` `refresh_occupancy` · `projection_version.py` 17 → 18 · pytest                                                                                     |
 | Backend     | `modules/shelter/schemas.py` `ShelterZoneDetail` (+ `code`, `status`, `present`) · `use_case.py` map zones · tests ใน `backend/tests/`                                                                                                      |
 | Frontend    | `fastapi.json` + `openapi.d.ts` · `features/public-portal/domain` (+ `percent` / `level` ต่อโซน) · `lib/components/shelter-zones.svelte` · `PUBLIC_SHELTER_DETAILS_I18N` · dom test                                                         |
 | Partner API | `/external/v1/shelters/{code}` ได้ field เพิ่มแบบ additive (ขึ้นกับ D3) — partner ที่ parse แบบ strict ต้องรับ field ใหม่ได้                                                                                                                |
@@ -119,3 +121,4 @@ affects:
 ## Decision log
 
 - 2026-11-11 — proposed (#1241; track ด้วย CR ไฟล์ตามที่เจ้าของงานสั่ง) · D1–D3 รอเจ้าของโครงการตัดสิน
+- 2026-11-13 — review PR #1354: แก้ path ของ model `PublicShelter` เป็น `packages/tent-model/` (affects + Impact) · เพิ่มกรณี `capacity = null` ใน FR-13 / FR-14 / Acceptance (`percent` / `level` = `null`, ไม่แสดงแท่งและป้ายระดับ)
