@@ -63,7 +63,6 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	const { consent, consent_member_keys } = consentParsed.data;
 
 	let shelterCode: string;
-	let phone: string;
 	let nationalId: string | null;
 	let captchaToken: string | undefined;
 	let unifiedInput: UnifiedRegistrationInput;
@@ -115,7 +114,6 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 		shelterCode = parsed.data.shelter_code;
 		captchaToken = parsed.data.captchaToken;
-		phone = (parsed.data.members[0]?.phone ?? '').trim();
 		nationalId = parsed.data.members[0].person_id?.number?.trim() || null;
 		unifiedInput = {
 			members: parsed.data.members.map((m) => ({
@@ -138,7 +136,6 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		const legacy = parsed.data;
 		shelterCode = legacy.shelter_code;
 		captchaToken = legacy.captchaToken;
-		phone = legacy.phone;
 		nationalId = legacy.national_id ?? null;
 
 		const pets = legacy.pets.map((pet) => {
@@ -225,9 +222,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		return json({ success: false, error: 'SHELTER_CLOSED' }, { status: 409, headers: noStore });
 	}
 
-	// 4b. Duplicate-hold prevention (CR-112)
+	// 4b. Duplicate-hold prevention (CR-112) — national id only; a shared phone is allowed (#1049)
 	const conflict = await findConflictingHold(shelterCode, {
-		phone,
 		cardNumber: nationalId
 	});
 	if (conflict) {
