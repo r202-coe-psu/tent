@@ -33,6 +33,8 @@ export {
 	isShelterBookable,
 	isShelterCancelled,
 	effectiveParkingVehicles,
+	isShelterPublicVisible,
+	isShelterAcceptingReferrals,
 	resolveOperationStatus,
 	DEFAULT_SITE_KIND,
 	HOST_HOUSE_SITE_KIND,

@@ -106,6 +106,11 @@ class PublicShelter(Document):
     # `None` = row not re-projected since this field was added: readers fall back to
     # counting `public_persons` (legacy, misses search-excluded people).
     occupancy_by_status: dict[str, int] | None = None
+    # `current_stay.zone` -> `current_stay.status` -> count, over the same evacuees as
+    # `occupancy_by_status` (draft-public-zone-occupancy, #1241). The API joins it with
+    # `raw_data.zones` and sums the Present statuses per zone. `None` = not re-projected
+    # yet: readers report no per-zone count (no `public_persons` fallback).
+    occupancy_by_zone: dict[str, dict[str, int]] | None = None
     readiness: PublicShelterReadinessSummary | None = None
     # Only ticked storage points with a pin; never read the points from `raw_data`.
     donation_points: list[DonationPoint] = Field(default_factory=list)

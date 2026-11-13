@@ -419,7 +419,7 @@ async def test_create_rejects_duplicate_open_national_id(
     assert await UnassignedRegistration.count() == 1
 
 
-async def test_create_rejects_duplicate_open_phone(
+async def test_create_allows_duplicate_open_phone(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
     first = await client.post(
@@ -448,9 +448,9 @@ async def test_create_rejects_duplicate_open_phone(
             ]
         ),
     )
-    assert second.status_code == 409
-    assert second.json()["errors"][0]["error"] == "DUPLICATE_OPEN_IDENTITY"
-    assert await UnassignedRegistration.count() == 1
+    # #1049: a phone may be shared; only person-id numbers are unique.
+    assert second.status_code == 201
+    assert await UnassignedRegistration.count() == 2
 
 
 async def test_create_rejects_duplicate_open_passport(
@@ -1071,10 +1071,10 @@ async def test_join_rejects_national_id_already_claimed_on_same_registration(
     assert len(unchanged.members) == 1
 
 
-async def test_join_rejects_phone_already_claimed_on_same_registration(
+async def test_join_allows_phone_already_claimed_on_same_registration(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    """Same gap as above, via phone instead of national_id."""
+    """Unlike national_id, a phone already used on this registration may be reused (#1049)."""
     created = await client.post(
         "/public/v1/unassigned-registrations",
         headers=auth_headers,
@@ -1112,12 +1112,11 @@ async def test_join_rejects_phone_already_claimed_on_same_registration(
             ],
         ),
     )
-    assert joined.status_code == 409
-    assert joined.json()["errors"][0]["error"] == "DUPLICATE_OPEN_IDENTITY"
+    assert joined.status_code == 201
 
-    unchanged = await UnassignedRegistration.get(reg_id)
-    assert unchanged is not None
-    assert len(unchanged.members) == 1
+    updated = await UnassignedRegistration.get(reg_id)
+    assert updated is not None
+    assert len(updated.members) == 2
 
 
 async def test_join_target_not_found_returns_404(

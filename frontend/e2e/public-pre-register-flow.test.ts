@@ -1401,7 +1401,7 @@ test.describe(
 				id: 'S1a 409 DUPLICATE_OPEN_IDENTITY',
 				status: 409,
 				body: { success: false, error: 'DUPLICATE_OPEN_IDENTITY' },
-				toast: 'เลขบัตรประชาชน หรือ เบอร์โทรศัพท์นี้ลงทะเบียนเรียบร้อยแล้ว',
+				toast: 'เลขบัตรประชาชนนี้ลงทะเบียนเรียบร้อยแล้ว',
 				allow: /409/
 			},
 			{
@@ -2027,7 +2027,7 @@ test.describe(
 			await expect(
 				page
 					.locator('[data-sonner-toast]')
-					.filter({ hasText: 'เลขบัตรประชาชน หรือ เบอร์โทรศัพท์นี้ลงทะเบียนเรียบร้อยแล้ว' })
+					.filter({ hasText: 'เลขบัตรประชาชนนี้ลงทะเบียนเรียบร้อยแล้ว' })
 			).toBeVisible();
 			// nothing was lost: the form keeps what was typed and no ticket appeared
 			await expect(page.locator('#member-0-first-name')).toHaveValue(FIRST_NAME);

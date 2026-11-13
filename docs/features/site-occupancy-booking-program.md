@@ -2,7 +2,7 @@
 title: "Program — Site kind, occupancy health, booking channels, triage"
 status: active
 created: 2026-08-13
-updated: 2026-10-27
+updated: 2026-11-12
 owner: PM (John) / เจ้าของโครงการ
 audience: developer + team lead assignment
 note: >
@@ -12,6 +12,11 @@ note: >
   CR ชุด = CR-066 (index, approved สไลซ์ล็อก) + CR-067..CR-071 approved (067 P1 / 071 slice A)
   + CR-072/CR-073 proposed.
   CR-198 approved 2026-10-26: `site_kind` เป็น master code (global-only) แทน enum 2 ค่า.
+  decision sync 2026-11-12 (#1049): ปลดการกันเบอร์โทรซ้ำทุกช่องทางที่ใช้ `unassigned_registrations` (public pre-register + staff on-site: เลิกเช็คเบอร์ซ้ำ, create/join/reopen ไม่ถูกปฏิเสธเพราะเบอร์) —
+  CR-112 duplicate-hold เช็คเฉพาะเลขบัตร (`DUPLICATE_HOLD` ไม่เกิดจากเบอร์), `check-duplicate`
+  ไม่เช็คเบอร์, Unassigned Registration (Mongo) `open_phones` ไม่ unique อีก
+  (`uniq_open_phones` → `by_open_phones`; drop ตอน startup) · เลขบัตรยังกันซ้ำเหมือนเดิม ·
+  ไม่กระทบ kiosk walk-in (`KIOSK_PHONE_DUPLICATE`) · ค้นสถานะ/ค้นครอบครัวด้วยเบอร์อาจได้หลายใบ — นอกขอบเขต.
 ---
 
 # Program — ชนิดสถานที่ · สุขภาพความจุ · ช่องจอง · คัดกรอง
