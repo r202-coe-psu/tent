@@ -15,7 +15,8 @@ import type {
 	SiteKind,
 	Utilities,
 	Zone,
-	FoodDistributionPoint
+	FoodDistributionPoint,
+	ParkingPoint
 } from '../domain/schema';
 
 /**
@@ -63,6 +64,7 @@ export interface ShelterSummary {
 	risk: Risk;
 	zones: Zone[];
 	food_distribution_points: FoodDistributionPoint[];
+	parking_points: ParkingPoint[];
 	admission_policy: AdmissionPolicy;
 	luggage_policy: LuggagePolicy;
 	parking_policy: ParkingPolicy;
