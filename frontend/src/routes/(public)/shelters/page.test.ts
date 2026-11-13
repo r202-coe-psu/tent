@@ -389,4 +389,44 @@ describe('public/shelters load function', () => {
 		expect(vi.mocked(listPublicShelters).mock.calls[1][0]?.site_kind).toBeUndefined();
 		expect(bad.filters.site_kind).toBeUndefined();
 	});
+
+	describe('parking filter (CR-253 FR-33/FR-34)', () => {
+		const item = (code: string, parking_vehicle_types: string[]) => ({
+			code,
+			name: code,
+			status: 'open',
+			capacity: 10,
+			province: 'สงขลา',
+			accepts_pre_registration: false,
+			updated_at: '2026-11-13T00:00:00Z',
+			parking_vehicle_types
+		});
+
+		beforeEach(() => {
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [item('SH_CAR', ['car']), item('SH_BOTH', ['car', 'boat']), item('SH_NONE', [])],
+				count: 3,
+				as_of: '2026-11-13T00:00:00Z'
+			} as unknown as PublicShelterListResponse);
+		});
+
+		it('keeps only shelters that take the ticked type and echoes the flag back', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters?parking_car=on'));
+			expect(result.shelters.map((s) => s.code)).toEqual(['SH_CAR', 'SH_BOTH']);
+			expect(result.filters.parking_car).toBe('on');
+			expect(result.filters.parking_boat).toBe('');
+		});
+
+		it('needs every ticked type at once', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?parking_car=on&parking_boat=on')
+			);
+			expect(result.shelters.map((s) => s.code)).toEqual(['SH_BOTH']);
+		});
+
+		it('does not filter when nothing is ticked', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters'));
+			expect(result.shelters).toHaveLength(3);
+		});
+	});
 });

@@ -6,7 +6,9 @@ import {
 	type PublicShelterListResponse,
 	type PublicShelterItem,
 	type MasterLabelOption,
-	countBySiteKind
+	countBySiteKind,
+	takesAllParkingTypes,
+	wantedParkingTypes
 } from '$lib/features/public-portal';
 import { formatMasterLabel } from '$lib/features/master-data';
 
@@ -40,6 +42,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
 	const hide_full = url.searchParams.get('hide_full') === 'true';
+	const parkingWanted = wantedParkingTypes(url.searchParams);
 
 	// FastAPI accepts a single Mongo status; map UI `prepare` → `standby`.
 	const statusRaw =
@@ -128,6 +131,11 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		shelters = shelters.filter((s) => s.status !== 'FULL');
 	}
 
+	// Client-side like `q` / `type`; several ticked types = the shelter takes every one (CR-253 FR-34).
+	if (parkingWanted.length > 0) {
+		shelters = shelters.filter((s) => takesAllParkingTypes(s.parking_vehicle_types, parkingWanted));
+	}
+
 	if (hasUser && !Number.isNaN(maxDistance) && maxDistance > 0) {
 		shelters = shelters.filter((s) => !s.geo || s.distance <= maxDistance);
 	}
@@ -171,7 +179,10 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			distance,
 			user_lat,
 			user_lng,
-			hide_full: hide_full ? 'true' : ''
+			hide_full: hide_full ? 'true' : '',
+			parking_car: parkingWanted.includes('car') ? 'on' : '',
+			parking_motorcycle: parkingWanted.includes('motorcycle') ? 'on' : '',
+			parking_boat: parkingWanted.includes('boat') ? 'on' : ''
 		},
 		available_types
 	};
