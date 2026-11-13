@@ -4,6 +4,8 @@ import {
 	assertCountedAgainstCatalog,
 	assertDonationLedgerRows,
 	authorizeDonation,
+	donationScopeCodes,
+	resolveDonationWriteShelter,
 	listShelterCodes,
 	resolveReceivedShelter,
 	routeErrorResponse,
@@ -94,9 +96,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		// Scope first, then read: a non-SA caller never reaches another shelter's db.
 		const codes = caller.isSA
 			? await listShelterCodes()
-			: caller.shelterCode
-				? [caller.shelterCode]
-				: [];
+			: donationScopeCodes(caller, url.searchParams.get('shelter_code'));
 
 		const rows: PendingDonationRow[] = [];
 		for (const code of codes) {
@@ -153,8 +153,10 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// Scope: staff key donations for their own shelter; SA has none of their own and
 		// must name one that exists.
-		let shelterCode = caller.shelterCode ?? '';
-		if (caller.isSA) {
+		let shelterCode = '';
+		if (!caller.isSA) {
+			shelterCode = resolveDonationWriteShelter(caller, input.shelter_code) ?? '';
+		} else {
 			if (!input.shelter_code) {
 				return json(
 					{ success: false, error_code: 'SHELTER_REQUIRED', error: 'shelter_code is required' },

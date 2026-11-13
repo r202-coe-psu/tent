@@ -279,14 +279,50 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 		expect(written).toBeNull();
 	});
 
-	it('writes to the caller own shelter and ignores a shelter_code they passed', async () => {
+	it('writes to the caller own shelter when they name it', async () => {
 		mockCouch();
 
-		await POST(event({ ...validBody, shelter_code: 'SH002' }));
+		await POST(event({ ...validBody, shelter_code: 'SH001' }));
 
-		const paths = vi.mocked(adminRaw).mock.calls.map((c) => String(c[0]));
-		expect(paths.some((p) => p.includes('/shelter_sh002/'))).toBe(false);
 		expect(docsOfType('donation')[0].shelter_code).toBe('SH001');
+	});
+
+	it('refuses a shelter where the caller holds no capability, writing nothing (#477)', async () => {
+		mockCouch();
+
+		const response = await POST(event({ ...validBody, shelter_code: 'SH002' }));
+
+		expect(response.status).toBe(403);
+		expect(written).toBeNull();
+	});
+
+	it('refuses the capability held only in another shelter (#477)', async () => {
+		mockCouch();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'multi',
+			roles: ['shelter:SH001', 'shelter:SH002', 'SH002:warehouse_staff'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+
+		const response = await POST(event({ ...validBody, shelter_code: 'SH001' }));
+
+		expect(response.status).toBe(403);
+		expect(written).toBeNull();
+	});
+
+	it('asks a multi-shelter caller which shelter instead of picking the first role (#477)', async () => {
+		mockCouch();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'multi',
+			roles: ['shelter:SH001', 'shelter:SH002', 'SH001:warehouse_staff', 'SH002:warehouse_staff'],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+
+		const refused = await POST(event(validBody));
+		expect(refused.status).toBe(400);
+		expect(written).toBeNull();
 	});
 
 	// The counter form runs under whatever shelter the station is switched to, and a

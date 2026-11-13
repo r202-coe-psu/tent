@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { assertDonationLedgerRows, authorizeDonation } from './donation-intake';
+import {
+	assertDonationLedgerRows,
+	authorizeDonation,
+	donationScopeCodes,
+	isInCallerScope,
+	resolveDonationWriteShelter
+} from './donation-intake';
+import type { PublicDonationDoc } from '$lib/features/donations';
 import { requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
 import type { StockLedger } from '$lib/features/operations/server';
 
@@ -39,10 +46,14 @@ describe('authorizeDonation', () => {
 		expect(await outcome(caller(['shelter:SH001', 'warehouse_staff'], 'SH001'))).toBe('allowed');
 	});
 
-	it('keeps warehouse_staff unscoped to a shelter (#477, unchanged)', async () => {
-		expect(await outcome(caller(['shelter:SH001', 'SH002:warehouse_staff'], 'SH001'))).toBe(
-			'allowed'
-		);
+	it('refuses warehouse_staff held only in a shelter the caller is not in (#477)', async () => {
+		expect(await outcome(caller(['shelter:SH001', 'SH002:warehouse_staff'], 'SH001'))).toBe(403);
+	});
+
+	it('admits a multi-shelter caller whose capability is not in the first shelter (#477)', async () => {
+		expect(
+			await outcome(caller(['shelter:SH001', 'shelter:SH002', 'SH002:warehouse_staff'], 'SH001'))
+		).toBe('allowed');
 	});
 
 	it('admits donation_staff of its own shelter, compound or flat with one shelter', async () => {
@@ -52,11 +63,8 @@ describe('authorizeDonation', () => {
 		expect(await outcome(caller(['shelter:SH001', 'donation_staff'], 'SH001'))).toBe('allowed');
 	});
 
-	it('refuses donation_staff of another shelter than the caller scope', async () => {
+	it('refuses donation_staff of a shelter the caller is not in', async () => {
 		expect(await outcome(caller(['shelter:SH001', 'SH002:donation_staff'], 'SH001'))).toBe(403);
-		expect(
-			await outcome(caller(['shelter:SH001', 'shelter:SH002', 'SH002:donation_staff'], 'SH001'))
-		).toBe(403);
 	});
 
 	it('refuses donation_staff without a shelter scope', async () => {
@@ -93,5 +101,54 @@ describe('assertDonationLedgerRows', () => {
 		['a negative quantity', { qty: '-5' }]
 	] as [string, Partial<StockLedger>][])('rejects %s', (_label, over) => {
 		expect(() => assertDonationLedgerRows([row(over)])).toThrow();
+	});
+});
+
+describe('active-shelter scoping (#477)', () => {
+	// warehouse_staff in SH002 only; a member of SH001 with no capability there.
+	const multi = caller(
+		['shelter:SH001', 'shelter:SH002', 'SH002:warehouse_staff', 'SH003:shelter_manager'],
+		'SH001'
+	);
+	const both = caller(
+		['shelter:SH001', 'shelter:SH002', 'SH001:warehouse_staff', 'SH002:donation_staff'],
+		'SH001'
+	);
+	const donationIn = (code: string) => ({ shelter_code: code }) as PublicDonationDoc;
+
+	it('isInCallerScope checks the capability in the donation shelter, not the first one', () => {
+		expect(isInCallerScope(multi, donationIn('SH002'))).toBe(true);
+		expect(isInCallerScope(multi, donationIn('SH001'))).toBe(false);
+		expect(isInCallerScope(caller(['system_admin'], null, true), donationIn('SH009'))).toBe(true);
+	});
+
+	it('isInCallerScope refuses a shelter the caller only holds scope in without a capability', () => {
+		expect(
+			isInCallerScope(caller(['shelter:SH001', 'kitchen_staff'], 'SH001'), donationIn('SH001'))
+		).toBe(false);
+	});
+
+	it('donationScopeCodes lists every shelter with a capability when none is requested', () => {
+		expect(donationScopeCodes(both, null)).toEqual(['SH001', 'SH002']);
+		expect(donationScopeCodes(multi, undefined)).toEqual(['SH002']);
+	});
+
+	it('donationScopeCodes narrows to the requested shelter and 403s on one without capability', () => {
+		expect(donationScopeCodes(both, 'SH002')).toEqual(['SH002']);
+		expect(() => donationScopeCodes(multi, 'SH001')).toThrow(
+			expect.objectContaining({ status: 403 })
+		);
+		expect(() => donationScopeCodes(both, 'SH009')).toThrow(
+			expect.objectContaining({ status: 403 })
+		);
+	});
+
+	it('resolveDonationWriteShelter picks the requested or only shelter, null when ambiguous', () => {
+		expect(resolveDonationWriteShelter(both, 'SH002')).toBe('SH002');
+		expect(resolveDonationWriteShelter(multi, null)).toBe('SH002');
+		expect(resolveDonationWriteShelter(both, null)).toBeNull();
+		expect(() => resolveDonationWriteShelter(multi, 'SH001')).toThrow(
+			expect.objectContaining({ status: 403 })
+		);
 	});
 });

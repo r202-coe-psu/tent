@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
 	authorizeDonation,
+	donationScopeCodes,
 	listShelterCodes,
 	routeErrorResponse,
 	shelterDb
@@ -17,15 +18,13 @@ import { isDonationRedirect, type DonationRedirect } from '$lib/features/donatio
  * destination's database, which is the whole reason the ticket exists (a field on
  * the origin's donation would be invisible across the scope boundary).
  */
-export const GET: RequestHandler = async ({ request }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
 	try {
 		const caller = await authorizeDonation(request.headers.get('cookie'));
 
 		const codes = caller.isSA
 			? await listShelterCodes()
-			: caller.shelterCode
-				? [caller.shelterCode]
-				: [];
+			: donationScopeCodes(caller, url.searchParams.get('shelter_code'));
 
 		const rows: DonationRedirect[] = [];
 		for (const code of codes) {

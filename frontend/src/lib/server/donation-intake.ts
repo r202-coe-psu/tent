@@ -1,6 +1,12 @@
 import { error, json } from '@sveltejs/kit';
 import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
-import { hasStaffCapability, isDonationStaff, isShelterManager } from '$lib/auth/roles';
+import {
+	WAREHOUSE_STAFF,
+	hasStaffCapability,
+	isDonationStaff,
+	isShelterManager,
+	shelterCodesFromRoles
+} from '$lib/auth/roles';
 import type { PublicDonationDoc, ReceiveDonationInput } from '$lib/features/donations';
 import type { CountedItem, StockLedger } from '$lib/features/operations/server';
 import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
@@ -24,25 +30,66 @@ import { sha256Hex } from '$lib/db/hash';
 type RegistryRow = { id: string; doc?: { code?: string } };
 type RegistryAllDocs = { rows?: RegistryRow[] };
 
+const DONATION_FORBIDDEN =
+	'Requires warehouse_staff, donation_staff, shelter_manager, or system_admin';
+
+/** Capabilities that open donation intake in a shelter (CR-227). */
+/** True when `roles` may run donation intake IN `shelterCode` (not merely somewhere). */
+export function canDonateIn(roles: readonly string[], shelterCode: string): boolean {
+	return (
+		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, WAREHOUSE_STAFF, shelterCode) ||
+		isDonationStaff(roles, shelterCode)
+	);
+}
+
+/** Shelters where a non-SA caller holds a donation-intake capability. */
+export function donationShelters(caller: Caller): string[] {
+	return shelterCodesFromRoles(caller.roles).filter((code) => canDonateIn(caller.roles, code));
+}
+
 /**
  * Donation intake gate — `warehouse_staff` (+ `shelter_manager` / SA), plus `donation_staff`
  * (CR-227), NOT CouchDB `_admin`. Mirrors the CR-024 capability pattern (`requireKitchen`).
  *
- * `warehouse_staff` is checked against any shelter (#477, unchanged). `donation_staff` is a new
- * role, so it is held to the caller's own shelter (`caller.shelterCode`) — the one every route on
- * this surface acts on for a non-SA caller.
+ * This only proves the caller holds a donation capability in SOME shelter. A route that acts on
+ * one shelter must then scope it (#477): by-id routes with {@link isInCallerScope} against the
+ * donation's own shelter, list/create routes with {@link donationScopeCodes} /
+ * {@link resolveDonationWriteShelter}.
  */
 export async function authorizeDonation(cookie: string | null): Promise<Caller> {
 	const caller = await requireShelterScopeOrSA(cookie); // authenticated; resolves roles/scope
-	const allowed =
-		caller.isSA ||
-		isShelterManager(caller.roles) ||
-		hasStaffCapability(caller.roles, 'warehouse_staff') ||
-		(!!caller.shelterCode && isDonationStaff(caller.roles, caller.shelterCode));
-	if (!allowed) {
-		throw error(403, 'Requires warehouse_staff, donation_staff, shelter_manager, or system_admin');
+	if (!caller.isSA && donationShelters(caller).length === 0) {
+		throw error(403, DONATION_FORBIDDEN);
 	}
 	return caller;
+}
+
+/**
+ * Shelters a NON-SA caller's list read covers (#477). With `requested` (the client's selected
+ * shelter) it is that one — 403 unless a donation capability is held there. Without it, every
+ * shelter where the caller holds one, so a multi-shelter user is not pinned to their first
+ * `shelter:` role. SA has no shelters of their own: callers handle SA before this.
+ */
+export function donationScopeCodes(caller: Caller, requested: string | null | undefined): string[] {
+	const wanted = requested?.trim() || null;
+	const own = donationShelters(caller);
+	if (!wanted) return own;
+	if (!own.includes(wanted)) throw error(403, DONATION_FORBIDDEN);
+	return [wanted];
+}
+
+/**
+ * The one shelter a NON-SA caller's write acts on (#477): `requested` when given (403 unless a
+ * donation capability is held there), else their only donation shelter. `null` when they hold
+ * it in several and did not say which — the route answers 400 rather than guess the first.
+ */
+export function resolveDonationWriteShelter(
+	caller: Caller,
+	requested: string | null | undefined
+): string | null {
+	const codes = donationScopeCodes(caller, requested);
+	return codes.length === 1 ? codes[0] : null;
 }
 
 /**
@@ -140,14 +187,22 @@ export async function resolveReceivedShelter(
 		}
 		return { code: wanted };
 	}
-	if (!caller.shelterCode) throw error(403, 'No shelter scope');
-	if (wanted && wanted !== caller.shelterCode) throw error(403, 'Forbidden');
-	return { code: caller.shelterCode };
+	const own = donationShelters(caller);
+	if (own.length === 0) throw error(403, 'No shelter scope');
+	if (wanted) {
+		if (!own.includes(wanted)) throw error(403, 'Forbidden');
+		return { code: wanted };
+	}
+	if (own.length > 1) throw error(400, 'shelter is required (caller belongs to several shelters)');
+	return { code: own[0] };
 }
 
-/** Shelter-scope isolation: non-SA callers only touch their own shelter's donations. */
+/**
+ * Shelter-scope isolation (#477): a non-SA caller only touches donations of a shelter where they
+ * hold a donation capability — checked in the donation's own shelter, not their first one.
+ */
 export function isInCallerScope(caller: Caller, donation: PublicDonationDoc): boolean {
-	return caller.isSA || caller.shelterCode === donation.shelter_code;
+	return caller.isSA || canDonateIn(caller.roles, donation.shelter_code);
 }
 
 /** Render a thrown value as the `{ success: false, error }` shape this surface uses. */
