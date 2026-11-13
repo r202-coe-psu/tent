@@ -111,3 +111,21 @@ describe('donation item defaults (#822)', () => {
 		expect(store.bookedItems).toEqual([]);
 	});
 });
+
+describe('DonationStore.removeItem keeps the last line (#1391)', () => {
+	it('removes a line while more than one remains', () => {
+		const store = new DonationStore();
+		store.addItem();
+		const [first, second] = store.items;
+		store.removeItem(first.id);
+		expect(store.items.map((i) => i.id)).toEqual([second.id]);
+	});
+
+	it('does not remove the only remaining line', () => {
+		const store = new DonationStore();
+		const [only] = store.items;
+		store.removeItem(only.id);
+		expect(store.items).toHaveLength(1);
+		expect(store.items[0].id).toBe(only.id);
+	});
+});
