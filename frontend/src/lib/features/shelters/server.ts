@@ -32,6 +32,8 @@ export {
 	SHELTER_MASTER_SCHEMA_V,
 	isShelterBookable,
 	isShelterCancelled,
+	isShelterPublicVisible,
+	isShelterAcceptingReferrals,
 	resolveOperationStatus,
 	DEFAULT_SITE_KIND,
 	HOST_HOUSE_SITE_KIND,
