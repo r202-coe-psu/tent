@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe('ShelterHeadcountCard', () => {
-	it('shows the total, people breakdown and dietary groups', () => {
+	it('shows four group cards with their headline counts', () => {
 		render({
 			people: { evacuees: 120, staff: 6, volunteers: 4 },
 			headcount: { halal: 35, infant: 8, soft_food: 12, regular: 77, volunteer: 10, total: 130 }
@@ -31,19 +31,23 @@ describe('ShelterHeadcountCard', () => {
 		expect(value('evacuees')).toBe('120');
 		expect(value('staff')).toBe('6');
 		expect(value('volunteers')).toBe('4');
-		expect(value('halal')).toBe('35');
-		expect(value('infant')).toBe('8');
-		expect(value('soft_food')).toBe('12');
 	});
 
-	it('labels halal as Muslim evacuees and warns that groups overlap', () => {
+	it('details halal and infant for evacuees and the total, halal only for staff and volunteers', () => {
 		render({
-			people: { evacuees: 1, staff: 0, volunteers: 0 },
-			headcount: { halal: 1, infant: 0, soft_food: 0, regular: 0, volunteer: 0, total: 1 }
+			people: { evacuees: 120, staff: 6, volunteers: 4 },
+			headcount: { halal: 35, infant: 8, soft_food: 12, regular: 77, volunteer: 10, total: 130 }
 		});
-		const text = document.body.textContent ?? '';
-		expect(text).toContain('ฮาลาล (มุสลิม)');
-		expect(text).toContain('นับซ้อนกันได้');
+		expect(value('total-halal')).toBe('35');
+		expect(value('total-infant')).toBe('8');
+		expect(value('evacuees-halal')).toBe('35');
+		expect(value('evacuees-infant')).toBe('8');
+		expect(value('staff-halal')).toBe('ไม่มีข้อมูล');
+		expect(value('volunteers-halal')).toBe('ไม่มีข้อมูล');
+		expect(
+			document.querySelector('[data-testid="kitchen-headcount-staff-infant-value"]')
+		).toBeNull();
+		expect(document.body.textContent).not.toContain('อาหารอ่อน');
 	});
 
 	it('shows a dash for every count while loading', () => {
@@ -53,9 +57,10 @@ describe('ShelterHeadcountCard', () => {
 			'evacuees',
 			'staff',
 			'volunteers',
-			'halal',
-			'infant',
-			'soft_food'
+			'total-halal',
+			'total-infant',
+			'evacuees-halal',
+			'evacuees-infant'
 		]) {
 			expect(value(key)).toBe('–');
 		}
@@ -66,7 +71,7 @@ describe('ShelterHeadcountCard', () => {
 			people: { evacuees: 0, staff: 0, volunteers: 0 },
 			headcount: { halal: 0, infant: 0, soft_food: 0, regular: 0, volunteer: 0, total: 0 }
 		});
-		expect(value('halal')).toBe('0');
+		expect(value('evacuees-halal')).toBe('0');
 		expect(value('total')).toBe('0');
 	});
 });
