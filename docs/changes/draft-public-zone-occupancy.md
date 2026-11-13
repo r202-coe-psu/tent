@@ -14,7 +14,7 @@ affects:
   - worker/src/worker/projectors/occupancy.py (+ `count_zone_stay_statuses`)
   - packages/tent-model/src/tent_model/public_shelter.py (Beanie model `PublicShelter` + `occupancy_by_zone` — แพ็กเกจกลางที่ worker และ backend ใช้ร่วมกัน)
   - worker/src/worker/mongo/shelter.py (`refresh_occupancy`)
-  - worker/src/worker/projection_version.py (`PROJECTION_VERSION` 17 → 18)
+  - worker/src/worker/projection_version.py (`PROJECTION_VERSION` 18 → 19 — ถ้ามี PR อื่น bump ก่อน merge ให้ใช้เลขถัดจากเลขล่าสุดบน `develop`)
   - backend/apiapp/modules/shelter/schemas.py (`ShelterZoneDetail`) + use_case.py (map zones) + tests
   - frontend/src/lib/api/fastapi.json + openapi.d.ts (`pnpm openapi:update`)
   - frontend/src/lib/features/public-portal/domain (+ ฟังก์ชันคำนวณ `percent`/`level` ต่อโซน)
@@ -28,7 +28,7 @@ affects:
 > - **เปลี่ยนอะไร:** หน้า public รายละเอียดศูนย์ (`/shelters/[id]`) แสดงยอดคนในแต่ละโซนเทียบ capacity (`N / capacity`) พร้อมสีตามความเต็ม และป้ายโซนปิด
 > - **เพื่อใคร:** ประชาชนและญาติที่ต้องการรู้ว่าศูนย์ยังมีที่ว่างในโซนที่ต้องการไหม (เช่นโซนครอบครัว โซนสัตว์เลี้ยง) โดยไม่ต้องโทรถามศูนย์
 > - **build:** worker นับ `occupancy_by_zone` ลง `public_shelters` → FastAPI เพิ่ม `code`/`status`/`present` ใน `ShelterZoneDetail` → frontend แสดงยอดใน `shelter-zones.svelte` · นับด้วยนิยาม **Present** เหมือน CR-226
-> - **กระทบ:** `PROJECTION_VERSION` 17 → 18 (bootstrap เติมค่า) · ไม่ bump `schema_v` · ไม่แตะ CouchDB / `_design/app` · `/external/v1/shelters/{code}` ได้ field เพิ่มแบบ additive
+> - **กระทบ:** `PROJECTION_VERSION` 18 → 19 (bootstrap เติมค่า) · ไม่ bump `schema_v` · ไม่แตะ CouchDB / `_design/app` · `/external/v1/shelters/{code}` ได้ field เพิ่มแบบ additive
 
 ---
 
@@ -44,7 +44,7 @@ affects:
 
 - FR-4 — `refresh_occupancy` เขียน field ใหม่ `public_shelters.occupancy_by_zone`: `{zone_code: {stay_status: count}}` จาก evacuee ชุดเดียวกับที่ใช้นับ `occupancy_by_status` (ไม่ query เพิ่ม)
 - FR-5 — เก็บทุก stay status ที่มี zone (ไม่กรองเฉพาะ Present ตอน project) — การกรองตามนิยามทำที่ FastAPI
-- FR-6 — bump `PROJECTION_VERSION` 17 → 18 พร้อมคอมเมนต์อ้าง CR นี้ เพื่อให้ bootstrap เติม `occupancy_by_zone` ให้ทุกศูนย์
+- FR-6 — bump `PROJECTION_VERSION` +1 จากเลขล่าสุดบน `develop` ตอน merge (ณ 2026-11-13 = 18 → 19; 18 เป็นของ CR-245) พร้อมคอมเมนต์อ้าง CR นี้ เพื่อให้ bootstrap เติม `occupancy_by_zone` ให้ทุกศูนย์
 
 **FastAPI**
 
@@ -106,7 +106,7 @@ affects:
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Docs        | `schema.md` §9.1 (+ `occupancy_by_zone`) · `api-contract.md` แถว `GET /public/v1/shelters/{code}` และ `/external/v1/shelters/{code}` · `couchdb-mongodb-sync.md` (`refresh_occupancy`) · `task-breakdown/12-public.md` (งานใหม่ต่อจาก T-58) |
 | Model       | `packages/tent-model/src/tent_model/public_shelter.py` (`PublicShelter` + field `occupancy_by_zone`) — แพ็กเกจกลางที่ worker และ backend ใช้ร่วมกัน                                                                                         |
-| Worker      | `projectors/occupancy.py` (+ ฟังก์ชันนับ `{zone: {status: count}}`) · `mongo/shelter.py` `refresh_occupancy` · `projection_version.py` 17 → 18 · pytest                                                                                     |
+| Worker      | `projectors/occupancy.py` (+ ฟังก์ชันนับ `{zone: {status: count}}`) · `mongo/shelter.py` `refresh_occupancy` · `projection_version.py` 18 → 19 · pytest                                                                                     |
 | Backend     | `modules/shelter/schemas.py` `ShelterZoneDetail` (+ `code`, `status`, `present`) · `use_case.py` map zones · tests ใน `backend/tests/`                                                                                                      |
 | Frontend    | `fastapi.json` + `openapi.d.ts` · `features/public-portal/domain` (+ `percent` / `level` ต่อโซน) · `lib/components/shelter-zones.svelte` · `PUBLIC_SHELTER_DETAILS_I18N` · dom test                                                         |
 | Partner API | `/external/v1/shelters/{code}` ได้ field เพิ่มแบบ additive (ขึ้นกับ D3) — partner ที่ parse แบบ strict ต้องรับ field ใหม่ได้                                                                                                                |
@@ -115,10 +115,11 @@ affects:
 ## Migration
 
 - CouchDB: ไม่มี doc ต้องแก้ ไม่ bump `schema_v` ไม่แตะ `_design/app`
-- Mongo `public_shelters`: field ใหม่ `occupancy_by_zone` (`{str: {str: int}} | null`, default `null`) additive · bump `PROJECTION_VERSION` 17 → 18 → bootstrap re-project เติมค่าให้ทุกศูนย์ · ระหว่างรอ แถวที่ยังเป็น `null` ได้ `present: null` (FR-9) และหน้า public ซ่อนยอด (FR-16)
+- Mongo `public_shelters`: field ใหม่ `occupancy_by_zone` (`{str: {str: int}} | null`, default `null`) additive · bump `PROJECTION_VERSION` 18 → 19 → bootstrap re-project เติมค่าให้ทุกศูนย์ · ระหว่างรอ แถวที่ยังเป็น `null` ได้ `present: null` (FR-9) และหน้า public ซ่อนยอด (FR-16)
 - ลำดับ deploy: worker ก่อน (หรือพร้อมกัน) แล้วค่อย backend + frontend — ถ้า backend ขึ้นก่อน ทุกศูนย์จะได้ `present: null` ชั่วคราว ไม่ error
 
 ## Decision log
 
 - 2026-11-11 — proposed (#1241; track ด้วย CR ไฟล์ตามที่เจ้าของงานสั่ง) · D1–D3 รอเจ้าของโครงการตัดสิน
 - 2026-11-13 — review PR #1354: แก้ path ของ model `PublicShelter` เป็น `packages/tent-model/` (affects + Impact) · เพิ่มกรณี `capacity = null` ใน FR-13 / FR-14 / Acceptance (`percent` / `level` = `null`, ไม่แสดงแท่งและป้ายระดับ)
+- 2026-11-13 — `PROJECTION_VERSION` 17 → 18 เปลี่ยนเป็น 18 → 19: #1319 (CR-245 `public_volunteers.occupation`) merge เข้า `develop` ด้วยเลข 18 ก่อน · FR-6 เขียนเป็น "+1 จากเลขล่าสุด" แบบเดียวกับ CR-246 FR-6
