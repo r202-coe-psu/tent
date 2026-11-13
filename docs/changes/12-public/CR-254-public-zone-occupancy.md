@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-254
 title: Public shelter detail — ยอดคนต่อโซน (Present ต่อโซน) ฝั่ง public
-status: proposed
+status: approved
 date: 2026-11-11
 requested_by: Team Lead PO Meeting (2026-11-07) · GitHub #1241
-decided_by: <รอเจ้าของโครงการ>
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-11-13
 layer: volatile
 affects:
   - docs/data/schema.md §9.1 `public_shelters` (+ `occupancy_by_zone`) — Mongo read model, ไม่ bump `schema_v`
@@ -21,7 +22,7 @@ affects:
   - frontend/src/lib/components/shelter-zones.svelte + i18n `PUBLIC_SHELTER_DETAILS_I18N`
 ---
 
-# Public shelter detail — ยอดคนต่อโซน
+# CR-254 — Public shelter detail ยอดคนต่อโซน
 
 > **สรุป (TL;DR):**
 >
@@ -80,11 +81,14 @@ affects:
   - frontend component (dom test): แสดงยอด, ซ่อนเมื่อ `present = null`, ไม่มีแท่งเมื่อ `capacity = null`, โซนปิด
 - [ ] ทุกไฟล์ `.svelte` ที่แก้ผ่าน `svelte-autofixer`
 
-## เรื่องที่ต้องตัดสิน (ก่อน approve)
+## เรื่องที่ต้องตัดสิน
 
-- **D1 — ขอบเขตของ "dashboard evacuee ต่อ zone" (#1241)** ⏳ รอตัดสิน — ค่าเริ่มต้นในร่างนี้: section ยอดคนต่อโซนในหน้ารายละเอียดศูนย์ `/shelters/[id]` เท่านั้น (ตัวเลือกอื่น: หน้า dashboard แยกที่สรุปทุกโซนทุกศูนย์ใน `/shelters` หรือ transparency — ต้องเพิ่ม FR)
-- **D2 — แสดงตัวเลขเป๊ะทุกประเภทโซนหรือไม่ (PDPA)** ⏳ รอตัดสิน — OP-9 (CR-005) อนุมัติให้ยอด**ต่อศูนย์**แสดงเป๊ะแม้ count ต่ำ แต่ยอด**ต่อโซน**ละเอียดกว่า โซน `quarantine` / `vulnerable` ที่มีคน 1–2 คนอาจชี้ตัวบุคคลได้ · ค่าเริ่มต้นในร่างนี้: ขยาย OP-9 มาครอบยอดต่อโซน แสดงเป๊ะทุกโซน (ตัวเลือกอื่น: ซ่อนยอดของโซน `quarantine` / `vulnerable`, หรือแสดงเฉพาะระดับ ว่าง / ใกล้เต็ม / เต็ม)
-- **D3 — field ใหม่ออกทาง partner API ด้วยหรือไม่** ⏳ รอตัดสิน — `/external/v1/shelters/{code}` ใช้ `ShelterDetailResponse` ตัวเดียวกัน field ใน FR-7 จึงออกไปถึง partner แบบ additive · ค่าเริ่มต้นในร่างนี้: ส่งด้วย (ตัวเลือกอื่น: แยก response model ของ external ไม่ส่ง `present`)
+- **D1 — ขอบเขตของ "dashboard evacuee ต่อ zone" (#1241)**
+  - **ตัดสินแล้ว 2026-11-13 (Soravit Sukkarn, Team Lead):** ยืนยันค่าเริ่มต้น — section ยอดคนต่อโซนในหน้ารายละเอียดศูนย์ `/shelters/[id]` เท่านั้น (ไม่ทำ dashboard รวมทุกศูนย์ในรอบนี้)
+- **D2 — แสดงตัวเลขเป๊ะทุกประเภทโซนหรือไม่ (PDPA)**
+  - **ตัดสินแล้ว 2026-11-13 (Soravit Sukkarn, Team Lead):** ยืนยันค่าเริ่มต้น — ขยาย OP-9 ครอบคลุมยอดต่อโซน แสดงเป๊ะทุกโซน
+- **D3 — field ใหม่ออกทาง partner API ด้วยหรือไม่**
+  - **ตัดสินแล้ว 2026-11-13 (Soravit Sukkarn, Team Lead):** ยืนยันค่าเริ่มต้น — ส่ง field ใหม่ออก `/external/v1/shelters/{code}` ด้วยแบบ additive (partner ที่ parse แบบ strict ต้องรับ field ใหม่ได้)
 
 ## Why
 
@@ -123,3 +127,4 @@ affects:
 - 2026-11-11 — proposed (#1241; track ด้วย CR ไฟล์ตามที่เจ้าของงานสั่ง) · D1–D3 รอเจ้าของโครงการตัดสิน
 - 2026-11-13 — review PR #1354: แก้ path ของ model `PublicShelter` เป็น `packages/tent-model/` (affects + Impact) · เพิ่มกรณี `capacity = null` ใน FR-13 / FR-14 / Acceptance (`percent` / `level` = `null`, ไม่แสดงแท่งและป้ายระดับ)
 - 2026-11-13 — `PROJECTION_VERSION` 17 → 18 เปลี่ยนเป็น 18 → 19: #1319 (CR-245 `public_volunteers.occupation`) merge เข้า `develop` ด้วยเลข 18 ก่อน · FR-6 เขียนเป็น "+1 จากเลขล่าสุด" แบบเดียวกับ CR-246 FR-6
+- 2026-11-13 — approved โดย Soravit Sukkarn (Team Lead) กำหนดหมายเลข CR-254 (ต่อจาก CR-253) · ย้ายเข้า `12-public/` · ยืนยันค่าเริ่มต้น D1–D3
