@@ -24,9 +24,29 @@ DISPATCH_JS = """([name, detail, origin, path]) => {
 }"""
 
 
+# Runs in the page. Navigates through the SvelteKit router (it intercepts same-origin <a> clicks
+# on the document) so the app swaps routes in place: page.goto() reloads the whole document and
+# flashes a blank white screen while the SPA boots again.
+NAVIGATE_JS = """(path) => {
+    const link = document.createElement('a');
+    link.href = path;
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+}"""
+
 RETRY_INTERVAL_S = 0.5
+# In-app navigation that has not reached the walk-in page by then (an unsaved-changes guard,
+# a router that ignored the click) falls back to a full page.goto().
+IN_APP_NAVIGATION_TIMEOUT_S = 3.0
 ACK_TIMEOUT_S = 15.0
 _DEFAULT_PORTS = {"http": 80, "https": 443}
+# Where the app parks a signed-out staff (frontend/src/lib/guards/auth.ts and the auth routes).
+# A card inserted there is ignored: the walk-in page would only bounce back to sign-in.
+SIGNED_OUT_PATHS = frozenset(
+    {"/login", "/admin-login", "/forgot-password", "/mfa-challenge", "/force-setup", "/consent"}
+)
 
 
 def _now() -> datetime:
@@ -47,8 +67,12 @@ class CardSession:
         self._now = now
         self._sleep = sleep
         self._monotonic = monotonic
+        self._may_navigate = True
 
     async def handle_card(self, reader: Any, page: Any) -> None:
+        # One navigation per card: when an auth guard sends the tab back to sign-in, the card is
+        # dropped instead of bouncing between sign-in and walk-in until the ack timeout.
+        self._may_navigate = True
         if not await self._dispatch(page, "scanner:card-reading", {}):
             return
         try:
@@ -95,6 +119,16 @@ class CardSession:
                 return False
 
     async def _on_walk_in(self, page: Any) -> bool:
+        if self._is_walk_in(page.url):
+            return True
+        if not self._may_navigate:
+            return False
+        self._may_navigate = False
+        if self._is_signed_out(page.url):
+            log.info("card ignored: staff is not signed in")
+            return False
+        if self._origin(page.url) == self._origin(self._shelter_url):
+            await self._navigate_in_app(page)
         if not self._is_walk_in(page.url):
             try:
                 await page.goto(self._walk_in_url())
@@ -102,6 +136,23 @@ class CardSession:
                 log.warning("walk-in navigation failed: %s", type(exc).__name__)
                 return False
         return self._is_walk_in(page.url)
+
+    async def _navigate_in_app(self, page: Any) -> None:
+        try:
+            await page.evaluate(NAVIGATE_JS, self._walk_in_path)
+            await page.wait_for_url(
+                self._is_walk_in,
+                wait_until="commit",
+                timeout=IN_APP_NAVIGATION_TIMEOUT_S * 1000,
+            )
+        except Exception as exc:  # not there yet: _on_walk_in falls back to page.goto()
+            log.info("in-app navigation to walk-in did not finish: %s", type(exc).__name__)
+
+    def _is_signed_out(self, url: str) -> bool:
+        return (
+            self._origin(url) == self._origin(self._shelter_url)
+            and urlsplit(url).path.rstrip("/") in SIGNED_OUT_PATHS
+        )
 
     def _is_walk_in(self, url: str) -> bool:
         page_url = urlsplit(url)

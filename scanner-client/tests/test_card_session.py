@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from scanner_client.card_session import DISPATCH_JS, CardSession
+from scanner_client.card_session import DISPATCH_JS, NAVIGATE_JS, CardSession
 
 CONTRACT_CARD_KEYS = {
     "citizen_id",
@@ -43,6 +43,8 @@ class FakePage:
     navigate_on_evaluate: url - right before the first evaluate the tab moves there (the race
         between the Python-side url check and the in-page script).
     goto_raises: goto() raises (net error / page closed).
+    in_app_lands: where the in-app (SvelteKit router) navigation leaves the tab
+        (default: same as goto_lands; pass the current url to emulate a router that did not move).
 
     evaluate() emulates the DISPATCH_JS contract: given [name, detail, origin, path] it only
     delivers (records in `delivered`) and acknowledges while its own url matches that origin+path;
@@ -58,6 +60,7 @@ class FakePage:
         navigate_after=None,
         navigate_on_evaluate=None,
         goto_raises=False,
+        in_app_lands=None,
     ):
         self.url = url
         self.goto_lands = goto_lands
@@ -69,6 +72,8 @@ class FakePage:
         self.events: list[tuple[str, dict]] = []
         self.delivered: list[tuple[str, dict]] = []
         self.gotos: list[str] = []
+        self.in_app_lands = in_app_lands or goto_lands
+        self.in_app_navigations: list[str] = []
 
     async def goto(self, url):
         self.gotos.append(url)
@@ -76,7 +81,15 @@ class FakePage:
             raise RuntimeError("net::ERR_CONNECTION_REFUSED")
         self.url = self.goto_lands
 
+    async def wait_for_url(self, url, *, wait_until, timeout):
+        if not url(self.url):
+            raise TimeoutError(f"Timeout {timeout}ms exceeded")
+
     async def evaluate(self, script, arg):
+        if script == NAVIGATE_JS:
+            self.in_app_navigations.append(arg)
+            self.url = self.in_app_lands
+            return None
         name, detail, origin, path = arg
         self.events.append((name, detail))
         calls = len(self.events)
@@ -277,13 +290,33 @@ def test_page_already_on_walk_in_is_not_navigated(url):
     assert [name for name, _ in page.events] == CARD_EVENTS
 
 
-def test_page_elsewhere_on_shelter_origin_is_navigated_to_walk_in_before_dispatch():
+def test_page_elsewhere_on_shelter_origin_navigates_in_app_without_a_page_reload():
     page = FakePage(url=SHELTER + "/dashboard")
+
+    asyncio.run(make_session().handle_card(FakeReader(), page))
+
+    assert page.in_app_navigations == ["/onsite/people/new"]
+    assert page.gotos == []
+    assert [name for name, _ in page.events] == CARD_EVENTS
+
+
+def test_in_app_navigation_that_never_reaches_walk_in_falls_back_to_goto():
+    dashboard = SHELTER + "/dashboard"
+    page = FakePage(url=dashboard, in_app_lands=dashboard)
 
     asyncio.run(make_session().handle_card(FakeReader(), page))
 
     assert page.gotos == [WALK_IN_URL]
     assert [name for name, _ in page.events] == CARD_EVENTS
+
+
+def test_page_on_other_origin_is_never_navigated_in_app():
+    page = FakePage(url="https://evil.example/somewhere")
+
+    asyncio.run(make_session().handle_card(FakeReader(), page))
+
+    assert page.in_app_navigations == []
+    assert page.gotos == [WALK_IN_URL]
 
 
 @pytest.mark.parametrize(
@@ -310,8 +343,42 @@ def test_page_redirected_to_login_after_first_event_stops_the_card():
 
     asyncio.run(make_session().handle_card(FakeReader(), page))
 
-    assert page.gotos == [WALK_IN_URL]
+    assert page.gotos == []
+    assert page.in_app_navigations == []
     assert [name for name, _ in page.events] == ["scanner:card-reading"]
+
+
+@pytest.mark.parametrize("path", ["/login", "/admin-login", "/admin-login/", "/mfa-challenge"])
+def test_card_inserted_while_signed_out_is_ignored_without_navigating(path):
+    page = FakePage(url=SHELTER + path + "?redirect=x")
+
+    asyncio.run(make_session().handle_card(FakeReader(), page))
+
+    assert page.in_app_navigations == []
+    assert page.gotos == []
+    assert page.events == []
+
+
+def test_auth_guard_bouncing_back_to_sign_in_navigates_only_once_per_card():
+    # session expired: every route the tab is sent to lands back on /login
+    page = FakePage(url=SHELTER + "/dashboard", goto_lands=LOGIN_URL, ack_after=None)
+    clock = FakeClock()
+
+    asyncio.run(make_session(clock=clock).handle_card(FakeReader(), page))
+
+    assert page.in_app_navigations == ["/onsite/people/new"]
+    assert page.gotos == [WALK_IN_URL]
+    assert page.events == []
+
+
+def test_tab_leaving_walk_in_mid_retry_is_sent_back_at_most_once():
+    dashboard = SHELTER + "/dashboard"
+    page = FakePage(ack_after=None, navigate_after=(1, dashboard))
+
+    asyncio.run(make_session().handle_card(FakeReader(), page))
+
+    assert page.in_app_navigations == ["/onsite/people/new"]
+    assert [name for name, _ in page.events] == ["scanner:card-reading"] * 2
 
 
 def test_page_redirected_to_login_while_retrying_stops_without_more_attempts():
@@ -386,7 +453,8 @@ def test_dispatch_script_refuses_unless_location_matches_expected_origin_and_pat
 
 
 def test_goto_failure_drops_the_event_with_a_warning_and_handle_card_returns(caplog):
-    page = FakePage(url=SHELTER + "/dashboard", goto_raises=True)
+    dashboard = SHELTER + "/dashboard"
+    page = FakePage(url=dashboard, in_app_lands=dashboard, goto_raises=True)
     caplog.set_level(logging.DEBUG)
 
     asyncio.run(make_session().handle_card(FakeReader(), page))
