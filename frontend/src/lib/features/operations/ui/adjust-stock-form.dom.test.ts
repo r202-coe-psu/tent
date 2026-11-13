@@ -315,4 +315,23 @@ describe('adjust form whole numbers for count units (#805)', () => {
 		await type('2');
 		expect(save().disabled).toBe(false);
 	});
+
+	it('explains a quantity the number input cannot parse, such as "1e"', async () => {
+		ledger.current = [INBOUND, DISPATCH];
+		await render();
+		await chooseLot('คงเหลือ 1199');
+		const qty = document.getElementById('new-qty') as HTMLInputElement;
+
+		typeUnparseable(qty);
+		await settle();
+
+		expect(document.body.textContent).toContain('จำนวนใหม่ต้องไม่ติดลบ ทศนิยมไม่เกิน 4 ตำแหน่ง');
+		expect(qty.getAttribute('aria-invalid')).toBe('true');
+	});
 });
+
+function typeUnparseable(input: HTMLInputElement) {
+	Object.defineProperty(input, 'validity', { configurable: true, value: { badInput: true } });
+	input.value = '';
+	input.dispatchEvent(new Event('input', { bubbles: true }));
+}

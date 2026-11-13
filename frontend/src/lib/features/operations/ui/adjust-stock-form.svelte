@@ -77,6 +77,8 @@
 	let customPoint = $state<StoragePointRef | null>(null);
 	let customExpiry = $state<string>('');
 	let newQtyInput = $state<string>('');
+	/** A number input reports text it cannot parse (`1e`, `-`) as an empty value. */
+	let newQtyBadInput = $state(false);
 	/** CR-143 §C — required; `merge` is not offered here (FR-C6). */
 	let adjustReason = $state<ManualAdjustReason | ''>('');
 	let note = $state<string>('');
@@ -147,7 +149,7 @@
 	const NEW_QTY_HINT = 'จำนวนใหม่ต้องไม่ติดลบ ทศนิยมไม่เกิน 4 ตำแหน่ง';
 	const newQty = $derived(parseQtyInput(newQtyInput));
 	const newQtyInvalid = $derived(
-		newQtyInput.trim() !== '' && (newQty === null || !qtyGte(newQty, 0))
+		newQtyBadInput || (newQtyInput.trim() !== '' && (newQty === null || !qtyGte(newQty, 0)))
 	);
 
 	// The counted quantity is what the user types, so it is what must be whole. The delta is
@@ -206,6 +208,7 @@
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
+		newQtyBadInput = false;
 		adjustReason = '';
 		note = '';
 	}
@@ -217,6 +220,7 @@
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
+		newQtyBadInput = false;
 		adjustReason = '';
 		note = '';
 		customExpiry = '';
@@ -225,6 +229,7 @@
 	function resetForNextLine() {
 		selectedLotKey = '';
 		newQtyInput = '';
+		newQtyBadInput = false;
 		adjustReason = '';
 		note = '';
 		customPointId = '';
@@ -448,7 +453,10 @@
 								min="0"
 								step={qtyInputStep(itemDimension)}
 								value={newQtyInput}
-								oninput={(event) => (newQtyInput = event.currentTarget.value)}
+								oninput={(event) => {
+									newQtyInput = event.currentTarget.value;
+									newQtyBadInput = event.currentTarget.validity.badInput;
+								}}
 								aria-invalid={newQtyInvalid || newQtyError ? 'true' : undefined}
 								class="min-h-11 border-sky-200 bg-white pr-14 font-mono text-lg font-bold"
 							/>

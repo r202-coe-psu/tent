@@ -122,6 +122,18 @@ describe('parseQtyInput', () => {
 	});
 });
 
+describe('parseQtyInput size limit', () => {
+	it('keeps 15 integer digits exact', () => {
+		expect(parseQtyInput('999999999999999.9999')).toBe('999999999999999.9999');
+	});
+
+	it('returns null past 15 integer digits instead of exponent notation', () => {
+		for (const raw of ['1000000000000000', '1000000000000000000000', '-99999999999999999999.5']) {
+			expect(parseQtyInput(raw)).toBeNull();
+		}
+	});
+});
+
 describe('toQtyStrLossless (#936)', () => {
 	it('converts a number to an exact string without rounding', () => {
 		expect(toQtyStrLossless(6.33333)).toBe('6.33333');

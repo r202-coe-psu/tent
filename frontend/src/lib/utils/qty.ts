@@ -100,12 +100,13 @@ export function qtyIsZero(value: QtyValue): boolean {
 	return parseQty(roundQty(value)).isZero();
 }
 
-const QTY_INPUT_RE = /^-?(\d+(\.\d{0,4})?|\.\d{1,4})$/;
+const QTY_INPUT_RE = /^-?(\d{1,15}(\.\d{0,4})?|\.\d{1,4})$/;
 
 /**
  * Parse what a person typed into a qty field: the canonical qty string, or null when it is not
  * a plain decimal with ≤4 fractional digits. Accepts `.5` and `5.`, which a number input allows;
- * rejects exponents, which it also allows but CR-038 does not.
+ * rejects exponents, which it also allows but CR-038 does not. The integer part stops at 15
+ * digits: past that, decimal.js prints exponent notation and rounds at its 20-digit precision.
  */
 export function parseQtyInput(raw: string): string | null {
 	const trimmed = raw.trim();

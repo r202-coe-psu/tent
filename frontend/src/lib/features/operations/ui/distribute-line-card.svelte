@@ -106,6 +106,8 @@
 
 	const maxBase = $derived(availableForLine(line.lot, itemLots, priorityItems, Date.now()));
 	const lineDimension = $derived(unitDimension(line.unit));
+	/** A number input reports text it cannot parse (`1e`, `-`) as an empty value. */
+	let qtyBadInput = $state(false);
 	// A count unit cannot issue part of a unit, so "all" is the whole units that fit (#805).
 	const maxQtyInUnit = $derived.by(() => {
 		if (!item || !line.unit) return '0';
@@ -141,6 +143,7 @@
 	}
 
 	function setQty(value: string) {
+		qtyBadInput = false;
 		try {
 			line.qty = persistQty(qtyGt(value, maxQtyInUnit) ? maxQtyInUnit : value);
 		} catch {
@@ -152,6 +155,7 @@
 		const current = parseQtyInput(line.qty) ?? '0';
 		const next = delta >= 0 ? addQty(current, delta) : subQty(current, Math.abs(delta));
 		if (qtyLte(next, 0)) {
+			qtyBadInput = false;
 			line.qty = '';
 			return;
 		}
@@ -284,7 +288,10 @@
 							step={qtyInputStep(lineDimension)}
 							value={line.qty}
 							aria-invalid={verdict.kind === 'incomplete' && verdict.missing === 'whole'}
-							oninput={(event) => (line.qty = event.currentTarget.value)}
+							oninput={(event) => {
+								line.qty = event.currentTarget.value;
+								qtyBadInput = event.currentTarget.validity.badInput;
+							}}
 							onkeydown={(event) => {
 								if (event.key === 'Enter') event.preventDefault();
 							}}
@@ -519,7 +526,7 @@
 					{baseUnitLabel} จึงยังบันทึกไม่ได้
 				</span>
 			</p>
-		{:else if verdict.kind === 'incomplete' && verdict.missing === 'qty' && line.qty.trim() !== ''}
+		{:else if verdict.kind === 'incomplete' && verdict.missing === 'qty' && (qtyBadInput || line.qty.trim() !== '')}
 			<p class="text-sm font-semibold text-red-700" role="alert">
 				จำนวนต้องเป็นตัวเลขมากกว่า 0 ทศนิยมไม่เกิน 4 ตำแหน่ง
 			</p>
