@@ -94,6 +94,22 @@ services:
       PRINT_HOUSEKEEPING_INTERVAL_MS: ${PRINT_HOUSEKEEPING_INTERVAL_MS:-}
     restart: unless-stopped
 
+  edge-users-copy:
+    container_name: tent-edge-users-copy-production
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    command: ["uv", "run", "--project", "worker", "edge-users-copy"]
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+    mem_limit: 256m
+    restart: unless-stopped
+
   fastapi:
     container_name: tent-fastapi-production
     build:
