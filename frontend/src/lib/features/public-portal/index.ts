@@ -70,6 +70,21 @@ export {
 	validateFamilySearchQuery,
 	type FamilySearchInputIssue
 } from './domain/search-input';
+export {
+	SEARCH_NAME_MAX,
+	SEARCH_PURPOSES,
+	SEARCH_PURPOSE_NOTE_MAX,
+	parseSearchConsent,
+	type SearchConsent,
+	type SearchConsentField,
+	type SearchPurpose
+} from './domain/search-consent';
+export {
+	clearConfirmedSearchConsent,
+	getConfirmedSearchConsent,
+	storeConfirmedSearchConsent
+} from './application/search-consent-session';
+export { default as SearchConsentDialog } from './ui/search-consent-dialog.svelte';
 export type { PublicApiErrorKind } from './domain/search-error';
 export {
 	familySearch,

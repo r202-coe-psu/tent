@@ -19,14 +19,27 @@ type Fake = {
 	rev: number;
 	puts: EvacueeQrDoc[];
 	conflicts: number;
+	groups?: string[];
+	screenings: { track: 'normal' | 'fast_track'; screened_at: string }[];
+	findStatus: number;
+	finds: unknown[];
 };
 
 function install(fake: Fake) {
 	vi.spyOn(couchAdmin, 'adminRaw').mockImplementation(async (path, method = 'GET', body) => {
 		if (path === `${DB}/${encodeURIComponent(EVACUEE)}`) {
 			return fake.evacuee
-				? { status: 200, data: { _id: EVACUEE } }
+				? {
+						status: 200,
+						data: { _id: EVACUEE, ...(fake.groups ? { vulnerable_groups: fake.groups } : {}) }
+					}
 				: { status: 404, data: { error: 'not_found' } };
+		}
+		if (path === `${DB}/_find` && method === 'POST') {
+			fake.finds.push(body);
+			return fake.findStatus >= 400
+				? { status: fake.findStatus, data: { error: 'boom' } }
+				: { status: 200, data: { docs: fake.screenings } };
 		}
 		if (path !== `${DB}/${encodeURIComponent(DOC_ID)}`) throw new Error(`unexpected ${path}`);
 		if (method === 'GET') {
@@ -52,6 +65,9 @@ const fresh = (over: Partial<Fake> = {}): Fake => ({
 	rev: 0,
 	puts: [],
 	conflicts: 0,
+	screenings: [],
+	findStatus: 200,
+	finds: [],
 	...over
 });
 
@@ -83,12 +99,13 @@ describe('issueEvacueeQr', () => {
 		expect(out).toEqual({
 			evacuee_id: EVACUEE,
 			qr_payload: `${EVACUEE}@683508`,
-			printed_at: '2026-11-06T08:15:30.123Z'
+			printed_at: '2026-11-06T08:15:30.123Z',
+			marker: null
 		});
 		expect(fake.puts[0]).toEqual({
 			_id: DOC_ID,
 			type: 'evacuee_qr',
-			schema_v: 1,
+			schema_v: 2,
 			shelter_code: 'SH001',
 			evacuee_id: EVACUEE,
 			prints: [
@@ -96,7 +113,8 @@ describe('issueEvacueeQr', () => {
 					printed_at: '2026-11-06T08:15:30.123Z',
 					hash: '683508',
 					printed_by: 'staff01',
-					source: 'profile'
+					source: 'profile',
+					marker: null
 				}
 			],
 			created_at: '2026-11-06T08:15:30.123Z',
@@ -104,6 +122,67 @@ describe('issueEvacueeQr', () => {
 			created_by: 'staff01'
 		});
 		expect(parsePersonQr(out.qr_payload)?.hash6).toBe('683508');
+	});
+
+	it('records marker red on the entry and in the result when the latest screening is fast_track', async () => {
+		const fake = fresh({
+			screenings: [{ track: 'fast_track', screened_at: '2026-11-05T10:00:00.000Z' }]
+		});
+		install(fake);
+		const out = await issueEvacueeQr(input);
+		expect(out.marker).toBe('red');
+		expect(fake.puts[0].prints[0].marker).toBe('red');
+		expect(fake.finds[0]).toEqual({
+			selector: { type: 'screening', evacuee_id: EVACUEE },
+			fields: ['track', 'screened_at']
+		});
+	});
+
+	it('records marker yellow when the evacuee has vulnerable groups but the screening is normal', async () => {
+		const fake = fresh({
+			groups: ['elderly'],
+			screenings: [{ track: 'normal', screened_at: '2026-11-05T10:00:00.000Z' }]
+		});
+		install(fake);
+		const out = await issueEvacueeQr(input);
+		expect(out.marker).toBe('yellow');
+		expect(fake.puts[0].prints[0].marker).toBe('yellow');
+	});
+
+	it('appends to a schema_v 1 doc: old entries untouched, doc becomes schema_v 2', async () => {
+		const old = {
+			printed_at: '2026-11-06T08:00:00.000Z',
+			hash: 'abcdef',
+			printed_by: 'a',
+			source: 'profile' as const
+		};
+		const fake = fresh({
+			groups: ['elderly'],
+			doc: {
+				_id: DOC_ID,
+				type: 'evacuee_qr',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				evacuee_id: EVACUEE,
+				prints: [old],
+				created_at: old.printed_at,
+				updated_at: old.printed_at,
+				created_by: 'a'
+			}
+		});
+		install(fake);
+		await issueEvacueeQr(input);
+		expect(fake.puts[0].schema_v).toBe(2);
+		expect(fake.puts[0].prints[0]).toStrictEqual(old);
+		expect(fake.puts[0].prints[1].marker).toBe('yellow');
+	});
+
+	it('throws DEPENDENCY_UNAVAILABLE and writes nothing when the screenings query is a 5xx', async () => {
+		const fake = fresh({ findStatus: 503 });
+		install(fake);
+		const err = await issueEvacueeQr(input).catch((e) => e);
+		expect((err as ServiceError).code).toBe('DEPENDENCY_UNAVAILABLE');
+		expect(fake.puts).toHaveLength(0);
 	});
 
 	it('appends with _rev, keeps old entries, and expires the previous payload', async () => {

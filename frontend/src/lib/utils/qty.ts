@@ -24,6 +24,15 @@ export function parseQty(value: QtyValue): Decimal {
 }
 
 /**
+ * Legacy read-side helper: a finite number becomes its exact decimal string (no rounding,
+ * no exponent); strings and anything else pass through unchanged.
+ */
+export function toQtyStrLossless(value: unknown): unknown {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return value;
+	return parseQty(value).toFixed();
+}
+
+/**
  * Canonical persist form for CouchDB `qty_str` fields.
  * Rounds to {@link QTY_DECIMALS} then emits a compact string (no trailing zeros padding).
  */

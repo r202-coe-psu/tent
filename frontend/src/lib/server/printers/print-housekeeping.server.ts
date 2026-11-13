@@ -9,8 +9,9 @@ import {
 } from './print-queue.server';
 
 /**
- * Print-job housekeeping (plan §3.5, FR-17..20). A container calls `runHousekeeping` through the
- * internal endpoint every ~30 s, so stale jobs and their label PNGs go away even when no Pi polls;
+ * Print-job housekeeping (plan §3.5, FR-17..20). The sync worker
+ * (`worker/src/worker/printing/housekeeping.py`) calls `runHousekeeping` through the internal
+ * endpoint every ~30 s, so stale jobs and their label PNGs go away even when no Pi polls;
  * Pi polls also trigger a cheap per-shelter sweep (`sweepIfDue`).
  *
  * The lease/expiry sweep runs on every call. Retention (delete finished jobs older than 7 days,

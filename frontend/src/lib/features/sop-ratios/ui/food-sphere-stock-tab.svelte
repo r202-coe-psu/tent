@@ -25,6 +25,9 @@
 		type FoodSphereTableGroup,
 		type FoodSphereTableItem
 	} from '../domain/food-sphere-table';
+	import { InvalidStockQtyError } from '../domain/food-sphere-table';
+	import { InvalidRatioQtyError } from '../domain/qty-input';
+	import { toast } from 'svelte-sonner';
 	import type { DocAlertStatus } from '../domain/replenishment-calc';
 	import DocStatusBadge from './doc-status-badge.svelte';
 	import PeopleTotalTooltip from './people-total-tooltip.svelte';
@@ -184,15 +187,49 @@
 
 		const headcounts = headcountsFromAgeGroups(effectiveOccupancy, demographics?.age_groups);
 
-		return buildFoodSphereTable({
-			itemMasters: allItems,
-			balance,
-			requirementGroups: reqGroups,
-			standards,
-			policies,
-			headcounts,
-			latestLotInfo
-		});
+		try {
+			if (standardsQuery.error instanceof InvalidRatioQtyError) throw standardsQuery.error;
+			if (reqGroupsQuery.error instanceof InvalidRatioQtyError) throw reqGroupsQuery.error;
+			return {
+				error: null as string | null,
+				...buildFoodSphereTable({
+					itemMasters: allItems,
+					balance,
+					requirementGroups: reqGroups,
+					standards,
+					policies,
+					headcounts,
+					latestLotInfo
+				})
+			};
+		} catch (e) {
+			if (!(e instanceof InvalidStockQtyError) && !(e instanceof InvalidRatioQtyError)) throw e;
+			return {
+				error:
+					e instanceof InvalidRatioQtyError
+						? e.message
+						: `ข้อมูลสต็อกของ ${allItems.find((i) => i._id === e.itemId)?.name ?? e.itemId} อ่านค่าไม่ได้`,
+				groups: [] as FoodSphereTableGroup[],
+				summary: {
+					totalItems: 0,
+					criticalCount: 0,
+					warningCount: 0,
+					adequateCount: 0,
+					overstockCount: 0,
+					unconfiguredCount: 0
+				}
+			};
+		}
+	});
+
+	// Toast once per distinct error message, not on every recompute.
+	let lastErrorShown: string | null = null;
+	$effect(() => {
+		const message = tableData.error;
+		if (message !== lastErrorShown) {
+			lastErrorShown = message;
+			if (message) toast.error(message);
+		}
 	});
 
 	// Auto-expand all groups upon first load
@@ -416,128 +453,133 @@
 		</div>
 	</div>
 
-	<!-- Summary cards: same look as the stock page's attention cards -->
-	<section
-		aria-label="สรุปสถานะเสบียง"
-		class="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6 xl:gap-3"
-	>
-		{#each summaryCards as card (card.key)}
-			{@const isSelected = riskFilter === card.key}
-			<button
-				type="button"
-				aria-pressed={isSelected}
-				onclick={() => (riskFilter = isSelected && card.key !== 'ALL' ? 'ALL' : card.key)}
-				class="flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl px-3.5 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none xl:min-h-28 xl:gap-1 xl:px-4 xl:py-3.5 {isSelected
-					? 'border-2 border-[#0284C7] bg-sky-50'
-					: 'border border-slate-200/80 bg-white shadow-2xs hover:border-slate-300'}"
-			>
-				<span class="flex w-full items-center justify-between gap-2">
-					<span class="text-sm font-semibold text-slate-700">{card.label}</span>
-					<card.icon class="h-4 w-4 shrink-0 {card.iconClass}" aria-hidden="true" />
-				</span>
-				<span class="text-2xl font-bold tabular-nums xl:text-3xl {card.numberClass}">
-					{card.count}
-				</span>
-				<span class="text-xs text-slate-500">{card.hint}</span>
-			</button>
-		{/each}
-	</section>
+	{#if !tableData.error}
+		<!-- Summary cards: same look as the stock page's attention cards -->
+		<section
+			aria-label="สรุปสถานะเสบียง"
+			class="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6 xl:gap-3"
+		>
+			{#each summaryCards as card (card.key)}
+				{@const isSelected = riskFilter === card.key}
+				<button
+					type="button"
+					aria-pressed={isSelected}
+					onclick={() => (riskFilter = isSelected && card.key !== 'ALL' ? 'ALL' : card.key)}
+					class="flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl px-3.5 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none xl:min-h-28 xl:gap-1 xl:px-4 xl:py-3.5 {isSelected
+						? 'border-2 border-[#0284C7] bg-sky-50'
+						: 'border border-slate-200/80 bg-white shadow-2xs hover:border-slate-300'}"
+				>
+					<span class="flex w-full items-center justify-between gap-2">
+						<span class="text-sm font-semibold text-slate-700">{card.label}</span>
+						<card.icon class="h-4 w-4 shrink-0 {card.iconClass}" aria-hidden="true" />
+					</span>
+					<span class="text-2xl font-bold tabular-nums xl:text-3xl {card.numberClass}">
+						{card.count}
+					</span>
+					<span class="text-xs text-slate-500">{card.hint}</span>
+				</button>
+			{/each}
+		</section>
+	{/if}
 
 	<div
 		class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
 	>
-		<!-- Filters -->
-		<div
-			class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-[minmax(0,2.2fr)_repeat(2,minmax(0,1fr))_auto] md:p-4"
-		>
-			<div class="relative col-span-2 md:col-span-1">
-				<Search
-					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
-					aria-hidden="true"
-				/>
-				<Input
-					bind:value={searchQuery}
-					placeholder="ค้นหา SKU, ชื่อรายการ หรือกลุ่มความต้องการ"
-					aria-label="ค้นหารายการเสบียง"
-					class="min-h-11 w-full rounded-lg border-slate-300 bg-white pr-10 pl-9 text-base shadow-2xs md:text-sm"
-				/>
-				{#if searchQuery}
+		{#if !tableData.error}
+			<!-- Filters -->
+			<div
+				class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-[minmax(0,2.2fr)_repeat(2,minmax(0,1fr))_auto] md:p-4"
+			>
+				<div class="relative col-span-2 md:col-span-1">
+					<Search
+						class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+						aria-hidden="true"
+					/>
+					<Input
+						bind:value={searchQuery}
+						placeholder="ค้นหา SKU, ชื่อรายการ หรือกลุ่มความต้องการ"
+						aria-label="ค้นหารายการเสบียง"
+						class="min-h-11 w-full rounded-lg border-slate-300 bg-white pr-10 pl-9 text-base shadow-2xs md:text-sm"
+					/>
+					{#if searchQuery}
+						<button
+							type="button"
+							onclick={() => (searchQuery = '')}
+							class="absolute top-1/2 right-1 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+							aria-label="ล้างคำค้นหา"
+						>
+							<X class="h-4 w-4" />
+						</button>
+					{/if}
+				</div>
+
+				<label class="flex min-w-0 items-center gap-1.5 text-sm">
+					<span class="sr-only">กรองหมวดหมู่</span>
+					<select
+						bind:value={categoryFilter}
+						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+					>
+						<option value="ALL_GROUPS">หมวด: ทั้งหมด ({tableData.groups.length} กลุ่ม)</option>
+						{#each tableData.groups as g (g.id)}
+							<option value={g.id}>หมวด: {g.name} ({g.items.length})</option>
+						{/each}
+					</select>
+				</label>
+
+				<label class="flex min-w-0 items-center gap-1.5 text-sm">
+					<span class="sr-only">กรองสถานะ</span>
+					<select
+						bind:value={riskFilter}
+						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+					>
+						<option value="ALL">สถานะ: ทั้งหมด ({tableData.summary.totalItems})</option>
+						<option value="CRITICAL">สถานะ: เสี่ยงขาดของ ({tableData.summary.criticalCount})</option
+						>
+						<option value="WARNING_REORDER">
+							สถานะ: ควรจัดหาเพิ่ม ({tableData.summary.warningCount})
+						</option>
+						<option value="ADEQUATE">สถานะ: เพียงพอ ({tableData.summary.adequateCount})</option>
+						<option value="OVERSTOCK"
+							>สถานะ: ของเกินจำเป็น ({tableData.summary.overstockCount})</option
+						>
+						<option value="UNCONFIGURED">
+							สถานะ: ยังไม่ตั้งนโยบาย ({tableData.summary.unconfiguredCount})
+						</option>
+					</select>
+				</label>
+
+				{#if searchQuery || categoryFilter !== 'ALL_GROUPS' || riskFilter !== 'ALL'}
 					<button
 						type="button"
-						onclick={() => (searchQuery = '')}
-						class="absolute top-1/2 right-1 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-						aria-label="ล้างคำค้นหา"
+						onclick={clearFilters}
+						class="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-sky-800 hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:col-span-1"
 					>
-						<X class="h-4 w-4" />
+						<RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
+						ล้างตัวกรอง
 					</button>
 				{/if}
 			</div>
 
-			<label class="flex min-w-0 items-center gap-1.5 text-sm">
-				<span class="sr-only">กรองหมวดหมู่</span>
-				<select
-					bind:value={categoryFilter}
-					class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-				>
-					<option value="ALL_GROUPS">หมวด: ทั้งหมด ({tableData.groups.length} กลุ่ม)</option>
-					{#each tableData.groups as g (g.id)}
-						<option value={g.id}>หมวด: {g.name} ({g.items.length})</option>
-					{/each}
-				</select>
-			</label>
-
-			<label class="flex min-w-0 items-center gap-1.5 text-sm">
-				<span class="sr-only">กรองสถานะ</span>
-				<select
-					bind:value={riskFilter}
-					class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-				>
-					<option value="ALL">สถานะ: ทั้งหมด ({tableData.summary.totalItems})</option>
-					<option value="CRITICAL">สถานะ: เสี่ยงขาดของ ({tableData.summary.criticalCount})</option>
-					<option value="WARNING_REORDER">
-						สถานะ: ควรจัดหาเพิ่ม ({tableData.summary.warningCount})
-					</option>
-					<option value="ADEQUATE">สถานะ: เพียงพอ ({tableData.summary.adequateCount})</option>
-					<option value="OVERSTOCK"
-						>สถานะ: ของเกินจำเป็น ({tableData.summary.overstockCount})</option
-					>
-					<option value="UNCONFIGURED">
-						สถานะ: ยังไม่ตั้งนโยบาย ({tableData.summary.unconfiguredCount})
-					</option>
-				</select>
-			</label>
-
-			{#if searchQuery || categoryFilter !== 'ALL_GROUPS' || riskFilter !== 'ALL'}
-				<button
-					type="button"
-					onclick={clearFilters}
-					class="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-sky-800 hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:col-span-1"
-				>
-					<RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
-					ล้างตัวกรอง
-				</button>
-			{/if}
-		</div>
-
-		<p
-			class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600"
-		>
-			<span>
-				กำลังแสดง <strong class="font-semibold text-slate-900 tabular-nums">
-					{filteredGroups.reduce((acc, g) => acc + g.items.length, 0)}
-				</strong>
-				รายการใน {filteredGroups.length} กลุ่ม
-			</span>
-			{#if effectiveOccupancy > 0}
-				<span aria-hidden="true" class="text-slate-400">·</span>
-				{@render peopleTotal()}
-			{/if}
-			{#if peopleBaseFailed}
-				<span class="font-semibold text-red-700">
-					· โหลดจำนวนเจ้าหน้าที่และจิตอาสาไม่สำเร็จ ฐานคำนวณนี้ต่ำกว่าความเป็นจริง
+			<p
+				class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600"
+			>
+				<span>
+					กำลังแสดง <strong class="font-semibold text-slate-900 tabular-nums">
+						{filteredGroups.reduce((acc, g) => acc + g.items.length, 0)}
+					</strong>
+					รายการใน {filteredGroups.length} กลุ่ม
 				</span>
-			{/if}
-		</p>
+				{#if effectiveOccupancy > 0}
+					<span aria-hidden="true" class="text-slate-400">·</span>
+					{@render peopleTotal()}
+				{/if}
+				{#if peopleBaseFailed}
+					<span class="font-semibold text-red-700">
+						· โหลดจำนวนเจ้าหน้าที่และจิตอาสาไม่สำเร็จ ฐานคำนวณนี้ต่ำกว่าความเป็นจริง
+					</span>
+				{/if}
+			</p>
+		{/if}
 
 		<!-- Table / Content Area -->
 		{#if isLoading}
@@ -549,6 +591,13 @@
 				{#each [0, 1, 2, 3, 4] as i (i)}
 					<div class="h-16 animate-pulse rounded-xl border border-slate-200/80 bg-slate-50"></div>
 				{/each}
+			</div>
+		{:else if tableData.error}
+			<div
+				role="alert"
+				class="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 p-6 text-center text-sm font-medium text-destructive sm:p-8"
+			>
+				{tableData.error}
 			</div>
 		{:else if filteredGroups.length === 0}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">

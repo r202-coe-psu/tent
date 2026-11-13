@@ -3,7 +3,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.config import ScannerConfigError, load_and_validate_config, load_config, validate_config
+from app.config import (
+    ScannerConfigError,
+    is_loopback_host,
+    load_and_validate_config,
+    load_config,
+    validate_config,
+)
 
 
 class ScannerConfigTests(unittest.TestCase):
@@ -194,6 +200,19 @@ class HardwareConfigTests(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn("PRINTER_BACKEND", message)
         self.assertNotIn("real-secret", message)
+
+
+
+class LoopbackHostTests(unittest.TestCase):
+    def test_loopback_hosts(self):
+        for host in ("localhost", "LOCALHOST", "Localhost", "127.0.0.1", "127.8.9.10", "::1"):
+            with self.subTest(host=host):
+                self.assertTrue(is_loopback_host(host))
+
+    def test_non_loopback_hosts(self):
+        for host in ("192.168.1.50", "10.0.0.5", "169.254.1.1", "edge.local", "tent.example.go.th", ""):
+            with self.subTest(host=host):
+                self.assertFalse(is_loopback_host(host))
 
 
 if __name__ == "__main__":

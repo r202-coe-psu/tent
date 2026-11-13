@@ -26,7 +26,8 @@ function hasValidToken(request: Request, expected: string): boolean {
 
 /**
  * Print housekeeping tick (FR-17, FR-34a): sweep every registered shelter's jobs and, once an
- * hour, apply retention + compaction. Called by the `print-housekeeping` container with
+ * hour, apply retention + compaction. Called by the sync worker (`worker` service,
+ * `worker/src/worker/printing/housekeeping.py`) with
  * `Authorization: Bearer <PRINT_HOUSEKEEPING_TOKEN>`; never by a browser (nginx answers 404 for
  * `/api/internal/printers/`). Fail closed: no token configured -> 503, so it cannot run open.
  */

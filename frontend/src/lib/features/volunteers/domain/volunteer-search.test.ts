@@ -6,7 +6,8 @@ const person = volunteerSearchFields({
 	last_name: 'สอนใจ',
 	nickname: 'ต้น',
 	phone: '0812345678',
-	volunteer_code: 'V-013'
+	volunteer_code: 'V-013',
+	occupation: 'พยาบาลวิชาชีพ'
 });
 
 describe('volunteerSearchFields', () => {
@@ -15,7 +16,8 @@ describe('volunteerSearchFields', () => {
 			name: 'วิทวัส สอนใจ',
 			nickname: 'ต้น',
 			phone: '0812345678',
-			code: 'V-013'
+			code: 'V-013',
+			occupation: 'พยาบาลวิชาชีพ'
 		});
 	});
 });
@@ -49,6 +51,11 @@ describe('matchesVolunteerSearch', () => {
 
 	it.each(['v013', 'V-013', 'V 013'])('finds the code by %s', (query) => {
 		expect(matchesVolunteerSearch(person, query)).toBe(true);
+	});
+
+	it('finds the occupation when present', () => {
+		expect(matchesVolunteerSearch(person, 'พยาบาล')).toBe(true);
+		expect(matchesVolunteerSearch(person, 'วิชาชีพ')).toBe(true);
 	});
 
 	it('is case-insensitive', () => {

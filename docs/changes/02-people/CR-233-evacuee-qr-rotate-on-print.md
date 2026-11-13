@@ -3,7 +3,7 @@ id: CR-233
 title: Person QR ของผู้อพยพออกใหม่ทุกครั้งที่ปริ้น — payload `evacuee:{ULID}@{hash6}` + log `evacuee_qr:{ULID}` ให้ใบเก่าหมดอายุ
 status: approved
 date: 2026-11-06
-updated: 2026-11-08
+updated: 2026-11-12 # A2 ตำแหน่งแถบระดับย้ายไปขอบซ้าย (decision sync · PR #1323) · 2026-11-11 # Amendment A2 approved by kong (#1301) · 2026-11-10 # Amendment A2 proposed
 requested_by: feedback อบรมระบบ 03/11/2026 (GitHub issue #1156)
 decided_by: Project Owner (เจ้าของโครงการ) — อนุมัติ 2026-11-06 (grill #1156, ข้อ 1–9)
 decision_date: 2026-11-06
@@ -12,6 +12,8 @@ supersedes:
   - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md FR-KPC-107 (reprint ไม่เขียน doc) และข้อความ payload ใน FR-KPC-81
   - docs/changes/14-kiosk/CR-149-kiosk-walk-in-registration.md ข้อความ payload ใน FR-KWR-19 และ FR-KWR-71
 affects:
+  - A2 (approved): docs/data/schema.md §1.9 `prints[].marker` + §8 ข้อ 2 · schema_v `evacuee_qr` 1 → 2 (lazy) · docs/data/api-contract.md §2.8 + kiosk check-in/reprint/register (`marker` ใน item/label) · CR-150 §7 (ตำแหน่งสัญลักษณ์บนบัตร)
+  - A2: frontend/src/lib/utils/vulnerability-marker.ts (ใหม่) · frontend/src/lib/server/{evacuee-qr-service.ts,shelter-access-design.ts} · frontend/src/lib/components/qr-id-card.svelte · frontend/src/lib/features/kiosk/{domain/print-label.ts,application/kiosk-label-image.ts,server/*,ui/*} · frontend/src/lib/features/people/{domain/evacuee-qr-label.ts,ui/evacuee-profile/*,ui/registration/family-batch-print.svelte}
   - docs/data/schema.md §1.9 (+ doc type `evacuee_qr`), §0 (ข้อยกเว้น `_id`), §8 ข้อ 1–2 · A1: §2.30 `distribution_log` `recipient_qr_override`
   - schema_v: `evacuee_qr` ใหม่ = 1 · `evacuee` คงที่ 15 (ไม่ bump) · A1: `distribution_log` 2 → 3 (lazy — เขียน v3 เฉพาะ log ที่ override)
   - docs/data/api-contract.md §1.3 (แถว ค้นหา/QR), §2.1 (`/kiosk/register` response), §2.1.3 (`source:"qr"`), §2.1.4 (ใหม่), §2.8 (ใหม่ — `POST /api/v1/evacuee-qr/issue`)
@@ -158,6 +160,22 @@ related:
 - FR-EQR-49 — ข้อความบนหน้า/ปุ่มและ response ต้องไม่มีชื่อหรือข้อมูลส่วนบุคคลของเจ้าของ QR ก่อนกดปุ่ม (FR-EQR-35); หลังกดจึงแสดงชื่อผู้รับตามปกติ
 - FR-EQR-50 — การ override ไม่เปลี่ยน `evacuee_qr` (ไม่ออก QR ใหม่ ไม่เพิ่ม entry) และไม่ใช้กับ kiosk หรือหน้า staff อื่น (check-in/out, คัดกรอง, จัดโซน, ค้นหา) — หน้าเหล่านั้นยังตาม FR-EQR-34
 
+### K. สัญลักษณ์ระดับความเปราะบางบนบัตร (Amendment A2 — approved)
+
+> **สถานะ:** approved 2026-11-11 โดย kong (proposed 2026-11-10 โดยทีมพัฒนา, GitHub issue #1301) · เพิ่มกติกาคำนวณระดับ + field ใน `prints[]` + คำเตือนบัตรล้าสมัย ไม่เปลี่ยน payload ของ QR และกฎสแกน (D, FR-EQR-27)
+
+- FR-EQR-51 — ระดับความเปราะบางของผู้พักพิง ณ เวลาพิมพ์ = `red` | `yellow` | ไม่มี (`null`) คำนวณด้วยฟังก์ชันเดียว `vulnerabilityMarker` (`frontend/src/lib/utils/vulnerability-marker.ts`) ซึ่งใช้ร่วมกันทั้ง client และ server:
+  - `red` เมื่อ `track` ของ `screening` ล่าสุดของคนนั้น (เรียงด้วย `screened_at`) เป็น `fast_track` — ไม่ขึ้นกับ `vulnerable_groups`
+  - `yellow` เมื่อไม่เป็น `red` (screening ล่าสุดเป็น `normal` หรือยังไม่มี screening) และ `evacuee.vulnerable_groups` มีอย่างน้อย 1 รหัส
+  - `null` เมื่อไม่เข้าทั้งสองข้อ
+  - หมายเหตุ: `evacuee` ไม่มี field `track` — `track` อยู่บน `screening` (และ `medical`); A2 ใช้ **screening ล่าสุด** เท่านั้น ไม่อ่าน `medical.track`
+- FR-EQR-52 — ไม่เพิ่ม field ระดับใน `evacuee` หรือ master `vulnerable_group`; ไม่นำ triage เขียว/เหลือง/แดง (CR-072 → CR-106) กลับมา
+- FR-EQR-53 — `issueEvacueeQr` คำนวณระดับเองฝั่ง server ตอนออก (อ่าน `evacuee` ที่อ่านอยู่แล้วตาม FR-EQR-16 + `_find` screening `{ type: 'screening', evacuee_id }`) **ไม่รับจาก body** (เหมือน `printed_by`, FR-EQR-10) แล้วเขียนลง entry ใหม่เป็น `prints[].marker` (`red` | `yellow` | `null` — entry ใหม่มี field นี้เสมอ) และคืน `marker` พร้อม `qr_payload` · อ่าน screening ไม่สำเร็จ (5xx) = `DEPENDENCY_UNAVAILABLE` ไม่เขียน entry
+- FR-EQR-54 — `evacuee_qr.schema_v` 1 → 2 แบบ lazy: doc ใหม่เขียนเป็น 2; doc v1 ถูกเขียนเป็น 2 เมื่อ append ครั้งถัดไป; entry เดิมไม่มี `marker` และคงไว้ตาม FR-EQR-12 · VDU (`_design/access`) รับ `schema_v` 1 และ 2, `marker` ถ้ามีต้องเป็น `red` / `yellow` / `null`, และ `marker` ของ entry เดิมห้ามเปลี่ยน (รวมในกติกา append-only)
+- FR-EQR-55 — บัตรที่พิมพ์ต้องใช้ระดับเดียวกับที่บันทึกใน entry ของการพิมพ์นั้น: kiosk (`check-in`, `reprint`, `register`) และ `POST /api/v1/evacuee-qr/issue` ส่ง `marker` ที่ได้จาก `issueEvacueeQr` กลับไปให้ client วาดบัตร · ตอนเปิดดูก่อนพิมพ์ (placeholder, FR-EQR-21a) client คำนวณระดับด้วย FR-EQR-51 จากข้อมูลที่หน้านั้นมีอยู่เพื่อแสดงตัวอย่างเท่านั้น
+- FR-EQR-56 — บัตรแสดง **เฉพาะระดับและความหมายสั้น ๆ** เป็นแถวเดียวบนสุดของคอลัมน์ข้อความ (เหนือชื่อ) ตัวดำบนพื้นขาว ไม่มีแถบหรือกรอบ: แดง = สี่เหลี่ยมทึบ ■ + "แดง · ดูแลเร่งด่วน" · เหลือง = สามเหลี่ยมโปร่ง △ + "เหลือง · ดูแลพิเศษ" (ข้อความเก็บที่เดียว `VULNERABILITY_MARKER_TEXT` ใน `frontend/src/lib/utils/vulnerability-marker.ts`) · ไม่ทับ QR และมีแถบแนวตั้งกว้าง 4 mm ชิดขอบซ้ายของบัตร (แดง = ดำทึบ, เหลือง = ขอบ 2 เส้นมีขีดเฉียงข้างใน, ไม่มีข้อความ; QR เล็กลงเพื่อเว้นที่) (ขนาด/ตำแหน่ง ดู CR-150 §7 FR-L8b) · ห้ามมีชื่อกลุ่ม โรค หรือความพิการบนบัตร · ไม่มีระดับ = บัตรหน้าตาเหมือนเดิม · ใช้กับทุกจุดพิมพ์ที่ใช้ `qr-id-card` / PNG label (kiosk check-in / reprint / register, `evacuee-qr-modal` รวม wristband หลังลงทะเบียน และ household summary, `family-batch-print`, PDF)
+- FR-EQR-57 — หน้าโปรไฟล์ผู้พักพิงแสดงคำเตือน "บัตรล้าสมัย — ระดับความเปราะบางเปลี่ยน" พร้อมปุ่มพิมพ์ใหม่ เมื่อมี entry ใน `prints[]` และระดับปัจจุบัน (FR-EQR-51) ไม่เท่ากับ `marker` ของ entry ล่าสุด · entry ล่าสุดที่ไม่มี `marker` (เขียนตอน v1) ถือว่าพิมพ์โดยไม่มีสัญลักษณ์ (= `null`) · ยังไม่เคยพิมพ์ = ไม่เตือน · คำเตือนไม่บังคับพิมพ์และไม่ทำให้ QR ใบเดิมหมดอายุ (หมดอายุเฉพาะเมื่อพิมพ์ใหม่ตาม FR-EQR-11)
+
 ### F. ขอบเขต (ไม่เปลี่ยน)
 
 - FR-EQR-36 — CR นี้ใช้กับ Person QR ของผู้อพยพ (`evacuee`) เท่านั้น ไม่เปลี่ยน: บัตรเจ้าหน้าที่ `TKT-STF-HASH-…` (CR-211), บัตรจิตอาสา `TKT-VOL-HASH-…` (CR-127, never rotate), QR บริจาค `TX-…` / `DN-…`, QR ของ bulk-return pool และ QR ตั๋วจอง (booking ticket / ตั๋วคิวกลาง ULID เปล่า) — การออกตั๋วเหล่านี้ไม่ถือเป็นการปริ้น Person QR และไม่เขียน `evacuee_qr`
@@ -211,6 +229,10 @@ related:
 - [ ] AC-EQR-12 — e2e: ปริ้นซ้ำ (kiosk reprint หรือ staff modal) แล้ว QR ใบเก่าสแกนไม่ผ่านทั้ง kiosk และหน้า staff ส่วน QR ใบใหม่สแกนผ่าน (`e2e/helpers/onsite.ts` `decodeQrImage` ต้องอ่าน payload ใหม่ได้)
 - [ ] AC-EQR-13 — `frontend/src/lib/utils/qrcode.test.ts` เพิ่มเคส `qrModuleCount('evacuee:{ULID}@{hash6}')` = 29 (FR-EQR-7) และเคส label ของ kiosk ที่ใช้ ECC เดียวกัน
 - [ ] AC-EQR-14 — (A1) หน้าแจกจ่ายสแกน QR expired แล้วมีปุ่มยอมรับความเสี่ยง กดแล้วได้ผู้รับและบันทึก `recipient_qr_override`; QR invalid ไม่มีปุ่ม; ก่อนกดไม่มีผู้รับถูกเลือก (FR-EQR-44..50)
+- [ ] AC-EQR-15 — (A2) คนที่ screening ล่าสุดเป็น `fast_track` → บัตรมี ■ + "แดง · ดูแลเร่งด่วน" ทั้ง kiosk label และ PDF/wristband ของ staff; คน `normal` ที่มี `vulnerable_groups` ≥ 1 → △ + "เหลือง · ดูแลพิเศษ"; คนที่ไม่เข้าทั้งคู่ → บัตรเหมือนเดิม; payload QR ไม่เปลี่ยน; บัตรไม่มีชื่อกลุ่ม/โรค (FR-EQR-51, 56)
+- [ ] AC-EQR-16 — (A2) ทุกการพิมพ์เขียน `prints[].marker` ตรงกับสัญลักษณ์บนบัตรใบนั้น; doc เป็น `schema_v 2`; entry v1 เดิมไม่ถูกแก้ (FR-EQR-53..55)
+- [ ] AC-EQR-17 — (A2) เปลี่ยน `track` (screening ใหม่) หรือ `vulnerable_groups` หลังพิมพ์ → โปรไฟล์ขึ้นเตือนบัตรล้าสมัย; พิมพ์ใหม่แล้วเตือนหาย; QR ใบเดิมยังใช้ได้จนกว่าจะพิมพ์ใหม่ (FR-EQR-57)
+- [ ] AC-EQR-18 — (A2) พิมพ์บน XP-365B แล้วแยกแดง/เหลืองได้ด้วยตาเปล่า และ QR ยังสแกนผ่าน
 - [ ] AC-EQR-15 — (FR-EQR-31a) `extractScanPersonQr` คืน `{ evacuee_id, hash6: null }` สำหรับรูป path/`?evacuee_id=` ที่มี `evacuee:{ULID}` และคืน `null` สำหรับ ULID เปล่าใน path; `resolveScannedRecipient` และ `federated-scan-lookup` ปฏิเสธใบส่งต่อเมื่อมี log โดยไม่เปิด evacuee / ไม่เลือกผู้รับ, ยอมรับเมื่อไม่มี log, และที่โต๊ะแจกของ override ได้พร้อมบันทึก `recipient_qr_override` (`scan-lookup.test.ts`, `recipient-scan.test.ts`, `federated-scan-lookup.test.ts`)
 
 ## Superseded
@@ -256,6 +278,7 @@ CR นี้แทนที่ข้อความต่อไปนี้ (ไ
 - ลำดับ deploy: (1) `_design/access` ของทุก `shelter_*` (FR-EQR-38/39) ก่อน มิฉะนั้นการเขียน `evacuee_qr` จะถูกปฏิเสธ → (2) parser/ตัวประเมินกฎสแกนใน staff app และ kiosk BFF → (3) เปิดการออก QR (ส่ง `qr_payload` ใหม่) — client PWA ที่ค้างรุ่นเก่าจะอ่าน `…@hex6` ไม่ได้ จึงต้องไม่ออก QR ใหม่ก่อนรุ่นที่รับ `@` ถูก deploy ครบ
 - Mongo / worker: ไม่มี (ไม่ bump `PROJECTION_VERSION`)
 - สายรัด/สติกเกอร์ที่พิมพ์ก่อนเปลี่ยนระบบ: ใช้ได้จนมีการปริ้นใหม่ของคนนั้น ไม่ต้องพิมพ์ใหม่ทั้งศูนย์
+- (A2) `evacuee_qr` schema_v 1 → 2 แบบ lazy ไม่ backfill: บัตรที่พิมพ์ก่อน A2 ไม่มีสัญลักษณ์และ entry ไม่มี `marker` (ถือเป็น `null` ตาม FR-EQR-57 — คนที่มีระดับจะขึ้นเตือนบัตรล้าสมัยจนกว่าจะพิมพ์ใหม่) · ลำดับ deploy: `pnpm redeploy:access` ของทุก `shelter_*` ก่อน server รุ่นใหม่ มิฉะนั้นการออก QR (doc v2) ถูกปฏิเสธ · Mongo/worker: ไม่มี
 
 ## Decision log
 
@@ -283,3 +306,10 @@ CR นี้แทนที่ข้อความต่อไปนี้ (ไ
 - 2026-11-06 — renumbered CR-231 → CR-232 → CR-233 เพราะเลขชนกับ CR อื่นที่ merge เข้า `develop` ก่อน (CR-231 public search consent purpose, PR #1214; CR-232 evacuee Excel export, PR #1215) — เนื้อหาไม่เปลี่ยน
 - 2026-11-08 — approved by Project Owner (Amendment A1, ขอโดยทีมหน้างาน): หน้าแจกจ่ายยอมให้แจกด้วย QR เก่าได้ผ่านปุ่ม "ยอมรับความเสี่ยงเพื่อแจกจ่าย" · ทุกคนที่แจกจ่ายได้กดได้ + บันทึกร่องรอย (เจ้าของโครงการเลือก) · เก็บร่องรอยใน `distribution_log` และ bump `schema_v` 2→3 แบบ lazy (FR-EQR-48) — เจ้าของโครงการอนุมัติ 2026-11-08 · migration: redeploy `_design/access` ของทุก `shelter_*` ก่อน client รุ่นใหม่ (`pnpm redeploy:access`), ไม่ backfill
 - 2026-11-08 — decision recorded (ตอบ Q3 ของรีวิว PR #1285 รอบ 1–2; ผู้พัฒนา PR เลือกทาง 1 ใน 3 ทาง): ใบส่งต่อ (handover slip) แบบ path นับเป็น Person QR แบบไม่มี `@` และอยู่ใต้กฎ FR-EQR-27 ทุกจุด รวมหน้าแจกของ (FR-EQR-31a, AC-EQR-15) · ทางที่ไม่เลือก: (2) ให้ใบส่งต่อพก payload ที่ออกผ่าน `/api/v1/evacuee-qr/issue`, (3) แก้ FR-EQR-27/30/34 ให้ยกเว้นใบส่งต่อ · **สถานะ: รอ Project Owner ยืนยัน** (CR นี้ approved ก่อนมีข้อนี้ และ FR-EQR-27 แถว 1 เดิมไม่กล่าวถึงใบส่งต่อ) · ยังไม่ได้ตัดสิน: การเปิด URL `/onsite/medical-screening/{id}` / `/onsite/zoning/{id}` ตรง ๆ ที่ route ไม่ผ่านกฎ Person QR, และ Q1 (booking ticket หมดอายุตามแถว 2 ทั้งที่ FR-EQR-36 ว่านอกขอบเขต) / Q2 (retention ของ `evacuee_qr`)
+- 2026-11-10 — proposed Amendment A2 (#1301, ทีมพัฒนาเสนอ): สัญลักษณ์ระดับความเปราะบางบนบัตร — ระดับจาก screening ล่าสุด (`evacuee` ไม่มี `track`; ผู้ใช้เลือก) + `vulnerable_groups`; server คำนวณและบันทึก `prints[].marker` (schema_v 2 lazy); โปรไฟล์เตือนบัตรล้าสมัย · ติดตามด้วยการแก้ CR-233 (A2) + CR-150 §7 แทน CR draft ใหม่ (ผู้ใช้เลือก) · รอเจ้าของโครงการอนุมัติ
+- 2026-11-10 — ปรับ A2 (proposed, ตามที่ทีมดูบัตรจริง): ตัดแถบดำ/กรอบออก เหลือสัญลักษณ์ + ข้อความสีดำ 9pt · เพิ่มความหมายหลังสี ("ดูแลเร่งด่วน" / "ดูแลพิเศษ" — คำเดียวกับที่ระบบใช้กับ fast_track และกลุ่มดูแลพิเศษอยู่แล้ว) · ชื่อบนบัตร 16pt → 15pt → 12pt (ชื่อยาว 3 บรรทัด + เบอร์ฉุกเฉินล้นบัตร, CR-150 §7)
+- 2026-11-10 — ปรับ A2 (proposed, ทีมขอให้มองปุ๊บรู้): เพิ่มแถบระดับเหนือ QR — แดงทึบ / เหลืองกรอบ ใช้คำเดิม ไม่ใช้คำว่า "ป่วย" (บัตรบอกแค่ระดับ) · QR ไม่เล็กลง (CR-150 §7 FR-L8b)
+- 2026-11-10 — ปรับ A2 (proposed): เปลี่ยนแถบมีข้อความเหนือ QR เป็นขีดดำล้วน — แดง 2 ขีด / เหลือง 1 ขีด (CR-150 §7 FR-L8b)
+- 2026-11-10 — ปรับ A2 (proposed): ย้ายขีดระดับจากเหนือ QR ไปเป็นแนวตั้งชิดขอบขวาของบัตร — QR เล็กลงเมื่อมีระดับ (CR-150 §7 FR-L8b)
+- 2026-11-11 — approved Amendment A2 (kong; #1301 / PR #1323): สัญลักษณ์ระดับความเปราะบางบนบัตร (FR-EQR-51..57, AC-EQR-15..18), `evacuee_qr` `schema_v` 1 → 2 แบบ lazy · CR-150 §7 approved พร้อมกัน · migration: redeploy `_design/access` ของทุก `shelter_*` ก่อน client รุ่นใหม่ (`pnpm redeploy:access`), ไม่ backfill · บันทึกตามที่ผู้ร่วมงานแจ้งการอนุมัติของ kong ในแชต ไม่ได้ตรวจกับ kong โดยตรง
+- 2026-11-12 — decision sync (ติดตามการแก้ด้วย note ใน CR นี้ + CR-150 §7 ตามที่ผู้ร่วมงานเลือก ไม่เปิด CR ใหม่): แถบระดับย้ายจากขีดดำขอบขวา (แดง 2 / เหลือง 1) ไปเป็นแถบกว้าง 4 mm ที่ขอบซ้าย — แดงดำทึบ, เหลืองขอบ 2 เส้นมีขีดเฉียง — เนื้อหา FR-EQR-56 และ CR-150 FR-L8b แก้ตามนี้ · QR มีระดับเล็กเท่ากันทั้งสองระดับ (24.8 mm จาก v3) · ไม่เปลี่ยน schema/rule อื่นของ A2 · **สถานะ: รอ kong ยืนยันรูปแบบแถบใหม่** (บันทึกตามที่ผู้พัฒนา PR ปรับใน 60ee8016b และผู้ร่วมงานสั่งบันทึก ไม่ได้ตรวจกับ kong โดยตรง) · ยังไม่ได้ทดสอบพิมพ์บนเครื่อง XP-365B (AC-EQR-18)

@@ -185,6 +185,15 @@ function nextEdgeShelters(doc: CouchUserDoc, nextRoles: readonly string[]): stri
 	return mergeEdgeShelters(mergeEdgeShelters(doc.edge_shelters, doc.roles ?? []), nextRoles);
 }
 
+/**
+ * #1298 FR-5 — per-shelter edge replication accounts (`repl_<code>_<suffix>`, role `repl:<CODE>`)
+ * are provisioned by `scripts/central-repl-user.sh`, never through user management. Treated as not
+ * found by every read / list / update / reset / delete path here.
+ */
+export function isReplUserDoc(doc: { roles?: readonly string[] } | null | undefined): boolean {
+	return (doc?.roles ?? []).some((role) => role.startsWith('repl:'));
+}
+
 function userDocId(name: string): string {
 	return `${USER_PREFIX}${encodeURIComponent(name)}`;
 }
@@ -245,9 +254,13 @@ async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'GET');
 	if (res.status >= 400) throw serviceErrorFromCouch('list users', res.status, res.data);
 	const rows = (res.data as { rows?: { id: string; doc: CouchUserDoc }[] })?.rows ?? [];
-	// Soft-deleted accounts (CR-171) are invisible to list / SA count / phone + OAuth lookups.
+	// Soft-deleted accounts (CR-171) and repl:* replication accounts (#1298) are invisible to list /
+	// SA count / phone + OAuth lookups.
 	return rows
-		.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc && !isDeletedUserDoc(r.doc))
+		.filter(
+			(r) =>
+				r.id.startsWith(USER_PREFIX) && r.doc && !isDeletedUserDoc(r.doc) && !isReplUserDoc(r.doc)
+		)
 		.map((r) => r.doc);
 }
 
@@ -319,7 +332,8 @@ async function storedUserName(name: string): Promise<string> {
 /** Read a LIVE user; a soft-deleted doc (CR-171) is reported as not found. */
 async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> {
 	const doc = await readUserDocIncludingDeleted(name, action);
-	if (isDeletedUserDoc(doc)) throw new ServiceError('VALIDATION', `User "${name}" not found`);
+	if (isDeletedUserDoc(doc) || isReplUserDoc(doc))
+		throw new ServiceError('VALIDATION', `User "${name}" not found`);
 	return doc;
 }
 

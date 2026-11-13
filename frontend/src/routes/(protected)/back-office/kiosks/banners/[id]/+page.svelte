@@ -14,7 +14,7 @@
 		useUpdateKioskBanner,
 		type KioskBannerSavePayload
 	} from '$lib/features/kiosk-banners';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import BackLink from '$lib/components/back-link.svelte';
 
 	const bannerQuery = useKioskBanner(() => page.params.id);
 	const update = useUpdateKioskBanner();
@@ -24,6 +24,10 @@
 		bannerQuery.data?.group_id
 			? (`/back-office/kiosks/banners/groups/${encodeURIComponent(bannerQuery.data.group_id)}/${screenTypeOf(bannerQuery.data)}` as const)
 			: ('/back-office/kiosks/banners' as const)
+	);
+
+	const backLabel = $derived(
+		bannerQuery.data?.group_id ? 'กลับไปกลุ่มแบนเนอร์' : 'กลับไปแบนเนอร์ Kiosk'
 	);
 
 	const notFound = $derived(
@@ -58,14 +62,8 @@
 </svelte:head>
 
 <StaffPageShell title="แก้ไขแบนเนอร์" maxWidth="6xl">
-	{#snippet meta()}
-		<a
-			href={resolve(listPath)}
-			class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
-		>
-			<ArrowLeft class="h-4 w-4" />
-			กลับไปรายการแบนเนอร์
-		</a>
+	{#snippet backLink()}
+		<BackLink href={resolve(listPath)} label={backLabel} class="-ml-3" />
 	{/snippet}
 
 	<div class="{spatial.container.staffPageCard} p-4 sm:p-6">

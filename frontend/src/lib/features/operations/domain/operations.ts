@@ -132,7 +132,8 @@ export const transferStatusSchema = z.enum([
 ]);
 export type TransferStatus = z.infer<typeof transferStatusSchema>;
 
-export const donationChannelSchema = z.enum(['public', 'walk_in']);
+/** `m6` = a withdrawal from the central warehouse in transit; written by the sync worker only. */
+export const donationChannelSchema = z.enum(['public', 'walk_in', 'm6']);
 export type DonationChannel = z.infer<typeof donationChannelSchema>;
 
 export interface TransferTimelineEvent {
@@ -369,12 +370,13 @@ export type DonationCloseReason = 'all_points' | 'staff_close' | 'expired';
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 11 = CR-206 `items[].drop_off_point_id` +
- * `point_receipts[]` (10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
+ * route, and `worker/inbound/donations.py`. 12 = M6 central-warehouse `channel: 'm6'` +
+ * `external` (11 = CR-206 `items[].drop_off_point_id` +
+ * `point_receipts[]`, 10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
  * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
  * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 11;
+export const DONATION_SCHEMA_V = 12;
 
 export interface Donor {
 	name: string;
@@ -398,6 +400,21 @@ export interface DonationLogistics {
 	courier_tracking_no?: string | null;
 }
 
+/**
+ * Link back to the M6 central-warehouse withdrawal an `m6` donation was made from.
+ * Written by the sync worker: at creation, then `confirmed_at` / `confirm_error` once the
+ * receipt has been confirmed back to M6. Absent before schema_v 12 and on every non-m6 donation.
+ */
+export interface DonationExternal {
+	system: 'm6';
+	request_code: string;
+	external_ref: string;
+	source_warehouse_code: string;
+	source_warehouse_name?: string | null;
+	confirmed_at?: Timestamp | null;
+	confirm_error?: string | null;
+}
+
 export interface Donation extends BaseDoc {
 	type: 'donation';
 	channel: DonationChannel;
@@ -407,16 +424,22 @@ export interface Donation extends BaseDoc {
 	amount_thb?: number;
 	campaign_id: string | null;
 	status: DonationStatus;
-	tracking_token_hash: string;
+	/** Absent on an `m6` donation: it has no donor-facing tracking page. */
+	tracking_token_hash?: string;
 	declared_at: Timestamp;
 	received_at: Timestamp | null;
-	expires_at: Timestamp;
+	/** Absent on an `m6` donation: goods in transit may outlast the reservation TTL. */
+	expires_at?: Timestamp;
 	booking_ref?: string;
 	logistics?: DonationLogistics;
+	/** `channel: 'm6'` only — absent before schema_v 12. */
+	external?: DonationExternal;
 	received_summary?: {
 		total_items: number;
 		received_at: Timestamp;
 		remarks?: string;
+		/** D20, m6 only: closed as received with nothing received — the worker tells M6 so. */
+		nothing_received?: boolean;
 		/** Booking closed from point receipts (CR-206): staff name or `system`. Absent on a whole-booking receipt. */
 		closed_by?: string;
 		closed_reason?: DonationCloseReason;
@@ -1428,6 +1451,30 @@ export function assertLotWriteOffsFit(
 		if (!qtyGte(lot.qty, want.qty)) {
 			throw new LotWriteOffError(
 				`ล็อตที่เลือกคงเหลือ ${persistQty(lot.qty)} ${lot.unit} ไม่พอตัด ${want.qty} ${want.unit} — ยอดอาจเปลี่ยนไปแล้ว กรุณาโหลดใหม่`
+			);
+		}
+	}
+}
+
+/**
+ * A count line names the lot it counted, whether it is short or over (#518). The lot list a
+ * walker counts from is read before the save, so after a shelter switch it can belong to
+ * ANOTHER shelter; a surplus carries no `lot_ref` on its row, so nothing else would notice.
+ * Each counted lot must exist in this ledger with the same item and unit.
+ */
+export function assertCountedLotsExist(
+	ledger: readonly StockLedger[],
+	lines: readonly { item_id: string; unit: string; lot_ref: string }[]
+): void {
+	if (lines.length === 0) return;
+	const itemIds = new Set(lines.map((l) => l.item_id));
+	const { lots } = projectLotsByItem(ledger.filter((row) => itemIds.has(row.item_id)));
+	const known = new Map(lots.map((lot) => [lot.lot_ref, lot]));
+	for (const line of lines) {
+		const lot = known.get(line.lot_ref);
+		if (!lot || lot.item_id !== line.item_id || lot.unit !== line.unit) {
+			throw new LotWriteOffError(
+				'ไม่พบล็อตที่นับในคลังของศูนย์นี้ — ข้อมูลอาจเปลี่ยนไปหรือสลับศูนย์ กรุณาโหลดใหม่แล้วนับอีกครั้ง'
 			);
 		}
 	}

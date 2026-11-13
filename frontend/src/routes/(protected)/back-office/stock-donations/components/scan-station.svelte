@@ -17,6 +17,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import Truck from '@lucide/svelte/icons/truck';
+	import Warehouse from '@lucide/svelte/icons/warehouse';
 	import Package from '@lucide/svelte/icons/package';
 	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
 	import Circle from '@lucide/svelte/icons/circle';
@@ -39,6 +40,9 @@
 	import { resolve } from '$app/paths';
 	import {
 		donationRefLabel,
+		isM6Donation,
+		M6SourceBadge,
+		m6SourceLabel,
 		linesMissingExpiry,
 		receivedQtyDifference,
 		rejectDonationInputSchema,
@@ -51,6 +55,7 @@
 		DonationPhotoStrip,
 		closedAtIntakeMessage,
 		canCloseByPoints,
+		canCloseM6WithoutGoods,
 		defaultStoragePointId,
 		otherPointLineCount,
 		scanStatus,
@@ -69,8 +74,13 @@
 		formatUnit,
 		mergeCatalogGenerations,
 		QuickCreateItem,
+		qtyInputStep,
+		requiresWholeQty,
 		useItemMasters,
+		useUnitDimensionResolver,
 		useUnitsOfMeasure,
+		WHOLE_QTY_MESSAGE,
+		wholeQtyError,
 		type ItemMaster
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -88,6 +98,7 @@
 	} from '$lib/features/operations';
 	import ReceivingPointSelect from './receiving-point-select.svelte';
 	import CloseDonationDialog from './close-donation-dialog.svelte';
+	import CloseM6EmptyDialog from './close-m6-empty-dialog.svelte';
 	import { readReceivingPoint, writeReceivingPoint } from './receiving-point-memory';
 
 	let {
@@ -348,6 +359,8 @@
 	const isOpenLine = (idx: number) => lineStates[idx]?.kind === 'receivable';
 	/** FR-MP-26 / FR-MP-28: a point already recorded something and a line has no result yet. */
 	const canClose = $derived(!!donationDoc && canCloseByPoints(donationDoc));
+	/** An m6 donation nothing arrived for: staff close it (D20) instead of refusing it. */
+	const canCloseEmptyM6 = $derived(!!donationDoc && canCloseM6WithoutGoods(donationDoc));
 	const hasReceipts = $derived((donationDoc?.point_receipts?.length ?? 0) > 0);
 
 	/** The line's storage point: what staff picked, else its default (FR-MP-20, FR-MP-21). */
@@ -366,6 +379,8 @@
 	// place this file SHOWS a unit runs it back through `formatUnit`.
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
 	const unitsOfMeasure = $derived(unitsOfMeasureQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
+	const qtyErrorOf = (qty: string, unit: string) => wholeQtyError(qty, unitDimension.resolve(unit));
 	let lastLots = $state<{ item_id: string; lot_no: string | null }[]>([]);
 
 	const VEHICLE_LABELS: Record<string, string> = {
@@ -374,6 +389,9 @@
 		pickup: 'รถกระบะ',
 		truck: 'รถบรรทุก'
 	};
+
+	/** A delivery from the central warehouse (M6): no donor, no phone, no booking logistics. */
+	const isM6 = $derived(donationDoc ? isM6Donation(donationDoc) : false);
 
 	/** What the donor booked, or how the goods are coming when no vehicle applies. */
 	const vehicleLabel = $derived.by(() => {
@@ -514,6 +532,7 @@
 	);
 
 	// Validation check for receiving into stock
+	const hasScanWholeError = $derived(keptItems.some((it) => qtyErrorOf(it.qty, it.unit)));
 	const canReceive = $derived(
 		!otherShelterCode &&
 			!pointChoiceMissing &&
@@ -526,6 +545,7 @@
 					: it.verified &&
 						it.item_id &&
 						it.qty &&
+						!qtyErrorOf(it.qty, it.unit) &&
 						isStoragePointChosen(storageOf(idx), storagePoints.points)
 			) &&
 			scannedMissingExpiry.length === 0
@@ -535,7 +555,8 @@
 	// waits on, ticked as staff complete it (it used to be a red error box listing
 	// what was still missing, which read as a failure before anything had been done).
 	const checkMapped = $derived(
-		scopeLines.length > 0 && keptItems.every((it) => it.item_id && it.qty)
+		scopeLines.length > 0 &&
+			keptItems.every((it) => it.item_id && it.qty && !qtyErrorOf(it.qty, it.unit))
 	);
 	const checkZoned = $derived(
 		scopeLines.length > 0 &&
@@ -698,6 +719,9 @@
 		}
 	]);
 	let walkinSaving = $state(false);
+	const hasWalkinWholeError = $derived(
+		walkinItems.some((it) => it.itemId && qtyErrorOf(it.qty, it.unit))
+	);
 
 	/**
 	 * `fromList` — opened from a row of the booking list: a miss there sends staff back to
@@ -796,6 +820,7 @@
 		actionPanel = 'none';
 		otherPointsUnlocked = false;
 		closeOpen = false;
+		closeEmptyOpen = false;
 		onClose?.();
 	}
 
@@ -847,7 +872,12 @@
 	}
 
 	async function handleSaveScan() {
-		if (!actionRef || saving || otherShelterCode || !canReceive) return;
+		if (!actionRef || saving || otherShelterCode) return;
+		if (hasScanWholeError) {
+			toast.error(WHOLE_QTY_MESSAGE);
+			return;
+		}
+		if (!canReceive) return;
 		const lineNos = scopeLines.map(({ idx }) => idx);
 		const recorded = new Set(lineNos);
 		const pointName = chosenPointId ? destinationName(chosenPointId) : null;
@@ -936,6 +966,8 @@
 
 	// "ปิดใบ" (CR-206 FR-MP-26, FR-MP-27): lines no point recorded close as not delivered.
 	let closeOpen = $state(false);
+	// "ปิดใบ — ไม่ได้รับของ" (D20): an m6 donation closed with nothing received.
+	let closeEmptyOpen = $state(false);
 	const openLineNames = $derived(
 		donationDoc && canClose
 			? scannedItems.flatMap((it, idx) =>
@@ -959,16 +991,21 @@
 			});
 			const data = await res.json().catch(() => ({}));
 			if (data.success) {
+				const closedEmpty = closeEmptyOpen;
 				closeOpen = false;
+				closeEmptyOpen = false;
 				const ref = bookingRef || actionRef;
 				toast.success(
-					data.donation?.status === 'rejected'
-						? `ปิดใบ ${ref} แล้ว — ไม่มีรายการที่รับเข้าคลัง ใบจึงเป็นไม่รับ`
-						: `ปิดใบ ${ref} แล้ว — รายการที่ไม่มาส่งนับเป็นรับไม่ครบ`
+					closedEmpty
+						? `ปิดใบ ${ref} แล้ว — แจ้ง M6 ว่าไม่ได้รับของ`
+						: data.donation?.status === 'rejected'
+							? `ปิดใบ ${ref} แล้ว — ไม่มีรายการที่รับเข้าคลัง ใบจึงเป็นไม่รับ`
+							: `ปิดใบ ${ref} แล้ว — รายการที่ไม่มาส่งนับเป็นรับไม่ครบ`
 				);
 				finishBooking();
 			} else if (data.error_code === 'DONATION_CHANGED') {
 				closeOpen = false;
+				closeEmptyOpen = false;
 				toast.error('ใบนี้เปลี่ยนไปหลังจากเปิดหน้าตรวจรับ', {
 					description: 'จุดอื่นอาจเพิ่งบันทึกรับ — ค้นหาใบใหม่แล้วดูรายการที่เหลืออีกครั้ง',
 					duration: 12_000
@@ -1091,6 +1128,10 @@
 			toast.error('กรุณาเลือกรายการสิ่งของอย่างน้อย 1 รายการพร้อมระบุจำนวน');
 			return;
 		}
+		if (hasWalkinWholeError) {
+			toast.error(WHOLE_QTY_MESSAGE);
+			return;
+		}
 
 		// Same rule the intake route enforces (schema.md §2.1): a perishable lot with no
 		// expiry cannot be rotated or discarded on time, and the ledger is append-only.
@@ -1205,7 +1246,7 @@
 						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
 						<ArrowLeft class="size-4" />
-						{onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
+						{onClose ? 'กลับไปรายการของบริจาค' : 'กลับไปสแกนรับของ'}
 					</Button>
 					<div class="flex flex-wrap items-center gap-3">
 						<span
@@ -1217,10 +1258,14 @@
 							<h2 class="text-base font-bold text-white md:text-lg">
 								{donationRefLabel({ booking_ref: bookingRef })} - ตรวจรับพัสดุบริจาค
 							</h2>
-							<p class="text-sm text-blue-100">
-								{donorName || 'ไม่ระบุชื่อ'}
-								{#if donorPhone}· <span class="tabular-nums">{donorPhone}</span>{/if}
-							</p>
+							{#if isM6 && donationDoc}
+								<M6SourceBadge row={donationDoc} showCode={false} class="mt-1" />
+							{:else}
+								<p class="text-sm text-blue-100">
+									{donorName || 'ไม่ระบุชื่อ'}
+									{#if donorPhone}· <span class="tabular-nums">{donorPhone}</span>{/if}
+								</p>
+							{/if}
 						</div>
 						<span
 							class="order-first inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-900 sm:order-last"
@@ -1436,6 +1481,8 @@
 										/>
 									</div>
 								{:else}
+									{@const qtyDimension = unitDimension.resolve(item.unit)}
+									{@const qtyError = wholeQtyError(item.qty, qtyDimension)}
 									<!-- Fields: what it is and how much, then where it goes -->
 									<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:px-5">
 										<div class="space-y-1.5">
@@ -1473,8 +1520,11 @@
 												<Input
 													id="item-qty-{idx}"
 													type="text"
-													inputmode="decimal"
+													inputmode={requiresWholeQty(qtyDimension) ? 'numeric' : 'decimal'}
+													step={qtyInputStep(qtyDimension)}
 													bind:value={item.qty}
+													aria-invalid={qtyError ? true : undefined}
+													aria-describedby={qtyError ? `item-qty-${idx}-error` : undefined}
 													class="h-11 pr-16 text-base font-bold tabular-nums"
 												/>
 												<span
@@ -1483,6 +1533,15 @@
 													{formatUnit(item.unit, unitsOfMeasure, langState.current)}
 												</span>
 											</div>
+											{#if qtyError}
+												<p
+													id="item-qty-{idx}-error"
+													data-testid="scan-line-{idx}-qty-error"
+													class="text-sm font-medium text-red-700"
+												>
+													{qtyError}
+												</p>
+											{/if}
 										</div>
 
 										<div class="space-y-1.5">
@@ -1575,44 +1634,63 @@
 							/>
 						{/if}
 						<div class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-							<h4 class="text-sm font-semibold text-slate-700">ข้อมูลการจอง</h4>
+							<h4 class="text-sm font-semibold text-slate-700">
+								{isM6 ? 'ข้อมูลการเบิกจากคลังกลาง' : 'ข้อมูลการจอง'}
+							</h4>
 							<dl class="space-y-2.5 text-sm">
-								<div class="flex gap-2.5">
-									<User class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-									<div>
-										<dt class="sr-only">ผู้บริจาค</dt>
-										<dd class="font-semibold text-slate-900">{donorName || 'ไม่ระบุชื่อ'}</dd>
-										<dd class="text-slate-500 tabular-nums">
-											{donorPhone || 'ไม่ระบุเบอร์โทร'}
-										</dd>
-										{#if donorEmail}<dd class="text-slate-500">{donorEmail}</dd>{/if}
-									</div>
-								</div>
-								<div class="flex gap-2.5">
-									<Truck class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-									<div>
-										<dt class="text-xs text-slate-500">วิธีส่ง / ยานพาหนะ</dt>
-										<dd class="font-semibold text-slate-900">{vehicleLabel}</dd>
-										{#if donationDoc?.logistics?.vehicle_plate}
-											<dd class="text-slate-500">ทะเบียน {donationDoc.logistics.vehicle_plate}</dd>
-										{/if}
-									</div>
-								</div>
-								<div class="flex gap-2.5">
-									<Calendar class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-									<div>
-										<dt class="text-xs text-slate-500">นัดหมาย</dt>
-										<dd class="font-semibold text-slate-900 tabular-nums">{appointmentLabel}</dd>
-									</div>
-								</div>
-								{#if logisticsDetail}
+								{#if isM6 && donationDoc}
 									<div class="flex gap-2.5">
-										<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+										<Warehouse class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
 										<div>
-											<dt class="text-xs text-slate-500">{logisticsDetail.label}</dt>
-											<dd class="font-semibold text-slate-900">{logisticsDetail.value}</dd>
+											<dt class="text-xs text-slate-500">ต้นทาง</dt>
+											<dd class="font-semibold text-slate-900">{m6SourceLabel(donationDoc)}</dd>
+											{#if donationDoc.m6?.request_code}
+												<dd class="text-slate-500 tabular-nums">
+													รหัสคำขอเบิก {donationDoc.m6.request_code}
+												</dd>
+											{/if}
 										</div>
 									</div>
+								{:else}
+									<div class="flex gap-2.5">
+										<User class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+										<div>
+											<dt class="sr-only">ผู้บริจาค</dt>
+											<dd class="font-semibold text-slate-900">{donorName || 'ไม่ระบุชื่อ'}</dd>
+											<dd class="text-slate-500 tabular-nums">
+												{donorPhone || 'ไม่ระบุเบอร์โทร'}
+											</dd>
+											{#if donorEmail}<dd class="text-slate-500">{donorEmail}</dd>{/if}
+										</div>
+									</div>
+									<div class="flex gap-2.5">
+										<Truck class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+										<div>
+											<dt class="text-xs text-slate-500">วิธีส่ง / ยานพาหนะ</dt>
+											<dd class="font-semibold text-slate-900">{vehicleLabel}</dd>
+											{#if donationDoc?.logistics?.vehicle_plate}
+												<dd class="text-slate-500">
+													ทะเบียน {donationDoc.logistics.vehicle_plate}
+												</dd>
+											{/if}
+										</div>
+									</div>
+									<div class="flex gap-2.5">
+										<Calendar class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+										<div>
+											<dt class="text-xs text-slate-500">นัดหมาย</dt>
+											<dd class="font-semibold text-slate-900 tabular-nums">{appointmentLabel}</dd>
+										</div>
+									</div>
+									{#if logisticsDetail}
+										<div class="flex gap-2.5">
+											<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+											<div>
+												<dt class="text-xs text-slate-500">{logisticsDetail.label}</dt>
+												<dd class="font-semibold text-slate-900">{logisticsDetail.value}</dd>
+											</div>
+										</div>
+									{/if}
 								{/if}
 							</dl>
 						</div>
@@ -1737,6 +1815,28 @@
 											ปิดใบ (รายการที่เหลือไม่มาส่ง)
 										</Button>
 									{/if}
+								{:else if isM6}
+									<!-- Goods already sent by M6: refusing the whole booking would never close the
+									     withdrawal there. A line that did not arrive is turned away per line, and a
+									     delivery that never came is closed as "ไม่ได้รับของ" (D20). -->
+									<p
+										class="rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+									>
+										ใบจากคลังกลาง (M6) ปฏิเสธทั้งใบไม่ได้ — รายการที่ไม่มาถึงให้เลือก "ไม่รับ"
+										ทีละรายการ ถ้าไม่ได้รับของเลยให้ปิดใบ
+									</p>
+									{#if canCloseEmptyM6}
+										<Button
+											variant="outline"
+											type="button"
+											data-testid="close-m6-empty-button"
+											onclick={() => (closeEmptyOpen = true)}
+											disabled={saving || !!otherShelterCode}
+											class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
+										>
+											ปิดใบ — ไม่ได้รับของ
+										</Button>
+									{/if}
 								{:else}
 									<Button
 										variant="outline"
@@ -1819,7 +1919,7 @@
 						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
 						<ArrowLeft class="size-4" />
-						กลับไปที่รายการของบริจาค
+						กลับไปรายการของบริจาค
 					</Button>
 				{/if}
 				<div class="flex items-center gap-2.5">
@@ -2041,7 +2141,7 @@
 					class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 				>
 					<ArrowLeft class="size-4" />
-					{initialView === 'walkin' && onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
+					{initialView === 'walkin' && onClose ? 'กลับไปรายการของบริจาค' : 'กลับไปสแกนรับของ'}
 				</Button>
 
 				<div class="flex items-center gap-2.5">
@@ -2147,6 +2247,8 @@
 
 					<div class="space-y-4">
 						{#each walkinItems as item, idx (item.id)}
+							{@const qtyDimension = unitDimension.resolve(item.unit)}
+							{@const qtyError = item.itemId ? wholeQtyError(item.qty, qtyDimension) : undefined}
 							<div
 								class="relative rounded-2xl border border-border/70 bg-muted/20 p-5 transition-all hover:border-border"
 							>
@@ -2210,10 +2312,22 @@
 										<Input
 											id="walkin-qty-{item.id}"
 											type="text"
-											inputmode="decimal"
+											inputmode={requiresWholeQty(qtyDimension) ? 'numeric' : 'decimal'}
+											step={qtyInputStep(qtyDimension)}
 											bind:value={item.qty}
+											aria-invalid={qtyError ? true : undefined}
+											aria-describedby={qtyError ? `walkin-qty-${item.id}-error` : undefined}
 											class="h-10 rounded-xl text-center text-sm font-bold"
 										/>
+										{#if qtyError}
+											<p
+												id="walkin-qty-{item.id}-error"
+												data-testid="walkin-qty-error"
+												class="text-sm font-medium text-destructive"
+											>
+												{qtyError}
+											</p>
+										{/if}
 									</div>
 
 									<!-- Unit Display / Input -->
@@ -2297,7 +2411,7 @@
 					<Button
 						type="button"
 						onclick={handleSaveWalkin}
-						disabled={walkinSaving}
+						disabled={walkinSaving || hasWalkinWholeError}
 						class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#001f3f] sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700"
 					>
 						{#if walkinSaving}
@@ -2350,6 +2464,13 @@
 	bind:open={closeOpen}
 	bookingRef={bookingRef || actionRef}
 	openLines={openLineNames}
+	pending={saving}
+	onconfirm={handleCloseDonation}
+/>
+
+<CloseM6EmptyDialog
+	bind:open={closeEmptyOpen}
+	bookingRef={bookingRef || actionRef}
 	pending={saving}
 	onconfirm={handleCloseDonation}
 />

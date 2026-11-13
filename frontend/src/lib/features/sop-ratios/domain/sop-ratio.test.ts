@@ -14,6 +14,7 @@ import {
 	isSopMaster,
 	isSopOverride,
 	createProfileSlug,
+	isRatioChanged,
 	type SopRatioKey
 } from './sop-ratio';
 import { validRatios } from './sop-ratio.fixture';
@@ -604,5 +605,19 @@ describe('VISIBLE_SOP_RATIO_KEYS (display-only Sphere variables)', () => {
 	it('keeps the merged shelter area and rejects unknown keys', () => {
 		expect(isVisibleSopRatioKey('m2_per_person_total')).toBe(true);
 		expect(isVisibleSopRatioKey('rice_g_per_person_meal')).toBe(false);
+	});
+});
+
+describe('isRatioChanged (#936)', () => {
+	it.each([
+		{ name: '1.0 equals 1 as decimals', current: '1.0', initial: '1', changed: false },
+		{ name: 'string 1 equals number 1', current: '1', initial: 1, changed: false },
+		{ name: '2 differs from 1', current: '2', initial: '1', changed: true },
+		{ name: 'no current value is not a change', current: undefined, initial: '1', changed: false },
+		{ name: 'clearing a value is a change', current: '1', initial: undefined, changed: true },
+		{ name: 'trailing dot equals 1', current: '1.', initial: '1', changed: false },
+		{ name: 'unparsable current is a change', current: 'abc', initial: '1', changed: true }
+	])('$name', ({ current, initial, changed }) => {
+		expect(isRatioChanged(current, initial)).toBe(changed);
 	});
 });

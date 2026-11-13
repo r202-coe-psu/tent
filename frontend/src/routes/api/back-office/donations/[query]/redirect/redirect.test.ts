@@ -117,6 +117,21 @@ describe('POST /api/back-office/donations/[query]/redirect', () => {
 		});
 	});
 
+	it('refuses to redirect a central-warehouse (m6) delivery, 422, writing nothing', async () => {
+		mockCouch({
+			...baseDonation,
+			channel: 'm6',
+			status: 'verifying',
+			external: { system: 'm6', request_code: 'WD-0007' }
+		} as unknown as PublicDonationDoc);
+
+		const response = await POST(postEvent({ target_shelter_code: 'SH002' }));
+
+		expect(response.status).toBe(422);
+		expect(await response.json()).toMatchObject({ error_code: 'M6_NOT_REFUSABLE' });
+		expect(batches()).toHaveLength(0);
+	});
+
 	it('writes the ticket into the DESTINATION db and the audit into the origin db', async () => {
 		mockCouch(baseDonation);
 

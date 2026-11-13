@@ -16,7 +16,7 @@
 | `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                          |
 | Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                           |
 | Automation                     | Staging deploy triggers `tent-e2e-staging` with `wait: false` (fire and forget; manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
-| Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                                 |
+| Pre-push (lefthook)            | unit tests only (Vitest + pytest) — lint is pre-commit; no svelte-check, no e2e                                                                                                                                                         |
 
 Known problems:
 
@@ -99,7 +99,7 @@ Write one suite per feature. Tags select the layer, so tests are never duplicate
 
 | Layer         | When                       | What runs                                                                      | Target time | Status                                                     |
 | ------------- | -------------------------- | ------------------------------------------------------------------------------ | ----------- | ---------------------------------------------------------- |
-| 1. Pre-push   | every push (lefthook)      | lint, check, unit + BFF/FastAPI contract tests                                 | 1–3 min     | ✅ exists                                                  |
+| 1. Pre-push   | every push (lefthook)      | unit tests (Vitest + pytest). Lint stays on pre-commit                         | 1–3 min     | ✅ exists                                                  |
 | 2. PR gate    | every PR → `develop`       | `@regression` (mocked, no DB)                                                  | ~10 min     | ❌ phase 3                                                 |
 | 3. Nightly    | nightly on `develop`       | `@critical` on an ephemeral docker stack, zero-leak teardown                   | 30–60 min   | ❌ phase 4                                                 |
 | 4. Staging    | after every staging deploy | `@release` (the six journeys, §8) + `@smoke` of every suite                    | 15–30 min   | ✅ step C (remote `@critical` still skips via `IS_REMOTE`) |
@@ -427,6 +427,12 @@ How they obey §4:
 - **Accepted leftovers in Mongo** (a browser cannot delete them; PII-free): `external_bookings` rows (cancelled; PII
   cleared by the worker), `third_party_access_logs`, `external_booking_idempotency` keys, and the soft-deleted
   `third_party_clients` rows. They are swept by the partner janitor (§9.C).
+- **Permanent `audit_events` rows (CR-231).** Every public family search — the UI flow in `public-search-flow.test.ts`
+  and the `public-cleanup.ts` polling helper — appends a `public.search` row (searcher `E2E …`, phone `0812345678`)
+  to Mongo `audit_events`. That collection is append-only with no retention, so **these rows cannot be removed** and
+  **contain test PII**. Run the suite against a throw-away Mongo (local `docker compose`, never a shared staging
+  database) and keep the searcher name prefixed `E2E` so the rows stay recognisable. The polling helper refuses to run against a remote target (`E2E_BASE_URL`) unless
+  `E2E_ALLOW_AUDIT_ROWS=true`.
 - **EXT-012 (person search, #736).** E12-1…5 search by CID only (every booking in the run shares the same name and phone,
   so name / phone / passport searches are covered by `backend/tests/test_thirdparty_person_search.py`): a
   `pre_registered` hit is masked, has no `family_members` / `phone` / `passport` and never echoes the CID, the response is
@@ -478,8 +484,9 @@ playwright test e2e/food-sphere-analysis.test.ts --grep @food-sphere
   `frontend:civic-design-system`.
 - **Spec changes.** Any change in the categories of `docs/change-management.md` §2 → stop and ask
   the owner how to track it before writing it.
-- **Definition of done.** `pnpm lint`, `pnpm check` (0 errors), `pnpm test`, `svelte-autofixer`
-  clean on touched `.svelte`, plus the step's own acceptance below.
+- **Definition of done.** `pnpm lint`, `pnpm test` (pre-push runs the unit suite), `pnpm check`
+  (0 errors, manual — not on the hook), `svelte-autofixer` clean on touched `.svelte`, plus the
+  step's own acceptance below.
 - **Git.** Conventional Commits ≤72 chars, lowercase after colon. Never `--no-verify` or
   `LEFTHOOK=0`. PR to `develop` with `gh`; the body says what changed, how it was verified (real
   command output), and lists any app bugs found.

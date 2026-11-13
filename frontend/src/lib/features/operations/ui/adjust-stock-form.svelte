@@ -5,7 +5,13 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		formatUnit,
+		qtyInputStep,
+		useUnitDimensionResolver,
+		useUnitsOfMeasure,
+		wholeQtyError
+	} from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useLedger, useAdjustStock, useStockBalance } from '../application/queries';
@@ -61,6 +67,7 @@
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
 
 	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
@@ -142,6 +149,11 @@
 	const newQtyInvalid = $derived(
 		newQtyInput.trim() !== '' && (newQty === null || !qtyGte(newQty, 0))
 	);
+
+	// The counted quantity is what the user types, so it is what must be whole. The delta is
+	// computed and may stay fractional: counting 0 against 0.5 bottle is how that remainder is written off.
+	const itemDimension = $derived(unitDimension.resolve(selectedItem?.unit));
+	const newQtyError = $derived(wholeQtyError(newQty, itemDimension));
 
 	// Delta Calculation
 	const deltaQty = $derived.by(() => {
@@ -243,6 +255,10 @@
 		}
 		if (newQty === null || !qtyGte(newQty, 0)) {
 			toast.error(NEW_QTY_HINT);
+			return;
+		}
+		if (newQtyError) {
+			toast.error(newQtyError);
 			return;
 		}
 		if (qtyIsZero(deltaQty)) {
@@ -430,9 +446,10 @@
 								type="number"
 								placeholder="0"
 								min="0"
-								step="any"
+								step={qtyInputStep(itemDimension)}
 								value={newQtyInput}
 								oninput={(event) => (newQtyInput = event.currentTarget.value)}
+								aria-invalid={newQtyInvalid || newQtyError ? 'true' : undefined}
 								class="min-h-11 border-sky-200 bg-white pr-14 font-mono text-lg font-bold"
 							/>
 							<span
@@ -443,6 +460,10 @@
 						</div>
 						{#if newQtyInvalid}
 							<p class="mt-1 text-xs font-semibold text-red-700" role="alert">{NEW_QTY_HINT}</p>
+						{:else if newQtyError}
+							<p class="mt-1.5 text-xs font-semibold text-destructive" role="alert">
+								{newQtyError}
+							</p>
 						{/if}
 					</div>
 
@@ -536,6 +557,7 @@
 						disabled={offline ||
 							isSubmitting ||
 							qtyIsZero(deltaQty) ||
+							!!newQtyError ||
 							!adjustReason ||
 							(noteRequired && !note.trim())}
 						class="min-h-11 w-full font-bold"
