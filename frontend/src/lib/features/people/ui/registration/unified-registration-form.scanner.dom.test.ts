@@ -258,6 +258,53 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 		expect(buttonByText('เพิ่มเป็นสมาชิกใหม่')).toBeUndefined();
 	});
 
+	describe('reading popup', () => {
+		const readingDialog = () =>
+			document.querySelector<HTMLElement>('[data-testid="scanner-reading-dialog"]');
+
+		it('opens a blocking popup while the card is read and closes it once the text arrives', async () => {
+			renderWalkInForm();
+
+			dispatchScannerEvent('scanner:card-reading');
+			await settle();
+			expect(readingDialog()?.textContent).toContain('กำลังอ่านบัตร…');
+
+			dispatchCardRead();
+			await settle();
+			expect(readingDialog()).toBeNull();
+		});
+
+		it('closes the popup when the card could not be read', async () => {
+			renderWalkInForm();
+
+			dispatchScannerEvent('scanner:card-reading');
+			await settle();
+			dispatchScannerEvent('scanner:card-error', { code: 'READ_FAILED' });
+			await settle();
+
+			expect(readingDialog()).toBeNull();
+		});
+
+		it('never leaves the popup up when the client goes silent', async () => {
+			vi.useFakeTimers();
+			try {
+				renderWalkInForm();
+				dispatchScannerEvent('scanner:card-reading');
+				flushSync();
+				expect(readingDialog()).not.toBeNull();
+
+				vi.advanceTimersByTime(20_000);
+				flushSync();
+				await vi.runOnlyPendingTimersAsync();
+				flushSync();
+
+				expect(readingDialog()).toBeNull();
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+	});
+
 	describe('one progress toast per card', () => {
 		const photoDetail = {
 			citizen_id: card.citizen_id,
@@ -276,7 +323,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			await settle();
 
 			expect(progress()).toEqual([
-				'loading: กำลังอ่านบัตร…',
+				'dismiss',
 				'loading: เติมข้อมูลสมาชิกคนที่ 1 แล้ว · กำลังอ่านรูป…',
 				'success: อ่านบัตรเรียบร้อย'
 			]);
@@ -292,7 +339,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			dispatchCardRead();
 			await settle();
 
-			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
+			expect(progress()).toEqual(['dismiss', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
 		});
 
 		it('dismisses the toast while staff choose in the overwrite dialog, and after cancel', async () => {
@@ -304,11 +351,11 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			dispatchScannerEvent('scanner:card-reading');
 			dispatchCardRead(otherCard);
 			await settle();
-			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'dismiss']);
+			expect(progress()).toEqual(['dismiss', 'dismiss']);
 			buttonByText('ยกเลิก')!.click();
 			await settle();
 
-			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'dismiss']);
+			expect(progress()).toEqual(['dismiss', 'dismiss']);
 		});
 
 		it('moves on to the member number chosen in the overwrite dialog', async () => {
@@ -330,7 +377,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			dispatchCardRead();
 			await settle();
 
-			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'dismiss']);
+			expect(progress()).toEqual(['dismiss', 'dismiss']);
 		});
 
 		it('dismisses the toast when the photo matches nobody in the form', async () => {
@@ -388,10 +435,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			const event = dispatchScannerEvent('scanner:card-error', { code: 'READ_FAILED' });
 
 			expect(event.defaultPrevented).toBe(true);
-			expect(progress()).toEqual([
-				'loading: กำลังอ่านบัตร…',
-				'error: อ่านบัตรไม่สำเร็จ ลองเสียบใหม่'
-			]);
+			expect(progress()).toEqual(['dismiss', 'error: อ่านบัตรไม่สำเร็จ ลองเสียบใหม่']);
 		});
 
 		it('turns a card photo read failure into an error on the toast', async () => {
@@ -652,7 +696,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 
 			expect(event.defaultPrevented).toBe(true);
 			expect(saveImageSpy).toHaveBeenCalledTimes(1);
-			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
+			expect(progress()).toEqual(['dismiss', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
 		});
 
 		it('quietly fills a missing photo when a card already in the form is read again', async () => {
@@ -670,7 +714,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 
 			expect(saveImageSpy).toHaveBeenCalledTimes(1);
 			expect(photoMarkers()).toHaveLength(1);
-			expect(progress()).toEqual(['loading: กำลังอ่านบัตร…', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
+			expect(progress()).toEqual(['dismiss', 'info: บัตรนี้อยู่ในฟอร์มแล้ว']);
 		});
 
 		it('ignores a malformed photo event without acknowledging it', async () => {

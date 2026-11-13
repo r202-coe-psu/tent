@@ -112,6 +112,7 @@ const th = {
 		continueRegistering: 'ลงทะเบียนต่อ',
 		duplicateLookupFailed: 'ตรวจสอบรายชื่อซ้ำไม่สำเร็จ — ลงทะเบียนต่อได้ตามปกติ',
 		reading: 'กำลังอ่านบัตร…',
+		readingHint: 'อย่าเพิ่งดึงบัตรออกจนกว่าจะอ่านเสร็จ',
 		filledReadingPhoto: (position: number) =>
 			`เติมข้อมูลสมาชิกคนที่ ${position} แล้ว · กำลังอ่านรูป…`,
 		readDone: 'อ่านบัตรเรียบร้อย',
@@ -239,6 +240,7 @@ const en: typeof th = {
 		continueRegistering: 'Continue registering',
 		duplicateLookupFailed: 'Could not check for duplicates — you can keep registering as usual',
 		reading: 'Reading the card…',
+		readingHint: 'Keep the card in the reader until it finishes',
 		filledReadingPhoto: (position: number) => `Filled in member ${position} · reading the photo…`,
 		readDone: 'Card read',
 		readFailed: 'Could not read the card — please reinsert it',

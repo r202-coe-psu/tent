@@ -1378,12 +1378,26 @@
 	/** A card read again while already in the form: its photo must not replace the already-in-form notice. */
 	let quietPhotoCitizenId: string | null = null;
 
+	/** The blocking "reading the card" popup: from `scanner:card-reading` until the text read ends. */
+	let scannerReading = $state(false);
+	/** The client gives up on an unacknowledged event after 15 s; never leave the popup stuck longer. */
+	const SCANNER_READING_MAX_MS = 20_000;
+	let scannerReadingTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function stopScannerReading() {
+		clearTimeout(scannerReadingTimer);
+		scannerReading = false;
+	}
+
 	/** `scanner:card-reading`: the client started reading a card. */
 	function handleScannerCardReading(event: Event) {
 		event.preventDefault();
 		heldScannerPhoto = null;
 		quietPhotoCitizenId = null;
-		toast.loading(ts.reading, { id: SCANNER_TOAST_ID });
+		toast.dismiss(SCANNER_TOAST_ID);
+		clearTimeout(scannerReadingTimer);
+		scannerReading = true;
+		scannerReadingTimer = setTimeout(stopScannerReading, SCANNER_READING_MAX_MS);
 	}
 
 	/** `scanner:card-error`: the client could not read the card or its photo. */
@@ -1391,6 +1405,7 @@
 		const parsed = scannerCardErrorSchema.safeParse((event as CustomEvent).detail);
 		if (!parsed.success) return;
 		event.preventDefault();
+		stopScannerReading();
 		toast.error(parsed.data.code === 'READ_FAILED' ? ts.readFailed : ts.photoReadFailed, {
 			id: SCANNER_TOAST_ID
 		});
@@ -1408,6 +1423,7 @@
 		const parsed = scannerCardSchema.safeParse((event as CustomEvent).detail);
 		if (!parsed.success) return;
 		event.preventDefault();
+		stopScannerReading();
 		const card = parsed.data;
 		if (applyScannedCard(members, card).kind === 'already-in-form') {
 			showAlreadyInForm(card);
@@ -1532,6 +1548,7 @@
 		const parsed = scannerCardPhotoSchema.safeParse((event as CustomEvent).detail);
 		if (!parsed.success) return;
 		event.preventDefault();
+		stopScannerReading();
 		const { citizen_id: citizenId, photo_base64: dataUrl } = parsed.data;
 		const member = findMemberByCitizenId(citizenId);
 		if (!member) {
@@ -1579,6 +1596,7 @@
 		window.addEventListener('scanner:card-photo', handleScannerCardPhoto);
 		window.addEventListener('scanner:card-error', handleScannerCardError);
 		return () => {
+			clearTimeout(scannerReadingTimer);
 			window.removeEventListener('scanner:card-reading', handleScannerCardReading);
 			window.removeEventListener('scanner:card-error', handleScannerCardError);
 			window.removeEventListener('scanner:card-read', handleScannerCardRead);
@@ -2548,6 +2566,21 @@
 			<AlertDialog.Cancel>{t.createNewDialogCancel}</AlertDialog.Cancel>
 			<AlertDialog.Action onclick={confirmCreateNew}>{t.createNewDialogConfirm}</AlertDialog.Action>
 		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root
+	open={scannerReading}
+	onOpenChange={(open) => {
+		if (!open) stopScannerReading();
+	}}
+>
+	<AlertDialog.Content class="sm:max-w-sm" data-testid="scanner-reading-dialog">
+		<div class="flex flex-col items-center gap-4 py-4 text-center" role="status">
+			<Loader2 class="size-10 animate-spin text-primary" aria-hidden="true" />
+			<AlertDialog.Title>{ts.reading}</AlertDialog.Title>
+			<AlertDialog.Description>{ts.readingHint}</AlertDialog.Description>
+		</div>
 	</AlertDialog.Content>
 </AlertDialog.Root>
 
