@@ -51,6 +51,7 @@ const evacuee = {
 	type: 'evacuee',
 	first_name: 'สุนิตา',
 	last_name: 'บางค้างพลู',
+	vulnerable_groups: [],
 	current_stay: { status: 'arriving', zone: null, since: '2026-10-24T10:00:00.000Z' },
 	household_id: 'household:test-1',
 	shelter_code: 'SH001'
@@ -76,7 +77,7 @@ async function settle() {
 
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
 const printButton = () => buttons().find((b) => b.textContent?.includes('พิมพ์ที่ เครื่อง-p1'));
-const closeButtons = () => buttons().filter((b) => b.textContent?.trim() === 'ปิดหน้าต่าง');
+const closeButtons = () => buttons().filter((b) => b.textContent?.trim() === 'ปิด');
 const pressEscape = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
 beforeEach(() => {

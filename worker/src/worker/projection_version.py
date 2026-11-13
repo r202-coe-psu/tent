@@ -43,6 +43,7 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 17 — draft-public-needs-decimal (#934): ``public_needs.qty_needed`` / ``qty_target`` /
 #: ``on_hand`` / ``reserved`` are ``Decimal128`` (were ``double``), computed in ``Decimal``
 #: and rounded to four places half-up before the ``<= 0`` delete.
-#: 18 — draft-public-zone-occupancy (#1241): ``public_shelters.occupancy_by_zone``
+#: 18 — CR-245 (#1152): ``public_volunteers.occupation`` (free text string|null).
+#: 19 — draft-public-zone-occupancy (#1241): ``public_shelters.occupancy_by_zone``
 #: (zone -> stay status -> count) for the public per-zone headcount.
-PROJECTION_VERSION: int = 18
+PROJECTION_VERSION: int = 19

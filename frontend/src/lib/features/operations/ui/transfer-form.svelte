@@ -22,7 +22,11 @@
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultIssueUom,
-		qtyToBaseUnit
+		qtyToBaseUnit,
+		qtyInputStep,
+		useUnitDimensionResolver,
+		requiresWholeQty,
+		wholeQtyError
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
@@ -37,6 +41,7 @@
 	const createMutation = useCreateTransfer();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const unitDimension = useUnitDimensionResolver();
 	// Not `useShelters()`: that list is scoped to the caller's own shelter for everyone but
 	// system_admin, so after dropping our own shelter nothing would be left (#570).
 	const destinationsQuery = useTransferDestinations();
@@ -73,9 +78,14 @@
 		SPA: true,
 		validators: zod4(transferFormSchema),
 		resetForm: true,
-		onUpdate: async ({ form: validated }) => {
+		onUpdate: async ({ form: validated, cancel }) => {
 			if (!validated.valid) {
 				toast.error('กรุณาตรวจสอบข้อมูลในฟอร์ม');
+				return;
+			}
+			if (qtyWholeError) {
+				cancel();
+				toast.error(qtyWholeError);
 				return;
 			}
 			await handleCreate(validated.data);
@@ -83,6 +93,10 @@
 	});
 
 	const { form: formData, submitting } = form;
+
+	const qtyWholeError = $derived(
+		wholeQtyError($formData.qty, unitDimension.resolve($formData.unit))
+	);
 
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
 	const selectedUnitLabel = $derived(
@@ -242,14 +256,18 @@
 						<Input
 							{...props}
 							type="number"
-							min="0.01"
-							step="any"
+							min={requiresWholeQty(unitDimension.resolve($formData.unit)) ? '1' : '0.01'}
+							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							placeholder="ระบุจำนวน"
 							bind:value={$formData.qty}
+							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
 							class="min-h-11 font-mono font-bold"
 						/>
 					{/snippet}
 				</Form.Control>
+				{#if qtyWholeError}
+					<p class="text-sm font-medium text-destructive">{qtyWholeError}</p>
+				{/if}
 				<Form.FieldErrors />
 			</Form.Field>
 
@@ -326,6 +344,7 @@
 			<Form.Button
 				disabled={$submitting ||
 					offline ||
+					!!qtyWholeError ||
 					!canPickDestination ||
 					!selectedItem ||
 					qtyLte(currentStock, 0)}

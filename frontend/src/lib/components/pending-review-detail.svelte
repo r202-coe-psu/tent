@@ -20,6 +20,9 @@
 	import {
 		donationActionRef,
 		donationRefLabel,
+		isM6Donation,
+		m6SourceLabel,
+		M6ConfirmStatus,
 		PUBLIC_DONATION_CATEGORIES,
 		RejectDonationDialog,
 		RejectReasonFields,
@@ -73,6 +76,9 @@
 	// A walk-in has no `booking_ref`; the doc id is what addresses it (see
 	// `donationActionRef`). Bailing out on a missing ref left those donations stuck.
 	const actionRef = $derived(donationActionRef(request));
+
+	// A central-warehouse (M6) delivery has no donor to call, so no contact block and no reveal.
+	const isM6 = $derived(isM6Donation(request));
 
 	// A received donation (#821) arrives with the donor contact MASKED by the server; the full
 	// values are fetched on request, one donation at a time, and every request is audited
@@ -344,7 +350,7 @@
 			class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 		>
 			<ArrowLeft class="h-3.5 w-3.5" />
-			กลับหน้าตรวจรับบริจาค
+			กลับไปตรวจรับบริจาค
 		</Button>
 		<div class="flex items-center gap-2.5">
 			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
@@ -364,7 +370,9 @@
 		     means for the review. It is information, not a fault: amber read as a problem. -->
 		<div class="grid grid-cols-1 gap-4 {request.is_unsolicited ? 'md:grid-cols-2' : ''}">
 			<div class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs">
-				<p class="text-sm font-semibold text-slate-500">ข้อมูลผู้บริจาค / จุดประสานงาน</p>
+				<p class="text-sm font-semibold text-slate-500">
+					{isM6 ? 'ต้นทางของรับเข้า' : 'ข้อมูลผู้บริจาค / จุดประสานงาน'}
+				</p>
 				<div class="mt-3 flex items-start gap-3">
 					<span
 						class="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-700"
@@ -373,48 +381,59 @@
 						<User class="size-5" />
 					</span>
 					<div class="min-w-0 space-y-1.5">
-						<p class="text-lg font-bold break-words text-slate-900">
-							{contact.name || 'ไม่ระบุชื่อ'}
-						</p>
-						{#if contactRemoved}
-							<p class="text-sm text-slate-600">ข้อมูลติดต่อถูกลบตามนโยบายการเก็บข้อมูล</p>
-						{:else}
-							<p class="flex items-center gap-2 text-base text-slate-700">
-								<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-								<span class="sr-only">เบอร์โทร</span>
-								{#if contact.phone && showContact}
-									<a
-										href="tel:{contact.phone}"
-										class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
-									>
-										{contact.phone}
-									</a>
-								{:else if contact.phone}
-									<span class="font-semibold text-slate-700 tabular-nums">{contact.phone}</span>
-								{:else}
-									<span class="text-slate-500">ไม่ระบุเบอร์โทร</span>
-								{/if}
-							</p>
-							{#if contact.email}
-								<p class="flex items-center gap-2 text-sm break-all text-slate-600">
-									<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-									<span class="sr-only">อีเมล</span>
-									{contact.email}
+						{#if isM6}
+							<!-- A central-warehouse delivery: no donor, no phone — the source and M6 status. -->
+							<p class="text-lg font-bold break-words text-slate-900">{m6SourceLabel(request)}</p>
+							{#if request.m6?.request_code}
+								<p class="text-sm font-semibold text-slate-600 tabular-nums">
+									รหัสคำขอเบิก {request.m6.request_code}
 								</p>
 							{/if}
-						{/if}
-						{#if !showContact}
-							<!-- Received donations (#821): the full contact only on request, and audited. -->
-							<Button
-								type="button"
-								variant="outline"
-								class="min-h-11"
-								disabled={revealMutation.isPending}
-								onclick={revealContact}
-							>
-								<Eye class="size-4" aria-hidden="true" />
-								{revealMutation.isPending ? 'กำลังโหลด...' : 'แสดงข้อมูลติดต่อ'}
-							</Button>
+							<M6ConfirmStatus row={request} />
+						{:else}
+							<p class="text-lg font-bold break-words text-slate-900">
+								{contact.name || 'ไม่ระบุชื่อ'}
+							</p>
+							{#if contactRemoved}
+								<p class="text-sm text-slate-600">ข้อมูลติดต่อถูกลบตามนโยบายการเก็บข้อมูล</p>
+							{:else}
+								<p class="flex items-center gap-2 text-base text-slate-700">
+									<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+									<span class="sr-only">เบอร์โทร</span>
+									{#if contact.phone && showContact}
+										<a
+											href="tel:{contact.phone}"
+											class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
+										>
+											{contact.phone}
+										</a>
+									{:else if contact.phone}
+										<span class="font-semibold text-slate-700 tabular-nums">{contact.phone}</span>
+									{:else}
+										<span class="text-slate-500">ไม่ระบุเบอร์โทร</span>
+									{/if}
+								</p>
+								{#if contact.email}
+									<p class="flex items-center gap-2 text-sm break-all text-slate-600">
+										<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+										<span class="sr-only">อีเมล</span>
+										{contact.email}
+									</p>
+								{/if}
+							{/if}
+							{#if !showContact && !isM6}
+								<!-- Received donations (#821): the full contact only on request, and audited. -->
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11"
+									disabled={revealMutation.isPending}
+									onclick={revealContact}
+								>
+									<Eye class="size-4" aria-hidden="true" />
+									{revealMutation.isPending ? 'กำลังโหลด...' : 'แสดงข้อมูลติดต่อ'}
+								</Button>
+							{/if}
 						{/if}
 					</div>
 				</div>
@@ -624,49 +643,51 @@
 		<!-- CR-175 FR-12: the donor's photos, so the goods can be judged before they arrive. -->
 		<DonationPhotoStrip photoIds={request.photos} shelterCode={request.shelter_code} />
 
-		<!-- Logistics Info Cards Grid (3 boxes) -->
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-			<!-- Vehicle -->
-			<div class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs">
-				<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
-					<Truck class="size-5 text-sky-600" aria-hidden="true" />
-					<span>ยานพาหนะจัดส่ง</span>
-				</div>
-				<p class="mt-2 text-lg font-bold text-slate-900">
-					{formatVehicle(request.vehicle, request.delivery_method)}
-				</p>
-				{#if request.vehicle_plate}
-					<p class="mt-1 text-sm font-semibold text-slate-700">ทะเบียน {request.vehicle_plate}</p>
-				{/if}
-			</div>
-
-			{#if request.pickup_address}
-				<!-- Where the shelter's vehicle goes. Only a pickup booking has one; the
-				     card used to fall back to a made-up "จุดรับบริจาคส่วนหน้า" for the rest. -->
+		<!-- Logistics Info Cards Grid (3 boxes). An m6 delivery has no booking logistics. -->
+		{#if !isM6}
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+				<!-- Vehicle -->
 				<div class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs">
 					<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
-						<MapPin class="size-5 text-sky-600" aria-hidden="true" />
-						<span>ที่อยู่เข้ารับของ</span>
+						<Truck class="size-5 text-sky-600" aria-hidden="true" />
+						<span>ยานพาหนะจัดส่ง</span>
 					</div>
-					<p class="mt-2 text-lg font-bold text-slate-900">{request.pickup_address}</p>
+					<p class="mt-2 text-lg font-bold text-slate-900">
+						{formatVehicle(request.vehicle, request.delivery_method)}
+					</p>
+					{#if request.vehicle_plate}
+						<p class="mt-1 text-sm font-semibold text-slate-700">ทะเบียน {request.vehicle_plate}</p>
+					{/if}
 				</div>
-			{/if}
 
-			<!-- Appointment Date -->
-			<div
-				class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs {request.pickup_address
-					? 'md:col-span-2'
-					: ''}"
-			>
-				<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
-					<Calendar class="size-5 text-sky-600" aria-hidden="true" />
-					<span>นัดหมายเสนอขอบริจาค</span>
+				{#if request.pickup_address}
+					<!-- Where the shelter's vehicle goes. Only a pickup booking has one; the
+				     card used to fall back to a made-up "จุดรับบริจาคส่วนหน้า" for the rest. -->
+					<div class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs">
+						<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+							<MapPin class="size-5 text-sky-600" aria-hidden="true" />
+							<span>ที่อยู่เข้ารับของ</span>
+						</div>
+						<p class="mt-2 text-lg font-bold text-slate-900">{request.pickup_address}</p>
+					</div>
+				{/if}
+
+				<!-- Appointment Date -->
+				<div
+					class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs {request.pickup_address
+						? 'md:col-span-2'
+						: ''}"
+				>
+					<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+						<Calendar class="size-5 text-sky-600" aria-hidden="true" />
+						<span>นัดหมายเสนอขอบริจาค</span>
+					</div>
+					<p class="mt-2 text-lg font-bold text-slate-900">
+						{formatSlotDate(request.slot, request.eta, request.declared_at)}
+					</p>
 				</div>
-				<p class="mt-2 text-lg font-bold text-slate-900">
-					{formatSlotDate(request.slot, request.eta, request.declared_at)}
-				</p>
 			</div>
-		</div>
+		{/if}
 
 		<!-- A received donation: the lots it put into stock, and what is left of each (#821). -->
 		{#if readonly && request.donation_id}

@@ -17,6 +17,9 @@ import {
 	canAccessWarehouse,
 	canManagePrinters,
 	canViewSupply,
+	hasCapabilityInShelter,
+	canAccessCentralWarehouse,
+	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -40,6 +43,8 @@ import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Images from '@lucide/svelte/icons/images';
 import Printer from '@lucide/svelte/icons/printer';
+import Ambulance from '@lucide/svelte/icons/ambulance';
+import Boxes from '@lucide/svelte/icons/boxes';
 
 type Leaf = {
 	label: string;
@@ -125,7 +130,10 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'การส่งต่อผู้เข้าพัก',
 				href: resolve('/back-office/referrals'),
 				icon: ClipboardList,
-				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
+				// Medical staff too, for medical-emergency referrals only (M5 draft CR D8, D16).
+				visibleTo: ({ roles, shelterCode }) =>
+					canAccessManagerPages(roles, shelterCode) ||
+					hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)
 			}
 		]
 	},
@@ -196,7 +204,28 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		]
 	},
 	{
-		title: '4. ตั้งค่าระบบ',
+		// Draft CR M5 D17: OneData platform shortcuts (M5 patient referral, M6 resources).
+		title: '4. OneData Platform',
+		items: [
+			{
+				label: 'OneData ระบบส่งต่อผู้ป่วย (M5)',
+				href: resolve('/back-office/onedata/m5'),
+				icon: Ambulance,
+				visibleTo: ({ roles, shelterCode }) =>
+					canAccessManagerPages(roles, shelterCode) ||
+					hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)
+			},
+			{
+				// M6 D2: SA, SM, warehouse_staff — not supply_coordinator (`canAccessWarehouse` would admit it).
+				label: 'OneData ระบบบริหารทรัพยากร (M6)',
+				href: resolve('/back-office/onedata/m6'),
+				icon: Boxes,
+				visibleTo: ({ roles, shelterCode }) => canAccessCentralWarehouse(roles, shelterCode)
+			}
+		]
+	},
+	{
+		title: '5. ตั้งค่าระบบ',
 		items: [
 			{
 				label: 'จัดการศูนย์พักพิง',

@@ -1,4 +1,5 @@
 import type { Referral, ReferralStatus } from '../domain/referral.schema';
+import type { TransitionOptions } from './referral.server-repository';
 
 /** Max attempts for a single referral transition when CouchDB answers 409 (document conflict). */
 export const TRANSITION_MAX_RETRIES = 3;
@@ -11,7 +12,8 @@ export interface TransitionRepo {
 		to: ReferralStatus,
 		actor: string,
 		reason?: string,
-		actorShelter?: string
+		actorShelter?: string,
+		options?: TransitionOptions
 	): Promise<Referral>;
 }
 
@@ -50,13 +52,16 @@ export async function transitionWithRetry(
 	to: ReferralStatus,
 	actor: string,
 	reason: string | undefined,
-	actorShelter: string
+	actorShelter: string,
+	options?: TransitionOptions
 ): Promise<Referral> {
 	let lastError: { message?: string } | null = null;
 
 	for (let attempt = 0; attempt < TRANSITION_MAX_RETRIES; attempt++) {
 		try {
-			return await repo.transition(id, to, actor, reason, actorShelter);
+			return options
+				? await repo.transition(id, to, actor, reason, actorShelter, options)
+				: await repo.transition(id, to, actor, reason, actorShelter);
 		} catch (e: unknown) {
 			if (!isConflict(e)) throw e;
 			lastError = e as { message?: string };

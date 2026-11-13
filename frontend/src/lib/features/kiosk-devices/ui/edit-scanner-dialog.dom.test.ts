@@ -130,6 +130,15 @@ describe('EditScannerDialog', () => {
 		});
 	});
 
+	it('offers only ตู้เล็ก and ตู้ใหญ่ for the screen, never จอ TV', async () => {
+		await render();
+		const values = [...document.body.querySelectorAll('[role="radio"]')].map((r) =>
+			r.getAttribute('data-value')
+		);
+		expect(values).toEqual(['compact', 'portrait']);
+		expect(document.body.textContent).not.toContain('จอ TV');
+	});
+
 	it('hands Scanner Key, PIN and delete off to their own dialogs', async () => {
 		await render();
 		buttonByText('ดูข้อมูลการติดตั้ง').click();

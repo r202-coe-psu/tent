@@ -356,6 +356,7 @@ erDiagram
         string first_name "req"
         string last_name "req"
         string nickname "opt"
+        string occupation "nullable opt max 100 CR-245 v6"
         string phone "nullable req"
         json skills "string array"
         string organization "nullable"

@@ -70,7 +70,59 @@ function typeInto(value: string) {
 	flushSync();
 }
 
+const m6Row = (over: Partial<NonNullable<PendingDonationRow['m6']>> = {}): PendingDonationRow => ({
+	...row(7),
+	channel: 'm6',
+	booking_ref: 'WD-0007',
+	donor_name: 'คลังกลาง M6 · คลังกลาง A',
+	donor_phone: null,
+	donor_email: null,
+	contact_masked: undefined,
+	m6: {
+		request_code: 'WD-0007',
+		source_warehouse_code: 'WH-A',
+		source_warehouse_name: 'คลังกลาง A',
+		confirmed_at: null,
+		confirm_error: null,
+		...over
+	}
+});
+
 describe('ReceivedDonationsList', () => {
+	describe('an m6 (central warehouse) row', () => {
+		it('shows the source warehouse badge instead of phone and email', () => {
+			mountList({ rows: [m6Row()] });
+			expect(text()).toContain('คลังกลาง M6 · คลังกลาง A');
+			expect(text()).toContain('WD-0007');
+			expect(text()).not.toContain('ไม่ระบุเบอร์โทร');
+			expect(text()).not.toContain('ไม่ระบุอีเมล');
+		});
+
+		it('says it is waiting for M6 while no confirmation is recorded', () => {
+			mountList({ rows: [m6Row()] });
+			expect(text()).toContain('กำลังยืนยันกับ M6');
+		});
+
+		it('says it is confirmed once confirmed_at is set', () => {
+			mountList({ rows: [m6Row({ confirmed_at: '2026-10-20T04:00:00.000Z' })] });
+			expect(text()).toContain('ยืนยันกับ M6 แล้ว');
+			expect(text()).not.toContain('ยังยืนยันกับ M6 ไม่สำเร็จ');
+		});
+
+		it('warns with the error and the automatic retry when confirmation failed', () => {
+			mountList({ rows: [m6Row({ confirm_error: 'M6 timeout' })] });
+			expect(text()).toContain('ยังยืนยันกับ M6 ไม่สำเร็จ');
+			expect(text()).toContain('M6 timeout');
+			expect(text()).toContain('อัตโนมัติ');
+		});
+
+		it('leaves a donor row on the contact lines, with no M6 wording', () => {
+			mountList({ rows: [row(1)] });
+			expect(text()).toContain('xxx-xxx-1111');
+			expect(text()).not.toContain('M6');
+		});
+	});
+
 	it('shows the received_at date and time (Buddhist year, Bangkok time) in both layouts', () => {
 		// declared_at / eta fall on other days (PendingDonationRow has no updated_at): they must not be what is shown.
 		mountList({

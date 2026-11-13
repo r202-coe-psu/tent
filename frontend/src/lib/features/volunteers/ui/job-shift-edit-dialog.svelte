@@ -21,7 +21,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
-	import { applyShiftEdit, validateShiftEdit } from '../domain/shift-edit';
+	import { applyShiftEdit, sanitizeCountTyping, validateShiftEdit } from '../domain/shift-edit';
 	import type { JobShift } from '../domain/job.schema';
 
 	let {
@@ -45,7 +45,7 @@
 	let date = $state('');
 	let startTime = $state('08:00');
 	let endTime = $state('16:00');
-	let seats = $state(1);
+	let seats = $state<number | null>(1);
 
 	/**
 	 * Reload the form from the shift each time the dialog opens. Keyed on
@@ -62,7 +62,7 @@
 
 	const validation = $derived(
 		validateShiftEdit(
-			{ date, start_time: startTime, end_time: endTime, quota: seats },
+			{ date, start_time: startTime, end_time: endTime, quota: seats ?? 0 },
 			siblings,
 			minQuota
 		)
@@ -72,7 +72,7 @@
 	const crossesMidnight = $derived(endDate !== '' && endDate !== date);
 
 	function save() {
-		if (!shift || error || pending) return;
+		if (!shift || error || pending || seats === null) return;
 		onsave(
 			applyShiftEdit(
 				shift,
@@ -123,6 +123,14 @@
 					step="1"
 					class="!h-11"
 					bind:value={seats}
+					oninput={(e) => {
+						const val = e.currentTarget.value;
+						const cleaned = sanitizeCountTyping(val);
+						if (val !== cleaned) {
+							e.currentTarget.value = cleaned;
+							seats = cleaned === '' ? null : Number(cleaned);
+						}
+					}}
 				/>
 				{#if minQuota > 0}
 					<p class="text-2xs text-muted-foreground">

@@ -99,6 +99,9 @@ export const peopleKeys = {
 	// invalidates this member listing (TanStack Query prefix-matches by default).
 	householdMembers: (householdId: string) =>
 		[...peopleKeys.households(), 'members', householdId] as const,
+	/** The `evacuee_qr.prints[]` log of one evacuee (#1301: drives the stale QR card warning). */
+	evacueeQrPrints: (evacueeId: string) =>
+		[...peopleKeys.all, 'evacuee-qr-prints', getShelterCode(), evacueeId] as const,
 	pendingScreening: (shelterCode = getShelterCode()) =>
 		[...peopleKeys.all, 'pending-screening', shelterCode] as const
 };

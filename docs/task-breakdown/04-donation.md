@@ -2,9 +2,9 @@
 title: "Task Breakdown — Donation"
 status: active
 created: 2026-06-05
-updated: 2026-10-21
+updated: 2026-11-12
 module: donation
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§F, 2026-06-22) เพิ่ม public `/donate` wizard (T-60); CR-047 (2026-07-24) atomic quota counter; CR-052 (2026-07-27) V8 realignment (UI split, Task #52 pending review, public tracking) — ดู T-15/T-16/T-22/T-60; status sync 2026-08-31 — T-16 🔄 → ✅ (R-16.1–16.7 implement + merge เข้า develop แล้ว: `76067e64`, `ad5e8d59`, `beee62de`) — เป็นการ sync สถานะตามของจริง **ไม่แตะ scope/estimate/deadline/gate** จึงบันทึกเป็น decision sync note ไม่ใช่ CR; ถ้าเจ้าของโครงการต้องการให้เป็น CR แจ้งได้; reference fix 2026-08-31 — เลข CR ในเอกสารนี้เคยเขียน "CR-048" ทั้งที่หมายถึง CR-052 (Design V8) แก้แล้วทั้งฉบับ (CR-048 ตัวจริง = referral draft→cancel); CR-174 (2026-10-21) — ประเมินใบบริจาคทีละรายการ: แทนข้อ "CR-052 (Task #52)" และตัดข้อ "CR-052 Cold-chain" (FR-14) — สองข้อนี้อยู่ใน DoD ของ T-15 (CR-174 `affects` อ้างเป็น T-16)
+note: draft CR central-warehouse-m6 (2026-11-12, implemented on `feat/m6-central-warehouse`, CR number pending) — T-16 DoD: รับของจากคลังกลางผ่าน donation `channel: m6` (worker สร้าง, ไม่ expire, ปฏิเสธ / ส่งต่อไม่ได้ D19, ปิดใบไม่ได้รับของ D20); decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§F, 2026-06-22) เพิ่ม public `/donate` wizard (T-60); CR-047 (2026-07-24) atomic quota counter; CR-052 (2026-07-27) V8 realignment (UI split, Task #52 pending review, public tracking) — ดู T-15/T-16/T-22/T-60; status sync 2026-08-31 — T-16 🔄 → ✅ (R-16.1–16.7 implement + merge เข้า develop แล้ว: `76067e64`, `ad5e8d59`, `beee62de`) — เป็นการ sync สถานะตามของจริง **ไม่แตะ scope/estimate/deadline/gate** จึงบันทึกเป็น decision sync note ไม่ใช่ CR; ถ้าเจ้าของโครงการต้องการให้เป็น CR แจ้งได้; reference fix 2026-08-31 — เลข CR ในเอกสารนี้เคยเขียน "CR-048" ทั้งที่หมายถึง CR-052 (Design V8) แก้แล้วทั้งฉบับ (CR-048 ตัวจริง = referral draft→cancel); CR-174 (2026-10-21) — ประเมินใบบริจาคทีละรายการ: แทนข้อ "CR-052 (Task #52)" และตัดข้อ "CR-052 Cold-chain" (FR-14) — สองข้อนี้อยู่ใน DoD ของ T-15 (CR-174 `affects` อ้างเป็น T-16)
 ---
 
 # Donation
@@ -64,6 +64,10 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - **CR-052 Validation Alert:** แสดงข้อความแจ้งเตือนระบุสาเหตุชัดเจนเมื่ออนุมัติไม่ผ่านเงื่อนไขใน `PendingReviewDialog` (`POST /api/back-office/donations/approve`)
 - **CR-052 ScanStation Search-select:** เพิ่มช่องเลือกรายการบริจาคทดแทนการสแกน QR ใน `ScanStation` (`scan-station.svelte` / `GET /api/back-office/donations/search`)
 - **CR-052 Redirect Transfer Ticket:** เมื่อกดส่งต่อ ต้องไม่สร้าง Lot/Ledger ที่ศูนย์ปัจจุบัน แต่เปิด `RedirectModal` สร้าง Transfer Ticket (`POST /api/back-office/tickets`) พร้อมเปลี่ยนสถานะรายการเป็น `redirected`
+- **รับของจากคลังกลาง M6 ([draft CR central-warehouse-m6](../changes/draft-central-warehouse-m6-withdrawal.md)):** sync worker สร้าง donation `channel: m6` (`status: verifying`) เมื่อใบเบิก M6 เป็น `in_transit` · รับด้วย flow เดิม (สแกน, รับทีละจุด, รับไม่ครบ) · ไม่ expire · รายการและหน้า scan แสดงที่มา "คลังกลาง M6 · {คลัง}" และสถานะยืนยันกับ M6
+  - ปฏิเสธ / ส่งต่อ / ไม่รับทุกบรรทัดไม่ได้ (`422 M6_NOT_REFUSABLE`, D19)
+  - ไม่ได้รับของเลย → "ปิดใบ — ไม่ได้รับของ" = `received` + `received_summary.nothing_received` (D20)
+  - รับแล้ว worker ยืนยันกลับ M6 (RES-007) เอง
 - Test + demo รับบริจาคครบทั้งสอง path
 
 ### T-21 — Donation reservation (FR-35)

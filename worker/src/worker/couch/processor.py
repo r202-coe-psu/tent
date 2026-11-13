@@ -171,6 +171,9 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     await apply_donation("delete", {"_id": doc_id})
                     # Declared qty left the board — recompute remaining needs.
                     await _reproject_needs(couch, shelter_code)
+                elif doc_id.startswith("donation_campaign:"):
+                    # The campaign's open needs leave the public board with it.
+                    await _reproject_needs(couch, shelter_code)
                 elif doc_id.startswith("job:"):
                     await apply_job("delete", {"_id": doc_id})
                 elif doc_id.startswith("job_application:"):

@@ -81,6 +81,35 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      # M5 referral sync tick (draft CR — referral M5 §1): worker → FastAPI only.
+      FASTAPI_INTERNAL_URL: http://fastapi:9000
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
+      M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
+      M6_SYNC_INTERVAL_S: ${M6_SYNC_INTERVAL_S:-45}
+      # Print housekeeping task (CR-222 FR-17) — dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the
+      # PRINT_HOUSEKEEPING_TOKEN in frontend/.env. Not PRINT_HOUSEKEEPING_TOKEN: the root .env
+      # carries a staging placeholder that would switch the task on against a token-less pnpm dev.
+      PRINT_HOUSEKEEPING_URL: ${PRINT_HOUSEKEEPING_URL:-http://host.docker.internal:5173}
+      PRINT_HOUSEKEEPING_TOKEN: ${DEV_PRINT_HOUSEKEEPING_TOKEN:-}
+      PRINT_HOUSEKEEPING_INTERVAL_MS: ${PRINT_HOUSEKEEPING_INTERVAL_MS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  edge-users-copy:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    container_name: edge-users-copy
+    command: ["uv", "run", "--project", "worker", "edge-users-copy"]
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+    mem_limit: 256m
     restart: unless-stopped
 
   fastapi:
@@ -98,6 +127,12 @@ services:
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
+      M5_BASE_URL: ${M5_BASE_URL:-}
+      M5_CLIENT_ID: ${M5_CLIENT_ID:-}
+      M5_CLIENT_SECRET: ${M5_CLIENT_SECRET:-}
+      M6_BASE_URL: ${M6_BASE_URL:-}
+      M6_CLIENT_ID: ${M6_CLIENT_ID:-}
+      M6_CLIENT_SECRET: ${M6_CLIENT_SECRET:-}
       THIRDPARTY_JWT_SIGNING_KEY: ${THIRDPARTY_JWT_SIGNING_KEY:-dev-thirdparty-jwt-signing-key}
       THIRDPARTY_SECRET_SALT: ${THIRDPARTY_SECRET_SALT:-salt-change-this-on-prod}
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
@@ -120,24 +155,6 @@ services:
     command: ["pnpm", "import-worker"]
     healthcheck:
       disable: true
-    restart: unless-stopped
-
-  # Print server housekeeping (FR-17) — opt-in for dev: `docker compose --profile printing up -d`
-  print-housekeeping:
-    image: tent/frontend:local
-    profiles: ["printing"]
-    environment:
-      PRINT_HOUSEKEEPING_URL: ${PRINT_HOUSEKEEPING_URL:-http://host.docker.internal:5173}
-      PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:-}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["pnpm", "print-housekeeping"]
-    healthcheck:
-      test: ["CMD", "node", "-e", "const t=Number(require('fs').readFileSync('/tmp/print-housekeeping.ok','utf8'));process.exit(Date.now()-t<=120000?0:1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 2
-      start_period: 60s
     restart: unless-stopped
 
 networks:

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { shelterCodeSchema } from '$lib/db/model';
 import {
 	DEFAULT_KIOSK_SCREEN_TYPE,
-	kioskScreenTypeSchema,
+	kioskDeviceScreenTypeSchema,
 	screenTypeOf
 } from '$lib/features/shared/domain/kiosk-screen';
 
@@ -33,7 +33,7 @@ export const scannerDeviceInputSchema = z
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').default('จุดคัดกรองทั่วไป'),
 		status: deviceStatusSchema.default('active'),
 		/** Which kiosk screen the device drives; picks which banners it is fed. */
-		screen_type: kioskScreenTypeSchema.default(DEFAULT_KIOSK_SCREEN_TYPE)
+		screen_type: kioskDeviceScreenTypeSchema.default(DEFAULT_KIOSK_SCREEN_TYPE)
 	})
 	.strict();
 export type ScannerDeviceInput = z.infer<typeof scannerDeviceInputSchema>;
@@ -142,7 +142,7 @@ const scannerDevicePersistedBaseShape = {
 	/** Banner group the kiosk is fed from; absent or null = no group, no banners. */
 	banner_group_id: z.string().min(1).nullable().optional(),
 	/** Absent = `compact` (additive field, no `schema_v` bump). */
-	screen_type: kioskScreenTypeSchema.optional()
+	screen_type: kioskDeviceScreenTypeSchema.optional()
 };
 
 /** v1 document (before staff PIN). Read as "no PIN"; upgraded to v2 when a PIN is first set. */
@@ -215,7 +215,7 @@ export const scannerDeviceSummarySchema = z
 		/** Banner group the kiosk is fed from (stored absent = `null`: no group, no banners). */
 		banner_group_id: z.string().min(1).nullable(),
 		/** Which kiosk screen the device drives (stored absent = `compact`). */
-		screen_type: kioskScreenTypeSchema
+		screen_type: kioskDeviceScreenTypeSchema
 	})
 	.strict();
 
@@ -234,7 +234,7 @@ export const scannerDevicePatchSchema = z
 		name: scannerDeviceInputSchema.shape.name.optional(),
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').optional(),
 		status: deviceStatusSchema.optional(),
-		screen_type: kioskScreenTypeSchema.optional()
+		screen_type: kioskDeviceScreenTypeSchema.optional()
 	})
 	.strict()
 	.refine((value) => Object.keys(value).length > 0, { message: 'ไม่มีข้อมูลที่จะแก้ไข' });

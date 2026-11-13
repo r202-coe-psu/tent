@@ -1,7 +1,9 @@
 import {
+	isM6Donation,
 	maskDonorEmail,
 	maskDonorName,
 	maskDonorPhone,
+	toM6Summary,
 	type DonationRejectReasonCode,
 	type PublicDonationDoc,
 	type ScanDonationView
@@ -15,9 +17,12 @@ import {
  * `POST …/contact`, which writes an audit row (CR-214 FR-8b / FR-10a). The scan station turns
  * a received booking away anyway, so nothing there needs the full contact. Shared by the
  * receive route and the close route (CR-206 FR-MP-26) so both answer with the same shape.
+ *
+ * An `m6` donation has no donor to mask: `donor.name` is the source warehouse and the phone is null.
  */
 export function toScanView(d: PublicDonationDoc): ScanDonationView {
-	const masked = d.status === 'received';
+	const masked = d.status === 'received' && !isM6Donation(d);
+	const m6 = toM6Summary(d);
 	return {
 		// CR-174 FR-25 — the counter sends it back so a booking the donor changed while
 		// the boxes were being counted is refused instead of received as it was.
@@ -25,6 +30,8 @@ export function toScanView(d: PublicDonationDoc): ScanDonationView {
 		booking_ref: d.booking_ref,
 		shelter_code: d.shelter_code,
 		status: d.status,
+		channel: d.channel,
+		...(m6 ? { m6 } : {}),
 		donor: masked
 			? {
 					name: maskDonorName(d.donor?.name),

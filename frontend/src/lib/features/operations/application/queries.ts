@@ -53,7 +53,7 @@ export const operationsKeys = {
 	campaigns: () => [...operationsKeys.all, 'campaigns', getShelterCode()] as const,
 	stockLedgers: () => [...operationsKeys.all, 'stockLedgers', getShelterCode()] as const,
 	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
-	ledger: () => [...operationsKeys.all, 'ledger'] as const,
+	ledger: () => [...operationsKeys.all, 'ledger', getShelterCode()] as const,
 	donationLots: (donationId: string) =>
 		[...operationsKeys.all, 'donationLots', getShelterCode(), donationId] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
@@ -65,7 +65,8 @@ export const operationsKeys = {
 	/** `scope` = a shelter code, or `'all'` for the system_admin all-shelters view. */
 	incomingStock: (scope: string = getShelterCode()) =>
 		[...operationsKeys.all, 'incomingStock', scope] as const,
-	transfers: () => [...operationsKeys.all, 'transfers'] as const,
+	transfers: () => [...operationsKeys.all, 'transfers', getShelterCode()] as const,
+	transfersFiltered: (filter: TransferFilter) => [...operationsKeys.transfers(), filter] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const,
 	transferDestinations: () =>
 		[...operationsKeys.all, 'transferDestinations', getShelterCode()] as const
@@ -475,7 +476,7 @@ export const useTransferDestinations = () =>
  */
 export const useTransfers = (filter?: TransferFilter) =>
 	createQuery(() => ({
-		queryKey: operationsKeys.transfers(),
+		queryKey: filter ? operationsKeys.transfersFiltered(filter) : operationsKeys.transfers(),
 		queryFn: () => operationsRepository().listTransfers(filter),
 		retry: retryUnlessForbidden
 	}));

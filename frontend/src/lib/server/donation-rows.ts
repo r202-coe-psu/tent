@@ -1,5 +1,11 @@
 import type { PendingDonationRow, PublicDonationDoc } from '$lib/features/donations/server';
-import { maskDonorEmail, maskDonorName, maskDonorPhone } from '$lib/features/donations/server';
+import {
+	isM6Donation,
+	maskDonorEmail,
+	maskDonorName,
+	maskDonorPhone,
+	toM6Summary
+} from '$lib/features/donations/server';
 
 /**
  * Rows of the back-office donation lists. Server-only; lives here rather than in a route
@@ -20,7 +26,10 @@ export function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 	const items = d.items ?? [];
 	const itemNotes = items.map((it) => it.note?.trim()).filter((n): n is string => Boolean(n));
 	const donorNote = itemNotes.length > 0 ? itemNotes.join('\n') : null;
-	const isUnsolicited = items.length === 0 || items.some((it) => !it.item_id);
+	// "Unsolicited" is about what a donor offered; an m6 delivery was requested by the shelter.
+	const isUnsolicited = !isM6Donation(d) && (items.length === 0 || items.some((it) => !it.item_id));
+
+	const m6 = toM6Summary(d);
 
 	return {
 		rev: d._rev,
@@ -28,6 +37,8 @@ export function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 		donation_id: d._id,
 		shelter_code: d.shelter_code,
 		status: d.status,
+		channel: d.channel,
+		...(m6 ? { m6 } : {}),
 		donor_name: d.donor?.name ?? '',
 		donor_phone: d.donor?.phone ?? null,
 		donor_email: d.donor?.email ?? null,
@@ -69,9 +80,13 @@ export function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
  * HERE, before it leaves the server — a mask applied on screen would still leave the full
  * name, number and email in the response for anyone with DevTools. The full values come one
  * donation at a time from `POST [query]/contact`, which writes an audit row.
+ *
+ * An `m6` row has no donor: its "name" is the source warehouse, public by nature, and masking
+ * it would only hide where the goods came from.
  */
 export function toReceivedRow(d: PublicDonationDoc): PendingDonationRow {
 	const row = toPendingRow(d);
+	if (isM6Donation(d)) return { ...row, ...receivedItemsOf(d) };
 	return {
 		...row,
 		donor_name: maskDonorName(d.donor?.name),
