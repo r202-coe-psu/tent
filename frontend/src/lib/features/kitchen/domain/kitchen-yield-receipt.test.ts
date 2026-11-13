@@ -7,6 +7,7 @@ import {
 	yieldReceiptInputSchema,
 	toYieldReceiptInput,
 	yieldTotal,
+	yieldTotalMismatch,
 	type YieldReceiptLine
 } from './kitchen-yield-receipt';
 
@@ -77,6 +78,23 @@ describe('yieldTotal', () => {
 
 	it('is zero for no lines', () => {
 		expect(yieldTotal([])).toBe('0');
+	});
+});
+
+describe('yieldTotalMismatch', () => {
+	const total = yieldTotal([line('a', '0.1'), line('b', '0.2')]);
+
+	it('does not flag decimal lines that add up to the recorded yield', () => {
+		expect(yieldTotalMismatch(total, '0.3')).toBe(false);
+	});
+
+	it('flags lines that do not add up to the recorded yield', () => {
+		expect(yieldTotalMismatch(total, '0.4')).toBe(true);
+		expect(yieldTotalMismatch('80', 79)).toBe(true);
+	});
+
+	it.each([undefined, ''])('never flags when no yield was recorded (%o)', (expected) => {
+		expect(yieldTotalMismatch(total, expected)).toBe(false);
 	});
 });
 
