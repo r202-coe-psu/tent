@@ -92,6 +92,11 @@ export {
 	useVulnerableGroupLabelMap
 } from './application/queries';
 export type { MasterLabelOption } from './domain/master-labels';
+export {
+	publicZoneOccupancy,
+	type PublicZoneOccupancy,
+	type PublicZoneOccupancyLevel
+} from './domain/zone-occupancy';
 
 export {
 	publicConfigBodySchema,

@@ -5469,10 +5469,22 @@
 			},
 			"ShelterZoneDetail": {
 				"properties": {
+					"code": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Code" },
 					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
 					"type": { "type": "string", "title": "Type" },
+					"status": {
+						"type": "string",
+						"enum": ["active", "closed"],
+						"title": "Status",
+						"default": "active"
+					},
 					"capacity": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Capacity" },
-					"area_m2": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Area M2" }
+					"area_m2": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Area M2" },
+					"present": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Present",
+						"description": "Present headcount in this zone (active + room_confirmed + temporary_leave); null until the worker has projected per-zone counts (#1241)"
+					}
 				},
 				"type": "object",
 				"required": ["type"],

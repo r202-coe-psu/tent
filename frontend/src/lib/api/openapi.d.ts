@@ -3508,14 +3508,27 @@ export interface components {
 		};
 		/** ShelterZoneDetail */
 		ShelterZoneDetail: {
+			/** Code */
+			code?: string | null;
 			/** Name */
 			name?: string | null;
 			/** Type */
 			type: string;
+			/**
+			 * Status
+			 * @default active
+			 * @enum {string}
+			 */
+			status: 'active' | 'closed';
 			/** Capacity */
 			capacity?: number | null;
 			/** Area M2 */
 			area_m2?: number | null;
+			/**
+			 * Present
+			 * @description Present headcount in this zone (active + room_confirmed + temporary_leave); null until the worker has projected per-zone counts (#1241)
+			 */
+			present?: number | null;
 		};
 		/**
 		 * SlotHold
