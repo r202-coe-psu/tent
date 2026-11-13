@@ -2329,6 +2329,66 @@ export interface components {
 			/** Zone Name */
 			zone_name?: string | null;
 		};
+		/** ExternalShelterDetail */
+		ExternalShelterDetail: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/**
+			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
+			 * @default evacuation_center
+			 */
+			site_kind: string;
+			/** Status */
+			status: string;
+			/** Admin Type */
+			admin_type: string;
+			/** Address */
+			address: string;
+			capacity: components['schemas']['ShelterCapacityDetail'];
+			/**
+			 * Occupancy
+			 * @description Forecast Occupancy headcount
+			 */
+			occupancy: number;
+			/**
+			 * Present
+			 * @description Present Occupancy headcount
+			 */
+			present: number;
+			/**
+			 * In Zone
+			 * @description In-zone Occupancy headcount (room_confirmed)
+			 */
+			in_zone: number;
+			/** Occupancy Rate */
+			occupancy_rate: number;
+			/** Building Status */
+			building_status: string;
+			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
+			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
+			travel: components['schemas']['ShelterTravelDetail'];
+			facilities: components['schemas']['ShelterFacilitiesDetail'];
+			/** Zones */
+			zones?: components['schemas']['ExternalShelterZoneDetail'][] | null;
+			contact: components['schemas']['ShelterContactDetail'];
+			/** Faq */
+			faq: components['schemas']['ShelterFaqDetail'][];
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
+		};
+		/** ExternalShelterDetailResponse */
+		ExternalShelterDetailResponse: {
+			shelter: components['schemas']['ExternalShelterDetail'];
+		};
 		/** ExternalShelterNeedsResponse */
 		ExternalShelterNeedsResponse: {
 			/** Code */
@@ -2337,6 +2397,21 @@ export interface components {
 			name: string;
 			/** Needs */
 			needs: components['schemas']['ExternalNeedItemResponse'][];
+		};
+		/**
+		 * ExternalShelterZoneDetail
+		 * @description Partner zone shape: without the per-zone `code` / `status` / `present` the public
+		 *     detail gained in CR-254 — the partner API stays as it was (CR-254 D3).
+		 */
+		ExternalShelterZoneDetail: {
+			/** Name */
+			name?: string | null;
+			/** Type */
+			type: string;
+			/** Capacity */
+			capacity?: number | null;
+			/** Area M2 */
+			area_m2?: number | null;
 		};
 		/** FamilyMember */
 		FamilyMember: {
@@ -4273,14 +4348,27 @@ export interface components {
 		};
 		/** ShelterZoneDetail */
 		ShelterZoneDetail: {
+			/** Code */
+			code?: string | null;
 			/** Name */
 			name?: string | null;
 			/** Type */
 			type: string;
+			/**
+			 * Status
+			 * @default active
+			 * @enum {string}
+			 */
+			status: 'active' | 'closed';
 			/** Capacity */
 			capacity?: number | null;
 			/** Area M2 */
 			area_m2?: number | null;
+			/**
+			 * Present
+			 * @description Present headcount in this zone (active + room_confirmed + temporary_leave); null until the worker has projected per-zone counts (#1241)
+			 */
+			present?: number | null;
 		};
 		/**
 		 * SlotHold
@@ -5896,7 +5984,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['ShelterDetailResponse'];
+					'application/json': components['schemas']['ExternalShelterDetailResponse'];
 				};
 			};
 			/** @description Validation Error */

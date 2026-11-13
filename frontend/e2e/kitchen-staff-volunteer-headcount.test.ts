@@ -128,7 +128,7 @@ async function openKitchen(browser: Browser, viewport?: { width: number; height:
 	await routeBrowserCouchThroughApp(page);
 	await injectSession(page, KITCHEN, session);
 	await page.goto('/back-office/kitchen');
-	await expect(page.getByRole('heading', { name: 'หน้าสรุปมื้อ' })).toBeVisible({
+	await expect(page.getByRole('heading', { name: 'รายการมื้ออาหาร' })).toBeVisible({
 		timeout: 15_000
 	});
 	return page;

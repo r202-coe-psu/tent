@@ -8,7 +8,7 @@ import {
 	SM_SH002_ROLES
 } from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
-import { CAN_WRITE } from './helpers/e2e-env';
+import { appBaseUrl, CAN_WRITE } from './helpers/e2e-env';
 import {
 	MOCK_DEST,
 	MOCK_SHELTER,
@@ -1230,6 +1230,69 @@ test.describe(
 			await expect(page.getByText(/เลือกแล้ว\s*0\s*คน/)).toBeVisible();
 			await row.getByRole('checkbox').click();
 			await expect(page.getByText(/เลือกแล้ว\s*1\s*คน/)).toBeVisible();
+		});
+	}
+);
+
+test.describe(
+	'Referrals — destination intake switched off (#1343)',
+	{ tag: ['@regression', '@back-office'] },
+	() => {
+		test.afterEach(async ({ page }) => {
+			await clearSession(page);
+		});
+
+		test('a shelter with accepts_referrals false is missing from the destination picker', async ({
+			page
+		}) => {
+			await signInMocked(page, newReferralStore(), MOCK_SHELTER, []);
+			// Registered after signInMocked, so it answers the registry read first; the
+			// session and every other CouchDB read still fall through to the helper's mocks.
+			const appBase = appBaseUrl();
+			await page.route('**/registry/_all_docs*', async (route) => {
+				if (route.request().method() !== 'GET') return route.fallback();
+				const docs = [
+					{ code: MOCK_SHELTER, name: 'Mock shelter SH001' },
+					{
+						code: MOCK_DEST,
+						name: 'Mock shelter SH002',
+						feature_flags: { accepts_referrals: false }
+					},
+					{ code: 'SH003', name: 'Mock shelter SH003', feature_flags: { accepts_referrals: true } }
+				].map(({ code, ...rest }) => ({
+					_id: `shelter:${code}`,
+					_rev: '1-mock',
+					type: 'shelter',
+					schema_v: 4,
+					code,
+					operation_status: 'open',
+					...rest
+				}));
+				return route.fulfill({
+					headers: {
+						'access-control-allow-origin': appBase,
+						'access-control-allow-credentials': 'true'
+					},
+					json: {
+						total_rows: docs.length,
+						offset: 0,
+						rows: docs.map((doc) => ({
+							id: doc._id,
+							key: doc._id,
+							value: { rev: '1-mock' },
+							doc
+						}))
+					}
+				});
+			});
+
+			await page.goto('/back-office/referrals');
+			await page.getByRole('link', { name: /สร้างรายการส่งต่อ/ }).click();
+			await page.getByRole('button', { name: /ย้ายศูนย์พักพิง/ }).click();
+			await page.getByPlaceholder('เลือกศูนย์พักพิงปลายทาง...').click();
+
+			await expect(page.getByRole('option', { name: /SH003/ })).toBeVisible();
+			await expect(page.getByRole('option', { name: /SH002/ })).toHaveCount(0);
 		});
 	}
 );

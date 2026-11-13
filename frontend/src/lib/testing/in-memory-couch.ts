@@ -154,14 +154,24 @@ export function createInMemoryCouch() {
 				return projected as T;
 			});
 		},
-		// Equality-only selectors; `limit` defaults to 25 and `bookmark` is the next row offset, like
-		// CouchDB (docs are served in `_id` order, as an index on [type, field] would).
+		// Selector values are equality operands or `{ $gte, $lt }` string ranges; `limit` defaults to
+		// 25 and `bookmark` is the next row offset, like CouchDB (docs are served in `_id` order, as
+		// an index on [type, field] would). Every query is recorded in `findQueries`.
 		findDocsPage: async <T>(
-			_dbName: string,
+			dbName: string,
 			query: { selector: Record<string, unknown>; limit?: number; bookmark?: string }
 		): Promise<{ docs: T[]; bookmark: string | null }> => {
+			findQueries.push({ dbName, ...clone(query) });
+			const inRange = (actual: unknown, range: { $gte?: string; $lt?: string }) =>
+				typeof actual === 'string' &&
+				(range.$gte === undefined || actual >= range.$gte) &&
+				(range.$lt === undefined || actual < range.$lt);
 			const matches = [...store.values()]
-				.filter((doc) => Object.entries(query.selector).every(([k, v]) => doc[k] === v))
+				.filter((doc) =>
+					Object.entries(query.selector).every(([k, v]) =>
+						v && typeof v === 'object' ? inRange(doc[k], v as { $gte?: string }) : doc[k] === v
+					)
+				)
 				.sort((a, b) => (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
 			const offset = query.bookmark ? Number(query.bookmark) : 0;
 			const docs = matches.slice(offset, offset + (query.limit ?? 25)).map((d) => clone(d) as T);

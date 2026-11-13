@@ -450,6 +450,8 @@ export interface SeedRecipientOptions {
 	/** Thai Buddhist birth year — sets the recipient's CR-130 age bucket for menu matching. */
 	birthYear?: number;
 	phone?: string;
+	/** ISO instant the stay began; default now. Set it before today's 00:00 to be present all day. */
+	staySince?: string;
 	/** Seeds a `medical` doc with these allergies (`allergy` codes or free text, #607). */
 	allergies?: string[];
 }
@@ -482,7 +484,7 @@ export async function seedRecipient(
 		vulnerable_groups: [],
 		special_needs: [],
 		household_id: null,
-		current_stay: { status: 'active', zone: 'A', since: now },
+		current_stay: { status: 'active', zone: 'A', since: options.staySince ?? now },
 		privacy: { search_excluded: false },
 		registered_via: 'staff'
 	});
@@ -669,6 +671,10 @@ export async function seedDistributionLog(
 		qty?: string;
 		meal?: MealPeriod;
 		returnable?: boolean;
+		/** ISO instant of the handover, UTC (`…Z`) like real logs: the day query compares strings. Default now. */
+		distributedAt?: string;
+		/** Who handed it over (a username or phone); default the scenario user. */
+		distributedBy?: string;
 	}
 ): Promise<string> {
 	const logId = `distribution_log:${ulid()}`;
@@ -691,8 +697,8 @@ export async function seedDistributionLog(
 		is_returnable: returnable,
 		status: returnable ? 'active' : 'fulfilled',
 		is_override: false,
-		distributed_at: now,
-		distributed_by: scenario.user.name
+		distributed_at: options.distributedAt ?? now,
+		distributed_by: options.distributedBy ?? scenario.user.name
 	});
 	return logId;
 }
