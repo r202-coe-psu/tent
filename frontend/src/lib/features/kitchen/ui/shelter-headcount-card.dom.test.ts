@@ -21,34 +21,39 @@ afterEach(() => {
 	document.body.innerHTML = '';
 });
 
+const PEOPLE = { evacuees: 120, staff: 6, volunteers: 4 };
+const HEADCOUNT = { halal: 35, infant: 8, soft_food: 12, regular: 77, volunteer: 10, total: 130 };
+
 describe('ShelterHeadcountCard', () => {
-	it('shows four group cards with their headline counts', () => {
-		render({
-			people: { evacuees: 120, staff: 6, volunteers: 4 },
-			headcount: { halal: 35, infant: 8, soft_food: 12, regular: 77, volunteer: 10, total: 130 }
-		});
+	it('shows four group cards with their headcounts', () => {
+		render({ people: PEOPLE, headcount: HEADCOUNT });
 		expect(value('total')).toBe('130');
 		expect(value('evacuees')).toBe('120');
 		expect(value('staff')).toBe('6');
 		expect(value('volunteers')).toBe('4');
 	});
 
-	it('details halal, soft food and infant for evacuees and the total, halal only for staff and volunteers', () => {
-		render({
-			people: { evacuees: 120, staff: 6, volunteers: 4 },
-			headcount: { halal: 35, infant: 8, soft_food: 12, regular: 77, volunteer: 10, total: 130 }
-		});
-		expect(value('total-halal')).toBe('35');
-		expect(value('total-soft_food')).toBe('12');
-		expect(value('total-infant')).toBe('8');
-		expect(value('evacuees-halal')).toBe('35');
-		expect(value('evacuees-soft_food')).toBe('12');
-		expect(value('evacuees-infant')).toBe('8');
-		expect(value('staff-halal')).toBe('ไม่มีข้อมูล');
-		expect(value('volunteers-halal')).toBe('ไม่มีข้อมูล');
-		expect(
-			document.querySelector('[data-testid="kitchen-headcount-staff-infant-value"]')
-		).toBeNull();
+	it('shows the three special-diet groups open by default', () => {
+		render({ people: PEOPLE, headcount: HEADCOUNT });
+		expect(value('halal')).toBe('35');
+		expect(value('soft_food')).toBe('12');
+		expect(value('infant')).toBe('8');
+		expect(document.body.textContent).toContain('นับซ้อนกันได้');
+	});
+
+	it('collapses and reopens the special-diet section', () => {
+		render({ people: PEOPLE, headcount: HEADCOUNT });
+		const toggle = document.querySelector<HTMLButtonElement>(
+			'[aria-controls="kitchen-headcount-diets"]'
+		)!;
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		toggle.click();
+		flushSync();
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		expect(value('halal')).toBe('');
+		toggle.click();
+		flushSync();
+		expect(value('halal')).toBe('35');
 	});
 
 	it('shows a dash for every count while loading', () => {
@@ -58,12 +63,9 @@ describe('ShelterHeadcountCard', () => {
 			'evacuees',
 			'staff',
 			'volunteers',
-			'total-halal',
-			'total-soft_food',
-			'total-infant',
-			'evacuees-halal',
-			'evacuees-soft_food',
-			'evacuees-infant'
+			'halal',
+			'soft_food',
+			'infant'
 		]) {
 			expect(value(key)).toBe('–');
 		}
@@ -74,7 +76,7 @@ describe('ShelterHeadcountCard', () => {
 			people: { evacuees: 0, staff: 0, volunteers: 0 },
 			headcount: { halal: 0, infant: 0, soft_food: 0, regular: 0, volunteer: 0, total: 0 }
 		});
-		expect(value('evacuees-halal')).toBe('0');
+		expect(value('halal')).toBe('0');
 		expect(value('total')).toBe('0');
 	});
 });
