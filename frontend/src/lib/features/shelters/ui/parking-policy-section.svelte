@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Car from '@lucide/svelte/icons/car';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
+	import { effectiveParkingVehicles } from '../domain/schema';
 	import type { Shelter, VehicleType, ParkingRule } from '../domain/schema';
 	import { parkingRuleLabels } from '../domain/policy-labels';
 	import { applyParkingAvailability } from '../domain/feature-flag-policy-sync';
@@ -43,25 +44,6 @@
 		$formData.parking_policy = next.parking_policy;
 	}
 
-	function vehicleEntry(type: VehicleType) {
-		return $formData.parking_policy?.supported_vehicles?.find((v) => v.type === type);
-	}
-
-	function toggleVehicle(type: VehicleType, checked: boolean) {
-		ensurePolicy();
-		const cur = $formData.parking_policy!.supported_vehicles ?? [];
-		$formData.parking_policy!.supported_vehicles = checked
-			? [...cur, { type, max_capacity: null }]
-			: cur.filter((v) => v.type !== type);
-	}
-
-	function setVehicleCapacity(type: VehicleType, raw: string) {
-		ensurePolicy();
-		$formData.parking_policy!.supported_vehicles = (
-			$formData.parking_policy!.supported_vehicles ?? []
-		).map((v) => (v.type === type ? { ...v, max_capacity: raw === '' ? null : Number(raw) } : v));
-	}
-
 	function toggleRule(rule: ParkingRule, checked: boolean) {
 		ensurePolicy();
 		const cur = $formData.parking_policy!.rules ?? [];
@@ -71,6 +53,7 @@
 	}
 
 	const availability = $derived($formData.parking_policy?.availability ?? null);
+	const effectiveVehicles = $derived(effectiveParkingVehicles($formData));
 </script>
 
 <section
@@ -132,37 +115,24 @@
 			<h3 class="text-sm font-bold text-slate-800">
 				2. ประเภทรถที่รองรับและจำนวน (Supported Vehicles &amp; Capacity)
 			</h3>
-			<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
-				{#each vehicleTypes as vt (vt.value)}
-					{@const entry = vehicleEntry(vt.value)}
-					<div class="space-y-2">
-						<label
-							class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800"
-						>
-							<Checkbox
-								checked={!!entry}
-								onCheckedChange={(v) => toggleVehicle(vt.value, v === true)}
-								{disabled}
-							/>
-							<span>{vt.label}</span>
-						</label>
-						{#if entry}
-							<div class="flex items-center gap-2 pl-7 text-sm">
-								<span class="text-slate-500">รองรับสูงสุด:</span>
-								<Input
-									type="number"
-									min="0"
-									value={entry.max_capacity ?? ''}
-									oninput={(e) => setVehicleCapacity(vt.value, e.currentTarget.value)}
-									{disabled}
-									class="w-28 bg-white"
-									placeholder="0"
-								/>
-								<span class="text-slate-500">{vt.unit}</span>
-							</div>
-						{/if}
+			<div
+				class="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs"
+				data-testid="effective-vehicles"
+			>
+				{#each effectiveVehicles as v (v.type)}
+					{@const vt = vehicleTypes.find((t) => t.value === v.type)}
+					<div class="flex items-center justify-between text-sm text-slate-800">
+						<span>{vt?.label ?? v.type}</span>
+						<span class="font-semibold">
+							{v.max_capacity === null ? 'ไม่ระบุจำนวน' : `${v.max_capacity} ${vt?.unit ?? ''}`}
+						</span>
 					</div>
+				{:else}
+					<p class="text-sm text-muted-foreground">ยังไม่ได้ระบุประเภทรถ</p>
 				{/each}
+				<p class="pt-1 text-xs text-muted-foreground">
+					ค่านี้แก้ได้ที่ส่วนที่ 10 "จุดจอดรถ" (ศูนย์ที่ยังไม่ระบุรถรายจุดแสดงค่าเดิม)
+				</p>
 			</div>
 		</div>
 
