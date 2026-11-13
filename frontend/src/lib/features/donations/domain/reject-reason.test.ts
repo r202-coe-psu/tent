@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+	applyRejectNotePreset,
 	combineLineRejectReasons,
 	DONATION_REJECT_REASON_SELECTABLE_CODES,
 	donationRejectReasonCodeSchema,
 	donorRejectMessage,
 	rejectDonationInputSchema,
-	REJECT_REASON_MAX
+	REJECT_NOTE_MAX,
+	REJECT_NOTE_PRESETS,
+	REJECT_REASON_MAX,
+	rejectNotePresetsFor
 } from './reject-reason';
 
 describe('donorRejectMessage (CR-172)', () => {
@@ -115,5 +119,55 @@ describe('combineLineRejectReasons (FR-12)', () => {
 			reject_reason: '',
 			reject_reason_code: 'other'
 		});
+	});
+});
+
+describe('reject note presets (#1256)', () => {
+	const ids = (code: Parameters<typeof rejectNotePresetsFor>[0]) =>
+		rejectNotePresetsFor(code).map((p) => p.id);
+
+	it('offers the thanks note and the forward note for over_need', () => {
+		expect(ids('over_need')).toEqual(['thanks', 'forward']);
+	});
+
+	it('offers the not-eligible forward note for not_eligible', () => {
+		expect(ids('not_eligible')).toEqual(['thanks', 'not_eligible_forward']);
+	});
+
+	it('offers the safety note for expired and damaged', () => {
+		expect(ids('expired')).toEqual(['thanks', 'safety']);
+		expect(ids('damaged')).toEqual(['thanks', 'safety']);
+	});
+
+	it('offers nothing for "other", nor before a reason is picked, nor for legacy not_needed', () => {
+		expect(ids('other')).toEqual([]);
+		expect(rejectNotePresetsFor(undefined)).toEqual([]);
+		expect(ids('not_needed')).toEqual([]);
+	});
+
+	it('keeps every preset inside the note limit and free of personal data prompts', () => {
+		for (const preset of Object.values(REJECT_NOTE_PRESETS)) {
+			expect(preset.text.length).toBeGreaterThan(0);
+			expect(preset.text.length).toBeLessThan(REJECT_NOTE_MAX);
+		}
+	});
+
+	it('fills an empty note with the preset text', () => {
+		expect(applyRejectNotePreset('', 'ขอบคุณ')).toBe('ขอบคุณ');
+		expect(applyRejectNotePreset('   ', 'ขอบคุณ')).toBe('ขอบคุณ');
+	});
+
+	it('appends after what staff already wrote, never overwriting it', () => {
+		expect(applyRejectNotePreset('นมกล่องหมดอายุ 2 กล่อง', 'ขอบคุณ')).toBe(
+			'นมกล่องหมดอายุ 2 กล่อง ขอบคุณ'
+		);
+	});
+
+	it('leaves the note as is when the preset is already in it', () => {
+		expect(applyRejectNotePreset('ขอบคุณ', 'ขอบคุณ')).toBe('ขอบคุณ');
+	});
+
+	it('returns null when the result would pass the note limit', () => {
+		expect(applyRejectNotePreset('ก'.repeat(REJECT_NOTE_MAX - 3), 'ขอบคุณ')).toBeNull();
 	});
 });

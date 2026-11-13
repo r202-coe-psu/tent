@@ -6,7 +6,9 @@
 		DONATION_REJECT_REASON_SELECTABLE_CODES,
 		DONATION_REJECT_REASON_LABELS,
 		REJECT_NOTE_MAX,
+		applyRejectNotePreset,
 		donorRejectMessage,
+		rejectNotePresetsFor,
 		type DonationRejectReasonCode
 	} from '../domain/reject-reason';
 
@@ -31,6 +33,13 @@
 
 	const noteRequired = $derived(code === 'other');
 	const preview = $derived(code ? donorRejectMessage(code, note) : '');
+	const presets = $derived(rejectNotePresetsFor(code));
+
+	/** Appends to the detail; a chip that would overflow the limit is disabled, not truncated. */
+	function usePreset(text: string) {
+		const next = applyRejectNotePreset(note, text);
+		if (next !== null) note = next;
+	}
 </script>
 
 <div class="space-y-3">
@@ -70,6 +79,22 @@
 			placeholder="เช่น นมกล่องหมดอายุ 2 กล่อง"
 			class="text-xs"
 		/>
+		{#if presets.length > 0}
+			<div class="flex flex-wrap gap-2" role="group" aria-label="ข้อความสำเร็จรูป">
+				{#each presets as preset (preset.id)}
+					<button
+						type="button"
+						data-testid="{idPrefix}-preset-{preset.id}"
+						title={preset.text}
+						disabled={disabled || applyRejectNotePreset(note, preset.text) === null}
+						onclick={() => usePreset(preset.text)}
+						class="min-h-9 cursor-pointer rounded-full border border-border bg-background px-3 text-2xs font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						+ {preset.label}
+					</button>
+				{/each}
+			</div>
+		{/if}
 		<p class="text-2xs text-amber-700 dark:text-amber-300">
 			ผู้บริจาคจะเห็นข้อความนี้บนหน้าติดตาม — ห้ามใส่ชื่อ เบอร์โทร หรือข้อมูลส่วนตัว
 		</p>

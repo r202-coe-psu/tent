@@ -72,6 +72,70 @@ export type RejectDonationInput = z.infer<typeof rejectDonationInputSchema>;
 
 export const rejectNoteSchema = noteSchema;
 
+/**
+ * Ready-made sentences staff can drop into the detail box (#1256). The donor reads the detail
+ * on the tracking page, so none of them names a person, a phone number or a shelter. `codes`
+ * is where a preset is offered; "other" gets none — it has no reason of its own to soften.
+ */
+export type RejectNotePreset = {
+	id: string;
+	/** The chip's caption. */
+	label: string;
+	/** What lands in the detail box. */
+	text: string;
+	codes: readonly DonationRejectReasonCode[];
+};
+
+const PRESET_REASON_CODES = ['not_eligible', 'over_need', 'expired', 'damaged'] as const;
+
+export const REJECT_NOTE_PRESETS = {
+	thanks: {
+		id: 'thanks',
+		label: 'ขอบคุณ',
+		text: 'ขอบคุณสำหรับน้ำใจที่ตั้งใจบริจาคให้ศูนย์',
+		codes: PRESET_REASON_CODES
+	},
+	forward: {
+		id: 'forward',
+		label: 'ส่งต่อศูนย์อื่น',
+		text: 'ขณะนี้ศูนย์มีของนี้เพียงพอแล้ว แต่ศูนย์อื่นยังต้องการอยู่ รบกวนส่งต่อไปยังศูนย์อื่นที่ยังขาดแคลน',
+		codes: ['over_need']
+	},
+	not_eligible_forward: {
+		id: 'not_eligible_forward',
+		label: 'ส่งต่อศูนย์อื่น',
+		text: 'ของนี้ไม่ตรงเกณฑ์ที่ศูนย์รับได้ หากศูนย์อื่นรับของลักษณะนี้ รบกวนส่งต่อไปยังศูนย์นั้น',
+		codes: ['not_eligible']
+	},
+	safety: {
+		id: 'safety',
+		label: 'เพื่อความปลอดภัย',
+		text: 'เพื่อความปลอดภัยของผู้ใช้ ศูนย์ไม่สามารถรับของที่หมดอายุหรือชำรุดได้',
+		codes: ['expired', 'damaged']
+	}
+} as const satisfies Record<string, RejectNotePreset>;
+
+/** The presets offered for `code`, in display order; none until a reason is picked. */
+export function rejectNotePresetsFor(
+	code: DonationRejectReasonCode | undefined
+): RejectNotePreset[] {
+	if (!code) return [];
+	return Object.values(REJECT_NOTE_PRESETS).filter((preset) =>
+		(preset.codes as readonly DonationRejectReasonCode[]).includes(code)
+	);
+}
+
+/**
+ * Add `text` after what staff already wrote — never over it. Null when the result would pass
+ * {@link REJECT_NOTE_MAX}, so the caller can leave the box alone instead of cutting a sentence.
+ */
+export function applyRejectNotePreset(note: string, text: string): string | null {
+	const current = note.trim();
+	if (current.includes(text)) return current;
+	const next = current ? `${current} ${text}` : text;
+	return next.length > REJECT_NOTE_MAX ? null : next;
+}
+
 function truncate(text: string, max: number): string {
 	return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
