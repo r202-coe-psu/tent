@@ -1,7 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
-import { isShelterCancelled, type ShelterMaster } from '$lib/features/shelters/server';
+import {
+	effectiveParkingVehicles,
+	isShelterCancelled,
+	type ShelterMaster
+} from '$lib/features/shelters/server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
 import {
@@ -72,6 +76,7 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 
 	let shelters = await Promise.all(
 		masters.map(async (m) => {
+			const parkingTypes = new Set(effectiveParkingVehicles(m).map((v) => v.type));
 			let mappedStatus = 'CLOSED';
 			if (m.operation_status === 'active') mappedStatus = 'OPEN';
 			else if (m.operation_status === 'full_capacity') mappedStatus = 'FULL';
@@ -195,23 +200,9 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 						(m.admission_policy.pet_policy.categories || []).some(
 							(c: { category: string }) => c.category === 'livestock'
 						),
-					parking_car:
-						(m.parking_policy?.availability === 'available' &&
-							(m.parking_policy.supported_vehicles || []).some(
-								(v: { type: string }) => v.type === 'car'
-							)) ||
-						(m.common_areas?.parking_capacity ?? 0) > 0,
-					parking_motorcycle:
-						(m.parking_policy?.availability === 'available' &&
-							(m.parking_policy.supported_vehicles || []).some(
-								(v: { type: string }) => v.type === 'motorcycle'
-							)) ||
-						(m.common_areas?.parking_capacity ?? 0) > 0,
-					parking_boat:
-						m.parking_policy?.availability === 'available' &&
-						(m.parking_policy.supported_vehicles || []).some(
-							(v: { type: string }) => v.type === 'boat'
-						),
+					parking_car: parkingTypes.has('car'),
+					parking_motorcycle: parkingTypes.has('motorcycle'),
+					parking_boat: parkingTypes.has('boat'),
 					utility_wifi: m.utilities?.communications?.includes('wifi') ?? false,
 					utility_high_ground: (m.risk?.elevation_m ?? 0) > 5,
 					utility_truck_access: m.risk?.entrance_description != null
