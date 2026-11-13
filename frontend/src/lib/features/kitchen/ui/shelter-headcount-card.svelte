@@ -6,6 +6,7 @@
 	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import Baby from '@lucide/svelte/icons/baby';
+	import Soup from '@lucide/svelte/icons/soup';
 	import type { MealSessionHeadcount } from '../domain/kitchen';
 	import type { ShelterPeopleCounts } from '../domain/occupancy';
 
@@ -37,12 +38,19 @@
 		emphasis?: boolean;
 	}
 
-	const halal = (key: string, label: string, count: Count): DetailRow => ({
-		key,
-		label,
-		icon: Utensils,
-		count
-	});
+	const HALAL_LABEL = 'อาหารฮาลาล';
+
+	/** Same three special-diet groups, and labels, as the "สร้างมื้อใหม่" target form. */
+	const dietRows = (prefix: string): DetailRow[] => [
+		{ key: `${prefix}-halal`, label: HALAL_LABEL, icon: Utensils, count: headcount?.halal },
+		{
+			key: `${prefix}-soft_food`,
+			label: 'อาหารอ่อน/ผู้สูงอายุ',
+			icon: Soup,
+			count: headcount?.soft_food
+		},
+		{ key: `${prefix}-infant`, label: 'ทารก/เด็กอ่อน', icon: Baby, count: headcount?.infant }
+	];
 
 	const groups = $derived<GroupCard[]>([
 		{
@@ -50,17 +58,9 @@
 			label: 'รวมทั้งหมด',
 			icon: Users,
 			count: headcount?.total,
-			detailsTitle: 'อาหารพิเศษรวม (นับจากผู้พักพิง)',
+			detailsTitle: 'อาหารพิเศษรวม',
 			emphasis: true,
-			details: [
-				halal('total-halal', 'ฮาลาล (มุสลิม)', headcount?.halal),
-				{
-					key: 'total-infant',
-					label: 'เด็กเล็ก',
-					icon: Baby,
-					count: headcount?.infant
-				}
-			]
+			details: dietRows('total')
 		},
 		{
 			key: 'evacuees',
@@ -68,10 +68,7 @@
 			icon: ShieldCheck,
 			count: people?.evacuees,
 			detailsTitle: 'อาหารพิเศษ (ผู้พักพิง)',
-			details: [
-				halal('evacuees-halal', 'ฮาลาล (มุสลิม)', headcount?.halal),
-				{ key: 'evacuees-infant', label: 'เด็กเล็ก', icon: Baby, count: headcount?.infant }
-			]
+			details: dietRows('evacuees')
 		},
 		{
 			key: 'staff',
@@ -79,7 +76,7 @@
 			icon: UserCheck,
 			count: people?.staff,
 			detailsTitle: 'อาหารพิเศษ (เจ้าหน้าที่)',
-			details: [halal('staff-halal', 'ฮาลาล (มุสลิม)', null)]
+			details: [{ key: 'staff-halal', label: HALAL_LABEL, icon: Utensils, count: null }]
 		},
 		{
 			key: 'volunteers',
@@ -87,7 +84,7 @@
 			icon: HeartHandshake,
 			count: people?.volunteers,
 			detailsTitle: 'อาหารพิเศษ (อาสาสมัคร)',
-			details: [halal('volunteers-halal', 'ฮาลาล (มุสลิม)', null)]
+			details: [{ key: 'volunteers-halal', label: HALAL_LABEL, icon: Utensils, count: null }]
 		}
 	]);
 
@@ -116,16 +113,16 @@
 					<span class="text-sm font-medium text-slate-500">คน</span>
 				</div>
 				<div class="mt-auto space-y-2 border-t border-slate-200/80 pt-3">
-					<div class="flex justify-between text-xs font-semibold text-slate-500">
+					<div class="flex justify-between gap-2 text-xs font-semibold text-slate-500">
 						<span>{group.detailsTitle}</span>
 						<span>จำนวน</span>
 					</div>
 					{#each group.details as row (row.key)}
 						{@const RowIcon = row.icon}
 						<div
-							class="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2 text-sm"
+							class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2 text-sm"
 						>
-							<span class="flex items-center gap-2 text-slate-700">
+							<span class="flex items-center gap-2 whitespace-nowrap text-slate-700">
 								<RowIcon class="size-4 shrink-0 text-slate-500" aria-hidden="true" />
 								{row.label}
 							</span>

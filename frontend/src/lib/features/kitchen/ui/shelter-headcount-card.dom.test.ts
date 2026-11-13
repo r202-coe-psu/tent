@@ -33,21 +33,22 @@ describe('ShelterHeadcountCard', () => {
 		expect(value('volunteers')).toBe('4');
 	});
 
-	it('details halal and infant for evacuees and the total, halal only for staff and volunteers', () => {
+	it('details halal, soft food and infant for evacuees and the total, halal only for staff and volunteers', () => {
 		render({
 			people: { evacuees: 120, staff: 6, volunteers: 4 },
 			headcount: { halal: 35, infant: 8, soft_food: 12, regular: 77, volunteer: 10, total: 130 }
 		});
 		expect(value('total-halal')).toBe('35');
+		expect(value('total-soft_food')).toBe('12');
 		expect(value('total-infant')).toBe('8');
 		expect(value('evacuees-halal')).toBe('35');
+		expect(value('evacuees-soft_food')).toBe('12');
 		expect(value('evacuees-infant')).toBe('8');
 		expect(value('staff-halal')).toBe('ไม่มีข้อมูล');
 		expect(value('volunteers-halal')).toBe('ไม่มีข้อมูล');
 		expect(
 			document.querySelector('[data-testid="kitchen-headcount-staff-infant-value"]')
 		).toBeNull();
-		expect(document.body.textContent).not.toContain('อาหารอ่อน');
 	});
 
 	it('shows a dash for every count while loading', () => {
@@ -58,8 +59,10 @@ describe('ShelterHeadcountCard', () => {
 			'staff',
 			'volunteers',
 			'total-halal',
+			'total-soft_food',
 			'total-infant',
 			'evacuees-halal',
+			'evacuees-soft_food',
 			'evacuees-infant'
 		]) {
 			expect(value(key)).toBe('–');
