@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from scanner_client import winscard
 from scanner_client.config import Settings
-from scanner_client.main import default_env_path, main, run_app
+from scanner_client.main import card_reader_backend, default_env_path, main, run_app
 from scanner_client.reader_watch import CardReaderWatcher
 
 
@@ -474,3 +475,20 @@ def test_no_answer_ends_the_app_without_opening_the_shelter_or_the_reader(tmp_pa
     assert harness.playwright.page.gotos == []
     assert watcher_settings == []
     assert harness.playwright.chromium.context.closed
+
+
+def test_windows_reads_cards_through_winscard_not_pyscard():
+    # Smart App Control blocks pyscard's unsigned .pyd; winscard.dll is signed by Microsoft.
+    list_reader_names, open_reader = card_reader_backend("win32")
+
+    assert list_reader_names is winscard.list_reader_names
+    assert open_reader is winscard.WinSCardThaiReader
+
+
+def test_other_platforms_keep_pyscard():
+    from app.scard import ThaiSmartCardReader
+
+    list_reader_names, open_reader = card_reader_backend("linux")
+
+    assert list_reader_names is not winscard.list_reader_names
+    assert open_reader is ThaiSmartCardReader

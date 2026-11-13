@@ -4,7 +4,7 @@ version = "0.2.0"
 requires-python = ">=3.11"
 dependencies = [
     "playwright>=1.45",
-    "pyscard>=2.0",
+    "pyscard>=2.0; sys_platform != 'win32'",  # Windows: winscard.dll via ctypes
     "python-dotenv>=1.0",
     "platformdirs>=4.0",
 ]

@@ -99,7 +99,8 @@ Compress-Archive -LiteralPath 'dist\scanner-client-debug' -DestinationPath $debu
 
 # 4. installer payload (build\embed): Smart App Control blocks the unsigned PyInstaller .exe, so
 #    the installer ships the python.org embeddable runtime (PSF-signed pythonw.exe + DLLs) and our
-#    code as plain .py files. Only two PyPI .pyd files (pyscard, greenlet) stay unsigned.
+#    code as plain .py files. The card reader goes through the signed winscard.dll (ctypes), so
+#    greenlet's .pyd is the only unsigned native file left.
 #      build\embed\python\         embeddable Python, python313._pth points at .. and ..\site-packages
 #      build\embed\site-packages\  runtime deps from uv.lock (Windows wheels)
 #      build\embed\scanner_client\ + app\scard.py (kiosk)   -> pythonw.exe -m scanner_client.main
@@ -144,7 +145,8 @@ foreach ($file in '.env.example', 'README.md', 'assets\tent.ico') {
 
 # smoke test: the embedded runtime must import the app and every native dependency
 Invoke-Checked "$stage\python\python.exe" @('-c',
-    'import scanner_client.main, app.scard, smartcard.scard, greenlet, playwright.async_api')
+    ('import scanner_client.main, app.scard, greenlet, playwright.async_api; ' +
+     'from scanner_client.winscard import WinSCard; WinSCard.load()'))
 Get-ChildItem -LiteralPath $stage -Recurse -Directory -Filter '__pycache__' |
     Remove-Item -Recurse -Force
 

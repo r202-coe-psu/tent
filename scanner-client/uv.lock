@@ -229,25 +229,10 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/1c/c6/579b4ee106d66374d57ee403309f55ccf4bb6db2e913723438d1bd232c8d/pyscard-2.3.2.tar.gz", hash = "sha256:5f5435e32aede88e6668fe1348d85fb7bea3d319e798ceb8c1eb0100cab53fb4", size = 162771, upload-time = "2026-10-27T15:38:40.735Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f2/b6/2817dce43648b036c2eb410b4b8d54c4567d49d698949deb8c4b0f7099dc/pyscard-2.3.2-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:7db28137eb87533052848f29153ad944f96514a1df482b20312883895320dfb3", size = 170763, upload-time = "2026-10-27T16:00:17.168Z" },
-    { url = "https://files.pythonhosted.org/packages/07/50/bba009fb1cbbb68aea4750df5b07185d67a5e9e9625cd2cf31d02f9be9c2/pyscard-2.3.2-cp311-cp311-win32.whl", hash = "sha256:f8cd415efcedc47fbeb7274246f6e6d01703b6cf95043c8ebec0ee9f374205c7", size = 139232, upload-time = "2026-10-27T16:00:18.548Z" },
-    { url = "https://files.pythonhosted.org/packages/df/7c/3a1ba01eead3d0bc38a59f931362cc1cf21cd480894cea58cd350d8f17d3/pyscard-2.3.2-cp311-cp311-win_amd64.whl", hash = "sha256:ea24ea994ab55ddeb3af5a2df9c7be399128bd9d0794c426a57fee1ee1a84681", size = 145441, upload-time = "2026-10-27T16:00:19.883Z" },
-    { url = "https://files.pythonhosted.org/packages/e6/aa/2cc28b2a292346eac080acd476a718202008772e55f61e8a4aacd8aed2e1/pyscard-2.3.2-cp311-cp311-win_arm64.whl", hash = "sha256:a73306ecf30cab777d647bc0ed6a4b225d39e6020d33d168bb4226c0a5291434", size = 141864, upload-time = "2026-10-27T16:00:21.417Z" },
     { url = "https://files.pythonhosted.org/packages/11/d0/694730dd1519d11ba0c6ca6e5e4255c4ab7dca2dec2b6a183b37d77f7e23/pyscard-2.3.2-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:6d496ff39d90224920d40a7f3051a2d3ea1dd2542673e0a47f5d57766f0823e7", size = 170687, upload-time = "2026-10-27T16:00:22.87Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/57/2d16951a404de429be833a524c3b825b380b7ca53dff498c9c7d58bd9f02/pyscard-2.3.2-cp312-cp312-win32.whl", hash = "sha256:dfab10a5cb8bdbcf9c772bfae531c9939463a2f3ffd38ddcd7d8552500c2c8c5", size = 139541, upload-time = "2026-10-27T16:00:24.308Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/a4/280dba20a9870d0b9cde621dbee3cdb090968238f9e5e9f3fa7a8210867b/pyscard-2.3.2-cp312-cp312-win_amd64.whl", hash = "sha256:cfa6ef3f9f51e2e73b272bedb1cdfe14f702889c6aa9e47ba9e08190896a3095", size = 145677, upload-time = "2026-10-27T16:00:25.598Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/0b/603c25b21ed7ae5f809f7a3ed35d56766c53736f99634eab881dc9e22871/pyscard-2.3.2-cp312-cp312-win_arm64.whl", hash = "sha256:d1da7b5f8502b49d1e64a39b07f63dccb2cf706c518cdc554b9d0dbf014d2963", size = 141899, upload-time = "2026-10-27T16:00:27.007Z" },
     { url = "https://files.pythonhosted.org/packages/e1/b6/66956e4de923ddd9fc84a4cb17d27c530c4af1bcea0e20025a287cf7ca07/pyscard-2.3.2-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:31ef19286678d649b822735468c050d29dd34dddb982886dc88055565f292924", size = 170424, upload-time = "2026-10-27T16:00:28.543Z" },
-    { url = "https://files.pythonhosted.org/packages/72/c1/82d8bcae20d1143bf80e60135c877251f5921b5d9ff3cdc93b415b6e4693/pyscard-2.3.2-cp313-cp313-win32.whl", hash = "sha256:c5c613986acfc4951b76725b1fe2cc5cb029c8970fbd45a1fc2a03c5841ba76f", size = 139371, upload-time = "2026-10-27T16:00:29.873Z" },
-    { url = "https://files.pythonhosted.org/packages/e7/e6/0670b127cd69c00bfaa32066fb14d696998a41f0e9053671ec90c1e0e96a/pyscard-2.3.2-cp313-cp313-win_amd64.whl", hash = "sha256:8bd6bf2a8775aeda220d1029745d6823b637f894884e88ed41025ab83371d9ec", size = 145504, upload-time = "2026-10-27T16:00:31.175Z" },
-    { url = "https://files.pythonhosted.org/packages/60/5d/44d80b21098133cae30f50742859c5f1cc4047fe3394b03c07c68a4d029d/pyscard-2.3.2-cp313-cp313-win_arm64.whl", hash = "sha256:217698e1d2a747da1c233d65128e5b712a0da037c89574e88a295d85104ae133", size = 141671, upload-time = "2026-10-27T16:00:32.579Z" },
     { url = "https://files.pythonhosted.org/packages/19/f4/270525d3d906be5d0b26d69bc45e681e3d2d7c90f8e2addcfa2f1bdab687/pyscard-2.3.2-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:cd9c5203f2e554b2255f101caace34d4b2c4bb2af821d4442ebeeb5542acb943", size = 170550, upload-time = "2026-10-27T16:00:33.924Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/2f/e80b55e4bf993b6da41d4675af0b94219dd7800dd75931c16f50187c874c/pyscard-2.3.2-cp314-cp314-win32.whl", hash = "sha256:be5cfdd08e080f90f4a626860ccab12d24f3523720c725f85db817e71e1c23cf", size = 140286, upload-time = "2026-10-27T16:00:35.262Z" },
-    { url = "https://files.pythonhosted.org/packages/52/71/40b42e79af72e37b272e9a0a3eebf40df1d8ba928f5bd3c11433b31228b1/pyscard-2.3.2-cp314-cp314-win_amd64.whl", hash = "sha256:e6a06f3d0ca8bd94329de37e2d6f4b9b9cbb05d13c7f1501313f4ae955cf9f2d", size = 146073, upload-time = "2026-10-27T16:00:36.608Z" },
-    { url = "https://files.pythonhosted.org/packages/fe/4a/c1d43e56fb1354c6959ddeaa8fc9982b6b72af80baa74edc486b9a4b16d3/pyscard-2.3.2-cp314-cp314-win_arm64.whl", hash = "sha256:61828d82e823ab229e720ffdf11c871d37ab87faea64956c6ad80b894f229c02", size = 142554, upload-time = "2026-10-27T16:00:37.916Z" },
     { url = "https://files.pythonhosted.org/packages/12/27/a4805c408ecdb93ac5cc2c94b643f4abd82e58579646d42272986456d1ca/pyscard-2.3.2-cp315-cp315-macosx_10_15_universal2.whl", hash = "sha256:336c8c10fe58ec0e9dd99dd693ec53d9983ae0f9808937efb808ff46b240d5b5", size = 170595, upload-time = "2026-10-27T16:00:39.195Z" },
-    { url = "https://files.pythonhosted.org/packages/28/55/c667844116f2e18fe742d8063b7782c05681a95e6811ee8ef631e8b69ecb/pyscard-2.3.2-cp315-cp315-win32.whl", hash = "sha256:2d698a4d00ae6ac8d5dd82dc56eb4b9715ad5293e7a2a5e74103eb25c7c87f7f", size = 140291, upload-time = "2026-10-27T16:00:40.654Z" },
-    { url = "https://files.pythonhosted.org/packages/fb/93/9044bd20584a60b7d5f09f690ec250e8f6818deec8d28e0fa81726276e04/pyscard-2.3.2-cp315-cp315-win_amd64.whl", hash = "sha256:6d769ff80b8299b5b874f4934af25e7ff78337d544477b14eb4b442a66d0b790", size = 146067, upload-time = "2026-10-27T16:00:42.249Z" },
-    { url = "https://files.pythonhosted.org/packages/de/5e/f55dd54d3a19784ddad57d0793848c2152d47457b1a689a654561299078a/pyscard-2.3.2-cp315-cp315-win_arm64.whl", hash = "sha256:edc6218d88c205162f2a33a3355d94897218ee971da2e3169b81be1d0811d55b", size = 142549, upload-time = "2026-10-27T16:00:43.586Z" },
 ]
 
 [[package]]
@@ -300,7 +285,7 @@ source = { editable = "." }
 dependencies = [
     { name = "platformdirs" },
     { name = "playwright" },
-    { name = "pyscard" },
+    { name = "pyscard", marker = "sys_platform != 'win32'" },
     { name = "python-dotenv" },
 ]
 
@@ -316,7 +301,7 @@ dev = [
 requires-dist = [
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "playwright", specifier = ">=1.45" },
-    { name = "pyscard", specifier = ">=2.0" },
+    { name = "pyscard", marker = "sys_platform != 'win32'", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
 ]
 

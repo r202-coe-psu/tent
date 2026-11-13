@@ -62,7 +62,16 @@ def _configure_logging(data_dir: Path) -> list[logging.Handler]:
     return handlers
 
 
-def _default_watcher_factory(settings: Settings, handle_card: Callable[[Any], Any]) -> Any:
+def card_reader_backend(
+    platform: str = sys.platform,
+) -> tuple[Callable[[], list[str]], Callable[[int], Any]]:
+    """(list_reader_names, open_reader(index)). Windows goes through winscard.dll: Smart App
+    Control blocks pyscard's unsigned .pyd there."""
+    if platform == "win32":
+        from scanner_client import winscard
+
+        return winscard.list_reader_names, winscard.WinSCardThaiReader
+
     from app.scard import ThaiSmartCardReader  # reused from the kiosk, not copied
 
     def list_reader_names() -> list[str]:
@@ -70,9 +79,14 @@ def _default_watcher_factory(settings: Settings, handle_card: Callable[[Any], An
 
         return [str(reader) for reader in readers()]
 
+    return list_reader_names, ThaiSmartCardReader
+
+
+def _default_watcher_factory(settings: Settings, handle_card: Callable[[Any], Any]) -> Any:
+    list_reader_names, open_reader = card_reader_backend()
     return CardReaderWatcher(
         list_reader_names=list_reader_names,
-        open_reader=lambda index: ThaiSmartCardReader(reader_index=index),
+        open_reader=lambda index: open_reader(reader_index=index),
         handle_card=handle_card,
         preferred_name=settings.card_reader_name,
         poll_interval=settings.poll_interval,
