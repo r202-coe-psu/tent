@@ -55,7 +55,11 @@ export function toPublicShelterCard(
 		vulnerable_groups: Array.isArray(item?.vulnerable_groups) ? item.vulnerable_groups : null,
 		admin_type: item?.admin_type ?? null,
 		geo: item?.geo ?? null,
-		accepts_pre_registration: item?.accepts_pre_registration === true
+		accepts_pre_registration: item?.accepts_pre_registration === true,
+		parking_points: Array.isArray(item?.parking_points) ? item.parking_points : [],
+		parking_vehicle_types: Array.isArray(item?.parking_vehicle_types)
+			? item.parking_vehicle_types
+			: []
 	};
 }
 
