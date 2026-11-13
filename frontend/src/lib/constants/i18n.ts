@@ -22,3 +22,4 @@ export { PUBLIC_TERM_I18N } from './i18n/public-term';
 export { PUBLIC_COOKIE_I18N } from './i18n/public-cookie';
 export { PUBLIC_POLICY_I18N } from './i18n/public-policy';
 export * from './i18n/admin-announcements';
+export { VEHICLE_TYPE_I18N, vehicleCapacityText, vehicleLabel } from './i18n/vehicle-types';

@@ -1,7 +1,13 @@
 <script lang="ts">
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import type { Shelter, ParkingPoint, VehicleType } from '../domain/schema';
+	import {
+		vehicleTypeSchema,
+		type Shelter,
+		type ParkingPoint,
+		type VehicleType
+	} from '../domain/schema';
+	import { VEHICLE_TYPE_I18N, vehicleLabel } from '$lib/constants/i18n';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -30,6 +36,8 @@
 		disabled?: boolean;
 	} = $props();
 
+	// `form` is fixed for the life of the section; only its `errors` store is read (auto-subscribed below).
+	// svelte-ignore state_referenced_locally
 	const { errors } = form;
 
 	/** Messages under one point's vehicles (e.g. a duplicated type), whatever the nesting. */
@@ -68,12 +76,9 @@
 		toast.success('เพิ่มจุดจอดรถสำเร็จ');
 	}
 
-	const vehicleTypes: { value: VehicleType; label: string; unit: string }[] = [
-		{ value: 'motorcycle', label: 'รถจักรยานยนต์', unit: 'คัน' },
-		{ value: 'car', label: 'รถยนต์ / รถกระบะ', unit: 'คัน' },
-		{ value: 'truck', label: 'รถบรรทุก / รถขนาดใหญ่', unit: 'คัน' },
-		{ value: 'boat', label: 'เรือ', unit: 'ลำ' }
-	];
+	const vehicleTypes = vehicleTypeSchema.options;
+	const unitOf = (type: VehicleType) =>
+		type === 'boat' ? VEHICLE_TYPE_I18N.th.unitBoat : VEHICLE_TYPE_I18N.th.unitVehicle;
 
 	function vehicleEntry(p: ParkingPoint, type: VehicleType) {
 		return (p.vehicles ?? []).find((v) => v.type === type);
@@ -303,16 +308,16 @@
 
 				<div class="space-y-2" data-testid={`parking-vehicles-${i}`}>
 					<span class="text-xs font-medium text-muted-foreground">ประเภทรถที่จอดได้ในจุดนี้</span>
-					{#each vehicleTypes as vt (vt.value)}
-						{@const entry = vehicleEntry(p, vt.value)}
+					{#each vehicleTypes as vt (vt)}
+						{@const entry = vehicleEntry(p, vt)}
 						<div class="flex flex-wrap items-center gap-3">
 							<label class="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
 								<Checkbox
 									checked={!!entry}
-									onCheckedChange={(v) => toggleVehicle(p, vt.value, v === true)}
+									onCheckedChange={(v) => toggleVehicle(p, vt, v === true)}
 									{disabled}
 								/>
-								<span>{vt.label}</span>
+								<span>{vehicleLabel(vt)}</span>
 							</label>
 							{#if entry}
 								<span class="text-xs text-muted-foreground">รองรับสูงสุด:</span>
@@ -320,13 +325,13 @@
 									type="number"
 									min="0"
 									value={entry.max_capacity ?? ''}
-									oninput={(e) => setVehicleCapacity(p, vt.value, e.currentTarget.value)}
-									aria-label={`ความจุ${vt.label}`}
+									oninput={(e) => setVehicleCapacity(p, vt, e.currentTarget.value)}
+									aria-label={`ความจุ${vehicleLabel(vt)}`}
 									placeholder="0"
 									class="w-24 bg-white"
 									{disabled}
 								/>
-								<span class="text-xs text-muted-foreground">{vt.unit}</span>
+								<span class="text-xs text-muted-foreground">{unitOf(vt)}</span>
 							{/if}
 						</div>
 					{/each}

@@ -2,7 +2,8 @@
 	import Car from '@lucide/svelte/icons/car';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import { effectiveParkingVehicles } from '../domain/schema';
-	import type { Shelter, VehicleType, ParkingRule } from '../domain/schema';
+	import type { Shelter, ParkingRule } from '../domain/schema';
+	import { VEHICLE_TYPE_I18N, vehicleLabel } from '$lib/constants/i18n';
 	import { parkingRuleLabels } from '../domain/policy-labels';
 	import { applyParkingAvailability } from '../domain/feature-flag-policy-sync';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -15,13 +16,6 @@
 		formData: SuperFormData<Shelter>;
 		disabled?: boolean;
 	} = $props();
-
-	const vehicleTypes: { value: VehicleType; label: string; unit: string }[] = [
-		{ value: 'motorcycle', label: 'รถจักรยานยนต์ (Motorcycles)', unit: 'คัน' },
-		{ value: 'car', label: 'รถยนต์ / รถกระบะ (Cars / Pickups)', unit: 'คัน' },
-		{ value: 'truck', label: 'รถบรรทุก / รถขนาดใหญ่ (Trucks / Heavy Vehicles)', unit: 'คัน' },
-		{ value: 'boat', label: 'เรืออพยพ / เรือเล็ก (Boats)', unit: 'ลำ' }
-	];
 
 	const parkingRules: { value: ParkingRule; label: string }[] = Object.entries(
 		parkingRuleLabels
@@ -120,11 +114,12 @@
 				data-testid="effective-vehicles"
 			>
 				{#each effectiveVehicles as v (v.type)}
-					{@const vt = vehicleTypes.find((t) => t.value === v.type)}
 					<div class="flex items-center justify-between text-sm text-slate-800">
-						<span>{vt?.label ?? v.type}</span>
+						<span>{vehicleLabel(v.type)}</span>
 						<span class="font-semibold">
-							{v.max_capacity === null ? 'ไม่ระบุจำนวน' : `${v.max_capacity} ${vt?.unit ?? ''}`}
+							{v.max_capacity == null
+								? VEHICLE_TYPE_I18N.th.capacityUnset
+								: `${v.max_capacity} ${v.type === 'boat' ? VEHICLE_TYPE_I18N.th.unitBoat : VEHICLE_TYPE_I18N.th.unitVehicle}`}
 						</span>
 					</div>
 				{:else}
