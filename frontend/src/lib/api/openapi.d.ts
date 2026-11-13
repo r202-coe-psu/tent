@@ -3551,6 +3551,31 @@ export interface components {
 			/** Total Pages */
 			total_pages: number;
 		};
+		/**
+		 * ParkingPoint
+		 * @description A pinned parking point of a shelter (CR-253). Never read from ``raw_data``.
+		 */
+		ParkingPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Note */
+			note?: string | null;
+			geo: components['schemas']['GeoPoint'];
+			/** Vehicles */
+			vehicles?: components['schemas']['ParkingVehicle'][];
+		};
+		/**
+		 * ParkingVehicle
+		 * @description A vehicle type a parking point takes, with its capacity (CR-253).
+		 */
+		ParkingVehicle: {
+			/** Type */
+			type: string;
+			/** Max Capacity */
+			max_capacity?: number | null;
+		};
 		/** PersonIdInput */
 		PersonIdInput: {
 			/**
@@ -4149,6 +4174,10 @@ export interface components {
 			accepts_pre_registration: boolean;
 			/** Donation Points */
 			donation_points?: components['schemas']['DonationPoint'][];
+			/** Parking Points */
+			parking_points?: components['schemas']['ParkingPoint'][];
+			/** Parking Vehicle Types */
+			parking_vehicle_types?: string[];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -4235,6 +4264,10 @@ export interface components {
 			readiness_tier?: string | null;
 			/** Readiness Assessed At */
 			readiness_assessed_at?: string | null;
+			/** Parking Points */
+			parking_points?: components['schemas']['ParkingPoint'][];
+			/** Parking Vehicle Types */
+			parking_vehicle_types?: string[];
 			/**
 			 * Updated At
 			 * Format: date-time
