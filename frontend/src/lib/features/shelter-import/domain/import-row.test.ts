@@ -831,6 +831,12 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 		expect(payload.food_distribution_points).toEqual(existingPoints);
 	});
 
+	it('never sends parking_points, so an import cannot wipe the stored pins (#1352)', () => {
+		const shelter = { ...rowPayload(), parking_points: [] };
+		const payload = buildUpdatePayload(shelter, null);
+		expect('parking_points' in payload).toBe(false);
+	});
+
 	it('replaces food points only when the latest workbook explicitly supplies the sheet', () => {
 		const shelter = rowPayload();
 		const importedPoints = [{ id: 'p-imported', name: 'จุดใหม่' }];
