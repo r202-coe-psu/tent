@@ -83,6 +83,11 @@ services:
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      # M5 referral sync tick (draft CR — referral M5 §1): worker → FastAPI only.
+      FASTAPI_INTERNAL_URL: http://fastapi:9000
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
+      M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
+      M6_SYNC_INTERVAL_S: ${M6_SYNC_INTERVAL_S:-45}
       # Print housekeeping task (CR-222 FR-17) — POSTs the frontend internal endpoint every 30 s
       PRINT_HOUSEKEEPING_URL: http://frontend:3000
       PRINT_HOUSEKEEPING_TOKEN: ${PRINT_HOUSEKEEPING_TOKEN:?PRINT_HOUSEKEEPING_TOKEN is required}
@@ -106,6 +111,12 @@ services:
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
       SECRET_KEY: ${SECRET_KEY}
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
+      M5_BASE_URL: ${M5_BASE_URL:-}
+      M5_CLIENT_ID: ${M5_CLIENT_ID:-}
+      M5_CLIENT_SECRET: ${M5_CLIENT_SECRET:-}
+      M6_BASE_URL: ${M6_BASE_URL:-}
+      M6_CLIENT_ID: ${M6_CLIENT_ID:-}
+      M6_CLIENT_SECRET: ${M6_CLIENT_SECRET:-}
       THIRDPARTY_JWT_SIGNING_KEY: ${THIRDPARTY_JWT_SIGNING_KEY}
       THIRDPARTY_SECRET_SALT: ${THIRDPARTY_SECRET_SALT}
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}

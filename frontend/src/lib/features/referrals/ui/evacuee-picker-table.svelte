@@ -15,10 +15,13 @@
 
 	let {
 		selectedIds = $bindable<string[]>([]),
-		error
+		error,
+		label = '2. เลือกผู้เข้าพักที่ต้องการส่งต่อ'
 	}: {
 		selectedIds?: string[];
 		error?: string | string[];
+		/** Step heading; the caller numbers it within its own form. */
+		label?: string;
 	} = $props();
 
 	const errorMessage = $derived(Array.isArray(error) ? error[0] : error);
@@ -81,7 +84,7 @@
 	<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
 		<div class="space-y-1">
 			<span class="text-sm font-semibold text-foreground"
-				>2. เลือกผู้เข้าพักที่ต้องการส่งต่อ <span class="text-red-600">*</span></span
+				>{label} <span class="text-red-600">*</span></span
 			>
 			<p class="text-xs text-muted-foreground">แสดงเฉพาะผู้ที่พักพิงอยู่ในศูนย์ (active stay)</p>
 		</div>

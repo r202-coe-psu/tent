@@ -455,6 +455,14 @@ describe('CouchDbReferralServerRepository listPage()', () => {
 		expect(body).not.toHaveProperty('skip');
 	});
 
+	it('dispatch_mode m5: adds it to the selector and keeps the outgoing index sort (D17)', async () => {
+		stubFind([]);
+		await repo.listPage({ direction: 'outgoing', dispatch_mode: 'm5' });
+		const body = findBody();
+		expect(body.selector).toEqual({ type: 'referral', shelter_code: 'SH001', dispatch_mode: 'm5' });
+		expect(body.sort).toEqual([{ type: 'desc' }, { shelter_code: 'desc' }, { created_at: 'desc' }]);
+	});
+
 	it('incoming: selects on to_shelter_code and sorts asc when created_at_asc', async () => {
 		stubFind([]);
 		await repo.listPage({ direction: 'incoming', sort: 'created_at_asc' });
