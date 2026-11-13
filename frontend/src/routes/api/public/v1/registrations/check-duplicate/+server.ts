@@ -53,6 +53,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	// 1. Query shelters for active conflicting holds
 	try {
 		const rawMasters = await listShelterMasters().catch(() => []);
+		// Shelters hidden via feature_flags.public_visible stay in scope on purpose: an existing
+		// hold there is still real, so a duplicate booking must keep colliding (CR-251).
 		const masters = rawMasters.filter(
 			(m) => resolveOperationStatus(m) !== 'closed' && !isShelterCancelled(m)
 		);
