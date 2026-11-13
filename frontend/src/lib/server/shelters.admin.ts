@@ -18,6 +18,7 @@ import {
 	buildValidateDocUpdate,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DISTRIBUTION_LOG_DAY_MANGO_INDEX,
 	DONATION_RECEIVED_MANGO_INDEX,
 	DONATION_RECEIVED_PHONE_MANGO_INDEX,
 	DONATION_BOOKING_REF_MANGO_INDEX,
@@ -50,6 +51,7 @@ import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 export {
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DISTRIBUTION_LOG_DAY_MANGO_INDEX,
 	DONATION_RECEIVED_MANGO_INDEX,
 	DONATION_RECEIVED_PHONE_MANGO_INDEX,
 	DONATION_BOOKING_REF_MANGO_INDEX,
@@ -622,6 +624,18 @@ export async function deployDailySopRoleMangoIndexes(db: string): Promise<void> 
 		throw new ServiceError(
 			'INTERNAL',
 			`Mango index ${DAILY_SOP_ROLE_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+}
+
+/** Idempotent deploy of the index behind the meal coverage report's logs-by-day read (#1300). */
+export async function deployDistributionLogDayMangoIndex(db: string): Promise<void> {
+	const res = await adminRaw(`/${db}/_index`, 'POST', DISTRIBUTION_LOG_DAY_MANGO_INDEX);
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`Mango index ${DISTRIBUTION_LOG_DAY_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 		);
 	}
 }
