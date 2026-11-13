@@ -647,6 +647,548 @@
 				}
 			}
 		},
+		"/v1/integrations/status": {
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "Integration Status",
+				"operationId": "integration_status_v1_integrations_status_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/IntegrationStatusResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/v1/integrations/m5/facilities": {
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "M5 Facilities",
+				"operationId": "m5_facilities_v1_integrations_m5_facilities_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 100 }, { "type": "null" }],
+							"title": "Q"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/M5FacilitiesResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m5/transfers": {
+			"post": {
+				"tags": ["Integrations"],
+				"summary": "M5 Create Transfer",
+				"operationId": "m5_create_transfer_v1_integrations_m5_transfers_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/M5TransferCreateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/M5TransferCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/v1/integrations/m5/transfers/{code}": {
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "M5 Get Transfer",
+				"operationId": "m5_get_transfer_v1_integrations_m5_transfers__code__get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "code",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"maxLength": 32,
+							"pattern": "^TRF-\\d{8}-\\d{4,}$",
+							"title": "Code"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M5TransferView" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m5/transfers/{code}/start": {
+			"post": {
+				"tags": ["Integrations"],
+				"summary": "M5 Start Transfer",
+				"operationId": "m5_start_transfer_v1_integrations_m5_transfers__code__start_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "code",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"maxLength": 32,
+							"pattern": "^TRF-\\d{8}-\\d{4,}$",
+							"title": "Code"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/M5ActionRequest" } }
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M5TransferView" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m5/transfers/{code}/cancel": {
+			"post": {
+				"tags": ["Integrations"],
+				"summary": "M5 Cancel Transfer",
+				"operationId": "m5_cancel_transfer_v1_integrations_m5_transfers__code__cancel_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "code",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"maxLength": 32,
+							"pattern": "^TRF-\\d{8}-\\d{4,}$",
+							"title": "Code"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/M5CancelRequest" } }
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M5TransferView" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m5/sync": {
+			"post": {
+				"tags": ["Integrations"],
+				"summary": "M5 Sync",
+				"description": "Worker tick (every `M5_SYNC_INTERVAL_S`). FastAPI runs several processes, so it\nnever polls M5 on its own.",
+				"operationId": "m5_sync_v1_integrations_m5_sync_post",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M5SyncResponse" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/v1/integrations/m6/warehouses": {
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "M6 Warehouses",
+				"operationId": "m6_warehouses_v1_integrations_m6_warehouses_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/M6WarehousesResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/v1/integrations/m6/warehouses/{code}/stock": {
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "M6 Stock",
+				"operationId": "m6_stock_v1_integrations_m6_warehouses__code__stock_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "code",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$", "title": "Code" }
+					},
+					{
+						"name": "type_code",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 32 }, { "type": "null" }],
+							"title": "Type Code"
+						}
+					},
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 100 }, { "type": "null" }],
+							"title": "Search"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M6StockResponse" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m6/catalog/search": {
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "M6 Catalog Search",
+				"operationId": "m6_catalog_search_v1_integrations_m6_catalog_search_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 100 }, { "type": "null" }],
+							"title": "Q"
+						}
+					},
+					{
+						"name": "type_code",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 32 }, { "type": "null" }],
+							"title": "Type Code"
+						}
+					},
+					{
+						"name": "warehouse_code",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 64 }, { "type": "null" }],
+							"title": "Warehouse Code"
+						}
+					},
+					{
+						"name": "cursor",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 256 }, { "type": "null" }],
+							"title": "Cursor"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "integer", "maximum": 100, "minimum": 1 }, { "type": "null" }],
+							"title": "Limit"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M6CatalogResponse" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m6/withdrawals": {
+			"post": {
+				"tags": ["Integrations"],
+				"summary": "M6 Create Withdrawal",
+				"operationId": "m6_create_withdrawal_v1_integrations_m6_withdrawals_post",
+				"security": [{ "HTTPBearer": [] }],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/M6WithdrawalCreateRequest" }
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M6WithdrawalView" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "M6 List Withdrawals",
+				"operationId": "m6_list_withdrawals_v1_integrations_m6_withdrawals_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "shelter_code",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "string", "minLength": 1, "title": "Shelter Code" }
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }],
+							"title": "Status"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/M6WithdrawalListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m6/withdrawals/{request_code}": {
+			"get": {
+				"tags": ["Integrations"],
+				"summary": "M6 Get Withdrawal",
+				"operationId": "m6_get_withdrawal_v1_integrations_m6_withdrawals__request_code__get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "request_code",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^[A-Za-z0-9._-]{1,64}$",
+							"title": "Request Code"
+						}
+					},
+					{
+						"name": "shelter_code",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "string", "minLength": 1, "title": "Shelter Code" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M6WithdrawalView" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m6/withdrawals/{request_code}/cancel": {
+			"post": {
+				"tags": ["Integrations"],
+				"summary": "M6 Cancel Withdrawal",
+				"operationId": "m6_cancel_withdrawal_v1_integrations_m6_withdrawals__request_code__cancel_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "request_code",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"pattern": "^[A-Za-z0-9._-]{1,64}$",
+							"title": "Request Code"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": { "schema": { "$ref": "#/components/schemas/M6CancelRequest" } }
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M6WithdrawalView" } }
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/integrations/m6/sync": {
+			"post": {
+				"tags": ["Integrations"],
+				"summary": "M6 Sync",
+				"description": "Worker tick (every `M6_SYNC_INTERVAL_S`). FastAPI runs several processes, so it\nnever polls M6 on its own.",
+				"operationId": "m6_sync_v1_integrations_m6_sync_post",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/M6SyncResponse" } }
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/public/v1/needs": {
 			"get": {
 				"tags": ["Needs"],
@@ -4121,6 +4663,16 @@
 				"type": "object",
 				"title": "HouseholdOut"
 			},
+			"IntegrationStatusResponse": {
+				"properties": {
+					"m5": { "$ref": "#/components/schemas/M5Status" },
+					"m6": { "$ref": "#/components/schemas/M6Status" }
+				},
+				"type": "object",
+				"required": ["m5", "m6"],
+				"title": "IntegrationStatusResponse",
+				"description": "One key per integration so M6 can be added without a breaking change."
+			},
 			"JobShiftTemplate": {
 				"properties": {
 					"shift_name": { "type": "string", "title": "Shift Name", "default": "" },
@@ -4412,6 +4964,650 @@
 				"type": "object",
 				"required": ["location_code", "updated_at", "items"],
 				"title": "LocationStockResult"
+			},
+			"M5ActionRequest": {
+				"properties": {
+					"actor": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Actor" }
+				},
+				"type": "object",
+				"title": "M5ActionRequest"
+			},
+			"M5CancelRequest": {
+				"properties": {
+					"reason": { "type": "string", "minLength": 1, "title": "Reason" },
+					"actor": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Actor" }
+				},
+				"type": "object",
+				"required": ["reason"],
+				"title": "M5CancelRequest"
+			},
+			"M5FacilitiesResponse": {
+				"properties": {
+					"data": {
+						"items": { "$ref": "#/components/schemas/M5Facility" },
+						"type": "array",
+						"title": "Data"
+					},
+					"total": { "type": "integer", "title": "Total" }
+				},
+				"type": "object",
+				"required": ["data", "total"],
+				"title": "M5FacilitiesResponse"
+			},
+			"M5Facility": {
+				"properties": {
+					"facility_id": { "type": "integer", "title": "Facility Id" },
+					"name": { "type": "string", "title": "Name" },
+					"category": { "type": "string", "title": "Category" },
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "type": "string", "title": "Province" },
+					"latitude": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Latitude" },
+					"longitude": {
+						"anyOf": [{ "type": "number" }, { "type": "null" }],
+						"title": "Longitude"
+					},
+					"readiness": {
+						"anyOf": [{ "$ref": "#/components/schemas/M5Readiness" }, { "type": "null" }]
+					}
+				},
+				"type": "object",
+				"required": ["facility_id", "name", "category", "province"],
+				"title": "M5Facility"
+			},
+			"M5OriginIn": {
+				"properties": {
+					"location_code": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"title": "Location Code"
+					},
+					"location_name": {
+						"type": "string",
+						"maxLength": 255,
+						"minLength": 1,
+						"title": "Location Name"
+					},
+					"latitude": { "type": "number", "maximum": 90.0, "minimum": -90.0, "title": "Latitude" },
+					"longitude": {
+						"type": "number",
+						"maximum": 180.0,
+						"minimum": -180.0,
+						"title": "Longitude"
+					}
+				},
+				"type": "object",
+				"required": ["location_code", "location_name", "latitude", "longitude"],
+				"title": "M5OriginIn"
+			},
+			"M5PatientIn": {
+				"properties": {
+					"referral_id": { "type": "string", "minLength": 1, "title": "Referral Id" },
+					"acuity": {
+						"type": "string",
+						"enum": ["red", "yellow", "green", "black"],
+						"title": "Acuity"
+					},
+					"name": {
+						"anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }],
+						"title": "Name"
+					},
+					"national_id": {
+						"anyOf": [{ "type": "string", "maxLength": 32 }, { "type": "null" }],
+						"title": "National Id"
+					},
+					"age": {
+						"anyOf": [{ "type": "integer", "maximum": 150.0, "minimum": 0.0 }, { "type": "null" }],
+						"title": "Age"
+					},
+					"condition": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Condition" }
+				},
+				"type": "object",
+				"required": ["referral_id", "acuity"],
+				"title": "M5PatientIn"
+			},
+			"M5Readiness": {
+				"properties": {
+					"beds_surge": { "type": "integer", "title": "Beds Surge" },
+					"er_capacity": { "type": "integer", "title": "Er Capacity" },
+					"vital": { "type": "integer", "title": "Vital" },
+					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
+				},
+				"type": "object",
+				"required": ["beds_surge", "er_capacity", "vital", "updated_at"],
+				"title": "M5Readiness"
+			},
+			"M5RequesterIn": {
+				"properties": {
+					"contact_name": {
+						"type": "string",
+						"maxLength": 120,
+						"minLength": 1,
+						"title": "Contact Name"
+					},
+					"contact_role": {
+						"type": "string",
+						"maxLength": 60,
+						"minLength": 1,
+						"title": "Contact Role"
+					},
+					"contact_phone": {
+						"type": "string",
+						"maxLength": 32,
+						"minLength": 1,
+						"title": "Contact Phone"
+					}
+				},
+				"type": "object",
+				"required": ["contact_name", "contact_role", "contact_phone"],
+				"title": "M5RequesterIn"
+			},
+			"M5Status": {
+				"properties": {
+					"configured": { "type": "boolean", "title": "Configured" },
+					"token_ok": { "type": "boolean", "title": "Token Ok" },
+					"reachable": { "type": "boolean", "title": "Reachable" },
+					"checked_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Checked At"
+					},
+					"error": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Error" }
+				},
+				"type": "object",
+				"required": ["configured", "token_ok", "reachable"],
+				"title": "M5Status"
+			},
+			"M5SyncResponse": {
+				"properties": {
+					"skipped": { "type": "boolean", "title": "Skipped" },
+					"checked": { "type": "integer", "title": "Checked", "default": 0 },
+					"changed": { "type": "integer", "title": "Changed", "default": 0 }
+				},
+				"type": "object",
+				"required": ["skipped"],
+				"title": "M5SyncResponse"
+			},
+			"M5TransferCreateRequest": {
+				"properties": {
+					"shelter_code": { "type": "string", "minLength": 1, "title": "Shelter Code" },
+					"batch_id": { "type": "string", "minLength": 1, "title": "Batch Id" },
+					"external_ref": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"title": "External Ref"
+					},
+					"origin": { "$ref": "#/components/schemas/M5OriginIn" },
+					"requester": { "$ref": "#/components/schemas/M5RequesterIn" },
+					"destination_facility_id": { "type": "integer", "title": "Destination Facility Id" },
+					"transport_vehicle_type": {
+						"type": "string",
+						"enum": ["ambulance", "van", "helicopter", "other"],
+						"title": "Transport Vehicle Type"
+					},
+					"transport_note": { "type": "string", "title": "Transport Note", "default": "" },
+					"note": { "type": "string", "title": "Note", "default": "" },
+					"patients": {
+						"items": { "$ref": "#/components/schemas/M5PatientIn" },
+						"type": "array",
+						"minItems": 1,
+						"title": "Patients"
+					},
+					"actor": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Actor" }
+				},
+				"type": "object",
+				"required": [
+					"shelter_code",
+					"batch_id",
+					"external_ref",
+					"origin",
+					"requester",
+					"destination_facility_id",
+					"transport_vehicle_type",
+					"patients"
+				],
+				"title": "M5TransferCreateRequest"
+			},
+			"M5TransferCreateResponse": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"status": { "type": "string", "title": "Status" },
+					"external_ref": { "type": "string", "title": "External Ref" },
+					"replayed": { "type": "boolean", "title": "Replayed" }
+				},
+				"type": "object",
+				"required": ["code", "status", "external_ref", "replayed"],
+				"title": "M5TransferCreateResponse"
+			},
+			"M5TransferView": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"status": { "type": "string", "title": "Status" },
+					"external_ref": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "External Ref"
+					},
+					"destination": {
+						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
+						"title": "Destination"
+					},
+					"original_destination": {
+						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
+						"title": "Original Destination"
+					},
+					"review": {
+						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
+						"title": "Review"
+					},
+					"activity": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Activity"
+					}
+				},
+				"additionalProperties": true,
+				"type": "object",
+				"required": ["code", "status"],
+				"title": "M5TransferView",
+				"description": "TRF-004 shape as M5 returns it (passed through; extra fields kept)."
+			},
+			"M6ActorIn": {
+				"properties": {
+					"name": { "type": "string", "maxLength": 200, "minLength": 1, "title": "Name" },
+					"username": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Username" }
+				},
+				"type": "object",
+				"required": ["name"],
+				"title": "M6ActorIn"
+			},
+			"M6CancelRequest": {
+				"properties": {
+					"shelter_code": { "type": "string", "minLength": 1, "title": "Shelter Code" },
+					"reason": { "type": "string", "minLength": 1, "title": "Reason" },
+					"actor": { "$ref": "#/components/schemas/M6ActorIn" }
+				},
+				"type": "object",
+				"required": ["shelter_code", "reason", "actor"],
+				"title": "M6CancelRequest"
+			},
+			"M6CatalogItem": {
+				"properties": {
+					"reference_id": {
+						"anyOf": [{ "type": "integer" }, { "type": "string" }],
+						"title": "Reference Id"
+					},
+					"name_th": { "type": "string", "title": "Name Th" },
+					"name_en": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name En" },
+					"type_code": { "type": "string", "title": "Type Code" },
+					"base_unit": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Base Unit"
+					},
+					"warehouses_count": { "type": "integer", "title": "Warehouses Count", "default": 0 },
+					"item_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Item Code"
+					},
+					"in_warehouse": {
+						"anyOf": [{ "type": "boolean" }, { "type": "null" }],
+						"title": "In Warehouse"
+					}
+				},
+				"type": "object",
+				"required": ["reference_id", "name_th", "type_code"],
+				"title": "M6CatalogItem"
+			},
+			"M6CatalogResponse": {
+				"properties": {
+					"data": {
+						"items": { "$ref": "#/components/schemas/M6CatalogItem" },
+						"type": "array",
+						"title": "Data"
+					},
+					"cursor": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cursor" },
+					"total": { "type": "integer", "title": "Total", "default": 0 }
+				},
+				"type": "object",
+				"required": ["data"],
+				"title": "M6CatalogResponse"
+			},
+			"M6DestinationIn": {
+				"properties": {
+					"location_code": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"title": "Location Code"
+					},
+					"name": { "type": "string", "maxLength": 255, "minLength": 1, "title": "Name" },
+					"type": { "type": "string", "maxLength": 32, "minLength": 1, "title": "Type" },
+					"lat": { "type": "number", "maximum": 90.0, "minimum": -90.0, "title": "Lat" },
+					"lng": { "type": "number", "maximum": 180.0, "minimum": -180.0, "title": "Lng" },
+					"address": { "type": "string", "minLength": 1, "title": "Address" }
+				},
+				"type": "object",
+				"required": ["location_code", "name", "type", "lat", "lng", "address"],
+				"title": "M6DestinationIn"
+			},
+			"M6LineIn": {
+				"properties": {
+					"item_code": { "type": "string", "maxLength": 64, "minLength": 1, "title": "Item Code" },
+					"name": { "type": "string", "maxLength": 255, "minLength": 1, "title": "Name" },
+					"unit": { "type": "string", "maxLength": 32, "minLength": 1, "title": "Unit" },
+					"type_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Type Code"
+					},
+					"qty": { "type": "integer", "minimum": 1.0, "title": "Qty" }
+				},
+				"type": "object",
+				"required": ["item_code", "name", "unit", "qty"],
+				"title": "M6LineIn"
+			},
+			"M6LineView": {
+				"properties": {
+					"item_code": { "type": "string", "title": "Item Code" },
+					"name": { "type": "string", "title": "Name" },
+					"unit": { "type": "string", "title": "Unit" },
+					"type_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Type Code"
+					},
+					"qty": { "type": "integer", "title": "Qty" },
+					"qty_fulfilled": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Qty Fulfilled"
+					}
+				},
+				"type": "object",
+				"required": ["item_code", "name", "unit", "qty"],
+				"title": "M6LineView"
+			},
+			"M6PersonView": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"username": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Username" }
+				},
+				"type": "object",
+				"required": ["name"],
+				"title": "M6PersonView"
+			},
+			"M6RequesterIn": {
+				"properties": {
+					"location_code": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"title": "Location Code"
+					},
+					"location_type": {
+						"type": "string",
+						"maxLength": 32,
+						"minLength": 1,
+						"title": "Location Type"
+					},
+					"location_name": {
+						"type": "string",
+						"maxLength": 255,
+						"minLength": 1,
+						"title": "Location Name"
+					},
+					"contact_name": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 1,
+						"title": "Contact Name"
+					},
+					"contact_role": {
+						"type": "string",
+						"maxLength": 128,
+						"minLength": 1,
+						"title": "Contact Role"
+					},
+					"contact_phone": {
+						"type": "string",
+						"maxLength": 32,
+						"minLength": 1,
+						"title": "Contact Phone"
+					},
+					"external_ref": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"title": "External Ref"
+					}
+				},
+				"type": "object",
+				"required": [
+					"location_code",
+					"location_type",
+					"location_name",
+					"contact_name",
+					"contact_role",
+					"contact_phone",
+					"external_ref"
+				],
+				"title": "M6RequesterIn"
+			},
+			"M6Status": {
+				"properties": {
+					"configured": { "type": "boolean", "title": "Configured" },
+					"token_ok": { "type": "boolean", "title": "Token Ok" },
+					"reachable": { "type": "boolean", "title": "Reachable" },
+					"resource_types": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Resource Types"
+					},
+					"scopes": { "items": { "type": "string" }, "type": "array", "title": "Scopes" },
+					"checked_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Checked At"
+					},
+					"error": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Error" }
+				},
+				"type": "object",
+				"required": ["configured", "token_ok", "reachable"],
+				"title": "M6Status"
+			},
+			"M6StockItem": {
+				"properties": {
+					"item_code": { "type": "string", "title": "Item Code" },
+					"reference_id": {
+						"anyOf": [{ "type": "integer" }, { "type": "string" }, { "type": "null" }],
+						"title": "Reference Id"
+					},
+					"name": { "type": "string", "title": "Name" },
+					"type_code": { "type": "string", "title": "Type Code" },
+					"unit": { "type": "string", "title": "Unit" },
+					"on_hand": { "type": "integer", "title": "On Hand" },
+					"available": { "type": "integer", "title": "Available" }
+				},
+				"type": "object",
+				"required": ["item_code", "name", "type_code", "unit", "on_hand", "available"],
+				"title": "M6StockItem"
+			},
+			"M6StockResponse": {
+				"properties": {
+					"warehouse_code": { "type": "string", "title": "Warehouse Code" },
+					"data": {
+						"items": { "$ref": "#/components/schemas/M6StockItem" },
+						"type": "array",
+						"title": "Data"
+					},
+					"total": { "type": "integer", "title": "Total" }
+				},
+				"type": "object",
+				"required": ["warehouse_code", "data", "total"],
+				"title": "M6StockResponse"
+			},
+			"M6SyncResponse": {
+				"properties": {
+					"polled": { "type": "integer", "title": "Polled", "default": 0 },
+					"changed": { "type": "integer", "title": "Changed", "default": 0 },
+					"confirmed": { "type": "integer", "title": "Confirmed", "default": 0 },
+					"confirm_failed": { "type": "integer", "title": "Confirm Failed", "default": 0 }
+				},
+				"type": "object",
+				"title": "M6SyncResponse"
+			},
+			"M6Warehouse": {
+				"properties": {
+					"warehouse_code": { "type": "string", "title": "Warehouse Code" },
+					"name": { "type": "string", "title": "Name" },
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"lat": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Lat" },
+					"lng": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Lng" }
+				},
+				"type": "object",
+				"required": ["warehouse_code", "name"],
+				"title": "M6Warehouse"
+			},
+			"M6WarehousesResponse": {
+				"properties": {
+					"data": {
+						"items": { "$ref": "#/components/schemas/M6Warehouse" },
+						"type": "array",
+						"title": "Data"
+					},
+					"total": { "type": "integer", "title": "Total" }
+				},
+				"type": "object",
+				"required": ["data", "total"],
+				"title": "M6WarehousesResponse"
+			},
+			"M6WithdrawalCreateRequest": {
+				"properties": {
+					"shelter_code": { "type": "string", "minLength": 1, "title": "Shelter Code" },
+					"external_ref": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"title": "External Ref"
+					},
+					"source_warehouse_code": {
+						"type": "string",
+						"maxLength": 64,
+						"minLength": 1,
+						"title": "Source Warehouse Code"
+					},
+					"source_warehouse_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Source Warehouse Name"
+					},
+					"requester": { "$ref": "#/components/schemas/M6RequesterIn" },
+					"destination": { "$ref": "#/components/schemas/M6DestinationIn" },
+					"reason": { "type": "string", "minLength": 1, "title": "Reason" },
+					"lines": {
+						"items": { "$ref": "#/components/schemas/M6LineIn" },
+						"type": "array",
+						"minItems": 1,
+						"title": "Lines"
+					},
+					"actor": { "$ref": "#/components/schemas/M6ActorIn" }
+				},
+				"type": "object",
+				"required": [
+					"shelter_code",
+					"external_ref",
+					"source_warehouse_code",
+					"requester",
+					"destination",
+					"reason",
+					"lines",
+					"actor"
+				],
+				"title": "M6WithdrawalCreateRequest"
+			},
+			"M6WithdrawalListResponse": {
+				"properties": {
+					"data": {
+						"items": { "$ref": "#/components/schemas/M6WithdrawalView" },
+						"type": "array",
+						"title": "Data"
+					},
+					"total": { "type": "integer", "title": "Total" }
+				},
+				"type": "object",
+				"required": ["data", "total"],
+				"title": "M6WithdrawalListResponse"
+			},
+			"M6WithdrawalView": {
+				"properties": {
+					"external_ref": { "type": "string", "title": "External Ref" },
+					"request_code": { "type": "string", "title": "Request Code" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"status": { "type": "string", "title": "Status" },
+					"source_warehouse_code": { "type": "string", "title": "Source Warehouse Code" },
+					"source_warehouse_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Source Warehouse Name"
+					},
+					"lines": {
+						"items": { "$ref": "#/components/schemas/M6LineView" },
+						"type": "array",
+						"title": "Lines"
+					},
+					"reason": { "type": "string", "title": "Reason" },
+					"requested_by": { "$ref": "#/components/schemas/M6PersonView" },
+					"contact_role": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Contact Role"
+					},
+					"contact_phone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Contact Phone"
+					},
+					"submitted_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Submitted At"
+					},
+					"approved_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Approved At"
+					},
+					"completed_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Completed At"
+					},
+					"cancelled_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Cancelled At"
+					},
+					"cancel_reason": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Cancel Reason"
+					},
+					"donation_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Donation Id"
+					},
+					"confirmed_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Confirmed At"
+					},
+					"confirm_error": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Confirm Error"
+					},
+					"fetched_at": { "type": "string", "format": "date-time", "title": "Fetched At" },
+					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
+					"live": { "type": "boolean", "title": "Live", "default": false }
+				},
+				"type": "object",
+				"required": [
+					"external_ref",
+					"request_code",
+					"shelter_code",
+					"status",
+					"source_warehouse_code",
+					"lines",
+					"reason",
+					"requested_by",
+					"fetched_at",
+					"created_at"
+				],
+				"title": "M6WithdrawalView"
 			},
 			"MemberCreated": {
 				"properties": {

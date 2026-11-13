@@ -976,6 +976,29 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(appendedDocs()).toHaveLength(0);
 		});
 
+		it('refuses to turn away every line of a central-warehouse (m6) delivery, 422, writing nothing', async () => {
+			mockCouch({
+				...twoLines,
+				channel: 'm6',
+				status: 'verifying',
+				external: { system: 'm6', request_code: 'WD-0007' }
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						{ ...rice, qty: '0', rejected: true, reject_reason_code: 'damaged' },
+						milkRejected
+					]
+				})
+			);
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error_code).toBe('M6_NOT_REFUSABLE');
+			expect(appendedDocs()).toHaveLength(0);
+		});
+
 		it.each([
 			['no reason code', { ...milkRejected, reject_reason_code: undefined }],
 			[

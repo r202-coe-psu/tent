@@ -11,6 +11,7 @@ import {
 	EVACUEE_NAME_FALLBACK,
 	getClosedSubLabel,
 	buildReferralListHref,
+	oneDataM5BatchPath,
 	parseReferralListParams,
 	referralBatchPath,
 	referralDetailPath
@@ -127,6 +128,16 @@ describe('list URL params', () => {
 		expect(buildReferralListHref({ direction: 'incoming', status: 'sent', q: 'a b' })).toBe(
 			'/back-office/referrals?dir=in&status=sent&q=a+b'
 		);
+		expect(buildReferralListHref({ status: 'sent' }, '/back-office/onedata/m5')).toBe(
+			'/back-office/onedata/m5?status=sent'
+		);
+		expect(buildReferralListHref({}, '/back-office/onedata/m5')).toBe('/back-office/onedata/m5');
+	});
+});
+
+describe('oneDataM5BatchPath', () => {
+	it('puts the encoded referral id under the OneData M5 page (D17)', () => {
+		expect(oneDataM5BatchPath('referral:01ABC')).toBe('/back-office/onedata/m5/referral%3A01ABC');
 	});
 
 	it('round-trips the page and drops page 1 or junk', () => {

@@ -441,7 +441,9 @@ describe('buildValidateDocUpdate', () => {
 	});
 
 	it('keeps referral indexes separate and unchanged', () => {
-		expect(REFERRAL_MANGO_INDEXES).toHaveLength(7);
+		expect(REFERRAL_MANGO_INDEXES).toHaveLength(8);
+		// M5 batches (schema_v 3) are read by `batch_id`.
+		expect(REFERRAL_MANGO_INDEXES.map((i) => i.index.fields)).toContainEqual(['type', 'batch_id']);
 	});
 
 	it('includes audit in the allowed doc type whitelist', () => {
