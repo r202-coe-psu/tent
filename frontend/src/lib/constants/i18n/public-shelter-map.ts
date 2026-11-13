@@ -22,7 +22,8 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		shelterClosed: 'ศูนย์ปิดแล้ว',
 		gestureDesktop: 'กด Ctrl ค้างไว้แล้วเลื่อนเพื่อซูมแผนที่',
 		gestureMac: 'กด ⌘ ค้างไว้แล้วเลื่อนเพื่อซูมแผนที่',
-		gestureMobile: 'ใช้สองนิ้วเพื่อเลื่อนแผนที่'
+		gestureMobile: 'ใช้สองนิ้วเพื่อเลื่อนแผนที่',
+		parkingPoint: 'จุดจอดรถ'
 	},
 	en: {
 		yourLocation: 'Search origin',
@@ -47,6 +48,7 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		shelterClosed: 'Shelter Closed',
 		gestureDesktop: 'Use Ctrl + scroll to zoom the map',
 		gestureMac: 'Use ⌘ + scroll to zoom the map',
-		gestureMobile: 'Use two fingers to move the map'
+		gestureMobile: 'Use two fingers to move the map',
+		parkingPoint: 'Parking'
 	}
 } as const;
