@@ -3,7 +3,7 @@ id: CR-112
 title: Registration foundation — Evacuee/Household/Pet schema, vulnerable groups, stay room_confirmed, occupancy triple, master seeds
 status: approved
 date: 2026-09-06
-updated: 2026-09-06
+updated: 2026-11-12
 requested_by: เจ้าของโครงการ (grill-with-docs session)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -22,6 +22,7 @@ tracking_note: >-
   track=CR file. sheet=OK 2026-09-06. Owner approved 2026-09-06.
   Pair: CR-113 (Unassigned Registration Mongo). Schema delta merged from
   docs/data/proposed-registration-foundation-schema-delta.md (superseded).
+note: decision sync 2026-11-12 (#1049) — superseded เฉพาะกฎกันเบอร์โทรซ้ำ: ไม่กันซ้ำด้วยเบอร์อีก (เลขบัตร/ANON ยังกันซ้ำ) ดู docs/data/schema.md §9.5 + docs/features/site-occupancy-booking-program.md ข้อความที่อ้างเบอร์ในเอกสารนี้ใช้ไม่ได้แล้ว
 ---
 
 # Registration foundation — schema, seeds, stay & occupancy
@@ -130,7 +131,7 @@ checked_out | transferred → active   (re-entry ผ่าน check_in; ไม�
 2. Cancel hold: SA/SM/RS + audit; ห้าม hard-delete; D-HOLD-TTL ยัง **none**  
 3. Report-in → `arriving` ยังนับ Forecast  
 4. **No-show aging report — เลื่อนออกจาก CR นี้** (ยังไม่มี SOP; โน้ต stakeholder: จองล่วงหน้าอาจเป็นเดือน / interim ที่เคยพูด N=7 ไม่ lock)  
-5. กันจองซ้ำด้วยเลขบัตร / เบอร์ / ANON ข้าม hold ที่ยังไม่ `cancelled`
+5. กันจองซ้ำด้วยเลขบัตร / ANON ข้าม hold ที่ยังไม่ `cancelled`
 
 ## Requirements (atomic)
 
