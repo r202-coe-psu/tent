@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { kioskScreenTypeSchema } from '$lib/features/shared/domain/kiosk-screen';
+import { kioskDeviceScreenTypeSchema } from '$lib/features/shared/domain/kiosk-screen';
 import {
 	deviceStatusSchema,
 	scannerDeviceInputSchema,
@@ -12,7 +12,7 @@ export const scannerEditFormSchema = z.object({
 	name: scannerDeviceInputSchema.shape.name,
 	station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ'),
 	status: deviceStatusSchema,
-	screen_type: kioskScreenTypeSchema
+	screen_type: kioskDeviceScreenTypeSchema
 });
 export type ScannerEditFormValues = z.infer<typeof scannerEditFormSchema>;
 

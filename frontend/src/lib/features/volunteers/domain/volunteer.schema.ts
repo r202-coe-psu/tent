@@ -3,6 +3,8 @@
  * and CR-095 (schema.md §2.8, `volunteer` schema_v 2 → 3 — `personnel_type`).
  * schema_v 3 → 4 (draft-volunteer-role-card-checkin.md) adds `tracking_token_hash`,
  * additive — existing schema_v 3 rows stay valid and read the field as absent.
+ * schema_v 4 → 5 (CR-228) adds `accepted_from` to `identity_verification` and to each
+ * `skill_verifications` entry, additive and not backfilled — v3 / v4 rows stay valid.
  *
  * Pure TypeScript / Zod — no I/O, no PouchDB, no Svelte.
  */
@@ -37,12 +39,20 @@ export const nationalIdSchema = z
 // Document schema
 // ---------------------------------------------------------------------------
 
+/** The `schema_v` every volunteer write stamps (CR-228). */
+export const VOLUNTEER_SCHEMA_V = 6;
+
+/** CR-245 — max length of the optional free-text occupation. */
+export const MAX_OCCUPATION_LENGTH = 100;
+export const OCCUPATION_TOO_LONG_MESSAGE = `อาชีพต้องไม่เกิน ${MAX_OCCUPATION_LENGTH} ตัวอักษร`;
+
 export interface Volunteer extends BaseDoc {
 	type: 'volunteer';
-	schema_v: 3 | 4;
+	schema_v: 3 | 4 | 5 | 6;
 	first_name: string;
 	last_name: string;
 	nickname?: string;
+	occupation?: string | null;
 	phone: string | null;
 	phone_hash?: string | null;
 	email?: string | null;
@@ -80,13 +90,18 @@ export interface Volunteer extends BaseDoc {
 	source: VolunteerSource;
 	/** CR-095 — backs the "ชนิดบุคคล" toggle, default `'volunteer'`. */
 	personnel_type: PersonnelType;
+	/** CR-239: target volunteer._id if this profile was merged (#694) */
+	merged_into?: string | null;
+	merged_at?: string | null;
+	merged_by?: string | null;
+	migration_run_id?: string | null;
 }
 
 export const volunteerSchema = z.object({
 	_id: z.string().startsWith('volunteer:'),
 	_rev: z.string().optional(),
 	type: z.literal('volunteer'),
-	schema_v: z.union([z.literal(3), z.literal(4)]),
+	schema_v: z.union([z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
 	shelter_code: z.string().min(1),
 	created_at: z.string(),
 	updated_at: z.string(),
@@ -94,6 +109,12 @@ export const volunteerSchema = z.object({
 	first_name: z.string().min(1),
 	last_name: z.string().min(1),
 	nickname: z.string().optional(),
+	occupation: z
+		.string()
+		.trim()
+		.max(MAX_OCCUPATION_LENGTH, OCCUPATION_TOO_LONG_MESSAGE)
+		.nullable()
+		.optional(),
 	phone: z.string().nullable(),
 	phone_hash: z.string().nullable().optional(),
 	email: z.string().nullable().optional(),
@@ -113,7 +134,11 @@ export const volunteerSchema = z.object({
 	identity_verification: verificationRecordSchema.nullable().optional(),
 	skill_verifications: z.record(z.string(), verificationRecordSchema).optional(),
 	source: volunteerSourceSchema,
-	personnel_type: personnelTypeSchema
+	personnel_type: personnelTypeSchema,
+	merged_into: z.string().nullable().optional(),
+	merged_at: z.string().nullable().optional(),
+	merged_by: z.string().nullable().optional(),
+	migration_run_id: z.string().nullable().optional()
 });
 
 export const isVolunteer = (d: unknown): d is Volunteer => volunteerSchema.safeParse(d).success;
@@ -126,6 +151,12 @@ export const volunteerInputSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
 	nickname: z.string().trim().optional(),
+	occupation: z
+		.string()
+		.trim()
+		.max(MAX_OCCUPATION_LENGTH, OCCUPATION_TOO_LONG_MESSAGE)
+		.nullable()
+		.optional(),
 	phone: optionalVolunteerMobileSchema,
 	email: z.string().trim().nullable().optional(),
 	skills: z.array(z.string()).default([]),
@@ -147,6 +178,12 @@ export const walkInVolunteerFormSchema = z.object({
 	first_name: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
 	last_name: z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
 	nickname: z.string().trim().optional(),
+	occupation: z
+		.string()
+		.trim()
+		.max(MAX_OCCUPATION_LENGTH, OCCUPATION_TOO_LONG_MESSAGE)
+		.optional()
+		.or(z.literal('')),
 	phone: z
 		.string()
 		.trim()
@@ -173,11 +210,12 @@ export function makeVolunteer(
 	const d = volunteerInputSchema.parse(input);
 	return makeDoc(
 		'volunteer',
-		4,
+		VOLUNTEER_SCHEMA_V,
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
 			...(d.nickname ? { nickname: d.nickname } : {}),
+			occupation: d.occupation ? d.occupation.trim() : null,
 			phone: d.phone,
 			email: d.email ?? null,
 			skills: d.skills,

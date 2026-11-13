@@ -196,6 +196,8 @@
 		};
 	});
 
+	// The housing label can be long; let it wrap so the full text is readable without a hover tooltip.
+	const housingTriggerWrapClass = '!h-auto min-h-9 whitespace-normal !pb-1.5';
 	const selectTriggerClass =
 		"flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
 
@@ -237,7 +239,7 @@
 					/>
 				</div>
 
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<Form.Field {form} name="municipalityZone">
 						<Form.Control>
 							{#snippet children({ props })}
@@ -269,7 +271,7 @@
 			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
 				ที่อยู่ครัวเรือนเดิม (ก่อนอพยพ)
 			</h3>
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<Form.Field {form} name="housingType">
 					<Form.Control>
 						{#snippet children({ props })}
@@ -281,8 +283,8 @@
 									(v) => setHousingTypeFromSelect(v, (next) => ($formData.housingType = next))
 								}
 							>
-								<Select.Trigger {...props} class={selectTriggerClass}>
-									{housingTypeTriggerLabel}
+								<Select.Trigger {...props} class="{selectTriggerClass} {housingTriggerWrapClass}">
+									<span class="min-w-0 text-left leading-normal">{housingTypeTriggerLabel}</span>
 								</Select.Trigger>
 								<Select.Content>
 									{#each housingTypeItems as opt (opt.value)}

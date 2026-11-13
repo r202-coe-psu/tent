@@ -53,7 +53,7 @@ const volunteerRepo = {
 	list: vi.fn(),
 	get: vi.fn(),
 	getByTrackingToken: vi.fn(),
-	getByPhoneHash: vi.fn(),
+	listByPhoneHash: vi.fn(),
 	create: vi.fn(),
 	update: vi.fn(),
 	deactivate: vi.fn(),

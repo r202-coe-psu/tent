@@ -25,17 +25,23 @@ vi.mock('$lib/stores/shelter.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/features/users', () => ({
-	fetchAuthStatus: async () => ({
-		must_change_password: false,
-		has_security_question: true,
-		pending_mfa: false
-	})
-}));
+vi.mock('$lib/features/users', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/features/users')>();
+	return {
+		...actual,
+		fetchAuthStatus: async () => ({
+			must_change_password: false,
+			has_security_question: true,
+			pending_mfa: false,
+			consent: { agreed: true, version: '1.0' }
+		})
+	};
+});
 
 import {
 	confineKioskStaffOnly,
 	resolvePostLoginDestination,
+	requireCentralWarehouseAccess,
 	requireDistributionDesk,
 	requireDonationAccess,
 	requireSupplyView,
@@ -43,6 +49,7 @@ import {
 	requireBannerManagement,
 	requireKioskManagement,
 	requireMedicalScreening,
+	requireReferralAccess,
 	requirePrinterManagement,
 	requireShelterReadiness,
 	requireVolunteerBackoffice,
@@ -80,12 +87,13 @@ describe('resolvePostLoginDestination (CR-124)', () => {
 		).toBe('/mfa-challenge');
 	});
 
-	it('lands on portal when not pending MFA', () => {
+	it('lands on portal when not pending MFA and consent is clear', () => {
 		expect(
 			resolvePostLoginDestination({
 				must_change_password: false,
 				has_security_question: true,
-				pending_mfa: false
+				pending_mfa: false,
+				consent: { agreed: true, version: '1.0' }
 			})
 		).toBe(LANDING_ROUTE);
 	});
@@ -106,6 +114,32 @@ describe('resolvePostLoginDestination (CR-124)', () => {
 				must_change_password: true,
 				has_security_question: false,
 				pending_mfa: true
+			})
+		).toBe(LANDING_ROUTE);
+	});
+
+	it('sends to /consent when volunteer or staff has not agreed to current consent version', () => {
+		expect(
+			resolvePostLoginDestination({
+				roles: ['volunteer'],
+				personnel_type: 'volunteer',
+				must_change_password: false,
+				has_security_question: true,
+				pending_mfa: false,
+				consent: null
+			})
+		).toBe('/consent');
+	});
+
+	it('lands on portal when consent is already agreed', () => {
+		expect(
+			resolvePostLoginDestination({
+				roles: ['volunteer'],
+				personnel_type: 'volunteer',
+				must_change_password: false,
+				has_security_question: true,
+				pending_mfa: false,
+				consent: { agreed: true, version: '1.0' }
 			})
 		).toBe(LANDING_ROUTE);
 	});
@@ -167,6 +201,35 @@ describe('requireMedicalScreening (Station 2 route guard)', () => {
 		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff'];
 		expect(await passes(requireMedicalScreening, roles, 'SH001')).toBe(true);
 		expect(await passes(requireMedicalScreening, roles, 'SH002')).toBe(false);
+	});
+});
+
+describe('requireReferralAccess (/back-office/referrals, M5 D8)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA, the shelter manager and medical staff of the selected shelter', async () => {
+		expect(await passes(requireReferralAccess, ['system_admin'])).toBe(true);
+		expect(await passes(requireReferralAccess, ['shelter:SH001', 'SH001:shelter_manager'])).toBe(
+			true
+		);
+		expect(await passes(requireReferralAccess, ['shelter:SH001', 'SH001:medical_staff'])).toBe(
+			true
+		);
+	});
+
+	it('refuses other staff', async () => {
+		for (const cap of ['registration_staff', 'triage_staff', 'kitchen_staff', 'warehouse_staff']) {
+			expect(await passes(requireReferralAccess, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+		}
+	});
+
+	it('is scoped to the selected shelter', async () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:medical_staff'];
+		expect(await passes(requireReferralAccess, roles, 'SH001')).toBe(true);
+		expect(await passes(requireReferralAccess, roles, 'SH002')).toBe(false);
 	});
 });
 
@@ -299,6 +362,41 @@ describe('donation_staff page guards (CR-227)', () => {
 		mocks.user = null;
 		await expect(requireDonationAccess()).rejects.toMatchObject({ status: 302 });
 		await expect(requireSupplyView()).rejects.toMatchObject({ status: 302 });
+	});
+});
+
+describe('requireCentralWarehouseAccess (M6 D2)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA, shelter_manager and warehouse_staff', async () => {
+		expect(await passes(requireCentralWarehouseAccess, ['system_admin'])).toBe(true);
+		for (const cap of ['shelter_manager', 'warehouse_staff']) {
+			expect(await passes(requireCentralWarehouseAccess, ['shelter:SH001', `SH001:${cap}`])).toBe(
+				true
+			);
+		}
+	});
+
+	it('refuses supply_coordinator and unrelated staff', async () => {
+		for (const cap of ['supply_coordinator', 'donation_staff', 'kitchen_staff', 'medical_staff']) {
+			expect(await passes(requireCentralWarehouseAccess, ['shelter:SH001', `SH001:${cap}`])).toBe(
+				false
+			);
+		}
+	});
+
+	it('is scoped to the selected shelter', async () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:warehouse_staff'];
+		expect(await passes(requireCentralWarehouseAccess, roles, 'SH001')).toBe(true);
+		expect(await passes(requireCentralWarehouseAccess, roles, 'SH002')).toBe(false);
+	});
+
+	it('redirects an unauthenticated visitor to login', async () => {
+		mocks.user = null;
+		await expect(requireCentralWarehouseAccess()).rejects.toMatchObject({ status: 302 });
 	});
 });
 

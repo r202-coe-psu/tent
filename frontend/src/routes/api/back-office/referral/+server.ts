@@ -1,7 +1,13 @@
 /* eslint-disable no-restricted-imports */
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode, handleEndpointError } from './_auth';
+import {
+	allowedReferralTypes,
+	assertReferralTypeAllowed,
+	authorizeReferral,
+	resolveShelterCode,
+	handleEndpointError
+} from './_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
@@ -23,7 +29,15 @@ const BACK_OFFICE_SCOPE = 'internal' as const;
 /** Parse list query params; invalid values answer 400 `{ error }` via `handleEndpointError`. */
 function parseListQuery(params: URLSearchParams) {
 	const raw: Record<string, string> = {};
-	for (const key of ['limit', 'bookmark', 'status', 'direction', 'sort', 'evacuee_id']) {
+	for (const key of [
+		'limit',
+		'bookmark',
+		'status',
+		'direction',
+		'sort',
+		'evacuee_id',
+		'dispatch_mode'
+	]) {
 		const value = params.get(key);
 		if (value) raw[key] = value;
 	}
@@ -41,18 +55,22 @@ function parseListQuery(params: URLSearchParams) {
 /**
  * GET /api/back-office/referral
  * One page of referrals for a shelter: `{ items, bookmark, has_more }`.
- * Params: limit (1–200, default 50), bookmark, status, direction, sort, evacuee_id.
+ * Params: limit (1–200, default 50), bookmark, status, direction, sort, evacuee_id, dispatch_mode.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeReferral(request.headers.get('cookie'));
+		const caller = await authorizeReferral(
+			request.headers.get('cookie'),
+			url.searchParams.get('shelter_code')
+		);
 
 		const shelterCode = resolveShelterCode(caller, url.searchParams.get('shelter_code'));
 
 		const query = parseListQuery(url.searchParams);
 
 		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
-		const page = await repo.listPage(query);
+		const types = allowedReferralTypes(caller, shelterCode);
+		const page = await repo.listPage(types ? { ...query, referral_types: [...types] } : query);
 
 		return json({
 			items: page.items.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)),
@@ -79,7 +97,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 		let caller;
 		try {
-			caller = await authorizeReferral(cookie);
+			caller = await authorizeReferral(cookie, url.searchParams.get('shelter_code'));
 		} catch (authErr: unknown) {
 			const err = authErr as { status?: number; body?: { message?: string }; message?: string };
 			const status = err.status || 401;
@@ -101,6 +119,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		if (!parsed.success) {
 			return json({ error: 'Validation failed', details: parsed.error.format() }, { status: 400 });
 		}
+
+		assertReferralTypeAllowed(caller, shelterCode, parsed.data.referral_type);
 
 		// FR-001: Self-referral guard
 		if (

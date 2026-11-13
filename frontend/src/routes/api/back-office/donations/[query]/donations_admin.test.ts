@@ -8,6 +8,9 @@ import {
 	type StockLedger
 } from '$lib/features/operations/server';
 import type { AuditEntry } from '$lib/features/shared';
+import { createLotCounterMock } from '$lib/testing/lot-counter-mock';
+
+let counterMock = createLotCounterMock();
 
 type GetEvent = Parameters<typeof GET>[0];
 type PostEvent = Parameters<typeof POST>[0];
@@ -84,7 +87,10 @@ function mockCouch(
 		keyedElsewhere?: string[];
 	} = {}
 ) {
+	counterMock = createLotCounterMock();
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string, body?: unknown) => {
+		const lc = counterMock.handle(path, method, body);
+		if (lc) return Promise.resolve(lc);
 		if (method === 'GET' && path.includes('audit')) {
 			return Promise.resolve(
 				over.earlierAudit
@@ -274,7 +280,9 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		expect(data.success).toBe(true);
 		expect(data.donation.status).toBe('received');
 
-		const putCall = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
+		const putCall = vi
+			.mocked(adminRaw)
+			.mock.calls.find((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'));
 		const savedDoc = putCall![2] as PublicDonationDoc;
 		expect(savedDoc.status).toBe('received');
 		expect(savedDoc.received_at).toBeDefined();
@@ -290,7 +298,9 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 		await POST(postEvent({ status: 'received', remarks: 'ของมาไม่ครบ' }));
 
-		const putCall = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
+		const putCall = vi
+			.mocked(adminRaw)
+			.mock.calls.find((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'));
 		expect((putCall![2] as PublicDonationDoc).received_summary?.remarks).toBe('ของมาไม่ครบ');
 	});
 
@@ -543,7 +553,11 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			);
 
 			expect(response.status).toBe(500);
-			expect(vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT')).toBeUndefined();
+			expect(
+				vi
+					.mocked(adminRaw)
+					.mock.calls.find((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'))
+			).toBeUndefined();
 		});
 	});
 
@@ -770,7 +784,11 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(response.status).toBe(409);
 			expect((await response.json()).error_code).toBe('DONATION_CHANGED');
 			expect(appendedDocs()).toHaveLength(0);
-			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+			expect(
+				vi
+					.mocked(adminRaw)
+					.mock.calls.some((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'))
+			).toBe(false);
 		});
 
 		it('refuses a receive that does not say which version it counted', async () => {
@@ -812,7 +830,9 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		};
 
 		function savedDoc(): PublicDonationDoc {
-			const putCall = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
+			const putCall = vi
+				.mocked(adminRaw)
+				.mock.calls.find((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'));
 			return putCall![2] as PublicDonationDoc;
 		}
 
@@ -956,6 +976,29 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(appendedDocs()).toHaveLength(0);
 		});
 
+		it('refuses to turn away every line of a central-warehouse (m6) delivery, 422, writing nothing', async () => {
+			mockCouch({
+				...twoLines,
+				channel: 'm6',
+				status: 'verifying',
+				external: { system: 'm6', request_code: 'WD-0007' }
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						{ ...rice, qty: '0', rejected: true, reject_reason_code: 'damaged' },
+						milkRejected
+					]
+				})
+			);
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error_code).toBe('M6_NOT_REFUSABLE');
+			expect(appendedDocs()).toHaveLength(0);
+		});
+
 		it.each([
 			['no reason code', { ...milkRejected, reject_reason_code: undefined }],
 			[
@@ -1019,7 +1062,9 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 			expect(retry.status).toBe(200);
 			expect(appendedDocs().filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
-			const putCall = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
+			const putCall = vi
+				.mocked(adminRaw)
+				.mock.calls.find((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'));
 			expect((putCall![2] as PublicDonationDoc).status).toBe('received');
 			// The boxes keep the label they were given the first time.
 			expect(body.lots).toEqual([{ item_id: 'item:rice', lot_no: rows[0].lot?.lot_no }]);
@@ -1052,7 +1097,11 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(retry.status).toBe(409);
 			expect((await retry.json()).error_code).toBe('RECEIPT_MISMATCH');
 			expect(appendedDocs()).toHaveLength(0);
-			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+			expect(
+				vi
+					.mocked(adminRaw)
+					.mock.calls.some((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'))
+			).toBe(false);
 		});
 
 		/** First attempt keyed the rice line and lost its PUT; returns its rows and audit. */
@@ -1084,7 +1133,11 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(retry.status).toBe(409);
 			expect((await retry.json()).error_code).toBe('RECEIPT_MISMATCH');
 			expect(appendedDocs()).toHaveLength(0);
-			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+			expect(
+				vi
+					.mocked(adminRaw)
+					.mock.calls.some((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'))
+			).toBe(false);
 		});
 
 		it('refuses a retry that maps the keyed line to another item', async () => {
@@ -1122,7 +1175,11 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(response.status).toBe(409);
 			expect((await response.json()).error_code).toBe('RECEIPT_MISMATCH');
 			expect(appendedDocs()).toHaveLength(0);
-			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+			expect(
+				vi
+					.mocked(adminRaw)
+					.mock.calls.some((c) => c[1] === 'PUT' && !String(c[0]).includes('lot_counter'))
+			).toBe(false);
 		});
 
 		it('accepts a row a concurrent receive wrote first when it records the same line', async () => {
@@ -1135,7 +1192,10 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			});
 			const base = vi.mocked(adminRaw).getMockImplementation()!;
 			// Not there on the first read, there once `_bulk_docs` reports the conflict.
+			counterMock = createLotCounterMock();
 			vi.mocked(adminRaw).mockImplementation((path, method, body) => {
+				const lc = counterMock.handle(path, method, body);
+				if (lc) return Promise.resolve(lc);
 				if (method === 'POST' && path.includes('_all_docs')) {
 					ledgerReads += 1;
 					const rowsNow = ledgerReads === 1 ? [] : rows;

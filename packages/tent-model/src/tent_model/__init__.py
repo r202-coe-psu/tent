@@ -1,4 +1,5 @@
 from tent_model.api_key import ApiKey
+from tent_model.audit_event import AuditEvent
 from tent_model.db import ALL_DOCUMENTS, close_db, init_db
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
@@ -57,6 +58,22 @@ from tent_model.shelter_stock import M6_TYPE_CODES, ShelterStock
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 from tent_model.external_booking import OPEN_BOOKING_STATES, ExternalBooking
 from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+from tent_model.m5_outbound_log import M5OutboundLog
+from tent_model.m5_transfer import (
+	M5_OPEN_STATUSES,
+	M5_STATUSES,
+	M5Transfer,
+	M5TransferPatient,
+)
+from tent_model.m6_confirm_outbox import M6ConfirmOutbox
+from tent_model.m6_outbound_log import M6OutboundLog
+from tent_model.m6_withdrawal import (
+	M6_OPEN_STATUSES,
+	M6_STATUSES,
+	M6Person,
+	M6Withdrawal,
+	M6WithdrawalLine,
+)
 from tent_model.third_party_client import THIRD_PARTY_SCOPES, ThirdPartyClient
 from tent_model.unassigned_registration import (
 	PersonId,
@@ -97,6 +114,7 @@ __all__ = [
 	"ProfileUpdateTarget",
 	"ReserveResult",
 	"RetentionAudit",
+	"AuditEvent",
 	"SearchAudit",
 	"SelectedShift",
 	"SelectedShiftBuffer",
@@ -116,6 +134,18 @@ __all__ = [
 	"ThirdPartyClient",
 	"ExternalBooking",
 	"ExternalBookingIdempotency",
+	"M5_OPEN_STATUSES",
+	"M5_STATUSES",
+	"M5OutboundLog",
+	"M5Transfer",
+	"M5TransferPatient",
+	"M6_OPEN_STATUSES",
+	"M6_STATUSES",
+	"M6ConfirmOutbox",
+	"M6OutboundLog",
+	"M6Person",
+	"M6Withdrawal",
+	"M6WithdrawalLine",
 	"OPEN_BOOKING_STATES",
 	"UnassignedHousehold",
 	"UnassignedMember",

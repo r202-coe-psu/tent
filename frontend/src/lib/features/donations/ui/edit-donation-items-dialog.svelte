@@ -8,6 +8,7 @@
 	import { toast } from 'svelte-sonner';
 	import { usePublicShelterNeeds, useUpdateDonationItems } from '../application/queries';
 	import type { DonationItemEdit } from '../data/public-tracking';
+	import { qtyInputStep, resolveUnitDimension, wholeQtyError } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -83,9 +84,17 @@
 
 	const mutation = useUpdateDonationItems();
 
+	// The donor is anonymous, so the unit master (CouchDB) is out of reach: the built-in
+	// unit list decides, and an unknown free-text unit is not enforced.
+	const dimensionOf = (row: Row) => resolveUnitDimension(row.unit);
+	const hasWholeError = (row: Row) => !!wholeQtyError(row.qty, dimensionOf(row));
+
 	const canSave = $derived(
 		rows.length > 0 &&
-			rows.every((row) => row.free_text.trim() && Number(row.qty) > 0 && row.unit.trim())
+			rows.every(
+				(row) =>
+					row.free_text.trim() && Number(row.qty) > 0 && row.unit.trim() && !hasWholeError(row)
+			)
 	);
 
 	function addRow() {
@@ -141,87 +150,98 @@
 
 		<div class="space-y-3">
 			{#each rows as row, index (row.key)}
-				<div class="flex items-end gap-2 rounded-2xl border border-border bg-card p-3">
-					<div class="min-w-0 flex-1 space-y-1">
-						<label class="text-2xs font-bold text-muted-foreground uppercase" for="name-{index}">
-							{row.item_id || shelterNeeds.length > 0 ? t.editPickItemLabel : t.editItemLabel}
-						</label>
-						{#if row.item_id}
-							<!-- Bound to a catalog item: the name and unit are the shelter's, not
+				<div class="space-y-1">
+					<div class="flex items-end gap-2 rounded-2xl border border-border bg-card p-3">
+						<div class="min-w-0 flex-1 space-y-1">
+							<label class="text-2xs font-bold text-muted-foreground uppercase" for="name-{index}">
+								{row.item_id || shelterNeeds.length > 0 ? t.editPickItemLabel : t.editItemLabel}
+							</label>
+							{#if row.item_id}
+								<!-- Bound to a catalog item: the name and unit are the shelter's, not
 							     free text, so they are shown rather than edited. Swap the item by
 							     removing the line and adding it again. -->
-							<div
-								class="flex h-9 items-center rounded-xl border border-border/60 bg-muted/40 px-3 text-xs font-medium text-foreground"
-							>
-								{row.free_text}
-							</div>
-						{:else if shelterNeeds.length > 0}
-							<select
-								id="name-{index}"
-								value={row.item_id ?? ''}
-								onchange={(e) => pickNeed(index, e.currentTarget.value)}
-								class="h-9 w-full rounded-xl border border-border bg-background px-2 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-							>
-								<option value="">{t.editPickItemPlaceholder}</option>
-								{#each availableNeeds as need (need.item_id)}
-									<option value={need.item_id}>{need.name} ({need.unit})</option>
-								{/each}
-							</select>
-						{:else}
-							<!-- No published needs to pick from — let the donor describe the item
+								<div
+									class="flex h-9 items-center rounded-xl border border-border/60 bg-muted/40 px-3 text-xs font-medium text-foreground"
+								>
+									{row.free_text}
+								</div>
+							{:else if shelterNeeds.length > 0}
+								<select
+									id="name-{index}"
+									value={row.item_id ?? ''}
+									onchange={(e) => pickNeed(index, e.currentTarget.value)}
+									class="h-9 w-full rounded-xl border border-border bg-background px-2 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+								>
+									<option value="">{t.editPickItemPlaceholder}</option>
+									{#each availableNeeds as need (need.item_id)}
+										<option value={need.item_id}>{need.name} ({need.unit})</option>
+									{/each}
+								</select>
+							{:else}
+								<!-- No published needs to pick from — let the donor describe the item
 							     rather than block the edit; staff review it at intake. -->
+								<Input
+									id="name-{index}"
+									bind:value={row.free_text}
+									placeholder={t.editItemPlaceholder}
+									class="h-9 rounded-xl text-xs"
+								/>
+							{/if}
+						</div>
+						<div class="w-20 space-y-1">
+							<label class="text-2xs font-bold text-muted-foreground uppercase" for="qty-{index}">
+								{t.editQtyLabel}
+							</label>
 							<Input
-								id="name-{index}"
-								bind:value={row.free_text}
-								placeholder={t.editItemPlaceholder}
+								id="qty-{index}"
+								type="number"
+								min="0"
+								step={qtyInputStep(dimensionOf(row))}
+								bind:value={row.qty}
+								aria-invalid={hasWholeError(row) ? 'true' : undefined}
 								class="h-9 rounded-xl text-xs"
 							/>
-						{/if}
-					</div>
-					<div class="w-20 space-y-1">
-						<label class="text-2xs font-bold text-muted-foreground uppercase" for="qty-{index}">
-							{t.editQtyLabel}
-						</label>
-						<Input
-							id="qty-{index}"
-							type="number"
-							min="0"
-							step="any"
-							bind:value={row.qty}
-							class="h-9 rounded-xl text-xs"
-						/>
-					</div>
-					<div class="w-20 space-y-1">
-						<label class="text-2xs font-bold text-muted-foreground uppercase" for="unit-{index}">
-							{t.editUnitLabel}
-						</label>
-						{#if row.item_id}
-							<!-- schema.md §2.1: a line carrying an `item_id` must use that item's
+						</div>
+						<div class="w-20 space-y-1">
+							<label class="text-2xs font-bold text-muted-foreground uppercase" for="unit-{index}">
+								{t.editUnitLabel}
+							</label>
+							{#if row.item_id}
+								<!-- schema.md §2.1: a line carrying an `item_id` must use that item's
 							     base unit, or the intake counter refuses it (CATALOG_MISMATCH). -->
-							<div
-								class="flex h-9 items-center justify-center rounded-xl border border-border/60 bg-muted/40 px-2 text-xs font-medium text-muted-foreground"
-							>
-								{row.unit || '—'}
-							</div>
-						{:else}
-							<Input
-								id="unit-{index}"
-								bind:value={row.unit}
-								placeholder={t.editUnitPlaceholder}
-								class="h-9 rounded-xl text-xs"
-							/>
-						{/if}
+								<div
+									class="flex h-9 items-center justify-center rounded-xl border border-border/60 bg-muted/40 px-2 text-xs font-medium text-muted-foreground"
+								>
+									{row.unit || '—'}
+								</div>
+							{:else}
+								<Input
+									id="unit-{index}"
+									bind:value={row.unit}
+									placeholder={t.editUnitPlaceholder}
+									class="h-9 rounded-xl text-xs"
+								/>
+							{/if}
+						</div>
+						<Button
+							variant="ghost"
+							size="icon"
+							class="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+							aria-label={t.editDeleteItemAria.replace(
+								'{name}',
+								row.free_text || String(index + 1)
+							)}
+							disabled={rows.length === 1}
+							onclick={() => removeRow(index)}
+						>
+							<Trash2 class="h-4 w-4" />
+						</Button>
 					</div>
-					<Button
-						variant="ghost"
-						size="icon"
-						class="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-						aria-label={t.editDeleteItemAria.replace('{name}', row.free_text || String(index + 1))}
-						disabled={rows.length === 1}
-						onclick={() => removeRow(index)}
-					>
-						<Trash2 class="h-4 w-4" />
-					</Button>
+					{#if hasWholeError(row)}
+						<p class="text-2xs font-semibold text-destructive" role="alert">
+							{t.editQtyWholeError}
+						</p>
+					{/if}
 				</div>
 			{/each}
 

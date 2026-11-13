@@ -9,5 +9,6 @@
 	id={data.id ?? ''}
 	isEdit={data.mode === 'edit'}
 	basePath={resolve('/system-management/shelters')}
+	backLabel="กลับไปจัดการศูนย์พักพิง"
 	siteKind={data.siteKind}
 />

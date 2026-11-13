@@ -11,6 +11,7 @@
 
 // domain
 export * from './domain/volunteer.schema';
+export * from './domain/phone-errors';
 export {
 	isVolunteerMobile,
 	volunteerMobileSchema,
@@ -47,6 +48,7 @@ export * from './domain/duty-window';
 export * from './domain/shift-closing';
 export * from './domain/collision';
 export * from './domain/assign-roster';
+export { sanitizeCountTyping } from './domain/shift-edit';
 export * from './domain/skills';
 export * from './domain/skill-catalog';
 export * from './domain/applicant-queue';

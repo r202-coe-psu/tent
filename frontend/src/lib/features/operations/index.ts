@@ -10,6 +10,7 @@ export type {
 	Donation,
 	Donor,
 	DonationItem,
+	DonationExternal,
 	DonationPointReceipt,
 	DonationPointReceiptItem,
 	DonationCloseReason,
@@ -203,6 +204,28 @@ export {
 // Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
 export { operationsRepository, OperationsRemoteRepository } from './data/operations.remote';
+
+// Lot-number reservation (CR-244): the one loop + the staff-session connector.
+export {
+	reserveLotNos,
+	LotReservationError,
+	LOT_RESERVATION_MAX_ATTEMPTS
+} from './data/lot-reservation';
+export type {
+	LotCounterConnector,
+	LotCounterRecord,
+	LotCounterPutResult,
+	ReserveLotNosOptions
+} from './data/lot-reservation';
+export { createSessionLotCounterConnector } from './data/lot-reservation.couch';
+export {
+	buildLotNos,
+	lotCounterId,
+	maxLotSeq,
+	lotSeedFindBody,
+	parseLotSeedMax
+} from './domain/operations';
+export type { LotCounter } from './domain/operations';
 
 // Application — TanStack Query hooks + live-query wiring
 export {

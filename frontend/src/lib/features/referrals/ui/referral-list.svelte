@@ -4,6 +4,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Archive from '@lucide/svelte/icons/archive';
 	import Check from '@lucide/svelte/icons/check';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import CircleX from '@lucide/svelte/icons/circle-x';
@@ -22,6 +23,8 @@
 		ReferralStatus
 	} from '../domain/referral.schema';
 	import { groupReferralsForList, type ReferralListGroup } from '../domain/referral.batch-group';
+	import { isM5Referral } from '../domain/referral.m5';
+	import { M5_STATUS_META } from './referral.m5.ui';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
@@ -29,6 +32,7 @@
 		getStatusBadgeVariant,
 		getStatusLabel,
 		getUrgencyLabel,
+		oneDataM5BatchPath,
 		referralBatchPath,
 		referralDetailPath,
 		resolveEvacueeName
@@ -47,10 +51,14 @@
 		isLoading = false,
 		isError = false,
 		onRetry,
-		hasMore = false,
-		isFetchingMore = false,
-		isLoadMoreError = false,
-		onLoadMore
+		page = 1,
+		hasPrev = false,
+		hasNext = false,
+		isFetchingNext = false,
+		isNextError = false,
+		onPrev,
+		onNext,
+		showDirection = true
 	}: {
 		referrals: Referral[];
 		/** Server query inputs — the parent owns them (URL) and refetches on change. */
@@ -58,16 +66,22 @@
 		onDirectionChange?: (next: ReferralDirectionFilter) => void;
 		status?: StatusTab;
 		onStatusChange?: (next: StatusTab) => void;
-		/** Client-side filter over loaded rows; the parent mirrors it into the URL. */
+		/** Client-side filter over the current page; the parent mirrors it into the URL. */
 		search?: string;
 		onSearchChange?: (next: string) => void;
 		isLoading?: boolean;
 		isError?: boolean;
 		onRetry?: () => void;
-		hasMore?: boolean;
-		isFetchingMore?: boolean;
-		isLoadMoreError?: boolean;
-		onLoadMore?: () => void;
+		/** 1-based server page shown; each page is one API call (bookmark), not a UI slice. */
+		page?: number;
+		hasPrev?: boolean;
+		hasNext?: boolean;
+		isFetchingNext?: boolean;
+		isNextError?: boolean;
+		onPrev?: () => void;
+		onNext?: () => void;
+		/** Hide the outgoing/incoming tabs (OneData M5 sends outgoing only). */
+		showDirection?: boolean;
 	} = $props();
 
 	/** Names come from the referral's own `evacuee_summary` snapshot — no evacuee roster is loaded. */
@@ -116,11 +130,22 @@
 		closed: Archive
 	};
 
-	/** Single referral opens its detail; a multi-member group opens the batch page. */
+	/**
+	 * An M5 batch (even of one) opens its OneData batch page, where the send / vehicle-left /
+	 * withdraw panel lives (D17). Other multi-member groups open the batch page, singles the detail.
+	 */
 	function groupHref(group: ReferralListGroup): string {
+		if (isM5Referral(group.sample)) return oneDataM5BatchPath(group.sample._id);
 		return group.count > 1
 			? referralBatchPath(group.sample._id)
 			: referralDetailPath(group.sample._id);
+	}
+
+	/** OneData M5 badge text: the M5 status once sent, "not sent yet" for a draft. */
+	function m5BadgeLabel(referral: Referral): string {
+		const external = 'external' in referral ? referral.external : undefined;
+		if (external?.status) return `OneData M5 · ${M5_STATUS_META[external.status].label}`;
+		return referral.status === 'draft' ? 'OneData M5 · ยังไม่ได้ส่ง' : 'OneData M5';
 	}
 
 	function primaryLabel(group: ReferralListGroup): string {
@@ -135,6 +160,11 @@
 		if (direction === 'incoming') return referral.shelter_code || '-';
 		return referral.to_shelter_code || referral.to_org?.name || '-';
 	}
+
+	// Both are off while the next page loads, so a late response cannot land on a page the user left.
+	const prevEnabled = $derived(hasPrev && !isFetchingNext);
+	const nextEnabled = $derived(hasNext && !isFetchingNext);
+	const pagerOff = 'aria-disabled:cursor-not-allowed aria-disabled:opacity-50';
 
 	const counterpartHeader = $derived(direction === 'incoming' ? 'ต้นทาง' : 'ปลายทาง');
 
@@ -160,6 +190,14 @@
 {/snippet}
 
 {#snippet badges(group: ReferralListGroup)}
+	{#if isM5Referral(group.sample)}
+		<Badge
+			class="gap-1 border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-900"
+		>
+			<Send class="h-3.5 w-3.5" aria-hidden="true" />
+			{m5BadgeLabel(group.sample)}
+		</Badge>
+	{/if}
 	{#if group.count > 1}
 		<Badge
 			class="gap-1 bg-sky-100 text-xs font-semibold text-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
@@ -192,29 +230,31 @@
 	</div>
 
 	<!-- Direction (server query) -->
-	<div
-		role="tablist"
-		aria-label="ทิศทางการส่งต่อ"
-		class="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
-	>
-		{#each directions as d (d.value)}
-			{@const isActive = direction === d.value}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={isActive}
-				onclick={() => {
-					if (!isActive) onDirectionChange?.(d.value);
-				}}
-				class="min-h-11 rounded-md px-5 text-sm transition-colors {rowFocus}
+	{#if showDirection}
+		<div
+			role="tablist"
+			aria-label="ทิศทางการส่งต่อ"
+			class="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
+		>
+			{#each directions as d (d.value)}
+				{@const isActive = direction === d.value}
+				<button
+					type="button"
+					role="tab"
+					aria-selected={isActive}
+					onclick={() => {
+						if (!isActive) onDirectionChange?.(d.value);
+					}}
+					class="min-h-11 rounded-md px-5 text-sm transition-colors {rowFocus}
 				{isActive
-					? 'bg-card font-semibold text-primary shadow-xs'
-					: 'font-medium text-muted-foreground hover:text-foreground'}"
-			>
-				{d.label}
-			</button>
-		{/each}
-	</div>
+						? 'bg-card font-semibold text-primary shadow-xs'
+						: 'font-medium text-muted-foreground hover:text-foreground'}"
+				>
+					{d.label}
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Status tabs (server query) -->
 	<div
@@ -348,36 +388,53 @@
 		</ul>
 	{/if}
 
-	<!-- Footer: load more -->
-	{#if !isLoading && !isError && referrals.length > 0}
+	<!-- Footer: server pages (bookmark cursor, so previous/next only — no total) -->
+	{#if !isLoading && !isError && (referrals.length > 0 || hasPrev)}
 		<div
 			class="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-4 sm:flex-row"
 		>
 			<div class="space-y-0.5 text-center font-sans text-xs text-muted-foreground sm:text-left">
-				<div>แสดง {shownCount} รายการ</div>
-				{#if isLoadMoreError}
-					<div role="alert" class="font-medium text-red-700">โหลดรายการเพิ่มไม่สำเร็จ</div>
+				<!-- Only the page number is live: the row count changes on every search keystroke. -->
+				<div class="tabular-nums">
+					<span role="status">หน้า {page}</span> · แสดง {shownCount} รายการ
+				</div>
+				{#if isNextError}
+					<div role="alert" class="font-medium text-red-700">โหลดหน้าถัดไปไม่สำเร็จ</div>
 				{/if}
-				{#if hasMore && searchInput.trim()}
-					<div role="status">ค้นหาเฉพาะรายการที่โหลดแล้ว</div>
+				{#if (hasPrev || hasNext) && searchInput.trim()}
+					<div role="status">ค้นหาเฉพาะรายการในหน้านี้</div>
 				{/if}
 			</div>
 
-			{#if hasMore}
+			<!-- aria-disabled, not disabled: a disabled button drops keyboard focus at the last page. -->
+			<nav aria-label="เปลี่ยนหน้ารายการส่งต่อ" class="flex items-center gap-2">
 				<Button
 					variant="outline"
-					onclick={() => onLoadMore?.()}
-					disabled={isFetchingMore}
-					class="h-11 gap-2"
+					aria-disabled={!prevEnabled}
+					onclick={() => {
+						if (prevEnabled) onPrev?.();
+					}}
+					class="h-11 gap-1 {pagerOff}"
 				>
-					{#if isFetchingMore}
-						<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
-					{/if}
-					โหลดเพิ่ม
+					<ChevronLeft class="h-4 w-4" aria-hidden="true" />
+					ก่อนหน้า
 				</Button>
-			{:else}
-				<span class="text-xs text-muted-foreground">ไม่มีรายการเพิ่มเติม</span>
-			{/if}
+				<Button
+					variant="outline"
+					aria-disabled={!nextEnabled}
+					onclick={() => {
+						if (nextEnabled) onNext?.();
+					}}
+					class="h-11 gap-1 {pagerOff}"
+				>
+					ถัดไป
+					{#if isFetchingNext}
+						<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+					{:else}
+						<ChevronRight class="h-4 w-4" aria-hidden="true" />
+					{/if}
+				</Button>
+			</nav>
 		</div>
 	{/if}
 </div>

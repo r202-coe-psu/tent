@@ -11,7 +11,7 @@ const mockBulk = vi.fn();
 
 vi.mock('$lib/features/referrals/server/referral.bulk-transition', () => ({
 	BULK_TRANSITION_MAX_IDS: 200,
-	bulkTransition: (...args: unknown[]) => mockBulk(...args)
+	bulkTransitionWithM5: (...args: unknown[]) => mockBulk(...args)
 }));
 
 function createMockEvent(body: unknown, search = ''): RequestEvent {
@@ -65,7 +65,9 @@ describe('POST /api/back-office/referral/bulk-transition', () => {
 			'closed',
 			'ปิดงาน',
 			'sm_user',
-			'SH001'
+			'SH001',
+			// Managers act on every referral type (D16); M5 batches are handled by the core.
+			{ allowedTypes: null }
 		);
 	});
 
@@ -135,6 +137,6 @@ describe('POST /api/back-office/referral/bulk-transition', () => {
 		} as never);
 		mockBulk.mockResolvedValue({ succeeded: [], failed: [] });
 		await POST(createMockEvent({ ids: ['referral:1'], to: 'closed' }, '?shelter_code=SH003'));
-		expect(mockBulk.mock.calls[0].slice(3)).toEqual(['admin', 'SH003']);
+		expect(mockBulk.mock.calls[0].slice(3)).toEqual(['admin', 'SH003', { allowedTypes: null }]);
 	});
 });

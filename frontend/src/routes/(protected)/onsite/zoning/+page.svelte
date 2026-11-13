@@ -581,6 +581,78 @@
 	const emptyPendingMessage = $derived(enableMedical ? t.emptyPendingMedical : t.emptyPendingPlain);
 </script>
 
+{#snippet waitOrZone(row: (typeof pagedRows.items)[number])}
+	{#if activeTab === 'pending'}
+		{@const since = zoningQueueSince(row, latestScreeningAt[row._id])}
+		<span title={formatTimeOrDate(since)} class="tabular-nums">
+			{formatQueueWait(since, now, langState.current)}
+		</span>
+	{:else}
+		<span class="inline-flex flex-wrap items-center gap-1.5">
+			<span>{zoneLabel(row.current_stay.zone, shelterZones)}</span>
+			{#if quarantineZoneCodes.has(row.current_stay.zone ?? '')}
+				<span
+					class="rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-red-500"
+					>{t.quarantineBadge}</span
+				>
+			{/if}
+			{#if row.current_stay.status === 'room_confirmed'}
+				<span
+					class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200"
+					>{t.confirmedBadge}</span
+				>
+			{:else if isPendingZoneArrivalConfirmation(row)}
+				<span
+					class="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
+					>{t.awaitingBadge}</span
+				>
+			{/if}
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet rowActions(row: (typeof pagedRows.items)[number])}
+	{#if activeTab === 'awaiting_confirm'}
+		<Button
+			size="sm"
+			onclick={(e) => {
+				e.stopPropagation();
+				void confirmOne(row._id);
+			}}
+			disabled={confirmRoomMutation.isPending || bulkBusy}
+			class="h-auto min-h-7 max-w-36 rounded-lg py-1 leading-tight font-semibold whitespace-normal sm:max-w-none sm:whitespace-nowrap"
+		>
+			{t.confirmZoneArrival}
+		</Button>
+		{#if row.household_id}
+			<Button
+				size="sm"
+				variant="outline"
+				onclick={(e) => {
+					e.stopPropagation();
+					void confirmHousehold(row.household_id!);
+				}}
+				disabled={confirmRoomHouseholdMutation.isPending || bulkBusy}
+				class="h-auto min-h-7 max-w-36 rounded-lg border-slate-200 px-3 py-1 leading-tight font-semibold whitespace-normal text-slate-700 sm:max-w-none sm:whitespace-nowrap"
+			>
+				{t.actionWholeHousehold}
+			</Button>
+		{/if}
+	{:else}
+		<Button
+			size="sm"
+			variant="outline"
+			onclick={(e) => {
+				e.stopPropagation();
+				openDetail(row._id);
+			}}
+			class="h-auto min-h-7 max-w-36 rounded-lg border-slate-200 px-3 py-1 leading-tight font-semibold whitespace-normal text-slate-700 sm:max-w-none sm:whitespace-nowrap"
+		>
+			{activeTab === 'pending' ? t.actionAssign : t.actionMove}
+		</Button>
+	{/if}
+{/snippet}
+
 {#snippet chip(label: string, tone: string)}
 	<Badge
 		variant="outline"
@@ -728,11 +800,12 @@
 		</div>
 	</Card.Root>
 
-	<section aria-label={t.summaryAria} class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+	<section aria-label={t.summaryAria} class="grid grid-cols-3 gap-2 sm:gap-4">
 		<button
 			type="button"
 			onclick={() => setActiveTab('pending')}
-			class="group flex flex-row items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:flex-col sm:items-stretch sm:p-4 {activeTab ===
+			aria-pressed={activeTab === 'pending'}
+			class="group flex flex-col items-stretch gap-1 rounded-xl border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:gap-3 sm:p-4 {activeTab ===
 			'pending'
 				? 'border-amber-300 bg-amber-50/50 shadow-2xs ring-2 ring-amber-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
@@ -742,24 +815,27 @@
 					>{t.tabPending}</span
 				>
 				<div
-					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
+					class="hidden size-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200 sm:flex"
 				>
 					<Clock class="size-4" />
 				</div>
 			</div>
-			<div class="max-w-[55%] min-w-0 text-right sm:mt-2 sm:max-w-none sm:text-left">
-				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+			<div class="min-w-0 sm:mt-2">
+				<p class="text-xl font-bold tracking-tight text-slate-900 tabular-nums sm:text-2xl">
 					{pendingEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs leading-tight break-words text-slate-500">{t.pendingSub}</p>
+				<p class="mt-0.5 hidden text-xs leading-tight break-words text-slate-500 sm:block">
+					{t.pendingSub}
+				</p>
 			</div>
 		</button>
 
 		<button
 			type="button"
 			onclick={() => setActiveTab('awaiting_confirm')}
-			class="group flex flex-row items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:flex-col sm:items-stretch sm:p-4 {activeTab ===
+			aria-pressed={activeTab === 'awaiting_confirm'}
+			class="group flex flex-col items-stretch gap-1 rounded-xl border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:gap-3 sm:p-4 {activeTab ===
 			'awaiting_confirm'
 				? 'border-emerald-300 bg-emerald-50/50 shadow-2xs ring-2 ring-emerald-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
@@ -769,24 +845,27 @@
 					>{t.tabAwaiting}</span
 				>
 				<div
-					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 transition-colors group-hover:bg-emerald-200"
+					class="hidden size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 transition-colors group-hover:bg-emerald-200 sm:flex"
 				>
 					<Clock class="size-4" />
 				</div>
 			</div>
-			<div class="max-w-[55%] min-w-0 text-right sm:mt-2 sm:max-w-none sm:text-left">
-				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+			<div class="min-w-0 sm:mt-2">
+				<p class="text-xl font-bold tracking-tight text-slate-900 tabular-nums sm:text-2xl">
 					{awaitingConfirmEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs leading-tight break-words text-slate-500">{t.awaitingSub}</p>
+				<p class="mt-0.5 hidden text-xs leading-tight break-words text-slate-500 sm:block">
+					{t.awaitingSub}
+				</p>
 			</div>
 		</button>
 
 		<button
 			type="button"
 			onclick={() => setActiveTab('assigned')}
-			class="group flex flex-row items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:flex-col sm:items-stretch sm:p-4 {activeTab ===
+			aria-pressed={activeTab === 'assigned'}
+			class="group flex flex-col items-stretch gap-1 rounded-xl border p-2.5 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:gap-3 sm:p-4 {activeTab ===
 			'assigned'
 				? 'border-sky-300 bg-sky-50/50 shadow-2xs ring-2 ring-sky-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
@@ -796,23 +875,25 @@
 					>{t.tabAssigned}</span
 				>
 				<div
-					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 transition-colors group-hover:bg-sky-200"
+					class="hidden size-7 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 transition-colors group-hover:bg-sky-200 sm:flex"
 				>
 					<Check class="size-4" />
 				</div>
 			</div>
-			<div class="max-w-[55%] min-w-0 text-right sm:mt-2 sm:max-w-none sm:text-left">
-				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+			<div class="min-w-0 sm:mt-2">
+				<p class="text-xl font-bold tracking-tight text-slate-900 tabular-nums sm:text-2xl">
 					{assignedEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">{t.unitPerson}</span>
 				</p>
-				<p class="mt-0.5 text-xs leading-tight break-words text-slate-500">{t.assignedSub}</p>
+				<p class="mt-0.5 hidden text-xs leading-tight break-words text-slate-500 sm:block">
+					{t.assignedSub}
+				</p>
 			</div>
 		</button>
 	</section>
 
 	<section class="flex flex-col gap-4">
-		<div class="border-b border-border">
+		<div class="hidden border-b border-border sm:block">
 			<nav
 				class="flex [scrollbar-width:none] gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
 				aria-label={t.tabsAria}
@@ -820,6 +901,7 @@
 				<button
 					type="button"
 					onclick={() => setActiveTab('pending')}
+					aria-pressed={activeTab === 'pending'}
 					class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 					'pending'
 						? 'border-primary text-primary'
@@ -834,6 +916,7 @@
 				<button
 					type="button"
 					onclick={() => setActiveTab('awaiting_confirm')}
+					aria-pressed={activeTab === 'awaiting_confirm'}
 					class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 					'awaiting_confirm'
 						? 'border-primary text-primary'
@@ -848,6 +931,7 @@
 				<button
 					type="button"
 					onclick={() => setActiveTab('assigned')}
+					aria-pressed={activeTab === 'assigned'}
 					class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 					'assigned'
 						? 'border-primary text-primary'
@@ -948,7 +1032,84 @@
 					</p>
 				</div>
 			{:else}
-				<div class="overflow-x-auto">
+				<label
+					class="flex min-h-11 items-center gap-3 border-b border-slate-200/80 px-4 text-sm text-slate-700 md:hidden"
+				>
+					<Checkbox
+						checked={allPageSelected}
+						indeterminate={somePageSelected}
+						onCheckedChange={toggleSelectAll}
+					/>
+					{t.selectAllAria}
+				</label>
+				<ul role="list" class="divide-y divide-slate-200/80 md:hidden" data-testid="zoning-cards">
+					{#each pagedRows.items as row, index (row._id)}
+						{@const hh = row.household_id ? householdMap.get(row.household_id) : null}
+						{@const ewarSymptoms = ewarSymptomsByEvacuee.get(row._id)}
+						{@const selected = isSelected(row._id)}
+						<li
+							class="space-y-2.5 px-4 py-3 {selected ? 'bg-[var(--shelter-accent-blue-bg)]' : ''}"
+						>
+							<div class="flex items-start gap-1">
+								<label class="-mt-3 -ml-3 flex size-11 shrink-0 items-center justify-center">
+									<Checkbox
+										checked={selected}
+										onCheckedChange={(checked) => onCheckboxChange(row._id, index, checked)}
+										aria-label={t.selectRowAria(formatPersonName(row))}
+									/>
+								</label>
+								<div class="min-w-0 flex-1">
+									<button
+										type="button"
+										class="text-left font-semibold break-words text-slate-900 underline-offset-2 hover:underline"
+										onclick={() => openDetail(row._id)}
+									>
+										{formatPersonName(row)}
+									</button>
+									<p class="text-xs text-slate-600 tabular-nums">
+										{t.colCard}: {maskNationalId(row.person_id?.number)}
+									</p>
+								</div>
+							</div>
+							<dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
+								<dt class="text-slate-500">{t.colFamily}</dt>
+								<dd class="break-words text-slate-700">{hh?.label ?? '—'}</dd>
+								<dt class="text-slate-500">{activeTab === 'pending' ? t.colWaited : t.colZone}</dt>
+								<dd class="text-slate-700">{@render waitOrZone(row)}</dd>
+								<dt class="text-slate-500">{t.colEwar}</dt>
+								<dd>
+									{@render chipList(
+										(ewarSymptoms ?? []).map((id) => ewarSymptomLabel(id, langState.current)),
+										CHIP_TONES.ewar,
+										t.colEwar
+									)}
+								</dd>
+								<dt class="text-slate-500">{t.colVulnerable}</dt>
+								<dd>
+									{@render chipList(
+										(row.vulnerable_groups ?? []).map(getSpecialNeedLabel),
+										CHIP_TONES.vulnerable,
+										t.colVulnerable
+									)}
+								</dd>
+								<dt class="text-slate-500">{t.colSpecialNeeds}</dt>
+								<dd>
+									{@render chipList(
+										(row.special_needs ?? []).map(getSpecialNeedLabel),
+										CHIP_TONES.need,
+										t.colSpecialNeeds
+									)}
+								</dd>
+							</dl>
+							<div
+								class="flex flex-wrap gap-2 [&>*]:min-h-11 [&>*]:max-w-none [&>*]:flex-1 [&>*]:text-sm"
+							>
+								{@render rowActions(row)}
+							</div>
+						</li>
+					{/each}
+				</ul>
+				<div class="hidden overflow-x-auto md:block">
 					<Table.Root>
 						<Table.Header class="border-b border-slate-200/90 bg-slate-50">
 							<Table.Row class="border-b-0 hover:bg-transparent">
@@ -1045,77 +1206,13 @@
 										{hh?.label ?? '—'}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs text-slate-500">
-										{#if activeTab === 'pending'}
-											{@const since = zoningQueueSince(row, latestScreeningAt[row._id])}
-											<span title={formatTimeOrDate(since)} class="tabular-nums">
-												{formatQueueWait(since, now, langState.current)}
-											</span>
-										{:else}
-											<span class="inline-flex flex-wrap items-center gap-1.5">
-												<span>{zoneLabel(row.current_stay.zone, shelterZones)}</span>
-												{#if quarantineZoneCodes.has(row.current_stay.zone ?? '')}
-													<span
-														class="rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-red-500"
-														>{t.quarantineBadge}</span
-													>
-												{/if}
-												{#if row.current_stay.status === 'room_confirmed'}
-													<span
-														class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200"
-														>{t.confirmedBadge}</span
-													>
-												{:else if isPendingZoneArrivalConfirmation(row)}
-													<span
-														class="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
-														>{t.awaitingBadge}</span
-													>
-												{/if}
-											</span>
-										{/if}
+										{@render waitOrZone(row)}
 									</Table.Cell>
 									<Table.Cell
 										class="sticky right-0 z-10 bg-white py-3 pr-5 text-right shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
 									>
 										<div class="flex flex-col items-end gap-1.5 sm:flex-row sm:justify-end">
-											{#if activeTab === 'awaiting_confirm'}
-												<Button
-													size="sm"
-													onclick={(e) => {
-														e.stopPropagation();
-														void confirmOne(row._id);
-													}}
-													disabled={confirmRoomMutation.isPending || bulkBusy}
-													class="h-auto min-h-7 max-w-36 rounded-lg py-1 leading-tight font-semibold whitespace-normal sm:max-w-none sm:whitespace-nowrap"
-												>
-													{t.confirmZoneArrival}
-												</Button>
-												{#if row.household_id}
-													<Button
-														size="sm"
-														variant="outline"
-														onclick={(e) => {
-															e.stopPropagation();
-															void confirmHousehold(row.household_id!);
-														}}
-														disabled={confirmRoomHouseholdMutation.isPending || bulkBusy}
-														class="h-auto min-h-7 max-w-36 rounded-lg border-slate-200 px-3 py-1 leading-tight font-semibold whitespace-normal text-slate-700 sm:max-w-none sm:whitespace-nowrap"
-													>
-														{t.actionWholeHousehold}
-													</Button>
-												{/if}
-											{:else}
-												<Button
-													size="sm"
-													variant="outline"
-													onclick={(e) => {
-														e.stopPropagation();
-														openDetail(row._id);
-													}}
-													class="h-auto min-h-7 max-w-36 rounded-lg border-slate-200 px-3 py-1 leading-tight font-semibold whitespace-normal text-slate-700 sm:max-w-none sm:whitespace-nowrap"
-												>
-													{activeTab === 'pending' ? t.actionAssign : t.actionMove}
-												</Button>
-											{/if}
+											{@render rowActions(row)}
 										</div>
 									</Table.Cell>
 								</Table.Row>

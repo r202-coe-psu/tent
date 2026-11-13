@@ -87,11 +87,13 @@ test.describe(
 			expect(await tabBadge(desk, 'supplies', /เปิดแจก (\d+)/)).toBe(openCount);
 
 			await desk.selectPoint('ทุกจุด');
-			await page.getByLabel('เลือกตั๋วพัสดุที่ใช้งาน').click();
-			// Option label: "{ticket_no} · {point} ({items})" — anchor on " · {point} (" because the
-			// south point's name extends the north one.
+			await page.locator('#supplies-ticket').click();
+			// A supplies option reads "{point} รายการ … เลขตั๋ว …" — anchor on "{point} รายการ" because
+			// the south point's name extends the north one.
 			const option = (point: string) =>
-				page.getByRole('option', { name: new RegExp(` · ${escapeRegExp(point)} \\(`) });
+				desk
+					.ticketPickerPopover()
+					.getByRole('button', { name: new RegExp(`^${escapeRegExp(point)}\\s+รายการ`) });
 			await expect(option(north)).toBeVisible();
 			await expect(option(south)).toBeVisible();
 			await page.keyboard.press('Escape');
@@ -118,7 +120,7 @@ test.describe(
 			await desk.selectPoint(scenarioPoint(scenario));
 			await desk.receive(incoming);
 			await expectTicketStatus(incoming, 'DISTRIBUTING', 'Receive checkpoint');
-			await expect(page.getByLabel('เลือกจุดแจก')).toContainText('ทุกจุด');
+			await expect(page.locator('#point-select')).toContainText('ทุกจุด');
 		});
 
 		test('X-4 a handover on one desk updates the balance on another without reload', async ({

@@ -1,7 +1,12 @@
 /* eslint-disable no-restricted-imports */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../../_auth';
+import {
+	assertReferralTypeAllowed,
+	authorizeReferral,
+	resolveShelterCode,
+	handleEndpointError
+} from '../../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import { redactForScope } from '$lib/features/referrals/domain/referral.redaction';
 
@@ -12,11 +17,15 @@ const BACK_OFFICE_SCOPE = 'internal' as const;
 
 /**
  * GET /api/back-office/referral/[id]/batch
- * Siblings of the referral created in the same batch (same template, creator and 2-minute window).
+ * Siblings of the referral created in the same batch: same `batch_id` (M5), else the same
+ * template, creator and 2-minute window.
  */
 export const GET: RequestHandler = async ({ request, params, url }) => {
 	try {
-		const caller = await authorizeReferral(request.headers.get('cookie'));
+		const caller = await authorizeReferral(
+			request.headers.get('cookie'),
+			url.searchParams.get('shelter_code')
+		);
 		const id = params.id;
 		if (!id) {
 			return json({ error: 'Missing ID parameter' }, { status: 400 });
@@ -36,6 +45,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 		) {
 			return json({ error: 'Forbidden: You do not have access to this referral' }, { status: 403 });
 		}
+		assertReferralTypeAllowed(caller, shelterCode, anchor.referral_type);
 
 		const items = await repo.getBatchFor(anchor);
 		return json({ items: items.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)) });

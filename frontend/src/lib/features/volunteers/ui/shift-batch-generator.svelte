@@ -13,6 +13,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { errorMessage } from '$lib/utils/errors';
 	import type { JobShift } from '../domain/job.schema';
+	import { sanitizeCountTyping } from '../domain/shift-edit';
 	import {
 		ALL_WEEKDAYS,
 		WEEKDAYS,
@@ -38,7 +39,7 @@
 	let endDate = $state('');
 	let startTime = $state('08:00');
 	let endTime = $state('16:00');
-	let seats = $state(5);
+	let seats = $state<number | null>(5);
 	let weekdays = $state<Weekday[]>([...ALL_WEEKDAYS]);
 
 	/** Checked as the user picks, so a weekday the range lacks is flagged before Generate. */
@@ -62,6 +63,7 @@
 			startTime !== '' &&
 			endTime !== '' &&
 			weekdays.length > 0 &&
+			seats !== null &&
 			Number.isInteger(seats) &&
 			seats > 0 &&
 			blocker === null
@@ -77,7 +79,7 @@
 			toast.error(`สร้างกะไม่ได้ — ${blocker}`);
 			return;
 		}
-		if (!canGenerate) return;
+		if (!canGenerate || seats === null) return;
 		try {
 			const rows = generateBatchShifts(
 				{
@@ -123,7 +125,21 @@
 		</label>
 		<label class="space-y-1">
 			<span class="text-sm font-semibold text-slate-700">👥 จำนวนคนต่อกะ</span>
-			<Input type="number" min="1" bind:value={seats} class="!h-11 tabular-nums" {disabled} />
+			<Input
+				type="number"
+				min="1"
+				bind:value={seats}
+				class="!h-11 tabular-nums"
+				{disabled}
+				oninput={(e) => {
+					const val = e.currentTarget.value;
+					const cleaned = sanitizeCountTyping(val);
+					if (val !== cleaned) {
+						e.currentTarget.value = cleaned;
+						seats = cleaned === '' ? null : Number(cleaned);
+					}
+				}}
+			/>
 		</label>
 	</div>
 

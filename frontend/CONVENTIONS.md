@@ -8,7 +8,7 @@ covers the _how_ — naming, structure, and coding patterns every contributor mu
 
 ## Contents
 
-1. [Git workflow](#1-git-workflow) — branches, commits, PRs, **pre-commit quality gate**
+1. [Git workflow](#1-git-workflow) — branches, commits, PRs, **quality gate**
 2. [File & directory naming](#2-file--directory-naming)
 3. [TypeScript conventions](#3-typescript-conventions)
 4. [Feature architecture in practice](#4-feature-architecture-in-practice)
@@ -80,26 +80,29 @@ fixed bug in shelter
 - Squash is allowed when the commit history inside the PR is noise (WIP commits);
   keep it when commits tell a meaningful story.
 
-### Pre-commit quality gate
+### Quality gate
 
-The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`) as a
-pre-commit hook. When staged files touch `frontend/`, it runs — in order, fail-fast:
+The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`).
+Hooks are installed when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
 
-| Step | Command      | What it catches                                  |
-| ---- | ------------ | ------------------------------------------------ |
-| 1    | `pnpm lint`  | formatting drift, ESLint violations              |
-| 2    | `pnpm check` | TypeScript / Svelte type errors (`svelte-check`) |
-| 3    | `pnpm test`  | broken domain/data logic (Vitest)                |
+| Hook       | When it runs                            | Command                                                           | What it catches                     |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
+| pre-commit | staged `frontend/` files match          | `prettier --write`, then `eslint --fix`                           | formatting drift, ESLint violations |
+| pre-push   | pushed commits touch `frontend/` source | `pnpm test:changed` (Vitest `--changed origin/develop`, fs cache) | broken domain/data logic            |
 
-This mirrors the Jenkins staging pipeline (lint → type-check → unit tests). Hooks are installed
-when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
+Backend and worker use `ruff` on pre-commit and `pytest` on pre-push the same way. Pre-push jobs
+run one after another. The frontend job runs only tests whose import graph reaches a changed file;
+config, lockfile and test-setup changes re-run everything (`CONTRIBUTING.md` §1). `pnpm check`
+(`svelte-check`) and the full `pnpm test` stay manual steps before you open a PR.
 
-- **Scope:** only runs when `frontend/` files are staged. Pure docs/config commits at the repo
-  root skip the gate.
+- **Scope:** the frontend pre-commit job runs when `frontend/` files are staged. A docs-only
+  commit at the repo root skips it. The frontend pre-push job runs when the push includes
+  matching `frontend/` files.
 - **Strict Rule — No Bypass:** **Never** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` (ห้าม commit/push แบบ no-verify โดยเด็ดขาด). All quality gates must pass cleanly. Always fix the errors rather than bypassing.
 
-Treat a green pre-commit the same as the §2 definition-of-done checklist for items 1–3. Item 4
-(`svelte-autofixer`) is still manual before you push.
+A green pre-commit covers definition-of-done lint/format. A green pre-push covers the unit tests
+your change can affect. The full `pnpm test`, `pnpm check` and `svelte-autofixer` stay manual
+(`CONTRIBUTING.md` §2).
 
 ---
 
@@ -740,11 +743,12 @@ features/public-portal/
 
 ```ts
 // data/public-api.ts — browser → BFF only (CR-063)
-export async function familySearch(query: string) {
+export async function familySearch(query: string, consent: SearchConsent) {
 	const response = await fetch('/api/public/v1/occupants', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ search: query })
+		// CR-231: searcher + purpose + consent_accepted are required, else 422
+		body: JSON.stringify({ search: query, ...consent })
 	});
 	const data = await response.json().catch(() => null);
 	if (!response.ok || !data) throw new Error(/* unwrap error */);

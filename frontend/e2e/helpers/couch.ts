@@ -74,6 +74,11 @@ export interface TestUser {
 	password: string;
 	roles: string[];
 	display_name?: string;
+	consent?: {
+		agreed: boolean;
+		agreed_at: string;
+		version: string;
+	} | null;
 }
 
 /**
@@ -83,7 +88,7 @@ export interface TestUser {
 export async function createCouchUser(user: TestUser): Promise<void> {
 	// Delete first in case a previous run crashed before cleanup
 	await deleteCouchUser(user.name);
-	const { name, password, roles, display_name } = user;
+	const { name, password, roles, display_name, consent } = user;
 	const res = await couchReq('PUT', `/_users/${USER_PREFIX}${encodeURIComponent(name)}`, {
 		name,
 		password,
@@ -91,7 +96,15 @@ export async function createCouchUser(user: TestUser): Promise<void> {
 		display_name: display_name ?? name,
 		type: 'user',
 		shelter_id: roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length) ?? null,
-		affiliation_tags: []
+		affiliation_tags: [],
+		consent:
+			consent !== undefined
+				? consent
+				: {
+						agreed: true,
+						agreed_at: new Date().toISOString(),
+						version: '1.0'
+					}
 	});
 	if (res.status >= 400)
 		throw new Error(`Could not create test user "${name}" (HTTP ${res.status})`);
@@ -104,15 +117,24 @@ export async function seedSecurityQuestion(name: string): Promise<void> {
 	if (got.status >= 400 || !got.data || typeof got.data !== 'object') {
 		throw new Error(`Could not load E2E user ${name} for setup`);
 	}
+	const current = got.data as Record<string, unknown>;
 	const res = await couchReq('PUT', path, {
-		...(got.data as Record<string, unknown>),
+		...current,
 		security_question: {
 			question_id: 'high_school',
 			answer_hash: 'e2e'.padEnd(64, '0'),
 			salt: 'e2e'.padEnd(32, '0'),
 			set_at: new Date().toISOString()
 		},
-		must_change_password: false
+		must_change_password: false,
+		consent:
+			current.consent !== undefined
+				? current.consent
+				: {
+						agreed: true,
+						agreed_at: new Date().toISOString(),
+						version: '1.0'
+					}
 	});
 	if (res.status >= 400) throw new Error(`Could not finish E2E user setup for ${name}`);
 }
@@ -240,6 +262,50 @@ export async function allDocuments(db: string): Promise<CouchDocument[]> {
 	}
 	const rows = (res.data as { rows?: Array<{ doc?: CouchDocument }> }).rows ?? [];
 	return rows.flatMap((row) => (row.doc ? [row.doc] : []));
+}
+
+/** The database's current update sequence, to pass later to `documentsChangedSince`. */
+export async function updateSeq(db: string): Promise<string> {
+	const res = await couchReq('GET', `/${db}`);
+	const seq = (res.data as { update_seq?: unknown } | null)?.update_seq;
+	if (res.status >= 400 || seq === undefined) {
+		throw new Error(`Could not read the update sequence of ${db} (HTTP ${res.status})`);
+	}
+	return String(seq);
+}
+
+/**
+ * Live documents written to `db` after `since`. Reads the changes feed, so the cost grows with
+ * what the run wrote, not with the size of the database.
+ */
+export async function documentsChangedSince(db: string, since: string): Promise<CouchDocument[]> {
+	const res = await couchReq(
+		'GET',
+		`/${db}/_changes?include_docs=true&since=${encodeURIComponent(since)}`
+	);
+	if (res.status >= 400 || !res.data || typeof res.data !== 'object') {
+		throw new Error(`Could not read changes of ${db} (HTTP ${res.status})`);
+	}
+	const results =
+		(res.data as { results?: Array<{ deleted?: boolean; doc?: CouchDocument }> }).results ?? [];
+	return results.flatMap((row) => (row.doc && !row.deleted ? [row.doc] : []));
+}
+
+/** The documents one test run wrote, read from each database's changes feed since `start`. */
+export class RunChanges {
+	#since = new Map<string, string>();
+
+	async start(dbs: readonly string[]): Promise<void> {
+		for (const db of dbs) this.#since.set(db, await updateSeq(db));
+	}
+
+	documents(db: string): Promise<CouchDocument[]> {
+		const since = this.#since.get(db);
+		if (since === undefined) {
+			throw new Error(`No start sequence for ${db}: cannot find this run's documents`);
+		}
+		return documentsChangedSince(db, since);
+	}
 }
 
 export async function deleteDocument(db: string, doc: CouchDocument): Promise<void> {

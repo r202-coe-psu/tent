@@ -30,6 +30,11 @@ export type {
 	HousingType
 } from './domain/people';
 
+// Domain — vulnerability marker (printed QR card)
+export { vulnerabilityMarker } from '$lib/utils/vulnerability-marker';
+export type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
+export { isQrCardStale } from './domain/qr-card-staleness';
+
 // Domain — input schemas + factories + transitions + guards
 export {
 	CARD_NUMBER_MAX_LENGTH,
@@ -227,6 +232,7 @@ export {
 } from './application/evacuee-qr-check';
 export { issueQrPayloads, type IssuedQrPayloads } from './application/evacuee-qr-issue';
 export { readEvacueeQrPrints } from './data/evacuee-qr.remote';
+export { useEvacueeQrPrints } from './application/evacuee-qr-prints';
 
 export {
 	extractScanLookupToken,
@@ -335,6 +341,8 @@ export {
 	type RegistrationConsent,
 	type RegistrationConsentConfig
 } from './domain/unified-registration';
+
+export { PUBLIC_PRE_REGISTER_DRAFT_KEY } from './domain/registration-draft';
 
 export {
 	defaultBirthCalendar,

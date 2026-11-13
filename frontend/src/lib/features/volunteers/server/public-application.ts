@@ -3,6 +3,7 @@ import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { normalizeThaiPhone } from '$lib/db/model';
 import { nextVolunteerCode } from '../domain/volunteer-code';
+import { VOLUNTEER_SCHEMA_V } from '../domain/volunteer.schema';
 import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
 import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catalog';
 import {
@@ -78,6 +79,7 @@ type CouchVolunteer = {
 	first_name?: string;
 	last_name?: string;
 	skills?: string[];
+	occupation?: string | null;
 	tracking_token_hash?: string;
 	volunteer_code?: string;
 	identity_verified?: boolean;
@@ -671,6 +673,10 @@ export async function applyPublicVolunteerApplication(
 	const volunteer = existing
 		? {
 				...existing,
+				schema_v: VOLUNTEER_SCHEMA_V,
+				occupation:
+					input.occupation?.trim() ||
+					(typeof existing.occupation === 'string' ? existing.occupation : null),
 				phone: normalizeThaiPhone(input.phone),
 				phone_hash: phoneHash,
 				skills: [
@@ -692,13 +698,14 @@ export async function applyPublicVolunteerApplication(
 		: {
 				_id: volunteerId,
 				type: 'volunteer',
-				schema_v: 4,
+				schema_v: VOLUNTEER_SCHEMA_V,
 				shelter_code: shelterCode,
 				created_at: now,
 				updated_at: now,
 				created_by: 'public',
 				first_name: input.first_name,
 				last_name: input.last_name,
+				occupation: input.occupation?.trim() || null,
 				phone: input.phone,
 				phone_hash: phoneHash,
 				national_id: input.national_id || null,

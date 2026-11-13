@@ -9,6 +9,7 @@ import type {
 	PublicShelterDetail,
 	PublicShelterListResponse
 } from '../domain/types';
+import type { SearchConsent } from '../domain/search-consent';
 import type { MasterLabelOption } from '../domain/master-labels';
 import type { SiteKindOption } from '../domain/site-kind';
 import { classifyPublicApiError, type PublicApiErrorKind } from '../domain/search-error';
@@ -43,13 +44,17 @@ export function publicApiError(
 	return new PublicApiError(kind, messages[kind] ?? (fallback || `Request failed (${status})`));
 }
 
-export async function familySearch(query: string): Promise<FamilySearchResponse> {
+/** CR-231: every search carries the searcher, purpose and consent (FR-6). */
+export async function familySearch(
+	query: string,
+	consent: SearchConsent
+): Promise<FamilySearchResponse> {
 	let response: Response;
 	try {
 		response = await fetch('/api/public/v1/occupants', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ search: query })
+			body: JSON.stringify({ search: query, ...consent })
 		});
 	} catch {
 		throw new PublicApiError('unavailable', SEARCH_ERROR_MESSAGES.unavailable ?? '');

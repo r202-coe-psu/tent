@@ -28,7 +28,7 @@ const banner = (
 	_id: `kiosk_banner:${id}`,
 	_rev: `1-${id}`,
 	type: 'kiosk_banner',
-	schema_v: 2,
+	schema_v: 3,
 	group_id: 'kiosk_banner_group:A',
 	shelter_code: 'SH001',
 	title: `แบนเนอร์ ${id}`,
@@ -110,7 +110,11 @@ describe('KioskBannerScreenManager', () => {
 		const current = [
 			banner('mine', { order: 1 }),
 			banner('theirs', { group_id: GROUP_B, order: 1 }),
-			{ ...banner('v1', { group_id: undefined, order: 2 }), schema_v: 1 as const },
+			{
+				...banner('v1', { group_id: undefined, order: 2 }),
+				schema_v: 1 as const,
+				screen_type: 'compact' as const
+			},
 			banner('also-theirs', { group_id: GROUP_B, order: 2 })
 		];
 

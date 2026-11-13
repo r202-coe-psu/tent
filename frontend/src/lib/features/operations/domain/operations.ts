@@ -132,7 +132,8 @@ export const transferStatusSchema = z.enum([
 ]);
 export type TransferStatus = z.infer<typeof transferStatusSchema>;
 
-export const donationChannelSchema = z.enum(['public', 'walk_in']);
+/** `m6` = a withdrawal from the central warehouse in transit; written by the sync worker only. */
+export const donationChannelSchema = z.enum(['public', 'walk_in', 'm6']);
 export type DonationChannel = z.infer<typeof donationChannelSchema>;
 
 export interface TransferTimelineEvent {
@@ -175,8 +176,8 @@ export interface StockLot {
 	self_purchased?: boolean;
 }
 
-/** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = 3-digit per-day per-shelter sequence. */
-export const LOT_NO_PATTERN = /^L-\d{6}-\d{3}$/;
+/** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = per-day per-shelter sequence, 3 digits, or 4+ digits without a leading zero past 999 (CR-244 FR-3). */
+export const LOT_NO_PATTERN = /^L-\d{6}-(\d{3}|[1-9]\d{3,})$/;
 
 /**
  * Single source of truth for the shape of `stock_ledger.lot` (schema.md §2.1) —
@@ -206,27 +207,81 @@ export function lotDateStamp(date: Date): string {
 	return `${yy}${mm}${dd}`;
 }
 
+/** `lot_counter` doc `_id` for a day stamp (`YYMMDD`) — CR-244 FR-1. */
+export function lotCounterId(stamp: string): string {
+	return `lot_counter:L-${stamp}`;
+}
+
+/** `lot_counter` doc shape (schema.md §2.1 · schema_v 1). */
+export interface LotCounter extends BaseDoc {
+	type: 'lot_counter';
+	/** Last sequence number already reserved for the day (int ≥ 0, only ever increases). */
+	last: number;
+}
+
+/** The counter value after reserving `count` numbers on top of `last` (FR-4). */
+export function nextCounterLast(last: number, count: number): number {
+	return last + count;
+}
+
 /**
- * Mint the next `count` lot numbers for a day, continuing after whatever already
- * exists. `existing` is every `lot_no` already on that shelter's ledger — entries
- * from other days are ignored, so the caller may pass the lot unfiltered.
- *
- * Not atomic: two staff receiving in the same second can be handed the same
- * sequence. Accepted in CR-088 — the worst case is two lots sharing a label.
+ * Build `count` consecutive lot numbers `L-YYMMDD-XXX` starting at sequence `firstSeq`
+ * (3-digit zero pad; past 999 the number simply grows to 4+ digits — CR-244 FR-3/FR-15).
+ * Pure string building: which sequence range a caller owns is decided by the reservation loop.
  */
-export function nextLotNos(existing: readonly string[], date: Date, count: number): string[] {
-	const stamp = lotDateStamp(date);
+export function buildLotNos(date: Date, firstSeq: number, count: number): string[] {
+	const prefix = `L-${lotDateStamp(date)}-`;
+	return Array.from(
+		{ length: Math.max(0, count) },
+		(_, i) => `${prefix}${String(firstSeq + i).padStart(3, '0')}`
+	);
+}
+
+/** Rows scanned when seeding a day's counter (once per shelter per day, CR-244 FR-6). */
+export const LOT_SEED_LOOKUP_LIMIT = 10_000;
+
+/**
+ * Mango `_find` body that lists the `lot_no`s already on `stock_ledger` for a day (`YYMMDD`) — the
+ * one-time seed of a new `lot_counter` (CR-244 FR-6). Shared by every connector.
+ */
+export function lotSeedFindBody(stamp: string) {
+	const prefix = `L-${stamp}-`;
+	return {
+		selector: {
+			type: 'stock_ledger',
+			'lot.lot_no': { $gte: prefix, $lt: `${prefix}\uFFF0` }
+		},
+		fields: ['lot.lot_no'],
+		limit: LOT_SEED_LOOKUP_LIMIT
+	};
+}
+
+/** Highest sequence of the day in the rows a {@link lotSeedFindBody} query returned (0 if none). */
+export function parseLotSeedMax(
+	rows: readonly { lot?: { lot_no?: string } }[],
+	stamp: string
+): number {
+	return maxLotSeq(
+		rows.map((r) => r.lot?.lot_no).filter((v): v is string => typeof v === 'string'),
+		stamp
+	);
+}
+
+/**
+ * Highest sequence among `lotNos` that belong to `stamp`'s day, or 0 — used once, to seed a
+ * day's counter from rows issued before it existed (CR-244 FR-6). Other days / junk are ignored.
+ */
+export function maxLotSeq(lotNos: readonly string[], stamp: string): number {
 	const prefix = `L-${stamp}-`;
 	let max = 0;
-	for (const lot of existing) {
+	for (const lot of lotNos) {
 		if (!lot.startsWith(prefix)) continue;
-		const seq = Number.parseInt(lot.slice(prefix.length), 10);
-		if (Number.isFinite(seq) && seq > max) max = seq;
+		const tail = lot.slice(prefix.length);
+		if (!/^\d+$/.test(tail)) continue;
+		const seq = Number.parseInt(tail, 10);
+		if (seq > max) max = seq;
 	}
-	return Array.from(
-		{ length: count },
-		(_, i) => `${prefix}${String(max + i + 1).padStart(3, '0')}`
-	);
+	return max;
 }
 
 export interface StockLedger extends BaseDoc {
@@ -315,12 +370,13 @@ export type DonationCloseReason = 'all_points' | 'staff_close' | 'expired';
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 11 = CR-206 `items[].drop_off_point_id` +
- * `point_receipts[]` (10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
+ * route, and `worker/inbound/donations.py`. 12 = M6 central-warehouse `channel: 'm6'` +
+ * `external` (11 = CR-206 `items[].drop_off_point_id` +
+ * `point_receipts[]`, 10 CR-209 `logistics.vehicle_plate`, 9 CR-175 donor `photos`, 8 CR-196
  * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
  * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 11;
+export const DONATION_SCHEMA_V = 12;
 
 export interface Donor {
 	name: string;
@@ -344,6 +400,21 @@ export interface DonationLogistics {
 	courier_tracking_no?: string | null;
 }
 
+/**
+ * Link back to the M6 central-warehouse withdrawal an `m6` donation was made from.
+ * Written by the sync worker: at creation, then `confirmed_at` / `confirm_error` once the
+ * receipt has been confirmed back to M6. Absent before schema_v 12 and on every non-m6 donation.
+ */
+export interface DonationExternal {
+	system: 'm6';
+	request_code: string;
+	external_ref: string;
+	source_warehouse_code: string;
+	source_warehouse_name?: string | null;
+	confirmed_at?: Timestamp | null;
+	confirm_error?: string | null;
+}
+
 export interface Donation extends BaseDoc {
 	type: 'donation';
 	channel: DonationChannel;
@@ -353,16 +424,22 @@ export interface Donation extends BaseDoc {
 	amount_thb?: number;
 	campaign_id: string | null;
 	status: DonationStatus;
-	tracking_token_hash: string;
+	/** Absent on an `m6` donation: it has no donor-facing tracking page. */
+	tracking_token_hash?: string;
 	declared_at: Timestamp;
 	received_at: Timestamp | null;
-	expires_at: Timestamp;
+	/** Absent on an `m6` donation: goods in transit may outlast the reservation TTL. */
+	expires_at?: Timestamp;
 	booking_ref?: string;
 	logistics?: DonationLogistics;
+	/** `channel: 'm6'` only — absent before schema_v 12. */
+	external?: DonationExternal;
 	received_summary?: {
 		total_items: number;
 		received_at: Timestamp;
 		remarks?: string;
+		/** D20, m6 only: closed as received with nothing received — the worker tells M6 so. */
+		nothing_received?: boolean;
 		/** Booking closed from point receipts (CR-206): staff name or `system`. Absent on a whole-booking receipt. */
 		closed_by?: string;
 		closed_reason?: DonationCloseReason;
@@ -1374,6 +1451,30 @@ export function assertLotWriteOffsFit(
 		if (!qtyGte(lot.qty, want.qty)) {
 			throw new LotWriteOffError(
 				`ล็อตที่เลือกคงเหลือ ${persistQty(lot.qty)} ${lot.unit} ไม่พอตัด ${want.qty} ${want.unit} — ยอดอาจเปลี่ยนไปแล้ว กรุณาโหลดใหม่`
+			);
+		}
+	}
+}
+
+/**
+ * A count line names the lot it counted, whether it is short or over (#518). The lot list a
+ * walker counts from is read before the save, so after a shelter switch it can belong to
+ * ANOTHER shelter; a surplus carries no `lot_ref` on its row, so nothing else would notice.
+ * Each counted lot must exist in this ledger with the same item and unit.
+ */
+export function assertCountedLotsExist(
+	ledger: readonly StockLedger[],
+	lines: readonly { item_id: string; unit: string; lot_ref: string }[]
+): void {
+	if (lines.length === 0) return;
+	const itemIds = new Set(lines.map((l) => l.item_id));
+	const { lots } = projectLotsByItem(ledger.filter((row) => itemIds.has(row.item_id)));
+	const known = new Map(lots.map((lot) => [lot.lot_ref, lot]));
+	for (const line of lines) {
+		const lot = known.get(line.lot_ref);
+		if (!lot || lot.item_id !== line.item_id || lot.unit !== line.unit) {
+			throw new LotWriteOffError(
+				'ไม่พบล็อตที่นับในคลังของศูนย์นี้ — ข้อมูลอาจเปลี่ยนไปหรือสลับศูนย์ กรุณาโหลดใหม่แล้วนับอีกครั้ง'
 			);
 		}
 	}

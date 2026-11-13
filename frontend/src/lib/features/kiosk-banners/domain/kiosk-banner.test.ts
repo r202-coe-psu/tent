@@ -154,7 +154,7 @@ describe('kioskBannerDocSchema', () => {
 			{ shelter_code: '' },
 			{ _id: 'announcement:01J9' },
 			{ type: 'announcement' },
-			{ schema_v: 3 },
+			{ schema_v: 4 },
 			{ created_by: '' }
 		]) {
 			expect(kioskBannerDocSchema.safeParse({ ...validDoc, ...patch }).success).toBe(false);
@@ -184,11 +184,30 @@ describe('kioskBannerDocSchema', () => {
 		expect(kioskBannerDocSchema.safeParse({ ...validDoc, screen_type: 'tv' }).success).toBe(false);
 	});
 
-	it('still enforces end_at > start_at on v1 and v2', () => {
+	it('accepts a v3 doc with screen_type tv and rejects tv on a v2 or v1 doc', () => {
+		const v3 = { ...validDoc, schema_v: 3, group_id: GROUP, screen_type: 'tv' };
+		const parsed = kioskBannerDocSchema.safeParse(v3);
+		expect(parsed.success && parsed.data.screen_type).toBe('tv');
+		expect(kioskBannerDocSchema.safeParse({ ...v3, schema_v: 2 }).success).toBe(false);
+		expect(kioskBannerDocSchema.safeParse({ ...v3, schema_v: 1 }).success).toBe(false);
+	});
+
+	it('requires a well-formed group_id on a v3 doc', () => {
+		const v3 = { ...validDoc, schema_v: 3 };
+		expect(kioskBannerDocSchema.safeParse(v3).success).toBe(false);
+		expect(kioskBannerDocSchema.safeParse({ ...v3, group_id: 'nope:1' }).success).toBe(false);
+		expect(kioskBannerDocSchema.safeParse({ ...v3, group_id: GROUP }).success).toBe(true);
+	});
+
+	it('still enforces end_at > start_at on v1, v2 and v3', () => {
 		const sameTime = { end_at: validDoc.start_at };
 		expect(kioskBannerDocSchema.safeParse({ ...validDoc, ...sameTime }).success).toBe(false);
 		expect(
 			kioskBannerDocSchema.safeParse({ ...validDoc, schema_v: 2, group_id: GROUP, ...sameTime })
+				.success
+		).toBe(false);
+		expect(
+			kioskBannerDocSchema.safeParse({ ...validDoc, schema_v: 3, group_id: GROUP, ...sameTime })
 				.success
 		).toBe(false);
 	});
@@ -203,7 +222,7 @@ describe('createKioskBanner', () => {
 		const doc = createKioskBanner(input, ctx, now);
 		expect(doc).toMatchObject({
 			type: 'kiosk_banner',
-			schema_v: 2,
+			schema_v: 3,
 			group_id: GROUP,
 			shelter_code: 'SH-007',
 			created_by: 'user:bob',
@@ -230,6 +249,13 @@ describe('createKioskBanner', () => {
 		);
 	});
 
+	it('can create a tv banner', () => {
+		const input = kioskBannerInputSchema.parse({ ...validInput, screen_type: 'tv' });
+		const doc = createKioskBanner(input, ctx, now);
+		expect(doc).toMatchObject({ schema_v: 3, screen_type: 'tv' });
+		expect(kioskBannerDocSchema.safeParse(doc).success).toBe(true);
+	});
+
 	it('mints a distinct _id per call and applies input defaults', () => {
 		const input = kioskBannerInputSchema.parse({
 			group_id: GROUP,
@@ -251,6 +277,14 @@ describe('matchesScreen', () => {
 		expect(matchesScreen({ screen_type: 'compact' }, 'compact')).toBe(true);
 		expect(matchesScreen({}, 'compact')).toBe(true);
 		expect(matchesScreen({}, 'portrait')).toBe(false);
+	});
+
+	it('matches tv only for tv banners; an unset screen_type is still compact', () => {
+		expect(matchesScreen({ screen_type: 'tv' }, 'tv')).toBe(true);
+		expect(matchesScreen({ screen_type: 'tv' }, 'compact')).toBe(false);
+		expect(matchesScreen({ screen_type: 'portrait' }, 'tv')).toBe(false);
+		expect(matchesScreen({}, 'tv')).toBe(false);
+		expect(matchesScreen({}, 'compact')).toBe(true);
 	});
 });
 

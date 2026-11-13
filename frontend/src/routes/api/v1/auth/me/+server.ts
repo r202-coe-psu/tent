@@ -54,7 +54,8 @@ function profilePayload(
 		email: doc?.email ?? null,
 		organization: doc?.organization ?? null,
 		position: doc?.position ?? null,
-		personnel_type: doc?.personnel_type ?? null
+		personnel_type: doc?.personnel_type ?? null,
+		consent: doc?.consent ?? null
 	};
 }
 

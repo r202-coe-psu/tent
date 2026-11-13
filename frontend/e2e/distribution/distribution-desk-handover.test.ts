@@ -164,11 +164,9 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 		await desk.receive(ticket);
 		await expectTicketStatus(ticket, 'DISTRIBUTING', 'Receive checkpoint');
 		await expect(
-			page.getByRole('heading', {
-				name: `สถานีแจกจ่ายอาหาร · จุดบริการ ${scenarioPoint(scenario)}`
-			})
+			page.getByRole('heading', { name: scenarioPoint(scenario), exact: true })
 		).toBeVisible();
-		await expect(page.getByText('มื้อ: กลางวัน').first()).toBeVisible();
+		await expect(page.getByText('มื้อกลางวัน', { exact: true }).first()).toBeVisible();
 	});
 
 	test('T1-3/T1-4 the received card leaves the list and the "รอรับ" badge counts down', async ({
@@ -263,7 +261,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		const scenario = await scenarioAs('food_handover');
 		const { desk, item, ticket, recipient } = await foodSetup(page, scenario);
 
-		await expect(page.getByText('มื้อ: กลางวัน').first()).toBeVisible();
+		await expect(page.getByText('มื้อกลางวัน', { exact: true }).first()).toBeVisible();
 		await expect(desk.itemButton(item.name)).toContainText('เหลือ 10');
 		await desk.itemButton(item.name).click();
 		await expect(desk.itemButton(item.name)).toHaveAttribute('aria-pressed', 'true');
@@ -516,21 +514,27 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await desk.goto();
 		await desk.openTab('food');
 		await desk.selectPoint(scenarioPoint(scenario));
-		const daySelect = page.getByLabel('เลือกวันที่ให้บริการ');
-		await expect(daySelect).toBeVisible();
+		await expect(page.getByRole('group', { name: 'วันที่แจก' })).toBeVisible();
 
 		// Today is the default day: both of today's tickets are offered, the older one is not.
-		const ticketSelect = page.getByLabel('เลือกตั๋วอาหารที่ใช้งาน');
-		await ticketSelect.click();
-		await expect(page.getByRole('option', { name: new RegExp(today.ticketNo) })).toBeVisible();
+		await page.locator('#food-ticket').click();
+		const options = desk.ticketPickerPopover();
+		await expect(options.getByRole('button', { name: new RegExp(today.ticketNo) })).toBeVisible();
 		await expect(
-			page.getByRole('option', { name: new RegExp(todayDinner.ticketNo) })
+			options.getByRole('button', { name: new RegExp(todayDinner.ticketNo) })
 		).toBeVisible();
-		await expect(page.getByRole('option', { name: new RegExp(older.ticketNo) })).toHaveCount(0);
+		await expect(options.getByRole('button', { name: new RegExp(older.ticketNo) })).toHaveCount(0);
+		await page.keyboard.press('Escape');
+
+		// CR-241 R5: "ทุกวัน" brings the older open ticket back.
+		const dayFilter = page.getByRole('group', { name: 'วันที่แจก' });
+		await dayFilter.getByRole('button', { name: 'ทุกวัน' }).click();
+		await page.locator('#food-ticket').click();
+		await expect(options.getByRole('button', { name: new RegExp(older.ticketNo) })).toBeVisible();
 		await page.keyboard.press('Escape');
 
 		await desk.selectTicket('food', todayDinner);
-		await expect(page.getByText('มื้อ: เย็น').first()).toBeVisible();
+		await expect(page.getByText('มื้อเย็น', { exact: true }).first()).toBeVisible();
 	});
 
 	test('T2-10/T2-12 an exhausted item is shown as such; history pages past 20 rows', async ({

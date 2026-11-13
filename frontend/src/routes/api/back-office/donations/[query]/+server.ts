@@ -7,6 +7,7 @@ import {
 	authorizeDonation,
 	findDonationByQuery,
 	isInCallerScope,
+	m6NotRefusableResponse,
 	routeErrorResponse as toRouteError,
 	toCountedItems
 } from '$lib/server/donation-intake';
@@ -16,6 +17,7 @@ import {
 	combineLineRejectReasons,
 	donorRejectMessage,
 	hasLineReview,
+	isM6Donation,
 	isReceivedByPoint,
 	rejectRemainingLines,
 	type DonationRejectReasonCode,
@@ -518,7 +520,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				closedReason: 'all_points',
 				now: nowStr
 			});
-			if (closed.status === 'rejected' && !canTransitionDonation(doc.status, 'rejected')) {
+			if (
+				closed.status === 'rejected' &&
+				(!canTransitionDonation(doc.status, 'rejected') || isM6Donation(doc))
+			) {
 				return null;
 			}
 			return { ...next, ...closed };
@@ -526,6 +531,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// FR-12 — nothing kept means the booking is refused, not received.
 		const allRejected = !receipt && rejections.length > 0 && rejections.every(Boolean);
+		// Turning away every line would reject the booking — not for goods sent by M6 (D19),
+		// whether in one go or by the drop-off point receipt that closes the booking.
+		if (allRejected || (receipt && withReceipt(donation, receipt) === null)) {
+			const m6 = m6NotRefusableResponse(donation);
+			if (m6) return m6;
+		}
 		if (
 			(allRejected && !canTransitionDonation(donation.status, 'rejected')) ||
 			(receipt && withReceipt(donation, receipt) === null)
@@ -636,7 +647,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// Lot labels are minted here, not on the client: the per-day sequence needs
 		// to see every row already on this shelter's ledger (CR-088 · schema.md §2.1).
 		// Only rows not written yet get one; a recorded row keeps the label it was given.
-		const lotNos = await allocateLotNos(dbName, pending.length);
+		const lotNos = await allocateLotNos(dbName, pending.length, ctx);
 		const pendingWithLots: CountedItem[] = pending.map((index, i) => ({
 			...counted[index],
 			lot: { ...(counted[index].lot ?? {}), lot_no: lotNos[i] }

@@ -94,7 +94,99 @@ describe('BFF Referral List and Create Endpoints', () => {
 			const res = await GET(event);
 			expect(res.status).toBe(403);
 			const data = await res.json();
-			expect(data.error).toContain('Requires shelter_manager or system_admin');
+			expect(data.error).toContain('Requires shelter_manager, medical_staff or system_admin');
+		});
+
+		it('403 when shelter_manager is held in another shelter but not the active one (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:shelter_manager'
+				],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+
+			const res = await GET(createMockEvent({ shelter_code: 'SH001' }));
+
+			expect(res.status).toBe(403);
+			expect(mockListPage).not.toHaveBeenCalled();
+		});
+
+		it('lists the shelter a multi-shelter manager picked, not the first one (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:shelter_manager'
+				],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockListPage.mockResolvedValue({ items: [], bookmark: null, hasMore: false });
+
+			const res = await GET(createMockEvent({ shelter_code: 'SH002' }));
+
+			expect(res.status).toBe(200);
+			expect(mockListPage).toHaveBeenCalled();
+		});
+
+		it('400 when a multi-shelter manager names no shelter (#477)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'two_shelter_user',
+				roles: ['shelter:SH001', 'shelter:SH002', 'SH001:shelter_manager', 'SH002:shelter_manager'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+
+			const res = await GET(createMockEvent());
+
+			expect(res.status).toBe(400);
+			expect(mockListPage).not.toHaveBeenCalled();
+		});
+
+		it('limits medical_staff to medical-emergency referrals (M5 D8, D16)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'nurse',
+				roles: ['shelter:SH001', 'SH001:medical_staff'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockListPage.mockResolvedValue({ items: [], bookmark: null, hasMore: false });
+
+			const res = await GET(createMockEvent({ shelter_code: 'SH001' }));
+			expect(res.status).toBe(200);
+			expect(mockListPage.mock.calls[0][0]).toMatchObject({
+				referral_types: ['medical-emergency']
+			});
+		});
+
+		it('refuses a medical_staff create of a non-medical referral', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'nurse',
+				roles: ['shelter:SH001', 'SH001:medical_staff'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			const res = await POST(
+				createMockEvent(
+					{ shelter_code: 'SH001' },
+					{
+						referral_type: 'resource',
+						evacuee_id: 'evacuee:1',
+						reason: 'x',
+						urgency: 'normal',
+						to_org: { name: 'อบต.' }
+					}
+				)
+			);
+			expect(res.status).toBe(403);
+			expect(mockCreate).not.toHaveBeenCalled();
 		});
 
 		it('allows shelter_manager and lists referrals scoped to their shelter code', async () => {
@@ -185,6 +277,19 @@ describe('BFF Referral List and Create Endpoints', () => {
 
 			it('rejects an oversized bookmark with 400', async () => {
 				expect((await GET(createMockEvent({ bookmark: 'x'.repeat(2001) }))).status).toBe(400);
+			});
+
+			it('passes dispatch_mode=m5 to the repository (OneData M5 page, D17)', async () => {
+				const res = await GET(createMockEvent({ dispatch_mode: 'm5', direction: 'outgoing' }));
+				expect(res.status).toBe(200);
+				expect(mockListPage).toHaveBeenLastCalledWith(
+					expect.objectContaining({ dispatch_mode: 'm5', direction: 'outgoing' })
+				);
+			});
+
+			it('rejects any dispatch_mode other than m5 with 400', async () => {
+				expect((await GET(createMockEvent({ dispatch_mode: 'tracking' }))).status).toBe(400);
+				expect(mockListPage).not.toHaveBeenCalled();
 			});
 		});
 	});

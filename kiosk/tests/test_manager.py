@@ -751,6 +751,77 @@ class SilentPrintArgsTests(unittest.TestCase):
         self.assertTrue(any("managed print policies" in line for line in logs.output))
 
 
+INSECURE_ORIGIN_FLAG = "--unsafely-treat-insecure-origin-as-secure"
+
+
+class InsecureOriginArgsTests(unittest.TestCase):
+    """Chromium opens the camera only in a secure context; an edge fallback over plain HTTP on the
+    LAN is not one, so the launcher marks the TENT_BASE_URL origin as secure."""
+
+    def build(self, **overrides):
+        with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=manager.SYSTEM_CHROMIUM_PATH):
+            client = manager.ScannerClientManager(valid_config(**overrides))
+        return client._build_browser_args()
+
+    def flags(self, args):
+        return [arg for arg in args if arg.startswith(INSECURE_ORIGIN_FLAG)]
+
+    def test_https_adds_no_insecure_origin_flag(self):
+        self.assertEqual(self.flags(self.build()), [])
+
+    def test_lan_http_ip_is_treated_as_secure(self):
+        args = self.build(TENT_BASE_URL="http://192.168.1.50")
+
+        self.assertEqual(self.flags(args), [f"{INSECURE_ORIGIN_FLAG}=http://192.168.1.50"])
+
+    def test_lan_http_keeps_the_port_and_drops_the_path(self):
+        args = self.build(TENT_BASE_URL="http://192.168.1.50:8080/kiosk/")
+
+        self.assertEqual(self.flags(args), [f"{INSECURE_ORIGIN_FLAG}=http://192.168.1.50:8080"])
+
+    def test_loopback_needs_no_flag(self):
+        for url in ("http://localhost:4173", "http://127.0.0.1:4173", "http://[::1]:4173"):
+            with self.subTest(url=url):
+                self.assertEqual(self.flags(self.build(TENT_BASE_URL=url)), [])
+
+    def test_named_http_host_is_treated_as_secure(self):
+        args = self.build(TENT_BASE_URL="http://edge.local", ALLOW_INSECURE_HTTP="true")
+
+        self.assertEqual(self.flags(args), [f"{INSECURE_ORIGIN_FLAG}=http://edge.local"])
+
+    def test_flag_is_added_in_kiosk_and_debug_mode(self):
+        for debug in ("false", "true"):
+            with self.subTest(debug=debug):
+                args = self.build(TENT_BASE_URL="http://192.168.1.50", DEBUG=debug)
+                self.assertEqual(len(self.flags(args)), 1)
+
+    def test_no_flag_when_nothing_opens_the_camera(self):
+        for overrides in (
+            {"KIOSK_QR_CHECK_IN": "off"},
+            {"KIOSK_QR_INPUT": "reader"},
+        ):
+            with self.subTest(**overrides):
+                args = self.build(TENT_BASE_URL="http://192.168.1.50", **overrides)
+                self.assertEqual(self.flags(args), [])
+
+    def test_flag_is_added_when_only_the_face_check_opens_the_camera(self):
+        with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=manager.SYSTEM_CHROMIUM_PATH):
+            client = manager.ScannerClientManager(
+                valid_config(TENT_BASE_URL="http://192.168.1.50", KIOSK_QR_INPUT="reader")
+            )
+        client.face_service = FakeFaceService()
+
+        self.assertEqual(len(self.flags(client._build_browser_args())), 1)
+
+    def test_http_origin_logs_a_warning(self):
+        with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=manager.SYSTEM_CHROMIUM_PATH):
+            client = manager.ScannerClientManager(valid_config(TENT_BASE_URL="http://192.168.1.50"))
+        with self.assertLogs(manager.logger, level="WARNING") as logs:
+            client._build_browser_args()
+
+        self.assertTrue(any("http://192.168.1.50" in line for line in logs.output))
+
+
 PNG = b"\x89PNG\r\n\x1a\n" + b"label"
 
 
@@ -1898,6 +1969,16 @@ class FaceCameraPermissionTests(unittest.IsolatedAsyncioTestCase):
         await client._grant_camera_permission(context)
 
         self.assertEqual(context.granted[0][1], "https://tent.example.go.th:8443")
+
+    async def test_an_http_edge_is_granted_the_same_origin_the_browser_treats_as_secure(self):
+        client = manager.ScannerClientManager(
+            valid_config(TENT_BASE_URL="http://192.168.1.50:8080/kiosk", KIOSK_FACE_CHECK="on")
+        )
+        context = self.FakeContext()
+
+        await client._grant_camera_permission(context)
+
+        self.assertEqual(context.granted[0][1], "http://192.168.1.50:8080")
 
     async def test_the_kiosk_origin_is_given_the_camera_when_qr_codes_are_scanned_by_camera(self):
         for qr_input in ("camera", "both"):

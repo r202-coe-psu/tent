@@ -8,7 +8,9 @@ import VolunteerAccessPortal from './volunteer-access-portal.svelte';
 const THAI = /[฀-๿]/;
 const state = vi.hoisted(() => ({
 	shifts: [] as unknown[],
-	tickets: [] as unknown[]
+	tickets: [] as unknown[],
+	applications: [] as unknown[],
+	cancelledArgs: null as unknown
 }));
 
 const profile = {
@@ -17,6 +19,7 @@ const profile = {
 	nickname: null,
 	phone_masked: 'xxx-xxx-2222',
 	email: null,
+	occupation: null,
 	volunteer_code: 'V-1001',
 	skills: [],
 	organization: null,
@@ -51,6 +54,18 @@ vi.mock('../application/queries', () => {
 			get data() {
 				return { tickets: state.tickets, phoneMasked: 'xxx-xxx-2222' };
 			}
+		}),
+		useVolunteerApplications: () => ({
+			...settled,
+			get data() {
+				return state.applications;
+			}
+		}),
+		useCancelTicketMutation: () => ({
+			mutateAsync: vi.fn(async (args) => {
+				state.cancelledArgs = args;
+			}),
+			isPending: false
 		})
 	};
 });
@@ -213,5 +228,80 @@ describe('VolunteerAccessPortal dashboard', () => {
 		expect(text).toContain('รายงานตัว Check-in');
 		expect(text).toContain('ขอลา / ถอนกะ');
 		expect(text).toContain('กติกาการเข้ากะ');
+	});
+
+	it('renders open ticket and cancel buttons when application matches, opens confirmation dialog (#973)', async () => {
+		state.applications = [
+			{
+				application_id: 'app:1',
+				status: 'confirmed',
+				job_id: 'job:1',
+				shift_id: 'shift:1',
+				date: '2099-09-10',
+				can_cancel: true
+			}
+		];
+		openDashboard('th');
+
+		const openLink = document.body.querySelector('[data-testid="open-ticket"]');
+		expect(openLink).toBeTruthy();
+		expect(openLink?.getAttribute('href')).toContain('application=app%3A1');
+		expect(openLink?.textContent).toContain('เปิดตั๋ว');
+
+		const cancelButton = document.body.querySelector(
+			'[data-testid="cancel-application"]'
+		) as HTMLButtonElement | null;
+		expect(cancelButton).toBeTruthy();
+		expect(cancelButton?.textContent).toContain('ยกเลิก');
+
+		// When cancel button is present and canCancel is true, withdraw button is hidden
+		const withdrawButtons = [...document.body.querySelectorAll('button')].filter((b) =>
+			b.textContent?.includes('ขอลา / ถอนกะ')
+		);
+		expect(withdrawButtons).toHaveLength(0);
+		cancelButton!.click();
+		flushSync();
+
+		// Confirmation dialog opens
+		expect(document.body.textContent).toContain('ยืนยันการยกเลิกกะ');
+		expect(document.body.textContent).toContain('Central kitchen');
+
+		const confirmBtn = document.body.querySelector(
+			'[data-testid="confirm-cancel-application"]'
+		) as HTMLButtonElement | null;
+		expect(confirmBtn).toBeTruthy();
+		confirmBtn!.click();
+		flushSync();
+
+		expect(state.cancelledArgs).toEqual({
+			token: 'TKT-VOL-ABCDEF',
+			applicationId: 'app:1'
+		});
+	});
+
+	it('restores withdraw button when application cannot be cancelled (W1)', () => {
+		// Application exists but cannot be cancelled (e.g., server says can_cancel: false)
+		state.applications = [
+			{
+				application_id: 'app:1',
+				status: 'confirmed',
+				job_id: 'job:1',
+				shift_id: 'shift:1',
+				date: '2099-09-10',
+				can_cancel: false
+			}
+		];
+		openDashboard('th');
+
+		// Open ticket link is still visible
+		expect(document.body.querySelector('[data-testid="open-ticket"]')).toBeTruthy();
+		// Cancel button is hidden
+		expect(document.body.querySelector('[data-testid="cancel-application"]')).toBeNull();
+
+		// Withdraw button is preserved because canCancel is false (W1 fix)
+		const withdrawButtons = [...document.body.querySelectorAll('button')].filter((b) =>
+			b.textContent?.includes('ขอลา / ถอนกะ')
+		);
+		expect(withdrawButtons.length).toBeGreaterThan(0);
 	});
 });

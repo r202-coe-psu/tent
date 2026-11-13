@@ -11,6 +11,7 @@ import {
 	canAccessManagerPages,
 	canAccessDonations,
 	canAccessWarehouse,
+	canAccessCentralWarehouse,
 	canViewSupply,
 	canAccessKitchen,
 	canAccessTickets,
@@ -24,9 +25,16 @@ import {
 	canManagePrinters,
 	canManageScanners,
 	kioskConfinement,
+	hasCapabilityInShelter,
+	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
-import { fetchAuthStatus, type AuthStatus } from '$lib/features/users';
+import {
+	fetchAuthStatus,
+	requiresConsent,
+	type AuthStatus,
+	type UserConsentStatus
+} from '$lib/features/users';
 
 /** Where a freshly-authenticated user (or an already-authed visitor to an auth page) lands. */
 export const LANDING_ROUTE = '/portal';
@@ -43,16 +51,24 @@ export const FORCE_SETUP_ROUTE = '/force-setup';
 /** CR-124 Google step-up challenge. */
 export const MFA_CHALLENGE_ROUTE = '/mfa-challenge';
 
+/** PDPA and Non-disclosure consent gate (issue #1246). */
+export const CONSENT_ROUTE = '/consent';
+
 export type PostLoginDestination =
-	typeof FORCE_SETUP_ROUTE | typeof MFA_CHALLENGE_ROUTE | typeof LANDING_ROUTE;
+	| typeof FORCE_SETUP_ROUTE
+	| typeof MFA_CHALLENGE_ROUTE
+	| typeof CONSENT_ROUTE
+	| typeof LANDING_ROUTE;
 
 /**
- * Post-password gate order (CR-105 then CR-124):
- * force-setup → MFA challenge → portal.
+ * Post-password gate order (CR-105 then CR-124 then #1246):
+ * force-setup → MFA challenge → consent → portal.
  */
 export function resolvePostLoginDestination(
 	status: Pick<AuthStatus, 'must_change_password' | 'has_security_question' | 'pending_mfa'> & {
 		roles?: readonly string[];
+		personnel_type?: 'staff' | 'volunteer' | null;
+		consent?: UserConsentStatus | null;
 	}
 ): PostLoginDestination {
 	if (status.roles?.includes(COUCH_ADMIN)) {
@@ -63,6 +79,9 @@ export function resolvePostLoginDestination(
 	}
 	if (status.pending_mfa) {
 		return MFA_CHALLENGE_ROUTE;
+	}
+	if (requiresConsent(status)) {
+		return CONSENT_ROUTE;
 	}
 	return LANDING_ROUTE;
 }
@@ -103,6 +122,9 @@ export async function requireAuth(fetchFn?: typeof fetch) {
 		if (dest === MFA_CHALLENGE_ROUTE) {
 			throw redirect(302, resolve(MFA_CHALLENGE_ROUTE));
 		}
+		if (dest === CONSENT_ROUTE) {
+			throw redirect(302, resolve(CONSENT_ROUTE));
+		}
 	} catch (e) {
 		if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 302) {
 			throw e;
@@ -132,6 +154,23 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!canAccessManagerPages(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Referrals guard (`/back-office/referrals/**`) — system admin, shelter_manager, or medical_staff
+ * of the selected shelter. Medical staff only ever see and create medical-emergency referrals
+ * (M5 draft CR D8, D16); the BFF enforces that per request.
+ */
+export async function requireReferralAccess(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (
+		!canAccessManagerPages(roles, shelter) &&
+		!hasCapabilityInShelter(roles, shelter, MEDICAL_STAFF)
+	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
@@ -230,6 +269,19 @@ export async function requireWarehouseAccess(
 	const shelter = activeShelterCode(roles);
 	if (!canAccessWarehouse(roles, shelter)) {
 		throw redirect(302, resolve(warehouseDeniedDestination(roles, shelter, options?.deskFallback)));
+	}
+}
+
+/**
+ * Central warehouse (M6) guard (`/back-office/onedata/m6`) — system_admin, or in the active shelter
+ * shelter_manager / warehouse_staff (draft CR M6 D2). `supply_coordinator` is NOT admitted, unlike
+ * {@link requireWarehouseAccess}. UX gate; the BFF re-checks per request.
+ */
+export async function requireCentralWarehouseAccess(fetchFn: typeof fetch = fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessCentralWarehouse(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
 
