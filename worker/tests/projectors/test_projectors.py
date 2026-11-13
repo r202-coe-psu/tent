@@ -20,7 +20,11 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
+from worker.projectors.occupancy import (
+    aggregate_occupancy,
+    count_stay_statuses,
+    count_zone_stay_statuses,
+)
 from worker.projectors.shelter import (
     RetentionPhase,
     classify_registry_shelter,
@@ -821,6 +825,63 @@ def test_count_stay_statuses_counts_search_excluded_evacuees():
         ]
     )
     assert counts == {"active": 2, "pre_registered": 1, "checked_out": 1}
+
+
+# --- #1241: count_zone_stay_statuses (pure) ---
+
+
+def test_count_zone_stay_statuses_groups_by_zone_then_status():
+    """Every status is kept per zone (the API picks Present); search-excluded count too."""
+    counts = count_zone_stay_statuses(
+        [
+            {
+                "_id": "e1",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": "A"},
+            },
+            {
+                "_id": "e2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "room_confirmed", "zone": "A"},
+            },
+            {
+                "_id": "e3",
+                "type": "evacuee",
+                "current_stay": {"status": "temporary_leave", "zone": "B"},
+            },
+            {
+                "_id": "e4",
+                "type": "evacuee",
+                "current_stay": {"status": "checked_out", "zone": "B"},
+            },
+            # No zone, no status, or not an evacuee: skipped.
+            {
+                "_id": "e5",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": None},
+            },
+            {
+                "_id": "e6",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": ""},
+            },
+            {"_id": "e7", "type": "evacuee", "current_stay": {"zone": "A"}},
+            {
+                "_id": "h1",
+                "type": "household",
+                "current_stay": {"status": "active", "zone": "A"},
+            },
+        ]
+    )
+    assert counts == {
+        "A": {"active": 1, "room_confirmed": 1},
+        "B": {"temporary_leave": 1, "checked_out": 1},
+    }
+
+
+def test_count_zone_stay_statuses_empty_when_nobody_has_a_zone():
+    assert count_zone_stay_statuses([{"_id": "e1", "type": "evacuee"}]) == {}
 
 
 # --- EXT-005: aggregate_occupancy (pure) ---
