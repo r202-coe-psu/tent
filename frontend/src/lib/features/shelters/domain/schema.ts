@@ -484,6 +484,57 @@ export const parkingPolicySchema = z.object({
 });
 export type ParkingPolicy = z.infer<typeof parkingPolicySchema>;
 
+/**
+ * Named parking pin (#1352, CR-253). Same shape as a food point (FR-7) plus the vehicle types and
+ * capacity this point takes (FR-5); a type may appear once per point (FR-6).
+ */
+export const parkingPointSchema = foodDistributionPointSchema
+	.extend({
+		name: z.string().trim().min(1, { message: 'กรุณาระบุชื่อที่จอดรถ' }),
+		vehicles: z.array(supportedVehicleSchema).optional().default([])
+	})
+	.superRefine((point, ctx) => {
+		const seen = new Set<string>();
+		point.vehicles.forEach((v, i) => {
+			if (seen.has(v.type)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['vehicles', i, 'type'],
+					message: 'ประเภทรถซ้ำในจุดเดียวกัน'
+				});
+			}
+			seen.add(v.type);
+		});
+	});
+export type ParkingPoint = z.infer<typeof parkingPointSchema>;
+
+/**
+ * Vehicle types and capacity a shelter really offers (CR-253 FR-9..FR-11), computed on read.
+ * Parking points win once any point names a vehicle (capacity = sum of `max_capacity`, nulls
+ * skipped, all-null stays null); otherwise the legacy `parking_policy.supported_vehicles`.
+ * `availability = 'none'` means no parking at all (FR-11) — the saved points are kept.
+ */
+export function effectiveParkingVehicles(
+	master: Pick<ShelterMaster, 'parking_points' | 'parking_policy'>
+): SupportedVehicle[] {
+	if (master.parking_policy?.availability === 'none') return [];
+	const points = master.parking_points ?? [];
+	if (!points.some((p) => (p.vehicles ?? []).length > 0)) {
+		return master.parking_policy?.supported_vehicles ?? [];
+	}
+	const totals = new Map<VehicleType, number | null>();
+	for (const p of points) {
+		for (const v of p.vehicles ?? []) {
+			const cur = totals.get(v.type) ?? null;
+			const add = v.max_capacity ?? null;
+			totals.set(v.type, add === null ? cur : (cur ?? 0) + add);
+		}
+	}
+	return vehicleTypeSchema.options
+		.filter((t) => totals.has(t))
+		.map((t) => ({ type: t, max_capacity: totals.get(t) ?? null }));
+}
+
 // ===== Feature Flags (CR-016, CR-052, CR-106, draft kiosk phone toggle) =====
 
 export const shelterFeatureFlagsSchema = z.object({
@@ -550,6 +601,8 @@ export const shelterSchema = z.object({
 	zones: z.array(zoneSchema),
 	// CR-128 — named food distribution points (staff-only, optional coords)
 	food_distribution_points: z.array(foodDistributionPointSchema).optional().default([]),
+	// #1352 — named parking pins (staff-only, optional coords)
+	parking_points: z.array(parkingPointSchema).optional().default([]),
 	admission_policy: admissionPolicySchema
 		.optional()
 		.default({ supported_vulnerable_groups: [], pet_policy: { policy: null, categories: [] } }),
@@ -671,6 +724,8 @@ export interface ShelterMaster {
 	zones?: Zone[];
 	// CR-128 — named food distribution points (staff-only plane)
 	food_distribution_points?: FoodDistributionPoint[];
+	// #1352 — named parking pins (staff-only plane)
+	parking_points?: ParkingPoint[];
 	admission_policy?: AdmissionPolicy;
 	luggage_policy?: LuggagePolicy;
 	parking_policy?: ParkingPolicy;
@@ -755,7 +810,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
  * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
  * skipping docs that are behind by less than a whole major shape change.
  */
-export const SHELTER_MASTER_SCHEMA_V = 9;
+export const SHELTER_MASTER_SCHEMA_V = 11;
 
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
@@ -883,18 +938,29 @@ function fillSubStorageDropOff(master: ShelterMaster): ShelterMaster {
 }
 
 /**
- * v8 → v9 (CR-205). Storage points get the drop-off fields; additive, no backfill script.
- * Goes through `normalizeCurrent`, which a v8 doc used to pass as the current version: it
- * also fills the `site_kind`, `food_distribution_points`, `sub_storage[].id` and
- * `types[]` a partially migrated doc can lack, and the drop-off fields with them.
+ * v8 → v9 (CR-205). Storage drop-off fields are filled by `normalizeCurrent` at the end of the
+ * chain. Stamps its own number so a v8 doc cannot skip `migrateV9ToV10`.
  */
 function migrateV8ToV9(v8: ShelterMaster): ShelterMaster {
-	return normalizeCurrent({ ...v8, schema_v: SHELTER_MASTER_SCHEMA_V });
+	return { ...v8, schema_v: 9 };
 }
 
-/** Tail of the chain: v7 → v8 → v9. */
-function migrateV7ToV9(v7: ShelterMaster): ShelterMaster {
-	return migrateV8ToV9(migrateV7ToV8(v7));
+/**
+ * v9 → v10 (CR-252 owns v10). Only stamps its own number so a v9 doc cannot skip it; when CR-252
+ * merges its field work belongs here and this stub is replaced.
+ */
+export function migrateV9ToV10(v9: ShelterMaster): ShelterMaster {
+	return { ...v9, schema_v: 10 };
+}
+
+/** v10 → v11 (CR-253). Parking points start empty; additive, no backfill script. */
+export function migrateV10ToV11(v10: ShelterMaster): ShelterMaster {
+	return normalizeCurrent({ ...v10, schema_v: SHELTER_MASTER_SCHEMA_V });
+}
+
+/** Tail of the chain: v7 → v8 → v9 → v10 → v11. */
+function migrateV7ToV11(v7: ShelterMaster): ShelterMaster {
+	return migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(migrateV7ToV8(v7))));
 }
 
 /**
@@ -913,6 +979,8 @@ function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	if (
 		hasSiteKind &&
 		Array.isArray(master.food_distribution_points) &&
+		Array.isArray(master.parking_points) &&
+		master.parking_points.every((p) => Array.isArray(p.vehicles)) &&
 		!missingSubStorageId &&
 		!legacySubStorageType &&
 		!missingDropOffKeys
@@ -925,7 +993,10 @@ function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	return {
 		...filled,
 		site_kind: filled.site_kind ?? DEFAULT_SITE_KIND,
-		food_distribution_points: filled.food_distribution_points ?? []
+		food_distribution_points: filled.food_distribution_points ?? [],
+		parking_points: (filled.parking_points ?? []).map((p) =>
+			Array.isArray(p.vehicles) ? p : { ...p, vehicles: [] }
+		)
 	};
 }
 
@@ -934,18 +1005,22 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
 		return normalizeCurrent(master as ShelterMaster);
 	}
-	if (master.schema_v === 8) return migrateV8ToV9(master as unknown as ShelterMaster);
-	if (master.schema_v === 7) return migrateV7ToV9(master as unknown as ShelterMaster);
+	if (master.schema_v === 10) return migrateV10ToV11(master as unknown as ShelterMaster);
+	if (master.schema_v === 9)
+		return migrateV10ToV11(migrateV9ToV10(master as unknown as ShelterMaster));
+	if (master.schema_v === 8)
+		return migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(master as unknown as ShelterMaster)));
+	if (master.schema_v === 7) return migrateV7ToV11(master as unknown as ShelterMaster);
 	if (master.schema_v === 6)
-		return migrateV7ToV9(migrateV6ToV7(master as unknown as ShelterMaster));
+		return migrateV7ToV11(migrateV6ToV7(master as unknown as ShelterMaster));
 	if (master.schema_v === 5)
-		return migrateV7ToV9(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
+		return migrateV7ToV11(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
 	if (master.schema_v === 4)
-		return migrateV7ToV9(
+		return migrateV7ToV11(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster)))
 		);
 	if (master.schema_v === 3)
-		return migrateV7ToV9(
+		return migrateV7ToV11(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster))))
 		);
 	const v2 = master as ShelterMasterV2;
@@ -1009,8 +1084,8 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	// Chain v2→v3→…→v9 so a v2 doc lands on the current shape in one call.
-	return migrateV7ToV9(
+	// Chain v2→v3→…→v10 so a v2 doc lands on the current shape in one call.
+	return migrateV7ToV11(
 		migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster))))
 	);
 }
