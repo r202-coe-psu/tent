@@ -154,13 +154,13 @@
 							{/if}
 							{#if closed}
 								<span
-									class="ml-auto shrink-0 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"
+									class="ml-auto min-w-32 shrink-0 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-center text-xs font-semibold text-slate-700"
 								>
 									{t.zoneClosed}
 								</span>
 							{:else if fill}
 								<span
-									class="shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums {BADGE[
+									class="min-w-32 shrink-0 rounded-full border px-2 py-0.5 text-center text-xs font-semibold tabular-nums {BADGE[
 										fill.level
 									]}"
 								>
