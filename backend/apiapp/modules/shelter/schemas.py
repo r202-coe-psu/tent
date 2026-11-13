@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 from tent_model.public_shelter import DonationPoint, GeoJsonPoint, GeoPoint
@@ -87,10 +88,19 @@ class ShelterFaqDetail(BaseModel):
 
 
 class ShelterZoneDetail(BaseModel):
+    code: str | None = None
     name: str | None = None
     type: str
+    status: Literal["active", "closed"] = "active"
     capacity: int | None = None
     area_m2: float | None = None
+    present: int | None = Field(
+        default=None,
+        description=(
+            "Present headcount in this zone (active + room_confirmed + temporary_leave); "
+            "null until the worker has projected per-zone counts (#1241)"
+        ),
+    )
 
 
 class ShelterDetail(BaseModel):
