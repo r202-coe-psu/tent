@@ -1,7 +1,6 @@
 <script lang="ts">
 	import ConsoleBanner from '$lib/components/console-banner.svelte';
-	import { CatalogWorkspace } from '$lib/features/catalog';
-	import RecipeTab from './components/recipe-tab.svelte';
+	import { CatalogWorkspace, RecipeTab } from '$lib/features/catalog';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
