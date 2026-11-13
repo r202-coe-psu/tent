@@ -51,9 +51,19 @@ def fake_bin(tmp_path) -> Path:
 
 
 @pytest.fixture
-def setup(fake_bin, env_file):
+def checkout(tmp_path) -> Path:
+    """A copy of the script, so its SCRIPT_DIR/.env lookup never sees a real printer/.env."""
+    directory = tmp_path / "checkout"
+    directory.mkdir()
+    script = directory / SCRIPT.name
+    script.write_bytes(SCRIPT.read_bytes())
+    return directory
+
+
+@pytest.fixture
+def setup(fake_bin, env_file, checkout):
     def run(*args: str, env: dict[str, str] | None = None, with_env_file: bool = True):
-        argv = ["bash", str(SCRIPT), "--dry-run", *args]
+        argv = ["bash", str(checkout / SCRIPT.name), "--dry-run", *args]
         if with_env_file:
             argv += ["--env-file", str(env_file)]
         return subprocess.run(
@@ -348,3 +358,64 @@ def test_pillow_raqm_support_is_checked_in_the_installed_venv_after_deps_are_syn
         if command.startswith("/srv/tent/printer/.venv/bin/python -c") and "raqm" in command
     )
     assert sync < check
+
+
+def test_checkout_env_is_installed_when_no_env_file_is_given(setup, checkout, tmp_path):
+    local = checkout / ".env"
+    local.write_text(ENV_TEXT)
+    local.chmod(0o600)
+    prefix = tmp_path / "opt" / "printer"
+
+    result = setup("--prefix", str(prefix), with_env_file=False)
+
+    assert result.returncode == 0, result.stderr
+    assert f"install -m 600 -o tent-printer -g lp {local} {prefix}/.env" in planned(result)
+
+
+def test_checkout_env_wins_over_the_installed_one_and_warns_when_they_differ(
+    setup, checkout, tmp_path
+):
+    local = checkout / ".env"
+    local.write_text(ENV_TEXT)
+    local.chmod(0o600)
+    prefix = tmp_path / "opt" / "printer"
+    prefix.mkdir(parents=True)
+    (prefix / ".env").write_text(ENV_TEXT.replace(FAKE_SECRET, "sk_print_OLD"))
+
+    result = setup("--prefix", str(prefix), with_env_file=False)
+
+    assert result.returncode == 0, result.stderr
+    assert f"install -m 600 -o tent-printer -g lp {local} {prefix}/.env" in planned(result)
+    assert f"ทับ {prefix}/.env" in result.stdout
+    assert FAKE_SECRET not in result.stdout + result.stderr
+
+
+def test_no_overwrite_warning_when_the_installed_env_is_identical(setup, checkout, tmp_path):
+    local = checkout / ".env"
+    local.write_text(ENV_TEXT)
+    local.chmod(0o600)
+    prefix = tmp_path / "opt" / "printer"
+    prefix.mkdir(parents=True)
+    (prefix / ".env").write_text(ENV_TEXT)
+
+    result = setup("--prefix", str(prefix), with_env_file=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "ทับ" not in result.stdout
+
+
+def test_env_file_readable_by_others_gets_a_chmod_600_warning(setup, env_file):
+    env_file.chmod(0o644)
+
+    result = setup()
+
+    assert result.returncode == 0, result.stderr
+    assert f"chmod 600 {env_file}" in result.stdout
+
+
+def test_env_file_with_mode_600_gets_no_permission_warning(setup, env_file):
+    env_file.chmod(0o600)
+
+    result = setup()
+
+    assert f"chmod 600 {env_file}" not in result.stdout

@@ -308,6 +308,9 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 	 * sort covers every field of the `(type, <shelter field>, created_at)` index so Mango uses it
 	 * directly. Without `direction`, falls back to the `$or` selector (evacuee lookups).
 	 * Pages by `bookmark` (never `skip`); `hasMore` counts raw docs before malformed ones are dropped.
+	 * A full page probes one row past the bookmark, so an exact multiple of `limit` (50, 100, …)
+	 * ends with "next" off instead of an empty page. Not `limit + 1`: the bookmark would then point
+	 * past the extra row and the next page would skip it.
 	 */
 	async listPage(filter?: ReferralFilter): Promise<ReferralPage> {
 		const parsed = referralFilterSchema.parse(filter ?? {});
@@ -354,10 +357,26 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		}
 
 		const rawDocs = data.docs || [];
+		let hasMore = false;
+		if (rawDocs.length === parsed.limit && data.bookmark) {
+			// A failed probe (bad status or network error) keeps "next" on rather than hiding rows
+			// that may exist; the next page request then surfaces the real error.
+			try {
+				const probe = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
+					selector,
+					sort,
+					limit: 1,
+					bookmark: data.bookmark
+				});
+				hasMore = probe.status !== HTTP_OK || (probe.data?.docs ?? []).length > 0;
+			} catch {
+				hasMore = true;
+			}
+		}
 		return {
 			items: rawDocs.filter((d): d is Referral => isReferral(d)),
 			bookmark: data.bookmark ?? null,
-			hasMore: rawDocs.length === parsed.limit
+			hasMore
 		};
 	}
 

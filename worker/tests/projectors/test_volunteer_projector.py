@@ -107,3 +107,21 @@ def test_accepted_from_is_stripped_from_verifications_in_public_plane():
     assert payload["identity_verification"] == {"status": "verified"}
     assert payload["skill_verifications"] == {"medical": {"status": "verified"}}
     assert "accepted_from" not in str(payload)
+
+
+def test_it_projects_occupation_when_present():
+    _, payload = project_volunteer(_doc(occupation="วิศวกร"), shelter_code="SH001")
+    assert payload["occupation"] == "วิศวกร"
+
+
+def test_it_projects_occupation_as_none_when_absent():
+    _, payload = project_volunteer(_doc(), shelter_code="SH001")
+    assert payload["occupation"] is None
+
+
+def test_occupation_is_the_only_occupation_key_and_never_a_position_copy():
+    _, payload = project_volunteer(
+        _doc(occupation="วิศวกร", position="secret-position"), shelter_code="SH001"
+    )
+    assert payload["occupation"] == "วิศวกร"
+    assert "position" not in payload

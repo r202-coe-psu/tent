@@ -4,6 +4,7 @@ import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { intakeStationsPassed } from '$lib/features/people/domain/intake-pipeline';
 import { labelZoneName, type ZoneLabelSource } from '$lib/features/people/domain/people';
 import { issueEvacueeQr } from '$lib/server/evacuee-qr-service';
+import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { findMasterByCode } from '$lib/server/shelters.admin';
@@ -233,7 +234,10 @@ export async function reprintKioskLabels(
 			.map((member) => member._id)
 	);
 	const printedBy = `kiosk:${deps.deviceId ?? 'unknown'}`;
-	const issued = new Map<string, { qr_payload: string } | { qr_issue_failed: true }>();
+	const issued = new Map<
+		string,
+		{ qr: { qr_payload: string } | { qr_issue_failed: true }; marker?: VulnerabilityMarker | null }
+	>();
 	// One entry per member, one at a time: each write is read-modify-write on its own doc.
 	for (const member of eligible) {
 		try {
@@ -243,18 +247,23 @@ export async function reprintKioskLabels(
 				source: 'kiosk_reprint',
 				printed_by: printedBy
 			});
-			issued.set(member._id, { qr_payload: result.qr_payload });
+			issued.set(member._id, { qr: { qr_payload: result.qr_payload }, marker: result.marker });
 		} catch {
-			issued.set(member._id, { qr_issue_failed: true });
+			issued.set(member._id, { qr: { qr_issue_failed: true } });
 		}
 	}
-	return eligible.map((member) => ({
-		evacuee_id: member._id,
-		...issued.get(member._id)!,
-		label: {
-			...toLabelIdentity(member),
-			zone: labelZoneName(member.current_stay?.zone, zones),
-			stations_passed: intakeStationsPassed(member.current_stay, screened.has(member._id))
-		}
-	}));
+	return eligible.map((member) => {
+		const { qr, marker } = issued.get(member._id)!;
+		return {
+			evacuee_id: member._id,
+			...qr,
+			label: {
+				...toLabelIdentity(member),
+				// #1301: the marker the entry was logged with; none when the entry failed.
+				...(marker === undefined ? {} : { marker }),
+				zone: labelZoneName(member.current_stay?.zone, zones),
+				stations_passed: intakeStationsPassed(member.current_stay, screened.has(member._id))
+			}
+		};
+	});
 }

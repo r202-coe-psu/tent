@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 
 from tent_model import close_db, init_db
@@ -22,6 +23,7 @@ from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
 from worker.inbound.volunteer_profile_updates import run_volunteer_profile_inbound_loop
 from worker.inbound.volunteer_schedule_actions import run_volunteer_schedule_action_loop
 from worker.listeners.registry import ListenerManager
+from worker.printing.housekeeping import start_print_housekeeping
 from worker.retention.job import run_retention_loop
 
 logging.basicConfig(
@@ -57,8 +59,13 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     external_booking_task: asyncio.Task[None] | None = None
     m5_transfer_task: asyncio.Task[None] | None = None
     m6_withdrawal_task: asyncio.Task[None] | None = None
+    print_housekeeping_task: asyncio.Task[None] | None = None
 
     try:
+        # Before bootstrap: a full re-projection can outlast the healthcheck start-period,
+        # and the task needs neither Couch nor Mongo.
+        if not bootstrap_only:
+            print_housekeeping_task = start_print_housekeeping(os.environ, stop)
         await maybe_bootstrap(couch, force=force_bootstrap or bootstrap_only)
         if bootstrap_only:
             logger.info("Bootstrap-only complete — exiting")
@@ -117,6 +124,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             external_booking_task,
             m5_transfer_task,
             m6_withdrawal_task,
+            print_housekeeping_task,
         ):
             if task:
                 task.cancel()
