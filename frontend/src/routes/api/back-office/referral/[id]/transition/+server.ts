@@ -1,13 +1,20 @@
 /* eslint-disable no-restricted-imports */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../../_auth';
+import {
+	allowedReferralTypes,
+	assertReferralTypeAllowed,
+	authorizeReferral,
+	resolveShelterCode,
+	handleEndpointError
+} from '../../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import {
 	ReferralConflictError,
 	transitionWithRetry
 } from '$lib/features/referrals/server/referral.transition-retry';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
+import { ExternallyManagedError } from '$lib/features/referrals/domain/referral.m5';
 
 export const prerender = false;
 
@@ -47,6 +54,11 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 		}
 
 		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);
+		// Role-limited callers (medical staff, D16) may only touch medical referrals.
+		if (allowedReferralTypes(caller, shelterCode)) {
+			const current = await repo.get(id);
+			if (current) assertReferralTypeAllowed(caller, shelterCode, current.referral_type);
+		}
 
 		try {
 			const updated = await transitionWithRetry(
@@ -61,6 +73,10 @@ export const PATCH: RequestHandler = async ({ request, params, url }) => {
 		} catch (e: unknown) {
 			if (e instanceof ReferralConflictError) {
 				return json({ error: e.message, details: e.details }, { status: 409 });
+			}
+			// M5 referrals: send/withdraw per batch, accept/reject from M5 only (CR §4).
+			if (e instanceof ExternallyManagedError) {
+				return json({ error: e.message, code: e.code }, { status: 409 });
 			}
 			throw e;
 		}

@@ -23,6 +23,8 @@
 		ReferralStatus
 	} from '../domain/referral.schema';
 	import { groupReferralsForList, type ReferralListGroup } from '../domain/referral.batch-group';
+	import { isM5Referral } from '../domain/referral.m5';
+	import { M5_STATUS_META } from './referral.m5.ui';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
@@ -30,6 +32,7 @@
 		getStatusBadgeVariant,
 		getStatusLabel,
 		getUrgencyLabel,
+		oneDataM5BatchPath,
 		referralBatchPath,
 		referralDetailPath,
 		resolveEvacueeName
@@ -54,7 +57,8 @@
 		isFetchingNext = false,
 		isNextError = false,
 		onPrev,
-		onNext
+		onNext,
+		showDirection = true
 	}: {
 		referrals: Referral[];
 		/** Server query inputs — the parent owns them (URL) and refetches on change. */
@@ -76,6 +80,8 @@
 		isNextError?: boolean;
 		onPrev?: () => void;
 		onNext?: () => void;
+		/** Hide the outgoing/incoming tabs (OneData M5 sends outgoing only). */
+		showDirection?: boolean;
 	} = $props();
 
 	/** Names come from the referral's own `evacuee_summary` snapshot — no evacuee roster is loaded. */
@@ -124,11 +130,22 @@
 		closed: Archive
 	};
 
-	/** Single referral opens its detail; a multi-member group opens the batch page. */
+	/**
+	 * An M5 batch (even of one) opens its OneData batch page, where the send / vehicle-left /
+	 * withdraw panel lives (D17). Other multi-member groups open the batch page, singles the detail.
+	 */
 	function groupHref(group: ReferralListGroup): string {
+		if (isM5Referral(group.sample)) return oneDataM5BatchPath(group.sample._id);
 		return group.count > 1
 			? referralBatchPath(group.sample._id)
 			: referralDetailPath(group.sample._id);
+	}
+
+	/** OneData M5 badge text: the M5 status once sent, "not sent yet" for a draft. */
+	function m5BadgeLabel(referral: Referral): string {
+		const external = 'external' in referral ? referral.external : undefined;
+		if (external?.status) return `OneData M5 · ${M5_STATUS_META[external.status].label}`;
+		return referral.status === 'draft' ? 'OneData M5 · ยังไม่ได้ส่ง' : 'OneData M5';
 	}
 
 	function primaryLabel(group: ReferralListGroup): string {
@@ -173,6 +190,14 @@
 {/snippet}
 
 {#snippet badges(group: ReferralListGroup)}
+	{#if isM5Referral(group.sample)}
+		<Badge
+			class="gap-1 border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-900"
+		>
+			<Send class="h-3.5 w-3.5" aria-hidden="true" />
+			{m5BadgeLabel(group.sample)}
+		</Badge>
+	{/if}
 	{#if group.count > 1}
 		<Badge
 			class="gap-1 bg-sky-100 text-xs font-semibold text-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
@@ -205,29 +230,31 @@
 	</div>
 
 	<!-- Direction (server query) -->
-	<div
-		role="tablist"
-		aria-label="ทิศทางการส่งต่อ"
-		class="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
-	>
-		{#each directions as d (d.value)}
-			{@const isActive = direction === d.value}
-			<button
-				type="button"
-				role="tab"
-				aria-selected={isActive}
-				onclick={() => {
-					if (!isActive) onDirectionChange?.(d.value);
-				}}
-				class="min-h-11 rounded-md px-5 text-sm transition-colors {rowFocus}
+	{#if showDirection}
+		<div
+			role="tablist"
+			aria-label="ทิศทางการส่งต่อ"
+			class="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
+		>
+			{#each directions as d (d.value)}
+				{@const isActive = direction === d.value}
+				<button
+					type="button"
+					role="tab"
+					aria-selected={isActive}
+					onclick={() => {
+						if (!isActive) onDirectionChange?.(d.value);
+					}}
+					class="min-h-11 rounded-md px-5 text-sm transition-colors {rowFocus}
 				{isActive
-					? 'bg-card font-semibold text-primary shadow-xs'
-					: 'font-medium text-muted-foreground hover:text-foreground'}"
-			>
-				{d.label}
-			</button>
-		{/each}
-	</div>
+						? 'bg-card font-semibold text-primary shadow-xs'
+						: 'font-medium text-muted-foreground hover:text-foreground'}"
+				>
+					{d.label}
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Status tabs (server query) -->
 	<div
