@@ -268,7 +268,8 @@ describe('ThaidSession resilience', () => {
 	it.each([
 		[new KioskThaidError(400, 'INVALID_INPUT'), 'invalid'],
 		[new KioskThaidError(401, 'DEVICE_AUTH_FAILED'), 'unauthorized'],
-		[new KioskThaidError(403, 'KIOSK_METHOD_DISABLED'), 'disabled']
+		[new KioskThaidError(403, 'KIOSK_METHOD_DISABLED'), 'disabled'],
+		[new KioskThaidError(403, 'KIOSK_CLOSED'), 'closed']
 	])('treats %s while polling as final: error state, no more polls', async (failure, kind) => {
 		const { api, session } = setup();
 		await session.start();
@@ -285,6 +286,7 @@ describe('ThaidSession resilience', () => {
 
 	it.each([
 		[new KioskThaidError(403, 'KIOSK_METHOD_DISABLED'), 'disabled', null],
+		[new KioskThaidError(403, 'KIOSK_CLOSED'), 'closed', null],
 		[new KioskThaidError(429, 'KIOSK_RATE_LIMITED', 30), 'rate_limited', 30],
 		[new KioskThaidError(503, 'DEPENDENCY_UNAVAILABLE'), 'unavailable', null],
 		[new TypeError('Failed to fetch'), 'unavailable', null]

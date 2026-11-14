@@ -19,4 +19,6 @@ function audit(deviceId: string, outcome: string): void {
  * answered like a wrong one; a device whose queue is full gets `429 RATE_LIMITED` at once.
  */
 export const POST: RequestHandler = ({ request }) =>
-	withDeviceStaffPin(request, audit, async () => staffPinJson({ ok: true }, 200));
+	withDeviceStaffPin(request, audit, async () => staffPinJson({ ok: true }, 200), {
+		refuseWhenClosed: true
+	});

@@ -107,6 +107,22 @@ describe('POST /api/v1/kiosk/lookup', () => {
 		} as never);
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and does no lookup', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			...principalFor('test-kiosk-device'),
+			service_open: false
+		} as never);
+
+		const response = await send({ source: 'phone', phone });
+
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(mockLookup).not.toHaveBeenCalled();
+		expect(mockFindShelter).not.toHaveBeenCalled();
+	});
+
 	it('rejects phone lookup when its authenticated shelter has disabled the method', async () => {
 		mockFindShelter.mockResolvedValueOnce({ code: 'SH001', feature_flags: {} } as never);
 
