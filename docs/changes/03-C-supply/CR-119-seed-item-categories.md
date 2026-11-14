@@ -3,7 +3,7 @@ id: CR-119
 title: ฐานข้อมูล 10 หมวดหมู่ระบบมาตรฐาน (10 System Protected Categories) และกลไก Seed ข้อมูลเริ่มต้นใน Catalog
 status: approved
 date: 2026-09-12
-updated: 2026-09-14
+updated: 2026-11-12
 requested_by: "Project Owner (ระบบบริหารจัดการสิ่งของบรรเทาทุกข์และโรงครัวกลาง)"
 decided_by: Project Owner
 layer: stable
@@ -199,8 +199,11 @@ function (newDoc, oldDoc, userCtx, secObj) {
   var targetShelter = newDoc.shelter_code || (oldDoc && oldDoc.shelter_code);
   if (targetShelter) {
     var hasScope = userCtx.roles.indexOf('shelter:' + targetShelter) !== -1;
-    var isManager = userCtx.roles.indexOf('shelter_manager') !== -1;
-    var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1;
+    // #832 (CR-093): รับทั้ง bare role และ compound {shelter_code}:{role} ของศูนย์เดียวกับ doc
+    var isManager = userCtx.roles.indexOf('shelter_manager') !== -1 ||
+      userCtx.roles.indexOf(targetShelter + ':shelter_manager') !== -1;
+    var isWS = userCtx.roles.indexOf('warehouse_staff') !== -1 ||
+      userCtx.roles.indexOf(targetShelter + ':warehouse_staff') !== -1;
     if (hasScope && (isManager || isWS)) {
       return;
     }
@@ -394,3 +397,4 @@ export async function syncSystemItemCategories(dryRun: boolean): Promise<{ creat
 - **2026-09-12 (Decision 4):** กำหนดให้ `item_master.category` จัดเก็บเป็น `category_id` (เช่น `"item_category:food"`) เพื่อการอ้างอิงที่แม่นยำ พร้อมระบบ Auto-fill `type_class` ตาม `default_class` ของหมวดหมู่
 - **2026-09-12 (Decision 5):** บรรจุกระบวนการ Seed ใน `scripts/sync-central-db.ts` (รันอัตโนมัติใน CI/CD) และ `scripts/seed.ts`
 - **2026-09-12 (Decision 6):** บันทึกการเปลี่ยนแปลงเป็น Change Record ฉบับเต็มที่ [`docs/changes/03-C-supply/CR-119-seed-item-categories.md`](CR-119-seed-item-categories.md)
+- **2026-11-12 (Amendment, #832):** VDU ของ catalog (§5.2) เดิมเช็ก `shelter_manager` / `warehouse_staff` เฉพาะ bare role ทำให้ผู้ใช้ที่ถือ compound role ตาม CR-093 (`{shelter_code}:shelter_manager`, `{shelter_code}:warehouse_staff`) เขียน doc ประจำศูนย์ไม่ได้ จึงแก้ให้รองรับทั้ง bare และ compound ของศูนย์เดียวกับ `shelter_code` ของ doc (สอดคล้อง `isRole()` ของ shelter DB) ไม่เปลี่ยน schema / `schema_v` / สิทธิ์ของ role อื่น โค้ดอยู่ที่ `frontend/scripts/sync-central-db.ts` และ `frontend/scripts/seed/master-seed.ts` ทดสอบใน `catalog-access-vdu.test.ts` ต้อง re-run `sync-central-db` เพื่อ deploy `catalog/_design/access` ใหม่ (วิธีบันทึก: แก้ snippet + note ใน CR นี้ ตามที่ Project Owner เลือก)

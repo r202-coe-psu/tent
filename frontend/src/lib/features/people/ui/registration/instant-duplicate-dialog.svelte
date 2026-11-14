@@ -63,7 +63,7 @@
 		}
 	}}
 >
-	<AlertDialog.Content class="max-w-lg">
+	<AlertDialog.Content class="max-w-[calc(100%-2rem)] sm:max-w-lg">
 		<AlertDialog.Header class="space-y-2">
 			<div class="flex items-center gap-2 text-amber-600 dark:text-amber-500">
 				<AlertTriangle class="size-5 shrink-0" />

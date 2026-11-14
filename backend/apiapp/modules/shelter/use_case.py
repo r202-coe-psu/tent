@@ -218,15 +218,30 @@ class ShelterUseCase:
 
         location = m.get("location") or {}
 
+        # #1241: per-zone Present from the worker's zone -> status counts (search-excluded
+        # people included, like `occupancy_by_status`). `None` = row not re-projected yet:
+        # no per-zone count rather than a `public_persons` fallback that would miss them.
+        by_zone = doc.occupancy_by_zone
+        if by_zone is not None and not doc.is_active:
+            by_zone = {}
+
         mapped_zones = []
         for z in zones:
             if isinstance(z, dict):
+                zone_code = z.get("code")
+                zone_present = None
+                if by_zone is not None:
+                    zone_counts = by_zone.get(zone_code, {}) if zone_code else {}
+                    zone_present = sum(zone_counts.get(s, 0) for s in PRESENT_OCCUPANCY_STATUSES)
                 mapped_zones.append(
                     {
+                        "code": zone_code,
                         "name": z.get("name"),
                         "type": z.get("type") or "general",
+                        "status": "closed" if z.get("status") == "closed" else "active",
                         "capacity": z.get("capacity"),
                         "area_m2": z.get("area_m2"),
+                        "present": zone_present,
                     }
                 )
 

@@ -9,14 +9,14 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { getShelterDb } from '$lib/db/shelter';
+import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { SaveThresholdOverrideInput } from '../domain/threshold-override';
 import type { AuthorContext } from '$lib/db/model';
 
 export const supplyKeys = {
 	all: ['supply'] as const,
 	list: () => [...supplyKeys.all, 'list'] as const,
-	overrides: () => [...supplyKeys.all, 'overrides'] as const,
+	overrides: () => [...supplyKeys.all, 'overrides', getShelterCode()] as const,
 	detail: (id: string) => [...supplyKeys.all, 'detail', id] as const
 };
 

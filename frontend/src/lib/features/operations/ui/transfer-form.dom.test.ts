@@ -171,3 +171,60 @@ describe('transfer form whole numbers for count units (#805)', () => {
 		expect(submitButton().disabled).toBe(false);
 	});
 });
+
+describe('transfer form quantity input (CR-038)', () => {
+	const QTY_HINT = 'จำนวนต้องมากกว่า 0 ทศนิยมไม่เกิน 4 ตำแหน่ง';
+	const qtyInput = () => document.querySelector<HTMLInputElement>('input[type="number"]')!;
+
+	async function settle() {
+		for (let i = 0; i < 3; i++) {
+			flushSync();
+			await tick();
+		}
+	}
+
+	async function pickBottles() {
+		stockItems.current = [BOTTLE];
+		await render({ data: [{ code: 'SH002', name: 'ศูนย์สอง' }], isSuccess: true, isError: false });
+		const input = document.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+		const trigger = input.parentElement!.querySelector<HTMLElement>('button[aria-haspopup]')!;
+		trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+		trigger.click();
+		await settle();
+		const option = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) =>
+			o.textContent?.includes('น้ำดื่ม')
+		)!;
+		option.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+		option.click();
+		await settle();
+	}
+
+	async function type(value: string) {
+		qtyInput().value = value;
+		qtyInput().dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+	}
+
+	it.each(['1e3', '1.23456', '0', '1000000000000000'])(
+		'refuses %s with the decimal hint and keeps the request button off',
+		async (raw) => {
+			await pickBottles();
+			await type(raw);
+			expect(document.body.textContent).toContain(QTY_HINT);
+			expect(qtyInput().getAttribute('aria-invalid')).toBe('true');
+			expect(submitButton().disabled).toBe(true);
+		}
+	);
+
+	it('explains a quantity the number input cannot parse, such as "1e"', async () => {
+		await pickBottles();
+		Object.defineProperty(qtyInput(), 'validity', {
+			configurable: true,
+			value: { badInput: true }
+		});
+		await type('');
+
+		expect(document.body.textContent).toContain(QTY_HINT);
+		expect(submitButton().disabled).toBe(true);
+	});
+});

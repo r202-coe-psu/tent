@@ -1,4 +1,6 @@
 import { adminRaw } from '$lib/server/couch-admin';
+import { findMasterByCode } from '$lib/server/shelters.admin';
+import { isShelterAcceptingReferrals } from '$lib/features/shelters/server';
 import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
 import { shelterDbName, REFERRAL_MANGO_INDEXES } from '$lib/server/shelter-access-design';
 import { isEvacuee, type Evacuee, type Movement } from '$lib/features/people/domain/people';
@@ -16,6 +18,13 @@ import {
 } from '../domain/referral.schema';
 import { applyTransition, canTransition } from '../domain/referral.transitions';
 import {
+	M5_REFERRAL_SCHEMA_V,
+	assertM5TransitionAllowed,
+	buildM5BatchReferralBodies,
+	type M5BatchInput,
+	type ReferralTransitionChannel
+} from '../domain/referral.m5';
+import {
 	assertActorMayTransition,
 	ReferralAuthorizationError
 } from '../domain/referral.authorization';
@@ -31,6 +40,15 @@ const HTTP_OK = 200;
 const HTTP_CREATED = 201;
 const HTTP_NOT_FOUND = 404;
 const HTTP_FORBIDDEN = 403;
+
+/** CR-251 FR-18/FR-18a: 422 when the destination shelter switched referral intake off (read from the registry). */
+// shortcut: registry read and write are not transactional, a toggle between them lets one accept through, acceptable until referrals get a revision check
+export async function assertDestinationAcceptsReferrals(toShelterCode: string): Promise<void> {
+	const master = await findMasterByCode(toShelterCode);
+	if (master && !isShelterAcceptingReferrals(master)) {
+		throw new CouchDbReferralError('ศูนย์ปลายทางปิดรับการส่งต่อ', 422);
+	}
+}
 
 export class CouchDbReferralError extends Error {
 	constructor(
@@ -54,6 +72,26 @@ interface PutResultResponse {
 	id: string;
 	rev: string;
 }
+
+interface BulkDocsRow {
+	id: string;
+	rev?: string;
+	ok?: boolean;
+	error?: string;
+	reason?: string;
+}
+
+/** Extra knobs for `transition()` used by the M5 batch path (CR §4). */
+export type TransitionOptions = {
+	/** Who drives the transition; `row` (default) is the per-item endpoint. */
+	channel?: ReferralTransitionChannel;
+	/** Applied to the transitioned doc before it is written (e.g. attach `external`). */
+	patch?: (doc: Referral) => Referral;
+};
+
+/** Cap on members read for one `batch_id` (an M5 batch is one transfer, far below this). */
+const BATCH_ID_LIMIT = 1000;
+const UPDATE_MAX_ATTEMPTS = 3;
 
 let centralOpsDbCreated = false;
 async function ensureCentralDb() {
@@ -281,6 +319,9 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 	 * sort covers every field of the `(type, <shelter field>, created_at)` index so Mango uses it
 	 * directly. Without `direction`, falls back to the `$or` selector (evacuee lookups).
 	 * Pages by `bookmark` (never `skip`); `hasMore` counts raw docs before malformed ones are dropped.
+	 * A full page probes one row past the bookmark, so an exact multiple of `limit` (50, 100, …)
+	 * ends with "next" off instead of an empty page. Not `limit + 1`: the bookmark would then point
+	 * past the extra row and the next page would skip it.
 	 */
 	async listPage(filter?: ReferralFilter): Promise<ReferralPage> {
 		const parsed = referralFilterSchema.parse(filter ?? {});
@@ -306,6 +347,12 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		if (parsed.evacuee_id) {
 			selector.evacuee_id = parsed.evacuee_id;
 		}
+		if (parsed.referral_types) {
+			selector.referral_type = { $in: parsed.referral_types };
+		}
+		if (parsed.dispatch_mode) {
+			selector.dispatch_mode = parsed.dispatch_mode;
+		}
 
 		const body: Record<string, unknown> = { selector, limit: parsed.limit, sort };
 		if (parsed.bookmark) {
@@ -321,10 +368,26 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		}
 
 		const rawDocs = data.docs || [];
+		let hasMore = false;
+		if (rawDocs.length === parsed.limit && data.bookmark) {
+			// A failed probe (bad status or network error) keeps "next" on rather than hiding rows
+			// that may exist; the next page request then surfaces the real error.
+			try {
+				const probe = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
+					selector,
+					sort,
+					limit: 1,
+					bookmark: data.bookmark
+				});
+				hasMore = probe.status !== HTTP_OK || (probe.data?.docs ?? []).length > 0;
+			} catch {
+				hasMore = true;
+			}
+		}
 		return {
 			items: rawDocs.filter((d): d is Referral => isReferral(d)),
 			bookmark: data.bookmark ?? null,
-			hasMore: rawDocs.length === parsed.limit
+			hasMore
 		};
 	}
 
@@ -341,6 +404,9 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 	 * keeps docs whose `referralBatchKey` matches.
 	 */
 	async getBatchFor(anchor: Referral): Promise<Referral[]> {
+		if ('batch_id' in anchor && anchor.batch_id) {
+			return this.findByBatchId(anchor.batch_id, anchor.shelter_code);
+		}
 		const { start, end } = referralBatchBucketBounds(anchor.created_at);
 		const key = referralBatchKey(anchor);
 		const limit = CouchDbReferralServerRepository.BATCH_LIMIT;
@@ -371,6 +437,76 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			bookmark = data.bookmark;
 		}
 		throw new CouchDbReferralError('Referral batch exceeds the page cap', 500);
+	}
+
+	/** Members of a stored batch (`batch_id`, M5), oldest first, scoped to the source shelter. */
+	async findByBatchId(batchId: string, shelterCode = this.contextShelterCode): Promise<Referral[]> {
+		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
+			selector: { type: 'referral', batch_id: batchId, shelter_code: shelterCode },
+			limit: BATCH_ID_LIMIT
+		});
+		if (status !== HTTP_OK) {
+			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
+		}
+		return (data.docs || [])
+			.filter((d): d is Referral => isReferral(d))
+			.sort((a, b) => a.created_at.localeCompare(b.created_at) || a._id.localeCompare(b._id));
+	}
+
+	/**
+	 * Create every draft of one M5 batch in a single `_bulk_docs` write (schema_v 3, FR-B2).
+	 * All-or-nothing: if any row fails, the rows that were written are deleted again.
+	 */
+	async createM5Batch(
+		input: M5BatchInput,
+		batchId: string,
+		ctx: AuthorContext,
+		summaries: ReadonlyMap<string, EvacueeSummary | undefined>
+	): Promise<Referral[]> {
+		const docs = buildM5BatchReferralBodies(input, batchId, summaries).map((body) =>
+			referralSchema.parse(makeDoc('referral', M5_REFERRAL_SCHEMA_V, body, ctx))
+		);
+		const { status, data } = await this.couchPost<BulkDocsRow[]>(this.dbName, '/_bulk_docs', {
+			docs
+		});
+		if (status !== HTTP_CREATED || !Array.isArray(data)) {
+			throw new CouchDbReferralError('Failed to create referral batch', status, data);
+		}
+		const written = data.filter((r) => r.ok && r.rev);
+		if (written.length !== docs.length) {
+			if (written.length) {
+				await this.couchPost(this.dbName, '/_bulk_docs', {
+					docs: written.map((r) => ({ _id: r.id, _rev: r.rev, _deleted: true }))
+				});
+			}
+			throw new CouchDbReferralError('Failed to create referral batch', 500, data);
+		}
+		const revs = new Map(written.map((r) => [r.id, r.rev!]));
+		return docs.map((d) => ({ ...d, _rev: revs.get(d._id) }));
+	}
+
+	/**
+	 * Read-modify-write of one referral without a status change (e.g. `external.status` after
+	 * TRF-005). `mutate` returns `null` to skip. Retries on 409.
+	 */
+	async update(id: string, mutate: (doc: Referral) => Referral | null): Promise<Referral | null> {
+		for (let attempt = 0; attempt < UPDATE_MAX_ATTEMPTS; attempt++) {
+			const latest = await this.get(id);
+			if (!latest) throw new CouchDbReferralError('Referral not found', HTTP_NOT_FOUND);
+			const next = mutate(latest);
+			if (!next) return null;
+			const touched = touch(next);
+			const { status, data } = await this.couchPut<PutResultResponse>(
+				this.dbName,
+				`/${encodeURIComponent(touched._id)}`,
+				touched
+			);
+			if (status === HTTP_CREATED || status === HTTP_OK) return { ...touched, _rev: data.rev };
+			if (status !== 409) {
+				throw new CouchDbReferralError('Failed to update referral', status, data);
+			}
+		}
+		throw new CouchDbReferralError('Conflict: referral update failed', 409);
 	}
 
 	async getBatch(id: string): Promise<Referral[]> {
@@ -439,7 +575,8 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 		to: ReferralStatus,
 		actor: string,
 		reason?: string,
-		actorShelter?: string
+		actorShelter?: string,
+		options: TransitionOptions = {}
 	): Promise<Referral> {
 		const latest = await this.get(id);
 		if (!latest) {
@@ -462,11 +599,21 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			throw new CouchDbReferralError('Invalid referral transition', 422);
 		}
 
+		// M5 referrals: status comes from M5; send/withdraw only per batch (CR §4 rules 1–4).
+		// Throws ExternallyManagedError, which the retry loop never treats as a conflict.
+		assertM5TransitionAllowed(latest, to, options.channel ?? 'row');
+
 		const nowIso = new Date().toISOString();
+
+		// CR-251 FR-18a: refuse to send to a destination that closed intake (status stays draft).
+		if (to === 'sent' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
+			await assertDestinationAcceptsReferrals(latest.to_shelter_code);
+		}
 
 		// Capacity accept: cross-DB transfer BEFORE marking referral accepted (fail-fast).
 		// Only reachable when actorShelter === to_shelter_code (asserted above).
 		if (to === 'accepted' && latest.referral_type === 'capacity' && latest.to_shelter_code) {
+			await assertDestinationAcceptsReferrals(latest.to_shelter_code);
 			try {
 				await this.completeCapacityTransfer(latest, actor, nowIso, reason);
 			} catch (e: unknown) {
@@ -477,7 +624,8 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			}
 		}
 
-		const updated = applyTransition(latest, to, actor, nowIso, reason);
+		const transitioned = applyTransition(latest, to, actor, nowIso, reason);
+		const updated = options.patch ? options.patch(transitioned) : transitioned;
 		const touched = touch(updated);
 
 		const { status, data } = await this.couchPut<PutResultResponse>(

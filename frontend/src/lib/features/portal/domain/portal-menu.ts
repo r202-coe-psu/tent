@@ -8,7 +8,7 @@
  *  - `scope: 'system'` items are SA-only.
  *  - `shelter_manager` of the *selected* shelter sees every `scope: 'shelter'` item.
  *  - otherwise an item is visible when the user holds one of its capabilities in the selected
- *    shelter (`hasCapabilityInShelter`); `warehouse_staff` counts as `supply_coordinator`.
+ *    shelter (`hasCapabilityInShelter`); `warehouse_staff` counts as `supply_coordinator` (not the reverse).
  *  - unknown / empty roles see nothing.
  * Items gated by a shelter feature flag (`requires`) additionally follow {@link PortalFeatures}
  * for everyone, SA/SM included. A department with no visible item is not rendered at all.
@@ -34,6 +34,7 @@ export type PortalDepartmentId =
 	| 'facility'
 	| 'management'
 	| 'pr'
+	| 'onedata'
 	| 'central';
 
 export type PortalIconKey =
@@ -73,6 +74,7 @@ export type PortalCapability =
 	| 'medical_staff'
 	| 'kitchen_staff'
 	| 'supply_coordinator'
+	| 'warehouse_staff'
 	| 'volunteer_coordinator'
 	| 'security_officer'
 	| 'facility_staff'
@@ -144,6 +146,7 @@ const TRG = 'triage_staff';
 const MED = 'medical_staff';
 const KS = 'kitchen_staff';
 const SC = 'supply_coordinator';
+const WH = 'warehouse_staff';
 const VC = 'volunteer_coordinator';
 const SO = 'security_officer';
 const FAC = 'facility_staff';
@@ -425,11 +428,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			{
 				id: 'referrals',
 				label: 'การส่งต่อผู้ประสบภัย',
-				desc: 'ส่งต่อโรงพยาบาลหรือศูนย์อื่น',
+				// D17: hospital sends go through OneData M5; this page moves and tracks.
+				desc: 'ย้ายศูนย์ และบันทึกติดตามการส่งต่อ',
 				icon: 'ambulance',
 				href: '/back-office/referrals',
 				scope: 'shelter',
-				roles: []
+				// Medical staff: medical-emergency referrals only (M5 draft CR D8, D16).
+				roles: [MED]
 			},
 			{
 				id: 'back-office',
@@ -439,6 +444,37 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				href: '/back-office',
 				scope: 'shelter',
 				roles: []
+			}
+		]
+	},
+	{
+		// Draft CR M5 D17: links to the OneData platform (M5 patient referral, M6 resources).
+		id: 'onedata',
+		label: 'OneData Platform',
+		desc: 'ส่งต่อผู้ป่วยและขอทรัพยากรผ่านระบบ OneData',
+		domain: 'admin',
+		icon: 'globe',
+		items: [
+			{
+				id: 'onedata-m5',
+				label: 'OneData ระบบส่งต่อผู้ป่วย (M5)',
+				desc: 'ส่งผู้ป่วยไปโรงพยาบาลให้ สธ. พิจารณา',
+				icon: 'ambulance',
+				href: '/back-office/onedata/m5',
+				scope: 'shelter',
+				roles: [MED]
+			},
+			{
+				id: 'onedata-m6',
+				label: 'OneData ระบบบริหารทรัพยากร (M6)',
+				desc: 'ขอเบิกของจากคลังกลาง',
+				icon: 'package',
+				href: '/back-office/onedata/m6',
+				scope: 'shelter',
+				// M6 D2: SA, SM and `warehouse_staff` only. `SC` is NOT listed: elsewhere in the portal
+				// `warehouse_staff` counts as `supply_coordinator`, but never the reverse here — the
+				// exact `warehouse_staff` capability is checked (see `holdsCapability`).
+				roles: [WH]
 			}
 		]
 	},
@@ -526,7 +562,9 @@ function holdsCapability(
 	shelterCode: string | null | undefined,
 	capability: PortalCapability
 ): boolean {
-	// warehouse_staff is an alias of supply_coordinator in the portal (matrix §1.1).
+	// warehouse_staff is an alias of supply_coordinator in the portal (matrix §1.1): an item listing
+	// `supply_coordinator` admits both. The reverse does not hold — an item listing `warehouse_staff`
+	// (OneData M6, D2) admits the exact capability only, so supply_coordinator stays out.
 	if (capability === 'supply_coordinator') return isWarehouseStaff(roles, shelterCode);
 	return hasCapabilityInShelter(roles, shelterCode, capability);
 }

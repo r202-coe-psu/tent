@@ -533,6 +533,35 @@ describe('CR-206 — receiving a booking point by point', () => {
 		});
 	});
 
+	it('D19: the last point cannot turn away what is left of a central-warehouse (m6) delivery', async () => {
+		couch.donation = {
+			...couch.donation,
+			channel: 'm6',
+			external: { system: 'm6', request_code: 'REQ-1' }
+		} as typeof couch.donation;
+		const first = await POST(
+			atPoint(
+				'sp-gym',
+				[0],
+				[{ ...water, qty: '0', rejected: true, reject_reason_code: 'damaged' }, medicine]
+			)
+		);
+		expect(first.status).toBe(200);
+
+		const response = await POST(
+			atPoint(
+				'sp-med',
+				[1],
+				[water, { ...medicine, qty: '0', rejected: true, reject_reason_code: 'damaged' }]
+			)
+		);
+
+		expect(response.status).toBe(422);
+		expect((await response.json()).error_code).toBe('M6_NOT_REFUSABLE');
+		expect(couch.donation.status).toBe('verifying');
+		expect(couch.donation.point_receipts).toHaveLength(1);
+	});
+
 	describe('retries and lines already recorded (FR-MP-22e)', () => {
 		it('AC-15: the same receipt again after a lost answer is 200 and writes nothing', async () => {
 			const staleRev = couch.donation._rev;

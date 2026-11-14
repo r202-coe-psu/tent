@@ -506,6 +506,65 @@ describe('scan-station point by point (CR-206)', () => {
 		expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining('ปิดใบ DN-206 แล้ว'));
 	});
 
+	describe('an m6 (central warehouse) booking — D19 / D20', () => {
+		const m6Booking = (extra: Record<string, unknown> = {}) => ({
+			rev: '3-abc',
+			booking_ref: 'DN-206',
+			shelter_code: 'SH001',
+			status: 'verifying',
+			channel: 'm6',
+			m6: {
+				request_code: 'WD-0007',
+				source_warehouse_code: 'WH-A',
+				source_warehouse_name: 'คลังกลาง A',
+				confirmed_at: null,
+				confirm_error: null
+			},
+			donor: { name: 'คลังกลาง M6 · คลังกลาง A', phone: null },
+			items: [{ item_id: 'item:water', qty: '24', unit: 'bottle' }],
+			...extra
+		});
+
+		it('offers no reject, but a close "ไม่ได้รับของ" while nothing is recorded', async () => {
+			stubApi(m6Booking());
+			await openBooking();
+
+			expect(document.body.textContent).toContain('คลังกลาง M6 · คลังกลาง A');
+			expect(buttonIn(document.body, 'ปฏิเสธคำขอ')).toBeUndefined();
+			expect(document.querySelector('[data-testid="close-m6-empty-button"]')).not.toBeNull();
+		});
+
+		it('closes through the close route only after the confirm dialog', async () => {
+			const fetchMock = stubApi(m6Booking(), { success: true, donation: { status: 'received' } });
+			await openBooking();
+
+			document.querySelector<HTMLButtonElement>('[data-testid="close-m6-empty-button"]')!.click();
+			await settle();
+			const dialog = document.querySelector('[data-testid="close-m6-empty-dialog"]')!;
+			expect(dialog.textContent).toContain('ยืนยันว่าไม่ได้รับของจากคลังกลาง M6');
+			expect(dialog.textContent).toContain('ระบบจะแจ้ง M6 ว่าไม่ได้รับของ');
+			// Opening the dialog sends nothing.
+			expect(postBody(fetchMock)).toBeNull();
+
+			document.querySelector<HTMLButtonElement>('[data-testid="close-m6-empty-confirm"]')!.click();
+			await settle();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			const sent = postBody(fetchMock)!;
+			expect(sent.url).toBe('/api/back-office/donations/DN-206/close');
+			expect(sent.body).toEqual({ expected_rev: '3-abc' });
+			expect(toastMock.success).toHaveBeenCalledWith(
+				expect.stringContaining('แจ้ง M6 ว่าไม่ได้รับของ')
+			);
+		});
+
+		it('a donor booking with no receipt gets no ไม่ได้รับของ close', async () => {
+			stubApi(splitBooking());
+			await openBooking();
+			expect(document.querySelector('[data-testid="close-m6-empty-button"]')).toBeNull();
+		});
+	});
+
 	it('offers no ปิดใบ before any point recorded (FR-MP-28)', async () => {
 		shelterDoc.current = { common_areas: { sub_storage: [dropOffPoint(GYM), dropOffPoint(MED)] } };
 		stubApi(splitBooking());

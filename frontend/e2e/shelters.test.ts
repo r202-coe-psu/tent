@@ -304,6 +304,61 @@ test.describe('Shelter Form — Edit', () => {
 		expect(body.capacity).toBe(80);
 	});
 
+	test('#1343 the two visibility switches read a doc without the keys as on, and PATCH the flags when turned off', async ({
+		page
+	}) => {
+		const CODE = 'SH903';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, {
+			name: 'ศูนย์ทดสอบการแสดงผล',
+			operation_status: 'standby',
+			capacity: 80,
+			shelter_type: null,
+			project_level: null,
+			location: {},
+			contact: {},
+			facilities: {},
+			common_areas: { sub_storage: [] },
+			utilities: { communications: [] },
+			risk: {},
+			zones: [],
+			food_distribution_points: [],
+			// Old doc: neither #1343 key is stored, so both must read as on.
+			feature_flags: { accepts_pre_registration: true }
+		});
+
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`/back-office/shelters/edit/${CODE}`);
+
+		const publicVisible = page.locator('#public-visible');
+		const acceptsReferrals = page.locator('#accepts-referrals');
+		await expect(publicVisible).toHaveAttribute('aria-checked', 'true');
+		await expect(acceptsReferrals).toHaveAttribute('aria-checked', 'true');
+
+		await publicVisible.click();
+		// FR-25: the switch stays on until the confirm; cancel keeps it, confirm turns it off.
+		await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+		await expect(publicVisible).toHaveAttribute('aria-checked', 'true');
+		await publicVisible.click();
+		await page.getByRole('button', { name: 'ซ่อนศูนย์', exact: true }).click();
+		await acceptsReferrals.click();
+		await expect(publicVisible).toHaveAttribute('aria-checked', 'false');
+		await expect(acceptsReferrals).toHaveAttribute('aria-checked', 'false');
+
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${CODE}`)
+		);
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await patched;
+
+		const body = getPatchBody() as { feature_flags: Record<string, unknown> };
+		expect(body.feature_flags).toMatchObject({
+			public_visible: false,
+			accepts_referrals: false,
+			accepts_pre_registration: true
+		});
+	});
+
 	test('pre-fills, edits and PATCHes the optional zone short name', async ({ page }) => {
 		const CODE = 'SH903';
 		const { getPatchBody } = await mockShelterDetail(page, CODE, {
