@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { toPersistBirthYearBE } from './birth-calendar';
 import { currentBEYear, genderSchema } from './people';
+import type { InstantDuplicateHref } from './instant-duplicate';
 import {
 	cardAddressToHouseholdFields,
 	type UnifiedHouseholdInput,
@@ -94,7 +95,8 @@ export type ScannedCardPlacement =
 	| { kind: 'already-in-form'; index: number }
 	| { kind: 'ask-overwrite' };
 
-const digitsOnly = (value: string | undefined) => (value ?? '').replace(/\D/g, '');
+/** An ID number as digits only, so `1-2345-…` and `12345…` compare equal. */
+export const digitsOnly = (value: string | null | undefined) => (value ?? '').replace(/\D/g, '');
 
 /**
  * Decide where a scanned card goes: onto the member that already carries its citizen ID, else the
@@ -115,4 +117,4 @@ export function applyScannedCard(
 }
 
 /** Who a scanned card's citizen ID already belongs to (shelter or central queue), and where to open them. */
-export type ScannedCardDuplicate = { name: string; href: string };
+export type ScannedCardDuplicate = { name: string; href: InstantDuplicateHref };

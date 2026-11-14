@@ -452,6 +452,7 @@ export {
 	scannerCardPhotoSchema,
 	cardToUnifiedMember,
 	applyScannedCard,
+	digitsOnly,
 	type ScannerCard,
 	type ScannerCardPhoto,
 	type ScannedCardPlacement,

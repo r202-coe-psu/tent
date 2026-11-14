@@ -49,6 +49,7 @@
 		applyCardAddressToHousehold,
 		applyScannedCard,
 		cardToUnifiedMember,
+		digitsOnly,
 		scannerCardErrorSchema,
 		scannerCardPhotoSchema,
 		scannerCardSchema,
@@ -161,6 +162,7 @@
 		onselectshelter,
 		onDirtyChange,
 		findScannedCardDuplicate,
+		scannerEnabled = false,
 		/** Increment from parent to clear a stale public join selection (bad token / missing target). */
 		joinResetKey = 0,
 		draftKey = '',
@@ -205,6 +207,11 @@
 		 * card is placed. Resolves null when nobody is found; throws when the lookup fails.
 		 */
 		findScannedCardDuplicate?: (citizenId: string) => Promise<ScannedCardDuplicate | null>;
+		/**
+		 * Listen to the desktop scanner client (#1326 `scanner:*` events). Only the staff walk-in page
+		 * turns it on; every other form leaves the events unacknowledged.
+		 */
+		scannerEnabled?: boolean;
 		joinResetKey?: number;
 		/**
 		 * Public pre-register (#358): keep the form in `sessionStorage` under this key, so a phone
@@ -1438,6 +1445,7 @@
 
 	/** Ask the page whether this citizen ID is already registered before the card is placed (#1326 D3). */
 	async function checkScannedCardDuplicate(card: ScannerCard) {
+		toast.loading(ts.checkingDuplicate, { id: SCANNER_TOAST_ID });
 		let duplicate: ScannedCardDuplicate | null;
 		try {
 			duplicate = (await findScannedCardDuplicate?.(card.citizen_id)) ?? null;
@@ -1446,7 +1454,7 @@
 			placeScannedCardAsUsual(card);
 			return;
 		}
-		if (duplicate) {
+		if (duplicate && !fieldsLocked) {
 			toast.dismiss(SCANNER_TOAST_ID);
 			pendingScannerDuplicate = { card, duplicate };
 			return;
@@ -1461,6 +1469,12 @@
 
 	/** Fill / already-in-form / ask-overwrite, decided against the members as they are now. */
 	function placeScannedCardAsUsual(card: ScannerCard) {
+		// Saving (or read-only): the form must not change under the save; staff insert the card again.
+		if (fieldsLocked) {
+			heldScannerPhoto = null;
+			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
 		const placement = applyScannedCard(members, card);
 		if (placement.kind === 'already-in-form') {
 			showAlreadyInForm(card);
@@ -1484,7 +1498,7 @@
 		const pending = pendingScannerDuplicate;
 		pendingScannerDuplicate = null;
 		heldScannerPhoto = null;
-		if (pending) void goto(resolve(pending.duplicate.href as '/'));
+		if (pending) void goto(resolve(pending.duplicate.href));
 	}
 
 	function continueWithScannedCard() {
@@ -1497,6 +1511,11 @@
 	const freshReportingInMember = () => ({ ...blankUnifiedMember(), reporting_in: true });
 
 	function placeScannedCard(card: ScannerCard, index: number) {
+		if (fieldsLocked) {
+			heldScannerPhoto = null;
+			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
 		members[index] = cardToUnifiedMember(card, members[index]);
 		household = applyCardAddressToHousehold(household, card);
 		markDirty();
@@ -1525,8 +1544,6 @@
 	}
 
 	const saveScannerPhoto = useSaveImage();
-
-	const digitsOnly = (value: string | null | undefined) => (value ?? '').replace(/\D/g, '');
 
 	/** The member holding this citizen ID right now — looked up fresh, never by a remembered index. */
 	const findMemberByCitizenId = (citizenId: string) =>
@@ -1566,14 +1583,17 @@
 
 	/** `quiet`: leave the toast alone on success (the already-in-form notice stays readable). */
 	async function attachScannerPhoto(citizenId: string, dataUrl: string, { quiet = false } = {}) {
+		const createdBy = authStore.user?.name;
+		if (!createdBy) {
+			// Never store an image owned by nobody; the walk-in page needs a signed-in staff anyway.
+			toast.error(ts.photoSaveFailed, { id: SCANNER_TOAST_ID });
+			return;
+		}
 		let photoId: string;
 		let file: File;
 		try {
 			file = jpegDataUrlToFile(dataUrl);
-			const saved = await saveScannerPhoto.mutateAsync({
-				file,
-				ctx: { shelterCode, createdBy: authStore.user?.name ?? 'unknown' }
-			});
+			const saved = await saveScannerPhoto.mutateAsync({ file, ctx: { shelterCode, createdBy } });
 			photoId = saved._id;
 		} catch {
 			toast.error(ts.photoSaveFailed, { id: SCANNER_TOAST_ID });
@@ -1591,6 +1611,7 @@
 	}
 
 	$effect(() => {
+		if (!scannerEnabled) return;
 		window.addEventListener('scanner:card-reading', handleScannerCardReading);
 		window.addEventListener('scanner:card-read', handleScannerCardRead);
 		window.addEventListener('scanner:card-photo', handleScannerCardPhoto);
@@ -1598,9 +1619,9 @@
 		return () => {
 			clearTimeout(scannerReadingTimer);
 			window.removeEventListener('scanner:card-reading', handleScannerCardReading);
-			window.removeEventListener('scanner:card-error', handleScannerCardError);
 			window.removeEventListener('scanner:card-read', handleScannerCardRead);
 			window.removeEventListener('scanner:card-photo', handleScannerCardPhoto);
+			window.removeEventListener('scanner:card-error', handleScannerCardError);
 		};
 	});
 

@@ -28,6 +28,7 @@
 		type IntakeNextStation,
 		type RegistrationConsent,
 		type RegistrationConsentConfig,
+		digitsOnly,
 		type ScannedCardDuplicate,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput
@@ -121,7 +122,7 @@
 			const hit = pool.value.results[0];
 			if (hit && hit.open_members.length > 0) {
 				const member =
-					hit.open_members.find((m) => m.person_id?.number?.replace(/\D/g, '') === citizenId) ??
+					hit.open_members.find((m) => digitsOnly(m.person_id?.number) === citizenId) ??
 					hit.open_members[0];
 				const { actionUrl } = resolveInstantDuplicateAction({
 					source: 'unassigned',
@@ -381,6 +382,7 @@
 				onsubmit={handleRegister}
 				onDirtyChange={(dirty) => (isDirty = dirty)}
 				{findScannedCardDuplicate}
+				scannerEnabled
 			/>
 		{/if}
 	{/if}

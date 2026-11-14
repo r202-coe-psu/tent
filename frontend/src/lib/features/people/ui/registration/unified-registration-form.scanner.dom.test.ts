@@ -42,6 +42,22 @@ vi.mock('$lib/features/images/data/image.remote', async (importOriginal) => {
 		})
 	};
 });
+/** Who is signed in: the photo of a card is saved under their name, never under a placeholder. */
+const signedIn = vi.hoisted(() => ({ user: { name: 'staff1', roles: [] } as unknown }));
+vi.mock('$lib/stores/auth.svelte', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/stores/auth.svelte')>();
+	const store = actual.authStore;
+	return {
+		...actual,
+		authStore: new Proxy(store, {
+			get(target, key) {
+				if (key === 'user') return signedIn.user;
+				const value = Reflect.get(target, key);
+				return typeof value === 'function' ? value.bind(target) : value;
+			}
+		})
+	};
+});
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
 	replaceState: vi.fn(),
@@ -73,6 +89,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	toastLog.length = 0;
 	saveImageSpy.mockReset();
+	signedIn.user = { name: 'staff1', roles: [] };
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(async () => Response.json([]))
@@ -101,6 +118,7 @@ function renderWalkInForm(extraProps: Record<string, unknown> = {}) {
 			shelterCode: 'SH001',
 			onsubmit: vi.fn(),
 			onDirtyChange: vi.fn(),
+			scannerEnabled: true,
 			...extraProps
 		}
 	});
@@ -244,6 +262,26 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 		expect(buttonByText('เพิ่มเป็นสมาชิกใหม่')).toBeUndefined();
 	});
 
+	it('ignores the scanner client on a form that did not enable it (e.g. report-in)', async () => {
+		renderWalkInForm({ scannerEnabled: false });
+
+		const event = dispatchCardRead(card);
+		await settle();
+
+		expect(event.defaultPrevented).toBe(false);
+		expect(values('first-name')).toEqual(['']);
+	});
+
+	it('places nothing while the form is locked (saving)', async () => {
+		renderWalkInForm({ pending: true });
+
+		dispatchCardRead(card);
+		await settle();
+
+		expect(values('first-name')).toEqual(['']);
+		expect(values('card-number')).toEqual(['']);
+	});
+
 	it('tells staff the card is already in the form and changes nothing', async () => {
 		renderWalkInForm();
 		dispatchCardRead(card);
@@ -370,14 +408,17 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 
 		it('dismisses the toast while the duplicate dialog is open', async () => {
 			renderWalkInForm({
-				findScannedCardDuplicate: vi.fn(async () => ({ name: 'สมหญิง ใจดี', href: '/x' }))
+				findScannedCardDuplicate: vi.fn(async () => ({
+					name: 'สมหญิง ใจดี',
+					href: '/onsite/people/evacuee-profile-view/EV-1' as const
+				}))
 			});
 
 			dispatchScannerEvent('scanner:card-reading');
 			dispatchCardRead();
 			await settle();
 
-			expect(progress()).toEqual(['dismiss', 'dismiss']);
+			expect(progress()).toEqual(['dismiss', 'loading: กำลังตรวจรายชื่อซ้ำ…', 'dismiss']);
 		});
 
 		it('dismisses the toast when the photo matches nobody in the form', async () => {
@@ -521,6 +562,28 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			expect(values('first-name')).toEqual(['สมหญิง']);
 		});
 
+		it('shows a progress toast while the lookup runs', async () => {
+			renderWalkInForm({ findScannedCardDuplicate: vi.fn(() => new Promise(() => {})) });
+
+			dispatchCardRead(card);
+			await settle();
+
+			expect(progress()).toEqual(['loading: กำลังตรวจรายชื่อซ้ำ…']);
+		});
+
+		it('places nothing when the form became locked while the lookup ran', async () => {
+			let finish!: (found: null) => void;
+			const lookup = vi.fn(() => new Promise<null>((resolve) => (finish = resolve)));
+			renderWalkInForm({ findScannedCardDuplicate: lookup, pending: true });
+
+			dispatchCardRead(card);
+			await settle();
+			finish(null);
+			await settle();
+
+			expect(values('first-name')).toEqual(['']);
+		});
+
 		it('places the card straight away when nobody is found', async () => {
 			renderWalkInForm({ findScannedCardDuplicate: vi.fn(async () => null) });
 
@@ -582,8 +645,22 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			expect([...new Uint8Array(await file.arrayBuffer()).slice(0, 4)]).toEqual([
 				0xff, 0xd8, 0xff, 0xe0
 			]);
-			expect(ctx).toMatchObject({ shelterCode: 'SH777' });
+			expect(ctx).toMatchObject({ shelterCode: 'SH777', createdBy: 'staff1' });
 			expect(photoMarkers()).toHaveLength(1);
+		});
+
+		it('does not save the photo when nobody is signed in', async () => {
+			signedIn.user = null;
+			renderWalkInForm();
+			dispatchCardRead(card);
+			await settle();
+
+			dispatchCardPhoto(photoDetail(card.citizen_id));
+			await settle();
+
+			expect(saveImageSpy).not.toHaveBeenCalled();
+			expect(progress()).toContain('error: บันทึกรูปจากบัตรไม่สำเร็จ');
+			expect(photoMarkers()).toHaveLength(0);
 		});
 
 		it('discards a photo whose citizen ID matches no member without uploading it', async () => {
