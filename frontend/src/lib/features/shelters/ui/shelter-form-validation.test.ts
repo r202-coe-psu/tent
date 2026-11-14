@@ -96,7 +96,8 @@ describe('shelter-form-validation', () => {
 			'risk',
 			'admission-policy',
 			'luggage-policy',
-			'parking-policy'
+			'parking-policy',
+			'parking-points'
 		]);
 		expect(SHELTER_SECTION_FIELDS['capacity']).toEqual([
 			'capacity',

@@ -143,3 +143,33 @@ describe('GET /api/back-office/shelter — visibility (#477)', () => {
 		expect(await callGET(['system_admin'], true)).toEqual(['SH001', 'SH002', 'SH003']);
 	});
 });
+
+describe('GET /api/back-office/shelter — parking points (#1352)', () => {
+	it('returns parking_points, defaulting to [] for a schema_v 9 doc without the field', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sa',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
+		const pin = {
+			id: '01J0000000000000000000000A',
+			name: 'ลานจอดรถ',
+			note: null,
+			lat: null,
+			lng: null,
+			vehicles: []
+		};
+		vi.mocked(listShelterMasters).mockResolvedValueOnce([
+			{ code: 'SH001', name: 'ศูนย์ 1', schema_v: 9 },
+			{ code: 'SH002', name: 'ศูนย์ 2', schema_v: 11, parking_points: [pin] }
+		] as never);
+		const request = new Request('http://localhost/api/back-office/shelter', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request } as unknown as Parameters<typeof GET>[0]);
+		const rows = (await res.json()) as { code: string; parking_points: unknown }[];
+		expect(rows.find((r) => r.code === 'SH001')?.parking_points).toEqual([]);
+		expect(rows.find((r) => r.code === 'SH002')?.parking_points).toEqual([pin]);
+	});
+});

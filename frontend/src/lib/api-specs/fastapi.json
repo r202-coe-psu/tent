@@ -6068,6 +6068,36 @@
 				"required": ["page", "limit", "total", "total_pages"],
 				"title": "PaginationMeta"
 			},
+			"ParkingPoint": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" },
+					"geo": { "$ref": "#/components/schemas/GeoPoint" },
+					"vehicles": {
+						"items": { "$ref": "#/components/schemas/ParkingVehicle" },
+						"type": "array",
+						"title": "Vehicles"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "geo"],
+				"title": "ParkingPoint",
+				"description": "A pinned parking point of a shelter (CR-253). Never read from ``raw_data``."
+			},
+			"ParkingVehicle": {
+				"properties": {
+					"type": { "type": "string", "title": "Type" },
+					"max_capacity": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Max Capacity"
+					}
+				},
+				"type": "object",
+				"required": ["type"],
+				"title": "ParkingVehicle",
+				"description": "A vehicle type a parking point takes, with its capacity (CR-253)."
+			},
 			"PersonIdInput": {
 				"properties": {
 					"cardType": {
@@ -6643,6 +6673,16 @@
 						"items": { "$ref": "#/components/schemas/DonationPoint" },
 						"type": "array",
 						"title": "Donation Points"
+					},
+					"parking_points": {
+						"items": { "$ref": "#/components/schemas/ParkingPoint" },
+						"type": "array",
+						"title": "Parking Points"
+					},
+					"parking_vehicle_types": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Parking Vehicle Types"
 					}
 				},
 				"type": "object",
@@ -6756,6 +6796,16 @@
 					"readiness_assessed_at": {
 						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
 						"title": "Readiness Assessed At"
+					},
+					"parking_points": {
+						"items": { "$ref": "#/components/schemas/ParkingPoint" },
+						"type": "array",
+						"title": "Parking Points"
+					},
+					"parking_vehicle_types": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Parking Vehicle Types"
 					},
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},

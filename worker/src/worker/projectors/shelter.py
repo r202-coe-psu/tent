@@ -242,6 +242,91 @@ def project_donation_points(doc: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+#: Vehicle types a parking point may take, in the order ``parking_vehicle_types`` lists them.
+_VEHICLE_TYPES = ("motorcycle", "car", "truck", "boat")
+
+
+def _parking_policy(doc: dict[str, Any]) -> dict[str, Any]:
+    policy = doc.get("parking_policy")
+    return policy if isinstance(policy, dict) else {}
+
+
+def _point_vehicles(point: dict[str, Any]) -> list[dict[str, Any]]:
+    """Valid ``vehicles[]`` of a parking point: known type once, capacity int >= 0 or null."""
+    raw = point.get("vehicles")
+    if not isinstance(raw, list):
+        return []
+    seen: dict[str, dict[str, Any]] = {}
+    for vehicle in raw:
+        if not isinstance(vehicle, dict) or vehicle.get("type") not in _VEHICLE_TYPES:
+            continue
+        capacity = vehicle.get("max_capacity")
+        if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 0:
+            capacity = None
+        seen.setdefault(
+            vehicle["type"], {"type": vehicle["type"], "max_capacity": capacity}
+        )
+    return list(seen.values())
+
+
+def _parking_points_of(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    points = doc.get("parking_points")
+    return (
+        [p for p in points if isinstance(p, dict)] if isinstance(points, list) else []
+    )
+
+
+def project_parking_points(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """``public_shelters.parking_points`` (CR-253 FR-25/26).
+
+    Only points with a persisted ``id``, a name and a real pin (both coordinates in range, not
+    (0,0)) leave the staff plane; ``availability = none`` hides every saved point.
+    """
+    if _parking_policy(doc).get("availability") == "none":
+        return []
+    out: list[dict[str, Any]] = []
+    for point in _parking_points_of(doc):
+        point_id = point.get("id")
+        name = point.get("name")
+        lat = _pin_coordinate(point.get("lat"), 90)
+        lng = _pin_coordinate(point.get("lng"), 180)
+        if not point_id or not isinstance(point_id, str):
+            continue
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if lat is None or lng is None or (lat == 0 and lng == 0):
+            continue
+        note = point.get("note")
+        note = note.strip() if isinstance(note, str) else ""
+        out.append(
+            {
+                "id": point_id,
+                "name": name.strip(),
+                "note": note or None,
+                "geo": {"lat": lat, "lng": lng},
+                "vehicles": _point_vehicles(point),
+            }
+        )
+    return out
+
+
+def project_parking_vehicle_types(doc: dict[str, Any]) -> list[str]:
+    """``public_shelters.parking_vehicle_types`` (CR-253 FR-35) — same rule as the form's
+    ``effectiveParkingVehicles``: points win once any names a vehicle (pinned or not), else the
+    legacy ``parking_policy.supported_vehicles``; ``availability = none`` is no parking. The
+    total ``common_areas.parking_capacity`` never decides a type (Q6).
+    """
+    policy = _parking_policy(doc)
+    if policy.get("availability") == "none":
+        return []
+    types = {v["type"] for p in _parking_points_of(doc) for v in _point_vehicles(p)}
+    if not types:
+        legacy = policy.get("supported_vehicles")
+        legacy = legacy if isinstance(legacy, list) else []
+        types = {v.get("type") for v in legacy if isinstance(v, dict)}
+    return [t for t in _VEHICLE_TYPES if t in types]
+
+
 def project_shelter(
     doc: dict[str, Any],
 ) -> tuple[ProjectionAction, dict[str, Any] | None]:
@@ -311,6 +396,8 @@ def project_shelter(
         "contact_phone": contact.get("phone"),
         "opened_at": _parse_timestamp(doc.get("opened_at")),
         "donation_points": project_donation_points(doc),
+        "parking_points": project_parking_points(doc),
+        "parking_vehicle_types": project_parking_vehicle_types(doc),
         "raw_data": doc,
         "updated_at": updated_at,
     }

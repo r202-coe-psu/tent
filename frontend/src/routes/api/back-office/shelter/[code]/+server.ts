@@ -63,6 +63,7 @@ export const GET: RequestHandler = async ({ request, params }) => {
 			risk: migrated.risk ?? {},
 			zones: migrated.zones ?? [],
 			food_distribution_points: migrated.food_distribution_points ?? [],
+			parking_points: migrated.parking_points ?? [],
 			admission_policy: migrated.admission_policy ?? EMPTY_ADMISSION_POLICY,
 			luggage_policy: migrated.luggage_policy ?? EMPTY_LUGGAGE_POLICY,
 			parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY,

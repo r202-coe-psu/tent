@@ -32,6 +32,7 @@ export {
 	SHELTER_MASTER_SCHEMA_V,
 	isShelterBookable,
 	isShelterCancelled,
+	effectiveParkingVehicles,
 	isShelterPublicVisible,
 	isShelterAcceptingReferrals,
 	resolveOperationStatus,

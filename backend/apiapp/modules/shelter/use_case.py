@@ -126,6 +126,8 @@ class ShelterUseCase:
                     vulnerable_groups=vul_groups,
                     admin_type=admin_type,
                     accepts_pre_registration=accepts_pre_registration(m),
+                    parking_points=doc.parking_points,
+                    parking_vehicle_types=doc.parking_vehicle_types,
                     updated_at=doc.updated_at,
                 )
             )
@@ -291,6 +293,8 @@ class ShelterUseCase:
                 "accepts_pre_registration": accepts_pre_registration(m),
                 # CR-205 FR-DP-15: the projected field only, never raw_data's sub_storage.
                 "donation_points": doc.donation_points,
+                "parking_points": doc.parking_points,
+                "parking_vehicle_types": doc.parking_vehicle_types,
                 "faq": m.get("faq")
                 or [
                     {

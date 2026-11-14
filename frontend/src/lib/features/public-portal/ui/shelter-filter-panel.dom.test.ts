@@ -96,3 +96,44 @@ describe('ShelterFilterPanel — first-visit GPS radius', () => {
 		expect(env.goto).not.toHaveBeenCalled();
 	});
 });
+
+describe('ShelterFilterPanel — parking filter (CR-253 FR-33)', () => {
+	beforeEach(() => {
+		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968&distance=5');
+		env.pending = null;
+		env.goto.mockClear();
+	});
+	afterEach(() => {
+		if (component) unmount(component);
+		component = undefined;
+		document.body.innerHTML = '';
+	});
+
+	it('shows the boxes ticked from the URL flags', async () => {
+		await render({
+			filters: {
+				parking_car: 'on',
+				parking_boat: 'on',
+				user_lat: '7.0086',
+				user_lng: '100.4968',
+				distance: '5'
+			}
+		});
+		const checked = (name: string) =>
+			document.body.querySelector(`[name="${name}"]`)?.getAttribute('aria-checked') ??
+			document.body.querySelector<HTMLInputElement>(`input[name="${name}"]`)?.checked;
+		expect(String(checked('parking_car'))).toBe('true');
+		expect(String(checked('parking_motorcycle'))).toBe('false');
+		expect(String(checked('parking_boat'))).toBe('true');
+	});
+
+	it('writes ticked types to the URL as parking_*=on, and drops them when unticked', async () => {
+		await render({ filters: { user_lat: '7.0086', user_lng: '100.4968', distance: '5' } });
+		env.goto.mockClear();
+
+		document.body.querySelector<HTMLElement>('[name="parking_car"]')!.click();
+		for (let i = 0; i < 3; i++) await tick();
+		expect(committedUrl().get('parking_car')).toBe('on');
+		expect(committedUrl().has('parking_boat')).toBe(false);
+	});
+});
