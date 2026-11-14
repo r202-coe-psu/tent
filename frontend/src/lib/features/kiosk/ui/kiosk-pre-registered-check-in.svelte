@@ -13,6 +13,7 @@
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import KioskLabelSheet from './kiosk-label-sheet.svelte';
 	import KioskPrintStatus from './kiosk-print-status.svelte';
+	import KioskSelfCheckout from './kiosk-self-checkout.svelte';
 	import {
 		initialReprintSelection,
 		initialSelection,
@@ -47,6 +48,9 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { KIOSK_QR_FLOW_I18N } from './_constants/kiosk-qr-flow.i18n';
+	import { KIOSK_SELF_CHECKOUT_I18N } from './_constants/kiosk-self-checkout.i18n';
+	import type { SelfCheckoutStep } from '../application/self-checkout-session.svelte';
+	import { shouldOfferSelfCheckout } from '../domain/self-checkout';
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
 	import KioskNoticePanel from './kiosk-notice-panel.svelte';
 	import {
@@ -99,6 +103,7 @@
 	}: Props = $props();
 
 	const t = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).checkIn);
+	const checkoutT = $derived(getTranslation(KIOSK_SELF_CHECKOUT_I18N, languageStore.current));
 
 	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
 	/** When the current `lookup` succeeded (ISO) — sent with the check-in as the Station 1 start (CR-192). */
@@ -112,6 +117,12 @@
 	let retryAfterSeconds = $state(0);
 	let isLookingUp = $state(false);
 	let isSubmitting = $state(false);
+	/**
+	 * #1401: a card / ThaiD holder who is already in the shelter is asked whether to check out. While
+	 * it is open the face check never shows (`holdShown`), and the usual check-in screens stay away.
+	 */
+	let selfCheckoutOpen = $state(false);
+	let selfCheckoutStep = $state<SelfCheckoutStep>('ask');
 	let selectedIds = $state<string[]>([]);
 	let results = $state<KioskCheckInMemberResult[]>([]);
 	let retryableIds = $state<string[]>([]);
@@ -142,7 +153,12 @@
 	const isPhoneGate = $derived(input?.source === 'phone');
 	const isThaidGate = $derived(input?.source === 'thaid');
 	const holdShown = $derived(
-		holdMembers && Boolean(hold) && Boolean(lookup) && centerMatches && results.length === 0
+		holdMembers &&
+			Boolean(hold) &&
+			Boolean(lookup) &&
+			centerMatches &&
+			results.length === 0 &&
+			!selfCheckoutOpen
 	);
 	/** No pre-registration for this card / ThaiD scan, and this shelter takes walk-ins at the kiosk. */
 	const walkInOffered = $derived(
@@ -176,16 +192,22 @@
 		)
 	);
 	/** Card face check (hold) or ThaiD: step 3 is proving who is at the kiosk, not a plain lookup. */
-	const verifiesIdentity = $derived((holdMembers && Boolean(hold)) || isThaidGate);
+	const verifiesIdentity = $derived(
+		!selfCheckoutOpen && ((holdMembers && Boolean(hold)) || isThaidGate)
+	);
 	// The face check runs after the lookup, so the members (step 4) only count once it has ended.
 	const wizardStep = $derived(
-		results.length > 0
-			? 5
-			: candidates.length > 0 || lookupError || isLookingUp || (lookup && holdMembers && hold)
-				? 3
-				: lookup
-					? 4
-					: 2
+		selfCheckoutOpen
+			? selfCheckoutStep === 'done'
+				? 5
+				: 4
+			: results.length > 0
+				? 5
+				: candidates.length > 0 || lookupError || isLookingUp || (lookup && holdMembers && hold)
+					? 3
+					: lookup
+						? 4
+						: 2
 	);
 	const selectedMembers = $derived(
 		lookup?.members.filter((member) => selectedIds.includes(member.evacuee_id)) ?? []
@@ -231,6 +253,8 @@
 		selectedIds = [];
 		isReprintOnly = false;
 		printSelectedIds = [];
+		selfCheckoutOpen = false;
+		selfCheckoutStep = 'ask';
 		isLookingUp = true;
 		try {
 			const found = await lookupPreRegisteredEvacuee(gate);
@@ -250,16 +274,12 @@
 			}
 			lookup = found;
 			lookupAt = new Date().toISOString();
-			const selectableMembers = found.members.filter((member) => member.selectable);
-			if (selectableMembers.length === 0) {
-				results = toExistingReportResults(found.members);
-				isReprintOnly = true;
-				printSelectedIds = initialReprintSelection(results);
-				await prepareQrImages(results, generation);
-				if (generation !== lookupGeneration) return;
+			// #1401: someone already in the shelter is asked about checking out first (no face check).
+			if (shouldOfferSelfCheckout(gate.source, found.members)) {
+				selfCheckoutOpen = true;
 				return;
 			}
-			selectedIds = initialSelection(gate.source, selectableMembers);
+			await openCheckInScreens(found, gate, generation);
 		} catch (error) {
 			if (generation !== lookupGeneration) return;
 			if (error instanceof KioskRequestError) {
@@ -273,6 +293,35 @@
 		} finally {
 			if (generation === lookupGeneration) isLookingUp = false;
 		}
+	}
+
+	/** The usual screens for a household: the check-in list, or the results / reprint when nobody is left. */
+	async function openCheckInScreens(
+		found: Extract<KioskLookupResponse, { kind: 'household' }>,
+		gate: GateInput,
+		generation: number
+	): Promise<void> {
+		const selectableMembers = found.members.filter((member) => member.selectable);
+		if (selectableMembers.length === 0) {
+			results = toExistingReportResults(found.members);
+			isReprintOnly = true;
+			printSelectedIds = initialReprintSelection(results);
+			await prepareQrImages(results, generation);
+			return;
+		}
+		selectedIds = initialSelection(gate.source, selectableMembers);
+	}
+
+	/**
+	 * "Not me" on the check-out question: this lookup goes on exactly as it did before #1401, so a
+	 * member still to check in gets the check-in list (with its own face check) and a household
+	 * with nobody left gets the results / reprint screen.
+	 */
+	async function declineSelfCheckout(): Promise<void> {
+		if (!lookup || !retryGate) return;
+		selfCheckoutOpen = false;
+		selfCheckoutStep = 'ask';
+		await openCheckInScreens(lookup, retryGate, lookupGeneration);
 	}
 
 	function centerMatchesFor(serverCode: string): boolean {
@@ -569,6 +618,7 @@
 			href={backUrl}
 			onclick={isPhoneGate ? onreset : undefined}
 			label={isPhoneGate ? t.backToPhone : undefined}
+			disabled={selfCheckoutOpen && selfCheckoutStep === 'submitting'}
 		/>
 	</div>
 
@@ -579,29 +629,31 @@
 				id="check-in-title"
 				class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 			>
-				{walkInOffered
-					? t.title.notPreRegistered
-					: alreadyKioskRegistered
-						? t.title.alreadyKioskRegistered
-						: lookupError
-							? t.title.lookupFailed
-							: results.length > 0
-								? t.title.results
-								: candidates.length > 0
-									? t.title.chooseHousehold
-									: lookup
-										? holdMembers
-											? t.title.verifyIdentity
-											: t.title.chooseMembers
-										: cardMode && !input
-											? t.title.waitingForCard
-											: t.title.searching}
+				{selfCheckoutOpen
+					? checkoutT.heading
+					: walkInOffered
+						? t.title.notPreRegistered
+						: alreadyKioskRegistered
+							? t.title.alreadyKioskRegistered
+							: lookupError
+								? t.title.lookupFailed
+								: results.length > 0
+									? t.title.results
+									: candidates.length > 0
+										? t.title.chooseHousehold
+										: lookup
+											? holdMembers
+												? t.title.verifyIdentity
+												: t.title.chooseMembers
+											: cardMode && !input
+												? t.title.waitingForCard
+												: t.title.searching}
 			</h1>
 			{#if cardMode && !input}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
 					{t.sub.insertCard}
 				</p>
-			{:else if lookup && results.length === 0 && !holdMembers}
+			{:else if lookup && results.length === 0 && !holdMembers && !selfCheckoutOpen}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
 					{t.sub.chooseArrived}
 				</p>
@@ -729,7 +781,19 @@
 			{@render hold?.()}
 		{/if}
 
-		{#if lookup && centerMatches && results.length === 0 && !holdMembers}
+		{#if selfCheckoutOpen && lookup && centerMatches && (input?.source === 'smart-card' || input?.source === 'thaid')}
+			<KioskSelfCheckout
+				gate={input}
+				primaryEvacueeId={lookup.primary_evacuee_id}
+				members={lookup.members}
+				onnotme={() => void declineSelfCheckout()}
+				ondone={onreset}
+				onbusychange={(busy) => onprintbusychange?.(busy)}
+				onstepchange={(step) => (selfCheckoutStep = step)}
+			/>
+		{/if}
+
+		{#if lookup && centerMatches && results.length === 0 && !holdMembers && !selfCheckoutOpen}
 			<section
 				class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6"
 				aria-labelledby="household-title"
@@ -1067,17 +1131,19 @@
 			/>
 		{/if}
 
-		<p
-			class={[
-				'no-print flex items-center justify-center gap-2 text-base text-slate-600 kiosk-portrait:gap-3 kiosk-portrait:text-xl kiosk-compact:text-sm',
-				holdShown && 'kiosk-compact:hidden'
-			]}
-		>
-			<ShieldCheck
-				class="size-4 shrink-0 text-[#0A2647] kiosk-portrait:size-6"
-				aria-hidden="true"
-			/>{t.qrNoPersonalData}
-		</p>
+		{#if !selfCheckoutOpen}
+			<p
+				class={[
+					'no-print flex items-center justify-center gap-2 text-base text-slate-600 kiosk-portrait:gap-3 kiosk-portrait:text-xl kiosk-compact:text-sm',
+					holdShown && 'kiosk-compact:hidden'
+				]}
+			>
+				<ShieldCheck
+					class="size-4 shrink-0 text-[#0A2647] kiosk-portrait:size-6"
+					aria-hidden="true"
+				/>{t.qrNoPersonalData}
+			</p>
+		{/if}
 	</div>
 </section>
 
