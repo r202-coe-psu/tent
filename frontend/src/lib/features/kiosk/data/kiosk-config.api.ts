@@ -32,7 +32,8 @@ export function resetKioskConfigCache(): void {
 	lastFailedAt = null;
 }
 
-/** Fail closed: any error, timeout or non-2xx response keeps the phone method hidden (FR-KPT-21).
+/** Fail closed for the method flags: any error, timeout or non-2xx keeps them off (FR-KPT-21);
+ * `serviceOpen` alone fails open (see FAIL_CLOSED_CONFIG).
  * A successful result is cached briefly (KIOSK_CONFIG_CACHE_TTL_MS); failures are never cached so
  * a recovered network is reflected on the very next visit, not after a stale window. */
 export async function fetchKioskConfig(
