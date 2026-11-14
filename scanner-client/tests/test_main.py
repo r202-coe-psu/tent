@@ -49,12 +49,31 @@ class FakePage(FakeEmitter):
             raise self.goto_error
 
 
+class FakeCdpSession:
+    def __init__(self, fail=False):
+        self.sent = []
+        self.fail = fail
+
+    async def send(self, method, params=None):
+        self.sent.append((method, params))
+        if self.fail:
+            raise RuntimeError("Browser.setWindowBounds wasn't found")
+        if method == "Browser.getWindowForTarget":
+            return {"windowId": 7, "bounds": {"windowState": "normal"}}
+        return {}
+
+
 class FakeContext(FakeEmitter):
     def __init__(self, page):
         super().__init__()
         self.page = page
         self.pages = []
         self.closed = False
+        self.cdp = FakeCdpSession()
+
+    async def new_cdp_session(self, page):
+        assert page is self.page
+        return self.cdp
 
     async def new_page(self):
         return self.page
@@ -524,3 +543,25 @@ def test_cards_are_watched_only_once_the_start_page_was_opened(tmp_path):
     harness.run(watcher_factory=watcher_factory)
 
     assert gotos_when_watching == [["https://shelter.example/admin-login"]]
+
+
+@pytest.mark.parametrize("keep_login", [False, True])
+def test_the_window_is_put_in_fullscreen_even_if_the_launch_flag_was_ignored(tmp_path, keep_login):
+    harness = Harness(tmp_path, keep_login=keep_login)
+
+    harness.run()
+
+    assert harness.playwright.chromium.context.cdp.sent == [
+        ("Browser.getWindowForTarget", None),
+        ("Browser.setWindowBounds", {"windowId": 7, "bounds": {"windowState": "fullscreen"}}),
+    ]
+    assert harness.playwright.page.gotos == ["https://shelter.example/admin-login"]
+
+
+def test_a_browser_that_refuses_fullscreen_still_opens_the_shelter(tmp_path):
+    harness = Harness(tmp_path)
+    harness.playwright.chromium.context.cdp.fail = True
+
+    harness.run()
+
+    assert harness.playwright.page.gotos == ["https://shelter.example/admin-login"]

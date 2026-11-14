@@ -143,6 +143,7 @@ async def run_app(
             page = await context.new_page()
         context.on("close", lambda *_: stop.set())
         page.on("close", lambda *_: stop.set())
+        await _enter_fullscreen(context, page)
 
         if ask_origin is not None:
             origin = await _until_stopped(ask_origin(page, settings.shelter_origin), stop)
@@ -172,6 +173,20 @@ async def run_app(
             stop.set()
             await watcher_task
             await _close_all(context, browser)
+
+
+async def _enter_fullscreen(context: Any, page: Any) -> None:
+    """Fullscreen through the DevTools protocol: Edge can ignore --start-fullscreen (e.g. when
+    it restores a saved window size), so the window is asked again once it exists."""
+    try:
+        cdp = await context.new_cdp_session(page)
+        window = await cdp.send("Browser.getWindowForTarget")
+        await cdp.send(
+            "Browser.setWindowBounds",
+            {"windowId": window["windowId"], "bounds": {"windowState": "fullscreen"}},
+        )
+    except Exception as exc:  # a browser that refuses still works, just not fullscreen
+        log.warning("could not make the window fullscreen: %s", type(exc).__name__)
 
 
 async def _until_stopped(asking: Awaitable[str | None], stop: asyncio.Event) -> str | None:
