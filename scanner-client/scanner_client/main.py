@@ -15,6 +15,8 @@ from playwright.async_api import async_playwright
 
 from scanner_client.card_session import CardSession
 from scanner_client.config import ConfigError, Settings, load_settings, save_shelter_url
+from scanner_client.label_print import LOCAL_PATHS, LocalPrintRoutes
+from scanner_client.label_printers import label_printer
 from scanner_client.reader_watch import CardReaderWatcher
 from scanner_client.url_prompt import ask_shelter_origin
 
@@ -151,6 +153,12 @@ async def run_app(
                 return
             settings = replace(settings, shelter_origin=origin)
             on_origin_chosen(origin)
+
+        # the page's label prints go to this PC's USB printer, answered here, never the server
+        printer = label_printer(settings.printer_name)
+        print_routes = LocalPrintRoutes(settings.shelter_origin, printer)
+        for path in sorted(LOCAL_PATHS):
+            await context.route(f"**{path}", print_routes.handle)
 
         session = card_session_factory(settings)
 

@@ -19,6 +19,10 @@ DEFAULT_START_PATH = "/admin-login"
 BROWSER_CHANNELS = ("msedge", "chrome", "chromium")
 # Same default as the kiosk's card poll loop (kiosk/app/manager.py: POLL_INTERVAL, "0.5").
 DEFAULT_POLL_INTERVAL = 0.5
+# Local label printer: the Windows printer name PRINTER.md sets up, and the CUPS queue
+# kiosk/setup_printer.sh makes elsewhere.
+WINDOWS_PRINTER_NAME = "XP-365B"
+CUPS_PRINTER_NAME = "tent_xprinter"
 POLL_INTERVAL_RANGE = (0.2, 10.0)
 _TRUE = {"true", "1", "yes"}
 _FALSE = {"false", "0", "no"}
@@ -38,6 +42,7 @@ class Settings:
     card_reader_name: str | None
     keep_login: bool
     poll_interval: float
+    printer_name: str = WINDOWS_PRINTER_NAME
 
 
 # Plain http is tolerated on the shelter LAN, where the edge stack serves http only
@@ -170,6 +175,8 @@ def load_settings(
         card_reader_name=get("CARD_READER_NAME") or None,
         keep_login=_keep_login(get("KEEP_LOGIN")),
         poll_interval=_poll_interval(get("POLL_INTERVAL")),
+        printer_name=get("PRINTER_NAME")
+        or (WINDOWS_PRINTER_NAME if platform.startswith("win") else CUPS_PRINTER_NAME),
     )
 
 

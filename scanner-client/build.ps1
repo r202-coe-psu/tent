@@ -189,7 +189,9 @@ foreach ($exe in 'tent.exe', 'python.exe') {
 Invoke-Checked "$zipStage\python.exe" @('-c',
     ('import sys, sitecustomize, ssl, ctypes, scanner_client.main, scanner_client.launcher; ' +
      'from pathlib import Path; from scanner_client.winscard import WinSCard; WinSCard.load(); ' +
-     'assert scanner_client.main.default_env_path().parent == Path(sys.executable).parent'))
+     'assert scanner_client.main.default_env_path().parent == Path(sys.executable).parent; ' +
+     'from scanner_client.label_printers import _win_printer_exists; ' +
+     'assert not _win_printer_exists(''tent-no-such-printer'')'))
 # tent.exe writes its own shortcuts through COM on the first start: write one here to prove it
 $lnkTest = Join-Path ([IO.Path]::GetTempPath()) 'tent-build-shortcut-test.lnk'
 Remove-Item -LiteralPath $lnkTest -ErrorAction SilentlyContinue

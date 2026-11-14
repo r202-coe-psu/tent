@@ -279,3 +279,20 @@ def test_save_shelter_url_creates_a_missing_env_file(tmp_path):
     save_shelter_url(path, "https://shelter.example")
 
     assert load_settings(path, {}, platform="linux").shelter_origin == "https://shelter.example"
+
+
+def test_label_printer_defaults_to_the_name_each_setup_guide_uses(tmp_path):
+    # PRINTER.md names the Windows printer XP-365B; kiosk/setup_printer.sh makes the CUPS
+    # queue tent_xprinter
+    env = "SHELTER_URL=https://a.example\n"
+
+    assert load(tmp_path, env, platform="win32").printer_name == "XP-365B"
+    assert load(tmp_path, env, platform="linux").printer_name == "tent_xprinter"
+
+
+def test_label_printer_name_can_be_changed(tmp_path):
+    settings = load(
+        tmp_path, "SHELTER_URL=https://a.example\nPRINTER_NAME=Label 2\n", platform="linux"
+    )
+
+    assert settings.printer_name == "Label 2"
