@@ -149,20 +149,6 @@ describe('toQtyStrLossless (#936)', () => {
 	});
 });
 
-describe('toQtyStrLossless (#936)', () => {
-	it('converts a number to an exact string without rounding', () => {
-		expect(toQtyStrLossless(6.33333)).toBe('6.33333');
-	});
-	it('avoids exponent notation', () => {
-		expect(toQtyStrLossless(1e-7)).toBe('0.0000001');
-	});
-	it('passes strings and non-finite numbers through', () => {
-		expect(toQtyStrLossless('2.5')).toBe('2.5');
-		expect(toQtyStrLossless(NaN)).toBeNaN();
-		expect(toQtyStrLossless(undefined)).toBeUndefined();
-	});
-});
-
 describe('parseQtyInputStrict (#939)', () => {
 	it.each([
 		['0.30000', '0.3'],
