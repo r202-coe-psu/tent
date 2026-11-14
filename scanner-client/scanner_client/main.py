@@ -25,7 +25,13 @@ LOG_BACKUP_COUNT = 3
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 # Follow the real window size (Playwright pins a 1280x720 viewport by default); open fullscreen
 # like F11 (staff press F11 to get the window back, Alt+F4 closes it).
-WINDOW_ARGS = ["--start-fullscreen"]
+# Without Playwright's automation marker (navigator.webdriver, the "controlled by automated test
+# software" bar): reCAPTCHA on the staff login scores such a browser as a bot, so login failed
+# only inside this app. Staff drive this window by hand; the app only fills the walk-in form.
+BROWSER_KWARGS: dict[str, Any] = {
+    "args": ["--start-fullscreen", "--disable-blink-features=AutomationControlled"],
+    "ignore_default_args": ["--enable-automation"],
+}
 
 log = logging.getLogger(__name__)
 
@@ -132,12 +138,12 @@ async def run_app(
                 user_data_dir=str(data_dir / "profile"),
                 **channel,
                 headless=False,
-                args=WINDOW_ARGS,
+                **BROWSER_KWARGS,
                 no_viewport=True,
             )
             page = context.pages[0] if context.pages else await context.new_page()
         else:
-            browser = await playwright.chromium.launch(**channel, headless=False, args=WINDOW_ARGS)
+            browser = await playwright.chromium.launch(**channel, headless=False, **BROWSER_KWARGS)
             browser.on("disconnected", lambda *_: stop.set())
             context = await browser.new_context(no_viewport=True)
             page = await context.new_page()
