@@ -165,12 +165,9 @@ class UnassignedRegistration(Document):
 				partialFilterExpression={"open_person_id_numbers.0": {"$exists": True}},
 				name="uniq_open_person_id_numbers",
 			),
-			IndexModel(
-				[("open_phones", ASCENDING)],
-				unique=True,
-				partialFilterExpression={"open_phones.0": {"$exists": True}},
-				name="uniq_open_phones",
-			),
+			# Phones may be shared (#1049): lookup index only. Replaces the former
+			# unique `uniq_open_phones`, which is dropped at startup (see database.py).
+			IndexModel([("open_phones", ASCENDING)], name="by_open_phones"),
 			IndexModel([("created_at", ASCENDING)], name="by_created_at"),
 			IndexModel([("members.status", ASCENDING)], name="by_member_status"),
 			# Kiosk check-in resolves a registration from a member's reserved evacuee id.

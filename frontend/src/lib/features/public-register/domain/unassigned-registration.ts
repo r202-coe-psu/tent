@@ -215,7 +215,7 @@ export type UnassignedRegistrationErrorCode =
 export function unassignedRegistrationErrorMessage(code: string | undefined): string {
 	switch (code) {
 		case 'DUPLICATE_OPEN_IDENTITY':
-			return 'เลขบัตรประชาชน หรือ เบอร์โทรศัพท์นี้ลงทะเบียนเรียบร้อยแล้ว';
+			return 'เลขบัตรประชาชนนี้ลงทะเบียนเรียบร้อยแล้ว';
 		case 'INVALID_ANONYMOUS_ID':
 			return 'รหัสนิรนามไม่ถูกต้อง';
 		case 'INVALID_PHOTO_REF':

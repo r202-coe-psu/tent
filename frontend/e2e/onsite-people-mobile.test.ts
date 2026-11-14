@@ -7,7 +7,7 @@
  *   pnpm exec vite build --mode test && pnpm playwright test e2e/onsite-people-mobile.test.ts
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
 	createCouchUser,
 	seedSecurityQuestion,
@@ -17,6 +17,7 @@ import {
 } from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
 import { mockCouchRoutes } from './helpers/mock-couch';
+import { expectFitsViewport } from './helpers/mobile';
 
 const RUN_ID = Date.now().toString(36);
 
@@ -79,14 +80,6 @@ const TABS = [
 	{ name: /ผู้ประสบภัยทั้งหมด/, cards: 4 }
 ];
 
-async function expectNoSidewaysOverflow(page: Page) {
-	const dimensions = await page.evaluate(() => ({
-		scrollWidth: document.documentElement.scrollWidth,
-		clientWidth: document.documentElement.clientWidth
-	}));
-	expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
-}
-
 test.describe('Station 1 queue on mobile (#1347)', { tag: ['@onsite', '@regression'] }, () => {
 	let managerSession: string;
 
@@ -128,7 +121,7 @@ test.describe('Station 1 queue on mobile (#1347)', { tag: ['@onsite', '@regressi
 			await expect(cards.first()).toBeVisible();
 			await expect(page.locator('table')).toBeHidden();
 
-			await expectNoSidewaysOverflow(page);
+			await expectFitsViewport(page);
 			// The tab container clips (overflow-hidden), so also check no card spills past the viewport.
 			for (const box of await cards.evaluateAll((els) =>
 				els.map((el) => {
@@ -160,4 +153,47 @@ test.describe('Station 1 queue on mobile (#1347)', { tag: ['@onsite', '@regressi
 		// Cards stay in the DOM but are display:none from md up.
 		await expect(page.getByTestId('queue-card').first()).toBeHidden();
 	});
+
+	for (const station of [
+		{ path: '/onsite/medical-screening', cards: 'screening-cards', medical: true },
+		{ path: '/onsite/zoning', cards: 'zoning-cards', medical: false }
+	]) {
+		test(`${station.path} shows cards and stays within a 390px viewport`, async ({ page }) => {
+			await page.setViewportSize({ width: 390, height: 844 });
+			await mockCouchRoutes(page, {
+				withRegistryShelter: true,
+				enableMedicalScreening: station.medical,
+				seedDocs: SEED_DOCS
+			});
+			await injectSession(page, MANAGER, managerSession);
+
+			await page.goto(station.path);
+			// Inactive tab panels stay mounted, so look at the visible list only.
+			const cards = page.locator(`[data-testid="${station.cards}"]:visible > li`);
+			await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+			await expect(page.locator('table:visible')).toHaveCount(0);
+			await expectFitsViewport(page);
+		});
+	}
+
+	for (const station of [
+		{ path: '/onsite/medical-screening', cards: 'screening-cards', medical: true },
+		{ path: '/onsite/zoning', cards: 'zoning-cards', medical: false }
+	]) {
+		test(`${station.path} keeps the table on desktop`, async ({ page }) => {
+			await page.setViewportSize({ width: 1280, height: 800 });
+			await mockCouchRoutes(page, {
+				withRegistryShelter: true,
+				enableMedicalScreening: station.medical,
+				seedDocs: SEED_DOCS
+			});
+			await injectSession(page, MANAGER, managerSession);
+
+			await page.goto(station.path);
+			await expect(page.locator('table:visible tbody tr').first()).toBeVisible({
+				timeout: 15_000
+			});
+			await expect(page.locator(`[data-testid="${station.cards}"]:visible`)).toHaveCount(0);
+		});
+	}
 });

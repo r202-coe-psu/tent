@@ -20,7 +20,15 @@
 	import ItemCombobox from './item-combobox.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
-	import { subQty, qtyAbs, qtyGt, persistQty } from '$lib/utils/qty';
+	import {
+		subQty,
+		qtyAbs,
+		qtyGt,
+		qtyGte,
+		qtyIsZero,
+		parseQtyInput,
+		persistQty
+	} from '$lib/utils/qty';
 	import { projectLotsByItem } from '../domain/operations';
 	import { isExpiryPassed } from '../domain/expiry-instant';
 	import { formatThaiShortDate } from '$lib/utils/date';
@@ -69,6 +77,8 @@
 	let customPoint = $state<StoragePointRef | null>(null);
 	let customExpiry = $state<string>('');
 	let newQtyInput = $state<string>('');
+	/** A number input reports text it cannot parse (`1e`, `-`) as an empty value. */
+	let newQtyBadInput = $state(false);
 	/** CR-143 §C — required; `merge` is not offered here (FR-C6). */
 	let adjustReason = $state<ManualAdjustReason | ''>('');
 	let note = $state<string>('');
@@ -136,24 +146,28 @@
 	const currentLotQty = $derived(currentLot ? currentLot.qty : '0');
 	const systemQty = $derived(selectedLotKey === 'new' ? '0' : currentLotQty);
 
+	const NEW_QTY_HINT = 'จำนวนใหม่ต้องไม่ติดลบ ทศนิยมไม่เกิน 4 ตำแหน่ง';
+	const newQty = $derived(parseQtyInput(newQtyInput));
+	const newQtyInvalid = $derived(
+		newQtyBadInput || (newQtyInput.trim() !== '' && (newQty === null || !qtyGte(newQty, 0)))
+	);
+
 	// The counted quantity is what the user types, so it is what must be whole. The delta is
 	// computed and may stay fractional: counting 0 against 0.5 bottle is how that remainder is written off.
 	const itemDimension = $derived(unitDimension.resolve(selectedItem?.unit));
-	const newQtyError = $derived(wholeQtyError(newQtyInput, itemDimension));
+	const newQtyError = $derived(wholeQtyError(newQty, itemDimension));
 
 	// Delta Calculation
 	const deltaQty = $derived.by(() => {
-		if (!newQtyInput || isNaN(Number(newQtyInput))) return '0';
+		if (newQty === null) return '0';
 		const base = selectedLotKey === 'new' ? '0' : currentLotQty;
-		return subQty(newQtyInput, base);
+		return subQty(newQty, base);
 	});
 
 	const deltaAbs = $derived(qtyAbs(deltaQty));
 	const deltaSign = $derived.by(() => {
-		const n = Number(deltaQty);
-		if (n < 0) return 'write_off' as const;
-		if (n > 0) return 'add' as const;
-		return null;
+		if (qtyIsZero(deltaQty)) return null;
+		return qtyGt(deltaQty, 0) ? ('add' as const) : ('write_off' as const);
 	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
@@ -194,6 +208,7 @@
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
+		newQtyBadInput = false;
 		adjustReason = '';
 		note = '';
 	}
@@ -205,6 +220,7 @@
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
+		newQtyBadInput = false;
 		adjustReason = '';
 		note = '';
 		customExpiry = '';
@@ -213,6 +229,7 @@
 	function resetForNextLine() {
 		selectedLotKey = '';
 		newQtyInput = '';
+		newQtyBadInput = false;
 		adjustReason = '';
 		note = '';
 		customPointId = '';
@@ -241,15 +258,15 @@
 			toast.error('ล็อตที่เลือกไม่มีคงเหลือแล้ว กรุณาเลือกล็อตใหม่');
 			return;
 		}
-		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
-			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
+		if (newQty === null || !qtyGte(newQty, 0)) {
+			toast.error(NEW_QTY_HINT);
 			return;
 		}
 		if (newQtyError) {
 			toast.error(newQtyError);
 			return;
 		}
-		if (deltaQty === '0') {
+		if (qtyIsZero(deltaQty)) {
 			toast.error('จำนวนใหม่เท่ากับจำนวนเดิม ไม่มีความเปลี่ยนแปลง');
 			return;
 		}
@@ -301,7 +318,7 @@
 			loading: 'กำลังบันทึก...',
 			success: () => {
 				const name = selectedItem?.name ?? input.item_id;
-				const signed = Number(deltaQty) > 0 ? `+${deltaQty}` : `${deltaQty}`;
+				const signed = qtyGt(deltaQty, 0) ? `+${deltaQty}` : `${deltaQty}`;
 				const summary = `${name} ${signed} ${selectedItem?.unit ?? ''}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
@@ -435,8 +452,12 @@
 								placeholder="0"
 								min="0"
 								step={qtyInputStep(itemDimension)}
-								bind:value={newQtyInput}
-								aria-invalid={newQtyError ? 'true' : undefined}
+								value={newQtyInput}
+								oninput={(event) => {
+									newQtyInput = event.currentTarget.value;
+									newQtyBadInput = event.currentTarget.validity.badInput;
+								}}
+								aria-invalid={newQtyInvalid || newQtyError ? 'true' : undefined}
 								class="min-h-11 border-sky-200 bg-white pr-14 font-mono text-lg font-bold"
 							/>
 							<span
@@ -445,7 +466,9 @@
 								{unitLabel}
 							</span>
 						</div>
-						{#if newQtyError}
+						{#if newQtyInvalid}
+							<p class="mt-1 text-xs font-semibold text-red-700" role="alert">{NEW_QTY_HINT}</p>
+						{:else if newQtyError}
 							<p class="mt-1.5 text-xs font-semibold text-destructive" role="alert">
 								{newQtyError}
 							</p>
@@ -541,7 +564,7 @@
 						variant={deltaSign === 'write_off' ? 'destructive' : 'default'}
 						disabled={offline ||
 							isSubmitting ||
-							deltaQty === '0' ||
+							qtyIsZero(deltaQty) ||
 							!!newQtyError ||
 							!adjustReason ||
 							(noteRequired && !note.trim())}

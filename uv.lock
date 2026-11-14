@@ -59,6 +59,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "fastapi-pagination" },
     { name = "grapheme" },
+    { name = "httpx" },
     { name = "jinja2" },
     { name = "loguru" },
     { name = "pydantic", extra = ["email"] },
@@ -78,7 +79,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "asgi-lifespan" },
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -92,6 +92,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.0" },
     { name = "fastapi-pagination", specifier = ">=0.15.16" },
     { name = "grapheme", specifier = ">=0.6.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "jinja2", specifier = ">=3.1.2" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.11.9" },
@@ -111,7 +112,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "asgi-lifespan", specifier = ">=2.1.0" },
-    { name = "httpx", specifier = ">=0.27.0" },
     { name = "pytest", specifier = ">=8.3.2" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "ruff", specifier = ">=0.9.5" },

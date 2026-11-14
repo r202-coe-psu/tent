@@ -10,6 +10,7 @@ export type {
 	Donation,
 	Donor,
 	DonationItem,
+	DonationExternal,
 	DonationPointReceipt,
 	DonationPointReceiptItem,
 	DonationCloseReason,

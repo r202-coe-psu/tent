@@ -35,6 +35,7 @@
 	import {
 		useReviewVolunteerIdentity,
 		useUpdateVolunteer,
+		fetchVolunteer,
 		useSkillOptions
 	} from '../application/queries';
 	import { optionalVolunteerMobileSchema, VOLUNTEER_PHONE_MESSAGE } from '../domain/phone';
@@ -53,6 +54,11 @@
 		type Volunteer
 	} from '../domain/volunteer.schema';
 	import type { ShiftKind } from '../domain/shift-assignment.schema';
+	import {
+		isVolunteerPhoneTakenError,
+		phoneTakenReactivateHint,
+		type ExistingVolunteerSummary
+	} from '../domain/phone-errors';
 
 	let {
 		open = $bindable(false),
@@ -96,24 +102,45 @@
 	let personnelType = $state<PersonnelType>('volunteer');
 	let assignedShift = $state<ShiftKind | 'unset'>('unset');
 	let verificationNotes = $state('');
+	let overrideVolunteer = $state<Volunteer | null>(null);
+	const currentVolunteer = $derived(overrideVolunteer ?? volunteer);
+	let phoneConflictExisting = $state<ExistingVolunteerSummary[]>([]);
+	const reactivateHint = $derived(phoneTakenReactivateHint(phoneConflictExisting));
 
 	// Rehydrate from the volunteer prop each time the dialog opens on a
 	// (possibly different) row — the same per-row rehydrate guard dialogs in this feature use.
+	// Does not loop: `lastOpenedId` is set to the current id at the end of the run, so the re-run it
+	// triggers (it is read below) hits the early return; the other writes are plain `$state` that the
+	// effect only assigns and never reads.
 	let lastOpenedId = $state<string | null>(null);
 	$effect(() => {
 		if (!open) {
 			lastOpenedId = null;
+			phoneConflictExisting = [];
+			overrideVolunteer = null;
 			return;
 		}
-		if (lastOpenedId === volunteer._id) return;
-		fullName = `${volunteer.first_name} ${volunteer.last_name}`.trim();
-		phone = volunteer.phone ?? '';
-		occupation = volunteer.occupation ?? '';
-		selectedSkills = toSkillCodes(volunteer.skills, skillsList);
-		personnelType = volunteer.personnel_type;
+		if (lastOpenedId === currentVolunteer._id) return;
+		fullName = `${currentVolunteer.first_name} ${currentVolunteer.last_name}`.trim();
+		phone = currentVolunteer.phone ?? '';
+		occupation = currentVolunteer.occupation ?? '';
+		selectedSkills = toSkillCodes(currentVolunteer.skills, skillsList);
+		personnelType = currentVolunteer.personnel_type;
 		assignedShift = todayShift ?? 'unset';
-		lastOpenedId = volunteer._id;
+		phoneConflictExisting = [];
+		lastOpenedId = currentVolunteer._id;
 	});
+
+	async function openConflictVolunteer(id: string) {
+		const v = await fetchVolunteer(queryClient, id);
+		if (v) {
+			overrideVolunteer = v;
+			phoneConflictExisting = [];
+			toast.info(`เปิดโปรไฟล์ ${v.volunteer_code}`);
+		} else {
+			toast.error('ไม่พบข้อมูลโปรไฟล์ดังกล่าว');
+		}
+	}
 
 	function toggleSkill(code: string) {
 		const canonicalCode = toSkillCode(code, skillsList);
@@ -125,7 +152,7 @@
 	const generalSelectedCount = $derived(
 		selectedSkills.filter((s) => !isControlledSkill(s, skillCatalog.controlledValues)).length
 	);
-	const identityStatus = $derived(identityVerificationStatus(volunteer));
+	const identityStatus = $derived(identityVerificationStatus(currentVolunteer));
 	const identityActionStatus = $derived<VerificationStatus>(
 		identityStatus === 'verified' ? 'pending' : 'verified'
 	);
@@ -136,11 +163,17 @@
 	async function reviewIdentity(status: VerificationStatus) {
 		try {
 			await identityReviewMutation.mutateAsync({
-				id: volunteer._id,
+				id: currentVolunteer._id,
 				status,
 				notes: verificationNotes.trim() || null
 			});
 			verificationNotes = '';
+			// A swapped-in profile is a snapshot, not a query: read it again so the badge and the
+			// action button follow the review.
+			if (overrideVolunteer) {
+				overrideVolunteer =
+					(await fetchVolunteer(queryClient, overrideVolunteer._id)) ?? overrideVolunteer;
+			}
 			toast.success(
 				status === 'verified' ? 'ยืนยันตัวตนอาสาสมัครแล้ว' : 'ส่งกลับไปรอตรวจตัวตนแล้ว'
 			);
@@ -168,7 +201,7 @@
 
 		try {
 			await updateMutation.mutateAsync({
-				...volunteer,
+				...currentVolunteer,
 				first_name: name.slice(0, spaceIndex).trim(),
 				last_name: name.slice(spaceIndex + 1).trim(),
 				phone: parsedPhone.data,
@@ -179,6 +212,13 @@
 			toast.success('บันทึกข้อมูลอาสาสมัครแล้ว');
 			open = false;
 		} catch (err) {
+			if (isVolunteerPhoneTakenError(err)) {
+				phoneConflictExisting = err.existing;
+				// No field error in this dialog, so the toast carries the message; the panel below
+				// holds the buttons that open the holder.
+				toast.error(err.message);
+				return;
+			}
 			toast.error(err instanceof Error ? err.message : 'บันทึกข้อมูลไม่สำเร็จ');
 		}
 	}
@@ -192,7 +232,7 @@
 			</div>
 			<div class="min-w-0">
 				<Dialog.Title class="text-base font-bold">
-					จัดการข้อมูลอาสาสมัคร ({volunteer.volunteer_code})
+					จัดการข้อมูลอาสาสมัคร ({currentVolunteer.volunteer_code})
 				</Dialog.Title>
 				<p class="text-xs text-muted-foreground">
 					แก้ไขข้อมูลส่วนบุคคล, ชนิดบุคลากร, กะที่มอบหมาย และทักษะรับรอง
@@ -227,16 +267,16 @@
 					</Badge>
 					<Badge
 						variant="outline"
-						class="gap-1 {volunteer.checked_in
+						class="gap-1 {currentVolunteer.checked_in
 							? 'border-emerald-300 bg-emerald-50 text-emerald-700'
 							: 'text-muted-foreground'}"
 					>
 						<span
-							class="h-1.5 w-1.5 rounded-full {volunteer.checked_in
+							class="h-1.5 w-1.5 rounded-full {currentVolunteer.checked_in
 								? 'bg-emerald-500'
 								: 'bg-muted-foreground/50'}"
 						></span>
-						{volunteer.checked_in ? 'ปฏิบัติหน้าที่อยู่' : 'ไม่ได้ปฏิบัติหน้าที่'}
+						{currentVolunteer.checked_in ? 'ปฏิบัติหน้าที่อยู่' : 'ไม่ได้ปฏิบัติหน้าที่'}
 					</Badge>
 				</div>
 				<p class="text-xs text-muted-foreground">สังกัดศูนย์: {shelterLine}</p>
@@ -292,7 +332,7 @@
 			<div class="space-y-3">
 				<div class="flex items-center justify-between gap-2">
 					<p class="text-xs font-bold text-foreground">ข้อมูลพื้นฐาน (BASIC INFORMATION)</p>
-					<Badge variant="outline" class="text-[11px]">ID: {volunteer.volunteer_code}</Badge>
+					<Badge variant="outline" class="text-[11px]">ID: {currentVolunteer.volunteer_code}</Badge>
 				</div>
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					<div class="space-y-1.5">
@@ -302,6 +342,29 @@
 					<div class="space-y-1.5">
 						<Label for="vm-phone">เบอร์มือถือ</Label>
 						<Input id="vm-phone" bind:value={phone} class="h-11" />
+						{#if phoneConflictExisting.length > 0}
+							<div
+								class="mt-2 space-y-1.5 rounded-lg border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive"
+							>
+								<p class="font-medium">พบโปรไฟล์ที่ใช้เบอร์นี้แล้วในศูนย์</p>
+								{#if reactivateHint}<p>{reactivateHint}</p>{/if}
+								<div class="flex flex-wrap gap-1.5">
+									{#each phoneConflictExisting as ex (ex._id)}
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											class="h-7 bg-background text-xs text-foreground hover:bg-muted"
+											onclick={() => void openConflictVolunteer(ex._id)}
+										>
+											เปิดโปรไฟล์ {ex.volunteer_code || 'ดูข้อมูล'}{ex.status === 'inactive'
+												? ' (ปิดใช้งานอยู่)'
+												: ''}
+										</Button>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</div>
 				</div>
 				<div class="space-y-1.5">
@@ -359,7 +422,9 @@
 						<p class="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-foreground">
 							บัญชีผู้ใช้งานระบบหลังบ้าน
 							<Badge variant="outline" class="text-[10px]">
-								{volunteer.user_name ? `มีบัญชี: ${volunteer.user_name}` : 'ยังไม่มีบัญชีหลังบ้าน'}
+								{currentVolunteer.user_name
+									? `มีบัญชี: ${currentVolunteer.user_name}`
+									: 'ยังไม่มีบัญชีหลังบ้าน'}
 							</Badge>
 						</p>
 						<p class="mt-0.5 text-[11px] text-muted-foreground">
@@ -445,7 +510,7 @@
 					</div>
 					{#each skillsList.filter((s) => s.controlled) as skill (skill.code)}
 						{@const has = selectedSkills.includes(skill.code)}
-						{@const skillStatus = skillVerificationStatus(volunteer, skill.code)}
+						{@const skillStatus = skillVerificationStatus(currentVolunteer, skill.code)}
 						<div
 							class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background p-2.5"
 						>
@@ -473,6 +538,10 @@
 										type="button"
 										size="sm"
 										class="h-8 gap-1.5 bg-primary-dark px-2.5 text-[11px] text-white hover:bg-primary-dark/90"
+										disabled={overrideVolunteer !== null}
+										title={overrideVolunteer
+											? 'ปิดแล้วเปิดโปรไฟล์นี้จากรายการ เพื่อรับรองทักษะ'
+											: undefined}
 										onclick={() => onOpenQualificationAudit(skill.code)}
 									>
 										<ClipboardCheck class="h-3.5 w-3.5" />

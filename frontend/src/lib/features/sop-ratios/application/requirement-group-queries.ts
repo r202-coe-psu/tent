@@ -38,9 +38,11 @@ export const useSaveRequirementGroup = () => {
 			const repo = requirementGroupRepository();
 			return repo.save(id, input, { createdBy, shelterCode });
 		},
+		// Returned so `mutateAsync` resolves only after the list has refetched: the form closes back
+		// to that list, and an edit opened from a stale row would show the values just replaced.
 		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: requirementGroupKeys.all });
 			toast.success('บันทึกกลุ่มความต้องการสำเร็จ');
+			return queryClient.invalidateQueries({ queryKey: requirementGroupKeys.all });
 		},
 		onError: (error: Error) => {
 			toast.error(`บันทึกกลุ่มความต้องการไม่สำเร็จ: ${error.message}`);

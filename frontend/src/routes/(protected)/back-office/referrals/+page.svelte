@@ -13,22 +13,59 @@
 		type ReferralStatus
 	} from '$lib/features/referrals';
 
-	// Tab, status and search live in the URL so back, refresh and share keep them.
+	// Tab, status, search and page live in the URL so back, refresh and share keep them.
 	const params = $derived(parseReferralListParams(page.url.searchParams));
 
-	function updateParams(next: Partial<typeof params>) {
-		void goto(buildReferralListHref({ ...params, ...next }), {
-			replaceState: true,
+	let listSection = $state<HTMLElement>();
+
+	// Filters replace the history entry; page turns push one so browser back steps to the previous
+	// page, scroll to the top and move focus to the list so keyboard users start at its first row
+	// instead of on the pager button at the bottom.
+	async function updateParams(next: Partial<typeof params>, { pageTurn = false } = {}) {
+		await goto(buildReferralListHref({ ...params, ...next }), {
+			replaceState: !pageTurn,
 			keepFocus: true,
-			noScroll: true
+			noScroll: !pageTurn
 		});
+		if (pageTurn) listSection?.focus({ preventScroll: true });
 	}
 
 	const listQuery = useReferralPages(() => ({
 		direction: params.direction,
 		status: params.status === 'all' ? undefined : params.status
 	}));
-	const referrals = $derived(listQuery.data?.pages.flatMap((p) => p.items) ?? []);
+	// One API page per screen; pages already fetched stay cached so "previous" needs no refetch.
+	const pages = $derived(listQuery.data?.pages ?? []);
+	// A cold load (refresh) has no bookmarks yet, so `?page=N` clamps to the last fetched page.
+	const pageIndex = $derived(Math.max(0, Math.min(params.page, pages.length) - 1));
+	const referrals = $derived(pages[pageIndex]?.items ?? []);
+	const hasNext = $derived(pageIndex < pages.length - 1 || listQuery.hasNextPage);
+
+	// Cursor paging cannot jump to page N, so a stale `?page=` (refresh, shared link) is rewritten
+	// to the page actually shown instead of leaving the URL and the footer disagreeing.
+	$effect(() => {
+		if (listQuery.isSuccess && !listQuery.isFetching && params.page > pages.length) {
+			void updateParams({ page: pages.length });
+		}
+	});
+
+	async function goNext() {
+		// Snapshot before the await: if the tab, status or page changed mid-fetch, stay where the user is.
+		const from = params;
+		const nextPage = pageIndex + 2; // 0-based index → 1-based number of the following page
+		if (pageIndex >= pages.length - 1) {
+			const res = await listQuery.fetchNextPage();
+			if (res.isFetchNextPageError) return;
+		}
+		if (
+			params.direction !== from.direction ||
+			params.status !== from.status ||
+			params.page !== from.page
+		) {
+			return;
+		}
+		void updateParams({ page: nextPage }, { pageTurn: true });
+	}
 </script>
 
 <div
@@ -53,21 +90,30 @@
 	</a>
 </div>
 
-<section aria-label="รายการส่งตัวทั้งหมด" class="space-y-3">
+<section
+	bind:this={listSection}
+	tabindex="-1"
+	aria-label="รายการส่งตัวทั้งหมด"
+	class="space-y-3 outline-none"
+>
 	<ReferralList
 		{referrals}
 		direction={params.direction}
-		onDirectionChange={(next: ReferralDirectionFilter) => updateParams({ direction: next })}
+		onDirectionChange={(next: ReferralDirectionFilter) =>
+			updateParams({ direction: next, page: 1 })}
 		status={params.status}
-		onStatusChange={(next: 'all' | ReferralStatus) => updateParams({ status: next })}
+		onStatusChange={(next: 'all' | ReferralStatus) => updateParams({ status: next, page: 1 })}
 		search={params.q}
 		onSearchChange={(next) => updateParams({ q: next })}
 		isLoading={listQuery.isPending}
 		isError={listQuery.isError && referrals.length === 0}
 		onRetry={() => listQuery.refetch()}
-		hasMore={listQuery.hasNextPage}
-		isFetchingMore={listQuery.isFetchingNextPage}
-		isLoadMoreError={listQuery.isFetchNextPageError}
-		onLoadMore={() => listQuery.fetchNextPage()}
+		page={pageIndex + 1}
+		hasPrev={pageIndex > 0}
+		{hasNext}
+		isFetchingNext={listQuery.isFetchingNextPage}
+		isNextError={listQuery.isFetchNextPageError && pageIndex === pages.length - 1}
+		onPrev={() => updateParams({ page: pageIndex }, { pageTurn: true })}
+		onNext={goNext}
 	/>
 </section>

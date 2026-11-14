@@ -21,7 +21,8 @@ describe('kiosk home route load', () => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: enabled,
 			thaidCheckInEnabled: false,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			serviceOpen: true
 		});
 		vi.mocked(fetchKioskHardware).mockResolvedValueOnce(hardware(true));
 		const fetch = vi.fn<typeof globalThis.fetch>();
@@ -30,7 +31,8 @@ describe('kiosk home route load', () => {
 			qrCheckInEnabled: true,
 			phoneCheckInEnabled: enabled,
 			thaidCheckInEnabled: false,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			serviceOpen: true
 		});
 		expect(fetchKioskConfig).toHaveBeenCalledWith(fetch);
 		expect(fetchKioskHardware).toHaveBeenCalledWith(fetch);
@@ -40,7 +42,8 @@ describe('kiosk home route load', () => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: true,
 			thaidCheckInEnabled: true,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			serviceOpen: true
 		});
 		vi.mocked(fetchKioskHardware).mockResolvedValueOnce(hardware(false));
 

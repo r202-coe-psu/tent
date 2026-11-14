@@ -62,7 +62,9 @@ async def _reproject_needs(couch: Any, shelter_code: str) -> None:
         await apply_need(action, payload)
 
 
-async def _reproject_shelter_database(couch: Any, shelter_code: str) -> None:
+async def _reproject_shelter_database(
+    couch: Any, shelter_code: str, *, persons_only: bool = False
+) -> None:
     """Rebuild a shelter DB's projections when its shelter (re)opens in public.
 
     A cancelled shelter's projections were purged and its changes skipped meanwhile
@@ -76,7 +78,11 @@ async def _reproject_shelter_database(couch: Any, shelter_code: str) -> None:
     # Imported here: bootstrap → worker.quota → expiry imports bootstrap back.
     from worker.couch.bootstrap import bootstrap_database
 
-    await bootstrap_database(couch, database)
+    if persons_only:
+        await bootstrap_database(couch, database, persons_only=True)
+        await refresh_occupancy(couch, shelter_code)
+    else:
+        await bootstrap_database(couch, database)
 
 
 async def _process_closed_shelter_change(
@@ -226,6 +232,24 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 await delete_jobs_for_shelter(code)
             elif closed and code:
                 await delete_closed_shelter_operations(code, trigger="shelter_closed")
+                # CR-251 FR-10: unhidden while closed (row purged → no previous status):
+                # its persons were never projected, so rescan them within retention.
+                if previous_status is None:
+                    from worker.couch.bootstrap import read_retention_months
+                    from worker.projectors.shelter import (
+                        RetentionPhase,
+                        classify_registry_shelter,
+                    )
+
+                    phase = classify_registry_shelter(
+                        doc,
+                        retention_months=await read_retention_months(couch),
+                        now=datetime.now(UTC),
+                    )
+                    if phase is RetentionPhase.CLOSED_WITHIN_RETENTION:
+                        await _reproject_shelter_database(
+                            couch, code, persons_only=True
+                        )
             elif relisted and code:
                 await _reproject_shelter_database(couch, code)
         elif doc_type == "announcement":

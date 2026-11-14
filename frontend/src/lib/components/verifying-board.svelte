@@ -4,6 +4,8 @@
 	import {
 		donationActionRef,
 		donationRefLabel,
+		isM6Donation,
+		M6SourceBadge,
 		type PendingDonationRow
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
@@ -54,9 +56,13 @@
 				<div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="text-sm font-bold text-foreground"
-								>{req.donor_name || 'ไม่ระบุชื่อ'}</span
-							>
+							{#if isM6Donation(req)}
+								<M6SourceBadge row={req} showCode={false} />
+							{:else}
+								<span class="text-sm font-bold text-foreground"
+									>{req.donor_name || 'ไม่ระบุชื่อ'}</span
+								>
+							{/if}
 							<span
 								class="rounded border border-border bg-muted/50 px-2 py-0.5 text-2xs font-medium text-muted-foreground"
 							>

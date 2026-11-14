@@ -20,7 +20,11 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
+from worker.projectors.occupancy import (
+    aggregate_occupancy,
+    count_stay_statuses,
+    count_zone_stay_statuses,
+)
 from worker.projectors.shelter import (
     RetentionPhase,
     classify_registry_shelter,
@@ -279,6 +283,69 @@ def test_project_shelter_cancelled_deletes_by_code():
     assert project_shelter(doc) == ("delete", {"_id": "SH009"})
 
 
+def _registry_shelter(**overrides):
+    doc = {
+        "_id": "shelter:01VIS",
+        "type": "shelter",
+        "code": "SH011",
+        "name": "ศูนย์ทดสอบ",
+        "operation_status": "active",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_project_shelter_public_visible_false_deletes_by_code():
+    """CR-251 FR-7 — hidden leaves the public plane
+    like cancelled; the `_id` lets the caller purge its shelter-scoped projections."""
+    doc = _registry_shelter(feature_flags={"public_visible": False})
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
+def test_project_shelter_public_hidden_wins_over_status_and_closed_retention():
+    """A hidden shelter is removed even when its status would otherwise soft-retain it (E-1)."""
+    doc = _registry_shelter(
+        operation_status="closed", feature_flags={"public_visible": False}
+    )
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
+def test_project_shelter_public_visible_true_upserts():
+    doc = _registry_shelter(feature_flags={"public_visible": True})
+    action, payload = project_shelter(doc)
+    assert action == "upsert"
+    assert payload is not None and payload["_id"] == "SH011"
+
+
+def test_project_shelter_missing_public_visible_key_upserts():
+    """FR-2 — a stored flags object without the key (or no flags at all) stays visible."""
+    action, payload = project_shelter(
+        _registry_shelter(feature_flags={"allow_pets": True})
+    )
+    assert action == "upsert"
+    assert payload is not None and payload["_id"] == "SH011"
+
+    action, payload = project_shelter(_registry_shelter())
+    assert action == "upsert"
+
+
+def test_project_shelter_only_boolean_false_hides():
+    """FR-2 — only a real boolean false takes effect; a string "false" does not."""
+    action, _ = project_shelter(
+        _registry_shelter(feature_flags={"public_visible": "false"})
+    )
+    assert action == "upsert"
+
+
+def test_project_shelter_cancelled_still_deletes_when_public_visible_true():
+    """FR-6 / regression — the cancelled branch is unaffected by the new flag."""
+    doc = _registry_shelter(
+        operation_status="cancelled", feature_flags={"public_visible": True}
+    )
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
 def test_project_shelter_malformed_doc_deletes():
     """Only malformed/non-shelter docs hard-delete here — the true archive signal (a
     CouchDB tombstone) is handled separately via `apply_shelter_deactivate`."""
@@ -340,6 +407,24 @@ def test_classify_registry_shelter_variants():
     assert phase({"operation_status": "standby"}) is RetentionPhase.OPEN
     assert phase({"status": "open"}) is RetentionPhase.OPEN
     assert phase({"operation_status": "cancelled"}) is RetentionPhase.HIDDEN
+    # CR-251 FR-8: hidden (public_visible false) is never bootstrapped/listened; missing = open
+    hidden = {"operation_status": "active", "feature_flags": {"public_visible": False}}
+    assert phase(hidden) is RetentionPhase.HIDDEN
+    assert not phase(hidden).is_listened and not phase(hidden).is_bootstrapped
+    assert (
+        phase(
+            {"operation_status": "closed", "feature_flags": {"public_visible": False}}
+        )
+        is RetentionPhase.HIDDEN
+    )
+    assert (
+        phase({"operation_status": "active", "feature_flags": {"public_visible": True}})
+        is RetentionPhase.OPEN
+    )
+    assert (
+        phase({"operation_status": "active", "feature_flags": {}})
+        is RetentionPhase.OPEN
+    )
     assert phase({"operation_status": "closed"}) is RetentionPhase.CLOSED_WITHOUT_DATE
     assert (
         phase(
@@ -821,6 +906,63 @@ def test_count_stay_statuses_counts_search_excluded_evacuees():
         ]
     )
     assert counts == {"active": 2, "pre_registered": 1, "checked_out": 1}
+
+
+# --- #1241: count_zone_stay_statuses (pure) ---
+
+
+def test_count_zone_stay_statuses_groups_by_zone_then_status():
+    """Every status is kept per zone (the API picks Present); search-excluded count too."""
+    counts = count_zone_stay_statuses(
+        [
+            {
+                "_id": "e1",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": "A"},
+            },
+            {
+                "_id": "e2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "room_confirmed", "zone": "A"},
+            },
+            {
+                "_id": "e3",
+                "type": "evacuee",
+                "current_stay": {"status": "temporary_leave", "zone": "B"},
+            },
+            {
+                "_id": "e4",
+                "type": "evacuee",
+                "current_stay": {"status": "checked_out", "zone": "B"},
+            },
+            # No zone, no status, or not an evacuee: skipped.
+            {
+                "_id": "e5",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": None},
+            },
+            {
+                "_id": "e6",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": ""},
+            },
+            {"_id": "e7", "type": "evacuee", "current_stay": {"zone": "A"}},
+            {
+                "_id": "h1",
+                "type": "household",
+                "current_stay": {"status": "active", "zone": "A"},
+            },
+        ]
+    )
+    assert counts == {
+        "A": {"active": 1, "room_confirmed": 1},
+        "B": {"temporary_leave": 1, "checked_out": 1},
+    }
+
+
+def test_count_zone_stay_statuses_empty_when_nobody_has_a_zone():
+    assert count_zone_stay_statuses([{"_id": "e1", "type": "evacuee"}]) == {}
 
 
 # --- EXT-005: aggregate_occupancy (pure) ---

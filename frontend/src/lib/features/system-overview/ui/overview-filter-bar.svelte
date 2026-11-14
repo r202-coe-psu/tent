@@ -67,7 +67,7 @@
 <div
 	class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
 >
-	<div class="w-[10.5rem] min-w-0 space-y-1.5">
+	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[10.5rem]">
 		<Label for="overview-site-kind" class="text-sm font-semibold text-slate-700">ประเภทศูนย์</Label>
 		<Select.Root
 			type="single"
@@ -98,7 +98,7 @@
 		</Select.Root>
 	</div>
 
-	<div class="w-[11rem] min-w-0 space-y-1.5">
+	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[11rem]">
 		<Label for="overview-op-status" class="text-sm font-semibold text-slate-700">สถานะศูนย์</Label>
 		<Select.Root
 			type="single"
@@ -131,7 +131,7 @@
 		</Select.Root>
 	</div>
 
-	<div class="w-[9rem] min-w-0 space-y-1.5">
+	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[9rem]">
 		<Label for="overview-stay" class="text-sm font-semibold text-slate-700">สถานะพัก</Label>
 		<Select.Root
 			type="single"
@@ -161,7 +161,7 @@
 		</Select.Root>
 	</div>
 
-	<div class="w-[10rem] min-w-0 space-y-1.5">
+	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[10rem]">
 		<Label for="overview-source" class="text-sm font-semibold text-slate-700">แหล่ง Pre-reg</Label>
 		<Select.Root
 			type="single"
@@ -190,7 +190,7 @@
 	</div>
 
 	{#if showHouseholdFilter}
-		<div class="w-[14rem] min-w-0 space-y-1.5 sm:w-[16rem]">
+		<div class="w-full min-w-0 space-y-1.5 sm:w-[16rem]">
 			<Label for="overview-household" class="text-sm font-semibold text-slate-700">ครอบครัว</Label>
 			<HouseholdSearchSelect
 				mode={householdMode}
@@ -202,7 +202,7 @@
 		</div>
 	{/if}
 
-	<div class="min-w-[12rem] flex-1 space-y-1.5">
+	<div class="w-full min-w-0 flex-1 space-y-1.5 sm:w-auto sm:min-w-[12rem]">
 		<Label for="overview-q" class="text-sm font-semibold text-slate-700">ค้นหา</Label>
 		<Input
 			id="overview-q"

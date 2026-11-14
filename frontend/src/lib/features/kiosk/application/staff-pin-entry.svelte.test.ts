@@ -12,9 +12,10 @@ function setup(results: (KioskStaffPinResult | Error)[] = [{ kind: 'verified' }]
 	const onverified = vi.fn();
 	const oncancel = vi.fn();
 	const onretry = vi.fn();
-	const entry = new StaffPinEntry({ verify, onverified, oncancel, onretry });
+	const onclosed = vi.fn();
+	const entry = new StaffPinEntry({ verify, onverified, oncancel, onretry, onclosed });
 	entry.start();
-	return { entry, verify, onverified, oncancel, onretry };
+	return { entry, verify, onverified, oncancel, onretry, onclosed };
 }
 
 function type(entry: StaffPinEntry, digits: string): void {
@@ -129,6 +130,22 @@ describe('StaffPinEntry.confirm', () => {
 		await entry.confirm();
 		expect(verify).toHaveBeenCalledTimes(2);
 		expect(onverified).toHaveBeenCalledOnce();
+	});
+
+	it('hands over to the closed page when the kiosk is closed, forgetting the PIN, without a retry or an error', async () => {
+		const { entry, onverified, oncancel, onretry, onclosed } = setup([{ kind: 'closed' }]);
+
+		type(entry, '123456');
+		await entry.confirm();
+
+		expect(onclosed).toHaveBeenCalledOnce();
+		expect(entry.pin).toBe('');
+		expect(entry.status.kind).not.toBe('checking');
+		expect(entry.status.kind).not.toBe('error');
+		expect(onverified).not.toHaveBeenCalled();
+		expect(onretry).not.toHaveBeenCalled();
+		entry.cancel();
+		expect(oncancel).not.toHaveBeenCalled();
 	});
 
 	it('treats a thrown check as a retryable error', async () => {

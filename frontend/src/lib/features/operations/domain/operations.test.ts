@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createWalkInDonation,
+	DONATION_SCHEMA_V,
+	donationChannelSchema,
 	walkInDonationInputSchema,
 	receiveDonation,
 	expireDonation,
@@ -85,6 +87,70 @@ function declaredItemsDonation(): Donation {
 	);
 }
 
+describe('donation schema_v 12 — the m6 (central warehouse) channel', () => {
+	it('stamps schema_v 12 on a walk-in and never makes it an m6 donation', () => {
+		const d = declaredItemsDonation();
+		expect(DONATION_SCHEMA_V).toBe(12);
+		expect(d.schema_v).toBe(12);
+		expect(d.channel).toBe('walk_in');
+		expect(d.external).toBeUndefined();
+	});
+
+	it('does not let the walk-in input pick a channel', () => {
+		const parsed = walkInDonationInputSchema.parse({
+			donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
+			kind: 'items',
+			items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+			tracking_token_hash: 'tok',
+			channel: 'm6'
+		});
+		expect('channel' in parsed).toBe(false);
+		expect(
+			createWalkInDonation(
+				{
+					donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
+					kind: 'items',
+					items: [{ item_id: 'item:rice', qty: 10, unit: 'kg' }],
+					tracking_token_hash: 'tok',
+					channel: 'm6'
+				} as never,
+				ctx
+			).channel
+		).toBe('walk_in');
+	});
+
+	it('knows the m6 channel', () => {
+		expect(donationChannelSchema.options).toEqual(['public', 'walk_in', 'm6']);
+		expect(donationChannelSchema.safeParse('m6').success).toBe(true);
+		expect(donationChannelSchema.safeParse('kiosk').success).toBe(false);
+	});
+
+	it('receives an m6 donation that has no expires_at, tracking token or logistics', () => {
+		const m6: Donation = {
+			...declaredItemsDonation(),
+			channel: 'm6',
+			status: 'verifying',
+			donor: { name: 'คลังกลาง M6 · คลังกลาง A', phone: null, phone_hash: '' },
+			booking_ref: 'WD-0007',
+			external: {
+				system: 'm6',
+				request_code: 'WD-0007',
+				external_ref: 'TENT-SH001-1',
+				source_warehouse_code: 'WH-A',
+				source_warehouse_name: 'คลังกลาง A',
+				confirmed_at: null,
+				confirm_error: null
+			}
+		};
+		delete m6.expires_at;
+		delete m6.tracking_token_hash;
+		delete m6.logistics;
+		const received = receiveDonation(m6);
+		expect(received.status).toBe('received');
+		expect(received.external?.request_code).toBe('WD-0007');
+	});
+});
+
 describe('walkInDonationInputSchema phone', () => {
 	const base = {
 		donor: { name: 'ผู้ใจบุญ', phone: '0800000000', phone_hash: 'h' },
@@ -137,7 +203,7 @@ describe('donation lifecycle (forward-only)', () => {
 		const d = declaredItemsDonation();
 		expect(d.status).toBe('declared');
 		expect(d.received_at).toBeNull();
-		expect(Date.parse(d.expires_at)).toBeGreaterThan(Date.parse(d.declared_at));
+		expect(Date.parse(d.expires_at ?? '')).toBeGreaterThan(Date.parse(d.declared_at));
 	});
 
 	it('allows declared → received/expired/cancelled only forward', () => {

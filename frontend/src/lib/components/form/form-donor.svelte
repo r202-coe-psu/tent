@@ -237,7 +237,8 @@
 					<button
 						type="button"
 						onclick={() => donationStore.removeItem(item.id)}
-						class="absolute top-2 right-2 cursor-pointer rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
+						disabled={donationStore.items.length <= 1}
+						class="absolute top-2 right-2 cursor-pointer rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 						title={t.deleteItemAria}
 						aria-label={t.deleteItemAria}
 					>

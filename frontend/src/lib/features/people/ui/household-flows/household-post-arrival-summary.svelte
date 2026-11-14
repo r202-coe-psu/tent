@@ -14,6 +14,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
+	import HouseholdMemberCards from './household-member-cards.svelte';
 
 	// Icons
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
@@ -102,6 +103,22 @@
 	const groupedPets = $derived(groupPetsBySpecies(createdHousehold.pets ?? []));
 	const hasVehicles = $derived(
 		!!(createdHousehold.vehicles && createdHousehold.vehicles.length > 0)
+	);
+
+	const memberCards = $derived(
+		selectedMembers.map((m) => ({
+			id: m._id,
+			name: `${m.first_name} ${m.last_name}`,
+			nickname: m.nickname,
+			isHead: m._id === createdHousehold.head_evacuee_id,
+			idMasked: maskNationalId(m.person_id?.number),
+			phone: m.phone,
+			needs: (m.special_needs ?? []).map((need: string) => ({
+				key: need,
+				emoji: SPECIAL_NEED_CHIPS[need]?.emoji || '⚠️',
+				label: SPECIAL_NEED_CHIPS[need]?.label || need
+			}))
+		}))
 	);
 </script>
 
@@ -260,7 +277,8 @@
 			</h3>
 		</div>
 
-		<div class="overflow-x-auto rounded-xl border border-border">
+		<HouseholdMemberCards members={memberCards} />
+		<div class="hidden overflow-x-auto rounded-xl border border-border md:block">
 			<table class="w-full border-collapse text-left text-sm">
 				<thead>
 					<tr class="border-b bg-muted/40">
@@ -332,11 +350,11 @@
 			💡 จัดกลุ่มครอบครัวสำเร็จแล้ว
 			สมาชิกทุกคนจะผูกอยู่กับครัวเรือนนี้และมีสถานะเช็คอินอยู่ในโซนที่ระบุ
 		</p>
-		<div class="flex items-center gap-2 self-end sm:self-auto">
+		<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 			{#if selectedHead}
 				<Button
 					variant="outline"
-					class="h-11 px-6 font-semibold"
+					class="h-11 w-full px-6 font-semibold sm:w-auto"
 					onclick={() => (showQrModal = true)}
 				>
 					ออกและพิมพ์ QR ประจำตัว
@@ -344,7 +362,7 @@
 			{/if}
 			<Button
 				onclick={onFinish}
-				class="h-11 bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700"
+				class="h-11 w-full bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700 sm:w-auto"
 			>
 				เสร็จสิ้นการจัดกลุ่มครอบครัว ✔
 			</Button>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -613,6 +614,64 @@ async def test_process_registry_shelter_relisted_rescans_its_database(
     assert apply_shelter.await_args.args[0] == "upsert"
     couch.database_exists.assert_awaited_once_with("shelter_sh003")
     bootstrap_db.assert_awaited_once_with(couch, "shelter_sh003")
+
+
+def _closed_shelter_change(seq: int) -> dict:
+    return {
+        "seq": seq,
+        "id": "shelter:01CLOSED",
+        "doc": {
+            "_id": "shelter:01CLOSED",
+            "type": "shelter",
+            "code": "SH005",
+            "operation_status": "closed",
+            "closed_at": datetime.now(UTC).isoformat(),
+        },
+    }
+
+
+async def _process_closed_shelter(previous: str | None, seq: int):
+    couch = AsyncMock()
+    couch.database_exists.return_value = True
+    couch.get_doc.return_value = None
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_shelter", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.projected_shelter_status",
+            new_callable=AsyncMock,
+            return_value=previous,
+        ),
+        patch(
+            "worker.couch.processor.delete_closed_shelter_operations",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "worker.couch.processor.refresh_occupancy", new_callable=AsyncMock
+        ) as refresh,
+        patch(
+            "worker.couch.bootstrap.bootstrap_database", new_callable=AsyncMock
+        ) as bootstrap_db,
+    ):
+        await process_change(couch, "registry", _closed_shelter_change(seq))
+    return couch, bootstrap_db, refresh
+
+
+@pytest.mark.asyncio
+async def test_unhiding_a_closed_shelter_rescans_its_persons_only():
+    """CR-251 FR-10: closed while hidden (no public row) then unhidden."""
+    couch, bootstrap_db, refresh = await _process_closed_shelter(None, 81)
+
+    bootstrap_db.assert_awaited_once_with(couch, "shelter_sh005", persons_only=True)
+    refresh.assert_awaited_once_with(couch, "SH005")
+
+
+@pytest.mark.asyncio
+async def test_closed_shelter_that_was_never_hidden_does_not_rescan():
+    _, bootstrap_db, refresh = await _process_closed_shelter("closed", 82)
+
+    bootstrap_db.assert_not_awaited()
+    refresh.assert_not_awaited()
 
 
 @pytest.mark.asyncio

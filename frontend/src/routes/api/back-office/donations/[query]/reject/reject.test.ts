@@ -121,6 +121,21 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		});
 	});
 
+	it('refuses to reject a central-warehouse (m6) delivery — M6 would never be told, 422', async () => {
+		mockCouch({
+			...baseDonation,
+			channel: 'm6',
+			status: 'verifying',
+			external: { system: 'm6', request_code: 'WD-0007' }
+		} as unknown as PublicDonationDoc);
+
+		const response = await POST(postEvent({ reason_code: 'expired' }));
+
+		expect(response.status).toBe(422);
+		expect(await response.json()).toMatchObject({ error_code: 'M6_NOT_REFUSABLE' });
+		expect(putBody()).toBeUndefined();
+	});
+
 	it('rejects a booking that has not arrived yet', async () => {
 		mockCouch(baseDonation);
 

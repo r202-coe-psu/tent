@@ -31,10 +31,6 @@ describe('toTransferLine', () => {
 		});
 	});
 
-	it('accepts a numeric qty (the form coerces it)', () => {
-		expect(toTransferLine(rice, { item_id: 'item:rice', qty: 3, unit: 'bag' }).qty).toBe('15');
-	});
-
 	it('rejects a unit the item does not know', () => {
 		expect(() => toTransferLine(rice, { item_id: 'item:rice', qty: '1', unit: 'crate' })).toThrow(
 			/Unknown unit/

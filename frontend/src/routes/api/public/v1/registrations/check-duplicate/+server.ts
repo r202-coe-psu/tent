@@ -38,36 +38,30 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	const rawNationalId = parsed.data.national_id?.trim() ?? '';
-	const rawPhone = parsed.data.phone?.trim() ?? '';
 
 	const cleanNationalId = rawNationalId.replace(/\D/g, '');
-	const cleanPhone = rawPhone.replace(/\D/g, '');
 
 	const checkCard = cleanNationalId.length === 13 ? cleanNationalId : undefined;
-	const checkPhone = cleanPhone.length >= 9 && cleanPhone.length <= 10 ? cleanPhone : undefined;
-
-	if (!checkCard && !checkPhone) {
+	// Phone is accepted but never checked: shared phones are allowed on public pre-register (#1049)
+	if (!checkCard) {
 		return json({ success: true, duplicate: false, field: null }, { headers: noStore });
 	}
 
 	// 1. Query shelters for active conflicting holds
 	try {
 		const rawMasters = await listShelterMasters().catch(() => []);
+		// Shelters hidden via feature_flags.public_visible stay in scope on purpose: an existing
+		// hold there is still real, so a duplicate booking must keep colliding (CR-251).
 		const masters = rawMasters.filter(
 			(m) => resolveOperationStatus(m) !== 'closed' && !isShelterCancelled(m)
 		);
 		for (const master of masters) {
 			const conflict = await findConflictingHold(master.code, {
-				cardNumber: checkCard,
-				phone: checkPhone
+				cardNumber: checkCard
 			});
 
 			if (conflict) {
-				let matchedField: 'national_id' | 'phone' = 'national_id';
-				if (checkPhone && conflict.phone?.replace(/\D/g, '') === checkPhone) {
-					matchedField = 'phone';
-				}
-				return json({ success: true, duplicate: true, field: matchedField }, { headers: noStore });
+				return json({ success: true, duplicate: true, field: 'national_id' }, { headers: noStore });
 			}
 		}
 	} catch {
@@ -80,17 +74,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			const poolRes = await unassignedRegistrationRemote.searchOpen(checkCard);
 			if (poolRes && poolRes.results && poolRes.results.length > 0) {
 				return json({ success: true, duplicate: true, field: 'national_id' }, { headers: noStore });
-			}
-		} catch {
-			// Pool error tolerant fallback
-		}
-	}
-
-	if (checkPhone) {
-		try {
-			const poolRes = await unassignedRegistrationRemote.searchOpen(checkPhone);
-			if (poolRes && poolRes.results && poolRes.results.length > 0) {
-				return json({ success: true, duplicate: true, field: 'phone' }, { headers: noStore });
 			}
 		} catch {
 			// Pool error tolerant fallback

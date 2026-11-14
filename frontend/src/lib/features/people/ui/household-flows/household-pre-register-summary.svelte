@@ -70,6 +70,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { COUNTRIES } from '$lib/utils/country';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
+	import HouseholdMemberCards from './household-member-cards.svelte';
 
 	let {
 		createdHousehold,
@@ -293,6 +294,22 @@
 		if (h.postal_code) parts.push(h.postal_code);
 		return parts.join(' ');
 	}
+
+	const memberCards = $derived(
+		householdMembers.map((m) => ({
+			id: m._id,
+			name: formatPersonName(m),
+			nickname: m.nickname,
+			isHead: m._id === createdHousehold.head_evacuee_id,
+			idMasked: maskNationalId(m.person_id?.number),
+			phone: m.phone,
+			needs: (m.vulnerable_groups ?? []).map((need: string) => ({
+				key: need,
+				emoji: VULNERABLE_GROUP_CHIPS[need]?.emoji || '⚠️',
+				label: VULNERABLE_GROUP_CHIPS[need]?.label || need
+			}))
+		}))
+	);
 </script>
 
 <div class="mx-auto w-full max-w-4xl space-y-6">
@@ -321,7 +338,7 @@
 				</div>
 			</div>
 
-			<div class="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 text-sm">
+			<div class="mt-6 grid grid-cols-1 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-2">
 				<div>
 					<span class="text-xs text-muted-foreground">ชื่อครัวเรือน</span>
 					<p class="font-semibold text-slate-800 dark:text-slate-200">
@@ -334,7 +351,7 @@
 						{createdHead ? formatPersonName(createdHead) : '—'}
 					</p>
 				</div>
-				<div class="col-span-2">
+				<div class="sm:col-span-2">
 					<span class="text-xs text-muted-foreground">ที่อยู่เดิม</span>
 					<p class="font-medium text-slate-800 dark:text-slate-200">
 						{formatAddress(createdHousehold)}
@@ -345,7 +362,7 @@
 
 		<!-- Member List Card -->
 		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
-			<div class="mb-4 flex items-center justify-between gap-4">
+			<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 				<h3 class="flex items-center gap-2 text-base font-bold text-slate-800 dark:text-slate-200">
 					<Users class="size-5 text-primary" />
 					รายชื่อสมาชิกในบ้าน ({householdMembers.length} คน)
@@ -361,7 +378,8 @@
 				</Button>
 			</div>
 
-			<div class="overflow-x-auto rounded-xl border">
+			<HouseholdMemberCards members={memberCards} />
+			<div class="hidden overflow-x-auto rounded-xl border md:block">
 				<table class="w-full border-collapse text-left text-sm">
 					<thead>
 						<tr class="border-b bg-muted/40">
@@ -409,7 +427,7 @@
 												<span
 													class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-2xs font-medium text-amber-700"
 												>
-													{VULNERABLE_GROUP_CHIPS[need]?.emoji}
+													{VULNERABLE_GROUP_CHIPS[need]?.emoji || '⚠️'}
 													{VULNERABLE_GROUP_CHIPS[need]?.label ?? need}
 												</span>
 											{/each}
@@ -720,7 +738,7 @@
 						</Form.Field>
 					</div>
 
-					<div class="grid grid-cols-2 gap-4">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<Form.Field form={memberForm} name="country">
 							<Form.Control>
 								{#snippet children({ props })}
@@ -857,15 +875,17 @@
 {/if}
 
 <!-- Action Row Step 4 -->
-<div class="mt-8 flex items-center justify-between border-t border-border pt-4">
+<div
+	class="mt-8 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"
+>
 	<p class="text-xs text-muted-foreground">
 		💡 บันทึกสมาชิกสำเร็จแล้ว สมาชิกทุกคนจะผูกอยู่กับครัวเรือนนี้
 	</p>
-	<div class="flex items-center gap-2">
+	<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 		{#if createdHead}
 			<Button
 				variant="outline"
-				class="h-11 px-6 font-semibold"
+				class="h-11 w-full px-6 font-semibold sm:w-auto"
 				onclick={() => (showQrModal = true)}
 			>
 				ออกและพิมพ์ QR ประจำตัว
@@ -873,7 +893,7 @@
 		{/if}
 		<Button
 			onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
-			class="h-11 bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700"
+			class="h-11 w-full bg-emerald-600 px-8 font-semibold text-white hover:bg-emerald-700 sm:w-auto"
 		>
 			เสร็จสิ้นการลงทะเบียนล่วงหน้า ✔
 		</Button>

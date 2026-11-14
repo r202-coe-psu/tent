@@ -30,7 +30,9 @@ export type ReferralUrgency = z.infer<typeof referralUrgencySchema>;
 export const toOrgSchema = z.object({
 	name: z.string().optional(),
 	kind: z.enum(['hospital', 'social_services', 'other']).optional(),
-	contact: z.string().optional()
+	contact: z.string().optional(),
+	/** M5 `facility_id` (TRF-001). Set on `dispatch_mode = m5` referrals only (schema_v 3). */
+	m5_facility_id: z.number().int().positive().optional()
 });
 export type ToOrg = z.infer<typeof toOrgSchema>;
 
@@ -38,6 +40,64 @@ export type ToOrg = z.infer<typeof toOrgSchema>;
 export const requiredToOrgSchema = toOrgSchema.extend({
 	name: z.string().min(1, 'ชื่อหน่วยงานจำเป็นต้องระบุ')
 });
+
+// ---------------------------------------------------------------------------
+// M5 hospital referral (draft CR — referral M5 integration §3, schema_v 3)
+// ---------------------------------------------------------------------------
+
+/** Missing = `tracking` (every v1/v2 doc). `m5` = dispatched through the M5 referral system. */
+export const dispatchModeSchema = z.enum(['tracking', 'm5']);
+export type DispatchMode = z.infer<typeof dispatchModeSchema>;
+
+/** M5 triage colour per patient. Separate from `urgency`. */
+export const acuitySchema = z.enum(['red', 'yellow', 'green', 'black']);
+export type Acuity = z.infer<typeof acuitySchema>;
+
+export const m5TransferStatusSchema = z.enum([
+	'awaiting_review',
+	'pending',
+	'rejected',
+	'in_transit',
+	'arrived',
+	'cancelled'
+]);
+export type M5TransferStatus = z.infer<typeof m5TransferStatusSchema>;
+
+export const vehicleTypeSchema = z.enum(['ambulance', 'van', 'helicopter', 'other']);
+export type VehicleType = z.infer<typeof vehicleTypeSchema>;
+
+/** The shelter's own vehicle (M5 has no vehicle requests). */
+export const referralTransportSchema = z.object({
+	vehicle_type: vehicleTypeSchema,
+	note: z.string().trim().max(500).optional()
+});
+export type ReferralTransport = z.infer<typeof referralTransportSchema>;
+
+/** Snapshot of who MOPH and the hospital call back (M5 `requester`). */
+export const requesterContactSchema = z.object({
+	name: z.string().trim().min(1, 'กรุณาระบุชื่อผู้ติดต่อ').max(120),
+	role: z.string().trim().min(1, 'กรุณาระบุตำแหน่ง').max(60),
+	phone: z.string().trim().min(1, 'กรุณาระบุเบอร์โทร').max(32)
+});
+export type RequesterContact = z.infer<typeof requesterContactSchema>;
+
+export const m5ReviewSchema = z.object({
+	note: z.string(),
+	by: z.string().nullable(),
+	at: z.string().nullable()
+});
+
+/** Link to the M5 transfer. The BFF writes it on send; the worker keeps it in sync. */
+export const referralExternalSchema = z.object({
+	system: z.literal('m5'),
+	external_ref: z.string().min(1).max(64),
+	code: z.string().min(1),
+	status: m5TransferStatusSchema,
+	original_m5_facility_id: z.number().int().optional(),
+	review: m5ReviewSchema.optional(),
+	last_synced_at: z.string().datetime().optional()
+});
+export type ReferralExternal = z.infer<typeof referralExternalSchema>;
 
 export const timelineStampSchema = z.object({
 	at: z.string().datetime(),
@@ -65,10 +125,11 @@ export type EvacueeSummary = z.infer<typeof evacueeSummarySchema>;
 // ---------------------------------------------------------------------------
 
 /**
- * Read-side schema_v range (CR-167 FR-C4, FR-C7). The reader accepts v1 and v2 docs.
- * Writers still stamp v1 until the v2 write path ships (#560); do not narrow this back to a literal.
+ * Read-side schema_v range (CR-167 FR-C4, FR-C7; M5 draft CR §Migration). The reader accepts
+ * v1–v3. Writers stamp v2, and v3 only on `dispatch_mode = m5` referrals (D15) — see
+ * `M5_REFERRAL_SCHEMA_V`. Do not narrow this back to a literal.
  */
-export const referralSchemaVSchema = z.union([z.literal(1), z.literal(2)]);
+export const referralSchemaVSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 
 const referralBaseSchema = z.object({
 	_id: z.string().startsWith('referral:'),
@@ -110,11 +171,20 @@ export const resourceReferralSchema = referralBaseSchema.extend({
 	to_org: requiredToOrgSchema
 });
 
-/** Medical emergency referral: requires to_org with name */
+/**
+ * Medical emergency referral: requires to_org with name. The M5 fields (schema_v 3) are all
+ * optional on read; the batch input schema enforces them when a batch is created.
+ */
 export const medicalReferralSchema = referralBaseSchema.extend({
 	referral_type: z.literal('medical-emergency'),
 	to_shelter_code: z.string().optional(),
-	to_org: requiredToOrgSchema
+	to_org: requiredToOrgSchema,
+	dispatch_mode: dispatchModeSchema.optional(),
+	batch_id: z.string().min(1).optional(),
+	acuity: acuitySchema.optional(),
+	transport: referralTransportSchema.optional(),
+	requester_contact: requesterContactSchema.optional(),
+	external: referralExternalSchema.optional()
 });
 
 /** Discriminated union for strict referral documents */
@@ -220,7 +290,11 @@ export const referralFilterSchema = z.object({
 	/** Omitted = legacy `$or` over both directions (used for `evacuee_id` lookups). */
 	direction: referralDirectionFilterSchema.optional(),
 	/** Opaque Mango bookmark from the previous page; never combined with `skip`. */
-	bookmark: z.string().max(2000).optional()
+	bookmark: z.string().max(2000).optional(),
+	/** Server-side role limit (D16): only these referral types. Never from the query string. */
+	referral_types: z.array(referralTypeSchema).optional(),
+	/** `m5` = only batches sent through OneData M5 (the OneData M5 page, D17). */
+	dispatch_mode: z.literal('m5').optional()
 });
 
 const DEFAULT_LIST_LIMIT = 50;
@@ -242,7 +316,8 @@ export const referralListQuerySchema = z.object({
 	status: referralStatusSchema.optional(),
 	direction: referralDirectionFilterSchema.optional(),
 	sort: z.enum(['created_at_desc', 'created_at_asc']).optional(),
-	evacuee_id: z.string().optional()
+	evacuee_id: z.string().optional(),
+	dispatch_mode: z.literal('m5').optional()
 });
 
 export type ReferralDirectionFilter = z.infer<typeof referralDirectionFilterSchema>;

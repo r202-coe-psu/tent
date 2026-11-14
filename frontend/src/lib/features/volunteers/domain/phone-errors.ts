@@ -1,0 +1,76 @@
+import type { VolunteerStatus } from './volunteer.schema';
+
+export interface ExistingVolunteerSummary {
+	_id: string;
+	volunteer_code?: string;
+	first_name: string;
+	last_name: string;
+	status: VolunteerStatus;
+}
+
+function sortByVolunteerCode(existing: ExistingVolunteerSummary[]): ExistingVolunteerSummary[] {
+	return [...existing].sort((a, b) =>
+		(a.volunteer_code || '').localeCompare(b.volunteer_code || '')
+	);
+}
+
+/**
+ * Format Thai error message for duplicate volunteer phone (CR-239 FR-9).
+ * Message format:
+ * `เบอร์นี้มีอยู่แล้วในศูนย์: V-012 สมชาย ใจดี` (or multiple separated by `, `)
+ * Inactive profiles append ` (ปิดใช้งานอยู่)`
+ */
+export function formatVolunteerPhoneTakenMessage(existing: ExistingVolunteerSummary[]): string {
+	const sorted = sortByVolunteerCode(existing);
+	const names = sorted.map((v) => {
+		const base = `${v.volunteer_code || ''} ${v.first_name} ${v.last_name}`.trim();
+		return v.status === 'inactive' ? `${base} (ปิดใช้งานอยู่)` : base;
+	});
+	return `เบอร์นี้มีอยู่แล้วในศูนย์: ${names.join(', ')}`;
+}
+
+/**
+ * CR-239 FR-12 / AC-3 — when the phone already belongs to a closed (`inactive`) profile, staff
+ * should reopen that one ("เปิดใช้งานอีกครั้ง" on its card) rather than create a duplicate.
+ * Null when every holder is active.
+ */
+export function phoneTakenReactivateHint(existing: ExistingVolunteerSummary[]): string | null {
+	return existing.some((v) => v.status === 'inactive')
+		? 'โปรไฟล์เดิมถูกปิดใช้งานอยู่ — เปิดโปรไฟล์นั้นแล้วกด "เปิดใช้งานอีกครั้ง" แทนการสร้างใหม่'
+		: null;
+}
+
+/**
+ * Thrown when trying to create or update a volunteer profile with a phone number
+ * that already belongs to another non-merged volunteer in the same shelter (CR-239).
+ */
+export class VolunteerPhoneTakenError extends Error {
+	readonly code = 'VOLUNTEER_PHONE_TAKEN' as const;
+	readonly existing: ExistingVolunteerSummary[];
+
+	constructor(existing: ExistingVolunteerSummary[]) {
+		super(formatVolunteerPhoneTakenMessage(existing));
+		this.name = 'VolunteerPhoneTakenError';
+		this.existing = sortByVolunteerCode(existing);
+	}
+
+	/** Build the error from full volunteer docs, keeping only the summary fields. */
+	static fromVolunteers(volunteers: ExistingVolunteerSummary[]): VolunteerPhoneTakenError {
+		return new VolunteerPhoneTakenError(
+			volunteers.map((d) => ({
+				_id: d._id,
+				volunteer_code: d.volunteer_code,
+				first_name: d.first_name,
+				last_name: d.last_name,
+				status: d.status
+			}))
+		);
+	}
+}
+
+export function isVolunteerPhoneTakenError(e: unknown): e is VolunteerPhoneTakenError {
+	return (
+		e instanceof VolunteerPhoneTakenError ||
+		(e instanceof Error && (e as { code?: string }).code === 'VOLUNTEER_PHONE_TAKEN')
+	);
+}

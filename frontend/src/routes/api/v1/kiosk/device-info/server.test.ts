@@ -143,6 +143,16 @@ describe('POST /api/v1/kiosk/device-info', () => {
 		expect(logged).not.toContain('482913');
 	});
 
+	it('a closed device can still open device info with a valid PIN', async () => {
+		mockLookup.mockResolvedValueOnce(deviceDoc({ service_open: false }) as never);
+
+		const response = await POST(request({ pin: '482913' }));
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect((await response.json()).device.device_id).toBe('kiosk-01');
+	});
+
 	it('returns 401 staff_pin_invalid for a wrong PIN and leaks no device data', async () => {
 		const response = await post(request({ pin: '111112' }));
 

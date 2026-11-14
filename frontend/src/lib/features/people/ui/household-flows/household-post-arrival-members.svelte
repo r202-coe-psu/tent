@@ -232,7 +232,7 @@
 					{#each selectedMembers as evac (evac._id)}
 						<div class="flex items-center justify-between border-b border-border/60 pb-2 text-sm">
 							<div class="min-w-0 pr-2">
-								<p class="truncate font-medium text-slate-900">
+								<p class="font-medium break-words text-slate-900">
 									{evac.first_name}
 									{evac.last_name}
 								</p>

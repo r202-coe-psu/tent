@@ -1,7 +1,6 @@
 <script lang="ts">
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
-	import { CatalogWorkspace } from '$lib/features/catalog';
-	import RecipeTab from '../../back-office/catalog/components/recipe-tab.svelte';
+	import { CatalogWorkspace, RecipeTab } from '$lib/features/catalog';
 	import UnitOfMeasureTab from '../../back-office/catalog/components/unit-of-measure-tab.svelte';
 	import { resolve } from '$app/paths';
 

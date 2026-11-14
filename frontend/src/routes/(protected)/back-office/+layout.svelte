@@ -71,7 +71,8 @@
 			currentPath = '/back-office/tickets/kitchen';
 		}
 		// Longest-match so a nested page (e.g. /kiosks/banners) keeps its own header label.
-		const href = activeNavHref(currentPath, navHrefs);
+		const fullPath = currentPath + (page.url.search || '');
+		const href = activeNavHref(fullPath, navHrefs);
 		if (!href) return null;
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {

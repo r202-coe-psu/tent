@@ -1,4 +1,6 @@
-import type { Referral, ReferralStatus } from '../domain/referral.schema';
+import type { Referral, ReferralStatus, ReferralType } from '../domain/referral.schema';
+import { isM5Referral } from '../domain/referral.m5';
+import { M5BatchError, cancelM5Batch } from './referral.m5.server';
 import { CouchDbReferralServerRepository } from './referral.server-repository';
 import { transitionWithRetry, type TransitionRepo } from './referral.transition-retry';
 
@@ -62,6 +64,103 @@ export async function bulkTransition(
 	await Promise.all(Array.from({ length: Math.min(workers, queue.length) }, worker));
 
 	// Report in input order regardless of completion order.
+	return {
+		succeeded: queue.filter((id) => succeeded.has(id)).map((id) => succeeded.get(id)!),
+		failed: queue.filter((id) => failed.has(id)).map((id) => ({ id, error: failed.get(id)! }))
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Bulk with M5 batches (draft CR — referral M5 §4 rule 7, D11) and role-limited types (D16)
+// ---------------------------------------------------------------------------
+
+/** M5 needs a withdrawal reason; CR-167 bulk makes it optional. */
+const DEFAULT_M5_WITHDRAW_REASON = 'ถอนคำขอจากศูนย์';
+
+export type BulkTransitionWithM5Options = {
+	/** Referral types the caller may act on; `null` = all (D16). */
+	allowedTypes: readonly ReferralType[] | null;
+	repo?: CouchDbReferralServerRepository;
+};
+
+/**
+ * `bulkTransition()` plus the M5 rules: a selected `m5` referral being withdrawn (`sent →
+ * closed`) withdraws its WHOLE batch through M5 once per `batch_id` (D11); a batch M5 refuses
+ * (`CANCEL_NEEDS_MOPH`, …) fails every selected member without failing the bulk. Every other id
+ * goes through the per-item path, where the M5 guard still applies.
+ */
+export async function bulkTransitionWithM5(
+	ids: readonly string[],
+	to: ReferralStatus,
+	reason: string | undefined,
+	actor: string,
+	actorShelter: string,
+	options: BulkTransitionWithM5Options
+): Promise<BulkTransitionResult> {
+	const repo = options.repo ?? new CouchDbReferralServerRepository('central_ops', actorShelter);
+	const queue = [...new Set(ids)];
+	const docs = new Map<string, Referral | null>();
+	let next = 0;
+	async function reader(): Promise<void> {
+		while (next < queue.length) {
+			const id = queue[next++];
+			docs.set(id, await repo.get(id).catch(() => null));
+		}
+	}
+	await Promise.all(
+		Array.from({ length: Math.min(BULK_TRANSITION_CONCURRENCY, queue.length) }, reader)
+	);
+
+	const succeeded = new Map<string, Referral>();
+	const failed = new Map<string, string>();
+	const m5Batches = new Map<string, string[]>();
+	const plain: string[] = [];
+
+	for (const id of queue) {
+		const doc = docs.get(id);
+		if (!doc) {
+			plain.push(id); // let the per-item path report not-found the usual way
+			continue;
+		}
+		const type = doc.referral_type ?? 'medical-emergency';
+		if (options.allowedTypes && !options.allowedTypes.includes(type)) {
+			failed.set(id, 'Forbidden: referral type not allowed for this role');
+			continue;
+		}
+		const batchId = 'batch_id' in doc ? doc.batch_id : undefined;
+		if (to === 'closed' && doc.status === 'sent' && isM5Referral(doc) && batchId) {
+			m5Batches.set(batchId, [...(m5Batches.get(batchId) ?? []), id]);
+		} else {
+			plain.push(id);
+		}
+	}
+
+	for (const [batchId, selected] of m5Batches) {
+		try {
+			const result = await cancelM5Batch(
+				{ repo, shelterCode: actorShelter, actor },
+				batchId,
+				reason || DEFAULT_M5_WITHDRAW_REASON
+			);
+			const closed = new Map(result.closed.map((r) => [r._id, r]));
+			const memberErrors = new Map(result.failed.map((f) => [f.id, f.error]));
+			for (const id of selected) {
+				const doc = closed.get(id);
+				if (doc) succeeded.set(id, doc);
+				else failed.set(id, memberErrors.get(id) ?? 'Withdrawal not recorded');
+			}
+		} catch (e: unknown) {
+			const message = e instanceof M5BatchError ? `${e.code}: ${e.message}` : String(e);
+			for (const id of selected) failed.set(id, message);
+		}
+	}
+
+	if (plain.length) {
+		const rest = await bulkTransition(plain, to, reason, actor, actorShelter, { repo });
+		for (const doc of rest.succeeded) succeeded.set(doc._id, doc);
+		for (const f of rest.failed) failed.set(f.id, f.error);
+	}
+
 	return {
 		succeeded: queue.filter((id) => succeeded.has(id)).map((id) => succeeded.get(id)!),
 		failed: queue.filter((id) => failed.has(id)).map((id) => ({ id, error: failed.get(id)! }))

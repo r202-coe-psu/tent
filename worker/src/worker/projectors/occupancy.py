@@ -140,3 +140,28 @@ def count_stay_statuses(evacuee_docs: list[dict[str, Any]]) -> dict[str, int]:
         if isinstance(status, str) and status:
             counts[status] = counts.get(status, 0) + 1
     return counts
+
+
+def count_zone_stay_statuses(
+    evacuee_docs: list[dict[str, Any]],
+) -> dict[str, dict[str, int]]:
+    """``current_stay.zone`` -> ``current_stay.status`` -> count for one shelter's evacuees
+    (draft-public-zone-occupancy, #1241).
+
+    Keeps every status so the API picks the Present set without a re-projection when the
+    definition changes. Evacuees with no zone are skipped; zone codes are not checked
+    against the shelter's ``zones[]`` here — the API joins on read. Ignores ``privacy`` for
+    the same reason as `count_stay_statuses`.
+    """
+    counts: dict[str, dict[str, int]] = {}
+    for doc in evacuee_docs:
+        if doc.get("type") != "evacuee":
+            continue
+        stay = doc.get("current_stay") or {}
+        zone = stay.get("zone")
+        status = stay.get("status")
+        if not (isinstance(zone, str) and zone and isinstance(status, str) and status):
+            continue
+        by_status = counts.setdefault(zone, {})
+        by_status[status] = by_status.get(status, 0) + 1
+    return counts

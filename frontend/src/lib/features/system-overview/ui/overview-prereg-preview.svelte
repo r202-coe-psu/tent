@@ -4,7 +4,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { getPreRegStatusInfo, type PreRegistrationListItem } from '../domain';
+	import type { PreRegistrationListItem } from '../domain';
 	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let {
@@ -25,6 +25,9 @@
 	function originLabel(item: PreRegistrationListItem): string {
 		return [item.province, item.district, item.subdistrict].filter(Boolean).join(' / ') || '—';
 	}
+	import PreRegStatusBadge from './prereg-status-badge.svelte';
+	import PreRegShelterCell from './prereg-shelter-cell.svelte';
+	import PreRegNameLink from './prereg-name-link.svelte';
 </script>
 
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
@@ -49,7 +52,24 @@
 		{:else if !items || items.length === 0}
 			<p class="py-6 text-center text-sm text-slate-500">ไม่พบรายการลงทะเบียนล่วงหน้า</p>
 		{:else}
-			<div class="overflow-x-auto rounded-xl border border-slate-200/80">
+			<ul
+				role="list"
+				class="divide-y rounded-xl border border-slate-200/80 md:hidden"
+				data-testid="prereg-preview-cards"
+			>
+				{#each items as item (item.id)}
+					<li class="space-y-1.5 p-3 text-sm">
+						<div class="flex flex-wrap items-start justify-between gap-2">
+							<div class="min-w-0"><PreRegNameLink {item} /></div>
+							<PreRegStatusBadge {item} />
+						</div>
+						<div class="break-words"><PreRegShelterCell {item} /></div>
+						<p class="break-words text-slate-700">ต้นทาง: {originLabel(item)}</p>
+						<p class="text-xs text-slate-500 tabular-nums">{formatWhen(item.registered_at)}</p>
+					</li>
+				{/each}
+			</ul>
+			<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 md:block">
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
@@ -64,42 +84,13 @@
 						{#each items as item (item.id)}
 							<Table.Row>
 								<Table.Cell>
-									<a
-										href={resolve(item.profile_href as '/system-management/pre-registrations')}
-										class="font-medium text-[#0284C7] hover:underline"
-									>
-										{item.display_name}
-									</a>
+									<PreRegNameLink {item} />
 								</Table.Cell>
 								<Table.Cell>
-									{@const status = getPreRegStatusInfo(
-										item.stay_status,
-										item.queue_status,
-										!!item.shelter_code
-									)}
-									<span
-										class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${status.className}`}
-										title={status.description}
-									>
-										<span class={`size-1.5 rounded-full ${status.dotColor}`}></span>
-										{status.label}
-									</span>
+									<PreRegStatusBadge {item} />
 								</Table.Cell>
 								<Table.Cell>
-									{#if item.shelter_name}
-										<div class="flex flex-col">
-											<span class="text-sm font-medium text-slate-900">{item.shelter_name}</span>
-											{#if item.shelter_code}
-												<span class="font-mono text-xs text-slate-500">[{item.shelter_code}]</span>
-											{/if}
-										</div>
-									{:else if item.shelter_code}
-										<span class="font-mono text-sm font-medium text-slate-900"
-											>[{item.shelter_code}]</span
-										>
-									{:else}
-										<span class="text-sm text-slate-400">ยังไม่ผูกศูนย์</span>
-									{/if}
+									<PreRegShelterCell {item} />
 								</Table.Cell>
 								<Table.Cell class="text-sm text-slate-700">{originLabel(item)}</Table.Cell>
 								<Table.Cell class="text-sm text-slate-700 tabular-nums">

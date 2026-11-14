@@ -19,8 +19,8 @@ describe('portalLayoutMode', () => {
 	});
 
 	it('is focused for two visible departments', () => {
-		const views = menu([...staff('kitchen_staff'), `${SH}:supply_coordinator`]);
-		expect(idsOf(views)).toEqual(['kitchen', 'supply']);
+		const views = menu([...staff('kitchen_staff'), `${SH}:volunteer_coordinator`]);
+		expect(idsOf(views)).toEqual(['kitchen', 'volunteer']);
 		expect(portalLayoutMode(views)).toBe('focused');
 	});
 
@@ -31,7 +31,7 @@ describe('portalLayoutMode', () => {
 	it('is overview for three visible departments', () => {
 		const views = menu([
 			...staff('kitchen_staff'),
-			`${SH}:supply_coordinator`,
+			`${SH}:security_officer`,
 			`${SH}:volunteer_coordinator`
 		]);
 		expect(idsOf(views)).toHaveLength(3);

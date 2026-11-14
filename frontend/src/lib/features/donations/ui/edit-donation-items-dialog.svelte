@@ -9,6 +9,7 @@
 	import { usePublicShelterNeeds, useUpdateDonationItems } from '../application/queries';
 	import type { DonationItemEdit } from '../data/public-tracking';
 	import { qtyInputStep, resolveUnitDimension, wholeQtyError } from '$lib/features/catalog';
+	import { parseQtyInputStrict, qtyGt } from '$lib/utils/qty';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -44,6 +45,8 @@
 		item_id?: string;
 		free_text: string;
 		qty: string;
+		/** The number box threw the typed text away (`1.2.3`): its value reads '' but it is not empty. */
+		qtyBadInput?: boolean;
 		unit: string;
 	};
 	let nextKey = 0;
@@ -88,12 +91,21 @@
 	// unit list decides, and an unknown free-text unit is not enforced.
 	const dimensionOf = (row: Row) => resolveUnitDimension(row.unit);
 	const hasWholeError = (row: Row) => !!wholeQtyError(row.qty, dimensionOf(row));
+	// The qty box keeps the raw text the donor typed; it is parsed as a decimal string, never
+	// through float Number() (#939 / CR-038).
+	const parsedQty = (row: Row) => parseQtyInputStrict(String(row.qty));
+	const hasFormatError = (row: Row) =>
+		!!row.qtyBadInput || (row.qty !== '' && parsedQty(row) === null);
+
+	const isPositive = (row: Row) => {
+		const qty = parsedQty(row);
+		return qty !== null && qtyGt(qty, 0);
+	};
 
 	const canSave = $derived(
 		rows.length > 0 &&
 			rows.every(
-				(row) =>
-					row.free_text.trim() && Number(row.qty) > 0 && row.unit.trim() && !hasWholeError(row)
+				(row) => row.free_text.trim() && isPositive(row) && row.unit.trim() && !hasWholeError(row)
 			)
 	);
 
@@ -121,7 +133,7 @@
 			...(row.line_key ? { line_key: row.line_key } : {}),
 			...(row.item_id ? { item_id: row.item_id } : {}),
 			free_text: row.free_text.trim(),
-			qty: String(Number(row.qty)),
+			qty: parsedQty(row) ?? '',
 			unit: row.unit.trim()
 		}));
 
@@ -197,8 +209,12 @@
 								type="number"
 								min="0"
 								step={qtyInputStep(dimensionOf(row))}
-								bind:value={row.qty}
-								aria-invalid={hasWholeError(row) ? 'true' : undefined}
+								value={row.qty}
+								oninput={(e) => {
+									row.qty = e.currentTarget.value;
+									row.qtyBadInput = e.currentTarget.validity.badInput;
+								}}
+								aria-invalid={hasWholeError(row) || hasFormatError(row) ? 'true' : undefined}
 								class="h-9 rounded-xl text-xs"
 							/>
 						</div>
@@ -240,6 +256,10 @@
 					{#if hasWholeError(row)}
 						<p class="text-2xs font-semibold text-destructive" role="alert">
 							{t.editQtyWholeError}
+						</p>
+					{:else if hasFormatError(row)}
+						<p class="text-2xs font-semibold text-destructive" role="alert">
+							{t.editQtyFormatError}
 						</p>
 					{/if}
 				</div>

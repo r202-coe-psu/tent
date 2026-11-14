@@ -31,6 +31,7 @@
 		type MealPlan,
 		type MealPlanRecipe
 	} from '$lib/features/kitchen';
+	import { shortfallQty } from '../domain/meal-calc';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
@@ -228,9 +229,11 @@
 	function stockShortfall(recipe: MealPlanRecipe): number {
 		if (recipe.recipe_id.startsWith('item_master:')) return 0;
 		const stock = RECIPE_TO_STOCK_ITEM[recipe.recipe_id];
-		const onHand = Number(stockBalance.data?.get(stock?.item_id ?? recipe.recipe_id) ?? '0');
-		const onHandDisplayUnit = stock ? onHand * stock.recipe_per_stock_unit : onHand;
-		return Math.max(0, recipe.planned_qty - onHandDisplayUnit);
+		return shortfallQty(
+			recipe.planned_qty,
+			stockBalance.data?.get(stock?.item_id ?? recipe.recipe_id) ?? '0',
+			stock?.recipe_per_stock_unit
+		);
 	}
 </script>
 

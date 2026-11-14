@@ -90,8 +90,9 @@ describe('Referral schema_v 1|2 reader (CR-167 FR-C1, FR-C4)', () => {
 		}
 	});
 
-	it('rejects schema_v values other than 1 or 2', () => {
-		expect(isReferral({ ...v1Medical, schema_v: 3 })).toBe(false);
+	it('accepts schema_v 3 (M5) and rejects values outside 1–3', () => {
+		expect(isReferral({ ...v1Medical, schema_v: 3 })).toBe(true);
+		expect(isReferral({ ...v1Medical, schema_v: 4 })).toBe(false);
 		expect(isReferral({ ...v1Medical, schema_v: 0 })).toBe(false);
 	});
 });

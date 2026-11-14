@@ -6,6 +6,7 @@ import {
 	findDonationByQuery,
 	isInCallerScope,
 	routeErrorResponse as toRouteError,
+	m6NotRefusableResponse,
 	staleDecisionResponse
 } from '$lib/server/donation-intake';
 import { hasKeyedDonationStock } from '$lib/server/donation-docs';
@@ -64,6 +65,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const reason = donorRejectMessage(reasonCode, parsed.data.note);
 
 		const { donation, dbName } = found;
+		const m6 = m6NotRefusableResponse(donation);
+		if (m6) return m6;
 		const stale = staleDecisionResponse(body, donation);
 		if (stale) return stale;
 		if (!canTransitionDonation(donation.status, 'rejected')) {

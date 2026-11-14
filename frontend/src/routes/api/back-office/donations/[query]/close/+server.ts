@@ -10,8 +10,11 @@ import {
 } from '$lib/server/donation-intake';
 import { toScanView } from '$lib/server/donation-scan-view';
 import {
+	canCloseM6WithoutGoods,
 	closeDonationByPoints,
+	closeM6Donation,
 	hasPointReceipts,
+	isM6Donation,
 	recordedLineNos,
 	type PublicDonationDoc
 } from '$lib/features/donations/server';
@@ -92,7 +95,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 		// FR-MP-28 — with no receipt nothing was taken in: the booking is rejected or left to
 		// expire, not closed as received.
-		if (!hasPointReceipts(donation)) {
+		// An m6 donation is the exception (owner decision D20): the central warehouse sent goods that
+		// never came, and only a `received` donation is confirmed back to it — so staff may close it
+		// with nothing received, as `received` with every line a shortfall.
+		const isM6 = isM6Donation(donation);
+		if (!hasPointReceipts(donation) && !(isM6 && canCloseM6WithoutGoods(donation))) {
 			return json(
 				{
 					success: false,
@@ -104,11 +111,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const nowStr = new Date().toISOString();
-		const closed = closeDonationByPoints(donation, {
-			closedBy: caller.name,
-			closedReason: 'staff_close',
-			now: nowStr
-		});
+		const closeOpts = { closedBy: caller.name, closedReason: 'staff_close', now: nowStr } as const;
+		const closed = isM6
+			? closeM6Donation(donation, closeOpts)
+			: closeDonationByPoints(donation, closeOpts);
 		// FR-MP-27b — every recorded line was turned away and the rest never came: the booking
 		// is refused, which only some statuses allow.
 		if (closed.status === 'rejected' && !canTransitionDonation(donation.status, 'rejected')) {
@@ -128,7 +134,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				action: 'manual_adjust',
 				target_type: 'donation',
 				target_id: donation._id,
-				reason: `ปิดใบบริจาคที่รับไม่ครบทุกจุด (${donation.booking_ref ?? donation._id})`,
+				reason: isM6
+					? `ปิดใบรับของจากคลังกลาง M6 (${donation.booking_ref ?? donation._id})`
+					: `ปิดใบบริจาคที่รับไม่ครบทุกจุด (${donation.booking_ref ?? donation._id})`,
 				// No donor PII: the booking ref is the donor-facing handle.
 				context: {
 					booking_ref: donation.booking_ref ?? null,

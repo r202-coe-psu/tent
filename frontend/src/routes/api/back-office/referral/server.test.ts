@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from './+server';
 import { requireShelterScopeOrSA, adminRaw } from '$lib/server/couch-admin';
+import { assertDestinationAcceptsReferrals } from '$lib/features/referrals/server/referral.server-repository';
 import type { RequestEvent } from './$types';
 import type { Referral } from '$lib/features/referrals/domain/referral.schema';
 
@@ -31,7 +32,8 @@ vi.mock('$lib/features/referrals/server/referral.server-repository', () => {
 		hasActiveReferral = mockHasActiveReferral;
 	}
 	return {
-		CouchDbReferralServerRepository: MockReferralServerRepository
+		CouchDbReferralServerRepository: MockReferralServerRepository,
+		assertDestinationAcceptsReferrals: vi.fn()
 	};
 });
 
@@ -94,7 +96,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 			const res = await GET(event);
 			expect(res.status).toBe(403);
 			const data = await res.json();
-			expect(data.error).toContain('Requires shelter_manager or system_admin');
+			expect(data.error).toContain('Requires shelter_manager, medical_staff or system_admin');
 		});
 
 		it('403 when shelter_manager is held in another shelter but not the active one (#477)', async () => {
@@ -148,6 +150,45 @@ describe('BFF Referral List and Create Endpoints', () => {
 
 			expect(res.status).toBe(400);
 			expect(mockListPage).not.toHaveBeenCalled();
+		});
+
+		it('limits medical_staff to medical-emergency referrals (M5 D8, D16)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'nurse',
+				roles: ['shelter:SH001', 'SH001:medical_staff'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockListPage.mockResolvedValue({ items: [], bookmark: null, hasMore: false });
+
+			const res = await GET(createMockEvent({ shelter_code: 'SH001' }));
+			expect(res.status).toBe(200);
+			expect(mockListPage.mock.calls[0][0]).toMatchObject({
+				referral_types: ['medical-emergency']
+			});
+		});
+
+		it('refuses a medical_staff create of a non-medical referral', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'nurse',
+				roles: ['shelter:SH001', 'SH001:medical_staff'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			const res = await POST(
+				createMockEvent(
+					{ shelter_code: 'SH001' },
+					{
+						referral_type: 'resource',
+						evacuee_id: 'evacuee:1',
+						reason: 'x',
+						urgency: 'normal',
+						to_org: { name: 'อบต.' }
+					}
+				)
+			);
+			expect(res.status).toBe(403);
+			expect(mockCreate).not.toHaveBeenCalled();
 		});
 
 		it('allows shelter_manager and lists referrals scoped to their shelter code', async () => {
@@ -238,6 +279,19 @@ describe('BFF Referral List and Create Endpoints', () => {
 
 			it('rejects an oversized bookmark with 400', async () => {
 				expect((await GET(createMockEvent({ bookmark: 'x'.repeat(2001) }))).status).toBe(400);
+			});
+
+			it('passes dispatch_mode=m5 to the repository (OneData M5 page, D17)', async () => {
+				const res = await GET(createMockEvent({ dispatch_mode: 'm5', direction: 'outgoing' }));
+				expect(res.status).toBe(200);
+				expect(mockListPage).toHaveBeenLastCalledWith(
+					expect.objectContaining({ dispatch_mode: 'm5', direction: 'outgoing' })
+				);
+			});
+
+			it('rejects any dispatch_mode other than m5 with 400', async () => {
+				expect((await GET(createMockEvent({ dispatch_mode: 'tracking' }))).status).toBe(400);
+				expect(mockListPage).not.toHaveBeenCalled();
 			});
 		});
 	});
@@ -356,6 +410,63 @@ describe('BFF Referral List and Create Endpoints', () => {
 
 			const data = await res.json();
 			expect(data.error).toBe('ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้');
+		});
+
+		it('returns 422 when the capacity destination no longer accepts referrals (CR-251 FR-17)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'sm_user',
+				roles: ['shelter_manager', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			vi.mocked(assertDestinationAcceptsReferrals).mockRejectedValueOnce(
+				Object.assign(new Error('ศูนย์ปลายทางปิดรับการส่งต่อ'), { status: 422 })
+			);
+
+			const res = await POST(
+				createMockEvent(
+					{},
+					{
+						referral_type: 'capacity',
+						evacuee_id: 'evacuee:1',
+						to_shelter_code: 'SH002',
+						reason: 'Capacity transfer',
+						urgency: 'normal'
+					}
+				)
+			);
+
+			expect(res.status).toBe(422);
+			expect(await res.json()).toEqual({ error: 'ศูนย์ปลายทางปิดรับการส่งต่อ' });
+			expect(assertDestinationAcceptsReferrals).toHaveBeenCalledWith('SH002');
+			expect(mockCreate).not.toHaveBeenCalled();
+			expect(adminRaw).not.toHaveBeenCalled();
+		});
+
+		it('checks destination intake only for capacity referrals (CR-251 FR-20)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'sm_user',
+				roles: ['shelter_manager', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: sampleEvacuee });
+			mockCreate.mockResolvedValue({ _id: 'referral:new' } as unknown as Referral);
+
+			const res = await POST(
+				createMockEvent(
+					{},
+					{
+						evacuee_id: 'evacuee:1',
+						to_org: { kind: 'hospital', name: 'General Hospital', contact: '02-123-4567' },
+						reason: 'Medical treatment needed',
+						urgency: 'urgent'
+					}
+				)
+			);
+
+			expect(res.status).toBe(201);
+			expect(assertDestinationAcceptsReferrals).not.toHaveBeenCalled();
 		});
 
 		it('returns 409 when duplicate active referral exists (FR-002)', async () => {
