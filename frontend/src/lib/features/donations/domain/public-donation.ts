@@ -13,6 +13,7 @@ import {
 	requireNoteForOther,
 	type DonationRejectReasonCode
 } from './reject-reason';
+import type { M6Summary } from './m6';
 
 export interface PublicDonor extends Donor {
 	line_id?: string;
@@ -35,6 +36,8 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		total_items: number;
 		received_at: string;
 		remarks?: string;
+		/** D20, m6 only: closed as received with nothing received — the worker tells M6 so. */
+		nothing_received?: boolean;
 		closed_by?: string;
 		closed_reason?: DonationCloseReason;
 		shortfalls?: Array<{
@@ -92,6 +95,10 @@ export interface ScanDonationView {
 	booking_ref?: string;
 	shelter_code: string;
 	status: string;
+	/** `m6` = a central-warehouse withdrawal in transit (no donor, no phone). Absent = a donor's. */
+	channel?: string;
+	/** Present only on an `m6` donation. */
+	m6?: M6Summary;
 	donor: { name: string; phone: string | null; email?: string | null };
 	items: Array<{
 		item_id?: string;

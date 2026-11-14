@@ -17,7 +17,11 @@ from tent_model import (
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
 from worker.mongo.upsert import apply_document
-from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
+from worker.projectors.occupancy import (
+    aggregate_occupancy,
+    count_stay_statuses,
+    count_zone_stay_statuses,
+)
 from worker.retention.audit import AuditTrigger, audit_and_delete
 
 
@@ -60,7 +64,8 @@ async def delete_closed_shelter_operations(
 
 async def refresh_occupancy(couch: CouchClient, shelter_code: str) -> bool:
     """Recompute `occupancy_total` / `occupancy_breakdown` from this shelter's active
-    evacuees (EXT-005, ADR 0002 §2) and `occupancy_by_status` from all of them (PDPA D8).
+    evacuees (EXT-005, ADR 0002 §2) and `occupancy_by_status` / `occupancy_by_zone` from all
+    of them (PDPA D8, #1241).
     No-op when the shelter has no `public_shelters`
     row yet — the `shelter` doc projection (`project_shelter`) owns creating it."""
     existing = await PublicShelter.get(shelter_code)
@@ -82,6 +87,7 @@ async def refresh_occupancy(couch: CouchClient, shelter_code: str) -> bool:
     existing.occupancy_total = total
     existing.occupancy_breakdown = OccupancyBreakdown(**breakdown)
     existing.occupancy_by_status = count_stay_statuses(evacuees)
+    existing.occupancy_by_zone = count_zone_stay_statuses(evacuees)
     existing.updated_at = datetime.now(UTC)
     await existing.save()
     return True

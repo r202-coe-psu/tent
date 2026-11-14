@@ -8,6 +8,8 @@ export {
 	resolveOperationStatus,
 	isShelterBookable,
 	isShelterCancelled,
+	isShelterPublicVisible,
+	isShelterAcceptingReferrals,
 	zoneTypeSchema,
 	ZONE_TYPE_LABELS,
 	zoneStatusSchema,

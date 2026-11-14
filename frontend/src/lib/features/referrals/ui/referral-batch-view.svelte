@@ -1,0 +1,76 @@
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Card from '$lib/components/ui/card/index.js';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import { isM5Referral } from '../domain/referral.m5';
+	import { useReferralBatch } from '../application/queries';
+	import M5BatchPanel from './m5-batch-panel.svelte';
+	import BackLink from '$lib/components/back-link.svelte';
+	import ReferralBatchCards from './referral-batch-cards.svelte';
+	import { ONEDATA_M5_PATH, REFERRALS_PATH } from './referral.ui-helpers';
+
+	/** Batch page body, shared by the referrals route and the OneData M5 route (D17). */
+	let { id }: { id: string } = $props();
+
+	const batchQuery = useReferralBatch(() => id);
+	const members = $derived(batchQuery.data ?? []);
+	// Only present right after a create; gone on refresh.
+	const failed = $derived(page.state.failed ?? []);
+	// An M5 batch is one transfer: send, vehicle-left and withdraw act on the whole batch.
+	const isM5Batch = $derived(members.length > 0 && members.every(isM5Referral));
+</script>
+
+<div class="flex flex-wrap items-center gap-3">
+	{#if isM5Batch}
+		<BackLink href={ONEDATA_M5_PATH} label="กลับไป OneData (M5)" />
+	{:else}
+		<BackLink href={REFERRALS_PATH} label="กลับไปรายการส่งต่อ" />
+	{/if}
+</div>
+
+{#if batchQuery.isError}
+	<Card.Root role="alert" class="border border-red-200 bg-white shadow-2xs">
+		<Card.Content class="flex flex-col items-center justify-center gap-3 py-16 text-center">
+			<TriangleAlert class="h-8 w-8 text-red-600" />
+			<h3 class="font-semibold text-foreground">โหลดชุดส่งต่อไม่สำเร็จ</h3>
+			<Button variant="outline" onclick={() => batchQuery.refetch()} class="h-11 gap-2">
+				<RotateCw class="h-4 w-4" />
+				ลองใหม่
+			</Button>
+		</Card.Content>
+	</Card.Root>
+{:else if batchQuery.isPending}
+	<Card.Root class="border border-border/80 shadow-sm">
+		<Card.Content
+			class="flex flex-col items-center justify-center gap-2 py-24 text-muted-foreground"
+		>
+			<Loader2 class="h-8 w-8 animate-spin text-primary" />
+			<span class="text-sm font-medium">กำลังโหลดชุดส่งต่อ...</span>
+		</Card.Content>
+	</Card.Root>
+{:else if members.length === 0 && failed.length === 0}
+	<Card.Root class="border border-border/80 shadow-sm">
+		<Card.Content class="flex flex-col items-center justify-center gap-3 py-16 text-center">
+			<h3 class="font-semibold text-foreground">ไม่พบรายการส่งต่อนี้</h3>
+			<p class="text-sm text-muted-foreground">รายการอาจถูกลบหรือไม่มีในศูนย์นี้แล้ว</p>
+		</Card.Content>
+	</Card.Root>
+{:else}
+	<div class="mx-auto w-full max-w-5xl space-y-4 pb-6">
+		{#if isM5Batch}
+			<M5BatchPanel {members} />
+		{/if}
+		<ReferralBatchCards
+			referrals={members}
+			{failed}
+			mode="view"
+			onSelectReferral={(memberId) =>
+				goto(resolve(`/back-office/referrals/${encodeURIComponent(memberId)}`))}
+		/>
+	</div>
+{/if}

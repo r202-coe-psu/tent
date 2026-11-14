@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { MealService } from './kitchen';
-import { addQty, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { addQty, qtyIsZero, qtyStrCoercePositiveSchema, subQty } from '$lib/utils/qty';
 
 /**
  * Warehouse receipt of cooked food: the yield of one `meal_service` is split
@@ -57,6 +57,11 @@ export function yieldLineKey(line: Pick<YieldReceiptLine, 'item_id' | 'storage_p
 /** Sum of every line's quantity (for comparing against `actual_yield`). */
 export function yieldTotal(lines: readonly Pick<YieldReceiptLine, 'qty'>[]): string {
 	return lines.reduce((sum, line) => addQty(sum, line.qty), '0');
+}
+
+/** The receipt lines don't add up to the yield the kitchen recorded; no recorded yield is never a mismatch. */
+export function yieldTotalMismatch(total: string, expected: number | string | undefined): boolean {
+	return expected !== undefined && expected !== '' && !qtyIsZero(subQty(total, expected));
 }
 
 /** Cooked food expires {@link KITCHEN_YIELD_SHELF_LIFE_HOURS}h after the service was recorded. */

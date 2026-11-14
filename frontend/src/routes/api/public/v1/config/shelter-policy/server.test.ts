@@ -90,4 +90,22 @@ describe('GET /api/public/v1/config/shelter-policy', () => {
 		expect(data.luggage_policy?.limitation).toBe('limited');
 		expect(data.parking_policy?.availability).toBe('none');
 	});
+
+	it('returns 404 for a public_visible:false shelter and 200 once it is visible (CR-251)', async () => {
+		const doc = (visible: boolean) =>
+			({
+				_id: 'shelter:01JHID',
+				code: 'SH010',
+				name: 'x',
+				feature_flags: { public_visible: visible, allow_pets: true }
+			}) as unknown as Awaited<ReturnType<typeof findMasterByCode>>;
+
+		findMasterByCodeMock.mockResolvedValue(doc(false));
+		const hidden = await GET(makeEvent('SH010'));
+		expect(hidden.status).toBe(404);
+		expect((await hidden.json()).code).toBeUndefined();
+
+		findMasterByCodeMock.mockResolvedValue(doc(true));
+		expect((await GET(makeEvent('SH010'))).status).toBe(200);
+	});
 });

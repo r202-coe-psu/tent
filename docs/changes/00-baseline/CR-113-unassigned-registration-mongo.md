@@ -3,7 +3,7 @@ id: CR-113
 title: Unassigned Registration — Mongo-only pre-registration without shelter until claim
 status: done
 date: 2026-09-06
-updated: 2026-09-09
+updated: 2026-11-12
 requested_by: เจ้าของโครงการ (grill-with-docs session)
 decided_by: เจ้าของโครงการ
 layer: stable
@@ -29,6 +29,7 @@ tracking_note: >-
   2026-09-09: #255 pet photo — UnassignedPet.image_url (gfs:) + claim → Couch pet image_url.
   2026-09-09: Amendment — public **shelter-specific** booking photos (face + pet) via
   BFF → Couch `image:{ulid}` (public writer); unassigned remains GridFS.
+note: decision sync 2026-11-12 (#1049) — superseded เฉพาะกฎกันเบอร์โทรซ้ำ: ไม่กันซ้ำด้วยเบอร์อีก (เลขบัตร/ANON ยังกันซ้ำ) ดู docs/data/schema.md §9.5 + docs/features/site-occupancy-booking-program.md ข้อความที่อ้างเบอร์ในเอกสารนี้ใช้ไม่ได้แล้ว
 ---
 
 # Unassigned Registration — Mongo-only, shelter not chosen yet
@@ -72,7 +73,7 @@ unassigned_registrations
   created_at
 ```
 
-**Indexes:** unique partial บน identity ที่สมาชิกยัง `open` (national_id / passport / ANON; เบอร์ตามกฎกันซ้ำ Q66 — unique บัตร/ANON เข้ม, เบอร์ตาม implement note ใน foundation) · index `created_at`, member status.
+**Indexes:** unique partial บน identity ที่สมาชิกยัง `open` (national_id / passport / ANON; unique บัตร/ANON เข้ม; เบอร์ไม่ unique — `by_open_phones` index ธรรมดา ตาม decision sync 2026-11-12 #1049) · index `created_at`, member status.
 
 ### Claim algorithm (locked) — option B: Mongo mark/lock → Couch birth
 
