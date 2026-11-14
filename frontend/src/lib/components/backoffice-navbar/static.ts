@@ -17,6 +17,9 @@ import {
 	canAccessWarehouse,
 	canManagePrinters,
 	canViewSupply,
+	hasCapabilityInShelter,
+	canAccessCentralWarehouse,
+	MEDICAL_STAFF,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -40,6 +43,8 @@ import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Images from '@lucide/svelte/icons/images';
 import Printer from '@lucide/svelte/icons/printer';
+import Ambulance from '@lucide/svelte/icons/ambulance';
+import Boxes from '@lucide/svelte/icons/boxes';
 
 type Leaf = {
 	label: string;
@@ -125,7 +130,10 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'การส่งต่อผู้เข้าพัก',
 				href: resolve('/back-office/referrals'),
 				icon: ClipboardList,
-				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
+				// Medical staff too, for medical-emergency referrals only (M5 draft CR D8, D16).
+				visibleTo: ({ roles, shelterCode }) =>
+					canAccessManagerPages(roles, shelterCode) ||
+					hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)
 			}
 		]
 	},
@@ -196,7 +204,28 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		]
 	},
 	{
-		title: '4. ตั้งค่าระบบ',
+		// Draft CR M5 D17: OneData platform shortcuts (M5 patient referral, M6 resources).
+		title: '4. OneData Platform',
+		items: [
+			{
+				label: 'OneData ระบบส่งต่อผู้ป่วย (M5)',
+				href: resolve('/back-office/onedata/m5'),
+				icon: Ambulance,
+				visibleTo: ({ roles, shelterCode }) =>
+					canAccessManagerPages(roles, shelterCode) ||
+					hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)
+			},
+			{
+				// M6 D2: SA, SM, warehouse_staff — not supply_coordinator (`canAccessWarehouse` would admit it).
+				label: 'OneData ระบบบริหารทรัพยากร (M6)',
+				href: resolve('/back-office/onedata/m6'),
+				icon: Boxes,
+				visibleTo: ({ roles, shelterCode }) => canAccessCentralWarehouse(roles, shelterCode)
+			}
+		]
+	},
+	{
+		title: '5. ตั้งค่าระบบ',
 		items: [
 			{
 				label: 'จัดการศูนย์พักพิง',
@@ -269,7 +298,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
 
-const stripTrailingSlash = (path: string): string => path.replace(/\/$/, '');
+/** Drops a trailing slash from the path part only (`/x/?tab=a` → `/x?tab=a`). */
+const stripTrailingSlash = (path: string): string => {
+	const q = path.indexOf('?');
+	const base = q === -1 ? path : path.slice(0, q);
+	const query = q === -1 ? '' : path.slice(q);
+	return base.replace(/\/$/, '') + query;
+};
 
 /** Every non-null nav href in the tree (groups included), depth-first. */
 export function navLeafHrefs(
@@ -294,14 +329,28 @@ export function navLeafHrefs(
  * The single nav href that owns `path`: the LONGEST href equal to the path or a path-segment
  * prefix of it (`href + '/'`). Lets a nested page (`/kiosks/banners`) win over its parent
  * (`/kiosks`) — FR-KBR-24, draft CR kiosk-banner-design-revision. Null when no href matches.
+ * Also supports query-bearing nav targets (e.g. `/back-office/supply?tab=catalog`) by prioritizing
+ * an exact match against the full path including search parameters.
  */
 export function activeNavHref(path: string, hrefs: readonly string[]): string | null {
 	const current = stripTrailingSlash(path);
+	// 1. Exact match against full URL (including query string if present)
+	for (const href of hrefs) {
+		if (current === stripTrailingSlash(href)) return href;
+	}
+
+	// 2. Pathname prefix match (strip query strings from both sides)
+	const currentPath = current.split('?')[0];
 	let best: string | null = null;
 	for (const href of hrefs) {
 		const target = stripTrailingSlash(href);
-		if (current !== target && !current.startsWith(target + '/')) continue;
-		if (best === null || target.length > stripTrailingSlash(best).length) best = href;
+		const targetPath = target.split('?')[0];
+		if (currentPath !== targetPath && !currentPath.startsWith(targetPath + '/')) continue;
+		// If the nav target has a query string that did not match exactly, do not match it as a base path
+		if (target.includes('?') && target !== current) continue;
+		if (best === null || targetPath.length > stripTrailingSlash(best.split('?')[0]).length) {
+			best = href;
+		}
 	}
 	return best;
 }

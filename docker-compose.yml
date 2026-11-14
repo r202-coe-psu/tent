@@ -81,6 +81,11 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      # M5 referral sync tick (draft CR — referral M5 §1): worker → FastAPI only.
+      FASTAPI_INTERNAL_URL: http://fastapi:9000
+      EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
+      M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
+      M6_SYNC_INTERVAL_S: ${M6_SYNC_INTERVAL_S:-45}
       # Print housekeeping task (CR-222 FR-17) — dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the
       # PRINT_HOUSEKEEPING_TOKEN in frontend/.env. Not PRINT_HOUSEKEEPING_TOKEN: the root .env
       # carries a staging placeholder that would switch the task on against a token-less pnpm dev.
@@ -122,6 +127,12 @@ services:
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
+      M5_BASE_URL: ${M5_BASE_URL:-}
+      M5_CLIENT_ID: ${M5_CLIENT_ID:-}
+      M5_CLIENT_SECRET: ${M5_CLIENT_SECRET:-}
+      M6_BASE_URL: ${M6_BASE_URL:-}
+      M6_CLIENT_ID: ${M6_CLIENT_ID:-}
+      M6_CLIENT_SECRET: ${M6_CLIENT_SECRET:-}
       THIRDPARTY_JWT_SIGNING_KEY: ${THIRDPARTY_JWT_SIGNING_KEY:-dev-thirdparty-jwt-signing-key}
       THIRDPARTY_SECRET_SALT: ${THIRDPARTY_SECRET_SALT:-salt-change-this-on-prod}
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}

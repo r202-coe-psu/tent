@@ -28,6 +28,7 @@ import {
 	DONATION_BOOKING_REF_MANGO_INDEX,
 	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
+	DISTRIBUTION_LOG_DAY_MANGO_INDEX,
 	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
@@ -330,6 +331,7 @@ describe('buildValidateDocUpdate', () => {
 			PEOPLE_MANGO_INDEXES,
 			REQUISITION_TICKET_MANGO_INDEXES,
 			BULK_RETURN_ENTRY_MANGO_INDEXES,
+			[DISTRIBUTION_LOG_DAY_MANGO_INDEX],
 			[DAILY_SOP_ROLE_MANGO_INDEX],
 			[DONATION_RECEIVED_MANGO_INDEX],
 			[DONATION_RECEIVED_PHONE_MANGO_INDEX],
@@ -418,6 +420,14 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	it('indexes distribution logs by type and distributed_at for the per-day read (#1300)', () => {
+		expect(DISTRIBUTION_LOG_DAY_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'distributed_at'] },
+			name: 'distribution-log-type-distributed-at-idx',
+			type: 'json'
+		});
+	});
+
 	it('declares the bulk return Mango indexes: entries by pool, moves by target pool (#658)', () => {
 		expect(BULK_RETURN_ENTRY_MANGO_INDEXES).toEqual([
 			{
@@ -441,7 +451,9 @@ describe('buildValidateDocUpdate', () => {
 	});
 
 	it('keeps referral indexes separate and unchanged', () => {
-		expect(REFERRAL_MANGO_INDEXES).toHaveLength(7);
+		expect(REFERRAL_MANGO_INDEXES).toHaveLength(8);
+		// M5 batches (schema_v 3) are read by `batch_id`.
+		expect(REFERRAL_MANGO_INDEXES.map((i) => i.index.fields)).toContainEqual(['type', 'batch_id']);
 	});
 
 	it('includes audit in the allowed doc type whitelist', () => {

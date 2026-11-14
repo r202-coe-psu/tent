@@ -25,26 +25,27 @@
 		useItemMasters,
 		useUnitsOfMeasure,
 		useDeleteRecipe,
-		useUpdateRecipe,
-		RecipeForm,
-		canWriteShelterRecipe,
-		MasterBadge,
-		MasterFilterBar,
-		MasterPager,
-		useMasterPaging,
+		useUpdateRecipe
+	} from '../application/queries';
+	import RecipeForm from './recipe-form.svelte';
+	import { canWriteShelterRecipe } from '../domain/catalog-permissions';
+	import MasterBadge from './master/master-badge.svelte';
+	import MasterFilterBar from './master/master-filter-bar.svelte';
+	import MasterPager from './master/master-pager.svelte';
+	import { useMasterPaging } from './master/use-master-paging.svelte';
+	import {
 		filterRecipes,
 		hiddenDeactivatedRecipes,
 		ingredientSummary,
 		pageSlice,
-		catalogOrigin,
-		formatUnit,
 		MASTER_PAGE_SIZE,
 		ORIGIN_LABELS,
 		ORIGIN_TONES,
 		type CatalogOriginKey,
-		type OriginFilter,
-		type Recipe
-	} from '$lib/features/catalog';
+		type OriginFilter
+	} from './master/master-view';
+	import { catalogOrigin, type Recipe } from '../domain/catalog';
+	import { formatUnit } from '../domain/unit-of-measure';
 
 	let {
 		basePath = '/back-office/catalog'
@@ -399,7 +400,7 @@
 <Sheet.Root bind:open={sheetOpen}>
 	<Sheet.Content
 		side="right"
-		class="flex h-[100dvh] w-full flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none md:w-[36rem] md:border-l"
+		class="flex h-[100dvh] w-full flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none md:w-[42rem] md:border-l lg:w-[48rem]"
 	>
 		{#if sheetMode === 'view' && selected}
 			{@const o = catalogOrigin(selected, shelterCode)}
@@ -531,13 +532,14 @@
 					{sheetMode === 'edit' ? (selected?.label ?? '') : 'กำหนดวัตถุดิบและยอดผลิตมาตรฐาน'}
 				</Sheet.Description>
 			</Sheet.Header>
-			<div class="min-h-0 flex-1 overflow-y-auto p-4">
+			<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{#if sheetMode === 'create' ? canCreate : !!selected && canModifyRecipe(selected)}
 					{#key `${sheetMode}-${selectedId}`}
 						<RecipeForm
 							id={sheetMode === 'edit' ? selectedId : ''}
 							isEdit={sheetMode === 'edit'}
 							{basePath}
+							compact={true}
 							onsuccess={afterForm}
 						/>
 					{/key}

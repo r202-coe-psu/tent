@@ -1,0 +1,352 @@
+{
+ "cover": {
+  "title": [
+   "คู่มือ Staff: รับเข้าศูนย์พักพิง, Checkout และการโอนย้ายผู้ประสบภัย"
+  ],
+  "subtitle": "PSU Smart Shelter · ศูนย์พักพิงผู้ประสบภัย",
+  "desc": [
+   "ขั้นตอนทีละปุ่ม เพื่อให้การลงทะเบียน ณ ศูนย์พักพิงรวดเร็วยิ่งขึ้น"
+  ],
+  "edition": "ฉบับที่ 1.0  •  13 พฤศจิกายน 2569"
+ },
+ "strip_footer": true,
+ "light_slides": [
+  37
+ ],
+ "no_plan": true,
+ "nested_title": true,
+ "light_map": {
+  "CBD5E1": "334155"
+ },
+ "nav": [
+  {
+   "label": "สถานี 1 · ลงทะเบียน",
+   "steps": [
+    {
+     "name": "ช่องทาง",
+     "slides": [
+      5
+     ]
+    },
+    {
+     "name": "เข้าหน้าทะเบียน",
+     "slides": [
+      6
+     ]
+    },
+    {
+     "name": "หน้าหลัก",
+     "slides": [
+      7,
+      8,
+      9
+     ]
+    },
+    {
+     "name": "Pre-register",
+     "slides": [
+      10
+     ]
+    },
+    {
+     "name": "Walk-in",
+     "slides": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+     ]
+    },
+    {
+     "name": "รับรายงานตัว",
+     "slides": [
+      17,
+      18
+     ]
+    },
+    {
+     "name": "ตู้ KIOSK",
+     "slides": [
+      19
+     ]
+    }
+   ]
+  },
+  {
+   "label": "สถานี 2 · คัดกรอง",
+   "steps": [
+    {
+     "name": "เข้าหน้าคัดกรอง",
+     "slides": [
+      20
+     ]
+    },
+    {
+     "name": "หน้าจุดตรวจ",
+     "slides": [
+      21
+     ]
+    },
+    {
+     "name": "แบบคัดกรอง",
+     "slides": [
+      22,
+      23,
+      24
+     ]
+    },
+    {
+     "name": "บันทึกผล",
+     "slides": [
+      25
+     ]
+    }
+   ]
+  },
+  {
+   "label": "สถานี 3 · จัดโซน",
+   "steps": [
+    {
+     "name": "เข้าหน้าจัดโซน",
+     "slides": [
+      26
+     ]
+    },
+    {
+     "name": "จัดสรรที่พัก",
+     "slides": [
+      27
+     ]
+    },
+    {
+     "name": "รอยืนยัน",
+     "slides": [
+      28
+     ]
+    },
+    {
+     "name": "ยืนยันแล้ว",
+     "slides": [
+      29
+     ]
+    }
+   ]
+  },
+  {
+   "label": "Checkout · ออกจากศูนย์",
+   "steps": [
+    {
+     "name": "เข้าหน้า",
+     "slides": [
+      30
+     ]
+    },
+    {
+     "name": "สแกน QR",
+     "slides": [
+      31
+     ]
+    },
+    {
+     "name": "เช็คเอาต์",
+     "slides": [
+      32
+     ]
+    }
+   ]
+  },
+  {
+   "label": "โอนย้าย · ส่งต่อ",
+   "steps": [
+    {
+     "name": "เข้าหน้า",
+     "slides": [
+      33
+     ]
+    },
+    {
+     "name": "ระบบส่งต่อ",
+     "slides": [
+      34
+     ]
+    },
+    {
+     "name": "สร้างรายการ",
+     "slides": [
+      35
+     ]
+    },
+    {
+     "name": "รายละเอียด",
+     "slides": [
+      36
+     ]
+    }
+   ]
+  }
+ ],
+ "delete_text": {
+  "5": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "6": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "7": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "8": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "9": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "10": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "11": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "12": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "13": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "14": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "15": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "16": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "17": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "18": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "19": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "20": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "21": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "22": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "23": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "24": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "25": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "26": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "27": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "28": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "29": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "30": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "31": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "32": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "33": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "34": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "35": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ],
+  "36": [
+   "STATION",
+   "CHECKOUT ·",
+   "โอนย้าย ·"
+  ]
+ }
+}
