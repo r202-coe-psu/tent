@@ -9,8 +9,8 @@ import pytest
 from worker.cli import edge_users_copy as euc
 from worker.cli.edge_users_copy import (
     EdgeUsersCopier,
-    destination_dbs,
-    doc_shelter_codes,
+    doc_role_codes,
+    split_destinations,
 )
 
 
@@ -61,6 +61,17 @@ class FakeCouch:
         self.local[f"{database}/{doc['_id']}"] = doc
         return {"ok": True, "rev": "0-1"}
 
+    async def get(self, path: str) -> httpx.Response:  # _client.get
+        _, database, doc_id = path.split("/", 2)
+        if database not in self.dbs:
+            return _resp(
+                404, {"error": "not_found", "reason": "Database does not exist."}
+            )
+        doc = self.dbs[database].get(doc_id)
+        if doc is None or doc.get("_deleted"):
+            return _resp(404, {"error": "not_found", "reason": "missing"})
+        return _resp(200, doc)
+
     async def post(
         self, path: str, json: dict, params: dict | None = None
     ) -> httpx.Response:  # _client.post
@@ -79,7 +90,9 @@ class FakeCouch:
         database = path.split("/")[1]
         if database in self.status_override or database not in self.dbs:
             return _resp(self.status_override.get(database, 404))
-        self.writes.append((database, json["docs"], json["new_edits"]))
+        self.writes.append((database, json["docs"], json.get("new_edits", True)))
+        for d in json["docs"]:
+            self.dbs[database][d["_id"]] = d
         return _resp(201, [{"id": d["_id"], "rev": d["_rev"]} for d in json["docs"]])
 
 
@@ -87,18 +100,35 @@ def user(uid: str, rev: str = "1-a", **fields: Any) -> dict:
     return {"_id": uid, "_rev": rev, **fields}
 
 
-def test_destination_selection_unions_edge_shelters_and_roles():
+def test_destination_split_write_for_roles_remove_for_leaver_shelters():
     doc = user(
-        "u", edge_shelters=["SH001"], roles=["shelter:SH002", "admin", "shelter:"]
+        "u",
+        edge_shelters=["SH001", "SH002"],
+        roles=["shelter:SH002", "admin", "shelter:", "shelter:SH003"],
     )
-    assert doc_shelter_codes(doc) == {"sh001", "sh002"}
-    dbs = {"edge_users_sh001", "edge_users_sh002", "edge_users_sh003"}
-    assert destination_dbs(doc, dbs) == {"edge_users_sh001", "edge_users_sh002"}
+    assert doc_role_codes(doc) == {"sh002", "sh003"}
+    dbs = {
+        "edge_users_sh001",
+        "edge_users_sh002",
+        "edge_users_sh003",
+        "edge_users_sh004",
+    }
+    write, remove = split_destinations(doc, dbs)
+    assert write == {"edge_users_sh002", "edge_users_sh003"}
+    assert remove == {"edge_users_sh001"}
 
 
 def test_shelters_without_db_are_skipped():
-    doc = user("u", roles=["shelter:SH009"])
-    assert destination_dbs(doc, {"edge_users_sh001"}) == set()
+    doc = user("u", edge_shelters=["SH008"], roles=["shelter:SH009"])
+    assert split_destinations(doc, {"edge_users_sh001"}) == (set(), set())
+
+
+def test_edge_shelters_only_user_is_a_leaver_not_a_write():
+    doc = user("u", edge_shelters=["SH001"])
+    assert split_destinations(doc, {"edge_users_sh001"}) == (
+        set(),
+        {"edge_users_sh001"},
+    )
 
 
 async def test_user_in_two_shelters_goes_to_both_only():
@@ -175,6 +205,16 @@ async def test_backfill_pages_filters_and_is_idempotent(monkeypatch):
     couch.users_pages.clear()
     await copier.refresh_dbs(force=True)  # marker present: no second backfill
     assert couch.writes == [] and couch.users_pages == []
+
+
+async def test_backfill_skips_users_with_only_edge_shelters():
+    users = {
+        "u1": user("u1", roles=["shelter:SH001"]),
+        "u2": user("u2", edge_shelters=["SH001"]),  # role dropped earlier
+    }
+    couch = FakeCouch(users, ["edge_users_sh001"])
+    await EdgeUsersCopier(couch).refresh_dbs(force=True)
+    assert [d["_id"] for _, docs, _ in couch.writes for d in docs] == ["u1"]
 
 
 async def test_recreated_db_is_backfilled_again():
@@ -259,3 +299,70 @@ async def test_failure_leaves_checkpoint_and_records_error(monkeypatch):
         await copier.run_once(0)
     await copier.save_checkpoint(last_seq=0, error="boom")
     assert couch.local["_users/_local/edge_users_copy"]["last_error"] == "boom"
+
+
+LEAVER = {"id": "u1", "changes": [{"rev": "2-b"}]}
+
+
+def _leaver_couch(**fields: Any) -> FakeCouch:
+    doc = user("u1", rev="2-b", edge_shelters=["SH001", "SH002"], **fields)
+    return FakeCouch({"u1": doc}, ["edge_users_sh001", "edge_users_sh002"])
+
+
+async def test_leaver_absent_from_edge_db_writes_nothing_there():
+    couch = _leaver_couch(roles=["shelter:SH002"])
+    copier = EdgeUsersCopier(couch)
+    copier.existing_dbs = {"edge_users_sh001", "edge_users_sh002"}
+    await copier.process_batch([LEAVER])
+    assert [w[0] for w in couch.writes] == ["edge_users_sh002"]
+
+
+async def test_leaver_present_gets_tombstone_and_current_shelter_still_written():
+    couch = _leaver_couch(roles=["shelter:SH002"])
+    couch.dbs["edge_users_sh001"]["u1"] = user("u1", rev="1-a")
+    copier = EdgeUsersCopier(couch)
+    copier.existing_dbs = {"edge_users_sh001", "edge_users_sh002"}
+    await copier.process_batch([LEAVER])
+    by_db = {w[0]: w for w in couch.writes}
+    assert by_db["edge_users_sh002"][2] is False
+    _, docs, _ = by_db["edge_users_sh001"]
+    assert docs == [{"_id": "u1", "_rev": "1-a", "_deleted": True}]
+
+
+async def test_second_change_after_tombstone_writes_nothing():
+    couch = _leaver_couch(roles=["shelter:SH002"])
+    couch.dbs["edge_users_sh001"]["u1"] = user("u1", rev="1-a")
+    copier = EdgeUsersCopier(couch)
+    copier.existing_dbs = {"edge_users_sh001", "edge_users_sh002"}
+    await copier.process_batch([LEAVER])
+    couch.writes.clear()
+    await copier.process_batch([LEAVER])
+    assert [w[0] for w in couch.writes] == ["edge_users_sh002"]
+
+
+async def test_user_returning_is_written_again_over_the_tombstone():
+    couch = _leaver_couch(roles=["shelter:SH002"])
+    couch.dbs["edge_users_sh001"]["u1"] = user("u1", rev="1-a")
+    copier = EdgeUsersCopier(couch)
+    copier.existing_dbs = {"edge_users_sh001", "edge_users_sh002"}
+    await copier.process_batch([LEAVER])
+    couch.writes.clear()
+    couch.users["u1"] = user(
+        "u1", rev="3-c", edge_shelters=["SH001", "SH002"], roles=["shelter:SH001"]
+    )
+    await copier.process_batch([{"id": "u1", "changes": [{"rev": "3-c"}]}])
+    by_db = {w[0]: w for w in couch.writes}
+    _, docs, new_edits = by_db["edge_users_sh001"]
+    assert new_edits is False
+    assert docs[0]["_rev"] == "3-c" and docs[0]["_revisions"]
+    assert "_deleted" not in docs[0]
+
+
+async def test_404_on_tombstone_drops_db_and_forces_relist():
+    couch = _leaver_couch(roles=["shelter:SH002"])
+    del couch.dbs["edge_users_sh001"]  # removed after the last listing
+    copier = EdgeUsersCopier(couch)
+    copier.existing_dbs = {"edge_users_sh001", "edge_users_sh002"}
+    await copier.process_batch([LEAVER])
+    assert copier.existing_dbs == {"edge_users_sh002"}
+    assert copier._last_refresh == float("-inf") and not copier._pass_open
