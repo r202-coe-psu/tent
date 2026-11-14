@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { formatThaiDateTime } from '$lib/utils/date';
-	import { qtyIsZero, subQty } from '$lib/utils/qty';
+	import { receivedMatchesSent } from '../domain/transfer-received';
 	import { transferItemLabel } from '../domain/transfer-item-label';
 	import { transferTimelineSteps } from '../domain/transfer-timeline';
 	import type { StockTransfer } from '../domain/operations';
@@ -75,9 +75,9 @@
 								<p class="text-xs text-muted-foreground">{item.qty} {line.unit}</p>
 								{#if received !== undefined}
 									<p
-										class="mt-0.5 text-xs {!qtyIsZero(subQty(received, item.qty))
-											? 'font-bold text-rose-700'
-											: 'text-emerald-700'}"
+										class="mt-0.5 text-xs {receivedMatchesSent(item.qty, received)
+											? 'text-emerald-700'
+											: 'font-bold text-rose-700'}"
 									>
 										รับจริง {received}
 										{line.unit}

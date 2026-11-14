@@ -268,6 +268,20 @@ describe('adjust form lots (#569)', () => {
 	});
 });
 
+describe('adjust form decimal write-off (#938)', () => {
+	it('resolves a negative decimal delta of -0.1 to a write-off off the lot', async () => {
+		ledger.current = [{ ...INBOUND, qty: '2.1' }];
+		await render();
+		await chooseLot('คงเหลือ 2.1');
+
+		await fillAndSubmit('2', 'เสียหาย / เน่าเสีย');
+
+		expect(submittedInput()).toMatchObject({ qty: '-0.1', lot_ref: INBOUND._id });
+		expect(document.body.textContent).toContain('ตัดออก 0.1');
+		expect(toastMock.error).not.toHaveBeenCalled();
+	});
+});
+
 describe('adjust form whole numbers for count units (#805)', () => {
 	const FRACTIONAL = { ...INBOUND, qty: '2.5' };
 
