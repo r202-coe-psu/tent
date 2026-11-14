@@ -300,14 +300,22 @@ def test_page_elsewhere_on_shelter_origin_navigates_in_app_without_a_page_reload
     assert [name for name, _ in page.events] == CARD_EVENTS
 
 
-def test_in_app_navigation_that_never_reaches_walk_in_falls_back_to_goto():
+def test_in_app_navigation_cancelled_by_a_guard_drops_the_card_without_reloading(caplog):
+    # e.g. staff answered "stay" to an unsaved-changes confirm: never reload past their answer
     dashboard = SHELTER + "/dashboard"
     page = FakePage(url=dashboard, in_app_lands=dashboard)
+    caplog.set_level(logging.DEBUG)
 
     asyncio.run(make_session().handle_card(FakeReader(), page))
 
-    assert page.gotos == [WALK_IN_URL]
-    assert [name for name, _ in page.events] == CARD_EVENTS
+    assert page.in_app_navigations == ["/onsite/people/new"]
+    assert page.gotos == []
+    assert page.events == []
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings
+    for message in warnings:
+        for value in PRIVATE_VALUES:
+            assert value not in message
 
 
 @pytest.mark.parametrize(
@@ -374,7 +382,7 @@ def test_auth_guard_bouncing_back_to_sign_in_navigates_only_once_per_card():
     asyncio.run(make_session(clock=clock).handle_card(FakeReader(), page))
 
     assert page.in_app_navigations == ["/onsite/people/new"]
-    assert page.gotos == [WALK_IN_URL]
+    assert page.gotos == []
     assert page.events == []
 
 
@@ -457,19 +465,3 @@ def test_tab_navigating_to_another_origin_right_before_evaluate_never_receives_c
 def test_dispatch_script_refuses_unless_location_matches_expected_origin_and_path():
     assert "location.origin" in DISPATCH_JS
     assert "location.pathname" in DISPATCH_JS
-
-
-def test_goto_failure_drops_the_event_with_a_warning_and_handle_card_returns(caplog):
-    dashboard = SHELTER + "/dashboard"
-    page = FakePage(url=dashboard, in_app_lands=dashboard, goto_raises=True)
-    caplog.set_level(logging.DEBUG)
-
-    asyncio.run(make_session().handle_card(FakeReader(), page))
-
-    assert page.events == []
-    assert page.gotos == [WALK_IN_URL]
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert warnings
-    for message in warnings:
-        for value in PRIVATE_VALUES:
-            assert value not in message

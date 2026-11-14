@@ -37,8 +37,8 @@ NAVIGATE_JS = """(path) => {
 }"""
 
 RETRY_INTERVAL_S = 0.5
-# In-app navigation that has not reached the walk-in page by then (an unsaved-changes guard,
-# a router that ignored the click) falls back to a full page.goto().
+# In-app navigation that has not reached the walk-in page by then (staff kept unsaved work when
+# the page asked, a router that ignored the click) drops the card; staff insert it again.
 IN_APP_NAVIGATION_TIMEOUT_S = 3.0
 ACK_TIMEOUT_S = 15.0
 _DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -133,12 +133,10 @@ class CardSession:
             return False
         await self._navigate_in_app(page)
         if not self._is_walk_in(page.url):
-            try:
-                await page.goto(self._walk_in_url())
-            except Exception as exc:
-                log.warning("walk-in navigation failed: %s", type(exc).__name__)
-                return False
-        return self._is_walk_in(page.url)
+            # e.g. staff kept unsaved work when the page asked: never reload past their answer
+            log.warning("card dropped: the tab did not move to the walk-in page")
+            return False
+        return True
 
     async def _navigate_in_app(self, page: Any) -> None:
         try:
@@ -148,7 +146,7 @@ class CardSession:
                 wait_until="commit",
                 timeout=IN_APP_NAVIGATION_TIMEOUT_S * 1000,
             )
-        except Exception as exc:  # not there yet: _on_walk_in falls back to page.goto()
+        except Exception as exc:  # not there yet: _on_walk_in drops the card
             log.info("in-app navigation to walk-in did not finish: %s", type(exc).__name__)
 
     def _is_signed_out(self, url: str) -> bool:
@@ -171,10 +169,6 @@ class CardSession:
     def _expected(self) -> tuple[str, str]:
         shelter = urlsplit(self._shelter_url)
         return f"{shelter.scheme}://{shelter.netloc}", self._walk_in_path
-
-    def _walk_in_url(self) -> str:
-        shelter = urlsplit(self._shelter_url)
-        return f"{shelter.scheme}://{shelter.netloc}{self._walk_in_path}"
 
     def _read_card(self, reader: Any) -> dict:
         """Text fields only, mirroring ThaiSmartCardReader.read_all_data() (inline there)."""
