@@ -6,7 +6,7 @@ def texts(sl):
     def walk(shapes):
         for sh in shapes:
             if sh.shape_type==6: walk(sh.shapes)
-            elif sh.has_text_frame:
+            elif sh.has_text_frame and not sh.name.startswith('Nav '):
                 out.extend(''.join(t.text or '' for t in p._p.iter(A+'t')) for p in sh.text_frame.paragraphs)
     walk(sl.shapes); return [t.strip() for t in out if t.strip()]
 src, new, cfgp = sys.argv[1:4]

@@ -9,7 +9,7 @@ BAND_H = 0.95
 def sldnum2(color): return T.ph(4, 'Slide number', 'sldNum', 12, 17.4, 10.68, 2.0, 0.4, 'r', 'ctr', T.defrpr(color, 1600, False), T.SLDNUM_FLD)
 T.LAYOUTS['band'] = ('Content – Band', BG, 'titleOnly',
     T.rect(10, 'Header band', 0, 0, 20, BAND_H, NAVY)
-    + T.ph(2, 'Title', 'title', 0, 0.6, 0.0, 18.8, BAND_H, 'l', 'ctr', T.defrpr('FFFFFF', 3600, True), T.label('Title'))
+    + T.ph(2, 'Title', 'title', 0, 0.6, 0.0, 18.8, BAND_H, 'l', 'ctr', T.defrpr('FFFFFF', 4400, True), T.label('Title'))
     + sldnum2(MUTED))
 T.LAYOUTS['cover'] = ('Cover', NAVY, 'title',
     T.rect(10, 'Accent bar', 1.2, 3.5, 1.6, 0.08, CERU)
@@ -24,6 +24,51 @@ T.LAYOUT_SRC = {'cover': 0, 'band': 5, 'section': 2}
 # content frame (inches)
 X0, X1, Y0, Y1 = 0.6, 19.4, 1.35, 10.55
 W = X1 - X0
+
+
+# ---------- navigator strip: big section + which step of N (keeps the reader oriented)
+NAV_Y, NAV_H = 1.1, 0.5
+NAV_Y0 = 1.85      # content frame top when a deck uses nav (replaces Y0)
+def _hex(h):
+    from pptx.dml.color import RGBColor
+    return RGBColor.from_string(h)
+def _nav_box(slide, shape, x, y, w, h, fill, line, text, pt, color, bold, name, align='ctr'):
+    from pptx.util import Pt
+    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+    sh = slide.shapes.add_shape(shape, emu(x), emu(y), emu(w), emu(h))
+    sh.name = name
+    etree.SubElement(sh._element.spPr, A_+'effectLst')   # no theme shadow/glow on text or shape
+    st = sh._element.find('{%s}style' % NS['p'])
+    if st is not None: sh._element.remove(st)           # drop theme effectRef (LibreOffice draws it as text shadow)
+    if fill: sh.fill.solid(); sh.fill.fore_color.rgb = _hex(fill)
+    else: sh.fill.background()
+    if line: sh.line.color.rgb = _hex(line); sh.line.width = Pt(1.5)
+    else: sh.line.fill.background()
+    if shape == 5: sh.adjustments[0] = 0.5          # rounded rectangle -> pill
+    tf = sh.text_frame; tf.word_wrap = False; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    tf.margin_left = tf.margin_right = emu(0.15 if align != 'ctr' else 0); tf.margin_top = tf.margin_bottom = 0
+    para = tf.paragraphs[0]; para.alignment = {'ctr': PP_ALIGN.CENTER, 'l': PP_ALIGN.LEFT}[align]
+    r = para.add_run(); r.text = text; r.font.size = Pt(pt); r.font.bold = bold; r.font.name = FONT
+    r.font.color.rgb = _hex(color)
+    return sh
+def add_nav_top(slide, section, step, n, step_name, page_title):
+    """Standard navigator (the only pattern): navy band = section (set by the caller as the title);
+    strip below = 'ขั้น X/N' (cerulean, same size as the page title) then the page title. No dots, no effects."""
+    label = 'ขั้น %d/%d' % (step, n)
+    def lw(pt): return width_in(label, pt) * 1.04 / 1.14 + 0.35
+    pt = next((S for S in (30, 28, 26, 24, 22, 20) if not page_title or lines_bold(page_title, X1 - X0 - lw(S) - 0.5, S) == 1), 20)
+    _nav_box(slide, 1, X0 - 0.15, NAV_Y, lw(pt) + 0.15, NAV_H, None, None, label, pt, CERU, True, 'Nav label', align='l')
+    if page_title:
+        x = X0 + lw(pt) + 0.1
+        _nav_box(slide, 1, x, NAV_Y, X1 - x, NAV_H, None, None, page_title, pt, NAVY, True, 'Nav page title', align='l')
+
+def nav_lookup(cfg, idx):
+    """-> (section label, step no, steps in section, step name) or None. idx = slide number in the ORIGINAL file."""
+    for sec in cfg.get('nav', []):
+        steps = sec['steps']
+        for k, st in enumerate(steps, start=1):
+            if idx in st['slides']: return sec['label'], k, len(steps), st.get('name', '')
+    return None
 
 # ---------- text measuring
 def _prompt(style):
@@ -169,6 +214,13 @@ def find_nested_title(shapes, ky=1.0, oy=0.0):
             if T.maxsz(sh) >= 3600 and ay / E < 3.0: cand = (T.maxsz(sh), ay, sh)
         if cand and (best is None or cand[0] > best[0]): best = cand
     return best
+
+# การ์ด/ลูกศร/กรอบที่เดิมแยกสีตามสถานี (เขียว ม่วง ส้ม ชมพู) -> ชุดเดียวกันทุกหน้าในตอน
+UNIFY = {'EFF6FF':T.TINT,'F0FDFA':T.TINT,'F5F3FF':T.TINT,'FFF7ED':T.TINT,'FDF2F8':T.TINT,'F1F5F9':T.TINT,'D8F3F0':T.TINT,'E7F4F2':T.TINT,
+         '5B7DB1':T.CERU,'124481':T.CERU}
+def unify_cards(root):
+    for c in root.iter(A_+'srgbClr'):
+        if c.get('val') in UNIFY: c.set('val', UNIFY[c.get('val')])
 
 def restyle_slide(prs, slide, layouts, notitle=False, log=None, cfg=None, idx=0):
     cfg = cfg or {}
@@ -318,10 +370,16 @@ def restyle_slide(prs, slide, layouts, notitle=False, log=None, cfg=None, idx=0)
     for d in deco: tree.remove(d._element)
     for rel in slide.part.rels.values():
         if rel.reltype == RT.SLIDE_LAYOUT: rel._target = layouts[layouts_key].part
+    nv = nav_lookup(cfg, idx)
+    if nv or idx in cfg.get('unify_slides', []): unify_cards(slide._element)
+    page_title = ' '.join(x.strip() for x in title_paras if x.strip()) if title_paras else ''
+    if nv:
+        add_nav_top(slide, *nv, page_title)
+        title_paras = [nv[0]]
     if title_paras:
         ttl = ' '.join(x.strip() for x in title_paras if x.strip())
-        tpt = next((S for S in (36, 32, 30, 28, 26, 24) if lines_bold(ttl, 18.6, S) == 1), 24)
-        szattr = '' if tpt == 36 else ' sz="%d"' % (tpt*100)
+        tpt = next((S for S in (44, 40, 36, 32, 30, 28, 26, 24) if lines_bold(ttl, 18.6, S) == 1), 24)
+        szattr = '' if tpt == 44 else ' sz="%d"' % (tpt*100)
         paras = '<a:p><a:r><a:rPr lang="th-TH"%s/><a:t>%s</a:t></a:r></a:p>' % (szattr, ttl.replace('&','&amp;').replace('<','&lt;'))
         tree.find('p:grpSpPr', NS).addnext(etree.fromstring(
             f'<p:sp {NSD}><p:nvSpPr><p:cNvPr id="900" name="Title 900"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>{paras}</p:txBody></p:sp>'))
@@ -384,4 +442,5 @@ T.restyle_slide = restyle_slide
 if __name__ == '__main__':
     src, out, cfgpath = sys.argv[1:4]
     cfg = json.load(open(cfgpath))
+    if cfg.get('nav'): Y0 = NAV_Y0
     for i, row in enumerate(T.build(src, out, cfg), start=2): print(i, row)
