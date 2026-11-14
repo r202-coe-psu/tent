@@ -9,7 +9,7 @@
 	import { usePublicShelterNeeds, useUpdateDonationItems } from '../application/queries';
 	import type { DonationItemEdit } from '../data/public-tracking';
 	import { qtyInputStep, resolveUnitDimension, wholeQtyError } from '$lib/features/catalog';
-	import { parseQtyInput, qtyGt } from '$lib/utils/qty';
+	import { parseQtyInputStrict, qtyGt } from '$lib/utils/qty';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -93,7 +93,7 @@
 	const hasWholeError = (row: Row) => !!wholeQtyError(row.qty, dimensionOf(row));
 	// The qty box keeps the raw text the donor typed; it is parsed as a decimal string, never
 	// through float Number() (#939 / CR-038).
-	const parsedQty = (row: Row) => parseQtyInput(String(row.qty));
+	const parsedQty = (row: Row) => parseQtyInputStrict(String(row.qty));
 	const hasFormatError = (row: Row) =>
 		!!row.qtyBadInput || (row.qty !== '' && parsedQty(row) === null);
 

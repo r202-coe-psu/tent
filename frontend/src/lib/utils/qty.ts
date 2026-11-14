@@ -41,12 +41,12 @@ export function persistQty(value: QtyValue): string {
 }
 
 /**
- * Strict parse of text a user typed into a quantity box (#939): plain decimal digits only (no
+ * Strict parse (`parseQtyInputStrict`, #939) of text a user typed into a quantity box (#939): plain decimal digits only (no
  * sign, exponent or separators) with at most {@link QTY_DECIMALS} significant fractional digits
  * (`0.30000` is fine, `0.12345` is not). Returns the persist string, or null when invalid.
  * Never routes through `Number()`, so `1e21` and float noise cannot reach storage.
  */
-export function parseQtyInput(raw: string): string | null {
+export function parseQtyInputStrict(raw: string): string | null {
 	const text = raw.trim();
 	if (!/^\d+(\.\d+)?$/.test(text)) return null;
 	const value = new Decimal(text);
