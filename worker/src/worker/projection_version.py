@@ -44,6 +44,10 @@ per deploy, so batch related projector changes into one bump per release when po
 #: ``on_hand`` / ``reserved`` are ``Decimal128`` (were ``double``), computed in ``Decimal``
 #: and rounded to four places half-up before the ``<= 0`` delete.
 #: 18 — CR-245 (#1152): ``public_volunteers.occupation`` (free text string|null).
-#: 19 — CR-252 (#1242): ``public_shelters.is_external`` / ``external_url``; status
-#: ``unknown`` for external shelters; ``capacity`` = 0 when external (no fallback 100).
-PROJECTION_VERSION: int = 19
+#: 19 — CR-251 (#1343): ``feature_flags.public_visible === false`` hides a shelter like
+#: ``cancelled`` (row and shelter-scoped projections purged); a rescan re-projects visible ones.
+#: 20 — CR-254 (#1241): ``public_shelters.occupancy_by_zone``
+#: (zone -> stay status -> count) for the public per-zone headcount.
+#: 21 — CR-252 (#1242): ``public_shelters.is_external`` / ``external_url``; status
+#: ``unknown`` for external shelters; ``capacity`` = entered value when external (no fallback 100).
+PROJECTION_VERSION: int = 21

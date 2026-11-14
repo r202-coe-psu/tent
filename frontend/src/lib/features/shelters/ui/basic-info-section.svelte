@@ -234,6 +234,31 @@
 		});
 	}
 
+	// CR-251 FR-25: hiding the shelter is confirmed first; turning it back on applies at once.
+	let confirmHideOpen = $state(false);
+
+	function setPublicVisible(checked: boolean) {
+		if (!checked) {
+			confirmHideOpen = true;
+			return;
+		}
+		applyPublicVisible(true);
+	}
+
+	function applyPublicVisible(checked: boolean) {
+		ensureFeatureFlags();
+		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
+			public_visible: checked
+		});
+	}
+
+	function setAcceptsReferrals(checked: boolean) {
+		ensureFeatureFlags();
+		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
+			accepts_referrals: checked
+		});
+	}
+
 	function setKioskPhoneCheckIn(checked: boolean) {
 		ensureFeatureFlags();
 		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
@@ -455,6 +480,29 @@
 			</AlertDialog.Content>
 		</AlertDialog.Root>
 
+		<AlertDialog.Root bind:open={confirmHideOpen}>
+			<AlertDialog.Content>
+				<AlertDialog.Header>
+					<AlertDialog.Title>ซ่อนศูนย์จากหน้าสาธารณะ?</AlertDialog.Title>
+					<AlertDialog.Description>
+						ประชาชนและหน่วยงานภายนอกจะไม่เห็นศูนย์นี้และข้อมูลผู้พักพิงทั้งหมด จนกว่าจะเปิดกลับ
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
+					<AlertDialog.Action
+						class="bg-destructive text-white hover:bg-destructive/90"
+						onclick={() => {
+							applyPublicVisible(false);
+							confirmHideOpen = false;
+						}}
+					>
+						ซ่อนศูนย์
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog.Root>
+
 		<Form.Field {form} name="shelter_type">
 			<Form.Control>
 				{#snippet children({ props })}
@@ -564,6 +612,50 @@
 					onCheckedChange={(v) => setAcceptsPreRegistration(v === true)}
 					{disabled}
 					aria-label="รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ"
+				/>
+			</div>
+
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
+			>
+				<div class="min-w-0 flex-1 space-y-1">
+					<label for="public-visible" class="text-sm font-semibold text-slate-800">
+						แสดงศูนย์นี้บนหน้าสาธารณะ
+					</label>
+					<p id="public-visible-desc" class="text-xs text-slate-500">
+						เปิด: ประชาชนเห็นศูนย์นี้ในหน้าค้นหาศูนย์ · ปิด:
+						ประชาชนและหน่วยงานภายนอกจะไม่เห็นศูนย์นี้และจำนวนผู้พักอาศัย (ค่าเริ่มต้นเปิด)
+					</p>
+				</div>
+				<Switch
+					id="public-visible"
+					bind:checked={
+						() => $formData.feature_flags?.public_visible ?? true,
+						(v) => setPublicVisible(v === true)
+					}
+					{disabled}
+					aria-describedby="public-visible-desc"
+				/>
+			</div>
+
+			<div
+				class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
+			>
+				<div class="min-w-0 flex-1 space-y-1">
+					<label for="accepts-referrals" class="text-sm font-semibold text-slate-800">
+						รับผู้ประสบภัยที่ส่งต่อมาจากศูนย์อื่น
+					</label>
+					<p id="accepts-referrals-desc" class="text-xs text-slate-500">
+						เปิด: ศูนย์อื่นส่งผู้ประสบภัยมาที่นี่ได้ · ปิด: ศูนย์อื่นส่งมาไม่ได้
+						และใบส่งต่อที่รออยู่จะกดรับไม่ได้ (ยังกดปฏิเสธได้) (ค่าเริ่มต้นเปิด)
+					</p>
+				</div>
+				<Switch
+					id="accepts-referrals"
+					checked={$formData.feature_flags?.accepts_referrals ?? true}
+					onCheckedChange={(v) => setAcceptsReferrals(v === true)}
+					{disabled}
+					aria-describedby="accepts-referrals-desc"
 				/>
 			</div>
 

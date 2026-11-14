@@ -101,6 +101,8 @@ export async function mockStaffSession(
 					must_change_password: false,
 					has_security_question: true,
 					pending_mfa: false,
+					// Without a consent record the staff gate (#1246) redirects every page to /consent.
+					consent: { agreed: true, agreed_at: '2026-01-01T00:00:00Z', version: '1.0' },
 					display_name: 'ผู้จัดการทดสอบ'
 				}
 			})

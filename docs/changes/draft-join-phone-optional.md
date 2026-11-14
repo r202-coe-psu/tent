@@ -11,6 +11,7 @@ affects:
   - frontend BFF POST /api/public/v1/registrations (+ unassigned schema)
   - public booking / unassigned error copy (INVALID_JOIN_TOKEN, JOIN_TARGET_NOT_FOUND)
   - no schema_v bump (evacuee.phone already str|null)
+note: decision sync 2026-11-12 (#1049) — superseded เฉพาะกฎกันเบอร์โทรซ้ำ: ไม่กันซ้ำด้วยเบอร์อีก (เลขบัตร/ANON ยังกันซ้ำ) ดู docs/data/schema.md §9.5 + docs/features/site-occupancy-booking-program.md ข้อความที่อ้างเบอร์ในเอกสารนี้ใช้ไม่ได้แล้ว
 ---
 
 # draft-join-phone-optional — join mode phone optional
@@ -41,7 +42,7 @@ client (`headPhoneRequired`) และ BFF `superRefine` — UX ไม่ตร�
 - UI: ส่ง `isJoiningExistingHousehold` ให้สมาชิกทุกคนรวม index 0; `hideNoPhone` เฉพาะ public
   create head; helper text อธิบายว่าไม่บังคับเพราะบ้านมีผู้ติดต่อแล้ว
 - BFF/domain: ข้าม phone `superRefine` เมื่อมี `join_match_token`; ข้าม phone rate limit เมื่อเบอร์ว่าง;
-  duplicate hold ใช้เบอร์เฉพาะเมื่อมีค่า
+  duplicate hold เช็คเฉพาะเลขบัตร (เบอร์ไม่ใช้กันซ้ำแล้ว — #1049)
 - Error UX: map `INVALID_JOIN_TOKEN` / `JOIN_TARGET_NOT_FOUND`; `INVALID_INPUT` + details → toast
   ข้อความ field แรก; join fail → ล้าง join selection
 

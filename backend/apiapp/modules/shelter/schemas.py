@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 from tent_model.public_shelter import DonationPoint, GeoJsonPoint, GeoPoint
@@ -90,10 +91,19 @@ class ShelterFaqDetail(BaseModel):
 
 
 class ShelterZoneDetail(BaseModel):
+    code: str | None = None
     name: str | None = None
     type: str
+    status: Literal["active", "closed"] = "active"
     capacity: int | None = None
     area_m2: float | None = None
+    present: int | None = Field(
+        default=None,
+        description=(
+            "Present headcount in this zone (active + room_confirmed + temporary_leave); "
+            "null until the worker has projected per-zone counts (#1241)"
+        ),
+    )
 
 
 class ShelterDetail(BaseModel):
@@ -132,3 +142,21 @@ class ShelterDetail(BaseModel):
 
 class ShelterDetailResponse(BaseModel):
     shelter: ShelterDetail
+
+
+class ExternalShelterZoneDetail(BaseModel):
+    """Partner zone shape: without the per-zone `code` / `status` / `present` the public
+    detail gained in CR-254 — the partner API stays as it was (CR-254 D3)."""
+
+    name: str | None = None
+    type: str
+    capacity: int | None = None
+    area_m2: float | None = None
+
+
+class ExternalShelterDetail(ShelterDetail):
+    zones: list[ExternalShelterZoneDetail] | None = None
+
+
+class ExternalShelterDetailResponse(BaseModel):
+    shelter: ExternalShelterDetail

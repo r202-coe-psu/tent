@@ -13,6 +13,8 @@ export {
 	UNKNOWN_STATUS_LABEL,
 	externalUrlSchema,
 	externalInvariantIssues,
+	isShelterPublicVisible,
+	isShelterAcceptingReferrals,
 	zoneTypeSchema,
 	ZONE_TYPE_LABELS,
 	zoneStatusSchema,

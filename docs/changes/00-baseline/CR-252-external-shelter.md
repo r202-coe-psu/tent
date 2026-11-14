@@ -10,7 +10,7 @@ updated: 2026-11-13 # decision sync: ศูนย์ External กรอก/แ�
 affects:
   - docs/data/schema.md §3.1 shelter (เพิ่ม `is_external`, `external_url`; `operation_status` +`unknown`; `capacity` req→opt เมื่อ External) · §9.1 `public_shelters` (เพิ่ม `is_external`, `external_url`; `status`/`location_status` +`unknown`; `capacity` = `0` เมื่อ External)
   - schema_v 9 → 10 (shelter; additive, doc เดิมไม่ต้อง backfill)
-  - worker PROJECTION_VERSION 18 → 19 (worker/src/worker/projection_version.py)
+  - worker PROJECTION_VERSION 20 → 21 (worker/src/worker/projection_version.py)
   - docs/prd/role-permission-matrix.md §3 (เพิ่มแถวใหม่ "Shelter registry / Profile management" — ตั้ง `is_external` ตอนสร้างเฉพาะ `system_admin`; `shelter_manager` แก้ศูนย์ External ไม่ได้ (FR-10))
   - docs/adr/0002-partner-integration-architecture.md (EXT-002/003/008 contract change)
   - amends CR-039 (shelter Excel import) · CR-077 (import full schema coverage)
@@ -29,7 +29,7 @@ affects:
 > - **เปลี่ยนอะไร:** shelter registry doc เพิ่ม `is_external` + `external_url` และ `operation_status = unknown` ("ไม่ทราบสถานะ") สำหรับศูนย์ที่บริหารในระบบอื่น (เก็บใน CouchDB doc type `shelter` เดิม ไม่แยก store)
 > - **เพื่อใคร/ทำไม:** ให้ public / partner เห็นศูนย์ภายนอกบนแผนที่และรายการ พร้อมลิงก์ไประบบต้นทาง โดยไม่นับ capacity/occupancy และไม่รับจอง/ลงทะเบียน/บริจาค
 > - **dev ต้อง build:** Zod invariant + guard `system_admin` · ฟอร์มแบบย่อ · worker/projector/FastAPI รองรับ `unknown` · Public UI (chip, pin, filter, ข้อความ i18n) · Excel import 2 คอลัมน์ · Partner API contract
-> - **กระทบ:** shelter `schema_v` 9→10 · `PROJECTION_VERSION` 18→19 · role matrix · ADR 0002 (EXT-002/003/008) · amends CR-039 / CR-077
+> - **กระทบ:** shelter `schema_v` 9→10 · `PROJECTION_VERSION` 20→21 · role matrix · ADR 0002 (EXT-002/003/008) · amends CR-039 / CR-077
 
 > **Tracking:** CR ใบเดียวครอบทั้งหมด (ตามที่ตกลงใน #1242). สถานะ `approved` โดย Soravit Sukkarn (Team Lead) — ลำดับถัดไปเตรียมแก้ `schema.md`, role matrix และ code.
 
@@ -58,7 +58,7 @@ affects:
 - FR-11 — provisioner สร้างเฉพาะ database เปล่าพร้อม grant สำหรับศูนย์ External (ไม่สร้าง views / sequence).
 - FR-12 — worker ข้าม listener, bootstrap และ occupancy ของศูนย์ `is_external`.
 - FR-13 — projector map `unknown` เป็นสถานะ public ที่ถูกต้อง: ไม่ใช่ HIDDEN และไม่ใช่ `open`. ศูนย์ External ยัง project เข้า `public_shelters` (ต่างจาก `cancelled`).
-- FR-14 — bump `PROJECTION_VERSION` 18 → 19.
+- FR-14 — bump `PROJECTION_VERSION` 20 → 21.
 - FR-15 — FastAPI `status_ui` map `unknown` → `"UNKNOWN"` (ค่าของตัวเอง) ห้าม fallback เป็น `CLOSED`; ใช้สตริงเดียวกันใน OpenAPI และ `toUiShelterStatus` (`mappers.ts`).
 
 ### พฤติกรรมของศูนย์ External
@@ -138,7 +138,7 @@ Team Lead PO Meeting 2026-11-07 (#1242, labels: priority:high, Before Floods): �
 
 - shelter `schema_v` 9 → 10: additive. doc เดิมไม่มี `is_external` → อ่านเป็น `false`; `external_url` → `null`. ไม่มี batch migration script.
 - Zod (client + BFF) ต้องอัปเดตตาม schema v10 (invariant FR-4/5/6/9). ไม่แตะ `validate_doc_update` / `REGISTRY_DESIGN_VERSION` (คงที่ 9).
-- `PROJECTION_VERSION` 18 → 19 → worker re-project `public_shelters` ครั้งเดียวหลัง deploy.
+- `PROJECTION_VERSION` 20 → 21 → worker re-project `public_shelters` ครั้งเดียวหลัง deploy.
 - ไม่ต้องรัน `pnpm openapi:update` ซ้ำนอกเหนือจากที่ `status_ui` / EXT schema เปลี่ยน — commit `fastapi.json` + `openapi.d.ts` ตาม workflow §4.2.
 
 ## Decision log

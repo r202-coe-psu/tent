@@ -36,6 +36,8 @@ export {
 	UNKNOWN_STATUS_LABEL,
 	externalUrlSchema,
 	externalInvariantIssues,
+	isShelterPublicVisible,
+	isShelterAcceptingReferrals,
 	resolveOperationStatus,
 	DEFAULT_SITE_KIND,
 	HOST_HOUSE_SITE_KIND,
