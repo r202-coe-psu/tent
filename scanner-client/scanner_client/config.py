@@ -80,7 +80,9 @@ def parse_shelter_origin(raw: str) -> str:
     except ValueError:
         raise bad from None
     host = (parts.hostname or "").lower()
-    if parts.scheme not in _DEFAULT_PORTS or not host:
+    # ASCII only: a Unicode look-alike host (Cyrillic "е" in "shelter") would read exactly like
+    # the default site in the domain warning. A real IDN must be entered as punycode (xn--…).
+    if parts.scheme not in _DEFAULT_PORTS or not host or not host.isascii():
         raise bad
     if "@" in parts.netloc or parts.path not in ("", "/"):
         raise bad
@@ -94,8 +96,10 @@ def parse_shelter_origin(raw: str) -> str:
 
 def _walk_in_path(raw: str) -> str:
     value = raw or DEFAULT_WALK_IN_PATH
-    if not value.startswith("/"):
-        raise ConfigError("WALK_IN_PATH must start with '/'")
+    if not value.startswith("/") or value.startswith("//"):
+        raise ConfigError(
+            "WALK_IN_PATH must be a path on the shelter site starting with a single '/'"
+        )
     return value
 
 

@@ -130,6 +130,8 @@ def test_origin_is_normalised_like_browser_location_origin(tmp_path, url, origin
         "ftp://shelter.example",
         "shelter.example",
         "https://shelter.example:notaport",
+        # Cyrillic "е": looks exactly like the default site in the domain warning.
+        "https://sh\u0435lter.psu.ac.th",
     ],
 )
 def test_shelter_url_must_be_a_bare_origin(tmp_path, url):
@@ -140,9 +142,11 @@ def test_shelter_url_must_be_a_bare_origin(tmp_path, url):
     assert "pw" not in str(err.value)
 
 
-def test_walk_in_path_must_start_with_slash(tmp_path):
+@pytest.mark.parametrize("path", ["onsite", "//evil.example/onsite"])
+def test_walk_in_path_must_start_with_a_single_slash(tmp_path, path):
+    # Same rule as START_PATH: "//host" is a protocol-relative URL to another site.
     with pytest.raises(ConfigError, match="WALK_IN_PATH"):
-        load(tmp_path, "SHELTER_URL=https://a.example\nWALK_IN_PATH=onsite\n", platform="linux")
+        load(tmp_path, f"SHELTER_URL=https://a.example\nWALK_IN_PATH={path}\n", platform="linux")
 
 
 def test_walk_in_path_can_be_overridden(tmp_path):
