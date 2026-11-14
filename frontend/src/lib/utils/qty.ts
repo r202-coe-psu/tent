@@ -40,6 +40,21 @@ export function persistQty(value: QtyValue): string {
 	return parseQty(value).toDecimalPlaces(QTY_DECIMALS, Decimal.ROUND_HALF_UP).toString();
 }
 
+/**
+ * Strict parse of text a user typed into a quantity box (#939): plain decimal digits only (no
+ * sign, exponent or separators) with at most {@link QTY_DECIMALS} significant fractional digits
+ * (`0.30000` is fine, `0.12345` is not). Returns the persist string, or null when invalid.
+ * Never routes through `Number()`, so `1e21` and float noise cannot reach storage.
+ */
+export function parseQtyInput(raw: string): string | null {
+	const text = raw.trim();
+	if (!/^\d+(\.\d+)?$/.test(text)) return null;
+	const value = new Decimal(text);
+	if (value.decimalPlaces() > QTY_DECIMALS) return null;
+	// toFixed(): `toString()` switches to exponent notation from 1e21 (`'1e+21'`), which must not reach storage.
+	return value.toFixed();
+}
+
 /** Round to qty scale and return persist string. */
 export function roundQty(value: QtyValue): string {
 	return persistQty(value);

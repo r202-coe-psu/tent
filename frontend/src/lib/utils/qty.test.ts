@@ -5,6 +5,7 @@ import {
 	parseQtyInput,
 	formatQty,
 	parseQty,
+	parseQtyInput,
 	persistQty,
 	qtyAbs,
 	qtyGte,
@@ -146,4 +147,26 @@ describe('toQtyStrLossless (#936)', () => {
 		expect(toQtyStrLossless(NaN)).toBeNaN();
 		expect(toQtyStrLossless(undefined)).toBeUndefined();
 	});
+});
+
+describe('parseQtyInput (#939)', () => {
+	it.each([
+		['0.30000', '0.3'],
+		['1', '1'],
+		['12.5', '12.5'],
+		[' 3 ', '3'],
+		['0.1200', '0.12'],
+		// Never exponent notation — `Decimal#toString()` would turn these into `1e+21` (#939 review W1)
+		['1000000000000000000000', '1000000000000000000000'],
+		['123456789012345678901234.5', '123456789012345678901234.5']
+	])('accepts %s as %s', (raw, expected) => {
+		expect(parseQtyInput(raw)).toBe(expected);
+	});
+
+	it.each(['', '  ', '1e3', '1e21', '0.12345', '-1', '1,5', 'abc', '1.', '.5', 'NaN', 'Infinity'])(
+		'rejects %j',
+		(raw) => {
+			expect(parseQtyInput(raw)).toBeNull();
+		}
+	);
 });
