@@ -15,8 +15,10 @@
   | Linux | `tent_xprinter` (คิว CUPS) | [Linux](#linux) |
 
 - ขนาดฉลาก/gap **ตั้งที่ printer** (Windows: Printing Defaults · Linux: คิว CUPS) — โปรแกรมไม่ได้ส่งขนาดไปเอง
-- ไม่มี printer ชื่อนั้นในเครื่อง → หน้าเว็บไม่มีตัวเลือกพิมพ์ในเครื่อง (ปุ่มเลือก "printer ที่ต่อกับเครื่องนี้"
-  ในหน้าเว็บยังอยู่ระหว่างพัฒนา — ทดสอบตอนนี้ได้ตาม[ทดสอบผ่าน scanner-client](#ทดสอบผ่าน-scanner-client))
+- หน้าเว็บมีปุ่ม **พิมพ์ที่เครื่องนี้ (XP-365B)** ในหน้าต่าง QR ของผู้อพยพ (หน้า profile) และ **พิมพ์ทั้งครอบครัว
+  ที่เครื่องนี้** ในหน้าพิมพ์ทั้งครอบครัว — แยกจากปุ่มพิมพ์ผ่าน print server ขึ้นเฉพาะเมื่อเปิดผ่าน scanner-client,
+  เครื่องมี printer ชื่อนั้น และผู้ใช้มีสิทธิ์พิมพ์ (registration_staff / shelter_manager ของศูนย์ หรือ system_admin)
+- ไม่มี printer ชื่อนั้นในเครื่อง → ไม่มีปุ่มนี้ (โปรแกรมเช็กซ้ำทุก 30 วินาที เสียบ printer ทีหลังได้)
 - รูปฉลากมีชื่อผู้อพยพ: โปรแกรมส่งจากหน่วยความจำตรงไป printer ไม่เขียนลงดิสก์ ไม่เขียนลง log
 
 ---
@@ -144,7 +146,8 @@ scanner-client ใช้ `tent_xprinter` เป็นค่าเริ่มต
 ---
 
 ## ทดสอบผ่าน scanner-client
-ใช้ได้ทั้ง Windows และ Linux — ยืนยันว่าโปรแกรมเจอ printer และพิมพ์ได้จริง (ก่อนหน้าเว็บมีปุ่มพิมพ์ในเครื่อง)
+ใช้ได้ทั้ง Windows และ Linux — ยืนยันว่าโปรแกรมเจอ printer และพิมพ์ได้จริง โดยไม่ต้องออก QR ของผู้อพยพจริง
+(หรือเปิดหน้า profile ของผู้อพยพ → QR → **พิมพ์ที่เครื่องนี้**)
 1. เปิด scanner-client → ใส่ URL ศูนย์ → ล็อกอิน
 2. กด **F12** → แท็บ **Console** → วางโค้ดนี้แล้ว Enter (พิมพ์ฉลาก 80×60 มีกรอบ + คำว่า TEST 1 ดวง)
    ```js
@@ -154,8 +157,8 @@ scanner-client ใช้ `tent_xprinter` เป็นค่าเริ่มต
    g.lineWidth = 6; g.strokeRect(8, 8, 623, 463);
    g.fillStyle = '#000'; g.font = 'bold 120px sans-serif'; g.fillText('TEST', 170, 280);
    const png = c.toDataURL('image/png').split(',')[1];
-   await fetch('/api/v1/kiosk/local-printer', { method: 'POST' }).then(r => r.json()).then(console.log);
-   await fetch('/api/v1/kiosk/print', {
+   await fetch('/api/v1/scanner-client/printer', { method: 'POST' }).then(r => r.json()).then(console.log);
+   await fetch('/api/v1/scanner-client/print', {
      method: 'POST', headers: { 'content-type': 'application/json' },
      body: JSON.stringify({ labels: [png] })
    }).then(r => r.json()).then(console.log);

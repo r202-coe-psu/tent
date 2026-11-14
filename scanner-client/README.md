@@ -103,9 +103,10 @@ Windows ไว้ ค่านั้นจะถูกเติมแทน `.en
 5. หน้าต่างเปิดแบบเต็มจอ (เหมือนกด F11) — กด **F11** เพื่อกลับเป็นหน้าต่างปกติ
 6. ปิดโปรแกรมโดยปิดหน้าต่าง Edge ที่โปรแกรมเปิดขึ้น (กด **Alt+F4** ได้เลยขณะเต็มจอ)
 
-พิมพ์ฉลาก: หน้าเว็บส่งงานพิมพ์มาที่โปรแกรม แล้วโปรแกรมพิมพ์ลง printer ในเครื่องทันที ไม่มีหน้าต่างเลือก printer
-(ปุ่มเลือก "printer ที่ต่อกับเครื่องนี้" ในหน้าเว็บยังอยู่ระหว่างพัฒนา — ทดสอบการพิมพ์ได้ตาม
-[PRINTER.md → ทดสอบผ่าน scanner-client](PRINTER.md#ทดสอบผ่าน-scanner-client))
+พิมพ์ฉลาก (เครื่องที่มี printer ฉลาก): กดปุ่ม **พิมพ์ที่เครื่องนี้ (XP-365B)** — โปรแกรมพิมพ์ลง printer ในเครื่องทันที
+ไม่มีหน้าต่างเลือก printer ปุ่มนี้อยู่ในหน้าต่าง QR ของผู้อพยพ (หน้า profile และหลังลงทะเบียน) และในหน้าพิมพ์ทั้งครอบครัว
+(**พิมพ์ทั้งครอบครัวที่เครื่องนี้**) — มีเฉพาะเมื่อเปิดผ่านโปรแกรมนี้และเครื่องมี printer ตาม [PRINTER.md](PRINTER.md)
+ปุ่มพิมพ์ผ่าน print server (ถ้าศูนย์มี) ยังอยู่เหมือนเดิม แยกกัน
 
 ## ไฟล์ log และข้อมูลของโปรแกรม
 - Windows: `%LocalAppData%\ScannerClient\logs\scanner-client.log` (วางใน Explorer ได้เลย)
@@ -148,8 +149,8 @@ log ไม่เก็บข้อมูลบนบัตรและไม่�
   `uv run playwright install chromium`
 - Linux (Debian/Ubuntu) รันทีเดียวจบ: `./run-linux.sh` (ดูข้อ 3)
 - อ่านบัตร: Windows ผ่าน `winscard.dll` ด้วย ctypes (`scanner_client/winscard.py`) · Linux ผ่าน pyscard + `pcscd`
-- พิมพ์ฉลาก: `scanner_client/label_print.py` ตอบ `/api/v1/kiosk/print` (รูปแบบเดียวกับ kiosk) และ
-  `/api/v1/kiosk/local-printer` ผ่าน Playwright routing · `scanner_client/label_printers.py` ส่งเข้า CUPS (`lp`)
+- พิมพ์ฉลาก: `scanner_client/label_print.py` ตอบ `/api/v1/scanner-client/print` และ
+  `/api/v1/scanner-client/printer` ผ่าน Playwright routing · `scanner_client/label_printers.py` ส่งเข้า CUPS (`lp`)
   หรือ Windows spooler (GDI+ ผ่าน ctypes) — ไม่มี `.pyd` ใหม่ให้ Smart App Control บล็อก
 - test: `uv run pytest` · lint: `uvx ruff check .` และ `uvx ruff format --check .`
 - build exe (ต้องทำบน Windows ที่ต่อเน็ตได้ ไม่ต้องลง Python/uv เอง): ดับเบิลคลิก `build.bat`

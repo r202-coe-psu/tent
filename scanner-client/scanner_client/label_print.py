@@ -1,9 +1,9 @@
 """Print the page's labels on this PC's USB label printer (issue #1326).
 
-The page posts rendered label PNGs to PRINT_PATH, the same contract as the kiosk
-(frontend kiosk-print.api.ts, kiosk/app/manager.py), and asks PRINTER_PATH whether this PC has
-the printer. The scanner client answers both itself through Playwright routing: they never reach
-the server, and a label (it carries the evacuee's name) is never written to disk or logged.
+The page posts rendered label PNGs to PRINT_PATH (`{"labels": [base64 PNG, ...]}`) and asks
+PRINTER_PATH whether this PC has the printer (frontend scanner-client-print.api.ts). The scanner
+client answers both itself through Playwright routing: they never reach the server, and a label
+(it carries the evacuee's name) is never written to disk or logged.
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
-PRINT_PATH = "/api/v1/kiosk/print"
-PRINTER_PATH = "/api/v1/kiosk/local-printer"
+PRINT_PATH = "/api/v1/scanner-client/print"
+PRINTER_PATH = "/api/v1/scanner-client/printer"
 LOCAL_PATHS = frozenset({PRINT_PATH, PRINTER_PATH})
 
-# Same limits as the kiosk: the page sends at most 8 labels per request (kiosk-print.api.ts)
-# and gives up on a request after 30 s, so stop starting labels after 25 s and say how many printed.
+# The page sends at most 8 labels per request and gives up on a request after 30 s
+# (scanner-client-print.api.ts), so stop starting labels after 25 s and say how many printed.
 MAX_LABELS = 20
 MAX_PNG_BYTES = 256 * 1024
 LABEL_TIMEOUT_SEC = 20.0

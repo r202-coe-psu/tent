@@ -1,5 +1,5 @@
 """The page's label print requests, answered by the scanner client itself and printed on the
-USB label printer of this PC. Same contract as the kiosk (frontend kiosk-print.api.ts)."""
+USB label printer of this PC (frontend scanner-client-print.api.ts)."""
 
 import asyncio
 import base64
@@ -82,6 +82,11 @@ def handle(printer, request, clock=None):
     route = FakeRoute(request)
     asyncio.run(routes.handle(route))
     return route
+
+
+def test_the_paths_belong_to_the_scanner_client_not_the_kiosk():
+    assert PRINT_PATH == "/api/v1/scanner-client/print"
+    assert PRINTER_PATH == "/api/v1/scanner-client/printer"
 
 
 def test_prints_every_label_in_order_and_reports_the_count():
