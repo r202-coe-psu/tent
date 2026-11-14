@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { now } from '$lib/db/model';
-import { deriveHouseholdStatus, stayStatusSchema } from '$lib/features/people/domain/people';
+import {
+	assertCheckoutDestination,
+	deriveHouseholdStatus,
+	stayStatusSchema,
+	type CheckoutDestination
+} from '$lib/features/people/domain/people';
 import {
 	isAlreadyCheckedInStatus,
 	isListedHouseholdMember,
@@ -42,7 +47,7 @@ export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 
 const evacueeQrTokenSchema = z.string().regex(new RegExp(`^evacuee:${ULID}(@[0-9a-f]{6})?$`, 'i'));
 const bareUlidPattern = new RegExp(`^${ULID}$`, 'i');
 
-const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
+export const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
 
 export const kioskGateInputSchema = z.discriminatedUnion('source', [
 	z.object({ source: z.literal('smart-card'), citizen_id: z.string().regex(/^\d{13}$/) }),
@@ -859,11 +864,16 @@ export async function checkInSelectedMembers(
 	return results;
 }
 
-/** Keep the legacy household status projection aligned with the member stay records. */
+/**
+ * Keep the legacy household status projection aligned with the member stay records.
+ * `checkoutDestination` (kiosk self-checkout, #1401) is written only when the household
+ * derives to `checked_out` and has no destination yet (R-29-8); an existing one is kept.
+ */
 export async function refreshHouseholdStatus(
 	dbName: string,
 	householdId: string,
-	shelterCode: string
+	shelterCode: string,
+	checkoutDestination?: CheckoutDestination
 ): Promise<void> {
 	try {
 		const [household, memberResult] = await Promise.all([
@@ -872,6 +882,7 @@ export async function refreshHouseholdStatus(
 				_rev: string;
 				type: string;
 				status?: string;
+				checkout_destination?: CheckoutDestination | null;
 				[key: string]: unknown;
 			}>(`/${dbName}/${encodeURIComponent(householdId)}`),
 			adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
@@ -889,10 +900,20 @@ export async function refreshHouseholdStatus(
 			.filter((parsed) => parsed.success)
 			.map((parsed) => parsed.data);
 		const status = deriveHouseholdStatus(statuses);
-		if (status === household.status) return;
+		const destination =
+			status === 'checked_out' && checkoutDestination && !household.checkout_destination
+				? checkoutDestination
+				: undefined;
+		if (destination) assertCheckoutDestination(destination);
+		if (status === household.status && !destination) return;
 		await adminFetch(`/${dbName}/${encodeURIComponent(householdId)}`, {
 			method: 'PUT',
-			body: JSON.stringify({ ...household, status, updated_at: now() })
+			body: JSON.stringify({
+				...household,
+				status,
+				...(destination ? { checkout_destination: destination } : {}),
+				updated_at: now()
+			})
 		});
 	} catch (err) {
 		// The evacuee write is authoritative; a later read can repair this derived projection.
