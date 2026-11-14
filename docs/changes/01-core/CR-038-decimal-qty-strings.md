@@ -3,9 +3,9 @@ id: CR-038
 title: Decimal qty strings — ความแม่นปริมาณก่อนขึ้นจริง
 status: done
 date: 2026-07-14
-updated: 2026-07-14
+updated: 2026-11-14
 requested_by: engineering
-decided_by: <เจ้าของโครงการ>
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 affects:
   - docs/data/schema.md §2.1–2.6, §2.7.1, §4.2–4.3
@@ -33,6 +33,31 @@ JSON/JS `number` เป็น IEEE-754 — qty เพี้ยนตอนบว
 
 - **`qty_str`**: string `^-?\d+(\.\d{1,4})?$` — ปริมาณในหน่วยที่ field ระบุ
   (ledger = `base_unit`); canonical persist ผ่าน Decimal `toDecimalPlaces(4)`
+
+### ค่าที่ผู้ใช้พิมพ์ในช่องจำนวน (form input) — amend 2026-11-14 (#938)
+
+ช่องกรอกจำนวนในฟอร์มต่อไปนี้ต้องผ่าน `parseQtyInput` (`$lib/utils/qty`) ก่อนใช้งาน
+(ขอบเขตของ #938 — `features/operations/ui`):
+
+- `adjust-stock-form.svelte` (ปรับยอดสต็อก)
+- `distribute-line-card.svelte` (แจกจ่าย)
+- `donation-batch-receive.svelte` (รับของบริจาคแบบ batch)
+- `transfer-form.svelte` (โอนสต็อก)
+
+ฟอร์มจำนวนอื่น (เช่น `receive-stock-form.svelte` และฟอร์มนอก operations) **ยังไม่อยู่ในกฎนี้**
+และยังรับค่าผ่าน `qtyStrCoerce*Schema` ซึ่งปัดเป็น 4 ตำแหน่งโดยไม่แจ้ง — ยกไปทำเป็น follow-up
+
+กฎนี้ใช้กับ **input เท่านั้น** — รูปแบบ `qty_str` ที่ persist ข้างบนไม่เปลี่ยน
+
+- regex: `^-?(\d{1,15}(\.\d{0,4})?|\.\d{1,4})$`
+- ถ้าค่าที่อ่านได้จากช่องเป็น `.5` หรือ `5.` ให้ถือว่าถูกต้องและ normalize เป็น canonical
+  `qty_str` เช่น `.5` → `0.5`, `5.` → `5` (บางเบราว์เซอร์อาจคืนค่าเหล่านี้จากช่อง
+  `type="number"` เป็น `""` + `badInput` แทน ซึ่งจะเข้ากรณีปฏิเสธด้านล่าง)
+- ส่วนจำนวนเต็มไม่เกิน **15 หลัก** — เผื่อ headroom ให้ค่าทศนิยม 4 ตำแหน่งยัง**เก็บและบวก/ลบได้ตรง**
+  ภายใน precision 20 significant digits ของ decimal.js (การคูณ เช่นแปลงหน่วยด้วย multiplier
+  ยังอาจถูกปัดได้ — ไม่อยู่ในขอบเขตของกฎนี้)
+- ไม่รับ exponent (`1e3`), ทศนิยมเกิน 4 ตำแหน่ง, หรือค่าที่เบราว์เซอร์อ่านไม่ได้
+  (`validity.badInput`) — ฟอร์มในรายการข้างบนต้องแสดง hint และไม่บันทึก ห้ามปัดเศษเงียบ
 
 ### Before → after (persist)
 
@@ -81,3 +106,6 @@ JSON/JS `number` เป็น IEEE-754 — qty เพี้ยนตอนบว
 - 2026-07-14 — ตัดเงิน/satang ออกจากขอบเขต (ระบบไม่เก็บเงิน)
 - 2026-07-14 — เพิ่ม team docs CONVENTIONS + CONTRIBUTING
 - 2026-07-14 — done (implemented: decimal.js + qty_str migration + docs)
+- 2026-11-14 — amend: เพิ่มกฎ form input (`parseQtyInput`) — รับ `.5`/`5.`, เพดาน 15 หลัก,
+  ปฏิเสธ exponent/badInput แทนการปัดเศษเงียบ (#938, PR #1345) — ใช้กับ 4 ฟอร์มใน operations
+  ที่ PR นี้แก้เท่านั้น ฟอร์มอื่นเป็น follow-up; แนวทางนี้เลือกโดย Soravit Sukkarn (Team Lead)
