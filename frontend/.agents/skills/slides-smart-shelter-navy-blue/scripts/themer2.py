@@ -28,7 +28,7 @@ W = X1 - X0
 
 # ---------- navigator strip: big section + which step of N (keeps the reader oriented)
 NAV_Y, NAV_H = 1.1, 0.5
-NAV_Y0 = 1.85      # content frame top when a deck uses nav (replaces Y0)
+NAV_Y0 = 1.68     # content frame top when a deck uses nav (replaces Y0)
 def _hex(h):
     from pptx.dml.color import RGBColor
     return RGBColor.from_string(h)
@@ -200,6 +200,30 @@ def has_content(sh):
     el = sh._element
     return any((t.text or '').strip() for t in el.iter(A_+'t')) or el.find('.//a:blip', NS) is not None
 
+def fix_url_boxes(slide, content):
+    """URL captions above screenshots must stay on one line (a wrapped line lands on the picture):
+    no wrapping, box = text width, font shrunk only if the URL is wider than the widest picture."""
+    pics = [s.width / E for s in content if any(visible_blip(b) for b in s._element.iter(A_+'blip'))]
+    max_w = max(pics) if pics else W
+    for s in content:
+        if s.shape_type == 6 or not s.has_text_frame: continue
+        txt = s.text_frame.text.strip()
+        if not txt.startswith('http') or '\n' in txt: continue
+        rprs = [r for r in s._element.iter(A_+'rPr') if r.get('sz')]
+        if not rprs: continue
+        pt = int(rprs[0].get('sz')) / 100
+        wid = lambda p: _FONT.getlength(txt) / 200 * p / 72 * 1.05
+        while wid(pt) > max_w and pt > 9: pt -= 0.5
+        for r in s._element.iter(A_+'rPr', A_+'endParaRPr'):
+            if r.get('sz'): r.set('sz', str(int(pt * 100)))
+        bp = s._element.find('.//a:bodyPr', NS)
+        bp.set('wrap', 'none')
+        s.width = emu(wid(pt) + 0.1)
+
+def visible_blip(b):
+    a = b.find('a:alphaModFix', NS)
+    return a is None or a.get('amt') != '0'
+
 def find_nested_title(shapes, ky=1.0, oy=0.0):
     best = None
     for sh in shapes:
@@ -232,6 +256,14 @@ def restyle_slide(prs, slide, layouts, notitle=False, log=None, cfg=None, idx=0)
         drop = any(txt.startswith(x) for x in cfg.get('delete_text', {}).get(str(idx), []))
         if cfg.get('strip_footer') and txt and sh.top > emu(10.2) and (txt.startswith('PSU Smart Shelter ·') or txt.isdigit()): drop = True
         if drop: tree.remove(sh._element)
+    # the old section pill's text was deleted but its empty shape would still count in the content
+    # bounding box (pushing content down); drop it now so layout starts at the real top
+    if cfg.get('delete_text', {}).get(str(idx)):
+        for sh in list(slide.shapes):
+            if (sh.shape_type == 6 and sh.top < emu(1.0) and sh.height < emu(0.8) and sh.width < emu(8)
+                    and not ''.join(x.text or '' for x in sh._element.iter(A_+'t')).strip()
+                    and not any(visible_blip(b) for b in sh._element.iter(A_+'blip'))):
+                tree.remove(sh._element)
     # slide-level background: dark = section slide, anything else inherits the layout
     bg = slide._element.find('p:cSld/p:bg', NS)
     bgc = bg.find('.//a:srgbClr', NS).get('val') if bg is not None and bg.find('.//a:srgbClr', NS) is not None else None
@@ -259,6 +291,12 @@ def restyle_slide(prs, slide, layouts, notitle=False, log=None, cfg=None, idx=0)
             nested = found[2]
             title_paras = T.para_texts(nested)
             nested._element.getparent().remove(nested._element)
+            # the title's empty background group would otherwise keep the content bbox starting at y≈1in
+            for g in list(content):
+                if (g.shape_type == 6 and g.top < emu(1.6) and g.height < emu(1.3) and g.width > emu(10)
+                        and not ''.join(x.text or '' for x in g._element.iter(A_+'t')).strip()
+                        and not any(visible_blip(b) for b in g._element.iter(A_+'blip'))):
+                    g._element.getparent().remove(g._element); content.remove(g)
         else: title_paras = []
     else:
         title_paras = T.para_texts(title_sh) if title_sh is not None else []
@@ -366,6 +404,7 @@ def restyle_slide(prs, slide, layouts, notitle=False, log=None, cfg=None, idx=0)
             for bp in s._element.iter(A_+'bodyPr'): pass
         ft = big
         mode = 'zoom fx%.2f fy%.2f sizes %d/%d' % (fx, fy, big, small)
+    fix_url_boxes(slide, content)
     if title_sh is not None: tree.remove(title_sh._element)
     for d in deco: tree.remove(d._element)
     for rel in slide.part.rels.values():
