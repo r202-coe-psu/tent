@@ -10,7 +10,7 @@
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import { beforeNavigate, replaceState } from '$app/navigation';
+	import { beforeNavigate, goto, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -18,6 +18,7 @@
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
+	import { STAFF_REGISTRATION_DESK_I18N } from '$lib/constants/i18n/staff-registration-desk';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
@@ -44,6 +45,17 @@
 	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
+	import {
+		applyCardAddressToHousehold,
+		applyScannedCard,
+		cardToUnifiedMember,
+		digitsOnly,
+		scannerCardErrorSchema,
+		scannerCardPhotoSchema,
+		scannerCardSchema,
+		type ScannedCardDuplicate,
+		type ScannerCard
+	} from '../../domain/scanner-card';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -106,6 +118,9 @@
 		residenceSuggestTick
 	} from './residence-suggest-reactivity.svelte';
 	import { createQuery } from '@tanstack/svelte-query';
+	import { useSaveImage } from '$lib/features/images';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { rememberPhotoPreview } from './registration-photo-preview';
 	import {
 		clearRegistrationDraft,
 		loadRegistrationDraft,
@@ -146,6 +161,8 @@
 		onsubmit,
 		onselectshelter,
 		onDirtyChange,
+		findScannedCardDuplicate,
+		scannerEnabled = false,
 		/** Increment from parent to clear a stale public join selection (bad token / missing target). */
 		joinResetKey = 0,
 		draftKey = '',
@@ -185,6 +202,16 @@
 		) => Promise<void> | void;
 		onselectshelter?: (shelterCode: string, shelterName?: string) => void;
 		onDirtyChange?: (dirty: boolean) => void;
+		/**
+		 * Duplicate lookup for a scanned card's citizen ID (shelter + central queue), run before the
+		 * card is placed. Resolves null when nobody is found; throws when the lookup fails.
+		 */
+		findScannedCardDuplicate?: (citizenId: string) => Promise<ScannedCardDuplicate | null>;
+		/**
+		 * Listen to the desktop scanner client (#1326 `scanner:*` events). Only the staff walk-in page
+		 * turns it on; every other form leaves the events unacknowledged.
+		 */
+		scannerEnabled?: boolean;
 		joinResetKey?: number;
 		/**
 		 * Public pre-register (#358): keep the form in `sessionStorage` under this key, so a phone
@@ -205,6 +232,7 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const ts = $derived(getTranslation(STAFF_REGISTRATION_DESK_I18N, langState.current).scanner);
 
 	/** Locks every field/control (pending submit OR explicit read-only view). */
 	const fieldsLocked = $derived(pending || readOnly);
@@ -1349,6 +1377,254 @@
 		}
 	});
 
+	/** One progress toast per card: every scanner step updates this same toast instead of stacking new ones. */
+	const SCANNER_TOAST_ID = 'scanner-card';
+
+	/** A card photo that arrived before its card was placed (staff still choosing in a dialog). */
+	let heldScannerPhoto: { citizenId: string; dataUrl: string } | null = null;
+	/** A card read again while already in the form: its photo must not replace the already-in-form notice. */
+	let quietPhotoCitizenId: string | null = null;
+
+	/** The blocking "reading the card" popup: from `scanner:card-reading` until the text read ends. */
+	let scannerReading = $state(false);
+	/** The client gives up on an unacknowledged event after 15 s; never leave the popup stuck longer. */
+	const SCANNER_READING_MAX_MS = 20_000;
+	let scannerReadingTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function stopScannerReading() {
+		clearTimeout(scannerReadingTimer);
+		scannerReading = false;
+	}
+
+	/** `scanner:card-reading`: the client started reading a card. */
+	function handleScannerCardReading(event: Event) {
+		event.preventDefault();
+		heldScannerPhoto = null;
+		quietPhotoCitizenId = null;
+		toast.dismiss(SCANNER_TOAST_ID);
+		clearTimeout(scannerReadingTimer);
+		scannerReading = true;
+		scannerReadingTimer = setTimeout(stopScannerReading, SCANNER_READING_MAX_MS);
+	}
+
+	/** `scanner:card-error`: the client could not read the card or its photo. */
+	function handleScannerCardError(event: Event) {
+		const parsed = scannerCardErrorSchema.safeParse((event as CustomEvent).detail);
+		if (!parsed.success) return;
+		event.preventDefault();
+		stopScannerReading();
+		toast.error(parsed.data.code === 'READ_FAILED' ? ts.readFailed : ts.photoReadFailed, {
+			id: SCANNER_TOAST_ID
+		});
+	}
+
+	/** A scanned card waiting for staff to choose a member to overwrite; held only while the dialog is open. */
+	let pendingScannerCard = $state.raw<ScannerCard | null>(null);
+
+	/**
+	 * Desktop scanner client (#1326): `scanner:card-read` fills the first empty member and, while the household address is empty, that address.
+	 * A card already on a member changes nothing; when every member has data, staff choose overwrite / add-new / cancel.
+	 * `preventDefault()` is the acknowledgement the scanner client waits for.
+	 */
+	function handleScannerCardRead(event: Event) {
+		const parsed = scannerCardSchema.safeParse((event as CustomEvent).detail);
+		if (!parsed.success) return;
+		event.preventDefault();
+		stopScannerReading();
+		const card = parsed.data;
+		if (applyScannedCard(members, card).kind === 'already-in-form') {
+			showAlreadyInForm(card);
+			return;
+		}
+		if (!findScannedCardDuplicate) {
+			placeScannedCardAsUsual(card);
+			return;
+		}
+		void checkScannedCardDuplicate(card);
+	}
+
+	/** Ask the page whether this citizen ID is already registered before the card is placed (#1326 D3). */
+	async function checkScannedCardDuplicate(card: ScannerCard) {
+		toast.loading(ts.checkingDuplicate, { id: SCANNER_TOAST_ID });
+		let duplicate: ScannedCardDuplicate | null;
+		try {
+			duplicate = (await findScannedCardDuplicate?.(card.citizen_id)) ?? null;
+		} catch {
+			toast.warning(ts.duplicateLookupFailed);
+			placeScannedCardAsUsual(card);
+			return;
+		}
+		if (duplicate && !fieldsLocked) {
+			toast.dismiss(SCANNER_TOAST_ID);
+			pendingScannerDuplicate = { card, duplicate };
+			return;
+		}
+		placeScannedCardAsUsual(card);
+	}
+
+	function showAlreadyInForm(card: ScannerCard) {
+		quietPhotoCitizenId = card.citizen_id;
+		toast.info(ts.alreadyInForm, { id: SCANNER_TOAST_ID });
+	}
+
+	/** Fill / already-in-form / ask-overwrite, decided against the members as they are now. */
+	function placeScannedCardAsUsual(card: ScannerCard) {
+		// Saving (or read-only): the form must not change under the save; staff insert the card again.
+		if (fieldsLocked) {
+			heldScannerPhoto = null;
+			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
+		const placement = applyScannedCard(members, card);
+		if (placement.kind === 'already-in-form') {
+			showAlreadyInForm(card);
+			return;
+		}
+		if (placement.kind === 'ask-overwrite') {
+			toast.dismiss(SCANNER_TOAST_ID);
+			pendingScannerCard = card;
+			return;
+		}
+		placeScannedCard(card, placement.index);
+	}
+
+	/** A scanned card whose citizen ID is already registered, waiting for staff to open that person or continue. */
+	let pendingScannerDuplicate = $state.raw<{
+		card: ScannerCard;
+		duplicate: ScannedCardDuplicate;
+	} | null>(null);
+
+	function goToScannedCardDuplicate() {
+		const pending = pendingScannerDuplicate;
+		pendingScannerDuplicate = null;
+		heldScannerPhoto = null;
+		if (pending) void goto(resolve(pending.duplicate.href));
+	}
+
+	function continueWithScannedCard() {
+		const pending = pendingScannerDuplicate;
+		pendingScannerDuplicate = null;
+		if (pending) placeScannedCardAsUsual(pending.card);
+	}
+
+	/** A fresh member as staff would add one — same defaults for add-new and overwrite. */
+	const freshReportingInMember = () => ({ ...blankUnifiedMember(), reporting_in: true });
+
+	function placeScannedCard(card: ScannerCard, index: number) {
+		if (fieldsLocked) {
+			heldScannerPhoto = null;
+			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
+		members[index] = cardToUnifiedMember(card, members[index]);
+		household = applyCardAddressToHousehold(household, card);
+		markDirty();
+		toast.loading(ts.filledReadingPhoto(index + 1), { id: SCANNER_TOAST_ID });
+		const held = heldScannerPhoto;
+		heldScannerPhoto = null;
+		if (held?.citizenId === card.citizen_id) void attachScannerPhoto(held.citizenId, held.dataUrl);
+	}
+
+	function overwriteMemberWithPendingCard(index: number) {
+		const card = pendingScannerCard;
+		pendingScannerCard = null;
+		if (!card) return;
+		// Overwrite = a different person takes this slot: start from a fresh member so none of the
+		// previous person's phone, photo, medical/needs fields carry over.
+		members[index] = freshReportingInMember();
+		placeScannedCard(card, index);
+	}
+
+	function addPendingCardAsNewMember() {
+		const card = pendingScannerCard;
+		pendingScannerCard = null;
+		if (!card) return;
+		members = [...members, freshReportingInMember()];
+		placeScannedCard(card, members.length - 1);
+	}
+
+	const saveScannerPhoto = useSaveImage();
+
+	/** The member holding this citizen ID right now — looked up fresh, never by a remembered index. */
+	const findMemberByCitizenId = (citizenId: string) =>
+		members.find((m) => digitsOnly(m.person_id?.number) === citizenId);
+
+	function jpegDataUrlToFile(dataUrl: string): File {
+		const binary = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+		const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+		return new File([bytes], 'card-photo.jpg', { type: 'image/jpeg' });
+	}
+
+	/**
+	 * Desktop scanner client (#1326 D2): `scanner:card-photo` belongs to the member with that citizen ID.
+	 * Held when that member is not in the form yet, so a card placed from a dialog still gets its photo.
+	 * Saved in the background (never blocks the save button); discarded when nobody matches, or when by the
+	 * time the upload finishes that member is gone, has another ID number, or the form is locked/submitted.
+	 */
+	function handleScannerCardPhoto(event: Event) {
+		const parsed = scannerCardPhotoSchema.safeParse((event as CustomEvent).detail);
+		if (!parsed.success) return;
+		event.preventDefault();
+		stopScannerReading();
+		const { citizen_id: citizenId, photo_base64: dataUrl } = parsed.data;
+		const member = findMemberByCitizenId(citizenId);
+		if (!member) {
+			heldScannerPhoto = { citizenId, dataUrl };
+			toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
+		if (quietPhotoCitizenId === citizenId) {
+			quietPhotoCitizenId = null;
+			if (!member.photo) void attachScannerPhoto(citizenId, dataUrl, { quiet: true });
+			return;
+		}
+		void attachScannerPhoto(citizenId, dataUrl);
+	}
+
+	/** `quiet`: leave the toast alone on success (the already-in-form notice stays readable). */
+	async function attachScannerPhoto(citizenId: string, dataUrl: string, { quiet = false } = {}) {
+		const createdBy = authStore.user?.name;
+		if (!createdBy) {
+			// Never store an image owned by nobody; the walk-in page needs a signed-in staff anyway.
+			toast.error(ts.photoSaveFailed, { id: SCANNER_TOAST_ID });
+			return;
+		}
+		let photoId: string;
+		let file: File;
+		try {
+			file = jpegDataUrlToFile(dataUrl);
+			const saved = await saveScannerPhoto.mutateAsync({ file, ctx: { shelterCode, createdBy } });
+			photoId = saved._id;
+		} catch {
+			toast.error(ts.photoSaveFailed, { id: SCANNER_TOAST_ID });
+			return;
+		}
+		const member = fieldsLocked ? undefined : findMemberByCitizenId(citizenId);
+		if (!member) {
+			if (!quiet) toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
+		member.photo = photoId;
+		rememberPhotoPreview(photoId, URL.createObjectURL(file));
+		markDirty();
+		if (!quiet) toast.success(ts.readDone, { id: SCANNER_TOAST_ID });
+	}
+
+	$effect(() => {
+		if (!scannerEnabled) return;
+		window.addEventListener('scanner:card-reading', handleScannerCardReading);
+		window.addEventListener('scanner:card-read', handleScannerCardRead);
+		window.addEventListener('scanner:card-photo', handleScannerCardPhoto);
+		window.addEventListener('scanner:card-error', handleScannerCardError);
+		return () => {
+			clearTimeout(scannerReadingTimer);
+			window.removeEventListener('scanner:card-reading', handleScannerCardReading);
+			window.removeEventListener('scanner:card-read', handleScannerCardRead);
+			window.removeEventListener('scanner:card-photo', handleScannerCardPhoto);
+			window.removeEventListener('scanner:card-error', handleScannerCardError);
+		};
+	});
+
 	/** 「สร้างใหม่」 always asks first — skipping a found family is how duplicate households start. */
 	let confirmCreateNewOpen = $state(false);
 	/** Staff confirmed a new family; hide the found-family list until they ask for it again. */
@@ -2310,6 +2586,74 @@
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel>{t.createNewDialogCancel}</AlertDialog.Cancel>
 			<AlertDialog.Action onclick={confirmCreateNew}>{t.createNewDialogConfirm}</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root
+	open={scannerReading}
+	onOpenChange={(open) => {
+		if (!open) stopScannerReading();
+	}}
+>
+	<AlertDialog.Content class="sm:max-w-sm" data-testid="scanner-reading-dialog">
+		<div class="flex flex-col items-center gap-4 py-4 text-center" role="status">
+			<Loader2 class="size-10 animate-spin text-primary" aria-hidden="true" />
+			<AlertDialog.Title>{ts.reading}</AlertDialog.Title>
+			<AlertDialog.Description>{ts.readingHint}</AlertDialog.Description>
+		</div>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root
+	open={pendingScannerDuplicate !== null}
+	onOpenChange={(open) => {
+		if (!open) pendingScannerDuplicate = null;
+	}}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{ts.duplicateTitle}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{ts.duplicateDescription(pendingScannerDuplicate?.duplicate.name ?? '')}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer class="sm:flex-wrap">
+			<AlertDialog.Action onclick={goToScannedCardDuplicate}>{ts.goToPerson}</AlertDialog.Action>
+			<AlertDialog.Action onclick={continueWithScannedCard}
+				>{ts.continueRegistering}</AlertDialog.Action
+			>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
+
+<AlertDialog.Root
+	open={pendingScannerCard !== null}
+	onOpenChange={(open) => {
+		if (!open) pendingScannerCard = null;
+	}}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{ts.dialogTitle}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{ts.dialogDescription(
+					pendingScannerCard
+						? `${pendingScannerCard.first_name_th} ${pendingScannerCard.last_name_th}`.trim()
+						: ''
+				)}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer class="sm:flex-wrap">
+			{#each members as member, index (memberFormKey(member))}
+				<AlertDialog.Action onclick={() => overwriteMemberWithPendingCard(index)}>
+					{ts.overwriteMember(index + 1)}
+				</AlertDialog.Action>
+			{/each}
+			<AlertDialog.Action onclick={addPendingCardAsNewMember}
+				>{ts.addAsNewMember}</AlertDialog.Action
+			>
+			<AlertDialog.Cancel>{ts.cancel}</AlertDialog.Cancel>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>

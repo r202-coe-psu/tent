@@ -18,6 +18,8 @@
 		deriveDuplicateCheckQueries,
 		duplicateCheckKey,
 		hasFederatedIntakeHits,
+		formatPersonName,
+		resolveInstantDuplicateAction,
 		isIntakeNewRegistrationLocked,
 		intakeSearchCopyByLanguage,
 		EVACUEE_PAGE_I18N,
@@ -26,10 +28,15 @@
 		type IntakeNextStation,
 		type RegistrationConsent,
 		type RegistrationConsentConfig,
+		digitsOnly,
+		type ScannedCardDuplicate,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput
 	} from '$lib/features/people';
-	import { unassignedRegistrationRemote } from '$lib/features/unassigned-registration';
+	import {
+		formatOpenMemberName,
+		unassignedRegistrationRemote
+	} from '$lib/features/unassigned-registration';
 	import { resolveShelterCode } from '$lib/db/shelter';
 	import { UlidReservation } from '$lib/db/ulid-reservation';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -89,6 +96,46 @@
 		return idReservation.ids;
 	}
 	let overrideResolver: ((confirmed: boolean) => void) | null = null;
+
+	/**
+	 * Scanned-card duplicate lookup (#1326 D3): the same shelter (Couch) + central unassigned queue
+	 * search as the save-time check, for one citizen ID. A hit anywhere wins; with no hit, a failed
+	 * source throws so the form can warn instead of reporting "nobody found".
+	 */
+	async function findScannedCardDuplicate(citizenId: string): Promise<ScannedCardDuplicate | null> {
+		const [local, pool] = await Promise.allSettled([
+			peopleRepository().searchEvacueesMany([citizenId]),
+			unassignedRegistrationRemote.searchOpen(citizenId)
+		]);
+		if (local.status === 'fulfilled') {
+			const evacuee = local.value.get(citizenId)?.[0];
+			if (evacuee) {
+				const { actionUrl } = resolveInstantDuplicateAction({
+					source: 'local',
+					id: evacuee._id,
+					status: evacuee.current_stay?.status
+				});
+				return { name: formatPersonName(evacuee), href: actionUrl };
+			}
+		}
+		if (pool.status === 'fulfilled') {
+			const hit = pool.value.results[0];
+			if (hit && hit.open_members.length > 0) {
+				const member =
+					hit.open_members.find((m) => digitsOnly(m.person_id?.number) === citizenId) ??
+					hit.open_members[0];
+				const { actionUrl } = resolveInstantDuplicateAction({
+					source: 'unassigned',
+					id: hit.id,
+					memberIds: hit.open_members.map((m) => m.reserved_evacuee_id)
+				});
+				return { name: formatOpenMemberName(member), href: actionUrl };
+			}
+		}
+		if (local.status === 'rejected') throw local.reason;
+		if (pool.status === 'rejected') throw pool.reason;
+		return null;
+	}
 
 	/**
 	 * Re-runs the CR-115 federated hard anti-dupe search at the actual write
@@ -334,6 +381,8 @@
 				consent={consentConfig}
 				onsubmit={handleRegister}
 				onDirtyChange={(dirty) => (isDirty = dirty)}
+				{findScannedCardDuplicate}
+				scannerEnabled
 			/>
 		{/if}
 	{/if}
