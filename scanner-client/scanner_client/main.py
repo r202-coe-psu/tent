@@ -160,12 +160,13 @@ async def run_app(
             except Exception as exc:  # one bad card must not stop the watcher; never log its data
                 log.error("card handling failed: %s", type(exc).__name__)
 
+        try:
+            await page.goto(f"{settings.shelter_origin}{settings.start_path}")
+        except Exception as exc:  # unreachable shelter: keep the window open, staff can reload
+            log.warning("could not open the shelter page: %s", type(exc).__name__)
+        # Only now: a card left in the reader at startup must not race the sign-in page.
         watcher_task = asyncio.create_task(watcher_factory(settings, handle_card).run(stop))
         try:
-            try:
-                await page.goto(f"{settings.shelter_origin}{settings.start_path}")
-            except Exception as exc:  # unreachable shelter: keep the window open, staff can reload
-                log.warning("could not open the shelter page: %s", type(exc).__name__)
             await stop.wait()
         finally:
             stop.set()

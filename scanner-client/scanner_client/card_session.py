@@ -124,11 +124,14 @@ class CardSession:
         if not self._may_navigate:
             return False
         self._may_navigate = False
+        if self._origin(page.url) != self._origin(self._shelter_url):
+            # startup (blank tab, URL prompt) or another site: the tab is left alone
+            log.info("card ignored: the tab is not on the shelter site")
+            return False
         if self._is_signed_out(page.url):
             log.info("card ignored: staff is not signed in")
             return False
-        if self._origin(page.url) == self._origin(self._shelter_url):
-            await self._navigate_in_app(page)
+        await self._navigate_in_app(page)
         if not self._is_walk_in(page.url):
             try:
                 await page.goto(self._walk_in_url())

@@ -310,13 +310,20 @@ def test_in_app_navigation_that_never_reaches_walk_in_falls_back_to_goto():
     assert [name for name, _ in page.events] == CARD_EVENTS
 
 
-def test_page_on_other_origin_is_never_navigated_in_app():
-    page = FakePage(url="https://evil.example/somewhere")
+@pytest.mark.parametrize(
+    "url",
+    ["about:blank", "data:text/html,prompt", "https://evil.example/somewhere"],
+    ids=["startup-blank", "url-prompt", "other-origin"],
+)
+def test_card_off_the_shelter_site_is_ignored_without_navigating(url):
+    # e.g. a card left in the reader while the app starts: the tab stays on sign-in
+    page = FakePage(url=url)
 
     asyncio.run(make_session().handle_card(FakeReader(), page))
 
     assert page.in_app_navigations == []
-    assert page.gotos == [WALK_IN_URL]
+    assert page.gotos == []
+    assert page.events == []
 
 
 @pytest.mark.parametrize(
@@ -443,7 +450,7 @@ def test_tab_navigating_to_another_origin_right_before_evaluate_never_receives_c
     asyncio.run(make_session().handle_card(FakeReader(), page))
 
     assert page.delivered == []
-    assert page.gotos == [WALK_IN_URL]
+    assert page.gotos == []
     assert [name for name, _ in page.events] == ["scanner:card-reading"]
 
 

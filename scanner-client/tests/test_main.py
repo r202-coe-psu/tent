@@ -509,3 +509,18 @@ def test_other_platforms_keep_pyscard():
 
     assert list_reader_names is not winscard.list_reader_names
     assert open_reader is ThaiSmartCardReader
+
+
+def test_cards_are_watched_only_once_the_start_page_was_opened(tmp_path):
+    # a card already in the reader at startup must not race the sign-in page
+    harness = Harness(tmp_path)
+    page = harness.playwright.page
+    gotos_when_watching = []
+
+    def watcher_factory(settings, handle):
+        gotos_when_watching.append(list(page.gotos))
+        return harness.watcher
+
+    harness.run(watcher_factory=watcher_factory)
+
+    assert gotos_when_watching == [["https://shelter.example/admin-login"]]
