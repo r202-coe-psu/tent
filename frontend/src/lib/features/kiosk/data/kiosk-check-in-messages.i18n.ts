@@ -38,6 +38,10 @@ export const KIOSK_SERVER_ERROR_EN: Partial<Record<string, string>> = {
 	KIOSK_QUEUE_UNAVAILABLE: 'The central queue is not available. Please contact staff.',
 	KIOSK_CLAIM_FAILED: 'Admission to the shelter did not go through. Please try again.',
 	KIOSK_CHECK_IN_FAILED: 'Could not save the check-in. Please try again.',
+	INVALID_CHECK_OUT_INPUT: 'The list of people to check out is not valid.',
+	KIOSK_CHECK_OUT_IDENTITY_MISMATCH:
+		'This card does not match the person checking out. Please contact staff.',
+	KIOSK_CHECK_OUT_FAILED: 'Could not save the check-out. Please try again.',
 	INVALID_REPRINT_INPUT: 'The details for reprinting are not valid.',
 	KIOSK_REPRINT_VERIFY_FAILED: 'The last 4 digits are not correct',
 	KIOSK_REPRINT_STAFF_PIN_INVALID: 'The PIN is not correct',
