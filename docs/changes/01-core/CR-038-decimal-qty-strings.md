@@ -3,9 +3,9 @@ id: CR-038
 title: Decimal qty strings — ความแม่นปริมาณก่อนขึ้นจริง
 status: done
 date: 2026-07-14
-updated: 2026-07-14
+updated: 2026-11-14
 requested_by: engineering
-decided_by: <เจ้าของโครงการ>
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 affects:
   - docs/data/schema.md §2.1–2.6, §2.7.1, §4.2–4.3
@@ -33,6 +33,19 @@ JSON/JS `number` เป็น IEEE-754 — qty เพี้ยนตอนบว
 
 - **`qty_str`**: string `^-?\d+(\.\d{1,4})?$` — ปริมาณในหน่วยที่ field ระบุ
   (ledger = `base_unit`); canonical persist ผ่าน Decimal `toDecimalPlaces(4)`
+
+### ค่าที่ผู้ใช้พิมพ์ในช่องจำนวน (form input) — amend 2026-11-14 (#938)
+
+ช่องกรอกจำนวนในฟอร์มทุกช่องต้องผ่าน `parseQtyInput` (`$lib/utils/qty`) ก่อนใช้งาน
+กฎนี้ใช้กับ **input เท่านั้น** — รูปแบบ `qty_str` ที่ persist ข้างบนไม่เปลี่ยน
+
+- regex: `^-?(\d{1,15}(\.\d{0,4})?|\.\d{1,4})$`
+- รับ `.5` และ `5.` (ช่อง `type="number"` ยอมให้พิมพ์) แล้ว normalize เป็น canonical `qty_str`
+  เช่น `.5` → `0.5`, `5.` → `5`
+- ส่วนจำนวนเต็มไม่เกิน **15 หลัก** — ให้ค่าทศนิยม 4 ตำแหน่งยังคำนวณได้ตรงภายใน precision
+  20 significant digits ของ decimal.js
+- ไม่รับ exponent (`1e3`), ทศนิยมเกิน 4 ตำแหน่ง, หรือค่าที่เบราว์เซอร์อ่านไม่ได้
+  (`validity.badInput`) — ฟอร์มต้องแสดง hint และไม่บันทึก ห้ามปัดเศษเงียบ
 
 ### Before → after (persist)
 
@@ -81,3 +94,5 @@ JSON/JS `number` เป็น IEEE-754 — qty เพี้ยนตอนบว
 - 2026-07-14 — ตัดเงิน/satang ออกจากขอบเขต (ระบบไม่เก็บเงิน)
 - 2026-07-14 — เพิ่ม team docs CONVENTIONS + CONTRIBUTING
 - 2026-07-14 — done (implemented: decimal.js + qty_str migration + docs)
+- 2026-11-14 — amend: เพิ่มกฎ form input (`parseQtyInput`) — รับ `.5`/`5.`, เพดาน 15 หลัก,
+  ปฏิเสธ exponent/badInput แทนการปัดเศษเงียบ (#938, PR #1345)
