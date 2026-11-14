@@ -1,44 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { createShelterSchema } from '$lib/features/shelters/server';
 import { externalForbiddenKeysFilled } from './external-guard';
 
-const base = {
-	name: 'ศูนย์ภายนอก',
-	site_kind: 'evacuation_center',
-	is_external: true,
-	operation_status: 'unknown',
-	capacity: 100,
-	facilities: {},
-	common_areas: {},
-	utilities: {},
-	risk: {},
-	zones: []
+/** What the importer emits for an external row whose other sheets are empty. */
+const untouched = {
+	facilities: { toilets_male: undefined, car_toilet_accessible: null, car_toilet_supported: null },
+	common_areas: { central_kitchen: false, parking_capacity: undefined, sub_storage: [] },
+	utilities: { power_source: null, water_source: null, communications: {}, vhf_channel: null },
+	risk: { elevation_m: undefined, constraints: null },
+	admission_policy: {
+		supported_vulnerable_groups: [],
+		pet_policy: { policy: null, categories: [] }
+	},
+	luggage_policy: { limitation: null, max_per_family: null, rules: [], rules_other: null },
+	parking_policy: { availability: null, supported_vehicles: [], rules: [], rules_other: null }
 };
 
-function parsed(extra: Record<string, unknown> = {}): Record<string, unknown> {
-	const r = createShelterSchema.safeParse({ ...base, ...extra });
-	if (!r.success) throw new Error(JSON.stringify(r.error.issues));
-	return r.data as Record<string, unknown>;
-}
-
 describe('externalForbiddenKeysFilled', () => {
-	it('accepts an external row with schema defaults only', () => {
-		expect(externalForbiddenKeysFilled(parsed())).toEqual([]);
+	it('accepts the untouched sections an external row carries', () => {
+		expect(externalForbiddenKeysFilled(untouched)).toEqual([]);
 	});
 
-	it('flags a policy / utility value on an external row', () => {
-		const data = parsed();
+	it('accepts rows with the sections missing altogether', () => {
+		expect(externalForbiddenKeysFilled({})).toEqual([]);
+	});
+
+	it('flags real data in utilities, risk and policy sections', () => {
 		const filled = {
-			...data,
-			utilities: { ...(data.utilities as object), power_available: true, water_available: true }
+			...untouched,
+			utilities: { ...untouched.utilities, power_source: 'generator' },
+			risk: { ...untouched.risk, constraints: 'ที่ลุ่ม' },
+			admission_policy: {
+				...untouched.admission_policy,
+				pet_policy: { policy: 'allowed', categories: [] }
+			}
 		};
-		const withPolicy = {
-			...data,
-			admission_policy: { ...(data.admission_policy as object), pet_policy: 'allowed' }
-		};
-		expect(
-			externalForbiddenKeysFilled(filled).length + externalForbiddenKeysFilled(withPolicy).length
-		).toBeGreaterThan(0);
-		expect(externalForbiddenKeysFilled(withPolicy)).toContain('admission_policy');
+		expect(externalForbiddenKeysFilled(filled).sort()).toEqual([
+			'admission_policy',
+			'risk',
+			'utilities'
+		]);
 	});
 });

@@ -1,4 +1,3 @@
-import { createShelterSchema } from '$lib/features/shelters/server';
 import { EXTERNAL_FORBIDDEN_HEADERS, PATH_TO_HEADER } from '../domain/columns';
 
 const FORBIDDEN = new Set(EXTERNAL_FORBIDDEN_HEADERS);
@@ -11,27 +10,22 @@ const FORBIDDEN_KEYS = [
 	)
 ];
 
+/** null / '' / false / 0 / [] / {} — or an object or array holding only such values. */
+function isBlank(value: unknown): boolean {
+	if (value === null || value === undefined || value === '' || value === false || value === 0) {
+		return true;
+	}
+	if (Array.isArray(value)) return value.every(isBlank);
+	if (typeof value === 'object') return Object.values(value as object).every(isBlank);
+	return false;
+}
+
 /**
  * CR-252 FR-30 (authoritative twin of the preview check): an external shelter carries basic info
- * only. Returns the top-level keys (policy, utilities, risk, …) whose value differs from the
- * schema default — i.e. that a stale or hand-rolled client filled in. Zones / food points are
- * checked by the caller.
+ * only. Returns the top-level keys (facilities, utilities, risk, policies, …) that hold real
+ * data — the importer and the schema both fill untouched sections with null / empty / false, so
+ * "blank" means structurally empty. Zones / food points are checked by the caller.
  */
 export function externalForbiddenKeysFilled(data: Record<string, unknown>): string[] {
-	// Two "untouched" shapes: every section as `{}`, and the optional policy sections omitted
-	// (the importer emits either, depending on whether the sheet was present).
-	const baselines = [false, true].flatMap((omit) => {
-		const stripped: Record<string, unknown> = { ...data };
-		for (const key of FORBIDDEN_KEYS) {
-			if (omit && key.endsWith('_policy')) delete stripped[key];
-			else stripped[key] = {};
-		}
-		const parsed = createShelterSchema.safeParse(stripped);
-		return parsed.success ? [parsed.data as Record<string, unknown>] : [];
-	});
-	if (baselines.length === 0) return [];
-	return FORBIDDEN_KEYS.filter((key) => {
-		const got = JSON.stringify(data[key] ?? null);
-		return !baselines.some((b) => JSON.stringify(b[key] ?? null) === got);
-	});
+	return FORBIDDEN_KEYS.filter((key) => !isBlank(data[key]));
 }

@@ -1,3 +1,4 @@
+import { externalForbiddenKeysFilled } from '../server/external-guard';
 import { describe, it, expect } from 'vitest';
 import { H } from '../domain/columns';
 import {
@@ -156,5 +157,7 @@ describe('buildSampleWorkbook', () => {
 		expect(result.shelter?.external_url).toMatch(/^https:\/\//);
 		expect(result.shelter?.capacity).toBe(100);
 		expect(result.shelter?.area_type).toBe('indoor');
+		// The BFF's authoritative FR-30 guard must not reject what the importer itself emits.
+		expect(externalForbiddenKeysFilled(result.shelter as Record<string, unknown>)).toEqual([]);
 	});
 });
