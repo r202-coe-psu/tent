@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import RejectReasonFields from './reject-reason-fields.svelte';
+import { REJECT_NOTE_PRESETS } from '../domain/reject-reason';
 
 let instance: ReturnType<typeof mount> | null = null;
 
@@ -54,7 +55,7 @@ describe('RejectReasonFields (#1166)', () => {
 
 		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
 		expect(textarea.value.startsWith('ของซ้ำ ')).toBe(true);
-		expect(textarea.value).toContain('ขอบคุณ');
+		expect(textarea.value).toContain(REJECT_NOTE_PRESETS.thanks.text);
 		expect(document.querySelector('[data-testid="t-preview"]')?.textContent).toContain(
 			'เกินความต้องการ — ของซ้ำ '
 		);

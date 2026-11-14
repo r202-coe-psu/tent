@@ -152,6 +152,15 @@ describe('reject note presets (#1256)', () => {
 		}
 	});
 
+	it('lets staff chain the thanks note with any other preset inside the limit', () => {
+		const { thanks, ...rest } = REJECT_NOTE_PRESETS;
+		for (const preset of Object.values(rest)) {
+			const chained = applyRejectNotePreset(thanks.text, preset.text);
+			expect(chained, preset.id).not.toBeNull();
+			expect(chained!.length).toBeLessThanOrEqual(REJECT_NOTE_MAX);
+		}
+	});
+
 	it('fills an empty note with the preset text', () => {
 		expect(applyRejectNotePreset('', 'ขอบคุณ')).toBe('ขอบคุณ');
 		expect(applyRejectNotePreset('   ', 'ขอบคุณ')).toBe('ขอบคุณ');
