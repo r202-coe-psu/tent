@@ -154,30 +154,51 @@ Get-ChildItem -LiteralPath $stage -Recurse -Directory -Filter '__pycache__' |
 
 # 4b. zip with no .exe of ours: python.org's PSF-signed pythonw.exe renamed to tent.exe (the
 #     signature covers the file's bytes, not its name). Double-clicked with no arguments, it
-#     imports zip\sitecustomize.py, which runs the client. The runtime sits at the top of the
-#     folder because tent.exe loads python313.dll from its own folder.
+#     imports zip\sitecustomize.py, which makes the shortcuts and runs the client. Only what
+#     tent.exe must load from its own folder stays on top, so staff find tent.exe at a glance:
+#       tent\tent.exe, python.exe, python313.dll, python3.dll, vcruntime140*.dll, python313._pth
+#       tent\.env.example, README.md, tent.ico      (.env is written here too)
+#       tent\lib\  .pyd + their dlls, python313.zip, site-packages, scanner_client, app,
+#                  sitecustomize.py (an extension's dlls load from the extension's own folder)
 $zipStage = 'build\zip\tent'
-New-Item -ItemType Directory -Force -Path $zipStage | Out-Null
-Copy-Item -Path "$stage\python\*" -Destination $zipStage -Recurse
+$zipLib = "$zipStage\lib"
+New-Item -ItemType Directory -Force -Path $zipLib | Out-Null
+$topLevel = 'python.exe', 'pythonw.exe', 'python313.dll', 'python3.dll', 'vcruntime140.dll',
+    'vcruntime140_1.dll'
+foreach ($item in Get-ChildItem -LiteralPath "$stage\python") {
+    if ($item.Name -eq 'python313._pth') { continue }
+    $to = if ($topLevel -contains $item.Name) { $zipStage } else { $zipLib }
+    Copy-Item -LiteralPath $item.FullName -Destination $to -Recurse
+}
 foreach ($dir in 'site-packages', 'scanner_client', 'app') {
-    Copy-Item -LiteralPath "$stage\$dir" -Destination "$zipStage\$dir" -Recurse
+    Copy-Item -LiteralPath "$stage\$dir" -Destination "$zipLib\$dir" -Recurse
 }
 foreach ($file in '.env.example', 'README.md', 'tent.ico') {
     Copy-Item -LiteralPath "$stage\$file" -Destination $zipStage
 }
-Copy-Item -LiteralPath 'zip\sitecustomize.py' -Destination $zipStage
+Copy-Item -LiteralPath 'zip\sitecustomize.py' -Destination $zipLib
 Move-Item -LiteralPath "$zipStage\pythonw.exe" -Destination "$zipStage\tent.exe"
-# `import site` is what makes Python import sitecustomize.py
+# paths are relative to the ._pth; `import site` is what makes Python import sitecustomize.py
 Set-Content -LiteralPath "$zipStage\python313._pth" -Encoding ascii -Value @(
-    'python313.zip', '.', 'site-packages', 'import site')
+    'lib\python313.zip', 'lib', 'lib\site-packages', 'import site')
 foreach ($exe in 'tent.exe', 'python.exe') {
     $signature = Get-AuthenticodeSignature -LiteralPath "$zipStage\$exe"
     if ($signature.Status -ne 'Valid') { throw "$exe is not validly signed ($($signature.Status))" }
 }
 # python.exe (not tent.exe) must stay plain Python: this would hang if it launched the client
 Invoke-Checked "$zipStage\python.exe" @('-c',
-    ('import sitecustomize, scanner_client.main, scanner_client.launcher; ' +
-     'from scanner_client.winscard import WinSCard; WinSCard.load()'))
+    ('import sys, sitecustomize, ssl, ctypes, scanner_client.main, scanner_client.launcher; ' +
+     'from pathlib import Path; from scanner_client.winscard import WinSCard; WinSCard.load(); ' +
+     'assert scanner_client.main.default_env_path().parent == Path(sys.executable).parent'))
+# tent.exe writes its own shortcuts through COM on the first start: write one here to prove it
+$lnkTest = Join-Path ([IO.Path]::GetTempPath()) 'tent-build-shortcut-test.lnk'
+Remove-Item -LiteralPath $lnkTest -ErrorAction SilentlyContinue
+Invoke-Checked "$zipStage\python.exe" @('-c',
+    ('import sys; from pathlib import Path; from scanner_client import shortcuts as s; ' +
+     'exe = Path(sys.executable); s.save_shortcut(s.Shortcut(Path(sys.argv[1]), exe, ' +
+     'exe.parent, exe.parent / s.ICON_NAME)); s.shortcut_folders()'), $lnkTest)
+if (-not (Test-Path -LiteralPath $lnkTest)) { throw 'shortcut smoke test wrote no .lnk' }
+Remove-Item -LiteralPath $lnkTest
 Get-ChildItem -LiteralPath $zipStage -Recurse -Directory -Filter '__pycache__' |
     Remove-Item -Recurse -Force
 $tentZip = 'dist\tent-win64.zip'

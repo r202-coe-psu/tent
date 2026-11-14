@@ -30,13 +30,21 @@ WINDOW_ARGS = ["--start-fullscreen"]
 log = logging.getLogger(__name__)
 
 
-def default_env_path(frozen: bool | None = None, executable: str | None = None) -> Path:
-    """`.env` next to the .exe when frozen (PyInstaller), else in scanner-client/."""
+def default_env_path(
+    frozen: bool | None = None,
+    executable: str | None = None,
+    package_root: Path | None = None,
+) -> Path:
+    """`.env` next to the .exe when frozen (PyInstaller), next to tent.exe in the zip build
+    (the package sits in its lib\\ folder), else in the folder holding the package."""
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
     if frozen:
         return Path(executable or sys.executable).parent / ".env"
-    return Path(__file__).resolve().parent.parent / ".env"
+    root = package_root or Path(__file__).resolve().parent.parent
+    if root.name == "lib" and (root.parent / "tent.exe").is_file():
+        return root.parent / ".env"
+    return root / ".env"
 
 
 def default_data_dir() -> Path:

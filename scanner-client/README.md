@@ -40,11 +40,17 @@ Smart App Control บล็อกไฟล์ `.exe` ที่ไม่มีล
 
 ### 2. แบบ zip `tent-win64.zip` (เครื่องที่เปิด Smart App Control)
 ไม่มีไฟล์ `.exe` ของทีมเลย: `tent.exe` คือ `pythonw.exe` ทางการจาก python.org (มีลายเซ็นดิจิทัล) ที่เปลี่ยนชื่อ
-ไอคอนจึงเป็นรูปงูของ Python
+ตัวไฟล์ `tent.exe` จึงเป็นรูปงูของ Python แต่ shortcut ที่โปรแกรมสร้างใช้ไอคอน **tent**
 1. คลิกขวา `tent-win64.zip` → **Extract All…** → เลือกที่เก็บถาวร เช่น `C:\Users\<ชื่อ>\AppData\Local\Programs`
    (ไม่ใช่ Downloads) ได้โฟลเดอร์ `tent`
-2. ดับเบิลคลิก `tent.exe` ในโฟลเดอร์ `tent` → โปรแกรมเปิดหน้าถาม URL (ดู "ใช้งาน")
-3. (แนะนำ) คลิกขวา `tent.exe` → Show more options → **Send to → Desktop (create shortcut)**
+2. ดับเบิลคลิก `tent.exe` ในโฟลเดอร์ `tent` (ไฟล์ของโปรแกรมอยู่ในโฟลเดอร์ย่อย `lib` ไม่ต้องเปิด)
+   → โปรแกรมเปิดหน้าถาม URL (ดู "ใช้งาน")
+   และสร้าง shortcut **tent** บน Desktop และใน Start Menu ให้เอง (ครั้งแรกเท่านั้น)
+3. ครั้งต่อไปเปิดจากไอคอน **tent** บน Desktop ได้เลย
+
+ลบ shortcut ทิ้งแล้วโปรแกรมจะไม่สร้างกลับมาเอง · ย้ายโฟลเดอร์ `tent` แล้วเปิด `tent.exe` ที่ใหม่หนึ่งครั้ง
+shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มีไอคอนขึ้น สร้างเองได้: คลิกขวา `tent.exe` → Show more options
+→ **Send to → Desktop (create shortcut)**
 
 ค่าที่ตั้ง (`.env`) อยู่ในโฟลเดอร์ `tent` · อัปเดต: ปิดโปรแกรม แล้วแตกไฟล์ zip ใหม่ทับโฟลเดอร์เดิม
 · ถอนการติดตั้ง: ลบโฟลเดอร์ `tent` และ shortcut

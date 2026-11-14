@@ -386,6 +386,23 @@ def test_env_file_sits_next_to_the_exe_when_frozen_else_next_to_the_package(tmp_
     assert default_env_path(frozen=False, executable="/usr/bin/python") == package_parent / ".env"
 
 
+def test_the_zip_build_keeps_the_env_file_next_to_tent_exe_not_in_lib(tmp_path):
+    # tent\tent.exe + tent\lib\scanner_client: the package hides in lib\, .env stays on top
+    (tmp_path / "tent" / "lib").mkdir(parents=True)
+    (tmp_path / "tent" / "tent.exe").touch()
+
+    assert default_env_path(frozen=False, package_root=tmp_path / "tent" / "lib") == (
+        tmp_path / "tent" / ".env"
+    )
+
+
+def test_a_folder_named_lib_without_tent_exe_is_not_the_zip_build(tmp_path):
+    (tmp_path / "lib").mkdir()
+
+    lib = tmp_path / "lib"
+    assert default_env_path(frozen=False, package_root=lib) == lib / ".env"
+
+
 def test_a_missing_or_bad_shelter_url_still_starts_and_leaves_it_to_the_prompt(tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("SHELTER_URL=http://shelter.example\n")

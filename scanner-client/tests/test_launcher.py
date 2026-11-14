@@ -37,7 +37,7 @@ def test_launch_runs_the_client_and_exits_with_its_code():
     codes = []
 
     with pytest.raises(Exited):
-        launch(TENT, [TENT], run=lambda: 2, exit_=_exit_recorder(codes))
+        launch(TENT, [TENT], prepare=lambda: None, run=lambda: 2, exit_=_exit_recorder(codes))
 
     assert codes == [2]
 
@@ -49,7 +49,7 @@ def test_launch_exits_with_failure_when_the_client_crashes():
         raise RuntimeError("boom")
 
     with pytest.raises(Exited):
-        launch(TENT, [TENT], run=crash, exit_=_exit_recorder(codes))
+        launch(TENT, [TENT], prepare=lambda: None, run=crash, exit_=_exit_recorder(codes))
 
     assert codes == [1]
 
@@ -59,3 +59,30 @@ def test_launch_does_nothing_for_other_interpreters():
         raise AssertionError("must not run")
 
     launch(r"C:\tent\python.exe", [r"C:\tent\python.exe"], run=never, exit_=never)
+
+
+def test_launch_makes_the_shortcuts_before_running_the_client():
+    calls = []
+
+    with pytest.raises(Exited):
+        launch(
+            TENT,
+            [TENT],
+            prepare=lambda: calls.append("shortcuts"),
+            run=lambda: calls.append("client") or 0,
+            exit_=_exit_recorder([]),
+        )
+
+    assert calls == ["shortcuts", "client"]
+
+
+def test_a_shortcut_failure_still_runs_the_client():
+    codes = []
+
+    def fail():
+        raise OSError("access denied")
+
+    with pytest.raises(Exited):
+        launch(TENT, [TENT], prepare=fail, run=lambda: 0, exit_=_exit_recorder(codes))
+
+    assert codes == [0]
