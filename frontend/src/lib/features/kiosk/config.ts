@@ -6,6 +6,7 @@
 export {
 	fetchKioskConfig,
 	KIOSK_CONFIG_TIMEOUT_MS,
+	resetKioskConfigCache,
 	type KioskConfig
 } from './data/kiosk-config.api';
 export { fetchKioskHardware } from './data/kiosk-hardware.api';

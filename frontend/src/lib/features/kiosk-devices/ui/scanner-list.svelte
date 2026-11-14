@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Building from '@lucide/svelte/icons/building';
 	import Activity from '@lucide/svelte/icons/activity';
@@ -7,9 +8,9 @@
 	import ImageIcon from '@lucide/svelte/icons/image';
 	import ImageOff from '@lucide/svelte/icons/image-off';
 	import type { ScannerDevice } from '../domain/scanner.schema';
-	import { useDeleteScannerDevice } from '../application/queries';
+	import { useDeleteScannerDevice, useUpdateScannerDevice } from '../application/queries';
 	import { toast } from 'svelte-sonner';
-	import { formatThaiShortDate } from '$lib/utils/date';
+	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import DeleteScannerDialog from './delete-scanner-dialog.svelte';
 	import EditScannerDialog from './edit-scanner-dialog.svelte';
 	import { KIOSK_SCREENS, screenTypeOf } from '$lib/features/shared/domain/kiosk-screen';
@@ -38,6 +39,7 @@
 	} = $props();
 
 	const deleteMutation = useDeleteScannerDevice();
+	const updateMutation = useUpdateScannerDevice();
 
 	let deleteDialogOpen = $state(false);
 	let deleteTarget = $state<ScannerDevice | null>(null);
@@ -71,8 +73,30 @@
 		});
 	}
 
+	/** Closing or reopening service takes effect at once: no confirm step. */
+	function setServiceOpen(device: ScannerDevice, open: boolean) {
+		updateMutation.mutate(
+			{ deviceId: device.device_id, patch: { service_open: open } },
+			{
+				onSuccess: () =>
+					toast.success(`${open ? 'เปิด' : 'ปิด'}ให้บริการเครื่อง ${device.name} เรียบร้อยแล้ว`),
+				onError: (err) =>
+					toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะบริการ')
+			}
+		);
+	}
+
 	function groupNameOf(device: ScannerDevice): string | null {
 		return (device.banner_group_id && groupNames?.get(device.banner_group_id)) || null;
+	}
+
+	/** Who closed service and when; null when the device was never closed (nothing recorded). */
+	function closedNote(device: ScannerDevice): string | null {
+		const { service_open_changed_by: by, service_open_changed_at: at } = device;
+		if (!by && !at) return null;
+		return [by && `ปิดโดย ${by}`, at && `เมื่อ ${formatThaiDateTime(at)}`]
+			.filter(Boolean)
+			.join(' ');
 	}
 
 	function formatLastSeen(lastSeen: string | null): string {
@@ -144,6 +168,14 @@
 										<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
 										Active
 									</span>
+									{#if !device.service_open}
+										<span
+											class="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
+										>
+											<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+											ปิดให้บริการ
+										</span>
+									{/if}
 								{:else}
 									<span class="badge-muted">
 										<span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
@@ -166,6 +198,24 @@
 									</span>
 								{/if}
 							</div>
+							{#if device.status === 'active'}
+								<div class="mt-2 flex items-center gap-2">
+									<Switch
+										id="service-open-{device.device_id}"
+										bind:checked={() => device.service_open, (next) => setServiceOpen(device, next)}
+										disabled={updateMutation.isPending &&
+											updateMutation.variables?.deviceId === device.device_id}
+									/>
+									<label
+										for="service-open-{device.device_id}"
+										class="text-xs font-semibold text-slate-700">เปิดให้บริการ</label
+									>
+								</div>
+								{@const note = device.service_open ? null : closedNote(device)}
+								{#if note}
+									<p class="mt-1 text-xs text-slate-500">{note}</p>
+								{/if}
+							{/if}
 						</td>
 						<td class="px-6 py-4 text-xs whitespace-nowrap text-slate-500">
 							<div class="flex items-center gap-1.5">

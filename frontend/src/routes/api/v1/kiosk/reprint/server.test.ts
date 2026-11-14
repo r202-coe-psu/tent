@@ -95,6 +95,24 @@ describe('POST /api/v1/kiosk/reprint', () => {
 		expect(mockReprint).not.toHaveBeenCalled();
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and reprints nothing', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			registry_id: 'reprint-device-1',
+			device_id: 'kiosk-sh001-01',
+			shelter_code: 'SH001',
+			service_open: false
+		} as never);
+
+		const response = await send(validBody);
+
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(mockReprint).not.toHaveBeenCalled();
+		expect(mockFindShelter).not.toHaveBeenCalled();
+	});
+
 	it('rejects when the shelter has disabled the phone method', async () => {
 		mockFindShelter.mockResolvedValueOnce({ code: 'SH001', feature_flags: {} } as never);
 		const response = await send(validBody);

@@ -510,6 +510,96 @@ describe('ScannerDeviceRepository', () => {
 			expect(updated.screen_type).toBe('portrait');
 		});
 
+		it("closing a device's service records who closed it and when", async () => {
+			vi.useFakeTimers();
+			vi.setSystemTime(new Date('2026-11-11T08:30:00.000Z'));
+			try {
+				mockRaw
+					.mockResolvedValueOnce({ status: 200, data: v2Doc })
+					.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+				const updated = await repository.updateDevice(v2Doc._id, { service_open: false }, 'sm-a');
+
+				expect(putBodyAt(1)).toMatchObject({
+					service_open: false,
+					service_open_changed_by: 'sm-a',
+					service_open_changed_at: '2026-11-11T08:30:00.000Z'
+				});
+				expect(updated.service_open).toBe(false);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it('re-sending the same service_open value leaves the audit fields untouched', async () => {
+			const closed = {
+				...v2Doc,
+				service_open: false,
+				service_open_changed_by: 'alice',
+				service_open_changed_at: '2026-11-10T09:00:00.000Z'
+			};
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: closed })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			await repository.updateDevice(v2Doc._id, { service_open: false }, 'bob');
+
+			expect(putBodyAt(1)).toMatchObject({
+				service_open: false,
+				service_open_changed_by: 'alice',
+				service_open_changed_at: '2026-11-10T09:00:00.000Z'
+			});
+		});
+
+		it('changing status leaves service closure as it was', async () => {
+			const closed = {
+				...v2Doc,
+				service_open: false,
+				service_open_changed_by: 'alice',
+				service_open_changed_at: '2026-11-10T09:00:00.000Z'
+			};
+			for (const status of ['inactive', 'active'] as const) {
+				mockRaw.mockReset();
+				mockRaw
+					.mockResolvedValueOnce({ status: 200, data: closed })
+					.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+				await repository.updateDevice(v2Doc._id, { status }, 'bob');
+
+				expect(putBodyAt(1)).toMatchObject({
+					status,
+					service_open: false,
+					service_open_changed_by: 'alice',
+					service_open_changed_at: '2026-11-10T09:00:00.000Z'
+				});
+			}
+		});
+
+		it('judges a service change against the doc re-read after a _rev race', async () => {
+			// Someone else closed the device between our first read and the retry: our own
+			// service_open:false is then a no-op and must not steal their audit trail.
+			const closedMeanwhile = {
+				...v2Doc,
+				_rev: '4-x',
+				service_open: false,
+				service_open_changed_by: 'alice',
+				service_open_changed_at: '2026-11-10T09:00:00.000Z'
+			};
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+				.mockResolvedValueOnce({ status: 200, data: closedMeanwhile })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true } });
+
+			await repository.updateDevice(v2Doc._id, { service_open: false }, 'bob');
+
+			expect(putBodyAt(3)).toMatchObject({
+				_rev: '4-x',
+				service_open_changed_by: 'alice',
+				service_open_changed_at: '2026-11-10T09:00:00.000Z'
+			});
+		});
+
 		it('keeps a v1 doc at v1 (no PIN metadata invented)', async () => {
 			mockRaw
 				.mockResolvedValueOnce({ status: 200, data: v1Doc })

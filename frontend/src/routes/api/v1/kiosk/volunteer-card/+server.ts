@@ -16,6 +16,7 @@ import {
 	ScannerAuthError,
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
+import { isKioskClosed, kioskClosedResponse } from '$lib/server/scanners/kiosk-closed';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -44,6 +45,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			request.headers.get('x-device-secret') ?? '',
 			scannerServerRepository
 		);
+		if (isKioskClosed(principal)) return kioskClosedResponse();
 		const parsed = inputSchema.safeParse(await request.json().catch(() => null));
 		const canonical = parsed.success ? normalizeKioskPhone(parsed.data.phone) : null;
 		if (!canonical) {

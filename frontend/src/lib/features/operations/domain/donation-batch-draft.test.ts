@@ -65,6 +65,18 @@ describe('draftProblem', () => {
 		expect(draftProblem(draft({ qty: '-1' }), false)).toBe('qty');
 	});
 
+	it('accepts a decimal typed without a leading zero', () => {
+		expect(draftProblem(draft({ qty: '.5' }), false)).toBeNull();
+		expect(isReceivedDraft({ qty: '.5' })).toBe(true);
+	});
+
+	it('flags a quantity that is not a plain decimal string (CR-038)', () => {
+		for (const qty of ['1e3', ' ', 'abc', '1.23456', '0x10']) {
+			expect(draftProblem(draft({ qty }), false)).toBe('qty');
+			expect(isReceivedDraft({ qty })).toBe(false);
+		}
+	});
+
 	it('flags a fractional quantity in a count unit but not in a measured unit (#805)', () => {
 		expect(draftProblem(draft({ qty: '1.5' }), false, 'count')).toBe('whole');
 		expect(draftProblem(draft({ qty: '2' }), false, 'count')).toBeNull();

@@ -1,13 +1,21 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import { page } from '$app/state';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { goToKioskClosed } from '../application/kiosk-navigation';
+	import { buildKioskContextQuery, readKioskDisplayQuery } from '../domain/display-context';
 	import { StaffPinEntry, STAFF_PIN_LENGTH } from '../application/staff-pin-entry.svelte';
 	import { verifyKioskStaffPin, type KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 	import KioskNumpadPanel from './kiosk-numpad-panel.svelte';
+
+	/** The closed page, keeping the display context the kiosk was opened with. */
+	function showClosedPage(): void {
+		goToKioskClosed(buildKioskContextQuery(readKioskDisplayQuery(page.url.searchParams)));
+	}
 
 	const PIN_SLOTS = Array.from({ length: STAFF_PIN_LENGTH }, (_, slot) => slot);
 
@@ -21,6 +29,8 @@
 		oncancel: () => void;
 		/** Checks the PIN with the server; replaced in tests. */
 		verify?: (pin: string) => Promise<KioskStaffPinResult>;
+		/** The server refused because the kiosk is closed; defaults to showing the closed page. */
+		onclosed?: () => void;
 	}
 
 	let {
@@ -28,7 +38,8 @@
 		description,
 		onverified,
 		oncancel,
-		verify = verifyKioskStaffPin
+		verify = verifyKioskStaffPin,
+		onclosed = showClosedPage
 	}: Props = $props();
 
 	const t = $derived(getTranslation(KIOSK_COMMON_I18N, languageStore.current));
@@ -42,6 +53,7 @@
 				verify: (pin) => verify(pin),
 				onverified: () => onverified(),
 				oncancel: () => oncancel(),
+				onclosed: () => onclosed(),
 				onretry: () => void refocusKeys()
 			})
 	);

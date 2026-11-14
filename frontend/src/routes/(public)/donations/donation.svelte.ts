@@ -124,6 +124,8 @@ export class DonationStore {
 	}
 
 	removeItem(id: string) {
+		// A donation needs at least one line (#1391) — the last one can't be removed.
+		if (this.items.length <= 1) return;
 		this.items = this.items.filter((item) => item.id !== id);
 	}
 
