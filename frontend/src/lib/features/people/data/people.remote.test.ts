@@ -26,7 +26,8 @@ import {
 } from './people.remote';
 import { UlidReservation } from '$lib/db/ulid-reservation';
 import { mintConsentStamp } from '$lib/features/consent/server';
-import type { EvacueeInput, Medical } from '../domain/people';
+import type { Evacuee, EvacueeInput, Medical } from '../domain/people';
+import type { EvacueeSearchCursor, EvacueeSearchPage } from '../domain/evacuee-search';
 import type { EvacueeSort } from '../domain/evacuee-sort';
 import type { EvacueeFilters } from './people.repository';
 import {
@@ -583,6 +584,181 @@ describe('PeopleRemoteRepository', () => {
 			const scan = vi.spyOn(memoryRepo, 'allByType');
 			expect((await repo.searchEvacueesMany(['', '  '])).size).toBe(0);
 			expect(scan).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('searchEvacueesPage', () => {
+		let somchai: Evacuee;
+		let emergency: Evacuee;
+		let passport: Evacuee;
+
+		const names = (items: readonly Evacuee[]) => items.map((e) => e.first_name).sort();
+
+		const drain = async (query: string, pageSize: number): Promise<Evacuee[]> => {
+			const all: Evacuee[] = [];
+			let cursor: EvacueeSearchCursor | null = null;
+			do {
+				const page: EvacueeSearchPage = await repo.searchEvacueesPage(query, { cursor, pageSize });
+				all.push(...page.items);
+				cursor = page.nextCursor;
+			} while (cursor);
+			return all;
+		};
+
+		beforeEach(async () => {
+			somchai = await repo.createEvacuee(
+				evInput({
+					first_name: 'Somchai',
+					last_name: 'Jaidee',
+					nickname: 'Chai',
+					phone: '0812345678',
+					person_id: { cardType: 'national_id', number: '1103700123456' }
+				}),
+				ctx
+			);
+			await repo.createEvacuee(
+				evInput({ first_name: 'Malee', last_name: 'Suksan', phone: '0899999999' }),
+				ctx
+			);
+			emergency = await repo.createEvacuee(
+				evInput({
+					first_name: 'Emergency',
+					last_name: 'Somboon',
+					phone: null,
+					emergency_contact: { name: 'ญาติ', phone: '0823456789', relation: 'ญาติ' }
+				}),
+				ctx
+			);
+			passport = await repo.createEvacuee(
+				evInput({
+					first_name: 'Traveller',
+					last_name: 'Smith',
+					phone: '0855555555',
+					person_id: { cardType: 'passport', number: 'AA1234567' }
+				}),
+				ctx
+			);
+		});
+
+		it('never loads the whole shelter, for any kind of query', async () => {
+			const scan = vi.spyOn(memoryRepo, 'allByType');
+			for (const q of [
+				'Som',
+				'Somchai Jai',
+				'0812',
+				'+66 81-234',
+				'1103700123456',
+				'AA1234567',
+				somchai._id,
+				'   '
+			]) {
+				await repo.searchEvacueesPage(q);
+			}
+			expect(scan).not.toHaveBeenCalled();
+		});
+
+		it('does no I/O for an empty query', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			const get = vi.spyOn(memoryRepo, 'get');
+			expect(await repo.searchEvacueesPage('  ')).toEqual({ items: [], nextCursor: null });
+			expect(find).not.toHaveBeenCalled();
+			expect(get).not.toHaveBeenCalled();
+		});
+
+		it('matches one word as a prefix of first name, last name or nickname', async () => {
+			expect(names((await repo.searchEvacueesPage('Som')).items)).toEqual(['Emergency', 'Somchai']);
+			expect(names((await repo.searchEvacueesPage('Chai')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('Sux')).items)).toEqual([]);
+			expect(names((await repo.searchEvacueesPage('Suk')).items)).toEqual(['Malee']);
+		});
+
+		it('matches several words as first-name prefix and last-name prefix', async () => {
+			expect(names((await repo.searchEvacueesPage('Somchai Jai')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('Som Jai')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('Jaidee Somchai')).items)).toEqual([]);
+		});
+
+		it('matches a phone prefix on the own phone, formatted or international', async () => {
+			expect(names((await repo.searchEvacueesPage('081-234')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('+66 81-234')).items)).toEqual(['Somchai']);
+		});
+
+		it('matches a phone prefix on the emergency-contact phone', async () => {
+			const { items } = await repo.searchEvacueesPage('0823');
+			expect(items.map((e) => e._id)).toEqual([emergency._id]);
+		});
+
+		it('matches a card only by its exact number', async () => {
+			expect(names((await repo.searchEvacueesPage('1103700123456')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('1-1037-00123-45-6')).items)).toEqual([
+				'Somchai'
+			]);
+			expect((await repo.searchEvacueesPage('110370012345')).items).toEqual([]);
+			expect(names((await repo.searchEvacueesPage('AA1234567')).items)).toEqual(['Traveller']);
+			expect(names((await repo.searchEvacueesPage('aa1234567')).items)).toEqual(['Traveller']);
+			expect((await repo.searchEvacueesPage('AA12345')).items).toEqual([]);
+		});
+
+		it('resolves a scan with one get and no index query', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			const get = vi.spyOn(memoryRepo, 'get');
+			const bare = passport._id.slice('evacuee:'.length);
+
+			for (const raw of [`/onsite/zoning/${passport._id}`, bare.toLowerCase(), passport._id]) {
+				const page = await repo.searchEvacueesPage(raw);
+				expect(page.items.map((e) => e._id)).toEqual([passport._id]);
+				expect(page.nextCursor).toBeNull();
+			}
+			expect(get).toHaveBeenCalledTimes(3);
+			expect(find).not.toHaveBeenCalled();
+		});
+
+		it('answers an unknown scan with no items', async () => {
+			const page = await repo.searchEvacueesPage('01J8Z3K4M5N6P7Q8R9S0T1V2W3');
+			expect(page).toEqual({ items: [], nextCursor: null });
+		});
+
+		it('pages through every match without skip, covering the full result set', async () => {
+			for (let i = 0; i < 7; i++) {
+				await repo.createEvacuee(evInput({ first_name: `Sompong${i}`, phone: null }), ctx);
+			}
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			const first = await repo.searchEvacueesPage('Som', { pageSize: 3 });
+			expect(first.items.length).toBeGreaterThan(0);
+			expect(first.nextCursor).not.toBeNull();
+
+			const all = await drain('Som', 3);
+			const ids = all.map((e) => e._id);
+			const expected = [
+				somchai._id,
+				emergency._id,
+				...(await memoryRepo.find<Evacuee>({ selector: { type: 'evacuee' } }))
+					.filter((e) => e.first_name.startsWith('Sompong'))
+					.map((e) => e._id)
+			];
+			expect(new Set(ids)).toEqual(new Set(expected));
+			for (const call of find.mock.calls) expect(call[0]).not.toHaveProperty('skip');
+		});
+
+		it('keeps a clause open on a full raw page even when the post-filter drops its rows', async () => {
+			await repo.createEvacuee(evInput({ first_name: 'Zed', phone: null }), ctx);
+			const page = await repo.searchEvacueesPage('Z', { pageSize: 1 });
+			expect(names(page.items)).toEqual(['Zed']);
+			const next = await repo.searchEvacueesPage('Z', { pageSize: 1, cursor: page.nextCursor });
+			expect(next.items).toEqual([]);
+			expect(next.nextCursor).toBeNull();
+		});
+
+		it('queries only the clauses still open in the cursor', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			await repo.searchEvacueesPage('Som', { pageSize: 1, cursor: { first_name: '1' } });
+			expect(find).toHaveBeenCalledTimes(1);
+		});
+
+		it('caps the page size at 50', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			await repo.searchEvacueesPage('Som', { pageSize: 500 });
+			expect(find.mock.calls.every(([q]) => q.limit === 50)).toBe(true);
 		});
 	});
 

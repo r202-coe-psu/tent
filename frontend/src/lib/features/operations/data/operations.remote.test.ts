@@ -89,6 +89,9 @@ let memoryRepo: Repository = {
 	async find<T>(): Promise<T[]> {
 		return [...couchDocs.values()] as unknown as T[];
 	},
+	async findPage<T>() {
+		return { docs: [...couchDocs.values()] as unknown as T[], bookmark: null };
+	},
 	async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
 		const saved: T[] = [];
 		for (const doc of docs) {
