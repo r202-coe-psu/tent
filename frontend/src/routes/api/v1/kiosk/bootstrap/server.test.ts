@@ -116,6 +116,17 @@ describe('POST /api/v1/kiosk/bootstrap', () => {
 		expect(mockHeartbeat).toHaveBeenCalledWith('scanner_device:kiosk-sh001-01');
 	});
 
+	// A heartbeat that loses a _rev race with an admin PATCH must not fail the kiosk's boot.
+	it('still boots when the heartbeat write fails', async () => {
+		mockGetDevice.mockResolvedValue(device());
+		mockHeartbeat.mockRejectedValue(new ScannerDependencyError());
+
+		const response = await POST(request());
+
+		expect(response.status).toBe(200);
+		expect((await response.json()).device.device_id).toBe('kiosk-sh001-01');
+	});
+
 	it('returns 503 for malformed stored data and dependency failures', async () => {
 		mockGetDevice.mockResolvedValue({ ...device(), secret_hash: 'not-a-sha256-hash' });
 		expect((await POST(request())).status).toBe(503);
