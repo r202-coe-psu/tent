@@ -55,10 +55,6 @@ class FakeContext(FakeEmitter):
         self.page = page
         self.pages = []
         self.closed = False
-        self.routes: list[tuple[str, object]] = []
-
-    async def route(self, pattern, handler):
-        self.routes.append((pattern, handler))
 
     async def new_page(self):
         return self.page
@@ -496,29 +492,6 @@ def test_no_answer_ends_the_app_without_opening_the_shelter_or_the_reader(tmp_pa
     assert harness.playwright.page.gotos == []
     assert watcher_settings == []
     assert harness.playwright.chromium.context.closed
-
-
-def test_label_print_requests_go_to_the_local_printer_for_the_chosen_shelter(tmp_path):
-    from scanner_client.label_print import PRINT_PATH, PRINTER_PATH, LocalPrintRoutes
-
-    harness, *_ = run_with_prompt(tmp_path, "http://192.168.1.10")
-
-    routes = harness.playwright.chromium.context.routes
-    assert sorted(pattern for pattern, _ in routes) == sorted(
-        [f"**{PRINT_PATH}", f"**{PRINTER_PATH}"]
-    )
-    handler = routes[0][1]
-    assert isinstance(handler.__self__, LocalPrintRoutes)
-    assert handler.__self__._origin == "http://192.168.1.10"  # the answer, not the old value
-
-
-def test_the_local_printer_is_the_configured_one(tmp_path):
-    harness = Harness(tmp_path, printer_name="Label 2")
-
-    harness.run()
-
-    handler = harness.playwright.chromium.context.routes[0][1]
-    assert handler.__self__._printer.name == "Label 2"
 
 
 def test_windows_reads_cards_through_winscard_not_pyscard():

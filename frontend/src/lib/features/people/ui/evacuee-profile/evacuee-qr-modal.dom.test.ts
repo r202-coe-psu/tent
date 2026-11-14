@@ -7,9 +7,7 @@ import type { Evacuee } from '$lib/features/people';
 vi.mock('$lib/features/printers', async () => ({
 	ReportedRenderError: (await import('$lib/features/printers/domain/reported-error'))
 		.ReportedRenderError,
-	PrintLabelsButton: (await import('./__fixtures__/print-labels-button-stub.svelte')).default,
-	ScannerClientPrintButton: (await import('./__fixtures__/scanner-client-print-button-stub.svelte'))
-		.default
+	PrintLabelsButton: (await import('./__fixtures__/print-labels-button-stub.svelte')).default
 }));
 const issue = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());

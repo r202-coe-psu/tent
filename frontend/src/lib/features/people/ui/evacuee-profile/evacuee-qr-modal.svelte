@@ -14,11 +14,7 @@
 		useScreeningsByEvacuee
 	} from '$lib/features/people';
 	import { KIOSK_LABEL_MM, renderKioskQrLabelPng } from '$lib/features/kiosk';
-	import {
-		PrintLabelsButton,
-		ReportedRenderError,
-		ScannerClientPrintButton
-	} from '$lib/features/printers';
+	import { PrintLabelsButton, ReportedRenderError } from '$lib/features/printers';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -80,8 +76,7 @@
 	// labels twice: the modal stays open until the run ends and the follow-up is resolved.
 	let printing = $state(false);
 	let retryHeld = $state(false);
-	let printingHere = $state(false);
-	const locked = $derived(printing || retryHeld || printingHere);
+	const locked = $derived(printing || retryHeld);
 
 	$effect(() => {
 		onLockedChange?.(locked);
@@ -265,19 +260,6 @@
 						source={printSource}
 						renderLabels={renderStationLabels}
 						label={stationOnly ? t.printIdCard : undefined}
-						disabled={printingHere}
-						buttonClass="h-12 w-full gap-2 text-base"
-					/>
-				{/if}
-				{#if printable && labelPng}
-					<!-- The label printer on this PC, only inside the scanner client (desk app). -->
-					<ScannerClientPrintButton
-						bind:printing={printingHere}
-						{shelterCode}
-						labelCount={1}
-						source={printSource}
-						renderLabels={renderStationLabels}
-						disabled={printing || retryHeld}
 						buttonClass="h-12 w-full gap-2 text-base"
 					/>
 				{/if}

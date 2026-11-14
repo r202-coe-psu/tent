@@ -33,7 +33,6 @@
 		renderLabels,
 		label,
 		buttonClass,
-		disabled = false,
 		printing: running = $bindable(false),
 		retryHeld = $bindable(false)
 	}: {
@@ -44,8 +43,6 @@
 		label?: string;
 		/** Extra classes for the main button (e.g. full width in a modal). */
 		buttonClass?: string;
-		/** e.g. while the scanner client button prints the same labels, so one QR is not issued twice. */
-		disabled?: boolean;
 		/**
 		 * True while a print run is in progress. Bind it to keep the host open meanwhile: unmounting
 		 * stops polling but not the queued job, so printing again after reopening duplicates labels.
@@ -231,10 +228,7 @@
 	// A locked printer that looks offline is still tried: the BFF answers a follow-up with the job it
 	// already holds, or refuses with PRINTER_OFFLINE when it has none, which releases the lock.
 	const blocked = $derived(
-		running ||
-			disabled ||
-			disconnected ||
-			(target !== undefined && !target.online && !lockedPrinter)
+		running || disconnected || (target !== undefined && !target.online && !lockedPrinter)
 	);
 	const buttonLabel = $derived(
 		running
