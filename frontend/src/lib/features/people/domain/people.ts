@@ -2382,6 +2382,40 @@ export function buildShelterCloseCheckout(
 }
 
 /**
+ * #1401: an evacuee checks themselves out at the kiosk. Unlike {@link buildShelterCloseCheckout}
+ * this goes through the normal guard (`active` / `room_confirmed` only, non-empty `reason`), so a
+ * stay staff must move by hand is refused. `destinationType` also lands on the movement
+ * (`returned_home` → `home`, `other` → `other`) so per-person reports see where they went.
+ */
+export function buildKioskSelfCheckout(
+	evacuee: Evacuee,
+	ctx: AuthorContext,
+	reason: string,
+	destinationType?: Extract<CheckoutDestinationType, 'returned_home' | 'other'>,
+	occurredAt: Timestamp = now()
+): { movement: Movement; evacuee: Evacuee } {
+	const destination: MovementDestination | undefined =
+		destinationType === 'returned_home'
+			? { kind: 'home' }
+			: destinationType === 'other'
+				? { kind: 'other', detail: 'เช็คเอาต์ที่ตู้ kiosk' }
+				: undefined;
+	assertMovementAllowed(evacuee, 'check_out', { reason });
+	const movement = createMovement(
+		{
+			evacuee_id: evacuee._id,
+			action: 'check_out',
+			zone: null,
+			...(destination ? { destination } : {}),
+			reason,
+			occurred_at: occurredAt
+		},
+		ctx
+	);
+	return { movement, evacuee: applyMovementToStay(evacuee, movement) };
+}
+
+/**
  * CR-219 FR-6: cancel a `pre_registered` stay with hold-cancel semantics
  * (`cancelPreRegistration`) — `status = cancelled`, `since = now`, no movement.
  */

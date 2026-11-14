@@ -1,14 +1,16 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushSync, mount, unmount } from 'svelte';
+import { createRawSnippet, flushSync, mount, unmount } from 'svelte';
 import type { ComponentProps } from 'svelte';
 import { languageStore } from '$lib/stores/language.svelte';
 import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 import {
 	checkInSelectedMembers,
 	lookupPreRegisteredEvacuee,
+	type KioskEvacueeSummary,
 	type KioskLookupResponse
 } from '../data/kiosk-check-in.api';
+import { checkOutKioskMembers } from '../data/kiosk-check-out.api';
 
 const THAI = /[฀-๿]/;
 
@@ -18,6 +20,7 @@ vi.mock('../data/kiosk-check-in.api', async (importOriginal) => ({
 	lookupPreRegisteredEvacuee: vi.fn(),
 	checkInSelectedMembers: vi.fn()
 }));
+vi.mock('../data/kiosk-check-out.api', () => ({ checkOutKioskMembers: vi.fn() }));
 vi.mock('../application/kiosk-label-print', () => ({
 	prepareKioskQrImage: vi.fn().mockResolvedValue({ src: 'data:image/png;base64,AA==', sizeMm: 30 }),
 	printKioskQrLabels: vi.fn().mockResolvedValue({ kind: 'printed', printed: 1 })
@@ -206,5 +209,210 @@ describe('KioskPreRegisteredCheckIn language', () => {
 		expect(screenText()).toContain('Waiting for card');
 		expect(screenText()).toContain('Insert your card to search');
 		expect(screenText()).not.toMatch(THAI);
+	});
+});
+
+describe('KioskPreRegisteredCheckIn self-checkout (#1401)', () => {
+	const CARD = { source: 'smart-card', citizen_id: '1234567890123' } as const;
+	/** Stands in for the face-check camera the card page passes as `hold`. */
+	const faceCheck = createRawSnippet(() => ({
+		render: () => '<div data-testid="face-check-hold">camera</div>'
+	}));
+	const faceCheckShown = () => document.querySelector('[data-testid="face-check-hold"]') !== null;
+
+	function person(
+		id: string,
+		status: string,
+		options: { primary?: boolean; selectable?: boolean } = {}
+	): KioskEvacueeSummary {
+		return {
+			evacuee_id: id,
+			first_name: id === 'p1' ? 'Somchai' : 'Malee',
+			last_name: 'J***',
+			gender: null,
+			age: 35,
+			status,
+			is_primary: options.primary ?? false,
+			selectable: options.selectable ?? false
+		};
+	}
+
+	function lookupOf(...members: KioskEvacueeSummary[]): KioskLookupResponse {
+		return {
+			kind: 'household',
+			name_masked: true,
+			shelter_code: 'SH001',
+			primary_evacuee_id: 'p1',
+			members
+		};
+	}
+
+	/** A card visitor on a kiosk with the face check on: the face step is held in front of the list. */
+	const mountCard = (props: Partial<ComponentProps<typeof KioskPreRegisteredCheckIn>> = {}) =>
+		mountCheckIn({ input: CARD, cardMode: true, holdMembers: true, hold: faceCheck, ...props });
+
+	function click(label: string) {
+		[...document.querySelectorAll('button')]
+			.find((button) => button.textContent?.includes(label))!
+			.click();
+		flushSync();
+	}
+
+	it('asks a card visitor who is already in the shelter whether to check out, with no face check', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(person('p1', 'active', { primary: true }))
+		);
+
+		mountCard();
+		await vi.waitFor(() => expect(screenText()).toContain('คุณเข้าพักในศูนย์แล้ว'));
+
+		expect(screenText()).toContain('ไม่ใช่ กลับ');
+		expect(faceCheckShown()).toBe(false);
+		expect(screenText()).not.toContain('เลือกสมาชิก');
+	});
+
+	it('never mounts the face check through the whole check-out, and sends the check-out without it', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(person('p1', 'active', { primary: true }))
+		);
+		vi.mocked(checkOutKioskMembers).mockResolvedValue({
+			shelter_code: 'SH001',
+			members: [{ evacuee_id: 'p1', status: 'checked_out' }]
+		});
+		mountCard();
+		await vi.waitFor(() => expect(screenText()).toContain('คุณเข้าพักในศูนย์แล้ว'));
+		const seen = [faceCheckShown()];
+
+		click('เช็คเอาต์');
+		seen.push(faceCheckShown());
+		click('ถัดไป');
+		seen.push(faceCheckShown());
+		click('กลับบ้าน');
+		seen.push(faceCheckShown());
+		click('ยืนยัน');
+		await vi.waitFor(() => expect(screenText()).toContain('เช็คเอาต์เรียบร้อยแล้ว'));
+		seen.push(faceCheckShown());
+
+		expect(seen).toEqual([false, false, false, false, false]);
+		expect(checkOutKioskMembers).toHaveBeenCalledExactlyOnceWith({
+			primary_evacuee_id: 'p1',
+			evacuee_ids: ['p1'],
+			destination_type: 'returned_home',
+			gate: CARD
+		});
+	});
+
+	it('offers the same check-out to a ThaiD visitor, sending the ThaiD session', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(person('p1', 'room_confirmed', { primary: true }))
+		);
+		vi.mocked(checkOutKioskMembers).mockResolvedValue({ shelter_code: 'SH001', members: [] });
+		const thaid = { source: 'thaid', session_id: 'thaid-session-1' } as const;
+
+		mountCheckIn({ input: thaid });
+		await vi.waitFor(() => expect(screenText()).toContain('คุณเข้าพักในศูนย์แล้ว'));
+		click('เช็คเอาต์');
+		click('ถัดไป');
+		click('อื่นๆ');
+		click('ยืนยัน');
+		await vi.waitFor(() => expect(checkOutKioskMembers).toHaveBeenCalled());
+
+		expect(vi.mocked(checkOutKioskMembers).mock.calls[0][0]).toMatchObject({
+			destination_type: 'other',
+			gate: thaid
+		});
+	});
+
+	it('keeps the old behaviour for a QR visitor who is already in the shelter', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(person('p1', 'active', { primary: true }), person('p2', 'arriving'))
+		);
+
+		mountCheckIn({ input: { source: 'qr', token: 'tok' } });
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ QR'));
+
+		expect(screenText()).not.toContain('คุณเข้าพักในศูนย์แล้ว');
+	});
+
+	it('keeps the old behaviour for a card visitor who has not been zoned yet', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(person('p1', 'arriving', { primary: true }))
+		);
+
+		mountCard({ holdMembers: false });
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ QR'));
+
+		expect(screenText()).not.toContain('คุณเข้าพักในศูนย์แล้ว');
+	});
+
+	it('on "not me" with someone left to check in, goes to the usual check-in list and its face check', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(
+				person('p1', 'active', { primary: true }),
+				person('p2', 'pre_registered', { selectable: true })
+			)
+		);
+		mountCard();
+		await vi.waitFor(() => expect(screenText()).toContain('คุณเข้าพักในศูนย์แล้ว'));
+		expect(faceCheckShown()).toBe(false);
+
+		click('ไม่ใช่ กลับ');
+
+		expect(screenText()).not.toContain('คุณเข้าพักในศูนย์แล้ว');
+		expect(faceCheckShown()).toBe(true);
+		expect(checkOutKioskMembers).not.toHaveBeenCalled();
+	});
+
+	it('on "not me" without the face check, shows the usual member list to check in', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(
+				person('p1', 'active', { primary: true }),
+				person('p2', 'pre_registered', { selectable: true })
+			)
+		);
+		mountCard({ holdMembers: false });
+		await vi.waitFor(() => expect(screenText()).toContain('คุณเข้าพักในศูนย์แล้ว'));
+
+		click('ไม่ใช่ กลับ');
+
+		expect(screenText()).toContain('เลือกผู้ที่มาถึง');
+		expect(screenText()).toContain('Malee');
+		expect(screenText()).toContain('ลงทะเบียนล่วงหน้า');
+	});
+
+	it('on "not me" with nobody left to check in, falls back to the usual reprint results', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(person('p1', 'active', { primary: true }), person('p2', 'arriving'))
+		);
+		mountCard({ holdMembers: false });
+		await vi.waitFor(() => expect(screenText()).toContain('คุณเข้าพักในศูนย์แล้ว'));
+
+		click('ไม่ใช่ กลับ');
+
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ QR'));
+		expect(screenText()).not.toContain('คุณเข้าพักในศูนย์แล้ว');
+	});
+
+	it('pauses the page idle timeout while the check-out is being saved', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(
+			lookupOf(person('p1', 'active', { primary: true }))
+		);
+		let release: () => void = () => {};
+		vi.mocked(checkOutKioskMembers).mockReturnValue(
+			new Promise((resolve) => {
+				release = () => resolve({ shelter_code: 'SH001', members: [] });
+			})
+		);
+		const onprintbusychange = vi.fn();
+		mountCard({ onprintbusychange });
+		await vi.waitFor(() => expect(screenText()).toContain('คุณเข้าพักในศูนย์แล้ว'));
+		click('เช็คเอาต์');
+		click('ถัดไป');
+		click('กลับบ้าน');
+
+		click('ยืนยัน');
+		expect(onprintbusychange).toHaveBeenLastCalledWith(true);
+		release();
+		await vi.waitFor(() => expect(onprintbusychange).toHaveBeenLastCalledWith(false));
 	});
 });
