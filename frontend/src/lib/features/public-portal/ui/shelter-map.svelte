@@ -536,7 +536,7 @@
 					? externalHref
 						? `<a href="${new URL(externalHref).href}" target="_blank" rel="noopener noreferrer"
 						style="display:flex;align-items:center;justify-content:center;gap:6px;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;padding:6px 12px;border-radius:8px;font-weight:bold;font-size:0.75rem;text-decoration:none;margin-top:8px;">
-						${t.externalLink} ↗
+						${t.externalLink} <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>
 					</a>`
 						: ''
 					: canBook

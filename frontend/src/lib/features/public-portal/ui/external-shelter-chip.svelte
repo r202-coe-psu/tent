@@ -1,9 +1,9 @@
 <script lang="ts">
-	import ExternalLink from '@lucide/svelte/icons/external-link';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 
 	/**
 	 * CR-252 FR-20 / FR-23: status chip of a shelter run in another system — gray (Slate/Neutral),
-	 * text label + external-link icon (never color alone). A vetted `https://` link makes it an
+	 * text label + arrow-up-right icon (never color alone). A vetted `https://` link makes it an
 	 * anchor that opens the source system in a new tab.
 	 */
 	interface Props {
@@ -31,11 +31,11 @@
 		class="{chipClass} hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {className}"
 	>
 		<span>{label}</span>
-		<ExternalLink class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+		<ArrowUpRight class="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />
 	</a>
 {:else}
 	<span data-testid="external-shelter-chip" class="{chipClass} {className}">
 		<span>{label}</span>
-		<ExternalLink class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+		<ArrowUpRight class="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />
 	</span>
 {/if}
