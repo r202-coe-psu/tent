@@ -29,7 +29,7 @@
 
 	const groups = $derived<(CountTile & { emphasis?: boolean })[]>([
 		{ key: 'total', label: 'รวมทั้งหมด', icon: Users, count: headcount?.total, emphasis: true },
-		{ key: 'evacuees', label: 'ผู้อพยพ (ผู้พักพิง)', icon: ShieldCheck, count: people?.evacuees },
+		{ key: 'evacuees', label: 'ผู้พักพิง', icon: ShieldCheck, count: people?.evacuees },
 		{ key: 'staff', label: 'เจ้าหน้าที่', icon: UserCheck, count: people?.staff },
 		{ key: 'volunteers', label: 'อาสาสมัคร', icon: HeartHandshake, count: people?.volunteers }
 	]);
@@ -74,7 +74,7 @@
 			aria-controls="kitchen-headcount-diets"
 			onclick={() => (dietsOpen = !dietsOpen)}
 		>
-			<span class="text-sm font-semibold text-slate-700">อาหารพิเศษ (นับจากผู้พักพิง)</span>
+			<span class="text-sm font-semibold text-slate-700">อาหารพิเศษ (เฉพาะผู้พักพิง)</span>
 			<ChevronDown
 				class="size-4 text-slate-500 transition-transform {dietsOpen ? 'rotate-180' : ''}"
 				aria-hidden="true"

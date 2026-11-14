@@ -13,6 +13,7 @@ import {
 	ScannerDependencyError,
 	ScannerDeviceNotFoundError
 } from './device-credentials';
+import { isKioskClosed, kioskClosedResponse } from './kiosk-closed';
 import { verifyDeviceStaffPin } from './staff-pin';
 import { StaffPinNotSetError, StaffPinUnavailableError } from './staff-pin-store';
 import { staffPinThrottle, type StaffPinThrottleResult } from './staff-pin-throttle';
@@ -88,15 +89,19 @@ const PIN_CHECK_UNAVAILABLE = errorBody(DEPENDENCY_UNAVAILABLE, 'บริกา
  * device credentials, then check the body's `pin` in the device's `staffPinThrottle` queue — so
  * every route asking for the PIN shares one guessing budget and the same errors. `onOk` answers
  * only once the PIN matched. `audit` gets one outcome per check and must never be given the PIN.
+ * With `refuseWhenClosed`, a device whose service is closed ("ปิดให้บริการ") is answered
+ * `403 KIOSK_CLOSED` right after authentication, before any PIN is checked; routes technicians
+ * use on the closed screen (device info) leave it off.
  */
 export async function withDeviceStaffPin(
 	request: Request,
 	audit: (deviceId: string, outcome: string) => void,
-	onOk: (device: PersistedScannerDevice) => Promise<Response>
+	onOk: (device: PersistedScannerDevice) => Promise<Response>,
+	options: { refuseWhenClosed?: boolean } = {}
 ): Promise<Response> {
 	let device: PersistedScannerDevice | null = null;
 	try {
-		await authenticateScannerDevice(
+		const principal = await authenticateScannerDevice(
 			request.headers.get('x-device-id') ?? '',
 			request.headers.get('x-device-secret') ?? '',
 			{
@@ -107,6 +112,7 @@ export async function withDeviceStaffPin(
 				}
 			}
 		);
+		if (options.refuseWhenClosed && isKioskClosed(principal)) return kioskClosedResponse();
 	} catch (error) {
 		if (error instanceof ScannerAuthError) {
 			return staffPinJson(errorBody(DEVICE_AUTH_FAILED, 'ไม่สามารถยืนยันเครื่อง kiosk ได้'), 401);

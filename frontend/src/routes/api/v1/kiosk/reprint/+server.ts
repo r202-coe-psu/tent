@@ -25,6 +25,7 @@ import {
 	ScannerAuthError,
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
+import { isKioskClosed, kioskClosedResponse } from '$lib/server/scanners/kiosk-closed';
 import { StaffPinUnavailableError, verifyDeviceStaffPin } from '$lib/server/scanners/staff-pin';
 import { staffPinThrottle } from '$lib/server/scanners/staff-pin-throttle';
 import { findMasterByCode } from '$lib/server/shelters.admin';
@@ -71,6 +72,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				}
 			}
 		);
+		if (isKioskClosed(principal)) return kioskClosedResponse();
 		const parsed = kioskReprintInputSchema.safeParse(await request.json().catch(() => null));
 		if (!parsed.success || !normalizeKioskPhone(parsed.data.phone)) {
 			return errorResponse(400, 'INVALID_REPRINT_INPUT', 'ข้อมูลสำหรับพิมพ์ซ้ำไม่ถูกต้อง');

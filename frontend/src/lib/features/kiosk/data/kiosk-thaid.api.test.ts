@@ -54,6 +54,7 @@ describe('createKioskThaidSession', () => {
 describe('createKioskThaidSession errors', () => {
 	it.each([
 		[403, 'disabled', { error: { code: 'KIOSK_METHOD_DISABLED' } }],
+		[403, 'closed', { error: { code: 'KIOSK_CLOSED' } }],
 		[429, 'rate_limited', { error: { code: 'KIOSK_RATE_LIMITED' } }],
 		[401, 'unauthorized', { error: { code: 'DEVICE_AUTH_FAILED' } }],
 		[400, 'invalid', { error: { code: 'INVALID_INPUT' } }],

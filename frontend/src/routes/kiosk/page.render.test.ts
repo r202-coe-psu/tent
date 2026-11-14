@@ -18,7 +18,8 @@ describe('kiosk home page', () => {
 					qrCheckInEnabled: true,
 					phoneCheckInEnabled: true,
 					thaidCheckInEnabled: false,
-					walkInRegistrationEnabled: false
+					walkInRegistrationEnabled: false,
+					serviceOpen: true
 				}
 			}
 		});
@@ -36,7 +37,8 @@ describe('kiosk home page', () => {
 					qrCheckInEnabled: true,
 					phoneCheckInEnabled: true,
 					thaidCheckInEnabled: false,
-					walkInRegistrationEnabled: false
+					walkInRegistrationEnabled: false,
+					serviceOpen: true
 				}
 			}
 		});

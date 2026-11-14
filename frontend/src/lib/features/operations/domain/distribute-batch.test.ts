@@ -92,6 +92,16 @@ describe('checkDistributeBatch: balance per line (#837)', () => {
 		expect(water.baseQty).toBe('24');
 	});
 
+	it('a decimal typed without a leading zero is a quantity', () => {
+		const check = checkDistributeBatch([line({ item_id: RICE, qty: '.5', unit: 'ชิ้น' })], ctx());
+		expect(check.verdicts[0]).toMatchObject({ kind: 'ok', baseQty: '0.5' });
+	});
+
+	it('a quantity that is not a plain decimal string is incomplete (CR-038)', () => {
+		const check = checkDistributeBatch([line({ item_id: RICE, qty: '1e1', unit: 'ชิ้น' })], ctx());
+		expect(check.verdicts[0]).toEqual({ kind: 'incomplete', missing: 'qty' });
+	});
+
 	it('holds a fractional quantity in a count unit back, but not in other units (#805)', () => {
 		const lines = [line({ item_id: WATER, qty: '1.5', unit: 'ขวด' })];
 		const dimensions = { ขวด: 'count', กก: 'mass' } as const;

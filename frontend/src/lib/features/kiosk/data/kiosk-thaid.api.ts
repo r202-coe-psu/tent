@@ -1,3 +1,5 @@
+import { isKioskClosedError } from './kiosk-closed';
+
 export const KIOSK_THAID_SESSION_PATH = '/api/v1/kiosk/thaid/session';
 export const KIOSK_THAID_STATUS_PATH = `${KIOSK_THAID_SESSION_PATH}/status`;
 export const KIOSK_THAID_CANCEL_PATH = `${KIOSK_THAID_SESSION_PATH}/cancel`;
@@ -17,6 +19,8 @@ export interface KioskThaidSession {
 /** Why a ThaiD session request failed, in the terms the kiosk screen cares about. */
 export type KioskThaidErrorKind =
 	| 'disabled'
+	/** 403 KIOSK_CLOSED: an admin closed the kiosk; the screen goes to the closed page. */
+	| 'closed'
 	| 'rate_limited'
 	/** 401 / 403: this kiosk is not (or no longer) allowed; retrying the same call cannot help. */
 	| 'unauthorized'
@@ -27,6 +31,7 @@ export type KioskThaidErrorKind =
 
 function kindOf(status: number, code: string | null): KioskThaidErrorKind {
 	if (code === 'KIOSK_METHOD_DISABLED') return 'disabled';
+	if (isKioskClosedError({ code })) return 'closed';
 	if (status === 429) return 'rate_limited';
 	if (status === 401 || status === 403) return 'unauthorized';
 	if (status >= 400 && status < 500 && status !== 408) return 'invalid';

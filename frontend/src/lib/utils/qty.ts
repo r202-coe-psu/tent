@@ -40,6 +40,22 @@ export function persistQty(value: QtyValue): string {
 	return parseQty(value).toDecimalPlaces(QTY_DECIMALS, Decimal.ROUND_HALF_UP).toString();
 }
 
+/**
+ * Strict parse of text a user typed into a quantity box (#939): plain decimal digits only (no
+ * sign, exponent or separators) with at most {@link QTY_DECIMALS} significant fractional digits
+ * (`0.30000` is fine, `0.12345` is not). Returns the persist string, or null when invalid.
+ * Never routes through `Number()`, so `1e21` and float noise cannot reach storage.
+ * For the looser variant (accepts `.5` / `5.`), see {@link parseQtyInput}.
+ */
+export function parseQtyInputStrict(raw: string): string | null {
+	const text = raw.trim();
+	if (!/^\d+(\.\d+)?$/.test(text)) return null;
+	const value = new Decimal(text);
+	if (value.decimalPlaces() > QTY_DECIMALS) return null;
+	// toFixed(): `toString()` switches to exponent notation from 1e21 (`'1e+21'`), which must not reach storage.
+	return value.toFixed();
+}
+
 /** Round to qty scale and return persist string. */
 export function roundQty(value: QtyValue): string {
 	return persistQty(value);
@@ -98,6 +114,20 @@ export function qtyLte(a: QtyValue, b: QtyValue): boolean {
 /** True when value is zero after qty rounding. */
 export function qtyIsZero(value: QtyValue): boolean {
 	return parseQty(roundQty(value)).isZero();
+}
+
+const QTY_INPUT_RE = /^-?(\d{1,15}(\.\d{0,4})?|\.\d{1,4})$/;
+
+/**
+ * Parse what a person typed into a qty field: the canonical qty string, or null when it is not
+ * a plain decimal with ≤4 fractional digits. Accepts `.5` and `5.`, which a number input allows;
+ * rejects exponents, which it also allows but CR-038 does not. The integer part stops at 15
+ * digits: past that, decimal.js prints exponent notation and rounds at its 20-digit precision.
+ * For plain digits only (no `.5` / `5.` / sign), use {@link parseQtyInputStrict}.
+ */
+export function parseQtyInput(raw: string): string | null {
+	const trimmed = raw.trim();
+	return QTY_INPUT_RE.test(trimmed) ? persistQty(trimmed) : null;
 }
 
 /** Zod: transactional qty string (allows zero; signed). */

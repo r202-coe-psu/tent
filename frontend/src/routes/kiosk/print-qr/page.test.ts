@@ -13,7 +13,8 @@ vi.mock('$lib/features/kiosk/config', async () => {
 const config = (phoneCheckInEnabled: boolean) => ({
 	phoneCheckInEnabled,
 	thaidCheckInEnabled: false,
-	walkInRegistrationEnabled: false
+	walkInRegistrationEnabled: false,
+	serviceOpen: true
 });
 
 describe('kiosk print-qr route load', () => {

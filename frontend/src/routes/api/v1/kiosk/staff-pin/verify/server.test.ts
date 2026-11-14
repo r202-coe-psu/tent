@@ -139,6 +139,18 @@ describe('POST /api/v1/kiosk/staff-pin/verify', () => {
 		expect((await POST(request({ pin: '482913' }))).status).toBe(200);
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and never checks the PIN', async () => {
+		mockLookup.mockResolvedValueOnce(deviceDoc({ service_open: false }) as never);
+
+		const response = await POST(request({ pin: '482913' }));
+
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(mockSecret).not.toHaveBeenCalled();
+	});
+
 	it('returns 401 DEVICE_AUTH_FAILED when device auth fails', async () => {
 		const response = await POST(request({ pin: '482913' }, { 'x-device-secret': 'wrong' }));
 

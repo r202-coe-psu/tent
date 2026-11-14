@@ -12,6 +12,8 @@ export interface IdentityMethodDefinition {
 
 export const KIOSK_HOME_PATH = '/kiosk';
 export const KIOSK_LANGUAGE_PATH = '/kiosk/language';
+/** Shown instead of every kiosk page while an admin has closed this device (#1302). */
+export const KIOSK_CLOSED_PATH = '/kiosk/closed';
 export const KIOSK_QR_PATH = '/kiosk/qr';
 export const KIOSK_CARD_PATH = '/kiosk/scanner/waiting';
 export const KIOSK_THAID_PATH = '/kiosk/thaid';

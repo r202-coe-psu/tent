@@ -32,6 +32,11 @@ describe('verifyKioskStaffPin', () => {
 			{ kind: 'not_set' }
 		],
 		[
+			'a closed kiosk (403 KIOSK_CLOSED)',
+			json({ error: { code: 'KIOSK_CLOSED', message: 'x' } }, 403),
+			{ kind: 'closed' }
+		],
+		[
 			'a device credential failure (401 with another code)',
 			json({ error: { code: 'unauthorized', message: 'x' } }, 401),
 			{ kind: 'error' }

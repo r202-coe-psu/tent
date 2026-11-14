@@ -86,6 +86,23 @@ describe('POST /api/v1/kiosk/volunteer-card', () => {
 		);
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and resolves nothing', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			registry_id: 'vol-card-device-1',
+			shelter_code: 'SH001',
+			service_open: false
+		} as never);
+
+		const response = await send({ phone: uniquePhone() });
+
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(mockResolve).not.toHaveBeenCalled();
+		expect(mockFindShelter).not.toHaveBeenCalled();
+	});
+
 	it('rejects an unauthenticated device', async () => {
 		const response = await send({ phone: uniquePhone() }, '');
 		expect(response.status).toBe(401);

@@ -131,6 +131,25 @@ describe('POST /api/v1/kiosk/check-in', () => {
 		expect(mockHeartbeat).toHaveBeenCalledWith('device-record-1');
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and records nothing', async () => {
+		mockAuthenticate.mockResolvedValueOnce({ ...principal, service_open: false } as never);
+		const response = await send({ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] });
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(mockCheckIn).not.toHaveBeenCalled();
+		expect(mockSavePhoto).not.toHaveBeenCalled();
+		expect(mockHeartbeat).not.toHaveBeenCalled();
+	});
+
+	it('still checks in for a device whose service_open is explicitly true', async () => {
+		mockAuthenticate.mockResolvedValueOnce({ ...principal, service_open: true } as never);
+		const response = await send({ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] });
+		expect(response.status).toBe(200);
+		expect(mockCheckIn).toHaveBeenCalledTimes(1);
+	});
+
 	it('answers 409 when a queue member was claimed elsewhere or cancelled', async () => {
 		mockCheckIn.mockRejectedValueOnce(new KioskUnassignedClaimConflictError());
 		const response = await send({ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] });
