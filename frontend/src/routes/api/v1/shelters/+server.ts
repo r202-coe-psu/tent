@@ -1,6 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
-import { isShelterPublicVisible, type ShelterMaster } from '$lib/features/shelters/server';
+import {
+	isExternalShelter,
+	isShelterPublicVisible,
+	type ShelterMaster
+} from '$lib/features/shelters/server';
 
 export const GET = async () => {
 	try {
@@ -8,7 +12,9 @@ export const GET = async () => {
 
 		const visible = masters
 			.map((m) => migrate(m as ShelterMaster))
-			.filter((m) => m.operation_status !== 'closed' && isShelterPublicVisible(m));
+			.filter(
+				(m) => m.operation_status !== 'closed' && isShelterPublicVisible(m) && !isExternalShelter(m)
+			); // CR-252 FR-18
 
 		return json(
 			visible.map((m) => ({

@@ -14,6 +14,8 @@ import {
 	DEFAULT_SHELTER_FEATURE_FLAGS,
 	DEFAULT_SITE_KIND,
 	resolveOperationStatus,
+	isExternalShelter,
+	externalInvariantIssues,
 	type ShelterMaster,
 	validateSiteKindChange
 } from '$lib/features/shelters/server';
@@ -40,7 +42,10 @@ export const GET: RequestHandler = async ({ request, params }) => {
 			site_kind: migrated.site_kind ?? DEFAULT_SITE_KIND,
 			db: `shelter_${migrated.code.toLowerCase()}`,
 			operation_status: migrated.operation_status ?? 'standby',
-			capacity: migrated.capacity ?? 0,
+			is_external: migrated.is_external === true,
+			external_url: migrated.external_url ?? null,
+			// External shelters may have no capacity; don't invent 0 (fails `positive` on re-save).
+			capacity: migrated.is_external ? migrated.capacity : (migrated.capacity ?? 0),
 			shelter_type: migrated.shelter_type ?? null,
 			floor_count: migrated.floor_count ?? null,
 			project_level: migrated.project_level ?? null,
@@ -75,15 +80,42 @@ export const GET: RequestHandler = async ({ request, params }) => {
 	}
 };
 
+/**
+ * CR-252 FR-4/5/9/10 against the stored doc (the schema cannot: `.partial()` fills defaults).
+ * `patch` holds only the keys the body sent. Resending the stored `is_external` / status is fine —
+ * the edit form always sends both.
+ */
+function assertExternalPatchAllowed(
+	current: ShelterMaster,
+	patch: Record<string, unknown>,
+	isSA: boolean
+): void {
+	const external = isExternalShelter(current);
+	if ('is_external' in patch && (patch.is_external === true) !== external) {
+		throw new ServiceError('FORBIDDEN', 'เปลี่ยนชนิดศูนย์ภายนอกหลังสร้างไม่ได้');
+	}
+	const nextStatus = patch.operation_status as string | undefined;
+	if (nextStatus === undefined) return;
+	if (external && !isSA && nextStatus !== resolveOperationStatus(current)) {
+		throw new ServiceError('FORBIDDEN', 'เฉพาะ system_admin เปลี่ยนสถานะศูนย์ภายนอกได้');
+	}
+	const [issue] = externalInvariantIssues({ is_external: external, operation_status: nextStatus });
+	if (issue) throw new ServiceError('VALIDATION', issue.message);
+}
+
 export const PATCH: RequestHandler = async ({ request, params }) => {
 	const code = params.code;
 	if (!code) return error(400, { message: 'Missing code' });
 
 	try {
-		await requireShelterManagerOrSA(request.headers.get('cookie'), code);
+		const caller = await requireShelterManagerOrSA(request.headers.get('cookie'), code);
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
-		const input = updateShelterSchema.parse(body);
+		const parsed = updateShelterSchema.safeParse(body);
+		if (!parsed.success) {
+			throw new ServiceError('VALIDATION', parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง');
+		}
+		const input = parsed.data;
 		// zod 4 `.partial()` still fills field `.default()`s, so a body without
 		// `operation_status` or `feature_flags` would reset them; patch only what was sent.
 		const sent = body !== null && typeof body === 'object' ? body : {};
@@ -115,6 +147,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 					'ข้อมูลศูนย์ถูกแก้ไขโดยผู้อื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง'
 				);
 			}
+			assertExternalPatchAllowed(current, patch, caller.isSA);
 			// CR-219 FR-22: closing must go through the close route, which checks people out first.
 			// A save that keeps an already-closed shelter closed is fine.
 			if (patch.operation_status === 'closed' && resolveOperationStatus(current) !== 'closed') {

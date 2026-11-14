@@ -5,6 +5,7 @@ const requireSystemAdminMock = vi.hoisted(() => vi.fn());
 const createImportJobMock = vi.hoisted(() => vi.fn());
 const safeParseMock = vi.hoisted(() => vi.fn());
 const readMasterDocMock = vi.hoisted(() => vi.fn());
+const forbiddenKeysMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$env/dynamic/private', () => ({ env }));
 vi.mock('$lib/server/couch-admin', () => ({
@@ -22,6 +23,10 @@ vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: readMasterDocM
 vi.mock('$lib/features/shelter-import/server/job-store', () => ({
 	MAX_IMPORT_ROWS: 1000,
 	createImportJob: createImportJobMock
+}));
+
+vi.mock('$lib/features/shelter-import/server/external-guard', () => ({
+	externalForbiddenKeysFilled: forbiddenKeysMock
 }));
 
 import { POST } from './+server';
@@ -47,6 +52,7 @@ beforeEach(() => {
 		shelterCode: null
 	});
 	createImportJobMock.mockReset().mockResolvedValue({ _id: 'shelter_import_job:key-hash' });
+	forbiddenKeysMock.mockReset().mockReturnValue([]);
 	safeParseMock.mockReset().mockImplementation((value) => ({
 		success: true,
 		data: { site_kind: 'evacuation_center', ...value, name: 'validated name' }
@@ -188,6 +194,38 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 		expect(rows[0]).toMatchObject({ valid: false });
 		expect(rows[0].input).toBeUndefined();
 		expect(rows[0].errors).toContainEqual(expect.objectContaining({ column: 'operation_status' }));
+	});
+
+	it('passes a clean external row through and rejects one that carries zones (CR-252 FR-30)', async () => {
+		const post = (shelter: object) =>
+			POST({
+				request: request(
+					JSON.stringify({
+						filename: 'shelters.xlsx',
+						duplicate_action: 'skip',
+						rows: [{ row: 1, name: 'ศูนย์ภายนอก', shelter }]
+					})
+				)
+			} as unknown as Parameters<typeof POST>[0]);
+
+		await post({ name: 'ศูนย์ภายนอก', is_external: true, operation_status: 'unknown', zones: [] });
+		let [{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({ valid: true });
+		expect(rows[0].input).toMatchObject({ is_external: true });
+
+		createImportJobMock.mockClear();
+		await post({ name: 'ศูนย์ภายนอก', is_external: true, zones: [{ code: 'A' }] });
+		[{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({ valid: false });
+		expect(rows[0].errors).toContainEqual(expect.objectContaining({ column: 'is_external' }));
+
+		// Policy / utilities / risk filled in by a hand-rolled client.
+		createImportJobMock.mockClear();
+		forbiddenKeysMock.mockReturnValue(['utilities']);
+		await post({ name: 'ศูนย์ภายนอก', is_external: true, zones: [] });
+		[{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({ valid: false });
+		expect(rows[0].errors).toContainEqual(expect.objectContaining({ column: 'is_external' }));
 	});
 
 	it('returns 422 for malformed JSON instead of a generic server error', async () => {

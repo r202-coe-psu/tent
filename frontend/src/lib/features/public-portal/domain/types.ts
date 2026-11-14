@@ -4,13 +4,25 @@ export type FamilySearchResult = components['schemas']['SearchResult'];
 export type FamilySearchResponse = components['schemas']['SearchResponse'];
 /** `master_data:site_kind` code (CR-198) — `evacuation_center`, `host_house`, or any code SA adds. */
 export type PublicSiteKind = string;
-export type PublicShelterItem = Omit<components['schemas']['ShelterItem'], 'site_kind'> & {
+export type PublicShelterItem = Omit<
+	components['schemas']['ShelterItem'],
+	'site_kind' | 'is_external' | 'external_url'
+> & {
 	site_kind?: PublicSiteKind;
 	vulnerable_groups?: string[];
+	/** CR-252: run in another system — absent reads as `false` (older payloads / fixtures). */
+	is_external?: boolean;
+	external_url?: string | null;
 };
-export type PublicShelterDetail = Omit<components['schemas']['ShelterDetail'], 'site_kind'> & {
+export type PublicShelterDetail = Omit<
+	components['schemas']['ShelterDetail'],
+	'site_kind' | 'is_external' | 'external_url'
+> & {
 	site_kind?: PublicSiteKind;
 	code?: string;
+	/** CR-252: run in another system — absent reads as `false` (older payloads / fixtures). */
+	is_external?: boolean;
+	external_url?: string | null;
 };
 export type PublicShelterListResponse = Omit<
 	components['schemas']['ShelterListResponse'],
@@ -40,6 +52,10 @@ export type PublicShelterCardModel = {
 	admin_type: string | null;
 	geo: PublicGeoPoint | null;
 	accepts_pre_registration: boolean;
+	/** CR-252 FR-20: run in another system — no capacity, no booking, links out. */
+	is_external: boolean;
+	/** CR-252 FR-2: `https://` only (already vetted by {@link safeExternalUrl}). */
+	external_url: string | null;
 };
 
 export type ListPublicSheltersParams = {

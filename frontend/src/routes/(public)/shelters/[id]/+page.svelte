@@ -23,7 +23,9 @@
 	// Closed or not accepting public pre-registration → hide booking CTA (still visible for browse).
 	let shelterCode = $derived(shelter?.code ?? shelter?.id ?? '');
 	let canBook = $derived(
-		Boolean(shelterCode) &&
+		// CR-252 FR-22: no booking CTA for an external shelter
+		shelter?.is_external !== true &&
+			Boolean(shelterCode) &&
 			shelter?.status !== 'CLOSED' &&
 			shelter?.accepts_pre_registration === true
 	);
@@ -67,17 +69,21 @@
 			<ShelterHero {shelter} />
 
 			<!-- Main Content Grid -->
-			<div class="grid grid-cols-1 gap-8 lg:grid-cols-2">
+			<div class="grid grid-cols-1 gap-8 {shelter.is_external ? '' : 'lg:grid-cols-2'}">
 				<!-- LEFT COLUMN -->
 				<div class="flex flex-col gap-8">
-					<ShelterAdmission {shelter} />
-					<ShelterTravel {shelter} />
-					<ShelterZones {shelter} />
+					{#if !shelter.is_external}
+						<ShelterAdmission {shelter} />
+						<ShelterTravel {shelter} />
+						<ShelterZones {shelter} />
+					{/if}
 				</div>
 
 				<!-- RIGHT COLUMN -->
 				<div class="flex flex-col gap-8">
-					<ShelterFacilities {shelter} />
+					{#if !shelter.is_external}
+						<ShelterFacilities {shelter} />
+					{/if}
 					<ShelterContact {shelter} />
 				</div>
 			</div>

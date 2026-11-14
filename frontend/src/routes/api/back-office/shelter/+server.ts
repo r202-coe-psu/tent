@@ -32,7 +32,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	await requireSystemAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as unknown;
-		const input = createShelterSchema.parse(body);
+		const parsed = createShelterSchema.safeParse(body);
+		if (!parsed.success) {
+			// Zod re-validation on the server (CR-252 FR-5): a 4xx naming the first problem, not a 500.
+			throw new ServiceError('VALIDATION', parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง');
+		}
+		const input = parsed.data;
 		const siteKindError = validateSiteKindChange(
 			input.site_kind,
 			(await readMasterDoc('site_kind'))?.items ?? []
@@ -61,7 +66,10 @@ export const GET: RequestHandler = async ({ request }) => {
 					site_kind: migrated.site_kind ?? DEFAULT_SITE_KIND,
 					db: shelterDbName(migrated.code),
 					operation_status: migrated.operation_status ?? 'standby',
-					capacity: migrated.capacity ?? 0,
+					is_external: migrated.is_external === true,
+					external_url: migrated.external_url ?? null,
+					// External shelters may have no capacity; don't invent 0 (fails `positive` on re-save).
+					capacity: migrated.is_external ? migrated.capacity : (migrated.capacity ?? 0),
 					shelter_type: migrated.shelter_type ?? null,
 					floor_count: migrated.floor_count ?? null,
 					project_level: migrated.project_level ?? null,

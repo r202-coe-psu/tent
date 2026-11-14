@@ -64,6 +64,34 @@ describe('public/shelters load function', () => {
 		expect(result.summary.shelters_open).toBe(0);
 	});
 
+	it('passes the unknown status filter to the API and maps external shelters (CR-252)', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{
+					code: 'EXT1',
+					name: 'ศูนย์ภายนอก',
+					status: 'unknown',
+					capacity: 0,
+					is_external: true,
+					external_url: 'https://example.org/x'
+				}
+			],
+			count: 1,
+			as_of: '2026-11-12T10:00:00Z'
+		} as unknown as PublicShelterListResponse);
+
+		const result = await runLoad(new URL('http://localhost/shelters?status=unknown'));
+
+		expect(vi.mocked(listPublicShelters).mock.calls[0][0]).toMatchObject({ status: 'unknown' });
+		expect(result.shelters[0]).toMatchObject({
+			status: 'UNKNOWN',
+			is_external: true,
+			external_url: 'https://example.org/x'
+		});
+		// not "open": an unknown-status shelter is not counted as running
+		expect(result.summary.shelters_open).toBe(0);
+	});
+
 	it('handles empty shelters array correctly', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [],

@@ -3,11 +3,14 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import {
+		safeExternalUrl,
 		shelterTypeLabel,
 		toLabelMap,
 		useShelterTypeLabelMap,
+		ExternalShelterChip,
 		type PublicShelterDetail
 	} from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -21,7 +24,10 @@
 	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
 	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 	let shelterCode = $derived(shelter.code || shelter.id);
-	let canBook = $derived(Boolean(shelterCode) && shelter.status !== 'CLOSED');
+	// CR-252 FR-20..22: an external shelter links out; it has no capacity and no booking.
+	let isExternal = $derived(shelter.is_external === true);
+	let externalHref = $derived(isExternal ? safeExternalUrl(shelter.external_url) : null);
+	let canBook = $derived(!isExternal && Boolean(shelterCode) && shelter.status !== 'CLOSED');
 
 	let adminTypeDisplay = $derived.by(() => {
 		const code = shelter.admin_type;
@@ -38,17 +44,28 @@
 
 	<div class="relative p-6 md:p-10">
 		<!-- Status Pill -->
-		<div
-			class="mb-5 inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/20 px-3 py-1 text-xs font-bold text-success-subtle"
-		>
-			<span class="relative flex h-2 w-2">
-				<span
-					class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success-subtle opacity-75"
-				></span>
-				<span class="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
-			</span>
-			{shelter.status === 'OPEN' ? t.openAdmission : shelter.status || '-'}
-		</div>
+		{#if isExternal}
+			<div class="mb-5">
+				<ExternalShelterChip
+					label={t.statusUnknown}
+					href={externalHref}
+					linkLabel={`${t.externalLink} ${t.externalLinkNewTab}`}
+					class="px-3 py-1"
+				/>
+			</div>
+		{:else}
+			<div
+				class="mb-5 inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success/20 px-3 py-1 text-xs font-bold text-success-subtle"
+			>
+				<span class="relative flex h-2 w-2">
+					<span
+						class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success-subtle opacity-75"
+					></span>
+					<span class="relative inline-flex h-2 w-2 rounded-full bg-success"></span>
+				</span>
+				{shelter.status === 'OPEN' ? t.openAdmission : shelter.status || '-'}
+			</div>
+		{/if}
 
 		<!-- Title & Subtitle -->
 		<h1 class="mb-3 text-3xl font-bold tracking-tight md:text-4xl">
@@ -73,22 +90,36 @@
 			class="flex flex-col justify-between gap-6 border-t border-white/10 pt-6 md:flex-row md:items-end"
 		>
 			<div class="grid grid-cols-2 gap-8 md:flex">
-				<div>
-					<div class="mb-1 text-xs font-semibold text-secondary/80">{t.capacityLabel}</div>
-					<div class="flex items-baseline gap-1.5">
-						<span class="text-3xl font-bold text-success-subtle"
-							>{shelter.capacity?.available ?? '-'}</span
-						>
-						<span class="text-xl font-medium text-secondary">/</span>
-						<span class="text-xl font-bold text-white">{shelter.capacity?.total ?? '-'}</span>
-						<span class="text-sm font-medium text-secondary/80">{t.people}</span>
+				{#if isExternal}
+					<div data-testid="external-contact-note">
+						<div class="mb-1 text-xs font-semibold text-secondary/80">{t.maxCapacityLabel}</div>
+						{#if (shelter.capacity?.total ?? 0) > 0}
+							<div class="flex items-baseline gap-1.5">
+								<span class="text-xl font-bold text-white">{shelter.capacity?.total}</span>
+								<span class="text-sm font-medium text-secondary/80">{t.people}</span>
+							</div>
+						{:else}
+							<div class="text-sm font-semibold text-white/90">{t.contactAtShelter}</div>
+						{/if}
 					</div>
-				</div>
+				{:else}
+					<div>
+						<div class="mb-1 text-xs font-semibold text-secondary/80">{t.capacityLabel}</div>
+						<div class="flex items-baseline gap-1.5">
+							<span class="text-3xl font-bold text-success-subtle"
+								>{shelter.capacity?.available ?? '-'}</span
+							>
+							<span class="text-xl font-medium text-secondary">/</span>
+							<span class="text-xl font-bold text-white">{shelter.capacity?.total ?? '-'}</span>
+							<span class="text-sm font-medium text-secondary/80">{t.people}</span>
+						</div>
+					</div>
 
-				<div>
-					<div class="mb-1 text-xs font-semibold text-secondary/80">{t.occupancyRate}</div>
-					<div class="text-3xl font-bold text-white">{shelter.occupancy_rate ?? '-'}%</div>
-				</div>
+					<div>
+						<div class="mb-1 text-xs font-semibold text-secondary/80">{t.occupancyRate}</div>
+						<div class="text-3xl font-bold text-white">{shelter.occupancy_rate ?? '-'}%</div>
+					</div>
+				{/if}
 
 				<div class="col-span-2 items-center justify-around md:col-span-1 md:space-y-2">
 					<div class="text-xs font-semibold text-secondary/80">{t.buildingStatus}</div>
@@ -116,6 +147,18 @@
 						<ClipboardCheck class="h-4.5 w-4.5" />
 						{t.bookThisShelter}
 					</a>
+				{/if}
+				{#if externalHref}
+					<Button
+						href={externalHref}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="flex w-fit items-center gap-2 rounded-xl border border-slate-300 bg-slate-100 px-6 py-3.5 text-sm font-bold text-slate-800 shadow-lg transition-colors hover:bg-slate-200"
+					>
+						<ExternalLink class="h-4.5 w-4.5" />
+						{t.externalLink}
+						<span class="sr-only">{t.externalLinkNewTab}</span>
+					</Button>
 				{/if}
 				{#if shelter.geo?.lat && shelter.geo?.lng}
 					{@const geo = shelter.geo}

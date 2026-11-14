@@ -20,6 +20,7 @@ const REGISTRY = {
 		shelter('SH002', 'ศูนย์สอง', { operation_status: 'active' }),
 		shelter('SH003', 'ศูนย์สาม', { operation_status: 'closed' }),
 		shelter('SH004', 'ศูนย์ที่สร้างผิด', { operation_status: 'cancelled' }),
+		shelter('SH005', 'ศูนย์ภายนอก', { is_external: true, operation_status: 'unknown' }),
 		shelter('SH002', 'ศูนย์สอง (ซ้ำ)'),
 		{ id: 'config:app', doc: { _id: 'config:app', type: 'config' } }
 	]
@@ -52,18 +53,21 @@ describe('GET /api/back-office/transfer/destinations (#570)', () => {
 	it.each([
 		['warehouse_staff', ['SH001:warehouse_staff', 'shelter:SH001']],
 		['shelter_manager', ['SH001:shelter_manager', 'shelter:SH001']]
-	])('gives %s every other shelter, without its own or a cancelled one', async (_, roles) => {
-		caller(roles);
+	])(
+		'gives %s every other shelter, without its own, a cancelled or an external one (CR-252)',
+		async (_, roles) => {
+			caller(roles);
 
-		const res = await GET(event());
+			const res = await GET(event());
 
-		expect(res.status).toBe(200);
-		// Sorted by Thai name; the duplicate SH002 row keeps its first name.
-		expect(await res.json()).toEqual([
-			{ code: 'SH002', name: 'ศูนย์สอง' },
-			{ code: 'SH003', name: 'ศูนย์สาม' }
-		]);
-	});
+			expect(res.status).toBe(200);
+			// Sorted by Thai name; the duplicate SH002 row keeps its first name.
+			expect(await res.json()).toEqual([
+				{ code: 'SH002', name: 'ศูนย์สอง' },
+				{ code: 'SH003', name: 'ศูนย์สาม' }
+			]);
+		}
+	);
 
 	it('answers code and name only', async () => {
 		caller(['SH001:warehouse_staff', 'shelter:SH001']);

@@ -3,7 +3,8 @@
 One place for the rule behind the public `accepts_pre_registration` flag, the partner
 `accepts_booking` field (EXT-002/003) and the EXT-008 bookability gate:
 
-    accepts_booking = location_status != "closed"
+    accepts_booking = NOT is_external
+                      AND location_status != "closed"
                       AND raw_data.feature_flags.accepts_pre_registration is True
 
 A missing flag is NOT bookable (same as the staff `isShelterBookable`). The flag is read from
@@ -35,7 +36,10 @@ def accepts_pre_registration(raw: Any) -> bool:
 
 
 def accepts_booking(doc: PublicShelter) -> bool:
-    """The normal booking rule: not closed AND the pre-registration switch is on."""
+    """The normal booking rule: not external (CR-252 FR-17), not closed AND the
+    pre-registration switch is on."""
+    if doc.is_external:
+        return False
     return doc.location_status != "closed" and accepts_pre_registration(doc.raw_data)
 
 
@@ -55,6 +59,7 @@ def accepts_booking_query(value: bool) -> dict[str, Any]:
     """Mongo filter equivalent of `accepts_booking(doc) is value` (for EXT-002 pagination)."""
     bookable: dict[str, Any] = {
         "$and": [
+            {"is_external": {"$ne": True}},
             {"location_status": {"$ne": "closed"}},
             {"$expr": _accepts_pre_registration_expr()},
         ]

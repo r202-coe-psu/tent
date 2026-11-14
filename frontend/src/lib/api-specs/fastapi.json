@@ -4857,6 +4857,7 @@
 						"title": "Closed At"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
 					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
 					"facilities": { "items": { "type": "string" }, "type": "array", "title": "Facilities" }
@@ -4966,6 +4967,7 @@
 						"title": "Closed At"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
 					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -6639,6 +6641,11 @@
 						"title": "Accepts Pre Registration",
 						"default": false
 					},
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
+					"external_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "External Url"
+					},
 					"donation_points": {
 						"items": { "$ref": "#/components/schemas/DonationPoint" },
 						"type": "array",
@@ -6744,6 +6751,11 @@
 						"type": "boolean",
 						"title": "Accepts Pre Registration",
 						"default": false
+					},
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
+					"external_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "External Url"
 					},
 					"readiness_status": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],

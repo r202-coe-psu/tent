@@ -62,3 +62,62 @@ describe('BasicInfoSection (#399 Coordinator Label)', () => {
 		expect(result.body).not.toContain('ผู้ประสานงาน EOC (EOC Liaison)');
 	});
 });
+
+describe('BasicInfoSection external shelter (CR-252 FR-8/9/19)', () => {
+	function renderWith(data: Record<string, unknown>, props: Record<string, unknown> = {}) {
+		const formData = writable({ name: 'x', operation_status: 'standby', ...data });
+		const form = {
+			form: formData,
+			errors: writable({}),
+			constraints: writable({}),
+			tainted: writable(undefined),
+			submitting: writable(false),
+			delayed: writable(false),
+			timeout: writable(false),
+			posted: writable(false),
+			allErrors: writable([]),
+			capture: vi.fn(),
+			restore: vi.fn(),
+			enhance: vi.fn(),
+			message: writable(undefined)
+		} as unknown as SuperForm<Shelter>;
+		return render(BasicInfoSection, {
+			props: { form, formData: formData as unknown as SuperFormData<Shelter>, ...props }
+		}).body;
+	}
+
+	it('shows the External switch to a system_admin creating a shelter', () => {
+		expect(renderWith({}, { isSystemAdmin: true, isEdit: false })).toContain('is-external-switch');
+	});
+
+	it.each([
+		['a non-admin creating', { isSystemAdmin: false, isEdit: false }],
+		['a system_admin editing', { isSystemAdmin: true, isEdit: true }]
+	])('hides the External switch from %s', (_n, props) => {
+		expect(renderWith({}, props)).not.toContain('is-external-switch');
+	});
+
+	it('an external form keeps the URL input, hides policy-ish basics, locks the type on edit', () => {
+		const body = renderWith(
+			{ is_external: true, operation_status: 'unknown', external_url: null },
+			{ isSystemAdmin: true, isEdit: true }
+		);
+		expect(body).toContain('ลิงก์ไปยังระบบต้นทาง');
+		expect(body).toContain('ความจุสูงสุด');
+		expect(body).toContain('external-locked-note');
+		expect(body).toContain('ประเภทอาคาร');
+		expect(body).not.toContain('จำนวนชั้น');
+		expect(body).not.toContain('ระดับโครงการ');
+		expect(body).not.toContain('คุณสมบัติการปฏิบัติการ');
+		expect(body).not.toContain('ข้อมูลบุคลากรหลัก');
+		expect(body).toContain('ที่อยู่ตามเขตการปกครอง');
+		expect(body).toContain('ผู้จัดการศูนย์');
+	});
+
+	it('a regular form shows no URL input and keeps the operational basics', () => {
+		const body = renderWith({ is_external: false }, { isSystemAdmin: true, isEdit: false });
+		expect(body).not.toContain('ลิงก์ไปยังระบบต้นทาง');
+		expect(body).toContain('ระดับโครงการ');
+		expect(body).toContain('คุณสมบัติการปฏิบัติการ');
+	});
+});

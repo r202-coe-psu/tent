@@ -291,4 +291,27 @@ describe('provisionShelter seeding', () => {
 
 		expect(writtenMaster().closed_at).toBeNull();
 	});
+
+	it('creates an external shelter as an empty database with grants only (CR-252 FR-11)', async () => {
+		const result = await provisionShelter(
+			{ name: 'ศูนย์ภายนอก', is_external: true, operation_status: 'unknown' } as Parameters<
+				typeof provisionShelter
+			>[0],
+			'SH004'
+		);
+
+		const steps = result.steps.map((s) => s.step);
+		expect(steps).toEqual(expect.arrayContaining(['create-db', 'security', 'registry-master']));
+		expect(steps).not.toContain('design-dashboard');
+		expect(steps.filter((s) => s.endsWith('-mango'))).toEqual([]);
+		expect(writtenMaster()).toMatchObject({ is_external: true, operation_status: 'unknown' });
+	});
+
+	it('still deploys views and indexes for a regular shelter', async () => {
+		const result = await provisionShelter(
+			{ name: 'ศูนย์ปกติ' } as Parameters<typeof provisionShelter>[0],
+			'SH005'
+		);
+		expect(result.steps.map((s) => s.step)).toContain('design-dashboard');
+	});
 });

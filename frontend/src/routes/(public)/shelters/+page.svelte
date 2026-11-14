@@ -26,6 +26,7 @@
 	import {
 		PublicShelterMetricCard,
 		PublicShelterCard,
+		ExternalShelterChip,
 		ShelterFilterPanel,
 		ShelterMap,
 		PublicPageShell,
@@ -206,6 +207,9 @@
 				return 'bg-transparent text-danger border-border/80';
 			case 'PREPARE':
 				return 'bg-transparent text-warning border-border/80';
+			case 'UNKNOWN':
+				// CR-252 FR-20: Slate/Neutral, distinct from the yellow of standby
+				return 'border-slate-300 bg-slate-100 text-slate-700';
 			default:
 				return 'bg-transparent text-muted-foreground border-border/80';
 		}
@@ -219,6 +223,8 @@
 				return t.statusFull;
 			case 'PREPARE':
 				return t.statusPrepare;
+			case 'UNKNOWN':
+				return t.statusUnknown;
 			default:
 				return t.statusClosed;
 		}
@@ -442,14 +448,22 @@
 					<!-- Top row: Status + Distance + Close -->
 					<div class="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
 						<div class="flex items-center gap-2">
-							<span
-								class="inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-bold {getStatusColor(
-									selectedShelter.status
-								)}"
-							>
-								<span class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current"></span>
-								{getStatusText(selectedShelter.status)}
-							</span>
+							{#if selectedShelter.is_external}
+								<ExternalShelterChip
+									label={t.statusUnknown}
+									href={selectedShelter.external_url}
+									linkLabel={`${cardT.externalLink} ${cardT.externalLinkNewTab}`}
+								/>
+							{:else}
+								<span
+									class="inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-bold {getStatusColor(
+										selectedShelter.status
+									)}"
+								>
+									<span class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current"></span>
+									{getStatusText(selectedShelter.status)}
+								</span>
+							{/if}
 							{#if selectedShelter.distance != null && !isNaN(selectedShelter.distance) && selectedShelter.distance > 0}
 								<span
 									class="inline-flex items-center gap-1 text-2xs font-semibold text-muted-foreground"
@@ -486,16 +500,20 @@
 							</span>
 							<span class="shrink-0 font-semibold text-foreground">
 								<Users class="mr-0.5 inline-block h-3 w-3 text-muted-foreground" />
-								{cardT.maxCapacity}
-								{selectedShelter.capacity ?? 0}
-								{cardT.people}
+								{#if selectedShelter.is_external && !((selectedShelter.capacity ?? 0) > 0)}
+									{cardT.contactAtShelter}
+								{:else}
+									{cardT.maxCapacity}
+									{selectedShelter.capacity ?? 0}
+									{cardT.people}
+								{/if}
 							</span>
 						</div>
 					</div>
 
 					<!-- Actions row -->
 					<div class="mt-2.5 flex gap-1.5">
-						{#if selectedShelter.status !== 'CLOSED' && selectedShelter.accepts_pre_registration && selectedShelter.code}
+						{#if !selectedShelter.is_external && selectedShelter.status !== 'CLOSED' && selectedShelter.accepts_pre_registration && selectedShelter.code}
 							<Button
 								type="button"
 								size="sm"

@@ -4,6 +4,7 @@ import { foodDistributionPointSchema, petPolicySchema, zoneSchema } from '$lib/f
 import { ulid } from '$lib/db/ulid';
 import {
 	FIELD_SEPARATOR,
+	EXTERNAL_FORBIDDEN_HEADERS,
 	H,
 	HEADER_TO_SHEET,
 	MASTER_COLUMNS,
@@ -97,6 +98,8 @@ export interface RowValidation {
 	foodDistributionPointsProvided?: boolean;
 	/** `ชนิดสถานที่` was left empty: a create takes the default, an update keeps the stored kind (CR-198 D-4). */
 	siteKindBlank?: boolean;
+	/** CR-252 FR-27: the row's `ศูนย์จากระบบภายนอก` = ใช่ (blank = ไม่ใช่). Set whenever the cell resolved. */
+	isExternal?: boolean;
 }
 
 /** The stored shelter, as far as {@link buildUpdatePayload} needs to read it. */
@@ -630,7 +633,24 @@ export function validateRow(
 	const name = nameCell === '' ? null : nameCell;
 
 	// -- sheet 1: identity, address, people --
-	const status = resolveEnum(raw, H.operation_status, OPERATION_STATUS_CHOICES, sink);
+	const isExternal = resolveBoolean(raw, H.is_external, sink) === true;
+	const statusCell = resolveEnum(raw, H.operation_status, OPERATION_STATUS_CHOICES, sink);
+	// CR-252 FR-29: an external row has no status of its own — the cell must be empty, the system sets `unknown`.
+	if (isExternal && cell(raw, H.operation_status) !== '') {
+		sink.push(H.operation_status, 'ศูนย์จากระบบภายนอกต้องเว้นสถานะว่าง (ระบบใส่ "ไม่ทราบสถานะ")');
+	}
+	const status = isExternal ? 'unknown' : statusCell;
+	const externalUrlCell = cell(raw, H.external_url);
+	// CR-252 FR-30: an external shelter carries basic info only — no zones, food points,
+	// facilities, utilities, risk or policy data.
+	if (isExternal) {
+		const externalOnly = 'ศูนย์จากระบบภายนอกห้ามมีข้อมูลในส่วนนี้';
+		for (const header of EXTERNAL_FORBIDDEN_HEADERS) {
+			if (cell(raw, header) !== '') sink.push(header, externalOnly);
+		}
+		for (const { line } of zoneRows) sink.push(H.zone_code, externalOnly, line);
+		for (const { line } of foodPointRows) sink.push(H.food_point_name, externalOnly, line);
+	}
 	// CR-183 FR-23: closing goes through the staff PATCH so `closed_at` has one writer.
 	if (status === 'closed') {
 		sink.push(
@@ -700,6 +720,8 @@ export function validateRow(
 		name: nameCell,
 		site_kind: siteKind,
 		operation_status: status,
+		is_external: isExternal,
+		external_url: isExternal ? strOrNull(externalUrlCell) : null,
 		shelter_type: shelterType,
 		project_level: level ?? null,
 		area_type: areaType ?? null,
@@ -831,10 +853,11 @@ export function validateRow(
 			shelter: parsed.data,
 			errors: [],
 			foodDistributionPointsProvided,
+			isExternal,
 			...(siteKindBlank ? { siteKindBlank } : {})
 		};
 	}
-	return { row, name, ok: false, errors: sink.errors, foodDistributionPointsProvided };
+	return { row, name, ok: false, errors: sink.errors, foodDistributionPointsProvided, isExternal };
 }
 
 /** Group zone rows by their `รหัสศูนย์พักพิง` value. */

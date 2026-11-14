@@ -35,6 +35,8 @@ class LocationItem(BaseModel):
     opened_at: datetime | None
     closed_at: datetime | None
     is_active: bool
+    # CR-252 (EXT-002/003): run in another system; `location_status` is `unknown`.
+    is_external: bool = False
     occupancy_total: int
     updated_at: datetime
 

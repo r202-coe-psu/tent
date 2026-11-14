@@ -56,6 +56,7 @@ export function applySiteKindRule(
 			ok: false,
 			errors: [...v.errors, { column: H.site_kind, message }],
 			foodDistributionPointsProvided: v.foodDistributionPointsProvided,
+			...(v.isExternal === undefined ? {} : { isExternal: v.isExternal }),
 			...(v.siteKindBlank ? { siteKindBlank: true } : {})
 		};
 	});

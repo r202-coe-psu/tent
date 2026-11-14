@@ -1,3 +1,4 @@
+import { externalForbiddenKeysFilled } from '../server/external-guard';
 import { describe, it, expect } from 'vitest';
 import { H } from '../domain/columns';
 import {
@@ -143,5 +144,20 @@ describe('buildSampleWorkbook', () => {
 		const vehicles = result.shelter?.parking_policy.supported_vehicles ?? [];
 		expect(vehicles.map((v) => v.type).sort()).toEqual(['car', 'motorcycle', 'truck']);
 		expect(vehicles.find((v) => v.type === 'motorcycle')?.max_capacity).toBe(20);
+	});
+
+	it('ships an external example row that passes validateRow (CR-252 FR-28)', () => {
+		const sample = buildSampleWorkbook(mastersWithShelterType());
+		const result = validateRow(toRawRow(sample.externalShelter), 2, lookupsWithShelterType());
+
+		expect(result.errors).toEqual([]);
+		expect(result.ok).toBe(true);
+		expect(result.shelter?.is_external).toBe(true);
+		expect(result.shelter?.operation_status).toBe('unknown');
+		expect(result.shelter?.external_url).toMatch(/^https:\/\//);
+		expect(result.shelter?.capacity).toBe(100);
+		expect(result.shelter?.area_type).toBe('indoor');
+		// The BFF's authoritative FR-30 guard must not reject what the importer itself emits.
+		expect(externalForbiddenKeysFilled(result.shelter as Record<string, unknown>)).toEqual([]);
 	});
 });

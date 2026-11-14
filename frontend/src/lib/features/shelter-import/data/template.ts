@@ -190,6 +190,8 @@ export async function buildShelterTemplateBlob(
 		if (sample) {
 			if (sheet.kind === 'shelter') {
 				writeSampleRow(ws, 2, headerToCol, sample.shelter);
+				// CR-252 FR-28: external example on data row 2 (`ลำดับที่` 2); only the main sheet has its cells.
+				writeSampleRow(ws, 3, headerToCol, sample.externalShelter);
 			} else if (sheet.kind === 'zone') {
 				sample.zones.forEach((zone, i) => {
 					const row = i + 2;
@@ -245,6 +247,19 @@ export async function buildShelterTemplateBlob(
 		h: 'เครื่องหมาย *',
 		req: '-',
 		hint: 'หัวคอลัมน์ที่ลงท้ายด้วย * สีแดง = ช่องที่จำเป็นต้องกรอก (ห้ามลบเครื่องหมายออกจากหัวคอลัมน์)'
+	});
+
+	readme.addRow({
+		sheet: 'วิธีใช้',
+		h: `${H.is_external} / ${H.external_url}`,
+		req: '-',
+		hint:
+			`CR-252: ใส่ "ใช่" ในคอลัมน์ "${H.is_external}" สำหรับศูนย์ที่บริหารในระบบอื่น (ว่าง = ไม่ใช่) — ` +
+			`ไม่ต้องกรอกความจุ เว้นคอลัมน์ "${H.operation_status}" ว่าง (ระบบใส่ "ไม่ทราบสถานะ") ` +
+			`ใส่ "${H.external_url}" ได้ (ขึ้นต้น https:// เท่านั้น) / ` +
+			'ห้ามมีข้อมูลในชีตโซน จุดแจกอาหาร สิ่งอำนวยความสะดวก สาธารณูปโภคฯ และนโยบายของศูนย์นั้น / ' +
+			'ศูนย์ที่มีอยู่แล้วเปลี่ยนชนิด (ภายนอก ↔ ปกติ) ผ่านการนำเข้าแบบ "อัปเดต" ไม่ได้ / ' +
+			'ไฟล์เก่าที่ไม่มีสองคอลัมน์นี้ยังนำเข้าได้ตามปกติ'
 	});
 
 	readme.addRow({

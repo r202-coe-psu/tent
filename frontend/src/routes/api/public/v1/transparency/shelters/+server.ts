@@ -76,6 +76,8 @@ export const GET: RequestHandler = async ({ url, setHeaders }) => {
 			if (m.operation_status === 'active') mappedStatus = 'OPEN';
 			else if (m.operation_status === 'full_capacity') mappedStatus = 'FULL';
 			else if (m.operation_status === 'standby') mappedStatus = 'PREPARE';
+			// CR-252 FR-15: external shelter — real status unknown, never CLOSED
+			else if (m.operation_status === 'unknown') mappedStatus = 'UNKNOWN';
 
 			const dist =
 				m.location?.lat && m.location?.lng && userLat !== 0 && userLng !== 0

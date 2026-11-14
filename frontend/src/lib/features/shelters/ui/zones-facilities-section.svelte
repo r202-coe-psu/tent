@@ -315,7 +315,7 @@
 
 	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 		<CapacityZoneGuideline
-			shelterCapacity={$formData.capacity}
+			shelterCapacity={$formData.capacity ?? 0}
 			zones={$formData.zones}
 			{disabled}
 			onSyncFromZones={syncCapacityFromZones}

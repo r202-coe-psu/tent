@@ -131,6 +131,10 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             # status rescans the DB via _reproject_shelter_database.
             await save_checkpoint(database, seq)
             return
+        if gated_code and public_status == "unknown":
+            # CR-252: external shelter — it has no operational DB content to project.
+            await save_checkpoint(database, seq)
+            return
         if gated_code and public_status == "closed":
             await _process_closed_shelter_change(couch, database, gated_code, change)
             await save_checkpoint(database, seq)
@@ -220,6 +224,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 action == "upsert"
                 and code is not None
                 and not closed
+                and not payload.get("is_external")
                 and previous_status in (None, "closed")
             )
             await apply_shelter(action, payload)

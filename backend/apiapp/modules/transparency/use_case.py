@@ -26,7 +26,8 @@ OCCUPANCY_STATUSES = (
 
 class TransparencyUseCase:
     async def get_summary(self) -> TransparencySummaryResponse:
-        shelters = await PublicShelter.find_all().to_list()
+        # CR-252 FR-16: external shelters are not counted (no capacity / occupancy of ours).
+        shelters = [s for s in await PublicShelter.find_all().to_list() if not s.is_external]
         shelters_total = len(shelters)
         shelters_open = sum(1 for s in shelters if s.status in OPEN_SHELTER_STATUSES)
 

@@ -6,10 +6,11 @@ date: 2026-11-12
 requested_by: Dev Team B — GitHub #1242
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
+updated: 2026-11-13 # decision sync: ศูนย์ External กรอก/แสดงความจุสูงสุด (FR-6 / FR-19 / FR-21 แก้) — ไม่เปิด CR ใหม่ ไม่ bump schema_v
 affects:
   - docs/data/schema.md §3.1 shelter (เพิ่ม `is_external`, `external_url`; `operation_status` +`unknown`; `capacity` req→opt เมื่อ External) · §9.1 `public_shelters` (เพิ่ม `is_external`, `external_url`; `status`/`location_status` +`unknown`; `capacity` = `0` เมื่อ External)
   - schema_v 9 → 10 (shelter; additive, doc เดิมไม่ต้อง backfill)
-  - worker PROJECTION_VERSION 18 → 19 (worker/src/worker/projection_version.py)
+  - worker PROJECTION_VERSION 20 → 21 (worker/src/worker/projection_version.py)
   - docs/prd/role-permission-matrix.md §3 (เพิ่มแถวใหม่ "Shelter registry / Profile management" — ตั้ง `is_external` ตอนสร้างเฉพาะ `system_admin`; `shelter_manager` แก้ศูนย์ External ไม่ได้ (FR-10))
   - docs/adr/0002-partner-integration-architecture.md (EXT-002/003/008 contract change)
   - amends CR-039 (shelter Excel import) · CR-077 (import full schema coverage)
@@ -28,7 +29,7 @@ affects:
 > - **เปลี่ยนอะไร:** shelter registry doc เพิ่ม `is_external` + `external_url` และ `operation_status = unknown` ("ไม่ทราบสถานะ") สำหรับศูนย์ที่บริหารในระบบอื่น (เก็บใน CouchDB doc type `shelter` เดิม ไม่แยก store)
 > - **เพื่อใคร/ทำไม:** ให้ public / partner เห็นศูนย์ภายนอกบนแผนที่และรายการ พร้อมลิงก์ไประบบต้นทาง โดยไม่นับ capacity/occupancy และไม่รับจอง/ลงทะเบียน/บริจาค
 > - **dev ต้อง build:** Zod invariant + guard `system_admin` · ฟอร์มแบบย่อ · worker/projector/FastAPI รองรับ `unknown` · Public UI (chip, pin, filter, ข้อความ i18n) · Excel import 2 คอลัมน์ · Partner API contract
-> - **กระทบ:** shelter `schema_v` 9→10 · `PROJECTION_VERSION` 18→19 · role matrix · ADR 0002 (EXT-002/003/008) · amends CR-039 / CR-077
+> - **กระทบ:** shelter `schema_v` 9→10 · `PROJECTION_VERSION` 20→21 · role matrix · ADR 0002 (EXT-002/003/008) · amends CR-039 / CR-077
 
 > **Tracking:** CR ใบเดียวครอบทั้งหมด (ตามที่ตกลงใน #1242). สถานะ `approved` โดย Soravit Sukkarn (Team Lead) — ลำดับถัดไปเตรียมแก้ `schema.md`, role matrix และ code.
 
@@ -43,7 +44,7 @@ affects:
 - FR-3 — `operation_status` เพิ่มค่า `unknown` (label "ไม่ทราบสถานะ"); enum = `standby | active | full_capacity | closed | cancelled | unknown`.
 - FR-4 — เมื่อ `is_external = true` ต้อง `operation_status = unknown` เสมอ (ฟอร์มล็อกค่า). ข้อยกเว้นเดียว: `system_admin` เปลี่ยนเป็น `cancelled` ได้เพื่อถอดออกจาก public.
 - FR-5 — เมื่อ `is_external = false` เลือก `unknown` ไม่ได้. บังคับที่ Zod (client) และ BFF `/api/**` (Zod ซ้ำฝั่ง server — shelter doc เขียนผ่าน admin credentials ทั้งหมด) ไม่เพิ่ม `validate_doc_update`; `registry-design.ts` / `REGISTRY_DESIGN_VERSION` ไม่เปลี่ยน.
-- FR-6 — `capacity` เป็น optional เมื่อ `is_external = true`; ศูนย์ปกติยังบังคับ `int > 0` ตามเดิม.
+- FR-6 — `capacity` เป็น optional เมื่อ `is_external = true` (กรอกได้แค่ความจุสูงสุด — ถ้ากรอกต้อง `int > 0`; ช่องว่าง = ไม่กรอก ไม่ใช่ `0`); ศูนย์ปกติยังบังคับ `int > 0` ตามเดิม. _(decision sync 2026-11-13)_
 - FR-7 — bump shelter `schema_v` 9 → 10; doc เดิมอ่านได้โดย `is_external` = `false` (ไม่มี backfill).
 
 ### สิทธิ์
@@ -57,7 +58,7 @@ affects:
 - FR-11 — provisioner สร้างเฉพาะ database เปล่าพร้อม grant สำหรับศูนย์ External (ไม่สร้าง views / sequence).
 - FR-12 — worker ข้าม listener, bootstrap และ occupancy ของศูนย์ `is_external`.
 - FR-13 — projector map `unknown` เป็นสถานะ public ที่ถูกต้อง: ไม่ใช่ HIDDEN และไม่ใช่ `open`. ศูนย์ External ยัง project เข้า `public_shelters` (ต่างจาก `cancelled`).
-- FR-14 — bump `PROJECTION_VERSION` 18 → 19.
+- FR-14 — bump `PROJECTION_VERSION` 20 → 21.
 - FR-15 — FastAPI `status_ui` map `unknown` → `"UNKNOWN"` (ค่าของตัวเอง) ห้าม fallback เป็น `CLOSED`; ใช้สตริงเดียวกันใน OpenAPI และ `toUiShelterStatus` (`mappers.ts`).
 
 ### พฤติกรรมของศูนย์ External
@@ -65,12 +66,12 @@ affects:
 - FR-16 — ไม่นับ capacity / occupancy; ไม่รับ pre-registration, booking, donation.
 - FR-17 — `accepts_booking = false` เสมอ ทั้งฟังก์ชัน Python (`shelter_booking.py`) และ Mongo filter.
 - FR-18 — ซ่อนจากตัวเลือกศูนย์ใน flow ปฏิบัติการทั้งหมด: scope ผู้ใช้, โอนย้าย, donation/needs, kiosk, import. แสดงเฉพาะรายการ system-management พร้อม badge "External".
-- FR-19 — ฟอร์ม system-management เมื่อเปิด toggle External: ซ่อน zones/facilities, food, storage, utilities, risk, policy และ capacity; เหลือ basic-info (ชื่อ, ที่ตั้ง, ติดต่อ, URL).
+- FR-19 — ฟอร์ม system-management เมื่อเปิด toggle External: ซ่อน zones/facilities, food, storage, utilities, risk, policy และ section ความจุเชิงพื้นที่; เหลือ basic-info (ชื่อ, ที่ตั้ง, ติดต่อ, URL) + ช่อง **ความจุสูงสุด** (optional) ช่องเดียว. _(decision sync 2026-11-13: เดิมซ่อน capacity ด้วย)_
 
 ### Public UI
 
 - FR-20 — ศูนย์ External แสดง chip สถานะ "ไม่ทราบสถานะ" สีเทา (Slate/Neutral) + icon ลิงก์ออกนอก; ลิงก์ไป `external_url` (ถ้ามี) เปิดแท็บใหม่ด้วย `target="_blank" rel="noopener noreferrer"`.
-- FR-21 — แทนที่ตัวเลข capacity/occupancy ด้วยข้อความ "ติดต่อ ณ ศูนย์พักพิง" (i18n string คงที่ ไม่ใช่ field ใน doc).
+- FR-21 — แทนที่ occupancy ด้วยข้อความ "ติดต่อ ณ ศูนย์พักพิง" (i18n string คงที่ ไม่ใช่ field ใน doc) และ **แสดงความจุสูงสุด** ของศูนย์ (ถ้า `> 0`) เหนือข้อความนั้น; ไม่มี capacity ⇒ แสดงเฉพาะข้อความ. `public_shelters.capacity` = ค่าที่กรอก (ไม่ fallback zones/100; `0` = ไม่ได้กรอก). _(decision sync 2026-11-13: เดิมแทนที่ตัวเลข capacity ด้วยข้อความ + `capacity = 0`)_
 - FR-22 — ซ่อนปุ่มจองและลงทะเบียนล่วงหน้า.
 - FR-23 — pin บนแผนที่ใช้สีเดียวกับ chip; ตัวกรองสถานะมีตัวเลือก "ไม่ทราบสถานะ".
 
@@ -137,11 +138,12 @@ Team Lead PO Meeting 2026-11-07 (#1242, labels: priority:high, Before Floods): �
 
 - shelter `schema_v` 9 → 10: additive. doc เดิมไม่มี `is_external` → อ่านเป็น `false`; `external_url` → `null`. ไม่มี batch migration script.
 - Zod (client + BFF) ต้องอัปเดตตาม schema v10 (invariant FR-4/5/6/9). ไม่แตะ `validate_doc_update` / `REGISTRY_DESIGN_VERSION` (คงที่ 9).
-- `PROJECTION_VERSION` 18 → 19 → worker re-project `public_shelters` ครั้งเดียวหลัง deploy.
+- `PROJECTION_VERSION` 20 → 21 → worker re-project `public_shelters` ครั้งเดียวหลัง deploy.
 - ไม่ต้องรัน `pnpm openapi:update` ซ้ำนอกเหนือจากที่ `status_ui` / EXT schema เปลี่ยน — commit `fastapi.json` + `openapi.d.ts` ตาม workflow §4.2.
 
 ## Decision log
 
 - 2026-11-07 — ตกลงสเปกจาก grilling ใน #1242 (Team Lead PO Meeting); เลือก track ด้วย CR ใบเดียว
 - 2026-11-12 — proposed (draft) — บันทึกร่าง CR ใน PR #1371
+- 2026-11-13 — decision sync (ติดตามด้วย note ใน CR นี้ ไม่เปิด CR ใหม่ ตามที่เจ้าของงานเลือก · #1242): ศูนย์ External กรอกความจุสูงสุดได้ (optional) และ public แสดงความจุนั้น — แก้ FR-6 / FR-19 / FR-21 · `public_shelters.capacity` ของศูนย์ External = ค่าที่กรอก (`backfill_capacity()` ไม่ fallback; เดิมคืน `0`) · ไม่ bump `schema_v` (10) และ `PROJECTION_VERSION` (19 ยังไม่ปล่อย) · occupancy ยังไม่นับ, accepts_booking ยังเป็น false
 - 2026-11-12 — approved โดย Soravit Sukkarn (Team Lead) กำหนดหมายเลข CR-252; เลือกหมวด `00-baseline` (ตาม CR-205 / CR-039 / CR-077 ที่แก้ shelter schema); เคาะ chip สถานะ "ไม่ทราบสถานะ" ใช้สีเทา (Slate/Neutral) ไม่ซ้ำกับสีเหลืองของ standby

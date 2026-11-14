@@ -47,7 +47,14 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			.split(',')
 			.map((s) => s.trim().toLowerCase())
 			.find(
-				(s) => s === 'open' || s === 'closed' || s === 'full' || s === 'prepare' || s === 'standby'
+				(s) =>
+					s === 'open' ||
+					s === 'closed' ||
+					s === 'full' ||
+					s === 'prepare' ||
+					s === 'standby' ||
+					// CR-252 FR-23: external shelters
+					s === 'unknown'
 			) || '';
 	const status = statusRaw === 'prepare' ? 'standby' : statusRaw;
 

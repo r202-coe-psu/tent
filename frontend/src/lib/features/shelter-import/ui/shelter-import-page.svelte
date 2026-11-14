@@ -29,6 +29,7 @@
 		type MasterColumn
 	} from '../domain/columns';
 	import {
+		applyExternalTypeRule,
 		findExistingDuplicates,
 		type DuplicateMatch,
 		type ExistingShelter
@@ -112,7 +113,17 @@
 			: new Map<number, DuplicateMatch>()
 	);
 	const validations = $derived(
-		applySiteKindRule(baseValidations, duplicates, lookups.site_kind.inactiveCodes, duplicateAction)
+		// CR-252 FR-31: external <-> normal type change under "update" is a validation_error.
+		applyExternalTypeRule(
+			applySiteKindRule(
+				baseValidations,
+				duplicates,
+				lookups.site_kind.inactiveCodes,
+				duplicateAction
+			),
+			duplicates,
+			duplicateAction
+		)
 	);
 	const validCount = $derived(validations.filter((v) => v.ok).length);
 	const errorCount = $derived(validations.length - validCount);
@@ -169,7 +180,8 @@
 			existingShelters = shelters.map((s) => ({
 				code: s.code,
 				name: s.name,
-				site_kind: s.site_kind
+				site_kind: s.site_kind,
+				is_external: s.is_external === true
 			}));
 			duplicateCheckReady = true;
 			return existingShelters;

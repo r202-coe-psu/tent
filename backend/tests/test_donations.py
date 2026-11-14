@@ -2412,3 +2412,30 @@ async def test_create_donation_refuses_more_than_30_photos(
     response = await _create_unsolicited(client, auth_headers, photos=photos)
     assert response.status_code == 422
     assert await DonationBuffer.find_all().count() == 0
+
+
+async def test_create_donation_rejects_external_shelter(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-252 FR-16: an external shelter answers 409 SHELTER_EXTERNAL, not SHELTER_CLOSED."""
+    await PublicShelter(
+        id="SH003",
+        shelter_code="SH003",
+        name="External Shelter",
+        status="unknown",
+        is_external=True,
+        capacity=50,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH003",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"item_id": "item:rice", "qty": 1, "unit": "kg"}],
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "SHELTER_EXTERNAL"

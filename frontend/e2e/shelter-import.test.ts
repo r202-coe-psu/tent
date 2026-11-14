@@ -64,11 +64,21 @@ test.afterEach(async ({ page }) => {
 	await clearSession(page);
 });
 
-async function workbook(rows: string[][], headers = HEADERS): Promise<Buffer> {
+async function workbook(
+	rows: string[][],
+	headers = HEADERS,
+	extraSheets: { name: string; rows: string[][] }[] = []
+): Promise<Buffer> {
 	const wb = new ExcelJS.Workbook();
-	const ws = wb.addWorksheet('ศูนย์พักพิง');
+	// With extra sheets the parser finds the main tab by its template name; a zone row joins its
+	// shelter by the shelter's position (`ลำดับที่` blank → row order).
+	const ws = wb.addWorksheet(extraSheets.length > 0 ? 'ข้อมูลศูนย์' : 'ศูนย์พักพิง');
 	ws.addRow(headers);
 	rows.forEach((row) => ws.addRow(row));
+	for (const sheet of extraSheets) {
+		const extra = wb.addWorksheet(sheet.name);
+		sheet.rows.forEach((row) => extra.addRow(row));
+	}
 	return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
@@ -294,14 +304,14 @@ test('imports valid spreadsheet rows, skips invalid rows, and records the outcom
 
 	await expect(page.getByText('shelters-e2e.xlsx')).toBeVisible();
 	await expect(page.getByText('พร้อมนำเข้า 1')).toBeVisible();
-	await expect(page.getByText(/พร้อมนำเข้า 1 · ผิดพลาด 1/)).toBeVisible();
+	await expect(page.getByText(/พร้อมนำเข้า\s+1\s+·\s+ผิดพลาด\s+1/)).toBeVisible();
 	await expect(page.getByText('ต้องระบุความจุสูงสุด (คน)')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'นำเข้า 1 ศูนย์' })).toBeEnabled();
 
 	await page.getByRole('button', { name: 'นำเข้า 1 ศูนย์' }).click();
 
 	await expect(page.getByRole('heading', { name: 'ตรวจสอบข้อมูลก่อนนำเข้า' })).not.toBeVisible();
-	await expect(page.getByRole('main').getByText('เสร็จพร้อมข้อผิดพลาด')).toBeVisible();
+	await expect(page.getByRole('dialog').getByText('เสร็จพร้อมข้อผิดพลาด')).toBeVisible();
 	expect(created.bodies).toHaveLength(1);
 	expect(created.bodies[0].rows).toEqual([
 		expect.objectContaining({
@@ -367,6 +377,58 @@ for (const typeHeader of ['ประเภทอาคาร', 'ประเภ�
 	});
 }
 
+test('imports an external shelter without capacity and rejects one carrying facility data (CR-252)', async ({
+	page
+}) => {
+	await mockMasterData(page);
+	const registry = await mockRegistry(page);
+	const created = await mockShelterImportJob(page, registry);
+	await injectSession(page, SA, session);
+	await page.goto(`${BASE}${IMPORT_PATH}`);
+
+	const extraHeaders = ['ศูนย์จากระบบภายนอก', 'ลิงก์ศูนย์ภายนอก'];
+	const row = (name: string, url: string) => {
+		const cells = Array(HEADERS.length + extraHeaders.length).fill('');
+		cells[0] = name;
+		cells[HEADERS.length] = 'ใช่';
+		cells[HEADERS.length + 1] = url;
+		return cells;
+	};
+	await page.locator('input[type="file"]').setInputFiles({
+		name: 'external.xlsx',
+		mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		buffer: await workbook(
+			[row('ศูนย์ E2E ภายนอก', 'https://example.org/ext'), row('ศูนย์ E2E ภายนอกมีโซน', '')],
+			[...HEADERS, ...extraHeaders],
+			[
+				{
+					name: 'โซน',
+					rows: [
+						['รหัสศูนย์พักพิง', 'รหัสโซน', 'ชื่อโซน', 'ความจุโซน (คน)'],
+						['2', 'A', 'โซน A', '10']
+					]
+				}
+			]
+		)
+	});
+
+	await expect(page.getByText(/พร้อมนำเข้า\s+1\s+·\s+ผิดพลาด\s+1/)).toBeVisible();
+	await expect(page.getByText('ศูนย์จากระบบภายนอกห้ามมีข้อมูลในส่วนนี้')).toBeVisible();
+	await page.getByRole('button', { name: 'นำเข้า 1 ศูนย์' }).click();
+	await expect(page.getByRole('dialog')).toBeVisible();
+	expect(created.bodies[0].rows).toEqual([
+		expect.objectContaining({
+			row: 1,
+			shelter: expect.objectContaining({
+				is_external: true,
+				operation_status: 'unknown',
+				external_url: 'https://example.org/ext'
+			})
+		}),
+		expect.objectContaining({ row: 2 })
+	]);
+});
+
 test('records a server error and continues importing later valid rows', async ({ page }) => {
 	await mockMasterData(page);
 	const registry = await mockRegistry(page);
@@ -392,7 +454,7 @@ test('records a server error and continues importing later valid rows', async ({
 	});
 	await page.getByRole('button', { name: 'นำเข้า 2 ศูนย์' }).click();
 
-	await expect(page.getByRole('main').getByText('เสร็จพร้อมข้อผิดพลาด')).toBeVisible();
+	await expect(page.getByRole('dialog').getByText('เสร็จพร้อมข้อผิดพลาด')).toBeVisible();
 	expect(created.bodies).toHaveLength(1);
 	expect(registry.logs).toHaveLength(1);
 	expect(registry.logs[0]).toMatchObject({ success_count: 1, error_count: 1 });

@@ -82,6 +82,7 @@
 		onClose?: () => void;
 	} = $props();
 
+	const STATUS_VALUES = ['open', 'full', 'prepare', 'closed', 'unknown'] as const;
 	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
 	const SEARCH_DEBOUNCE_MS = 300;
 
@@ -106,6 +107,8 @@
 		}))
 	);
 	let selectedType = $state<string>('');
+	// CR-252 FR-23: one status at a time, as the list API takes (URL value is lowercase).
+	let selectedStatus = $state<string>('');
 	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
 	let customDistanceDraft = $state<string>('');
@@ -149,6 +152,7 @@
 		if (selectedSubdistrict) params.set('subdistrict', selectedSubdistrict);
 		if (selectedSiteKind) params.set('site_kind', selectedSiteKind);
 		if (selectedType) params.set('type', selectedType);
+		if (selectedStatus) params.set('status', selectedStatus);
 		if (userLat && userLng) {
 			params.set('user_lat', userLat);
 			params.set('user_lng', userLng);
@@ -194,6 +198,7 @@
 			f.subdistrict,
 			f.site_kind,
 			f.type,
+			f.status,
 			f.distance,
 			f.user_lat,
 			f.user_lng,
@@ -208,6 +213,8 @@
 			selectedSubdistrict = f.subdistrict ?? '';
 			selectedSiteKind = f.site_kind ?? '';
 			selectedType = f.type ?? '';
+			selectedStatus =
+				STATUS_VALUES.find((v) => v === f.status?.split(',')[0]?.toLowerCase()) ?? '';
 			const nextDistance = f.distance || '5';
 			distanceValue = nextDistance;
 			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
@@ -276,6 +283,7 @@
 			selectedSubdistrict,
 			selectedSiteKind,
 			selectedType,
+			selectedStatus,
 			distanceValue,
 			userLat,
 			userLng,
@@ -285,6 +293,14 @@
 		if (hydrating) return;
 		commitFilters();
 	});
+
+	const statusOptions = $derived([
+		{ value: 'open', label: t.statusOpen },
+		{ value: 'full', label: t.statusFull },
+		{ value: 'prepare', label: t.statusPrepare },
+		{ value: 'closed', label: t.statusClosed },
+		{ value: 'unknown', label: t.statusUnknown }
+	]);
 
 	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
 
@@ -567,6 +583,29 @@
 						<Select.Content>
 							<Select.Item value="">{t.siteKindAll}</Select.Item>
 							{#each siteKindOptions as option (option.value)}
+								<Select.Item value={option.value}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<!-- Status (CR-252 FR-23) -->
+				<div class="space-y-1.5">
+					<Label for={`${idPrefix}status`} class="text-xs font-semibold text-muted-foreground"
+						>{t.statusLabel}</Label
+					>
+					<Select.Root
+						type="single"
+						name="status"
+						bind:value={selectedStatus}
+						items={statusOptions}
+					>
+						<Select.Trigger id={`${idPrefix}status`} class="w-full rounded-xl">
+							<Select.Value placeholder={t.statusAll} />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="">{t.statusAll}</Select.Item>
+							{#each statusOptions as option (option.value)}
 								<Select.Item value={option.value}>{option.label}</Select.Item>
 							{/each}
 						</Select.Content>

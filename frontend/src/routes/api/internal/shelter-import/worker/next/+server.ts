@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { ulid } from '$lib/db/ulid';
-import { buildUpdatePayload } from '$lib/features/shelter-import';
+import { buildUpdatePayload, externalTypeChangeVerdict } from '$lib/features/shelter-import';
 import {
 	claimNextImportItem,
 	assertImportItemClaim,
@@ -37,6 +37,9 @@ function unauthorized() {
 
 /** CR-198 FR-7/FR-8 rejection: a verdict on the row, so the item is not retried. */
 class SiteKindRejected extends Error {}
+
+/** CR-252 FR-31 rejection: update would flip external <-> normal. A verdict on the row, not retried. */
+class ExternalTypeRejected extends Error {}
 
 function itemError(error: unknown): ImportItemError[] {
 	return [
@@ -198,6 +201,12 @@ export const POST: RequestHandler = async ({ request }) => {
 					updateMaster(
 						code,
 						(current) => {
+							// CR-252 FR-31: authoritative check against the stored doc (the preview list may be stale).
+							const typeMessage = externalTypeChangeVerdict(
+								input.is_external === true,
+								current.is_external === true
+							);
+							if (typeMessage) throw new ExternalTypeRejected(typeMessage);
 							// A blank cell keeps the stored kind (CR-198 D-4), so there is nothing to check.
 							if (item.site_kind_blank !== true) checkSiteKind(current.site_kind);
 							return {
@@ -297,6 +306,14 @@ export const POST: RequestHandler = async ({ request }) => {
 					await updateImportItem(item, {
 						status: 'validation_error',
 						errors: [{ column: 'site_kind', message: error.message }],
+						lease_until: undefined,
+						worker_id: undefined,
+						claim_token: undefined
+					});
+				} else if (error instanceof ExternalTypeRejected) {
+					await updateImportItem(item, {
+						status: 'validation_error',
+						errors: [{ column: 'ศูนย์จากระบบภายนอก', message: error.message }],
 						lease_until: undefined,
 						worker_id: undefined,
 						claim_token: undefined

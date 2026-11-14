@@ -38,7 +38,7 @@
 		</div>
 	</div>
 
-	{#if shelter.faq && shelter.faq.length > 0}
+	{#if !shelter.is_external && shelter.faq && shelter.faq.length > 0}
 		<div class="flex flex-col gap-2">
 			{#each shelter.faq as item (item.q)}
 				<details class="group overflow-hidden rounded-xl border border-border bg-white shadow-sm">

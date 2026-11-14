@@ -141,6 +141,8 @@
 			name: d.name,
 			site_kind: d.site_kind,
 			operation_status: d.operation_status,
+			is_external: d.is_external === true,
+			external_url: d.external_url ?? null,
 			shelter_type: d.shelter_type ?? null,
 			floor_count: d.floor_count ?? null,
 			project_level: d.project_level ?? null,
@@ -155,7 +157,7 @@
 			province: d.province ?? null,
 			postal_code: d.postal_code ?? null,
 			key_personnel: d.key_personnel ?? { eoc_liaison: {}, medical_lead: {}, kitchen_lead: {} },
-			capacity: d.capacity,
+			capacity: d.is_external === true && !d.capacity ? undefined : d.capacity,
 			area_m2: d.area_m2 ?? null,
 			area_type: (d.area_type ?? null) as Shelter['area_type'],
 			facilities: d.facilities ?? {},
@@ -246,7 +248,7 @@
 		saveEdit(data, fresh.data?._rev ?? data._rev);
 	}
 
-	const sections = [
+	const allSections = [
 		{ id: 'basic-info', label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
 		{ id: 'capacity', label: 'ความจุ โซน และสิ่งอำนวยความสะดวก', icon: Building2 },
 		{ id: 'food-distribution', label: 'จุดแจกอาหาร', icon: UtensilsCrossed },
@@ -257,13 +259,12 @@
 		{ id: 'luggage-policy', label: 'นโยบายทรัพย์สิน / สัมภาระ', icon: Briefcase },
 		{ id: 'parking-policy', label: 'นโยบายยานพาหนะ', icon: Car }
 	];
-	const sectionIds = sections.map((s) => s.id);
 
 	let activeSection = $state('basic-info');
 	let showValidationSummary = $state(false);
 
 	const scrollSpy = createScrollSpy({
-		sectionIds: () => sectionIds,
+		sectionIds: () => sections.map((s) => s.id),
 		prefix: '',
 		stickyVar: '--shelter-form-sticky-top',
 		onActiveChange: (id) => {
@@ -323,6 +324,11 @@
 	});
 
 	const { form: formData, submitting, enhance, errors, tainted, isTainted } = form;
+
+	// CR-252 FR-19: an external shelter keeps only basic info — the other sections are not rendered.
+	const isExternal = $derived($formData.is_external === true);
+
+	const sections = $derived(isExternal ? allSections.slice(0, 1) : allSections);
 
 	const invalidSectionIds = $derived.by(() =>
 		showValidationSummary ? findInvalidSectionIds($errors) : []
@@ -427,6 +433,12 @@
 				return {
 					label: 'ปิดศูนย์ (Closed)',
 					classes: 'border border-slate-200 bg-slate-100 text-slate-700',
+					dot: 'bg-slate-400'
+				};
+			case 'unknown':
+				return {
+					label: 'ไม่ทราบสถานะ (Unknown)',
+					classes: 'border border-slate-300 bg-slate-100 text-slate-700',
 					dot: 'bg-slate-400'
 				};
 			case 'standby':
@@ -667,15 +679,19 @@
 							{formData}
 							canClose={canCloseShelter}
 							storedStatus={isEdit ? storedStatus : undefined}
+							isSystemAdmin={isSystemAdmin(authStore.user?.roles ?? [])}
+							{isEdit}
 						/>
-						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
-						<FoodDistributionSection {form} {formData} />
-						<StoragePointsSection {form} {formData} {stockedLotCount} {stockReady} />
-						<UtilitiesSection {form} {formData} />
-						<RiskSection {form} {formData} />
-						<AdmissionPolicySection {formData} />
-						<LuggagePolicySection {formData} />
-						<ParkingPolicySection {formData} />
+						{#if !isExternal}
+							<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
+							<FoodDistributionSection {form} {formData} />
+							<StoragePointsSection {form} {formData} {stockedLotCount} {stockReady} />
+							<UtilitiesSection {form} {formData} />
+							<RiskSection {form} {formData} />
+							<AdmissionPolicySection {formData} />
+							<LuggagePolicySection {formData} />
+							<ParkingPolicySection {formData} />
+						{/if}
 					</form>
 				</div>
 			</div>

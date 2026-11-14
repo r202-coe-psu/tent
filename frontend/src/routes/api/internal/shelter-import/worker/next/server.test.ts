@@ -24,8 +24,10 @@ vi.mock('$lib/features/shelters/server', async () => ({
 	validateSiteKindChange: (await import('$lib/features/shelters/domain/schema'))
 		.validateSiteKindChange
 }));
-vi.mock('$lib/features/shelter-import', () => ({
-	buildUpdatePayload: buildUpdatePayloadMock
+vi.mock('$lib/features/shelter-import', async () => ({
+	buildUpdatePayload: buildUpdatePayloadMock,
+	externalTypeChangeVerdict: (await import('$lib/features/shelter-import/domain/duplicates'))
+		.externalTypeChangeVerdict
 }));
 vi.mock('$lib/features/shelter-import/server/job-store', () => ({
 	claimNextImportItem: claimMock,
@@ -254,6 +256,26 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			expect(updateItemMock).toHaveBeenCalledWith(
 				expect.anything(),
 				validationError(expect.stringContaining('field_hospital'))
+			);
+		});
+
+		it('rejects an update that flips external <-> normal as a validation_error (CR-252 FR-31)', async () => {
+			claimMock.mockResolvedValue(
+				item({ input: { ...(input as object), is_external: true } as never })
+			);
+			updateRunsMutatorOn({ site_kind: 'evacuation_center', is_external: false });
+
+			await call();
+
+			expect(buildUpdatePayloadMock).not.toHaveBeenCalled();
+			expect(updateItemMock).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					status: 'validation_error',
+					errors: [
+						{ column: 'ศูนย์จากระบบภายนอก', message: expect.stringContaining('เปลี่ยนชนิดไม่ได้') }
+					]
+				})
 			);
 		});
 
