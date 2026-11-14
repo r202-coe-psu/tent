@@ -8,7 +8,12 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { PRINTERS_I18N, PrintLabelsButton, ReportedRenderError } from '$lib/features/printers';
+	import {
+		PRINTERS_I18N,
+		PrintLabelsButton,
+		ReportedRenderError,
+		ScannerClientPrintButton
+	} from '$lib/features/printers';
 	import { renderKioskQrLabelPng } from '$lib/features/kiosk';
 	import { toast } from 'svelte-sonner';
 	import { issueQrPayloads } from '../../application/evacuee-qr-issue';
@@ -149,9 +154,10 @@
 	// button's follow-up state: printing the family again would duplicate labels.
 	let printing = $state(false);
 	let retryHeld = $state(false);
+	let printingHere = $state(false);
 	// Latest QR issued per member by the family button, shown in each card's preview.
 	let issuedByMember = $state<Record<string, string | undefined>>({});
-	const leaveLocked = $derived(printing || retryHeld);
+	const leaveLocked = $derived(printing || retryHeld || printingHere);
 
 	function isHead(member: Evacuee, index: number): boolean {
 		if (household.head_evacuee_id) {
@@ -230,9 +236,10 @@
 		class="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background/95 p-3 backdrop-blur-sm"
 	>
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-			<!-- The only print button on this page: member cards hide the station button (`printable={false}`)
-			     and the PDF button (`stationOnly`), and nextActions has none. One instance = one print
-			     state, so no double print and no second issue path rotating the QRs just printed. -->
+			<!-- The only print buttons on this page: member cards hide the station button
+			     (`printable={false}`) and the PDF button (`stationOnly`), and nextActions has none. The
+			     print-server button and the scanner client button share one issue path and each is
+			     disabled while the other prints, so the QRs just printed are not rotated again. -->
 			{#if total > 0}
 				<!-- Keyed by the family: the button keeps unsent chunks for Retry, which must not outlive a
 				     change of members (it would print the old labels). Invariant: `members` is a snapshot
@@ -248,9 +255,20 @@
 						source="walk_in"
 						renderLabels={renderFamilyLabels}
 						label={printersT.printFamily(total)}
+						disabled={printingHere}
 						buttonClass="min-h-11"
 					/>
 				{/key}
+				<!-- The label printer on this PC, only inside the scanner client (desk app). -->
+				<ScannerClientPrintButton
+					bind:printing={printingHere}
+					{shelterCode}
+					labelCount={total}
+					source="walk_in"
+					renderLabels={renderFamilyLabels}
+					disabled={printing || retryHeld}
+					buttonClass="min-h-11"
+				/>
 			{/if}
 			{@render nextActions()}
 		</div>

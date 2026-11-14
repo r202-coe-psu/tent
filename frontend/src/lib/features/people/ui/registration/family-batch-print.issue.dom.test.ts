@@ -21,6 +21,9 @@ vi.mock('$lib/features/printers', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/printers')>()),
 	PrintLabelsButton: (
 		await import('../evacuee-profile/__fixtures__/print-labels-render-stub.svelte')
+	).default,
+	ScannerClientPrintButton: (
+		await import('../evacuee-profile/__fixtures__/scanner-client-print-button-stub.svelte')
 	).default
 }));
 vi.mock('$lib/features/kiosk', () => ({

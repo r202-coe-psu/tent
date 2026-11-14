@@ -142,6 +142,16 @@ describe('PrintLabelsButton', () => {
 		expect(buttons()).toHaveLength(1);
 	});
 
+	it('stays disabled while the host says so (another print button is printing)', async () => {
+		stationPrinter.set('SH001', 'p1');
+		await render({ printers: [printer('p1')], disabled: true });
+
+		expect(mainButton().disabled).toBe(true);
+		mainButton().click();
+		await settle();
+		expect(api.createPrintJob).not.toHaveBeenCalled();
+	});
+
 	it('tells the user they may not print when the server answers 403', async () => {
 		stationPrinter.set('SH001', 'p1');
 		api.createPrintJob.mockRejectedValue(new PrintApiError('no', 403, 'FORBIDDEN'));
