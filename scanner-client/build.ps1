@@ -8,6 +8,8 @@
   Needs internet only: uses `uv` from PATH, else downloads it into .tools\; uv fetches Python.
   Same for Inno Setup (ISCC.exe), downloaded into .tools\inno when not installed.
   Output (in dist\):
+      tent-win64.zip                   tent\ folder: double-click tent.exe (python.org's signed
+                                       pythonw.exe renamed), passes Smart App Control
       scanner-client-setup.exe         per-user installer (Inno Setup, installer.iss); asks
                                        SHELTER_URL, adds shortcuts + an uninstall entry
       scanner-client-win64.zip         scanner-client\ (onedir, console-less) + README.md
@@ -150,6 +152,37 @@ Invoke-Checked "$stage\python\python.exe" @('-c',
 Get-ChildItem -LiteralPath $stage -Recurse -Directory -Filter '__pycache__' |
     Remove-Item -Recurse -Force
 
+# 4b. zip with no .exe of ours: python.org's PSF-signed pythonw.exe renamed to tent.exe (the
+#     signature covers the file's bytes, not its name). Double-clicked with no arguments, it
+#     imports zip\sitecustomize.py, which runs the client. The runtime sits at the top of the
+#     folder because tent.exe loads python313.dll from its own folder.
+$zipStage = 'build\zip\tent'
+New-Item -ItemType Directory -Force -Path $zipStage | Out-Null
+Copy-Item -Path "$stage\python\*" -Destination $zipStage -Recurse
+foreach ($dir in 'site-packages', 'scanner_client', 'app') {
+    Copy-Item -LiteralPath "$stage\$dir" -Destination "$zipStage\$dir" -Recurse
+}
+foreach ($file in '.env.example', 'README.md', 'tent.ico') {
+    Copy-Item -LiteralPath "$stage\$file" -Destination $zipStage
+}
+Copy-Item -LiteralPath 'zip\sitecustomize.py' -Destination $zipStage
+Move-Item -LiteralPath "$zipStage\pythonw.exe" -Destination "$zipStage\tent.exe"
+# `import site` is what makes Python import sitecustomize.py
+Set-Content -LiteralPath "$zipStage\python313._pth" -Encoding ascii -Value @(
+    'python313.zip', '.', 'site-packages', 'import site')
+foreach ($exe in 'tent.exe', 'python.exe') {
+    $signature = Get-AuthenticodeSignature -LiteralPath "$zipStage\$exe"
+    if ($signature.Status -ne 'Valid') { throw "$exe is not validly signed ($($signature.Status))" }
+}
+# python.exe (not tent.exe) must stay plain Python: this would hang if it launched the client
+Invoke-Checked "$zipStage\python.exe" @('-c',
+    ('import sitecustomize, scanner_client.main, scanner_client.launcher; ' +
+     'from scanner_client.winscard import WinSCard; WinSCard.load()'))
+Get-ChildItem -LiteralPath $zipStage -Recurse -Directory -Filter '__pycache__' |
+    Remove-Item -Recurse -Force
+$tentZip = 'dist\tent-win64.zip'
+Compress-Archive -LiteralPath $zipStage -DestinationPath $tentZip -Force
+
 # 5. installer (Inno Setup): ISCC from PATH / a normal install, else a private copy in .tools\
 $iscc = @(
     (Get-Command iscc -ErrorAction SilentlyContinue | ForEach-Object Source),
@@ -183,7 +216,7 @@ Invoke-Checked $iscc @("/DAppVersion=$version", 'installer.iss')
 $setup = 'dist\scanner-client-setup.exe'
 if (-not (Test-Path -LiteralPath $setup)) { throw "Build did not produce $setup" }
 
-foreach ($z in $setup, $zip, $debugZip) {
+foreach ($z in $setup, $tentZip, $zip, $debugZip) {
     $mb = [math]::Round((Get-Item -LiteralPath $z).Length / 1MB, 1)
     Write-Host "OK  $z  ($mb MB)"
 }
