@@ -1,16 +1,18 @@
 ---
-id: draft # draft (ตอน proposed) -> เปลี่ยนเป็น CR-NNN เมื่อเจ้าของโครงการ approve
-title: Scanner client — เสียบบัตรประชาชนที่ notebook แล้วเติมฟอร์มลงทะเบียน walk-in
-status: proposed
+id: CR-256
+title: "Scanner client — เสียบบัตรประชาชนที่ notebook แล้วเติมฟอร์มลงทะเบียน walk-in"
+status: approved
 date: 2026-11-14
 created: 2026-11-14
 updated: 2026-11-14
-requested_by: ทีม kiosk — หน่วยงานพันธมิตรที่ไม่มีตู้ Kiosk แต่มี notebook + เครื่องอ่านบัตร USB (#1326 / PR #1355)
-decided_by: รอเจ้าของโครงการ approve
+requested_by: "ทีม kiosk — หน่วยงานพันธมิตรที่ไม่มีตู้ Kiosk แต่มี notebook + เครื่องอ่านบัตร USB (#1326 / PR #1355)"
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-11-14
 layer: volatile
 affects:
   - frontend/src/lib/features/people/domain/scanner-card.ts (ใหม่ — scannerCardSchema, cardToUnifiedMember, applyScannedCard)
   - frontend/src/lib/features/people/domain/{unified-registration,instant-duplicate}.ts
+  - frontend/src/lib/features/people/index.ts (barrel export)
   - frontend/src/lib/features/people/ui/registration/unified-registration-form.svelte (handler scanner:*)
   - frontend/src/routes/(protected)/onsite/people/new/+page.svelte (ตรวจซ้ำตอนเสียบบัตร)
   - frontend/src/lib/constants/i18n/staff-registration-desk.ts (copy th/en)
@@ -24,7 +26,7 @@ why: >
 migration: N/A — ไม่เปลี่ยนรูปร่าง doc ที่ persist
 ---
 
-# Scanner client — เสียบบัตรประชาชนที่ notebook แล้วเติมฟอร์มลงทะเบียน walk-in
+# CR-256 — Scanner client — เสียบบัตรประชาชนที่ notebook แล้วเติมฟอร์มลงทะเบียน walk-in
 
 > **สรุป (TL;DR):**
 >
@@ -174,3 +176,4 @@ N/A — ไม่เปลี่ยนรูปร่าง doc ที่ persis
 
 - 2026-11-14 — proposed (draft) จาก #1326 / PR #1355 · ทีมเสนอ: ไม่ทำ audit แยกว่ามาจากบัตร ใช้ช่องทาง walk-in
   (`registered_via: 'staff'`) เดิม (D4) · tab เดิมเป็นความเสี่ยงที่รับไว้ (D5) · `START_PATH=/admin-login` ปิดเรื่องแล้ว (D6)
+- 2026-11-14 — approved โดย Soravit Sukkarn (Team Lead) หลัง review PR #1404 · รันเลข CR-256 · ยืนยันข้อตัดสินใจ D1–D7 ทั้งชุด
