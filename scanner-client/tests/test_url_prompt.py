@@ -1,6 +1,6 @@
 import asyncio
 
-from scanner_client.url_prompt import ask_shelter_origin
+from scanner_client.url_prompt import DEFAULT_SHELTER_ORIGIN, ask_shelter_origin
 
 
 class PageClosed(Exception):
@@ -75,3 +75,23 @@ def test_closing_the_window_while_asking_returns_none():
     page = FakePromptPage([])
 
     assert ask(page) is None
+
+
+def test_without_a_saved_origin_it_offers_the_psu_shelter_site():
+    page = FakePromptPage(["https://shelter.psu.ac.th"])
+
+    ask(page, "")
+
+    assert DEFAULT_SHELTER_ORIGIN == "https://shelter.psu.ac.th"
+    assert DEFAULT_SHELTER_ORIGIN in [arg for _, arg in page.evaluations]
+    assert DEFAULT_SHELTER_ORIGIN in page.contents[0]  # tells staff where it goes by default
+
+
+def test_the_url_box_stays_hidden_until_staff_choose_to_change_the_domain():
+    page = FakePromptPage(["https://shelter.psu.ac.th"])
+
+    ask(page, "")
+
+    html = page.contents[0]
+    assert 'id="change"' in html
+    assert 'id="custom" hidden' in html
