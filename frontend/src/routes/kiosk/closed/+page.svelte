@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
@@ -6,6 +7,7 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import {
+		abandonWalkIn,
 		buildKioskContextQuery,
 		getKioskDisplayContext,
 		KioskDeviceInfo,
@@ -19,6 +21,9 @@
 	const query = $derived(readKioskDisplayQuery(page.url.searchParams));
 	const contextQuery = $derived(buildKioskContextQuery(query));
 	const displayContext = $derived(getKioskDisplayContext(query, languageStore.current));
+
+	// The layout gate can land here mid walk-in, past the page that would have cleared it.
+	onMount(() => abandonWalkIn());
 
 	// Staff reopen the kiosk from the admin app; the device finds out here, without anyone touching it.
 	$effect(() => {
