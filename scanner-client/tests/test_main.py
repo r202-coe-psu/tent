@@ -11,10 +11,10 @@ from scanner_client.config import Settings
 from scanner_client.main import card_reader_backend, default_env_path, main, run_app
 from scanner_client.reader_watch import CardReaderWatcher
 
-# Fullscreen, and no "controlled by automated software" marker: reCAPTCHA scores a browser that
+# No "controlled by automated software" marker: reCAPTCHA scores a browser that
 # reports navigator.webdriver as a bot and staff login fails only inside the app.
 BROWSER_KWARGS = {
-    "args": ["--start-fullscreen", "--disable-blink-features=AutomationControlled"],
+    "args": ["--disable-blink-features=AutomationControlled"],
     "ignore_default_args": ["--enable-automation"],
 }
 
@@ -568,3 +568,39 @@ def test_a_browser_that_refuses_fullscreen_still_opens_the_shelter(tmp_path):
     harness.run()
 
     assert harness.playwright.page.gotos == ["https://shelter.example/admin-login"]
+
+
+def test_dialogs_are_left_for_staff_to_answer(tmp_path):
+    # without a listener Playwright dismisses confirm()/beforeunload unseen (confirm() = false)
+    harness = Harness(tmp_path)
+
+    harness.run()
+
+    assert len(harness.playwright.chromium.context.handlers.get("dialog", [])) == 1
+
+
+def test_the_url_prompt_is_not_fullscreen_only_the_shelter_is(tmp_path):
+    cdp = []
+
+    async def ask_origin(prompt_page, initial):
+        cdp.append(("asked", list(harness.playwright.chromium.context.cdp.sent)))
+        return "https://shelter.example"
+
+    harness = Harness(tmp_path)
+    page = harness.playwright.page
+
+    async def go():
+        asyncio.get_running_loop().call_later(0.05, page.fire, "close")
+        await run_app(
+            harness.settings,
+            data_dir=harness.data_dir,
+            start_playwright=harness.playwright.start,
+            watcher_factory=lambda settings, handle: harness.watcher,
+            card_session_factory=lambda settings: object(),
+            ask_origin=ask_origin,
+        )
+
+    asyncio.run(asyncio.wait_for(go(), timeout=5))
+
+    assert cdp == [("asked", [])]
+    assert harness.playwright.chromium.context.cdp.sent[-1][0] == "Browser.setWindowBounds"

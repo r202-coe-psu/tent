@@ -23,13 +23,14 @@ LOG_FILE_NAME = "scanner-client.log"
 LOG_MAX_BYTES = 1_000_000
 LOG_BACKUP_COUNT = 3
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
-# Follow the real window size (Playwright pins a 1280x720 viewport by default); open fullscreen
-# like F11 (staff press F11 to get the window back, Alt+F4 closes it).
+# Follow the real window size (Playwright pins a 1280x720 viewport by default). The window goes
+# fullscreen like F11 once the shelter opens, not on the URL prompt (staff press F11 to get the
+# window back, Alt+F4 closes it).
 # Without Playwright's automation marker (navigator.webdriver, the "controlled by automated test
 # software" bar): reCAPTCHA on the staff login scores such a browser as a bot, so login failed
 # only inside this app. Staff drive this window by hand; the app only fills the walk-in form.
 BROWSER_KWARGS: dict[str, Any] = {
-    "args": ["--start-fullscreen", "--disable-blink-features=AutomationControlled"],
+    "args": ["--disable-blink-features=AutomationControlled"],
     "ignore_default_args": ["--enable-automation"],
 }
 
@@ -149,7 +150,10 @@ async def run_app(
             page = await context.new_page()
         context.on("close", lambda *_: stop.set())
         page.on("close", lambda *_: stop.set())
-        await _enter_fullscreen(context, page)
+        # Without a listener Playwright dismisses every dialog unseen (confirm() returns false, an
+        # unsaved-changes guard can never be passed). With one that leaves it alone, the window
+        # shows it and staff answer it themselves.
+        context.on("dialog", lambda dialog: None)
 
         if ask_origin is not None:
             origin = await _until_stopped(ask_origin(page, settings.shelter_origin), stop)
@@ -159,6 +163,7 @@ async def run_app(
             settings = replace(settings, shelter_origin=origin)
             on_origin_chosen(origin)
 
+        await _enter_fullscreen(context, page)
         session = card_session_factory(settings)
 
         async def handle_card(reader: Any) -> None:
@@ -182,8 +187,8 @@ async def run_app(
 
 
 async def _enter_fullscreen(context: Any, page: Any) -> None:
-    """Fullscreen through the DevTools protocol: Edge can ignore --start-fullscreen (e.g. when
-    it restores a saved window size), so the window is asked again once it exists."""
+    """Fullscreen through the DevTools protocol, which Edge honours even when it restores a
+    saved window size (the --start-fullscreen flag it may ignore)."""
     try:
         cdp = await context.new_cdp_session(page)
         window = await cdp.send("Browser.getWindowForTarget")
