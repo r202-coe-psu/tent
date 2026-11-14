@@ -127,10 +127,10 @@ Expand-Archive -LiteralPath $embedZip -DestinationPath "$stage\python" -Force
 Set-Content -LiteralPath "$stage\python\python313._pth" -Encoding ascii -Value @(
     'python313.zip', '.', '..', '..\site-packages')
 
-Invoke-Checked $uv @('export', '--frozen', '--no-dev', '--no-emit-project', '--no-hashes',
+Invoke-Checked $uv @('export', '--frozen', '--no-dev', '--no-emit-project',
     '--quiet', '-o', 'build\requirements.txt')
 Invoke-Checked $uv @('pip', 'install', '--quiet', '--target', "$stage\site-packages",
-    '-r', 'build\requirements.txt', '--only-binary', ':all:',
+    '-r', 'build\requirements.txt', '--require-hashes', '--only-binary', ':all:',
     '--python-platform', 'x86_64-pc-windows-msvc', '--python-version', '3.13')
 Remove-Item -LiteralPath "$stage\site-packages\greenlet\tests" -Recurse -Force -ErrorAction SilentlyContinue
 
