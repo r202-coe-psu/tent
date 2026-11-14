@@ -3,7 +3,7 @@ id: CR-165
 title: ย้ายการจัดการเครื่องสแกน/Kiosk (scanner_device) จาก System Management ไป Back Office — SA ทุกศูนย์ + shelter_manager / kiosk_staff เฉพาะศูนย์ตัวเอง · ย้าย API `/api/v1/scanner/*` → `/api/v1/kiosk/*`
 status: approved
 date: 2026-10-12
-updated: 2026-11-12
+updated: 2026-11-14
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team LEAD)
 layer: volatile
@@ -263,7 +263,6 @@ path ในตารางนี้เป็น path หลังย้าย (�
 | AC-SBO-28 | `POST /api/v1/kiosk/draft` และ `POST /api/v1/scanner/draft` | `404` ทั้งคู่ | 37 |
 | AC-SBO-29 | `grep -rn "features/scanners" frontend/src` | ไม่พบ · `$lib/features/kiosk-devices` import ได้ | 38 |
 | AC-SBO-30 | `grep -n "banner_staff" frontend/src/lib/auth/roles.ts` · ตัวเลือก role ในหน้าจัดการผู้ใช้ | ไม่พบ `banner_staff` · มี `kiosk_staff` | 39, 41 |
-
 | AC-SBO-31 | SA / SM / `kiosk_staff` ศูนย์ A กด Switch ปิดเครื่องของ A | `200` · `service_open: false` + changed_by/at · ศูนย์ B ได้ `404` · role อื่น `403` | 44, 50 |
 | AC-SBO-32 | ปิดเครื่องขณะตู้อยู่หน้าแรก | ภายใน ~30 วิ ตู้ขึ้น `/kiosk/closed` พร้อมชื่อศูนย์ · จุดบริการ · สลับ EN ได้ | 47, 49 |
 | AC-SBO-33 | ปิดเครื่องขณะมีคนใช้กลาง flow แล้วกด action ถัดไป | `403 KIOSK_CLOSED` → หน้าปิด · action นั้นไม่ถูกบันทึกหรือพิมพ์ · งานที่สำเร็จก่อนหน้าพิมพ์จนจบ | 45, 48 |
@@ -281,7 +280,9 @@ path ในตารางนี้เป็น path หลังย้าย (�
 - **Docs:** `role-permission-matrix.md` §1.1 แทนแถว BAN `banner_staff` ด้วย KIO `kiosk_staff` (คง 11 บทบาท) · เพิ่มแถวสิทธิ์「Kiosk Device (`/back-office/kiosks`)」SA ✓ · SM scope · KIO scope · อื่น — · แถว「Kiosk Banner」คอลัมน์ BAN → KIO · CR-162 เพิ่มหมายเหตุว่า `banner_staff` ถูกแทนที่ (FR-SBO-39..42) · `api-contract.md` §2.2 หัวข้อ admin เปลี่ยน "SA เท่านั้น" → "SA ทุกศูนย์ / SM + `kiosk_staff` เฉพาะศูนย์" + เพิ่ม `GET`/`PATCH` + error 404 นอก scope · `schema.md` §3.11 `staff_pin_updated_by` = SA, SM หรือ `kiosk_staff` และการแก้ชื่อ/สถานะทำฝั่ง server · `schema.md` §3.11.1 `scanner_staff_pin.updated_by` = SA, SM หรือ `kiosk_staff` · `schema.md` §6 `_users.roles` เพิ่ม `{code}:kiosk_staff`
 - **Code:** ตาม `affects:` · ไม่แตะ `registry` VDU (ยังให้เขียนเฉพาะ SA/`_admin` — server ใช้ admin credential)
 - **Docs (path):** `api-contract.md` §2.1–2.3 แก้ path ทุกจุดตาม §2.4 และเปลี่ยนชื่อ `scanner_client` → kiosk client · `schema.md` §1.6, §3.11, §3.11.1, §3.12 แก้ path ที่อ้าง · `smart-card-registration-spec.md`, `kiosk-banner-design-guideline.md` แก้ path · CR เดิม (CR-097/149/151/152/158/162/163) ไม่แก้ย้อนหลัง — CR นี้อ้างไว้ใน `supersedes_rules`
-- **ไม่กระทบ:** body / response / auth ของ endpoint · `scanner_secrets` `_security` · `sync:central` · ชื่อ doc / DB `scanner_*`
+- **ไม่กระทบ:** body / response / auth ของ endpoint · `scanner_secrets` `_security` · `sync:central` · ชื่อ doc / DB `scanner_*` (ข้อนี้คือผลของการย้าย path เท่านั้น — amend §2.5 เปลี่ยน response ตามบรรทัดถัดไป)
+- **amend 2026-11-11 (§2.5) — endpoint / response:** endpoint งานของตู้ 9 ตัว (`lookup`, `check-in`, `register`, `reprint`, `volunteer-card`, `thaid/session{,/status,/cancel}`, `staff-pin/verify`) ตอบ `403 KIOSK_CLOSED` เพิ่มเมื่อเครื่องปิดให้บริการ (FR-SBO-45) · response ของ `bootstrap`, `config` และรายการ/รายละเอียดเครื่องฝั่ง admin เพิ่ม `service_open` (+ `service_open_changed_at` / `service_open_changed_by` ฝั่ง admin) · `PATCH devices/[id]` รับ `service_open` · body / auth ของ endpoint เดิมไม่เปลี่ยน · kiosk client รุ่นเก่าที่ไม่รู้จัก `KIOSK_CLOSED` จะเห็นเป็น error ทั่วไปแทนหน้าปิด
+- **ความเสี่ยง (amend §2.5):** ตู้รู้ว่าปิดช้าสุด ~30 วิ (poll / cache ของ gate) — ระหว่างนั้น action ถัดไปถูก server ตัดด้วย `403` อยู่แล้ว จึงไม่มีงานถูกบันทึกหลังปิด · อ่าน config ไม่ได้ฝั่งตู้ = ถือว่าเปิด (FR-SBO-47) ตู้จึงไม่ขึ้นหน้าปิดแต่ action ยังถูก server ตัด · `thaid/session/cancel` ถูก gate ด้วย ตอนปิดจึงเผา ThaiD session ที่ verify แล้วไม่ได้ — session หมดอายุเองใน 180 วิ และ id อยู่แค่ใน memory ของตู้ซึ่งถูกล้างแล้ว
 - **ความเสี่ยง:** ตัดทันทีไม่มี alias — ตู้ที่ยังไม่อัปเดต kiosk client หลัง deploy server จะ bootstrap ไม่ผ่านและเรียก API ของตู้ไม่ได้ทั้งหมด (`404`) จนกว่าจะอัปเดต · กลับกัน ตู้ที่อัปเดตก่อน deploy server ก็ใช้ไม่ได้ · รับมือด้วยขั้น cutover ใน §6
 - **ความเสี่ยง:** SM และ `kiosk_staff` ดู staff PIN ของเครื่องในศูนย์ได้ — ยอมรับเพราะ PIN ใช้ได้เฉพาะที่เครื่องนั้น และทั้งสอง role เป็นผู้รับผิดชอบตู้และเจ้าหน้าที่หน้าตู้ · ทุก reveal ถูก log (FR-SBO-07)
 - **ความเสี่ยง:** SM และ `kiosk_staff` ลบเครื่องในศูนย์ได้ — ลบแล้วย้อนกลับไม่ได้ (ลบ registry doc + PIN doc) ตู้ใช้งานไม่ได้ทันทีและต้องสร้างเครื่องใหม่ + ตั้ง secret ที่ตู้ใหม่ · ยอมรับตามที่ทีม kiosk ตกลงกับ Team Lead แล้ว โดยต้องผ่าน confirm dialog (FR-SBO-30) · ทุกการลบถูก log (FR-SBO-07)
@@ -289,7 +290,8 @@ path ในตารางนี้เป็น path หลังย้าย (�
 
 ## 6. Migration
 
-- **Data:** ไม่เปลี่ยนรูปร่าง doc ที่ persist · ไม่ bump `schema_v` · ไม่ต้อง backfill · device credential / PIN เดิมใช้ต่อได้
+- **Data:** การย้าย path ไม่เปลี่ยนรูปร่าง doc ที่ persist · ไม่ bump `schema_v` · ไม่ต้อง backfill · device credential / PIN เดิมใช้ต่อได้
+- **Data (amend 2026-11-11, §2.5):** `scanner_device` เพิ่ม `service_open` / `service_open_changed_at` / `service_open_changed_by` แบบ additive (optional) · ไม่ bump `schema_v` (คง 2) · ไม่ต้อง backfill — doc ที่ไม่มี `service_open` = เปิด
 - **Cutover (ตัดทันที — ไม่มี alias path เดิม):**
   1. นัดช่วงเวลาที่ไม่มีการลงทะเบียน / check-in ที่ตู้ และแจ้งทุกศูนย์ที่มีตู้
   2. เตรียม kiosk client เวอร์ชันที่ใช้ path ใหม่ให้ทุกตู้ (ดึง code / build) แต่ยังไม่ restart
@@ -297,6 +299,7 @@ path ในตารางนี้เป็น path หลังย้าย (�
   4. restart kiosk client ทุกตู้ทันที → ตรวจว่า bootstrap ผ่านและหน้า `/kiosk` โหลด config ได้ (AC-SBO-24)
   5. ตู้ที่ bootstrap ไม่ผ่านหลังขั้น 4 = ยังเป็น client เวอร์ชันเดิม → อัปเดตแล้ว restart
 - **Rollback:** revert server + kiosk client คู่กัน (path ต้องตรงกันทั้งสองฝั่ง)
+- **Rollback amend (§2.5):** schema `scanner_device` ของ server เวอร์ชันก่อน amend เป็น `.strict()` — doc ที่เคยถูกปิด/เปิดมีฟิลด์ `service_open*` แล้วจะ parse ไม่ผ่าน · ก่อน revert ให้ unset `service_open`, `service_open_changed_at`, `service_open_changed_by` ออกจากทุก `scanner_device` ใน `registry` (หรือเปิดทุกเครื่องก่อนแล้วจึง unset) แล้วจึง deploy เวอร์ชันเก่า
 - **`banner_staff` → `kiosk_staff`:** ณ 2026-10-12 ไม่มี `banner_staff` ใน `roles.ts` (CR-162 ยังไม่ build) จึงไม่มี `_users` ที่ถือ role นี้ผ่านแอป · ก่อน deploy ตรวจ `_users` ว่ามี `{code}:banner_staff` หรือไม่ ถ้ามีให้แทนด้วย `{code}:kiosk_staff`
 - **URL หน้า:** `/back-office/kiosks` ยังไม่เคยขึ้น production · `/system-management/scanners` redirect ไป `/back-office/kiosks` (FR-SBO-25)
 
