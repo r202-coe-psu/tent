@@ -151,6 +151,22 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		});
 	});
 
+	// #1166 AC-1 — the other half of the split: `over_need` reads as its own label and code.
+	it('rejects a booking with over_need and stores that label and code', async () => {
+		mockCouch(baseDonation);
+
+		const response = await POST(
+			postEvent({ reason_code: 'over_need', note: 'ศูนย์มีของนี้พอแล้ว' })
+		);
+
+		expect(response.status).toBe(200);
+		expect(putBody()).toMatchObject({
+			status: 'rejected',
+			reject_reason: 'เกินความต้องการ — ศูนย์มีของนี้พอแล้ว',
+			reject_reason_code: 'over_need'
+		});
+	});
+
 	it('rejects a delivery already open on the counter, and writes no stock', async () => {
 		mockCouch({ ...baseDonation, status: 'verifying' } as PublicDonationDoc);
 
