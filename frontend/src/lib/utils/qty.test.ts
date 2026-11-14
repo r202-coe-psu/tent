@@ -121,7 +121,10 @@ describe('parseQtyInput (#939)', () => {
 		['1', '1'],
 		['12.5', '12.5'],
 		[' 3 ', '3'],
-		['0.1200', '0.12']
+		['0.1200', '0.12'],
+		// Never exponent notation — `Decimal#toString()` would turn these into `1e+21` (#939 review W1)
+		['1000000000000000000000', '1000000000000000000000'],
+		['123456789012345678901234.5', '123456789012345678901234.5']
 	])('accepts %s as %s', (raw, expected) => {
 		expect(parseQtyInput(raw)).toBe(expected);
 	});

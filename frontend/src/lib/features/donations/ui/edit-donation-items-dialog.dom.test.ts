@@ -101,6 +101,23 @@ describe('EditDonationItemsDialog quantity persistence (#939)', () => {
 		expect(mocks.mutate).not.toHaveBeenCalled();
 	});
 
+	it('flags text the browser threw away, instead of leaving a silent disabled button (#939 S1)', async () => {
+		const qty = await openWith('kg');
+		// A number box sanitises `1.2.3` to '' and only says so through validity.badInput.
+		Object.defineProperty(qty, 'validity', { value: { badInput: true }, configurable: true });
+		await type(qty, '');
+
+		expect(document.body.textContent).toContain(QTY_FORMAT_ERROR);
+		expect(qty.getAttribute('aria-invalid')).toBe('true');
+		expect(saveButton().disabled).toBe(true);
+
+		// Once the box holds a real number again, the message goes away.
+		Object.defineProperty(qty, 'validity', { value: { badInput: false }, configurable: true });
+		await type(qty, '2.5');
+		expect(document.body.textContent).not.toContain(QTY_FORMAT_ERROR);
+		expect(saveButton().disabled).toBe(false);
+	});
+
 	it('rejects zero', async () => {
 		const qty = await openWith('kg');
 		await type(qty, '0.00000');

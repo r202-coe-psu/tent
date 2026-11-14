@@ -45,6 +45,8 @@
 		item_id?: string;
 		free_text: string;
 		qty: string;
+		/** The number box threw the typed text away (`1.2.3`): its value reads '' but it is not empty. */
+		qtyBadInput?: boolean;
 		unit: string;
 	};
 	let nextKey = 0;
@@ -92,7 +94,8 @@
 	// The qty box keeps the raw text the donor typed; it is parsed as a decimal string, never
 	// through float Number() (#939 / CR-038).
 	const parsedQty = (row: Row) => parseQtyInput(String(row.qty));
-	const hasFormatError = (row: Row) => row.qty !== '' && parsedQty(row) === null;
+	const hasFormatError = (row: Row) =>
+		!!row.qtyBadInput || (row.qty !== '' && parsedQty(row) === null);
 
 	const isPositive = (row: Row) => {
 		const qty = parsedQty(row);
@@ -207,7 +210,10 @@
 								min="0"
 								step={qtyInputStep(dimensionOf(row))}
 								value={row.qty}
-								oninput={(e) => (row.qty = e.currentTarget.value)}
+								oninput={(e) => {
+									row.qty = e.currentTarget.value;
+									row.qtyBadInput = e.currentTarget.validity.badInput;
+								}}
 								aria-invalid={hasWholeError(row) || hasFormatError(row) ? 'true' : undefined}
 								class="h-9 rounded-xl text-xs"
 							/>

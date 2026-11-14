@@ -51,7 +51,8 @@ export function parseQtyInput(raw: string): string | null {
 	if (!/^\d+(\.\d+)?$/.test(text)) return null;
 	const value = new Decimal(text);
 	if (value.decimalPlaces() > QTY_DECIMALS) return null;
-	return persistQty(value);
+	// toFixed(): `toString()` switches to exponent notation from 1e21 (`'1e+21'`), which must not reach storage.
+	return value.toFixed();
 }
 
 /** Round to qty scale and return persist string. */
