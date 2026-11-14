@@ -14,6 +14,7 @@ import {
 	createMovement,
 	createScreening,
 	applyMovementToStay,
+	buildKioskSelfCheckout,
 	assertMovementAllowed,
 	movementConflictMessage,
 	canCheckInEvacuee,
@@ -83,7 +84,7 @@ import {
 	movementReasonLabel
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
-import type { ScreeningInput, StayStatus } from './people';
+import type { Evacuee, ScreeningInput, StayStatus } from './people';
 import { isUlid } from '$lib/db/ulid';
 import { ConflictError } from '$lib/utils/errors';
 
@@ -2223,5 +2224,82 @@ describe('shelter-closed checkout display (CR-219 FR-1, FR-21)', () => {
 
 	it('accepts shelter_closed as a stored destination', () => {
 		expect(checkoutDestinationTypeSchema.safeParse('shelter_closed').success).toBe(true);
+	});
+});
+
+describe('buildKioskSelfCheckout (#1401)', () => {
+	const AT = '2026-11-14T09:00:00.000Z';
+	const REASON = 'เช็คเอาต์ด้วยตนเองที่ตู้ kiosk (kiosk-3)';
+	const kioskCtx = { shelterCode: 'SH001', createdBy: 'scanner:kiosk-3' };
+
+	function evacueeIn(status: StayStatus): Evacuee {
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			kioskCtx,
+			null
+		);
+		return {
+			...e,
+			household_id: 'household:H1',
+			current_stay: { status, zone: 'Z1', since: '2026-10-01T00:00:00.000Z' }
+		};
+	}
+
+	it.each(['active', 'room_confirmed'] as const)(
+		'checks out %s through a normal check_out movement',
+		(status) => {
+			const before = evacueeIn(status);
+			const { movement, evacuee } = buildKioskSelfCheckout(before, kioskCtx, REASON, undefined, AT);
+			expect(movement).toMatchObject({
+				type: 'movement',
+				evacuee_id: before._id,
+				action: 'check_out',
+				zone: null,
+				reason: REASON,
+				occurred_at: AT,
+				created_by: 'scanner:kiosk-3',
+				shelter_code: 'SH001'
+			});
+			expect(evacuee.current_stay).toMatchObject({ status: 'checked_out', since: AT });
+			expect(evacuee.household_id).toBe('household:H1');
+		}
+	);
+
+	it('puts a home destination on the movement for returned_home', () => {
+		const { movement } = buildKioskSelfCheckout(
+			evacueeIn('active'),
+			kioskCtx,
+			REASON,
+			'returned_home',
+			AT
+		);
+		expect(movement.destination).toEqual({ kind: 'home' });
+	});
+
+	it('puts an other destination with a detail on the movement for other', () => {
+		const { movement } = buildKioskSelfCheckout(evacueeIn('active'), kioskCtx, REASON, 'other', AT);
+		expect(movement.destination).toEqual({ kind: 'other', detail: 'เช็คเอาต์ที่ตู้ kiosk' });
+	});
+
+	it('leaves the destination off when none is given', () => {
+		const { movement } = buildKioskSelfCheckout(
+			evacueeIn('active'),
+			kioskCtx,
+			REASON,
+			undefined,
+			AT
+		);
+		expect(movement.destination).toBeUndefined();
+	});
+
+	it.each(['arriving', 'temporary_leave', 'checked_out', 'pre_registered'] as const)(
+		'refuses %s (only staff or the shelter-close flow may move those)',
+		(status) => {
+			expect(() => buildKioskSelfCheckout(evacueeIn(status), kioskCtx, REASON)).toThrow();
+		}
+	);
+
+	it('refuses an empty reason', () => {
+		expect(() => buildKioskSelfCheckout(evacueeIn('active'), kioskCtx, '   ')).toThrow(/เหตุผล/);
 	});
 });
