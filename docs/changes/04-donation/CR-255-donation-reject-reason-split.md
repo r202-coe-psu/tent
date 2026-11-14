@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-255
 title: "แยกเหตุผลปฏิเสธบริจาค not_needed → not_eligible (ไม่ตรงเกณฑ์การรับ) / over_need (เกินความต้องการ)"
-status: proposed
+status: approved
 date: 2026-11-12
-updated: 2026-11-12
+updated: 2026-11-14
 requested_by: "feedback อบรมระบบ 03/11/2026 (GitHub #1166)"
-decided_by:
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-11-14
 layer: volatile
 affects:
   - docs/data/schema.md §2.3 `donation` — enum `reject_reason_code`, `items[].review_reason_code`, `received_summary.items[].reject_reason_code`
@@ -27,7 +28,7 @@ migration: >
   ไม่ bump `schema_v` และไม่ backfill — doc เดิมคง `not_needed` และข้อความเหตุผลเดิม ระบบยังอ่านและแสดงได้
 ---
 
-# แยกเหตุผลปฏิเสธบริจาค: ไม่ตรงเกณฑ์การรับ / เกินความต้องการ
+# CR-255 — แยกเหตุผลปฏิเสธบริจาค: ไม่ตรงเกณฑ์การรับ / เกินความต้องการ
 
 > **สรุป (TL;DR):**
 >
@@ -103,3 +104,4 @@ N/A — ไม่ bump `schema_v` (เพิ่มค่า enum แบบ addit
 - 2026-11-12 — ทางเลือกที่ตัด: rename `not_needed` → ค่าใหม่ค่าเดียว + backfill (เดาความหมายเดิมของ doc เก่าไม่ได้)
 - 2026-11-12 — ช่องว่างที่รู้และยอมรับไว้ก่อน: route รับของ (`POST /api/back-office/donations/[query]`) ยังรับ `not_needed` บนรายการที่ไม่รับที่เคาน์เตอร์ ถ้ามีการยิง request เอง (UI ไม่เสนอตัวเลือกนี้) — ไม่ใช่ requirement ของ CR นี้
 - 2026-11-12 — preset ข้อความเหตุผล (GitHub #1256) ทำต่อหลัง CR นี้ merge และไม่มี CR แยก
+- 2026-11-14 — approved โดย Soravit Sukkarn (Team Lead) หลัง review PR #1376 · รันเลข CR-255 · ข้อที่ reviewer ยกและ owner รับตามที่ร่างไว้: (a) route รับของ (`POST /api/back-office/donations/[query]`) คงชุด code เต็มตาม FR-6 / Impact ("คงชุดเต็ม") · (b) ช่องว่าง `not_needed` ที่ยิง request เองได้ที่ route รับของ — ยอมรับ · (c) รายการ Impact ที่ยังไม่ครบ (`reject-reason.test.ts`, `item-review.test.ts`, `test_donation_close.py`, `point-receipts.test.ts`) และการจัดการ CR-172 FR-2 / CR-174 FR-1 — ยอมรับตามที่ร่างไว้
