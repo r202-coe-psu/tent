@@ -7,6 +7,7 @@ import { REJECT_NOTE_PRESETS } from '../domain/reject-reason';
 let instance: ReturnType<typeof mount> | null = null;
 
 afterEach(() => {
+	localStorage.clear();
 	if (instance) unmount(instance);
 	instance = null;
 	document.body.innerHTML = '';
@@ -55,7 +56,7 @@ describe('RejectReasonFields (#1166)', () => {
 
 		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
 		expect(textarea.value.startsWith('ของซ้ำ ')).toBe(true);
-		expect(textarea.value).toContain(REJECT_NOTE_PRESETS.thanks.text);
+		expect(textarea.value).toContain(REJECT_NOTE_PRESETS.thanks.texts.formal);
 		expect(document.querySelector('[data-testid="t-preview"]')?.textContent).toContain(
 			'เกินความต้องการ — ของซ้ำ '
 		);
@@ -69,5 +70,44 @@ describe('RejectReasonFields (#1166)', () => {
 		flushSync();
 		const chip = document.querySelector('[data-testid="t-preset-thanks"]') as HTMLButtonElement;
 		expect(chip.disabled).toBe(true);
+	});
+
+	it('writes the preset in the tone picked, and remembers the tone (#1256)', () => {
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', code: 'over_need' }
+		});
+		flushSync();
+		const formal = document.querySelector('[data-testid="t-tone-formal"]');
+		expect(formal?.getAttribute('aria-pressed')).toBe('true');
+
+		(document.querySelector('[data-testid="t-tone-warm"]') as HTMLButtonElement).click();
+		flushSync();
+		expect(
+			document.querySelector('[data-testid="t-tone-warm"]')?.getAttribute('aria-pressed')
+		).toBe('true');
+		(document.querySelector('[data-testid="t-preset-thanks"]') as HTMLButtonElement).click();
+		flushSync();
+
+		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+		expect(textarea.value).toBe(REJECT_NOTE_PRESETS.thanks.texts.warm);
+		expect(localStorage.getItem('tent.reject-note-tone')).toBe('warm');
+
+		unmount(instance);
+		document.body.innerHTML = '';
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', code: 'over_need' }
+		});
+		flushSync();
+		expect(
+			document.querySelector('[data-testid="t-tone-warm"]')?.getAttribute('aria-pressed')
+		).toBe('true');
+	});
+
+	it('shows no tone choice until a reason is picked, and none for "other" (#1256)', () => {
+		instance = mount(RejectReasonFields, { target: document.body, props: { idPrefix: 't' } });
+		flushSync();
+		expect(document.querySelectorAll('[data-testid^="t-tone-"]')).toHaveLength(0);
 	});
 });

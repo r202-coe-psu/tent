@@ -8,6 +8,9 @@ import {
 	rejectDonationInputSchema,
 	REJECT_NOTE_MAX,
 	REJECT_NOTE_PRESETS,
+	REJECT_NOTE_TONES,
+	DEFAULT_REJECT_NOTE_TONE,
+	parseRejectNoteTone,
 	REJECT_REASON_MAX,
 	rejectNotePresetsFor
 } from './reject-reason';
@@ -145,19 +148,36 @@ describe('reject note presets (#1256)', () => {
 		expect(ids('not_needed')).toEqual([]);
 	});
 
-	it('keeps every preset inside the note limit and free of personal data prompts', () => {
+	it('offers three tones, formal first and by default (#1256)', () => {
+		expect(REJECT_NOTE_TONES.map((t) => t.id)).toEqual(['formal', 'warm', 'concise']);
+		expect(DEFAULT_REJECT_NOTE_TONE).toBe('formal');
+	});
+
+	it('reads a stored tone back, falling back to the default for anything else', () => {
+		expect(parseRejectNoteTone('warm')).toBe('warm');
+		expect(parseRejectNoteTone('concise')).toBe('concise');
+		expect(parseRejectNoteTone('shouting')).toBe('formal');
+		expect(parseRejectNoteTone(null)).toBe('formal');
+	});
+
+	it('has a text in every tone for every preset, inside the note limit', () => {
 		for (const preset of Object.values(REJECT_NOTE_PRESETS)) {
-			expect(preset.text.length).toBeGreaterThan(0);
-			expect(preset.text.length).toBeLessThan(REJECT_NOTE_MAX);
+			for (const tone of REJECT_NOTE_TONES) {
+				const text = preset.texts[tone.id];
+				expect(text.length, `${preset.id}/${tone.id}`).toBeGreaterThan(0);
+				expect(text.length, `${preset.id}/${tone.id}`).toBeLessThan(REJECT_NOTE_MAX);
+			}
 		}
 	});
 
-	it('lets staff chain the thanks note with any other preset inside the limit', () => {
+	it('lets staff chain the thanks note with any other preset, in any tone', () => {
 		const { thanks, ...rest } = REJECT_NOTE_PRESETS;
-		for (const preset of Object.values(rest)) {
-			const chained = applyRejectNotePreset(thanks.text, preset.text);
-			expect(chained, preset.id).not.toBeNull();
-			expect(chained!.length).toBeLessThanOrEqual(REJECT_NOTE_MAX);
+		for (const tone of REJECT_NOTE_TONES) {
+			for (const preset of Object.values(rest)) {
+				const chained = applyRejectNotePreset(thanks.texts[tone.id], preset.texts[tone.id]);
+				expect(chained, `${preset.id}/${tone.id}`).not.toBeNull();
+				expect(chained!.length).toBeLessThanOrEqual(REJECT_NOTE_MAX);
+			}
 		}
 	});
 

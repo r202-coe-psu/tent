@@ -6,9 +6,12 @@
 		DONATION_REJECT_REASON_SELECTABLE_CODES,
 		DONATION_REJECT_REASON_LABELS,
 		REJECT_NOTE_MAX,
+		REJECT_NOTE_TONES,
 		applyRejectNotePreset,
+		parseRejectNoteTone,
 		donorRejectMessage,
 		rejectNotePresetsFor,
+		type RejectNoteTone,
 		type DonationRejectReasonCode
 	} from '../domain/reject-reason';
 
@@ -34,6 +37,25 @@
 	const noteRequired = $derived(code === 'other');
 	const preview = $derived(code ? donorRejectMessage(code, note) : '');
 	const presets = $derived(rejectNotePresetsFor(code));
+
+	// The shelter's tone is remembered per browser; storage may be blocked, so every access is guarded.
+	const TONE_STORAGE_KEY = 'tent.reject-note-tone';
+	function readStoredTone(): RejectNoteTone {
+		try {
+			return parseRejectNoteTone(localStorage.getItem(TONE_STORAGE_KEY));
+		} catch {
+			return parseRejectNoteTone(null);
+		}
+	}
+	let tone = $state<RejectNoteTone>(readStoredTone());
+	function pickTone(next: RejectNoteTone) {
+		tone = next;
+		try {
+			localStorage.setItem(TONE_STORAGE_KEY, next);
+		} catch {
+			/* private mode / quota: the choice still holds for this session */
+		}
+	}
 
 	/** Appends to the detail; a chip that would overflow the limit is disabled, not truncated. */
 	function usePreset(text: string) {
@@ -80,19 +102,40 @@
 			class="text-xs"
 		/>
 		{#if presets.length > 0}
-			<div class="flex flex-wrap gap-2" role="group" aria-label="ข้อความสำเร็จรูป">
-				{#each presets as preset (preset.id)}
-					<button
-						type="button"
-						data-testid="{idPrefix}-preset-{preset.id}"
-						title={preset.text}
-						disabled={disabled || applyRejectNotePreset(note, preset.text) === null}
-						onclick={() => usePreset(preset.text)}
-						class="min-h-9 cursor-pointer rounded-full border border-border bg-background px-3 text-2xs font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-					>
-						+ {preset.label}
-					</button>
-				{/each}
+			<div class="space-y-2">
+				<div class="flex flex-wrap items-center gap-2" role="group" aria-label="โทนข้อความ">
+					<span class="text-2xs font-semibold text-muted-foreground">โทนข้อความ</span>
+					{#each REJECT_NOTE_TONES as option (option.id)}
+						<button
+							type="button"
+							{disabled}
+							data-testid="{idPrefix}-tone-{option.id}"
+							aria-pressed={tone === option.id}
+							onclick={() => pickTone(option.id)}
+							class="min-h-8 cursor-pointer rounded-full border px-3 text-2xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 {tone ===
+							option.id
+								? 'border-primary bg-primary/10 text-primary'
+								: 'border-border bg-background text-muted-foreground hover:bg-muted'}"
+						>
+							{option.label}
+						</button>
+					{/each}
+				</div>
+				<div class="flex flex-wrap gap-2" role="group" aria-label="ข้อความสำเร็จรูป">
+					{#each presets as preset (preset.id)}
+						{@const text = preset.texts[tone]}
+						<button
+							type="button"
+							data-testid="{idPrefix}-preset-{preset.id}"
+							title={text}
+							disabled={disabled || applyRejectNotePreset(note, text) === null}
+							onclick={() => usePreset(text)}
+							class="min-h-9 cursor-pointer rounded-full border border-border bg-background px-3 text-2xs font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+						>
+							+ {preset.label}
+						</button>
+					{/each}
+				</div>
 			</div>
 		{/if}
 		<p class="text-2xs text-amber-700 dark:text-amber-300">

@@ -76,13 +76,28 @@ export const rejectNoteSchema = noteSchema;
  * Ready-made sentences staff can drop into the detail box (#1256). The donor reads the detail
  * on the tracking page, so none of them names a person, a phone number or a shelter. `codes`
  * is where a preset is offered; "other" gets none — it has no reason of its own to soften.
+ * Each preset reads in three tones (the shelter picks one; formal is the default): formal for
+ * automated replies and SMS, warm for chat with one donor, concise for notices and short texts.
  */
+export const REJECT_NOTE_TONES = [
+	{ id: 'formal', label: 'ทางการ' },
+	{ id: 'warm', label: 'อบอุ่น' },
+	{ id: 'concise', label: 'กระชับ' }
+] as const;
+export type RejectNoteTone = (typeof REJECT_NOTE_TONES)[number]['id'];
+export const DEFAULT_REJECT_NOTE_TONE: RejectNoteTone = 'formal';
+
+/** A stored or typed value → a tone; anything unknown is the default. */
+export function parseRejectNoteTone(value: string | null | undefined): RejectNoteTone {
+	return REJECT_NOTE_TONES.find((tone) => tone.id === value)?.id ?? DEFAULT_REJECT_NOTE_TONE;
+}
+
 export type RejectNotePreset = {
 	id: string;
 	/** The chip's caption. */
 	label: string;
-	/** What lands in the detail box. */
-	text: string;
+	/** What lands in the detail box, per tone. */
+	texts: Record<RejectNoteTone, string>;
 	codes: readonly DonationRejectReasonCode[];
 };
 
@@ -92,25 +107,47 @@ export const REJECT_NOTE_PRESETS = {
 	thanks: {
 		id: 'thanks',
 		label: 'ขอบคุณ',
-		text: 'ขอขอบพระคุณในน้ำใจอันงดงามของท่านเป็นอย่างยิ่ง',
+		texts: {
+			formal: 'ขอขอบพระคุณในน้ำใจอันงดงามของท่านเป็นอย่างยิ่ง',
+			warm: 'ขอบคุณสำหรับน้ำใจและความห่วงใยที่ส่งมาให้พวกเรา',
+			concise: 'ขอขอบคุณทุกน้ำใจที่ร่วมแบ่งปัน'
+		},
 		codes: PRESET_REASON_CODES
 	},
 	forward: {
 		id: 'forward',
 		label: 'ส่งต่อศูนย์อื่น',
-		text: 'ขณะนี้ทางศูนย์พักพิงได้รับสิ่งของในหมวดนี้เพียงพอต่อความต้องการของผู้ประสบภัยแล้ว เพื่อให้ความช่วยเหลือของท่านเกิดประโยชน์สูงสุดและถึงมือผู้ที่กำลังเดือดร้อนอย่างทั่วถึง ทางเราขออนุญาตแนะนำให้ท่านส่งต่อสิ่งของเหล่านี้ไปยังศูนย์พักพิงใกล้เคียงที่ยังขาดแคลนแทน',
+		texts: {
+			formal:
+				'ขณะนี้ทางศูนย์พักพิงได้รับสิ่งของในหมวดนี้เพียงพอต่อความต้องการของผู้ประสบภัยแล้ว เพื่อให้ความช่วยเหลือของท่านเกิดประโยชน์สูงสุดและถึงมือผู้ที่กำลังเดือดร้อนอย่างทั่วถึง ทางเราขออนุญาตแนะนำให้ท่านส่งต่อสิ่งของเหล่านี้ไปยังศูนย์พักพิงใกล้เคียงที่ยังขาดแคลนแทน',
+			warm: 'ตอนนี้สิ่งของประเภทนี้ที่ศูนย์ฯ ของเรามีเพียงพอสำหรับดูแลทุกคนแล้ว เพื่อให้ความตั้งใจดีของท่านได้ช่วยเหลือพี่น้องผู้ประสบภัยได้เต็มที่ที่สุด อยากขอรบกวนให้ท่านลองส่งต่อสิ่งของชุดนี้ไปยังศูนย์พักพิงอื่น ๆ ที่ยังขาดแคลนแทน',
+			concise:
+				'ขณะนี้สิ่งของหมวดนี้ที่ศูนย์ฯ มีเพียงพอต่อการดูแลผู้ประสบภัยแล้ว ขอแนะนำให้ท่านส่งต่อไปยังศูนย์พักพิงใกล้เคียงที่ยังต้องการความช่วยเหลือแทน'
+		},
 		codes: ['over_need']
 	},
 	not_eligible_forward: {
 		id: 'not_eligible_forward',
 		label: 'ส่งต่อศูนย์อื่น',
-		text: 'สิ่งของนี้ไม่ตรงตามเกณฑ์การรับของทางศูนย์พักพิง ทางเราขออนุญาตแนะนำให้ท่านส่งต่อไปยังศูนย์พักพิงใกล้เคียงที่สามารถรับสิ่งของลักษณะนี้ได้ เพื่อให้ความช่วยเหลือของท่านถึงมือผู้ที่กำลังเดือดร้อนอย่างทั่วถึง',
+		texts: {
+			formal:
+				'สิ่งของนี้ไม่ตรงตามเกณฑ์การรับของทางศูนย์พักพิง ทางเราขออนุญาตแนะนำให้ท่านส่งต่อไปยังศูนย์พักพิงใกล้เคียงที่สามารถรับสิ่งของลักษณะนี้ได้ เพื่อให้ความช่วยเหลือของท่านถึงมือผู้ที่กำลังเดือดร้อนอย่างทั่วถึง',
+			warm: 'สิ่งของชิ้นนี้ไม่ตรงกับเกณฑ์ที่ศูนย์ฯ รับได้ในตอนนี้ ขอรบกวนให้ท่านลองส่งต่อไปยังศูนย์พักพิงอื่นที่รับสิ่งของลักษณะนี้ เพื่อให้ความตั้งใจดีของท่านถึงมือผู้ที่ต้องการอย่างแท้จริง',
+			concise:
+				'สิ่งของนี้ไม่ตรงเกณฑ์การรับของศูนย์ฯ ขอแนะนำให้ส่งต่อไปยังศูนย์พักพิงใกล้เคียงที่รับสิ่งของลักษณะนี้'
+		},
 		codes: ['not_eligible']
 	},
 	safety: {
 		id: 'safety',
 		label: 'เพื่อความปลอดภัย',
-		text: 'เพื่อความปลอดภัยของผู้ใช้สิ่งของ ทางศูนย์พักพิงไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดเสียหายได้ ขออภัยในความไม่สะดวก และขอขอบคุณในความตั้งใจดีของท่าน',
+		texts: {
+			formal:
+				'เพื่อความปลอดภัยของผู้ใช้สิ่งของ ทางศูนย์พักพิงไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดเสียหายได้ ขออภัยในความไม่สะดวก และขอขอบคุณในความตั้งใจดีของท่าน',
+			warm: 'เพื่อความปลอดภัยของทุกคน ศูนย์ฯ ขออภัยที่ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขอบคุณที่ตั้งใจช่วยเหลือพวกเรา',
+			concise:
+				'เพื่อความปลอดภัย ศูนย์ฯ ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขออภัยในความไม่สะดวก'
+		},
 		codes: ['expired', 'damaged']
 	}
 } as const satisfies Record<string, RejectNotePreset>;
