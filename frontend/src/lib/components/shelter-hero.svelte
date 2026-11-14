@@ -92,14 +92,13 @@
 			<div class="grid grid-cols-2 gap-8 md:flex">
 				{#if isExternal}
 					<div data-testid="external-contact-note">
-						<div class="mb-1 text-xs font-semibold text-secondary/80">{t.capacityLabel}</div>
+						<div class="mb-1 text-xs font-semibold text-secondary/80">{t.maxCapacityLabel}</div>
 						{#if (shelter.capacity?.total ?? 0) > 0}
 							<div class="flex items-baseline gap-1.5">
 								<span class="text-xl font-bold text-white">{shelter.capacity?.total}</span>
 								<span class="text-sm font-medium text-secondary/80">{t.people}</span>
 							</div>
-						{/if}
-						{#if !((shelter.capacity?.total ?? 0) > 0)}
+						{:else}
 							<div class="text-sm font-semibold text-white/90">{t.contactAtShelter}</div>
 						{/if}
 					</div>

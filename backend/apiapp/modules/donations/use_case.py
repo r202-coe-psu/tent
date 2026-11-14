@@ -543,6 +543,16 @@ class DonationsUseCase:
                     "shelter_code": payload.shelter_code,
                 },
             )
+        # CR-252 FR-16: an external shelter takes no donations through us — its own system does.
+        if shelter.is_external:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": "SHELTER_EXTERNAL",
+                    "shelter_code": payload.shelter_code,
+                },
+            )
         if shelter.status not in _DONATION_OPEN_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

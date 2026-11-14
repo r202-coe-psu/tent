@@ -10,6 +10,7 @@ import {
 	MAX_IMPORT_ROWS,
 	type ImportItemError
 } from '$lib/features/shelter-import/server/job-store';
+import { externalForbiddenKeysFilled } from '$lib/features/shelter-import/server/external-guard';
 
 export const prerender = false;
 const MAX_IMPORT_BODY_BYTES = 5 * 1024 * 1024;
@@ -148,17 +149,19 @@ export const POST: RequestHandler = async ({ request }) => {
 					message: 'นำเข้าศูนย์สถานะ "ปิดศูนย์" ไม่ได้ — ปิดศูนย์จากหน้าจัดการศูนย์'
 				});
 			}
-			// CR-252 FR-30: a stale or hand-rolled client must not import zones / food points on an
-			// external shelter (the preview check is advisory; this one is authoritative).
+			// CR-252 FR-30: a stale or hand-rolled client must not import zones / food points /
+			// policy / utilities / risk on an external shelter (the preview check is advisory;
+			// this one is authoritative).
 			if (
 				parsed?.success &&
 				parsed.data.is_external === true &&
 				((parsed.data.zones?.length ?? 0) > 0 ||
-					(parsed.data.food_distribution_points?.length ?? 0) > 0)
+					(parsed.data.food_distribution_points?.length ?? 0) > 0 ||
+					externalForbiddenKeysFilled(parsed.data as Record<string, unknown>).length > 0)
 			) {
 				errors.push({
 					column: 'is_external',
-					message: 'ศูนย์จากระบบภายนอกห้ามมีโซนหรือจุดแจกอาหาร'
+					message: 'ศูนย์จากระบบภายนอกห้ามมีข้อมูลโซน จุดแจกอาหาร นโยบาย สาธารณูปโภค หรือความเสี่ยง'
 				});
 			}
 			const input = parsed?.success && errors.length === 0 ? parsed.data : undefined;

@@ -50,7 +50,9 @@ class ThirdPartySummaryUseCase:
         capacity_total = 0
 
         for shelter in shelters:
-            capacity_total += shelter.capacity
+            # CR-252 FR-16: an external shelter's capacity is display-only, never summed.
+            if not shelter.is_external:
+                capacity_total += shelter.capacity
             occupancy_total += shelter.occupancy_total
             stock_rows = await ShelterStock.find(
                 ShelterStock.shelter_code == shelter.shelter_code
