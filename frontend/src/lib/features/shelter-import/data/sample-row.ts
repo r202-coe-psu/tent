@@ -189,6 +189,10 @@ export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
 		...(siteKindLabel ? { [H.site_kind]: siteKindLabel } : {}),
 		[H.is_external]: YES,
 		[H.external_url]: 'https://example.org/shelters/external-001',
+		// Operation status stays blank on purpose (FR-29: the system sets "ไม่ทราบสถานะ").
+		...(shelterTypeLabel ? { [H.shelter_type]: shelterTypeLabel } : {}),
+		[H.area_type]: labelOf(AREA_TYPE_CHOICES, 'indoor'),
+		[H.capacity]: 100,
 		[H.address]: '12 หมู่ที่ 5 ตำบลบ้านพรุ อำเภอหาดใหญ่ จังหวัดสงขลา 90250',
 		[H.lat]: 6.9942,
 		[H.lng]: 100.4631,

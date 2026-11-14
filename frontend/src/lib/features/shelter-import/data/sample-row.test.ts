@@ -154,5 +154,7 @@ describe('buildSampleWorkbook', () => {
 		expect(result.shelter?.is_external).toBe(true);
 		expect(result.shelter?.operation_status).toBe('unknown');
 		expect(result.shelter?.external_url).toMatch(/^https:\/\//);
+		expect(result.shelter?.capacity).toBe(100);
+		expect(result.shelter?.area_type).toBe('indoor');
 	});
 });
