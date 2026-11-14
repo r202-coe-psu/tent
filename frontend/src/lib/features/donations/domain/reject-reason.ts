@@ -8,11 +8,35 @@ import { z } from 'zod';
  * the server composes the text the donor sees from both, so the preview in the
  * dialog and the stored `reject_reason` can never disagree.
  */
-export const DONATION_REJECT_REASON_CODES = ['not_needed', 'expired', 'damaged', 'other'] as const;
+export const DONATION_REJECT_REASON_CODES = [
+	'not_eligible',
+	'over_need',
+	'expired',
+	'damaged',
+	'other',
+	'not_needed'
+] as const;
+/** Every code a stored document may carry (including legacy `not_needed`). */
 export const donationRejectReasonCodeSchema = z.enum(DONATION_REJECT_REASON_CODES);
 export type DonationRejectReasonCode = z.infer<typeof donationRejectReasonCodeSchema>;
 
+/**
+ * Codes new forms and inputs offer/accept. `not_needed` is legacy read-only: it stays valid on
+ * old documents (and its label stays) but was split into `not_eligible` / `over_need` (#1166).
+ */
+export const DONATION_REJECT_REASON_SELECTABLE_CODES = [
+	'not_eligible',
+	'over_need',
+	'expired',
+	'damaged',
+	'other'
+] as const;
+export const selectableRejectReasonCodeSchema = z.enum(DONATION_REJECT_REASON_SELECTABLE_CODES);
+export type SelectableDonationRejectReasonCode = z.infer<typeof selectableRejectReasonCodeSchema>;
+
 export const DONATION_REJECT_REASON_LABELS: Record<DonationRejectReasonCode, string> = {
+	not_eligible: 'ไม่ตรงเกณฑ์การรับ',
+	over_need: 'เกินความต้องการ',
 	not_needed: 'ไม่ตรงเกณฑ์การรับ / เกินความต้องการ',
 	expired: 'หมดอายุ',
 	damaged: 'ชำรุดเสียหาย',
@@ -42,7 +66,7 @@ export function requireNoteForOther(
 
 /** Body of `POST /api/back-office/donations/[query]/reject`. */
 export const rejectDonationInputSchema = z
-	.object({ reason_code: donationRejectReasonCodeSchema, note: noteSchema.optional() })
+	.object({ reason_code: selectableRejectReasonCodeSchema, note: noteSchema.optional() })
 	.superRefine((value, ctx) => requireNoteForOther(value, ctx));
 export type RejectDonationInput = z.infer<typeof rejectDonationInputSchema>;
 

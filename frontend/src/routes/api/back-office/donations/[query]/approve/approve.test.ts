@@ -186,6 +186,32 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			});
 		});
 
+		it('refuses a line decision carrying the legacy not_needed code (#1166)', async () => {
+			mockCouch(mixed);
+
+			const response = await POST(
+				postEvent({ lines: [{ index: 1, decision: 'rejected', reason_code: 'not_needed' }] })
+			);
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error_code).toBe('INVALID_REVIEW');
+			expect(putBody()).toBeUndefined();
+		});
+
+		it('writes the over_need reason for a refused line (#1166)', async () => {
+			mockCouch(mixed);
+
+			await POST(
+				postEvent({ lines: [{ index: 1, decision: 'rejected', reason_code: 'over_need' }] })
+			);
+
+			expect((putBody()?.items as object[])[1]).toMatchObject({
+				review_status: 'rejected',
+				review_reason_code: 'over_need',
+				review_reason: 'เกินความต้องการ'
+			});
+		});
+
 		it('AC-4: refusing every typed line refuses the booking', async () => {
 			mockCouch({
 				...mixed,

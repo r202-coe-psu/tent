@@ -100,15 +100,25 @@ describe('applyLineReview (FR-9, FR-10)', () => {
 		const result = applyLineReview(
 			[typedLine, { ...typedLine, free_text: 'หมอน' }],
 			[
-				{ index: 0, decision: 'rejected', reason_code: 'not_needed' },
-				{ index: 1, decision: 'rejected', reason_code: 'not_needed' }
+				{ index: 0, decision: 'rejected', reason_code: 'over_need' },
+				{ index: 1, decision: 'rejected', reason_code: 'over_need' }
 			]
 		);
 		expect(result).toMatchObject({
 			status: 'rejected',
-			reject_reason: 'ไม่ตรงเกณฑ์การรับ / เกินความต้องการ',
-			reject_reason_code: 'not_needed'
+			reject_reason: 'เกินความต้องการ',
+			reject_reason_code: 'over_need'
 		});
+	});
+
+	it('refuses the legacy not_needed code on a new line decision (#1166)', () => {
+		expect(
+			lineReviewDecisionSchema.safeParse({
+				index: 0,
+				decision: 'rejected',
+				reason_code: 'not_needed'
+			}).success
+		).toBe(false);
 	});
 
 	it('refuses to decide a campaign line, a line twice, or to leave one undecided', () => {

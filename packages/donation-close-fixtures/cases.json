@@ -540,6 +540,92 @@
           ]
         }
       }
+    },
+    {
+      "name": "refused booking: lines refused at review with the split codes read their labels (#1166)",
+      "donation": {
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "review_status": "rejected",
+            "review_reason_code": "over_need",
+            "review_reason": "",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "review_status": "rejected",
+            "review_reason_code": "not_eligible",
+            "review_reason": "",
+            "drop_off_point_id": "p-med"
+          }
+        ]
+      },
+      "opts": {
+        "closed_by": "system",
+        "closed_reason": "expired",
+        "now": "2026-10-30T17:00:00.000Z"
+      },
+      "expected": {
+        "status": "rejected",
+        "reject_reason": "เกินความต้องการ; ไม่ตรงเกณฑ์การรับ",
+        "reject_reason_code": "other",
+        "items": [
+          {
+            "item_id": "item:water",
+            "free_text": "น้ำดื่ม",
+            "qty": "24",
+            "unit": "bottle",
+            "review_status": "rejected",
+            "review_reason_code": "over_need",
+            "review_reason": "",
+            "drop_off_point_id": "p-gym"
+          },
+          {
+            "item_id": "item:para",
+            "free_text": "ยาพารา",
+            "qty": "10",
+            "unit": "pack",
+            "review_status": "rejected",
+            "review_reason_code": "not_eligible",
+            "review_reason": "",
+            "drop_off_point_id": "p-med"
+          }
+        ],
+        "received_summary": {
+          "total_items": 2,
+          "received_at": "2026-10-30T17:00:00.000Z",
+          "closed_by": "system",
+          "closed_reason": "expired",
+          "shortfalls": [],
+          "items": [
+            {
+              "item_id": "item:water",
+              "free_text": "น้ำดื่ม",
+              "qty": "0",
+              "unit": "bottle",
+              "rejected": true,
+              "reject_reason": "เกินความต้องการ",
+              "reject_reason_code": "over_need"
+            },
+            {
+              "item_id": "item:para",
+              "free_text": "ยาพารา",
+              "qty": "0",
+              "unit": "pack",
+              "rejected": true,
+              "reject_reason": "ไม่ตรงเกณฑ์การรับ",
+              "reject_reason_code": "not_eligible"
+            }
+          ]
+        }
+      }
     }
   ]
 }
