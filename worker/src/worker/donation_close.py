@@ -20,6 +20,9 @@ _QTY_STEP = Decimal("0.0001")
 
 #: Mirrors ``DONATION_REJECT_REASON_LABELS`` / ``REJECT_REASON_MAX`` (CR-172).
 _REJECT_REASON_LABELS = {
+    "not_eligible": "ไม่ตรงเกณฑ์การรับ",
+    "over_need": "เกินความต้องการ",
+    # Legacy (#1166): old documents keep this code; new input no longer offers it.
     "not_needed": "ไม่ตรงเกณฑ์การรับ / เกินความต้องการ",
     "expired": "หมดอายุ",
     "damaged": "ชำรุดเสียหาย",
