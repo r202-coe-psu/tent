@@ -36,6 +36,7 @@ export {
 	UNKNOWN_STATUS_LABEL,
 	externalUrlSchema,
 	externalInvariantIssues,
+	effectiveParkingVehicles,
 	isShelterPublicVisible,
 	isShelterAcceptingReferrals,
 	resolveOperationStatus,

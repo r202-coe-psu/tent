@@ -50,4 +50,6 @@ per deploy, so batch related projector changes into one bump per release when po
 #: (zone -> stay status -> count) for the public per-zone headcount.
 #: 21 — CR-252 (#1242): ``public_shelters.is_external`` / ``external_url``; status
 #: ``unknown`` for external shelters; ``capacity`` = entered value when external (no fallback 100).
-PROJECTION_VERSION: int = 21
+#: 22 — CR-253: ``public_shelters.parking_points`` (pinned points with per-point vehicles) and
+#: ``public_shelters.parking_vehicle_types`` (effective vehicle types for the list filter).
+PROJECTION_VERSION: int = 22

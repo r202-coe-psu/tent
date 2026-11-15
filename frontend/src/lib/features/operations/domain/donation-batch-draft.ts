@@ -1,4 +1,4 @@
-import { qtyGt } from '$lib/utils/qty';
+import { parseQtyInput, qtyGt, qtyGte } from '$lib/utils/qty';
 import { wholeQtyError, type Dimension } from '$lib/features/catalog';
 import { initialExpiryState, type ExpiryState } from './lot-expiry';
 import type { Donation } from './operations';
@@ -56,8 +56,8 @@ export function initialBatchDrafts(donation: Donation): BatchLineDraft[] {
 
 /** A line that will become a ledger row. */
 export function isReceivedDraft(draft: Pick<BatchLineDraft, 'qty'>): boolean {
-	const qty = draft.qty.trim();
-	return qty !== '' && Number.isFinite(Number(qty)) && qtyGt(qty, 0);
+	const qty = parseQtyInput(draft.qty);
+	return qty !== null && qtyGt(qty, 0);
 }
 
 /**
@@ -70,8 +70,8 @@ export function draftProblem(
 	requiresExpiry: boolean,
 	dimension?: Dimension
 ): 'qty' | 'whole' | 'item' | 'expiry' | null {
-	const qty = draft.qty.trim();
-	if (qty === '' || !Number.isFinite(Number(qty)) || Number(qty) < 0) return 'qty';
+	const qty = parseQtyInput(draft.qty);
+	if (qty === null || !qtyGte(qty, 0)) return 'qty';
 	if (!draft.locked && wholeQtyError(qty, dimension)) return 'whole';
 	if (!isReceivedDraft(draft)) return null;
 	if (!draft.item_id) return 'item';

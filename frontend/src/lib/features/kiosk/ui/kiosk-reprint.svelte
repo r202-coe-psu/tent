@@ -7,7 +7,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { navigateToKioskHome } from '../application/kiosk-navigation';
+	import { goToKioskClosed, navigateToKioskHome } from '../application/kiosk-navigation';
 	import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
 	import {
 		ReprintSession,
@@ -99,6 +99,7 @@
 					lookup: (input) => lookupPreRegisteredEvacuee(input),
 					reprint: (input) => reprintKioskLabels(input),
 					print: printMembers,
+					onClosed: () => goToKioskClosed(contextQuery),
 					...deps
 				},
 				() => languageStore.current

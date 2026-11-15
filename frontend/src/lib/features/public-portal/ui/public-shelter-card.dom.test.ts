@@ -32,6 +32,8 @@ function shelter(over: Partial<PublicShelterCardModel> = {}): PublicShelterCardM
 		accepts_pre_registration: false,
 		is_external: true,
 		external_url: 'https://example.org/x',
+		parking_points: [],
+		parking_vehicle_types: [],
 		...over
 	};
 }

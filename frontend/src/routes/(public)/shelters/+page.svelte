@@ -36,6 +36,7 @@
 		siteKindLabel,
 		siteKindTiles,
 		useSiteKinds,
+		toParkingMapPoints,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 	import { Button } from '$lib/components/ui/button';
@@ -129,6 +130,9 @@
 			return da - db;
 		});
 	});
+
+	// Pins follow the result list: a shelter filtered out takes its parking pins with it (CR-253 FR-30).
+	const parkingPins = $derived(toParkingMapPoints(displayShelters));
 
 	let mapRadiusKm = $derived.by(() => {
 		const d = parseFloat(data?.filters?.distance ?? '');
@@ -326,6 +330,7 @@
 		<div class="absolute inset-0 z-0 h-full w-full">
 			<ShelterMap
 				shelters={displayShelters}
+				parkingPoints={parkingPins}
 				userLocation={liveUserLat && liveUserLng
 					? { lat: liveUserLat, lng: liveUserLng }
 					: undefined}

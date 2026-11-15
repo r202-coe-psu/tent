@@ -158,7 +158,10 @@ describe('POST /api/v1/kiosk/devices', () => {
 			staff_pin_set: false,
 			staff_pin_is_default: false,
 			banner_group_id: null,
-			screen_type: 'compact'
+			screen_type: 'compact',
+			service_open: true,
+			service_open_changed_at: null,
+			service_open_changed_by: null
 		});
 		expect(data.device).not.toHaveProperty('secret_hash');
 		expect(data.device).not.toHaveProperty('_rev');
@@ -255,7 +258,10 @@ describe('GET /api/v1/kiosk/devices', () => {
 				staff_pin_set: false,
 				staff_pin_is_default: false,
 				banner_group_id: null,
-				screen_type: 'compact'
+				screen_type: 'compact',
+				service_open: true,
+				service_open_changed_at: null,
+				service_open_changed_by: null
 			}
 		]);
 	});

@@ -33,6 +33,8 @@ export type PublicShelterListResponse = Omit<
 export type PublicGeoPoint = components['schemas']['GeoPoint'];
 /** One ticked storage point of a shelter detail (CR-205 FR-DP-12). */
 export type PublicDonationPoint = components['schemas']['DonationPoint'];
+/** One pinned parking point of a shelter (CR-253 FR-25): name, note, geo, vehicles + capacity. */
+export type PublicParkingPoint = components['schemas']['ParkingPoint'];
 
 /** UI list/map shape derived from the public shelters API (no occupancy). */
 export type PublicShelterCardModel = {
@@ -56,6 +58,10 @@ export type PublicShelterCardModel = {
 	is_external: boolean;
 	/** CR-252 FR-2: `https://` only (already vetted by {@link safeExternalUrl}). */
 	external_url: string | null;
+	/** Pinned parking points; `[]` when the shelter has none (CR-253 FR-28). */
+	parking_points: PublicParkingPoint[];
+	/** Vehicle types the shelter takes, in motorcycle/car/truck/boat order (CR-253 FR-35). */
+	parking_vehicle_types: string[];
 };
 
 export type ListPublicSheltersParams = {

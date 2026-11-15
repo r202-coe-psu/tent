@@ -12,6 +12,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
 	import type { DonationMapPoint, MapPointFocus } from '../domain/donation-map';
+	import type { ParkingMapPoint } from '../domain/parking';
 	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
 	import { safeExternalUrl } from '../domain/mappers';
 	import { useShelterTypeLabelMap, useSiteKinds } from '../application/queries';
@@ -26,6 +27,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_MAP_I18N } from '$lib/constants/i18n';
+	import { parkingPopupContent } from './parking-popup';
 
 	type MapLibreNamespace = {
 		Map: typeof MapLibreMap;
@@ -80,6 +82,7 @@
 		pointFocus = null,
 		disablePopup = false,
 		points = [],
+		parkingPoints = [],
 		showLegend = true,
 		cooperativeGestures = false,
 		onSelectShelter,
@@ -101,6 +104,8 @@
 		disablePopup?: boolean;
 		/** Extra pins that are not shelters (drop-off points); drawn smaller than shelter pins. */
 		points?: DonationMapPoint[];
+		/** Parking pins of the listed shelters (CR-253 FR-29); a distinct P pin, never a shelter pin. */
+		parkingPoints?: ParkingMapPoint[];
 		/** The legend describes the shelter-browsing map; embedded pickers turn it off. */
 		showLegend?: boolean;
 		/** In a scrolling page, a one-finger drag scrolls the page instead of panning the map. */
@@ -124,6 +129,8 @@
 	const SEARCH_RADIUS_LINE = 'search-radius-line';
 	/** Civic Design System — Cerulean (location / selection accent) */
 	const CERULEAN = '#0284C7';
+	/** Parking pins: slate, so they never read as a shelter or a drop-off point. */
+	const PARKING_PIN = '#475569';
 	const EMPTY_FEATURE_COLLECTION = {
 		type: 'FeatureCollection' as const,
 		features: [] as never[]
@@ -284,6 +291,14 @@
 		return `<svg class="marker-pin" width="20" height="28" viewBox="0 0 20 28" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.12));cursor:pointer;">
 			<path d="M10 1.5C5.3 1.5 1.5 5.3 1.5 10c0 5.9 7.2 15.4 8.1 16.5a0.5 0.5 0 0 0 0.8 0C11.3 25.4 18.5 15.9 18.5 10 18.5 5.3 14.7 1.5 10 1.5z" fill="${CERULEAN}" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
 			<path d="M6.8 8.6L10 6.6l3.2 2v4.4H6.8z M10 9.4v3.6" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+		</svg>`;
+	}
+
+	/** Small slate pin with a P for a parking point, apart from shelter (large) and drop-off (cerulean) pins. */
+	function parkingPointPinSvg(): string {
+		return `<svg class="marker-pin" width="20" height="28" viewBox="0 0 20 28" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.12));cursor:pointer;">
+			<path d="M10 1.5C5.3 1.5 1.5 5.3 1.5 10c0 5.9 7.2 15.4 8.1 16.5a0.5 0.5 0 0 0 0.8 0C11.3 25.4 18.5 15.9 18.5 10 18.5 5.3 14.7 1.5 10 1.5z" fill="${PARKING_PIN}" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
+			<text x="10" y="10.4" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Sans Thai',sans-serif" font-size="11" font-weight="700" fill="#ffffff">P</text>
 		</svg>`;
 	}
 
@@ -665,6 +680,29 @@
 			pointMarkerMap.set(point.id, { el, lng, lat });
 		}
 
+		// 4. Parking points of every listed shelter (CR-253 FR-29/FR-30)
+		for (const point of parkingPoints) {
+			const lng = Number(point.geo?.lng);
+			const lat = Number(point.geo?.lat);
+			if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+
+			const el = document.createElement('div');
+			el.className = 'custom-parking-marker';
+			el.dataset.testid = `parking-marker-${point.id}`;
+			el.setAttribute('role', 'img');
+			el.setAttribute('aria-label', `${t.parkingPoint}: ${point.name}`);
+			el.innerHTML = parkingPointPinSvg();
+
+			const popup = new lib.Popup({ offset: 22, closeButton: false }).setDOMContent(
+				parkingPopupContent(point, langState.current)
+			);
+			const marker = new lib.Marker({ element: el, anchor: 'bottom' })
+				.setLngLat([lng, lat])
+				.setPopup(popup)
+				.addTo(map);
+			markersLayer.push(marker);
+		}
+
 		if (!selectedId) {
 			if (hasUserLocation) {
 				const userKey = `${userLngCoord.toFixed(5)},${userLatCoord.toFixed(5)}`;
@@ -869,6 +907,16 @@
 				<span class="text-muted-foreground">{t.statusUnknown}</span>
 			</div>
 		</div>
+		{#if parkingPoints.length > 0}
+			<div class="h-4 w-px bg-border"></div>
+			<div class="flex items-center gap-1.5" data-testid="parking-legend">
+				<span
+					class="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white bg-slate-600 text-[9px] leading-none font-bold text-white shadow-xs"
+					aria-hidden="true">P</span
+				>
+				<span class="text-muted-foreground">{t.parkingPoint}</span>
+			</div>
+		{/if}
 	</div>
 {/if}
 

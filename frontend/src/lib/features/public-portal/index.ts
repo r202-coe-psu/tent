@@ -1,4 +1,5 @@
 export { default as PublicShelterCard } from './ui/public-shelter-card.svelte';
+export { default as ShelterParking } from './ui/shelter-parking.svelte';
 export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-card.svelte';
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
 export { default as ExternalShelterChip } from './ui/external-shelter-chip.svelte';
@@ -32,6 +33,7 @@ export type {
 	FamilySearchResult,
 	ListPublicSheltersParams,
 	PublicGeoPoint,
+	PublicParkingPoint,
 	PublicShelterCardModel,
 	PublicShelterDetail,
 	PublicShelterItem,
@@ -45,6 +47,12 @@ export {
 	toPublicShelterCard,
 	toUiShelterStatus
 } from './domain/mappers';
+export {
+	takesAllParkingTypes,
+	toParkingMapPoints,
+	wantedParkingTypes,
+	type ParkingMapPoint
+} from './domain/parking';
 export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
 export {
 	DEFAULT_SITE_KIND,

@@ -25,6 +25,7 @@ export const KIOSK_SERVER_ERROR_EN: Partial<Record<string, string>> = {
 	KIOSK_LOOKUP_UNAVAILABLE: 'The search service is not available right now. Please try again.',
 	KIOSK_LOOKUP_FAILED: 'The search did not work. Please try again.',
 	KIOSK_METHOD_DISABLED: 'This option is switched off. Please contact staff.',
+	KIOSK_CLOSED: 'This kiosk is closed right now.',
 	KIOSK_THAID_SESSION_INVALID: 'The ThaiD check has expired or is not valid. Please scan again.',
 	INVALID_GATE_INPUT: 'The details to search with are not valid.',
 	INVALID_CHECK_IN_INPUT: 'The list of people is not valid.',

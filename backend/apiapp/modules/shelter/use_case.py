@@ -128,6 +128,8 @@ class ShelterUseCase:
                     accepts_pre_registration=(not doc.is_external and accepts_pre_registration(m)),
                     is_external=doc.is_external,
                     external_url=doc.external_url,
+                    parking_points=doc.parking_points,
+                    parking_vehicle_types=doc.parking_vehicle_types,
                     updated_at=doc.updated_at,
                 )
             )
@@ -297,6 +299,8 @@ class ShelterUseCase:
                 "external_url": doc.external_url,
                 # CR-205 FR-DP-15: the projected field only, never raw_data's sub_storage.
                 "donation_points": doc.donation_points,
+                "parking_points": doc.parking_points,
+                "parking_vehicle_types": doc.parking_vehicle_types,
                 "faq": m.get("faq")
                 or [
                     {

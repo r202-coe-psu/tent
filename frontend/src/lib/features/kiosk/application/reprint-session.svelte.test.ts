@@ -8,7 +8,7 @@ import {
 import type { LanguageCode } from '$lib/stores/language.svelte';
 import { ReprintSession, type ReprintSessionDeps } from './reprint-session.svelte';
 
-type FakeDeps = { [K in keyof ReprintSessionDeps]: Mock<ReprintSessionDeps[K]> };
+type FakeDeps = { [K in keyof ReprintSessionDeps]-?: Mock<NonNullable<ReprintSessionDeps[K]>> };
 
 function member(
 	id: string,
@@ -61,6 +61,7 @@ function setup(overrides: Partial<FakeDeps> = {}, language: LanguageCode = 'th')
 		lookup: vi.fn<ReprintSessionDeps['lookup']>().mockResolvedValue(HOUSEHOLD),
 		reprint: vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue(REPRINT_RESULT),
 		print: vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'printed', printed: 2 }),
+		onClosed: vi.fn<NonNullable<ReprintSessionDeps['onClosed']>>(),
 		...overrides
 	};
 	return { deps, session: new ReprintSession(deps, () => language) };
@@ -203,6 +204,40 @@ describe('ReprintSession phone step', () => {
 			expect(session.busy).toBe(false);
 		}
 	);
+
+	it('ends the session and sends the kiosk to the closed page when the lookup is refused as closed', async () => {
+		const lookup = vi
+			.fn<ReprintSessionDeps['lookup']>()
+			.mockRejectedValue(new KioskRequestError('ตู้ปิด', 403, 'KIOSK_CLOSED'));
+		const { deps, session } = setup({ lookup });
+		session.phone = '0812345678';
+
+		await session.submitPhone();
+
+		expect(deps.onClosed).toHaveBeenCalledTimes(1);
+		expect(session.phone).toBe('');
+		expect(session.step).toBe('phone');
+		expect(session.busy).toBe(false);
+		expect(session.error).toBe('');
+	});
+
+	it('ends the session and sends the kiosk to the closed page when the last-four check is refused as closed', async () => {
+		const reprint = vi
+			.fn<ReprintSessionDeps['reprint']>()
+			.mockRejectedValue(new KioskRequestError('ตู้ปิด', 403, 'KIOSK_CLOSED'));
+		const { deps, session } = setup({ reprint });
+		await toVerify(session);
+		session.idLast4 = '1234';
+
+		await session.submitVerify();
+
+		expect(deps.onClosed).toHaveBeenCalledTimes(1);
+		expect(deps.print).not.toHaveBeenCalled();
+		expect(session.step).toBe('phone');
+		expect(session.members).toEqual([]);
+		expect(session.idLast4).toBe('');
+		expect(session.error).toBe('');
+	});
 
 	it('shows the server message for any other failure', async () => {
 		const lookup = vi
@@ -588,6 +623,23 @@ describe('ReprintSession staff PIN', () => {
 		expect(result).toEqual({ kind: 'not_set' });
 		expect(session.step).toBe('staff_pin');
 		expect(deps.print).not.toHaveBeenCalled();
+	});
+
+	it('ends the session and sends the kiosk to the closed page when the PIN check is refused as closed', async () => {
+		const reprint = vi
+			.fn<ReprintSessionDeps['reprint']>()
+			.mockRejectedValue(new KioskRequestError('ตู้ปิด', 403, 'KIOSK_CLOSED'));
+		const { deps, session } = setup({ reprint });
+		await toStaffPin(session);
+
+		const result = await session.verifyStaffPin('2468');
+
+		expect(result).toEqual({ kind: 'closed' });
+		expect(deps.onClosed).toHaveBeenCalledTimes(1);
+		expect(deps.print).not.toHaveBeenCalled();
+		expect(session.step).toBe('phone');
+		expect(session.members).toEqual([]);
+		expect(session.error).toBe('');
 	});
 
 	it('goes back to the phone step with the not-found message when the household is gone', async () => {

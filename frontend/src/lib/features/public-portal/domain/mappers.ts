@@ -78,7 +78,11 @@ export function toPublicShelterCard(
 		// CR-252 FR-22: an external shelter never takes pre-registration.
 		accepts_pre_registration: !isExternal && item?.accepts_pre_registration === true,
 		is_external: isExternal,
-		external_url: isExternal ? safeExternalUrl(item?.external_url) : null
+		external_url: isExternal ? safeExternalUrl(item?.external_url) : null,
+		parking_points: Array.isArray(item?.parking_points) ? item.parking_points : [],
+		parking_vehicle_types: Array.isArray(item?.parking_vehicle_types)
+			? item.parking_vehicle_types
+			: []
 	};
 }
 

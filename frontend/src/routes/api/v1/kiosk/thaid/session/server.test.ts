@@ -54,6 +54,22 @@ describe('POST /api/v1/kiosk/thaid/session', () => {
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and creates no session', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			registry_id: 'kiosk-closed',
+			shelter_code: 'SH001',
+			service_open: false
+		} as never);
+
+		const response = await POST(event('kiosk-closed'));
+
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(mockGate).not.toHaveBeenCalled();
+	});
+
 	it('returns 403 KIOSK_METHOD_DISABLED and creates no session when the gate is closed', async () => {
 		mockGate.mockResolvedValueOnce(false);
 

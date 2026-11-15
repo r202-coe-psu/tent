@@ -25,6 +25,7 @@
 		AdmissionPolicySection,
 		LuggagePolicySection,
 		ParkingPolicySection,
+		ParkingPointsSection,
 		EMPTY_ADMISSION_POLICY,
 		EMPTY_LUGGAGE_POLICY,
 		EMPTY_PARKING_POLICY,
@@ -166,6 +167,7 @@
 			risk: d.risk ?? {},
 			zones: d.zones ?? [],
 			food_distribution_points: d.food_distribution_points ?? [],
+			parking_points: d.parking_points ?? [],
 			admission_policy: d.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 			luggage_policy: d.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
 			parking_policy: d.parking_policy ?? { ...EMPTY_PARKING_POLICY },
@@ -257,7 +259,8 @@
 		{ id: 'risk', label: 'ประเมินความเสี่ยงและโครงสร้าง', icon: ShieldAlert },
 		{ id: 'admission-policy', label: 'นโยบายการรับผู้อพยพ', icon: PawPrint },
 		{ id: 'luggage-policy', label: 'นโยบายทรัพย์สิน / สัมภาระ', icon: Briefcase },
-		{ id: 'parking-policy', label: 'นโยบายยานพาหนะ', icon: Car }
+		{ id: 'parking-policy', label: 'นโยบายยานพาหนะ', icon: Car },
+		{ id: 'parking-points', label: 'จุดจอดรถ', icon: Car }
 	];
 
 	let activeSection = $state('basic-info');
@@ -352,6 +355,7 @@
 	if (!$formData.parking_policy) $formData.parking_policy = { ...EMPTY_PARKING_POLICY };
 	if (!$formData.feature_flags) $formData.feature_flags = { ...DEFAULT_SHELTER_FEATURE_FLAGS };
 	if (!$formData.food_distribution_points) $formData.food_distribution_points = [];
+	if (!$formData.parking_points) $formData.parking_points = [];
 
 	// `.pre` so a kind carried in from the list filter (FR-11) lands before the master default seeds.
 	$effect.pre(() => {
@@ -691,6 +695,7 @@
 							<AdmissionPolicySection {formData} />
 							<LuggagePolicySection {formData} />
 							<ParkingPolicySection {formData} />
+							<ParkingPointsSection {form} {formData} />
 						{/if}
 					</form>
 				</div>
