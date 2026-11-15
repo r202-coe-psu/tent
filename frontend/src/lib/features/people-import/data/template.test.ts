@@ -262,7 +262,6 @@ describe('Backfill Import columns (#1399)', () => {
 	});
 
 	it('reads a real spreadsheet date cell back as the file text format (Excel Text format overridden)', async () => {
-		const ExcelJS = (await import('exceljs')).default;
 		const wb = await loadTemplate(EMPTY_MASTERS);
 		const ws = wb.getWorksheet('ครัวเรือน')!;
 		let col = 0;
@@ -274,7 +273,6 @@ describe('Backfill Import columns (#1399)', () => {
 		// A user who re-formats the cell as a date (instead of Text) gets a real date back.
 		ws.getCell(2, col).numFmt = 'dd/mm/yyyy hh:mm';
 		const buffer = await wb.xlsx.writeBuffer();
-		void ExcelJS;
 
 		const parsed = await parsePeopleWorkbook(new File([buffer], 'dates.xlsx'));
 		expect(parsed.households[0].cells[H.arrived_at]).toBe('10/11/2569 14:00');

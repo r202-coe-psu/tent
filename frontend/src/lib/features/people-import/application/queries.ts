@@ -11,7 +11,7 @@ import {
 } from '$lib/db/subscribe-data-changes';
 import { peopleKeys, peopleRepository } from '$lib/features/people';
 import type { AuthorContext } from '$lib/db/model';
-import { buildBackfilledStay } from '../domain/backfill';
+import { importHousehold, PartialHouseholdImportError } from './import-household';
 import { PEOPLE_IMPORT_LOG_TYPE } from '../domain/import-log';
 import { createPeopleImportLog, type ImportRowResult } from '../domain/import-log';
 import type { RowValidation } from '../domain/import-row';
@@ -97,36 +97,16 @@ export function useImportPeople() {
 
 				const skippedLines = new Set((duplicate?.members ?? []).map((m) => m.line));
 				try {
-					const household = await repo.createHousehold(row.payload.household, ctx);
-					const head = await repo.createEvacuee(
-						{ ...row.payload.head, household_id: household._id },
-						ctx
-					);
-					await repo.patchHousehold(household._id, { head_evacuee_id: head._id });
-					createdPeople += 1;
-
-					const stays = [buildBackfilledStay(head, row.payload.headStay, ctx)];
-					let createdMembers = 0;
-					for (const member of row.payload.members) {
-						if (skippedLines.has(member.line)) continue;
-						const created = await repo.createEvacuee(
-							{ ...member.evacuee, household_id: household._id },
-							ctx
-						);
-						stays.push(buildBackfilledStay(created, member.stay, ctx));
-						createdMembers += 1;
-					}
-					createdPeople += createdMembers;
+					const imported = await importHousehold(repo, row.payload, skippedLines, ctx);
+					createdPeople += imported.createdPeople;
 					skippedPeople += skippedLines.size;
-					// Stays last, once everyone exists: the household status is derived from them.
-					await repo.applyBackfilledStays(household._id, stays);
 
 					results.push({
 						row: row.row,
 						label: row.label,
 						status: 'created',
-						household_id: household._id,
-						created_members: createdMembers,
+						household_id: imported.householdId,
+						created_members: imported.createdMembers,
 						skipped_members: skippedLines.size
 					});
 				} catch (e) {
@@ -134,6 +114,8 @@ export function useImportPeople() {
 						row: row.row,
 						label: row.label,
 						status: 'server_error',
+						// A half-written household must be findable from the log (see the error class).
+						...(e instanceof PartialHouseholdImportError ? { household_id: e.householdId } : {}),
 						errors: [
 							{ column: '-', message: e instanceof Error ? e.message : 'บันทึกข้อมูลไม่สำเร็จ' }
 						]

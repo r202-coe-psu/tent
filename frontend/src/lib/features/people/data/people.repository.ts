@@ -2,6 +2,7 @@ import type { UlidReservation } from '$lib/db/ulid-reservation';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import type {
+	CheckoutDestination,
 	Evacuee,
 	EvacueeInput,
 	Household,
@@ -256,7 +257,9 @@ export interface PeopleRepository {
 	 */
 	applyBackfilledStays(
 		householdId: string,
-		entries: { evacuee: Evacuee; movements: Movement[] }[]
+		entries: { evacuee: Evacuee; movements: Movement[] }[],
+		/** Set only when the derived household status ends up `checked_out` with no destination yet. */
+		checkoutDestination?: CheckoutDestination | null
 	): Promise<void>;
 	/** Every movement record in this shelter database. */
 	listMovements(): Promise<Movement[]>;

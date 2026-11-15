@@ -489,10 +489,7 @@ function readStay(raw: RawRow, sink: ErrorSink, lookups: Lookups): ImportStay | 
 	const rawStatus = cell(raw, H.stay_status);
 	const status = resolveEnum(raw, H.stay_status, STAY_STATUS_CHOICES, sink);
 	if (rawStatus === '') {
-		sink.push(
-			H.stay_status,
-			`ต้องระบุสถานะ: ${optionList(STAY_STATUS_CHOICES)} (ไฟล์ template เก่าไม่มีคอลัมน์นี้ — ดาวน์โหลด template ใหม่)`
-		);
+		sink.push(H.stay_status, `ต้องระบุสถานะ: ${optionList(STAY_STATUS_CHOICES)}`);
 	}
 
 	const arrived = resolveInstant(raw, H.arrived_at, sink, now);

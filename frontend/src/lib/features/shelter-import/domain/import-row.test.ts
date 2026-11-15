@@ -499,7 +499,7 @@ describe('validateRow — zones sheet', () => {
 		const err = r.errors.find((e) => e.column === H.zone_capacity);
 		expect(err?.sheet).toBe('โซน');
 		expect(err?.line).toBe(4);
-		expect(err?.message).toBe('ต้องระบุความจุของโซน โซน (A)');
+		expect(err?.message).toBe('ต้องระบุความจุของโซน (คน)');
 	});
 
 	it('rejects a duplicate zone code within one shelter', () => {
