@@ -23,6 +23,7 @@ export function takesAllParkingTypes(shelterTypes: readonly string[], wanted: re
 export type ParkingMapPoint = {
 	id: string;
 	shelterCode: string;
+	shelterName: string;
 	geo: PublicGeoPoint;
 	name: string;
 	note: string | null;
@@ -31,7 +32,7 @@ export type ParkingMapPoint = {
 
 /** Pins for every shelter in the result list (FR-30); a point without usable coordinates is skipped. */
 export function toParkingMapPoints(
-	shelters: Pick<PublicShelterCardModel, 'code' | 'parking_points'>[]
+	shelters: Pick<PublicShelterCardModel, 'code' | 'name' | 'parking_points'>[]
 ): ParkingMapPoint[] {
 	return shelters.flatMap((shelter) =>
 		(shelter.parking_points ?? [])
@@ -40,6 +41,7 @@ export function toParkingMapPoints(
 			.map((p) => ({
 				id: `${shelter.code}:${p.id}`,
 				shelterCode: shelter.code,
+				shelterName: shelter.name,
 				geo: p.geo,
 				name: p.name,
 				note: p.note ?? null,

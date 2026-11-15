@@ -6,6 +6,7 @@ import type { ParkingMapPoint } from '../domain/parking';
 const point = (over: Partial<ParkingMapPoint> = {}): ParkingMapPoint => ({
 	id: 'SH1:p1',
 	shelterCode: 'SH1',
+	shelterName: 'ศูนย์พักพิง ม.อ.',
 	geo: { lat: 7, lng: 100 },
 	name: 'ลานหน้าอาคาร',
 	note: null,
@@ -26,14 +27,21 @@ describe('parkingPopupContent', () => {
 			'th'
 		);
 		expect(el.textContent).toContain('ลานหน้าอาคาร');
+		expect(el.textContent).toContain('ศูนย์พักพิง ม.อ.');
 		expect(el.textContent).toContain('จอดได้เฉพาะรถยนต์');
-		expect(el.textContent).toContain('รถยนต์ / รถกระบะ · รองรับสูงสุด 30 คัน');
-		expect(el.textContent).toContain('เรือ · ไม่ระบุจำนวน');
+		expect(el.textContent).toContain('ประเภทยานพาหนะ');
+		expect(el.textContent).toContain('รองรับสูงสุด');
+		expect(el.textContent).toContain('รถยนต์ / รถกระบะ');
+		expect(el.textContent).toContain('30 คัน');
+		expect(el.textContent).toContain('ไม่ระบุจำนวน');
 	});
 
 	it('follows the language and omits an empty note', () => {
 		const el = parkingPopupContent(point({ vehicles: [{ type: 'car', max_capacity: 5 }] }), 'en');
-		expect(el.textContent).toContain('Cars / pickups · Up to 5 vehicles');
+		expect(el.textContent).toContain('Cars / pickups');
+		expect(el.textContent).toContain('5 vehicles');
+		expect(el.textContent).toContain('Vehicle type');
+		// header + table; no note row
 		expect(el.children).toHaveLength(2);
 	});
 

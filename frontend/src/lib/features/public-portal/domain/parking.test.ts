@@ -22,19 +22,21 @@ describe('toParkingMapPoints (FR-30)', () => {
 
 	it('flattens the points of every shelter and namespaces ids by shelter', () => {
 		const pins = toParkingMapPoints([
-			{ code: 'SH1', parking_points: [point('a', 7), point('b', 8)] },
-			{ code: 'SH2', parking_points: [point('a', 9)] },
-			{ code: 'SH3', parking_points: [] }
+			{ code: 'SH1', name: 'ศูนย์ 1', parking_points: [point('a', 7), point('b', 8)] },
+			{ code: 'SH2', name: 'ศูนย์ 2', parking_points: [point('a', 9)] },
+			{ code: 'SH3', name: 'ศูนย์ 3', parking_points: [] }
 		]);
 		expect(pins.map((p) => p.id)).toEqual(['SH1:a', 'SH1:b', 'SH2:a']);
 		expect(pins[0].shelterCode).toBe('SH1');
+		expect(pins[0].shelterName).toBe('ศูนย์ 1');
+		expect(pins[2].shelterName).toBe('ศูนย์ 2');
 	});
 
 	it('skips a point without usable coordinates', () => {
 		expect(
-			toParkingMapPoints([{ code: 'SH1', parking_points: [point('a', null), point('b', 7)] }]).map(
-				(p) => p.id
-			)
+			toParkingMapPoints([
+				{ code: 'SH1', name: 'ศูนย์ 1', parking_points: [point('a', null), point('b', 7)] }
+			]).map((p) => p.id)
 		).toEqual(['SH1:b']);
 	});
 });

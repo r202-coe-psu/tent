@@ -121,8 +121,10 @@ test.describe('Public shelters — parking points (CR-253)', () => {
 		const popup = page.getByTestId('parking-popup-SH_P1:a');
 		await expect(popup).toContainText('ลานหน้าอาคาร');
 		await expect(popup).toContainText('จอดได้เฉพาะรถยนต์');
-		await expect(popup).toContainText('รถยนต์ / รถกระบะ · รองรับสูงสุด 30 คัน');
-		await expect(popup).toContainText('เรือ · ไม่ระบุจำนวน');
+		await expect(popup).toContainText('รองรับสูงสุด');
+		await expect(popup).toContainText('รถยนต์ / รถกระบะ');
+		await expect(popup).toContainText('30 คัน');
+		await expect(popup).toContainText('ไม่ระบุจำนวน');
 		await shot(page, 'public-2-map-parking-popup');
 	});
 

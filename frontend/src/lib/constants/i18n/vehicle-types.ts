@@ -8,7 +8,9 @@ export const VEHICLE_TYPE_I18N = {
 		unitVehicle: 'คัน',
 		unitBoat: 'ลำ',
 		upTo: 'รองรับสูงสุด',
-		capacityUnset: 'ไม่ระบุจำนวน'
+		capacityUnset: 'ไม่ระบุจำนวน',
+		typeColumn: 'ประเภทยานพาหนะ',
+		capacityColumn: 'รองรับสูงสุด'
 	},
 	en: {
 		motorcycle: 'Motorcycles',
@@ -18,7 +20,9 @@ export const VEHICLE_TYPE_I18N = {
 		unitVehicle: 'vehicles',
 		unitBoat: 'boats',
 		upTo: 'Up to',
-		capacityUnset: 'Capacity not set'
+		capacityUnset: 'Capacity not set',
+		typeColumn: 'Vehicle type',
+		capacityColumn: 'Up to'
 	}
 } as const;
 
@@ -42,4 +46,21 @@ export function vehicleCapacityText(
 	const w = words(lang);
 	if (max == null) return w.capacityUnset;
 	return `${w.upTo} ${max} ${type === 'boat' ? w.unitBoat : w.unitVehicle}`;
+}
+
+/** Column-style capacity ("30 vehicles" / "Capacity not set") for the popup table. */
+export function vehicleCapacityValue(
+	type: string,
+	max: number | null | undefined,
+	lang?: string
+): string {
+	const w = words(lang);
+	if (max == null) return w.capacityUnset;
+	return `${max} ${type === 'boat' ? w.unitBoat : w.unitVehicle}`;
+}
+
+/** Popup table headings. */
+export function parkingPopupWords(lang?: string) {
+	const w = words(lang);
+	return { typeColumn: w.typeColumn, capacityColumn: w.capacityColumn };
 }
