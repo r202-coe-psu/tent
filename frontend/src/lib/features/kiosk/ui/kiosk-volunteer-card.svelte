@@ -8,7 +8,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
-	import { navigateToKioskHome } from '../application/kiosk-navigation';
+	import { goToKioskClosed, navigateToKioskHome } from '../application/kiosk-navigation';
 	import { REPRINT_PHONE_MAX_LENGTH } from '../application/reprint-session.svelte';
 	import {
 		VolunteerCardSession,
@@ -69,6 +69,7 @@
 				{
 					lookup: (phone) => requestKioskVolunteerCard(phone),
 					print: (volunteer) => printVolunteerLabel(volunteer, browserPrint, languageStore.current),
+					onClosed: () => goToKioskClosed(contextQuery),
 					...deps
 				},
 				() => languageStore.current

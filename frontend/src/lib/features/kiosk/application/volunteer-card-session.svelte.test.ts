@@ -6,7 +6,9 @@ import {
 	type VolunteerCardSessionDeps
 } from './volunteer-card-session.svelte';
 
-type FakeDeps = { [K in keyof VolunteerCardSessionDeps]: Mock<VolunteerCardSessionDeps[K]> };
+type FakeDeps = {
+	[K in keyof VolunteerCardSessionDeps]-?: Mock<NonNullable<VolunteerCardSessionDeps[K]>>;
+};
 
 const FOUND: KioskVolunteerCardResult = {
 	shelter_code: 'SH001',
@@ -19,6 +21,7 @@ function setup(overrides: Partial<FakeDeps> = {}) {
 		print: vi
 			.fn<VolunteerCardSessionDeps['print']>()
 			.mockResolvedValue({ kind: 'printed', printed: 1 }),
+		onClosed: vi.fn<NonNullable<VolunteerCardSessionDeps['onClosed']>>(),
 		...overrides
 	};
 	return { deps, session: new VolunteerCardSession(deps) };
@@ -87,6 +90,22 @@ describe('VolunteerCardSession', () => {
 			expect(session.error).toBe(text);
 		}
 	);
+
+	it('ends the session and sends the kiosk to the closed page when the lookup is refused as closed', async () => {
+		const lookup = vi
+			.fn<VolunteerCardSessionDeps['lookup']>()
+			.mockRejectedValue(new KioskRequestError('ตู้ปิด', 403, 'KIOSK_CLOSED'));
+		const { deps, session } = setup({ lookup });
+		session.phone = '0812345678';
+
+		await session.submitPhone();
+
+		expect(deps.onClosed).toHaveBeenCalledTimes(1);
+		expect(session.phone).toBe('');
+		expect(session.step).toBe('phone');
+		expect(session.busy).toBe(false);
+		expect(session.error).toBe('');
+	});
 
 	it('shows the server message for any other failure', async () => {
 		const lookup = vi
