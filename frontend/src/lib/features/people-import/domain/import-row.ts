@@ -611,15 +611,20 @@ export function validateRow(
 
 	const memberResult = validateMembers(memberRows, lookups);
 	const assetDescription = cell(raw, H.assets);
+	const stayStatuses = [
+		...(headStay ? [headStay.status] : []),
+		...memberResult.members.map((m) => m.stay.status)
+	];
+	const householdStatus = deriveHouseholdStatus(stayStatuses);
 	const household = {
 		label,
 		head_evacuee_id: null,
 		// Derived from the people's stays (#1399) — the same rule the repository applies on write.
-		status: deriveHouseholdStatus([
-			...(headStay ? [headStay.status] : []),
-			...memberResult.members.map((m) => m.stay.status)
-		]),
-		checkout_destination: null,
+		status: householdStatus,
+		// A household where everyone already left needs a destination (R-29-8); the file has none,
+		// so it is preset to `returned_home` (#1399 decision). Never set while someone is housed.
+		checkout_destination:
+			householdStatus === 'checked_out' ? { type: 'returned_home' as const } : null,
 		municipality_zone: strOrNull(cell(raw, H.municipality_zone)),
 		community: strOrNull(cell(raw, H.community)),
 		pets: resolvePets(raw, sink),

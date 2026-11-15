@@ -7,6 +7,7 @@ requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (IMPS, approved 2026-08-13 — slice A/T-72 เท่านั้น; T-73 = รอบ CR ถัดไป)
 layer: volatile
 parent: CR-066
+note: decision sync 2026-11-15 (#1399) — superseded เฉพาะ T-72 initial stay=A (ทุกแถว pre_registered / ห้ามคอลัมน์สถานะ) และกติกาจัดโซนที่หน้าจัดโซนเท่านั้น (T-09): ไฟล์ import ตอนนี้เป็น Backfill Import มีคอลัมน์ สถานะ/เวลามา/เวลากลับ/โซน ดู Decision log ท้ายไฟล์ — ข้อความ T-72 ด้านบนที่อ้าง pre_registered ทุกแถวใช้ไม่ได้แล้ว
 affects:
   - docs/data/schema.md §1.1 `registered_via` (ร่วม CR-070)
   - docs/data/schema.md §1.7 `people_import_log` (ใหม่, schema_v 1 — T-72)
@@ -106,3 +107,9 @@ Additive. คนที่ import แล้วเป็น evacuee schema ปั�
   มีชื่อผู้ประสบภัย ต้องอยู่ใน shelter scope เดียวกับข้อมูลคน. บันทึกเป็น **schema.md §1.7** และเพิ่มใน
   `_design/access` ของ `shelter_*` ทั้ง whitelist และ append-only list (§8 ข้อ 2); shelter db เดิมต้องรัน
   `pnpm redeploy:access` (อยู่ใน `pnpm db:sync` ของ Jenkins deploy อยู่แล้ว). **ไม่ bump schema_v ของ doc เดิม.**
+- 2026-11-15 — **decision sync (#1399 · decided_by: kong · ไม่ bump schema_v):** template นำเข้ากลายเป็น **Backfill Import** — ย้ายรายชื่อคนที่มาพักจริงแล้วหรือกลับไปแล้ว (เช่น ศูนย์ อปท. #1349, ศูนย์บ้านพี่เลี้ยง #1350 ที่เปิดอยู่ก่อน) พร้อมเวลาจริง. **กลับคำตัดสิน 2 ข้อ:** (1) **T-72 initial stay=A** เดิมทุกแถว `pre_registered` + ห้ามคอลัมน์สถานะ → ตอนนี้มีคอลัมน์ `สถานะ` บังคับทุกแถว (`พักอยู่`=`active` / `กลับแล้ว`=`checked_out`); นำเข้าเป็น `pre_registered` ด้วยไฟล์ไม่ได้อีก (จองผ่าน public booking หรือหน้าลงทะเบียน) (2) **กติกา T-09 การจัดโซนต้องทำที่หน้าจัดโซน** → ใส่ `โซน` ในไฟล์ได้ (guard CR-112 `check_in` ต้องมีโซน ยังคงเดิม).
+  - **คอลัมน์ใหม่ (ต่อคน — อยู่ใน personColumns: หัวหน้า/สมาชิก/CSV):** `สถานะ`* · `เวลามา`* (`วว/ดด/ปปปป ชช:นน` พ.ศ. เวลาไทย Asia/Bangkok; Text; รับ cell วันที่ของ Excel) · `เวลากลับ` (บังคับเฉพาะ `กลับแล้ว`; `พักอยู่` ห้ามกรอก) · `โซน` (dropdown ทุกโซนของศูนย์ → แปลงเป็นรหัสโซน; บังคับเฉพาะ `พักอยู่`).
+  - **กฎตรวจ (error = แถวไม่ถูกนำเข้า):** เวลากลับไม่ก่อนเวลามา · เวลาไม่เลยเวลาปัจจุบัน · `พักอยู่` เลือกโซนที่ `closed` ไม่ได้ (`กลับแล้ว` ได้ เป็นประวัติ). **เตือน (ไม่บล็อก):** `พักอยู่` เกินความจุศูนย์/โซน.
+  - **สิ่งที่บันทึก:** movement ย้อนหลัง `check_in` (`occurred_at`=เวลามา, `zone`=โซน) · `กลับแล้ว` เพิ่ม `check_out` (`occurred_at`=เวลากลับ, `reason`=`backfill_import` ค่าคงที่แบบ `shelter_closed`, ไม่ระบุ `destination`) · `current_stay` ตามสถานะล่าสุด, `since`=เวลา movement ล่าสุด · `registered_via=import` เหมือนเดิม.
+  - **ครัวเรือนที่ทุกคน `กลับแล้ว`:** `status=checked_out` (derive จาก stay) และ preset `checkout_destination={type: returned_home}` (กลับบ้าน) เพราะไฟล์ไม่มี destination และ R-29-8 บังคับให้ครัวเรือน checked_out มี destination; ครัวเรือนที่ยังมีคนพักอยู่ = `null`.
+  - **ผลกระทบที่ยอมรับ:** template เก่าไม่มีคอลัมน์สถานะ → อัปโหลดไม่ผ่าน (แจ้งให้โหลดใหม่) · ข้อความหน้า import ที่ว่า "ลงทะเบียนล่วงหน้าหลายครัวเรือน" แก้แล้ว · เอา `สถานะการเข้าพัก` และ `โซนพักพิงในศูนย์` ออกจาก `APP_ONLY_FIELDS` + แก้ README sheet.

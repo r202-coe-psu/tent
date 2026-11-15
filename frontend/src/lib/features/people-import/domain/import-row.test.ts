@@ -61,6 +61,8 @@ describe('validateRow — the minimum contract (T-48 required + CR-071 locks)', 
 			emptyLookups()
 		);
 		expect(left.payload?.household.status).toBe('checked_out');
+		expect(left.payload?.household.checkout_destination).toEqual({ type: 'returned_home' });
+		expect(housed.payload?.household.checkout_destination).toBeNull();
 
 		// One member still housed keeps the household checked in.
 		const mixed = validateRow(
@@ -70,6 +72,7 @@ describe('validateRow — the minimum contract (T-48 required + CR-071 locks)', 
 			[memberRow({ [H.first_name]: 'ก', [H.last_name]: 'ข', [H.gender]: 'หญิง' })]
 		);
 		expect(mixed.payload?.household.status).toBe('checked_in');
+		expect(mixed.payload?.household.checkout_destination).toBeNull();
 	});
 
 	it('names the household after its head when the label cell is blank', () => {
