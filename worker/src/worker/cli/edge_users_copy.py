@@ -8,12 +8,18 @@ no sync-worker bootstrap.
   is checkpointed in ``_users/_local/edge_users_copy`` (never replicated) and resumed
   after a restart. The same doc carries ``last_seq`` / ``last_error`` / ``updated_at``
   for ``central-repl-user.sh --status`` (FR-13).
-* Destinations = ``edge_shelters`` ∪ ``roles`` ``shelter:<CODE>`` (CR-171 FR-9), limited to
-  shelters whose ``edge_users_<code>`` database exists (listed every 30 s).
+* Write destinations = shelters where the user currently has role ``shelter:<CODE>``,
+  limited to shelters whose ``edge_users_<code>`` database exists (listed every 30 s).
+* Leaver destinations = shelters in ``edge_shelters`` (append-only, never modified here)
+  with no ``shelter:<CODE>`` role any more. The doc is deleted from that
+  ``edge_users_<code>`` with a tombstone if it is present there, effective at once (no
+  grace period); if it is absent or already deleted nothing is written. Regaining the
+  role writes the doc again through the normal write path.
 * A doc is written as its winning revision plus ``_revisions`` with
   ``new_edits: false``, so revision ids match central and an edge never sees a conflict.
-* A database without ``_local/backfill_done`` is a new shelter: every existing user of
-  that shelter is copied (paged, 500/page), then ``_local/backfill_done`` is written.
+* A database without ``_local/backfill_done`` is a new shelter: every existing user that
+  still has the role for that shelter is copied (paged, 500/page), then
+  ``_local/backfill_done`` is written.
 
     uv run --project worker edge-users-copy
 """
@@ -26,6 +32,7 @@ import logging
 import time
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -61,12 +68,9 @@ def edge_db_name(code: str) -> str:
     return f"{DB_PREFIX}{code.lower()}"
 
 
-def doc_shelter_codes(doc: dict[str, Any]) -> set[str]:
-    """Lower-cased shelter codes from ``edge_shelters`` ∪ roles ``shelter:<CODE>``."""
+def doc_role_codes(doc: dict[str, Any]) -> set[str]:
+    """Lower-cased shelter codes from roles ``shelter:<CODE>``."""
     codes: set[str] = set()
-    for code in doc.get("edge_shelters") or []:
-        if isinstance(code, str) and code:
-            codes.add(code.lower())
     for role in doc.get("roles") or []:
         if (
             isinstance(role, str)
@@ -77,13 +81,28 @@ def doc_shelter_codes(doc: dict[str, Any]) -> set[str]:
     return codes
 
 
-def destination_dbs(doc: dict[str, Any], existing_dbs: set[str]) -> set[str]:
-    """Databases a user doc must be written to: its shelters that have an edge DB."""
+def doc_edge_shelter_codes(doc: dict[str, Any]) -> set[str]:
+    """Lower-cased shelter codes from ``edge_shelters``."""
     return {
-        name
-        for code in doc_shelter_codes(doc)
-        if (name := edge_db_name(code)) in existing_dbs
+        code.lower()
+        for code in doc.get("edge_shelters") or []
+        if isinstance(code, str) and code
     }
+
+
+def split_destinations(
+    doc: dict[str, Any], existing_dbs: set[str]
+) -> tuple[set[str], set[str]]:
+    """``(write, remove_if_present)`` databases for a user doc, limited to existing DBs.
+
+    ``write``: shelters the user has a role for. ``remove_if_present``: shelters left in
+    ``edge_shelters`` after the role was dropped.
+    """
+    roles = doc_role_codes(doc)
+    leaving = doc_edge_shelter_codes(doc) - roles
+    write = {n for code in roles if (n := edge_db_name(code)) in existing_dbs}
+    remove = {n for code in leaving if (n := edge_db_name(code)) in existing_dbs}
+    return write, remove
 
 
 def _is_404(exc: httpx.HTTPStatusError) -> bool:
@@ -190,7 +209,7 @@ class EdgeUsersCopier:
                 doc = row.get("doc")
                 if not doc or str(doc.get("_id", "")).startswith("_design/"):
                     continue
-                if code in doc_shelter_codes(doc):
+                if code in doc_role_codes(doc):
                     refs.append((doc["_id"], doc.get("_rev")))
             batch = await self.fetch_with_revisions(refs)
             if batch:
@@ -252,6 +271,33 @@ class EdgeUsersCopier:
             raise RuntimeError(msg)
         return True
 
+    async def _tombstone(self, database: str, doc_id: str) -> bool:
+        """Delete ``doc_id`` from ``database`` if it is there. False when the DB is gone."""
+        url = f"/{database}/{quote(doc_id, safe='')}"
+        response = await self._couch._client.get(url)
+        if response.status_code == 404:
+            # Missing or already deleted doc: nothing to remove. A missing DB says so.
+            reason = str((response.json() or {}).get("reason", ""))
+            return not reason.startswith("Database")
+        response.raise_for_status()
+        # A normal edit on the winning revision: the edge pulls the deletion.
+        response = await self._couch._client.post(
+            f"/{database}/_bulk_docs",
+            json={
+                "docs": [
+                    {"_id": doc_id, "_rev": response.json()["_rev"], "_deleted": True}
+                ]
+            },
+        )
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        failures = [row for row in response.json() if row.get("error")]
+        if failures:
+            msg = f"{database}: tombstone failed: {failures[:3]}"
+            raise RuntimeError(msg)
+        return True
+
     async def process_batch(self, changes: list[dict[str, Any]]) -> None:
         refs: list[tuple[str, str | None]] = []
         for change in changes:
@@ -263,12 +309,21 @@ class EdgeUsersCopier:
                 continue
             refs.append((doc_id, revs[0].get("rev")))
         per_db: dict[str, list[dict[str, Any]]] = {}
+        leavers: list[tuple[str, str]] = []
         for doc in await self.fetch_with_revisions(refs):
-            for database in destination_dbs(doc, self.existing_dbs):
+            write, remove = split_destinations(doc, self.existing_dbs)
+            for database in write:
                 per_db.setdefault(database, []).append(doc)
+            leavers.extend((database, doc["_id"]) for database in remove)
         for database, docs in per_db.items():
             if not await self._write(database, docs):
                 # Dropped by ``--remove`` meanwhile: skip it, re-list, not an error.
+                self.existing_dbs.discard(database)
+                self.invalidate_db_list()
+        for database, doc_id in leavers:
+            if database in self.existing_dbs and not await self._tombstone(
+                database, doc_id
+            ):
                 self.existing_dbs.discard(database)
                 self.invalidate_db_list()
 

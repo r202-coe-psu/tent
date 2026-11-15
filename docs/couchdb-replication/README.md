@@ -598,7 +598,7 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 **ทางแก้ (CR-171, อนุมัติ 2026-10-17):**
 
 - เพิ่ม field `_users.edge_shelters` (รหัสศูนย์ทุกศูนย์ที่ user เคยมี `shelter:<CODE>` — เพิ่มได้อย่างเดียว) แล้ว selector กรองด้วย field นี้ **หรือ** `roles` (กันช่วงก่อน backfill) → revision ที่ถอด role / soft delete ยังตรง selector และ replicate ไป edge
-- **หลัง [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md):** กฎกรองนี้ใช้ใน service `edge-users-copy` ที่ **central** (คัดลอก `_users` → `edge_users_<code>` ด้วย `new_edits: false`) ส่วน `users_<code>_pull` ที่ edge ดึง `edge_users_<code>` โดยไม่มี selector — กฎกรองเหมือนเดิม
+- **หลัง [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md):** กฎกรองนี้ใช้ใน service `edge-users-copy` ที่ **central** (คัดลอก `_users` → `edge_users_<code>` ด้วย `new_edits: false`) ส่วน `users_<code>_pull` ที่ edge ดึง `edge_users_<code>` โดยไม่มี selector · ตั้งแต่ 2026-11-14 (#1163) ศูนย์ที่ถูกถอด role แล้วจะถูกลบ doc ออกจาก `edge_users_<code>` ด้วย tombstone (`edge_shelters` ยัง append-only)
 - "ลบ user" ทุกเส้นทางเป็น soft delete (`roles: []`, สุ่มรหัส, `deleted_at`) ห้าม `DELETE` · ชื่อของ user ที่ถูกลบใช้ซ้ำไม่ได้
 - Google / ThaiD login ปฏิเสธบัญชีที่ถูกลบ · ขั้นตอน deploy: ดู SETUP-EDGE "อัปเกรดเป็น CR-171"
 - ทางเลือกที่ตัดทิ้ง (reconcile ใน watchdog, ตัด selector, `$or` กับ `_deleted`, runbook ลบมือ): ดู Decision log ใน CR
