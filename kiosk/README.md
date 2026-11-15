@@ -457,6 +457,37 @@ tail -f /tmp/kiosk_autostart.log
 
 ---
 
+### 🔁 อัปเดตตู้อัตโนมัติตอนบูต (`kiosk-stable`)
+
+ตู้ที่เปิด `KIOSK_AUTO_UPDATE=on` ใน `.env` จะรัน `kiosk_updater.py` ครั้งเดียวทุกครั้งที่ `start_kiosk.sh` เริ่ม (ก่อนเปิด Chromium) ไม่ต้อง SSH เข้าไป `git pull` เอง ([#1218](https://github.com/r202-coe-psu/tent/issues/1218))
+
+- ดึง tag `kiosk-stable` จาก `origin` แล้ว checkout ไปที่ commit นั้น (HEAD จะเป็นแบบ detached)
+- รัน `pip install -r requirements.txt` เมื่อ `requirements.txt` เปลี่ยน, `playwright install chromium` เมื่อเวอร์ชัน playwright เปลี่ยนและไม่ได้ตั้ง `BROWSER_EXECUTABLE_PATH`, และ `models/download_models.sh` เมื่อสคริปต์นั้นเปลี่ยน
+- **บูตด้วยเวอร์ชันเดิมเสมอเมื่อมีปัญหา:** ไม่มีเน็ตหรือ fetch ไม่ได้ (timeout 20 วินาที), มีไฟล์ tracked ที่แก้ค้างบนตู้, หรือขั้นติดตั้งพัง (กรณีนี้จะ checkout กลับ commit เดิมและติดตั้ง package ของเดิมกลับ)
+- `main.py` ที่ restart ใน supervisor loop ไม่เรียก updater จึงไม่มีการอัปเดตระหว่างที่มีคนใช้งานตู้
+- ผลลัพธ์ทุกครั้งอยู่ใน `/tmp/kiosk_autostart.log` บรรทัดที่ขึ้นต้นด้วย `[kiosk-updater]`
+
+**เปิดใช้บนตู้ (ทำครั้งเดียวต่อเครื่อง):**
+
+```bash
+cd ~/tent && git fetch origin --tags && git checkout --detach kiosk-stable
+echo 'KIOSK_AUTO_UPDATE=on' >> kiosk/.env
+sudo reboot
+```
+
+**ปล่อยเวอร์ชันใหม่ให้ตู้ (dev):** ปัก tag เวอร์ชันบน commit ที่ทดสอบแล้ว แล้วย้าย `kiosk-stable` มาที่ tag นั้น ตู้จะได้เวอร์ชันใหม่ตอนบูตครั้งถัดไปที่ออนไลน์
+
+```bash
+git tag kiosk-v0.2.0 <commit>
+git tag -f kiosk-stable kiosk-v0.2.0
+git push origin kiosk-v0.2.0
+git push -f origin kiosk-stable
+```
+
+ย้อนเวอร์ชันได้โดยย้าย `kiosk-stable` กลับไปที่ tag เก่าแล้ว push แบบ force อีกครั้ง
+
+---
+
 ## 🖥️ การตั้งค่าจอแสดงผลแนวตั้งและการป้องกันจอดับ (Display Optimization)
 
 ### 1. ป้องกันหน้าจอดับ (Disable Screen Blanking / Sleep)
