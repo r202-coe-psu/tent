@@ -1,18 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-	applyRejectNotePreset,
+	applyRejectNoteTemplate,
 	combineLineRejectReasons,
 	DONATION_REJECT_REASON_SELECTABLE_CODES,
 	donationRejectReasonCodeSchema,
 	donorRejectMessage,
 	rejectDonationInputSchema,
 	REJECT_NOTE_MAX,
-	REJECT_NOTE_PRESETS,
 	REJECT_NOTE_TONES,
-	DEFAULT_REJECT_NOTE_TONE,
-	parseRejectNoteTone,
-	REJECT_REASON_MAX,
-	rejectNotePresetsFor
+	rejectNoteTemplate,
+	REJECT_REASON_MAX
 } from './reject-reason';
 
 describe('donorRejectMessage (CR-172)', () => {
@@ -125,78 +122,71 @@ describe('combineLineRejectReasons (FR-12)', () => {
 	});
 });
 
-describe('reject note presets (#1256)', () => {
-	const ids = (code: Parameters<typeof rejectNotePresetsFor>[0]) =>
-		rejectNotePresetsFor(code).map((p) => p.id);
+describe('reject note templates (#1256)', () => {
+	const PRESET_CODES = ['not_eligible', 'over_need', 'expired', 'damaged'] as const;
 
-	it('offers the thanks note and the forward note for over_need', () => {
-		expect(ids('over_need')).toEqual(['thanks', 'forward']);
-	});
-
-	it('offers the not-eligible forward note for not_eligible', () => {
-		expect(ids('not_eligible')).toEqual(['thanks', 'not_eligible_forward']);
-	});
-
-	it('offers the safety note for expired and damaged', () => {
-		expect(ids('expired')).toEqual(['thanks', 'safety']);
-		expect(ids('damaged')).toEqual(['thanks', 'safety']);
-	});
-
-	it('offers nothing for "other", nor before a reason is picked, nor for legacy not_needed', () => {
-		expect(ids('other')).toEqual([]);
-		expect(rejectNotePresetsFor(undefined)).toEqual([]);
-		expect(ids('not_needed')).toEqual([]);
-	});
-
-	it('offers three tones, formal first and by default (#1256)', () => {
+	it('offers three tones, formal first', () => {
 		expect(REJECT_NOTE_TONES.map((t) => t.id)).toEqual(['formal', 'warm', 'concise']);
-		expect(DEFAULT_REJECT_NOTE_TONE).toBe('formal');
 	});
 
-	it('reads a stored tone back, falling back to the default for anything else', () => {
-		expect(parseRejectNoteTone('warm')).toBe('warm');
-		expect(parseRejectNoteTone('concise')).toBe('concise');
-		expect(parseRejectNoteTone('shouting')).toBe('formal');
-		expect(parseRejectNoteTone(null)).toBe('formal');
-	});
-
-	it('has a text in every tone for every preset, inside the note limit', () => {
-		for (const preset of Object.values(REJECT_NOTE_PRESETS)) {
+	it('has a whole message in every tone for each reason that gets one', () => {
+		for (const code of PRESET_CODES) {
 			for (const tone of REJECT_NOTE_TONES) {
-				const text = preset.texts[tone.id];
-				expect(text.length, `${preset.id}/${tone.id}`).toBeGreaterThan(0);
-				expect(text.length, `${preset.id}/${tone.id}`).toBeLessThan(REJECT_NOTE_MAX);
+				const text = rejectNoteTemplate(code, tone.id);
+				expect(text, `${code}/${tone.id}`).toBeTruthy();
+				expect(text!.length, `${code}/${tone.id}`).toBeLessThanOrEqual(REJECT_NOTE_MAX);
 			}
 		}
 	});
 
-	it('lets staff chain the thanks note with any other preset, in any tone', () => {
-		const { thanks, ...rest } = REJECT_NOTE_PRESETS;
-		for (const tone of REJECT_NOTE_TONES) {
-			for (const preset of Object.values(rest)) {
-				const chained = applyRejectNotePreset(thanks.texts[tone.id], preset.texts[tone.id]);
-				expect(chained, `${preset.id}/${tone.id}`).not.toBeNull();
-				expect(chained!.length).toBeLessThanOrEqual(REJECT_NOTE_MAX);
+	it('writes each message for its own reason, not one text for all', () => {
+		const over = rejectNoteTemplate('over_need', 'formal');
+		const notEligible = rejectNoteTemplate('not_eligible', 'formal');
+		const expired = rejectNoteTemplate('expired', 'formal');
+		expect(new Set([over, notEligible, expired]).size).toBe(3);
+		// Expired and damaged share the safety message.
+		expect(rejectNoteTemplate('damaged', 'warm')).toBe(rejectNoteTemplate('expired', 'warm'));
+	});
+
+	it('thanks the donor in every message', () => {
+		for (const code of PRESET_CODES) {
+			for (const tone of REJECT_NOTE_TONES) {
+				expect(rejectNoteTemplate(code, tone.id), `${code}/${tone.id}`).toContain('ขอบคุณ');
 			}
 		}
 	});
 
-	it('fills an empty note with the preset text', () => {
-		expect(applyRejectNotePreset('', 'ขอบคุณ')).toBe('ขอบคุณ');
-		expect(applyRejectNotePreset('   ', 'ขอบคุณ')).toBe('ขอบคุณ');
+	it('offers nothing for "other", for the legacy code, or before a reason is picked', () => {
+		expect(rejectNoteTemplate('other', 'formal')).toBeNull();
+		expect(rejectNoteTemplate('not_needed', 'formal')).toBeNull();
+		expect(rejectNoteTemplate(undefined, 'formal')).toBeNull();
 	});
 
-	it('appends after what staff already wrote, never overwriting it', () => {
-		expect(applyRejectNotePreset('นมกล่องหมดอายุ 2 กล่อง', 'ขอบคุณ')).toBe(
-			'นมกล่องหมดอายุ 2 กล่อง ขอบคุณ'
+	it('fills an empty note', () => {
+		expect(applyRejectNoteTemplate('', 'ข้อความ')).toBe('ข้อความ');
+		expect(applyRejectNoteTemplate('   ', 'ข้อความ')).toBe('ข้อความ');
+	});
+
+	it('swaps one template for another instead of stacking them', () => {
+		const formal = rejectNoteTemplate('over_need', 'formal')!;
+		const warm = rejectNoteTemplate('over_need', 'warm')!;
+		expect(applyRejectNoteTemplate(formal, warm)).toBe(warm);
+		// …even after the reason changed since the first one went in.
+		const expired = rejectNoteTemplate('expired', 'concise')!;
+		expect(applyRejectNoteTemplate(formal, expired)).toBe(expired);
+	});
+
+	it('appends after what staff wrote, never over it', () => {
+		expect(applyRejectNoteTemplate('นมกล่องหมดอายุ 2 กล่อง', 'ข้อความ')).toBe(
+			'นมกล่องหมดอายุ 2 กล่อง ข้อความ'
 		);
 	});
 
-	it('leaves the note as is when the preset is already in it', () => {
-		expect(applyRejectNotePreset('ขอบคุณ', 'ขอบคุณ')).toBe('ขอบคุณ');
+	it('leaves the note as is when the message is already in it', () => {
+		expect(applyRejectNoteTemplate('ก่อนหน้า ข้อความ', 'ข้อความ')).toBe('ก่อนหน้า ข้อความ');
 	});
 
-	it('returns null when the result would pass the note limit', () => {
-		expect(applyRejectNotePreset('ก'.repeat(REJECT_NOTE_MAX - 3), 'ขอบคุณ')).toBeNull();
+	it('returns null when appending would pass the note limit', () => {
+		expect(applyRejectNoteTemplate('ก'.repeat(REJECT_NOTE_MAX - 3), 'ข้อความ')).toBeNull();
 	});
 });

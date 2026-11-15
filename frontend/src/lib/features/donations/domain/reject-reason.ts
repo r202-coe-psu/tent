@@ -73,11 +73,11 @@ export type RejectDonationInput = z.infer<typeof rejectDonationInputSchema>;
 export const rejectNoteSchema = noteSchema;
 
 /**
- * Ready-made sentences staff can drop into the detail box (#1256). The donor reads the detail
- * on the tracking page, so none of them names a person, a phone number or a shelter. `codes`
- * is where a preset is offered; "other" gets none — it has no reason of its own to soften.
- * Each preset reads in three tones (the shelter picks one; formal is the default): formal for
- * automated replies and SMS, warm for chat with one donor, written the way a person would say it, concise for notices and short texts.
+ * Whole messages staff can drop into the detail box with one tap (#1256), then edit. The donor
+ * reads the detail on the tracking page, so none of them names a person, a phone number or a
+ * shelter. Each reason that gets one reads in three tones — formal (automated replies, SMS),
+ * warm (chat with one donor), concise (notices, short texts) — and says why in its own words, so
+ * "we have enough" is never sent for an expired item. "other" and the legacy `not_needed` get none.
  */
 export const REJECT_NOTE_TONES = [
 	{ id: 'formal', label: 'ทางการ' },
@@ -85,88 +85,64 @@ export const REJECT_NOTE_TONES = [
 	{ id: 'concise', label: 'กระชับ' }
 ] as const;
 export type RejectNoteTone = (typeof REJECT_NOTE_TONES)[number]['id'];
-export const DEFAULT_REJECT_NOTE_TONE: RejectNoteTone = 'formal';
 
-/** A stored or typed value → a tone; anything unknown is the default. */
-export function parseRejectNoteTone(value: string | null | undefined): RejectNoteTone {
-	return REJECT_NOTE_TONES.find((tone) => tone.id === value)?.id ?? DEFAULT_REJECT_NOTE_TONE;
-}
+type ToneTexts = Record<RejectNoteTone, string>;
 
-export type RejectNotePreset = {
-	id: string;
-	/** The chip's caption. */
-	label: string;
-	/** What lands in the detail box, per tone. */
-	texts: Record<RejectNoteTone, string>;
-	codes: readonly DonationRejectReasonCode[];
+const OVER_NEED: ToneTexts = {
+	formal:
+		'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง ขณะนี้ทางศูนย์มีสิ่งของประเภทนี้เพียงพอแล้ว จึงยังไม่สามารถรับเพิ่มได้ หากท่านยังประสงค์จะช่วยเหลือ รบกวนนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่ยังต้องการ จะเป็นประโยชน์ต่อผู้ที่กำลังเดือดร้อนอย่างมาก',
+	warm: 'ขอบคุณมากที่นึกถึงพวกเราและตั้งใจมาช่วย ตอนนี้ของประเภทนี้ที่ศูนย์เรามีพอแล้ว เลยยังรับเพิ่มไม่ได้ ถ้ายังอยากช่วย ลองนำไปให้ศูนย์อื่นที่ยังขาดอยู่นะ ของจะได้ไปถึงคนที่รออยู่ได้เร็วขึ้น',
+	concise:
+		'ขอบคุณที่ตั้งใจช่วยเหลือ ตอนนี้ศูนย์มีของประเภทนี้พอแล้ว รบกวนส่งต่อให้ศูนย์อื่นที่ยังต้องการ'
 };
 
-const PRESET_REASON_CODES = ['not_eligible', 'over_need', 'expired', 'damaged'] as const;
+const NOT_ELIGIBLE: ToneTexts = {
+	formal:
+		'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง สิ่งของนี้ไม่ตรงกับประเภทที่ทางศูนย์รับได้ รบกวนท่านนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่รับสิ่งของลักษณะนี้ เพื่อให้ไปถึงมือผู้ที่ต้องการต่อไป',
+	warm: 'ขอบคุณมากที่นึกถึงพวกเราและตั้งใจมาช่วย ของชิ้นนี้ไม่ตรงกับที่ศูนย์เรารับได้ในตอนนี้ ขอโทษที่รับไว้ไม่ได้นะ ลองนำไปให้ศูนย์อื่นที่รับของแบบนี้ดู ของที่ตั้งใจให้จะได้ไปถึงคนที่ต้องการจริง ๆ',
+	concise:
+		'ขอบคุณที่ตั้งใจช่วยเหลือ ของนี้ไม่ตรงกับที่ศูนย์รับได้ รบกวนส่งต่อให้ศูนย์อื่นที่รับของลักษณะนี้'
+};
 
-export const REJECT_NOTE_PRESETS = {
-	thanks: {
-		id: 'thanks',
-		label: 'ขอบคุณ',
-		texts: {
-			formal: 'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง',
-			warm: 'ขอบคุณมากที่นึกถึงพวกเราและตั้งใจมาช่วย',
-			concise: 'ขอบคุณที่ตั้งใจช่วยเหลือ'
-		},
-		codes: PRESET_REASON_CODES
-	},
-	forward: {
-		id: 'forward',
-		label: 'ส่งต่อศูนย์อื่น',
-		texts: {
-			formal:
-				'ขณะนี้ทางศูนย์มีสิ่งของประเภทนี้เพียงพอแล้ว จึงยังไม่สามารถรับเพิ่มได้ หากท่านยังประสงค์จะช่วยเหลือ รบกวนนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่ยังต้องการ จะเป็นประโยชน์ต่อผู้ที่กำลังเดือดร้อนอย่างมาก',
-			warm: 'ตอนนี้ของประเภทนี้ที่ศูนย์เรามีพอแล้ว เลยยังรับเพิ่มไม่ได้ ถ้ายังอยากช่วย ลองนำไปให้ศูนย์อื่นที่ยังขาดอยู่นะ ของจะได้ไปถึงคนที่รออยู่ได้เร็วขึ้น',
-			concise: 'ตอนนี้ศูนย์มีของประเภทนี้พอแล้ว รบกวนส่งต่อให้ศูนย์อื่นที่ยังต้องการ'
-		},
-		codes: ['over_need']
-	},
-	not_eligible_forward: {
-		id: 'not_eligible_forward',
-		label: 'ส่งต่อศูนย์อื่น',
-		texts: {
-			formal:
-				'สิ่งของนี้ไม่ตรงกับประเภทที่ทางศูนย์รับได้ รบกวนท่านนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่รับสิ่งของลักษณะนี้ เพื่อให้ไปถึงมือผู้ที่ต้องการต่อไป',
-			warm: 'ของชิ้นนี้ไม่ตรงกับที่ศูนย์เรารับได้ในตอนนี้ ขอโทษที่รับไว้ไม่ได้นะ ลองนำไปให้ศูนย์อื่นที่รับของแบบนี้ดู ของที่ตั้งใจให้จะได้ไปถึงคนที่ต้องการจริง ๆ',
-			concise: 'ของนี้ไม่ตรงกับที่ศูนย์รับได้ รบกวนส่งต่อให้ศูนย์อื่นที่รับของลักษณะนี้'
-		},
-		codes: ['not_eligible']
-	},
-	safety: {
-		id: 'safety',
-		label: 'เพื่อความปลอดภัย',
-		texts: {
-			formal:
-				'เพื่อความปลอดภัยของผู้ใช้ ทางศูนย์ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขออภัยในความไม่สะดวก และขอบคุณในความตั้งใจดีของท่าน',
-			warm: 'ศูนย์รับของที่หมดอายุหรือชำรุดไม่ได้ เพราะอาจเป็นอันตรายกับคนที่นำไปใช้ ขอโทษด้วยนะ แต่ขอบคุณจริง ๆ ที่ตั้งใจช่วย',
-			concise: 'เพื่อความปลอดภัย ศูนย์รับของที่หมดอายุหรือชำรุดไม่ได้ ขออภัยด้วย'
-		},
-		codes: ['expired', 'damaged']
-	}
-} as const satisfies Record<string, RejectNotePreset>;
+/** Expired and damaged goods share one message; it carries its own thanks. */
+const SAFETY: ToneTexts = {
+	formal:
+		'เพื่อความปลอดภัยของผู้ใช้ ทางศูนย์ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขออภัยในความไม่สะดวก และขอบคุณในความตั้งใจดีของท่าน',
+	warm: 'ศูนย์รับของที่หมดอายุหรือชำรุดไม่ได้ เพราะอาจเป็นอันตรายกับคนที่นำไปใช้ ขอโทษด้วยนะ แต่ขอบคุณจริง ๆ ที่ตั้งใจช่วย',
+	concise:
+		'เพื่อความปลอดภัย ศูนย์รับของที่หมดอายุหรือชำรุดไม่ได้ ขออภัยด้วย ขอบคุณที่ตั้งใจช่วยเหลือ'
+};
 
-/** The presets offered for `code`, in display order; none until a reason is picked. */
-export function rejectNotePresetsFor(
-	code: DonationRejectReasonCode | undefined
-): RejectNotePreset[] {
-	if (!code) return [];
-	return Object.values(REJECT_NOTE_PRESETS).filter((preset) =>
-		(preset.codes as readonly DonationRejectReasonCode[]).includes(code)
-	);
+const REJECT_NOTE_TEMPLATES: Partial<Record<DonationRejectReasonCode, ToneTexts>> = {
+	over_need: OVER_NEED,
+	not_eligible: NOT_ELIGIBLE,
+	expired: SAFETY,
+	damaged: SAFETY
+};
+
+/** The whole message for `code` in `tone`; null when the reason has none (or none is picked). */
+export function rejectNoteTemplate(
+	code: DonationRejectReasonCode | undefined,
+	tone: RejectNoteTone
+): string | null {
+	return (code && REJECT_NOTE_TEMPLATES[code]?.[tone]) || null;
 }
 
+const ALL_TEMPLATE_TEXTS: ReadonlySet<string> = new Set(
+	Object.values(REJECT_NOTE_TEMPLATES).flatMap((texts) => Object.values(texts!))
+);
+
 /**
- * Add `text` after what staff already wrote — never over it. Null when the result would pass
- * {@link REJECT_NOTE_MAX}, so the caller can leave the box alone instead of cutting a sentence.
+ * Put `text` in the detail box. A box that is empty, or still holds only a template, takes the new
+ * one in its place (so changing tone or reason swaps rather than stacks); anything staff wrote
+ * stays and the template goes after it. Null when appending would pass {@link REJECT_NOTE_MAX},
+ * so the caller can leave the box alone instead of cutting a sentence.
  */
-export function applyRejectNotePreset(note: string, text: string): string | null {
+export function applyRejectNoteTemplate(note: string, text: string): string | null {
 	const current = note.trim();
+	if (current === '' || ALL_TEMPLATE_TEXTS.has(current)) return text;
 	if (current.includes(text)) return current;
-	const next = current ? `${current} ${text}` : text;
+	const next = `${current} ${text}`;
 	return next.length > REJECT_NOTE_MAX ? null : next;
 }
 
