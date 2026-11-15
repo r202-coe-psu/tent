@@ -32,7 +32,7 @@
 					? t.noCoordinatorName
 					: shelter.contact?.manager || '-'}
 			</div>
-			<div class="text-xl font-bold text-success-dark">
+			<div class="pt-2 text-sm font-bold text-success-dark">
 				{shelter.contact?.phone === 'unspecified' ? t.noContactInfo : shelter.contact?.phone || '-'}
 			</div>
 		</div>

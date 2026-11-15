@@ -123,8 +123,8 @@
 
 				<div class="col-span-2 items-center justify-around md:col-span-1 md:space-y-2">
 					<div class="text-xs font-semibold text-secondary/80">{t.buildingStatus}</div>
-					<div class="flex items-end gap-2 self-end text-xl font-bold text-white">
-						<CheckCircle2 class="h-5 w-5 text-warning-subtle" />
+					<div class="flex items-center gap-1.5 text-lg leading-normal font-bold text-white">
+						<CheckCircle2 class="h-4 w-4 shrink-0 text-warning-subtle" />
 						{#if shelter.building_status === 'indoor'}
 							{t.indoor}
 						{:else if shelter.building_status === 'outdoor'}
