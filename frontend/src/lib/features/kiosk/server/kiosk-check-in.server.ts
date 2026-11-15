@@ -7,11 +7,7 @@ import {
 	isReprintableStatus
 } from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
-import {
-	groupPhoneMatches,
-	KIOSK_PHONE_MAX_CANDIDATES,
-	isPhoneMatchEligible
-} from '../domain/phone-match';
+import { groupPhoneMatches, isPhoneMatchEligible } from '../domain/phone-match';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { maskLastName } from '$lib/utils/mask';
@@ -381,7 +377,7 @@ async function lookupByPhone(
 		if (truncated) break;
 	}
 	const docs = [...docsById.values()];
-	// A capped or malformed page sequence cannot prove there are five or fewer groups.
+	// A capped or malformed page sequence cannot prove the match list is complete.
 	// Fail closed instead of returning an incomplete household picker.
 	if (truncated) return { kind: 'too_many' };
 	const householdIds = [
@@ -407,7 +403,6 @@ async function lookupByPhone(
 	}
 
 	const groups = groupPhoneMatches(docs, shelterCode, headByHousehold);
-	if (groups.length > KIOSK_PHONE_MAX_CANDIDATES) return { kind: 'too_many' };
 
 	const normalizedPrimaryId = primaryId
 		? `evacuee:${primaryId.slice('evacuee:'.length).toUpperCase()}`

@@ -486,15 +486,15 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		}
 	});
 
-	it('returns too_many after the sixth eligible household', async () => {
+	it('lists every eligible household even when more than five share the phone', async () => {
 		for (let index = 0; index < 6; index += 1) setHousehold([evacuee(index)]);
 
-		expect(await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone })).toEqual({
-			kind: 'too_many'
-		});
+		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
+		expect(result.kind).toBe('candidates');
+		if (result.kind === 'candidates') expect(result.candidates).toHaveLength(6);
 	});
 
-	it('keeps the five-household cap when a candidate id is supplied', async () => {
+	it('resolves a candidate id when more than five households share the phone', async () => {
 		let firstId = '';
 		for (let index = 0; index < 6; index += 1) {
 			const member = evacuee(index);
@@ -508,7 +508,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				phone,
 				primary_evacuee_id: firstId
 			})
-		).toEqual({ kind: 'too_many' });
+		).toMatchObject({ kind: 'household', primary_evacuee_id: firstId });
 	});
 
 	it('finds a kiosk walk-in by phone and lets only checked-in members be reprinted', async () => {
