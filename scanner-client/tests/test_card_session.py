@@ -5,7 +5,14 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from scanner_client.card_session import DISPATCH_JS, NAVIGATE_JS, CardSession
+from scanner_client.card_session import (
+    CARD_SETTLE_S,
+    DISPATCH_JS,
+    NAVIGATE_JS,
+    READ_ATTEMPTS,
+    READ_RETRY_DELAY_S,
+    CardSession,
+)
 
 CONTRACT_CARD_KEYS = {
     "citizen_id",
@@ -140,13 +147,27 @@ class FakeReader:
     Failure switches: connect_ok, getter_raises, dob, photo ("ok" | "none" | "raises").
     """
 
-    def __init__(self, connect_ok=True, getter_raises=False, dob="25350412", photo="ok"):
+    def __init__(
+        self,
+        connect_ok=True,
+        getter_raises=False,
+        dob="25350412",
+        photo="ok",
+        connect_results=None,
+        clock=None,
+    ):
         self.connect_ok = connect_ok
         self.getter_raises = getter_raises
         self.dob = dob
         self.photo = photo
+        self.connect_results = list(connect_results or [])
+        self.clock = clock
+        self.connect_times = []
 
     def connect(self):
+        self.connect_times.append(self.clock.t if self.clock else None)
+        if self.connect_results:
+            return self.connect_results.pop(0)
         return self.connect_ok
 
     def get_citizen_id(self):
@@ -237,6 +258,42 @@ def test_text_read_failure_dispatches_read_failed_and_nothing_else(reader, caplo
         ("scanner:card-error", {"code": "READ_FAILED"}),
     ]
     assert_logs_have_no_card_data(caplog, "READ_FAILED")
+
+
+def test_card_is_read_only_after_it_had_time_to_settle_in_the_slot():
+    clock = FakeClock()
+    reader = FakeReader(clock=clock)
+
+    asyncio.run(make_session(clock=clock).handle_card(reader, FakePage()))
+
+    assert reader.connect_times[0] >= CARD_SETTLE_S
+
+
+def test_text_read_that_fails_then_succeeds_is_retried_and_delivered():
+    page = FakePage()
+    reader = FakeReader(connect_results=[False, False])
+
+    asyncio.run(make_session().handle_card(reader, page))
+
+    assert len(reader.connect_times) == 3
+    assert [name for name, _ in page.events] == [
+        "scanner:card-reading",
+        "scanner:card-read",
+        "scanner:card-photo",
+    ]
+
+
+def test_text_read_gives_up_after_the_last_attempt_with_a_pause_between_attempts():
+    clock = FakeClock()
+    page = FakePage()
+    reader = FakeReader(connect_ok=False, clock=clock)
+
+    asyncio.run(make_session(clock=clock).handle_card(reader, page))
+
+    assert len(reader.connect_times) == READ_ATTEMPTS
+    gaps = [b - a for a, b in zip(reader.connect_times, reader.connect_times[1:], strict=False)]
+    assert all(gap >= READ_RETRY_DELAY_S for gap in gaps)
+    assert page.events[-1] == ("scanner:card-error", {"code": "READ_FAILED"})
 
 
 @pytest.mark.parametrize("dob", ["", "-", "2535", "abcd0412"])

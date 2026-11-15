@@ -41,6 +41,12 @@ RETRY_INTERVAL_S = 0.5
 # the page asked, a router that ignored the click) drops the card; staff insert it again.
 IN_APP_NAVIGATION_TIMEOUT_S = 3.0
 ACK_TIMEOUT_S = 15.0
+# The slot reports a card the moment it touches the contacts, before the reader has powered the
+# chip ("Card is unpowered" / "unresponsive"): wait a moment, and retry a failed text read
+# instead of making staff pull the card out and insert it again.
+CARD_SETTLE_S = 0.3
+READ_ATTEMPTS = 3
+READ_RETRY_DELAY_S = 0.5
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 # Where the app parks a signed-out staff (frontend/src/lib/guards/auth.ts and the auth routes).
 # A card inserted there is ignored: the walk-in page would only bounce back to sign-in.
@@ -75,9 +81,8 @@ class CardSession:
         self._may_navigate = True
         if not await self._dispatch(page, "scanner:card-reading", {}):
             return
-        try:
-            card = await asyncio.to_thread(self._read_card, reader)
-        except Exception:
+        card = await self._read_card_with_retries(reader)
+        if card is None:
             await self._fail(page, "READ_FAILED")
             return
         if not await self._dispatch(page, "scanner:card-read", card):
@@ -96,6 +101,19 @@ class CardSession:
                 "photo_base64": "data:image/jpeg;base64," + photo_base64,
             },
         )
+
+    async def _read_card_with_retries(self, reader: Any) -> dict | None:
+        await self._sleep(CARD_SETTLE_S)
+        for attempt in range(1, READ_ATTEMPTS + 1):
+            try:
+                return await asyncio.to_thread(self._read_card, reader)
+            except Exception as exc:
+                log.info("card read attempt %d failed: %s", attempt, type(exc).__name__)
+            if attempt < READ_ATTEMPTS:
+                # No presence check here: is_card_inserted() tracks card swaps for the watcher,
+                # and a pulled card just fails connect() fast.
+                await self._sleep(READ_RETRY_DELAY_S)
+        return None
 
     async def _fail(self, page: Any, code: str) -> None:
         log.warning("card error: %s", code)  # code only; never card contents
