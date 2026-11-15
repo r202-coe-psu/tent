@@ -8,6 +8,7 @@ import {
 	SHELTER_REGISTRY_DB,
 	deployBulkReturnEntryMangoIndexes,
 	deployDailySopRoleMangoIndexes,
+	deployDistributionLogDayMangoIndex,
 	deployDonationReceivedMangoIndex,
 	deployDonationPhotoMangoIndex,
 	deployPeopleMangoIndexes,
@@ -403,6 +404,9 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployDailySopRoleMangoIndexes(db);
 	steps.push({ step: 'daily-sop-role-mango', status: 200 });
+	await assertActive?.();
+	await deployDistributionLogDayMangoIndex(db);
+	steps.push({ step: 'distribution-log-day-mango', status: 200 });
 	await assertActive?.();
 	await deployDonationReceivedMangoIndex(db);
 	steps.push({ step: 'donation-received-mango', status: 200 });

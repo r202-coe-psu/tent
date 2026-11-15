@@ -59,6 +59,10 @@ def project_donation(
     if doc.get("type") != "donation":
         return ("delete", None)
 
+    # Central-warehouse (M6) donations are staff-only: never on the public plane (CR D4).
+    if doc.get("channel") == "m6":
+        return ("delete", None)
+
     doc_id = doc.get("_id")
     if not doc_id:
         return ("delete", None)

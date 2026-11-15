@@ -14,6 +14,10 @@ import {
 	migrateShelterV2ToCurrent,
 	isShelterBookable,
 	isShelterCancelled,
+	isShelterPublicVisible,
+	isShelterAcceptingReferrals,
+	shelterFeatureFlagsSchema,
+	DEFAULT_SHELTER_FEATURE_FLAGS,
 	operationStatusSchema,
 	validateSiteKindChange,
 	DEFAULT_SITE_KIND,
@@ -138,7 +142,9 @@ describe('shelterSchema', () => {
 			accepts_pre_registration: true,
 			kiosk_phone_check_in_enabled: false,
 			kiosk_thaid_check_in_enabled: false,
-			kiosk_walk_in_registration_enabled: false
+			kiosk_walk_in_registration_enabled: false,
+			public_visible: true,
+			accepts_referrals: true
 		});
 	});
 
@@ -1111,6 +1117,116 @@ describe('isShelterBookable', () => {
 				feature_flags: { accepts_pre_registration: true }
 			})
 		).toBe(false);
+	});
+});
+
+describe('CR-251 shelter visibility + referral intake — public_visible / accepts_referrals', () => {
+	it('FR-1 defaults both new flags to true in the schema and the default object', () => {
+		expect(DEFAULT_SHELTER_FEATURE_FLAGS.public_visible).toBe(true);
+		expect(DEFAULT_SHELTER_FEATURE_FLAGS.accepts_referrals).toBe(true);
+		const parsed = shelterFeatureFlagsSchema.parse({});
+		expect(parsed.public_visible).toBe(true);
+		expect(parsed.accepts_referrals).toBe(true);
+	});
+
+	it('FR-2 reads a stored flags object without the new keys as true (not false)', () => {
+		const oldFlags = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: { accepts_pre_registration: true, enable_medical_screening: false }
+		});
+		expect(oldFlags.feature_flags?.public_visible).toBe(true);
+		expect(oldFlags.feature_flags?.accepts_referrals).toBe(true);
+		expect(isShelterPublicVisible({ feature_flags: {} })).toBe(true);
+		expect(isShelterAcceptingReferrals({ feature_flags: {} })).toBe(true);
+	});
+
+	it('FR-2 only a real boolean false takes effect', () => {
+		const hidden = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: { public_visible: false, accepts_referrals: false }
+		});
+		expect(hidden.feature_flags?.public_visible).toBe(false);
+		expect(hidden.feature_flags?.accepts_referrals).toBe(false);
+		expect(isShelterPublicVisible({ feature_flags: { public_visible: true } })).toBe(true);
+		expect(isShelterAcceptingReferrals({ feature_flags: { accepts_referrals: true } })).toBe(true);
+	});
+
+	it('FR-3 isShelterPublicVisible is false only when public_visible === false', () => {
+		expect(
+			isShelterPublicVisible({
+				operation_status: 'active',
+				feature_flags: { public_visible: false }
+			})
+		).toBe(false);
+		expect(
+			isShelterPublicVisible({
+				operation_status: 'active',
+				feature_flags: { public_visible: true }
+			})
+		).toBe(true);
+		expect(isShelterPublicVisible({ operation_status: 'active' })).toBe(true);
+		expect(isShelterPublicVisible(null)).toBe(true);
+	});
+
+	it('FR-3 a cancelled shelter stays hidden regardless of public_visible', () => {
+		expect(
+			isShelterPublicVisible({
+				operation_status: 'cancelled',
+				feature_flags: { public_visible: true }
+			})
+		).toBe(false);
+	});
+
+	it('FR-4 isShelterAcceptingReferrals is false only when accepts_referrals === false', () => {
+		expect(isShelterAcceptingReferrals({ feature_flags: { accepts_referrals: false } })).toBe(
+			false
+		);
+		expect(isShelterAcceptingReferrals({ feature_flags: { accepts_referrals: true } })).toBe(true);
+		expect(isShelterAcceptingReferrals({ operation_status: 'active' })).toBe(true);
+	});
+
+	it('FR-5 isShelterBookable is false when the shelter is hidden, even with pre-registration on', () => {
+		expect(
+			isShelterBookable({
+				operation_status: 'active',
+				feature_flags: { accepts_pre_registration: true, public_visible: false }
+			})
+		).toBe(false);
+		expect(
+			isShelterBookable({
+				operation_status: 'active',
+				feature_flags: { accepts_pre_registration: true, public_visible: true }
+			})
+		).toBe(true);
+	});
+
+	it('FR-6 the two flags are independent of operation_status in both directions', () => {
+		// Hidden shelter stays hidden when status changes; status does not reset the flag.
+		expect(
+			isShelterPublicVisible({
+				operation_status: 'standby',
+				feature_flags: { public_visible: false }
+			})
+		).toBe(false);
+		expect(
+			isShelterPublicVisible({
+				operation_status: 'full_capacity',
+				feature_flags: { public_visible: false }
+			})
+		).toBe(false);
+		// accepts_referrals does not touch public visibility or bookability.
+		expect(
+			isShelterPublicVisible({
+				operation_status: 'active',
+				feature_flags: { accepts_referrals: false }
+			})
+		).toBe(true);
+		expect(
+			isShelterBookable({
+				operation_status: 'active',
+				feature_flags: { accepts_pre_registration: true, accepts_referrals: false }
+			})
+		).toBe(true);
 	});
 });
 

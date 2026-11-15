@@ -4,8 +4,15 @@
  * Pure TypeScript — No I/O.
  */
 
-import type { Referral, ReferralStatus } from './referral.schema';
+import {
+	MEDICAL_STAFF,
+	hasCapabilityInShelter,
+	isShelterManager,
+	isSystemAdmin
+} from '$lib/auth/roles';
+import type { Referral, ReferralStatus, ReferralType } from './referral.schema';
 import { canTransition } from './referral.transitions';
+import { isM5Referral } from './referral.m5';
 
 export class ReferralAuthorizationError extends Error {
 	constructor(message: string) {
@@ -82,8 +89,9 @@ export function assertActorMayTransition(
 	}
 }
 
-/** UI helper: show Accept/Reject for this actor. */
+/** UI helper: show Accept/Reject for this actor. Never for M5 referrals (M5 decides, rule 1). */
 export function canActorRespond(referral: Referral, actorShelter: string): boolean {
+	if (isM5Referral(referral)) return false;
 	if (!canTransition(referral.status, 'accepted') && !canTransition(referral.status, 'rejected')) {
 		return false;
 	}
@@ -98,4 +106,32 @@ export function canActorRespond(referral: Referral, actorShelter: string): boole
 		if (e instanceof ReferralAuthorizationError) return false;
 		throw e;
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Role → referral type (M5 draft CR D8, D16)
+// ---------------------------------------------------------------------------
+
+/**
+ * Referral types the caller may see and act on in `shelterCode`, or `null` for all types.
+ * SA and shelter managers: all. `medical_staff` (without manager rights): `medical-emergency`
+ * only (D8, D16). Anyone else: none (`[]`).
+ */
+export function referralTypesForRoles(
+	roles: readonly string[],
+	shelterCode: string | null | undefined
+): readonly ReferralType[] | null {
+	if (isSystemAdmin(roles) || isShelterManager(roles, shelterCode)) return null;
+	if (hasCapabilityInShelter(roles, shelterCode, MEDICAL_STAFF)) return ['medical-emergency'];
+	return [];
+}
+
+/** True when the caller may create or act on a referral of `type` in `shelterCode`. */
+export function canManageReferralType(
+	roles: readonly string[],
+	shelterCode: string | null | undefined,
+	type: ReferralType
+): boolean {
+	const allowed = referralTypesForRoles(roles, shelterCode);
+	return allowed === null || allowed.includes(type);
 }

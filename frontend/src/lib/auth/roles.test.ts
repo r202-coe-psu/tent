@@ -13,6 +13,7 @@ import {
 	canViewSupply,
 	canChangeStock,
 	canManageStoragePoints,
+	canAccessCentralWarehouse,
 	canAccessKitchen,
 	canAccessTickets,
 	canAccessEvacueeRegistration,
@@ -819,6 +820,29 @@ describe('canManageStoragePoints (#1186)', () => {
 			'donation_staff'
 		]) {
 			expect(canManageStoragePoints(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
+		}
+	});
+});
+
+describe('canAccessCentralWarehouse (M6 D2)', () => {
+	it('lets SA, shelter_manager and warehouse_staff in, in their own shelter only', () => {
+		expect(canAccessCentralWarehouse(['system_admin'], 'SH001')).toBe(true);
+		for (const cap of ['warehouse_staff', 'shelter_manager']) {
+			const roles = ['shelter:SH001', `SH001:${cap}`];
+			expect(canAccessCentralWarehouse(roles, 'SH001')).toBe(true);
+			expect(canAccessCentralWarehouse(roles, 'SH002')).toBe(false);
+		}
+	});
+
+	it('refuses supply_coordinator and every other staff role', () => {
+		for (const cap of [
+			'supply_coordinator',
+			'kitchen_staff',
+			'registration_staff',
+			'donation_staff',
+			'distribution_staff'
+		]) {
+			expect(canAccessCentralWarehouse(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
 		}
 	});
 });

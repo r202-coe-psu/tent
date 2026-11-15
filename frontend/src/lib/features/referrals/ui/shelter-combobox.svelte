@@ -31,6 +31,7 @@
 	const availableShelters = $derived(
 		allShelters
 			.filter((s) => s.operation_status !== 'closed' && s.operation_status !== 'cancelled')
+			.filter((s) => s.accepts_referrals !== false)
 			.filter((s) => !excludeCode || s.code.toUpperCase() !== excludeCode.toUpperCase())
 			.sort((a, b) => a.name.localeCompare(b.name, 'th'))
 	);

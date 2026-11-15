@@ -10,7 +10,11 @@ vi.mock('$app/paths', () => ({ resolve: resolveMock }));
 
 import { languageStore } from '$lib/stores/language.svelte';
 import { kioskLanguageSession } from './kiosk-language-session.svelte';
-import { navigateToKioskHome, returnToKioskLanguagePicker } from './kiosk-navigation';
+import {
+	goToKioskClosed,
+	navigateToKioskHome,
+	returnToKioskLanguagePicker
+} from './kiosk-navigation';
 
 describe('kiosk visit end', () => {
 	beforeEach(() => {
@@ -38,5 +42,25 @@ describe('kiosk visit end', () => {
 		expect(kioskLanguageSession.needsLanguageChoice).toBe(true);
 		expect(resolveMock).toHaveBeenCalledWith('/kiosk/language?shelter_code=SH001');
 		expect(gotoMock).toHaveBeenCalledWith('/kiosk/language?shelter_code=SH001');
+	});
+});
+
+describe('kiosk closure navigation', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('opens the closed page with kiosk context, replacing the history entry', () => {
+		goToKioskClosed('?shelter_code=SH001');
+
+		expect(gotoMock).toHaveBeenCalledWith('/kiosk/closed?shelter_code=SH001', {
+			replaceState: true
+		});
+	});
+
+	it('opens the closed page without context when none is given', () => {
+		goToKioskClosed();
+
+		expect(gotoMock).toHaveBeenCalledWith('/kiosk/closed', { replaceState: true });
 	});
 });

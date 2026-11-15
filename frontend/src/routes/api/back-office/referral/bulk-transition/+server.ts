@@ -2,10 +2,15 @@
 import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../_auth';
+import {
+	allowedReferralTypes,
+	authorizeReferral,
+	resolveShelterCode,
+	handleEndpointError
+} from '../_auth';
 import {
 	BULK_TRANSITION_MAX_IDS,
-	bulkTransition
+	bulkTransitionWithM5
 } from '$lib/features/referrals/server/referral.bulk-transition';
 import { redactForScope } from '$lib/features/referrals/domain/referral.redaction';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
@@ -46,7 +51,17 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		}
 
 		const { ids, to, reason } = parsed.data;
-		const result = await bulkTransition(ids, to, reason || undefined, caller.name, shelterCode);
+		// M5 referrals withdraw per batch through M5 (D11); medical staff only touch medical (D16).
+		const result = await bulkTransitionWithM5(
+			ids,
+			to,
+			reason || undefined,
+			caller.name,
+			shelterCode,
+			{
+				allowedTypes: allowedReferralTypes(caller, shelterCode)
+			}
+		);
 		return json({
 			succeeded: result.succeeded.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)),
 			failed: result.failed

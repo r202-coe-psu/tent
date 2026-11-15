@@ -39,7 +39,7 @@ POLL_INTERVAL_SECONDS = 3
 
 #: ``donation`` schema_v this writer stamps. Keep in step with the walk-in writer in the
 #: frontend — both channels write the same shape (schema.md §2.3).
-DONATION_SCHEMA_V = 11
+DONATION_SCHEMA_V = 12
 
 _AUDIT_SCHEMA_V = 1
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"

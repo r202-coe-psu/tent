@@ -10,6 +10,7 @@ import {
 	requiresExpiry,
 	type ItemMaster
 } from '$lib/features/catalog/server';
+import { isM6Donation } from '$lib/features/donations/server';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { sha256Hex } from '$lib/db/hash';
 
@@ -255,4 +256,24 @@ export function staleDecisionResponse(body: unknown, donation: { _rev?: string }
 		);
 	}
 	return null;
+}
+
+/**
+ * A central-warehouse (`m6`) donation cannot be refused or sent to another shelter: the goods are
+ * already on a truck from M6, and only a RECEIVED donation is confirmed back to M6 (the worker
+ * watches for `received`). Refusing it would leave the withdrawal in transit on M6's side with
+ * nothing to close it. What does not arrive is closed with a receipt that records the shortfall.
+ * Returns the 422 to send, or null for any other donation.
+ */
+export function m6NotRefusableResponse(donation: { channel?: string | null }) {
+	if (!isM6Donation(donation)) return null;
+	return json(
+		{
+			success: false,
+			error_code: 'M6_NOT_REFUSABLE',
+			error:
+				'ใบรับของจากคลังกลาง (M6) ปฏิเสธหรือส่งต่อทั้งใบไม่ได้ — รับเท่าที่มาถึงแล้วบันทึกส่วนที่ขาดไว้ในใบนี้'
+		},
+		{ status: 422 }
+	);
 }

@@ -616,6 +616,21 @@ export function canManageStoragePoints(
 	);
 }
 
+/**
+ * Central warehouse (M6) — `/back-office/onedata/m6`, draft CR M6 D2: SA, SM, or `warehouse_staff` of
+ * the shelter. `supply_coordinator` is deliberately NOT included (unlike {@link canAccessWarehouse}
+ * / {@link isWarehouseStaff}): the check is the exact `warehouse_staff` capability.
+ */
+export function canAccessCentralWarehouse(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		canAccessManagerPages(roles, shelterCode) ||
+		hasStaffCapability(roles, WAREHOUSE_STAFF, shelterCode)
+	);
+}
+
 /** `requireKitchen`: SA, SM, or kitchen_staff of the shelter. */
 export function canAccessKitchen(roles: readonly string[], shelterCode?: string | null): boolean {
 	return (

@@ -17,6 +17,8 @@
 		donationRefLabel,
 		donationStatusLabel,
 		filterDonationQueue,
+		isM6Donation,
+		M6SourceBadge,
 		queueGroupOf,
 		type DonationQueueFilter,
 		type PendingDonationRow
@@ -119,6 +121,11 @@
 	 * return the same sentence, labelling every request as unsolicited.
 	 */
 	function getTriggerReason(req: PendingDonationRow): string {
+		if (isM6Donation(req)) {
+			return req.status === 'received'
+				? 'รับของจากคลังกลางแล้ว'
+				: 'ของจากคลังกลางกำลังเดินทาง — เปิดเพื่อตรวจรับเมื่อของมาถึง';
+		}
 		if (queueGroupOf(req.status) === 'awaiting') {
 			return 'อนุมัติแล้ว — รอผู้บริจาคนำของมาส่ง (เปิดเพื่อตรวจรับ)';
 		}
@@ -135,7 +142,10 @@
 			const q = searchQuery.toLowerCase().trim();
 			list = list.filter((r) => {
 				const nameMatch = r.donor_name?.toLowerCase().includes(q);
-				const refMatch = r.booking_ref?.toLowerCase().includes(q);
+				const refMatch =
+					r.booking_ref?.toLowerCase().includes(q) ||
+					r.m6?.request_code.toLowerCase().includes(q) ||
+					r.m6?.source_warehouse_name?.toLowerCase().includes(q);
 				const itemMatch = r.items?.some(
 					(it) => it.free_text?.toLowerCase().includes(q) || it.item_id?.toLowerCase().includes(q)
 				);
@@ -308,9 +318,13 @@
 				{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
 					<article class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 						<div>
-							<div class="text-base font-bold text-slate-900">
-								{req.donor_name || 'ไม่ระบุชื่อ'}
-							</div>
+							{#if isM6Donation(req)}
+								<M6SourceBadge row={req} showCode={false} />
+							{:else}
+								<div class="text-base font-bold text-slate-900">
+									{req.donor_name || 'ไม่ระบุชื่อ'}
+								</div>
+							{/if}
 							<div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
 								<Badge
 									variant="outline"
@@ -393,9 +407,13 @@
 							<Table.Row class="transition-colors hover:bg-muted/10">
 								<!-- Donor Info & Ref -->
 								<Table.Cell class="min-w-[240px] px-6 py-4">
-									<div class="text-sm font-bold text-foreground">
-										{req.donor_name || 'ไม่ระบุชื่อ'}
-									</div>
+									{#if isM6Donation(req)}
+										<M6SourceBadge row={req} showCode={false} />
+									{:else}
+										<div class="text-sm font-bold text-foreground">
+											{req.donor_name || 'ไม่ระบุชื่อ'}
+										</div>
+									{/if}
 									<div class="mt-1.5 flex flex-wrap items-center gap-2 text-2xs">
 										<Badge
 											variant="outline"

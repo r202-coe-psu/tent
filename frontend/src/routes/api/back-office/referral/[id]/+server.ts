@@ -1,7 +1,12 @@
 /* eslint-disable no-restricted-imports */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeReferral, resolveShelterCode, handleEndpointError } from '../_auth';
+import {
+	assertReferralTypeAllowed,
+	authorizeReferral,
+	resolveShelterCode,
+	handleEndpointError
+} from '../_auth';
 import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
 import { redactForScope } from '$lib/features/referrals/domain/referral.redaction';
 
@@ -37,6 +42,7 @@ export const GET: RequestHandler = async ({ request, params, url }) => {
 		if (!caller.isSA && doc.shelter_code !== shelterCode && doc.to_shelter_code !== shelterCode) {
 			return json({ error: 'Forbidden: You do not have access to this referral' }, { status: 403 });
 		}
+		assertReferralTypeAllowed(caller, shelterCode, doc.referral_type);
 
 		return json(redactForScope(doc, BACK_OFFICE_SCOPE));
 	} catch (e: unknown) {

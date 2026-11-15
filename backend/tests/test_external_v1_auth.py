@@ -193,3 +193,28 @@ async def test_external_shelter_detail_returns_donation_points(
             "location_note": "ประตู 2",
         }
     ]
+
+
+async def test_external_shelter_detail_zones_keep_the_partner_shape(
+    client: AsyncClient, valid_api_key: ApiKey, bearer_headers: dict[str, str]
+) -> None:
+    """CR-254 D3: the per-zone `code` / `status` / `present` stay off the partner API."""
+    await PublicShelter(
+        id="SH901",
+        shelter_code="SH901",
+        name="ศูนย์ทดสอบโซน",
+        status="open",
+        capacity=10,
+        occupancy_by_zone={"Z1": {"active": 2}},
+        raw_data={
+            "zones": [
+                {"code": "Z1", "name": "โซนครอบครัว", "type": "general", "capacity": 10},
+            ]
+        },
+        updated_at=datetime.now(UTC),
+    ).insert()
+    res = await client.get("/external/v1/shelters/SH901", headers=bearer_headers)
+    assert res.status_code == 200
+    assert res.json()["shelter"]["zones"] == [
+        {"name": "โซนครอบครัว", "type": "general", "capacity": 10, "area_m2": None}
+    ]

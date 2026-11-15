@@ -42,6 +42,12 @@ export const REFERRAL_MANGO_INDEXES = [
 		type: 'json' as const
 	},
 	{
+		// M5 batches (schema_v 3): every member of one `batch_id` (draft CR — referral M5 §3).
+		index: { fields: ['type', 'batch_id'] },
+		name: 'referral-type-batch-idx',
+		type: 'json' as const
+	},
+	{
 		index: { fields: [{ type: 'desc' }, { created_at: 'desc' }] },
 		name: 'referral-list-created-desc-idx',
 		type: 'json' as const
@@ -324,6 +330,16 @@ export const BULK_RETURN_ENTRY_MANGO_INDEXES = [
 		type: 'json' as const
 	}
 ];
+
+/**
+ * Mango index for reading the distribution logs of one Thai day by `distributed_at` (meal coverage
+ * report, #1300). Without it `_find` still answers, by scanning every `distribution_log`.
+ */
+export const DISTRIBUTION_LOG_DAY_MANGO_INDEX = {
+	index: { fields: ['type', 'distributed_at'] },
+	name: 'distribution-log-type-distributed-at-idx',
+	type: 'json' as const
+};
 
 /** Mango index definitions required by Ticket & Distribution queries (schema.md §6 / §8 / CR-121). */
 export const TICKET_DISTRIBUTION_MANGO_INDEXES = [

@@ -83,8 +83,9 @@ export function applyTransition(
 		next.response_reason = reason ?? doc.response_reason;
 	} else if (to === 'closed' && reason) {
 		next.close_reason = reason;
-		// FR-C5: a v1 doc that gains `close_reason` is lifted to v2 on write.
-		next.schema_v = 2;
+		// FR-C5: a v1 doc that gains `close_reason` is lifted to v2 on write. Never lowers a
+		// v3 (M5) doc.
+		next.schema_v = doc.schema_v === 1 ? 2 : doc.schema_v;
 	}
 
 	return next;

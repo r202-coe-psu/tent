@@ -64,6 +64,7 @@ export class ReferralRemoteRepository implements ReferralRepository {
 			if (filter.sort) qs.append('sort', filter.sort);
 			if (filter.direction) qs.append('direction', filter.direction);
 			if (filter.bookmark) qs.append('bookmark', filter.bookmark);
+			if (filter.dispatch_mode) qs.append('dispatch_mode', filter.dispatch_mode);
 		}
 		const res = await fetch(`/api/back-office/referral?${qs}`, {
 			credentials: 'include',

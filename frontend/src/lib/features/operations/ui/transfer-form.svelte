@@ -31,7 +31,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
-	import { qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+	import { parseQtyInput, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 
 	let { onsuccess }: { onsuccess?: () => void } = $props();
 
@@ -69,7 +69,7 @@
 	const transferFormSchema = z.object({
 		to_shelter: z.string().trim().min(1, 'กรุณาระบุศูนย์ปลายทาง'),
 		item_id: z.string().trim().min(1, 'กรุณาระบุสินค้า'),
-		qty: z.coerce.number().positive('จำนวนต้องมากกว่า 0'),
+		qty: z.string().trim().min(1, 'กรุณาระบุจำนวน'),
 		unit: z.string().trim().min(1, 'กรุณาระบุหน่วยนับ'),
 		notes: z.string().trim().optional()
 	});
@@ -83,20 +83,30 @@
 				toast.error('กรุณาตรวจสอบข้อมูลในฟอร์ม');
 				return;
 			}
+			if (qty === null || qtyInvalid) {
+				cancel();
+				toast.error(QTY_HINT);
+				return;
+			}
 			if (qtyWholeError) {
 				cancel();
 				toast.error(qtyWholeError);
 				return;
 			}
-			await handleCreate(validated.data);
+			await handleCreate(validated.data, qty);
 		}
 	});
 
 	const { form: formData, submitting } = form;
 
-	const qtyWholeError = $derived(
-		wholeQtyError($formData.qty, unitDimension.resolve($formData.unit))
+	const QTY_HINT = 'จำนวนต้องมากกว่า 0 ทศนิยมไม่เกิน 4 ตำแหน่ง';
+	/** A number input reports text it cannot parse (`1e`, `-`) as an empty value. */
+	let qtyBadInput = $state(false);
+	const qty = $derived(parseQtyInput($formData.qty));
+	const qtyInvalid = $derived(
+		qtyBadInput || ($formData.qty.trim() !== '' && (qty === null || !qtyGt(qty, 0)))
 	);
+	const qtyWholeError = $derived(wholeQtyError(qty, unitDimension.resolve($formData.unit)));
 
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
 	const selectedUnitLabel = $derived(
@@ -107,9 +117,9 @@
 		return balanceByItemId.get(selectedItem._id) ?? '0';
 	});
 	const remainingAfterTransfer = $derived.by(() => {
-		if (!selectedItem || !$formData.qty) return null;
+		if (!selectedItem || qty === null) return null;
 		try {
-			const inBase = qtyToBaseUnit(String($formData.qty), $formData.unit, selectedItem);
+			const inBase = qtyToBaseUnit(qty, $formData.unit, selectedItem);
 			if (qtyGt(inBase, currentStock)) return 'over' as const;
 			return subQty(currentStock, inBase);
 		} catch {
@@ -127,9 +137,10 @@
 		selectedItemId = item?._id ?? '';
 		$formData.item_id = item?._id ?? '';
 		$formData.unit = item ? defaultIssueUom(item) : '';
+		qtyBadInput = false;
 	}
 
-	async function handleCreate(data: z.infer<typeof transferFormSchema>) {
+	async function handleCreate(data: z.infer<typeof transferFormSchema>, qty: string) {
 		if (!selectedItem) {
 			toast.error('กรุณาเลือกสินค้า');
 			return;
@@ -139,7 +150,7 @@
 		try {
 			line = toTransferLine(selectedItem, {
 				item_id: data.item_id,
-				qty: data.qty,
+				qty,
 				unit: data.unit
 			});
 		} catch {
@@ -259,13 +270,19 @@
 							min={requiresWholeQty(unitDimension.resolve($formData.unit)) ? '1' : '0.01'}
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							placeholder="ระบุจำนวน"
-							bind:value={$formData.qty}
-							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
+							value={$formData.qty}
+							oninput={(event) => {
+								$formData.qty = event.currentTarget.value;
+								qtyBadInput = event.currentTarget.validity.badInput;
+							}}
+							aria-invalid={qtyInvalid || qtyWholeError ? true : props['aria-invalid']}
 							class="min-h-11 font-mono font-bold"
 						/>
 					{/snippet}
 				</Form.Control>
-				{#if qtyWholeError}
+				{#if qtyInvalid}
+					<p class="text-sm font-medium text-destructive" role="alert">{QTY_HINT}</p>
+				{:else if qtyWholeError}
 					<p class="text-sm font-medium text-destructive">{qtyWholeError}</p>
 				{/if}
 				<Form.FieldErrors />
@@ -344,6 +361,7 @@
 			<Form.Button
 				disabled={$submitting ||
 					offline ||
+					qtyInvalid ||
 					!!qtyWholeError ||
 					!canPickDestination ||
 					!selectedItem ||

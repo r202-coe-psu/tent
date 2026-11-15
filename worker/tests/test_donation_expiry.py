@@ -325,3 +325,27 @@ async def test_ac16_a_booking_that_moved_since_the_read_is_left_to_the_next_swee
     assert await expire_declared_donations(couch, now=NOW) == 1
     assert put.await_count == 2
     assert all(call.kwargs == {"retry_conflict": False} for call in put.await_args_list)
+
+
+# --- channel m6 (central warehouse) ---
+
+
+def test_never_expires_an_m6_donation_even_with_a_past_deadline():
+    for status in ("verifying", "pending_review", "declared"):
+        assert should_expire(status, PAST, now=NOW, channel="m6") is False, status
+    # Other channels are unaffected.
+    assert should_expire("verifying", PAST, now=NOW, channel="public") is True
+
+
+async def test_sweep_skips_m6_donations():
+    m6_doc = {
+        "_id": "donation:m6-WD-1",
+        "type": "donation",
+        "channel": "m6",
+        "status": "verifying",
+        "expires_at": PAST,
+    }
+    put = AsyncMock(return_value={"ok": True})
+    couch = _couch({"shelter_sh001": [m6_doc]}, put=put)
+    assert await expire_declared_donations(couch, now=NOW) == 0
+    put.assert_not_awaited()

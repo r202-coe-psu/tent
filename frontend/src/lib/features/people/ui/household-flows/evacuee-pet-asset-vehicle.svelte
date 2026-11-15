@@ -255,7 +255,7 @@
 				<h3 class="text-base font-bold text-foreground">{t.pets.title}</h3>
 			</div>
 
-			<div class="grid grid-cols-2 gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<button
 					type="button"
 					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasPets
@@ -398,7 +398,7 @@
 				<Package class="size-5 text-primary" />
 				<h3 class="text-base font-bold text-foreground">{t.assets.title}</h3>
 			</div>
-			<div class="grid grid-cols-2 gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<button
 					type="button"
 					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasAssets
@@ -442,7 +442,7 @@
 				<Car class="size-5 text-primary" />
 				<h3 class="text-base font-bold text-foreground">{t.vehicles.title}</h3>
 			</div>
-			<div class="grid grid-cols-2 gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<button
 					type="button"
 					class="touch-target rounded-xl border-2 px-3 py-3 text-sm font-medium transition-colors {!hasVehicles

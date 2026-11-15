@@ -59,7 +59,10 @@ interface RoleAccess {
 	role: StaffCapability;
 	/** `portal-dept-<id>` sections `/portal` must show for this role, and no others. */
 	portalDepartments: string[];
-	/** `/portal` shows the registration tile only while the shelter has Station 2 switched on. */
+	/**
+	 * `/portal` shows this role's registration tile (Station 2) only while the shelter has medical
+	 * screening switched on; with it off, `registration` drops out of `portalDepartments`.
+	 */
 	needsMedicalScreening?: true;
 	/** URLs the role description promises and the guard allows. */
 	allowed: string[];
@@ -90,11 +93,12 @@ const ROLE_ACCESS: RoleAccess[] = [
 	},
 	{
 		role: 'medical_staff',
-		portalDepartments: ['registration'],
+		// M5 draft CR D8, D16, D17: medical staff open referrals (medical emergencies only) and the
+		// OneData M5 page, so the portal adds the referrals tile (management) and OneData.
+		portalDepartments: ['registration', 'management', 'onedata'],
 		needsMedicalScreening: true,
-		allowed: ['/onsite/medical-screening'],
-		// #879 item 1: referrals stay manager-only; the description was fixed instead (#954).
-		forbidden: ['/back-office/kitchen', '/back-office/referrals']
+		allowed: ['/onsite/medical-screening', '/back-office/referrals', '/back-office/onedata/m5'],
+		forbidden: ['/back-office/kitchen', '/back-office/onedata/m6']
 	},
 	{
 		role: 'kitchen_staff',
@@ -114,19 +118,22 @@ const ROLE_ACCESS: RoleAccess[] = [
 			'/back-office/stock-donations',
 			'/back-office/tickets/kitchen'
 		],
-		forbidden: ['/back-office/kitchen'],
+		// M6 D2: supply_coordinator is not warehouse_staff for OneData M6.
+		forbidden: ['/back-office/kitchen', '/back-office/onedata/m6'],
 		sidebarPendingSpec: ['/back-office/distribution']
 	},
 	{
 		role: 'warehouse_staff',
-		portalDepartments: ['supply'],
+		// M6 draft CR D2: the exact warehouse_staff capability opens OneData M6.
+		portalDepartments: ['supply', 'onedata'],
 		allowed: [
 			'/back-office/supply',
 			'/back-office/stock-donations',
 			'/back-office/distribution',
-			'/back-office/tickets/kitchen'
+			'/back-office/tickets/kitchen',
+			'/back-office/onedata/m6'
 		],
-		forbidden: ['/back-office/kitchen']
+		forbidden: ['/back-office/kitchen', '/back-office/onedata/m5']
 	},
 	{
 		// CR-227 (#1121): runs the donation intake and sees stock read-only. Distribution, tickets
@@ -200,6 +207,8 @@ const MANAGEMENT_PAGES = [
 	'/back-office/distribution',
 	'/back-office/tickets/kitchen',
 	'/back-office/kitchen',
+	'/back-office/onedata/m5',
+	'/back-office/onedata/m6',
 	'/back-office/incidents',
 	'/back-office/shelters',
 	'/back-office/users',
@@ -474,10 +483,14 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 		test(`${row.role} reaches only its own pages`, async ({ browser }) => {
 			const page = await openAs(browser, roleUser(row.role));
 			await page.goto('/portal');
-			const expected = row.needsMedicalScreening && !(await medicalScreeningEnabled());
+			const screeningOff = row.needsMedicalScreening && !(await medicalScreeningEnabled());
 			await expect
 				.poll(() => portalDepartments(page), { message: 'portal departments' })
-				.toEqual(expected ? [] : row.portalDepartments);
+				.toEqual(
+					screeningOff
+						? row.portalDepartments.filter((id) => id !== 'registration')
+						: row.portalDepartments
+				);
 			for (const url of row.allowed) await expectLoads(page, url);
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
 			// #1037: the sidebar offers exactly the back-office pages the guards let this role open.

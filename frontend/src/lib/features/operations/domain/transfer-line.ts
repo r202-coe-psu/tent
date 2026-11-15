@@ -17,8 +17,8 @@ export interface TransferLine {
  */
 export function toTransferLine(
 	item: PackagingSource,
-	line: { item_id: string; qty: string | number; unit: string }
+	line: { item_id: string; qty: string; unit: string }
 ): TransferLine {
-	const { qty, unit } = toLedgerQtyUnit(String(line.qty), line.unit, item);
+	const { qty, unit } = toLedgerQtyUnit(line.qty, line.unit, item);
 	return { item_id: line.item_id, qty, unit };
 }

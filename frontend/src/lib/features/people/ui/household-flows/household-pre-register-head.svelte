@@ -529,7 +529,7 @@
 						</Form.Field>
 					</div>
 
-					<div class="grid grid-cols-2 gap-4">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<Form.Field {form} name="country">
 							<Form.Control>
 								{#snippet children({ props })}
@@ -603,7 +603,7 @@
 					<ShieldAlert class="size-4 text-amber-500" />
 					ข้อมูลผู้ติดต่อฉุกเฉิน
 				</h4>
-				<div class="grid grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 					<Form.Field {form} name="emergency_contact.name">
 						<Form.Control>
 							{#snippet children({ props })}

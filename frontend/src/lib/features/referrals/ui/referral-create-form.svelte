@@ -14,6 +14,13 @@
 	import CapacityReferralForm from './capacity-referral-form.svelte';
 	import ResourceReferralForm from './resource-referral-form.svelte';
 	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
+	import { referralTypesForRoles } from '../domain/referral.authorization';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import Ambulance from '@lucide/svelte/icons/ambulance';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import { resolve } from '$app/paths';
 
 	let {
 		onBatchDone
@@ -38,6 +45,14 @@
 
 	let selectedIds = $state<string[]>([]);
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
+
+	// Medical staff see medical-emergency only (D8, D16); the BFF enforces the same rule.
+	const allowedTypes = $derived(
+		referralTypesForRoles(authStore.user?.roles ?? [], getShelterCode())
+	);
+	const typeAllowed = (t: 'medical-emergency' | 'capacity' | 'resource') =>
+		allowedTypes === null || allowedTypes.includes(t);
+
 	let selectionAttempted = $state(false);
 
 	const evacueeError = $derived(
@@ -164,45 +179,76 @@
 						</div>
 					</button>
 
-					<button
-						type="button"
-						onclick={() => (selectedType = 'capacity')}
-						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+					{#if typeAllowed('capacity')}
+						<button
+							type="button"
+							onclick={() => (selectedType = 'capacity')}
+							class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'capacity'
-							? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20'
-							: 'border-border/60 hover:border-border'}"
-					>
-						<div>
-							<div class="flex items-center justify-between">
-								<span class="font-bold text-purple-600 dark:text-purple-400">ย้ายศูนย์พักพิง</span>
-								<span class="text-xs font-semibold uppercase opacity-60">Capacity</span>
+								? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20'
+								: 'border-border/60 hover:border-border'}"
+						>
+							<div>
+								<div class="flex items-center justify-between">
+									<span class="font-bold text-purple-600 dark:text-purple-400">ย้ายศูนย์พักพิง</span
+									>
+									<span class="text-xs font-semibold uppercase opacity-60">Capacity</span>
+								</div>
+								<p class="mt-1 text-xs text-muted-foreground">
+									โอนย้ายผู้เข้าพักไปยังศูนย์พักพิงอื่นเนื่องจากศูนย์เดิมเต็ม
+								</p>
 							</div>
-							<p class="mt-1 text-xs text-muted-foreground">
-								โอนย้ายผู้เข้าพักไปยังศูนย์พักพิงอื่นเนื่องจากศูนย์เดิมเต็ม
-							</p>
-						</div>
-					</button>
+						</button>
+					{/if}
 
-					<button
-						type="button"
-						onclick={() => (selectedType = 'resource')}
-						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+					{#if typeAllowed('resource')}
+						<button
+							type="button"
+							onclick={() => (selectedType = 'resource')}
+							class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'resource'
-							? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
-							: 'border-border/60 hover:border-border'}"
-					>
-						<div>
-							<div class="flex items-center justify-between">
-								<span class="font-bold text-blue-600 dark:text-blue-400">ขอสนับสนุนทรัพยากร</span>
-								<span class="text-xs font-semibold uppercase opacity-60">Resource</span>
+								? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
+								: 'border-border/60 hover:border-border'}"
+						>
+							<div>
+								<div class="flex items-center justify-between">
+									<span class="font-bold text-blue-600 dark:text-blue-400">ขอสนับสนุนทรัพยากร</span>
+									<span class="text-xs font-semibold uppercase opacity-60">Resource</span>
+								</div>
+								<p class="mt-1 text-xs text-muted-foreground">
+									ขอสนับสนุนสิ่งของ ยา เครื่องอุปโภคบริโภค จากองค์กรภายนอก
+								</p>
 							</div>
-							<p class="mt-1 text-xs text-muted-foreground">
-								ขอสนับสนุนสิ่งของ ยา เครื่องอุปโภคบริโภค จากองค์กรภายนอก
-							</p>
-						</div>
-					</button>
+						</button>
+					{/if}
 				</div>
 			</div>
+
+			{#if selectedType === 'medical-emergency'}
+				<!-- D17: sending to a hospital goes through OneData M5; this form only records tracking. -->
+				<div
+					class="flex flex-col gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 sm:flex-row sm:items-center"
+				>
+					<Ambulance class="h-6 w-6 shrink-0 text-indigo-700" aria-hidden="true" />
+					<div class="min-w-0 flex-1 space-y-1">
+						<p class="text-sm font-semibold text-indigo-950">
+							ส่งผู้ป่วยไปโรงพยาบาล ให้ใช้ OneData ระบบส่งต่อผู้ป่วย (M5)
+						</p>
+						<p class="text-sm text-indigo-900">
+							สธ. พิจารณาและโรงพยาบาลปลายทางรับเรื่องผ่านระบบ
+							ฟอร์มนี้บันทึกเพื่อติดตามภายในศูนย์เท่านั้น ไม่ส่งข้อมูลออกนอกระบบ ใช้เมื่อส่งผ่าน
+							OneData ไม่ได้และประสานโรงพยาบาลเอง
+						</p>
+					</div>
+					<a
+						href={resolve('/back-office/onedata/m5/new')}
+						class={buttonVariants({ class: 'h-11 shrink-0 gap-2 font-semibold' })}
+					>
+						ไปที่ OneData (M5)
+						<ArrowRight class="h-4 w-4" aria-hidden="true" />
+					</a>
+				</div>
+			{/if}
 
 			<hr class="border-border/60" />
 

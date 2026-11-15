@@ -149,7 +149,7 @@ async def test_refresh_occupancy_counts_every_stay_status_including_search_exclu
                 "_id": "evacuee:2",
                 "type": "evacuee",
                 "privacy": {"search_excluded": True},
-                "current_stay": {"status": "room_confirmed"},
+                "current_stay": {"status": "room_confirmed", "zone": "Z1"},
             },
             {
                 "_id": "evacuee:3",
@@ -175,6 +175,8 @@ async def test_refresh_occupancy_counts_every_stay_status_including_search_exclu
     }
     # EXT-005: in shelter = active + room_confirmed (decision sync 2026-11-02).
     assert reloaded.occupancy_total == 2
+    # #1241: per-zone counts include the search-excluded evacuee; no zone = not counted.
+    assert reloaded.occupancy_by_zone == {"Z1": {"room_confirmed": 1}}
 
 
 async def test_refresh_occupancy_no_op_when_shelter_row_missing(db: None) -> None:

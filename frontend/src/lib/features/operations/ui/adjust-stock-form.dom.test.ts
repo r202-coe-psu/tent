@@ -268,6 +268,20 @@ describe('adjust form lots (#569)', () => {
 	});
 });
 
+describe('adjust form decimal write-off (#938)', () => {
+	it('resolves a negative decimal delta of -0.1 to a write-off off the lot', async () => {
+		ledger.current = [{ ...INBOUND, qty: '2.1' }];
+		await render();
+		await chooseLot('คงเหลือ 2.1');
+
+		await fillAndSubmit('2', 'เสียหาย / เน่าเสีย');
+
+		expect(submittedInput()).toMatchObject({ qty: '-0.1', lot_ref: INBOUND._id });
+		expect(document.body.textContent).toContain('ตัดออก 0.1');
+		expect(toastMock.error).not.toHaveBeenCalled();
+	});
+});
+
 describe('adjust form whole numbers for count units (#805)', () => {
 	const FRACTIONAL = { ...INBOUND, qty: '2.5' };
 
@@ -315,4 +329,23 @@ describe('adjust form whole numbers for count units (#805)', () => {
 		await type('2');
 		expect(save().disabled).toBe(false);
 	});
+
+	it('explains a quantity the number input cannot parse, such as "1e"', async () => {
+		ledger.current = [INBOUND, DISPATCH];
+		await render();
+		await chooseLot('คงเหลือ 1199');
+		const qty = document.getElementById('new-qty') as HTMLInputElement;
+
+		typeUnparseable(qty);
+		await settle();
+
+		expect(document.body.textContent).toContain('จำนวนใหม่ต้องไม่ติดลบ ทศนิยมไม่เกิน 4 ตำแหน่ง');
+		expect(qty.getAttribute('aria-invalid')).toBe('true');
+	});
 });
+
+function typeUnparseable(input: HTMLInputElement) {
+	Object.defineProperty(input, 'validity', { configurable: true, value: { badInput: true } });
+	input.value = '';
+	input.dispatchEvent(new Event('input', { bubbles: true }));
+}

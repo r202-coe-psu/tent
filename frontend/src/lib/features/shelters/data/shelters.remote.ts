@@ -7,6 +7,7 @@ import {
 	EMPTY_PARKING_POLICY,
 	DEFAULT_SHELTER_FEATURE_FLAGS,
 	DEFAULT_SITE_KIND,
+	isShelterAcceptingReferrals,
 	isShelterMasterDoc,
 	migrateShelterV2ToCurrent,
 	type ShelterMaster
@@ -27,7 +28,8 @@ function masterToBasic(master: ShelterMaster): ShelterBasic {
 		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		operation_status: master.operation_status ?? 'standby',
 		capacity: master.capacity ?? 0,
-		province: master.province ?? null
+		province: master.province ?? null,
+		accepts_referrals: isShelterAcceptingReferrals(master)
 	};
 }
 

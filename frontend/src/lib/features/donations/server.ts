@@ -21,6 +21,8 @@ export {
 	RECEIVED_PAGE_SIZE
 } from './domain/donation-queue';
 export { maskDonorEmail, maskDonorName, maskDonorPhone } from './domain/donor-contact';
+export { canCloseM6WithoutGoods, closeM6Donation, isM6Donation, toM6Summary } from './domain/m6';
+export type { M6Summary } from './domain/m6';
 export {
 	buildBookingRefFindBody,
 	buildLotLedgerFindBody,

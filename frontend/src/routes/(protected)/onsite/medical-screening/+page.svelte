@@ -211,6 +211,31 @@
 	}
 </script>
 
+{#snippet needBadges(evacuee: (typeof pagedRows.items)[number])}
+	{#if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) || (evacuee.special_needs && evacuee.special_needs.length > 0)}
+		<div class="flex flex-wrap gap-1">
+			{#each evacuee.vulnerable_groups ?? [] as need (need)}
+				<Badge
+					variant="outline"
+					class="border-primary/30 bg-primary/10 px-1.5 py-0 text-[11px] text-primary"
+				>
+					{getSpecialNeedLabel(need)}
+				</Badge>
+			{/each}
+			{#each evacuee.special_needs ?? [] as need (need)}
+				<Badge
+					variant="outline"
+					class="border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[11px] text-amber-700 dark:text-amber-300"
+				>
+					{getSpecialNeedLabel(need)}
+				</Badge>
+			{/each}
+		</div>
+	{:else}
+		<span class="text-xs text-muted-foreground">—</span>
+	{/if}
+{/snippet}
+
 <svelte:head>
 	<title>{t.queuePageTitle}</title>
 </svelte:head>
@@ -405,7 +430,47 @@
 							{/if}
 						</div>
 					{:else}
-						<div class="overflow-x-auto">
+						<ul role="list" class="divide-y divide-border md:hidden" data-testid="screening-cards">
+							{#each pagedRows.items as evacuee (evacuee._id)}
+								<li class="space-y-2 px-4 py-3">
+									<button
+										type="button"
+										tabindex="-1"
+										class="block w-full min-w-0 text-left"
+										onclick={() => openScreeningForm(evacuee._id)}
+									>
+										<span class="block font-semibold break-words text-foreground">
+											{evacuee.first_name}
+											{evacuee.last_name}
+										</span>
+										{#if evacuee.nickname}
+											<span class="text-xs text-muted-foreground">({evacuee.nickname})</span>
+										{/if}
+									</button>
+									<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+										<span>
+											{t.colRegisteredAt}:
+											{formatTimeOrDate(evacuee.current_stay?.since || evacuee.created_at)}
+										</span>
+										<span
+											>{t.colIdNo}:
+											<span class="font-mono">{maskNationalId(evacuee.person_id?.number)}</span
+											></span
+										>
+										<span>{t.colPhone}: {evacuee.phone || '—'}</span>
+									</div>
+									{@render needBadges(evacuee)}
+									<Button
+										variant="outline"
+										class="min-h-11 w-full"
+										onclick={() => openScreeningForm(evacuee._id)}
+									>
+										{activeTab === 'pending' ? t.btnScreen : t.btnEditResult}
+									</Button>
+								</li>
+							{/each}
+						</ul>
+						<div class="hidden overflow-x-auto md:block">
 							<Table.Root>
 								<Table.TableHeader class="bg-muted/40 text-xs">
 									<Table.TableRow>
@@ -446,28 +511,7 @@
 												{formatTimeOrDate(evacuee.current_stay?.since || evacuee.created_at)}
 											</Table.TableCell>
 											<Table.TableCell class="py-3">
-												{#if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) || (evacuee.special_needs && evacuee.special_needs.length > 0)}
-													<div class="flex flex-wrap gap-1">
-														{#each evacuee.vulnerable_groups ?? [] as need (need)}
-															<Badge
-																variant="outline"
-																class="border-primary/30 bg-primary/10 px-1.5 py-0 text-[11px] text-primary"
-															>
-																{getSpecialNeedLabel(need)}
-															</Badge>
-														{/each}
-														{#each evacuee.special_needs ?? [] as need (need)}
-															<Badge
-																variant="outline"
-																class="border-amber-500/30 bg-amber-500/10 px-1.5 py-0 text-[11px] text-amber-700 dark:text-amber-300"
-															>
-																{getSpecialNeedLabel(need)}
-															</Badge>
-														{/each}
-													</div>
-												{:else}
-													<span class="text-xs text-muted-foreground">—</span>
-												{/if}
+												{@render needBadges(evacuee)}
 											</Table.TableCell>
 											<Table.TableCell class="py-3 text-right">
 												<Button

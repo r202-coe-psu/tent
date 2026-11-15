@@ -41,6 +41,7 @@ vi.mock('$lib/features/users', async (importOriginal) => {
 import {
 	confineKioskStaffOnly,
 	resolvePostLoginDestination,
+	requireCentralWarehouseAccess,
 	requireDistributionDesk,
 	requireDonationAccess,
 	requireSupplyView,
@@ -48,6 +49,7 @@ import {
 	requireBannerManagement,
 	requireKioskManagement,
 	requireMedicalScreening,
+	requireReferralAccess,
 	requirePrinterManagement,
 	requireShelterReadiness,
 	requireVolunteerBackoffice,
@@ -202,6 +204,35 @@ describe('requireMedicalScreening (Station 2 route guard)', () => {
 	});
 });
 
+describe('requireReferralAccess (/back-office/referrals, M5 D8)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA, the shelter manager and medical staff of the selected shelter', async () => {
+		expect(await passes(requireReferralAccess, ['system_admin'])).toBe(true);
+		expect(await passes(requireReferralAccess, ['shelter:SH001', 'SH001:shelter_manager'])).toBe(
+			true
+		);
+		expect(await passes(requireReferralAccess, ['shelter:SH001', 'SH001:medical_staff'])).toBe(
+			true
+		);
+	});
+
+	it('refuses other staff', async () => {
+		for (const cap of ['registration_staff', 'triage_staff', 'kitchen_staff', 'warehouse_staff']) {
+			expect(await passes(requireReferralAccess, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+		}
+	});
+
+	it('is scoped to the selected shelter', async () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:medical_staff'];
+		expect(await passes(requireReferralAccess, roles, 'SH001')).toBe(true);
+		expect(await passes(requireReferralAccess, roles, 'SH002')).toBe(false);
+	});
+});
+
 describe('requireVolunteerBackoffice (/back-office/volunteers)', () => {
 	beforeEach(() => {
 		mocks.user = { roles: [] };
@@ -331,6 +362,41 @@ describe('donation_staff page guards (CR-227)', () => {
 		mocks.user = null;
 		await expect(requireDonationAccess()).rejects.toMatchObject({ status: 302 });
 		await expect(requireSupplyView()).rejects.toMatchObject({ status: 302 });
+	});
+});
+
+describe('requireCentralWarehouseAccess (M6 D2)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA, shelter_manager and warehouse_staff', async () => {
+		expect(await passes(requireCentralWarehouseAccess, ['system_admin'])).toBe(true);
+		for (const cap of ['shelter_manager', 'warehouse_staff']) {
+			expect(await passes(requireCentralWarehouseAccess, ['shelter:SH001', `SH001:${cap}`])).toBe(
+				true
+			);
+		}
+	});
+
+	it('refuses supply_coordinator and unrelated staff', async () => {
+		for (const cap of ['supply_coordinator', 'donation_staff', 'kitchen_staff', 'medical_staff']) {
+			expect(await passes(requireCentralWarehouseAccess, ['shelter:SH001', `SH001:${cap}`])).toBe(
+				false
+			);
+		}
+	});
+
+	it('is scoped to the selected shelter', async () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:warehouse_staff'];
+		expect(await passes(requireCentralWarehouseAccess, roles, 'SH001')).toBe(true);
+		expect(await passes(requireCentralWarehouseAccess, roles, 'SH002')).toBe(false);
+	});
+
+	it('redirects an unauthenticated visitor to login', async () => {
+		mocks.user = null;
+		await expect(requireCentralWarehouseAccess()).rejects.toMatchObject({ status: 302 });
 	});
 });
 

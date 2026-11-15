@@ -76,6 +76,7 @@ describe('bulk return pool v3 — reopen vs concurrent loan apply (CR-193 §35)'
 			create: (i, c) => real.create(i, c),
 			get: (id) => real.get(id),
 			getMany: (ids) => real.getMany(ids),
+			listByDistributedDay: (d) => real.listByDistributedDay(d),
 			list: (f) => real.list(f),
 			listWithSkipped: (f) => real.listWithSkipped(f),
 			mutateLogCAS: async (id, m, o) => {

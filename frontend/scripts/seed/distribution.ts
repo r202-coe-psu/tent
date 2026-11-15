@@ -136,12 +136,42 @@ interface LogFixture {
 	/** Index into the loaded recipients. */
 	person: number;
 	qty: number;
+	/** Ignored when `yesterdayAt` is set. */
 	minutesAgo: number;
+	/** `[hour, minute]` Thai time on the previous Thai day, for the meal coverage report (#1300). */
+	yesterdayAt?: readonly [number, number];
+	meal?: MealPeriod;
 	override?: string;
 	voided?: boolean;
 }
 
 const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
+
+const MEAL_TIMES = { breakfast: [7, 30], lunch: [12, 0], dinner: [18, 0] } as const;
+
+/** Meal records of the previous Thai day, with a mix of coverage for the meal coverage tab (#1300). */
+function yesterdayMealLogs(): LogFixture[] {
+	const meal = (person: number, which: keyof typeof MEAL_TIMES, voided = false): LogFixture => ({
+		// Parent ticket only; the report reads recipient, meal and time.
+		ticket: 'breakfast',
+		item: 'mealGeneral',
+		person,
+		qty: 1,
+		minutesAgo: 0,
+		yesterdayAt: MEAL_TIMES[which],
+		meal: which,
+		...(voided ? { voided } : {})
+	});
+	return [
+		// Two meals: not listed by the report.
+		...range(0, 6).flatMap((p) => [meal(p, 'breakfast'), meal(p, 'lunch')]),
+		// One meal: listed as "มีบันทึก 1 มื้อ".
+		...range(6, 10).map((p) => meal(p, 'dinner')),
+		// One fulfilled and one voided meal: the voided one does not count, so also listed with 1.
+		meal(10, 'breakfast'),
+		meal(10, 'lunch', true)
+	];
+}
 
 function deskLogs(): LogFixture[] {
 	return [
@@ -177,7 +207,8 @@ function deskLogs(): LogFixture[] {
 			person: p,
 			qty: 1,
 			minutesAgo: 100 - i * 4
-		}))
+		})),
+		...yesterdayMealLogs()
 	];
 }
 
@@ -233,6 +264,15 @@ function buildTicket(
 
 /** ISO timestamp `minutesAgo` before `now`. */
 const ago = (now: number, minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
+
+const THAILAND_OFFSET_MS = 7 * 3_600_000;
+const DAY_MS = 24 * 3_600_000;
+
+/** ISO timestamp at `[hour, minute]` Thai time on the Thai calendar day before `now`. */
+function yesterdayThaiAt(now: number, [hour, minute]: readonly [number, number]): string {
+	const todayStart = Math.floor((now + THAILAND_OFFSET_MS) / DAY_MS) * DAY_MS - THAILAND_OFFSET_MS;
+	return new Date(todayStart - DAY_MS + (hour * 60 + minute) * 60_000).toISOString();
+}
 
 export interface DistributionDocs {
 	tickets: RequisitionTicket[];
@@ -332,6 +372,8 @@ export async function buildDistributionDocs(
 	const logs = deskLogs().map((f, i) => {
 		const ticket = ticketByKey.get(f.ticket)!;
 		const person = people[f.person];
+		const at = f.yesterdayAt ? yesterdayThaiAt(now, f.yesterdayAt) : ago(now, f.minutesAgo);
+		const meal = f.meal ?? ticket.meal;
 		const log = createDistributionLog(
 			{
 				ticket_id: ticket._id,
@@ -340,11 +382,11 @@ export async function buildDistributionDocs(
 				recipient_type: 'evacuee',
 				recipient_id: person.id,
 				...(person.householdId ? { household_id: person.householdId } : {}),
-				...(ticket.meal ? { meal: ticket.meal } : {}),
+				...(meal ? { meal } : {}),
 				is_returnable: Boolean(catalog[f.item].returnable),
 				is_override: Boolean(f.override),
 				...(f.override ? { override_reason: f.override } : {}),
-				distributed_at: ago(now, f.minutesAgo)
+				distributed_at: at
 			},
 			ctx,
 			seedUlid(i + 1)
@@ -353,7 +395,7 @@ export async function buildDistributionDocs(
 		return distributionLogDocSchema.parse({
 			...log,
 			status: 'voided',
-			voided_at: ago(now, f.minutesAgo - 1),
+			voided_at: new Date(Date.parse(at) + 60_000).toISOString(),
 			voided_by: actor
 		}) as DistributionLog;
 	});

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { thaiMobilePhoneSchema } from '$lib/db/model';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 import { isRealCalendarDate } from '$lib/features/operations/server';
+import type { M6Summary } from './m6';
 
 /**
  * Redacted back-office donation queue row (T-16) — shared between the
@@ -21,6 +22,10 @@ export interface PendingDonationRow {
 	donation_id?: string;
 	shelter_code: string;
 	status: string;
+	/** `m6` = a central-warehouse withdrawal in transit (no donor, no phone). Absent = a donor's. */
+	channel?: string;
+	/** Present only on an `m6` row: where it comes from and whether M6 has been told it arrived. */
+	m6?: M6Summary;
 	donor_name: string;
 	donor_phone: string | null;
 	donor_email?: string | null;

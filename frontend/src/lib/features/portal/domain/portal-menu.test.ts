@@ -45,6 +45,7 @@ const ORDER = [
 	'security',
 	'facility',
 	'management',
+	'onedata',
 	'pr',
 	'central'
 ];
@@ -200,17 +201,28 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(itemIds(dept(views, 'registration'))).toEqual([]);
 	});
 
-	it.each(['triage_staff', 'medical_staff'])(
-		'%s sees only Station 2 under registration (flag on)',
-		(cap) => {
-			const views = menu(staff(cap), ON);
-			expect(deptIds(views)).toEqual(['registration']);
-			expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
-		}
-	);
+	it('triage_staff sees only Station 2 under registration (flag on)', () => {
+		const views = menu(staff('triage_staff'), ON);
+		expect(deptIds(views)).toEqual(['registration']);
+		expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
+	});
 
-	it.each(['triage_staff', 'medical_staff'])('%s sees nothing when the flag is off', (cap) => {
-		expect(menu(staff(cap), OFF)).toEqual([]);
+	it('triage_staff sees nothing when the flag is off', () => {
+		expect(menu(staff('triage_staff'), OFF)).toEqual([]);
+	});
+
+	it('medical_staff sees Station 2, medical referrals (M5 D8) and OneData M5 (D17)', () => {
+		const views = menu(staff('medical_staff'), ON);
+		expect(deptIds(views)).toEqual(['registration', 'management', 'onedata']);
+		expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
+		expect(itemIds(dept(views, 'management'))).toEqual(['referrals']);
+		expect(itemIds(dept(views, 'onedata'))).toEqual(['onedata-m5']);
+	});
+
+	it('medical_staff keeps only referrals when the flag is off', () => {
+		const views = menu(staff('medical_staff'), OFF);
+		expect(deptIds(views)).toEqual(['management', 'onedata']);
+		expect(itemIds(dept(views, 'management'))).toEqual(['referrals']);
 	});
 
 	it('kitchen_staff sees only the kitchen department', () => {
@@ -219,7 +231,7 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(itemIds(views[0])).toEqual(['kitchen-hub', 'kitchen-requisition']);
 	});
 
-	it('supply_coordinator sees only the supply department', () => {
+	it('supply_coordinator sees the supply department but not OneData M6 (M6 D2)', () => {
 		const views = menu(staff('supply_coordinator'));
 		expect(deptIds(views)).toEqual(['supply']);
 		expect(itemIds(views[0])).toEqual([
@@ -228,6 +240,25 @@ describe('filterPortalMenu — single-department roles', () => {
 			'supply-distribution',
 			'supply-kitchen-requisition'
 		]);
+	});
+
+	it('warehouse_staff sees the supply department and OneData M6 (ready, M6 D2)', () => {
+		const views = menu(staff('warehouse_staff'));
+		expect(deptIds(views)).toEqual(['supply', 'onedata']);
+		expect(itemIds(dept(views, 'onedata'))).toEqual(['onedata-m6']);
+		expect(stateOf(views, 'onedata-m6')).toBe('ready');
+		expect(itemIds(views[0])).toEqual([
+			'warehouse',
+			'stock-donations',
+			'supply-distribution',
+			'supply-kitchen-requisition'
+		]);
+	});
+
+	it('shelter_manager and system_admin see OneData M6; warehouse_staff of another shelter does not', () => {
+		expect(itemIds(dept(menu(staff('shelter_manager')), 'onedata'))).toContain('onedata-m6');
+		expect(itemIds(dept(menu(SA, ON), 'onedata'))).toContain('onedata-m6');
+		expect(menu(staff('warehouse_staff', 'SH002'))).toEqual([]);
 	});
 
 	it('distribution_staff sees only the distribution desk', () => {
@@ -280,8 +311,10 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(deptIds(menu(staff('registration_staff')))).not.toContain('pr');
 	});
 
-	it('warehouse_staff is treated as supply_coordinator', () => {
-		expect(menu(staff('warehouse_staff'))).toEqual(menu(staff('supply_coordinator')));
+	it('warehouse_staff is treated as supply_coordinator in the supply department', () => {
+		expect(dept(menu(staff('warehouse_staff')), 'supply')).toEqual(
+			dept(menu(staff('supply_coordinator')), 'supply')
+		);
 	});
 
 	it('volunteer_coordinator sees only the volunteer department', () => {
@@ -400,6 +433,7 @@ describe('portal department colours', () => {
 			security: 'security',
 			facility: 'facility',
 			management: 'admin',
+			onedata: 'admin',
 			pr: 'pr',
 			central: 'admin'
 		});

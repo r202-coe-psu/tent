@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { fetchDocs } from '$lib/server/donation-docs';
-import { adminRaw } from '$lib/server/couch-admin';
+import { adminRaw, requireShelterScopeOrSA } from '$lib/server/couch-admin';
 
 vi.mock('$lib/server/shelters.admin', () => ({
 	findMasterByCode: vi.fn()
@@ -14,6 +14,7 @@ vi.mock('$lib/server/donation-docs', () => ({
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn(),
+	requireShelterScopeOrSA: vi.fn(),
 	serviceError: vi.fn((e: unknown) => {
 		const err = e as { status?: number; message?: string };
 		return new Response(JSON.stringify({ error: err.message || String(e) }), {
@@ -30,6 +31,7 @@ describe('GET /api/v1/shelters/[code]/stock-status', () => {
 		vi.mocked(findMasterByCode).mockReset();
 		vi.mocked(fetchDocs).mockReset();
 		vi.mocked(adminRaw).mockReset();
+		vi.mocked(requireShelterScopeOrSA).mockReset();
 	});
 
 	it('returns 404 when shelter is not found', async () => {
@@ -171,5 +173,39 @@ describe('GET /api/v1/shelters/[code]/stock-status', () => {
 		expect(blanket.reorder_threshold).toBe('70');
 		expect(blanket.difference).toBe('-10');
 		expect(blanket.status).toBe('low');
+	});
+
+	describe('hidden shelter (CR-251 public_visible:false)', () => {
+		const hidden = {
+			_id: 'shelter:SH001',
+			code: 'SH001',
+			feature_flags: { public_visible: false }
+		} as never;
+		const ev = (cookie?: string) =>
+			({
+				request: new Request('http://x', { headers: cookie ? { cookie } : {} }),
+				params: { code: 'SH001' }
+			}) as unknown as GetEvent;
+
+		it('answers 404 to a caller outside the shelter scope', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(hidden);
+			vi.mocked(requireShelterScopeOrSA).mockRejectedValue(new Error('401'));
+
+			const response = await GET(ev());
+			expect(response.status).toBe(404);
+			expect((await response.json()).message).toBe('Shelter "SH001" not found');
+			expect(adminRaw).not.toHaveBeenCalled();
+		});
+
+		it('still serves the shelter own staff', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(hidden);
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue(undefined as never);
+			vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { rows: [] } });
+			vi.mocked(fetchDocs).mockResolvedValue([]);
+
+			const response = await GET(ev('AuthSession=x'));
+			expect(response.status).toBe(200);
+			expect(requireShelterScopeOrSA).toHaveBeenCalledWith('AuthSession=x', 'SH001');
+		});
 	});
 });

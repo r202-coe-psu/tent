@@ -5,6 +5,7 @@ import {
 	calculateMealIngredientsFromCustom,
 	scaleRecipeIngredientQty,
 	resolveItemMasterStock,
+	shortfallQty,
 	toRequisitionInput,
 	toTicketItemInput,
 	assessRequisition,
@@ -592,5 +593,25 @@ describe('calculateMealIngredientsFromCustom — round up per person', () => {
 			AS_OF
 		);
 		expect(result.recipes[0].planned_qty).toBe(2);
+	});
+});
+
+describe('shortfallQty', () => {
+	it('is 0 when stock converted to recipe units exactly covers the plan', () => {
+		expect(shortfallQty(1001, '1.001', 1000)).toBe(0);
+		expect(shortfallQty(300, '0.3', 1000)).toBe(0);
+	});
+
+	it('is 0 when stock exceeds the plan', () => {
+		expect(shortfallQty(500, '2', 1000)).toBe(0);
+	});
+
+	it('returns the uncovered amount in recipe units', () => {
+		expect(shortfallQty(1500, '1.2', 1000)).toBe(300);
+	});
+
+	it('compares stock and plan in the same unit when there is no ratio', () => {
+		expect(shortfallQty(0.3, '0.3')).toBe(0);
+		expect(shortfallQty(5, '1.5')).toBe(3.5);
 	});
 });

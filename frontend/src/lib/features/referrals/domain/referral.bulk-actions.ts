@@ -7,6 +7,7 @@
 import type { Referral, ReferralStatus } from './referral.schema';
 import { canTransition } from './referral.transitions';
 import { canActorRespond, isOutgoingCapacityReferral } from './referral.authorization';
+import { assertM5TransitionAllowed } from './referral.m5';
 
 export type ReferralActionKey =
 	'send' | 'cancel_draft' | 'withdraw' | 'close' | 'accept' | 'reject';
@@ -95,16 +96,32 @@ function mayClose(referral: Referral, actorShelter: string): boolean {
 	);
 }
 
+/**
+ * Row/bulk view of the M5 guard (CR §4): `send` is batch-only, and an accepted M5 referral closes
+ * by hand only after M5 reports arrived/cancelled. Bulk `withdraw` stays — it withdraws the
+ * whole M5 batch (D11).
+ */
+function m5Allows(referral: Referral, to: ReferralStatus): boolean {
+	if (to === 'closed' && referral.status === 'sent') return true;
+	try {
+		assertM5TransitionAllowed(referral, to, 'row');
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /** Actions `actorShelter` can take on this referral right now (empty when none). */
 export function getReferralActions(referral: Referral, actorShelter: string): ReferralActionKey[] {
 	const { status } = referral;
 	const keys: ReferralActionKey[] = [];
-	if (canTransition(status, 'sent') && mayClose(referral, actorShelter)) keys.push('send');
+	const allowed = (to: ReferralStatus) => canTransition(status, to) && m5Allows(referral, to);
+	if (allowed('sent') && mayClose(referral, actorShelter)) keys.push('send');
 	if (canActorRespond(referral, actorShelter)) {
 		if (canTransition(status, 'accepted')) keys.push('accept');
 		if (canTransition(status, 'rejected')) keys.push('reject');
 	}
-	if (canTransition(status, 'closed') && mayClose(referral, actorShelter)) {
+	if (allowed('closed') && mayClose(referral, actorShelter)) {
 		if (status === 'draft') keys.push('cancel_draft');
 		else if (status === 'sent') keys.push('withdraw');
 		else keys.push('close');

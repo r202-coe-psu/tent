@@ -582,14 +582,29 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(bulkAsPublicWriter).toHaveBeenCalled();
 		});
 
-		it('409 DUPLICATE_HOLD when a non-cancelled hold already matches phone/card', async () => {
+		it('201 when only the phone matches an existing hold (#1049 — shared phones allowed)', async () => {
 			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
-			vi.mocked(findConflictingHold).mockResolvedValue({
-				current_stay: { status: 'pre_registered' },
-				phone: '0812345678'
-			});
+			// The gate only reports a hold for the identity fields it is asked about.
+			vi.mocked(findConflictingHold).mockImplementation(async (_code, identity) =>
+				identity.phone === '0812345678'
+					? { current_stay: { status: 'pre_registered' }, phone: '0812345678' }
+					: null
+			);
 
 			const res = await POST(event(VALID_BODY));
+			expect(res.status).toBe(201);
+			expect(bulkAsPublicWriter).toHaveBeenCalled();
+		});
+
+		it('409 DUPLICATE_HOLD when a non-cancelled hold already matches the national id', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+			vi.mocked(findConflictingHold).mockImplementation(async (_code, identity) =>
+				identity.cardNumber === '1234567890121'
+					? { current_stay: { status: 'pre_registered' }, phone: null }
+					: null
+			);
+
+			const res = await POST(event({ ...VALID_BODY, national_id: '1234567890121' }));
 			expect(res.status).toBe(409);
 			expect((await res.json()).error).toBe('DUPLICATE_HOLD');
 			expect(bulkAsPublicWriter).not.toHaveBeenCalled();

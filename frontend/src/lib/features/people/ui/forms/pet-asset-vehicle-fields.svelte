@@ -192,8 +192,10 @@
 		{:else}
 			<div class="space-y-2.5">
 				{#each vehicles as vehicle, index (index)}
-					<div class="flex items-end gap-2.5 rounded-lg border border-border/80 bg-muted/20 p-2.5">
-						<div class="w-[140px] shrink-0 space-y-1">
+					<div
+						class="flex flex-wrap items-end gap-2.5 rounded-lg border border-border/80 bg-muted/20 p-2.5 sm:flex-nowrap"
+					>
+						<div class="w-full space-y-1 sm:w-[140px] sm:shrink-0">
 							<Label class="text-2xs text-muted-foreground">ประเภทยานพาหนะ</Label>
 							<Select.Root
 								type="single"
@@ -216,7 +218,7 @@
 							</Select.Root>
 						</div>
 
-						<div class="flex-1 space-y-1">
+						<div class="min-w-0 flex-1 space-y-1">
 							<Label class="text-2xs text-muted-foreground">เลขทะเบียนรถ</Label>
 							<Input
 								bind:value={vehicle.license_plate}

@@ -2,7 +2,8 @@
  * Presentation grouping for referral list — collapses multi-person create batches
  * into one row when docs share the same template + creator + time bucket.
  *
- * Not persisted (no batch_id on schema yet). Heuristic only for list UI.
+ * M5 batches carry a real `batch_id` (schema_v 3) and group by it. Everything else falls back
+ * to the heuristic below (template + creator + 2-minute bucket).
  */
 
 import type { Referral, ReferralStatus } from './referral.schema';
@@ -30,8 +31,9 @@ export function referralBatchBucketBounds(createdAt: string): { start: string; e
 	};
 }
 
-/** Fingerprint shared template fields + creator + coarse create time. */
+/** Fingerprint shared template fields + creator + coarse create time; `batch_id` wins. */
 export function referralBatchKey(r: Referral): string {
+	if ('batch_id' in r && r.batch_id) return `batch:${r.batch_id}`;
 	const t = Math.floor(new Date(r.created_at).getTime() / BATCH_TIME_BUCKET_MS);
 	return [
 		r.shelter_code,

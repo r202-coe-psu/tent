@@ -184,7 +184,9 @@
 				>
 					<Stethoscope class="size-5" />
 				</div>
-				<h1 class="truncate text-xl font-bold tracking-tight text-foreground md:text-2xl">
+				<h1
+					class="text-xl font-bold tracking-tight break-words text-foreground sm:truncate md:text-2xl"
+				>
 					{#if evacuee}
 						{evacuee.first_name}
 						{evacuee.last_name}

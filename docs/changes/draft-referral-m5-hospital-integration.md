@@ -12,7 +12,7 @@ affects:
   - docs/data/schema.md §9 (Mongo collection ใหม่ `m5_transfers`, `m5_outbound_logs`)
   - docs/data/api-contract.md (BFF `/api/back-office/referral/m5/*`, FastAPI `/v1/integrations/m5/*`)
   - docs/task-breakdown/09-F-referral.md (T-34 DoD — กฎ "medical detail / national ID ไม่ออกนอกระบบ" และ scope R3 internal-only)
-  - docs/adr/0002-partner-integration-architecture.md (เพิ่ม outbound plane — หรือแยกเป็น ADR ใหม่)
+  - docs/adr/0003-outbound-integration-plane.md (ใหม่ — outbound plane แยกจาก ADR-0002)
   - backend/apiapp/modules/integrations_m5 (ใหม่)
   - worker/src/worker/inbound (loop ใหม่ `m5_transfers` → `central_ops` referral + ซ่อมใบที่ค้าง `draft` (D7) + เขียน movement `leave_temporary` ลง `shelter_{code}` เมื่อ `in_transit` (D9))
   - worker config (`M5_SYNC_INTERVAL_S` — worker เป็นตัวเคาะ `/v1/integrations/m5/sync`)
@@ -30,9 +30,10 @@ source: M5_API_Patient_Referral_External.docx — "M5 Patient Referral API — I
 
 referral ประเภท `medical-emergency` จะส่งเป็นใบส่งต่อเข้า M5 ได้ M5 คือระบบส่งต่อผู้ป่วยของ สธ. ที่เจ้าหน้าที่ สธ. ใช้อนุมัติ และโรงพยาบาลใช้กดรับผู้ป่วย
 
-- **staff เลือกโหมดได้ต่อใบ:**
-  - "ติดตามอย่างเดียว" (`tracking`) — ประสานโรงพยาบาลเอง ไม่มีข้อมูลออกนอกระบบ
-  - "ส่งผ่าน M5" (`m5`)
+- **แยกทางเข้าตามโหมด (D17 แทนตัวเลือกในฟอร์มของ D3):**
+  - ส่งผ่าน M5 (`m5`) → เมนู **OneData Platform → OneData ระบบส่งต่อผู้ป่วย (M5)** หน้า `/back-office/onedata/m5`
+  - ติดตามอย่างเดียว (`tracking`) → เมนูเดิม "การส่งต่อผู้เข้าพัก" — ประสานโรงพยาบาลเอง ไม่มีข้อมูลออกนอกระบบ
+  - UI ที่ end-user เห็นเรียก M5 ว่า "OneData ระบบส่งต่อผู้ป่วย (M5)" และ M6 ว่า "OneData ระบบบริหารทรัพยากร (M6)"
 - **ใบ M5 หนึ่งใบมีผู้ป่วยได้หลายคน** ผูกกันด้วย `batch_id` สถานะของใบใช้กับทุกคนในชุด ชุดเกิดจากฟอร์มเดียวที่เลือกผู้ป่วยหลายคน (D6)
 - **ผู้ใช้:** `shelter_manager`, `medical_staff` และ `system_admin` ของศูนย์ต้นทาง (D8)
 - **เมื่อรถออก (`in_transit`)** worker ตั้งสถานะการพักของผู้ป่วยทุกคนในชุดเป็น `temporary_leave` (D9)
@@ -42,7 +43,7 @@ referral ประเภท `medical-emergency` จะส่งเป็นใ�
 - **Health gate:** client ต้องตรวจก่อนว่าเชื่อมต่อ FastAPI และ M5 ได้ ถ้าไม่ได้จะปิดตัวเลือก "ส่งผ่าน M5" และแสดงว่า "เชื่อมต่อกับระบบกลางไม่ได้" ส่วนโหมดติดตามอย่างเดียวยังใช้ได้
 - **schema:** referral `schema_v` 2 → 3 แบบ additive
 
-**สถานะการตัดสิน:** owner ตัดสิน D1–D4 (2026-11-10) และ D6–D12 (2026-11-11) แล้ว D5 ปิดครบทุกข้อแล้ว (2026-11-11 — ข้อ 1, 2, 5 ยืนยันจากการยิง M5 staging จริง) ดูหัวข้อ "เรื่องที่ต้องตัดสิน"
+**สถานะการตัดสิน:** owner ตัดสิน D1–D4 (2026-11-10), D6–D16 และ D17 (เมนู OneData, 2026-11-11) แล้ว D5 ปิดครบทุกข้อแล้ว (2026-11-11 — ข้อ 1, 2, 5 ยืนยันจากการยิง M5 staging จริง) ดูหัวข้อ "เรื่องที่ต้องตัดสิน"
 
 ## Why
 
@@ -91,7 +92,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 |---|---|---|
 | FastAPI | `GET /v1/integrations/status` | ตอบ `{m5: {configured, token_ok, reachable, checked_at, error}, m6: {…}}` และ cache ผลการตรวจ upstream ไว้ 30–60 วินาที เพื่อไม่ให้ยิง M5 ทุกครั้งที่ถูกถาม |
 | BFF | `GET /api/back-office/integrations/status` | timeout 3 วินาที แล้วตอบ `state` ต่อระบบ ค่าใดค่าหนึ่งจากตารางถัดไป |
-| UI | query `useIntegrationStatus('m5')` (refetch ทุก 30 วินาที, `retry: false`) | ถ้า `state ≠ ready`: ปิดตัวเลือกโหมด "ส่งผ่าน M5" และปุ่ม "ส่งไป M5", "แจ้งรถออก", "ถอนใบ" ของชุดที่ผูก M5 แล้วแสดง alert พร้อมปุ่มลองใหม่ (pattern เดียวกับ `ConnectionBanner`) · โหมด "ติดตามอย่างเดียว" ใช้ได้ตามปกติ (D3) |
+| UI | query `useIntegrationStatus('m5')` (refetch ทุก 30 วินาที, `retry: false`) | ถ้า `state ≠ ready`: ปิดปุ่ม "ส่งเข้า OneData (M5)", "แจ้งรถออก", "ถอนใบ" ของชุดที่ผูก M5 แล้วแสดง alert พร้อมปุ่มลองใหม่ (pattern เดียวกับ `ConnectionBanner`) บนหน้า OneData M5 · ยังบันทึกร่างได้ · เมนู "การส่งต่อผู้เข้าพัก" (tracking) ใช้ได้ตามปกติ (D3, D17) |
 
 | `state` | เงื่อนไข | ข้อความที่ผู้ใช้เห็น |
 |---|---|---|
@@ -226,7 +227,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 |---|---|---|
 | 400 validation | `422` + รายฟิลด์ | — |
 | `destination_not_found` | `409 M5_DESTINATION_NOT_FOUND` | — |
-| `external_ref_in_use` | `409 M5_EXTERNAL_REF_CONFLICT` | เกิดเมื่อส่งซ้ำด้วย ref เดิมแต่เนื้อหาต่าง (ยืนยันบน staging) · BFF ต้องสร้าง payload ของชุดเดิมให้ได้ค่าเดิมทุกครั้ง (เรียงผู้ป่วยตาม `referral_id`) · ถ้ายังได้ 409 (เช่น ข้อมูล evacuee เปลี่ยนระหว่างส่งซ้ำ) ให้ worker sync ใบเดิมจาก `transfer_code` แทนการสร้างใบใหม่ |
+| `external_ref_in_use` | — (กู้คืนใบเดิม) | เกิดเมื่อส่งซ้ำด้วย ref เดิมแต่เนื้อหาต่าง (ยืนยันบน staging) · BFF สร้าง payload ของชุดเดิมให้ได้ค่าเดิมทุกครั้ง (เรียงผู้ป่วยตาม `referral_id`) · ถ้ายังได้ 409 FastAPI ดึงใบเดิมจาก `transfer_code` (TRF-004) บันทึกลง `m5_transfers` แล้วตอบ `200` `replayed: true` แทนการล้ม |
 | `not_pending` / `cancel_needs_moph` / `already_closed` | `409` + code เดิม | — |
 | 401 token หมดอายุ | — | ขอ token ใหม่และลองซ้ำ 1 ครั้ง |
 | `invalid_client` / 403 | `503 M5_CREDENTIAL_INVALID` | เปิด circuit และไม่ retry |
@@ -267,6 +268,18 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - **D14 — แก้ชุด `draft`** ✅ ตัดสินแล้ว (2026-11-11): **ตัด FR-B4 / `PATCH batch`** ให้ถอนแล้วสร้างใหม่ (§3)
 - **D15 — `schema_v` ของใบ tracking** ✅ ตัดสินแล้ว (2026-11-11): stamp v3 เฉพาะใบ `m5` ใบ `tracking` คง v2 (§Migration)
 - **D16 — list ของ `medical_staff`** ✅ ตัดสินแล้ว (2026-11-11): เห็นเฉพาะ `medical-emergency` ของศูนย์ตัวเอง (§4 ข้อ 10)
+- **D17 — เมนู OneData และแยกทางเข้า M5** ✅ ตัดสินแล้ว (2026-11-11): แก้ส่วน UI ของ D3 · ค่า `dispatch_mode` และกฎ transition คงเดิม
+  - **owner ตัดสิน:**
+    - เพิ่มกลุ่มเมนู **OneData Platform** ทั้งใน Portal และ Sidebar หลังบ้าน มี 2 เมนูย่อยที่พาไปหน้าของระบบนั้นทันที
+    - "OneData ระบบส่งต่อผู้ป่วย (M5)" มีหน้าของตัวเอง: `/back-office/onedata/m5` (รายการเฉพาะชุด `dispatch_mode = m5` + ปุ่ม "ส่งต่อผู้ป่วย"), `/back-office/onedata/m5/new` (ฟอร์ม M5 ตรง ไม่ต้องเลือกประเภทหรือโหมด) และ `/back-office/onedata/m5/{id}` (หน้าชุด) · สิทธิ์เท่ากับหน้าส่งต่อ (SA, SM, `medical_staff` — `requireReferralAccess`)
+    - "OneData ระบบบริหารทรัพยากร (M6)" ยังไม่มีหน้า แสดง "เร็วๆ นี้" · เห็นเฉพาะ SA, SM, `warehouse_staff` / `supply_coordinator` (M6 D2)
+    - ข้อความที่ end-user เห็นใช้ "OneData ระบบส่งต่อผู้ป่วย (M5)" และ "OneData ระบบบริหารทรัพยากร (M6)" แทน "M5" / "M6" · ชื่อใน code, API และ schema คง `m5`
+    - เมนูส่งต่อเดิม ("การส่งต่อผู้เข้าพัก") ยังอยู่ ใช้ติดตาม movement ของผู้เข้าพักภายในระบบ เผื่อกรณีที่ M5 ไม่รองรับ
+  - **owner ยืนยันข้อเสนอ** (ตอบข้อกังวลของ owner ว่าผู้ใช้จะเลือก tracking แทน M5):
+    - ฟอร์มเดิม `/back-office/referrals/new` ไม่มีตัวเลือก "ส่งผ่าน M5" แล้ว ใบ `medical-emergency` จากฟอร์มนี้เป็น `tracking` เสมอ
+    - เมื่อเลือกประเภทการแพทย์ในฟอร์มเดิม แสดงกล่องแนะนำให้ใช้ OneData พร้อมปุ่ม "ไปที่ OneData (M5)"
+    - (ตัวเลือกที่ไม่เลือก: คืนตัวเลือก "ส่งผ่าน M5" ในฟอร์มเดิมคู่กับเมนู OneData)
+  - **รายละเอียด implement:** BFF `GET /api/back-office/referral` รับ `dispatch_mode=m5` (api-contract §2.10) · รายการส่งต่อแสดงป้าย "OneData M5 · {สถานะ M5}" · ชุด M5 ทุกชุด (รวมชุด 1 คน) เปิดหน้าชุดใต้ `/back-office/onedata/m5/` · Sidebar กลุ่ม "ตั้งค่าระบบ" เลื่อนจากกลุ่ม 4 เป็นกลุ่ม 5
 
 ## Impact
 
@@ -275,7 +288,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
   - `schema.md` §9: `m5_transfers` และ `m5_outbound_logs`
   - `api-contract.md`: FastAPI และ BFF endpoints
   - `09-F-referral.md`: DoD ข้อยกเว้น PDPA (D1) และ scope release ปัจจุบัน (D2)
-  - ADR-0002: เพิ่มย่อหน้า outbound plane หรือเขียน ADR-0003 แยก
+  - ADR-0003: outbound integration plane (เขียนแล้ว)
 - **backend:**
   - module `integrations_m5` ประกอบด้วย client (httpx), token cache, sync handler (ไม่มี poller ในตัว), router และ schemas
   - tests ใช้ `respx` หรือ mock M5 ให้ครบ error ทุกตัวในข้อ 5
@@ -310,3 +323,6 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - 2026-11-11 — D5 ตอบแล้ว 2 ข้อ: (3) owner ตัดสินส่งพิกัดศูนย์เป็น Number · (4) M5 ไม่มีแผนทำ webhook ใช้ polling ถาวร · เหลือ (1), (2), (5) รอทีม M5 · ยังไม่ approve
 - 2026-11-11 — owner approve แผน implement (เลข CR-NNN ออกหลัง implement เสร็จ) พร้อมคำตัดสิน D13 ค่าเริ่มต้น `acuity` จาก `triage_level` เก่าถ้ามี ไม่มีให้ว่างและบังคับเลือก · D14 ตัด FR-B4 / `PATCH batch` · D15 stamp v3 เฉพาะใบ `m5` · D16 `medical_staff` เห็นเฉพาะ referral `medical-emergency` ใน list · D5 ที่เหลือจะตรวจจาก M5 staging จริง
 - 2026-11-11 — spike บน M5 staging ปิด D5 ข้อ 1 (ใช้ path form), 2 (ฟิลด์ผู้ป่วยไม่บังคับ), 5 (ไม่พบเพดาน, 60 คนผ่าน) · token เก่าไม่ถูก revoke เมื่อขอใหม่ · payload ของการส่งซ้ำต้องได้ค่าเดิมทุกครั้ง
+- 2026-11-11 — implement ครบ Phase 1–5 บน branch `feat/m5-referral` (FastAPI `integrations_m5`, domain v3, BFF รายชุด, worker apply + tick, UI) และ sync docs (`schema.md` §1.4 §5.4 §9.9 §9.10, `api-contract.md` §2.10 §5.4, ADR-0003, `09-F-referral.md`, role matrix) · เปลี่ยนจากร่าง: `external_ref_in_use` ให้ FastAPI กู้คืนใบเดิมเอง (§5) แทนการรอ worker · ยังไม่ได้ทดสอบ end-to-end กับ M5 staging, e2e และเลข CR
+- 2026-11-11 — owner ตัดสิน D17: เพิ่มเมนู OneData Platform (Portal + Sidebar) มี M5 และ M6 ("เร็วๆ นี้") · M5 มีหน้าของตัวเอง `/back-office/onedata/m5` · ข้อความ end-user ใช้ "OneData ระบบส่งต่อผู้ป่วย (M5)" / "OneData ระบบบริหารทรัพยากร (M6)" · เมนูส่งต่อเดิมคงไว้สำหรับ tracking · เสนอ (รอยืนยัน): ตัดตัวเลือก M5 ออกจากฟอร์มเดิมและแสดงกล่องแนะนำ OneData · implement บน `feat/m5-referral`
+- 2026-11-11 — owner ยืนยันข้อเสนอใน D17: ฟอร์มส่งต่อเดิมไม่มีตัวเลือก "ส่งผ่าน M5" (ใบ `medical-emergency` จากฟอร์มนี้เป็น `tracking` เสมอ) และแสดงกล่องแนะนำ OneData

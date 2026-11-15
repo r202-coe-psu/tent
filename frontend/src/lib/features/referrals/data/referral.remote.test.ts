@@ -149,6 +149,21 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		expect(page).toEqual({ items: [capacitySent], bookmark: 'bm-2', hasMore: true });
 	});
 
+	it('listPage sends dispatch_mode only when asked (OneData M5 page, D17)', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ items: [], bookmark: null, has_more: false })
+		});
+
+		await repo.listPage({ direction: 'outgoing', dispatch_mode: 'm5' });
+		await repo.listPage({ direction: 'outgoing' });
+
+		const first = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x');
+		const second = new URL(fetchMock.mock.calls[1]![0] as string, 'http://x');
+		expect(first.searchParams.get('dispatch_mode')).toBe('m5');
+		expect(second.searchParams.has('dispatch_mode')).toBe(false);
+	});
+
 	it('does not warn when every list row is a valid referral', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		fetchMock.mockResolvedValue({

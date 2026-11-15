@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { fetchDocs } from '$lib/server/donation-docs';
-import { adminRaw, serviceError } from '$lib/server/couch-admin';
+import { adminRaw, requireShelterScopeOrSA, serviceError } from '$lib/server/couch-admin';
+import { isShelterPublicVisible } from '$lib/features/shelters/server';
 import { isStockLedger, stockBalance } from '$lib/features/operations/server';
 import type { StockLedger } from '$lib/features/operations/server';
 import {
@@ -20,17 +21,27 @@ export const prerender = false;
 /**
  * GET /api/v1/shelters/{code}/stock-status
  *
- * Public endpoint — returns current stock quantities on hand, reorder thresholds,
+ * Public endpoint (hidden shelters: staff in scope only) — returns current stock quantities on hand, reorder thresholds,
  * status, and shortages (gap differences) for all items in the catalog.
  * No personal identifiable info (PII) is exposed here.
  */
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ request, params }) => {
 	try {
 		const code = params.code;
 		if (!code) return json({ message: 'Missing shelter code' }, { status: 400 });
 
 		const master = await findMasterByCode(code);
-		if (!master) return json({ message: `Shelter "${code}" not found` }, { status: 404 });
+		const notFound = json({ message: `Shelter "${code}" not found` }, { status: 404 });
+		if (!master) return notFound;
+		// CR-251: a hidden shelter answers as unknown to the public, but its own staff
+		// (Daily SOP) still read it — so only a caller outside its scope gets the 404.
+		if (!isShelterPublicVisible(master)) {
+			try {
+				await requireShelterScopeOrSA(request.headers.get('cookie'), code);
+			} catch {
+				return notFound;
+			}
+		}
 
 		const db = `shelter_${code.toLowerCase()}`;
 

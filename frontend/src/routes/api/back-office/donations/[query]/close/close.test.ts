@@ -65,9 +65,9 @@ function mockCouch(
 	});
 }
 
-function postEvent(body: unknown = { expected_rev: '3-abc' }): PostEvent {
+function postEvent(body: unknown = { expected_rev: '3-abc' }, query = 'DN-999999'): PostEvent {
 	return {
-		params: { query: 'DN-999999' },
+		params: { query },
 		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(body) }
 	} as unknown as PostEvent;
 }
@@ -200,6 +200,140 @@ describe('POST /api/back-office/donations/[query]/close', () => {
 		expect((await response.json()).error_code).toBe('NO_POINT_RECEIPTS');
 		expect(writtenAudits()).toHaveLength(0);
 		expect(putBody()).toBeUndefined();
+	});
+
+	describe('m6 (central warehouse) donation — owner decision D20', () => {
+		const m6Donation = {
+			_id: 'donation:m6-WD-0007',
+			_rev: '3-abc',
+			type: 'donation',
+			schema_v: 12,
+			channel: 'm6',
+			status: 'verifying',
+			shelter_code: 'SH001',
+			booking_ref: 'WD-0007',
+			donor: { name: 'คลังกลาง M6 · คลังกลาง A', phone: null, phone_hash: '' },
+			items: [
+				{ item_id: 'item:water', qty: '24', unit: 'ขวด', review_status: 'approved' },
+				{ free_text: 'ยาพารา', qty: '10', unit: 'แผง', review_status: 'approved' }
+			],
+			external: { system: 'm6', request_code: 'WD-0007', confirmed_at: null, confirm_error: null }
+		} as unknown as PublicDonationDoc;
+
+		it('closes with no receipt as received, every line a shortfall, and nothing_received set', async () => {
+			mockCouch(m6Donation);
+
+			const response = await POST(postEvent(undefined, 'WD-0007'));
+			const body = await response.json();
+
+			expect(response.status).toBe(200);
+			const saved = putBody()!;
+			expect(saved.status).toBe('received');
+			expect(saved.received_at).toBeDefined();
+			expect(saved.received_summary).toMatchObject({
+				nothing_received: true,
+				total_items: 0,
+				closed_by: 'admin',
+				closed_reason: 'staff_close',
+				items: [
+					{ item_id: 'item:water', qty: '0', unit: 'ขวด' },
+					{ free_text: 'ยาพารา', qty: '0', unit: 'แผง' }
+				]
+			});
+			expect(saved.received_summary?.shortfalls).toEqual([
+				{ item_id: 'item:water', declared: '24', counted: '0', short: '24' },
+				{ item_id: 'ยาพารา', declared: '10', counted: '0', short: '10' }
+			]);
+			expect(saved.received_summary?.received_at).toBeDefined();
+			// The donation keeps its M6 link for the worker to confirm.
+			expect(saved.external).toEqual(m6Donation.external);
+			expect(saved.channel).toBe('m6');
+			expect(body.donation).toMatchObject({ status: 'received', channel: 'm6' });
+			const audits = writtenAudits();
+			expect(audits).toHaveLength(1);
+			expect(audits[0].reason).toContain('M6');
+		});
+
+		it('closes as received (not rejected) when every recorded line was turned away', async () => {
+			mockCouch({
+				...m6Donation,
+				point_receipts: [
+					{
+						point_id: null,
+						line_nos: [0, 1],
+						received_at: '2026-10-28T02:12:00.000Z',
+						received_by: 'staff',
+						audit_id: 'audit:x',
+						ledger_ids: [],
+						items: [
+							{
+								line_no: 0,
+								item_id: 'item:water',
+								qty: '0',
+								unit: 'ขวด',
+								rejected: true,
+								reject_reason_code: 'damaged'
+							},
+							{
+								line_no: 1,
+								free_text: 'ยาพารา',
+								qty: '0',
+								unit: 'แผง',
+								rejected: true,
+								reject_reason_code: 'damaged'
+							}
+						]
+					}
+				]
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(postEvent(undefined, 'WD-0007'));
+
+			expect(response.status).toBe(200);
+			const saved = putBody()!;
+			expect(saved.status).toBe('received');
+			expect(saved.received_summary).toMatchObject({ nothing_received: true, total_items: 0 });
+			expect(saved.reject_reason).toBeUndefined();
+		});
+
+		it('closes a partly received one as received without the nothing_received flag', async () => {
+			mockCouch({
+				...m6Donation,
+				point_receipts: [{ ...gymReceipt, point_id: null }]
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(postEvent(undefined, 'WD-0007'));
+
+			expect(response.status).toBe(200);
+			const saved = putBody()!;
+			expect(saved.status).toBe('received');
+			expect(saved.received_summary?.nothing_received).toBeUndefined();
+			expect(saved.received_summary?.total_items).toBe(2);
+		});
+
+		it('still refuses to close one that is already received', async () => {
+			mockCouch({ ...m6Donation, status: 'received' } as PublicDonationDoc);
+
+			const response = await POST(postEvent(undefined, 'WD-0007'));
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error_code).toBe('DONATION_CLOSED');
+			expect(putBody()).toBeUndefined();
+		});
+
+		it('keeps refusing a non-m6 booking no point has recorded', async () => {
+			mockCouch({
+				...m6Donation,
+				channel: 'public',
+				external: undefined
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(postEvent(undefined, 'WD-0007'));
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error_code).toBe('NO_POINT_RECEIPTS');
+			expect(putBody()).toBeUndefined();
+		});
 	});
 
 	it.each(['received', 'rejected', 'expired', 'cancelled', 'redirected'])(

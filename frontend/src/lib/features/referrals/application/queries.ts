@@ -46,6 +46,8 @@ export type ReferralPagesParams = {
 	direction: ReferralDirectionFilter;
 	status?: ReferralStatus;
 	sort?: ReferralFilter['sort'];
+	/** `m5` = OneData M5 batches only. */
+	dispatchMode?: ReferralFilter['dispatch_mode'];
 };
 
 /** Next bookmark to fetch, or `undefined` when the last page was reached. */
@@ -70,8 +72,8 @@ export function replaceReferralInPages(
 /** Server-paged referral list for one direction (+ optional status), loaded via `bookmark`. */
 export const useReferralPages = (params: () => ReferralPagesParams) =>
 	createInfiniteQuery(() => {
-		const { direction, status, sort } = params();
-		const filter: ReferralFilter = { direction, status, sort };
+		const { direction, status, sort, dispatchMode } = params();
+		const filter: ReferralFilter = { direction, status, sort, dispatch_mode: dispatchMode };
 		return {
 			queryKey: referralKeys.list(filter),
 			initialPageParam: undefined as string | undefined,

@@ -311,6 +311,18 @@ export const useVolunteer = (id: () => string, enabled: () => boolean = () => tr
 		enabled: enabled() && !!id()
 	}));
 
+/**
+ * One-off read of a volunteer by id for UI that swaps profiles imperatively (opening the holder of
+ * a taken phone). `staleTime: 0` always refetches so a profile reviewed a moment ago is not served
+ * from cache; the result still lands under `volunteerDetail(id)` for `useVolunteer` readers.
+ */
+export const fetchVolunteer = (queryClient: QueryClient, id: string): Promise<Volunteer | null> =>
+	queryClient.fetchQuery({
+		queryKey: volunteerKeys.volunteerDetail(id),
+		queryFn: () => volunteerRepository().get(id),
+		staleTime: 0
+	});
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------

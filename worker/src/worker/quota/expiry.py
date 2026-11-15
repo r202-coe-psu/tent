@@ -44,8 +44,17 @@ def _iso(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-def should_expire(status: Any, expires_at: Any, *, now: datetime) -> bool:
+#: Channels whose donations never expire. ``m6`` goods are in a central-warehouse truck
+#: that may take longer than any reservation TTL; they carry no ``expires_at`` either.
+NEVER_EXPIRE_CHANNELS = frozenset({"m6"})
+
+
+def should_expire(
+    status: Any, expires_at: Any, *, now: datetime, channel: Any = None
+) -> bool:
     """Pure predicate — is this donation a reservation whose TTL has passed?"""
+    if channel in NEVER_EXPIRE_CHANNELS:
+        return False
     if status not in EXPIRABLE_STATUSES:
         return False
     if not isinstance(expires_at, str) or not expires_at:
@@ -96,7 +105,12 @@ async def expire_declared_donations(couch: CouchClient, *, now: datetime) -> int
             doc
             async for doc in couch.iter_all_docs(database)
             if doc.get("type") == "donation"
-            and should_expire(doc.get("status"), doc.get("expires_at"), now=now)
+            and should_expire(
+                doc.get("status"),
+                doc.get("expires_at"),
+                now=now,
+                channel=doc.get("channel"),
+            )
         ]
 
         for doc in stale:

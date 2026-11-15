@@ -397,6 +397,85 @@ async def test_shelter_detail_occupancy_falls_back_to_persons_before_reprojectio
     assert (shelter["occupancy"], shelter["present"], shelter["in_zone"]) == (3, 2, 1)
 
 
+# --- #1241: per-zone Present headcount ---------------------------------------------------
+
+
+def _zoned_shelter_doc(code: str) -> dict:
+    doc = _shelter_doc(code, "open")
+    doc["raw_data"]["zones"] = [
+        {"code": "Z1", "name": "โซนครอบครัว", "type": "general", "capacity": 10, "status": "active"},
+        {"code": "Z2", "name": "โซนสัตว์เลี้ยง", "type": "pet", "capacity": 5, "status": "closed"},
+        {"code": "Z3", "name": "โซนว่าง", "type": "female", "capacity": 8},
+    ]
+    return doc
+
+
+async def test_shelter_detail_zone_present_counts_present_statuses_only(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _zoned_shelter_doc("SH001")
+    doc["occupancy_by_zone"] = {
+        "Z1": {
+            "active": 2,
+            "room_confirmed": 1,
+            "temporary_leave": 1,
+            # Not Present: not checked in yet, or gone.
+            "pre_registered": 3,
+            "checked_out": 4,
+        },
+        "Z2": {"active": 1},
+        # A zone code the shelter no longer has is not shown anywhere.
+        "GONE": {"active": 9},
+    }
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    zones = response.json()["shelter"]["zones"]
+    assert [(z["code"], z["status"], z["present"]) for z in zones] == [
+        ("Z1", "active", 4),
+        ("Z2", "closed", 1),
+        # Nobody in the zone: 0, not null. No `status` in raw_data: active.
+        ("Z3", "active", 0),
+    ]
+
+
+async def test_shelter_detail_zone_present_is_null_before_reprojection(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """No `occupancy_by_zone` yet: no per-zone count, and no `public_persons` fallback."""
+    await _insert_shelter_doc(db_client, settings, _zoned_shelter_doc("SH001"))
+    await _insert_person_doc(db_client, settings, "evacuee:a0", "SH001", "active")
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    zones = response.json()["shelter"]["zones"]
+    assert [z["present"] for z in zones] == [None, None, None]
+
+
+async def test_shelter_detail_zone_present_is_zero_when_deactivated(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _zoned_shelter_doc("SH001")
+    doc["is_active"] = False
+    doc["occupancy_by_zone"] = {"Z1": {"active": 3}}
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    zones = response.json()["shelter"]["zones"]
+    assert [z["present"] for z in zones] == [0, 0, 0]
+
+
 # --- #751 regression: public `accepts_pre_registration` is unchanged -----------------------
 # The flag logic moves into a helper shared with the partner plane (EXT-002/003/008). The public
 # field stays "the staff switch is exactly True" — a missing flag is False, and the shelter's

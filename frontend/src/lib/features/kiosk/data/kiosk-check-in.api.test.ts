@@ -653,6 +653,17 @@ describe('kiosk request messages language', () => {
 		expect(error.code).toBe('DEPENDENCY_UNAVAILABLE');
 	});
 
+	it('words a closed kiosk in English rather than falling back to the generic message', async () => {
+		languageStore.setLanguage('en');
+
+		const error = await requestError(
+			errorResponse(403, { code: 'KIOSK_CLOSED', message: 'ตู้นี้ปิดให้บริการ' })
+		);
+
+		expect(error.message).toBe('This kiosk is closed right now.');
+		expect(error.code).toBe('KIOSK_CLOSED');
+	});
+
 	it('falls back to the English generic message for a code it has no English for', async () => {
 		languageStore.setLanguage('en');
 

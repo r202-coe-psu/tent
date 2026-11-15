@@ -471,14 +471,14 @@
 <section class="flex flex-col gap-4">
 	<!-- Tab Switcher Navigation -->
 	<div class="border-b border-border">
-		<nav class="flex gap-1 overflow-x-auto" aria-label={t.tabsAria}>
+		<nav class="flex flex-col gap-1 sm:flex-row sm:overflow-x-auto" aria-label={t.tabsAria}>
 			<button
 				type="button"
 				onclick={() => {
 					activeTab = 'all';
 					allStatusFilter = 'all';
 				}}
-				class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
+				class="flex min-h-11 shrink-0 items-center gap-2 border-l-2 px-3 py-2 text-left text-sm font-semibold transition-colors sm:min-h-0 sm:border-b-2 sm:border-l-0 sm:px-4 sm:pt-0 sm:pb-3 {activeTab ===
 				'all'
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
@@ -493,7 +493,7 @@
 			<button
 				type="button"
 				onclick={() => (activeTab = 'pre_registered')}
-				class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
+				class="flex min-h-11 shrink-0 items-center gap-2 border-l-2 px-3 py-2 text-left text-sm font-semibold transition-colors sm:min-h-0 sm:border-b-2 sm:border-l-0 sm:px-4 sm:pt-0 sm:pb-3 {activeTab ===
 				'pre_registered'
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
@@ -510,7 +510,7 @@
 			<button
 				type="button"
 				onclick={() => (activeTab = 'arriving')}
-				class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
+				class="flex min-h-11 shrink-0 items-center gap-2 border-l-2 px-3 py-2 text-left text-sm font-semibold transition-colors sm:min-h-0 sm:border-b-2 sm:border-l-0 sm:px-4 sm:pt-0 sm:pb-3 {activeTab ===
 				'arriving'
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
