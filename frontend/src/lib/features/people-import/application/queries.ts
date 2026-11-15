@@ -11,6 +11,7 @@ import {
 } from '$lib/db/subscribe-data-changes';
 import { peopleKeys, peopleRepository } from '$lib/features/people';
 import type { AuthorContext } from '$lib/db/model';
+import { buildBackfilledStay } from '../domain/backfill';
 import { PEOPLE_IMPORT_LOG_TYPE } from '../domain/import-log';
 import { createPeopleImportLog, type ImportRowResult } from '../domain/import-log';
 import type { RowValidation } from '../domain/import-row';
@@ -25,6 +26,9 @@ import { importLogDb, listImportLogs, writeImportLog } from '../data/import-log.
  * in a `people_import_log`, then invalidates the people lists. Partial success
  * is the contract: a household that fails leaves the ones already written in
  * place. Log reactivity rides the shelter DB's changes feed — no polling.
+ *
+ * Each person is then given their real stay (back-dated `check_in` / `check_out` movements —
+ * Backfill Import, #1399) in one `applyBackfilledStays` call per household.
  *
  * Write order per household is deliberately household → head → members, the
  * reverse of the wizard's. The wizard can afford head-first because a person
@@ -101,14 +105,21 @@ export function useImportPeople() {
 					await repo.patchHousehold(household._id, { head_evacuee_id: head._id });
 					createdPeople += 1;
 
+					const stays = [buildBackfilledStay(head, row.payload.headStay, ctx)];
 					let createdMembers = 0;
 					for (const member of row.payload.members) {
 						if (skippedLines.has(member.line)) continue;
-						await repo.createEvacuee({ ...member.evacuee, household_id: household._id }, ctx);
+						const created = await repo.createEvacuee(
+							{ ...member.evacuee, household_id: household._id },
+							ctx
+						);
+						stays.push(buildBackfilledStay(created, member.stay, ctx));
 						createdMembers += 1;
 					}
 					createdPeople += createdMembers;
 					skippedPeople += skippedLines.size;
+					// Stays last, once everyone exists: the household status is derived from them.
+					await repo.applyBackfilledStays(household._id, stays);
 
 					results.push({
 						row: row.row,

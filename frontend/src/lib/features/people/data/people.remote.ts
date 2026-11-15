@@ -1160,6 +1160,20 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return updated;
 	}
 
+	async applyBackfilledStays(
+		householdId: string,
+		entries: { evacuee: Evacuee; movements: Movement[] }[]
+	): Promise<void> {
+		for (const { evacuee, movements } of entries) {
+			// Movements first, like every other stay write: the stream is the source of truth, so a
+			// failure between the two leaves history without a stale snapshot, never the reverse.
+			for (const movement of movements) await this.repo.put(movement);
+			const latest = await this.fetchLatestOrThrow(evacuee._id);
+			await this.repo.put({ ...evacuee, _rev: latest._rev });
+		}
+		await this.refreshDerivedHouseholdStatus(householdId);
+	}
+
 	/** Zone Arrival Confirmation: active → room_confirmed (CR-112). */
 	async confirmRoom(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee> {
 		const latest = await this.fetchLatestOrThrow(evacuee._id);

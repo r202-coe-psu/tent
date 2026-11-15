@@ -9,7 +9,9 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useEvacuees } from '$lib/features/people';
 	import { useMasterData } from '$lib/features/master-data';
+	import { useShelter } from '$lib/features/shelters';
 	import {
+		isLegacyTemplate,
 		type Lookups,
 		orphanMemberRows,
 		validateWorkbook,
@@ -17,6 +19,7 @@
 		type RowValidation
 	} from '../domain/import-row';
 	import { APP_ONLY_FIELDS } from '../domain/columns';
+	import { capacityWarnings } from '../domain/capacity';
 	import { findExistingDuplicates, type DuplicateMatch } from '../domain/duplicates';
 	import {
 		buildPeopleCsvTemplateBlob,
@@ -36,7 +39,16 @@
 	const activeChronicDiseases = $derived(
 		(chronicDiseaseQuery.data?.items ?? []).filter((i) => i.status === 'active')
 	);
-	const lookups = $derived<Lookups>({ medical_conditions: activeChronicDiseases });
+
+	// Backfill Import (#1399): the zone column is checked against this shelter's own zones, so
+	// validation (and the import button) wait until they are loaded.
+	const shelterQuery = useShelter(() => shelterCode);
+	const shelterZones = $derived(shelterQuery.data?.zones);
+	const zonesReady = $derived(shelterZones !== undefined);
+	const lookups = $derived<Lookups>({
+		medical_conditions: activeChronicDiseases,
+		zones: shelterZones
+	});
 
 	let workbook = $state<ParsedWorkbook>({ households: [], members: [] });
 	let filename = $state('');
@@ -71,6 +83,18 @@
 		[...duplicates.values()].reduce((sum, d) => sum + (d.head ? 0 : d.members.length), 0)
 	);
 	const importableHouseholds = $derived(validCount - skippedHouseholds);
+	const legacyTemplate = $derived(isLegacyTemplate(workbook));
+	/** Over-capacity notes — people marked "พักอยู่" are already there, so this never blocks. */
+	const capacityNotes = $derived(
+		workbook.households.length
+			? capacityWarnings({
+					rows: validations.filter((v) => v.ok && !duplicates.get(v.row)?.head),
+					zones: shelterZones ?? [],
+					existing: evacueesQuery.data ?? [],
+					shelterCapacity: shelterQuery.data?.capacity
+				})
+			: []
+	);
 	const importablePeople = $derived(
 		validations
 			.filter((v) => v.ok && !duplicates.get(v.row)?.head)
@@ -81,7 +105,9 @@
 
 	function templateMasters(): TemplateMasters {
 		return {
-			medical_conditions: activeChronicDiseases.map((i) => ({ value: i.code, label: i.label_th }))
+			medical_conditions: activeChronicDiseases.map((i) => ({ value: i.code, label: i.label_th })),
+			// Every zone, closed ones too — a person who already left may have stayed in one.
+			zone: (shelterZones ?? []).map((z) => ({ value: z.code, label: z.name }))
 		};
 	}
 
@@ -140,7 +166,9 @@
 		filename = '';
 	}
 
-	const importDisabled = $derived(importableHouseholds === 0 || !duplicatesReady);
+	const importDisabled = $derived(
+		importableHouseholds === 0 || !duplicatesReady || !zonesReady || legacyTemplate
+	);
 
 	function runImport() {
 		if (importDisabled) return;
@@ -161,11 +189,13 @@
 		<div>
 			<h2 class="text-2xl font-bold tracking-tight text-foreground">นำเข้าผู้เข้าพักจาก Excel</h2>
 			<p class="mt-1 text-sm text-muted-foreground">
-				ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อลงทะเบียนล่วงหน้าหลายครัวเรือนพร้อมกัน
+				ดาวน์โหลด template กรอกสถานะ เวลามา/กลับ และโซนตามจริง
+				แล้วอัปโหลดเพื่อนำเข้าย้อนหลังหลายครัวเรือนพร้อมกัน
 			</p>
 			<p class="mt-1 text-xs text-muted-foreground">
 				ทุกแถวจะเข้าศูนย์ <span class="font-medium text-foreground">{shelterCode}</span>
-				ที่เปิดอยู่ตอนนี้ และได้สถานะ "ลงทะเบียนล่วงหน้า" — {APP_ONLY_FIELDS.join(' · ')} ตั้งค่าในระบบหลังนำเข้าเสร็จ
+				ที่เปิดอยู่ตอนนี้ — ทุกคนเข้าระบบตามสถานะ "พักอยู่" หรือ "กลับแล้ว" พร้อมเวลาจริง (ไม่ใช่การจองล่วงหน้า)
+				· {APP_ONLY_FIELDS.join(' · ')} ตั้งค่าในระบบหลังนำเข้าเสร็จ
 			</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
@@ -233,6 +263,31 @@
 						: `นำเข้า ${importableHouseholds} ครัวเรือน (${importablePeople} คน)`}
 				</Button>
 			</div>
+			{#if legacyTemplate}
+				<p class="mb-3 text-sm text-destructive">
+					ไฟล์นี้ใช้ template เก่าที่ไม่มีคอลัมน์ "สถานะ" "เวลามา" "เวลากลับ" — กรุณาดาวน์โหลด
+					Template ใหม่ แล้วกรอกข้อมูลลงไฟล์ใหม่
+				</p>
+			{/if}
+			{#if !zonesReady}
+				<p class="mb-3 text-sm text-muted-foreground">
+					{shelterQuery.isError
+						? 'อ่านรายการโซนของศูนย์ไม่สำเร็จ — ยังนำเข้าไม่ได้เพราะตรวจสอบโซนไม่ได้'
+						: 'กำลังโหลดรายการโซนของศูนย์...'}
+				</p>
+			{/if}
+			{#if capacityNotes.length > 0}
+				<div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+					<p class="text-sm text-amber-700">
+						ผู้พักเกินความจุ — นำเข้าได้ เพราะคนเหล่านี้พักอยู่จริงแล้ว
+					</p>
+					<ul class="mt-2 space-y-1 text-sm text-amber-700">
+						{#each capacityNotes as note (note)}
+							<li>{note}</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 			{#if !duplicatesReady}
 				<p class="mb-3 text-sm text-muted-foreground">
 					{evacueesQuery.isError

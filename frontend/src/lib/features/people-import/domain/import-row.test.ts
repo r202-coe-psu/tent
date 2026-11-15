@@ -9,18 +9,26 @@ import {
 	type RawSheetRow
 } from './import-row';
 
-/** The smallest household the contract accepts: T-48's required person fields. */
+/** Every row now carries its real stay (Backfill Import, #1399) — a past arrival, still housed. */
+const STAYING: RawRow = {
+	[H.stay_status]: 'พักอยู่',
+	[H.arrived_at]: '10/11/2569 14:00',
+	[H.zone]: 'A'
+};
+
+/** The smallest household the contract accepts: T-48's required person fields + the stay. */
 function minimalHead(overrides: RawRow = {}): RawRow {
 	return {
 		[H.first_name]: 'สมชาย',
 		[H.last_name]: 'ใจดี',
 		[H.gender]: 'ชาย',
+		...STAYING,
 		...overrides
 	};
 }
 
 function memberRow(cells: RawRow, line = 1, ref = '1'): RawSheetRow {
-	return { ref, line, cells };
+	return { ref, line, cells: { ...STAYING, ...cells } };
 }
 
 describe('validateRow — the minimum contract (T-48 required + CR-071 locks)', () => {
@@ -40,9 +48,28 @@ describe('validateRow — the minimum contract (T-48 required + CR-071 locks)', 
 		expect(result.payload?.head.registered_via).toBe('import');
 	});
 
-	it('stamps every household as pre_registered — there is no status column', () => {
-		const result = validateRow(minimalHead(), 1, emptyLookups());
-		expect(result.payload?.household.status).toBe('pre_registered');
+	it('derives the household status from the stays instead of locking pre_registered', () => {
+		const housed = validateRow(minimalHead(), 1, emptyLookups());
+		expect(housed.payload?.household.status).toBe('checked_in');
+
+		const left = validateRow(
+			minimalHead({
+				[H.stay_status]: 'กลับแล้ว',
+				[H.departed_at]: '12/11/2569 09:30'
+			}),
+			1,
+			emptyLookups()
+		);
+		expect(left.payload?.household.status).toBe('checked_out');
+
+		// One member still housed keeps the household checked in.
+		const mixed = validateRow(
+			minimalHead({ [H.stay_status]: 'กลับแล้ว', [H.departed_at]: '12/11/2569 09:30' }),
+			1,
+			emptyLookups(),
+			[memberRow({ [H.first_name]: 'ก', [H.last_name]: 'ข', [H.gender]: 'หญิง' })]
+		);
+		expect(mixed.payload?.household.status).toBe('checked_in');
 	});
 
 	it('names the household after its head when the label cell is blank', () => {

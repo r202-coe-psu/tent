@@ -257,6 +257,18 @@ export type CheckoutDestinationType = z.infer<typeof checkoutDestinationTypeSche
 /** Movement `reason` / audit `reason` / `checkout_destination.type` of the shelter-close flow (CR-219 D-4). */
 export const SHELTER_CLOSED_REASON = 'shelter_closed';
 
+/**
+ * Movement `reason` of the `check_out` the people-import Backfill Import writes for a person who
+ * already left (#1399). A fixed code, like `shelter_closed` — never typed by staff.
+ */
+export const BACKFILL_IMPORT_REASON = 'backfill_import';
+
+/** Display copy for the `backfill_import` reason. */
+export const BACKFILL_IMPORT_REASON_LABEL = 'นำเข้าย้อนหลัง';
+
+/** English mirror of `BACKFILL_IMPORT_REASON_LABEL`. */
+export const BACKFILL_IMPORT_REASON_LABEL_EN = 'Backfill import';
+
 /** Display copy for the `shelter_closed` reason (CR-219 FR-21). */
 export const SHELTER_CLOSED_REASON_LABEL = 'ศูนย์ปิด';
 
@@ -272,6 +284,9 @@ export function movementReasonLabel(
 	language: LanguageCode = 'th'
 ): string {
 	if (!reason) return '';
+	if (reason === BACKFILL_IMPORT_REASON) {
+		return language === 'en' ? BACKFILL_IMPORT_REASON_LABEL_EN : BACKFILL_IMPORT_REASON_LABEL;
+	}
 	if (reason !== SHELTER_CLOSED_REASON) return reason;
 	return language === 'en' ? SHELTER_CLOSED_REASON_LABEL_EN : SHELTER_CLOSED_REASON_LABEL;
 }

@@ -440,6 +440,14 @@ function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
 
 type ParsedZone = z.infer<typeof zoneSchema>;
 
+/** Zone label for issue messages: `ชื่อโซน (รหัส)`, falling back to whichever half is present. */
+function zoneLabel(cells: RawRow): string {
+	const name = cell(cells, H.zone_name);
+	const code = cell(cells, H.zone_code);
+	if (name && code) return `${name} (${code})`;
+	return name || code;
+}
+
 function buildZones(zoneRows: readonly RawSheetRow[], sink: ErrorSink): ParsedZone[] {
 	const zones: ParsedZone[] = [];
 	const seenCodes = new Set<string>();
@@ -463,7 +471,7 @@ function buildZones(zoneRows: readonly RawSheetRow[], sink: ErrorSink): ParsedZo
 				const header = ZONE_PATH_TO_HEADER[issue.path.join('.')] ?? H.zone_code;
 				const message =
 					header === H.zone_capacity && cell(cells, H.zone_capacity) === ''
-						? 'ต้องระบุความจุของโซน (คน)'
+						? `ต้องระบุความจุของโซน ${zoneLabel(cells)}`
 						: issue.message;
 				sink.push(header, message, line);
 			}
@@ -471,7 +479,7 @@ function buildZones(zoneRows: readonly RawSheetRow[], sink: ErrorSink): ParsedZo
 		}
 
 		if (seenCodes.has(parsed.data.code)) {
-			sink.push(H.zone_code, `รหัสโซน "${parsed.data.code}" ซ้ำภายในศูนย์เดียวกัน`, line);
+			sink.push(H.zone_code, `โซน ${zoneLabel(cells)} ใช้รหัสซ้ำภายในศูนย์เดียวกัน`, line);
 			continue;
 		}
 		seenCodes.add(parsed.data.code);

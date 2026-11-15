@@ -85,6 +85,21 @@ export const PET_SPECIES_CHOICES: EnumChoice<'dog' | 'cat' | 'other'>[] = [
 	{ value: 'other', label: 'อื่นๆ' }
 ];
 
+/**
+ * Stay status a Backfill Import row can carry (#1399): already housed (`active`) or already left
+ * for good (`checked_out`). Never `pre_registered` — that is a booking, not a stay that happened.
+ */
+export const STAY_STATUS_CHOICES: EnumChoice<'active' | 'checked_out'>[] = [
+	{ value: 'active', label: 'พักอยู่' },
+	{ value: 'checked_out', label: 'กลับแล้ว' }
+];
+
+/** Timezone of the date-time cells — Thai wall-clock, fixed UTC+7 (no DST). */
+export const IMPORT_TIME_ZONE = 'Asia/Bangkok';
+
+/** Shape shown to the user (and written in the template's sample) for the time columns. */
+export const DATETIME_FORMAT_HINT = 'วว/ดด/ปปปป ชช:นน (ปี พ.ศ. เวลาไทย) เช่น 10/11/2569 14:00';
+
 /** CSV only — which person a flat row describes (see {@link CSV_SHEET}). */
 export const ROLE_CHOICES: EnumChoice<'head' | 'member'>[] = [
 	{ value: 'head', label: 'หัวหน้าครัวเรือน' },
@@ -119,6 +134,12 @@ export const H = {
 	id_number: 'เลขประจำตัว/เลขที่เอกสาร',
 	first_name: 'ชื่อ',
 	last_name: 'นามสกุล',
+	// Backfill Import (#1399) — the stay the person actually had. Per person, so they sit in
+	// personColumns and appear for the head, the members and the flat CSV alike.
+	stay_status: 'สถานะ',
+	arrived_at: 'เวลามา',
+	departed_at: 'เวลากลับ',
+	zone: 'โซน',
 	nickname: 'ชื่อเล่น',
 	gender: 'เพศ',
 	birth_year: 'ปีเกิด (พ.ศ.)',
@@ -150,7 +171,7 @@ export const H = {
 	notes: 'หมายเหตุครัวเรือน'
 } as const;
 
-export type ColumnKind = 'string' | 'number' | 'enum' | 'multi-enum' | 'masterdata';
+export type ColumnKind = 'string' | 'number' | 'enum' | 'multi-enum' | 'masterdata' | 'datetime';
 
 /**
  * Columns Excel must not treat as numeric. Left as General, Excel turns
@@ -185,15 +206,10 @@ export const MASTER_COLUMNS: readonly MasterColumn[] = [];
 /**
  * Fields intentionally absent from the workbook — documented on the README sheet.
  *
- * Shelter zone allocation is capacity-sensitive and belongs to the zone screen
- * (T-09); stay status is locked to `pre_registered` for every imported row
- * (CR-071 — no per-row status column); photos are uploads, not cell values.
+ * Stay status and shelter zone were moved INTO the file by the Backfill Import (#1399, decision
+ * sync on CR-071 T-72); photos are uploads, not cell values.
  */
-export const APP_ONLY_FIELDS: readonly string[] = [
-	'โซนพักพิงในศูนย์',
-	'รูปถ่ายผู้ประสบภัย',
-	'สถานะการเข้าพัก'
-];
+export const APP_ONLY_FIELDS: readonly string[] = ['รูปถ่ายผู้ประสบภัย'];
 
 export interface ColumnDef {
 	/** Thai header text — the key. */
@@ -204,7 +220,10 @@ export interface ColumnDef {
 	isRef?: boolean;
 	/** enum / multi-enum columns only — the fixed whitelist. */
 	choices?: readonly EnumChoice[];
-	/** masterdata columns only — which master_data type supplies the options (none after CR-137). */
+	/**
+	 * masterdata columns only — the key of the injected option list (`TemplateMasters`). The
+	 * `zone` list is the importing shelter's own zones (#1399); master_data types are gone (CR-137).
+	 */
 	masterType?: string;
 	/**
 	 * Dotted path into the payload this column feeds, used to map a Zod issue
@@ -286,6 +305,32 @@ function personColumns(role: string): ColumnDef[] {
 			required: true,
 			path: 'last_name',
 			hint: `นามสกุลของ${role} (จำเป็น)`
+		},
+		{
+			header: H.stay_status,
+			kind: 'enum',
+			required: true,
+			choices: STAY_STATUS_CHOICES,
+			hint: 'พักอยู่ = ได้ที่พักแล้ว / กลับแล้ว = ออกจากศูนย์ถาวรแล้ว (ไม่ใช่ลาชั่วคราว)'
+		},
+		{
+			header: H.arrived_at,
+			kind: 'datetime',
+			required: true,
+			hint: `เวลาเช็คอินจริง ${DATETIME_FORMAT_HINT} — ตั้งคอลัมน์เป็น Text`
+		},
+		{
+			header: H.departed_at,
+			kind: 'datetime',
+			required: false,
+			hint: `เวลาเช็คเอาต์จริง รูปแบบเดียวกับเวลามา — กรอกเฉพาะ "กลับแล้ว" (ถ้า "พักอยู่" ห้ามกรอก)`
+		},
+		{
+			header: H.zone,
+			kind: 'masterdata',
+			required: false,
+			masterType: 'zone',
+			hint: 'โซนพักพิงในศูนย์นี้ — จำเป็นสำหรับ "พักอยู่" (เลือกโซนที่ปิดไม่ได้) / "กลับแล้ว" กรอกได้ถ้ารู้'
 		},
 		{ header: H.nickname, kind: 'string', required: false, path: 'nickname', hint: 'ชื่อเล่น' },
 		{

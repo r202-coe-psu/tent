@@ -1,6 +1,7 @@
 import {
 	APP_ONLY_FIELDS,
 	CSV_SHEET,
+	DATETIME_FORMAT_HINT,
 	H,
 	isTextColumn,
 	MEMBER_SHEET_NAME,
@@ -67,16 +68,23 @@ function colLetter(n: number): string {
 	return s;
 }
 
-/** The option labels backing a column's dropdown, or null when it has none. */
-function choiceLabels(col: ColumnDef): string[] | null {
+/**
+ * The option labels backing a column's dropdown, or null when it has none. A `masterdata` column
+ * (the importing shelter's zones, #1399) takes its options from the injected `masters` list; the
+ * cell stores the zone's NAME and the importer resolves it back to the zone code.
+ */
+function choiceLabels(col: ColumnDef, masters: TemplateMasters): string[] | null {
 	if (col.kind === 'enum') return col.choices?.map((c) => c.label) ?? null;
+	if (col.kind === 'masterdata' && col.masterType) {
+		return masters[col.masterType]?.map((c) => c.label) ?? null;
+	}
 	return null;
 }
 
 /** Every option a column accepts — including multi-value ones (README only). */
-function documentedOptions(col: ColumnDef): string[] | null {
+function documentedOptions(col: ColumnDef, masters: TemplateMasters): string[] | null {
 	if (col.kind === 'multi-enum') return col.choices?.map((c) => c.label) ?? null;
-	return choiceLabels(col);
+	return choiceLabels(col, masters);
 }
 
 function headerFillFor(col: ColumnDef): string {
@@ -123,7 +131,9 @@ export async function buildPeopleTemplateBlob(
 	const ExcelJS = (await import('exceljs')).default;
 	const wb = new ExcelJS.Workbook();
 	wb.creator = 'SmartShelter';
-	const sample: SampleWorkbook | null = options?.withSample ? buildSampleWorkbook() : null;
+	const sample: SampleWorkbook | null = options?.withSample
+		? buildSampleWorkbook(masters.zone?.[0]?.label)
+		: null;
 
 	// Hidden option lists — one column per dropdown, referenced by range.
 	const lists = wb.addWorksheet('lists');
@@ -167,7 +177,7 @@ export async function buildPeopleTemplateBlob(
 
 		// Dropdowns — applied as one validation per column range.
 		sheet.columns.forEach((col, i) => {
-			const labels = choiceLabels(col);
+			const labels = choiceLabels(col, masters);
 			if (!labels || labels.length === 0) return;
 			const range = listRange(labels);
 			const physicalCol = i + 1;
@@ -250,9 +260,23 @@ export async function buildPeopleTemplateBlob(
 
 	readme.addRow({
 		sheet: 'วิธีใช้',
-		h: 'สถานะหลังนำเข้า',
+		h: 'ไฟล์นี้ใช้ทำอะไร',
 		req: '-',
-		hint: 'ทุกครัวเรือนที่นำเข้าสำเร็จจะได้สถานะ "ลงทะเบียนล่วงหน้า" และยังไม่นับเป็นผู้เข้าพัก จนกว่าจะเช็คอินที่ประตูหรือเจ้าหน้าที่เปลี่ยนสถานะให้ — ไฟล์นี้จึงไม่มีคอลัมน์สถานะ'
+		hint:
+			'นำเข้าย้อนหลัง (Backfill Import) — ย้ายรายชื่อคนที่มาพักจริงแล้วหรือกลับไปแล้วเข้าระบบ พร้อมเวลาจริง ' +
+			'ไม่ใช่การจองล่วงหน้า (ถ้าต้องการจองล่วงหน้า ให้ใช้หน้าจองของผู้ประสบภัยหรือหน้าลงทะเบียน)'
+	});
+
+	readme.addRow({
+		sheet: 'วิธีใช้',
+		h: 'สถานะ / เวลามา / เวลากลับ / โซน',
+		req: 'ใช่',
+		hint:
+			`ทุกแถวต้องมี "${H.stay_status}" (พักอยู่ หรือ กลับแล้ว) และ "${H.arrived_at}" — ` +
+			`"${H.departed_at}" กรอกเฉพาะ "กลับแล้ว" และต้องไม่ก่อนเวลามา / ` +
+			`"${H.zone}" จำเป็นสำหรับ "พักอยู่" (เลือกโซนที่ปิดไม่ได้) / ` +
+			`เวลาทั้งสองใช้รูปแบบ ${DATETIME_FORMAT_HINT} และต้องไม่เลยเวลาปัจจุบัน / ` +
+			'ถ้าคนที่พักอยู่เกินความจุศูนย์หรือโซน ระบบจะเตือนแต่ยังนำเข้าได้'
 	});
 
 	readme.addRow({
@@ -270,7 +294,7 @@ export async function buildPeopleTemplateBlob(
 			// The 1:1 sheets share one join key, documented once under "วิธีใช้"; the
 			// member sheet's is the column people get wrong, so it keeps its own row.
 			if (col.isRef && sheet.kind === 'household') continue;
-			const colOptions = documentedOptions(col);
+			const colOptions = documentedOptions(col, masters);
 			const masterOptions = col.path ? masters[col.path] : undefined;
 			let hint = col.hint;
 			if (colOptions) {
@@ -320,7 +344,7 @@ export function buildPeopleCsvTemplateBlob(
 	const lines = [headers.map(csvField).join(',')];
 
 	if (options?.withSample) {
-		for (const row of buildSampleCsvRows()) {
+		for (const row of buildSampleCsvRows(masters.zone?.[0]?.label)) {
 			lines.push(CSV_SHEET.columns.map((c) => csvField(row[c.header] ?? '')).join(','));
 		}
 	}
