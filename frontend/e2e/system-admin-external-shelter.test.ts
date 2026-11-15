@@ -124,7 +124,7 @@ test.describe(
 			await expect(saved).toBeVisible({ timeout: 30_000 });
 			expect((await registryDoc(code)).capacity).toBe(EDITED_CAPACITY);
 
-			// 3. Reload shows it; saving again keeps the stored value (a blank input = "no change").
+			// 3. Reload shows it; saving again keeps the stored value.
 			await page.goto(`/system-management/shelters/edit/${code}`);
 			await expect(capacity).toHaveValue(String(EDITED_CAPACITY), { timeout: 30_000 });
 			await save.click();
@@ -159,6 +159,36 @@ test.describe(
 			await expect(page.getByText('นโยบายการรับเข้าพัก')).toHaveCount(0);
 			await expect(page.getByText('สิ่งอำนวยความสะดวกในศูนย์')).toHaveCount(0);
 			await expect(page.getByText('Q:')).toHaveCount(0);
+		});
+
+		test('SA clears the saved capacity and the public page drops the number', async ({ page }) => {
+			test.setTimeout(120_000);
+			const code = shelterCode!;
+			const admin = await bootstrapAdminSession();
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, admin.user, admin.cookie);
+
+			const capacity = page.getByRole('spinbutton', { name: 'ความจุสูงสุด (Max Capacity)' });
+			const save = page.getByRole('button', { name: 'บันทึกข้อมูล' });
+			const saved = page.getByText(`อัปเดตข้อมูลศูนย์พักพิง ${code} สำเร็จ`);
+
+			await page.goto(`/system-management/shelters/edit/${code}`);
+			await expect(capacity).toHaveValue(String(EDITED_CAPACITY), { timeout: 30_000 });
+			await capacity.fill('');
+			await save.click();
+			await expect(saved).toBeVisible({ timeout: 30_000 });
+
+			// Regression: the cleared input used to be dropped from the PATCH, so the old value stayed.
+			expect((await registryDoc(code)).capacity ?? null).toBeNull();
+
+			await page.goto(`/system-management/shelters/edit/${code}`);
+			await expect(capacity).toHaveValue('', { timeout: 30_000 });
+			await waitForProjection(
+				`${code} capacity cleared`,
+				async () =>
+					((await publicShelter(code)) as { capacity?: number } | undefined)?.capacity === 0,
+				{ timeoutMs: 90_000, intervalMs: 3_000 }
+			);
 		});
 
 		test('Z teardown leaves no E2E shelter from this run', async () => {
