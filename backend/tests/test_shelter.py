@@ -599,3 +599,54 @@ async def test_shelter_list_has_no_donation_points(
     assert response.status_code == 200
     item = next(s for s in response.json()["shelters"] if s["code"] == "SH203")
     assert "donation_points" not in item
+
+
+# --- CR-253: parking_points + parking_vehicle_types (projected fields only) ---
+
+
+_PARKING = {
+    "id": "p1",
+    "name": "ลานหน้าอาคาร",
+    "note": None,
+    "geo": {"lat": 7.0086, "lng": 100.4747},
+    "vehicles": [{"type": "car", "max_capacity": 30}],
+}
+
+
+async def test_shelter_list_and_detail_return_projected_parking_fields(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _shelter_doc("SH301")
+    doc["raw_data"]["parking_points"] = [{"id": "raw", "name": "ห้ามรั่ว"}]
+    doc["parking_points"] = [_PARKING]
+    doc["parking_vehicle_types"] = ["car"]
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    listed = await client.get("/public/v1/shelters", headers=auth_headers)
+    item = next(s for s in listed.json()["shelters"] if s["code"] == "SH301")
+    assert item["parking_points"] == [_PARKING]
+    assert item["parking_vehicle_types"] == ["car"]
+
+    detail = await client.get("/public/v1/shelters/SH301", headers=auth_headers)
+    assert detail.json()["shelter"]["parking_points"] == [_PARKING]
+    assert detail.json()["shelter"]["parking_vehicle_types"] == ["car"]
+    assert "ห้ามรั่ว" not in listed.text + detail.text
+
+
+async def test_shelter_parking_fields_default_to_empty_before_reprojection(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _insert_shelter_doc(db_client, settings, _shelter_doc("SH302"))
+
+    listed = await client.get("/public/v1/shelters", headers=auth_headers)
+    item = next(s for s in listed.json()["shelters"] if s["code"] == "SH302")
+    assert item["parking_points"] == [] and item["parking_vehicle_types"] == []
+    detail = await client.get("/public/v1/shelters/SH302", headers=auth_headers)
+    assert detail.json()["shelter"]["parking_points"] == []
+    assert detail.json()["shelter"]["parking_vehicle_types"] == []

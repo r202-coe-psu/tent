@@ -157,6 +157,8 @@ export function buildUpdatePayload(
 	// from the stored document instead of replacing them with schema defaults.
 	delete rest.feature_flags;
 	if (options.foodDistributionPointsProvided !== true) delete rest.food_distribution_points;
+	// #1352: the workbook has no parking sheet, so never send the schema default `[]`.
+	delete rest.parking_points;
 	if (options.siteKindBlank === true) delete rest.site_kind;
 	return {
 		...(rest as Omit<ShelterInput, 'municipality_zone' | 'community'>),

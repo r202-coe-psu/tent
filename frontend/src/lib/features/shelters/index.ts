@@ -20,6 +20,8 @@ export {
 	locationSchema,
 	contactSchema,
 	foodDistributionPointSchema,
+	parkingPointSchema,
+	effectiveParkingVehicles,
 	facilitiesSchema,
 	subStorageItemSchema,
 	commonAreasSchema,
@@ -65,6 +67,7 @@ export {
 	type Location,
 	type Contact,
 	type FoodDistributionPoint,
+	type ParkingPoint,
 	type Facilities,
 	type SubStorageItem,
 	type CommonAreas,
@@ -213,4 +216,5 @@ export { default as UtilitiesSection } from './ui/utilities-section.svelte';
 export { default as RiskSection } from './ui/risk-section.svelte';
 export { default as AdmissionPolicySection } from './ui/admission-policy-section.svelte';
 export { default as LuggagePolicySection } from './ui/luggage-policy-section.svelte';
+export { default as ParkingPointsSection } from './ui/parking-points-section.svelte';
 export { default as ParkingPolicySection } from './ui/parking-policy-section.svelte';

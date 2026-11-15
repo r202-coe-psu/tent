@@ -22,6 +22,8 @@ import {
 	validateSiteKindChange,
 	DEFAULT_SITE_KIND,
 	SHELTER_MASTER_SCHEMA_V,
+	parkingPointSchema,
+	effectiveParkingVehicles,
 	type ShelterMasterV2
 } from './schema';
 
@@ -1453,7 +1455,7 @@ describe('CR-205 — storage point drop-off fields', () => {
 	});
 });
 
-describe('CR-205 — migrate to schema_v 9', () => {
+describe('CR-205 — migrate to the current schema_v (10 → 11 adds parking_points)', () => {
 	const doc = (schema_v: number, sub_storage: unknown[]) =>
 		({
 			_id: 'shelter:x',
@@ -1471,15 +1473,15 @@ describe('CR-205 — migrate to schema_v 9', () => {
 			updated_at: '2024-01-01T00:00:00Z'
 		}) as unknown as ShelterMasterV2;
 
-	it('is schema_v 9', () => {
-		expect(SHELTER_MASTER_SCHEMA_V).toBe(9);
+	it('is schema_v 11', () => {
+		expect(SHELTER_MASTER_SCHEMA_V).toBe(11);
 	});
 
 	it('v8 → v9 fills the defaults (AC-1)', () => {
 		const m = migrateShelterV2ToCurrent(
 			doc(8, [{ id: 's1', name: 'คลังยา', types: ['medical_supplies'] }])
 		);
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
 	});
 
@@ -1493,13 +1495,13 @@ describe('CR-205 — migrate to schema_v 9', () => {
 				{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'] }
 			])
 		);
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage?.map((p) => p.id)).toEqual(['legacy-0', 's2']);
 	});
 
 	it('v8 with a single legacy `type` gets types[]', () => {
 		const m = migrateShelterV2ToCurrent(doc(8, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage?.[0]).toEqual({
 			id: 's1',
 			name: 'คลังยา',
@@ -1513,14 +1515,14 @@ describe('CR-205 — migrate to schema_v 9', () => {
 		delete bare.site_kind;
 		delete bare.food_distribution_points;
 		const m = migrateShelterV2ToCurrent(bare as unknown as ShelterMasterV2);
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.site_kind).toBe('evacuation_center');
 		expect(m.food_distribution_points).toEqual([]);
 	});
 
-	it('v7 with a single `type` ends at v9 with types[] and the defaults (AC-10)', () => {
+	it('v7 with a single `type` ends at the current version with types[] and the defaults (AC-10)', () => {
 		const m = migrateShelterV2ToCurrent(doc(7, [{ id: 's1', name: 'คลังยา', type: 'food_dry' }]));
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage?.[0]).toEqual({
 			id: 's1',
 			name: 'คลังยา',
@@ -1529,9 +1531,9 @@ describe('CR-205 — migrate to schema_v 9', () => {
 		});
 	});
 
-	it('v6 without ids ends at v9 with legacy ids, types[] and the defaults', () => {
+	it('v6 without ids ends at the current version with legacy ids, types[] and the defaults', () => {
 		const m = migrateShelterV2ToCurrent(doc(6, [{ name: 'คลังยา', type: 'food_dry' }]));
-		expect(m.schema_v).toBe(9);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage?.[0]).toEqual({
 			id: 'legacy-0',
 			name: 'คลังยา',
@@ -1568,5 +1570,148 @@ describe('CR-205 — migrate to schema_v 9', () => {
 		expect(m).not.toBe(stamped);
 		expect(m.common_areas?.sub_storage?.[0]).toMatchObject(NO_DROP_OFF);
 		expect(migrateShelterV2ToCurrent(m)).toBe(m);
+	});
+});
+
+describe('#1352 — parking_points (schema_v 11)', () => {
+	const v9 = () =>
+		({
+			_id: 'shelter:x',
+			type: 'shelter',
+			schema_v: 9,
+			code: 'SH001',
+			name: 'X',
+			site_kind: 'evacuation_center',
+			operation_status: 'standby',
+			capacity: 10,
+			zones: [],
+			food_distribution_points: [],
+			common_areas: { sub_storage: [] },
+			created_at: '2024-01-01T00:00:00Z',
+			updated_at: '2024-01-01T00:00:00Z'
+		}) as unknown as ShelterMasterV2;
+
+	it('v9 → v11 adds an empty parking_points and stamps 11', () => {
+		const m = migrateShelterV2ToCurrent(v9());
+		expect(m.schema_v).toBe(11);
+		expect(m.parking_points).toEqual([]);
+	});
+
+	it('v9 keeps parking_points it already has and fills vehicles = []', () => {
+		const pin = { id: 'p1', name: 'ลานหน้าอาคาร' };
+		const m = migrateShelterV2ToCurrent({ ...v9(), parking_points: [pin] } as never);
+		expect(m.parking_points).toEqual([{ ...pin, vehicles: [] }]);
+	});
+
+	it.each([7, 8])('v%i ends at 11 with parking_points = []', (v) => {
+		const m = migrateShelterV2ToCurrent({ ...v9(), schema_v: v } as never);
+		expect(m.schema_v).toBe(11);
+		expect(m.parking_points).toEqual([]);
+	});
+
+	it('v4 chains through to v11 with parking_points', () => {
+		const m = migrateShelterV2ToCurrent({ ...v9(), schema_v: 4 } as never);
+		expect(m.schema_v).toBe(11);
+		expect(m.parking_points).toEqual([]);
+	});
+
+	it('a doc stamped 11 without the key is filled, then identity-stable', () => {
+		const stamped = { ...v9(), schema_v: 11 } as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m).not.toBe(stamped);
+		expect(m.parking_points).toEqual([]);
+		expect(migrateShelterV2ToCurrent(m)).toBe(m);
+	});
+
+	it('parkingPointSchema needs a name and bounds the coordinates', () => {
+		const bad = parkingPointSchema.safeParse({ id: 'p1', name: '  ' });
+		expect(bad.success).toBe(false);
+		expect(bad.error?.issues[0].message).toBe('กรุณาระบุชื่อที่จอดรถ');
+		expect(parkingPointSchema.safeParse({ id: 'p1', name: 'a', lat: 91 }).success).toBe(false);
+		expect(parkingPointSchema.safeParse({ id: 'p1', name: 'a', lng: 181 }).success).toBe(false);
+		expect(
+			parkingPointSchema.safeParse({ id: 'p1', name: 'a', lat: null, lng: null }).success
+		).toBe(true);
+	});
+});
+
+describe('CR-253 — parking point vehicles and effective vehicles', () => {
+	const pt = (vehicles: { type: string; max_capacity?: number | null }[]) =>
+		parkingPointSchema.parse({ id: 'p', name: 'a', vehicles });
+	const policy = (availability: 'none' | 'available' | null, supported_vehicles: never[] = []) => ({
+		availability,
+		supported_vehicles,
+		rules: [],
+		rules_other: null
+	});
+
+	it('a point without vehicles reads as []', () => {
+		expect(parkingPointSchema.parse({ id: 'p', name: 'a' }).vehicles).toEqual([]);
+	});
+
+	it('rejects a duplicate type in one point (FR-6) and a negative capacity (FR-5)', () => {
+		const dup = parkingPointSchema.safeParse({
+			id: 'p',
+			name: 'a',
+			vehicles: [{ type: 'car' }, { type: 'car', max_capacity: 3 }]
+		});
+		expect(dup.success).toBe(false);
+		expect(dup.error?.issues[0].path).toEqual(['vehicles', 1, 'type']);
+		expect(
+			parkingPointSchema.safeParse({
+				id: 'p',
+				name: 'a',
+				vehicles: [{ type: 'car', max_capacity: -1 }]
+			}).success
+		).toBe(false);
+	});
+
+	const legacy = [{ type: 'car', max_capacity: 200 }] as never[];
+
+	it.each([
+		[
+			'points name vehicles → sum per type, null skipped',
+			[
+				pt([{ type: 'car', max_capacity: 30 }]),
+				pt([
+					{ type: 'car', max_capacity: 20 },
+					{ type: 'boat', max_capacity: 10 },
+					{ type: 'motorcycle', max_capacity: null }
+				])
+			],
+			policy('available', legacy),
+			[
+				{ type: 'motorcycle', max_capacity: null },
+				{ type: 'car', max_capacity: 50 },
+				{ type: 'boat', max_capacity: 10 }
+			]
+		],
+		[
+			'all-null capacity stays null',
+			[pt([{ type: 'car', max_capacity: null }]), pt([{ type: 'car' }])],
+			policy('available'),
+			[{ type: 'car', max_capacity: null }]
+		],
+		[
+			'points without vehicles fall back to the legacy policy (FR-10)',
+			[pt([])],
+			policy('available', legacy),
+			legacy
+		],
+		['no points → legacy policy', [], policy('available', legacy), legacy],
+		[
+			'availability none → nothing, even with points (FR-11)',
+			[pt([{ type: 'car', max_capacity: 5 }])],
+			policy('none', legacy),
+			[]
+		],
+		[
+			'availability unset still counts the points',
+			[pt([{ type: 'boat', max_capacity: 2 }])],
+			policy(null),
+			[{ type: 'boat', max_capacity: 2 }]
+		]
+	])('%s', (_name, parking_points, parking_policy, expected) => {
+		expect(effectiveParkingVehicles({ parking_points, parking_policy } as never)).toEqual(expected);
 	});
 });

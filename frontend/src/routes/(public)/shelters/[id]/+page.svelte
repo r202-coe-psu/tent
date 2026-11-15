@@ -11,7 +11,7 @@
 	import ShelterZones from '$lib/components/shelter-zones.svelte';
 	import ShelterFacilities from '$lib/components/shelter-facilities.svelte';
 	import ShelterContact from '$lib/components/shelter-contact.svelte';
-	import { PublicPageShell } from '$lib/features/public-portal';
+	import { PublicPageShell, ShelterParking } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
@@ -72,6 +72,7 @@
 				<div class="flex flex-col gap-8">
 					<ShelterAdmission {shelter} />
 					<ShelterTravel {shelter} />
+					<ShelterParking {shelter} />
 					<ShelterZones {shelter} />
 				</div>
 

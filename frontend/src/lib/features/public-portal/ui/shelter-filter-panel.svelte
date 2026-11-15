@@ -53,9 +53,9 @@
 		pet_general?: boolean;
 		pet_large?: boolean;
 		pet_livestock?: boolean;
-		parking_car?: boolean;
-		parking_motorcycle?: boolean;
-		parking_boat?: boolean;
+		parking_car?: boolean | string;
+		parking_motorcycle?: boolean | string;
+		parking_boat?: boolean | string;
 		utility_wifi?: boolean;
 		utility_high_ground?: boolean;
 		utility_truck_access?: boolean;
@@ -111,6 +111,9 @@
 	let customDistanceDraft = $state<string>('');
 	let customDistanceError = $state(false);
 	let hideFullToggle = $state(false);
+	let parkCarChecked = $state(false);
+	let parkMotorChecked = $state(false);
+	let parkBoatChecked = $state(false);
 	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -118,6 +121,11 @@
 	let lastDistrict: string | null = null;
 
 	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
+
+	/** URL flags arrive as 'on'; direct callers may pass a boolean. */
+	function isOn(value: boolean | string | undefined): boolean {
+		return value === true || value === 'on';
+	}
 
 	function isDistancePreset(value: string): boolean {
 		return (DISTANCE_PRESETS as readonly string[]).includes(value);
@@ -155,6 +163,9 @@
 			if (distanceValue) params.set('distance', distanceValue);
 		}
 		if (hideFullToggle) params.set('hide_full', 'true');
+		if (parkCarChecked) params.set('parking_car', 'on');
+		if (parkMotorChecked) params.set('parking_motorcycle', 'on');
+		if (parkBoatChecked) params.set('parking_boat', 'on');
 		return params;
 	}
 
@@ -197,7 +208,10 @@
 			f.distance,
 			f.user_lat,
 			f.user_lng,
-			f.hide_full
+			f.hide_full,
+			f.parking_car,
+			f.parking_motorcycle,
+			f.parking_boat
 		];
 
 		untrack(() => {
@@ -213,6 +227,9 @@
 			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
 			customDistanceError = false;
 			hideFullToggle = f.hide_full === true || f.hide_full === 'true';
+			parkCarChecked = isOn(f.parking_car);
+			parkMotorChecked = isOn(f.parking_motorcycle);
+			parkBoatChecked = isOn(f.parking_boat);
 
 			if (f.user_lat) userLat = f.user_lat.toString();
 			if (f.user_lng) userLng = f.user_lng.toString();
@@ -279,7 +296,10 @@
 			distanceValue,
 			userLat,
 			userLng,
-			hideFullToggle
+			hideFullToggle,
+			parkCarChecked,
+			parkMotorChecked,
+			parkBoatChecked
 		];
 
 		if (hydrating) return;
@@ -787,7 +807,7 @@
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
 													name="parking_car"
-													checked={filters.parking_car === true}
+													bind:checked={parkCarChecked}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span
@@ -798,7 +818,7 @@
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
 													name="parking_motorcycle"
-													checked={filters.parking_motorcycle === true}
+													bind:checked={parkMotorChecked}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span
@@ -809,7 +829,7 @@
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
 													name="parking_boat"
-													checked={filters.parking_boat === true}
+													bind:checked={parkBoatChecked}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span
