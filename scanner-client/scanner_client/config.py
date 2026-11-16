@@ -5,6 +5,7 @@ Validation errors name the KEY only, never the value (a URL could carry credenti
 
 import ipaddress
 import math
+import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ POLL_INTERVAL_RANGE = (0.2, 10.0)
 _TRUE = {"true", "1", "yes"}
 _FALSE = {"false", "0", "no"}
 _DEFAULT_PORTS = {"http": 80, "https": 443}
+_HOSTNAME = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$")
 
 
 class ConfigError(ValueError):
@@ -38,6 +40,9 @@ class Settings:
     card_reader_name: str | None
     keep_login: bool
     poll_interval: float
+    # Set (instead of raising) when a stored SHELTER_URL is present but invalid: the startup
+    # prompt shows it and does not prefill the default over the bad value. Names the key only.
+    shelter_url_error: str | None = None
 
 
 # Plain http is tolerated on the shelter LAN, where the edge stack serves http only
@@ -66,6 +71,16 @@ def _allows_plain_http(host: str) -> bool:
     return ip.is_loopback or any(ip in net for net in _LAN_NETWORKS)
 
 
+def _is_valid_host(host: str) -> bool:
+    if _HOSTNAME.fullmatch(host):
+        return True
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
 def parse_shelter_origin(raw: str) -> str:
     """Validate SHELTER_URL (env file or the startup prompt) and return the bare origin."""
     raw = raw.strip()
@@ -80,9 +95,10 @@ def parse_shelter_origin(raw: str) -> str:
     except ValueError:
         raise bad from None
     host = (parts.hostname or "").lower()
-    # ASCII only: a Unicode look-alike host (Cyrillic "е" in "shelter") would read exactly like
-    # the default site in the domain warning. A real IDN must be entered as punycode (xn--…).
-    if parts.scheme not in _DEFAULT_PORTS or not host or not host.isascii():
+    # Strict hostname (ASCII labels, dots) or IP: a Unicode look-alike host (Cyrillic "е" in
+    # "shelter") would read exactly like the default site in the domain warning. A real IDN
+    # must be entered as punycode (xn--…).
+    if parts.scheme not in _DEFAULT_PORTS or not host or not _is_valid_host(host):
         raise bad
     if "@" in parts.netloc or parts.path not in ("", "/"):
         raise bad
@@ -96,7 +112,7 @@ def parse_shelter_origin(raw: str) -> str:
 
 def _walk_in_path(raw: str) -> str:
     value = raw or DEFAULT_WALK_IN_PATH
-    if not value.startswith("/") or value.startswith("//"):
+    if not value.startswith("/") or value.startswith("//") or "\\" in value:
         raise ConfigError(
             "WALK_IN_PATH must be a path on the shelter site starting with a single '/'"
         )
@@ -105,7 +121,7 @@ def _walk_in_path(raw: str) -> str:
 
 def _start_path(raw: str) -> str:
     value = raw or DEFAULT_START_PATH
-    if not value.startswith("/") or value.startswith("//"):
+    if not value.startswith("/") or value.startswith("//") or "\\" in value:
         raise ConfigError(
             "START_PATH must be a path on the shelter site starting with a single '/'"
         )
@@ -159,12 +175,15 @@ def load_settings(
     def get(key: str) -> str:
         return str(config.get(key) or "").strip()
 
+    shelter_url_error: str | None = None
     try:
         shelter_origin = parse_shelter_origin(get("SHELTER_URL"))
-    except ConfigError:
+    except ConfigError as exc:
         if require_shelter_url:
             raise
         shelter_origin = ""
+        if get("SHELTER_URL"):  # a missing value is not an error: the prompt just asks
+            shelter_url_error = str(exc)
 
     return Settings(
         shelter_origin=shelter_origin,
@@ -174,6 +193,7 @@ def load_settings(
         card_reader_name=get("CARD_READER_NAME") or None,
         keep_login=_keep_login(get("KEEP_LOGIN")),
         poll_interval=_poll_interval(get("POLL_INTERVAL")),
+        shelter_url_error=shelter_url_error,
     )
 
 

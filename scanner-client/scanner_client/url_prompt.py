@@ -142,15 +142,20 @@ TAKE_SUBMISSION_JS = """() => {
 }"""
 
 
-async def ask_shelter_origin(page: Any, initial: str) -> str | None:
+async def ask_shelter_origin(
+    page: Any, initial: str, error: str | None = None
+) -> str | None:
     """Ask until a valid origin is entered (and, off the default site, confirmed); None when
     the window is closed meanwhile."""
     try:
         await page.set_content(PROMPT_HTML)
-        shown = initial or DEFAULT_SHELTER_ORIGIN
+        # A stored value that failed validation is never replaced by the default silently.
+        shown = "" if error else (initial or DEFAULT_SHELTER_ORIGIN)
         await page.evaluate(PREFILL_JS, shown)
         warned: str | None = None
-        if shown != DEFAULT_SHELTER_ORIGIN:
+        if error:
+            await page.evaluate(SHOW_ERROR_JS, f"ที่อยู่ที่บันทึกไว้ไม่ถูกต้อง — {error}")
+        elif shown != DEFAULT_SHELTER_ORIGIN:
             warned = shown
             await page.evaluate(SHOW_WARNING_JS, warned)
         while True:

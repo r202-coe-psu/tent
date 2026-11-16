@@ -171,3 +171,13 @@ def test_pyscard_errors_listing_or_opening_are_retried_every_2s():
 
     assert scenario.opened == [0, 0]
     assert scenario.sleeps[:2] == [2.0, 2.0]
+
+
+def test_a_reader_name_that_matches_nothing_warns_once_listing_the_readers(caplog):
+    scenario = Scenario(names=[[USB_READER]], preferred="ACS", max_sleeps=3)
+
+    scenario.run()
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "ACS" in warnings[0] and USB_READER in warnings[0]

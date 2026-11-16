@@ -283,3 +283,31 @@ def test_save_shelter_url_creates_a_missing_env_file(tmp_path):
     save_shelter_url(path, "https://shelter.example")
 
     assert load_settings(path, {}, platform="linux").shelter_origin == "https://shelter.example"
+
+
+def test_an_invalid_stored_shelter_url_is_carried_as_an_error_for_the_prompt(tmp_path):
+    settings = load(
+        tmp_path, "SHELTER_URL=http://example.org\n", platform="linux", require_shelter_url=False
+    )
+
+    assert settings.shelter_origin == ""
+    assert "SHELTER_URL" in settings.shelter_url_error
+    assert "example.org" not in settings.shelter_url_error
+    missing = load(tmp_path, "", platform="linux", require_shelter_url=False)
+    assert missing.shelter_url_error is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://shelter.psu.ac.th\\.x.org", "https://shelter .example", "https://-a.example"],
+)
+def test_host_must_be_a_plain_hostname(url):
+    with pytest.raises(ConfigError, match="SHELTER_URL"):
+        parse_shelter_origin(url)
+
+
+@pytest.mark.parametrize("path", ["/\\evil.example", "/a\\b"])
+def test_paths_reject_backslashes(tmp_path, path):
+    for key in ("WALK_IN_PATH", "START_PATH"):
+        with pytest.raises(ConfigError, match=key):
+            load(tmp_path, f"SHELTER_URL=https://a.example\n{key}={path}\n", platform="linux")

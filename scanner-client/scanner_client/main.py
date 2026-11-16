@@ -150,13 +150,17 @@ async def run_app(
             page = await context.new_page()
         context.on("close", lambda *_: stop.set())
         page.on("close", lambda *_: stop.set())
-        # Without a listener Playwright dismisses every dialog unseen (confirm() returns false, an
-        # unsaved-changes guard can never be passed). With one that leaves it alone, the window
-        # shows it and staff answer it themselves.
-        context.on("dialog", lambda dialog: None)
+        # A listener that neither accepts nor dismisses freezes the page (and every evaluate on
+        # it), so dismiss: confirm() returns false, the page stays as it was.
+        context.on("dialog", _dismiss_dialog)
 
         if ask_origin is not None:
-            origin = await _until_stopped(ask_origin(page, settings.shelter_origin), stop)
+            asking = (
+                ask_origin(page, settings.shelter_origin, error=settings.shelter_url_error)
+                if settings.shelter_url_error
+                else ask_origin(page, settings.shelter_origin)
+            )
+            origin = await _until_stopped(asking, stop)
             if origin is None:  # window closed before an answer
                 await _close_all(context, browser)
                 return
@@ -184,6 +188,27 @@ async def run_app(
             stop.set()
             await watcher_task
             await _close_all(context, browser)
+
+
+async def _dismiss_dialog(dialog: Any) -> None:
+    log.info("dismissed a %s dialog", getattr(dialog, "type", "browser"))
+    try:
+        await dialog.dismiss()
+    except Exception as exc:  # already handled / page gone
+        log.warning("could not dismiss a dialog: %s", type(exc).__name__)
+
+
+def _show_fatal(message: str) -> None:
+    """The windowed build has no console: surface a startup failure in a native box on Windows."""
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(0, message, "tent", 0x10)  # MB_ICONERROR
+            return
+        except Exception:
+            pass
+    print(message, file=sys.stderr)
 
 
 async def _enter_fullscreen(context: Any, page: Any) -> None:
@@ -238,6 +263,7 @@ def main(
             )
         except ConfigError as exc:
             log.error("invalid configuration: %s", exc)
+            _show_fatal(f"Invalid configuration: {exc}\n\nFix the .env file and start again.")
             return 2
 
         def remember(origin: str) -> None:

@@ -604,3 +604,80 @@ def test_the_url_prompt_is_not_fullscreen_only_the_shelter_is(tmp_path):
 
     assert cdp == [("asked", [])]
     assert harness.playwright.chromium.context.cdp.sent[-1][0] == "Browser.setWindowBounds"
+
+
+def test_a_browser_dialog_is_dismissed_so_the_page_never_freezes(tmp_path):
+    harness = Harness(tmp_path)
+    dismissed = []
+
+    class Dialog:
+        type = "confirm"
+
+        async def dismiss(self):
+            dismissed.append(True)
+
+    async def go():
+        async def close_later():
+            await asyncio.sleep(0.02)
+            [handler] = harness.playwright.chromium.context.handlers["dialog"]
+            await handler(Dialog())
+            harness.playwright.page.fire("close")
+
+        task = asyncio.create_task(close_later())
+        await asyncio.wait_for(
+            run_app(
+                harness.settings,
+                data_dir=harness.data_dir,
+                start_playwright=harness.playwright.start,
+                watcher_factory=lambda settings, handle: harness.watcher,
+                card_session_factory=lambda settings: object(),
+            ),
+            timeout=5,
+        )
+        await task
+
+    asyncio.run(go())
+
+    assert dismissed == [True]
+
+
+def test_an_invalid_stored_url_reaches_the_prompt_as_an_error(tmp_path):
+    harness = Harness(tmp_path, shelter_origin="", shelter_url_error="SHELTER_URL is bad")
+    seen = []
+
+    async def ask_origin(prompt_page, initial, error=None):
+        seen.append((initial, error))
+        return "https://shelter.example"
+
+    async def go():
+        harness.playwright.page.fire  # noqa: B018
+        asyncio.get_running_loop().call_later(0.05, harness.playwright.page.fire, "close")
+        await asyncio.wait_for(
+            run_app(
+                harness.settings,
+                data_dir=harness.data_dir,
+                start_playwright=harness.playwright.start,
+                watcher_factory=lambda settings, handle: harness.watcher,
+                card_session_factory=lambda settings: object(),
+                ask_origin=ask_origin,
+            ),
+            timeout=5,
+        )
+
+    asyncio.run(go())
+
+    assert seen == [("", "SHELTER_URL is bad")]
+
+
+def test_other_config_errors_are_shown_in_a_message_box(tmp_path, monkeypatch):
+    from scanner_client import main as main_module
+
+    shown = []
+    monkeypatch.setattr(main_module, "_show_fatal", shown.append)
+    env_path = tmp_path / ".env"
+    env_path.write_text("POLL_INTERVAL=abc\n")
+
+    code = main(env_path=env_path, environ={}, data_dir=tmp_path / "data", runner=RecordingRunner())
+
+    assert code == 2
+    assert "POLL_INTERVAL" in shown[0]

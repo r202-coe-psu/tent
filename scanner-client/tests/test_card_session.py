@@ -522,3 +522,35 @@ def test_tab_navigating_to_another_origin_right_before_evaluate_never_receives_c
 def test_dispatch_script_refuses_unless_location_matches_expected_origin_and_path():
     assert "location.origin" in DISPATCH_JS
     assert "location.pathname" in DISPATCH_JS
+
+
+class HangingPage(FakePage):
+    async def evaluate(self, script, arg=None):
+        await asyncio.sleep(3600)
+
+
+def test_a_page_that_never_answers_evaluate_drops_the_event_within_the_deadline(caplog):
+    page = HangingPage()
+    caplog.set_level(logging.DEBUG)
+
+    async def go():
+        await asyncio.wait_for(
+            make_session(evaluate_timeout=0.05).handle_card(FakeReader(), page), timeout=2
+        )
+
+    asyncio.run(go())
+
+    assert any("did not answer" in r.getMessage() for r in caplog.records)
+
+
+def test_the_next_card_is_still_handled_after_a_hung_page():
+    hung, fine = HangingPage(), FakePage()
+    session = make_session(evaluate_timeout=0.05)
+
+    async def go():
+        await session.handle_card(FakeReader(), hung)
+        await session.handle_card(FakeReader(), fine)
+
+    asyncio.run(go())
+
+    assert [name for name, _ in fine.delivered][0] == "scanner:card-reading"

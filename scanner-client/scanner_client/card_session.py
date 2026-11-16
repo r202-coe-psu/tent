@@ -67,12 +67,14 @@ class CardSession:
         now: Callable[[], datetime] = _now,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         monotonic: Callable[[], float] = time.monotonic,
+        evaluate_timeout: float = ACK_TIMEOUT_S,
     ):
         self._shelter_url = shelter_url
         self._walk_in_path = walk_in_path
         self._now = now
         self._sleep = sleep
         self._monotonic = monotonic
+        self._evaluate_timeout = evaluate_timeout
         self._may_navigate = True
 
     async def handle_card(self, reader: Any, page: Any) -> None:
@@ -127,8 +129,16 @@ class CardSession:
                 log.warning("dropping %s: page is not the shelter walk-in page", name)
                 return False
             try:
-                if await page.evaluate(DISPATCH_JS, [name, detail, *self._expected()]):
+                if await asyncio.wait_for(
+                    page.evaluate(DISPATCH_JS, [name, detail, *self._expected()]),
+                    self._evaluate_timeout,
+                ):
                     return True
+            except TimeoutError:  # a frozen page (e.g. an open dialog): drop, keep the loop alive
+                log.warning(
+                    "dropping %s: page did not answer within %ss", name, self._evaluate_timeout
+                )
+                return False
             except Exception:
                 pass  # navigation in progress: not acknowledged for this attempt
             await self._sleep(RETRY_INTERVAL_S)
@@ -158,7 +168,9 @@ class CardSession:
 
     async def _navigate_in_app(self, page: Any) -> None:
         try:
-            await page.evaluate(NAVIGATE_JS, self._walk_in_path)
+            await asyncio.wait_for(
+                page.evaluate(NAVIGATE_JS, self._walk_in_path), self._evaluate_timeout
+            )
             await page.wait_for_url(
                 self._is_walk_in,
                 wait_until="commit",

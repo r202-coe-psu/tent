@@ -41,7 +41,8 @@ if [[ ! -f .env ]]; then
 		read -rp "SHELTER_URL (เช่น https://shelter.example.org หรือ http://localhost:5173): " url
 	fi
 	[[ -n "$url" ]] || die "ยังไม่ได้ตั้ง SHELTER_URL — แก้ในไฟล์ $(pwd)/.env แล้วรันใหม่"
-	sed -i "s|^#\?\s*SHELTER_URL=.*|SHELTER_URL=${url}|" .env
+	esc_url="$(printf '%s' "$url" | sed -e 's/[&|\\]/\\&/g')"
+	sed -i "s|^#\?\s*SHELTER_URL=.*|SHELTER_URL=${esc_url}|" .env
 	say ".env created"
 fi
 
@@ -66,7 +67,7 @@ Type=Application
 Name=tent
 Comment=Read Thai ID cards into the shelter walk-in registration page
 Exec="$(command -v uv)" run --project "$PWD" scanner-client
-Path=$PWD
+Path="$PWD"
 Icon=$PWD/assets/tent.png
 Terminal=false
 Categories=Utility;

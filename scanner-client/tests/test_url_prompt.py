@@ -185,3 +185,12 @@ def test_the_tick_hint_page_names_the_box_to_tick():
 
     assert "window.showTickHint" in page.contents[0]
     assert "ติ๊กช่องด้านบนก่อนกด Enter" in page.contents[0]
+
+
+def test_an_invalid_stored_value_shows_the_error_and_is_not_replaced_by_the_default():
+    page = FakePromptPage([confirmed("https://last.example")])
+
+    asyncio.run(ask_shelter_origin(page, "", error="SHELTER_URL must be an origin only"))
+
+    assert DEFAULT_SHELTER_ORIGIN not in [arg for _, arg in page.evaluations]
+    assert any("SHELTER_URL must be an origin only" in e for e in page.errors_shown())

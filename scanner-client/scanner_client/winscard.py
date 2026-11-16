@@ -238,7 +238,9 @@ class WinSCard:
         )
         reply = list(recv[: recv_len.value])
         if len(reply) < 2:
-            raise WinSCardError("SCardTransmit", SCARD_S_SUCCESS)
+            raise WinSCardError(
+                "SCardTransmit: response shorter than 2 bytes (no status word)", SCARD_S_SUCCESS
+            )
         return reply[:-2], reply[-2], reply[-1]
 
     def disconnect(self, card: int) -> None:

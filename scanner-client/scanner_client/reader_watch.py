@@ -52,6 +52,7 @@ class CardReaderWatcher:
         self._preferred_name = preferred_name
         self._poll_interval = poll_interval
         self._sleep = sleep
+        self._last_state: str | None = None
 
     async def run(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
@@ -73,11 +74,27 @@ class CardReaderWatcher:
             names = await asyncio.to_thread(self._list_reader_names)
             index = pick_reader_index(names, self._preferred_name)
             if index is None:
+                self._note_state(
+                    "no-match",
+                    "no card reader matches CARD_READER_NAME=%r; available readers: %s"
+                    if self._preferred_name
+                    else "no usable card reader found; available readers: %s",
+                    *((self._preferred_name,) if self._preferred_name else ()),
+                    ", ".join(names) or "(none)",
+                )
                 return None
+            self._last_state = None
             return await asyncio.to_thread(self._open_reader, index)
         except Exception as exc:  # pyscard missing, pcscd down, no reader: all just "not yet"
-            log.warning("card reader not available: %s", exc)
+            self._note_state(f"error:{exc}", "card reader not available: %s", exc)
             return None
+
+    def _note_state(self, state: str, message: str, *args: Any) -> None:
+        """Warn once per state change instead of every retry (the console-less build has no
+        one watching a scrolling log)."""
+        if state != self._last_state:
+            self._last_state = state
+            log.warning(message, *args)
 
     async def _watch(self, reader: Any, stop: asyncio.Event) -> None:
         handled = False  # the card now in the slot was already handed over
