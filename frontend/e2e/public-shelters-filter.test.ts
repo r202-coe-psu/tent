@@ -37,8 +37,12 @@ import { publicShelter, teardownShelter } from './helpers/public-cleanup';
 import { createShelterViaUi } from './helpers/staff-ui';
 
 const FIXTURE = sheltersFixture();
-/** GPS fix + filter commit + the `/shelters` load it triggers, on a cold preview server. */
-const GPS_URL_TIMEOUT_MS = 15_000;
+/**
+ * GPS fix + filter commit + the `/shelters` load it triggers, on a cold preview server. The first
+ * load renders every shelter (736 on staging) before the radius applies, which blocks the main
+ * thread long enough on the CPU-starved CI agent to push the URL commit past 15 s.
+ */
+const GPS_URL_TIMEOUT_MS = 45_000;
 const { marker: MARKER, hostNear: HOST_NEAR, evacFar: EVAC_FAR } = FIXTURE;
 const USER_LOCATION = { latitude: 7.0086, longitude: 100.4968 };
 
