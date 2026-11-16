@@ -7,7 +7,9 @@ import {
 	type PublicShelterItem,
 	type MasterLabelOption,
 	countBySiteKind,
+	shelterGroup,
 	takesAllParkingTypes,
+	hiddenShelterGroups,
 	wantedParkingTypes
 } from '$lib/features/public-portal';
 import { formatMasterLabel } from '$lib/features/master-data';
@@ -43,6 +45,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const user_lng = url.searchParams.get('user_lng') || '';
 	const hide_full = url.searchParams.get('hide_full') === 'true';
 	const parkingWanted = wantedParkingTypes(url.searchParams);
+	const groupsHidden = hiddenShelterGroups(url.searchParams);
 
 	// FastAPI accepts a single Mongo status; map UI `prepare` → `standby`.
 	const statusRaw =
@@ -134,6 +137,11 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		shelters = shelters.filter((s) => s.admin_type === tf);
 	}
 
+	// Shelter-type toggles default to on; only the switched-off ones are in the URL.
+	if (groupsHidden.length > 0) {
+		shelters = shelters.filter((s) => !groupsHidden.includes(shelterGroup(s)));
+	}
+
 	if (hide_full) {
 		shelters = shelters.filter((s) => s.status !== 'FULL');
 	}
@@ -189,7 +197,10 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			hide_full: hide_full ? 'true' : '',
 			parking_car: parkingWanted.includes('car') ? 'on' : '',
 			parking_motorcycle: parkingWanted.includes('motorcycle') ? 'on' : '',
-			parking_boat: parkingWanted.includes('boat') ? 'on' : ''
+			parking_boat: parkingWanted.includes('boat') ? 'on' : '',
+			hide_evacuation: groupsHidden.includes('evacuation') ? 'on' : '',
+			hide_external: groupsHidden.includes('external') ? 'on' : '',
+			hide_host_house: groupsHidden.includes('host_house') ? 'on' : ''
 		},
 		available_types
 	};

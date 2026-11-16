@@ -59,6 +59,9 @@
 		utility_wifi?: boolean;
 		utility_high_ground?: boolean;
 		utility_truck_access?: boolean;
+		hide_evacuation?: boolean | string;
+		hide_external?: boolean | string;
+		hide_host_house?: boolean | string;
 	}
 
 	let {
@@ -117,6 +120,9 @@
 	let parkCarChecked = $state(false);
 	let parkMotorChecked = $state(false);
 	let parkBoatChecked = $state(false);
+	let showEvacuation = $state(true);
+	let showExternal = $state(true);
+	let showHostHouse = $state(true);
 	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -170,6 +176,9 @@
 		if (parkCarChecked) params.set('parking_car', 'on');
 		if (parkMotorChecked) params.set('parking_motorcycle', 'on');
 		if (parkBoatChecked) params.set('parking_boat', 'on');
+		if (!showEvacuation) params.set('hide_evacuation', 'on');
+		if (!showExternal) params.set('hide_external', 'on');
+		if (!showHostHouse) params.set('hide_host_house', 'on');
 		return params;
 	}
 
@@ -216,7 +225,10 @@
 			f.hide_full,
 			f.parking_car,
 			f.parking_motorcycle,
-			f.parking_boat
+			f.parking_boat,
+			f.hide_evacuation,
+			f.hide_external,
+			f.hide_host_house
 		];
 
 		untrack(() => {
@@ -237,6 +249,9 @@
 			parkCarChecked = isOn(f.parking_car);
 			parkMotorChecked = isOn(f.parking_motorcycle);
 			parkBoatChecked = isOn(f.parking_boat);
+			showEvacuation = !isOn(f.hide_evacuation);
+			showExternal = !isOn(f.hide_external);
+			showHostHouse = !isOn(f.hide_host_house);
 
 			if (f.user_lat) userLat = f.user_lat.toString();
 			if (f.user_lng) userLng = f.user_lng.toString();
@@ -307,7 +322,10 @@
 			hideFullToggle,
 			parkCarChecked,
 			parkMotorChecked,
-			parkBoatChecked
+			parkBoatChecked,
+			showEvacuation,
+			showHostHouse,
+			showExternal
 		];
 
 		if (hydrating) return;
@@ -524,6 +542,35 @@
 	>
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
 			<div class="space-y-4">
+				<!-- Shelter type groups -->
+				<div class="overflow-hidden rounded-xl border border-border">
+					<Accordion.Root type="single" class="w-full">
+						<Accordion.Item value="shelter-groups" class="border-none">
+							<Accordion.Trigger
+								class="px-4 py-3 transition-colors hover:bg-muted/50 hover:no-underline"
+							>
+								<span class="text-sm font-bold text-primary-dark">{t.shelterTypeGroup}</span>
+							</Accordion.Trigger>
+							<Accordion.Content class="pb-2">
+								<div class="flex flex-col gap-3 px-4 pt-2 pb-2">
+									<label class="flex cursor-pointer items-center justify-between gap-3">
+										<span class="text-sm font-medium text-foreground">{t.groupEvacuation}</span>
+										<Switch bind:checked={showEvacuation} aria-label={t.groupEvacuation} />
+									</label>
+									<label class="flex cursor-pointer items-center justify-between gap-3">
+										<span class="text-sm font-medium text-foreground">{t.groupExternal}</span>
+										<Switch bind:checked={showExternal} aria-label={t.groupExternal} />
+									</label>
+									<label class="flex cursor-pointer items-center justify-between gap-3">
+										<span class="text-sm font-medium text-foreground">{t.groupHostHouse}</span>
+										<Switch bind:checked={showHostHouse} aria-label={t.groupHostHouse} />
+									</label>
+								</div>
+							</Accordion.Content>
+						</Accordion.Item>
+					</Accordion.Root>
+				</div>
+
 				<!-- Search -->
 				<div class="space-y-1.5">
 					<Label for={`${idPrefix}search`} class="text-xs font-semibold text-muted-foreground"
