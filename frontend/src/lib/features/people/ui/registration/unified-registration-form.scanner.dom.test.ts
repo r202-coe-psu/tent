@@ -575,17 +575,17 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			expect(progress()).toEqual(['loading: กำลังตรวจรายชื่อซ้ำ…']);
 		});
 
-		it('places nothing when the form became locked while the lookup ran', async () => {
-			let finish!: (found: null) => void;
-			const lookup = vi.fn(() => new Promise<null>((resolve) => (finish = resolve)));
+		it('does not look up a card while the form is locked, and tells staff straight away', async () => {
+			const lookup = vi.fn(async () => null);
 			renderWalkInForm({ findScannedCardDuplicate: lookup, pending: true });
 
-			dispatchCardRead(card);
-			await settle();
-			finish(null);
+			const event = dispatchCardRead(card);
 			await settle();
 
+			expect(event.defaultPrevented).toBe(true);
+			expect(lookup).not.toHaveBeenCalled();
 			expect(values('first-name')).toEqual(['']);
+			expect(vi.mocked(toast.warning)).toHaveBeenCalledTimes(1);
 		});
 
 		it('places the card straight away when nobody is found', async () => {

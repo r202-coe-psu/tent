@@ -1445,6 +1445,7 @@
 		event.preventDefault();
 		stopScannerReading();
 		const card = parsed.data;
+		if (discardCardWhenLocked()) return;
 		// One decision at a time: a new card never replaces the one staff are still deciding on.
 		if (pendingScannerCard || pendingScannerDuplicate) {
 			rejectedScannerCitizenId = card.citizen_id;
