@@ -2,6 +2,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import kiosk_updater
 
@@ -12,15 +13,25 @@ def git(cwd, *args):
     ).stdout.strip()
 
 
-class FakeSteps:
-    """Records the post-checkout steps the updater asks for; fails the ones listed."""
+class PowerCut(BaseException):
+    """The kiosk loses power: the updater process dies mid-step."""
 
-    def __init__(self, fail=()):
+
+class FakeSteps:
+    """Records the post-checkout steps the updater asks for; fails or kills on the ones listed."""
+
+    def __init__(self, fail=(), cut_power_at=None, crash=()):
         self.calls = []
         self.fail = set(fail)
+        self.cut_power_at = cut_power_at
+        self.crash = set(crash)
 
     def __call__(self, name, kiosk_dir):
         self.calls.append(name)
+        if name == self.cut_power_at:
+            raise PowerCut()
+        if name in self.crash:
+            raise OSError(f"{name} blew up")
         return name not in self.fail
 
 
@@ -31,17 +42,19 @@ class UpdateOnBootTests(unittest.TestCase):
         root = Path(tmp.name)
         self.origin = root / "origin"
         self.origin.mkdir()
-        git(self.origin, "init", "-q", "-b", "develop")
+        git(self.origin, "init", "-q", "-b", "main")
         git(self.origin, "config", "user.email", "dev@example.com")
         git(self.origin, "config", "user.name", "dev")
         self.commit_file("kiosk/main.py", "v1\n")
         self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.27.0\n")
         self.release("kiosk-v0.1.0")
+        log = mock.patch.object(kiosk_updater, "LOG_FILE", root / "updater.log")
+        log.start()
+        self.addCleanup(log.stop)
 
         self.device = root / "device"
+        # A kiosk installed per README: a clone with main checked out.
         git(root, "clone", "-q", str(self.origin), str(self.device))
-        git(self.device, "fetch", "-q", "origin", "+refs/tags/kiosk-stable:refs/tags/kiosk-stable")
-        git(self.device, "checkout", "-q", "--detach", "kiosk-stable")
         self.kiosk_dir = self.device / "kiosk"
         self.steps = FakeSteps()
 
@@ -60,6 +73,9 @@ class UpdateOnBootTests(unittest.TestCase):
     def head(self):
         return git(self.device, "rev-parse", "HEAD")
 
+    def branch(self):
+        return git(self.device, "branch", "--show-current")
+
     def update(self):
         return kiosk_updater.update_on_boot(self.kiosk_dir, run_step=self.steps)
 
@@ -70,6 +86,7 @@ class UpdateOnBootTests(unittest.TestCase):
         self.assertEqual(self.update(), "updated")
         self.assertEqual(self.head(), new)
         self.assertEqual((self.kiosk_dir / "main.py").read_text(), "v2\n")
+        self.assertEqual(self.branch(), "main")
 
     def test_already_on_kiosk_stable_runs_no_install_step(self):
         before = self.head()
@@ -143,8 +160,107 @@ class UpdateOnBootTests(unittest.TestCase):
 
         self.assertEqual(self.update(), "rolled-back")
         self.assertEqual(self.head(), before)
-        # pip already ran for the new requirements, so it runs again for the old ones.
-        self.assertEqual(self.steps.calls, ["pip", "models", "pip"])
+        # pip install -r of the old >= requirements keeps newer packages, so restore the snapshot
+        # pip took first; the old download script puts back the models the old code expects.
+        self.assertEqual(self.steps.calls, ["pip", "models", "pip-restore", "models"])
+
+    def test_failed_pip_install_restores_the_package_snapshot(self):
+        before = self.head()
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        self.steps.fail.add("pip")
+
+        self.assertEqual(self.update(), "rolled-back")
+        self.assertEqual(self.head(), before)
+        self.assertEqual(self.steps.calls, ["pip", "pip-restore"])
+
+    def test_power_cut_during_install_resumes_the_install_on_next_boot(self):
+        new = self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        with self.assertRaises(PowerCut):
+            kiosk_updater.update_on_boot(self.kiosk_dir, run_step=FakeSteps(cut_power_at="pip"))
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+        self.assertEqual(self.steps.calls, ["pip"])
+
+    def test_install_step_that_raises_counts_as_failed_and_rolls_back(self):
+        before = self.head()
+        self.commit_file("kiosk/models/download_models.sh", "# new sha256\n")
+        self.release("kiosk-v0.2.0")
+        self.steps.crash.add("models")
+
+        self.assertEqual(self.update(), "rolled-back")
+        self.assertEqual(self.head(), before)
+
+    def test_main_tells_start_kiosk_to_re_exec_only_when_the_code_moved(self):
+        run = lambda: kiosk_updater.main(self.kiosk_dir, run_step=self.steps)
+        self.assertEqual(run(), 0)
+
+        self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        self.assertEqual(run(), kiosk_updater.UPDATED_EXIT)
+
+    def test_main_never_raises_and_re_execs_if_the_code_moved_before_a_crash(self):
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        # pip fails, then the rollback itself crashes after the checkout back: code did not move.
+        self.steps.fail.add("pip")
+        self.steps.crash.add("pip-restore")
+
+        self.assertEqual(kiosk_updater.main(self.kiosk_dir, run_step=self.steps), 0)
+
+    def test_kiosk_stable_on_an_unmerged_branch_is_refused(self):
+        before = self.head()
+        git(self.origin, "switch", "-q", "-c", "feat/unreviewed")
+        self.commit_file("kiosk/main.py", "unreviewed\n")
+        self.release("kiosk-v0.2.0")
+
+        self.assertEqual(self.update(), "untrusted")
+        self.assertEqual(self.head(), before)
+
+    def test_release_only_on_develop_is_refused(self):
+        before = self.head()
+        git(self.origin, "switch", "-q", "-c", "develop")
+        self.commit_file("kiosk/main.py", "develop only\n")
+        self.release("kiosk-v0.2.0")
+
+        self.assertEqual(self.update(), "untrusted")
+        self.assertEqual(self.head(), before)
+
+    def test_kiosk_on_another_branch_never_updates(self):
+        git(self.device, "switch", "-q", "-c", "develop")
+        before = self.head()
+        self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+
+        self.assertEqual(self.update(), "disabled")
+        self.assertEqual(self.head(), before)
+        self.assertEqual(self.branch(), "develop")
+
+    def test_detached_kiosk_never_updates(self):
+        git(self.device, "checkout", "-q", "--detach")
+        before = self.head()
+        self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+
+        self.assertEqual(self.update(), "disabled")
+        self.assertEqual(self.head(), before)
+
+    def test_rolled_back_kiosk_stays_on_main(self):
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        self.steps.fail.add("pip")
+
+        self.assertEqual(self.update(), "rolled-back")
+        self.assertEqual(self.branch(), "main")
+
+    def test_package_named_like_playwright_does_not_reinstall_the_browser(self):
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.27.0\nplaywright-stealth>=1.0\n")
+        self.release("kiosk-v0.2.0")
+
+        self.update()
+        self.assertEqual(self.steps.calls, ["pip"])
 
 
 if __name__ == "__main__":

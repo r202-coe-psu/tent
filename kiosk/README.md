@@ -459,23 +459,32 @@ tail -f /tmp/kiosk_autostart.log
 
 ### 🔁 อัปเดตตู้อัตโนมัติตอนบูต (`kiosk-stable`)
 
-ตู้ที่เปิด `KIOSK_AUTO_UPDATE=on` ใน `.env` จะรัน `kiosk_updater.py` ครั้งเดียวทุกครั้งที่ `start_kiosk.sh` เริ่ม (ก่อนเปิด Chromium) ไม่ต้อง SSH เข้าไป `git pull` เอง ([#1218](https://github.com/r202-coe-psu/tent/issues/1218))
+`start_kiosk.sh` รัน `kiosk_updater.py` ครั้งเดียวทุกครั้งที่เริ่ม (ก่อนเปิด Chromium) ไม่ต้อง SSH เข้าไป `git pull` เอง ([#1218](https://github.com/r202-coe-psu/tent/issues/1218))
 
-- ดึง tag `kiosk-stable` จาก `origin` แล้ว checkout ไปที่ commit นั้น (HEAD จะเป็นแบบ detached)
-- รัน `pip install -r requirements.txt` เมื่อ `requirements.txt` เปลี่ยน, `playwright install chromium` เมื่อเวอร์ชัน playwright เปลี่ยนและไม่ได้ตั้ง `BROWSER_EXECUTABLE_PATH`, และ `models/download_models.sh` เมื่อสคริปต์นั้นเปลี่ยน
-- **บูตด้วยเวอร์ชันเดิมเสมอเมื่อมีปัญหา:** ไม่มีเน็ตหรือ fetch ไม่ได้ (timeout 20 วินาที), มีไฟล์ tracked ที่แก้ค้างบนตู้, หรือขั้นติดตั้งพัง (กรณีนี้จะ checkout กลับ commit เดิมและติดตั้ง package ของเดิมกลับ)
+- **เปิด/ปิดด้วย branch ที่ตู้ checkout อยู่:** ตู้ที่อยู่บน `main` อัปเดตอัตโนมัติ ตู้ที่อยู่ branch อื่น (เช่น `develop` สำหรับทดสอบ) หรือ detached ไม่อัปเดตเลย (`disabled`) ให้อัปเดตด้วยมือตามเดิม
+- ดึง tag `kiosk-stable` จาก `origin` แล้วย้าย branch `main` บนตู้ไปที่ commit นั้น (ตู้ยังอยู่บน `main`)
+- **รับเฉพาะ commit ที่อยู่บน `origin/main` แล้ว** ถ้า tag ชี้ไป commit ที่ยังไม่ merge เข้า main ตู้จะไม่อัปเดต (`untrusted`)
+- รัน `pip install -r requirements.txt` เมื่อ `requirements.txt` เปลี่ยน, `playwright install chromium` เมื่อเวอร์ชัน playwright เปลี่ยนและไม่ได้ตั้ง `BROWSER_EXECUTABLE_PATH`, และ `models/download_models.sh` เมื่อสคริปต์นั้นเปลี่ยน แต่ละขั้นมี timeout 10 นาที
+- **บูตด้วยเวอร์ชันเดิมเสมอเมื่อมีปัญหา:**
+  - ไม่มีเน็ตหรือ fetch ไม่ได้ภายใน 20 วินาที (`offline`)
+  - มีไฟล์ tracked ที่แก้ค้างบนตู้ (`dirty`) ตู้นี้จะไม่อัปเดตจนกว่าจะมีคนเข้าไปจัดการ ให้ดู log ข้างล่าง
+  - ขั้นติดตั้งล้ม, error หรือ timeout (`rolled-back`) จะ checkout กลับ commit เดิม, ติดตั้ง package ตาม `pip freeze` ที่เก็บไว้ก่อนอัปเดต (downgrade ได้จริง) และรันสคริปต์โมเดลของเวอร์ชันเดิม
+- **ไฟดับระหว่างติดตั้ง:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม
 - `main.py` ที่ restart ใน supervisor loop ไม่เรียก updater จึงไม่มีการอัปเดตระหว่างที่มีคนใช้งานตู้
-- ผลลัพธ์ทุกครั้งอยู่ใน `/tmp/kiosk_autostart.log` บรรทัดที่ขึ้นต้นด้วย `[kiosk-updater]`
+- ผลลัพธ์ทุกครั้งอยู่ที่ `~/.local/state/smart-shelter-kiosk/updater.log` (อยู่ข้าม reboot) และใน `/tmp/kiosk_autostart.log` บรรทัดที่ขึ้นต้นด้วย `[kiosk-updater]`
 
 **เปิดใช้บนตู้ (ทำครั้งเดียวต่อเครื่อง):**
 
 ```bash
-cd ~/tent && git fetch origin --tags && git checkout --detach kiosk-stable
-echo 'KIOSK_AUTO_UPDATE=on' >> kiosk/.env
+cd ~/tent && git fetch origin && git switch main && git pull
 sudo reboot
 ```
 
-**ปล่อยเวอร์ชันใหม่ให้ตู้ (dev):** ปัก tag เวอร์ชันบน commit ที่ทดสอบแล้ว แล้วย้าย `kiosk-stable` มาที่ tag นั้น ตู้จะได้เวอร์ชันใหม่ตอนบูตครั้งถัดไปที่ออนไลน์
+ปิด auto update บนตู้ไหนก็ได้ด้วยการ checkout branch อื่น เช่น `git switch develop`
+
+**ก่อนปัก tag ครั้งแรก (admin repo ทำครั้งเดียว):** ตั้ง tag ruleset ใน GitHub (Settings → Rules → Rulesets → New tag ruleset) target `kiosk-*` ให้เฉพาะ maintainer สร้าง/อัปเดต/ลบได้ เพราะใครย้าย `kiosk-stable` ได้ก็เลือกโค้ดที่ทุกตู้จะรันได้ (รวมถึงย้อนไปเวอร์ชันเก่าที่มีช่องโหว่)
+
+**ปล่อยเวอร์ชันใหม่ให้ตู้ (maintainer):** ปัก tag เวอร์ชันบน commit ใน `main` ที่ทดสอบแล้ว แล้วย้าย `kiosk-stable` มาที่ tag นั้น ตู้จะได้เวอร์ชันใหม่ตอนบูตครั้งถัดไปที่ออนไลน์
 
 ```bash
 git tag kiosk-v0.2.0 <commit>

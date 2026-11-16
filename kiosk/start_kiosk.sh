@@ -50,14 +50,16 @@ else
     PYTHON_BIN="$(which python3)"
 fi
 
-# 6.0 Auto-update once per start, before Chromium opens: move to the commit tag kiosk-stable points
-# at (#1218). Opt-in via KIOSK_AUTO_UPDATE=on so a developer's checkout is never detached. After an
-# update, re-exec so bash does not keep reading the start_kiosk.sh the checkout replaced; this whole
-# if-block is parsed before it runs, so the exec below is safe even when this file changed.
-KIOSK_AUTO_UPDATE="${KIOSK_AUTO_UPDATE:-$(sed -n 's/^KIOSK_AUTO_UPDATE=//p' "$SCRIPT_DIR/.env" 2>/dev/null | tail -1 | tr -d '"'\''[:space:]')}"
-if [ "$KIOSK_AUTO_UPDATE" = "on" ] && [ -z "$KIOSK_UPDATE_DONE" ]; then
+# 6.0 Auto-update once per start, before Chromium opens (#1218): a kiosk with branch main checked
+# out moves to the commit tag kiosk-stable points at; any other branch or a detached HEAD opts out.
+# After an update, re-exec so bash does not keep reading the start_kiosk.sh the checkout replaced;
+# this whole if-block is parsed before it runs, so the exec below is safe even when this file changed.
+if [ -z "$KIOSK_UPDATE_DONE" ]; then
     "$PYTHON_BIN" kiosk_updater.py >> "$LOG_FILE" 2>&1
-    if [ "$?" -eq 10 ]; then
+    # A release without start_kiosk.sh would make exec fail and bash exit: keep running this copy.
+    if [ "$?" -eq 10 ] && [ -x "$SCRIPT_DIR/start_kiosk.sh" ]; then
+        # The lock is free between this close and the new flock; a duplicate autostart taking it
+        # then just finds the kiosk up to date and runs as the single instance.
         exec 200>&-
         KIOSK_UPDATE_DONE=1 STARTUP_DELAY=0 exec "$SCRIPT_DIR/start_kiosk.sh" "$@"
     fi
