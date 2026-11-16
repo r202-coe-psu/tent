@@ -52,7 +52,7 @@ Smart App Control บล็อกไฟล์ `.exe` ที่ไม่มีล
 shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มีไอคอนขึ้น สร้างเองได้: คลิกขวา `smart-shelter.exe` → Show more options
 → **Send to → Desktop (create shortcut)**
 
-ค่าที่ตั้ง (`.env`) อยู่ในโฟลเดอร์ `smart-shelter` · อัปเดต: ปิดโปรแกรม แล้วแตกไฟล์ zip ใหม่ทับโฟลเดอร์เดิม
+ค่าที่ตั้ง (`.env`) อยู่ในโฟลเดอร์ `smart-shelter` · อัปเดต: ปิดโปรแกรม แล้วแตกไฟล์ zip ใหม่ทับโฟลเดอร์เดิม (ชื่อ `smart-shelter` เดียวกัน)
 · ถอนการติดตั้ง: ลบโฟลเดอร์ `smart-shelter` และ shortcut
 
 เครื่องที่เคยใช้เวอร์ชันชื่อ `tent` (`tent.exe`, ไอคอน **tent**): แตกไฟล์ zip ใหม่ได้โฟลเดอร์ `smart-shelter`
