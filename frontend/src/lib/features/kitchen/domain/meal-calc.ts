@@ -1,5 +1,13 @@
 import Decimal from 'decimal.js';
-import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
+import {
+	parseQty,
+	persistQty,
+	qtyGte,
+	qtyLte,
+	roundQty,
+	subQty,
+	type QtyValue
+} from '$lib/utils/qty';
 import type { Recipe, ItemMaster } from '$lib/features/catalog';
 import type { SupplyItem } from '$lib/features/supply';
 import type {
@@ -198,6 +206,15 @@ export function calculateMealIngredientsFromCustom(
 			headcount_as_of: headcountAsOf
 		}
 	};
+}
+
+/**
+ * How much of `plannedQty` (recipe unit) the on-hand stock (`qty_str`, stock unit) cannot cover.
+ * Never negative; computed in Decimal so a stock that exactly covers the plan yields 0.
+ */
+export function shortfallQty(plannedQty: number, onHand: QtyValue, recipePerStockUnit = 1): number {
+	const shortfall = new Decimal(plannedQty).minus(parseQty(onHand).times(recipePerStockUnit));
+	return shortfall.gt(0) ? shortfall.toNumber() : 0;
 }
 
 /**

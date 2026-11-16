@@ -64,6 +64,34 @@ describe('public/shelters load function', () => {
 		expect(result.summary.shelters_open).toBe(0);
 	});
 
+	it('passes the unknown status filter to the API and maps external shelters (CR-252)', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{
+					code: 'EXT1',
+					name: 'ศูนย์ภายนอก',
+					status: 'unknown',
+					capacity: 0,
+					is_external: true,
+					external_url: 'https://example.org/x'
+				}
+			],
+			count: 1,
+			as_of: '2026-11-12T10:00:00Z'
+		} as unknown as PublicShelterListResponse);
+
+		const result = await runLoad(new URL('http://localhost/shelters?status=unknown'));
+
+		expect(vi.mocked(listPublicShelters).mock.calls[0][0]).toMatchObject({ status: 'unknown' });
+		expect(result.shelters[0]).toMatchObject({
+			status: 'UNKNOWN',
+			is_external: true,
+			external_url: 'https://example.org/x'
+		});
+		// not "open": an unknown-status shelter is not counted as running
+		expect(result.summary.shelters_open).toBe(0);
+	});
+
 	it('handles empty shelters array correctly', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [],
@@ -374,19 +402,122 @@ describe('public/shelters load function', () => {
 		});
 	});
 
-	it('passes any well-formed site_kind code through to the API and rejects malformed ones', async () => {
+	it('ignores a legacy ?site_kind= param: the panel has no control for it any more', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [],
 			count: 0,
 			as_of: '2026-08-19T10:00:00Z'
 		});
 
-		const ok = await runLoad(new URL('http://localhost/shelters?site_kind=field_hospital'));
-		expect(vi.mocked(listPublicShelters).mock.calls[0][0]?.site_kind).toBe('field_hospital');
-		expect(ok.filters.site_kind).toBe('field_hospital');
+		const result = await runLoad(new URL('http://localhost/shelters?site_kind=host_house'));
+		expect(vi.mocked(listPublicShelters).mock.calls[0][0]?.site_kind).toBeUndefined();
+		expect(result.filters.site_kind).toBeUndefined();
+	});
 
-		const bad = await runLoad(new URL('http://localhost/shelters?site_kind=Field%20Hospital!'));
-		expect(vi.mocked(listPublicShelters).mock.calls[1][0]?.site_kind).toBeUndefined();
-		expect(bad.filters.site_kind).toBeUndefined();
+	describe('shelter type toggles (hide_*)', () => {
+		const item = (code: string, extra: Record<string, unknown>) => ({
+			code,
+			name: code,
+			status: 'open',
+			capacity: 1,
+			...extra
+		});
+
+		beforeEach(() => {
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [
+					item('EVAC', { site_kind: 'evacuation_center' }),
+					item('HOST', { site_kind: 'host_house' }),
+					item('EXT', { is_external: true, site_kind: 'evacuation_center' }),
+					item('EXT_HOST', { is_external: true, site_kind: 'host_house' })
+				],
+				count: 4,
+				as_of: '2026-11-16T10:00:00Z'
+			} as PublicShelterListResponse);
+		});
+
+		const codesFor = async (query: string) =>
+			(await runLoad(new URL(`http://localhost/shelters${query}`))).shelters.map((s) => s.code);
+
+		it('shows every type by default and echoes no hide_* flag', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters'));
+			expect(result.shelters.map((s) => s.code)).toEqual(['EVAC', 'HOST', 'EXT', 'EXT_HOST']);
+			expect(result.filters.hide_evacuation).toBe('');
+			expect(result.filters.hide_external).toBe('');
+			expect(result.filters.hide_host_house).toBe('');
+		});
+
+		it('hide_external drops every external shelter and keeps the rest', async () => {
+			expect(await codesFor('?hide_external=on')).toEqual(['EVAC', 'HOST']);
+		});
+
+		it('hide_host_house drops only non-external host houses', async () => {
+			expect(await codesFor('?hide_host_house=on')).toEqual(['EVAC', 'EXT', 'EXT_HOST']);
+		});
+
+		it('hide_evacuation drops only non-external evacuation centers', async () => {
+			expect(await codesFor('?hide_evacuation=on')).toEqual(['HOST', 'EXT', 'EXT_HOST']);
+		});
+
+		it('counts an external host house as external, not as a host house', async () => {
+			expect(await codesFor('?hide_evacuation=on&hide_external=on')).toEqual(['HOST']);
+		});
+
+		it('returns an empty list when all three types are off', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?hide_evacuation=on&hide_external=on&hide_host_house=on')
+			);
+			expect(result.shelters).toEqual([]);
+			expect(result.count).toBe(0);
+		});
+
+		it('echoes the switched-off types back in filters', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?hide_external=on&hide_host_house=on')
+			);
+			expect(result.filters.hide_external).toBe('on');
+			expect(result.filters.hide_host_house).toBe('on');
+			expect(result.filters.hide_evacuation).toBe('');
+		});
+	});
+
+	describe('parking filter (CR-253 FR-33/FR-34)', () => {
+		const item = (code: string, parking_vehicle_types: string[]) => ({
+			code,
+			name: code,
+			status: 'open',
+			capacity: 10,
+			province: 'สงขลา',
+			accepts_pre_registration: false,
+			updated_at: '2026-11-13T00:00:00Z',
+			parking_vehicle_types
+		});
+
+		beforeEach(() => {
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [item('SH_CAR', ['car']), item('SH_BOTH', ['car', 'boat']), item('SH_NONE', [])],
+				count: 3,
+				as_of: '2026-11-13T00:00:00Z'
+			} as unknown as PublicShelterListResponse);
+		});
+
+		it('keeps only shelters that take the ticked type and echoes the flag back', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters?parking_car=on'));
+			expect(result.shelters.map((s) => s.code)).toEqual(['SH_CAR', 'SH_BOTH']);
+			expect(result.filters.parking_car).toBe('on');
+			expect(result.filters.parking_boat).toBe('');
+		});
+
+		it('needs every ticked type at once', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?parking_car=on&parking_boat=on')
+			);
+			expect(result.shelters.map((s) => s.code)).toEqual(['SH_BOTH']);
+		});
+
+		it('does not filter when nothing is ticked', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters'));
+			expect(result.shelters).toHaveLength(3);
+		});
 	});
 });

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	activeSiteKinds,
 	countBySiteKind,
+	hiddenShelterGroups,
 	isHostHouseKind,
 	normalizeSiteKind,
+	shelterGroup,
 	shelterPinKind,
 	siteKindLabel,
 	siteKindTiles,
@@ -134,5 +136,25 @@ describe('siteKindTiles', () => {
 
 	it('falls back to the counted codes when the master list is empty', () => {
 		expect(siteKindTiles({ host_house: 1 }, [])).toEqual([{ code: 'host_house', count: 1 }]);
+	});
+});
+
+describe('shelter groups (type toggles)', () => {
+	it('puts external shelters only in external, whatever their site kind', () => {
+		expect(shelterGroup({ is_external: true, site_kind: 'evacuation_center' })).toBe('external');
+		expect(shelterGroup({ is_external: true, site_kind: 'host_house' })).toBe('external');
+	});
+
+	it('keeps host houses and evacuation centers apart from external', () => {
+		expect(shelterGroup({ is_external: false, site_kind: 'host_house' })).toBe('host_house');
+		expect(shelterGroup({ is_external: false, site_kind: 'evacuation_center' })).toBe('evacuation');
+		expect(shelterGroup({})).toBe('evacuation');
+	});
+
+	it('reads only switched-off groups from the URL (default all on)', () => {
+		expect(hiddenShelterGroups(new URLSearchParams(''))).toEqual([]);
+		expect(hiddenShelterGroups(new URLSearchParams('hide_external=on&hide_host_house=on'))).toEqual(
+			['external', 'host_house']
+		);
 	});
 });

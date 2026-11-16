@@ -194,6 +194,19 @@ describe('distribute form: one batch, many lines (#837)', () => {
 		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(false);
 	});
 
+	it('explains a quantity the number input cannot parse, such as "1e"', async () => {
+		await render({ preselectedItemId: RICE._id });
+
+		const input = qtyInputs()[0];
+		Object.defineProperty(input, 'validity', { configurable: true, value: { badInput: true } });
+		await type(input, '');
+
+		expect(document.body.textContent).toContain(
+			'จำนวนต้องเป็นตัวเลขมากกว่า 0 ทศนิยมไม่เกิน 4 ตำแหน่ง'
+		);
+		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(true);
+	});
+
 	it('"ทั้งหมด" on a legacy fractional lot offers the whole units that fit (#805)', async () => {
 		ledgerRows = [inbound('RICE1', RICE._id, '2.5', 'ถุง')];
 		await render({ preselectedItemId: RICE._id });

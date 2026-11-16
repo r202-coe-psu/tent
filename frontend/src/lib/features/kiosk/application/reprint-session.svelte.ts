@@ -8,6 +8,7 @@ import {
 	type KioskReprintMember,
 	type KioskReprintResult
 } from '../data/kiosk-check-in.api';
+import { isKioskClosedError } from '../data/kiosk-closed';
 import type { KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 import { isKioskPhoneSubmittable } from '../domain/phone';
 import { selectableIds, isAllSelected, toggleAllSelection } from '../domain/household-selection';
@@ -33,6 +34,8 @@ export interface ReprintSessionDeps {
 	lookup(input: GateInput): Promise<KioskLookupResponse>;
 	reprint(input: KioskReprintInput): Promise<KioskReprintResult>;
 	print(members: readonly KioskReprintMember[]): Promise<KioskPrintFlowResult>;
+	/** The server refused a call because the kiosk is closed: the page shows the closed screen. */
+	onClosed?: () => void;
 }
 
 function messageFor(error: unknown, t: ReprintSessionMessages): string {
@@ -196,6 +199,7 @@ export class ReprintSession {
 			await this.printLabels(generation);
 		} catch (error) {
 			if (generation !== this.generation) return;
+			if (this.endIfClosed(error)) return;
 			this.last4Value = '';
 			this.error = messageFor(error, this.messages);
 			if (error instanceof KioskRequestError && error.code === 'KIOSK_REPRINT_NOT_FOUND') {
@@ -239,6 +243,7 @@ export class ReprintSession {
 			return { kind: 'verified' };
 		} catch (error) {
 			if (generation !== this.generation) return { kind: 'error' };
+			if (this.endIfClosed(error)) return { kind: 'closed' };
 			if (error instanceof KioskRequestError && error.code === 'KIOSK_REPRINT_STAFF_PIN_INVALID') {
 				return { kind: 'wrong' };
 			}
@@ -344,6 +349,7 @@ export class ReprintSession {
 			this.step = 'members';
 		} catch (error) {
 			if (generation !== this.generation) return;
+			if (this.endIfClosed(error)) return;
 			this.error = messageFor(error, this.messages);
 		} finally {
 			if (generation === this.generation) this.busy = false;
@@ -378,6 +384,14 @@ export class ReprintSession {
 		this.printedCount = this.printable.length;
 		this.printable = [];
 		this.step = 'done';
+	}
+
+	/** A closed kiosk ends the visit (the visitor's data goes with it) instead of showing an error. */
+	private endIfClosed(error: unknown): boolean {
+		if (!isKioskClosedError(error)) return false;
+		this.reset();
+		this.deps.onClosed?.();
+		return true;
 	}
 
 	private clearHousehold(keepCandidates = false): void {

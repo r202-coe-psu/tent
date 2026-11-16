@@ -57,7 +57,8 @@
 		if (path.startsWith('/back-office/households')) {
 			path = '/back-office/evacuee-management';
 		}
-		return activeNavHref(path, navHrefs);
+		const fullPath = path + (page.url.search || '');
+		return activeNavHref(fullPath, navHrefs);
 	});
 
 	function isActive(href: BackofficeNavbarNode['href']): boolean {

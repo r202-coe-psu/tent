@@ -1,7 +1,5 @@
 import { isListedHouseholdMember } from './check-in-status';
 
-export const KIOSK_PHONE_MAX_CANDIDATES = 5;
-
 export type PhoneMatchDoc = {
 	_id: string;
 	shelter_code?: string;

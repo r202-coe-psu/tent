@@ -1,4 +1,5 @@
 import { DEFAULT_SITE_KIND } from '$lib/features/shelters/server';
+import { H, HEADER_TO_SHEET } from './columns';
 import type { RowValidation } from './import-row';
 
 /**
@@ -17,6 +18,8 @@ export interface ExistingShelter {
 	name: string;
 	/** Stored kind; a shelter without one reads as {@link DEFAULT_SITE_KIND}. */
 	site_kind?: string;
+	/** CR-252: stored `is_external`; a shelter without the flag reads as `false`. */
+	is_external?: boolean;
 }
 
 export interface DuplicateMatch {
@@ -25,6 +28,7 @@ export interface DuplicateMatch {
 	existingCode: string;
 	existingName: string;
 	existingSiteKind: string;
+	existingIsExternal: boolean;
 }
 
 /**
@@ -52,7 +56,8 @@ export function findExistingDuplicates(
 			name: v.name,
 			existingCode: match.code,
 			existingName: match.name,
-			existingSiteKind: match.site_kind ?? DEFAULT_SITE_KIND
+			existingSiteKind: match.site_kind ?? DEFAULT_SITE_KIND,
+			existingIsExternal: match.is_external === true
 		});
 	}
 	return matches;
@@ -77,4 +82,40 @@ export function findInFileDuplicates(validations: readonly RowValidation[]): Map
 		}
 	}
 	return duplicates;
+}
+
+/** CR-252 FR-9 / FR-31: thai verdict when an update would flip a shelter's external <-> normal type, else `null`. */
+export function externalTypeChangeVerdict(
+	rowIsExternal: boolean,
+	existingIsExternal: boolean
+): string | null {
+	if (rowIsExternal === existingIsExternal) return null;
+	return `เปลี่ยนชนิดไม่ได้ — ศูนย์เดิมเป็นศูนย์${existingIsExternal ? 'จากระบบภายนอก' : 'ปกติ'} แต่แถวนี้ระบุเป็นศูนย์${rowIsExternal ? 'จากระบบภายนอก' : 'ปกติ'}`;
+}
+
+/**
+ * CR-252 FR-31 in the preview: under `duplicateAction = 'update'`, a row whose type differs from
+ * the stored shelter becomes a `validation_error`. Skipped duplicates and new rows pass through.
+ * The worker re-checks against the stored doc (the preview list may be stale).
+ */
+export function applyExternalTypeRule(
+	validations: readonly RowValidation[],
+	duplicates: ReadonlyMap<number, DuplicateMatch>,
+	duplicateAction: 'skip' | 'update'
+): RowValidation[] {
+	if (duplicateAction !== 'update') return [...validations];
+	return validations.map((v) => {
+		if (!v.ok) return v;
+		const match = duplicates.get(v.row);
+		if (!match) return v;
+		const message = externalTypeChangeVerdict(v.isExternal === true, match.existingIsExternal);
+		if (!message) return v;
+		const sheet = HEADER_TO_SHEET[H.is_external];
+		return {
+			...v,
+			ok: false,
+			shelter: undefined,
+			errors: [...v.errors, { column: H.is_external, message, ...(sheet ? { sheet } : {}) }]
+		};
+	});
 }

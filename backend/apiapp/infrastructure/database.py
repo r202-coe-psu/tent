@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 import beanie
 from loguru import logger
 from pymongo import AsyncMongoClient
+from pymongo.errors import OperationFailure
 from tent_model import ALL_DOCUMENTS
 
 
@@ -42,11 +43,24 @@ class BeanieClient:
                 document_models=ALL_DOCUMENTS,
             )
 
+            await self._drop_legacy_unique_phone_index()
+
             logger.info("Beanie initialization successful")
 
         except Exception as e:
             logger.error(f"Beanie initialization failed: {e}")
             raise
+
+    async def _drop_legacy_unique_phone_index(self):
+        """Shared phones are allowed (#1049): drop the old unique index if it still exists."""
+        try:
+            await self.database["unassigned_registrations"].drop_index("uniq_open_phones")
+            logger.info("Dropped legacy unique index uniq_open_phones")
+        except OperationFailure as exc:
+            # 26 NamespaceNotFound / 27 IndexNotFound: already gone, nothing to do.
+            if exc.code not in (26, 27):
+                logger.error(f"Failed to drop legacy index uniq_open_phones: {exc}")
+                raise
 
     async def close(self):
         """Close MongoDB connection"""

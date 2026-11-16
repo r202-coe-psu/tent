@@ -8,6 +8,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { toast } from 'svelte-sonner';
 	import Users from '@lucide/svelte/icons/users';
 	import Search from '@lucide/svelte/icons/search';
@@ -56,6 +58,9 @@
 	let selectedIds = $state<string[]>([]);
 	let isSelectingAllMatching = $state(false);
 	let isBulkCancelling = $state(false);
+	let zoneDialogOpen = $state(false);
+	let zoneDialogEvacuee = $state.raw<Evacuee | null>(null);
+	let pickedZone = $state('');
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
@@ -182,24 +187,33 @@
 		}
 	}
 
-	async function handleCheckIn(evacuee: Evacuee) {
+	async function submitCheckIn(evacuee: Evacuee, zone: string) {
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
-		let zone = evacuee.current_stay.zone?.trim() ?? '';
-		if (!zone) {
-			const entered = window.prompt('ระบุโซนสำหรับเช็คอิน');
-			if (entered === null) return;
-			zone = entered.trim();
-		}
-		if (!zone) {
-			toast.error('การเช็คอินต้องระบุโซน');
-			return;
-		}
 		try {
 			await checkIn.mutateAsync({ evacuee, ctx, zone });
 			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
 		}
+	}
+
+	function handleCheckIn(evacuee: Evacuee) {
+		const zone = evacuee.current_stay.zone?.trim() ?? '';
+		if (zone) {
+			void submitCheckIn(evacuee, zone);
+			return;
+		}
+		zoneDialogEvacuee = evacuee;
+		pickedZone = '';
+		zoneDialogOpen = true;
+	}
+
+	async function confirmZoneAndCheckIn() {
+		const evacuee = zoneDialogEvacuee;
+		const zone = pickedZone.trim();
+		if (!evacuee || !zone) return;
+		zoneDialogOpen = false;
+		await submitCheckIn(evacuee, zone);
 	}
 
 	async function handleBulkCancel() {
@@ -286,8 +300,8 @@
 	</div>
 
 	<!-- Filters -->
-	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-		<div class="w-full min-w-0 space-y-2 md:col-span-2">
+	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+		<div class="w-full min-w-0 space-y-2">
 			<label for="evacuee-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
 			<div class="relative">
 				<Search
@@ -316,7 +330,7 @@
 			>
 				<Select.Trigger
 					id="evacuee-type-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-label="ประเภทผู้เข้าพัก"
 				>
 					<span class="truncate">
@@ -353,7 +367,7 @@
 			>
 				<Select.Trigger
 					id="evacuee-zone-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-label="โซนที่จัดสรร"
 				>
 					<span class="truncate">
@@ -378,7 +392,7 @@
 			<Select.Root type="single" bind:value={selectedStatus} onValueChange={resetPageOnFilter}>
 				<Select.Trigger
 					id="evacuee-status-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-label="สถานะการพักพิง"
 				>
 					<span class="truncate">
@@ -403,7 +417,7 @@
 			<Select.Root type="single" value={selectedSort} onValueChange={handleSortChange}>
 				<Select.Trigger
 					id="evacuee-sort"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-labelledby="evacuee-sort-label"
 				>
 					<span class="truncate">{EVACUEE_SORT_LABELS[selectedSort]}</span>
@@ -654,3 +668,41 @@
 		<PaginationControls bind:page={currentPage} count={total} perPage={PAGE_SIZE} />
 	{/if}
 </div>
+
+<Dialog.Root bind:open={zoneDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>ระบุโซนสำหรับเช็คอิน</Dialog.Title>
+			<Dialog.Description>
+				{#if zoneDialogEvacuee}
+					{zoneDialogEvacuee.first_name} {zoneDialogEvacuee.last_name} ยังไม่ได้ระบุโซน
+				{/if}
+			</Dialog.Description>
+		</Dialog.Header>
+		{#if zoneOptions.length > 0}
+			<Select.Root type="single" bind:value={pickedZone}>
+				<Select.Trigger class="h-11 w-full" aria-label="เลือกโซน">
+					{zoneOptions.find((option) => option.value === pickedZone)?.label ?? 'เลือกโซน'}
+				</Select.Trigger>
+				<Select.Content>
+					{#each zoneOptions as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		{:else}
+			<div class="space-y-1.5">
+				<Label for="evacuee-check-in-zone">รหัสโซน</Label>
+				<Input id="evacuee-check-in-zone" bind:value={pickedZone} placeholder="เช่น A1" />
+			</div>
+		{/if}
+		<Dialog.Footer>
+			<Button type="button" variant="outline" onclick={() => (zoneDialogOpen = false)}>
+				ยกเลิก
+			</Button>
+			<Button type="button" disabled={!pickedZone.trim()} onclick={confirmZoneAndCheckIn}>
+				ยืนยันเช็คอิน
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

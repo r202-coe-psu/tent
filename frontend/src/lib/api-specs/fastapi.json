@@ -489,7 +489,7 @@
 						"description": "Successful Response",
 						"content": {
 							"application/json": {
-								"schema": { "$ref": "#/components/schemas/ShelterDetailResponse" }
+								"schema": { "$ref": "#/components/schemas/ExternalShelterDetailResponse" }
 							}
 						}
 					},
@@ -4404,6 +4404,98 @@
 				"title": "ExternalSearchResult",
 				"description": "`/external/v1/occupants` keeps the zone partners read (CR-183 FR-18 is public-only)."
 			},
+			"ExternalShelterDetail": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"site_kind": {
+						"type": "string",
+						"title": "Site Kind",
+						"description": "Master code from master_data:site_kind (e.g. evacuation_center, host_house)",
+						"default": "evacuation_center"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"admin_type": { "type": "string", "title": "Admin Type" },
+					"address": { "type": "string", "title": "Address" },
+					"capacity": { "$ref": "#/components/schemas/ShelterCapacityDetail" },
+					"occupancy": {
+						"type": "integer",
+						"title": "Occupancy",
+						"description": "Forecast Occupancy headcount"
+					},
+					"present": {
+						"type": "integer",
+						"title": "Present",
+						"description": "Present Occupancy headcount"
+					},
+					"in_zone": {
+						"type": "integer",
+						"title": "In Zone",
+						"description": "In-zone Occupancy headcount (room_confirmed)"
+					},
+					"occupancy_rate": { "type": "integer", "title": "Occupancy Rate" },
+					"building_status": { "type": "string", "title": "Building Status" },
+					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
+					"location": {
+						"anyOf": [{ "$ref": "#/components/schemas/GeoJsonPoint" }, { "type": "null" }]
+					},
+					"admission_policy": { "$ref": "#/components/schemas/ShelterAdmissionPolicyDetail" },
+					"travel": { "$ref": "#/components/schemas/ShelterTravelDetail" },
+					"facilities": { "$ref": "#/components/schemas/ShelterFacilitiesDetail" },
+					"zones": {
+						"anyOf": [
+							{
+								"items": { "$ref": "#/components/schemas/ExternalShelterZoneDetail" },
+								"type": "array"
+							},
+							{ "type": "null" }
+						],
+						"title": "Zones"
+					},
+					"contact": { "$ref": "#/components/schemas/ShelterContactDetail" },
+					"faq": {
+						"items": { "$ref": "#/components/schemas/ShelterFaqDetail" },
+						"type": "array",
+						"title": "Faq"
+					},
+					"accepts_pre_registration": {
+						"type": "boolean",
+						"title": "Accepts Pre Registration",
+						"default": false
+					},
+					"donation_points": {
+						"items": { "$ref": "#/components/schemas/DonationPoint" },
+						"type": "array",
+						"title": "Donation Points"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"status",
+					"admin_type",
+					"address",
+					"capacity",
+					"occupancy",
+					"present",
+					"in_zone",
+					"occupancy_rate",
+					"building_status",
+					"admission_policy",
+					"travel",
+					"facilities",
+					"contact",
+					"faq"
+				],
+				"title": "ExternalShelterDetail"
+			},
+			"ExternalShelterDetailResponse": {
+				"properties": { "shelter": { "$ref": "#/components/schemas/ExternalShelterDetail" } },
+				"type": "object",
+				"required": ["shelter"],
+				"title": "ExternalShelterDetailResponse"
+			},
 			"ExternalShelterNeedsResponse": {
 				"properties": {
 					"code": { "type": "string", "title": "Code" },
@@ -4417,6 +4509,18 @@
 				"type": "object",
 				"required": ["code", "name", "needs"],
 				"title": "ExternalShelterNeedsResponse"
+			},
+			"ExternalShelterZoneDetail": {
+				"properties": {
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"type": { "type": "string", "title": "Type" },
+					"capacity": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Capacity" },
+					"area_m2": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Area M2" }
+				},
+				"type": "object",
+				"required": ["type"],
+				"title": "ExternalShelterZoneDetail",
+				"description": "Partner zone shape: without the per-zone `code` / `status` / `present` the public\ndetail gained in CR-254 — the partner API stays as it was (CR-254 D3)."
 			},
 			"FamilyMember": {
 				"properties": {
@@ -4753,6 +4857,7 @@
 						"title": "Closed At"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
 					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
 					"facilities": { "items": { "type": "string" }, "type": "array", "title": "Facilities" }
@@ -4862,6 +4967,7 @@
 						"title": "Closed At"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
 					"occupancy_total": { "type": "integer", "title": "Occupancy Total" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -5964,6 +6070,36 @@
 				"required": ["page", "limit", "total", "total_pages"],
 				"title": "PaginationMeta"
 			},
+			"ParkingPoint": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"name": { "type": "string", "title": "Name" },
+					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" },
+					"geo": { "$ref": "#/components/schemas/GeoPoint" },
+					"vehicles": {
+						"items": { "$ref": "#/components/schemas/ParkingVehicle" },
+						"type": "array",
+						"title": "Vehicles"
+					}
+				},
+				"type": "object",
+				"required": ["id", "name", "geo"],
+				"title": "ParkingPoint",
+				"description": "A pinned parking point of a shelter (CR-253). Never read from ``raw_data``."
+			},
+			"ParkingVehicle": {
+				"properties": {
+					"type": { "type": "string", "title": "Type" },
+					"max_capacity": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Max Capacity"
+					}
+				},
+				"type": "object",
+				"required": ["type"],
+				"title": "ParkingVehicle",
+				"description": "A vehicle type a parking point takes, with its capacity (CR-253)."
+			},
 			"PersonIdInput": {
 				"properties": {
 					"cardType": {
@@ -6535,10 +6671,25 @@
 						"title": "Accepts Pre Registration",
 						"default": false
 					},
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
+					"external_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "External Url"
+					},
 					"donation_points": {
 						"items": { "$ref": "#/components/schemas/DonationPoint" },
 						"type": "array",
 						"title": "Donation Points"
+					},
+					"parking_points": {
+						"items": { "$ref": "#/components/schemas/ParkingPoint" },
+						"type": "array",
+						"title": "Parking Points"
+					},
+					"parking_vehicle_types": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Parking Vehicle Types"
 					}
 				},
 				"type": "object",
@@ -6641,6 +6792,11 @@
 						"title": "Accepts Pre Registration",
 						"default": false
 					},
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
+					"external_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "External Url"
+					},
 					"readiness_status": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Readiness Status"
@@ -6652,6 +6808,16 @@
 					"readiness_assessed_at": {
 						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
 						"title": "Readiness Assessed At"
+					},
+					"parking_points": {
+						"items": { "$ref": "#/components/schemas/ParkingPoint" },
+						"type": "array",
+						"title": "Parking Points"
+					},
+					"parking_vehicle_types": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Parking Vehicle Types"
 					},
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -6702,10 +6868,22 @@
 			},
 			"ShelterZoneDetail": {
 				"properties": {
+					"code": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Code" },
 					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
 					"type": { "type": "string", "title": "Type" },
+					"status": {
+						"type": "string",
+						"enum": ["active", "closed"],
+						"title": "Status",
+						"default": "active"
+					},
 					"capacity": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Capacity" },
-					"area_m2": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Area M2" }
+					"area_m2": { "anyOf": [{ "type": "number" }, { "type": "null" }], "title": "Area M2" },
+					"present": {
+						"anyOf": [{ "type": "integer" }, { "type": "null" }],
+						"title": "Present",
+						"description": "Present headcount in this zone (active + room_confirmed + temporary_leave); null until the worker has projected per-zone counts (#1241)"
+					}
 				},
 				"type": "object",
 				"required": ["type"],

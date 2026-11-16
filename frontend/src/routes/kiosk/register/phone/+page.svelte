@@ -20,6 +20,7 @@
 		KIOSK_IDLE_TIMEOUT_MS,
 		KioskNoticePanel,
 		KioskRegisterPhone,
+		goToKioskClosed,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
 		restartThaidWalkIn,
@@ -91,6 +92,12 @@
 			continuing = true;
 			walkInSession.registration = outcome.registration;
 			await goto(resolve(`/kiosk/register/done${contextQuery}`));
+			return;
+		}
+		if (outcome.kind === 'closed') {
+			// The server refused this write: nothing was saved. End the walk-in (burns a ThaiD scan).
+			abandonWalkIn();
+			goToKioskClosed(contextQuery);
 			return;
 		}
 		if (outcome.kind === 'phone_duplicate') {

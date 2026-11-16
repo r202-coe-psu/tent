@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
 	toQtyStrLossless,
 	addQty,
+	parseQtyInput,
+	parseQtyInputStrict,
 	formatQty,
 	parseQty,
 	persistQty,
@@ -100,6 +102,39 @@ describe('formatQty', () => {
 	});
 });
 
+describe('parseQtyInput', () => {
+	it('returns the canonical qty string for what a number input can hold', () => {
+		const cases: [string, string][] = [
+			['0', '0'],
+			['12', '12'],
+			['-0.1', '-0.1'],
+			['0.30', '0.3'],
+			['.5', '0.5'],
+			['5.', '5'],
+			[' 1.2345 ', '1.2345']
+		];
+		for (const [raw, out] of cases) expect(parseQtyInput(raw)).toBe(out);
+	});
+
+	it('returns null for blanks, exponents, hex, and more than 4 decimals', () => {
+		for (const raw of ['', ' ', '.', '-', '1e3', '0x10', '1.23456', 'Infinity', '+1', '1 2']) {
+			expect(parseQtyInput(raw)).toBeNull();
+		}
+	});
+});
+
+describe('parseQtyInput size limit', () => {
+	it('keeps 15 integer digits exact', () => {
+		expect(parseQtyInput('999999999999999.9999')).toBe('999999999999999.9999');
+	});
+
+	it('returns null past 15 integer digits instead of exponent notation', () => {
+		for (const raw of ['1000000000000000', '1000000000000000000000', '-99999999999999999999.5']) {
+			expect(parseQtyInput(raw)).toBeNull();
+		}
+	});
+});
+
 describe('toQtyStrLossless (#936)', () => {
 	it('converts a number to an exact string without rounding', () => {
 		expect(toQtyStrLossless(6.33333)).toBe('6.33333');
@@ -112,4 +147,26 @@ describe('toQtyStrLossless (#936)', () => {
 		expect(toQtyStrLossless(NaN)).toBeNaN();
 		expect(toQtyStrLossless(undefined)).toBeUndefined();
 	});
+});
+
+describe('parseQtyInputStrict (#939)', () => {
+	it.each([
+		['0.30000', '0.3'],
+		['1', '1'],
+		['12.5', '12.5'],
+		[' 3 ', '3'],
+		['0.1200', '0.12'],
+		// Never exponent notation — `Decimal#toString()` would turn these into `1e+21` (#939 review W1)
+		['1000000000000000000000', '1000000000000000000000'],
+		['123456789012345678901234.5', '123456789012345678901234.5']
+	])('accepts %s as %s', (raw, expected) => {
+		expect(parseQtyInputStrict(raw)).toBe(expected);
+	});
+
+	it.each(['', '  ', '1e3', '1e21', '0.12345', '-1', '1,5', 'abc', '1.', '.5', 'NaN', 'Infinity'])(
+		'rejects %j',
+		(raw) => {
+			expect(parseQtyInputStrict(raw)).toBeNull();
+		}
+	);
 });

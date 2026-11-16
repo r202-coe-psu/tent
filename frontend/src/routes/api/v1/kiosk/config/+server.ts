@@ -13,6 +13,7 @@ import {
 	DEPENDENCY_UNAVAILABLE,
 	ScannerAuthError
 } from '$lib/server/scanners/device-credentials';
+import { isKioskClosed } from '$lib/server/scanners/kiosk-closed';
 
 export const prerender = false;
 
@@ -34,7 +35,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				shelter_code: principal.shelter_code,
 				phone_check_in_enabled: isKioskPhoneCheckInEnabled(shelter),
 				walk_in_registration_enabled: isKioskWalkInRegistrationEnabled(shelter),
-				thaid_check_in_enabled: thaidCheckInEnabled
+				thaid_check_in_enabled: thaidCheckInEnabled,
+				service_open: !isKioskClosed(principal)
 			},
 			{ status: 200, headers: noStoreHeaders }
 		);

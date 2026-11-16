@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
-import { isShelterCancelled } from '$lib/features/shelters/server';
+import { isExternalShelter, isShelterCancelled } from '$lib/features/shelters/server';
 import { authorizeTransfer, handleEndpointError, resolveShelterCode } from '../_auth';
 
 export const prerender = false;
@@ -18,7 +18,7 @@ type TransferDestination = { code: string; name: string };
  * caller's own shelter for everyone but system_admin, so after the form drops its own shelter
  * nothing is left. This route answers only code + name, to the same roles the transfer API
  * already accepts (`authorizeTransfer`). A cancelled shelter (set up by
- * mistake, never opened) is left out: nothing should be sent there.
+ * mistake, never opened) and an external shelter (CR-252) are left out: nothing should be sent there.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
@@ -39,6 +39,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
 			if (!doc || doc.type !== 'shelter' || typeof doc.code !== 'string' || !doc.code) continue;
 			const key = doc.code.toUpperCase();
 			if (key === own || byCode.has(key) || isShelterCancelled(doc)) continue;
+			// CR-252 FR-18: an external shelter holds no stock here, nothing can be sent to it.
+			if (isExternalShelter(doc)) continue;
 			const name = typeof doc.name === 'string' && doc.name.trim() ? doc.name : doc.code;
 			byCode.set(key, { code: doc.code, name });
 		}

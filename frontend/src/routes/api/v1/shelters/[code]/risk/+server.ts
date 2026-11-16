@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { serviceError } from '$lib/server/couch-admin';
 import { findMasterByCode, migrate } from '$lib/server/shelters.admin';
-import { isShelterCancelled } from '$lib/features/shelters/server';
+import { isShelterPublicVisible } from '$lib/features/shelters/server';
 
 export const prerender = false;
 
@@ -22,7 +22,7 @@ export const GET: RequestHandler = async ({ params }) => {
 
 		const master = await findMasterByCode(code);
 		// A cancelled shelter is not public (draft-shelter-cancelled-status) — answer as unknown.
-		if (!master || isShelterCancelled(master)) {
+		if (!master || !isShelterPublicVisible(master)) {
 			return error(404, { message: `Shelter "${code}" not found` });
 		}
 

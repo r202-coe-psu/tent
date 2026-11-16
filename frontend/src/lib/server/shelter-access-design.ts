@@ -331,6 +331,16 @@ export const BULK_RETURN_ENTRY_MANGO_INDEXES = [
 	}
 ];
 
+/**
+ * Mango index for reading the distribution logs of one Thai day by `distributed_at` (meal coverage
+ * report, #1300). Without it `_find` still answers, by scanning every `distribution_log`.
+ */
+export const DISTRIBUTION_LOG_DAY_MANGO_INDEX = {
+	index: { fields: ['type', 'distributed_at'] },
+	name: 'distribution-log-type-distributed-at-idx',
+	type: 'json' as const
+};
+
 /** Mango index definitions required by Ticket & Distribution queries (schema.md §6 / §8 / CR-121). */
 export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
 	{

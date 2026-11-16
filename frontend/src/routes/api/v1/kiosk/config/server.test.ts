@@ -59,7 +59,8 @@ describe('POST /api/v1/kiosk/config', () => {
 			shelter_code: 'SH001',
 			phone_check_in_enabled: true,
 			walk_in_registration_enabled: true,
-			thaid_check_in_enabled: true
+			thaid_check_in_enabled: true,
+			service_open: true
 		});
 		expect(mockFindShelter).toHaveBeenCalledTimes(1);
 		expect(mockFindShelter).toHaveBeenCalledWith('SH001');
@@ -75,6 +76,20 @@ describe('POST /api/v1/kiosk/config', () => {
 		});
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('pragma')).toBe('no-cache');
+	});
+
+	it.each([
+		['closed', false],
+		['open', true]
+	])('answers 200 with service_open for a device whose service is %s', async (_label, open) => {
+		mockAuthenticate.mockResolvedValueOnce({ shelter_code: 'SH001', service_open: open } as never);
+		const response = await POST(
+			request({}, { 'x-device-id': 'device-1', 'x-device-secret': 'secret' })
+		);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect((await response.json()).service_open).toBe(open);
 	});
 
 	it.each([

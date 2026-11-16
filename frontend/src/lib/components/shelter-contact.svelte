@@ -32,13 +32,13 @@
 					? t.noCoordinatorName
 					: shelter.contact?.manager || '-'}
 			</div>
-			<div class="text-xl font-bold text-success-dark">
+			<div class="pt-2 text-sm font-bold text-success-dark">
 				{shelter.contact?.phone === 'unspecified' ? t.noContactInfo : shelter.contact?.phone || '-'}
 			</div>
 		</div>
 	</div>
 
-	{#if shelter.faq && shelter.faq.length > 0}
+	{#if !shelter.is_external && shelter.faq && shelter.faq.length > 0}
 		<div class="flex flex-col gap-2">
 			{#each shelter.faq as item (item.q)}
 				<details class="group overflow-hidden rounded-xl border border-border bg-white shadow-sm">

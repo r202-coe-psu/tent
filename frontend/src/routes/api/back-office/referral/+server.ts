@@ -8,7 +8,10 @@ import {
 	resolveShelterCode,
 	handleEndpointError
 } from './_auth';
-import { CouchDbReferralServerRepository } from '$lib/features/referrals/server/referral.server-repository';
+import {
+	assertDestinationAcceptsReferrals,
+	CouchDbReferralServerRepository
+} from '$lib/features/referrals/server/referral.server-repository';
 import {
 	referralInputSchema,
 	referralListQuerySchema
@@ -86,7 +89,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
  * POST /api/back-office/referral
  * Create a new draft referral
  *
- * Admin/debug path — SPA create uses session remote (`referral.remote.ts`).
+ * The SPA creates referrals through this route (`ReferralRemoteRepository`).
  */
 export const POST: RequestHandler = async ({ request, url }) => {
 	try {
@@ -131,6 +134,10 @@ export const POST: RequestHandler = async ({ request, url }) => {
 				{ error: 'ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้' },
 				{ status: 422 }
 			);
+		}
+
+		if (parsed.data.referral_type === 'capacity' && parsed.data.to_shelter_code) {
+			await assertDestinationAcceptsReferrals(parsed.data.to_shelter_code);
 		}
 
 		const db = `shelter_${shelterCode.toLowerCase()}`;

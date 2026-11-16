@@ -35,10 +35,17 @@ export function updateShelter(
 	input: Partial<Shelter>,
 	rev?: string
 ): Promise<{ ok: true; code: string; rev: string }> {
+	// A cleared capacity (External shelter) is `undefined`, which JSON.stringify drops, so the
+	// server would keep the old value. Send an explicit `null`; the server reads it as "clear".
+	// Only a full form save (carries `is_external`) does this, never a partial patch.
+	const payload =
+		input.is_external === true && input.capacity === undefined
+			? { ...input, capacity: null }
+			: input;
 	return serviceFetch(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`, {
 		method: 'PATCH',
 		// `_rev` makes the server 409 when the doc changed since the form loaded.
-		body: JSON.stringify(rev ? { ...input, _rev: rev } : input)
+		body: JSON.stringify(rev ? { ...payload, _rev: rev } : payload)
 	});
 }
 

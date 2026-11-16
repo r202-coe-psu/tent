@@ -28,6 +28,7 @@ import {
 	DONATION_BOOKING_REF_MANGO_INDEX,
 	ROLE_GRANT_AUDIT_MANGO_INDEX,
 	STOCK_LEDGER_LOT_NO_MANGO_INDEX,
+	DISTRIBUTION_LOG_DAY_MANGO_INDEX,
 	DONATION_PHOTO_ORPHAN_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
@@ -330,6 +331,7 @@ describe('buildValidateDocUpdate', () => {
 			PEOPLE_MANGO_INDEXES,
 			REQUISITION_TICKET_MANGO_INDEXES,
 			BULK_RETURN_ENTRY_MANGO_INDEXES,
+			[DISTRIBUTION_LOG_DAY_MANGO_INDEX],
 			[DAILY_SOP_ROLE_MANGO_INDEX],
 			[DONATION_RECEIVED_MANGO_INDEX],
 			[DONATION_RECEIVED_PHONE_MANGO_INDEX],
@@ -415,6 +417,14 @@ describe('buildValidateDocUpdate', () => {
 				purpose: 'donation',
 				donation_id: { $exists: false }
 			}
+		});
+	});
+
+	it('indexes distribution logs by type and distributed_at for the per-day read (#1300)', () => {
+		expect(DISTRIBUTION_LOG_DAY_MANGO_INDEX).toEqual({
+			index: { fields: ['type', 'distributed_at'] },
+			name: 'distribution-log-type-distributed-at-idx',
+			type: 'json'
 		});
 	});
 

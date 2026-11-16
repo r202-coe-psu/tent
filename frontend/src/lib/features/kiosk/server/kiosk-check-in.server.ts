@@ -7,11 +7,7 @@ import {
 	isReprintableStatus
 } from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
-import {
-	groupPhoneMatches,
-	KIOSK_PHONE_MAX_CANDIDATES,
-	isPhoneMatchEligible
-} from '../domain/phone-match';
+import { groupPhoneMatches, isPhoneMatchEligible } from '../domain/phone-match';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { maskLastName } from '$lib/utils/mask';
@@ -326,6 +322,22 @@ export async function getById(dbName: string, id: string): Promise<EvacueeDoc | 
 	}
 }
 
+/** Max concurrent per-household `_find` calls when expanding phone candidates. */
+export const HOUSEHOLD_EXPAND_BATCH_SIZE = 8;
+
+/** Runs `fn` over `items` in sequential batches so CouchDB never sees an unbounded burst. */
+async function mapInBatches<T, R>(
+	items: readonly T[],
+	batchSize: number,
+	fn: (item: T) => Promise<R>
+): Promise<R[]> {
+	const results: R[] = [];
+	for (let i = 0; i < items.length; i += batchSize) {
+		results.push(...(await Promise.all(items.slice(i, i + batchSize).map(fn))));
+	}
+	return results;
+}
+
 async function lookupByPhone(
 	shelterCode: string,
 	rawPhone: string,
@@ -381,7 +393,7 @@ async function lookupByPhone(
 		if (truncated) break;
 	}
 	const docs = [...docsById.values()];
-	// A capped or malformed page sequence cannot prove there are five or fewer groups.
+	// A capped or malformed page sequence cannot prove the match list is complete.
 	// Fail closed instead of returning an incomplete household picker.
 	if (truncated) return { kind: 'too_many' };
 	const householdIds = [
@@ -407,7 +419,6 @@ async function lookupByPhone(
 	}
 
 	const groups = groupPhoneMatches(docs, shelterCode, headByHousehold);
-	if (groups.length > KIOSK_PHONE_MAX_CANDIDATES) return { kind: 'too_many' };
 
 	const normalizedPrimaryId = primaryId
 		? `evacuee:${primaryId.slice('evacuee:'.length).toUpperCase()}`
@@ -429,8 +440,10 @@ async function lookupByPhone(
 				)
 			];
 			// Equality queries keep the (type, household_id) index usable.
-			const memberResults = await Promise.all(
-				householdIds.map((householdId) =>
+			const memberResults = await mapInBatches(
+				householdIds,
+				HOUSEHOLD_EXPAND_BATCH_SIZE,
+				(householdId) =>
 					adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
 						method: 'POST',
 						body: JSON.stringify({
@@ -442,7 +455,6 @@ async function lookupByPhone(
 							limit: 100
 						})
 					})
-				)
 			);
 			const expanded = memberResults.flatMap((result) => (result.docs ?? []).filter(isEvacueeDoc));
 			const candidates = groups.map((candidate) => {

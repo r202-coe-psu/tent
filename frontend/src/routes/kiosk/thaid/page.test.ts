@@ -15,7 +15,8 @@ describe('kiosk thaid route load', () => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: true,
 			thaidCheckInEnabled: false,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			serviceOpen: true
 		});
 		const url = new URL(
 			'https://tent.example.go.th/kiosk/thaid?shelter_name=Shelter%201&shelter_code=SH001&station_name=Desk%201&device_name=Kiosk%201&device_secret=must-not-forward'
@@ -41,7 +42,8 @@ describe('kiosk thaid route load', () => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: false,
 			thaidCheckInEnabled: true,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			serviceOpen: true
 		});
 		const url = new URL('https://tent.example.go.th/kiosk/thaid?shelter_code=SH001');
 

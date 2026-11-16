@@ -18,7 +18,7 @@
 	import LedgerRowView from './ledger-row.svelte';
 	import LedgerCard from './ledger-card.svelte';
 	import SelfPurchasedSummary from './self-purchased-summary.svelte';
-	import { downloadCsv } from './download-csv';
+	import { downloadCsv } from '$lib/utils/download-csv';
 	import {
 		LEDGER_PAGE_SIZE,
 		mergeLedgerParams,

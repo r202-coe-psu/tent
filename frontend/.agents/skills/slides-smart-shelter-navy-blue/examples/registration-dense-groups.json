@@ -1,0 +1,21 @@
+{
+ "cover": {
+  "title": [
+   "คู่มือ Staff: รับเข้าศูนย์พักพิง, Checkout และการโอนย้ายผู้ประสบภัย"
+  ],
+  "subtitle": "PSU Smart Shelter · ศูนย์พักพิงผู้ประสบภัย",
+  "desc": [
+   "ขั้นตอนทีละปุ่ม เพื่อให้การลงทะเบียน ณ ศูนย์พักพิงรวดเร็วยิ่งขึ้น"
+  ],
+  "edition": "ฉบับที่ 1.0  •  13 พฤศจิกายน 2569"
+ },
+ "strip_footer": true,
+ "light_slides": [
+  37
+ ],
+ "no_plan": true,
+ "nested_title": true,
+ "light_map": {
+  "CBD5E1": "334155"
+ }
+}

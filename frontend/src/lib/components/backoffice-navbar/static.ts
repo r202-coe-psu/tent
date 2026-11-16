@@ -298,7 +298,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
 
-const stripTrailingSlash = (path: string): string => path.replace(/\/$/, '');
+/** Drops a trailing slash from the path part only (`/x/?tab=a` → `/x?tab=a`). */
+const stripTrailingSlash = (path: string): string => {
+	const q = path.indexOf('?');
+	const base = q === -1 ? path : path.slice(0, q);
+	const query = q === -1 ? '' : path.slice(q);
+	return base.replace(/\/$/, '') + query;
+};
 
 /** Every non-null nav href in the tree (groups included), depth-first. */
 export function navLeafHrefs(
@@ -323,14 +329,28 @@ export function navLeafHrefs(
  * The single nav href that owns `path`: the LONGEST href equal to the path or a path-segment
  * prefix of it (`href + '/'`). Lets a nested page (`/kiosks/banners`) win over its parent
  * (`/kiosks`) — FR-KBR-24, draft CR kiosk-banner-design-revision. Null when no href matches.
+ * Also supports query-bearing nav targets (e.g. `/back-office/supply?tab=catalog`) by prioritizing
+ * an exact match against the full path including search parameters.
  */
 export function activeNavHref(path: string, hrefs: readonly string[]): string | null {
 	const current = stripTrailingSlash(path);
+	// 1. Exact match against full URL (including query string if present)
+	for (const href of hrefs) {
+		if (current === stripTrailingSlash(href)) return href;
+	}
+
+	// 2. Pathname prefix match (strip query strings from both sides)
+	const currentPath = current.split('?')[0];
 	let best: string | null = null;
 	for (const href of hrefs) {
 		const target = stripTrailingSlash(href);
-		if (current !== target && !current.startsWith(target + '/')) continue;
-		if (best === null || target.length > stripTrailingSlash(best).length) best = href;
+		const targetPath = target.split('?')[0];
+		if (currentPath !== targetPath && !currentPath.startsWith(targetPath + '/')) continue;
+		// If the nav target has a query string that did not match exactly, do not match it as a base path
+		if (target.includes('?') && target !== current) continue;
+		if (best === null || targetPath.length > stripTrailingSlash(best.split('?')[0]).length) {
+			best = href;
+		}
 	}
 	return best;
 }

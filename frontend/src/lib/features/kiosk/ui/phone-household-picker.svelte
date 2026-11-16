@@ -50,7 +50,7 @@
 			{t.subheading}
 		</p>
 	</header>
-	<div class="space-y-2 kiosk-portrait:space-y-4">
+	<div class="max-h-[60vh] space-y-2 overflow-y-auto kiosk-portrait:space-y-4">
 		{#each candidates as candidate (candidate.primary_evacuee_id)}
 			<Button
 				type="button"

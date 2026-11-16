@@ -14,7 +14,7 @@ affects:
   - worker/src/worker/projectors/shelter.py (`project_shelter`, `classify_registry_shelter` → `RetentionPhase.HIDDEN`) · couch/bootstrap.py · couch/processor.py (ใช้ผ่าน `HIDDEN` / `delete` เดิม ไม่ต้องแก้ logic)
   - frontend/src/lib/features/shelters/domain/schema.ts (`shelterFeatureFlagsSchema`, `DEFAULT_SHELTER_FEATURE_FLAGS`, `isShelterBookable`, + `isShelterPublicVisible`, `isShelterAcceptingReferrals`)
   - frontend/src/lib/features/shelters/ui/basic-info-section.svelte · shelter-form-page.svelte
-  - frontend BFF /api/v1/shelters · /api/v1/shelters/{code}/risk (+ /public/v1 alias) · /api/public/v1/transparency/shelters · /api/public/v1/config/shelter-policy
+  - frontend BFF /api/v1/shelters · /api/v1/shelters/{code}/risk (+ /public/v1 alias) · /api/public/v1/transparency/shelters · /api/public/v1/config/shelter-policy · /api/v1/shelters/{code}/stock-status
   - frontend/src/lib/features/referrals/ui/shelter-combobox.svelte · referrals/server/referral.server-repository.ts (`transition`)
   - frontend/src/routes/api/back-office/referral/+server.ts (POST) · referral/[id]/transition · referral/bulk-transition
 ---
@@ -58,6 +58,7 @@ affects:
 
 - FR-13 — `GET /api/v1/shelters` และ `GET /api/public/v1/transparency/shelters` ตัดศูนย์ที่ `isShelterPublicVisible() === false` ออกจาก list.
 - FR-14 — `GET /api/v1/shelters/{code}/risk` (+ alias `/public/v1/...`) และ `GET /api/public/v1/config/shelter-policy` ตอบ 404 เหมือนไม่พบศูนย์ เมื่อศูนย์ถูกซ่อน.
+- FR-14a — `GET /api/v1/shelters/{code}/stock-status` ตอบ 404 เหมือนไม่พบศูนย์ เมื่อศูนย์ถูกซ่อน ยกเว้นเจ้าหน้าที่ที่มี scope ศูนย์นั้น (Daily SOP) ยังอ่านได้ตามเดิม.
 
 **Referral intake (เฉพาะ `referral_type = capacity` ที่มี `to_shelter_code`)**
 
@@ -101,6 +102,7 @@ affects:
 - [ ] ปิด `public_visible` (ผ่าน dialog ยืนยัน) → หลัง worker ประมวลผล ศูนย์ไม่ปรากฏใน public ทุกหน้า (ค้นหาศูนย์, needs, transparency, ค้นหาผู้พักพิง, งานอาสา) และ external API; `/api/public/v1/shelters/{code}` 404; จอง/ลงทะเบียนล่วงหน้าไม่ได้.
 - [ ] เปิด `public_visible` กลับ → ศูนย์และข้อมูลราย shelter กลับมาใน public หลัง worker rescan.
 - [ ] ปิด `accepts_referrals` → ศูนย์ไม่อยู่ใน referral picker; `POST /api/back-office/referral` ไป shelter นั้นตอบ 422; ส่งใบ `draft` ไปศูนย์นั้นตอบ 422 และใบคงเป็น `draft`; accept ใบ `sent` ที่ค้างอยู่ตอบ 422 และผู้อพยพไม่ถูกย้าย; reject/close ใบเดิมสำเร็จ.
+- [ ] ศูนย์ที่ซ่อน: `stock-status` ตอบ 404 กับผู้เรียกที่ไม่มี scope ศูนย์นั้น; เจ้าหน้าที่ในขอบเขตยังอ่านได้.
 - [ ] ผู้ที่ไม่ใช่ `system_admin` / `shelter_manager` ของศูนย์ PATCH flag ได้ 403.
 - [ ] Tests: domain (defaults, doc เดิมอ่านเป็น `true`, `isShelterBookable`, helper ใหม่) · form DOM (2 switch + dialog) · worker (projector delete, processor gate, rescan เมื่อเปิดกลับ) · BFF (list filter, risk/shelter-policy 404, referral POST 422, accept 422, reject/close ผ่าน, bulk ล้มรายใบ) · combobox filter · e2e shelters / referrals / public shelters.
 
@@ -137,3 +139,4 @@ affects:
 - 2026-11-12 — ตอบ Q-2 (ซ่อนเฉพาะเมื่อกด `public_visible = false`), Q-4, Q-5 ตามร่าง, Q-6 ยอมรับช่องนี้ไว้ก่อน
 - 2026-11-12 — ตอบ Q-3: ห้าม `draft → sent` ไปศูนย์ที่ปิดรับด้วย เพิ่ม FR-18a (ครบ Q-1..Q-6)
 - 2026-11-12 — แก้ข้อเท็จจริง Q-6/FR-17: SPA สร้าง/ส่งผ่าน BFF อยู่แล้ว ไม่ใช่ CouchDB ตรง (คอมเมนต์ใน `referral/+server.ts` ล้าสมัย — แก้ตอนลงมือทำ)
+- 2026-11-13 — เพิ่ม FR-14a: `stock-status` ของศูนย์ที่ซ่อนตอบ 404 ยกเว้นเจ้าหน้าที่ในขอบเขต (พฤติกรรมที่ implement ไปแล้วใน PR #1379)
