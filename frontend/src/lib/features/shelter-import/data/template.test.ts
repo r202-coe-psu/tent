@@ -5,7 +5,7 @@ import { buildShelterTemplateBlob } from './template';
 
 const MASTERS = {
 	shelter_type: [{ value: 'school', label: 'โรงเรียน' }],
-	site_kind: [{ value: 'evacuation_center', label: 'ศูนย์อพยพ' }]
+	site_kind: [{ value: 'evacuation_center', label: 'ศูนย์พักพิง' }]
 };
 
 async function generateAndParse() {

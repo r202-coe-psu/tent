@@ -21,7 +21,7 @@ function mastersWithShelterType(): TemplateMasters {
 		shelter_type: [{ value: 'school', label: 'โรงเรียน' }],
 		site_kind: [
 			{ value: 'host_house', label: 'บ้านพี่เลี้ยง' },
-			{ value: 'evacuation_center', label: 'ศูนย์อพยพ' }
+			{ value: 'evacuation_center', label: 'ศูนย์พักพิง' }
 		]
 	};
 }
@@ -33,7 +33,7 @@ function lookupsWithShelterType(): Lookups {
 		site_kind: buildMasterLookup([
 			{
 				code: 'evacuation_center',
-				label: 'ศูนย์อพยพ',
+				label: 'ศูนย์พักพิง',
 				label_en: 'Evacuation Center',
 				is_default: true
 			},
@@ -63,7 +63,7 @@ describe('buildSampleWorkbook', () => {
 
 	it('fills ชนิดสถานที่ with the default evacuation_center label, not the first item', () => {
 		const sample = buildSampleWorkbook(mastersWithShelterType());
-		expect(sample.shelter[H.site_kind]).toBe('ศูนย์อพยพ');
+		expect(sample.shelter[H.site_kind]).toBe('ศูนย์พักพิง');
 	});
 
 	it('leaves ชนิดสถานที่ empty when no site_kind master data exists', () => {

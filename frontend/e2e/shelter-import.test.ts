@@ -107,7 +107,7 @@ async function mockMasterData(page: Page): Promise<void> {
 					? [
 							{
 								code: 'evacuation_center',
-								label_th: 'ศูนย์อพยพ',
+								label_th: 'ศูนย์พักพิง',
 								label_en: 'Evacuation Center',
 								is_default: true,
 								status: 'active'

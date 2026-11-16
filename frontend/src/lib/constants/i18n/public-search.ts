@@ -35,7 +35,7 @@ export const PUBLIC_SEARCH_I18N = {
 		origin: 'ภูมิลำเนาเดิม',
 		checkinTime: 'เวลาลงทะเบียนเข้าพัก',
 		notSpecifiedTime: 'ไม่ระบุเวลา',
-		shelterClosed: 'ศูนย์อพยพปิดแล้ว',
+		shelterClosed: 'ศูนย์พักพิงปิดแล้ว',
 		familyInfo: 'ข้อมูลสมาชิกในครอบครัว',
 		people: 'คน',
 		clickToView: 'คลิกเพื่อดู',

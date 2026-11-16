@@ -178,7 +178,7 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 		items: [
 			{
 				key: 'evacuation_center',
-				label_th: 'ศูนย์อพยพ',
+				label_th: 'ศูนย์พักพิง',
 				label_en: 'Evacuation Center',
 				is_default: true
 			},

@@ -289,7 +289,7 @@ test.describe(
 			await shelterTrigger(page).click();
 			const options = page.getByRole('option');
 			// An option reads "<name>[ (เต็ม)][ <capacity>]": anchor the name at the start and
-			// require a word boundary after it, so "ทดสอบ" never matches "ศูนย์อพยพทดสอบ".
+			// require a word boundary after it, so "ทดสอบ" never matches "ศูนย์พักพิงทดสอบ".
 			const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 			const optionNamed = (name: string) => new RegExp(`^\\s*${escapeRegExp(name)}(?=\\s|\\(|$)`);
 			await expect(options).toHaveCount(1 + bookable.length);

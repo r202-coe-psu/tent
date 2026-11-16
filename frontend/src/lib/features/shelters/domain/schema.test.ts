@@ -164,7 +164,7 @@ describe('shelterSchema', () => {
 		for (const site_kind of ['host_house', 'field_hospital']) {
 			expect(shelterSchema.parse({ ...validShelterInput, site_kind }).site_kind).toBe(site_kind);
 		}
-		for (const site_kind of ['', 'Host House', 'host-house', 'ศูนย์อพยพ']) {
+		for (const site_kind of ['', 'Host House', 'host-house', 'ศูนย์พักพิง']) {
 			expect(() => shelterSchema.parse({ ...validShelterInput, site_kind })).toThrow();
 		}
 	});

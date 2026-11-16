@@ -15,7 +15,7 @@ export const HOST_HOUSE_SITE_KIND = 'host_house';
 const SEEDED_SITE_KINDS: Record<string, SiteKindOption> = {
 	[DEFAULT_SITE_KIND]: {
 		code: DEFAULT_SITE_KIND,
-		label_th: 'ศูนย์อพยพ',
+		label_th: 'ศูนย์พักพิง',
 		label_en: 'Evacuation Center'
 	},
 	[HOST_HOUSE_SITE_KIND]: {

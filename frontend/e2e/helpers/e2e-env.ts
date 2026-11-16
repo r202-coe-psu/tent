@@ -33,7 +33,7 @@
  * Shelters fixture — two shelters whose names start with `E2E_SHELTERS_MARKER`,
  * both in จ.สงขลา อ.หาดใหญ่:
  *   `<marker> บ้านพี่เลี้ยงคอหงส์` — host house, ต.คอหงส์, 7.01, 100.498
- *   `<marker> ศูนย์อพยพบ้านพรุ`   — evacuation centre, ต.บ้านพรุ, 6.95, 100.47
+ *   `<marker> ศูนย์พักพิงบ้านพรุ`   — evacuation centre, ต.บ้านพรุ, 6.95, 100.47
  * Set both to `closed` after provisioning so the public does not treat them as real
  * destinations — the filters under test do not depend on status.
  *
@@ -228,7 +228,7 @@ export function sheltersFixture(): SheltersFixture {
 			capacity: 10
 		},
 		evacFar: {
-			name: `${marker} ศูนย์อพยพบ้านพรุ`,
+			name: `${marker} ศูนย์พักพิงบ้านพรุ`,
 			siteKind: 'evacuation_center',
 			lat: 6.95,
 			lng: 100.47,

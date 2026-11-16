@@ -13,7 +13,7 @@ import {
 const KINDS: SiteKindOption[] = [
 	{
 		code: 'evacuation_center',
-		label_th: 'ศูนย์อพยพ',
+		label_th: 'ศูนย์พักพิง',
 		label_en: 'Evacuation Center',
 		status: 'active'
 	},
@@ -54,7 +54,7 @@ describe('siteKindLabel', () => {
 
 	it('reads a missing code as the default kind', () => {
 		expect(siteKindLabel(undefined, KINDS, 'en')).toBe('Evacuation Center');
-		expect(siteKindLabel('  ', KINDS, 'th')).toBe('ศูนย์อพยพ');
+		expect(siteKindLabel('  ', KINDS, 'th')).toBe('ศูนย์พักพิง');
 	});
 });
 

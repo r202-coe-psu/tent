@@ -116,7 +116,7 @@ describe('searchResultKey', () => {
 	// has to carry position too.
 	it('stays unique when two results are identical on every visible field', () => {
 		const row = {
-			shelter_name: 'ศูนย์อพยพ ม.อ.',
+			shelter_name: 'ศูนย์พักพิง ม.อ.',
 			name: 'สักก์ธนัชญ์ พี****',
 			national_id: '111-XXXX-XX-111'
 		} as FamilySearchResult;

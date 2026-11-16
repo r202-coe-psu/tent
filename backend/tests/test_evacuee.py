@@ -592,7 +592,7 @@ async def test_evacuee_search_returns_physical_address_from_location(
         {
             "_id": "SH003_TEST",
             "shelter_code": "SH003_TEST",
-            "name": "ศูนย์อพยพ ม.อ.",
+            "name": "ศูนย์พักพิง ม.อ.",
             "province": "สงขลา",
             "district": "หาดใหญ่",
             "subdistrict": "คอหงส์",

@@ -271,7 +271,7 @@ test.describe('Master Data hub', () => {
 			site_kind: [
 				{
 					code: 'evacuation_center',
-					label_th: 'ศูนย์อพยพ',
+					label_th: 'ศูนย์พักพิง',
 					label_en: 'Evacuation Center',
 					is_default: true
 				}
@@ -279,12 +279,12 @@ test.describe('Master Data hub', () => {
 		});
 		await page.goto(`${BASE}${HUB_PATH}?type=site_kind`);
 
-		await expect(page.getByText('ศูนย์อพยพ', { exact: true })).toBeVisible();
+		await expect(page.getByText('ศูนย์พักพิง', { exact: true })).toBeVisible();
 		await expect(
 			page.getByText('ดูได้อย่างเดียว — ประเภทนี้จัดการที่ส่วนกลางเท่านั้น')
 		).toBeVisible();
 		await expect(page.getByRole('button', { name: 'เพิ่มรายการ' })).toHaveCount(0);
-		await expect(page.getByRole('button', { name: 'แก้ไข ศูนย์อพยพ' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'แก้ไข ศูนย์พักพิง' })).toHaveCount(0);
 	});
 
 	test('system management can add chronic_disease items (CR-186)', async ({ page }) => {

@@ -24,7 +24,7 @@ describe('GET /api/public/v1/config/site-kinds', () => {
 			items: [
 				{
 					code: 'evacuation_center',
-					label_th: 'ศูนย์อพยพ',
+					label_th: 'ศูนย์พักพิง',
 					label_en: 'Evacuation Center',
 					is_default: true,
 					status: 'active'
@@ -49,7 +49,7 @@ describe('GET /api/public/v1/config/site-kinds', () => {
 			types: [
 				{
 					code: 'evacuation_center',
-					label_th: 'ศูนย์อพยพ',
+					label_th: 'ศูนย์พักพิง',
 					label_en: 'Evacuation Center',
 					status: 'active'
 				},

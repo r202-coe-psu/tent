@@ -1,7 +1,7 @@
 {
 	"name": "SmartShelter",
 	"short_name": "Tent",
-	"description": "ระบบจัดการศูนย์อพยพ — staff app และ public portal",
+	"description": "ระบบจัดการศูนย์พักพิง — staff app และ public portal",
 	"start_url": "/",
 	"display": "standalone",
 	"background_color": "#0A2647",

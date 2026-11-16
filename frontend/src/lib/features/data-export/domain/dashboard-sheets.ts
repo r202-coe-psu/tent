@@ -65,12 +65,12 @@ function kpiRows(o: OccupancyPayload): ExportCell[][] {
 	const returnRate = o.total > 0 ? Math.round((o.checked_out / o.total) * 100) : 0;
 	return [
 		['ผู้เข้าพักทั้งหมด', o.total],
-		['อยู่ในศูนย์อพยพ', o.in_shelter],
+		['อยู่ในศูนย์พักพิง', o.in_shelter],
 		['รอเข้าพัก (ลงทะเบียนล่วงหน้า/ที่ตู้)', o.pre_registered + o.kiosk_registered],
 		['รายงานตัวแล้ว (รอคัดกรอง/จัดที่พัก)', o.arriving],
 		['ออกชั่วคราว', o.temporary_leave],
-		['ย้ายไปศูนย์อพยพอื่น', o.transferred],
-		['ออกจากศูนย์อพยพแล้ว', o.checked_out],
+		['ย้ายไปศูนย์พักพิงอื่น', o.transferred],
+		['ออกจากศูนย์พักพิงแล้ว', o.checked_out],
 		['อัตรากลับบ้าน (%)', returnRate]
 	];
 }

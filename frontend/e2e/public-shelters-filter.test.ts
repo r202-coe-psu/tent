@@ -169,9 +169,9 @@ test.describe(
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
 			await page.getByRole('button', { name: 'ชนิดสถานที่' }).click();
-			await page.getByRole('option', { name: 'ศูนย์อพยพ' }).click();
+			await page.getByRole('option', { name: 'ศูนย์พักพิง' }).click();
 			await expect(page).toHaveURL(/site_kind=evacuation_center/);
-			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toHaveText('ศูนย์อพยพ');
+			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toHaveText('ศูนย์พักพิง');
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 		});

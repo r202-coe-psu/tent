@@ -132,7 +132,7 @@ const th = {
 	zoneCard: {
 		title: 'พิกัดโซนและศูนย์พักพิง',
 		editAria: 'แก้ไขโซนพักอาศัย',
-		shelter: 'ศูนย์อพยพ:',
+		shelter: 'ศูนย์พักพิง:',
 		livingZone: 'โซนพักอาศัย:',
 		zone: (zone: string) => `โซน ${zone}`,
 		bedSpot: 'หมายเลขเตียง/จุดพัก:'

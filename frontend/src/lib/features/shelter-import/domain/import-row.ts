@@ -222,7 +222,7 @@ export function buildMasterLookup(
 	}
 	for (const it of items) {
 		const inactive = inactiveCodes.has(it.code);
-		// Workbooks from the CR-067 template carry "label_th (label_en)", e.g. "ศูนย์อพยพ (Evacuation Center)".
+		// Workbooks from the CR-067 template carry "label_th (label_en)", e.g. "ศูนย์พักพิง (Evacuation Center)".
 		const combined = it.label_en?.trim() ? `${it.label.trim()} (${it.label_en.trim()})` : undefined;
 		for (const label of [it.label, it.label_en, combined]) {
 			const key = label?.trim();

@@ -23,7 +23,7 @@
 	const cards = $derived([
 		{ label: 'ผู้เข้าพักทั้งหมด', value: occupancy.total, icon: Users, tone: 'text-blue-500' },
 		{
-			label: 'อยู่ในศูนย์อพยพ',
+			label: 'อยู่ในศูนย์พักพิง',
 			value: occupancy.in_shelter,
 			icon: UserCheck,
 			tone: 'text-green-500'
@@ -47,13 +47,13 @@
 			tone: 'text-amber-500'
 		},
 		{
-			label: 'ย้ายไปศูนย์อพยพอื่น',
+			label: 'ย้ายไปศูนย์พักพิงอื่น',
 			value: occupancy.transferred,
 			icon: ArrowRightLeft,
 			tone: 'text-purple-500'
 		},
 		{
-			label: 'ออกจากศูนย์อพยพแล้ว',
+			label: 'ออกจากศูนย์พักพิงแล้ว',
 			value: occupancy.checked_out,
 			icon: UserX,
 			tone: 'text-red-500'

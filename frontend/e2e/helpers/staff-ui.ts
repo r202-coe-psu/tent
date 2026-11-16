@@ -28,7 +28,7 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 	// Labels come from the seeded master_data:site_kind (CR-198).
 	await page
 		.getByRole('option', {
-			name: shelter.siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์อพยพ',
+			name: shelter.siteKind === 'host_house' ? 'บ้านพี่เลี้ยง' : 'ศูนย์พักพิง',
 			exact: true
 		})
 		.click();
@@ -59,7 +59,7 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 /** Back-office sidebar → pick `code` as the active shelter for back-office / onsite screens. */
 export async function selectActiveShelter(page: Page, code: string): Promise<void> {
 	await page.goto('/back-office/stock-donations');
-	await page.getByRole('button', { name: 'เลือกศูนย์อพยพ' }).click();
+	await page.getByRole('button', { name: 'เลือกศูนย์พักพิง' }).click();
 	await page.getByRole('option', { name: new RegExp(`^${code} — `) }).click();
 	await expectActiveShelter(page, code);
 }
@@ -73,7 +73,7 @@ export async function expectActiveShelter(
 	code: string,
 	options?: { timeout?: number }
 ): Promise<void> {
-	const trigger = page.getByRole('button', { name: 'เลือกศูนย์อพยพ' });
+	const trigger = page.getByRole('button', { name: 'เลือกศูนย์พักพิง' });
 	await expect
 		.poll(
 			async () => (await trigger.getAttribute('title')) ?? (await trigger.textContent()) ?? '',

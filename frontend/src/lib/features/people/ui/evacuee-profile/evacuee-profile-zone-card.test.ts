@@ -61,7 +61,7 @@ describe('EvacueeProfileZoneCard', () => {
 		const body = renderCard('th');
 		expect(body).toContain('พิกัดโซนและศูนย์พักพิง');
 		expect(body).toContain('แก้ไขโซนพักอาศัย');
-		expect(body).toContain('ศูนย์อพยพ:');
+		expect(body).toContain('ศูนย์พักพิง:');
 		expect(body).toContain('โซนพักอาศัย:');
 		expect(body).toContain('โซน A');
 		expect(body).toContain('หมายเลขเตียง/จุดพัก:');

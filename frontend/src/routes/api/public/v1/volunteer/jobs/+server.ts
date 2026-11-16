@@ -130,7 +130,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		if (shelters.length === 0) {
 			shelters.push({
 				code: 'SH001',
-				name: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
+				name: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์พักพิงหลักระดับจังหวัด)',
 				db: 'shelter_sh001'
 			});
 		}

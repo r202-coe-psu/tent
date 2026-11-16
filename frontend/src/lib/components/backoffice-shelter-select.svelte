@@ -71,14 +71,14 @@
 	const selectedShelterLabel = $derived(
 		selectedShelter
 			? shelterLabel(selectedShelter.code, selectedShelter.name)
-			: (shelterStore.selectedShelterCode ?? 'เลือกศูนย์อพยพ')
+			: (shelterStore.selectedShelterCode ?? 'เลือกศูนย์พักพิง')
 	);
 </script>
 
 <div class={cn('flex min-w-0 flex-col gap-1.5', className)}>
 	{#if !compact}
 		<span class="px-0.5 text-2xs font-bold tracking-wider text-muted-foreground/70 uppercase">
-			ศูนย์อพยพ
+			ศูนย์พักพิง
 		</span>
 	{/if}
 	<Select type="single" bind:value={shelterStore.selectedShelterCode}>
@@ -87,7 +87,7 @@
 				'h-11 min-h-11',
 				compact ? 'w-11 justify-center px-0 [&_svg:last-child]:hidden' : 'w-full'
 			)}
-			aria-label="เลือกศูนย์อพยพ"
+			aria-label="เลือกศูนย์พักพิง"
 			title={compact ? selectedShelterLabel : undefined}
 		>
 			{#if compact}

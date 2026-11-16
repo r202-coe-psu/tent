@@ -53,7 +53,9 @@ const LEGACY_SHELTER_TYPE_EN: Record<string, string> = {
 	ศูนย์กีฬา: 'Sports Centre',
 	อาคารราชการ: 'Government Building',
 	หน่วยงานราชการ: 'Government Agency',
+	// Legacy free-text value stored before the master-data registry; keep for old docs.
 	ศูนย์อพยพ: 'Evacuation Center',
+	ศูนย์พักพิง: 'Evacuation Center',
 	มหาวิทยาลัย: 'University',
 	มัสยิด: 'Mosque',
 	โบสถ์: 'Church',

@@ -101,7 +101,7 @@
 									class="mt-1 inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700"
 									data-testid="external-badge"
 								>
-									ศูนย์อพยพภายนอก
+									ศูนย์พักพิงภายนอก
 								</span>
 							{/if}
 						</td>

@@ -380,13 +380,13 @@
 				{#if !effectiveLock}
 					<div class="w-full min-w-0 space-y-2">
 						<label for="user-shelter-filter" class="text-xs font-semibold text-foreground"
-							>ศูนย์อพยพ</label
+							>ศูนย์พักพิง</label
 						>
 						<Select.Root type="single" bind:value={shelterDraft}>
 							<Select.Trigger
 								id="user-shelter-filter"
 								class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
-								aria-label="ศูนย์อพยพ"
+								aria-label="ศูนย์พักพิง"
 							>
 								<span class="truncate">
 									{shelterFilterOptions.find((option) => option.value === shelterDraft)?.label ??

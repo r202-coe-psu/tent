@@ -24,7 +24,7 @@ function lookups(): Lookups {
 		site_kind: buildMasterLookup([
 			{
 				code: 'evacuation_center',
-				label: 'ศูนย์อพยพ',
+				label: 'ศูนย์พักพิง',
 				label_en: 'Evacuation Center',
 				is_default: true
 			},
@@ -111,7 +111,7 @@ describe('validateRow — happy path', () => {
 		const withInactive: Lookups = {
 			...lookups(),
 			site_kind: buildMasterLookup([
-				{ code: 'evacuation_center', label: 'ศูนย์อพยพ', is_default: true },
+				{ code: 'evacuation_center', label: 'ศูนย์พักพิง', is_default: true },
 				{ code: 'field_hospital', label: 'โรงพยาบาลสนาม', status: 'inactive', is_default: true }
 			])
 		};
@@ -127,7 +127,7 @@ describe('validateRow — happy path', () => {
 
 	it('reads site kinds written by the pre-CR-198 template ("label_th (label_en)")', () => {
 		for (const [cell, code] of [
-			['ศูนย์อพยพ (Evacuation Center)', 'evacuation_center'],
+			['ศูนย์พักพิง (Evacuation Center)', 'evacuation_center'],
 			['บ้านพี่เลี้ยง (Host House)', 'host_house']
 		]) {
 			const r = validateRow(baseRow({ [H.site_kind]: cell }), 1, lookups());
