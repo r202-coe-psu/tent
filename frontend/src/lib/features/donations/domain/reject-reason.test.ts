@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-	applyRejectNoteTemplate,
-	retargetRejectNote,
+	containsRejectNoteTemplate,
+	noteForReason,
 	combineLineRejectReasons,
 	DONATION_REJECT_REASON_SELECTABLE_CODES,
 	donationRejectReasonCodeSchema,
 	donorRejectMessage,
 	rejectDonationInputSchema,
 	REJECT_NOTE_MAX,
-	REJECT_NOTE_TONES,
 	rejectNoteTemplate,
 	REJECT_REASON_MAX
 } from './reject-reason';
@@ -123,136 +122,88 @@ describe('combineLineRejectReasons (FR-12)', () => {
 	});
 });
 
-describe('reject note templates (#1256)', () => {
+describe('reject note template (#1256)', () => {
 	const PRESET_CODES = ['not_eligible', 'over_need', 'expired', 'damaged'] as const;
+	const t = (code: Parameters<typeof rejectNoteTemplate>[0]) => rejectNoteTemplate(code)!;
 
-	it('offers three tones, formal first', () => {
-		expect(REJECT_NOTE_TONES.map((t) => t.id)).toEqual(['formal', 'warm', 'concise']);
-	});
-
-	it('has a whole message in every tone for each reason that gets one', () => {
+	it('has one formal message for each reason that gets one, inside the note limit', () => {
 		for (const code of PRESET_CODES) {
-			for (const tone of REJECT_NOTE_TONES) {
-				const text = rejectNoteTemplate(code, tone.id);
-				expect(text, `${code}/${tone.id}`).toBeTruthy();
-				expect(text!.length, `${code}/${tone.id}`).toBeLessThanOrEqual(REJECT_NOTE_MAX);
-			}
+			expect(t(code), code).toBeTruthy();
+			expect(t(code).length, code).toBeLessThanOrEqual(REJECT_NOTE_MAX);
 		}
 	});
 
-	it('writes each message for its own reason, not one text for all', () => {
-		const over = rejectNoteTemplate('over_need', 'formal');
-		const notEligible = rejectNoteTemplate('not_eligible', 'formal');
-		const expired = rejectNoteTemplate('expired', 'formal');
-		expect(new Set([over, notEligible, expired]).size).toBe(3);
-		// Expired and damaged share the safety message.
-		expect(rejectNoteTemplate('damaged', 'warm')).toBe(rejectNoteTemplate('expired', 'warm'));
+	it('writes each message for its own reason, expired and damaged sharing one', () => {
+		expect(new Set([t('over_need'), t('not_eligible'), t('expired')]).size).toBe(3);
+		expect(t('damaged')).toBe(t('expired'));
 	});
 
 	it('thanks the donor in every message', () => {
-		for (const code of PRESET_CODES) {
-			for (const tone of REJECT_NOTE_TONES) {
-				expect(rejectNoteTemplate(code, tone.id), `${code}/${tone.id}`).toContain('ขอบคุณ');
-			}
-		}
+		for (const code of PRESET_CODES) expect(t(code), code).toContain('ขอบคุณ');
 	});
 
 	it('offers nothing for "other", for the legacy code, or before a reason is picked', () => {
-		expect(rejectNoteTemplate('other', 'formal')).toBeNull();
-		expect(rejectNoteTemplate('not_needed', 'formal')).toBeNull();
-		expect(rejectNoteTemplate(undefined, 'formal')).toBeNull();
+		expect(rejectNoteTemplate('other')).toBeNull();
+		expect(rejectNoteTemplate('not_needed')).toBeNull();
+		expect(rejectNoteTemplate(undefined)).toBeNull();
 	});
 
-	it('fills an empty note', () => {
-		expect(applyRejectNoteTemplate('', 'ข้อความ')).toBe('ข้อความ');
-		expect(applyRejectNoteTemplate('   ', 'ข้อความ')).toBe('ข้อความ');
-	});
-
-	it('swaps one template for another instead of stacking them', () => {
-		const formal = rejectNoteTemplate('over_need', 'formal')!;
-		const warm = rejectNoteTemplate('over_need', 'warm')!;
-		expect(applyRejectNoteTemplate(formal, warm)).toBe(warm);
-		// …even after the reason changed since the first one went in.
-		const expired = rejectNoteTemplate('expired', 'concise')!;
-		expect(applyRejectNoteTemplate(formal, expired)).toBe(expired);
-	});
-
-	it('appends after what staff wrote, never over it', () => {
-		expect(applyRejectNoteTemplate('นมกล่องหมดอายุ 2 กล่อง', 'ข้อความ')).toBe(
-			'นมกล่องหมดอายุ 2 กล่อง ข้อความ'
-		);
-	});
-
-	it('leaves the note as is when the message is already in it', () => {
-		expect(applyRejectNoteTemplate('ก่อนหน้า ข้อความ', 'ข้อความ')).toBe('ก่อนหน้า ข้อความ');
-	});
-
-	it('returns null when appending would pass the note limit', () => {
-		expect(applyRejectNoteTemplate('ก'.repeat(REJECT_NOTE_MAX - 3), 'ข้อความ')).toBeNull();
-	});
-
-	// Review round 3, W1: a template that follows staff's own words is still just a template.
-	it('swaps a template that follows staff text instead of stacking a second one', () => {
-		const formal = rejectNoteTemplate('over_need', 'formal')!;
-		const warm = rejectNoteTemplate('over_need', 'warm')!;
-		const typed = `นมหมดอายุ ${formal}`;
-		expect(applyRejectNoteTemplate(typed, warm)).toBe(`นมหมดอายุ ${warm}`);
-	});
-
-	it('swaps a template that staff kept in the middle of their own text', () => {
-		const formal = rejectNoteTemplate('over_need', 'formal')!;
-		const warm = rejectNoteTemplate('over_need', 'warm')!;
-		expect(applyRejectNoteTemplate(`${formal} ติดต่อได้ที่หน้างาน`, warm)).toBe(
-			`${warm} ติดต่อได้ที่หน้างาน`
-		);
-	});
-
-	it('returns null when the swap would pass the note limit', () => {
-		const concise = rejectNoteTemplate('over_need', 'concise')!;
-		const formal = rejectNoteTemplate('over_need', 'formal')!;
-		const filler = 'ก'.repeat(REJECT_NOTE_MAX - concise.length - 1);
-		expect(applyRejectNoteTemplate(`${filler} ${concise}`, formal)).toBeNull();
+	it('recognises a template anywhere in a note, and nothing else', () => {
+		expect(containsRejectNoteTemplate(t('over_need'))).toBe(true);
+		expect(containsRejectNoteTemplate(`นมหมดอายุ ${t('expired')} ติดต่อหน้างาน`)).toBe(true);
+		expect(containsRejectNoteTemplate('นมหมดอายุ 2 กล่อง')).toBe(false);
+		expect(containsRejectNoteTemplate('')).toBe(false);
 	});
 });
 
-// Review round 3, B1: a message written for one reason must never reach the donor under another.
-describe('retargetRejectNote (#1256)', () => {
-	const t = (code: Parameters<typeof rejectNoteTemplate>[0], tone: 'formal' | 'warm' | 'concise') =>
-		rejectNoteTemplate(code, tone)!;
+// The message goes in as soon as a reason is picked, and a message written for one reason must
+// never reach the donor under another (#1256 review round 3, B1).
+describe('noteForReason (#1256)', () => {
+	const t = (code: Parameters<typeof rejectNoteTemplate>[0]) => rejectNoteTemplate(code)!;
 
-	it('switches the template to the new reason, keeping the tone', () => {
-		expect(retargetRejectNote(t('over_need', 'warm'), 'expired')).toBe(t('expired', 'warm'));
-		expect(retargetRejectNote(t('not_eligible', 'concise'), 'over_need')).toBe(
-			t('over_need', 'concise')
+	it('fills an empty note with the reason’s message', () => {
+		expect(noteForReason('', 'over_need')).toBe(t('over_need'));
+		expect(noteForReason('   ', 'expired')).toBe(t('expired'));
+	});
+
+	it('swaps the message when the reason changes', () => {
+		expect(noteForReason(t('over_need'), 'expired')).toBe(t('expired'));
+		expect(noteForReason(t('not_eligible'), 'over_need')).toBe(t('over_need'));
+	});
+
+	it('keeps what staff wrote around the message, whichever side', () => {
+		expect(noteForReason(`นมหมดอายุ ${t('over_need')}`, 'damaged')).toBe(
+			`นมหมดอายุ ${t('damaged')}`
+		);
+		expect(noteForReason(`${t('over_need')} ติดต่อหน้างาน`, 'damaged')).toBe(
+			`${t('damaged')} ติดต่อหน้างาน`
 		);
 	});
 
-	it('keeps what staff wrote around the template', () => {
-		expect(retargetRejectNote(`นมหมดอายุ ${t('over_need', 'formal')}`, 'damaged')).toBe(
-			`นมหมดอายุ ${t('damaged', 'formal')}`
-		);
+	it('puts the message after staff’s own words when none is in the note yet', () => {
+		expect(noteForReason('นมหมดอายุ 2 กล่อง', 'expired')).toBe(`นมหมดอายุ 2 กล่อง ${t('expired')}`);
 	});
 
-	it('drops the template when the new reason has none, keeping staff text', () => {
-		expect(retargetRejectNote(t('over_need', 'formal'), 'other')).toBe('');
-		expect(retargetRejectNote(`นมหมดอายุ ${t('over_need', 'formal')}`, 'other')).toBe('นมหมดอายุ');
-		expect(retargetRejectNote(t('over_need', 'formal'), undefined)).toBe('');
+	it('drops the message, keeping staff text, when the new reason has none', () => {
+		expect(noteForReason(t('over_need'), 'other')).toBe('');
+		expect(noteForReason(`นมหมดอายุ ${t('over_need')}`, 'other')).toBe('นมหมดอายุ');
+		expect(noteForReason('นมหมดอายุ 2 กล่อง', 'other')).toBe('นมหมดอายุ 2 กล่อง');
+		expect(noteForReason(t('over_need'), undefined)).toBe('');
 	});
 
-	it('leaves a note with no template alone', () => {
-		expect(retargetRejectNote('นมหมดอายุ 2 กล่อง', 'expired')).toBe('นมหมดอายุ 2 กล่อง');
-		expect(retargetRejectNote('', 'expired')).toBe('');
+	it('leaves the note alone when the message already fits the reason', () => {
+		expect(noteForReason(t('expired'), 'damaged')).toBe(t('expired'));
 	});
 
-	it('leaves the note unchanged when the template already fits the reason', () => {
-		const note = t('expired', 'warm');
-		expect(retargetRejectNote(note, 'damaged')).toBe(note);
+	it('leaves staff text alone rather than pass the limit when adding the message', () => {
+		const filler = 'ก'.repeat(REJECT_NOTE_MAX - 10);
+		expect(noteForReason(filler, 'over_need')).toBe(filler);
 	});
 
-	it('drops the template rather than pass the limit when the new one is longer', () => {
-		const concise = t('over_need', 'concise');
-		const filler = 'ก'.repeat(REJECT_NOTE_MAX - concise.length - 1);
-		const result = retargetRejectNote(`${filler} ${concise}`, 'not_eligible');
+	it('drops the old message rather than pass the limit when the new one is longer', () => {
+		const over = t('over_need');
+		const filler = 'ก'.repeat(REJECT_NOTE_MAX - over.length - 1);
+		const result = noteForReason(`${filler} ${over}`, 'not_eligible');
 		expect(result.length).toBeLessThanOrEqual(REJECT_NOTE_MAX);
 	});
 });

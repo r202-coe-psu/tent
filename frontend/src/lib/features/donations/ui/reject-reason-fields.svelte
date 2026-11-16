@@ -6,11 +6,9 @@
 		DONATION_REJECT_REASON_SELECTABLE_CODES,
 		DONATION_REJECT_REASON_LABELS,
 		REJECT_NOTE_MAX,
-		REJECT_NOTE_TONES,
-		applyRejectNoteTemplate,
+		containsRejectNoteTemplate,
 		donorRejectMessage,
-		rejectNoteTemplate,
-		retargetRejectNote,
+		noteForReason,
 		type DonationRejectReasonCode
 	} from '../domain/reject-reason';
 
@@ -35,30 +33,17 @@
 
 	const noteRequired = $derived(code === 'other');
 	const preview = $derived(code ? donorRejectMessage(code, note) : '');
-	/** A tone's whole message for the picked reason; none until a reason that has one is picked. */
-	const templates = $derived(
-		REJECT_NOTE_TONES.map((tone) => ({ ...tone, text: rejectNoteTemplate(code, tone.id) })).filter(
-			(tone): tone is typeof tone & { text: string } => tone.text !== null
-		)
-	);
-
-	/** Fills the detail; a tone that would overflow the limit is disabled, not truncated. */
-	function useTemplate(text: string) {
-		const next = applyRejectNoteTemplate(note, text);
-		if (next !== null) note = next;
-	}
-	/** True when a tone is greyed out only because it would not fit in the detail box. */
-	const templatesTooLong = $derived(
-		!disabled && templates.some((template) => applyRejectNoteTemplate(note, template.text) === null)
-	);
-
 	/**
-	 * A message written for one reason must not reach the donor under another, so changing the
-	 * reason swaps (or drops) a template already in the detail — staff's own words stay.
+	 * Picking a reason puts its formal message in the detail for staff to edit; changing the reason
+	 * swaps (or drops) that message — one written for another reason must not reach the donor.
+	 * Once staff reworded or removed the message, a new reason leaves their text alone.
 	 */
+	let filled = false;
 	function pickReason(next: DonationRejectReasonCode) {
 		code = next;
-		note = retargetRejectNote(note, next);
+		if (filled && note.trim() !== '' && !containsRejectNoteTemplate(note)) return;
+		note = noteForReason(note, next);
+		filled = containsRejectNoteTemplate(note);
 	}
 
 	/** The "other" option spans both columns; the rest sit side by side. */
@@ -97,30 +82,6 @@
 			placeholder="เช่น นมกล่องหมดอายุ 2 กล่อง"
 			class="text-xs"
 		/>
-		{#if templates.length > 0}
-			<div class="flex flex-wrap items-center gap-2" role="group" aria-label="ข้อความสำเร็จรูป">
-				<span class="text-2xs font-semibold text-muted-foreground">ข้อความสำเร็จรูป</span>
-				{#each templates as template (template.id)}
-					<button
-						type="button"
-						data-testid="{idPrefix}-template-{template.id}"
-						title={template.text}
-						aria-label="ใส่ข้อความแบบ{template.label}"
-						aria-describedby={templatesTooLong ? `${idPrefix}-template-hint` : undefined}
-						disabled={disabled || applyRejectNoteTemplate(note, template.text) === null}
-						onclick={() => useTemplate(template.text)}
-						class="min-h-11 cursor-pointer rounded-full border border-border bg-background px-3 text-2xs font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-					>
-						{template.label}
-					</button>
-				{/each}
-			</div>
-			{#if templatesTooLong}
-				<p id="{idPrefix}-template-hint" class="text-2xs text-muted-foreground">
-					รายละเอียดยาวจนใส่ข้อความสำเร็จรูปไม่ได้ (รวมกันไม่เกิน {REJECT_NOTE_MAX} ตัวอักษร) — ลบบางส่วนก่อน
-				</p>
-			{/if}
-		{/if}
 		<p class="text-2xs text-amber-700 dark:text-amber-300">
 			ผู้บริจาคจะเห็นข้อความนี้บนหน้าติดตาม — ห้ามใส่ชื่อ เบอร์โทร หรือข้อมูลส่วนตัว
 		</p>

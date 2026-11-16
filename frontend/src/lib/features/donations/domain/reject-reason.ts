@@ -73,79 +73,45 @@ export type RejectDonationInput = z.infer<typeof rejectDonationInputSchema>;
 export const rejectNoteSchema = noteSchema;
 
 /**
- * Whole messages staff can drop into the detail box with one tap (#1256), then edit. The donor
- * reads the detail on the tracking page, so none of them names a person, a phone number or a
- * shelter. Each reason that gets one reads in three tones — formal (automated replies, SMS),
- * warm (chat with one donor), concise (notices, short texts) — and says why in its own words, so
- * "we have enough" is never sent for an expired item. "other" and the legacy `not_needed` get none.
+ * The formal message put in the detail box the moment staff pick a reason (#1256), for them to edit.
+ * The donor reads the detail on the tracking page, so none of them names a person, a phone number
+ * or a shelter. Each reason says why in its own words — "we have enough" is never sent for an
+ * expired item. Expired and damaged goods share one message, which carries its own thanks and,
+ * unlike the other two, does not ask the donor to pass the goods on: spoiled or broken things
+ * should not reach another shelter either (no separate CR — see the CR-255 decision log).
+ * "other" and the legacy `not_needed` get none.
  */
-export const REJECT_NOTE_TONES = [
-	{ id: 'formal', label: 'ทางการ' },
-	{ id: 'warm', label: 'อบอุ่น' },
-	{ id: 'concise', label: 'กระชับ' }
-] as const;
-export type RejectNoteTone = (typeof REJECT_NOTE_TONES)[number]['id'];
+const OVER_NEED =
+	'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง ขณะนี้ทางศูนย์มีสิ่งของประเภทนี้เพียงพอแล้ว จึงยังไม่สามารถรับเพิ่มได้ หากท่านยังประสงค์จะช่วยเหลือ รบกวนนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่ยังต้องการ จะเป็นประโยชน์ต่อผู้ที่กำลังเดือดร้อนอย่างมาก';
 
-type ToneTexts = Record<RejectNoteTone, string>;
+const NOT_ELIGIBLE =
+	'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง สิ่งของนี้ไม่ตรงกับประเภทที่ทางศูนย์รับได้ รบกวนท่านนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่รับสิ่งของลักษณะนี้ เพื่อให้ไปถึงมือผู้ที่ต้องการต่อไป';
 
-const OVER_NEED: ToneTexts = {
-	formal:
-		'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง ขณะนี้ทางศูนย์มีสิ่งของประเภทนี้เพียงพอแล้ว จึงยังไม่สามารถรับเพิ่มได้ หากท่านยังประสงค์จะช่วยเหลือ รบกวนนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่ยังต้องการ จะเป็นประโยชน์ต่อผู้ที่กำลังเดือดร้อนอย่างมาก',
-	warm: 'ขอบคุณมากที่นึกถึงพวกเราและตั้งใจมาช่วย ตอนนี้ของประเภทนี้ที่ศูนย์เรามีพอแล้ว เลยยังรับเพิ่มไม่ได้ ถ้ายังอยากช่วย ลองนำไปให้ศูนย์อื่นที่ยังขาดอยู่นะ ของจะได้ไปถึงคนที่รออยู่ได้เร็วขึ้น',
-	concise:
-		'ขอบคุณที่ตั้งใจช่วยเหลือ ตอนนี้ศูนย์มีของประเภทนี้พอแล้ว รบกวนส่งต่อให้ศูนย์อื่นที่ยังต้องการ'
-};
+const SAFETY =
+	'เพื่อความปลอดภัยของผู้ใช้ ทางศูนย์ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขออภัยในความไม่สะดวก และขอบคุณในความตั้งใจดีของท่าน';
 
-const NOT_ELIGIBLE: ToneTexts = {
-	formal:
-		'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง สิ่งของนี้ไม่ตรงกับประเภทที่ทางศูนย์รับได้ รบกวนท่านนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่รับสิ่งของลักษณะนี้ เพื่อให้ไปถึงมือผู้ที่ต้องการต่อไป',
-	warm: 'ขอบคุณมากที่นึกถึงพวกเราและตั้งใจมาช่วย ของชิ้นนี้ไม่ตรงกับที่ศูนย์เรารับได้ในตอนนี้ ขอโทษที่รับไว้ไม่ได้นะ ลองนำไปให้ศูนย์อื่นที่รับของแบบนี้ดู ของที่ตั้งใจให้จะได้ไปถึงคนที่ต้องการจริง ๆ',
-	concise:
-		'ขอบคุณที่ตั้งใจช่วยเหลือ ของนี้ไม่ตรงกับที่ศูนย์รับได้ รบกวนส่งต่อให้ศูนย์อื่นที่รับของลักษณะนี้'
-};
-
-/**
- * Expired and damaged goods share one message; it carries its own thanks and, unlike the other
- * two, does not ask the donor to pass the goods on — spoiled or broken things should not reach
- * another shelter either (#1256 review S5; no separate CR, see CR-255 decision log).
- */
-const SAFETY: ToneTexts = {
-	formal:
-		'เพื่อความปลอดภัยของผู้ใช้ ทางศูนย์ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขออภัยในความไม่สะดวก และขอบคุณในความตั้งใจดีของท่าน',
-	warm: 'ศูนย์รับของที่หมดอายุหรือชำรุดไม่ได้ เพราะอาจเป็นอันตรายกับคนที่นำไปใช้ ขอโทษด้วยนะ แต่ขอบคุณจริง ๆ ที่ตั้งใจช่วย',
-	concise:
-		'เพื่อความปลอดภัย ศูนย์รับของที่หมดอายุหรือชำรุดไม่ได้ ขออภัยด้วย ขอบคุณที่ตั้งใจช่วยเหลือ'
-};
-
-const REJECT_NOTE_TEMPLATES: Partial<Record<DonationRejectReasonCode, ToneTexts>> = {
+const REJECT_NOTE_TEMPLATES: Partial<Record<DonationRejectReasonCode, string>> = {
 	over_need: OVER_NEED,
 	not_eligible: NOT_ELIGIBLE,
 	expired: SAFETY,
 	damaged: SAFETY
 };
 
-/** The whole message for `code` in `tone`; null when the reason has none (or none is picked). */
-export function rejectNoteTemplate(
-	code: DonationRejectReasonCode | undefined,
-	tone: RejectNoteTone
-): string | null {
-	return (code && REJECT_NOTE_TEMPLATES[code]?.[tone]) || null;
+/** The message for `code`; null when the reason has none (or none is picked). */
+export function rejectNoteTemplate(code: DonationRejectReasonCode | undefined): string | null {
+	return (code && REJECT_NOTE_TEMPLATES[code]) || null;
 }
 
-/** Every template text with the tone it is written in, longest first so a longer one wins. */
-const TEMPLATE_ENTRIES: readonly { text: string; tone: RejectNoteTone }[] = [
-	...new Map(
-		Object.values(REJECT_NOTE_TEMPLATES).flatMap((texts) =>
-			texts ? REJECT_NOTE_TONES.map((tone) => [texts[tone.id], tone.id] as const) : []
-		)
-	).entries()
-]
-	.map(([text, tone]) => ({ text, tone }))
-	.sort((x, y) => y.text.length - x.text.length);
+/** All the messages, so a note can be checked for one — staff may have written around it. */
+const TEMPLATE_TEXTS: readonly string[] = [...new Set(Object.values(REJECT_NOTE_TEMPLATES))];
 
-/** The template sitting anywhere in `note` (staff may have written around it), if any. */
-function findTemplateIn(note: string): { text: string; tone: RejectNoteTone } | undefined {
-	return TEMPLATE_ENTRIES.find((entry) => note.includes(entry.text));
+function findTemplateIn(note: string): string | undefined {
+	return TEMPLATE_TEXTS.find((text) => note.includes(text));
+}
+
+/** True when `note` still holds one of the messages (alone, or with staff's words around it). */
+export function containsRejectNoteTemplate(note: string): boolean {
+	return findTemplateIn(note) !== undefined;
 }
 
 function swapIn(note: string, from: string, to: string): string {
@@ -156,42 +122,26 @@ function swapIn(note: string, from: string, to: string): string {
 }
 
 /**
- * Put `text` in the detail box. A template already in the box — alone, after staff's words, or in
- * the middle of them — is swapped for the new one, so changing tone never stacks two messages and
- * what staff wrote stays put; with no template the text goes in an empty box or after what staff
- * wrote. Null when the result would pass {@link REJECT_NOTE_MAX}, so the caller can leave the box
- * alone instead of cutting a sentence.
+ * The detail box after staff pick `code`: that reason's message goes in. An empty box takes it; a
+ * message already there (alone, or among staff's words) is swapped for the new reason's, or dropped
+ * when the new reason has none; staff's own words stay and the message goes after them. A message
+ * must never reach the donor under a reason it was not written for. Where adding or swapping would
+ * pass {@link REJECT_NOTE_MAX}, staff's text wins: the box is left as it was (or loses just the old
+ * message) instead of cutting a sentence.
  */
-export function applyRejectNoteTemplate(note: string, text: string): string | null {
+export function noteForReason(note: string, code: DonationRejectReasonCode | undefined): string {
+	const replacement = rejectNoteTemplate(code) ?? '';
 	const current = note.trim();
-	if (current === '') return text;
 	const existing = findTemplateIn(current);
-	const next = existing
-		? existing.text === text
-			? current
-			: swapIn(current, existing.text, text)
-		: current.includes(text)
-			? current
-			: `${current} ${text}`;
-	return next.length > REJECT_NOTE_MAX ? null : next;
-}
-
-/**
- * The reason changed: a template written for the old one must not reach the donor under the new
- * one ("we have enough" next to "expired"). Swap it for the new reason's message in the same tone;
- * drop it when the new reason has none ("other", nothing picked) or the swap would pass the limit.
- * Staff's own words are kept; a note with no template is returned untouched.
- */
-export function retargetRejectNote(
-	note: string,
-	code: DonationRejectReasonCode | undefined
-): string {
-	const existing = findTemplateIn(note);
-	if (!existing) return note;
-	const replacement = rejectNoteTemplate(code, existing.tone) ?? '';
-	if (replacement === existing.text) return note;
-	const swapped = swapIn(note, existing.text, replacement);
-	return swapped.length > REJECT_NOTE_MAX ? swapIn(note, existing.text, '') : swapped;
+	if (existing) {
+		if (existing === replacement) return note;
+		const swapped = swapIn(current, existing, replacement);
+		return swapped.length > REJECT_NOTE_MAX ? swapIn(current, existing, '') : swapped;
+	}
+	if (replacement === '') return note;
+	if (current === '') return replacement;
+	const appended = `${current} ${replacement}`;
+	return appended.length > REJECT_NOTE_MAX ? note : appended;
 }
 
 function truncate(text: string, max: number): string {

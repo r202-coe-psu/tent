@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import RejectReasonFields from './reject-reason-fields.svelte';
-import { rejectNoteTemplate } from '../domain/reject-reason';
+import { REJECT_NOTE_MAX, rejectNoteTemplate } from '../domain/reject-reason';
 
 let instance: ReturnType<typeof mount> | null = null;
 
@@ -24,162 +24,97 @@ describe('RejectReasonFields (#1166)', () => {
 		expect(text).not.toContain('ไม่ตรงเกณฑ์การรับ / เกินความต้องการ');
 	});
 
-	it('offers the three tones only for a reason that has a message, none for "other" (#1256)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need' }
-		});
-		flushSync();
-		expect(document.querySelector('[data-testid="t-template-formal"]')?.textContent?.trim()).toBe(
-			'ทางการ'
-		);
-		expect(document.querySelector('[data-testid="t-template-warm"]')?.textContent?.trim()).toBe(
-			'อบอุ่น'
-		);
-		expect(document.querySelector('[data-testid="t-template-concise"]')?.textContent?.trim()).toBe(
-			'กระชับ'
-		);
-		unmount(instance);
-		document.body.innerHTML = '';
-
-		for (const code of [undefined, 'other'] as const) {
-			instance = mount(RejectReasonFields, {
-				target: document.body,
-				props: { idPrefix: 't', code }
-			});
-			flushSync();
-			expect(document.querySelectorAll('[data-testid^="t-template-"]'), String(code)).toHaveLength(
-				0
-			);
-			unmount(instance);
-			document.body.innerHTML = '';
-		}
-		instance = null;
-	});
-
-	it('fills the whole message for the reason and shows it in the donor preview (#1256)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need' }
-		});
-		flushSync();
-		(document.querySelector('[data-testid="t-template-warm"]') as HTMLButtonElement).click();
-		flushSync();
-
-		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
-		expect(textarea.value).toBe(rejectNoteTemplate('over_need', 'warm'));
-		expect(document.querySelector('[data-testid="t-preview"]')?.textContent).toContain(
-			`เกินความต้องการ — ${rejectNoteTemplate('over_need', 'warm')}`
-		);
-	});
-
-	it('swaps to another tone instead of stacking, and keeps what staff typed (#1256)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need' }
-		});
-		flushSync();
-		const click = (tone: string) => {
-			(document.querySelector(`[data-testid="t-template-${tone}"]`) as HTMLButtonElement).click();
-			flushSync();
-		};
-		const textarea = () => document.querySelector('textarea') as HTMLTextAreaElement;
-
-		click('formal');
-		click('concise');
-		expect(textarea().value).toBe(rejectNoteTemplate('over_need', 'concise'));
-
-		textarea().value = 'ของซ้ำ';
-		textarea().dispatchEvent(new Event('input', { bubbles: true }));
-		flushSync();
-		click('warm');
-		expect(textarea().value).toBe(`ของซ้ำ ${rejectNoteTemplate('over_need', 'warm')}`);
-	});
-
-	it('disables a tone that would overflow the detail limit (#1256)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need', note: 'ก'.repeat(390) }
-		});
-		flushSync();
-		const chip = document.querySelector('[data-testid="t-template-concise"]') as HTMLButtonElement;
-		expect(chip.disabled).toBe(true);
-	});
-
-	// Review round 3, B1 — the radio group needs a real click to change the reason.
+	// The radio group needs a real click to change the reason.
 	const pickReason = (code: string) => {
 		(document.querySelector(`[id="t-code-${code}"]`) as HTMLElement).click();
 		flushSync();
 	};
 	const noteBox = () => document.querySelector('textarea') as HTMLTextAreaElement;
-	const click = (tone: string) => {
-		(document.querySelector(`[data-testid="t-template-${tone}"]`) as HTMLButtonElement).click();
+	const type = (value: string) => {
+		noteBox().value = value;
+		noteBox().dispatchEvent(new Event('input', { bubbles: true }));
+		flushSync();
+	};
+	const mountFields = (props: Record<string, unknown> = {}) => {
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', ...props }
+		});
 		flushSync();
 	};
 
-	it('swaps the message for the new reason instead of leaving the old reason’s text (#1256 B1)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need' }
-		});
-		flushSync();
-		click('formal');
+	it('fills the formal message the moment a reason is picked, and previews it (#1256)', () => {
+		mountFields();
+		expect(noteBox().value).toBe('');
+
+		pickReason('over_need');
+
+		expect(noteBox().value).toBe(rejectNoteTemplate('over_need'));
+		expect(document.querySelector('[data-testid="t-preview"]')?.textContent).toContain(
+			`เกินความต้องการ — ${rejectNoteTemplate('over_need')}`
+		);
+	});
+
+	it('has no tone or preset buttons any more (#1256)', () => {
+		mountFields();
+		pickReason('over_need');
+		expect(document.querySelectorAll('[data-testid^="t-template-"]')).toHaveLength(0);
+		expect(document.body.textContent).not.toContain('อบอุ่น');
+		expect(document.body.textContent).not.toContain('กระชับ');
+	});
+
+	it('swaps the message for the new reason instead of leaving the old one’s text (#1256 B1)', () => {
+		mountFields();
+		pickReason('over_need');
 		pickReason('expired');
 
-		expect(noteBox().value).toBe(rejectNoteTemplate('expired', 'formal'));
+		expect(noteBox().value).toBe(rejectNoteTemplate('expired'));
 		const preview = document.querySelector('[data-testid="t-preview"]')?.textContent ?? '';
 		expect(preview).toContain('หมดอายุ');
 		expect(preview).not.toContain('เพียงพอแล้ว');
 	});
 
-	it('clears a template when the reason becomes "other", so the note is required again (#1256 B1)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need' }
-		});
-		flushSync();
-		click('warm');
+	it('clears the message for "other", so the note is required again (#1256 B1)', () => {
+		mountFields();
+		pickReason('over_need');
 		pickReason('other');
 
 		expect(noteBox().value).toBe('');
 		expect(noteBox().required).toBe(true);
 	});
 
-	it('keeps staff words around the template when the reason changes (#1256 B1)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need', note: 'นมหมดอายุ' }
-		});
-		flushSync();
-		click('concise');
+	it('keeps what staff typed around the message when the reason changes (#1256)', () => {
+		mountFields();
+		pickReason('over_need');
+		type(`นมหมดอายุ ${rejectNoteTemplate('over_need')}`);
 		pickReason('not_eligible');
 
-		expect(noteBox().value).toBe(`นมหมดอายุ ${rejectNoteTemplate('not_eligible', 'concise')}`);
+		expect(noteBox().value).toBe(`นมหมดอายุ ${rejectNoteTemplate('not_eligible')}`);
 	});
 
-	it('does not stack a second message when staff typed first and then switches tone (#1256 W1)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need', note: 'นมหมดอายุ' }
-		});
-		flushSync();
-		click('formal');
-		click('warm');
+	it('does not stack a second message on a message staff already reworded (#1256)', () => {
+		mountFields();
+		pickReason('over_need');
+		type('ขออภัยครับ ศูนย์มีของพอแล้ว ลองส่งต่อศูนย์อื่นนะครับ');
+		pickReason('not_eligible');
 
-		expect(noteBox().value).toBe(`นมหมดอายุ ${rejectNoteTemplate('over_need', 'warm')}`);
+		expect(noteBox().value).toBe('ขออภัยครับ ศูนย์มีของพอแล้ว ลองส่งต่อศูนย์อื่นนะครับ');
 	});
 
-	it('names each tone button for screen readers and explains a disabled one (#1256 S2, S3)', () => {
-		instance = mount(RejectReasonFields, {
-			target: document.body,
-			props: { idPrefix: 't', code: 'over_need', note: 'ก'.repeat(390) }
-		});
-		flushSync();
-		const chip = document.querySelector('[data-testid="t-template-formal"]') as HTMLButtonElement;
-		expect(chip.getAttribute('aria-label')).toBe('ใส่ข้อความแบบทางการ');
-		expect(chip.disabled).toBe(true);
-		const hintId = chip.getAttribute('aria-describedby');
-		expect(hintId).toBeTruthy();
-		expect(document.getElementById(hintId!)?.textContent).toContain('400');
+	it('puts the message after words staff typed before picking a reason (#1256)', () => {
+		mountFields();
+		type('นมหมดอายุ 2 กล่อง');
+		pickReason('expired');
+
+		expect(noteBox().value).toBe(`นมหมดอายุ 2 กล่อง ${rejectNoteTemplate('expired')}`);
+	});
+
+	it('leaves long staff text alone instead of cutting a sentence (#1256)', () => {
+		const long = 'ก'.repeat(REJECT_NOTE_MAX - 10);
+		mountFields();
+		type(long);
+		pickReason('over_need');
+
+		expect(noteBox().value).toBe(long);
 	});
 });
