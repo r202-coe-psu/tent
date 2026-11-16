@@ -29,6 +29,7 @@ vi.mock('svelte-sonner', () => {
 	};
 });
 const saveImageSpy = vi.hoisted(() => vi.fn());
+const deleteImageSpy = vi.hoisted(() => vi.fn(async () => {}));
 // The CouchDB image adapter is the system boundary: `useSaveImage` reaches it, not the barrel.
 vi.mock('$lib/features/images/data/image.remote', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/features/images/data/image.remote')>();
@@ -36,6 +37,7 @@ vi.mock('$lib/features/images/data/image.remote', async (importOriginal) => {
 		...actual,
 		imageRepository: () => ({
 			saveImage: saveImageSpy,
+			deleteImage: deleteImageSpy,
 			getThumbnailUrl: async () => {
 				throw new Error('no thumbnail in tests');
 			}
@@ -89,6 +91,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	toastLog.length = 0;
 	saveImageSpy.mockReset();
+	deleteImageSpy.mockClear();
 	signedIn.user = { name: 'staff1', roles: [] };
 	vi.stubGlobal(
 		'fetch',
@@ -454,6 +457,7 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			await settle();
 
 			expect(progress()).toEqual(['dismiss']);
+			expect(deleteImageSpy).toHaveBeenCalledWith('image:card-1');
 		});
 
 		it('reports a failed photo upload on the same toast', async () => {
@@ -805,5 +809,103 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 			expect(event.defaultPrevented).toBe(false);
 			expect(saveImageSpy).not.toHaveBeenCalled();
 		});
+	});
+});
+
+describe('UnifiedRegistrationForm — scanner review fixes', () => {
+	const warnings = () => vi.mocked(toast.warning).mock.calls.map((call) => call[0]);
+	const typeInto = (suffix: string, value: string) => {
+		const input = document.querySelector<HTMLInputElement>(`input[id$="${suffix}"]`)!;
+		input.value = value;
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+	};
+
+	it('W1: asks before overwriting a member where staff only typed a last name', async () => {
+		renderWalkInForm();
+		typeInto('last-name', 'พิมพ์เอง');
+		await settle();
+
+		dispatchCardRead();
+		await settle();
+
+		expect(values('last-name')).toEqual(['พิมพ์เอง']);
+		expect(buttonByText('ทับคนที่ 1')).toBeDefined();
+	});
+
+	it('W3: warns and places the card as usual when the duplicate lookup never answers', async () => {
+		vi.useFakeTimers();
+		try {
+			renderWalkInForm({ findScannedCardDuplicate: vi.fn(() => new Promise<null>(() => {})) });
+			dispatchCardRead();
+			await vi.advanceTimersByTimeAsync(9_000);
+			flushSync();
+
+			expect(warnings()).toContain('ตรวจสอบรายชื่อซ้ำไม่สำเร็จ — ลงทะเบียนต่อได้ตามปกติ');
+			expect(values('first-name')).toEqual(['สมหญิง']);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('W4: rejects a new card while a dialog is open, keeps the pending card, and acknowledges it', async () => {
+		await readTwoDifferentCards();
+
+		const event = dispatchCardRead({ ...otherCard, citizen_id: '1111111111111' });
+		await settle();
+
+		expect(event.defaultPrevented).toBe(true);
+		expect(warnings().length).toBe(1);
+		expect(document.body.textContent).toContain('สมชาย');
+		expect(document.body.textContent).not.toContain('1111111111111');
+	});
+
+	it('W6: tells staff when a card is dropped because the form is locked', async () => {
+		renderWalkInForm({ pending: true });
+
+		dispatchCardRead();
+		await settle();
+
+		expect(values('first-name')).toEqual(['']);
+		expect(warnings().length).toBe(1);
+	});
+
+	it('S5: shows an error and acknowledges a card event that fails the schema', async () => {
+		renderWalkInForm();
+
+		const event = dispatchScannerEvent('scanner:card-read', { citizen_id: 'bad' });
+		await settle();
+
+		expect(event.defaultPrevented).toBe(true);
+		expect(toastLog.some((entry) => entry.method === 'error')).toBe(true);
+	});
+
+	it('S3: discards a photo for a member that vanished when no dialog is open', async () => {
+		renderWalkInForm();
+		dispatchScannerEvent('scanner:card-photo', {
+			citizen_id: card.citizen_id,
+			photo_base64: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=='
+		});
+		await settle();
+		dispatchCardRead();
+		await settle();
+
+		expect(saveImageSpy).not.toHaveBeenCalled();
+	});
+
+	it('S4: never replaces an existing member photo, even on a non-quiet photo event', async () => {
+		saveImageSpy.mockResolvedValue({ _id: 'image:card-1' });
+		renderWalkInForm();
+		dispatchCardRead();
+		await settle();
+		const photo = {
+			citizen_id: card.citizen_id,
+			photo_base64: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=='
+		};
+		dispatchScannerEvent('scanner:card-photo', photo);
+		await settle();
+		dispatchScannerEvent('scanner:card-photo', photo);
+		await settle();
+
+		expect(saveImageSpy).toHaveBeenCalledTimes(1);
 	});
 });

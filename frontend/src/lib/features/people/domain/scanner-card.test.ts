@@ -151,6 +151,16 @@ describe('cardToUnifiedMember demographics', () => {
 		expect(member.birth_year).toBe(2540);
 		expect(member.age).toBe(29);
 	});
+
+	it('leaves birth year and age empty for a sentinel date of birth (00000000)', () => {
+		const member = cardToUnifiedMember(
+			card({ birth_year_ce: -543, age: 2569 }),
+			blankUnifiedMember()
+		);
+
+		expect(member.birth_year).toBeUndefined();
+		expect(member.age).toBeUndefined();
+	});
 });
 
 const blankHousehold: UnifiedHouseholdInput = {
@@ -229,6 +239,17 @@ describe('applyScannedCard', () => {
 		const members = [blankUnifiedMember(), withId('1234567890121')];
 
 		expect(applyScannedCard(members, card())).toEqual({ kind: 'already-in-form', index: 1 });
+	});
+
+	it.each([
+		['last name', { last_name: 'ใจดี' }],
+		['gender', { gender: 'male' as const }],
+		['birth year', { birth_year: 2535 }],
+		['age', { age: 30 }]
+	])('does not treat a member with only a typed %s as empty', (_label, patch) => {
+		const members = [{ ...blankUnifiedMember(), ...patch }];
+
+		expect(applyScannedCard(members, card())).toEqual({ kind: 'ask-overwrite' });
 	});
 
 	it('asks to overwrite when no member is empty', () => {

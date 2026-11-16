@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { toPersistBirthYearBE } from './birth-calendar';
-import { currentBEYear, genderSchema } from './people';
+import { currentBEYear, genderSchema, isBirthYearBEValid, MAX_AGE_YEARS } from './people';
 import type { InstantDuplicateHref } from './instant-duplicate';
 import {
 	cardAddressToHouseholdFields,
@@ -63,8 +63,13 @@ export function cardToUnifiedMember(
 	};
 	if (card.birth_year_ce !== undefined) {
 		const birthYearBE = toPersistBirthYearBE(card.birth_year_ce, 'CE');
-		member.birth_year = birthYearBE;
-		member.age = card.age ?? Math.max(0, currentBEYear() - birthYearBE);
+		// A sentinel / out-of-range date of birth (e.g. `00000000`) leaves birth year and age untouched.
+		if (isBirthYearBEValid(birthYearBE)) {
+			member.birth_year = birthYearBE;
+			const derived = Math.max(0, currentBEYear() - birthYearBE);
+			member.age =
+				card.age !== undefined && card.age >= 0 && card.age <= MAX_AGE_YEARS ? card.age : derived;
+		}
 	}
 	return member;
 }
@@ -98,9 +103,21 @@ export type ScannedCardPlacement =
 /** An ID number as digits only, so `1-2345-…` and `12345…` compare equal. */
 export const digitsOnly = (value: string | null | undefined) => (value ?? '').replace(/\D/g, '');
 
+/** Whether staff already entered a value in any field a card would write (D1: never overwrite silently). */
+function hasUserEnteredCardField(m: UnifiedMemberWithMeta): boolean {
+	return Boolean(
+		m.first_name?.trim() ||
+		m.last_name?.trim() ||
+		m.gender ||
+		m.person_id?.number?.trim() ||
+		m.birth_year ||
+		m.age
+	);
+}
+
 /**
  * Decide where a scanned card goes: onto the member that already carries its citizen ID, else the
- * first empty member (no first name, no ID number), else ask staff before overwriting someone.
+ * first empty member (no value in any field the card writes), else ask staff before overwriting someone.
  */
 export function applyScannedCard(
 	members: readonly UnifiedMemberWithMeta[],
@@ -111,7 +128,7 @@ export function applyScannedCard(
 		? members.findIndex((m) => digitsOnly(m.person_id?.number) === cardId)
 		: -1;
 	if (existing !== -1) return { kind: 'already-in-form', index: existing };
-	const empty = members.findIndex((m) => !m.first_name.trim() && !m.person_id?.number?.trim());
+	const empty = members.findIndex((m) => !hasUserEnteredCardField(m));
 	if (empty !== -1) return { kind: 'fill', index: empty };
 	return { kind: 'ask-overwrite' };
 }

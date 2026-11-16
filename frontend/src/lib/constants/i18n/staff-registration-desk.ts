@@ -119,7 +119,11 @@ const th = {
 		readDone: 'อ่านบัตรเรียบร้อย',
 		readFailed: 'อ่านบัตรไม่สำเร็จ ลองเสียบใหม่',
 		photoReadFailed: 'อ่านรูปจากบัตรไม่สำเร็จ',
-		photoSaveFailed: 'บันทึกรูปจากบัตรไม่สำเร็จ'
+		photoSaveFailed: 'บันทึกรูปจากบัตรไม่สำเร็จ',
+		finishOpenDialog:
+			'มีหน้าต่างบัตรที่รอการตัดสินใจอยู่ — กรุณาจัดการให้เสร็จก่อนแล้วเสียบบัตรใหม่',
+		formLocked: 'กำลังบันทึกหรือฟอร์มถูกล็อก — ไม่ได้นำข้อมูลจากบัตรไปใส่ กรุณาเสียบบัตรใหม่',
+		selectShelterFirst: 'กรุณาเลือกศูนย์พักพิงที่เปิดอยู่ก่อน แล้วจึงเสียบบัตร'
 	}
 };
 
@@ -247,7 +251,11 @@ const en: typeof th = {
 		readDone: 'Card read',
 		readFailed: 'Could not read the card — please reinsert it',
 		photoReadFailed: 'Could not read the photo from the card',
-		photoSaveFailed: 'Could not save the photo from the card'
+		photoSaveFailed: 'Could not save the photo from the card',
+		finishOpenDialog:
+			'A card dialog is waiting for your decision — finish it first, then insert the card again',
+		formLocked: 'The form is saving or locked — the card was not applied. Please insert it again',
+		selectShelterFirst: 'Select an active shelter first, then insert the card'
 	}
 };
 

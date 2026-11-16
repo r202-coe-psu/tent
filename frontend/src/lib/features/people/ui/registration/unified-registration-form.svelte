@@ -118,7 +118,7 @@
 		residenceSuggestTick
 	} from './residence-suggest-reactivity.svelte';
 	import { createQuery } from '@tanstack/svelte-query';
-	import { useSaveImage } from '$lib/features/images';
+	import { imageRepository, useSaveImage } from '$lib/features/images';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { rememberPhotoPreview } from './registration-photo-preview';
 	import {
@@ -1384,6 +1384,12 @@
 	let heldScannerPhoto: { citizenId: string; dataUrl: string } | null = null;
 	/** A card read again while already in the form: its photo must not replace the already-in-form notice. */
 	let quietPhotoCitizenId: string | null = null;
+	/** Citizen ID of a card rejected while a dialog was open: its photo must be dropped, not held. */
+	let rejectedScannerCitizenId: string | null = null;
+	/** A duplicate lookup is running: the card is not placed yet, so its photo is still held. */
+	let scannerLookupRunning = false;
+	/** Give up on the duplicate lookup after this long and carry on as if it failed. */
+	const SCANNER_DUPLICATE_LOOKUP_MAX_MS = 8_000;
 
 	/** The blocking "reading the card" popup: from `scanner:card-reading` until the text read ends. */
 	let scannerReading = $state(false);
@@ -1401,6 +1407,7 @@
 		event.preventDefault();
 		heldScannerPhoto = null;
 		quietPhotoCitizenId = null;
+		rejectedScannerCitizenId = null;
 		toast.dismiss(SCANNER_TOAST_ID);
 		clearTimeout(scannerReadingTimer);
 		scannerReading = true;
@@ -1428,10 +1435,22 @@
 	 */
 	function handleScannerCardRead(event: Event) {
 		const parsed = scannerCardSchema.safeParse((event as CustomEvent).detail);
-		if (!parsed.success) return;
+		if (!parsed.success) {
+			// Acknowledge so the client stops resending a card that can never parse, and tell staff.
+			event.preventDefault();
+			stopScannerReading();
+			toast.error(ts.readFailed, { id: SCANNER_TOAST_ID });
+			return;
+		}
 		event.preventDefault();
 		stopScannerReading();
 		const card = parsed.data;
+		// One decision at a time: a new card never replaces the one staff are still deciding on.
+		if (pendingScannerCard || pendingScannerDuplicate) {
+			rejectedScannerCitizenId = card.citizen_id;
+			toast.warning(ts.finishOpenDialog, { id: SCANNER_TOAST_ID });
+			return;
+		}
 		if (applyScannedCard(members, card).kind === 'already-in-form') {
 			showAlreadyInForm(card);
 			return;
@@ -1447,13 +1466,26 @@
 	async function checkScannedCardDuplicate(card: ScannerCard) {
 		toast.loading(ts.checkingDuplicate, { id: SCANNER_TOAST_ID });
 		let duplicate: ScannedCardDuplicate | null;
+		scannerLookupRunning = true;
+		let deadline: ReturnType<typeof setTimeout> | undefined;
 		try {
-			duplicate = (await findScannedCardDuplicate?.(card.citizen_id)) ?? null;
+			const timedOut = new Promise<never>((_, reject) => {
+				deadline = setTimeout(
+					() => reject(new Error('duplicate lookup timed out')),
+					SCANNER_DUPLICATE_LOOKUP_MAX_MS
+				);
+			});
+			duplicate =
+				(await Promise.race([findScannedCardDuplicate?.(card.citizen_id), timedOut])) ?? null;
 		} catch {
+			scannerLookupRunning = false;
 			toast.warning(ts.duplicateLookupFailed);
 			placeScannedCardAsUsual(card);
 			return;
+		} finally {
+			clearTimeout(deadline);
 		}
+		scannerLookupRunning = false;
 		if (duplicate && !fieldsLocked) {
 			toast.dismiss(SCANNER_TOAST_ID);
 			pendingScannerDuplicate = { card, duplicate };
@@ -1467,14 +1499,20 @@
 		toast.info(ts.alreadyInForm, { id: SCANNER_TOAST_ID });
 	}
 
+	/**
+	 * Saving (or read-only): the form must not change under the save, so the card is dropped — and staff
+	 * are told to insert it again. Returns true when the card was discarded.
+	 */
+	function discardCardWhenLocked(): boolean {
+		if (!fieldsLocked) return false;
+		heldScannerPhoto = null;
+		toast.warning(ts.formLocked, { id: SCANNER_TOAST_ID });
+		return true;
+	}
+
 	/** Fill / already-in-form / ask-overwrite, decided against the members as they are now. */
 	function placeScannedCardAsUsual(card: ScannerCard) {
-		// Saving (or read-only): the form must not change under the save; staff insert the card again.
-		if (fieldsLocked) {
-			heldScannerPhoto = null;
-			toast.dismiss(SCANNER_TOAST_ID);
-			return;
-		}
+		if (discardCardWhenLocked()) return;
 		const placement = applyScannedCard(members, card);
 		if (placement.kind === 'already-in-form') {
 			showAlreadyInForm(card);
@@ -1511,11 +1549,7 @@
 	const freshReportingInMember = () => ({ ...blankUnifiedMember(), reporting_in: true });
 
 	function placeScannedCard(card: ScannerCard, index: number) {
-		if (fieldsLocked) {
-			heldScannerPhoto = null;
-			toast.dismiss(SCANNER_TOAST_ID);
-			return;
-		}
+		if (discardCardWhenLocked()) return;
 		members[index] = cardToUnifiedMember(card, members[index]);
 		household = applyCardAddressToHousehold(household, card);
 		markDirty();
@@ -1529,7 +1563,8 @@
 		const card = pendingScannerCard;
 		pendingScannerCard = null;
 		if (!card) return;
-		// Overwrite = a different person takes this slot: start from a fresh member so none of the
+		if (discardCardWhenLocked()) return;
+		// Overwrite =  a different person takes this slot: start from a fresh member so none of the
 		// previous person's phone, photo, medical/needs fields carry over.
 		members[index] = freshReportingInMember();
 		placeScannedCard(card, index);
@@ -1539,6 +1574,7 @@
 		const card = pendingScannerCard;
 		pendingScannerCard = null;
 		if (!card) return;
+		if (discardCardWhenLocked()) return;
 		members = [...members, freshReportingInMember()];
 		placeScannedCard(card, members.length - 1);
 	}
@@ -1567,9 +1603,13 @@
 		event.preventDefault();
 		stopScannerReading();
 		const { citizen_id: citizenId, photo_base64: dataUrl } = parsed.data;
+		if (citizenId === rejectedScannerCitizenId) return;
 		const member = findMemberByCitizenId(citizenId);
 		if (!member) {
-			heldScannerPhoto = { citizenId, dataUrl };
+			// Hold only while that card can still be placed (dialog open / lookup running); else discard (FR-7).
+			if (pendingScannerCard || pendingScannerDuplicate || scannerLookupRunning) {
+				heldScannerPhoto = { citizenId, dataUrl };
+			}
 			toast.dismiss(SCANNER_TOAST_ID);
 			return;
 		}
@@ -1589,6 +1629,15 @@
 			toast.error(ts.photoSaveFailed, { id: SCANNER_TOAST_ID });
 			return;
 		}
+		// Never replace a photo staff (or an earlier scan) already set, on either path.
+		const target = () => {
+			const found = fieldsLocked ? undefined : findMemberByCitizenId(citizenId);
+			return found && !found.photo ? found : undefined;
+		};
+		if (!target()) {
+			if (!quiet) toast.dismiss(SCANNER_TOAST_ID);
+			return;
+		}
 		let photoId: string;
 		let file: File;
 		try {
@@ -1599,8 +1648,12 @@
 			toast.error(ts.photoSaveFailed, { id: SCANNER_TOAST_ID });
 			return;
 		}
-		const member = fieldsLocked ? undefined : findMemberByCitizenId(citizenId);
+		const member = target();
 		if (!member) {
+			// Discarded after the upload: do not leave an orphan image doc behind.
+			void imageRepository()
+				.deleteImage(photoId)
+				.catch(() => {});
 			if (!quiet) toast.dismiss(SCANNER_TOAST_ID);
 			return;
 		}

@@ -54,6 +54,22 @@
 	// No 'SH001' fallback here: a walk-in must never be written to a guessed shelter.
 	const shelterCode = $derived(resolveShelterCode());
 
+	/** Without an active shelter the form is not mounted; scanned cards must not vanish silently. */
+	$effect(() => {
+		if (shelterCode) return;
+		const rejectCard = (event: Event) => {
+			event.preventDefault();
+			toast.warning(td.scanner.selectShelterFirst, { id: 'scanner-card' });
+		};
+		const ackPhoto = (event: Event) => event.preventDefault();
+		window.addEventListener('scanner:card-read', rejectCard);
+		window.addEventListener('scanner:card-photo', ackPhoto);
+		return () => {
+			window.removeEventListener('scanner:card-read', rejectCard);
+			window.removeEventListener('scanner:card-photo', ackPhoto);
+		};
+	});
+
 	let completed = $state<{
 		household: Household;
 		members: Evacuee[];
@@ -105,7 +121,7 @@
 	async function findScannedCardDuplicate(citizenId: string): Promise<ScannedCardDuplicate | null> {
 		const [local, pool] = await Promise.allSettled([
 			peopleRepository().searchEvacueesMany([citizenId]),
-			unassignedRegistrationRemote.searchOpen(citizenId)
+			unassignedRegistrationRemote.searchOpen(citizenId, { signal: AbortSignal.timeout(8000) })
 		]);
 		if (local.status === 'fulfilled') {
 			const evacuee = local.value.get(citizenId)?.[0];
@@ -119,8 +135,8 @@
 			}
 		}
 		if (pool.status === 'fulfilled') {
-			const hit = pool.value.results[0];
-			if (hit && hit.open_members.length > 0) {
+			const hit = pool.value.results.find((r) => r.open_members.length > 0);
+			if (hit) {
 				const member =
 					hit.open_members.find((m) => digitsOnly(m.person_id?.number) === citizenId) ??
 					hit.open_members[0];

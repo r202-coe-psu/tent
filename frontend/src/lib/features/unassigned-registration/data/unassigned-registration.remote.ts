@@ -47,13 +47,17 @@ function errorFromBody(
 }
 
 export const unassignedRegistrationRemote: UnassignedRegistrationRepository = {
-	async searchOpen(q: string): Promise<UnassignedRegistrationSearchResponse> {
+	async searchOpen(
+		q: string,
+		options?: { signal?: AbortSignal }
+	): Promise<UnassignedRegistrationSearchResponse> {
 		const params = new URLSearchParams({ q });
 		const response = await fetch(
 			`/api/staff/v1/unassigned-registrations/search?${params.toString()}`,
 			{
 				credentials: 'include',
-				headers: { Accept: 'application/json' }
+				headers: { Accept: 'application/json' },
+				signal: options?.signal
 			}
 		);
 		const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
