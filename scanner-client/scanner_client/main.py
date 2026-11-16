@@ -191,7 +191,11 @@ async def run_app(
 
 
 async def _dismiss_dialog(dialog: Any) -> None:
-    log.info("dismissed a %s dialog", getattr(dialog, "type", "browser"))
+    log.info(
+        "dismissed a %s dialog: %r",
+        getattr(dialog, "type", "browser"),
+        getattr(dialog, "message", ""),
+    )
     try:
         await dialog.dismiss()
     except Exception as exc:  # already handled / page gone

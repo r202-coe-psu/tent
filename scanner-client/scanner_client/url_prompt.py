@@ -142,9 +142,7 @@ TAKE_SUBMISSION_JS = """() => {
 }"""
 
 
-async def ask_shelter_origin(
-    page: Any, initial: str, error: str | None = None
-) -> str | None:
+async def ask_shelter_origin(page: Any, initial: str, error: str | None = None) -> str | None:
     """Ask until a valid origin is entered (and, off the default site, confirmed); None when
     the window is closed meanwhile."""
     try:
