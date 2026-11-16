@@ -693,3 +693,93 @@ describe('GET /api/back-office/donations?status=received (#821)', () => {
 		expect(vi.mocked(adminRaw)).not.toHaveBeenCalled();
 	});
 });
+
+describe('GET /api/back-office/donations — capability in the active shelter (#477)', () => {
+	const multi = (roles: string[]) =>
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'multi',
+			roles: ['shelter:SH001', 'shelter:SH002', ...roles],
+			isSA: false,
+			shelterCode: 'SH001'
+		});
+	const readShelters = () =>
+		vi
+			.mocked(adminRaw)
+			.mock.calls.map((c) => String(c[0]).match(/\/shelter_(sh\d+)\//)?.[1])
+			.filter(Boolean);
+
+	beforeEach(() => {
+		vi.resetAllMocks();
+	});
+
+	it('without shelter_code, covers every shelter where the caller holds a capability', async () => {
+		multi(['SH001:warehouse_staff', 'SH002:donation_staff']);
+		mockCouch();
+
+		const data = await (await GET(event())).json();
+
+		expect(data.donations.map((d: { booking_ref: string }) => d.booking_ref).sort()).toEqual([
+			'DN-000001',
+			'DN-000002',
+			'DN-000004'
+		]);
+	});
+
+	it('reads the shelter the capability is held in, not the first membership', async () => {
+		multi(['SH002:warehouse_staff']);
+		mockCouch();
+
+		const data = await (await GET(event())).json();
+
+		expect(data.donations.map((d: { booking_ref: string }) => d.booking_ref)).toEqual([
+			'DN-000004'
+		]);
+		expect(readShelters()).not.toContain('sh001');
+	});
+
+	it('with shelter_code, reads only that shelter', async () => {
+		multi(['SH001:warehouse_staff', 'SH002:warehouse_staff']);
+		mockCouch();
+
+		const data = await (await GET(event('?shelter_code=SH002'))).json();
+
+		expect(data.donations.map((d: { booking_ref: string }) => d.booking_ref)).toEqual([
+			'DN-000004'
+		]);
+		expect(readShelters()).not.toContain('sh001');
+	});
+
+	it('403 naming the shelter, reading nothing, for a shelter without a capability', async () => {
+		multi(['SH001:warehouse_staff']);
+		mockCouch();
+
+		const response = await GET(event('?shelter_code=SH002'));
+		const data = await response.json();
+
+		expect(response.status).toBe(403);
+		expect(data.error).toContain('SH002');
+		expect(readShelters()).toEqual([]);
+	});
+
+	it('?status=received: 400 for a caller of several shelters who names none', async () => {
+		multi(['SH001:warehouse_staff', 'SH002:warehouse_staff']);
+
+		const response = await GET(event('?status=received'));
+
+		expect(response.status).toBe(400);
+		expect(vi.mocked(adminRaw).mock.calls.some((c) => String(c[0]).includes('_find'))).toBe(false);
+	});
+
+	it('?status=received: reads the named shelter, 403 for one without a capability', async () => {
+		multi(['SH002:warehouse_staff']);
+		vi.mocked(adminRaw).mockResolvedValue({ status: 200, data: { docs: [] } });
+
+		const ok = await GET(event('?status=received&shelter=SH002'));
+		expect(ok.status).toBe(200);
+		expect(readShelters()).toEqual(['sh002']);
+
+		const refused = await GET(event('?status=received&shelter=SH001'));
+		expect(refused.status).toBe(403);
+		expect((await refused.json()).error).toContain('SH001');
+	});
+});

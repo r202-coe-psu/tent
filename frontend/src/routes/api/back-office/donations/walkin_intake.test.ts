@@ -293,6 +293,8 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 		const response = await POST(event({ ...validBody, shelter_code: 'SH002' }));
 
 		expect(response.status).toBe(403);
+		// The counter toasts this verbatim: it must say which shelter, not "Internal Server Error".
+		expect((await response.json()).error).toContain('SH002');
 		expect(written).toBeNull();
 	});
 
@@ -322,6 +324,7 @@ describe('POST /api/back-office/donations (walk-in intake)', () => {
 
 		const refused = await POST(event(validBody));
 		expect(refused.status).toBe(400);
+		expect(await refused.json()).toMatchObject({ error_code: 'SHELTER_REQUIRED' });
 		expect(written).toBeNull();
 	});
 

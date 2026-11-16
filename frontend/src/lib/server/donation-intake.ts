@@ -1,4 +1,4 @@
-import { error, json } from '@sveltejs/kit';
+import { error, isHttpError, json } from '@sveltejs/kit';
 import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
 import {
 	WAREHOUSE_STAFF,
@@ -32,6 +32,19 @@ type RegistryAllDocs = { rows?: RegistryRow[] };
 
 const DONATION_FORBIDDEN =
 	'Requires warehouse_staff, donation_staff, shelter_manager, or system_admin';
+
+/**
+ * 403 for a shelter the caller named but holds no donation capability in (#477). Names the
+ * shelter and says what to do: the counter toasts this verbatim, and the station's shelter
+ * comes from `shelter:` membership, which can differ from where the capability is held.
+ */
+export function donationForbiddenIn(shelterCode: string): string {
+	return `ไม่มีสิทธิ์รับบริจาคในศูนย์ ${shelterCode} — สลับไปศูนย์ที่คุณมีสิทธิ์รับบริจาคแล้วลองอีกครั้ง`;
+}
+
+/** 400 for a caller with a donation capability in several shelters who did not name one (#477). */
+export const DONATION_SHELTER_REQUIRED =
+	'กรุณาเลือกศูนย์ที่กำลังทำงานก่อน — คุณมีสิทธิ์รับบริจาคมากกว่าหนึ่งศูนย์';
 
 /** Capabilities that open donation intake in a shelter (CR-227). */
 /** True when `roles` may run donation intake IN `shelterCode` (not merely somewhere). */
@@ -75,7 +88,7 @@ export function donationScopeCodes(caller: Caller, requested: string | null | un
 	const wanted = requested?.trim() || null;
 	const own = donationShelters(caller);
 	if (!wanted) return own;
-	if (!own.includes(wanted)) throw error(403, DONATION_FORBIDDEN);
+	if (!own.includes(wanted)) throw error(403, donationForbiddenIn(wanted));
 	return [wanted];
 }
 
@@ -190,10 +203,10 @@ export async function resolveReceivedShelter(
 	const own = donationShelters(caller);
 	if (own.length === 0) throw error(403, 'No shelter scope');
 	if (wanted) {
-		if (!own.includes(wanted)) throw error(403, 'Forbidden');
+		if (!own.includes(wanted)) throw error(403, donationForbiddenIn(wanted));
 		return { code: wanted };
 	}
-	if (own.length > 1) throw error(400, 'shelter is required (caller belongs to several shelters)');
+	if (own.length > 1) throw error(400, DONATION_SHELTER_REQUIRED);
 	return { code: own[0] };
 }
 
@@ -207,6 +220,9 @@ export function isInCallerScope(caller: Caller, donation: PublicDonationDoc): bo
 
 /** Render a thrown value as the `{ success: false, error }` shape this surface uses. */
 export function routeErrorResponse(e: unknown): { message: string; status: number } {
+	// SvelteKit's `error()` throws an HttpError, which is NOT an Error: read its body, or every
+	// 403/400 thrown by the helpers above would reach the client as "Internal Server Error".
+	if (isHttpError(e)) return { message: e.body.message || `Error: ${e.status}`, status: e.status };
 	const message = e instanceof Error ? e.message : 'Internal Server Error';
 	const status =
 		typeof e === 'object' &&

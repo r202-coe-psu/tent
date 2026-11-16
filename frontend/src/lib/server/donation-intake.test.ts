@@ -4,8 +4,10 @@ import {
 	authorizeDonation,
 	donationScopeCodes,
 	isInCallerScope,
-	resolveDonationWriteShelter
+	resolveDonationWriteShelter,
+	routeErrorResponse
 } from './donation-intake';
+import { error } from '@sveltejs/kit';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
 import type { StockLedger } from '$lib/features/operations/server';
@@ -150,5 +152,25 @@ describe('active-shelter scoping (#477)', () => {
 		expect(() => resolveDonationWriteShelter(multi, 'SH001')).toThrow(
 			expect.objectContaining({ status: 403 })
 		);
+	});
+});
+
+describe('routeErrorResponse', () => {
+	it('passes the status and message of a SvelteKit error() through', () => {
+		let thrown: unknown;
+		try {
+			error(403, 'ไม่มีสิทธิ์รับบริจาคในศูนย์ SH002');
+		} catch (e) {
+			thrown = e;
+		}
+		expect(routeErrorResponse(thrown)).toEqual({
+			status: 403,
+			message: 'ไม่มีสิทธิ์รับบริจาคในศูนย์ SH002'
+		});
+	});
+
+	it('keeps a plain Error message as a 500, and hides anything else', () => {
+		expect(routeErrorResponse(new Error('boom'))).toEqual({ status: 500, message: 'boom' });
+		expect(routeErrorResponse('x')).toEqual({ status: 500, message: 'Internal Server Error' });
 	});
 });

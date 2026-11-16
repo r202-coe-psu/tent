@@ -4,6 +4,7 @@ import {
 	assertCountedAgainstCatalog,
 	assertDonationLedgerRows,
 	authorizeDonation,
+	DONATION_SHELTER_REQUIRED,
 	donationScopeCodes,
 	resolveDonationWriteShelter,
 	listShelterCodes,
@@ -173,8 +174,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			shelterCode = input.shelter_code;
 		}
 		if (!shelterCode) {
+			// Only reached by a caller holding donation intake in several shelters who named none.
 			return json(
-				{ success: false, error_code: 'SHELTER_REQUIRED', error: 'Caller has no shelter scope' },
+				{ success: false, error_code: 'SHELTER_REQUIRED', error: DONATION_SHELTER_REQUIRED },
 				{ status: 400 }
 			);
 		}
