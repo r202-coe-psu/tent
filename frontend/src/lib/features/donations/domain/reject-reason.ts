@@ -104,7 +104,11 @@ const NOT_ELIGIBLE: ToneTexts = {
 		'ขอบคุณที่ตั้งใจช่วยเหลือ ของนี้ไม่ตรงกับที่ศูนย์รับได้ รบกวนส่งต่อให้ศูนย์อื่นที่รับของลักษณะนี้'
 };
 
-/** Expired and damaged goods share one message; it carries its own thanks. */
+/**
+ * Expired and damaged goods share one message; it carries its own thanks and, unlike the other
+ * two, does not ask the donor to pass the goods on — spoiled or broken things should not reach
+ * another shelter either (#1256 review S5; no separate CR, see CR-255 decision log).
+ */
 const SAFETY: ToneTexts = {
 	formal:
 		'เพื่อความปลอดภัยของผู้ใช้ ทางศูนย์ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขออภัยในความไม่สะดวก และขอบคุณในความตั้งใจดีของท่าน',
@@ -128,22 +132,66 @@ export function rejectNoteTemplate(
 	return (code && REJECT_NOTE_TEMPLATES[code]?.[tone]) || null;
 }
 
-const ALL_TEMPLATE_TEXTS: ReadonlySet<string> = new Set(
-	Object.values(REJECT_NOTE_TEMPLATES).flatMap((texts) => Object.values(texts!))
-);
+/** Every template text with the tone it is written in, longest first so a longer one wins. */
+const TEMPLATE_ENTRIES: readonly { text: string; tone: RejectNoteTone }[] = [
+	...new Map(
+		Object.values(REJECT_NOTE_TEMPLATES).flatMap((texts) =>
+			texts ? REJECT_NOTE_TONES.map((tone) => [texts[tone.id], tone.id] as const) : []
+		)
+	).entries()
+]
+	.map(([text, tone]) => ({ text, tone }))
+	.sort((x, y) => y.text.length - x.text.length);
+
+/** The template sitting anywhere in `note` (staff may have written around it), if any. */
+function findTemplateIn(note: string): { text: string; tone: RejectNoteTone } | undefined {
+	return TEMPLATE_ENTRIES.find((entry) => note.includes(entry.text));
+}
+
+function swapIn(note: string, from: string, to: string): string {
+	return note
+		.replace(from, to)
+		.replace(/\s{2,}/g, ' ')
+		.trim();
+}
 
 /**
- * Put `text` in the detail box. A box that is empty, or still holds only a template, takes the new
- * one in its place (so changing tone or reason swaps rather than stacks); anything staff wrote
- * stays and the template goes after it. Null when appending would pass {@link REJECT_NOTE_MAX},
- * so the caller can leave the box alone instead of cutting a sentence.
+ * Put `text` in the detail box. A template already in the box — alone, after staff's words, or in
+ * the middle of them — is swapped for the new one, so changing tone never stacks two messages and
+ * what staff wrote stays put; with no template the text goes in an empty box or after what staff
+ * wrote. Null when the result would pass {@link REJECT_NOTE_MAX}, so the caller can leave the box
+ * alone instead of cutting a sentence.
  */
 export function applyRejectNoteTemplate(note: string, text: string): string | null {
 	const current = note.trim();
-	if (current === '' || ALL_TEMPLATE_TEXTS.has(current)) return text;
-	if (current.includes(text)) return current;
-	const next = `${current} ${text}`;
+	if (current === '') return text;
+	const existing = findTemplateIn(current);
+	const next = existing
+		? existing.text === text
+			? current
+			: swapIn(current, existing.text, text)
+		: current.includes(text)
+			? current
+			: `${current} ${text}`;
 	return next.length > REJECT_NOTE_MAX ? null : next;
+}
+
+/**
+ * The reason changed: a template written for the old one must not reach the donor under the new
+ * one ("we have enough" next to "expired"). Swap it for the new reason's message in the same tone;
+ * drop it when the new reason has none ("other", nothing picked) or the swap would pass the limit.
+ * Staff's own words are kept; a note with no template is returned untouched.
+ */
+export function retargetRejectNote(
+	note: string,
+	code: DonationRejectReasonCode | undefined
+): string {
+	const existing = findTemplateIn(note);
+	if (!existing) return note;
+	const replacement = rejectNoteTemplate(code, existing.tone) ?? '';
+	if (replacement === existing.text) return note;
+	const swapped = swapIn(note, existing.text, replacement);
+	return swapped.length > REJECT_NOTE_MAX ? swapIn(note, existing.text, '') : swapped;
 }
 
 function truncate(text: string, max: number): string {

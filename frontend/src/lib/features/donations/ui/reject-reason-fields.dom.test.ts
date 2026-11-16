@@ -105,4 +105,81 @@ describe('RejectReasonFields (#1166)', () => {
 		const chip = document.querySelector('[data-testid="t-template-concise"]') as HTMLButtonElement;
 		expect(chip.disabled).toBe(true);
 	});
+
+	// Review round 3, B1 — the radio group needs a real click to change the reason.
+	const pickReason = (code: string) => {
+		(document.querySelector(`[id="t-code-${code}"]`) as HTMLElement).click();
+		flushSync();
+	};
+	const noteBox = () => document.querySelector('textarea') as HTMLTextAreaElement;
+	const click = (tone: string) => {
+		(document.querySelector(`[data-testid="t-template-${tone}"]`) as HTMLButtonElement).click();
+		flushSync();
+	};
+
+	it('swaps the message for the new reason instead of leaving the old reason’s text (#1256 B1)', () => {
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', code: 'over_need' }
+		});
+		flushSync();
+		click('formal');
+		pickReason('expired');
+
+		expect(noteBox().value).toBe(rejectNoteTemplate('expired', 'formal'));
+		const preview = document.querySelector('[data-testid="t-preview"]')?.textContent ?? '';
+		expect(preview).toContain('หมดอายุ');
+		expect(preview).not.toContain('เพียงพอแล้ว');
+	});
+
+	it('clears a template when the reason becomes "other", so the note is required again (#1256 B1)', () => {
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', code: 'over_need' }
+		});
+		flushSync();
+		click('warm');
+		pickReason('other');
+
+		expect(noteBox().value).toBe('');
+		expect(noteBox().required).toBe(true);
+	});
+
+	it('keeps staff words around the template when the reason changes (#1256 B1)', () => {
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', code: 'over_need', note: 'นมหมดอายุ' }
+		});
+		flushSync();
+		click('concise');
+		pickReason('not_eligible');
+
+		expect(noteBox().value).toBe(`นมหมดอายุ ${rejectNoteTemplate('not_eligible', 'concise')}`);
+	});
+
+	it('does not stack a second message when staff typed first and then switches tone (#1256 W1)', () => {
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', code: 'over_need', note: 'นมหมดอายุ' }
+		});
+		flushSync();
+		click('formal');
+		click('warm');
+
+		expect(noteBox().value).toBe(`นมหมดอายุ ${rejectNoteTemplate('over_need', 'warm')}`);
+	});
+
+	it('names each tone button for screen readers and explains a disabled one (#1256 S2, S3)', () => {
+		instance = mount(RejectReasonFields, {
+			target: document.body,
+			props: { idPrefix: 't', code: 'over_need', note: 'ก'.repeat(390) }
+		});
+		flushSync();
+		const chip = document.querySelector('[data-testid="t-template-formal"]') as HTMLButtonElement;
+		expect(chip.getAttribute('aria-label')).toBe('ใส่ข้อความแบบทางการ');
+		expect(chip.disabled).toBe(true);
+		const hintId = chip.getAttribute('aria-describedby');
+		expect(hintId).toBeTruthy();
+		expect(document.getElementById(hintId!)?.textContent).toContain('400');
+	});
 });
