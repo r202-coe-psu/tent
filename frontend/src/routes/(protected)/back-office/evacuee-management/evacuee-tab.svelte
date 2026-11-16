@@ -8,6 +8,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { toast } from 'svelte-sonner';
 	import Users from '@lucide/svelte/icons/users';
 	import Search from '@lucide/svelte/icons/search';
@@ -56,6 +58,9 @@
 	let selectedIds = $state<string[]>([]);
 	let isSelectingAllMatching = $state(false);
 	let isBulkCancelling = $state(false);
+	let zoneDialogOpen = $state(false);
+	let zoneDialogEvacuee = $state.raw<Evacuee | null>(null);
+	let pickedZone = $state('');
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
@@ -182,24 +187,33 @@
 		}
 	}
 
-	async function handleCheckIn(evacuee: Evacuee) {
+	async function submitCheckIn(evacuee: Evacuee, zone: string) {
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
-		let zone = evacuee.current_stay.zone?.trim() ?? '';
-		if (!zone) {
-			const entered = window.prompt('ระบุโซนสำหรับเช็คอิน');
-			if (entered === null) return;
-			zone = entered.trim();
-		}
-		if (!zone) {
-			toast.error('การเช็คอินต้องระบุโซน');
-			return;
-		}
 		try {
 			await checkIn.mutateAsync({ evacuee, ctx, zone });
 			toast.success(`เช็คอิน ${evacuee.first_name} ${evacuee.last_name} แล้ว`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
 		}
+	}
+
+	function handleCheckIn(evacuee: Evacuee) {
+		const zone = evacuee.current_stay.zone?.trim() ?? '';
+		if (zone) {
+			void submitCheckIn(evacuee, zone);
+			return;
+		}
+		zoneDialogEvacuee = evacuee;
+		pickedZone = '';
+		zoneDialogOpen = true;
+	}
+
+	async function confirmZoneAndCheckIn() {
+		const evacuee = zoneDialogEvacuee;
+		const zone = pickedZone.trim();
+		if (!evacuee || !zone) return;
+		zoneDialogOpen = false;
+		await submitCheckIn(evacuee, zone);
 	}
 
 	async function handleBulkCancel() {
@@ -654,3 +668,41 @@
 		<PaginationControls bind:page={currentPage} count={total} perPage={PAGE_SIZE} />
 	{/if}
 </div>
+
+<Dialog.Root bind:open={zoneDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>ระบุโซนสำหรับเช็คอิน</Dialog.Title>
+			<Dialog.Description>
+				{#if zoneDialogEvacuee}
+					{zoneDialogEvacuee.first_name} {zoneDialogEvacuee.last_name} ยังไม่ได้ระบุโซน
+				{/if}
+			</Dialog.Description>
+		</Dialog.Header>
+		{#if zoneOptions.length > 0}
+			<Select.Root type="single" bind:value={pickedZone}>
+				<Select.Trigger class="h-11 w-full" aria-label="เลือกโซน">
+					{zoneOptions.find((option) => option.value === pickedZone)?.label ?? 'เลือกโซน'}
+				</Select.Trigger>
+				<Select.Content>
+					{#each zoneOptions as option (option.value)}
+						<Select.Item value={option.value} label={option.label} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		{:else}
+			<div class="space-y-1.5">
+				<Label for="evacuee-check-in-zone">รหัสโซน</Label>
+				<Input id="evacuee-check-in-zone" bind:value={pickedZone} placeholder="เช่น A1" />
+			</div>
+		{/if}
+		<Dialog.Footer>
+			<Button type="button" variant="outline" onclick={() => (zoneDialogOpen = false)}>
+				ยกเลิก
+			</Button>
+			<Button type="button" disabled={!pickedZone.trim()} onclick={confirmZoneAndCheckIn}>
+				ยืนยันเช็คอิน
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
