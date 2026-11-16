@@ -4,6 +4,7 @@ import { findMasterByCode } from '$lib/server/shelters.admin';
 import { getEvacueeQrPrints, issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import {
 	checkInSelectedMembers,
+	HOUSEHOLD_EXPAND_BATCH_SIZE,
 	KioskInputError,
 	KioskLookupUnavailableError,
 	KioskThaidIdentityMismatchError,
@@ -502,7 +503,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 			const suffix = String(index).padStart(2, '0');
 			setHousehold([
 				evacuee(0, {
-					_id: `evacuee:01ARZ3NDEKTSV4RRFFQ69G5${suffix}`.slice(0, 'evacuee:'.length + 26),
+					_id: `evacuee:01ARZ3NDEKTSV4RRFFQ69G5${suffix}`,
 					household_id: `household:bulk-${suffix}`,
 					first_name: `สมชาย${suffix}`,
 					created_at: `2026-09-01T00:${suffix}:00.000Z`
@@ -534,7 +535,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		expect(result.kind).toBe('candidates');
 		if (result.kind === 'candidates') expect(result.candidates).toHaveLength(householdCount);
 		expect(maxInFlight).toBeGreaterThan(1);
-		expect(maxInFlight).toBeLessThanOrEqual(10);
+		expect(maxInFlight).toBeLessThanOrEqual(HOUSEHOLD_EXPAND_BATCH_SIZE);
 	});
 
 	it('resolves a candidate id when more than five households share the phone', async () => {

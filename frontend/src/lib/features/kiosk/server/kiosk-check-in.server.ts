@@ -323,7 +323,7 @@ export async function getById(dbName: string, id: string): Promise<EvacueeDoc | 
 }
 
 /** Max concurrent per-household `_find` calls when expanding phone candidates. */
-const HOUSEHOLD_EXPAND_BATCH_SIZE = 8;
+export const HOUSEHOLD_EXPAND_BATCH_SIZE = 8;
 
 /** Runs `fn` over `items` in sequential batches so CouchDB never sees an unbounded burst. */
 async function mapInBatches<T, R>(
