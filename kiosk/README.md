@@ -468,8 +468,8 @@ tail -f /tmp/kiosk_autostart.log
 - **บูตด้วยเวอร์ชันเดิมเสมอเมื่อมีปัญหา:**
   - ไม่มีเน็ตหรือ fetch ไม่ได้ภายใน 20 วินาที (`offline`)
   - มีไฟล์ tracked ที่แก้ค้างบนตู้ (`dirty`) หรือมี commit บนตู้ที่ยังไม่อยู่บน `origin/main` (`diverged`) ตู้นี้จะไม่อัปเดตจนกว่าจะมีคนเข้าไปจัดการ ให้ดู log ข้างล่าง
-  - ขั้นติดตั้งล้ม, error หรือ timeout (`rolled-back`) จะ checkout กลับ commit เดิม, ติดตั้ง package ตาม `pip freeze` ที่เก็บไว้ก่อนอัปเดต (downgrade ได้จริง) และรันสคริปต์โมเดลของเวอร์ชันเดิม ถ้าการย้อนกลับเองไม่สำเร็จ (เช่นเน็ตหลุด) จะเก็บ snapshot ไว้แล้วลองใหม่ตอนบูตครั้งถัดไป
-- **ไฟดับระหว่างอัปเดต:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะ checkout ให้ครบและรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม ทำแบบนี้แม้บูตตอนไม่มีเน็ต
+  - ขั้นติดตั้งล้ม, error หรือ timeout (`rolled-back`) จะ checkout กลับ commit เดิม, ติดตั้ง package ตาม `pip freeze` ที่เก็บไว้ก่อนอัปเดต (คืนเวอร์ชันเดิมของ package ที่มีอยู่ก่อน ส่วน package ใหม่ที่ release เพิ่มจะยังอยู่) และรันสคริปต์โมเดลของเวอร์ชันเดิม ถ้าการย้อนกลับเองไม่สำเร็จ (เช่นเน็ตหลุด) จะเก็บ snapshot ไว้แล้วลองใหม่ตอนบูตครั้งถัดไป ถ้าระหว่างนั้น maintainer ย้าย `kiosk-stable` กลับไปเวอร์ชันเดิม ตู้จะคืน package จาก snapshot ให้ (`restored`)
+- **ไฟดับระหว่างอัปเดต:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะ checkout ให้ครบและรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม ทำแบบนี้แม้บูตตอนไม่มีเน็ต ไฟล์ที่ checkout ทับได้มีแค่ไฟล์ที่ release นั้นเปลี่ยน ถ้ามีคนแก้ไฟล์อื่นไว้หรือ commit บนตู้ จะยังได้ `dirty` / `diverged` เหมือนเดิม
 - `main.py` ที่ restart ใน supervisor loop ไม่เรียก updater จึงไม่มีการอัปเดตระหว่างที่มีคนใช้งานตู้
 - ผลลัพธ์ทุกครั้งอยู่ที่ `~/.local/state/smart-shelter-kiosk/updater.log` (อยู่ข้าม reboot) และใน `/tmp/kiosk_autostart.log` บรรทัดที่ขึ้นต้นด้วย `[kiosk-updater]`
 
@@ -494,6 +494,72 @@ git push -f origin kiosk-stable
 ```
 
 ย้อนเวอร์ชันได้โดยย้าย `kiosk-stable` กลับไปที่ tag เก่าแล้ว push แบบ force อีกครั้ง
+
+#### สำหรับ dev ที่พัฒนาต่อ (auto-patch internals)
+
+**ไฟล์ที่เกี่ยวข้อง**
+
+| ไฟล์ | หน้าที่ |
+| --- | --- |
+| `kiosk_updater.py` | ตัว updater ใช้แค่ stdlib (ห้าม import package จาก venv เพราะต้องรันได้แม้ venv พังอยู่) |
+| `start_kiosk.sh` ข้อ 6.0 | เรียก updater ครั้งเดียวก่อน supervisor loop ถ้า exit code เป็น `10` จะ re-exec ตัวเอง |
+| `tests/test_kiosk_updater.py` | test กับ git repo จริงใน temp dir (origin + clone ของตู้) |
+| `.git/kiosk-update/` บนตู้ | state ของ updater: `pending` (marker) และ `pip-freeze.txt` (snapshot) |
+| `~/.local/state/smart-shelter-kiosk/updater.log` บนตู้ | log ของ updater ที่อยู่ข้าม reboot |
+
+**ลำดับการทำงานของ `update_on_boot()`**
+
+1. ถ้า HEAD ไม่ได้อยู่บน branch `main` → `disabled` (ไม่แตะเน็ตเลย)
+2. อ่าน marker `pending` ถ้ามี แปลว่ารอบก่อนจบไม่ครบ ให้ทำต่อ (resume)
+3. `git fetch` tag `kiosk-stable` แบบ force และ `main` (timeout 20 วินาที) ถ้า fetch ไม่ได้และไม่มี marker → `offline` แต่ถ้ามี marker ให้ใช้ target ที่จดไว้ใน marker
+4. target ต้องเป็น ancestor ของ `origin/main` ไม่งั้น → `untrusted` (ถ้า resume อยู่ ให้ทำ target เดิมใน marker ให้จบแทน)
+5. HEAD ต้องอยู่บน `origin/main` ไม่งั้น → `diverged` (มีคน commit บนตู้)
+6. มีไฟล์ tracked ที่ถูกแก้ → `dirty` ยกเว้นตอน resume ที่ไฟล์นั้นอยู่ในชุดที่ checkout รอบก่อนกำลังเขียน
+7. เขียน marker `"<base>\n<target>\n"` แบบ atomic (เขียนไฟล์ tmp, fsync, แล้ว `os.replace`) **ก่อน** checkout
+8. `git checkout -B main <target>` (ใส่ `-f` เฉพาะตอน resume) ถ้า git ไม่ยอมทับไฟล์ untracked → ลบ marker แล้วคืน `dirty`
+9. รันขั้นติดตั้งที่จำเป็น (`_steps_between`) ถ้าขั้นไหนล้ม → checkout กลับ base แล้วรันขั้น undo (`UNDO_STEP`)
+10. สำเร็จทั้งหมด → ลบ snapshot แล้วค่อยลบ marker (`_finish`) ถ้า undo ล้ม จะเก็บทั้งสองไว้ให้บูตครั้งถัดไปทำต่อ
+
+**ผลลัพธ์ (outcome) ที่เขียนลง log**
+
+| outcome | ความหมาย | HEAD |
+| --- | --- | --- |
+| `disabled` | ตู้ไม่ได้อยู่บน `main` | ไม่เปลี่ยน |
+| `offline` | fetch ไม่ได้ และไม่มีงานค้าง | ไม่เปลี่ยน |
+| `up-to-date` | อยู่ที่ `kiosk-stable` แล้ว | ไม่เปลี่ยน |
+| `untrusted` | tag ชี้ไป commit ที่ไม่อยู่บน `origin/main` | ไม่เปลี่ยน |
+| `diverged` | มี commit บนตู้ที่ยังไม่อยู่บน `origin/main` | ไม่เปลี่ยน |
+| `dirty` | มีไฟล์ tracked ถูกแก้ หรือ release จะทับไฟล์ untracked | ไม่เปลี่ยน |
+| `updated` | ย้ายไปเวอร์ชันใหม่และติดตั้งครบ | เปลี่ยน → re-exec |
+| `rolled-back` | ขั้นติดตั้งล้ม ย้อนกลับเวอร์ชันเดิมแล้ว | กลับเป็นเดิม |
+| `restored` | tag ถูกย้ายกลับระหว่างที่ rollback ยังไม่เสร็จ คืน package จาก snapshot แล้ว | เวอร์ชันเดิม |
+| `skipped: …` | error ที่ไม่คาดไว้ (`main()` จับไว้) ตู้บูตต่อตามปกติ | ตามจริง |
+
+**สิ่งที่ห้ามพังเวลาแก้โค้ดส่วนนี้**
+
+- **ตู้ต้องบูตได้เสมอ:** `main()` ห้าม raise และต้องคืน `10` ก็ต่อเมื่อ HEAD เปลี่ยนจริง (ไม่ใช่ดูจาก outcome) เพราะ bash อ่าน `start_kiosk.sh` ทีละส่วนระหว่างรัน ถ้าไฟล์ถูกเปลี่ยนแล้วไม่ re-exec จะรันคำสั่งครึ่ง ๆ กลาง ๆ
+- **ทุกจุดต้องทนไฟดับ:** เขียน state ผ่าน `_write_atomic` เท่านั้น และเขียน marker ก่อนแตะ working tree หรือ venv ทุกครั้ง
+- **ห้ามทับงานของคน:** การเช็ก `dirty` / `diverged` ต้องมาก่อน checkout เสมอ รวมถึงตอน resume
+- **ขั้นติดตั้งต้องรันผ่าน `run_command`:** เพื่อให้มี timeout (600 วินาทีต่อขั้น และรวม 1200 วินาทีจาก `BOOT_BUDGET`) และถูก kill ทั้ง process group
+- **`main.py` ที่ restart ในลูปห้ามเรียก updater:** อัปเดตได้เฉพาะตอนเริ่ม `start_kiosk.sh` (ตัวแปร `KIOSK_UPDATE_DONE` กันรอบ re-exec)
+
+**เพิ่มขั้นติดตั้งใหม่** (เช่น `apt` package หรือ asset อื่นที่ไม่อยู่ใน git)
+
+1. เพิ่มเงื่อนไขใน `_steps_between()` ว่าไฟล์ไหนเปลี่ยนแล้วต้องรันขั้นนี้ (path เทียบจากโฟลเดอร์ `kiosk/`)
+2. เพิ่มคำสั่งใน `commands` ของ `run_install_step()` คำสั่งต้อง idempotent (รันซ้ำได้หลังไฟดับ)
+3. กำหนดวิธีย้อนกลับใน `UNDO_STEP` และลำดับใน `UNDO_ORDER`
+4. เพิ่ม test ใน `tests/test_kiosk_updater.py` ทั้งกรณีที่ต้องรันและกรณีที่ต้องย้อนกลับ
+
+**รัน test**
+
+```bash
+cd kiosk
+.venv/bin/python -m unittest tests.test_kiosk_updater -v
+```
+
+Test ใช้ `FakeSteps` แทนขั้นติดตั้งจริง (บันทึกว่าขั้นไหนถูกเรียก, สั่งให้ล้ม, raise หรือจำลองไฟดับด้วย `PowerCut` ได้) ส่วน `run_command` มี test แยกกับคำสั่ง shell จริง และ Lefthook ไม่ได้รัน test ของ `kiosk/` ให้ ต้องรันเองก่อนเปิด PR
+
+**ทดลองกับตู้จำลองในเครื่อง:** สร้าง repo origin ที่มี branch `main` และ tag `kiosk-stable` แล้ว `git clone` เป็นตู้ ย้าย tag ไป commit ใหม่ แล้วรัน `STARTUP_DELAY=0 ./start_kiosk.sh` ในโฟลเดอร์ `kiosk/` ของตู้ ให้ `main.py` จำลองจบด้วย `sys.exit(78)` เพื่อให้ script หยุดหลังเปิดรอบแรก แล้วดูผลใน `/tmp/kiosk_autostart.log`
 
 ---
 

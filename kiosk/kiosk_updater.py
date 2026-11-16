@@ -39,12 +39,14 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
     if branch != RELEASE_BRANCH:
         return "disabled"
     pending = state_dir(kiosk_dir) / "pending"
-    # A pending marker means the last update died part way (power cut): HEAD may be the new code
-    # on half-installed packages, or a half-written checkout. Finish from the version it left.
-    # An empty marker is a power cut while writing it, before anything else changed.
-    base = pending.read_text().strip() if pending.exists() else ""
+    # A pending marker ("<base>\n<target>") means the last update died part way (power cut, or a
+    # rollback that could not finish): HEAD may be the new code on half-installed packages, or a
+    # half-written checkout. Finish what it started, from the version it left.
+    resuming = pending.exists()
+    recorded = pending.read_text().split() if resuming else []
     current = _git(kiosk_dir, "rev-parse", "HEAD")
-    base = base or current
+    base = recorded[0] if recorded else current
+    started = recorded[1] if len(recorded) > 1 else current
     # The tag moves on every release, so fetch it with force (+) or git keeps the old one.
     try:
         _git(
@@ -59,30 +61,41 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
         )
         target = _git(kiosk_dir, "rev-parse", f"{STABLE_TAG}^{{commit}}")
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        if base == current:
+        if not resuming:
             return "offline"
-        # Offline after a power cut: finish installing the code already checked out (it passed
-        # every check before), or roll back if a step needs the network.
-        target = current
-    if target == current and base == current and not pending.exists():
-        return "up-to-date"
-    if not pending.exists():
-        # A hotfix made by hand on site would be lost or block checkout; leave it for a person.
-        # With a marker, changed files are the updater's own half-written checkout.
-        if _git(kiosk_dir, "status", "--porcelain", "--untracked-files=no"):
-            return "dirty"
-        # Same for a commit made on the kiosk: checkout -B would drop it from main.
-        if not _is_ancestor(kiosk_dir, current, f"{remote}/{RELEASE_BRANCH}"):
-            return "diverged"
+        # Its objects are already here and it passed every check when it started.
+        target = started
     # Moving a tag needs only write access; reaching main needs a reviewed PR.
     if not _is_ancestor(kiosk_dir, target, f"{remote}/{RELEASE_BRANCH}"):
-        return "untrusted"
-    steps = _steps_between(kiosk_dir, base, target)
-    if not pending.exists():
+        if not resuming:
+            return "untrusted"
+        target = started
+    # A commit made on the kiosk: checkout -B would drop it from main. HEAD is otherwise always a
+    # version the updater put there, all on main.
+    if not _is_ancestor(kiosk_dir, current, f"{remote}/{RELEASE_BRANCH}"):
+        return "diverged"
+    # A hotfix made by hand on site would be lost; leave it for a person. Only the files an
+    # interrupted checkout was rewriting may differ, and those are the updater's own.
+    ours = set(_git(kiosk_dir, "diff", "--name-only", base, started).splitlines()) if resuming else set()
+    modified = _git(kiosk_dir, "diff", "--name-only", "HEAD").splitlines()
+    if any(path not in ours for path in modified):
+        return "dirty"
+    if not resuming:
+        if target == current:
+            return "up-to-date"
         # Left by an update that died after clearing its marker: it describes an older venv.
         (pending.parent / PIP_SNAPSHOT).unlink(missing_ok=True)
-    _write_atomic(pending, base)
-    _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, target)
+    elif target == base:
+        return _restore(kiosk_dir, run_step, base)
+    steps = _steps_between(kiosk_dir, base, target)
+    _write_atomic(pending, f"{base}\n{target}\n")
+    try:
+        # -f only to finish the updater's own half-written checkout; otherwise git refuses to
+        # overwrite an untracked file the release starts tracking.
+        _git(kiosk_dir, "checkout", "-q", *(["-f"] if resuming else []), "-B", RELEASE_BRANCH, target)
+    except subprocess.CalledProcessError:
+        pending.unlink()
+        return "dirty"
     attempted = []
     for step in steps:
         attempted.append(step)
@@ -108,6 +121,15 @@ UNDO_STEP = {"pip": "pip-restore", "playwright": "playwright", "models": "models
 UNDO_ORDER = ["pip", "playwright", "models"]
 
 
+def _restore(kiosk_dir, run_step, base):
+    # kiosk-stable went back to the version an unfinished rollback was returning to.
+    _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
+    if (state_dir(kiosk_dir) / PIP_SNAPSHOT).exists() and not _try_step(run_step, "pip-restore", kiosk_dir):
+        return "rolled-back"
+    _finish(kiosk_dir)
+    return "restored"
+
+
 def _try_step(run_step, step, kiosk_dir):
     try:
         return run_step(step, kiosk_dir)
@@ -119,7 +141,11 @@ def _try_step(run_step, step, kiosk_dir):
 def _write_atomic(path, text):
     path.parent.mkdir(exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(text)
+    # fsync before the rename: after a power cut the file is either the old one or complete.
+    with tmp.open("w") as file:
+        file.write(text)
+        file.flush()
+        os.fsync(file.fileno())
     os.replace(tmp, path)
 
 
@@ -198,7 +224,7 @@ def run_install_step(step, kiosk_dir):
         freeze = subprocess.run([*pip, "freeze"], capture_output=True, text=True, timeout=_step_timeout())
         if freeze.returncode != 0:
             return False
-        snapshot.write_text(freeze.stdout)
+        _write_atomic(snapshot, freeze.stdout)
     if step == "pip-restore" and not snapshot.exists():
         return False
     commands = {

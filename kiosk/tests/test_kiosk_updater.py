@@ -289,7 +289,7 @@ class UpdateOnBootTests(unittest.TestCase):
         # The updater wrote its marker, then power died with main.py half written.
         state = kiosk_updater.state_dir(self.kiosk_dir)
         state.mkdir()
-        (state / "pending").write_text(before)
+        (state / "pending").write_text(f"{before}\n{new}\n")
         (self.kiosk_dir / "main.py").write_text("v")
 
         self.assertEqual(self.update(), "updated")
@@ -366,6 +366,82 @@ class UpdateOnBootTests(unittest.TestCase):
 
         self.assertEqual(self.update(), "updated")
         self.assertEqual(self.steps.calls, ["pip", "playwright"])
+
+    def leave_a_stale_marker(self):
+        """A release whose pip and rollback both failed (network gone): marker stays, HEAD is old."""
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        steps = FakeSteps(fail={"pip", "pip-restore"})
+        # Stand in for run_install_step, which freezes the venv before its first pip install.
+        snapshot = kiosk_updater.state_dir(self.kiosk_dir) / kiosk_updater.PIP_SNAPSHOT
+        steps.on_call = lambda name: name == "pip" and snapshot.write_text("httpx==0.27.0\n")
+        self.assertEqual(kiosk_updater.update_on_boot(self.kiosk_dir, run_step=steps), "rolled-back")
+        self.assertTrue((kiosk_updater.state_dir(self.kiosk_dir) / "pending").exists())
+
+    def test_stale_marker_does_not_overwrite_a_hand_edit_the_release_never_touches(self):
+        self.leave_a_stale_marker()
+        (self.kiosk_dir / "main.py").write_text("site hotfix\n")
+
+        self.assertEqual(self.update(), "dirty")
+        self.assertEqual((self.kiosk_dir / "main.py").read_text(), "site hotfix\n")
+
+    def test_stale_marker_does_not_drop_a_commit_made_on_the_kiosk(self):
+        self.leave_a_stale_marker()
+        git(self.device, "config", "user.email", "tech@example.com")
+        git(self.device, "config", "user.name", "tech")
+        (self.kiosk_dir / "main.py").write_text("site hotfix\n")
+        git(self.device, "commit", "-q", "-am", "site hotfix")
+        hotfix = self.head()
+
+        self.assertEqual(self.update(), "diverged")
+        self.assertEqual(self.head(), hotfix)
+
+    def test_reverting_kiosk_stable_after_a_failed_rollback_restores_the_packages(self):
+        self.leave_a_stale_marker()
+        git(self.origin, "tag", "-f", "kiosk-stable", "kiosk-v0.1.0")
+
+        self.assertEqual(self.update(), "restored")
+        self.assertEqual(self.steps.calls, ["pip-restore"])
+        self.steps.calls.clear()
+        self.assertEqual(self.update(), "up-to-date")
+        self.assertEqual(self.steps.calls, [])
+
+    def test_offline_boot_completes_a_checkout_cut_short_by_a_power_cut(self):
+        before = self.head()
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        git(self.device, "fetch", "-q", "origin", "+refs/tags/kiosk-stable:refs/tags/kiosk-stable")
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        state.mkdir()
+        (state / "pending").write_text(f"{before}\n{new}\n")
+        (self.kiosk_dir / "main.py").write_text("v")
+        git(self.device, "remote", "set-url", "origin", str(self.origin.parent / "missing"))
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+        self.assertEqual((self.kiosk_dir / "main.py").read_text(), "v2\n")
+
+    def test_release_that_starts_tracking_a_local_file_does_not_overwrite_it(self):
+        before = self.head()
+        (self.kiosk_dir / "notes.txt").write_text("site data\n")
+        self.commit_file("kiosk/notes.txt", "from the release\n")
+        self.release("kiosk-v0.2.0")
+
+        self.assertEqual(self.update(), "dirty")
+        self.assertEqual(self.head(), before)
+        self.assertEqual((self.kiosk_dir / "notes.txt").read_text(), "site data\n")
+        self.assertEqual(self.update(), "dirty")
+
+    def test_tag_moved_off_main_mid_install_still_finishes_the_trusted_install(self):
+        self.cut_power_during_pip()
+        installed = self.head()
+        git(self.origin, "switch", "-q", "-c", "feat/unreviewed")
+        self.commit_file("kiosk/main.py", "unreviewed\n")
+        self.release("kiosk-v0.3.0")
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), installed)
+        self.assertEqual(self.steps.calls, ["pip"])
 
 
 class RunCommandTests(unittest.TestCase):
