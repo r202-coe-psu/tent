@@ -408,17 +408,18 @@ def test_env_file_sits_next_to_the_exe_when_frozen_else_next_to_the_package(tmp_
     assert default_env_path(frozen=False, executable="/usr/bin/python") == package_parent / ".env"
 
 
-def test_the_zip_build_keeps_the_env_file_next_to_tent_exe_not_in_lib(tmp_path):
-    # tent\tent.exe + tent\lib\scanner_client: the package hides in lib\, .env stays on top
-    (tmp_path / "tent" / "lib").mkdir(parents=True)
-    (tmp_path / "tent" / "tent.exe").touch()
+def test_the_zip_build_keeps_the_env_file_next_to_smart_shelter_exe_not_in_lib(tmp_path):
+    # smart-shelter\smart-shelter.exe + smart-shelter\lib\scanner_client: the package hides in
+    # lib\, .env stays on top
+    (tmp_path / "smart-shelter" / "lib").mkdir(parents=True)
+    (tmp_path / "smart-shelter" / "smart-shelter.exe").touch()
 
-    assert default_env_path(frozen=False, package_root=tmp_path / "tent" / "lib") == (
-        tmp_path / "tent" / ".env"
+    assert default_env_path(frozen=False, package_root=tmp_path / "smart-shelter" / "lib") == (
+        tmp_path / "smart-shelter" / ".env"
     )
 
 
-def test_a_folder_named_lib_without_tent_exe_is_not_the_zip_build(tmp_path):
+def test_a_folder_named_lib_without_smart_shelter_exe_is_not_the_zip_build(tmp_path):
     (tmp_path / "lib").mkdir()
 
     lib = tmp_path / "lib"

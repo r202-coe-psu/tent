@@ -11,11 +11,11 @@
 
 [Setup]
 AppId={{6E0B2E3C-6A1F-4C1B-9D6B-3C7A1E5B2F10}
-AppName=tent scanner client
+AppName=Smart Shelter scanner client
 AppVersion={#AppVersion}
-AppPublisher=tent
+AppPublisher=Smart Shelter
 DefaultDirName={localappdata}\Programs\tent-scanner-client
-DefaultGroupName=tent
+DefaultGroupName=Smart Shelter
 DisableProgramGroupPage=yes
 DisableDirPage=yes
 PrivilegesRequired=lowest
@@ -38,8 +38,8 @@ Type: filesandordirs; Name: "{app}\_internal"
 Type: files; Name: "{app}\scanner-client.exe"
 
 [Icons]
-Name: "{autoprograms}\tent"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; WorkingDir: "{app}"; IconFilename: "{app}\tent.ico"
-Name: "{autodesktop}\tent"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; WorkingDir: "{app}"; IconFilename: "{app}\tent.ico"
+Name: "{autoprograms}\Smart Shelter"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; WorkingDir: "{app}"; IconFilename: "{app}\tent.ico"
+Name: "{autodesktop}\Smart Shelter"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; WorkingDir: "{app}"; IconFilename: "{app}\tent.ico"
 
 [Run]
 Filename: "{app}\python\pythonw.exe"; Parameters: "-m scanner_client.main"; Description: "เปิดโปรแกรมเลย"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent

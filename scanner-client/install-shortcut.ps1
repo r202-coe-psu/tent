@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Create "tent" shortcuts (Desktop + Start Menu) for the scanner-client.exe next to
+  Create "Smart Shelter" shortcuts (Desktop + Start Menu) for the scanner-client.exe next to
   this script. No admin needed. Run via install-shortcut.bat (double-click).
   Re-run after moving the folder: shortcuts point at the absolute .exe path.
 #>
@@ -12,7 +12,7 @@ $exe = Get-ChildItem -LiteralPath $PSScriptRoot -Filter 'scanner-client*.exe' | 
 if (-not $exe) {
     throw "scanner-client.exe not found in $PSScriptRoot - keep this script inside the extracted folder."
 }
-$name = if ($exe.BaseName -like '*-debug') { 'tent (debug)' } else { 'tent' }
+$name = if ($exe.BaseName -like '*-debug') { 'Smart Shelter (debug)' } else { 'Smart Shelter' }
 
 $shell = New-Object -ComObject WScript.Shell
 # GetFolderPath follows OneDrive-redirected Desktops; 'Programs' is the per-user Start Menu.

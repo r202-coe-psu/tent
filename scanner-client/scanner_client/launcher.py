@@ -1,8 +1,8 @@
-"""Start the client from tent.exe in the zip build (issue #1326).
+"""Start the client from smart-shelter.exe in the zip build (issue #1326).
 
 Smart App Control blocks every .exe we build, so the zip ships python.org's PSF-signed
-pythonw.exe renamed to tent.exe. Double-clicked, it starts with no arguments; the `site` module
-then imports sitecustomize.py, which calls `launch()` to make the Desktop + Start Menu
+pythonw.exe renamed to smart-shelter.exe. Double-clicked, it starts with no arguments; the `site`
+module then imports sitecustomize.py, which calls `launch()` to make the Desktop + Start Menu
 shortcuts (first start only) and run the client. Any other start (python.exe, `-m`, `-c`) goes
 on as plain Python.
 """
@@ -15,7 +15,7 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path, PureWindowsPath
 
-LAUNCHER_NAME = "tent"
+LAUNCHER_NAME = "smart-shelter"
 
 
 def should_launch(executable: str, orig_argv: Sequence[str]) -> bool:
@@ -48,7 +48,7 @@ def launch(
     run: Callable[[], int] = _run_client,
     exit_: Callable[[int], object] = os._exit,
 ) -> None:
-    """Run the client and end the process; returns only when this is not a tent.exe start.
+    """Run the client and end the process; returns only when this is not a smart-shelter.exe start.
 
     It runs while `site` is still being imported, where SystemExit would be a fatal startup
     error, so it ends the process with os._exit after flushing the log instead.
@@ -57,7 +57,7 @@ def launch(
         return
     try:
         prepare()
-    except Exception:  # no shortcut is no reason to stop: staff can still open tent.exe
+    except Exception:  # no shortcut is no reason to stop: staff can still open smart-shelter.exe
         pass
     code = 1
     try:

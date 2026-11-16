@@ -1,4 +1,5 @@
-"""Desktop + Start Menu shortcuts that tent.exe makes on its first start (zip build, issue #1326).
+"""Desktop + Start Menu shortcuts that smart-shelter.exe makes on its first start (zip build,
+issue #1326).
 
 Shortcuts are written through the shell's own COM object (IShellLinkW in Windows' signed
 shell32/ole32) via ctypes: no extra .pyd for Smart App Control to block, and no PowerShell,
@@ -13,7 +14,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
-SHORTCUT_NAME = "tent.lnk"
+SHORTCUT_NAME = "Smart Shelter.lnk"
 ICON_NAME = "tent.ico"
 MARKER_NAME = "shortcuts"
 DESCRIPTION = "Read Thai ID cards into the shelter walk-in registration page"

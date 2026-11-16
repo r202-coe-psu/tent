@@ -6,7 +6,7 @@
 ## ดาวน์โหลด
 ตอนนี้ยังไม่มีหน้าดาวน์โหลดกลาง — ขอไฟล์จากทีมพัฒนา (ทีมส่งให้ทาง Drive/LINE หรือแฟลชไดรฟ์)
 - **`scanner-client-setup.exe`** — ตัวติดตั้ง (ใช้ไฟล์นี้ ถ้าเครื่องไม่ได้เปิด Smart App Control)
-- **`tent-win64.zip`** — แบบไม่ต้องติดตั้ง สำหรับเครื่องที่**เปิด Smart App Control** (ไม่ต้องปิด ดูข้อ 2)
+- **`smart-shelter-win64.zip`** — แบบไม่ต้องติดตั้ง สำหรับเครื่องที่**เปิด Smart App Control** (ไม่ต้องปิด ดูข้อ 2)
 - `scanner-client-win64.zip` — แบบไม่ต้องติดตั้ง (สำรอง · เป็น `.exe` ที่ไม่มีลายเซ็น Smart App Control บล็อกแน่นอน)
 - `scanner-client-debug-win64.zip` — ไว้ดู error ตอนแก้ปัญหาเท่านั้น
 
@@ -22,7 +22,7 @@ Smart App Control บล็อกไฟล์ `.exe` ที่ไม่มีล
 (หรือ Windows Security → App & browser control → Smart App Control settings)
 
 - **Off** หรือ Windows 10 (ไม่มี Smart App Control) → ใช้ตัวติดตั้ง (ข้อ 1)
-- **On** → ใช้ `tent-win64.zip` (ข้อ 2) ไม่ต้องปิด หรือถ้าอยากใช้ตัวติดตั้ง: เลือก **Off** → ติดตั้ง (ข้อ 1)
+- **On** → ใช้ `smart-shelter-win64.zip` (ข้อ 2) ไม่ต้องปิด หรือถ้าอยากใช้ตัวติดตั้ง: เลือก **Off** → ติดตั้ง (ข้อ 1)
   → กลับมาเลือก **On** ได้ (ทดสอบแล้ว: เปิด On + restart แล้วโปรแกรมเปิดและอ่านบัตรได้) · ติดตั้งเวอร์ชันใหม่ทับ
   ต้องปิดก่อนทุกครั้ง · Windows บางรุ่นเปิด On กลับไม่ได้จนกว่าจะ reset เครื่อง — ถ้าไม่แน่ใจใช้ข้อ 2
 
@@ -32,46 +32,49 @@ Smart App Control บล็อกไฟล์ `.exe` ที่ไม่มีล
 3. ใส่ **SHELTER_URL** = ที่อยู่เว็บศูนย์ฯ เช่น `https://shelter.example.org`
    (ใส่แค่ `https://ชื่อเว็บ` ไม่ต้องมี path · เครื่อง edge ในวง LAN ใช้ `http://` ได้เฉพาะเมื่อใส่เป็น IP
    วงภายใน เช่น `http://192.168.1.10` — ชื่อโฮสต์หรือ IP สาธารณะต้องเป็น `https://`)
-4. กด Next จนจบ → ได้ไอคอน **tent** บน Desktop และใน Start Menu
+4. กด Next จนจบ → ได้ไอคอน **Smart Shelter** บน Desktop และใน Start Menu
 
 ติดตั้งไว้ที่ `%LocalAppData%\Programs\tent-scanner-client` · ติดตั้งเวอร์ชันใหม่ทับได้เลย (ไม่ถาม URL ซ้ำ ใช้ `.env` เดิม)
-· URL เปลี่ยนได้ทุกครั้งที่เปิดโปรแกรม (ดู "ใช้งาน") · แก้ค่าอื่นใน `.env` ที่โฟลเดอร์นั้นได้ (ดู `.env.example`) · ไอคอน **tent** เรียก
+· URL เปลี่ยนได้ทุกครั้งที่เปิดโปรแกรม (ดู "ใช้งาน") · แก้ค่าอื่นใน `.env` ที่โฟลเดอร์นั้นได้ (ดู `.env.example`) · ไอคอน **Smart Shelter** เรียก
 `python\pythonw.exe -m scanner_client.main` ในโฟลเดอร์นั้น (ไม่มี `scanner-client.exe` ในแบบติดตั้ง)
 
-### 2. แบบ zip `tent-win64.zip` (เครื่องที่เปิด Smart App Control)
-ไม่มีไฟล์ `.exe` ของทีมเลย: `tent.exe` คือ `pythonw.exe` ทางการจาก python.org (มีลายเซ็นดิจิทัล) ที่เปลี่ยนชื่อ
-ตัวไฟล์ `tent.exe` จึงเป็นรูปงูของ Python แต่ shortcut ที่โปรแกรมสร้างใช้ไอคอน **tent**
-1. คลิกขวา `tent-win64.zip` → **Extract All…** → เลือกที่เก็บถาวร เช่น `C:\Users\<ชื่อ>\AppData\Local\Programs`
-   (ไม่ใช่ Downloads) ได้โฟลเดอร์ `tent`
-2. ดับเบิลคลิก `tent.exe` ในโฟลเดอร์ `tent` (ไฟล์ของโปรแกรมอยู่ในโฟลเดอร์ย่อย `lib` ไม่ต้องเปิด)
+### 2. แบบ zip `smart-shelter-win64.zip` (เครื่องที่เปิด Smart App Control)
+ไม่มีไฟล์ `.exe` ของทีมเลย: `smart-shelter.exe` คือ `pythonw.exe` ทางการจาก python.org (มีลายเซ็นดิจิทัล) ที่เปลี่ยนชื่อ
+ตัวไฟล์ `smart-shelter.exe` จึงเป็นรูปงูของ Python แต่ shortcut ที่โปรแกรมสร้างใช้ไอคอน **Smart Shelter**
+1. คลิกขวา `smart-shelter-win64.zip` → **Extract All…** → เลือกที่เก็บถาวร เช่น `C:\Users\<ชื่อ>\AppData\Local\Programs`
+   (ไม่ใช่ Downloads) ได้โฟลเดอร์ `smart-shelter`
+2. ดับเบิลคลิก `smart-shelter.exe` ในโฟลเดอร์ `smart-shelter` (ไฟล์ของโปรแกรมอยู่ในโฟลเดอร์ย่อย `lib` ไม่ต้องเปิด)
    → โปรแกรมเปิดหน้าถาม URL (ดู "ใช้งาน")
-   และสร้าง shortcut **tent** บน Desktop และใน Start Menu ให้เอง (ครั้งแรกเท่านั้น)
-3. ครั้งต่อไปเปิดจากไอคอน **tent** บน Desktop ได้เลย
+   และสร้าง shortcut **Smart Shelter** บน Desktop และใน Start Menu ให้เอง (ครั้งแรกเท่านั้น)
+3. ครั้งต่อไปเปิดจากไอคอน **Smart Shelter** บน Desktop ได้เลย
 
-ลบ shortcut ทิ้งแล้วโปรแกรมจะไม่สร้างกลับมาเอง · ย้ายโฟลเดอร์ `tent` แล้วเปิด `tent.exe` ที่ใหม่หนึ่งครั้ง
-shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มีไอคอนขึ้น สร้างเองได้: คลิกขวา `tent.exe` → Show more options
+ลบ shortcut ทิ้งแล้วโปรแกรมจะไม่สร้างกลับมาเอง · ย้ายโฟลเดอร์ `smart-shelter` แล้วเปิด `smart-shelter.exe` ที่ใหม่หนึ่งครั้ง
+shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มีไอคอนขึ้น สร้างเองได้: คลิกขวา `smart-shelter.exe` → Show more options
 → **Send to → Desktop (create shortcut)**
 
-ค่าที่ตั้ง (`.env`) อยู่ในโฟลเดอร์ `tent` · อัปเดต: ปิดโปรแกรม แล้วแตกไฟล์ zip ใหม่ทับโฟลเดอร์เดิม
-· ถอนการติดตั้ง: ลบโฟลเดอร์ `tent` และ shortcut
+ค่าที่ตั้ง (`.env`) อยู่ในโฟลเดอร์ `smart-shelter` · อัปเดต: ปิดโปรแกรม แล้วแตกไฟล์ zip ใหม่ทับโฟลเดอร์เดิม
+· ถอนการติดตั้ง: ลบโฟลเดอร์ `smart-shelter` และ shortcut
+
+เครื่องที่เคยใช้เวอร์ชันชื่อ `tent` (`tent.exe`, ไอคอน **tent**): แตกไฟล์ zip ใหม่ได้โฟลเดอร์ `smart-shelter`
+คัดลอก `.env` จากโฟลเดอร์ `tent` เดิมมาไว้ด้วย แล้วลบโฟลเดอร์ `tent` และ shortcut **tent** เก่าเอง
 
 ### ติดตั้งแบบ zip เดิม (สำรอง · Smart App Control บล็อก)
 1. แตกไฟล์ `scanner-client-win64.zip` ไว้ที่ไหนก็ได้ (เช่น `C:\Tools`) ได้โฟลเดอร์ `scanner-client`
 2. (ไม่บังคับ) ตั้งค่าอื่นได้โดยคัดลอก `.env.example` เป็น `.env` ข้าง `scanner-client.exe` — URL ไม่ต้องใส่
    โปรแกรมถามตอนเปิด
-3. ดับเบิลคลิก `install-shortcut.bat` → ได้ไอคอน **tent** บน Desktop และใน Start Menu
+3. ดับเบิลคลิก `install-shortcut.bat` → ได้ไอคอน **Smart Shelter** บน Desktop และใน Start Menu
    (ถ้าย้ายโฟลเดอร์ `scanner-client` ไปที่อื่น ให้ดับเบิลคลิกไฟล์นี้ใหม่)
 
 **ห้ามใส่รหัสผ่านหรือ secret ใด ๆ ใน `.env`** — ไฟล์นี้มีแต่ค่าตั้งต้นที่เปิดเผยได้ เจ้าหน้าที่ล็อกอินในหน้าเว็บเองตามปกติ
 
 ### เปลี่ยน SHELTER_URL ภายหลัง
-ปิดโปรแกรมแล้วเปิดไอคอน **tent** ใหม่ → ในหน้า "ที่อยู่เว็บศูนย์พักพิง" กด **เปลี่ยน domain** → กรอก URL ใหม่ → Enter
+ปิดโปรแกรมแล้วเปิดไอคอน **Smart Shelter** ใหม่ → ในหน้า "ที่อยู่เว็บศูนย์พักพิง" กด **เปลี่ยน domain** → กรอก URL ใหม่ → Enter
 → ถ้าไม่ใช่ `https://shelter.psu.ac.th` จะขึ้นกล่องเตือนสีแดง ให้ตรวจชื่อเว็บแล้วติ๊ก **ตรวจแล้ว … เป็นเว็บของศูนย์พักพิงจริง**
 → Enter อีกครั้ง (โปรแกรมบันทึกลง `.env` ให้เอง ครั้งหน้าเติมค่านี้ไว้ให้ และขึ้นกล่องเตือนให้ติ๊กทุกครั้งที่เปิด)
 · ถ้าตั้ง `SHELTER_URL` เป็น environment variable ของ Windows ไว้ ค่านั้นจะถูกเติมแทน `.env` เสมอ
 
 ## ใช้งาน
-1. เสียบเครื่องอ่านบัตร แล้วดับเบิลคลิกไอคอน **tent** (แบบ `tent-win64.zip`: `tent.exe` · แบบ zip เดิม:
+1. เสียบเครื่องอ่านบัตร แล้วดับเบิลคลิกไอคอน **Smart Shelter** (แบบ `smart-shelter-win64.zip`: `smart-shelter.exe` · แบบ zip เดิม:
    `scanner-client.exe`)
 2. ถ้า Windows ขึ้น SmartScreen ("Windows protected your PC") ให้กด **More info → Run anyway**
    (แจ้งครั้งเดียวต่อเครื่อง/ไฟล์ใหม่) · ถ้าขึ้นว่า **Smart App Control blocked** ให้ทำข้อ 0 ด้านบน
@@ -88,20 +91,20 @@ shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มี�
 
 ## ไฟล์ log
 `%LocalAppData%\ScannerClient\logs\scanner-client.log` (วางใน Explorer ได้เลย) — log ไม่เก็บข้อมูลบนบัตร
-ถอนการติดตั้ง: Settings → Apps → Installed apps → **tent scanner client** → Uninstall
+ถอนการติดตั้ง: Settings → Apps → Installed apps → **Smart Shelter scanner client** → Uninstall
 (แบบ zip: ลบโฟลเดอร์ `scanner-client`) แล้วลบ `%LocalAppData%\ScannerClient` ถ้าต้องการล้าง log/โปรไฟล์ด้วย
 
 ## แก้ปัญหาเบื้องต้น
 | อาการ | วิธีแก้ |
 | --- | --- |
-| ขึ้น "Smart App Control blocked" / เปิดไม่ขึ้นเลย | ใช้ `tent-win64.zip` (ข้อ 2) หรือปิด Smart App Control ตามข้อ 0 |
+| ขึ้น "Smart App Control blocked" / เปิดไม่ขึ้นเลย | ใช้ `smart-shelter-win64.zip` (ข้อ 2) หรือปิด Smart App Control ตามข้อ 0 |
 | โปรแกรมปิดทันที / ไม่มีหน้าต่าง | ดู log; `invalid configuration` = ค่าอื่นใน `.env` ผิด (เช่น `POLL_INTERVAL`) แก้ตามข้อความใน log |
 | อ่านบัตรไม่ได้ / ไม่เจอเครื่องอ่าน | เสียบเครื่องอ่านใหม่ รอ Windows ติดตั้ง driver เสร็จ แล้วเปิดโปรแกรมใหม่ |
 | เลือกเครื่องอ่านผิด (เช่น Windows Hello / virtual smart card) | ตั้ง `CARD_READER_NAME=` เป็นส่วนหนึ่งของชื่อเครื่องอ่านจริง เช่น `ACS` |
 | Edge ถูกบล็อกด้วยนโยบายองค์กร | ตั้ง `BROWSER_CHANNEL=chromium` — **ต้องใช้ build ที่ bundle Chromium** (build มาตรฐานนี้ไม่มี) หรือลอง `chrome` |
 | เสียบบัตรแล้วไม่ไปหน้า walk-in | ต้องล็อกอินก่อน (บัตรที่เสียบค้างไว้ก่อนล็อกอินจะถูกข้าม: ดึงออกแล้วเสียบใหม่) · ถ้าหน้าที่เปิดอยู่มีข้อมูลยังไม่บันทึกแล้วกด "อยู่หน้านี้" บัตรจะถูกข้ามเช่นกัน บันทึกหรือออกจากหน้านั้นก่อนแล้วเสียบใหม่ |
 | ต้องล็อกอินใหม่ทุกครั้ง | ตั้ง `KEEP_LOGIN=true` (เก็บโปรไฟล์ใน `%LocalAppData%\ScannerClient\profile`) — **เฉพาะเครื่องที่เจ้าหน้าที่ใช้คนเดียว** ห้ามเปิดบนเครื่องที่ใช้ร่วมกัน (ดู "ความปลอดภัย") |
-| ต้องดูข้อความ error สด ๆ | แบบติดตั้ง: เปิด Command Prompt แล้ว `cd /d %LocalAppData%\Programs\tent-scanner-client` → `python\python.exe -m scanner_client.main` · แบบ `tent-win64.zip`: ในโฟลเดอร์ `tent` สั่ง `python.exe -m scanner_client.main` · แบบ zip เดิม: `scanner-client-debug.exe` จาก `scanner-client-debug-win64.zip` |
+| ต้องดูข้อความ error สด ๆ | แบบติดตั้ง: เปิด Command Prompt แล้ว `cd /d %LocalAppData%\Programs\tent-scanner-client` → `python\python.exe -m scanner_client.main` · แบบ `smart-shelter-win64.zip`: ในโฟลเดอร์ `smart-shelter` สั่ง `python.exe -m scanner_client.main` · แบบ zip เดิม: `scanner-client-debug.exe` จาก `scanner-client-debug-win64.zip` |
 
 ตัวแปรอื่น ๆ (`START_PATH` หน้าแรกที่เปิด ค่าเริ่มต้น `/admin-login`, `WALK_IN_PATH`, `POLL_INTERVAL`) ดูคำอธิบายใน `.env.example`
 
@@ -124,7 +127,7 @@ shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มี�
   เพราะ reCAPTCHA หน้าล็อกอินให้คะแนนเป็น bot ถ้าวันหนึ่ง reCAPTCHA เข้มขึ้น ล็อกอินผ่านโปรแกรมนี้จะไม่ผ่าน
   (หน้าเว็บขึ้น error ล็อกอินตามปกติ) ทางสำรองคือ site key / allowlist แยกสำหรับ client นี้ ซึ่งยังไม่ได้ทำ
 - log ไม่เก็บข้อมูลบนบัตร · `.env` ไม่มี secret · installer ติดตั้งแบบ per-user ไม่ใช้สิทธิ์ admin
-  · ตอน build installer (`scanner-client-setup.exe`) กับ `tent-win64.zip` แพ็กเกจ Python ถูกตรวจ hash ตาม `uv.lock`
+  · ตอน build installer (`scanner-client-setup.exe`) กับ `smart-shelter-win64.zip` แพ็กเกจ Python ถูกตรวจ hash ตาม `uv.lock`
   (`--require-hashes`) และ Python embeddable / Inno Setup ตรวจ SHA256 — **ไม่รวม** `scanner-client-win64.zip` /
   `scanner-client-debug-win64.zip` (PyInstaller) และ `run-linux.sh` ที่ติดตั้งด้วย `uv sync` ไม่ได้สั่ง `--require-hashes`
 - `SHELTER_URL` รับเฉพาะชื่อ host ที่เป็นตัวอักษร ASCII — ชื่อที่มีตัวอักษรหน้าตาเหมือนกัน (เช่น `е` ภาษารัสเซียแทน `e`)
@@ -139,7 +142,7 @@ shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มี�
   ต้องสั่ง `uv run playwright install msedge` เฉพาะเครื่องที่ยังไม่มี Edge; ถ้าใช้ `BROWSER_CHANNEL=chromium` ต้อง
   `uv run playwright install chromium`
 - Linux (Debian/Ubuntu) รันทีเดียวจบ: `./run-linux.sh` — ติดตั้ง `pcscd`/`libccid` (sudo), uv, deps, Chromium,
-  สร้าง `.env` (ถาม `SHELTER_URL` ครั้งแรก), สร้าง shortcut **tent** ในเมนูแอป + Desktop
+  สร้าง `.env` (ถาม `SHELTER_URL` ครั้งแรก), สร้าง shortcut **Smart Shelter** ในเมนูแอป + Desktop
   แล้วเปิดโปรแกรม · รันซ้ำได้ ข้ามขั้นที่ทำแล้ว · ครั้งต่อไปเปิดจาก shortcut ได้เลย
 - test: `uv run pytest`
 - event contract กับหน้า walk-in (#1326): `scanner:card-reading` → `scanner:card-read` → `scanner:card-photo`
@@ -153,7 +156,7 @@ shortcut จะชี้ไปที่ใหม่ · ถ้าไม่มี�
   `.tools\` แล้ว uv โหลด Python ให้เอง (Inno Setup ก็เช่นกัน โหลดไว้ใน `.tools\inno`)
   → `dist\scanner-client-setup.exe` (installer จาก `installer.iss` · payload คือ `build\embed\` = Python embeddable
   จาก python.org + deps จาก `uv.lock` + โค้ดเป็น `.py` ไม่ใช่ PyInstaller เพื่อให้ผ่าน Smart App Control),
-  `dist\tent-win64.zip` (`build\zip\tent\`: runtime เดียวกับ installer แต่ `pythonw.exe` เปลี่ยนชื่อเป็น
-  `tent.exe` + `zip\sitecustomize.py` เปิดโปรแกรมเมื่อเปิด `tent.exe` แบบไม่มี argument — ดู
+  `dist\smart-shelter-win64.zip` (`build\zip\smart-shelter\`: runtime เดียวกับ installer แต่ `pythonw.exe` เปลี่ยนชื่อเป็น
+  `smart-shelter.exe` + `zip\sitecustomize.py` เปิดโปรแกรมเมื่อเปิด `smart-shelter.exe` แบบไม่มี argument — ดู
   `scanner_client/launcher.py`), `dist\scanner-client-win64.zip`
   และ `dist\scanner-client-debug-win64.zip` (spec: `scanner-client.spec`, onedir, ไม่ bundle browser)

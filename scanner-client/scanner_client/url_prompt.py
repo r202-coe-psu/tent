@@ -22,7 +22,7 @@ PROMPT_HTML = (
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<title>tent — เลือกศูนย์พักพิง</title>
+<title>Smart Shelter — เลือกศูนย์พักพิง</title>
 <style>
   body { margin: 0; min-height: 100vh; display: grid; place-items: center;
          font-family: "Segoe UI", Tahoma, sans-serif; background: #f4f6f8; color: #1f2933; }

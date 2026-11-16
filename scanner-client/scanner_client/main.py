@@ -42,14 +42,14 @@ def default_env_path(
     executable: str | None = None,
     package_root: Path | None = None,
 ) -> Path:
-    """`.env` next to the .exe when frozen (PyInstaller), next to tent.exe in the zip build
+    """`.env` next to the .exe when frozen (PyInstaller), next to smart-shelter.exe in the zip build
     (the package sits in its lib\\ folder), else in the folder holding the package."""
     if frozen is None:
         frozen = bool(getattr(sys, "frozen", False))
     if frozen:
         return Path(executable or sys.executable).parent / ".env"
     root = package_root or Path(__file__).resolve().parent.parent
-    if root.name == "lib" and (root.parent / "tent.exe").is_file():
+    if root.name == "lib" and (root.parent / "smart-shelter.exe").is_file():
         return root.parent / ".env"
     return root / ".env"
 
@@ -208,7 +208,7 @@ def _show_fatal(message: str) -> None:
         try:
             import ctypes
 
-            ctypes.windll.user32.MessageBoxW(0, message, "tent", 0x10)  # MB_ICONERROR
+            ctypes.windll.user32.MessageBoxW(0, message, "Smart Shelter", 0x10)  # MB_ICONERROR
             return
         except Exception:
             pass

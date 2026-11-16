@@ -8,8 +8,9 @@
   Needs internet only: uses `uv` from PATH, else downloads it into .tools\; uv fetches Python.
   Same for Inno Setup (ISCC.exe), downloaded into .tools\inno when not installed.
   Output (in dist\):
-      tent-win64.zip                   tent\ folder: double-click tent.exe (python.org's signed
-                                       pythonw.exe renamed), passes Smart App Control
+      smart-shelter-win64.zip          smart-shelter\ folder: double-click smart-shelter.exe
+                                       (python.org's signed pythonw.exe renamed), passes Smart
+                                       App Control
       scanner-client-setup.exe         per-user installer (Inno Setup, installer.iss); asks
                                        SHELTER_URL, adds shortcuts + an uninstall entry
       scanner-client-win64.zip         scanner-client\ (onedir, console-less) + README.md
@@ -152,15 +153,16 @@ Invoke-Checked "$stage\python\python.exe" @('-c',
 Get-ChildItem -LiteralPath $stage -Recurse -Directory -Filter '__pycache__' |
     Remove-Item -Recurse -Force
 
-# 4b. zip with no .exe of ours: python.org's PSF-signed pythonw.exe renamed to tent.exe (the
-#     signature covers the file's bytes, not its name). Double-clicked with no arguments, it
+# 4b. zip with no .exe of ours: python.org's PSF-signed pythonw.exe renamed to smart-shelter.exe
+#     (the signature covers the file's bytes, not its name). Double-clicked with no arguments, it
 #     imports zip\sitecustomize.py, which makes the shortcuts and runs the client. Only what
-#     tent.exe must load from its own folder stays on top, so staff find tent.exe at a glance:
-#       tent\tent.exe, python.exe, python313.dll, python3.dll, vcruntime140*.dll, python313._pth
-#       tent\.env.example, README.md, tent.ico      (.env is written here too)
-#       tent\lib\  .pyd + their dlls, python313.zip, site-packages, scanner_client, app,
+#     smart-shelter.exe must load from its own folder stays on top, so staff find it at a glance:
+#       smart-shelter\smart-shelter.exe, python.exe, python313.dll, python3.dll,
+#                      vcruntime140*.dll, python313._pth
+#       smart-shelter\.env.example, README.md, tent.ico      (.env is written here too)
+#       smart-shelter\lib\  .pyd + their dlls, python313.zip, site-packages, scanner_client, app,
 #                  sitecustomize.py (an extension's dlls load from the extension's own folder)
-$zipStage = 'build\zip\tent'
+$zipStage = 'build\zip\smart-shelter'
 $zipLib = "$zipStage\lib"
 New-Item -ItemType Directory -Force -Path $zipLib | Out-Null
 $topLevel = 'python.exe', 'pythonw.exe', 'python313.dll', 'python3.dll', 'vcruntime140.dll',
@@ -177,21 +179,23 @@ foreach ($file in '.env.example', 'README.md', 'tent.ico') {
     Copy-Item -LiteralPath "$stage\$file" -Destination $zipStage
 }
 Copy-Item -LiteralPath 'zip\sitecustomize.py' -Destination $zipLib
-Move-Item -LiteralPath "$zipStage\pythonw.exe" -Destination "$zipStage\tent.exe"
+Move-Item -LiteralPath "$zipStage\pythonw.exe" -Destination "$zipStage\smart-shelter.exe"
 # paths are relative to the ._pth; `import site` is what makes Python import sitecustomize.py
 Set-Content -LiteralPath "$zipStage\python313._pth" -Encoding ascii -Value @(
     'lib\python313.zip', 'lib', 'lib\site-packages', 'import site')
-foreach ($exe in 'tent.exe', 'python.exe') {
+foreach ($exe in 'smart-shelter.exe', 'python.exe') {
     $signature = Get-AuthenticodeSignature -LiteralPath "$zipStage\$exe"
     if ($signature.Status -ne 'Valid') { throw "$exe is not validly signed ($($signature.Status))" }
 }
-# python.exe (not tent.exe) must stay plain Python: this would hang if it launched the client
+# python.exe (not smart-shelter.exe) must stay plain Python: this would hang if it launched the
+# client
 Invoke-Checked "$zipStage\python.exe" @('-c',
     ('import sys, sitecustomize, ssl, ctypes, scanner_client.main, scanner_client.launcher; ' +
      'from pathlib import Path; from scanner_client.winscard import WinSCard; WinSCard.load(); ' +
      'assert scanner_client.main.default_env_path().parent == Path(sys.executable).parent'))
-# tent.exe writes its own shortcuts through COM on the first start: write one here to prove it
-$lnkTest = Join-Path ([IO.Path]::GetTempPath()) 'tent-build-shortcut-test.lnk'
+# smart-shelter.exe writes its own shortcuts through COM on the first start: write one here to
+# prove it
+$lnkTest = Join-Path ([IO.Path]::GetTempPath()) 'smart-shelter-build-shortcut-test.lnk'
 Remove-Item -LiteralPath $lnkTest -ErrorAction SilentlyContinue
 Invoke-Checked "$zipStage\python.exe" @('-c',
     ('import sys; from pathlib import Path; from scanner_client import shortcuts as s; ' +
@@ -201,8 +205,8 @@ if (-not (Test-Path -LiteralPath $lnkTest)) { throw 'shortcut smoke test wrote n
 Remove-Item -LiteralPath $lnkTest
 Get-ChildItem -LiteralPath $zipStage -Recurse -Directory -Filter '__pycache__' |
     Remove-Item -Recurse -Force
-$tentZip = 'dist\tent-win64.zip'
-Compress-Archive -LiteralPath $zipStage -DestinationPath $tentZip -Force
+$appZip = 'dist\smart-shelter-win64.zip'
+Compress-Archive -LiteralPath $zipStage -DestinationPath $appZip -Force
 
 # 5. installer (Inno Setup): ISCC from PATH / a normal install, else a private copy in .tools\
 $iscc = @(
@@ -237,7 +241,7 @@ Invoke-Checked $iscc @("/DAppVersion=$version", 'installer.iss')
 $setup = 'dist\scanner-client-setup.exe'
 if (-not (Test-Path -LiteralPath $setup)) { throw "Build did not produce $setup" }
 
-foreach ($z in $setup, $tentZip, $zip, $debugZip) {
+foreach ($z in $setup, $appZip, $zip, $debugZip) {
     $mb = [math]::Round((Get-Item -LiteralPath $z).Length / 1MB, 1)
     Write-Host "OK  $z  ($mb MB)"
 }

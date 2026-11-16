@@ -57,14 +57,14 @@ fi
 
 # 5. Shortcut (app menu + Desktop). Runs the app directly, not this script: setup is done and
 #    a launcher has no terminal for sudo prompts. Rewritten each run so a moved folder heals.
-say "creating tent shortcut"
+say "creating Smart Shelter shortcut"
 app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 mkdir -p "$app_dir"
-entry="$app_dir/tent.desktop"
+entry="$app_dir/smart-shelter.desktop"
 cat >"$entry" <<EOF
 [Desktop Entry]
 Type=Application
-Name=tent
+Name=Smart Shelter
 Comment=Read Thai ID cards into the shelter walk-in registration page
 Exec="$(command -v uv)" run --project "$PWD" scanner-client
 Path="$PWD"
@@ -75,9 +75,9 @@ EOF
 chmod +x "$entry"
 desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
 if [[ -d "$desktop_dir" && "$desktop_dir" != "$HOME" ]]; then
-	install -m 755 "$entry" "$desktop_dir/tent.desktop"
+	install -m 755 "$entry" "$desktop_dir/smart-shelter.desktop"
 	# GNOME refuses to launch untrusted Desktop files ("Allow Launching"); best effort elsewhere.
-	gio set "$desktop_dir/tent.desktop" metadata::trusted true 2>/dev/null || true
+	gio set "$desktop_dir/smart-shelter.desktop" metadata::trusted true 2>/dev/null || true
 fi
 
 # 6. Run
