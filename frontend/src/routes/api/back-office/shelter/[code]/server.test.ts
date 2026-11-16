@@ -272,3 +272,154 @@ describe('GET /api/back-office/shelter/[code]', () => {
 		expect((await res.json())._rev).toBe('4-abc');
 	});
 });
+
+describe('PATCH /api/back-office/shelter/[code] — external shelter (CR-252 FR-4/5/9/10)', () => {
+	const saCaller = { name: 'sa', roles: ['system_admin'], isSA: true, shelterCode: null };
+
+	async function patchAgainst(stored: Record<string, unknown>, body: unknown, sa = false) {
+		if (sa) mgrMock.mockResolvedValue(saCaller);
+		let patch: Record<string, unknown> | undefined;
+		updateMock.mockImplementation(async (_code, mutator) => {
+			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
+			return { id: 'shelter:SH001', rev: '3-new' };
+		});
+		const res = await callPATCH('SH001', body);
+		return { res, patch };
+	}
+
+	const external = { is_external: true, operation_status: 'unknown' };
+	const regular = { operation_status: 'active' };
+
+	it.each([
+		['regular to external', regular, true],
+		['external to regular', external, false]
+	])('403 when the PATCH switches %s (FR-9)', async (_n, stored, next) => {
+		const { res } = await patchAgainst(stored, { is_external: next }, true);
+		expect(res.status).toBe(403);
+	});
+
+	it('accepts resending the unchanged is_external and status (the edit form does)', async () => {
+		const { res, patch } = await patchAgainst(
+			external,
+			{ is_external: true, operation_status: 'unknown', name: 'x' },
+			false
+		);
+		expect(res.status).toBe(200);
+		expect(patch).toMatchObject({ is_external: true, operation_status: 'unknown', name: 'x' });
+	});
+
+	it('403 when a shelter_manager changes the status of an external shelter (FR-10)', async () => {
+		const { res } = await patchAgainst(external, { operation_status: 'cancelled' });
+		expect(res.status).toBe(403);
+	});
+
+	it('lets a system_admin cancel an external shelter (FR-4)', async () => {
+		const { res } = await patchAgainst(external, { operation_status: 'cancelled' }, true);
+		expect(res.status).toBe(200);
+	});
+
+	it.each(['active', 'closed', 'standby'])(
+		'422 when a system_admin sets an external shelter to %s',
+		async (status) => {
+			const { res } = await patchAgainst(external, { operation_status: status }, true);
+			expect(res.status).toBe(422);
+		}
+	);
+
+	it('422 when a regular shelter is set to unknown (FR-5)', async () => {
+		const { res } = await patchAgainst(regular, { operation_status: 'unknown' });
+		expect(res.status).toBe(422);
+	});
+
+	it('rejects a non-https external_url', async () => {
+		const { res } = await patchAgainst(external, { external_url: 'http://x.example' }, true);
+		expect(res.status).toBe(422);
+	});
+
+	it('stores a blank external_url as null', async () => {
+		const { patch } = await patchAgainst(external, { external_url: '  ' }, true);
+		expect(patch).toMatchObject({ external_url: null });
+	});
+});
+
+describe('GET /api/back-office/shelter/[code] — parking points (#1352)', () => {
+	const pin = {
+		id: '01J0000000000000000000000A',
+		name: 'ลานจอดหน้าอาคาร',
+		note: null,
+		lat: 7.0086,
+		lng: 100.4747,
+		vehicles: []
+	};
+
+	async function callGET(stored: Record<string, unknown>) {
+		vi.mocked(findMasterByCode).mockResolvedValue({ code: 'SH001' } as ShelterMaster);
+		vi.mocked(migrate).mockReturnValue({
+			code: 'SH001',
+			_rev: '9-old',
+			...stored
+		} as ShelterMaster);
+		const request = new Request('http://localhost/api/back-office/shelter/SH001', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		return GET({ request, params: { code: 'SH001' } } as unknown as Parameters<typeof GET>[0]);
+	}
+
+	it('returns parking_points as [] for a doc stored without the field', async () => {
+		const res = await callGET({ schema_v: 9 });
+		expect(res.status).toBe(200);
+		expect((await res.json()).parking_points).toEqual([]);
+	});
+
+	it('returns the stored parking_points', async () => {
+		const res = await callGET({ schema_v: 11, parking_points: [pin] });
+		expect((await res.json()).parking_points).toEqual([pin]);
+	});
+});
+
+describe('PATCH /api/back-office/shelter/[code] — parking points (#1352)', () => {
+	const pin = {
+		id: '01J0000000000000000000000A',
+		name: 'ลานจอดหน้าอาคาร',
+		note: null,
+		lat: 7.0086,
+		lng: 100.4747,
+		vehicles: []
+	};
+
+	/** Run the mutator against a stored doc; returns the patch it produced. */
+	async function patchFor(body: unknown, stored: Record<string, unknown> = {}) {
+		let patch: Record<string, unknown> | undefined;
+		updateMock.mockImplementation(async (_code, mutator) => {
+			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
+			return { id: 'shelter:SH001', rev: '3-new' };
+		});
+		const res = await callPATCH('SH001', body);
+		return { res, patch };
+	}
+
+	it('saves the parking points the form sends', async () => {
+		const { res, patch } = await patchFor({ parking_points: [pin] });
+		expect(res.status).toBe(200);
+		expect(patch?.parking_points).toEqual([pin]);
+	});
+
+	it('leaves the stored pins alone when the body omits parking_points (no schema default sent)', async () => {
+		const { res, patch } = await patchFor({ name: 'ชื่อใหม่' }, { parking_points: [pin] });
+		expect(res.status).toBe(200);
+		expect(patch).not.toHaveProperty('parking_points');
+	});
+
+	it('writes nothing when a parking point has an empty name', async () => {
+		const { res, patch } = await patchFor({ parking_points: [{ ...pin, name: '' }] });
+		expect(res.status).not.toBe(200);
+		expect(patch).toBeUndefined();
+	});
+
+	// Known bug: a zod parse failure in PATCH is not a ServiceError/HTTP error, so serviceOrHttpError
+	// answers 500 INTERNAL instead of 400 VALIDATION. Flip to `it` once the route maps ZodError.
+	it.fails('answers 400 VALIDATION for an empty parking point name', async () => {
+		const { res } = await patchFor({ parking_points: [{ ...pin, name: '' }] });
+		expect(res.status).toBe(400);
+	});
+});

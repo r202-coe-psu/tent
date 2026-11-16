@@ -118,7 +118,7 @@ scripts/central-repl-user.sh SH001
 | lockout (รหัสผิด 5 ครั้ง)      | CouchDB นับต่อ (user, IP) — **แต่ละศูนย์มีชื่อของตัวเอง** จึงหยุดแค่ศูนย์ที่รหัสผิด ศูนย์อื่นยัง sync                                                                                                      | แก้ `.env` ของ edge ศูนย์นั้นให้ตรงรหัสล่าสุด แล้วรอ 5 นาที                                         |
 | หมุนรหัส central admin         | **edge ไม่ต้องแก้อะไร** (ไม่ถือ admin) · แต่ `edge-users-copy` และ sync-worker ใช้ admin เดิมอยู่ → ได้ 401 ถ้าไม่อัปเดต                                                                                   | อัปเดต `COUCHDB_PASSWORD` ของ**ทุก service** ที่ใช้รหัสนี้ แล้ว restart (ดู "หลัง deploy" ด้านล่าง) |
 | `edge-users-copy` หยุด / error | user ที่ถูกถอดสิทธิ์ / soft delete ยัง login ที่ edge ได้ เพราะ edge ไม่ได้รับ revision ใหม่                                                                                                               | ตรวจ `--status` ทุกวัน (ด้านล่าง)                                                                   |
-| hard delete ใน `_users`        | tombstone ไม่ถูกคัดลอกไป `edge_users_<code>` — บัญชีที่ hard delete ยังอยู่ที่ edge (นอกขอบเขต CR-247 · ติดตามที่ #1331)                                                                                   | ใช้ soft delete (แอปทำแบบนี้อยู่แล้ว)                                                               |
+| hard delete ใน `_users`        | tombstone ไม่ถูกคัดลอกไป `edge_users_<code>` — บัญชีที่ hard delete ยังอยู่และ login ที่ edge ได้ (ข้อจำกัดที่ยอมรับ · #1331)                                                                                   | ใช้ soft delete (แอปทำแบบนี้อยู่แล้ว) · ถ้า hard delete แล้ว รัน `edge-users-clean.sh --apply` ทันที (ด้านล่าง)                                                               |
 
 ### 3.4 service `edge-users-copy` (คัดลอก user ไป `edge_users_<code>`)
 
@@ -290,6 +290,8 @@ scripts/edge-users-clean.sh                 # dry-run ทุกศูนย์ �
 scripts/edge-users-clean.sh SH001 SH002     # dry-run เฉพาะบางศูนย์
 scripts/edge-users-clean.sh SH001 --apply   # ลบจริง
 ```
+
+**ต้องรันทันทีเมื่อ hard delete:** ถ้าลบ user ออกจาก `_users` ที่ central ตรง ๆ ต้องรัน `scripts/edge-users-clean.sh --apply` **ทันที** · `edge-users-copy` ไม่ส่งการลบนี้ไป edge ช่องว่างคือ user คนนั้นยัง login ที่ edge ได้จนกว่าจะรันสคริปต์ (และ edge ดึงการลบในรอบ pull ถัดไป)
 
 **เพื่ออะไร:** แอปใช้ soft delete (doc ยังอยู่ ตั้ง `deleted_at`) จึงไม่มี orphan จากการใช้งานปกติ — orphan เกิดเฉพาะตอนมีคนลบ user ตรงใน CouchDB (Fauxton / admin API) ·
 edge ได้รับการลบในรอบ pull ถัดไปของ `users_<code>_pull` · script ไม่แตะ `_design/*` และเช็กซ้ำกับ `_users` ของ central ก่อนลบทุกตัว (user ที่เพิ่งสร้างระหว่างรันจะไม่ถูกลบ) ·

@@ -30,6 +30,8 @@ async def insert_shelter(
     status: str = "open",
     is_active: bool = True,
     raw_data: dict[str, Any] | None = None,
+    is_external: bool = False,
+    external_url: str | None = None,
 ) -> PublicShelter:
     """Default raw_data = the pre-registration flag ON (#751: a missing flag is NOT bookable).
 
@@ -42,7 +44,9 @@ async def insert_shelter(
         status=status,
         location_status=status,
         is_active=is_active,
-        capacity=100,
+        is_external=is_external,
+        external_url=external_url,
+        capacity=0 if is_external else 100,
         raw_data=BOOKABLE_RAW if raw_data is None else raw_data,
         updated_at=datetime.now(UTC),
     ).insert()

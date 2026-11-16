@@ -64,6 +64,34 @@ describe('public/shelters load function', () => {
 		expect(result.summary.shelters_open).toBe(0);
 	});
 
+	it('passes the unknown status filter to the API and maps external shelters (CR-252)', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{
+					code: 'EXT1',
+					name: 'ศูนย์ภายนอก',
+					status: 'unknown',
+					capacity: 0,
+					is_external: true,
+					external_url: 'https://example.org/x'
+				}
+			],
+			count: 1,
+			as_of: '2026-11-12T10:00:00Z'
+		} as unknown as PublicShelterListResponse);
+
+		const result = await runLoad(new URL('http://localhost/shelters?status=unknown'));
+
+		expect(vi.mocked(listPublicShelters).mock.calls[0][0]).toMatchObject({ status: 'unknown' });
+		expect(result.shelters[0]).toMatchObject({
+			status: 'UNKNOWN',
+			is_external: true,
+			external_url: 'https://example.org/x'
+		});
+		// not "open": an unknown-status shelter is not counted as running
+		expect(result.summary.shelters_open).toBe(0);
+	});
+
 	it('handles empty shelters array correctly', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [],
@@ -388,5 +416,45 @@ describe('public/shelters load function', () => {
 		const bad = await runLoad(new URL('http://localhost/shelters?site_kind=Field%20Hospital!'));
 		expect(vi.mocked(listPublicShelters).mock.calls[1][0]?.site_kind).toBeUndefined();
 		expect(bad.filters.site_kind).toBeUndefined();
+	});
+
+	describe('parking filter (CR-253 FR-33/FR-34)', () => {
+		const item = (code: string, parking_vehicle_types: string[]) => ({
+			code,
+			name: code,
+			status: 'open',
+			capacity: 10,
+			province: 'สงขลา',
+			accepts_pre_registration: false,
+			updated_at: '2026-11-13T00:00:00Z',
+			parking_vehicle_types
+		});
+
+		beforeEach(() => {
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [item('SH_CAR', ['car']), item('SH_BOTH', ['car', 'boat']), item('SH_NONE', [])],
+				count: 3,
+				as_of: '2026-11-13T00:00:00Z'
+			} as unknown as PublicShelterListResponse);
+		});
+
+		it('keeps only shelters that take the ticked type and echoes the flag back', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters?parking_car=on'));
+			expect(result.shelters.map((s) => s.code)).toEqual(['SH_CAR', 'SH_BOTH']);
+			expect(result.filters.parking_car).toBe('on');
+			expect(result.filters.parking_boat).toBe('');
+		});
+
+		it('needs every ticked type at once', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?parking_car=on&parking_boat=on')
+			);
+			expect(result.shelters.map((s) => s.code)).toEqual(['SH_BOTH']);
+		});
+
+		it('does not filter when nothing is ticked', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters'));
+			expect(result.shelters).toHaveLength(3);
+		});
 	});
 });

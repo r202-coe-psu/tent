@@ -41,7 +41,7 @@
 				) || siteKindFilter
 	);
 
-	const sheltersQuery = useShelters();
+	const sheltersQuery = useShelters({ includeExternal: true }); // CR-252: the only list that shows external shelters
 	const shelters = $derived(sheltersQuery.data ?? []);
 	const filteredShelters = $derived(
 		shelters.filter((shelter) => {

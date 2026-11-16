@@ -557,3 +557,27 @@ async def test_malformed_feature_flags_are_not_bookable_and_never_500(
 
     assert await _codes(client, location_read_headers, accepts_booking="true") == {"SH901"}
     assert await _codes(client, location_read_headers, accepts_booking="false") == {"SH900"}
+
+
+# --- CR-252 FR-24: external shelters on EXT-002/003 ---------------------------------------
+
+
+async def test_external_location_reports_unknown_and_is_external(
+    client: AsyncClient, location_read_headers: dict[str, str]
+) -> None:
+    await insert_shelter("SH950", status="unknown", raw_data=flag_raw(True), is_external=True)
+    await insert_shelter("SH951")
+
+    detail = await client.get("/external/locations/SH950", headers=location_read_headers)
+    result = detail.json()["result"]
+    assert result["location_status"] == "unknown"
+    assert result["is_external"] is True
+    assert result["accepts_booking"] is False
+
+    listing = await client.get("/external/locations", headers=location_read_headers)
+    by_code = {i["location_code"]: i for i in listing.json()["result"]}
+    assert by_code["SH950"]["is_external"] is True
+    assert by_code["SH951"]["is_external"] is False
+
+    assert await _codes(client, location_read_headers, status="unknown") == {"SH950"}
+    assert await _codes(client, location_read_headers, accepts_booking="false") == {"SH950"}

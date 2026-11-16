@@ -227,6 +227,9 @@ export const H = {
 	// -- sheet 1: ข้อมูลศูนย์ --
 	name: 'ชื่อศูนย์พักพิง',
 	site_kind: 'ชนิดสถานที่',
+	/** CR-252 FR-27 — blank = ไม่ใช่. */
+	is_external: 'ศูนย์จากระบบภายนอก',
+	external_url: 'ลิงก์ศูนย์ภายนอก',
 	operation_status: 'สถานะ',
 	shelter_type: 'ประเภทอาคาร',
 	project_level: 'ระดับโครงการ',
@@ -465,12 +468,27 @@ const SHEET_MAIN: SheetDef = {
 			hint: 'ชนิดสถานที่ — เลือกจากรายการประเภทศูนย์ (ว่าง = ค่าเริ่มต้นของรายการ)'
 		},
 		{
+			header: H.is_external,
+			kind: 'boolean',
+			required: false,
+			choices: BOOLEAN_CHOICES,
+			path: 'is_external',
+			hint: 'ศูนย์ที่บริหารในระบบอื่น (CR-252) — ใช่/ไม่ใช่ (ว่าง = ไม่ใช่) · ศูนย์ภายนอกไม่ต้องกรอกความจุ/สถานะ และห้ามมีข้อมูลในชีตโซน จุดแจกอาหาร สิ่งอำนวยความสะดวก สาธารณูปโภคฯ และนโยบาย · เปลี่ยนชนิดของศูนย์เดิมผ่านการนำเข้าไม่ได้'
+		},
+		{
+			header: H.external_url,
+			kind: 'string',
+			required: false,
+			path: 'external_url',
+			hint: 'ลิงก์ไปยังระบบต้นทางของศูนย์ภายนอก — ขึ้นต้นด้วย https:// เท่านั้น (ไม่บังคับ; ใช้ได้เฉพาะศูนย์ภายนอก)'
+		},
+		{
 			header: H.operation_status,
 			kind: 'enum',
 			required: false,
 			choices: OPERATION_STATUS_CHOICES.filter((c) => c.value !== 'closed'),
 			path: 'operation_status',
-			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ) · ปิดศูนย์ได้จากหน้าจัดการศูนย์เท่านั้น'
+			hint: 'สถานะการเปิดให้บริการ (ว่าง = กำลังเตรียมการ) · ปิดศูนย์ได้จากหน้าจัดการศูนย์เท่านั้น · ศูนย์ภายนอกต้องเว้นว่าง (ระบบใส่ "ไม่ทราบสถานะ")'
 		},
 		{
 			header: H.shelter_type,
@@ -501,7 +519,7 @@ const SHEET_MAIN: SheetDef = {
 			kind: 'number',
 			required: true,
 			path: 'capacity',
-			hint: 'ความจุสูงสุด (คน) — จำนวนเต็มมากกว่า 0 (จำเป็น)'
+			hint: 'ความจุสูงสุด (คน) — จำนวนเต็มมากกว่า 0 (จำเป็น ยกเว้นศูนย์ภายนอก)'
 		},
 		{
 			header: H.area_m2,
@@ -1044,6 +1062,17 @@ export const SHEETS: readonly SheetDef[] = [
 ];
 
 export const MAIN_SHEET_NAME = SHEET_MAIN.name;
+/**
+ * CR-252 FR-30 — sheets whose data an external shelter must not carry: the 1:1 sheets other
+ * than the main one (facilities / utilities+risk / policy) and the zone / food-point sheets.
+ */
+export const EXTERNAL_FORBIDDEN_SHEET_NAMES: readonly string[] = SHEETS.filter(
+	(s) => s !== SHEET_MAIN
+).map((s) => s.name);
+/** Non-join headers of the 1:1 sheets in {@link EXTERNAL_FORBIDDEN_SHEET_NAMES}. */
+export const EXTERNAL_FORBIDDEN_HEADERS: readonly string[] = SHEETS.filter(
+	(s) => s.kind === 'shelter' && s !== SHEET_MAIN
+).flatMap((s) => s.columns.filter((c) => !c.isRef).map((c) => c.header));
 export const ZONE_SHEET_NAME = SHEET_ZONES.name;
 export const FOOD_DISTRIBUTION_SHEET_NAME = SHEET_FOOD_DISTRIBUTION.name;
 

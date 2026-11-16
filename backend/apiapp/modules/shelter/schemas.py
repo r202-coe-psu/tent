@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from tent_model.public_shelter import DonationPoint, GeoJsonPoint, GeoPoint
+from tent_model.public_shelter import DonationPoint, GeoJsonPoint, GeoPoint, ParkingPoint
 
 
 class ShelterListCapacityDetail(BaseModel):
@@ -32,9 +32,17 @@ class ShelterItem(BaseModel):
     vulnerable_groups: list[str] | None = None
     admin_type: str | None = None
     accepts_pre_registration: bool = False
+    # CR-252: run in another system; status is `unknown`, never bookable.
+    # Capacity is the entered value (0 = not entered).
+    is_external: bool = False
+    external_url: str | None = None
     readiness_status: str | None = None
     readiness_tier: str | None = None
     readiness_assessed_at: datetime | None = None
+    # CR-253: projected fields only. The list carries them so `/shelters` can draw every pin and
+    # filter by vehicle type without a detail call per shelter.
+    parking_points: list[ParkingPoint] = Field(default_factory=list)
+    parking_vehicle_types: list[str] = Field(default_factory=list)
     updated_at: datetime
 
 
@@ -129,9 +137,16 @@ class ShelterDetail(BaseModel):
     contact: ShelterContactDetail
     faq: list[ShelterFaqDetail]
     accepts_pre_registration: bool = False
+    # CR-252: run in another system; status is `UNKNOWN`, never bookable.
+    # Capacity is the entered value (0 = not entered).
+    is_external: bool = False
+    external_url: str | None = None
     # CR-205: ticked storage points with a pin, projected by the worker. [] = the shelter's
     # own location is the only drop-off point. Detail only; the list does not carry it.
     donation_points: list[DonationPoint] = Field(default_factory=list)
+    # CR-253: projected fields only (never raw_data).
+    parking_points: list[ParkingPoint] = Field(default_factory=list)
+    parking_vehicle_types: list[str] = Field(default_factory=list)
 
 
 class ShelterDetailResponse(BaseModel):

@@ -279,7 +279,8 @@ test.describe('Shelter Form — Edit', () => {
 			utilities: { communications: [] },
 			risk: {},
 			zones: [],
-			food_distribution_points: []
+			food_distribution_points: [],
+			parking_points: []
 		});
 
 		await injectSession(page, SA, sessions[SA.name]);
@@ -384,7 +385,8 @@ test.describe('Shelter Form — Edit', () => {
 				},
 				{ code: 'Z2', name: 'โซนชาย', capacity: 20, type: 'male', status: 'active' }
 			],
-			food_distribution_points: []
+			food_distribution_points: [],
+			parking_points: []
 		});
 
 		await injectSession(page, SA, sessions[SA.name]);
@@ -436,7 +438,8 @@ function storageShelter(subStorage: unknown[], schemaV = 8): Record<string, unkn
 		utilities: { communications: [] },
 		risk: {},
 		zones: [],
-		food_distribution_points: []
+		food_distribution_points: [],
+		parking_points: []
 	};
 }
 
@@ -950,6 +953,202 @@ test.describe('Shelter Form — Donation drop-off points (CR-205)', () => {
 		await expect(
 			page.locator('[data-fs-field-error]').filter({ hasText: 'พิกัด 0, 0 ไม่ใช่ตำแหน่งจริง' })
 		).toBeVisible();
+		expect(getPatchBody()).toBeNull();
+	});
+});
+
+test.describe('Shelter Form — parking points (#1352)', () => {
+	const PARKING_SECTION = 'จุดจอดรถ';
+
+	/** A shelter in edit mode with the given parking points (schema_v 11). */
+	function parkingShelter(points: unknown[]): Record<string, unknown> {
+		return {
+			...storageShelter([], 11),
+			parking_policy: {
+				availability: 'available',
+				supported_vehicles: [],
+				rules: [],
+				rules_other: null
+			},
+			parking_points: points
+		};
+	}
+
+	async function openParking(page: Page, code: string) {
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`/back-office/shelters/edit/${code}`);
+		await sectionNav(page, PARKING_SECTION).click();
+		await expect(page.getByRole('heading', { level: 2, name: PARKING_SECTION })).toBeVisible();
+	}
+
+	async function addPoint(page: Page, name: string) {
+		await page.getByRole('button', { name: /เพิ่มจุดจอดรถ/ }).click();
+		await page.getByLabel('ชื่อจุดจอดรถ').fill(name);
+	}
+
+	async function pin(page: Page, lat: string, lng: string) {
+		await page.getByRole('button', { name: 'ปักหมุด', exact: true }).click();
+		const dialog = page.getByRole('dialog');
+		await dialog.getByLabel('ละติจูด (Latitude)').fill(lat);
+		await dialog.getByLabel('ลองจิจูด (Longitude)').fill(lng);
+		await page.getByRole('button', { name: 'ยืนยันปักหมุด' }).click();
+	}
+
+	const save = (page: Page, code: string) => {
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${code}`)
+		);
+		return page
+			.getByRole('button', { name: 'บันทึกข้อมูล' })
+			.click()
+			.then(() => patched);
+	};
+
+	test('adds a parking point with a name and a pin, and the save sends both', async ({ page }) => {
+		const CODE = 'SH920';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, parkingShelter([]));
+		await openParking(page, CODE);
+
+		await addPoint(page, 'ลานหน้าอาคาร');
+		await pin(page, '7.0086', '100.4747');
+		await expect(page.getByText('พิกัดปัจจุบัน: 7.0086, 100.4747')).toBeVisible();
+
+		await save(page, CODE);
+		const body = getPatchBody() as { parking_points: { name: string; lat: number; lng: number }[] };
+		expect(body.parking_points).toHaveLength(1);
+		expect(body.parking_points[0]).toMatchObject({
+			name: 'ลานหน้าอาคาร',
+			lat: 7.0086,
+			lng: 100.4747
+		});
+	});
+
+	test('cancelling the pin dialog keeps the coordinates already confirmed', async ({ page }) => {
+		const CODE = 'SH921';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, parkingShelter([]));
+		await openParking(page, CODE);
+
+		await addPoint(page, 'ลานหลังอาคาร');
+		await pin(page, '7.0086', '100.4747');
+
+		await page.getByRole('button', { name: 'ปักหมุด', exact: true }).click();
+		const dialog = page.getByRole('dialog');
+		await dialog.getByLabel('ละติจูด (Latitude)').fill('1');
+		await dialog.getByLabel('ลองจิจูด (Longitude)').fill('2');
+		await dialog.getByRole('button', { name: 'ยกเลิก' }).click();
+
+		await expect(page.getByText('พิกัดปัจจุบัน: 7.0086, 100.4747')).toBeVisible();
+		await save(page, CODE);
+		expect(
+			(getPatchBody() as { parking_points: { lat: number; lng: number }[] }).parking_points[0]
+		).toMatchObject({ lat: 7.0086, lng: 100.4747 });
+	});
+
+	test('removing a parking point drops it from the save', async ({ page }) => {
+		const CODE = 'SH922';
+		const { getPatchBody } = await mockShelterDetail(
+			page,
+			CODE,
+			parkingShelter([{ id: 'pk-1', name: 'ลานเดิม', note: null, lat: null, lng: null }])
+		);
+		await openParking(page, CODE);
+		await expect(page.getByLabel('ชื่อจุดจอดรถ')).toHaveValue('ลานเดิม');
+
+		await page.getByRole('button', { name: 'ลบจุดจอดรถ' }).click();
+		await expect(page.getByText('ยังไม่มีจุดจอดรถ กรุณาเพิ่มรายการใหม่')).toBeVisible();
+
+		await save(page, CODE);
+		expect((getPatchBody() as { parking_points: unknown[] }).parking_points).toEqual([]);
+	});
+
+	test('an empty point name blocks save with the error on that row and marks the section in the nav', async ({
+		page
+	}) => {
+		const CODE = 'SH923';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, parkingShelter([]));
+		await openParking(page, CODE);
+
+		await page.getByRole('button', { name: /เพิ่มจุดจอดรถ/ }).click();
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+
+		const nameError = page
+			.locator('[data-fs-field-error]')
+			.filter({ hasText: 'กรุณาระบุชื่อที่จอดรถ' });
+		await nameError.scrollIntoViewIfNeeded();
+		await expect(nameError).toBeVisible();
+		await expect(sectionNav(page, PARKING_SECTION)).toHaveClass(/text-red-(700|900)/);
+		expect(getPatchBody()).toBeNull();
+	});
+
+	test('ticks a vehicle type with its capacity and the save sends it (CR-253)', async ({
+		page
+	}) => {
+		const CODE = 'SH924';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, parkingShelter([]));
+		await openParking(page, CODE);
+
+		await addPoint(page, 'ลานรถยนต์');
+		await page.getByRole('checkbox', { name: 'รถยนต์ / รถกระบะ' }).click();
+		await page.getByLabel('ความจุรถยนต์ / รถกระบะ').fill('30');
+
+		await save(page, CODE);
+		const body = getPatchBody() as { parking_points: { vehicles: unknown[] }[] };
+		expect(body.parking_points[0].vehicles).toEqual([{ type: 'car', max_capacity: 30 }]);
+	});
+
+	test('part 9 shows the per-point totals read-only (CR-253 FR-13)', async ({ page }) => {
+		const CODE = 'SH925';
+		await mockShelterDetail(
+			page,
+			CODE,
+			parkingShelter([
+				{ id: 'pk-a', name: 'ลาน A', vehicles: [{ type: 'car', max_capacity: 30 }] },
+				{
+					id: 'pk-b',
+					name: 'ลาน B',
+					vehicles: [
+						{ type: 'car', max_capacity: 20 },
+						{ type: 'boat', max_capacity: 10 }
+					]
+				}
+			])
+		);
+		await openParking(page, CODE);
+
+		const totals = page.getByTestId('effective-vehicles');
+		await totals.scrollIntoViewIfNeeded();
+		await expect(totals).toContainText('50 คัน');
+		await expect(totals).toContainText('10 ลำ');
+		await expect(totals.getByRole('checkbox')).toHaveCount(0);
+		await expect(totals.getByRole('spinbutton')).toHaveCount(0);
+	});
+
+	test('a duplicated vehicle type blocks save with the error on that point and marks the nav', async ({
+		page
+	}) => {
+		const CODE = 'SH926';
+		const { getPatchBody } = await mockShelterDetail(
+			page,
+			CODE,
+			parkingShelter([
+				{
+					id: 'pk-d',
+					name: 'ลานซ้ำ',
+					vehicles: [
+						{ type: 'car', max_capacity: 5 },
+						{ type: 'car', max_capacity: 7 }
+					]
+				}
+			])
+		);
+		await openParking(page, CODE);
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+
+		const dupError = page.getByTestId('parking-vehicles-0').getByRole('alert');
+		await dupError.scrollIntoViewIfNeeded();
+		await expect(dupError).toHaveText('ประเภทรถซ้ำในจุดเดียวกัน');
+		await expect(sectionNav(page, PARKING_SECTION)).toHaveClass(/text-red-(700|900)/);
 		expect(getPatchBody()).toBeNull();
 	});
 });

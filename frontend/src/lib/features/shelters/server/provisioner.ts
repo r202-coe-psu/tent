@@ -1,6 +1,11 @@
 import { ulid } from '$lib/db/ulid';
 import { nextClosedAt } from '../domain/closed-at';
-import { SHELTER_MASTER_SCHEMA_V, type Shelter, type ShelterMaster } from '../domain/schema';
+import {
+	isExternalShelter,
+	SHELTER_MASTER_SCHEMA_V,
+	type Shelter,
+	type ShelterMaster
+} from '../domain/schema';
 import { SHELTER_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import { CENTRAL_WRITE_POLICY_DESIGN, hasWritePolicy } from '$lib/server/central-db-security';
@@ -380,40 +385,44 @@ async function provisionShelterUnlocked(
 		steps.push({ step: 'design', status: access.status });
 	}
 
-	await assertActive?.();
-	const dashboard = await deployShelterViews(db);
-	steps.push({ step: 'design-dashboard', status: dashboard });
-	await assertActive?.();
-	await deployReferralMangoIndexes(db);
-	steps.push({ step: 'referral-mango', status: 200 });
-	await assertActive?.();
-	await deployKioskLookupMangoIndexes(db);
-	steps.push({ step: 'kiosk-lookup-mango', status: 200 });
-	await assertActive?.();
-	await deployTransferLedgerMangoIndexes(db);
-	steps.push({ step: 'transfer-ledger-mango', status: 200 });
-	await assertActive?.();
-	await deployPeopleMangoIndexes(db);
-	steps.push({ step: 'people-mango', status: 200 });
-	await assertActive?.();
-	await deployRequisitionTicketMangoIndexes(db);
-	steps.push({ step: 'requisition-ticket-mango', status: 200 });
-	await assertActive?.();
-	await deployBulkReturnEntryMangoIndexes(db);
-	steps.push({ step: 'bulk-return-entry-mango', status: 200 });
-	await assertActive?.();
-	await deployDailySopRoleMangoIndexes(db);
-	steps.push({ step: 'daily-sop-role-mango', status: 200 });
-	await assertActive?.();
-	await deployDistributionLogDayMangoIndex(db);
-	steps.push({ step: 'distribution-log-day-mango', status: 200 });
-	await assertActive?.();
-	await deployDonationReceivedMangoIndex(db);
-	steps.push({ step: 'donation-received-mango', status: 200 });
-	await deployDonationPhotoMangoIndex(db);
-	steps.push({ step: 'donation-photo-mango', status: 200 });
-	await deployRoleGrantAuditMangoIndex(db);
-	steps.push({ step: 'role-grant-audit-mango', status: 200 });
+	// CR-252 FR-11: an external shelter gets an empty database plus grants only — no dashboard
+	// views or mango indexes (nothing is ever written there).
+	if (!isExternalShelter(input)) {
+		await assertActive?.();
+		const dashboard = await deployShelterViews(db);
+		steps.push({ step: 'design-dashboard', status: dashboard });
+		await assertActive?.();
+		await deployReferralMangoIndexes(db);
+		steps.push({ step: 'referral-mango', status: 200 });
+		await assertActive?.();
+		await deployKioskLookupMangoIndexes(db);
+		steps.push({ step: 'kiosk-lookup-mango', status: 200 });
+		await assertActive?.();
+		await deployTransferLedgerMangoIndexes(db);
+		steps.push({ step: 'transfer-ledger-mango', status: 200 });
+		await assertActive?.();
+		await deployPeopleMangoIndexes(db);
+		steps.push({ step: 'people-mango', status: 200 });
+		await assertActive?.();
+		await deployRequisitionTicketMangoIndexes(db);
+		steps.push({ step: 'requisition-ticket-mango', status: 200 });
+		await assertActive?.();
+		await deployBulkReturnEntryMangoIndexes(db);
+		steps.push({ step: 'bulk-return-entry-mango', status: 200 });
+		await assertActive?.();
+		await deployDailySopRoleMangoIndexes(db);
+		steps.push({ step: 'daily-sop-role-mango', status: 200 });
+		await assertActive?.();
+		await deployDistributionLogDayMangoIndex(db);
+		steps.push({ step: 'distribution-log-day-mango', status: 200 });
+		await assertActive?.();
+		await deployDonationReceivedMangoIndex(db);
+		steps.push({ step: 'donation-received-mango', status: 200 });
+		await deployDonationPhotoMangoIndex(db);
+		steps.push({ step: 'donation-photo-mango', status: 200 });
+		await deployRoleGrantAuditMangoIndex(db);
+		steps.push({ step: 'role-grant-audit-mango', status: 200 });
+	}
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

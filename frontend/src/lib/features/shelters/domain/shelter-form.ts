@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { shelterSchema, type Shelter, type SubStorageItem } from './schema';
+import {
+	refineExternalInvariants,
+	shelterBaseSchema,
+	type Shelter,
+	type SubStorageItem
+} from './schema';
 import { omitUnchangedSubStorage, sameSubStorage } from './storage-points';
 
 /**
@@ -8,10 +13,12 @@ import { omitUnchangedSubStorage, sameSubStorage } from './storage-points';
  * reseed, superforms' own write-back after submit) rewrites them too, and a save can never send a
  * `_rev` newer than its content. `_loaded_sub_storage` is not validated: it is a snapshot, not input.
  */
-export const shelterFormSchema = shelterSchema.extend({
-	_rev: z.string().optional(),
-	_loaded_sub_storage: z.array(z.any()).optional()
-});
+export const shelterFormSchema = shelterBaseSchema
+	.extend({
+		_rev: z.string().optional(),
+		_loaded_sub_storage: z.array(z.any()).optional()
+	})
+	.superRefine(refineExternalInvariants);
 export type ShelterForm = z.infer<typeof shelterFormSchema>;
 
 /** The stored fields only, without the form's load bookkeeping. */

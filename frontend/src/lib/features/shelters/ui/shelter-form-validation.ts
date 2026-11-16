@@ -13,6 +13,8 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 		'name',
 		'site_kind',
 		'operation_status',
+		'is_external',
+		'external_url',
 		'shelter_type',
 		'floor_count',
 		'project_level',
@@ -36,7 +38,8 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 	risk: ['risk'],
 	'admission-policy': ['admission_policy'],
 	'luggage-policy': ['luggage_policy'],
-	'parking-policy': ['parking_policy']
+	'parking-policy': ['parking_policy'],
+	'parking-points': ['parking_points']
 };
 
 /** Top-level keys present on a Superforms errors object (skip `_errors`). */
