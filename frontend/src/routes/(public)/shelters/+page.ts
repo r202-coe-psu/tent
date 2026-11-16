@@ -14,9 +14,6 @@ import {
 } from '$lib/features/public-portal';
 import { formatMasterLabel } from '$lib/features/master-data';
 
-/** `site_kind` is any master code (CR-198); only the code shape is checked here. */
-const SITE_KIND_CODE = /^[a-z0-9_]+$/;
-
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
 	const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -38,8 +35,6 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const subdistrict = url.searchParams.get('subdistrict') || '';
 	const typeFilter = url.searchParams.get('type') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
-	const siteKindParam = url.searchParams.get('site_kind') || '';
-	const siteKind = SITE_KIND_CODE.test(siteKindParam) ? siteKindParam : undefined;
 	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
@@ -78,7 +73,6 @@ export const load: PageLoad = async ({ url, fetch }) => {
 				district: district || undefined,
 				subdistrict: subdistrict || undefined,
 				status: status || undefined,
-				site_kind: siteKind,
 				lat: hasUser ? userLatNum : undefined,
 				lng: hasUser ? userLngNum : undefined,
 				radius_km:
@@ -190,7 +184,6 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			subdistrict,
 			type: typeFilter,
 			status: statusParam,
-			site_kind: siteKind,
 			distance,
 			user_lat,
 			user_lng,
