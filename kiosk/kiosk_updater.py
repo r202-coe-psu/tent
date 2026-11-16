@@ -49,6 +49,11 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
     base = recorded[0] if recorded else current
     started = recorded[1] if len(recorded) > 1 else current
     rolled_back = "undo" in recorded[2:]
+    if resuming:
+        # A power cut mid-checkout leaves git's locks behind; nothing else runs git at boot.
+        git_dir = Path(_git(kiosk_dir, "rev-parse", "--absolute-git-dir"))
+        for lock in ("index.lock", "HEAD.lock", f"refs/heads/{RELEASE_BRANCH}.lock"):
+            (git_dir / lock).unlink(missing_ok=True)
     # The tag moves on every release, so fetch it with force (+) or git keeps the old one.
     try:
         _git(
@@ -80,8 +85,9 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
     # interrupted checkout was rewriting may differ, and those are the updater's own.
     # After a rollback the tree is back on base, so no file is the updater's any more.
     rewriting = resuming and not rolled_back
-    ours = set(_git(kiosk_dir, "diff", "--name-only", base, started).splitlines()) if rewriting else set()
-    modified = _git(kiosk_dir, "diff", "--name-only", "HEAD").splitlines()
+    # --no-renames: with rename detection the old path of a renamed file is not listed at all.
+    ours = set(_git(kiosk_dir, "diff", "--no-renames", "--name-only", base, started).splitlines()) if rewriting else set()
+    modified = _git(kiosk_dir, "diff", "--no-renames", "--name-only", "HEAD").splitlines()
     if any(path not in ours for path in modified):
         return "dirty"
     if not resuming:
@@ -93,9 +99,6 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
         return _restore(kiosk_dir, run_step, base, started)
     steps = _steps_between(kiosk_dir, base, target)
     _write_atomic(pending, f"{base}\n{target}\n")
-    if resuming:
-        # A power cut mid-checkout leaves git's lock behind; nothing else runs git at boot.
-        (Path(_git(kiosk_dir, "rev-parse", "--absolute-git-dir")) / "index.lock").unlink(missing_ok=True)
     try:
         # -f only to finish the updater's own half-written checkout; otherwise git refuses to
         # overwrite an untracked file the release starts tracking.
@@ -133,6 +136,7 @@ def _restore(kiosk_dir, run_step, base, started):
     # kiosk-stable went back to the version an unfinished update or rollback left: undo everything
     # that release could have installed.
     _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
+    _write_atomic(state_dir(kiosk_dir) / "pending", f"{base}\n{started}\nundo\n")
     steps = _steps_between(kiosk_dir, base, started)
     if not (state_dir(kiosk_dir) / PIP_SNAPSHOT).exists() and "pip" in steps:
         steps.remove("pip")  # no snapshot: pip never ran, so there is nothing to put back
@@ -190,7 +194,7 @@ def state_dir(kiosk_dir):
 
 
 def _steps_between(kiosk_dir, current, target):
-    changed = _git(kiosk_dir, "diff", "--relative", "--name-only", current, target).splitlines()
+    changed = _git(kiosk_dir, "diff", "--no-renames", "--relative", "--name-only", current, target).splitlines()
     steps = []
     if "requirements.txt" in changed:
         steps.append("pip")

@@ -514,9 +514,9 @@ git push -f origin kiosk-stable
 3. `git fetch` tag `kiosk-stable` แบบ force และ `main` (timeout 20 วินาที) ถ้า fetch ไม่ได้และไม่มี marker → `offline` แต่ถ้ามี marker ให้ใช้ target ที่จดไว้ใน marker
 4. target ต้องเป็น ancestor ของ `origin/main` ไม่งั้น → `untrusted` (ถ้า resume อยู่ ให้ทำ target เดิมใน marker ให้จบแทน)
 5. HEAD ต้องอยู่บน `origin/main` ไม่งั้น → `diverged` (มีคน commit บนตู้)
-6. มีไฟล์ tracked ที่ถูกแก้ → `dirty` ยกเว้นตอน resume ที่ไฟล์นั้นอยู่ในชุดที่ checkout รอบก่อนกำลังเขียน
+6. มีไฟล์ tracked ที่ถูกแก้ → `dirty` ยกเว้นตอน resume ที่ไฟล์นั้นอยู่ในชุดที่ checkout รอบก่อนกำลังเขียน (ทุก `git diff` ใช้ `--no-renames` เพราะถ้าตรวจ rename ไฟล์ path เดิมของไฟล์ที่ถูก rename จะไม่ถูกนับ)
 7. เขียน marker `"<base>\n<target>\n"` แบบ atomic (เขียนไฟล์ tmp, fsync, แล้ว `os.replace`) **ก่อน** checkout
-8. `git checkout -B main <target>` (ตอน resume จะลบ `.git/index.lock` ที่ค้างจากไฟดับก่อน และใส่ `-f`) ถ้า git ไม่ยอมทับไฟล์ untracked → ลบ marker แล้วคืน `dirty` ถ้าล้มด้วยเหตุอื่น จะเก็บ marker ไว้ให้บูตครั้งถัดไปทำต่อ
+8. `git checkout -B main <target>` (ตอน resume ใส่ `-f` และตั้งแต่ต้นของการ resume จะลบ lock ของ git ที่ค้างจากไฟดับ: `index.lock`, `HEAD.lock`, `refs/heads/main.lock`) ถ้า git ไม่ยอมทับไฟล์ untracked → ลบ marker แล้วคืน `dirty` ถ้าล้มด้วยเหตุอื่น จะเก็บ marker ไว้ให้บูตครั้งถัดไปทำต่อ
 9. รันขั้นติดตั้งที่จำเป็น (`_steps_between`) ถ้าขั้นไหนล้ม → checkout กลับ base แล้วรันขั้น undo (`UNDO_STEP`)
 10. ตอน rollback เมื่อ checkout กลับ base สำเร็จ จะเขียนบรรทัด `undo` ต่อท้าย marker (บอกว่า tree กลับเป็น base แล้ว ไม่มีไฟล์ไหนเป็นของ updater อีก) และขั้น undo ได้งบเวลาใหม่ของตัวเอง
 11. สำเร็จทั้งหมด → ลบ snapshot แล้วค่อยลบ marker (`_finish`) ถ้า undo ล้ม จะเก็บทั้งสองไว้ บูตครั้งถัดไปจะลองอัปเดต release เดิมอีกครั้ง หรือถ้า tag ถูกย้ายกลับมาที่ base ก็ย้อนทุกขั้นที่ release นั้นรันให้ (`_restore`)

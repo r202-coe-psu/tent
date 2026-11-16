@@ -497,6 +497,61 @@ class UpdateOnBootTests(unittest.TestCase):
         self.update()
         self.assertGreater(timeouts["pip-restore"], 60)
 
+    def test_power_cut_mid_checkout_of_a_rename_is_completed(self):
+        before = self.head()
+        self.commit_file("kiosk/app_module.py", "".join(f"line {n}\n" for n in range(50)))
+        self.release("kiosk-v0.1.1")
+        self.assertEqual(self.update(), "updated")
+        before = self.head()
+        git(self.origin, "mv", "kiosk/app_module.py", "kiosk/renamed_module.py")
+        git(self.origin, "commit", "-q", "-m", "rename module")
+        new = git(self.origin, "rev-parse", "HEAD")
+        self.release("kiosk-v0.2.0")
+        git(self.device, "fetch", "-q", "origin", "+refs/tags/kiosk-stable:refs/tags/kiosk-stable")
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        (state / "pending").write_text(f"{before}\n{new}\n")
+        # Power died after git removed the old path and before it wrote the new one.
+        (self.kiosk_dir / "app_module.py").unlink()
+
+        self.assertEqual(self.update(), "updated")
+        self.assertTrue((self.kiosk_dir / "renamed_module.py").exists())
+
+    def test_ref_lock_left_by_a_power_cut_does_not_strand_the_kiosk(self):
+        before = self.head()
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        state.mkdir()
+        (state / "pending").write_text(f"{before}\n{new}\n")
+        (self.device / ".git" / "refs" / "heads" / "main.lock").write_text("")
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+
+    def test_restore_after_a_power_cut_clears_the_git_lock_first(self):
+        self.commit_file("kiosk/models/download_models.sh", "# new sha256\n")
+        self.release("kiosk-v0.2.0")
+        with self.assertRaises(PowerCut):
+            kiosk_updater.update_on_boot(self.kiosk_dir, run_step=FakeSteps(cut_power_at="models"))
+        git(self.origin, "tag", "-f", "kiosk-stable", "kiosk-v0.1.0")
+        (self.device / ".git" / "index.lock").write_text("")
+
+        self.assertEqual(self.update(), "restored")
+
+    def test_hand_edit_after_an_unfinished_restore_is_not_overwritten(self):
+        self.commit_file("kiosk/main.py", "v2\n")
+        self.commit_file("kiosk/models/download_models.sh", "# new sha256\n")
+        self.release("kiosk-v0.2.0")
+        with self.assertRaises(PowerCut):
+            kiosk_updater.update_on_boot(self.kiosk_dir, run_step=FakeSteps(cut_power_at="models"))
+        git(self.origin, "tag", "-f", "kiosk-stable", "kiosk-v0.1.0")
+        self.steps.fail.add("models")
+        self.assertEqual(self.update(), "rolled-back")
+        (self.kiosk_dir / "main.py").write_text("site hotfix\n")
+
+        self.assertEqual(self.update(), "dirty")
+        self.assertEqual((self.kiosk_dir / "main.py").read_text(), "site hotfix\n")
+
 
 class RunCommandTests(unittest.TestCase):
     def test_timeout_kills_the_step_and_everything_it_started(self):
