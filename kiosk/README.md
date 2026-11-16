@@ -468,8 +468,8 @@ tail -f /tmp/kiosk_autostart.log
 - **บูตด้วยเวอร์ชันเดิมเสมอเมื่อมีปัญหา:**
   - ไม่มีเน็ตหรือ fetch ไม่ได้ภายใน 20 วินาที (`offline`)
   - มีไฟล์ tracked ที่แก้ค้างบนตู้ (`dirty`) หรือมี commit บนตู้ที่ยังไม่อยู่บน `origin/main` (`diverged`) ตู้นี้จะไม่อัปเดตจนกว่าจะมีคนเข้าไปจัดการ ให้ดู log ข้างล่าง
-  - ขั้นติดตั้งล้ม, error หรือ timeout (`rolled-back`) จะ checkout กลับ commit เดิม, ติดตั้ง package ตาม `pip freeze` ที่เก็บไว้ก่อนอัปเดต (คืนเวอร์ชันเดิมของ package ที่มีอยู่ก่อน ส่วน package ใหม่ที่ release เพิ่มจะยังอยู่) และรันสคริปต์โมเดลของเวอร์ชันเดิม ถ้าการย้อนกลับเองไม่สำเร็จ (เช่นเน็ตหลุด) จะเก็บ snapshot ไว้แล้วลองใหม่ตอนบูตครั้งถัดไป ถ้าระหว่างนั้น maintainer ย้าย `kiosk-stable` กลับไปเวอร์ชันเดิม ตู้จะคืน package จาก snapshot ให้ (`restored`)
-- **ไฟดับระหว่างอัปเดต:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะ checkout ให้ครบและรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม ทำแบบนี้แม้บูตตอนไม่มีเน็ต ไฟล์ที่ checkout ทับได้มีแค่ไฟล์ที่ release นั้นเปลี่ยน ถ้ามีคนแก้ไฟล์อื่นไว้หรือ commit บนตู้ จะยังได้ `dirty` / `diverged` เหมือนเดิม
+  - ขั้นติดตั้งล้ม, error หรือ timeout (`rolled-back`) จะ checkout กลับ commit เดิม, ติดตั้ง package ตาม `pip freeze` ที่เก็บไว้ก่อนอัปเดต (คืนเวอร์ชันเดิมของ package ที่มีอยู่ก่อน ส่วน package ใหม่ที่ release เพิ่มจะยังอยู่) และรันสคริปต์โมเดลของเวอร์ชันเดิม ถ้าการย้อนกลับเองไม่สำเร็จ (เช่นเน็ตหลุด) โค้ดจะกลับเป็นเวอร์ชันเดิมแล้วแต่ package อาจยังปนอยู่ ตู้จะเก็บ snapshot ไว้ บูตครั้งถัดไปจะลองอัปเดต release เดิมอีกครั้ง ถ้าต้องการให้ตู้ถอยกลับแทน ให้ maintainer ย้าย `kiosk-stable` กลับไปเวอร์ชันเดิม ตู้จะย้อนทุกขั้นที่ release นั้นเคยรันให้ (`restored`)
+- **ไฟดับระหว่างอัปเดต:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะ checkout ให้ครบและรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม ทำแบบนี้แม้บูตตอนไม่มีเน็ต ไฟล์ tracked ที่แก้ค้างจะถูกทับได้เฉพาะไฟล์ที่ release นั้นเปลี่ยน ถ้ามีคนแก้ไฟล์อื่นไว้หรือ commit บนตู้ จะยังได้ `dirty` / `diverged` เหมือนเดิม (ข้อควรระวัง: ตอนทำต่อ checkout ใช้ `-f` จึงทับไฟล์ untracked ที่ release เริ่ม track ด้วย)
 - `main.py` ที่ restart ใน supervisor loop ไม่เรียก updater จึงไม่มีการอัปเดตระหว่างที่มีคนใช้งานตู้
 - ผลลัพธ์ทุกครั้งอยู่ที่ `~/.local/state/smart-shelter-kiosk/updater.log` (อยู่ข้าม reboot) และใน `/tmp/kiosk_autostart.log` บรรทัดที่ขึ้นต้นด้วย `[kiosk-updater]`
 
@@ -516,9 +516,10 @@ git push -f origin kiosk-stable
 5. HEAD ต้องอยู่บน `origin/main` ไม่งั้น → `diverged` (มีคน commit บนตู้)
 6. มีไฟล์ tracked ที่ถูกแก้ → `dirty` ยกเว้นตอน resume ที่ไฟล์นั้นอยู่ในชุดที่ checkout รอบก่อนกำลังเขียน
 7. เขียน marker `"<base>\n<target>\n"` แบบ atomic (เขียนไฟล์ tmp, fsync, แล้ว `os.replace`) **ก่อน** checkout
-8. `git checkout -B main <target>` (ใส่ `-f` เฉพาะตอน resume) ถ้า git ไม่ยอมทับไฟล์ untracked → ลบ marker แล้วคืน `dirty`
+8. `git checkout -B main <target>` (ตอน resume จะลบ `.git/index.lock` ที่ค้างจากไฟดับก่อน และใส่ `-f`) ถ้า git ไม่ยอมทับไฟล์ untracked → ลบ marker แล้วคืน `dirty` ถ้าล้มด้วยเหตุอื่น จะเก็บ marker ไว้ให้บูตครั้งถัดไปทำต่อ
 9. รันขั้นติดตั้งที่จำเป็น (`_steps_between`) ถ้าขั้นไหนล้ม → checkout กลับ base แล้วรันขั้น undo (`UNDO_STEP`)
-10. สำเร็จทั้งหมด → ลบ snapshot แล้วค่อยลบ marker (`_finish`) ถ้า undo ล้ม จะเก็บทั้งสองไว้ให้บูตครั้งถัดไปทำต่อ
+10. ตอน rollback เมื่อ checkout กลับ base สำเร็จ จะเขียนบรรทัด `undo` ต่อท้าย marker (บอกว่า tree กลับเป็น base แล้ว ไม่มีไฟล์ไหนเป็นของ updater อีก) และขั้น undo ได้งบเวลาใหม่ของตัวเอง
+11. สำเร็จทั้งหมด → ลบ snapshot แล้วค่อยลบ marker (`_finish`) ถ้า undo ล้ม จะเก็บทั้งสองไว้ บูตครั้งถัดไปจะลองอัปเดต release เดิมอีกครั้ง หรือถ้า tag ถูกย้ายกลับมาที่ base ก็ย้อนทุกขั้นที่ release นั้นรันให้ (`_restore`)
 
 **ผลลัพธ์ (outcome) ที่เขียนลง log**
 
@@ -531,8 +532,8 @@ git push -f origin kiosk-stable
 | `diverged` | มี commit บนตู้ที่ยังไม่อยู่บน `origin/main` | ไม่เปลี่ยน |
 | `dirty` | มีไฟล์ tracked ถูกแก้ หรือ release จะทับไฟล์ untracked | ไม่เปลี่ยน |
 | `updated` | ย้ายไปเวอร์ชันใหม่และติดตั้งครบ | เปลี่ยน → re-exec |
-| `rolled-back` | ขั้นติดตั้งล้ม ย้อนกลับเวอร์ชันเดิมแล้ว | กลับเป็นเดิม |
-| `restored` | tag ถูกย้ายกลับระหว่างที่ rollback ยังไม่เสร็จ คืน package จาก snapshot แล้ว | เวอร์ชันเดิม |
+| `rolled-back` | ขั้นติดตั้งล้ม ย้อนกลับเวอร์ชันเดิมแล้ว (ถ้า undo ล้ม package อาจยังปนอยู่ และ marker ถูกเก็บไว้) | กลับเป็นเดิม |
+| `restored` | tag ถูกย้ายกลับมาที่ base ระหว่างที่งานค้าง ย้อนทุกขั้นที่ release นั้นรันแล้ว | เวอร์ชันเดิม |
 | `skipped: …` | error ที่ไม่คาดไว้ (`main()` จับไว้) ตู้บูตต่อตามปกติ | ตามจริง |
 
 **สิ่งที่ห้ามพังเวลาแก้โค้ดส่วนนี้**
@@ -540,7 +541,7 @@ git push -f origin kiosk-stable
 - **ตู้ต้องบูตได้เสมอ:** `main()` ห้าม raise และต้องคืน `10` ก็ต่อเมื่อ HEAD เปลี่ยนจริง (ไม่ใช่ดูจาก outcome) เพราะ bash อ่าน `start_kiosk.sh` ทีละส่วนระหว่างรัน ถ้าไฟล์ถูกเปลี่ยนแล้วไม่ re-exec จะรันคำสั่งครึ่ง ๆ กลาง ๆ
 - **ทุกจุดต้องทนไฟดับ:** เขียน state ผ่าน `_write_atomic` เท่านั้น และเขียน marker ก่อนแตะ working tree หรือ venv ทุกครั้ง
 - **ห้ามทับงานของคน:** การเช็ก `dirty` / `diverged` ต้องมาก่อน checkout เสมอ รวมถึงตอน resume
-- **ขั้นติดตั้งต้องรันผ่าน `run_command`:** เพื่อให้มี timeout (600 วินาทีต่อขั้น และรวม 1200 วินาทีจาก `BOOT_BUDGET`) และถูก kill ทั้ง process group
+- **ขั้นติดตั้งต้องรันผ่าน `run_command`:** เพื่อให้มี timeout (600 วินาทีต่อขั้น และรวม 1200 วินาทีจาก `BOOT_BUDGET` ส่วน rollback ได้งบใหม่อีกเท่ากัน) และถูก kill ทั้ง process group ยกเว้น `pip freeze` ที่ใช้ `subprocess.run` พร้อม timeout เพราะต้องเก็บ output
 - **`main.py` ที่ restart ในลูปห้ามเรียก updater:** อัปเดตได้เฉพาะตอนเริ่ม `start_kiosk.sh` (ตัวแปร `KIOSK_UPDATE_DONE` กันรอบ re-exec)
 
 **เพิ่มขั้นติดตั้งใหม่** (เช่น `apt` package หรือ asset อื่นที่ไม่อยู่ใน git)

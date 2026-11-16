@@ -443,6 +443,60 @@ class UpdateOnBootTests(unittest.TestCase):
         self.assertEqual(self.head(), installed)
         self.assertEqual(self.steps.calls, ["pip"])
 
+    def test_git_lock_left_by_a_power_cut_mid_checkout_does_not_strand_the_kiosk(self):
+        before = self.head()
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        git(self.device, "fetch", "-q", "origin", "+refs/tags/kiosk-stable:refs/tags/kiosk-stable")
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        state.mkdir()
+        (state / "pending").write_text(f"{before}\n{new}\n")
+        (self.device / ".git" / "index.lock").write_text("")
+        (self.kiosk_dir / "main.py").unlink()
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual((self.kiosk_dir / "main.py").read_text(), "v2\n")
+
+    def test_checkout_that_fails_for_another_reason_keeps_the_marker(self):
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        (self.device / ".git" / "index.lock").write_text("")
+
+        self.assertEqual(self.update(), "dirty")
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+
+    def test_hotfix_after_an_unfinished_rollback_is_not_overwritten(self):
+        self.commit_file("kiosk/main.py", "v2\n")
+        self.leave_a_stale_marker()
+        (self.kiosk_dir / "main.py").write_text("site hotfix\n")
+
+        self.assertEqual(self.update(), "dirty")
+        self.assertEqual((self.kiosk_dir / "main.py").read_text(), "site hotfix\n")
+
+    def test_reverting_the_tag_after_a_power_cut_undoes_every_step_the_release_ran(self):
+        self.commit_file("kiosk/models/download_models.sh", "# new sha256\n")
+        self.release("kiosk-v0.2.0")
+        with self.assertRaises(PowerCut):
+            kiosk_updater.update_on_boot(self.kiosk_dir, run_step=FakeSteps(cut_power_at="models"))
+        git(self.origin, "tag", "-f", "kiosk-stable", "kiosk-v0.1.0")
+
+        self.assertEqual(self.update(), "restored")
+        self.assertEqual(self.steps.calls, ["models"])
+
+    def test_rollback_gets_its_own_time_even_after_the_install_used_up_the_budget(self):
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        self.steps.fail.add("pip")
+        timeouts = {}
+        self.steps.on_call = lambda name: timeouts.setdefault(name, kiosk_updater._step_timeout())
+        spent = mock.patch.object(kiosk_updater, "_deadline", time.monotonic() - 1)
+        spent.start()
+        self.addCleanup(spent.stop)
+
+        self.update()
+        self.assertGreater(timeouts["pip-restore"], 60)
+
 
 class RunCommandTests(unittest.TestCase):
     def test_timeout_kills_the_step_and_everything_it_started(self):

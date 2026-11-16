@@ -39,14 +39,16 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
     if branch != RELEASE_BRANCH:
         return "disabled"
     pending = state_dir(kiosk_dir) / "pending"
-    # A pending marker ("<base>\n<target>") means the last update died part way (power cut, or a
-    # rollback that could not finish): HEAD may be the new code on half-installed packages, or a
-    # half-written checkout. Finish what it started, from the version it left.
+    # A pending marker ("<base>\n<target>\n", plus "undo" once a rollback put the tree back on
+    # base) means the last update died part way (power cut, or a rollback that could not finish):
+    # HEAD may be the new code on half-installed packages, or a half-written checkout. Finish what
+    # it started, from the version it left.
     resuming = pending.exists()
     recorded = pending.read_text().split() if resuming else []
     current = _git(kiosk_dir, "rev-parse", "HEAD")
     base = recorded[0] if recorded else current
     started = recorded[1] if len(recorded) > 1 else current
+    rolled_back = "undo" in recorded[2:]
     # The tag moves on every release, so fetch it with force (+) or git keeps the old one.
     try:
         _git(
@@ -76,7 +78,9 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
         return "diverged"
     # A hotfix made by hand on site would be lost; leave it for a person. Only the files an
     # interrupted checkout was rewriting may differ, and those are the updater's own.
-    ours = set(_git(kiosk_dir, "diff", "--name-only", base, started).splitlines()) if resuming else set()
+    # After a rollback the tree is back on base, so no file is the updater's any more.
+    rewriting = resuming and not rolled_back
+    ours = set(_git(kiosk_dir, "diff", "--name-only", base, started).splitlines()) if rewriting else set()
     modified = _git(kiosk_dir, "diff", "--name-only", "HEAD").splitlines()
     if any(path not in ours for path in modified):
         return "dirty"
@@ -86,26 +90,30 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
         # Left by an update that died after clearing its marker: it describes an older venv.
         (pending.parent / PIP_SNAPSHOT).unlink(missing_ok=True)
     elif target == base:
-        return _restore(kiosk_dir, run_step, base)
+        return _restore(kiosk_dir, run_step, base, started)
     steps = _steps_between(kiosk_dir, base, target)
     _write_atomic(pending, f"{base}\n{target}\n")
+    if resuming:
+        # A power cut mid-checkout leaves git's lock behind; nothing else runs git at boot.
+        (Path(_git(kiosk_dir, "rev-parse", "--absolute-git-dir")) / "index.lock").unlink(missing_ok=True)
     try:
         # -f only to finish the updater's own half-written checkout; otherwise git refuses to
         # overwrite an untracked file the release starts tracking.
-        _git(kiosk_dir, "checkout", "-q", *(["-f"] if resuming else []), "-B", RELEASE_BRANCH, target)
-    except subprocess.CalledProcessError:
-        pending.unlink()
+        _git(kiosk_dir, "checkout", "-q", *(["-f"] if rewriting else []), "-B", RELEASE_BRANCH, target)
+    except subprocess.CalledProcessError as error:
+        # Only a refusal before git wrote anything may drop the marker; any other failure may
+        # have left a half-written tree for the next boot to finish.
+        if not resuming and "would be overwritten" in (error.stderr or ""):
+            pending.unlink()
         return "dirty"
     attempted = []
     for step in steps:
         attempted.append(step)
         if not _try_step(run_step, step, kiosk_dir):
             _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
+            _write_atomic(pending, f"{base}\n{target}\nundo\n")
             # Undo every step the new version touched, the failed one too: it may have half-run.
-            undone = [
-                _try_step(run_step, UNDO_STEP[undo], kiosk_dir)
-                for undo in sorted(attempted, key=UNDO_ORDER.index)
-            ]
+            undone = _undo(kiosk_dir, run_step, attempted)
             # A failed undo keeps the marker and pip snapshot, so the next boot tries again from
             # the true old package set instead of freezing this mixed one.
             if all(undone):
@@ -121,13 +129,25 @@ UNDO_STEP = {"pip": "pip-restore", "playwright": "playwright", "models": "models
 UNDO_ORDER = ["pip", "playwright", "models"]
 
 
-def _restore(kiosk_dir, run_step, base):
-    # kiosk-stable went back to the version an unfinished rollback was returning to.
+def _restore(kiosk_dir, run_step, base, started):
+    # kiosk-stable went back to the version an unfinished update or rollback left: undo everything
+    # that release could have installed.
     _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
-    if (state_dir(kiosk_dir) / PIP_SNAPSHOT).exists() and not _try_step(run_step, "pip-restore", kiosk_dir):
+    steps = _steps_between(kiosk_dir, base, started)
+    if not (state_dir(kiosk_dir) / PIP_SNAPSHOT).exists() and "pip" in steps:
+        steps.remove("pip")  # no snapshot: pip never ran, so there is nothing to put back
+    if not all(_undo(kiosk_dir, run_step, steps)):
         return "rolled-back"
     _finish(kiosk_dir)
     return "restored"
+
+
+def _undo(kiosk_dir, run_step, steps):
+    global _deadline
+    # The install may have spent the whole boot budget; the rollback gets time of its own.
+    if _deadline is not None:
+        _deadline = time.monotonic() + BOOT_BUDGET
+    return [_try_step(run_step, UNDO_STEP[step], kiosk_dir) for step in sorted(steps, key=UNDO_ORDER.index)]
 
 
 def _try_step(run_step, step, kiosk_dir):
