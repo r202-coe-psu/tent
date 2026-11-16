@@ -460,9 +460,15 @@ class UpdateOnBootTests(unittest.TestCase):
     def test_checkout_that_fails_for_another_reason_keeps_the_marker(self):
         new = self.commit_file("kiosk/main.py", "v2\n")
         self.release("kiosk-v0.2.0")
-        (self.device / ".git" / "index.lock").write_text("")
+        real_git = kiosk_updater._git
 
-        self.assertEqual(self.update(), "dirty")
+        def checkout_dies(cwd, *args, **kwargs):
+            if args[0] == "checkout":
+                raise subprocess.CalledProcessError(128, ["git", *args], stderr="fatal: killed mid-write")
+            return real_git(cwd, *args, **kwargs)
+
+        with mock.patch.object(kiosk_updater, "_git", checkout_dies):
+            self.assertEqual(self.update(), "dirty")
         self.assertEqual(self.update(), "updated")
         self.assertEqual(self.head(), new)
 
@@ -551,6 +557,46 @@ class UpdateOnBootTests(unittest.TestCase):
 
         self.assertEqual(self.update(), "dirty")
         self.assertEqual((self.kiosk_dir / "main.py").read_text(), "site hotfix\n")
+
+    def test_checkout_that_cannot_write_a_file_is_not_taken_as_updated(self):
+        before = self.head()
+        self.commit_file("kiosk/sub/keep.py", "x\n")
+        self.release("kiosk-v0.1.1")
+        self.update()
+        before = self.head()
+        new = self.commit_file("kiosk/sub/new.py", "new\n")
+        self.release("kiosk-v0.2.0")
+        sub = self.kiosk_dir / "sub"
+        sub.chmod(0o555)  # stands in for a full SD card or an I/O error
+        self.addCleanup(sub.chmod, 0o755)
+
+        self.assertEqual(self.update(), "dirty")
+        self.assertEqual(self.head(), before)
+        sub.chmod(0o755)
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+        self.assertTrue((sub / "new.py").exists())
+
+    def test_ref_lock_from_a_power_cut_during_fetch_does_not_look_offline_forever(self):
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        (self.device / ".git" / "refs" / "tags" / "kiosk-stable.lock").write_text("")
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+
+    def test_release_that_tracks_an_ignored_local_file_does_not_overwrite_it(self):
+        self.commit_file(".gitignore", ".env\n")
+        self.release("kiosk-v0.1.1")
+        self.update()
+        (self.kiosk_dir / ".env").write_text("DEVICE_SECRET=kiosk1\n")
+        (self.origin / "kiosk" / ".env").write_text("DEVICE_SECRET=example\n")
+        git(self.origin, "add", "-f", "kiosk/.env")
+        git(self.origin, "commit", "-q", "-m", "track .env")
+        self.release("kiosk-v0.2.0")
+
+        self.assertEqual(self.update(), "dirty")
+        self.assertEqual((self.kiosk_dir / ".env").read_text(), "DEVICE_SECRET=kiosk1\n")
 
 
 class RunCommandTests(unittest.TestCase):

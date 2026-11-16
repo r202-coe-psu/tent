@@ -49,11 +49,17 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
     base = recorded[0] if recorded else current
     started = recorded[1] if len(recorded) > 1 else current
     rolled_back = "undo" in recorded[2:]
-    if resuming:
-        # A power cut mid-checkout leaves git's locks behind; nothing else runs git at boot.
-        git_dir = Path(_git(kiosk_dir, "rev-parse", "--absolute-git-dir"))
-        for lock in ("index.lock", "HEAD.lock", f"refs/heads/{RELEASE_BRANCH}.lock"):
-            (git_dir / lock).unlink(missing_ok=True)
+    # A power cut mid-fetch or mid-checkout leaves git's locks behind and every later git command
+    # fails on them; nothing else runs git at boot.
+    git_dir = Path(_git(kiosk_dir, "rev-parse", "--absolute-git-dir"))
+    for lock in (
+        "index.lock",
+        "HEAD.lock",
+        f"refs/heads/{RELEASE_BRANCH}.lock",
+        f"refs/tags/{STABLE_TAG}.lock",
+        f"refs/remotes/{remote}/{RELEASE_BRANCH}.lock",
+    ):
+        (git_dir / lock).unlink(missing_ok=True)
     # The tag moves on every release, so fetch it with force (+) or git keeps the old one.
     try:
         _git(
@@ -97,6 +103,12 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
         (pending.parent / PIP_SNAPSHOT).unlink(missing_ok=True)
     elif target == base:
         return _restore(kiosk_dir, run_step, base, started)
+    # Git overwrites an ignored file (a device's .env, say) without asking when a release starts
+    # tracking that path; refuse like a hand edit.
+    top = Path(git_dir).parent
+    added = _git(kiosk_dir, "diff", "--no-renames", "--name-only", "--diff-filter=A", "HEAD", target).splitlines()
+    if any((top / path).exists() and path not in ours for path in added):
+        return "dirty"
     steps = _steps_between(kiosk_dir, base, target)
     _write_atomic(pending, f"{base}\n{target}\n")
     try:
@@ -109,11 +121,20 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
         if not resuming and "would be overwritten" in (error.stderr or ""):
             pending.unlink()
         return "dirty"
+    if _tree_differs(kiosk_dir):
+        # Git exits 0 after "unable to create file" (full SD card, I/O error): go back to base.
+        # If that checkout is whole too, nothing changed; otherwise the next boot finishes it.
+        _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
+        if not _tree_differs(kiosk_dir):
+            _finish(kiosk_dir)
+        return "dirty"
     attempted = []
     for step in steps:
         attempted.append(step)
         if not _try_step(run_step, step, kiosk_dir):
             _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
+            if _tree_differs(kiosk_dir):  # the next boot finishes this checkout
+                return "rolled-back"
             _write_atomic(pending, f"{base}\n{target}\nundo\n")
             # Undo every step the new version touched, the failed one too: it may have half-run.
             undone = _undo(kiosk_dir, run_step, attempted)
@@ -136,6 +157,8 @@ def _restore(kiosk_dir, run_step, base, started):
     # kiosk-stable went back to the version an unfinished update or rollback left: undo everything
     # that release could have installed.
     _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
+    if _tree_differs(kiosk_dir):  # the next boot finishes this checkout
+        return "rolled-back"
     _write_atomic(state_dir(kiosk_dir) / "pending", f"{base}\n{started}\nundo\n")
     steps = _steps_between(kiosk_dir, base, started)
     if not (state_dir(kiosk_dir) / PIP_SNAPSHOT).exists() and "pip" in steps:
@@ -144,6 +167,10 @@ def _restore(kiosk_dir, run_step, base, started):
         return "rolled-back"
     _finish(kiosk_dir)
     return "restored"
+
+
+def _tree_differs(kiosk_dir):
+    return bool(_git(kiosk_dir, "diff", "--no-renames", "--name-only", "HEAD"))
 
 
 def _undo(kiosk_dir, run_step, steps):
