@@ -51,6 +51,23 @@ describe('POST /api/v1/kiosk/thaid/session/cancel', () => {
 		expect((await response.json()).error.code).toBe('DEVICE_AUTH_FAILED');
 	});
 
+	it('answers 403 KIOSK_CLOSED for a device whose service is closed and cancels nothing', async () => {
+		const session = createKioskCheckInSession({ device_id: 'kiosk-a', shelter_code: 'SH001' });
+		mockAuthenticate.mockResolvedValueOnce({
+			registry_id: 'kiosk-a',
+			shelter_code: 'SH001',
+			service_open: false
+		} as never);
+
+		const response = await POST(event({ session_id: session.id }));
+
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(response.headers.get('pragma')).toBe('no-cache');
+		expect((await response.json()).error.code).toBe('KIOSK_CLOSED');
+		expect(getKioskSessionForDevice(session.id, 'kiosk-a')?.status).toBe('pending');
+	});
+
 	it('returns 400 INVALID_INPUT for a malformed session_id', async () => {
 		const response = await POST(event({ session_id: 'nope' }));
 

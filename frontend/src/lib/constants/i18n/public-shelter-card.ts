@@ -33,7 +33,12 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		privateArea: 'พื้นที่เอกชน',
 		other: 'อื่นๆ',
 		unspecified: 'ไม่ระบุ',
-		selectedShelter: 'ศูนย์ที่เลือก'
+		selectedShelter: 'ศูนย์ที่เลือก',
+		// CR-252 FR-21: constant string in place of capacity numbers for an external shelter
+		contactAtShelter: 'ติดต่อ ณ ศูนย์พักพิง',
+		externalLink: 'ไปยังระบบต้นทาง',
+		externalLinkNewTab: '(เปิดในแท็บใหม่)',
+		statusUnknown: 'ไม่ทราบสถานะ'
 	},
 	en: {
 		districtPrefix: 'Dist.',
@@ -69,6 +74,10 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		privateArea: 'Private Area',
 		other: 'Other',
 		unspecified: 'Unspecified',
-		selectedShelter: 'Selected Shelter'
+		selectedShelter: 'Selected Shelter',
+		contactAtShelter: 'Contact the shelter',
+		externalLink: 'Open source system',
+		externalLinkNewTab: '(opens in a new tab)',
+		statusUnknown: 'Status unknown'
 	}
 } as const;

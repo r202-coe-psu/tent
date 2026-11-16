@@ -53,9 +53,9 @@
 		pet_general?: boolean;
 		pet_large?: boolean;
 		pet_livestock?: boolean;
-		parking_car?: boolean;
-		parking_motorcycle?: boolean;
-		parking_boat?: boolean;
+		parking_car?: boolean | string;
+		parking_motorcycle?: boolean | string;
+		parking_boat?: boolean | string;
 		utility_wifi?: boolean;
 		utility_high_ground?: boolean;
 		utility_truck_access?: boolean;
@@ -82,6 +82,7 @@
 		onClose?: () => void;
 	} = $props();
 
+	const STATUS_VALUES = ['open', 'full', 'prepare', 'closed', 'unknown'] as const;
 	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
 	const SEARCH_DEBOUNCE_MS = 300;
 
@@ -106,11 +107,16 @@
 		}))
 	);
 	let selectedType = $state<string>('');
+	// CR-252 FR-23: one status at a time, as the list API takes (URL value is lowercase).
+	let selectedStatus = $state<string>('');
 	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
 	let customDistanceDraft = $state<string>('');
 	let customDistanceError = $state(false);
 	let hideFullToggle = $state(false);
+	let parkCarChecked = $state(false);
+	let parkMotorChecked = $state(false);
+	let parkBoatChecked = $state(false);
 	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -118,6 +124,11 @@
 	let lastDistrict: string | null = null;
 
 	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
+
+	/** URL flags arrive as 'on'; direct callers may pass a boolean. */
+	function isOn(value: boolean | string | undefined): boolean {
+		return value === true || value === 'on';
+	}
 
 	function isDistancePreset(value: string): boolean {
 		return (DISTANCE_PRESETS as readonly string[]).includes(value);
@@ -149,12 +160,16 @@
 		if (selectedSubdistrict) params.set('subdistrict', selectedSubdistrict);
 		if (selectedSiteKind) params.set('site_kind', selectedSiteKind);
 		if (selectedType) params.set('type', selectedType);
+		if (selectedStatus) params.set('status', selectedStatus);
 		if (userLat && userLng) {
 			params.set('user_lat', userLat);
 			params.set('user_lng', userLng);
 			if (distanceValue) params.set('distance', distanceValue);
 		}
 		if (hideFullToggle) params.set('hide_full', 'true');
+		if (parkCarChecked) params.set('parking_car', 'on');
+		if (parkMotorChecked) params.set('parking_motorcycle', 'on');
+		if (parkBoatChecked) params.set('parking_boat', 'on');
 		return params;
 	}
 
@@ -194,10 +209,14 @@
 			f.subdistrict,
 			f.site_kind,
 			f.type,
+			f.status,
 			f.distance,
 			f.user_lat,
 			f.user_lng,
-			f.hide_full
+			f.hide_full,
+			f.parking_car,
+			f.parking_motorcycle,
+			f.parking_boat
 		];
 
 		untrack(() => {
@@ -208,11 +227,16 @@
 			selectedSubdistrict = f.subdistrict ?? '';
 			selectedSiteKind = f.site_kind ?? '';
 			selectedType = f.type ?? '';
+			selectedStatus =
+				STATUS_VALUES.find((v) => v === f.status?.split(',')[0]?.toLowerCase()) ?? '';
 			const nextDistance = f.distance || '5';
 			distanceValue = nextDistance;
 			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
 			customDistanceError = false;
 			hideFullToggle = f.hide_full === true || f.hide_full === 'true';
+			parkCarChecked = isOn(f.parking_car);
+			parkMotorChecked = isOn(f.parking_motorcycle);
+			parkBoatChecked = isOn(f.parking_boat);
 
 			if (f.user_lat) userLat = f.user_lat.toString();
 			if (f.user_lng) userLng = f.user_lng.toString();
@@ -276,15 +300,27 @@
 			selectedSubdistrict,
 			selectedSiteKind,
 			selectedType,
+			selectedStatus,
 			distanceValue,
 			userLat,
 			userLng,
-			hideFullToggle
+			hideFullToggle,
+			parkCarChecked,
+			parkMotorChecked,
+			parkBoatChecked
 		];
 
 		if (hydrating) return;
 		commitFilters();
 	});
+
+	const statusOptions = $derived([
+		{ value: 'open', label: t.statusOpen },
+		{ value: 'full', label: t.statusFull },
+		{ value: 'prepare', label: t.statusPrepare },
+		{ value: 'closed', label: t.statusClosed },
+		{ value: 'unknown', label: t.statusUnknown }
+	]);
 
 	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
 
@@ -573,6 +609,29 @@
 					</Select.Root>
 				</div>
 
+				<!-- Status (CR-252 FR-23) -->
+				<div class="space-y-1.5">
+					<Label for={`${idPrefix}status`} class="text-xs font-semibold text-muted-foreground"
+						>{t.statusLabel}</Label
+					>
+					<Select.Root
+						type="single"
+						name="status"
+						bind:value={selectedStatus}
+						items={statusOptions}
+					>
+						<Select.Trigger id={`${idPrefix}status`} class="w-full rounded-xl">
+							<Select.Value placeholder={t.statusAll} />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="">{t.statusAll}</Select.Item>
+							{#each statusOptions as option (option.value)}
+								<Select.Item value={option.value}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
 				<!-- Building type -->
 				<div class="space-y-1.5">
 					<Label for={`${idPrefix}type`} class="text-xs font-semibold text-muted-foreground"
@@ -787,7 +846,7 @@
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
 													name="parking_car"
-													checked={filters.parking_car === true}
+													bind:checked={parkCarChecked}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span
@@ -798,7 +857,7 @@
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
 													name="parking_motorcycle"
-													checked={filters.parking_motorcycle === true}
+													bind:checked={parkMotorChecked}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span
@@ -809,7 +868,7 @@
 											<label class="group flex cursor-pointer items-start gap-3">
 												<Checkbox
 													name="parking_boat"
-													checked={filters.parking_boat === true}
+													bind:checked={parkBoatChecked}
 													class="mt-0.5 rounded shadow-sm"
 												/>
 												<span

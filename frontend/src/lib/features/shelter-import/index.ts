@@ -63,7 +63,7 @@ export {
 	type RowValidation,
 	type ShelterInput
 } from './domain/import-row';
-export { normalizeShelterName } from './domain/duplicates';
+export { normalizeShelterName, externalTypeChangeVerdict } from './domain/duplicates';
 export {
 	createShelterImportLog,
 	isShelterImportLog,

@@ -7,6 +7,7 @@ import {
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from '../data/kiosk-check-in.api';
+import { isKioskClosedError } from '../data/kiosk-closed';
 import { cancelKioskThaidSession } from '../data/kiosk-thaid.api';
 import { buildKioskPhotoPayload } from './kiosk-card-photo';
 import { walkInSession, type WalkInSource } from './walk-in-session.svelte';
@@ -38,6 +39,8 @@ export type WalkInCardRegistrationOutcome =
 	| { kind: 'consent_expired'; message: string }
 	/** ThaiD only: consent and the 180 s scan session both expired, so only a new scan goes on. */
 	| { kind: 'thaid_restart'; message: string }
+	/** An admin closed the kiosk: end the walk-in and show the closed page (no retry, no message). */
+	| { kind: 'closed' }
 	| { kind: 'error'; message: string };
 
 function isPhoneDuplicate(cause: unknown): cause is KioskRequestError {
@@ -117,6 +120,7 @@ export async function registerWalkInCardRead(
 			registration: await register(card, session.consentDecision, session.startedAt ?? null)
 		};
 	} catch (cause) {
+		if (isKioskClosedError(cause)) return { kind: 'closed' };
 		if (isPhoneDuplicate(cause)) {
 			return { kind: 'phone_duplicate', message: codedMessage(cause, language) };
 		}
@@ -170,6 +174,7 @@ export async function submitWalkInThaid(
 		);
 		return { kind: 'registered', registration };
 	} catch (cause) {
+		if (isKioskClosedError(cause)) return { kind: 'closed' };
 		if (isPhoneDuplicate(cause)) {
 			return { kind: 'phone_duplicate', message: codedMessage(cause, language) };
 		}

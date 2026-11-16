@@ -39,7 +39,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		await request.json().catch(() => ({}));
 		const principal = await authenticateScannerDevice(deviceId, secret, scannerServerRepository);
 		const shelter = await findMasterByCode(principal.shelter_code);
-		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id);
+		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
 		return json(
 			{
 				device: toBootstrapDevice(

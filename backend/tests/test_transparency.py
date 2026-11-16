@@ -17,6 +17,7 @@ async def _insert_shelter(
     updated_at: datetime | None = None,
     occupancy_by_status: dict[str, int] | None = None,
     is_active: bool = True,
+    is_external: bool = False,
 ) -> None:
     db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
     await db_client[db_name]["public_shelters"].insert_one(
@@ -26,6 +27,7 @@ async def _insert_shelter(
             "name": f"ศูนย์ {code}",
             "status": status,
             "is_active": is_active,
+            "is_external": is_external,
             "capacity": 100,
             **({} if occupancy_by_status is None else {"occupancy_by_status": occupancy_by_status}),
             "updated_at": updated_at or datetime.now(UTC),
@@ -187,3 +189,17 @@ async def test_transparency_occupancy_falls_back_to_persons_before_reprojection(
     response = await client.get("/public/v1/transparency/summary", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["summary"]["occupancy_total"] == 3
+
+
+async def test_transparency_summary_excludes_external_shelters(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """CR-252 FR-16: external shelters are not counted in the totals."""
+    await _insert_shelter(db_client, settings, code="SH001", status="open")
+    await _insert_shelter(db_client, settings, code="SH002", status="unknown", is_external=True)
+
+    body = (await client.get("/public/v1/transparency/summary", headers=auth_headers)).json()
+    assert body["summary"]["shelters_total"] == 1

@@ -3,7 +3,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import {
-		DONATION_REJECT_REASON_CODES,
+		DONATION_REJECT_REASON_SELECTABLE_CODES,
 		DONATION_REJECT_REASON_LABELS,
 		REJECT_NOTE_MAX,
 		donorRejectMessage,
@@ -40,10 +40,13 @@
 		aria-label="เหตุผลที่ไม่รับ"
 		class="grid grid-cols-1 gap-2 sm:grid-cols-2"
 	>
-		{#each DONATION_REJECT_REASON_CODES as option (option)}
+		{#each DONATION_REJECT_REASON_SELECTABLE_CODES as option (option)}
 			<Label
 				for="{idPrefix}-code-{option}"
-				class="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium"
+				class="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium {option ===
+				'other'
+					? 'sm:col-span-2'
+					: ''}"
 			>
 				<RadioGroup.Item id="{idPrefix}-code-{option}" value={option} />
 				{DONATION_REJECT_REASON_LABELS[option]}

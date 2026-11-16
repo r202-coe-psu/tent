@@ -159,7 +159,15 @@ ID ระดับ CR (`FR-77-x`) — ใช้ตรวจรับงานข
 > [NEEDS DECISION: D-IMP-LEGACY] การรองรับหัวคอลัมน์รุ่นเก่าใน parser จะคงไว้ถึงเมื่อไร (มีวันหมดอายุ
 > หรือถือเป็นพฤติกรรมถาวร)
 
+## Amendment — CR-252 (2026-11-12)
+
+> [CR-252](CR-252-external-shelter.md) (approved, #1242) amends this CR's import contract (FR-27..31 there). ไม่เปลี่ยนความหมายของ requirement เดิม — เพิ่มเท่านั้น; ไฟล์เก่าที่ไม่มีคอลัมน์ใหม่ยังนำเข้าได้เหมือนเดิม.
+> - ชีต `ข้อมูลศูนย์` เพิ่ม 2 คอลัมน์: "ศูนย์จากระบบภายนอก" (ใช่/ไม่ใช่, ว่าง = ไม่ใช่) และ "ลิงก์ศูนย์ภายนอก" (https เท่านั้น); `lists` เพิ่ม dropdown ใช่/ไม่ใช่, ชีต "คำแนะนำ" อธิบายกฎ, template ตัวอย่างมีแถว External
+> - แถว External: ไม่บังคับ `capacity`; คอลัมน์สถานะต้องว่าง (ระบบใส่ `unknown`); มีข้อมูลในชีตโซน / จุดแจกอาหาร / สิ่งอำนวยความสะดวก / สาธารณูปโภคและความเสี่ยง / นโยบาย = `validation_error`
+> - `duplicateAction=update` ที่ทำให้ชนิดเปลี่ยน (External ↔ ปกติ) = `validation_error` "เปลี่ยนชนิดไม่ได้" — บังคับทั้ง preview และ worker
+
 ## Decision log
 
 - 2026-08-15 — proposed (ร่างจาก branch `refactor-import-shelter-excel`; ยังมี 5 ข้อรอเคาะ)
 - 2026-08-21 — approved (project owner อนุมัติสเปก CR-077)
+- 2026-11-12 — amended โดย [CR-252](CR-252-external-shelter.md) (external shelter columns + validation; approved)

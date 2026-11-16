@@ -60,6 +60,8 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		if (!body.success) error(400, { message: 'confirm_text is required' });
 
 		const shelter = await requireShelter(code);
+		// CR-252: External shelters have no stays/occupancy; closing would hide them wrongly.
+		if (shelter.is_external) error(409, { message: 'ศูนย์จากระบบภายนอกปิดศูนย์ไม่ได้' });
 		// FR-8: never trust the client's modal — re-check the typed phrase here.
 		if (!matchesShelterCloseConfirm(body.data.confirm_text, shelter.code, shelter.name)) {
 			error(400, { message: 'ข้อความยืนยันไม่ตรงกับรหัสและชื่อศูนย์' });

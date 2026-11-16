@@ -3,6 +3,9 @@ import { migrateVulnerableGroupCodes } from '$lib/features/people/server';
 
 // ===== Enums (CR-008) =====
 
+// CR-252 FR-3: `unknown` = an external shelter whose real status this system does not know.
+// Never shown as open or closed.
+
 // `cancelled` (draft-shelter-cancelled-status.md): set up by mistake / never opened — hidden
 // from the whole public plane, unlike `closed`. Reversible: any other status re-lists it.
 export const operationStatusSchema = z.enum([
@@ -10,7 +13,8 @@ export const operationStatusSchema = z.enum([
 	'active',
 	'full_capacity',
 	'closed',
-	'cancelled'
+	'cancelled',
+	'unknown'
 ]);
 export type OperationStatus = z.infer<typeof operationStatusSchema>;
 
@@ -109,6 +113,67 @@ export function isShelterBookable(doc: unknown): boolean {
 	if (status === 'closed' || status === 'cancelled') return false;
 	if (!isShelterPublicVisible(doc)) return false;
 	return readFlag(doc, 'accepts_pre_registration') === true;
+}
+
+/** CR-252 FR-3: label of `operation_status = unknown`. */
+export const UNKNOWN_STATUS_LABEL = 'ไม่ทราบสถานะ';
+
+/** CR-252: a shelter run in another system (`is_external`); a doc without the flag reads as `false`. */
+export function isExternalShelter(doc: unknown): boolean {
+	return (
+		typeof doc === 'object' &&
+		doc !== null &&
+		(doc as { is_external?: unknown }).is_external === true
+	);
+}
+
+/** CR-252 FR-18: the operational view of a shelter list — external shelters left out. */
+export function withoutExternalShelters<T>(shelters: readonly T[]): T[] {
+	return shelters.filter((s) => !isExternalShelter(s));
+}
+
+export interface ExternalInvariantInput {
+	is_external?: boolean | null;
+	operation_status?: string | null;
+	capacity?: number | null;
+}
+
+export interface ExternalInvariantIssue {
+	path: 'operation_status' | 'capacity';
+	message: string;
+}
+
+/**
+ * CR-252 FR-4/5/6 on the fields that were actually supplied (`undefined` = not sent, not checked).
+ * External: status `unknown`, or `cancelled` (the system_admin takedown, FR-4; the role is checked by
+ * the BFF). Non-external: `unknown` is rejected (FR-5), capacity is required (FR-6).
+ * Shared by the Zod schema and the BFF PATCH, which checks only what the body sent.
+ */
+export function externalInvariantIssues(
+	input: ExternalInvariantInput,
+	opts: { requireCapacity?: boolean } = {}
+): ExternalInvariantIssue[] {
+	const issues: ExternalInvariantIssue[] = [];
+	const status = input.operation_status;
+	if (input.is_external === true) {
+		if (status !== undefined && status !== null && status !== 'unknown' && status !== 'cancelled') {
+			issues.push({
+				path: 'operation_status',
+				message: 'ศูนย์จากระบบภายนอกต้องมีสถานะ "ไม่ทราบสถานะ"'
+			});
+		}
+	} else if (input.is_external === false) {
+		if (status === 'unknown') {
+			issues.push({
+				path: 'operation_status',
+				message: 'ศูนย์ปกติเลือกสถานะ "ไม่ทราบสถานะ" ไม่ได้'
+			});
+		}
+		if (opts.requireCapacity && (input.capacity === undefined || input.capacity === null)) {
+			issues.push({ path: 'capacity', message: 'กรุณาระบุความจุสูงสุด' });
+		}
+	}
+	return issues;
 }
 
 export const zoneTypeSchema = z.enum([
@@ -505,6 +570,57 @@ export const parkingPolicySchema = z.object({
 });
 export type ParkingPolicy = z.infer<typeof parkingPolicySchema>;
 
+/**
+ * Named parking pin (#1352, CR-253). Same shape as a food point (FR-7) plus the vehicle types and
+ * capacity this point takes (FR-5); a type may appear once per point (FR-6).
+ */
+export const parkingPointSchema = foodDistributionPointSchema
+	.extend({
+		name: z.string().trim().min(1, { message: 'กรุณาระบุชื่อที่จอดรถ' }),
+		vehicles: z.array(supportedVehicleSchema).optional().default([])
+	})
+	.superRefine((point, ctx) => {
+		const seen = new Set<string>();
+		point.vehicles.forEach((v, i) => {
+			if (seen.has(v.type)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['vehicles', i, 'type'],
+					message: 'ประเภทรถซ้ำในจุดเดียวกัน'
+				});
+			}
+			seen.add(v.type);
+		});
+	});
+export type ParkingPoint = z.infer<typeof parkingPointSchema>;
+
+/**
+ * Vehicle types and capacity a shelter really offers (CR-253 FR-9..FR-11), computed on read.
+ * Parking points win once any point names a vehicle (capacity = sum of `max_capacity`, nulls
+ * skipped, all-null stays null); otherwise the legacy `parking_policy.supported_vehicles`.
+ * `availability = 'none'` means no parking at all (FR-11) — the saved points are kept.
+ */
+export function effectiveParkingVehicles(
+	master: Pick<ShelterMaster, 'parking_points' | 'parking_policy'>
+): SupportedVehicle[] {
+	if (master.parking_policy?.availability === 'none') return [];
+	const points = master.parking_points ?? [];
+	if (!points.some((p) => (p.vehicles ?? []).length > 0)) {
+		return master.parking_policy?.supported_vehicles ?? [];
+	}
+	const totals = new Map<VehicleType, number | null>();
+	for (const p of points) {
+		for (const v of p.vehicles ?? []) {
+			const cur = totals.get(v.type) ?? null;
+			const add = v.max_capacity ?? null;
+			totals.set(v.type, add === null ? cur : (cur ?? 0) + add);
+		}
+	}
+	return vehicleTypeSchema.options
+		.filter((t) => totals.has(t))
+		.map((t) => ({ type: t, max_capacity: totals.get(t) ?? null }));
+}
+
 // ===== Feature Flags (CR-016, CR-052, CR-106, draft kiosk phone toggle) =====
 
 export const shelterFeatureFlagsSchema = z.object({
@@ -538,10 +654,30 @@ export const DEFAULT_SHELTER_FEATURE_FLAGS: ShelterFeatureFlags = {
 
 // ===== Main shelter schemas (CR-008 + CR-023 v4/v4.1) =====
 
-export const shelterSchema = z.object({
+/** CR-252 FR-2: only `https://`; blank / whitespace-only becomes `null` before validation. */
+export const externalUrlSchema = z.preprocess(
+	(v) => (typeof v === 'string' ? v.trim() || null : v),
+	z
+		.string()
+		.max(2048, 'ลิงก์ยาวเกินไป')
+		.refine((v) => {
+			if (!/^https:\/\//i.test(v)) return false;
+			try {
+				return new URL(v).protocol === 'https:';
+			} catch {
+				return false;
+			}
+		}, 'ลิงก์ต้องขึ้นต้นด้วย https://')
+		.nullable()
+);
+
+export const shelterBaseSchema = z.object({
 	name: z.string().trim().min(1, 'ชื่อศูนย์พักพิงต้องไม่ว่าง'),
 	site_kind: siteKindSchema,
 	operation_status: operationStatusSchema.default('standby'),
+	// CR-252 FR-1/2/8/9: set at creation by system_admin only, immutable afterwards (BFF).
+	is_external: z.boolean().default(false),
+	external_url: externalUrlSchema.optional().default(null),
 	// code จาก master_data:shelter_type (CR-023 FR-23-0a) — persist string code
 	shelter_type: z.string().trim().nullish(),
 	floor_count: z.coerce
@@ -562,10 +698,17 @@ export const shelterSchema = z.object({
 	province: z.string().trim().nullish(),
 	postal_code: z.string().trim().nullish(),
 	key_personnel: keyPersonnelSchema.nullish(),
-	capacity: z.coerce
-		.number({ error: 'กรุณาระบุความจุสูงสุด' })
-		.int('ความจุสูงสุดต้องเป็นจำนวนเต็ม')
-		.positive('ความจุสูงสุดต้องมากกว่า 0'),
+	capacity: z.preprocess(
+		// A cleared number input arrives as '' / null; `z.coerce.number` would turn that into 0
+		// and fail `positive` for an External shelter that left capacity blank.
+		(v) => (v === '' || v === null ? undefined : v),
+		z.coerce
+			.number({ error: 'กรุณาระบุความจุสูงสุด' })
+			.int('ความจุสูงสุดต้องเป็นจำนวนเต็ม')
+			.positive('ความจุสูงสุดต้องมากกว่า 0')
+			// CR-252 FR-6: optional here; `refineExternalInvariants` requires it for a non-external shelter.
+			.optional()
+	),
 	area_m2: z.coerce.number().min(0).nullish(),
 	area_type: areaTypeSchema.nullish(),
 	facilities: facilitiesSchema,
@@ -575,6 +718,8 @@ export const shelterSchema = z.object({
 	zones: z.array(zoneSchema),
 	// CR-128 — named food distribution points (staff-only, optional coords)
 	food_distribution_points: z.array(foodDistributionPointSchema).optional().default([]),
+	// #1352 — named parking pins (staff-only, optional coords)
+	parking_points: z.array(parkingPointSchema).optional().default([]),
 	admission_policy: admissionPolicySchema
 		.optional()
 		.default({ supported_vulnerable_groups: [], pet_policy: { policy: null, categories: [] } }),
@@ -589,6 +734,18 @@ export const shelterSchema = z.object({
 	// `.optional()` — `.nullish().default(null)` would make `.partial()` reset it on every edit.
 	closed_at: z.string().datetime().nullable().optional()
 });
+
+/** CR-252 FR-4/5/6 as a Zod refinement; reapply it after `.extend()` (a refined object cannot be extended). */
+export function refineExternalInvariants(
+	value: ExternalInvariantInput,
+	ctx: z.RefinementCtx
+): void {
+	for (const issue of externalInvariantIssues(value, { requireCapacity: true })) {
+		ctx.addIssue({ code: 'custom', path: [issue.path], message: issue.message });
+	}
+}
+
+export const shelterSchema = shelterBaseSchema.superRefine(refineExternalInvariants);
 export type Shelter = z.infer<typeof shelterSchema>;
 
 // ===== Server-side create (server auto-mints code) =====
@@ -597,8 +754,10 @@ export const createShelterSchema = shelterSchema;
 export type CreateShelterInput = Shelter;
 
 // ===== Server-side update (partial PATCH body) =====
+// Cross-field invariants are not in the schema: `.partial()` still fills `.default()`s, so they would
+// fire on fields the body never sent. The PATCH route checks them against the stored doc.
 
-export const updateShelterSchema = shelterSchema.partial();
+export const updateShelterSchema = shelterBaseSchema.partial();
 export type UpdateShelterInput = z.infer<typeof updateShelterSchema>;
 
 // ===== v2 → current migration helper =====
@@ -654,6 +813,8 @@ export interface ShelterMaster {
 	name: string;
 	site_kind: SiteKind;
 	operation_status?: OperationStatus;
+	is_external?: boolean;
+	external_url?: string | null;
 	shelter_type?: string | null;
 	floor_count?: number | null;
 	project_level?: ProjectLevel | null;
@@ -696,6 +857,8 @@ export interface ShelterMaster {
 	zones?: Zone[];
 	// CR-128 — named food distribution points (staff-only plane)
 	food_distribution_points?: FoodDistributionPoint[];
+	// #1352 — named parking pins (staff-only plane)
+	parking_points?: ParkingPoint[];
 	admission_policy?: AdmissionPolicy;
 	luggage_policy?: LuggagePolicy;
 	parking_policy?: ParkingPolicy;
@@ -780,7 +943,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
  * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
  * skipping docs that are behind by less than a whole major shape change.
  */
-export const SHELTER_MASTER_SCHEMA_V = 9;
+export const SHELTER_MASTER_SCHEMA_V = 11;
 
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
@@ -908,18 +1071,29 @@ function fillSubStorageDropOff(master: ShelterMaster): ShelterMaster {
 }
 
 /**
- * v8 → v9 (CR-205). Storage points get the drop-off fields; additive, no backfill script.
- * Goes through `normalizeCurrent`, which a v8 doc used to pass as the current version: it
- * also fills the `site_kind`, `food_distribution_points`, `sub_storage[].id` and
- * `types[]` a partially migrated doc can lack, and the drop-off fields with them.
+ * v8 → v9 (CR-205). Storage drop-off fields are filled by `normalizeCurrent` at the end of the
+ * chain. Stamps its own number so a v8 doc cannot skip `migrateV9ToV10`.
  */
 function migrateV8ToV9(v8: ShelterMaster): ShelterMaster {
-	return normalizeCurrent({ ...v8, schema_v: SHELTER_MASTER_SCHEMA_V });
+	return { ...v8, schema_v: 9 };
 }
 
-/** Tail of the chain: v7 → v8 → v9. */
-function migrateV7ToV9(v7: ShelterMaster): ShelterMaster {
-	return migrateV8ToV9(migrateV7ToV8(v7));
+/**
+ * v9 → v10 (CR-252 owns v10). Only stamps its own number so a v9 doc cannot skip it; when CR-252
+ * merges its field work belongs here and this stub is replaced.
+ */
+export function migrateV9ToV10(v9: ShelterMaster): ShelterMaster {
+	return { ...v9, schema_v: 10 };
+}
+
+/** v10 → v11 (CR-253). Parking points start empty; additive, no backfill script. */
+export function migrateV10ToV11(v10: ShelterMaster): ShelterMaster {
+	return normalizeCurrent({ ...v10, schema_v: SHELTER_MASTER_SCHEMA_V });
+}
+
+/** Tail of the chain: v7 → v8 → v9 → v10 → v11. */
+function migrateV7ToV11(v7: ShelterMaster): ShelterMaster {
+	return migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(migrateV7ToV8(v7))));
 }
 
 /**
@@ -938,6 +1112,8 @@ function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	if (
 		hasSiteKind &&
 		Array.isArray(master.food_distribution_points) &&
+		Array.isArray(master.parking_points) &&
+		master.parking_points.every((p) => Array.isArray(p.vehicles)) &&
 		!missingSubStorageId &&
 		!legacySubStorageType &&
 		!missingDropOffKeys
@@ -950,7 +1126,10 @@ function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	return {
 		...filled,
 		site_kind: filled.site_kind ?? DEFAULT_SITE_KIND,
-		food_distribution_points: filled.food_distribution_points ?? []
+		food_distribution_points: filled.food_distribution_points ?? [],
+		parking_points: (filled.parking_points ?? []).map((p) =>
+			Array.isArray(p.vehicles) ? p : { ...p, vehicles: [] }
+		)
 	};
 }
 
@@ -959,18 +1138,22 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
 		return normalizeCurrent(master as ShelterMaster);
 	}
-	if (master.schema_v === 8) return migrateV8ToV9(master as unknown as ShelterMaster);
-	if (master.schema_v === 7) return migrateV7ToV9(master as unknown as ShelterMaster);
+	if (master.schema_v === 10) return migrateV10ToV11(master as unknown as ShelterMaster);
+	if (master.schema_v === 9)
+		return migrateV10ToV11(migrateV9ToV10(master as unknown as ShelterMaster));
+	if (master.schema_v === 8)
+		return migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(master as unknown as ShelterMaster)));
+	if (master.schema_v === 7) return migrateV7ToV11(master as unknown as ShelterMaster);
 	if (master.schema_v === 6)
-		return migrateV7ToV9(migrateV6ToV7(master as unknown as ShelterMaster));
+		return migrateV7ToV11(migrateV6ToV7(master as unknown as ShelterMaster));
 	if (master.schema_v === 5)
-		return migrateV7ToV9(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
+		return migrateV7ToV11(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
 	if (master.schema_v === 4)
-		return migrateV7ToV9(
+		return migrateV7ToV11(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster)))
 		);
 	if (master.schema_v === 3)
-		return migrateV7ToV9(
+		return migrateV7ToV11(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster))))
 		);
 	const v2 = master as ShelterMasterV2;
@@ -1034,8 +1217,8 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	// Chain v2→v3→…→v9 so a v2 doc lands on the current shape in one call.
-	return migrateV7ToV9(
+	// Chain v2→v3→…→v10 so a v2 doc lands on the current shape in one call.
+	return migrateV7ToV11(
 		migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster))))
 	);
 }

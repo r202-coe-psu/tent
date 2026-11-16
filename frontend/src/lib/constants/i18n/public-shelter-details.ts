@@ -1,9 +1,15 @@
 export const PUBLIC_SHELTER_DETAILS_I18N = {
 	th: {
+		parkingPoints: 'จุดจอดรถ',
 		openAdmission: 'เปิดรับผู้อพยพ',
+		statusUnknown: 'ไม่ทราบสถานะ',
+		contactAtShelter: 'ติดต่อ ณ ศูนย์พักพิง',
+		externalLink: 'ไปยังระบบต้นทาง',
+		externalLinkNewTab: '(เปิดในแท็บใหม่)',
 		unnamedShelter: 'ไม่มีชื่อศูนย์',
 		addressNotSpecified: 'ไม่ระบุที่อยู่',
 		capacityLabel: 'ความจุ (ว่าง / ทั้งหมด)',
+		maxCapacityLabel: 'รองรับได้สูงสุด',
 		occupancyRate: 'อัตราครองเตียง',
 		buildingStatus: 'สถานะอาคาร',
 		navigateMaps: 'นำทางด้วย Google Maps',
@@ -98,10 +104,16 @@ export const PUBLIC_SHELTER_DETAILS_I18N = {
 		shelterDetailFallback: 'ข้อมูลศูนย์พักพิง'
 	},
 	en: {
+		parkingPoints: 'Parking',
 		openAdmission: 'Open for Admission',
+		statusUnknown: 'Status unknown',
+		contactAtShelter: 'Contact the shelter',
+		externalLink: 'Open source system',
+		externalLinkNewTab: '(opens in a new tab)',
 		unnamedShelter: 'Unnamed Shelter',
 		addressNotSpecified: 'Address Not Specified',
 		capacityLabel: 'Capacity (Available / Total)',
+		maxCapacityLabel: 'Max Capacity',
 		occupancyRate: 'Occupancy Rate',
 		buildingStatus: 'Building Status',
 		navigateMaps: 'Navigate with Google Maps',

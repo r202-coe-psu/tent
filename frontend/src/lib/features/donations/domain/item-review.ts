@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { DonationItem } from '$lib/features/operations';
 import {
 	combineLineRejectReasons,
-	donationRejectReasonCodeSchema,
+	selectableRejectReasonCodeSchema,
 	donorRejectMessage,
 	rejectNoteSchema,
 	requireNoteForOther,
@@ -72,7 +72,7 @@ export const lineReviewDecisionSchema = z
 	.object({
 		index: z.number().int().min(0),
 		decision: z.enum(['approved', 'rejected']),
-		reason_code: donationRejectReasonCodeSchema.optional(),
+		reason_code: selectableRejectReasonCodeSchema.optional(),
 		note: rejectNoteSchema.optional(),
 		drop_off_point_id: z.string().min(1).nullable().optional()
 	})

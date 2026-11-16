@@ -49,6 +49,7 @@ from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import (
     RetentionPhase,
     classify_registry_shelter,
+    is_shelter_external,
     parse_retention_months,
     project_shelter,
 )
@@ -269,6 +270,9 @@ async def list_all_shelter_codes(couch: CouchClient) -> list[str]:
     codes: list[str] = []
     async for doc in couch.iter_all_docs(REGISTRY_DB):
         if doc.get("type") != "shelter":
+            continue
+        if is_shelter_external(doc):
+            # CR-252 FR-12: no shelter DB content, so no sweep has anything to do.
             continue
         code = doc.get("code")
         if code:

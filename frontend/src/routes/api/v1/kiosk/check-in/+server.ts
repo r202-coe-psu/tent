@@ -24,6 +24,7 @@ import {
 	ScannerAuthError,
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
+import { isKioskClosed, kioskClosedResponse } from '$lib/server/scanners/kiosk-closed';
 
 export const prerender = false;
 
@@ -47,6 +48,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			request.headers.get('x-device-secret') ?? '',
 			scannerServerRepository
 		);
+		if (isKioskClosed(principal)) return kioskClosedResponse();
 		const parsed = kioskCheckInInputSchema.safeParse(await request.json().catch(() => null));
 		if (!parsed.success) {
 			return json(

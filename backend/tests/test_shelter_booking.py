@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from shelter_factory import insert_shelter
+from shelter_factory import BOOKABLE_RAW, insert_shelter
 from tent_model.public_shelter import PublicShelter
 
 from apiapp.utils.shelter_booking import (
@@ -64,14 +64,14 @@ def test_accepts_pre_registration_is_true_only_for_exact_true(raw: Any) -> None:
 @pytest.mark.parametrize("raw", [r for _, r in NOT_ACCEPTING], ids=[i for i, _ in NOT_ACCEPTING])
 @pytest.mark.parametrize("location_status", ["open", "full", "closed"])
 def test_accepts_booking_is_false_for_malformed_raw_data(raw: Any, location_status: str) -> None:
-    doc = SimpleNamespace(location_status=location_status, raw_data=raw)
+    doc = SimpleNamespace(location_status=location_status, raw_data=raw, is_external=False)
     assert accepts_booking(doc) is False  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(("location_status", "expected"), [("open", True), ("closed", False)])
 def test_accepts_booking_needs_both_conditions(location_status: str, expected: bool) -> None:
     raw = {"feature_flags": {"accepts_pre_registration": True}}
-    doc = SimpleNamespace(location_status=location_status, raw_data=raw)
+    doc = SimpleNamespace(location_status=location_status, raw_data=raw, is_external=False)
     assert accepts_booking(doc) is expected  # type: ignore[arg-type]
 
 
@@ -87,3 +87,20 @@ async def test_mongo_filter_agrees_with_helper(
     in_true = await PublicShelter.find(accepts_booking_query(True)).count()
     in_false = await PublicShelter.find(accepts_booking_query(False)).count()
     assert (in_true, in_false) == ((1, 0) if expected else (0, 1))
+
+
+# --- CR-252 FR-17: an external shelter is never bookable ----------------------------------
+
+
+@pytest.mark.parametrize("location_status", ["unknown", "open"])
+def test_accepts_booking_is_false_for_external_even_with_flag_on(location_status: str) -> None:
+    raw = {"feature_flags": {"accepts_pre_registration": True}}
+    doc = SimpleNamespace(location_status=location_status, raw_data=raw, is_external=True)
+    assert accepts_booking(doc) is False  # type: ignore[arg-type]
+
+
+async def test_mongo_filter_agrees_with_helper_for_external(client: Any) -> None:
+    doc = await insert_shelter("SH778", status="unknown", raw_data=BOOKABLE_RAW, is_external=True)
+    assert accepts_booking(doc) is False
+    assert await PublicShelter.find(accepts_booking_query(True)).count() == 0
+    assert await PublicShelter.find(accepts_booking_query(False)).count() == 1
