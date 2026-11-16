@@ -220,6 +220,52 @@ test.describe(
 			await expect(page.getByRole('img', { name: 'ใช้ความจุไป 0% (0 จาก 20 คน)' })).toBeVisible();
 		});
 
+		test('check-in without a zone asks for one in a modal, not window.prompt (#1410)', async ({
+			page
+		}) => {
+			test.setTimeout(120_000);
+			expect(shelterCode).toBeTruthy();
+			const admin = await bootstrapAdminSession();
+			await routeBrowserCouchThroughApp(page);
+			await injectSession(page, admin.user, admin.cookie);
+			await selectActiveShelter(page, shelterCode!);
+
+			let nativePrompts = 0;
+			page.on('dialog', (dialog) => {
+				nativePrompts += 1;
+				void dialog.dismiss();
+			});
+
+			await page.goto('/back-office/evacuee-management?tab=evacuee');
+			const evacueeRow = page.locator('table tbody tr').filter({ hasText: HEAD_FULL });
+			await expect(async () => {
+				await page.locator('#evacuee-search').fill(HEAD_FIRST);
+				await expect(evacueeRow).toBeVisible({ timeout: 3_000 });
+			}).toPass({ intervals: [2_000], timeout: 60_000 });
+
+			await evacueeRow.getByRole('button', { name: 'เช็คอิน', exact: true }).click();
+
+			const dialog = page.getByRole('dialog', { name: 'ระบุโซนสำหรับเช็คอิน' });
+			await expect(dialog).toBeVisible();
+			await expect(dialog).toContainText(HEAD_FULL);
+			const confirm = dialog.getByRole('button', { name: 'ยืนยันเช็คอิน' });
+			await expect(confirm).toBeDisabled();
+
+			// Cancel leaves the evacuee untouched.
+			await dialog.getByRole('button', { name: 'ยกเลิก' }).click();
+			await expect(dialog).toBeHidden();
+
+			await evacueeRow.getByRole('button', { name: 'เช็คอิน', exact: true }).click();
+			await dialog.getByRole('button', { name: 'เลือกโซน' }).click();
+			await page.getByRole('option', { name: ZONE_NAME }).click();
+			await expect(confirm).toBeEnabled();
+			await confirm.click();
+
+			await expect(page.getByText(`เช็คอิน ${HEAD_FULL} แล้ว`)).toBeVisible({ timeout: 30_000 });
+			await expect(dialog).toBeHidden();
+			expect(nativePrompts, 'no browser window.prompt/alert').toBe(0);
+		});
+
 		test('Z teardown leaves no E2E shelter from this run', async () => {
 			test.setTimeout(180_000);
 			expect(shelterCode).toBeTruthy();
