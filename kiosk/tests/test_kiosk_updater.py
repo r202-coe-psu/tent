@@ -1,5 +1,6 @@
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -26,8 +27,12 @@ class FakeSteps:
         self.cut_power_at = cut_power_at
         self.crash = set(crash)
 
+    on_call = None
+
     def __call__(self, name, kiosk_dir):
         self.calls.append(name)
+        if self.on_call:
+            self.on_call(name)
         if name == self.cut_power_at:
             raise PowerCut()
         if name in self.crash:
@@ -201,7 +206,7 @@ class UpdateOnBootTests(unittest.TestCase):
         self.release("kiosk-v0.2.0")
         self.assertEqual(run(), kiosk_updater.UPDATED_EXIT)
 
-    def test_main_never_raises_and_re_execs_if_the_code_moved_before_a_crash(self):
+    def test_main_survives_a_crashing_rollback_without_re_exec_when_code_is_back(self):
         self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
         self.release("kiosk-v0.2.0")
         # pip fails, then the rollback itself crashes after the checkout back: code did not move.
@@ -261,6 +266,124 @@ class UpdateOnBootTests(unittest.TestCase):
 
         self.update()
         self.assertEqual(self.steps.calls, ["pip"])
+
+    def cut_power_during_pip(self):
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        with self.assertRaises(PowerCut):
+            kiosk_updater.update_on_boot(self.kiosk_dir, run_step=FakeSteps(cut_power_at="pip"))
+
+    def test_offline_boot_after_a_power_cut_still_finishes_the_install(self):
+        self.cut_power_during_pip()
+        new = self.head()
+        git(self.device, "remote", "set-url", "origin", str(self.origin.parent / "missing"))
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+        self.assertEqual(self.steps.calls, ["pip"])
+
+    def test_checkout_cut_short_by_a_power_cut_is_completed_not_reported_dirty(self):
+        before = self.head()
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        # The updater wrote its marker, then power died with main.py half written.
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        state.mkdir()
+        (state / "pending").write_text(before)
+        (self.kiosk_dir / "main.py").write_text("v")
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+        self.assertEqual((self.kiosk_dir / "main.py").read_text(), "v2\n")
+
+    def test_marker_left_empty_by_a_power_cut_does_not_block_updates(self):
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        state.mkdir()
+        (state / "pending").write_text("")
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.head(), new)
+
+    def test_commit_made_on_the_kiosk_and_never_pushed_is_kept(self):
+        git(self.device, "config", "user.email", "tech@example.com")
+        git(self.device, "config", "user.name", "tech")
+        (self.kiosk_dir / "main.py").write_text("site hotfix\n")
+        git(self.device, "commit", "-q", "-am", "site hotfix")
+        hotfix = self.head()
+        self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+
+        self.assertEqual(self.update(), "diverged")
+        self.assertEqual(self.head(), hotfix)
+
+    def test_failed_restore_keeps_the_snapshot_for_the_next_boot(self):
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        snapshot = state / kiosk_updater.PIP_SNAPSHOT
+        # Stand in for run_install_step, which freezes the venv before its first pip install.
+        self.steps.on_call = lambda name: name == "pip" and snapshot.write_text("httpx==0.27.0\n")
+        self.steps.fail.update({"pip", "pip-restore"})
+
+        self.assertEqual(self.update(), "rolled-back")
+        self.assertEqual(snapshot.read_text(), "httpx==0.27.0\n")
+
+    def test_snapshot_left_from_an_old_update_is_not_reused(self):
+        state = kiosk_updater.state_dir(self.kiosk_dir)
+        state.mkdir()
+        (state / kiosk_updater.PIP_SNAPSHOT).write_text("httpx==0.20.0\n")
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\nhttpx>=0.28.0\n")
+        self.release("kiosk-v0.2.0")
+        self.steps.fail.add("pip")
+        seen = []
+        self.steps.on_call = lambda name: seen.append((state / kiosk_updater.PIP_SNAPSHOT).exists())
+
+        self.update()
+        # No marker: that snapshot is stale, so pip must take a fresh one.
+        self.assertEqual(seen[0], False)
+
+    def test_playwright_installed_from_a_url_counts_as_playwright(self):
+        self.commit_file("kiosk/requirements.txt", "playwright @ https://example.com/p-1.whl\n")
+        self.release("kiosk-v0.2.0")
+        self.update()
+        self.steps.calls.clear()
+        self.commit_file("kiosk/requirements.txt", "playwright @ https://example.com/p-2.whl\n")
+        self.release("kiosk-v0.3.0")
+
+        self.update()
+        self.assertEqual(self.steps.calls, ["pip", "playwright"])
+
+    def test_release_that_adds_requirements_txt_installs_it(self):
+        git(self.origin, "rm", "-q", "kiosk/requirements.txt")
+        git(self.origin, "commit", "-q", "-m", "drop requirements")
+        self.release("kiosk-v0.1.1")
+        self.assertEqual(self.update(), "updated")
+        self.commit_file("kiosk/requirements.txt", "playwright>=1.40.0\n")
+        self.release("kiosk-v0.2.0")
+        self.steps.calls.clear()
+
+        self.assertEqual(self.update(), "updated")
+        self.assertEqual(self.steps.calls, ["pip", "playwright"])
+
+
+class RunCommandTests(unittest.TestCase):
+    def test_timeout_kills_the_step_and_everything_it_started(self):
+        with tempfile.TemporaryDirectory() as directory:
+            late = Path(directory) / "late"
+            # Like download_models.sh -> curl: the grandchild would outlive a plain kill.
+            script = f"(sleep 1; touch {late}) & sleep 30"
+
+            started = time.monotonic()
+            self.assertFalse(kiosk_updater.run_command(["bash", "-c", script], directory, 0.3))
+            self.assertLess(time.monotonic() - started, 5)
+            time.sleep(1.5)
+            self.assertFalse(late.exists())
+
+    def test_reports_the_exit_status(self):
+        self.assertTrue(kiosk_updater.run_command(["true"], ".", 5))
+        self.assertFalse(kiosk_updater.run_command(["false"], ".", 5))
 
 
 if __name__ == "__main__":

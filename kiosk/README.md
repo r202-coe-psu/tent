@@ -462,14 +462,14 @@ tail -f /tmp/kiosk_autostart.log
 `start_kiosk.sh` รัน `kiosk_updater.py` ครั้งเดียวทุกครั้งที่เริ่ม (ก่อนเปิด Chromium) ไม่ต้อง SSH เข้าไป `git pull` เอง ([#1218](https://github.com/r202-coe-psu/tent/issues/1218))
 
 - **เปิด/ปิดด้วย branch ที่ตู้ checkout อยู่:** ตู้ที่อยู่บน `main` อัปเดตอัตโนมัติ ตู้ที่อยู่ branch อื่น (เช่น `develop` สำหรับทดสอบ) หรือ detached ไม่อัปเดตเลย (`disabled`) ให้อัปเดตด้วยมือตามเดิม
-- ดึง tag `kiosk-stable` จาก `origin` แล้วย้าย branch `main` บนตู้ไปที่ commit นั้น (ตู้ยังอยู่บน `main`)
+- ดึง tag `kiosk-stable` จาก `origin` แล้วย้าย branch `main` บนตู้ไปที่ commit นั้น (ตู้ยังอยู่บน `main`) ถ้า `main` บนตู้นำหน้า tag อยู่ จะถูกย้ายถอยกลับมาที่ tag
 - **รับเฉพาะ commit ที่อยู่บน `origin/main` แล้ว** ถ้า tag ชี้ไป commit ที่ยังไม่ merge เข้า main ตู้จะไม่อัปเดต (`untrusted`)
-- รัน `pip install -r requirements.txt` เมื่อ `requirements.txt` เปลี่ยน, `playwright install chromium` เมื่อเวอร์ชัน playwright เปลี่ยนและไม่ได้ตั้ง `BROWSER_EXECUTABLE_PATH`, และ `models/download_models.sh` เมื่อสคริปต์นั้นเปลี่ยน แต่ละขั้นมี timeout 10 นาที
+- รัน `pip install -r requirements.txt` เมื่อ `requirements.txt` เปลี่ยน, `playwright install chromium` เมื่อเวอร์ชัน playwright เปลี่ยนและไม่ได้ตั้ง `BROWSER_EXECUTABLE_PATH`, และ `models/download_models.sh` เมื่อสคริปต์นั้นเปลี่ยน แต่ละขั้นมี timeout 10 นาที และรวมทุกขั้นไม่เกิน 20 นาที ขั้นที่เกินเวลาจะถูกหยุดพร้อม process ที่มันเปิดไว้ (เช่น `curl`)
 - **บูตด้วยเวอร์ชันเดิมเสมอเมื่อมีปัญหา:**
   - ไม่มีเน็ตหรือ fetch ไม่ได้ภายใน 20 วินาที (`offline`)
-  - มีไฟล์ tracked ที่แก้ค้างบนตู้ (`dirty`) ตู้นี้จะไม่อัปเดตจนกว่าจะมีคนเข้าไปจัดการ ให้ดู log ข้างล่าง
-  - ขั้นติดตั้งล้ม, error หรือ timeout (`rolled-back`) จะ checkout กลับ commit เดิม, ติดตั้ง package ตาม `pip freeze` ที่เก็บไว้ก่อนอัปเดต (downgrade ได้จริง) และรันสคริปต์โมเดลของเวอร์ชันเดิม
-- **ไฟดับระหว่างติดตั้ง:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม
+  - มีไฟล์ tracked ที่แก้ค้างบนตู้ (`dirty`) หรือมี commit บนตู้ที่ยังไม่อยู่บน `origin/main` (`diverged`) ตู้นี้จะไม่อัปเดตจนกว่าจะมีคนเข้าไปจัดการ ให้ดู log ข้างล่าง
+  - ขั้นติดตั้งล้ม, error หรือ timeout (`rolled-back`) จะ checkout กลับ commit เดิม, ติดตั้ง package ตาม `pip freeze` ที่เก็บไว้ก่อนอัปเดต (downgrade ได้จริง) และรันสคริปต์โมเดลของเวอร์ชันเดิม ถ้าการย้อนกลับเองไม่สำเร็จ (เช่นเน็ตหลุด) จะเก็บ snapshot ไว้แล้วลองใหม่ตอนบูตครั้งถัดไป
+- **ไฟดับระหว่างอัปเดต:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะ checkout ให้ครบและรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม ทำแบบนี้แม้บูตตอนไม่มีเน็ต
 - `main.py` ที่ restart ใน supervisor loop ไม่เรียก updater จึงไม่มีการอัปเดตระหว่างที่มีคนใช้งานตู้
 - ผลลัพธ์ทุกครั้งอยู่ที่ `~/.local/state/smart-shelter-kiosk/updater.log` (อยู่ข้าม reboot) และใน `/tmp/kiosk_autostart.log` บรรทัดที่ขึ้นต้นด้วย `[kiosk-updater]`
 

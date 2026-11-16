@@ -6,8 +6,10 @@ kiosk always boots. Usage: python kiosk_updater.py
 
 import os
 import re
+import signal
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +19,7 @@ PIP_SNAPSHOT = "pip-freeze.txt"
 # Checking out any other branch (or detaching) is how a kiosk opts out, e.g. to test develop.
 RELEASE_BRANCH = "main"
 # The package itself, not playwright-stealth and the like.
-PLAYWRIGHT_LINE = re.compile(r"^playwright\s*($|[<>=!~;\[])")
+PLAYWRIGHT_LINE = re.compile(r"^playwright\s*($|[<>=!~;\[@])", re.IGNORECASE)
 
 
 def _git(cwd, *args, timeout=None):
@@ -36,6 +38,13 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
         branch = None
     if branch != RELEASE_BRANCH:
         return "disabled"
+    pending = state_dir(kiosk_dir) / "pending"
+    # A pending marker means the last update died part way (power cut): HEAD may be the new code
+    # on half-installed packages, or a half-written checkout. Finish from the version it left.
+    # An empty marker is a power cut while writing it, before anything else changed.
+    base = pending.read_text().strip() if pending.exists() else ""
+    current = _git(kiosk_dir, "rev-parse", "HEAD")
+    base = base or current
     # The tag moves on every release, so fetch it with force (+) or git keeps the old one.
     try:
         _git(
@@ -48,35 +57,46 @@ def update_on_boot(kiosk_dir, *, run_step, remote="origin", fetch_timeout=20):
             f"+refs/heads/{RELEASE_BRANCH}:refs/remotes/{remote}/{RELEASE_BRANCH}",
             timeout=fetch_timeout,
         )
+        target = _git(kiosk_dir, "rev-parse", f"{STABLE_TAG}^{{commit}}")
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return "offline"
-    current = _git(kiosk_dir, "rev-parse", "HEAD")
-    target = _git(kiosk_dir, "rev-parse", f"{STABLE_TAG}^{{commit}}")
-    pending = state_dir(kiosk_dir) / "pending"
-    # A pending marker means the last update died mid-install (power cut): HEAD is already the new
-    # code but its packages may not be, so install again from the version it left.
-    base = pending.read_text().strip() if pending.exists() else current
-    if target == current and base == current:
+        if base == current:
+            return "offline"
+        # Offline after a power cut: finish installing the code already checked out (it passed
+        # every check before), or roll back if a step needs the network.
+        target = current
+    if target == current and base == current and not pending.exists():
         return "up-to-date"
-    # A hotfix made by hand on site would be lost or block checkout; leave it for a person.
-    if _git(kiosk_dir, "status", "--porcelain", "--untracked-files=no"):
-        return "dirty"
+    if not pending.exists():
+        # A hotfix made by hand on site would be lost or block checkout; leave it for a person.
+        # With a marker, changed files are the updater's own half-written checkout.
+        if _git(kiosk_dir, "status", "--porcelain", "--untracked-files=no"):
+            return "dirty"
+        # Same for a commit made on the kiosk: checkout -B would drop it from main.
+        if not _is_ancestor(kiosk_dir, current, f"{remote}/{RELEASE_BRANCH}"):
+            return "diverged"
     # Moving a tag needs only write access; reaching main needs a reviewed PR.
     if not _is_ancestor(kiosk_dir, target, f"{remote}/{RELEASE_BRANCH}"):
         return "untrusted"
     steps = _steps_between(kiosk_dir, base, target)
-    pending.parent.mkdir(exist_ok=True)
-    pending.write_text(base)
-    _git(kiosk_dir, "checkout", "-q", "-B", RELEASE_BRANCH, target)
+    if not pending.exists():
+        # Left by an update that died after clearing its marker: it describes an older venv.
+        (pending.parent / PIP_SNAPSHOT).unlink(missing_ok=True)
+    _write_atomic(pending, base)
+    _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, target)
     attempted = []
     for step in steps:
         attempted.append(step)
         if not _try_step(run_step, step, kiosk_dir):
-            _git(kiosk_dir, "checkout", "-q", "-B", RELEASE_BRANCH, base)
+            _git(kiosk_dir, "checkout", "-q", "-f", "-B", RELEASE_BRANCH, base)
             # Undo every step the new version touched, the failed one too: it may have half-run.
-            for undo in sorted(attempted, key=UNDO_ORDER.index):
+            undone = [
                 _try_step(run_step, UNDO_STEP[undo], kiosk_dir)
-            _finish(kiosk_dir)
+                for undo in sorted(attempted, key=UNDO_ORDER.index)
+            ]
+            # A failed undo keeps the marker and pip snapshot, so the next boot tries again from
+            # the true old package set instead of freezing this mixed one.
+            if all(undone):
+                _finish(kiosk_dir)
             return "rolled-back"
     _finish(kiosk_dir)
     return "updated"
@@ -96,8 +116,16 @@ def _try_step(run_step, step, kiosk_dir):
         return False
 
 
+def _write_atomic(path, text):
+    path.parent.mkdir(exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
 def _finish(kiosk_dir):
-    for file in ("pending", PIP_SNAPSHOT):
+    # Snapshot first: a marker without one only costs a fresh freeze, never a stale restore.
+    for file in (PIP_SNAPSHOT, "pending"):
         (state_dir(kiosk_dir) / file).unlink(missing_ok=True)
 
 
@@ -129,15 +157,22 @@ def _steps_between(kiosk_dir, current, target):
 
 
 def _playwright_pin(kiosk_dir, commit):
-    requirements = _git(kiosk_dir, "show", f"{commit}:./requirements.txt")
+    try:
+        requirements = _git(kiosk_dir, "show", f"{commit}:./requirements.txt")
+    except subprocess.CalledProcessError:  # a version without requirements.txt pins nothing
+        return []
     return [line for line in requirements.splitlines() if PLAYWRIGHT_LINE.match(line)]
 
 
 # start_kiosk.sh re-executes itself on this code: bash reads a script as it runs, so it must not
 # keep running a start_kiosk.sh that the checkout just replaced.
 UPDATED_EXIT = 10
-# Bounds one install step so a network drop after the fetch cannot hold the boot screen forever.
+# Bound one install step, and all of them together, so a network drop after the fetch cannot hold
+# the boot screen for long. Steps cut short by the total budget fail and roll back; a rollback that
+# runs out of time keeps its marker and finishes on the next boot.
 STEP_TIMEOUT = 600
+BOOT_BUDGET = 1200
+_deadline = None
 # /tmp/kiosk_autostart.log is gone after a reboot; keep the updater's history where it survives.
 LOG_FILE = Path.home() / ".local/state/smart-shelter-kiosk/updater.log"
 
@@ -160,7 +195,7 @@ def run_install_step(step, kiosk_dir):
     pip = [sys.executable, "-m", "pip"]
     if step == "pip" and not snapshot.exists():
         # Only the first attempt saves it: after a power cut the venv may already be half-new.
-        freeze = subprocess.run([*pip, "freeze"], capture_output=True, text=True, timeout=STEP_TIMEOUT)
+        freeze = subprocess.run([*pip, "freeze"], capture_output=True, text=True, timeout=_step_timeout())
         if freeze.returncode != 0:
             return False
         snapshot.write_text(freeze.stdout)
@@ -173,10 +208,25 @@ def run_install_step(step, kiosk_dir):
         "models": ["bash", "models/download_models.sh"],
     }
     log(f"running {step}")
+    return run_command(commands[step], kiosk_dir, _step_timeout())
+
+
+def _step_timeout():
+    if _deadline is None:
+        return STEP_TIMEOUT
+    return max(1, min(STEP_TIMEOUT, _deadline - time.monotonic()))
+
+
+def run_command(command, cwd, timeout):
+    # Own process group: on timeout kill what the step started too (curl under download_models.sh,
+    # node under playwright), or it keeps writing while the rollback runs.
+    process = subprocess.Popen(command, cwd=cwd, start_new_session=True)
     try:
-        return subprocess.run(commands[step], cwd=kiosk_dir, timeout=STEP_TIMEOUT).returncode == 0
+        return process.wait(timeout=timeout) == 0
     except subprocess.TimeoutExpired:
-        log(f"{step} timed out after {STEP_TIMEOUT}s")
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        log(f"{command[-1]} timed out after {timeout:.0f}s")
         return False
 
 
@@ -191,6 +241,8 @@ def _uses_system_chromium(kiosk_dir):
 
 
 def main(kiosk_dir=None, run_step=run_install_step):
+    global _deadline
+    _deadline = time.monotonic() + BOOT_BUDGET
     kiosk_dir = Path(kiosk_dir or Path(__file__).resolve().parent)
     before = None
     try:
