@@ -123,7 +123,8 @@ test.describe(
 		});
 
 		test('filters the list by shelter name', async ({ page }) => {
-			test.setTimeout(75_000); // outlasts the 60 s projection wait below
+			// GPS commit + the 60 s projection wait below + margin
+			test.setTimeout(GPS_URL_TIMEOUT_MS + 60_000 + 15_000);
 			await page.goto('/shelters');
 			// First visit: GPS → URL commit → page load re-runs before the URL changes (~3 s locally).
 			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
@@ -145,6 +146,8 @@ test.describe(
 		});
 
 		test('widens and narrows the GPS radius', async ({ page }) => {
+			// GPS commit + radius reloads of the full list
+			test.setTimeout(GPS_URL_TIMEOUT_MS + 60_000);
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}`);
 			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
