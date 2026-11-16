@@ -124,6 +124,11 @@ function writeSampleRow(
 	}
 }
 
+/** First zone a "พักอยู่" sample row may use — closed zones are in the dropdown but fail validation. */
+function sampleZoneLabel(masters: TemplateMasters): string | undefined {
+	return masters.zone?.find((z) => !z.inactive)?.label;
+}
+
 export async function buildPeopleTemplateBlob(
 	masters: TemplateMasters,
 	options?: TemplateOptions
@@ -132,7 +137,7 @@ export async function buildPeopleTemplateBlob(
 	const wb = new ExcelJS.Workbook();
 	wb.creator = 'SmartShelter';
 	const sample: SampleWorkbook | null = options?.withSample
-		? buildSampleWorkbook(masters.zone?.[0]?.label)
+		? buildSampleWorkbook(sampleZoneLabel(masters))
 		: null;
 
 	// Hidden option lists — one column per dropdown, referenced by range.
@@ -344,7 +349,7 @@ export function buildPeopleCsvTemplateBlob(
 	const lines = [headers.map(csvField).join(',')];
 
 	if (options?.withSample) {
-		for (const row of buildSampleCsvRows(masters.zone?.[0]?.label)) {
+		for (const row of buildSampleCsvRows(sampleZoneLabel(masters))) {
 			lines.push(CSV_SHEET.columns.map((c) => csvField(row[c.header] ?? '')).join(','));
 		}
 	}

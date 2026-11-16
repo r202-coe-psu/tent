@@ -107,7 +107,11 @@
 		return {
 			medical_conditions: activeChronicDiseases.map((i) => ({ value: i.code, label: i.label_th })),
 			// Every zone, closed ones too — a person who already left may have stayed in one.
-			zone: (shelterZones ?? []).map((z) => ({ value: z.code, label: z.name }))
+			zone: (shelterZones ?? []).map((z) => ({
+				value: z.code,
+				label: z.name,
+				inactive: z.status === 'closed'
+			}))
 		};
 	}
 

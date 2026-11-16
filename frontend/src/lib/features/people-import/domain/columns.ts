@@ -35,6 +35,8 @@ import type { CardType, Gender, Religion } from '$lib/features/people';
 export interface EnumChoice<T extends string = string> {
 	value: T;
 	label: string;
+	/** Option is listed but not usable for a new "พักอยู่" row (e.g. a closed zone) — never a sample value. */
+	inactive?: boolean;
 }
 
 /** Separator for multi-value cells. Not a comma — Thai option labels contain commas. */

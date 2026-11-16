@@ -11,7 +11,13 @@ vi.mock('$lib/db/shelter', () => ({
 
 vi.mock('$lib/db/repository', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/db/repository')>();
-	return { ...actual, createRemoteRepository: () => memoryRepo };
+	return {
+		...actual,
+		// peopleRepository() caches the repo it first builds, so hand out a stable proxy that always
+		// forwards to the current in-memory repo (and to any spy installed on it).
+		createRemoteRepository: () =>
+			new Proxy({} as typeof memoryRepo, { get: (_t, key) => Reflect.get(memoryRepo, key) })
+	};
 });
 
 import { peopleRepository } from '$lib/features/people';
@@ -122,5 +128,35 @@ describe('importHousehold (Backfill Import write sequence)', () => {
 		// The household really is left behind, still pre_registered — which is why the id is surfaced.
 		const members = await repo.listHouseholdMembers(partial.householdId);
 		expect(members[0].current_stay.status).toBe('pre_registered');
+	});
+
+	it('reports a household where the first person was written and the second failed', async () => {
+		const repo = peopleRepository();
+		const real = memoryRepo.put.bind(memoryRepo);
+		let evacueeSnapshots = 0;
+		vi.spyOn(memoryRepo, 'put').mockImplementation(async (doc) => {
+			// Fail the second person's snapshot write — their movements are already stored by then.
+			if ((doc as { type?: string }).type === 'evacuee' && ++evacueeSnapshots === 4) {
+				throw new Error('network down');
+			}
+			return real(doc);
+		});
+
+		const err = await importHousehold(
+			repo,
+			payloadOf(person('สมชาย'), [person('สมหญิง')]),
+			new Set(),
+			ctx
+		).catch((e: unknown) => e);
+
+		expect(err).toBeInstanceOf(PartialHouseholdImportError);
+		const partial = err as PartialHouseholdImportError;
+		const members = await repo.listHouseholdMembers(partial.householdId);
+		const byName = Object.fromEntries(members.map((m) => [m.first_name, m]));
+		expect(byName['สมชาย'].current_stay.status).toBe('active');
+		expect(byName['สมหญิง'].current_stay.status).toBe('pre_registered');
+		// The failed person's movement is orphaned: history exists, the snapshot does not reflect it.
+		const movements = await repo.listMovementsByEvacuee(byName['สมหญิง']._id);
+		expect(movements.map((m) => m.action)).toEqual(['check_in']);
 	});
 });

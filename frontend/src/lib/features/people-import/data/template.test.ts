@@ -248,6 +248,27 @@ describe('Backfill Import columns (#1399)', () => {
 		expect(rows[0].payload?.household.status).toBe('checked_in');
 	});
 
+	it('skips a closed first zone when picking the sample zone', async () => {
+		const masters: TemplateMasters = {
+			zone: [
+				{ value: 'X', label: 'โซน X (ปิด)', inactive: true },
+				{ value: 'A', label: 'โซน A' }
+			]
+		};
+		const blob = await buildPeopleTemplateBlob(masters, { withSample: true });
+		const wb = await parsePeopleWorkbook(new File([await blob.arrayBuffer()], 't.xlsx'));
+		expect(wb.households[0].cells[H.zone]).toBe('โซน A');
+
+		const rows = validateWorkbook(wb, {
+			zones: [
+				{ code: 'X', name: 'โซน X (ปิด)', status: 'closed' },
+				{ code: 'A', name: 'โซน A', status: 'active' }
+			],
+			now: new Date('2026-11-15T05:00:00.000Z')
+		});
+		expect(rows[0].errors).toEqual([]);
+	});
+
 	it('documents the stay columns and the Backfill Import purpose on the README', async () => {
 		const wb = await loadTemplate(EMPTY_MASTERS);
 		const text: string[] = [];

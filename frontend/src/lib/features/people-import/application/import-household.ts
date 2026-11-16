@@ -17,9 +17,11 @@ export interface ImportedHousehold {
 }
 
 /**
- * The household (and maybe some of its people) already exist, but a later write failed. They are
- * left `pre_registered` with no movements — a state the file can no longer produce and a re-import
- * would skip as a duplicate — so the id travels with the error and ends up in the import log.
+ * The household (and maybe some of its people) already exist, but a later write failed. People
+ * are left `pre_registered`, and — because `applyBackfilledStays` writes each person's movements
+ * before their snapshot — some may already have back-dated movements while their `current_stay`
+ * is still `pre_registered`. A re-import would skip the household as a duplicate, so the id
+ * travels with the error and ends up in the import log.
  */
 export class PartialHouseholdImportError extends Error {
 	constructor(
