@@ -265,6 +265,33 @@ def log(message):
         pass
 
 
+# The line main() logs once per boot: "<outcome>: <short HEAD before> -> <short HEAD after>".
+OUTCOME_LINE = re.compile(r"^\[kiosk-updater\] (?P<at>\S+) (?P<outcome>.+): (?P<before>\S+) -> (?P<after>\S+)$")
+
+
+def update_info(kiosk_dir, log_file=None):
+    """For the kiosk info panel: the commit running now, when an update last changed it, and what
+    the last boot check said. Anything unreadable is None, never raised."""
+    try:
+        commit = _git(kiosk_dir, "rev-parse", "--short=7", "HEAD", timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        commit = None
+    try:
+        lines = (log_file or LOG_FILE).read_text(errors="replace").splitlines()
+    except OSError:
+        lines = []
+    updated_at = last_check = None
+    for line in lines:
+        match = OUTCOME_LINE.match(line)
+        if not match:
+            continue
+        # "skipped: OSError: ..." is too long for the panel; the log keeps the detail.
+        last_check = {"at": match["at"], "outcome": match["outcome"].split(":", 1)[0]}
+        if match["before"] != match["after"]:
+            updated_at = match["at"]
+    return {"commit": commit, "updated_at": updated_at, "last_check": last_check}
+
+
 def run_install_step(step, kiosk_dir):
     if step == "playwright" and _uses_system_chromium(kiosk_dir):
         return True

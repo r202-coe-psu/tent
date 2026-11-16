@@ -40,7 +40,9 @@ class FakeSteps:
         return name not in self.fail
 
 
-class UpdateOnBootTests(unittest.TestCase):
+class KioskCheckoutCase(unittest.TestCase):
+    """A release repo and a kiosk cloned from it, with the updater log in the temp dir."""
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -84,6 +86,8 @@ class UpdateOnBootTests(unittest.TestCase):
     def update(self):
         return kiosk_updater.update_on_boot(self.kiosk_dir, run_step=self.steps)
 
+
+class UpdateOnBootTests(KioskCheckoutCase):
     def test_moves_to_the_commit_kiosk_stable_points_at(self):
         new = self.commit_file("kiosk/main.py", "v2\n")
         self.release("kiosk-v0.2.0")
@@ -597,6 +601,56 @@ class UpdateOnBootTests(unittest.TestCase):
 
         self.assertEqual(self.update(), "dirty")
         self.assertEqual((self.kiosk_dir / ".env").read_text(), "DEVICE_SECRET=kiosk1\n")
+
+
+class UpdateInfoTests(KioskCheckoutCase):
+    """What the kiosk info panel reads back from the checkout and the updater log."""
+
+    def info(self):
+        return kiosk_updater.update_info(self.kiosk_dir)
+
+    def test_a_kiosk_never_updated_shows_its_commit_and_no_update(self):
+        self.assertEqual(
+            self.info(),
+            {"commit": self.head()[:7], "updated_at": None, "last_check": None},
+        )
+
+    def test_shows_when_an_update_last_changed_the_commit_and_what_each_boot_said(self):
+        new = self.commit_file("kiosk/main.py", "v2\n")
+        self.release("kiosk-v0.2.0")
+        with mock.patch.object(kiosk_updater, "datetime") as clock:
+            clock.now.return_value.isoformat.return_value = "2026-11-17T08:01:12"
+            kiosk_updater.main(self.kiosk_dir, run_step=self.steps)
+            clock.now.return_value.isoformat.return_value = "2026-11-18T07:59:40"
+            kiosk_updater.main(self.kiosk_dir, run_step=self.steps)
+
+        self.assertEqual(
+            self.info(),
+            {
+                "commit": new[:7],
+                "updated_at": "2026-11-17T08:01:12",
+                "last_check": {"at": "2026-11-18T07:59:40", "outcome": "up-to-date"},
+            },
+        )
+
+    def test_a_skipped_boot_shows_only_the_outcome_word_and_other_lines_are_ignored(self):
+        kiosk_updater.LOG_FILE.write_text(
+            "[kiosk-updater] 2026-11-17T08:00:00 running pip\n"
+            "[kiosk-updater] 2026-11-17T08:00:05 skipped: OSError: disk full: abc1234 -> abc1234\n"
+            "garbage\n"
+        )
+
+        self.assertEqual(
+            self.info()["last_check"], {"at": "2026-11-17T08:00:05", "outcome": "skipped"}
+        )
+        self.assertIsNone(self.info()["updated_at"])
+
+    def test_answers_none_for_what_it_cannot_read(self):
+        with tempfile.TemporaryDirectory() as not_a_repo:
+            self.assertEqual(
+                kiosk_updater.update_info(Path(not_a_repo), Path(not_a_repo) / "missing.log"),
+                {"commit": None, "updated_at": None, "last_check": None},
+            )
 
 
 class RunCommandTests(unittest.TestCase):

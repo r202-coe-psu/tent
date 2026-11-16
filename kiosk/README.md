@@ -472,6 +472,7 @@ tail -f /tmp/kiosk_autostart.log
 - **ไฟดับระหว่างอัปเดต:** updater เขียน marker ไว้ใน `.git/kiosk-update/` ก่อน checkout บูตครั้งถัดไปจะ checkout ให้ครบและรันขั้นติดตั้งต่อจนเสร็จ หรือย้อนกลับถ้าล้ม ทำแบบนี้แม้บูตตอนไม่มีเน็ต (checkout ทำได้ offline แต่ถ้าขั้นติดตั้งต้องโหลด package ก็จะ rollback แล้วทำต่อตอนออนไลน์) ไฟล์ tracked ที่แก้ค้างจะถูกทับได้เฉพาะไฟล์ที่ release นั้นเปลี่ยน ถ้ามีคนแก้ไฟล์อื่นไว้หรือ commit บนตู้ จะยังได้ `dirty` / `diverged` เหมือนเดิม (ข้อควรระวัง: ตอนทำต่อ checkout ใช้ `-f` จึงทับไฟล์ untracked ที่ release เริ่ม track ด้วย)
 - `main.py` ที่ restart ใน supervisor loop ไม่เรียก updater จึงไม่มีการอัปเดตระหว่างที่มีคนใช้งานตู้
 - ผลลัพธ์ทุกครั้งอยู่ที่ `~/.local/state/smart-shelter-kiosk/updater.log` (อยู่ข้าม reboot) และใน `/tmp/kiosk_autostart.log` บรรทัดที่ขึ้นต้นด้วย `[kiosk-updater]`
+- ปุ่ม ℹ ข้อมูลเครื่องบนตู้ (หลัง PIN เจ้าหน้าที่) แสดง `Commit <hash 7 ตัว>` ที่ตู้รันอยู่, เวลาที่ updater เปลี่ยน commit ครั้งล่าสุด และผลตรวจของ boot ล่าสุด (อ่านจาก log นี้)
 
 **เปิดใช้บนตู้ (ทำครั้งเดียวต่อเครื่อง):**
 

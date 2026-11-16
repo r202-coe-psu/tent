@@ -26,6 +26,7 @@ from app.config import (
 )
 from app.rfpro import RfproError, RfproThaiCardReader
 from app.scard import ReaderLostError, ThaiSmartCardReader
+import kiosk_updater
 
 try:
     import httpx
@@ -53,10 +54,12 @@ KIOSK_PRINT_PATH = "/api/v1/kiosk/print"
 # Per-machine hardware settings for the kiosk page (QR input, camera choice). Answered locally
 # like the print path — never forwarded to the server and never given the device credential.
 KIOSK_HARDWARE_PATH = "/api/v1/kiosk/hardware"
-# This machine's hostname and LAN IPs for the info panel; its own path so a slow DNS lookup can
+# This machine's hostname, LAN IPs and update state for the info panel; its own path so a slow DNS lookup can
 # never delay /hardware, which every page waits on to choose camera or reader.
 KIOSK_HOST_INFO_PATH = "/api/v1/kiosk/host-info"
 HOST_INFO_TIMEOUT_S = 2.0
+# The checkout the boot updater moves; its commit is the version this kiosk runs.
+KIOSK_DIR = Path(__file__).resolve().parent.parent
 # Own single worker so a host-info lookup stuck on DNS never takes a default-executor thread that
 # the card reader, printer and face check need; extra requests queue behind it and time out.
 _HOST_INFO_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
@@ -452,11 +455,17 @@ class ScannerClientManager:
             )
         except Exception:
             info = {"hostname": None, "ips": []}
+        try:
+            update = await asyncio.wait_for(
+                asyncio.to_thread(kiosk_updater.update_info, KIOSK_DIR), timeout=HOST_INFO_TIMEOUT_S
+            )
+        except Exception:
+            update = {"commit": None, "updated_at": None, "last_check": None}
         await route.fulfill(
             status=200,
             content_type="application/json",
             headers={"cache-control": "no-store"},
-            body=json.dumps(info),
+            body=json.dumps({**info, **update}),
         )
 
     def _host_info(self) -> Dict[str, Any]:

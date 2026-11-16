@@ -79,17 +79,29 @@
 
 	const pinLabel = $derived(!info ? '' : info.staffPin.isDefault ? t.pinDefault : t.pinSet);
 
-	const pinUpdated = $derived.by(() => {
-		const pin = info?.staffPin;
-		if (!pin?.updatedAt) return null;
-		const at = new Date(pin.updatedAt);
+	/** A date-time for the panel; null when there is none or it does not parse. */
+	function formatWhen(iso: string | null | undefined): string | null {
+		if (!iso) return null;
+		const at = new Date(iso);
 		if (Number.isNaN(at.getTime())) return null;
-		const when = at.toLocaleString(DISPLAY_LOCALE, {
+		return at.toLocaleString(DISPLAY_LOCALE, {
 			timeZone: DISPLAY_TIME_ZONE,
 			dateStyle: 'medium',
 			timeStyle: 'short'
 		});
-		return t.updated(when);
+	}
+
+	const pinUpdated = $derived.by(() => {
+		const when = formatWhen(info?.staffPin.updatedAt);
+		return when ? t.updated(when) : null;
+	});
+
+	const lastUpdate = $derived(formatWhen(host?.updatedAt) ?? t.neverUpdated);
+
+	const lastCheck = $derived.by(() => {
+		const check = host?.lastCheck;
+		if (!check) return null;
+		return t.lastCheck(formatWhen(check.at) ?? check.at, check.outcome);
 	});
 
 	/** The panel is modal: keyboard focus starts inside it, on the safe way out. */
@@ -228,6 +240,33 @@
 						{:else}
 							—
 						{/each}
+					</dd>
+				</div>
+				<div
+					class="flex justify-between gap-4 py-2 kiosk-portrait:py-4 kiosk-compact:border-b kiosk-compact:border-slate-100 kiosk-compact:py-1.5"
+				>
+					<dt class="text-slate-600">{t.version}</dt>
+					<dd
+						class="text-right font-semibold text-[#0A2647] tabular-nums"
+						data-testid="kiosk-device-info-commit"
+					>
+						{host?.commit ? `Commit ${host.commit}` : '—'}
+					</dd>
+				</div>
+				<div
+					class="flex justify-between gap-4 py-2 kiosk-portrait:py-4 kiosk-compact:border-b kiosk-compact:border-slate-100 kiosk-compact:py-1.5"
+				>
+					<dt class="text-slate-600">{t.lastUpdate}</dt>
+					<dd
+						class="text-right font-semibold text-[#0A2647]"
+						data-testid="kiosk-device-info-last-update"
+					>
+						{lastUpdate}
+						{#if lastCheck}
+							<span class="block text-sm font-normal text-slate-500 kiosk-portrait:text-lg"
+								>{lastCheck}</span
+							>
+						{/if}
 					</dd>
 				</div>
 				<div
