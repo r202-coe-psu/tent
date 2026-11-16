@@ -286,8 +286,8 @@
 	</div>
 
 	<!-- Filters -->
-	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-		<div class="w-full min-w-0 space-y-2 md:col-span-2">
+	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+		<div class="w-full min-w-0 space-y-2">
 			<label for="evacuee-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
 			<div class="relative">
 				<Search
@@ -316,7 +316,7 @@
 			>
 				<Select.Trigger
 					id="evacuee-type-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-label="ประเภทผู้เข้าพัก"
 				>
 					<span class="truncate">
@@ -353,7 +353,7 @@
 			>
 				<Select.Trigger
 					id="evacuee-zone-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-label="โซนที่จัดสรร"
 				>
 					<span class="truncate">
@@ -378,7 +378,7 @@
 			<Select.Root type="single" bind:value={selectedStatus} onValueChange={resetPageOnFilter}>
 				<Select.Trigger
 					id="evacuee-status-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-label="สถานะการพักพิง"
 				>
 					<span class="truncate">
@@ -403,7 +403,7 @@
 			<Select.Root type="single" value={selectedSort} onValueChange={handleSortChange}>
 				<Select.Trigger
 					id="evacuee-sort"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-labelledby="evacuee-sort-label"
 				>
 					<span class="truncate">{EVACUEE_SORT_LABELS[selectedSort]}</span>
