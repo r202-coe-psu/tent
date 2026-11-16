@@ -57,14 +57,17 @@
 	/** Without an active shelter the form is not mounted; scanned cards must not vanish silently. */
 	$effect(() => {
 		if (shelterCode) return;
+		const ackReading = (event: Event) => event.preventDefault();
 		const rejectCard = (event: Event) => {
 			event.preventDefault();
 			toast.warning(td.scanner.selectShelterFirst, { id: 'scanner-card' });
 		};
 		const ackPhoto = (event: Event) => event.preventDefault();
+		window.addEventListener('scanner:card-reading', ackReading);
 		window.addEventListener('scanner:card-read', rejectCard);
 		window.addEventListener('scanner:card-photo', ackPhoto);
 		return () => {
+			window.removeEventListener('scanner:card-reading', ackReading);
 			window.removeEventListener('scanner:card-read', rejectCard);
 			window.removeEventListener('scanner:card-photo', ackPhoto);
 		};
