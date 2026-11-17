@@ -19,6 +19,7 @@ import {
 	type EmergencyContact,
 	createHousehold as buildHousehold,
 	isHousehold,
+	type CheckoutDestination,
 	type Household,
 	type HouseholdInput,
 	createScreening as buildScreening,
@@ -1158,6 +1159,30 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
+	}
+
+	async applyBackfilledStays(
+		householdId: string,
+		entries: { evacuee: Evacuee; movements: Movement[] }[],
+		checkoutDestination: CheckoutDestination | null = null
+	): Promise<void> {
+		for (const { evacuee, movements } of entries) {
+			// Movements first, like every other stay write: the stream is the source of truth, so a
+			// failure between the two leaves history without a stale snapshot, never the reverse.
+			for (const movement of movements) await this.repo.put(movement);
+			const latest = await this.fetchLatestOrThrow(evacuee._id);
+			await this.repo.put({ ...evacuee, _rev: latest._rev });
+		}
+		await this.refreshDerivedHouseholdStatus(householdId);
+		// A household whose people all left needs a destination (R-29-8); the import file has none,
+		// so the caller presets one. It cannot be set at creation: a `checked_out` household refuses
+		// new members.
+		if (checkoutDestination) {
+			const household = await this.repo.get<Household>(householdId);
+			if (household && household.status === 'checked_out' && !household.checkout_destination) {
+				await this.repo.put(touch({ ...household, checkout_destination: checkoutDestination }));
+			}
+		}
 	}
 
 	/** Zone Arrival Confirmation: active → room_confirmed (CR-112). */
