@@ -73,7 +73,7 @@
 		VEHICLE_OPTIONS.find((v) => v.value === vehicleType)?.label ?? 'เลือกพาหนะ'
 	);
 
-	/** D13: acuity defaults from the latest legacy `triage_level`, if any. */
+	/** D13: acuity defaults from the latest screening's `triage_level` (CR-258), if any. */
 	const triageByEvacuee = $derived.by(() => {
 		const latest: Record<
 			string,
