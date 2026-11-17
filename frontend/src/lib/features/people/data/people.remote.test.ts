@@ -1458,6 +1458,28 @@ describe('check-in / check-out', () => {
 			expect(fetched?.current_stay.zone).toBeNull();
 		});
 
+		it('persists triage_level from the Station 2 form', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({ first_name: 'Triage', status: 'arriving' }),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'normal',
+						triage_level: 'yellow',
+						symptoms: []
+					},
+					checkIn: false
+				},
+				ctx
+			);
+
+			expect(result.screening.triage_level).toBe('yellow');
+		});
+
 		it('creates screening doc and checks in evacuee to active when checkIn is true with zone', async () => {
 			const evacuee = await repo.createEvacuee(
 				evInput({ first_name: 'Wichai', status: 'arriving' }),

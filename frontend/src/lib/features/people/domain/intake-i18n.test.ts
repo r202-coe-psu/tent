@@ -38,7 +38,9 @@ describe('intake pipeline copy by language', () => {
 	it('zone kind labels: Thai is the original map, English has the same keys', () => {
 		expect(zoneKindLabelsByLanguage.th).toBe(ZONE_KIND_LABELS);
 		expect(sortedKeys(zoneKindLabelsByLanguage.en)).toEqual(sortedKeys(ZONE_KIND_LABELS));
-		expect(zoneKindLabelsByLanguage.en.quarantine).toBe('Quarantine zone (watch-list symptoms)');
+		expect(zoneKindLabelsByLanguage.en.quarantine).toBe(
+			'Quarantine zone (watch-list symptoms / yellow-red triage)'
+		);
 		expect(zoneKindLabelsByLanguage.en.general).toBe('General zone');
 	});
 

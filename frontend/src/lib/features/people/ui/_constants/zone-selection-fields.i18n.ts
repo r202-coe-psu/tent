@@ -2,13 +2,14 @@ import { ZONE_TYPE_LABELS, type ZoneType } from '$lib/features/shelters/index.js
 
 const th = {
 	zoneTypes: ZONE_TYPE_LABELS,
-	recommendQuarantine: 'แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)',
+	recommendQuarantine: 'แนะนำสำหรับผู้มีอาการเฝ้าระวังหรือ triage เหลือง/แดง (กักตัว)',
 	recommendVulnerable: 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง',
 	recommendGeneral: 'ไม่มีอาการเฝ้าระวังหรือความต้องการพิเศษ — แนะนำโซนทั่วไป',
 	preferredUsePrefix: 'โซนที่สถานี 1 ระบุไว้:',
 	preferredUseSuffix: '— เลือกไว้ให้แล้ว เปลี่ยนได้',
 	quarantineOverridesPrefix: 'สถานี 1 ระบุโซน',
-	quarantineOverridesSuffix: 'ไว้ — ไม่ได้เลือกให้ เพราะมีอาการเฝ้าระวัง ต้องแยกไปโซนกักโรค',
+	quarantineOverridesSuffix:
+		'ไว้ — ไม่ได้เลือกให้ เพราะมีอาการเฝ้าระวังหรือ triage เหลือง/แดง ต้องแยกไปโซนกักโรค',
 	preferredUnavailable: (code: string) =>
 		`โซนที่สถานี 1 ระบุไว้ (${code}) ไม่เปิดใช้งานแล้ว — กรุณาเลือกโซนเอง`,
 	noOpenZone: (kind: string) => `ไม่มี${kind} ที่เปิดอยู่`,
@@ -37,14 +38,14 @@ const en: typeof th = {
 		pet: 'Pets',
 		quarantine: 'Quarantine'
 	} satisfies Record<ZoneType, string>,
-	recommendQuarantine: 'Recommended for people with watch-list symptoms (quarantine)',
+	recommendQuarantine: 'Recommended for watch-list symptoms or yellow/red triage (quarantine)',
 	recommendVulnerable: 'Recommended for people with special needs or vulnerable groups',
 	recommendGeneral: 'No watch-list symptoms or special needs — general zone recommended',
 	preferredUsePrefix: 'Zone given at Station 1:',
 	preferredUseSuffix: '— preselected, you can change it',
 	quarantineOverridesPrefix: 'Station 1 suggested zone',
 	quarantineOverridesSuffix:
-		'but it was not preselected because of watch-list symptoms — separate into a quarantine zone',
+		'but it was not preselected because of watch-list symptoms or yellow/red triage — separate into a quarantine zone',
 	preferredUnavailable: (code: string) =>
 		`The zone given at Station 1 (${code}) is no longer active — please choose a zone yourself`,
 	noOpenZone: (kind: string) => `No open ${kind.toLowerCase()}`,

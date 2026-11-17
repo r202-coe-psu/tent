@@ -2,7 +2,7 @@
  * Pure helpers for Intake Pipeline queues (Station 1 next-queue labels + Station 3 tabs).
  * No I/O — unit-tested.
  */
-import type { Evacuee, TriageLevel } from './people';
+import type { Evacuee, Screening, TriageLevel } from './people';
 import { isInShelterStayStatus } from '$lib/features/shared';
 import { parsePersonQr } from '$lib/utils/evacuee-qr';
 import type { LanguageCode } from '$lib/utils/language';
@@ -226,21 +226,51 @@ export function countStationQueues(
 }
 
 /**
- * Zone type recommendation for Station 3 (CR-106):
- * EWAR surveillance symptoms → quarantine; else Vulnerable Groups / Special Needs → vulnerable; else general.
- * Supports legacy TriageLevel for backward compatibility.
+ * Triage colour from each evacuee's latest screening (by `screened_at`, else `created_at`).
+ * An evacuee whose latest screening has no colour gets no entry — an older colour is never used.
+ */
+export function latestTriageByEvacuee(
+	screenings: readonly Pick<
+		Screening,
+		'evacuee_id' | 'screened_at' | 'created_at' | 'triage_level'
+	>[]
+): Map<string, TriageLevel> {
+	const latest = new Map<string, (typeof screenings)[number]>();
+	for (const s of screenings) {
+		const prev = latest.get(s.evacuee_id);
+		const at = s.screened_at ?? s.created_at;
+		if (!prev || at > (prev.screened_at ?? prev.created_at)) latest.set(s.evacuee_id, s);
+	}
+	const out = new Map<string, TriageLevel>();
+	for (const [id, s] of latest) if (s.triage_level) out.set(id, s.triage_level);
+	return out;
+}
+
+/**
+ * Colour the UI shows for a screened evacuee: a screening saved without a colour (before
+ * CR-258, or by a writer that skips it) reads as green. Display only — never written back.
+ */
+export function displayTriageLevel(level: TriageLevel | null | undefined): TriageLevel {
+	return level ?? 'green';
+}
+
+/** What Station 2 recorded that drives the Station 3 zone recommendation. */
+export interface ZoningScreeningSignals {
+	symptoms?: readonly string[] | null;
+	triage?: TriageLevel | null;
+}
+
+/**
+ * Zone type recommendation for Station 3:
+ * EWAR surveillance symptoms or yellow/red triage → quarantine;
+ * else Vulnerable Groups / Special Needs → vulnerable; else general.
  */
 export function recommendZoneKind(
 	evacuee: Pick<Evacuee, 'vulnerable_groups' | 'special_needs'>,
-	ewarSymptomsOrTriage?: readonly string[] | TriageLevel | null
+	screening?: ZoningScreeningSignals | null
 ): ZoningRecommendKind {
-	if (Array.isArray(ewarSymptomsOrTriage)) {
-		if (ewarSymptomsOrTriage.length > 0) {
-			return 'quarantine';
-		}
-	} else if (ewarSymptomsOrTriage === 'red' || ewarSymptomsOrTriage === 'yellow') {
-		return 'quarantine';
-	}
+	if ((screening?.symptoms?.length ?? 0) > 0) return 'quarantine';
+	if (screening?.triage === 'red' || screening?.triage === 'yellow') return 'quarantine';
 	if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) {
 		return 'vulnerable';
 	}
@@ -253,13 +283,13 @@ export function recommendZoneKind(
 
 /** Zone type names shared by Station 2 (screening summary) and Station 3 (zone picker). */
 export const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
-	quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง)',
+	quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง / triage เหลือง-แดง)',
 	vulnerable: 'โซนกลุ่มเปราะบาง',
 	general: 'โซนทั่วไป'
 };
 
 const zoneKindLabelsEn: Record<ZoningRecommendKind, string> = {
-	quarantine: 'Quarantine zone (watch-list symptoms)',
+	quarantine: 'Quarantine zone (watch-list symptoms / yellow-red triage)',
 	vulnerable: 'Vulnerable group zone',
 	general: 'General zone'
 };
@@ -284,7 +314,7 @@ export function pickRecommendedZone<Z extends { type?: string; status?: string }
 export type PreferredZoneOutcome =
 	| { kind: 'none' }
 	| { kind: 'use'; code: string }
-	/** EWAR symptoms: quarantine is recommended instead, the suggestion is shown read-only (FR-07). */
+	/** EWAR symptoms or yellow/red triage: quarantine is recommended instead, the suggestion is shown read-only (FR-07). */
 	| { kind: 'quarantine_overrides'; code: string }
 	/** The suggested zone is closed or no longer in the shelter (FR-08). */
 	| { kind: 'unavailable'; code: string };

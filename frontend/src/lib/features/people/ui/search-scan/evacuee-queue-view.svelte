@@ -37,7 +37,9 @@
 	import {
 		isInShelterStatus,
 		nextQueueLabel,
-		nextQueueLabelText
+		nextQueueLabelText,
+		latestTriageByEvacuee,
+		displayTriageLevel
 	} from '../../domain/intake-pipeline';
 	import { peopleLabels } from '../../domain/people';
 	import { sortByCreatedAtAsc } from '../../domain/evacuee-sort';
@@ -95,6 +97,7 @@
 	const screenings = $derived(screeningsQuery.data ?? []);
 	const screenedIds = $derived(new Set(screenings.map((s) => s.evacuee_id)));
 	const screeningByEvacuee = $derived(new Map(screenings.map((s) => [s.evacuee_id, s])));
+	const triageByEvacuee = $derived(latestTriageByEvacuee(screenings));
 
 	let activeTab = $state<WorkflowTab>(untrack(() => initialTab));
 	let arrivingSubTab = $state<ArrivingSubTab>('all');
@@ -283,8 +286,8 @@
 	{#if screening}
 		<span class="inline-flex items-center gap-1 font-medium text-emerald-700">
 			<CheckCircle2 class="size-3.5 shrink-0 text-emerald-600" />
-			{t.screened}{#if screening.triage_level}
-				({t.triage[screening.triage_level] ?? screening.triage_level}){/if}
+			{t.screened}
+			({t.triage[displayTriageLevel(triageByEvacuee.get(row._id))]})
 		</span>
 	{:else}
 		<span class="font-medium text-amber-700">{t.awaitingScreening}</span>

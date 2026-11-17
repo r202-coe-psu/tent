@@ -1308,7 +1308,7 @@ describe('triageLevelSchema and screeningInputSchema', () => {
 		expect(() => triageLevelSchema.parse('blue')).toThrow();
 	});
 
-	it('screeningInputSchema no longer accepts triage_level or vital signs on new input (CR-106 2026-09-07)', () => {
+	it('screeningInputSchema keeps triage_level but drops vital signs on new input (CR-106 2026-09-07)', () => {
 		// Extra/legacy keys on the raw input are silently dropped, not thrown on —
 		// a caller still sending them (an old client, a stale form) must not 422.
 		const parsed = screeningInputSchema.parse({
@@ -1320,11 +1320,21 @@ describe('triageLevelSchema and screeningInputSchema', () => {
 			heart_rate: 75,
 			spo2_percent: 98
 		} as never);
-		expect(parsed).not.toHaveProperty('triage_level');
+		expect(parsed.triage_level).toBe('yellow');
 		expect(parsed).not.toHaveProperty('blood_pressure_sys');
 		expect(parsed).not.toHaveProperty('vital_signs');
 		expect(parsed).not.toHaveProperty('temperature_c');
 		expect(parsed).not.toHaveProperty('needs_referral');
+	});
+
+	it('screeningInputSchema rejects a triage_level outside green/yellow/red', () => {
+		expect(() =>
+			screeningInputSchema.parse({
+				evacuee_id: 'evacuee:01J',
+				track: 'normal',
+				triage_level: 'blue'
+			} as never)
+		).toThrow();
 	});
 });
 
@@ -1337,7 +1347,17 @@ describe('createScreening', () => {
 		expect(typeof s.screened_at).toBe('string');
 	});
 
-	it('never stamps temperature_c, needs_referral, triage_level, or vital_signs on a new doc (CR-106 2026-09-07 amendment)', () => {
+	it('stamps triage_level when given and leaves it off when omitted', () => {
+		const withTriage = createScreening(
+			{ evacuee_id: 'evacuee:x', track: 'normal', triage_level: 'red' },
+			ctx
+		);
+		expect(withTriage.triage_level).toBe('red');
+		const without = createScreening({ evacuee_id: 'evacuee:x', track: 'normal' }, ctx);
+		expect(without).not.toHaveProperty('triage_level');
+	});
+
+	it('never stamps temperature_c, needs_referral, or vital_signs on a new doc (CR-106 2026-09-07 amendment)', () => {
 		// A stale caller might still send these legacy fields — they must be
 		// ignored, not persisted. Cast the whole literal since ScreeningInput
 		// no longer declares them.
@@ -1355,7 +1375,7 @@ describe('createScreening', () => {
 		} as unknown as ScreeningInput;
 		const s = createScreening(staleInput, ctx);
 		expect(s.schema_v).toBe(2);
-		expect(s).not.toHaveProperty('triage_level');
+		expect(s.triage_level).toBe('red');
 		expect(s).not.toHaveProperty('vital_signs');
 		expect(s).not.toHaveProperty('temperature_c');
 		expect(s).not.toHaveProperty('needs_referral');
