@@ -9,6 +9,8 @@ import {
 import {
 	decodeBannerImage,
 	kioskBannerInputSchema,
+	TEMPLATE_IMAGE_MAX_BYTES,
+	TEMPLATE_IMAGE_TOO_LARGE_MESSAGE,
 	type KioskBannerInput
 } from '$lib/features/kiosk-banners';
 import { z } from 'zod';
@@ -124,6 +126,21 @@ export function decodeImageField(raw: unknown): DecodedBannerImage {
 	if (!payload.success) throw new ServiceError('VALIDATION', 'ข้อมูลรูปภาพไม่ถูกต้อง');
 	const decoded = decodeBannerImage(payload.data);
 	if (!decoded.ok) throw new ServiceError('VALIDATION', IMAGE_MESSAGES[decoded.reason]);
+	return { bytes: decoded.bytes, contentType: decoded.contentType };
+}
+
+/** The template logo (`template_image`): same checks as `image`, with its own 512 KB cap. */
+export function decodeTemplateImageField(raw: unknown): DecodedBannerImage {
+	const payload = imagePayloadSchema.safeParse(raw);
+	if (!payload.success) throw new ServiceError('VALIDATION', 'ข้อมูลรูปภาพไม่ถูกต้อง');
+	const decoded = decodeBannerImage(payload.data, TEMPLATE_IMAGE_MAX_BYTES);
+	if (!decoded.ok) {
+		const message =
+			decoded.reason === 'too_large'
+				? TEMPLATE_IMAGE_TOO_LARGE_MESSAGE
+				: IMAGE_MESSAGES[decoded.reason];
+		throw new ServiceError('VALIDATION', message);
+	}
 	return { bytes: decoded.bytes, contentType: decoded.contentType };
 }
 

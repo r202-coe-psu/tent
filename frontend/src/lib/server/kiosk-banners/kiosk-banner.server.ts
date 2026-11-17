@@ -1,5 +1,6 @@
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
+	TEMPLATE_IMAGE_ATTACHMENT,
 	createKioskBanner,
 	groupOf,
 	isActiveAt,
@@ -11,7 +12,8 @@ import {
 	type KioskBannerContext,
 	type KioskBannerDoc,
 	type KioskBannerImageMime,
-	type KioskBannerInput
+	type KioskBannerInput,
+	type KioskBannerTemplate
 } from '$lib/features/kiosk-banners';
 import { screenTypeOf, type KioskScreenType } from '$lib/features/shared';
 
@@ -21,6 +23,12 @@ const IMAGE_ATTACHMENT = 'image';
 export interface DecodedBannerImage {
 	bytes: Uint8Array;
 	contentType: KioskBannerImageMime;
+}
+
+/** Uploaded files of a banner; `templateImage` is the logo of a template banner. */
+export interface BannerFiles {
+	image: DecodedBannerImage | null;
+	templateImage?: DecodedBannerImage | null;
 }
 
 /** Banner doc plus the image content type; raw `_attachments` never leaves this module. */
@@ -88,12 +96,29 @@ async function putDoc(
 	return { ...doc, _rev: rev, image_content_type: attachment?.content_type ?? null };
 }
 
+const referencesTemplateImage = (template: KioskBannerTemplate | undefined): boolean =>
+	template?.image === TEMPLATE_IMAGE_ATTACHMENT;
+
+/** A logo is required exactly when the template references it; `stored` = already on the doc. */
+function assertTemplateImage(
+	template: KioskBannerTemplate | undefined,
+	sent: boolean,
+	stored: boolean
+): void {
+	const referenced = referencesTemplateImage(template);
+	if (sent && !referenced) {
+		throw new ServiceError('VALIDATION', 'รูปในประกาศใช้ได้เฉพาะประกาศที่มีรูปในแม่แบบ');
+	}
+	if (referenced && !sent && !stored) throw new ServiceError('VALIDATION', 'เลือกรูปในประกาศ');
+}
+
 export async function createBanner(
 	input: KioskBannerInput,
-	image: DecodedBannerImage,
+	files: { image: DecodedBannerImage; templateImage?: DecodedBannerImage | null },
 	ctx: Omit<KioskBannerContext, 'order'>,
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
+	assertTemplateImage(input.template, !!files.templateImage, false);
 	const banners = await findRawBanners(ctx.shelterCode);
 	const order = nextBannerOrder(
 		banners,
@@ -101,7 +126,10 @@ export async function createBanner(
 		now
 	);
 	const doc = createKioskBanner(input, { ...ctx, order }, now);
-	return putDoc(doc, { [IMAGE_ATTACHMENT]: toInline(image) });
+	return putDoc(doc, {
+		[IMAGE_ATTACHMENT]: toInline(files.image),
+		...(files.templateImage ? { [TEMPLATE_IMAGE_ATTACHMENT]: toInline(files.templateImage) } : {})
+	});
 }
 
 async function readRaw(id: string): Promise<RawBannerDoc> {
@@ -115,15 +143,35 @@ async function readRaw(id: string): Promise<RawBannerDoc> {
 
 /** Fields a mutation may set; `schema_v`/`group_id` are the only ones that differ across versions. */
 type BannerPatch = Partial<Omit<KioskBannerDoc, 'schema_v' | 'group_id'>> & {
-	schema_v?: 3;
+	schema_v?: 4;
 	group_id?: string;
+	template?: KioskBannerTemplate;
 };
+
+/**
+ * `files` null keeps every stored attachment. Otherwise a new file replaces its slot, and the stored
+ * `template_image` survives only while the new doc's template still references it.
+ */
+function mergeAttachments(
+	stored: Record<string, AttachmentStub> | undefined,
+	files: BannerFiles | null,
+	template: KioskBannerTemplate | undefined
+): Record<string, InlineAttachment | AttachmentStub> {
+	if (!files) return stored ?? {};
+	const { [TEMPLATE_IMAGE_ATTACHMENT]: storedLogo, ...rest } = stored ?? {};
+	const logo = files.templateImage ? toInline(files.templateImage) : storedLogo;
+	return {
+		...rest,
+		...(files.image ? { [IMAGE_ATTACHMENT]: toInline(files.image) } : {}),
+		...(referencesTemplateImage(template) && logo ? { [TEMPLATE_IMAGE_ATTACHMENT]: logo } : {})
+	};
+}
 
 async function mutate(
 	id: string,
 	rev: string,
 	change: (current: RawBannerDoc) => BannerPatch | Promise<BannerPatch>,
-	image: DecodedBannerImage | null,
+	files: BannerFiles | null,
 	now: Date
 ): Promise<KioskBannerRecord> {
 	const current = await readRaw(id);
@@ -131,48 +179,57 @@ async function mutate(
 		throw new ServiceError('CONFLICT', 'Banner was modified by someone else');
 	}
 	const { _attachments, ...kept } = current;
-	const doc = {
-		...kept,
-		...(await change(current)),
-		updated_at: now.toISOString()
-	} as KioskBannerDoc;
-	return putDoc(doc, image ? { [IMAGE_ATTACHMENT]: toInline(image) } : (_attachments ?? {}));
+	const patch = await change(current);
+	const doc = { ...kept, ...patch, updated_at: now.toISOString() } as KioskBannerDoc & {
+		template?: KioskBannerTemplate;
+	};
+	// A patch that sets `template: undefined` (an edit back to an uploaded image) drops the old one.
+	if ('template' in patch && patch.template === undefined) delete doc.template;
+	return putDoc(doc, mergeAttachments(_attachments, files, doc.template));
 }
 
 export function updateBanner(
 	id: string,
 	rev: string,
 	input: KioskBannerInput,
-	image: DecodedBannerImage | null,
+	files: BannerFiles,
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
 	const { title, caption, duration_sec, start_at, end_at, status, screen_type, group_id } = input;
 	return mutate(
 		id,
 		rev,
-		async (current) => ({
-			title,
-			caption,
-			duration_sec,
-			start_at,
-			end_at,
-			status,
-			screen_type,
-			group_id,
-			// Editing a v1 or v2 banner always writes it back as v3.
-			schema_v: 3,
-			// Order is only set by the reorder page; a banner moved to another group or screen goes to
-			// the end of that slot.
-			order:
-				groupOf(current) === group_id && screenTypeOf(current) === screen_type
-					? current.order
-					: nextBannerOrder(
-							await findRawBanners(current.shelter_code),
-							{ group_id, screen_type },
-							now
-						)
-		}),
-		image,
+		async (current) => {
+			assertTemplateImage(
+				input.template,
+				!!files.templateImage,
+				!!current._attachments?.[TEMPLATE_IMAGE_ATTACHMENT]
+			);
+			return {
+				title,
+				caption,
+				duration_sec,
+				start_at,
+				end_at,
+				status,
+				screen_type,
+				group_id,
+				// Editing a v1, v2 or v3 banner always writes it back as v4.
+				schema_v: 4,
+				// Order is only set by the reorder page; a banner moved to another group or screen goes to
+				// the end of that slot.
+				order:
+					groupOf(current) === group_id && screenTypeOf(current) === screen_type
+						? current.order
+						: nextBannerOrder(
+								await findRawBanners(current.shelter_code),
+								{ group_id, screen_type },
+								now
+							),
+				template: input.template
+			};
+		},
+		files,
 		now
 	);
 }
@@ -311,8 +368,9 @@ export async function listActiveForShelter(
 	);
 }
 
-export async function getBannerImage(
-	id: string
+async function readAttachment(
+	id: string,
+	name: string
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
 	const res = await adminRaw(`${docPath(id)}?attachments=true`, 'GET');
 	if (res.status === 404) return null;
@@ -321,7 +379,7 @@ export async function getBannerImage(
 	}
 	const image = (
 		res.data as { _attachments?: Record<string, { content_type: string; data?: string }> }
-	)._attachments?.[IMAGE_ATTACHMENT];
+	)._attachments?.[name];
 	if (!image?.data) return null;
 	const buf = Buffer.from(image.data, 'base64');
 	return {
@@ -329,3 +387,7 @@ export async function getBannerImage(
 		contentType: image.content_type
 	};
 }
+
+export const getBannerImage = (id: string) => readAttachment(id, IMAGE_ATTACHMENT);
+
+export const getBannerTemplateImage = (id: string) => readAttachment(id, TEMPLATE_IMAGE_ATTACHMENT);

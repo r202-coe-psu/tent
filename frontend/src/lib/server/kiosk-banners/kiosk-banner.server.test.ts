@@ -6,13 +6,14 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => ({
 }));
 
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
-import type { KioskBannerInput } from '$lib/features/kiosk-banners';
+import type { KioskBannerInput, KioskBannerTemplate } from '$lib/features/kiosk-banners';
 import {
 	BannerNotFoundError,
 	createBanner,
 	deleteBanner,
 	getBanner,
 	getBannerImage,
+	getBannerTemplateImage,
 	listActiveForShelter,
 	listBannersForShelter,
 	reorderBanners,
@@ -43,6 +44,17 @@ beforeEach(() => {
 });
 
 const BYTES = { bytes: png, contentType: 'image/png' } as const;
+const LOGO_BYTES = { bytes: new Uint8Array([9, 8, 7]), contentType: 'image/jpeg' } as const;
+const logoBase64 = Buffer.from(LOGO_BYTES.bytes).toString('base64');
+const TEMPLATE: KioskBannerTemplate = {
+	heading: 'หัวข้อ',
+	body: '',
+	align: 'center',
+	bg_color: '#1e3a8a',
+	text_color: '#ffffff',
+	image: 'template_image'
+};
+const TEMPLATE_NO_IMAGE: KioskBannerTemplate = { ...TEMPLATE, image: null };
 const CTX = { shelterCode: 'SH1', createdBy: 'alice' };
 const SLOT = { groupId: GROUP_A, screenType: 'compact' } as const;
 const FOUND_NONE = { status: 200, data: { docs: [] } };
@@ -53,7 +65,7 @@ describe('createBanner', () => {
 			.mockResolvedValueOnce(FOUND_NONE)
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		const record = await createBanner(input, BYTES, CTX, NOW);
+		const record = await createBanner(input, { image: BYTES }, CTX, NOW);
 
 		expect(adminRawMock).toHaveBeenCalledTimes(2);
 		const [findPath, findMethod, findBody] = adminRawMock.mock.calls[0];
@@ -79,7 +91,7 @@ describe('createBanner', () => {
 			.mockResolvedValueOnce(FOUND_NONE)
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		const record = await createBanner(input, BYTES, CTX, NOW);
+		const record = await createBanner(input, { image: BYTES }, CTX, NOW);
 
 		expect(record.order).toBe(1);
 		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ order: 1 });
@@ -98,7 +110,7 @@ describe('createBanner', () => {
 			})
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		const record = await createBanner(input, BYTES, CTX, NOW);
+		const record = await createBanner(input, { image: BYTES }, CTX, NOW);
 
 		expect(record.order).toBe(6);
 		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ order: 6 });
@@ -118,7 +130,7 @@ describe('createBanner', () => {
 			})
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		const record = await createBanner(input, BYTES, CTX, NOW);
+		const record = await createBanner(input, { image: BYTES }, CTX, NOW);
 
 		expect(record.order).toBe(4);
 	});
@@ -137,19 +149,19 @@ describe('createBanner', () => {
 			})
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		const record = await createBanner(input, BYTES, CTX, NOW);
+		const record = await createBanner(input, { image: BYTES }, CTX, NOW);
 
 		expect(record.order).toBe(4);
 	});
 
-	it('writes a v3 doc carrying the input group', async () => {
+	it('writes a v4 doc carrying the input group', async () => {
 		adminRawMock
 			.mockResolvedValueOnce(FOUND_NONE)
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		await createBanner(input, BYTES, CTX, NOW);
+		await createBanner(input, { image: BYTES }, CTX, NOW);
 
-		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ schema_v: 3, group_id: GROUP_A });
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ schema_v: 4, group_id: GROUP_A });
 	});
 
 	it('ignores an order smuggled in the input', async () => {
@@ -157,9 +169,57 @@ describe('createBanner', () => {
 			.mockResolvedValueOnce(FOUND_NONE)
 			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		const record = await createBanner({ ...input, order: 7 } as KioskBannerInput, BYTES, CTX, NOW);
+		const record = await createBanner(
+			{ ...input, order: 7 } as KioskBannerInput,
+			{ image: BYTES },
+			CTX,
+			NOW
+		);
 
 		expect(record.order).toBe(1);
+	});
+
+	it('writes the template with both the image and the template_image attachments', async () => {
+		adminRawMock
+			.mockResolvedValueOnce(FOUND_NONE)
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		await createBanner(
+			{ ...input, template: TEMPLATE },
+			{ image: BYTES, templateImage: LOGO_BYTES },
+			CTX,
+			NOW
+		);
+
+		const body = adminRawMock.mock.calls[1][2] as { _attachments: unknown };
+		expect(body).toMatchObject({ template: TEMPLATE });
+		expect(body._attachments).toEqual({
+			image: { content_type: 'image/png', data: pngBase64 },
+			template_image: { content_type: 'image/jpeg', data: logoBase64 }
+		});
+	});
+
+	it('rejects a template that references template_image when no logo is sent', async () => {
+		const err = await createBanner(
+			{ ...input, template: TEMPLATE },
+			{ image: BYTES },
+			CTX,
+			NOW
+		).catch((e) => e);
+
+		expect(err).toBeInstanceOf(ServiceError);
+		expect(err).toMatchObject({ code: 'VALIDATION', message: 'เลือกรูปในประกาศ' });
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		['has no template', undefined],
+		['has a template without an image', TEMPLATE_NO_IMAGE]
+	])('rejects a logo when the banner %s', async (_name, template) => {
+		await expect(
+			createBanner({ ...input, template }, { image: BYTES, templateImage: LOGO_BYTES }, CTX, NOW)
+		).rejects.toMatchObject({ code: 'VALIDATION' });
+		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 });
 
@@ -170,6 +230,8 @@ const STUB = {
 	length: 1234,
 	stub: true
 };
+
+const LOGO_STUB = { ...STUB, content_type: 'image/webp', digest: 'md5-logo' };
 
 function existingDoc(overrides: Record<string, unknown> = {}) {
 	return {
@@ -205,7 +267,7 @@ describe('updateBanner', () => {
 			'kiosk_banner:b1',
 			'1-a',
 			{ ...input, title: 'ใหม่' },
-			null,
+			{ image: null },
 			NOW
 		);
 
@@ -236,7 +298,13 @@ describe('updateBanner', () => {
 				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
 			});
 
-		await updateBanner('kiosk_banner:b1', '1-a', { ...input, screen_type: 'portrait' }, null, NOW);
+		await updateBanner(
+			'kiosk_banner:b1',
+			'1-a',
+			{ ...input, screen_type: 'portrait' },
+			{ image: null },
+			NOW
+		);
 
 		expect(adminRawMock.mock.calls[2][2]).toMatchObject({ screen_type: 'portrait', order: 1 });
 	});
@@ -249,7 +317,7 @@ describe('updateBanner', () => {
 				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
 			});
 
-		const record = await updateBanner('kiosk_banner:b1', '1-a', input, null, NOW);
+		const record = await updateBanner('kiosk_banner:b1', '1-a', input, { image: null }, NOW);
 
 		expect(adminRawMock).toHaveBeenCalledTimes(2);
 		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ order: 4 });
@@ -268,7 +336,7 @@ describe('updateBanner', () => {
 			'kiosk_banner:b1',
 			'1-a',
 			{ ...input, order: 9 } as KioskBannerInput,
-			null,
+			{ image: null },
 			NOW
 		);
 
@@ -303,7 +371,7 @@ describe('updateBanner', () => {
 			'kiosk_banner:b1',
 			'1-a',
 			{ ...input, screen_type: 'portrait' },
-			null,
+			{ image: null },
 			NOW
 		);
 
@@ -342,7 +410,7 @@ describe('updateBanner', () => {
 			'kiosk_banner:b1',
 			'1-a',
 			{ ...input, group_id: GROUP_B },
-			null,
+			{ image: null },
 			NOW
 		);
 
@@ -350,7 +418,7 @@ describe('updateBanner', () => {
 		expect(record.order).toBe(6);
 	});
 
-	it('turns an ungrouped v1 banner into v3 in the chosen group, at the end of its slot', async () => {
+	it('turns an ungrouped v1 banner into v4 in the chosen group, at the end of its slot', async () => {
 		adminRawMock
 			.mockResolvedValueOnce({
 				status: 200,
@@ -365,10 +433,10 @@ describe('updateBanner', () => {
 				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
 			});
 
-		const record = await updateBanner('kiosk_banner:b1', '1-a', input, null, NOW);
+		const record = await updateBanner('kiosk_banner:b1', '1-a', input, { image: null }, NOW);
 
 		expect(adminRawMock.mock.calls[2][2]).toMatchObject({
-			schema_v: 3,
+			schema_v: 4,
 			group_id: GROUP_A,
 			order: 5
 		});
@@ -385,7 +453,7 @@ describe('updateBanner', () => {
 			'kiosk_banner:b1',
 			'1-a',
 			input,
-			{ bytes: png, contentType: 'image/png' },
+			{ image: { bytes: png, contentType: 'image/png' } },
 			NOW
 		);
 
@@ -394,10 +462,145 @@ describe('updateBanner', () => {
 		expect(record.image_content_type).toBe('image/png');
 	});
 
+	describe('with a template', () => {
+		const ok = { status: 201, data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' } };
+		const withLogo = (overrides: Record<string, unknown> = {}) =>
+			existingDoc({
+				schema_v: 4,
+				template: TEMPLATE,
+				_attachments: { image: STUB, template_image: LOGO_STUB },
+				...overrides
+			});
+		const putBody = () =>
+			adminRawMock.mock.calls.find((c) => c[1] === 'PUT')![2] as Record<string, unknown> & {
+				_attachments: Record<string, unknown>;
+			};
+
+		it('keeps the template_image stub when only a new image is sent', async () => {
+			adminRawMock
+				.mockResolvedValueOnce({ status: 200, data: withLogo() })
+				.mockResolvedValueOnce(ok);
+
+			await updateBanner(
+				'kiosk_banner:b1',
+				'1-a',
+				{ ...input, template: TEMPLATE },
+				{ image: BYTES },
+				NOW
+			);
+
+			expect(putBody()._attachments).toEqual({
+				image: { content_type: 'image/png', data: pngBase64 },
+				template_image: LOGO_STUB
+			});
+		});
+
+		it('replaces template_image with a new logo and keeps the image stub', async () => {
+			adminRawMock
+				.mockResolvedValueOnce({ status: 200, data: withLogo() })
+				.mockResolvedValueOnce(ok);
+
+			await updateBanner(
+				'kiosk_banner:b1',
+				'1-a',
+				{ ...input, template: TEMPLATE },
+				{ image: null, templateImage: LOGO_BYTES },
+				NOW
+			);
+
+			expect(putBody()._attachments).toEqual({
+				image: STUB,
+				template_image: { content_type: 'image/jpeg', data: logoBase64 }
+			});
+		});
+
+		it('writes the input template into the doc', async () => {
+			adminRawMock
+				.mockResolvedValueOnce({ status: 200, data: withLogo() })
+				.mockResolvedValueOnce(ok);
+
+			await updateBanner(
+				'kiosk_banner:b1',
+				'1-a',
+				{ ...input, template: { ...TEMPLATE, heading: 'แก้แล้ว', align: 'left' } },
+				{ image: null },
+				NOW
+			);
+
+			expect(putBody().template).toEqual({ ...TEMPLATE, heading: 'แก้แล้ว', align: 'left' });
+		});
+
+		it('drops the template and its template_image when switched back to an uploaded image', async () => {
+			adminRawMock
+				.mockResolvedValueOnce({ status: 200, data: withLogo() })
+				.mockResolvedValueOnce(ok);
+
+			await updateBanner('kiosk_banner:b1', '1-a', input, { image: BYTES }, NOW);
+
+			expect(putBody()).not.toHaveProperty('template');
+			expect(Object.keys(putBody()._attachments)).toEqual(['image']);
+		});
+
+		it('drops the template_image attachment when the template no longer references it', async () => {
+			adminRawMock
+				.mockResolvedValueOnce({ status: 200, data: withLogo() })
+				.mockResolvedValueOnce(ok);
+
+			await updateBanner(
+				'kiosk_banner:b1',
+				'1-a',
+				{ ...input, template: TEMPLATE_NO_IMAGE },
+				{ image: null },
+				NOW
+			);
+
+			expect(putBody()._attachments).toEqual({ image: STUB });
+			expect(putBody().template).toEqual(TEMPLATE_NO_IMAGE);
+		});
+
+		it('rejects a template that references template_image when no logo exists or is sent', async () => {
+			adminRawMock.mockResolvedValueOnce({
+				status: 200,
+				data: existingDoc({ schema_v: 4 })
+			});
+
+			await expect(
+				updateBanner(
+					'kiosk_banner:b1',
+					'1-a',
+					{ ...input, template: TEMPLATE },
+					{ image: BYTES },
+					NOW
+				)
+			).rejects.toMatchObject({ code: 'VALIDATION', message: 'เลือกรูปในประกาศ' });
+			expect(adminRawMock).toHaveBeenCalledTimes(1);
+		});
+
+		it.each([
+			['has no template', undefined],
+			['has a template without an image', TEMPLATE_NO_IMAGE]
+		])('rejects a new logo when the banner %s', async (_name, template) => {
+			adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc({ schema_v: 4 }) });
+
+			await expect(
+				updateBanner(
+					'kiosk_banner:b1',
+					'1-a',
+					{ ...input, template },
+					{ image: null, templateImage: LOGO_BYTES },
+					NOW
+				)
+			).rejects.toMatchObject({ code: 'VALIDATION' });
+			expect(adminRawMock).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	it('rejects a stale rev with CONFLICT and never PUTs', async () => {
 		adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc({ _rev: '2-z' }) });
 
-		await expect(updateBanner('kiosk_banner:b1', '1-a', input, null, NOW)).rejects.toMatchObject({
+		await expect(
+			updateBanner('kiosk_banner:b1', '1-a', input, { image: null }, NOW)
+		).rejects.toMatchObject({
 			code: 'CONFLICT'
 		});
 		expect(adminRawMock).toHaveBeenCalledTimes(1);
@@ -408,7 +611,9 @@ describe('updateBanner', () => {
 			.mockResolvedValueOnce({ status: 200, data: existingDoc() })
 			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } });
 
-		const err = await updateBanner('kiosk_banner:b1', '1-a', input, null, NOW).catch((e) => e);
+		const err = await updateBanner('kiosk_banner:b1', '1-a', input, { image: null }, NOW).catch(
+			(e) => e
+		);
 		expect(err).toBeInstanceOf(ServiceError);
 		expect(err.code).toBe('CONFLICT');
 	});
@@ -431,6 +636,28 @@ describe('setBannerStatus', () => {
 			_attachments: { image: STUB }
 		});
 		expect(record.status).toBe('inactive');
+	});
+
+	it('keeps the template and the template_image stub', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({
+				status: 200,
+				data: existingDoc({
+					schema_v: 4,
+					template: TEMPLATE,
+					_attachments: { image: STUB, template_image: LOGO_STUB }
+				})
+			})
+			.mockResolvedValueOnce({
+				status: 201,
+				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+			});
+
+		await setBannerStatus('kiosk_banner:b1', '1-a', 'inactive', NOW);
+
+		const body = adminRawMock.mock.calls[1][2] as Record<string, unknown>;
+		expect(body.template).toEqual(TEMPLATE);
+		expect(body._attachments).toEqual({ image: STUB, template_image: LOGO_STUB });
 	});
 });
 
@@ -531,6 +758,38 @@ describe('reorderBanners', () => {
 				doc(3, { order: 2, updated_at: NOW.toISOString() })
 			]
 		});
+	});
+
+	it('keeps the template and the template_image stub of a reordered template banner', async () => {
+		const templated = (n: number) =>
+			doc(n, {
+				schema_v: 4,
+				template: TEMPLATE,
+				_attachments: { image: STUB, template_image: LOGO_STUB }
+			});
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: { docs: [templated(1), templated(2)] } })
+			.mockResolvedValueOnce({
+				status: 201,
+				data: rowsFor('kiosk_banner:b1', 'kiosk_banner:b2')
+			});
+
+		await reorderBanners(
+			'SH1',
+			SLOT,
+			[
+				{ id: 'kiosk_banner:b2', rev: '1-r2' },
+				{ id: 'kiosk_banner:b1', rev: '1-r1' }
+			],
+			NOW
+		);
+
+		const { docs } = adminRawMock.mock.calls[1][2] as { docs: Record<string, unknown>[] };
+		expect(docs).toHaveLength(2);
+		for (const written of docs) {
+			expect(written.template).toEqual(TEMPLATE);
+			expect(written._attachments).toEqual({ image: STUB, template_image: LOGO_STUB });
+		}
 	});
 
 	it('renumbers only its own group slot, leaving other groups and ungrouped banners alone', async () => {
@@ -844,5 +1103,39 @@ describe('getBannerImage', () => {
 			data: existingDoc({ _attachments: undefined })
 		});
 		expect(await getBannerImage('kiosk_banner:y')).toBeNull();
+	});
+});
+
+describe('getBannerTemplateImage', () => {
+	it('decodes the template_image attachment fetched with attachments=true', async () => {
+		adminRawMock.mockResolvedValue({
+			status: 200,
+			data: existingDoc({
+				_attachments: {
+					image: { content_type: 'image/png', data: pngBase64 },
+					template_image: { content_type: 'image/jpeg', data: logoBase64 }
+				}
+			})
+		});
+
+		const logo = await getBannerTemplateImage('kiosk_banner:b1');
+
+		expect(adminRawMock).toHaveBeenCalledWith(
+			'/registry/kiosk_banner%3Ab1?attachments=true',
+			'GET'
+		);
+		expect(logo?.contentType).toBe('image/jpeg');
+		expect(Array.from(new Uint8Array(logo!.bytes))).toEqual([9, 8, 7]);
+	});
+
+	it('returns null when the doc is missing or has no template_image', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
+		expect(await getBannerTemplateImage('kiosk_banner:x')).toBeNull();
+
+		adminRawMock.mockResolvedValueOnce({
+			status: 200,
+			data: existingDoc({ _attachments: { image: { content_type: 'image/png', data: pngBase64 } } })
+		});
+		expect(await getBannerTemplateImage('kiosk_banner:y')).toBeNull();
 	});
 });
