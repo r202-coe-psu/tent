@@ -28,6 +28,7 @@
 		StayStatusBadge,
 		TriageBadge,
 		TRIAGE_I18N,
+		displayTriageLevel,
 		maskNationalId,
 		formatPersonName,
 		classifyZoningQueueTab,
@@ -415,10 +416,10 @@
 						</li>
 					{/each}
 				</ol>
-				{#if (latestScreening?.symptoms?.length ?? 0) > 0 || latestScreening?.track === 'fast_track' || latestScreening?.triage_level || isolationDefault}
+				{#if latestScreening || isolationDefault}
 					<div class="flex flex-wrap items-center gap-2">
-						{#if latestScreening?.triage_level}
-							<TriageBadge level={latestScreening.triage_level} />
+						{#if latestScreening}
+							<TriageBadge level={displayTriageLevel(latestScreening.triage_level)} />
 						{/if}
 						{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
 							<Badge
@@ -524,9 +525,7 @@
 						<div>
 							<dt class="text-xs text-muted-foreground">{t.triageLabel}</dt>
 							<dd class="mt-1">
-								{latestScreening.triage_level
-									? tTriage.levels[latestScreening.triage_level].label
-									: '—'}
+								{tTriage.levels[displayTriageLevel(latestScreening.triage_level)].label}
 							</dd>
 						</div>
 						<div>

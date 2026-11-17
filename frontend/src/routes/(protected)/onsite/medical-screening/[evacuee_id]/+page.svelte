@@ -23,6 +23,7 @@
 		formatPersonName,
 		StationCompletionSummary,
 		TRIAGE_I18N,
+		displayTriageLevel,
 		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
@@ -84,11 +85,11 @@
 	const savedFacts = $derived.by(() => {
 		if (!evacuee) return [];
 		const symptoms = latestScreening?.symptoms ?? [];
-		const triage = latestScreening?.triage_level ?? null;
+		const triage = displayTriageLevel(latestScreening?.triage_level);
 		return [
 			{
 				label: t.factTriage,
-				value: triage ? tTriage.levels[triage].label : '—'
+				value: tTriage.levels[triage].label
 			},
 			{
 				label: t.factCareTrack,

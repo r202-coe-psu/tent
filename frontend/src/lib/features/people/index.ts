@@ -190,6 +190,7 @@ export {
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	latestTriageByEvacuee,
+	displayTriageLevel,
 	pickRecommendedZone,
 	resolvePreferredZone,
 	ZONE_KIND_LABELS,

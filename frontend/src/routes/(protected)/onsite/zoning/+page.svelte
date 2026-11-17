@@ -31,6 +31,7 @@
 		useScreenings,
 		TriageBadge,
 		latestTriageByEvacuee,
+		displayTriageLevel,
 		maskNationalId,
 		matchesEvacueeSearch,
 		formatPersonName,
@@ -667,9 +668,11 @@
 {/snippet}
 
 {#snippet triageBadge(evacueeId: string)}
-	{@const level = triageByEvacuee.get(evacueeId)}
-	{#if level}
-		<TriageBadge {level} class="mt-1 flex w-fit" />
+	{#if screenedIds.has(evacueeId)}
+		<TriageBadge
+			level={displayTriageLevel(triageByEvacuee.get(evacueeId))}
+			class="mt-1 flex w-fit"
+		/>
 	{/if}
 {/snippet}
 

@@ -48,7 +48,7 @@ affects:
 - **FR-03** — บันทึกแล้ว screening doc ใหม่ต้องมี `triage_level`
 - **FR-04** — เลือกสีต้อง **ไม่** เปลี่ยน `care_track` หรือ field อื่นอัตโนมัติ (ต่างจาก UI ก่อน 2026-09-07 ที่ เหลือง/แดง → fast_track, แดง → ส่งต่อ)
 - **FR-05** — สรุปหลังบันทึก Station 2 แสดงสี triage
-- **FR-06** — คิว Station 2 แท็บ "ตรวจแล้ว", คิว Station 3 (การ์ดมือถือ + ตาราง) และหน้า `/onsite/zoning/[id]` แสดง badge สีจาก screening ล่าสุด; screening ที่ไม่มี `triage_level` ไม่แสดง badge
+- **FR-06** — คิว Station 2 แท็บ "ตรวจแล้ว", คิว Station 3 (การ์ดมือถือ + ตาราง) และหน้า `/onsite/zoning/[id]` แสดง badge สีจาก screening ล่าสุด; screening ล่าสุดที่ไม่มี `triage_level` (doc ก่อน CR-258 หรือ writer อื่นที่ไม่ส่งสี) **แสดงเป็นเขียว** โดยไม่เขียนค่ากลับลง doc; คนที่ยังไม่คัดกรองไม่มี badge
 - **FR-07** — `recommendZoneKind` คืน `quarantine` เมื่อ EWAR ไม่ว่าง หรือ triage `yellow`/`red`
 - **FR-08** — ข้อความแนะนำโซนกักตัวต้องไม่อ้าง EWAR เป็นเหตุผลเดียว
 
@@ -57,7 +57,7 @@ affects:
 - [ ] Station 2 เปิดคนใหม่ → เขียวถูกเลือกอยู่; เปลี่ยนสีแล้วออกจากหน้า → ถามยืนยัน (dirty)
 - [ ] บันทึกเหลือง ไม่ติ๊ก EWAR, ไม่มี VG → Station 3 แนะนำโซนกักตัว
 - [ ] บันทึกเขียว ไม่ติ๊ก EWAR, มี VG → แนะนำโซนกลุ่มเปราะบาง
-- [ ] Screening เก่าที่ไม่มี `triage_level` → ไม่มี badge, แนะนำโซนเหมือนเดิม
+- [ ] Screening เก่าที่ไม่มี `triage_level` → แสดง badge เขียว, แนะนำโซนเหมือนเขียว, doc ไม่ถูกแก้
 - [ ] ไม่มี vitals / อุณหภูมิ / หมู่เลือด / referral toggle กลับมาในฟอร์ม
 - [ ] unit tests domain (`recommendZoneKind`, `createScreening`) + render test ฟอร์ม Station 2 ผ่าน
 
@@ -70,9 +70,10 @@ affects:
 
 ## Migration
 
-ไม่ bump `schema_v`. `screening` schema_v 2 มี `triage_level` อยู่แล้ว (`enum | null`, optional). Doc ที่บันทึกช่วง 2026-09-07 → วันนี้ไม่มี field นี้ = อ่านเป็น "ไม่ระบุ" ไม่ backfill.
+ไม่ bump `schema_v`. `screening` schema_v 2 มี `triage_level` อยู่แล้ว (`enum | null`, optional). Doc ที่บันทึกช่วง 2026-09-07 → วันนี้ไม่มี field นี้ = อ่านเป็น "ไม่ระบุ" ไม่ backfill. UI แสดง doc เหล่านี้เป็นเขียว (FR-06).
 
 ## Decision log
 
 - 2026-11-17 — proposed. เจ้าของโครงการเลือก: track ด้วย CR ใหม่; สโคป = ฟอร์ม + badge + แนะนำโซน; ค่าเริ่มต้นเขียว
+- 2026-11-17 — เจ้าของโครงการ: screening ที่ไม่มีสีให้ UI แสดงเป็นเขียว (แก้ FR-06 เดิมที่ไม่แสดง badge) · M5 acuity ยังใช้ค่าที่บันทึกจริงตาม D13 (ไม่มีสี → ว่างและบังคับเลือก)
 - 2026-11-17 — **approved** โดยเจ้าของโครงการ รวม FR-04 (เลือกสีไม่เปลี่ยน `care_track` / สถานะส่งต่ออัตโนมัติ)

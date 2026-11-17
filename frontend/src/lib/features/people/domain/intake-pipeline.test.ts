@@ -14,6 +14,7 @@ import {
 	parseZoningQrCode,
 	recommendZoneKind,
 	latestTriageByEvacuee,
+	displayTriageLevel,
 	pickRecommendedZone,
 	resolvePreferredZone,
 	sortByZoningQueueSince,
@@ -353,6 +354,12 @@ describe('latestTriageByEvacuee', () => {
 			sc('e1', '2026-10-01T08:00:00Z')
 		]);
 		expect(map.has('e1')).toBe(false);
+	});
+
+	it('shows a screening saved without a colour as green', () => {
+		expect(displayTriageLevel(undefined)).toBe('green');
+		expect(displayTriageLevel(null)).toBe('green');
+		expect(displayTriageLevel('red')).toBe('red');
 	});
 });
 

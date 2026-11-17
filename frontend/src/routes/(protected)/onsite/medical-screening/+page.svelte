@@ -31,7 +31,8 @@
 		TriageBadge,
 		maskNationalId,
 		lookupFederatedByScanCode,
-		latestTriageByEvacuee
+		latestTriageByEvacuee,
+		displayTriageLevel
 	} from '$lib/features/people';
 	import {
 		ClaimDialog,
@@ -215,9 +216,8 @@
 </script>
 
 {#snippet triageBadge(evacueeId: string)}
-	{@const level = triageByEvacuee.get(evacueeId)}
-	{#if level}
-		<TriageBadge {level} class="mt-1 w-fit" />
+	{#if screenedIds.has(evacueeId)}
+		<TriageBadge level={displayTriageLevel(triageByEvacuee.get(evacueeId))} class="mt-1 w-fit" />
 	{/if}
 {/snippet}
 

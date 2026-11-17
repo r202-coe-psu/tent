@@ -246,6 +246,14 @@ export function latestTriageByEvacuee(
 	return out;
 }
 
+/**
+ * Colour the UI shows for a screened evacuee: a screening saved without a colour (before
+ * CR-258, or by a writer that skips it) reads as green. Display only — never written back.
+ */
+export function displayTriageLevel(level: TriageLevel | null | undefined): TriageLevel {
+	return level ?? 'green';
+}
+
 /** What Station 2 recorded that drives the Station 3 zone recommendation. */
 export interface ZoningScreeningSignals {
 	symptoms?: readonly string[] | null;
