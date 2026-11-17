@@ -28,8 +28,11 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
+		TriageBadge,
 		maskNationalId,
-		lookupFederatedByScanCode
+		lookupFederatedByScanCode,
+		latestTriageByEvacuee,
+		displayTriageLevel
 	} from '$lib/features/people';
 	import {
 		ClaimDialog,
@@ -70,6 +73,7 @@
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
 	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
+	const triageByEvacuee = $derived(latestTriageByEvacuee(screeningsQuery.data ?? []));
 
 	let searchQuery = $state('');
 	let barcodeInput = $state('');
@@ -210,6 +214,12 @@
 		return `${time}${t.timeSuffix} (${day})`;
 	}
 </script>
+
+{#snippet triageBadge(evacueeId: string)}
+	{#if screenedIds.has(evacueeId)}
+		<TriageBadge level={displayTriageLevel(triageByEvacuee.get(evacueeId))} class="mt-1 w-fit" />
+	{/if}
+{/snippet}
 
 {#snippet needBadges(evacuee: (typeof pagedRows.items)[number])}
 	{#if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) || (evacuee.special_needs && evacuee.special_needs.length > 0)}
@@ -447,6 +457,7 @@
 											<span class="text-xs text-muted-foreground">({evacuee.nickname})</span>
 										{/if}
 									</button>
+									{@render triageBadge(evacuee._id)}
 									<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
 										<span>
 											{t.colRegisteredAt}:
@@ -499,6 +510,7 @@
 															({evacuee.nickname})
 														</span>
 													{/if}
+													{@render triageBadge(evacuee._id)}
 												</div>
 											</Table.TableCell>
 											<Table.TableCell class="py-3 font-mono text-xs text-muted-foreground">

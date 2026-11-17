@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import MealCoveragePanel from './MealCoveragePanel.svelte';
 
+// The first mounts of this large panel pass 5s when the whole suite runs in parallel
+// (the pre-push hook), though each takes well under a second alone.
+vi.setConfig({ testTimeout: 20_000 });
+
 const env = vi.hoisted(() => ({
 	evacuees: { data: [] as unknown[], isLoading: false, isError: false },
 	movements: { data: [] as unknown[], isLoading: false, isError: false },

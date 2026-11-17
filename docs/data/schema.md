@@ -263,12 +263,14 @@ ZONE_CHANGE eligible from: [active, room_confirmed]
 | `needs_referral` | bool                                                                                           | req | default `false`                                  |
 | `notes`          | str                                                                                            | opt | —                                                |
 | `screened_at`    | ts                                                                                             | req | —                                                |
-| `triage_level`   | enum(`green`,`yellow`,`red`)\|null                                                             | opt | ผลคัดแยก triage 3 สี (schema_v 2, CR-072/CR-106) |
+| `triage_level`   | enum(`green`,`yellow`,`red`)\|null                                                             | opt | ผลคัดแยก triage 3 สี (schema_v 2) — Station 2 เขียนทุกครั้ง ค่าเริ่มต้น `green` (CR-258); doc ช่วง 2026-09-07 → 2026-11-17 ไม่มีค่า |
 | `vital_signs`    | {`blood_pressure_sys`:num?, `blood_pressure_dia`:num?, `heart_rate`:num?, `spo2_percent`:num?} | opt | สัญญาณชีพ (schema_v 2)                           |
 
 **Index:** `(evacuee_id, screened_at)` · view `latest_screening`
 
 **Migration (schema_v 1 → 2, CR-106):** purely additive — เพิ่ม `triage_level` (เขียว/เหลือง/แดง) และ `vital_signs` (ความดัน, ชีพจร, SpO2); doc เดิม schema_v 1 อ่านได้ตามปกติโดยไม่ต้อง backfill, เมื่อเขียนใหม่ stamp schema_v 2
+
+> **CR-258 (2026-11-17):** `triage_level` กลับมาใช้ — Station 2 เขียนเขียว/เหลือง/แดง และ Station 3 แนะนำโซนกักตัวเมื่อ `yellow`/`red` · `vital_signs`, `temperature_c`, `needs_referral` ยังเลิกเขียนใหม่ตาม CR-106 amendment 2026-09-07 (อ่านได้เป็น legacy) · ไม่ bump `schema_v`
 
 ### 1.6 `image` — `image:{ulid}` · **schema_v 2** (CR-049, CR-175 donor photos)
 
@@ -2887,7 +2889,7 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | `notes`           | str                                                                               | opt | —                                                                                                                                                                |
 | `dispatch_mode`   | enum(`tracking`,`m5`)                                                             | opt | `medical-emergency` เท่านั้น (schema_v 3) · ไม่มีค่า = `tracking` (ใบเดิมทั้งหมด) · `m5` = ส่งผ่าน M5 · เลือกตอนสร้างชุด |
 | `batch_id`        | ulid                                                                              | opt | บังคับเมื่อ `dispatch_mode = m5` · ทุกใบที่มี `batch_id` เดียวกัน = ใบส่งต่อ M5 ใบเดียว · ใบเดิมไม่ backfill |
-| `acuity`          | enum(`red`,`yellow`,`green`,`black`)                                              | opt | บังคับเมื่อ `m5` · รายคน แยกจาก `urgency` · UI ตั้งค่าเริ่มต้นจาก `screening.triage_level` เก่าถ้ามี |
+| `acuity`          | enum(`red`,`yellow`,`green`,`black`)                                              | opt | บังคับเมื่อ `m5` · รายคน แยกจาก `urgency` · UI ตั้งค่าเริ่มต้นจาก `screening.triage_level` ล่าสุดถ้ามี (CR-258) ไม่มีสี → ว่าง |
 | `transport`       | {`vehicle_type`:enum(`ambulance`,`van`,`helicopter`,`other`), `note`:str?}       | opt | บังคับเมื่อ `m5` · พาหนะของศูนย์ · ร่วมกันทั้งชุด |
 | `requester_contact` | {`name`:str, `role`:str, `phone`:str}                                           | opt | บังคับเมื่อ `m5` · ผู้ติดต่อกลับ ณ ตอนส่ง · ร่วมกันทั้งชุด |
 | `external`        | {`system`:`m5`, `external_ref`:str(≤64), `code`:str, `status`:enum(`awaiting_review`,`pending`,`rejected`,`in_transit`,`arrived`,`cancelled`), `original_m5_facility_id`:int?, `review`:{`note`,`by`,`at`}?, `last_synced_at`:ts?} | sys | ลิงก์ไปใบ M5 · BFF เขียนตอนส่งสำเร็จ (`external_ref` = `TENT-{shelter_code}-{batch_id}`) · sync worker อัปเดตส่วนที่เหลือ · ทุกใบในชุดมีค่าเดียวกัน |
