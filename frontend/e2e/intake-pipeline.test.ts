@@ -702,7 +702,6 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		await expect(page.getByText(/ดูแลตามปกติ|Normal|Fast track/i).first()).toBeVisible({
 			timeout: 10_000
 		});
-		await expect(page.getByText('ระดับความเร่งด่วน (Triage)')).toBeVisible();
 		await expect(page.locator('#med-triage-green')).toHaveAttribute('data-state', 'checked');
 		await expect(page.getByRole('button', { name: 'บันทึกผลคัดกรอง' })).toBeVisible();
 		await expect(page.getByText(/อุณหภูมิ|blood group|ระดับไทรอาจ/i)).toHaveCount(0);

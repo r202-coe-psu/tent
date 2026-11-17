@@ -337,7 +337,7 @@ describe('ClinicalScreeningForm component', () => {
 		household_id: null
 	} as Evacuee;
 
-	it('renders 4-section screening form with triage, editable VG and special needs, without vitals/referral or amber read-only banner', () => {
+	it('renders 4-section screening form with editable VG and special needs, without vitals/referral or amber read-only banner', () => {
 		const result = render(ClinicalScreeningForm, {
 			props: {
 				evacuee: sampleEvacuee,
@@ -347,14 +347,6 @@ describe('ClinicalScreeningForm component', () => {
 
 		// Section 1: Health History & Care Track (+ general symptoms via HealthMedicalFields)
 		expect(result.body).toContain('1. ประวัติสุขภาพและแนวทางดูแล');
-		// Triage green / yellow / red, green preselected (CR-258)
-		expect(result.body).toContain('ระดับความเร่งด่วน (Triage)');
-		expect(result.body).toContain('id="med-triage-green"');
-		expect(result.body).toContain('id="med-triage-yellow"');
-		expect(result.body).toContain('id="med-triage-red"');
-		expect(result.body).toMatch(
-			/id="med-triage-green"[^>]*data-state="checked"|data-state="checked"[^>]*id="med-triage-green"/
-		);
 		expect(result.body).toContain('แนวทางดูแล (Care Track)');
 		expect(result.body).toContain('ดูแลตามปกติ (Normal)');
 		expect(result.body).toContain('Fast track');

@@ -31,10 +31,8 @@
 		TriageBadge,
 		maskNationalId,
 		lookupFederatedByScanCode,
-		type Screening,
-		type TriageLevel
+		latestTriageByEvacuee
 	} from '$lib/features/people';
-	import { SvelteMap } from 'svelte/reactivity';
 	import {
 		ClaimDialog,
 		type UnassignedRegistrationSearchHit
@@ -74,17 +72,7 @@
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
 	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
-	/** Triage colour of each evacuee's latest screening (screenings without one are skipped). */
-	const triageByEvacuee = $derived.by(() => {
-		const latest = new SvelteMap<string, Screening>();
-		for (const s of screeningsQuery.data ?? []) {
-			const prev = latest.get(s.evacuee_id);
-			if (!prev || (s.screened_at || '') > (prev.screened_at || '')) latest.set(s.evacuee_id, s);
-		}
-		const map = new SvelteMap<string, TriageLevel>();
-		for (const [id, s] of latest) if (s.triage_level) map.set(id, s.triage_level);
-		return map;
-	});
+	const triageByEvacuee = $derived(latestTriageByEvacuee(screeningsQuery.data ?? []));
 
 	let searchQuery = $state('');
 	let barcodeInput = $state('');

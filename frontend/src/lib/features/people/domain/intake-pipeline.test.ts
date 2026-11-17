@@ -13,6 +13,7 @@ import {
 	nextScreeningQueueEvacuee,
 	parseZoningQrCode,
 	recommendZoneKind,
+	latestTriageByEvacuee,
 	pickRecommendedZone,
 	resolvePreferredZone,
 	sortByZoningQueueSince,
@@ -321,6 +322,37 @@ describe('recommendZoneKind', () => {
 		expect(recommendZoneKind(none, { symptoms: [], triage: 'green' })).toBe('general');
 		expect(recommendZoneKind(none, { symptoms: [], triage: null })).toBe('general');
 		expect(recommendZoneKind(none, null)).toBe('general');
+	});
+});
+
+describe('latestTriageByEvacuee', () => {
+	const sc = (
+		evacuee_id: string,
+		screened_at: string,
+		triage_level?: 'green' | 'yellow' | 'red'
+	) => ({
+		evacuee_id,
+		screened_at,
+		created_at: screened_at,
+		triage_level
+	});
+
+	it('takes the colour of the latest screening per evacuee, in any input order', () => {
+		const map = latestTriageByEvacuee([
+			sc('e1', '2026-11-17T10:00:00Z', 'red'),
+			sc('e1', '2026-11-17T08:00:00Z', 'green'),
+			sc('e2', '2026-11-17T09:00:00Z', 'yellow')
+		]);
+		expect(map.get('e1')).toBe('red');
+		expect(map.get('e2')).toBe('yellow');
+	});
+
+	it('gives no colour when the latest screening has none, even if an older one did', () => {
+		const map = latestTriageByEvacuee([
+			sc('e1', '2026-09-01T08:00:00Z', 'red'),
+			sc('e1', '2026-10-01T08:00:00Z')
+		]);
+		expect(map.has('e1')).toBe(false);
 	});
 });
 

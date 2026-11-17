@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -30,6 +30,7 @@
 		useHouseholds,
 		useScreenings,
 		TriageBadge,
+		latestTriageByEvacuee,
 		maskNationalId,
 		matchesEvacueeSearch,
 		formatPersonName,
@@ -56,7 +57,6 @@
 		applyRowClickSelection,
 		movementConflictMessage,
 		type Evacuee,
-		type TriageLevel,
 		type ZoningQueueTab
 	} from '$lib/features/people';
 	import {
@@ -121,20 +121,7 @@
 		}
 		return map;
 	});
-	/** Triage colour from each evacuee's latest screening (older screenings may have none). */
-	const triageByEvacuee = $derived.by(() => {
-		const map = new SvelteMap<string, TriageLevel>();
-		const seen = new SvelteSet<string>();
-		const sorted = [...screenings].sort((a, b) =>
-			(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
-		);
-		for (const s of sorted) {
-			if (seen.has(s.evacuee_id)) continue;
-			seen.add(s.evacuee_id);
-			if (s.triage_level) map.set(s.evacuee_id, s.triage_level);
-		}
-		return map;
-	});
+	const triageByEvacuee = $derived(latestTriageByEvacuee(screenings));
 	const occupantCounts = $derived(countPresentOccupantsByZone(allEvacuees));
 	/** Latest screening time per evacuee — when they became ready for zoning. */
 	const latestScreeningAt = $derived.by(() => {

@@ -189,6 +189,7 @@ export {
 	countStationQueues,
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
+	latestTriageByEvacuee,
 	pickRecommendedZone,
 	resolvePreferredZone,
 	ZONE_KIND_LABELS,

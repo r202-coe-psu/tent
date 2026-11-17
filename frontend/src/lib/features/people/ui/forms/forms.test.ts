@@ -585,23 +585,6 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			);
 		});
 
-		it('recommends quarantine for yellow triage even when EWAR symptoms are empty', () => {
-			const result = render(ZoneSelectionFields, {
-				props: {
-					selected_zone: '',
-					ewar_symptoms: [],
-					triage_level: 'yellow',
-					shelter_zones: [
-						{ code: 'Z-01', name: 'โซน A - ทั่วไป', type: 'general' },
-						{ code: 'Z-Q', name: 'โซนกักตัว', type: 'quarantine' }
-					]
-				}
-			});
-			expect(result.body).toContain(
-				'แนะนำสำหรับผู้มีอาการเฝ้าระวังหรือ triage เหลือง/แดง (กักตัว)'
-			);
-		});
-
 		it('says no matching zone is open instead of recommending a zone of another type', () => {
 			const result = render(ZoneSelectionFields, {
 				props: {

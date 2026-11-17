@@ -2,7 +2,7 @@
  * Pure helpers for Intake Pipeline queues (Station 1 next-queue labels + Station 3 tabs).
  * No I/O — unit-tested.
  */
-import type { Evacuee, TriageLevel } from './people';
+import type { Evacuee, Screening, TriageLevel } from './people';
 import { isInShelterStayStatus } from '$lib/features/shared';
 import { parsePersonQr } from '$lib/utils/evacuee-qr';
 import type { LanguageCode } from '$lib/utils/language';
@@ -223,6 +223,27 @@ export function countStationQueues(
 		}
 	}
 	return { station1, station2: opts.enableMedicalScreening ? station2 : null, station3 };
+}
+
+/**
+ * Triage colour from each evacuee's latest screening (by `screened_at`, else `created_at`).
+ * An evacuee whose latest screening has no colour gets no entry — an older colour is never used.
+ */
+export function latestTriageByEvacuee(
+	screenings: readonly Pick<
+		Screening,
+		'evacuee_id' | 'screened_at' | 'created_at' | 'triage_level'
+	>[]
+): Map<string, TriageLevel> {
+	const latest = new Map<string, (typeof screenings)[number]>();
+	for (const s of screenings) {
+		const prev = latest.get(s.evacuee_id);
+		const at = s.screened_at ?? s.created_at;
+		if (!prev || at > (prev.screened_at ?? prev.created_at)) latest.set(s.evacuee_id, s);
+	}
+	const out = new Map<string, TriageLevel>();
+	for (const [id, s] of latest) if (s.triage_level) out.set(id, s.triage_level);
+	return out;
 }
 
 /** What Station 2 recorded that drives the Station 3 zone recommendation. */

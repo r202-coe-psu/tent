@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-	buildZoningPath,
-	classifyZoningQueueTab,
-	parseZoningQrCode,
-	recommendZoneKind
-} from '$lib/features/people';
+import { buildZoningPath, classifyZoningQueueTab, parseZoningQrCode } from '$lib/features/people';
 
 describe('Station 3 zoning helpers (route contract)', () => {
 	it('builds zoning path', () => {
@@ -33,40 +28,6 @@ describe('Station 3 zoning helpers (route contract)', () => {
 		} as Parameters<typeof classifyZoningQueueTab>[0];
 		expect(classifyZoningQueueTab(e, { enableMedicalScreening: false, hasScreening: false })).toBe(
 			'awaiting_confirm'
-		);
-	});
-
-	it('recommends quarantine when EWAR surveillance symptoms are present (CR-106)', () => {
-		expect(
-			recommendZoneKind(
-				{ vulnerable_groups: [], special_needs: [] },
-				{ symptoms: ['fever', 'diarrhea'] }
-			)
-		).toBe('quarantine');
-	});
-
-	it('recommends quarantine for red/yellow triage', () => {
-		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, { triage: 'red' })).toBe(
-			'quarantine'
-		);
-		expect(
-			recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, { triage: 'yellow' })
-		).toBe('quarantine');
-	});
-
-	it('recommends vulnerable for Vulnerable Groups when triage is green and EWAR empty', () => {
-		expect(
-			recommendZoneKind(
-				{ vulnerable_groups: ['wheelchair'], special_needs: [] },
-				{ symptoms: [], triage: 'green' }
-			)
-		).toBe('vulnerable');
-	});
-
-	it('defaults to general when no triage and no vulnerable tags', () => {
-		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, null)).toBe('general');
-		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, { symptoms: [] })).toBe(
-			'general'
 		);
 	});
 });
