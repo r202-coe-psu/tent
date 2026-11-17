@@ -26,6 +26,8 @@
 		useConfirmRoomForHousehold,
 		ZoneSelectionFields,
 		StayStatusBadge,
+		TriageBadge,
+		TRIAGE_I18N,
 		maskNationalId,
 		formatPersonName,
 		classifyZoningQueueTab,
@@ -54,6 +56,7 @@
 	import { STAFF_ZONING_I18N } from '$lib/constants/i18n/staff-zoning';
 
 	const t = $derived(getTranslation(STAFF_ZONING_I18N, langState.current));
+	const tTriage = $derived(getTranslation(TRIAGE_I18N, langState.current));
 
 	let { data }: { data: { evacueeId: string; focusZone?: boolean } } = $props();
 
@@ -190,13 +193,13 @@
 	);
 
 	const recommendKind = $derived(
-		recommendZoneKind(
-			evacuee ?? { vulnerable_groups: [], special_needs: [] },
-			latestScreening?.symptoms
-		)
+		recommendZoneKind(evacuee ?? { vulnerable_groups: [], special_needs: [] }, {
+			symptoms: latestScreening?.symptoms,
+			triage: latestScreening?.triage_level
+		})
 	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
-	/** CR-159: Station 1's suggestion — default pick only when there are no EWAR symptoms. */
+	/** CR-159: Station 1's suggestion — default pick only when quarantine is not recommended. */
 	const preferredZone = $derived(
 		resolvePreferredZone(evacuee?.preferred_zone, shelterZones, recommendKind)
 	);
@@ -412,8 +415,11 @@
 						</li>
 					{/each}
 				</ol>
-				{#if (latestScreening?.symptoms?.length ?? 0) > 0 || latestScreening?.track === 'fast_track' || isolationDefault}
+				{#if (latestScreening?.symptoms?.length ?? 0) > 0 || latestScreening?.track === 'fast_track' || latestScreening?.triage_level || isolationDefault}
 					<div class="flex flex-wrap items-center gap-2">
+						{#if latestScreening?.triage_level}
+							<TriageBadge level={latestScreening.triage_level} />
+						{/if}
 						{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
 							<Badge
 								variant="outline"
@@ -516,6 +522,14 @@
 							</dd>
 						</div>
 						<div>
+							<dt class="text-xs text-muted-foreground">{t.triageLabel}</dt>
+							<dd class="mt-1">
+								{latestScreening.triage_level
+									? tTriage.levels[latestScreening.triage_level].label
+									: '—'}
+							</dd>
+						</div>
+						<div>
 							<dt class="text-xs text-muted-foreground">{t.careLabel}</dt>
 							<dd class="mt-1">
 								{latestScreening.track === 'fast_track' ? t.careFastTrack : t.careNormal}
@@ -580,6 +594,7 @@
 						bind:selected_zone={() => selectedZone, setSelectedZone}
 						{evacuee}
 						ewar_symptoms={latestScreening?.symptoms}
+						triage_level={latestScreening?.triage_level}
 						preferred_zone={preferredZone}
 						occupant_counts={occupantCounts}
 						shelter_zones={shelterQuery.data?.zones}

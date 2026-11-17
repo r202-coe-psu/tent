@@ -569,7 +569,7 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('โซน B - เปราะบาง');
 		});
 
-		it('shows EWAR surveillance quarantine recommendation without deprecated triage text', () => {
+		it('shows the quarantine recommendation for EWAR surveillance symptoms', () => {
 			const result = render(ZoneSelectionFields, {
 				props: {
 					selected_zone: '',
@@ -580,8 +580,26 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 					]
 				}
 			});
-			expect(result.body).toContain('แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)');
-			expect(result.body).not.toContain('triage');
+			expect(result.body).toContain(
+				'แนะนำสำหรับผู้มีอาการเฝ้าระวังหรือ triage เหลือง/แดง (กักตัว)'
+			);
+		});
+
+		it('recommends quarantine for yellow triage even when EWAR symptoms are empty', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: '',
+					ewar_symptoms: [],
+					triage_level: 'yellow',
+					shelter_zones: [
+						{ code: 'Z-01', name: 'โซน A - ทั่วไป', type: 'general' },
+						{ code: 'Z-Q', name: 'โซนกักตัว', type: 'quarantine' }
+					]
+				}
+			});
+			expect(result.body).toContain(
+				'แนะนำสำหรับผู้มีอาการเฝ้าระวังหรือ triage เหลือง/แดง (กักตัว)'
+			);
 		});
 
 		it('says no matching zone is open instead of recommending a zone of another type', () => {
@@ -592,7 +610,9 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 					shelter_zones: [{ code: 'Z-01', name: 'โซน A - ทั่วไป', type: 'general' }]
 				}
 			});
-			expect(result.body).toContain('ไม่มีโซนกักตัว (มีอาการเฝ้าระวัง) ที่เปิดอยู่');
+			expect(result.body).toContain(
+				'ไม่มีโซนกักตัว (มีอาการเฝ้าระวัง / triage เหลือง-แดง) ที่เปิดอยู่'
+			);
 			expect(result.body).not.toContain('โซนแนะนำ:');
 		});
 

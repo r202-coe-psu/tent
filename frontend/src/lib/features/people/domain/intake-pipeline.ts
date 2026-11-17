@@ -225,22 +225,23 @@ export function countStationQueues(
 	return { station1, station2: opts.enableMedicalScreening ? station2 : null, station3 };
 }
 
+/** What Station 2 recorded that drives the Station 3 zone recommendation. */
+export interface ZoningScreeningSignals {
+	symptoms?: readonly string[] | null;
+	triage?: TriageLevel | null;
+}
+
 /**
- * Zone type recommendation for Station 3 (CR-106):
- * EWAR surveillance symptoms → quarantine; else Vulnerable Groups / Special Needs → vulnerable; else general.
- * Supports legacy TriageLevel for backward compatibility.
+ * Zone type recommendation for Station 3:
+ * EWAR surveillance symptoms or yellow/red triage → quarantine;
+ * else Vulnerable Groups / Special Needs → vulnerable; else general.
  */
 export function recommendZoneKind(
 	evacuee: Pick<Evacuee, 'vulnerable_groups' | 'special_needs'>,
-	ewarSymptomsOrTriage?: readonly string[] | TriageLevel | null
+	screening?: ZoningScreeningSignals | null
 ): ZoningRecommendKind {
-	if (Array.isArray(ewarSymptomsOrTriage)) {
-		if (ewarSymptomsOrTriage.length > 0) {
-			return 'quarantine';
-		}
-	} else if (ewarSymptomsOrTriage === 'red' || ewarSymptomsOrTriage === 'yellow') {
-		return 'quarantine';
-	}
+	if ((screening?.symptoms?.length ?? 0) > 0) return 'quarantine';
+	if (screening?.triage === 'red' || screening?.triage === 'yellow') return 'quarantine';
 	if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) {
 		return 'vulnerable';
 	}
@@ -253,13 +254,13 @@ export function recommendZoneKind(
 
 /** Zone type names shared by Station 2 (screening summary) and Station 3 (zone picker). */
 export const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
-	quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง)',
+	quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง / triage เหลือง-แดง)',
 	vulnerable: 'โซนกลุ่มเปราะบาง',
 	general: 'โซนทั่วไป'
 };
 
 const zoneKindLabelsEn: Record<ZoningRecommendKind, string> = {
-	quarantine: 'Quarantine zone (watch-list symptoms)',
+	quarantine: 'Quarantine zone (watch-list symptoms / yellow-red triage)',
 	vulnerable: 'Vulnerable group zone',
 	general: 'General zone'
 };
@@ -284,7 +285,7 @@ export function pickRecommendedZone<Z extends { type?: string; status?: string }
 export type PreferredZoneOutcome =
 	| { kind: 'none' }
 	| { kind: 'use'; code: string }
-	/** EWAR symptoms: quarantine is recommended instead, the suggestion is shown read-only (FR-07). */
+	/** EWAR symptoms or yellow/red triage: quarantine is recommended instead, the suggestion is shown read-only (FR-07). */
 	| { kind: 'quarantine_overrides'; code: string }
 	/** The suggested zone is closed or no longer in the shelter (FR-08). */
 	| { kind: 'unavailable'; code: string };

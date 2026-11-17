@@ -687,7 +687,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 
 	// ── Seam 1 / 3: Medical Screening simplified form reachable when flag ON ─
 
-	test('Station 2 simplified Medical Screening form has no triage or vitals when flag ON', async ({
+	test('Station 2 Medical Screening form has triage but no vitals when flag ON', async ({
 		page
 	}) => {
 		await setupPage(page, MANAGER, managerSession, {
@@ -698,12 +698,14 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		await page.goto(`/onsite/medical-screening/${EXISTING_EVACUEE._id}`);
 		await expect(page.getByText(/คัดกรอง|Medical/i).first()).toBeVisible({ timeout: 15_000 });
 
-		// CR-106 simplified form — care track + EWAR, no triage/vitals fields
+		// Care track + EWAR + triage green/yellow/red (green preselected); no vitals fields
 		await expect(page.getByText(/ดูแลตามปกติ|Normal|Fast track/i).first()).toBeVisible({
 			timeout: 10_000
 		});
+		await expect(page.getByText('ระดับความเร่งด่วน (Triage)')).toBeVisible();
+		await expect(page.locator('#med-triage-green')).toHaveAttribute('data-state', 'checked');
 		await expect(page.getByRole('button', { name: 'บันทึกผลคัดกรอง' })).toBeVisible();
-		await expect(page.getByText(/อุณหภูมิ|blood group|triage level|ระดับไทรอาจ/i)).toHaveCount(0);
+		await expect(page.getByText(/อุณหภูมิ|blood group|ระดับไทรอาจ/i)).toHaveCount(0);
 	});
 
 	// ── Seam 1 / 3: Zoning reachable when medical flag OFF (skip Station 2) ───

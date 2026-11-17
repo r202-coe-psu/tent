@@ -2,9 +2,9 @@
 title: "Task Breakdown — Household & Zoning"
 status: active
 created: 2026-06-05
-updated: 2026-10-28
+updated: 2026-11-17
 module: people
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow); 2026-08-13 — CR-066 T-71..T-74; Wave 3 + T-72 **approved**; T-73/T-74 = Wave 4 รอบ CR ถัดไป; 2026-08-14 — CR-076 บังคับ household ใน onsite registration และเก็บ pet/asset/vehicle ที่ household; decision sync 2026-10-28 (decided_by: kong, #990) — copy only: สะกด "เช็คเอาต์" ทั้งแอป (เลิก "เช็คเอาท์"); ไม่แตะ enum `checked_out`, label อังกฤษ, `schema_v`, `PROJECTION_VERSION`
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; updated 2026-06-18 per CR-001 (permission cross-ref, lifecycle, screening inline, pre-registration, bulk ops, UI split); updated 2026-06-24 per CR-009 (T-04 — Household management ย้ายไป Stage 3, 2-box search/create flow); 2026-08-13 — CR-066 T-71..T-74; Wave 3 + T-72 **approved**; T-73/T-74 = Wave 4 รอบ CR ถัดไป; 2026-08-14 — CR-076 บังคับ household ใน onsite registration และเก็บ pet/asset/vehicle ที่ household; decision sync 2026-10-28 (decided_by: kong, #990) — copy only: สะกด "เช็คเอาต์" ทั้งแอป (เลิก "เช็คเอาท์"); ไม่แตะ enum `checked_out`, label อังกฤษ, `schema_v`, `PROJECTION_VERSION`; 2026-11-17 — CR-258 T-74 ✅ (triage 3 สีใน Station 2, เจ้าหน้าที่เลือกสีเอง)
 ---
 
 # Household & Zoning
@@ -28,7 +28,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 | T-71 | ⬜     | Public booking + ยืนยันที่ประตู (reuse T-51 scan) — CR-070 P4 | FR-70..72, FR-77..79 | R3    | prod  | in-scope | 8      | ÷1.4  | 5.5    | T-48,T-50,T-51       |
 | T-72 | ⬜     | People import xlsx/csv (ขยาย T-55) — CR-071 P5                | FR-73, FR-80, FR-81  | R3    | prod  | in-scope | 6      | ÷1.25 | 5      | T-48                 |
 | T-73 | ⬜     | Inbound POST คนจากหน่วยงาน — CR-071 P5 **blocked payload**    | FR-74                | R3    | prod  | blocked  | 6      | ÷1.25 | 5      | T-71, partner spec   |
-| T-74 | ⬜     | Triage เขียว/เหลือง/แดง — CR-072 P6 **blocked กฎ**            | FR-75                | R3    | prod  | blocked  | 5      | ÷1.4  | 3.5    | T-49, D-TRIAGE-RULES |
+| T-74 | ✅     | Triage เขียว/เหลือง/แดง — CR-258 (Station 2 เลือกสีเอง)       | FR-75                | R3    | prod  | in-scope | 5      | ÷1.4  | 3.5    | T-49, CR-258         |
 |      |        | **รวมทั้งโมดูล**                                              |                      |       |       |          | **24** |       | **16** |                      |
 
 ## Task Details
@@ -295,9 +295,9 @@ household (CR-076) + D-PRE-REG-AGE (FR-77)
 
 ---
 
-### T-74 — Triage เขียว / เหลือง / แดง (CR-072 P6) — BLOCKED
+### T-74 — Triage เขียว / เหลือง / แดง (CR-072 P6 → CR-258)
 
-**Status:** ⬜ blocked — D-TRIAGE-RULES + D-TRIAGE-FIELD — **Wave 4 รอบ CR ถัดไป**
+**Status:** ✅ done 2026-11-17 ตาม [CR-258](../changes/00-baseline/CR-258-station2-triage-reinstate.md) — เจ้าหน้าที่ Station 2 เลือกสีเอง (ค่าเริ่มต้นเขียว); D-TRIAGE-RULES (เกณฑ์การแพทย์อัตโนมัติ) ยังไม่ล็อกและไม่อยู่ในสโคป
 **Owner:** Team B
 **Depends:** T-49; [CR-072](../changes/00-baseline/CR-072-triage-green-yellow-red.md)
 **Program:** P6

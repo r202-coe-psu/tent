@@ -28,9 +28,13 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
+		TriageBadge,
 		maskNationalId,
-		lookupFederatedByScanCode
+		lookupFederatedByScanCode,
+		type Screening,
+		type TriageLevel
 	} from '$lib/features/people';
+	import { SvelteMap } from 'svelte/reactivity';
 	import {
 		ClaimDialog,
 		type UnassignedRegistrationSearchHit
@@ -70,6 +74,17 @@
 	const allEvacuees = $derived(allEvacueesQuery.data ?? []);
 	const householdMap = $derived(new Map((householdsQuery.data ?? []).map((h) => [h._id, h])));
 	const screenedIds = $derived(new Set((screeningsQuery.data ?? []).map((s) => s.evacuee_id)));
+	/** Triage colour of each evacuee's latest screening (screenings without one are skipped). */
+	const triageByEvacuee = $derived.by(() => {
+		const latest = new SvelteMap<string, Screening>();
+		for (const s of screeningsQuery.data ?? []) {
+			const prev = latest.get(s.evacuee_id);
+			if (!prev || (s.screened_at || '') > (prev.screened_at || '')) latest.set(s.evacuee_id, s);
+		}
+		const map = new SvelteMap<string, TriageLevel>();
+		for (const [id, s] of latest) if (s.triage_level) map.set(id, s.triage_level);
+		return map;
+	});
 
 	let searchQuery = $state('');
 	let barcodeInput = $state('');
@@ -210,6 +225,13 @@
 		return `${time}${t.timeSuffix} (${day})`;
 	}
 </script>
+
+{#snippet triageBadge(evacueeId: string)}
+	{@const level = triageByEvacuee.get(evacueeId)}
+	{#if level}
+		<TriageBadge {level} class="mt-1 w-fit" />
+	{/if}
+{/snippet}
 
 {#snippet needBadges(evacuee: (typeof pagedRows.items)[number])}
 	{#if (evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0) || (evacuee.special_needs && evacuee.special_needs.length > 0)}
@@ -447,6 +469,7 @@
 											<span class="text-xs text-muted-foreground">({evacuee.nickname})</span>
 										{/if}
 									</button>
+									{@render triageBadge(evacuee._id)}
 									<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
 										<span>
 											{t.colRegisteredAt}:
@@ -499,6 +522,7 @@
 															({evacuee.nickname})
 														</span>
 													{/if}
+													{@render triageBadge(evacuee._id)}
 												</div>
 											</Table.TableCell>
 											<Table.TableCell class="py-3 font-mono text-xs text-muted-foreground">

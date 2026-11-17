@@ -263,12 +263,14 @@ ZONE_CHANGE eligible from: [active, room_confirmed]
 | `needs_referral` | bool                                                                                           | req | default `false`                                  |
 | `notes`          | str                                                                                            | opt | —                                                |
 | `screened_at`    | ts                                                                                             | req | —                                                |
-| `triage_level`   | enum(`green`,`yellow`,`red`)\|null                                                             | opt | ผลคัดแยก triage 3 สี (schema_v 2, CR-072/CR-106) |
+| `triage_level`   | enum(`green`,`yellow`,`red`)\|null                                                             | opt | ผลคัดแยก triage 3 สี (schema_v 2) — Station 2 เขียนทุกครั้ง ค่าเริ่มต้น `green` (CR-258); doc ช่วง 2026-09-07 → 2026-11-17 ไม่มีค่า |
 | `vital_signs`    | {`blood_pressure_sys`:num?, `blood_pressure_dia`:num?, `heart_rate`:num?, `spo2_percent`:num?} | opt | สัญญาณชีพ (schema_v 2)                           |
 
 **Index:** `(evacuee_id, screened_at)` · view `latest_screening`
 
 **Migration (schema_v 1 → 2, CR-106):** purely additive — เพิ่ม `triage_level` (เขียว/เหลือง/แดง) และ `vital_signs` (ความดัน, ชีพจร, SpO2); doc เดิม schema_v 1 อ่านได้ตามปกติโดยไม่ต้อง backfill, เมื่อเขียนใหม่ stamp schema_v 2
+
+> **CR-258 (2026-11-17):** `triage_level` กลับมาใช้ — Station 2 เขียนเขียว/เหลือง/แดง และ Station 3 แนะนำโซนกักตัวเมื่อ `yellow`/`red` · `vital_signs`, `temperature_c`, `needs_referral` ยังเลิกเขียนใหม่ตาม CR-106 amendment 2026-09-07 (อ่านได้เป็น legacy) · ไม่ bump `schema_v`
 
 ### 1.6 `image` — `image:{ulid}` · **schema_v 2** (CR-049, CR-175 donor photos)
 

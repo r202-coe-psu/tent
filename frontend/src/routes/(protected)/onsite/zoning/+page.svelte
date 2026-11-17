@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -29,6 +29,7 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
+		TriageBadge,
 		maskNationalId,
 		matchesEvacueeSearch,
 		formatPersonName,
@@ -55,6 +56,7 @@
 		applyRowClickSelection,
 		movementConflictMessage,
 		type Evacuee,
+		type TriageLevel,
 		type ZoningQueueTab
 	} from '$lib/features/people';
 	import {
@@ -116,6 +118,20 @@
 			if (s.symptoms && !map.has(s.evacuee_id)) {
 				map.set(s.evacuee_id, s.symptoms);
 			}
+		}
+		return map;
+	});
+	/** Triage colour from each evacuee's latest screening (older screenings may have none). */
+	const triageByEvacuee = $derived.by(() => {
+		const map = new SvelteMap<string, TriageLevel>();
+		const seen = new SvelteSet<string>();
+		const sorted = [...screenings].sort((a, b) =>
+			(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
+		);
+		for (const s of sorted) {
+			if (seen.has(s.evacuee_id)) continue;
+			seen.add(s.evacuee_id);
+			if (s.triage_level) map.set(s.evacuee_id, s.triage_level);
 		}
 		return map;
 	});
@@ -663,6 +679,13 @@
 	</Badge>
 {/snippet}
 
+{#snippet triageBadge(evacueeId: string)}
+	{@const level = triageByEvacuee.get(evacueeId)}
+	{#if level}
+		<TriageBadge {level} class="mt-1 flex w-fit" />
+	{/if}
+{/snippet}
+
 {#snippet chipList(rawLabels: string[], tone: string, heading: string)}
 	{@const labels = [...new Set(rawLabels)]}
 	{#if labels.length === 0}
@@ -1066,6 +1089,7 @@
 									>
 										{formatPersonName(row)}
 									</button>
+									{@render triageBadge(row._id)}
 									<p class="text-xs text-slate-600 tabular-nums">
 										{t.colCard}: {maskNationalId(row.person_id?.number)}
 									</p>
@@ -1177,6 +1201,7 @@
 									</Table.Cell>
 									<Table.Cell class="py-3 font-semibold text-slate-900">
 										{formatPersonName(row)}
+										{@render triageBadge(row._id)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs text-slate-600 tabular-nums">
 										{maskNationalId(row.person_id?.number)}
