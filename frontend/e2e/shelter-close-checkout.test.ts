@@ -11,6 +11,10 @@
  * FR-18 cancel writes nothing · FR-10/FR-4/FR-5/FR-6/FR-6a writes · FR-12 re-run ·
  * FR-13 registry closed only after the people · FR-22 403 / PATCH 400 · FR-25 reopen.
  *
+ * CR-243: the close runs in the `shelter-close-worker` (compose service, or `pnpm
+ * shelter-close-worker` locally with SHELTER_CLOSE_WORKER_TOKEN matching the app's) — without it
+ * the modal never finishes and these tests time out.
+ *
  * Local: `docker compose up -d`, `pnpm seed:master`, then
  *   pnpm exec playwright test e2e/shelter-close-checkout.test.ts
  */
@@ -368,12 +372,24 @@ test.describe('Shelter close checks everyone out (CR-219)', { tag: ['@shelter-cl
 		await page.context().close();
 	});
 
-	test('FR-12 a second close is a no-op: no duplicate movements', async () => {
-		const res = await api('manager', 'POST', `/api/back-office/shelter/${shelterCode}/close`, {
-			confirm_text: confirmPhrase()
-		});
-		expect(res.status).toBe(200);
-		expect(res.data).toEqual({ closed: true, checked_out: 0, cancelled: 0, failed: [] });
+	test('FR-12 a second close is a no-op job: 202, completes with nothing to do, no duplicate movements', async () => {
+		test.setTimeout(90_000);
+		const close = `/api/back-office/shelter/${shelterCode}/close`;
+		const res = await api('manager', 'POST', close, { confirm_text: confirmPhrase() });
+		// CR-243 FR-6: the request only queues the job; the worker does the rest.
+		expect(res.status).toBe(202);
+		const jobId = (res.data as { job_id: string }).job_id;
+		expect(jobId).toBeTruthy();
+
+		await expect
+			.poll(async () => (await api('manager', 'GET', `${close}/jobs/${jobId}`)).data, {
+				timeout: 60_000
+			})
+			.toMatchObject({ status: 'completed', end_reason: 'ok' });
+		const job = (await api('manager', 'GET', `${close}/jobs/${jobId}`)).data as {
+			counters: { checked_out: number; cancelled: number; failed: number };
+		};
+		expect(job.counters).toMatchObject({ checked_out: 0, cancelled: 0, failed: 0 });
 		expect(await docsOfType('movement')).toHaveLength(3);
 	});
 

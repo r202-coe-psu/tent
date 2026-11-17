@@ -157,5 +157,25 @@ services:
       disable: true
     restart: unless-stopped
 
+  shelter-close-worker:
+    image: tent/frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    environment:
+      SHELTER_CLOSE_WORKER_URL: ${SHELTER_CLOSE_WORKER_URL:-http://host.docker.internal:5173}
+      SHELTER_CLOSE_WORKER_TOKEN: ${SHELTER_CLOSE_WORKER_TOKEN:?SHELTER_CLOSE_WORKER_TOKEN is required}
+      SHELTER_CLOSE_WORKER_POLL_MS: ${SHELTER_CLOSE_WORKER_POLL_MS:-2000}
+      SHELTER_CLOSE_WORKER_TIMEOUT_MS: ${SHELTER_CLOSE_WORKER_TIMEOUT_MS:-30000}
+      SHELTER_CLOSE_CHUNK_BUDGET_MS: ${SHELTER_CLOSE_CHUNK_BUDGET_MS:-20000}
+      SHELTER_CLOSE_LEASE_MS: ${SHELTER_CLOSE_LEASE_MS:-60000}
+      SHELTER_CLOSE_STALE_MS: ${SHELTER_CLOSE_STALE_MS:-600000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["pnpm", "shelter-close-worker"]
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
 networks:
   default:
