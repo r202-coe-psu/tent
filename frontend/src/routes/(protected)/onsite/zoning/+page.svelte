@@ -35,7 +35,7 @@
 		classifyZoningQueueTab,
 		buildZoningPath,
 		formatQueueWait,
-		sortByZoningQueueSince,
+		sortByCreatedAtAsc,
 		zoningQueueSince,
 		useConfirmRoom,
 		useConfirmRoomForHousehold,
@@ -166,22 +166,20 @@
 	/** Guards against bits-ui toggling the single box after a Shift range select. */
 	let skipNextCheckboxChange = false;
 
-	// Oldest-waiting first: this queue is the primary worklist, scanning is a shortcut
+	// Oldest-registered first on every tab (#1426); editing a record never moves it
+	const queueEvacuees = $derived(sortByCreatedAtAsc(allEvacuees));
 	const pendingEvacuees = $derived(
-		sortByZoningQueueSince(
-			allEvacuees.filter(
-				(e) =>
-					classifyZoningQueueTab(e, {
-						enableMedicalScreening: enableMedical,
-						hasScreening: screenedIds.has(e._id)
-					}) === 'pending'
-			),
-			latestScreeningAt
+		queueEvacuees.filter(
+			(e) =>
+				classifyZoningQueueTab(e, {
+					enableMedicalScreening: enableMedical,
+					hasScreening: screenedIds.has(e._id)
+				}) === 'pending'
 		)
 	);
 	const awaitingConfirmEvacuees = $derived(
 		listPendingZoneArrivalConfirmations(
-			allEvacuees.filter(
+			queueEvacuees.filter(
 				(e) =>
 					classifyZoningQueueTab(e, {
 						enableMedicalScreening: enableMedical,
@@ -191,7 +189,7 @@
 		)
 	);
 	const assignedEvacuees = $derived(
-		allEvacuees.filter(
+		queueEvacuees.filter(
 			(e) =>
 				classifyZoningQueueTab(e, {
 					enableMedicalScreening: enableMedical,
