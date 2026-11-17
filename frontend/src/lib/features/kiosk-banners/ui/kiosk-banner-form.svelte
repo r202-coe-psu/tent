@@ -131,7 +131,7 @@
 	 * A valid logo (shrunk to fit its 512 KB cap) replaces the current one; an invalid one keeps the
 	 * current logo and says why, which blocks saving until the staff picks again or removes it.
 	 */
-	async function chooseLogo(chosen: File | null) {
+	async function prepareLogo(chosen: File | null) {
 		if (!chosen) return;
 		const logo = await prepareTemplateLogo(chosen);
 		if (!logo.ok) {
@@ -142,6 +142,12 @@
 		logoError = null;
 		logoFile = logo.file;
 		newLogoUrl = URL.createObjectURL(logo.file);
+	}
+
+	// The logo being shrunk; a save waits for it so it never goes out without the chosen logo.
+	let logoTask: Promise<void> = Promise.resolve();
+	function chooseLogo(chosen: File | null) {
+		logoTask = prepareLogo(chosen);
 	}
 
 	function removeLogo() {
@@ -190,6 +196,7 @@
 	/** Template mode: render the preview to the banner PNG, then hand it over with the template. */
 	async function saveFromTemplate(valid: boolean, values: KioskBannerFormValues) {
 		if (!valid) return;
+		await logoTask;
 		if (logoError) {
 			toast.error(logoError);
 			document.getElementById('banner-template-image')?.focus();
@@ -579,10 +586,8 @@
 				<Eye class="h-4 w-4" />
 				ดูตัวอย่างบน kiosk
 			</Button>
-		{:else}
-			<span aria-hidden="true"></span>
 		{/if}
-		<div class="flex flex-col gap-2 sm:flex-row">
+		<div class="flex flex-col gap-2 sm:ml-auto sm:flex-row">
 			<Button variant="outline" class="min-h-11" href={listHref}>ยกเลิก</Button>
 			<Button type="submit" class="btn-primary-brand min-h-11" disabled={$submitting}>
 				{$submitting ? 'กำลังบันทึก…' : 'บันทึก'}

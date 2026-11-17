@@ -505,6 +505,27 @@ describe('KioskBannerForm', () => {
 			expect(payload.input.template?.image).toBe('template_image');
 		});
 
+		it('waits for a logo that is still being shrunk before saving', async () => {
+			let finish: (file: File) => void = () => {};
+			vi.mocked(prepareTemplateLogo).mockImplementation(
+				() => new Promise((resolve) => (finish = (file) => resolve({ ok: true, file })))
+			);
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+			const logo = png();
+			pick(logo);
+
+			await submit();
+			expect(onsave).not.toHaveBeenCalled();
+
+			finish(logo);
+			await vi.waitFor(() => expect(onsave).toHaveBeenCalledTimes(1));
+			expect(onsave.mock.calls[0][0].templateImage).toMatchObject({ content_type: 'image/png' });
+			expect(onsave.mock.calls[0][0].input.template?.image).toBe('template_image');
+		});
+
 		it('does not save a template with neither heading nor body', async () => {
 			render();
 			useTemplate();
