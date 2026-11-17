@@ -14,6 +14,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import {
 		ShelterList,
+		isShelterPublicVisible,
 		useShelters,
 		type ShelterSummary,
 		type SiteKind
@@ -23,6 +24,7 @@
 	let currentPage = $state(1);
 	let siteKindFilter = $state<SiteKind | 'all'>('all');
 	let searchQuery = $state('');
+	let hideHidden = $state(false);
 
 	// CR-198 FR-10: "ทั้งหมด" + every active site kind, labelled from the global master.
 	const siteKindQuery = useMasterData(() => 'site_kind');
@@ -48,6 +50,7 @@
 			if (siteKindFilter !== 'all' && shelter.site_kind !== siteKindFilter) {
 				return false;
 			}
+			if (hideHidden && !isShelterPublicVisible(shelter)) return false;
 			const q = searchQuery.trim().toLowerCase();
 			if (q) {
 				const nameMatch = shelter.name?.toLowerCase().includes(q);
@@ -86,6 +89,11 @@
 
 	function handleSearchInput(e: Event) {
 		searchQuery = (e.target as HTMLInputElement).value;
+		currentPage = 1;
+	}
+
+	function toggleHideHidden(e: Event) {
+		hideHidden = (e.target as HTMLInputElement).checked;
 		currentPage = 1;
 	}
 
@@ -182,6 +190,16 @@
 						</button>
 					{/each}
 				</div>
+
+				<label class="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+					<input
+						type="checkbox"
+						checked={hideHidden}
+						onchange={toggleHideHidden}
+						class="size-3.5 rounded border-slate-300"
+					/>
+					ไม่แสดงศูนย์ที่ซ่อน
+				</label>
 
 				<span class="shrink-0 text-xs text-slate-500 tabular-nums">
 					พบ <strong class="font-bold text-slate-800">{total}</strong> แห่ง
