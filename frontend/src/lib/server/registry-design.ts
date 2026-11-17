@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view or the registry write policy changes so deployers can tell a
  * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 9;
+export const REGISTRY_DESIGN_VERSION = 10;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -47,8 +47,13 @@ export function buildRegistryValidateDocUpdate(): string {
     throw({ forbidden: 'Only system administrators can write registry documents' });
   }
   if (newDoc.type === 'kiosk_banner' && !newDoc._deleted) {
-    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2 && newDoc.schema_v !== 3) {
-      throw({ forbidden: 'kiosk_banner schema_v must be 1, 2 or 3' });
+    if (
+      newDoc.schema_v !== 1 &&
+      newDoc.schema_v !== 2 &&
+      newDoc.schema_v !== 3 &&
+      newDoc.schema_v !== 4
+    ) {
+      throw({ forbidden: 'kiosk_banner schema_v must be 1, 2, 3 or 4' });
     }
     if (
       newDoc.schema_v >= 2 &&
@@ -91,8 +96,52 @@ export function buildRegistryValidateDocUpdate(): string {
     ) {
       throw({ forbidden: 'kiosk_banner screen_type must be compact, portrait or tv' });
     }
-    if (newDoc.screen_type === 'tv' && newDoc.schema_v !== 3) {
-      throw({ forbidden: 'kiosk_banner screen_type tv requires schema_v 3' });
+    if (newDoc.screen_type === 'tv' && newDoc.schema_v < 3) {
+      throw({ forbidden: 'kiosk_banner screen_type tv requires schema_v 3 or 4' });
+    }
+    if (newDoc.template !== undefined) {
+      if (newDoc.schema_v !== 4) {
+        throw({ forbidden: 'kiosk_banner template requires schema_v 4' });
+      }
+      var tpl = newDoc.template;
+      if (typeof tpl !== 'object' || tpl === null || Object.prototype.toString.call(tpl) === '[object Array]') {
+        throw({ forbidden: 'kiosk_banner template must be an object' });
+      }
+      var tplKeys = ['heading', 'body', 'align', 'bg_color', 'text_color', 'image'];
+      for (var tplKey in tpl) {
+        if (Object.prototype.hasOwnProperty.call(tpl, tplKey) && tplKeys.indexOf(tplKey) === -1) {
+          throw({ forbidden: 'kiosk_banner template has an unknown key: ' + tplKey });
+        }
+      }
+      for (var tplIndex = 0; tplIndex < tplKeys.length; tplIndex++) {
+        if (tpl[tplKeys[tplIndex]] === undefined) {
+          throw({ forbidden: 'kiosk_banner template is missing ' + tplKeys[tplIndex] });
+        }
+      }
+      if (
+        typeof tpl.heading !== 'string' ||
+        typeof tpl.body !== 'string' ||
+        tpl.heading.length > 120 ||
+        tpl.body.length > 600 ||
+        (tpl.heading.trim().length === 0 && tpl.body.trim().length === 0)
+      ) {
+        throw({ forbidden: 'kiosk_banner template heading/body must be strings (heading up to 120, body up to 600 characters, not both blank)' });
+      }
+      if (tpl.align !== 'left' && tpl.align !== 'center' && tpl.align !== 'right') {
+        throw({ forbidden: 'kiosk_banner template align must be left, center or right' });
+      }
+      var hexColor = /^#[0-9a-fA-F]{6}$/;
+      if (
+        typeof tpl.bg_color !== 'string' ||
+        !hexColor.test(tpl.bg_color) ||
+        typeof tpl.text_color !== 'string' ||
+        !hexColor.test(tpl.text_color)
+      ) {
+        throw({ forbidden: 'kiosk_banner template bg_color and text_color must be #rrggbb' });
+      }
+      if (tpl.image !== null && tpl.image !== 'template_image') {
+        throw({ forbidden: 'kiosk_banner template image must be null or template_image' });
+      }
     }
     var startMs = typeof newDoc.start_at === 'string' ? Date.parse(newDoc.start_at) : NaN;
     var endMs = typeof newDoc.end_at === 'string' ? Date.parse(newDoc.end_at) : NaN;

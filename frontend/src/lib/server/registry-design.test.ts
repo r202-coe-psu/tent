@@ -14,7 +14,7 @@ describe('registry shelter lookup design', () => {
 		const design = buildRegistryDesignDoc();
 
 		expect(design.version).toBe(REGISTRY_DESIGN_VERSION);
-		expect(REGISTRY_DESIGN_VERSION).toBe(9);
+		expect(REGISTRY_DESIGN_VERSION).toBe(10);
 		expect(design.views.by_normalized_name.map).toContain("doc.type === 'shelter'");
 		expect(design.views.by_normalized_name.map).toContain("replace(/\\s+/g, ' ')");
 	});
@@ -56,6 +56,22 @@ function validBanner(overrides: Record<string, unknown> = {}): Record<string, un
 	};
 }
 
+function v4Banner(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return validBanner({ schema_v: 4, group_id: 'kiosk_banner_group:01H', ...overrides });
+}
+
+function validTemplate(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return {
+		heading: 'Welcome',
+		body: 'Please take a queue ticket',
+		align: 'center',
+		bg_color: '#0a1b2c',
+		text_color: '#FFFFFF',
+		image: 'template_image',
+		...overrides
+	};
+}
+
 function runVdu(doc: Record<string, unknown>, userCtx = ADMIN): void {
 	compileVdu()(doc, null, userCtx, {});
 }
@@ -93,7 +109,7 @@ describe('registry kiosk_banner validate_doc_update', () => {
 	});
 
 	it.each([
-		['schema_v 4', { schema_v: 4 }],
+		['schema_v 5', { schema_v: 5 }],
 		['schema_v 0', { schema_v: 0 }],
 		['missing schema_v', { schema_v: undefined }],
 		['schema_v 2 without group_id', { schema_v: 2 }],
@@ -119,6 +135,70 @@ describe('registry kiosk_banner validate_doc_update', () => {
 		['schema_v 2', { schema_v: 2, group_id: 'kiosk_banner_group:01H' }]
 	])("rejects screen_type 'tv' on a %s banner", (_label, overrides) => {
 		expect(() => runVdu(validBanner({ ...overrides, screen_type: 'tv' }))).toThrow(
+			expect.objectContaining({ forbidden: expect.any(String) })
+		);
+	});
+
+	it("accepts schema_v 4 banners without a template, including screen_type 'tv'", () => {
+		for (const screen_type of ['tv', 'compact', 'portrait', undefined]) {
+			expect(() =>
+				runVdu(validBanner({ schema_v: 4, group_id: 'kiosk_banner_group:01H', screen_type }))
+			).not.toThrow();
+		}
+	});
+
+	it('accepts a schema_v 4 banner with a valid template', () => {
+		for (const template of [
+			validTemplate(),
+			validTemplate({ image: null, body: '' }),
+			validTemplate({ heading: '', body: 'only body', align: 'right' }),
+			validTemplate({ heading: 'x'.repeat(120), body: 'y'.repeat(600), align: 'left' })
+		]) {
+			expect(() => runVdu(v4Banner({ template }))).not.toThrow();
+		}
+	});
+
+	it('reports the supported schema_v values in the rejection message', () => {
+		expect(() => runVdu(validBanner({ schema_v: 5 }))).toThrow(
+			expect.objectContaining({ forbidden: 'kiosk_banner schema_v must be 1, 2, 3 or 4' })
+		);
+	});
+
+	it.each([
+		['schema_v 1', { schema_v: 1 }],
+		['schema_v 2', { schema_v: 2, group_id: 'kiosk_banner_group:01H' }],
+		['schema_v 3', { schema_v: 3, group_id: 'kiosk_banner_group:01H' }]
+	])('rejects a template on a %s banner', (_label, overrides) => {
+		expect(() => runVdu(validBanner({ ...overrides, template: validTemplate() }))).toThrow(
+			expect.objectContaining({ forbidden: expect.any(String) })
+		);
+	});
+
+	it.each([
+		['null template', null],
+		['string template', 'hello'],
+		['array template', []],
+		['extra key', { ...validTemplate(), font: 'serif' }],
+		['missing key', { ...validTemplate(), bg_color: undefined }],
+		['non-string heading', validTemplate({ heading: 5 })],
+		['heading over 120 chars', validTemplate({ heading: 'x'.repeat(121) })],
+		['non-string body', validTemplate({ body: 5 })],
+		['body over 600 chars', validTemplate({ body: 'x'.repeat(601) })],
+		['blank heading and body', validTemplate({ heading: '  ', body: '\n ' })],
+		['unknown align', validTemplate({ align: 'justify' })],
+		['non-string align', validTemplate({ align: 1 })],
+		['bg_color without #', validTemplate({ bg_color: '112233' })],
+		['bg_color short hex', validTemplate({ bg_color: '#123' })],
+		['bg_color non-hex digits', validTemplate({ bg_color: '#12345g' })],
+		['bg_color too long', validTemplate({ bg_color: '#1234567' })],
+		['non-string bg_color', validTemplate({ bg_color: 123456 })],
+		['text_color named', validTemplate({ text_color: 'white' })],
+		['text_color non-hex digits', validTemplate({ text_color: '#zzzzzz' })],
+		['image url', validTemplate({ image: 'https://x/y.png' })],
+		['image other string', validTemplate({ image: 'banner_image' })],
+		['numeric image', validTemplate({ image: 1 })]
+	])('rejects a schema_v 4 banner with %s', (_label, template) => {
+		expect(() => runVdu(v4Banner({ template }))).toThrow(
 			expect.objectContaining({ forbidden: expect.any(String) })
 		);
 	});
