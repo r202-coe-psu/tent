@@ -208,7 +208,7 @@ describe('phases and finalize close (FR-17..FR-22, AC-15)', () => {
 		await createJob();
 		await drain();
 		expect(closeShelter).not.toHaveBeenCalled();
-		expect(jobDoc().status).toBe('completed');
+		expect(jobDoc()).toMatchObject({ status: 'completed', closed: false }); // not closed BY this job
 	});
 
 	it('repairs a household whose members are already closed out (FR-18)', async () => {
@@ -317,7 +317,7 @@ describe('cursor resume (FR-12, FR-14, AC-5)', () => {
 });
 
 describe('chunk budget (FR-12)', () => {
-	it('drops a chunk that overran SHELTER_CLOSE_CHUNK_BUDGET_MS, keeps the cursor and renews the lease', async () => {
+	it('drops a chunk that overran SHELTER_CLOSE_CHUNK_BUDGET_MS, keeps the cursor and gives the lease up', async () => {
 		for (let i = 0; i < 5; i++) addEvacuee('active');
 		await createJob();
 		let slow = true;
@@ -331,10 +331,11 @@ describe('chunk budget (FR-12)', () => {
 		expect(jobDoc()).toMatchObject({
 			phase: 'people',
 			cursor: {},
-			counters: { checked_out: 0 },
-			lease_owner: 'w1'
+			counters: { checked_out: 0 }
 		});
-		expect(jobDoc().lease_until).toBe(new Date(now + 1000).toISOString());
+		// Lease released (already expired) so the next claim is a takeover that counts an attempt.
+		expect(jobDoc().lease_owner).toBeUndefined();
+		expect(jobDoc().lease_until).toBe(new Date(now).toISOString());
 		expect(couch.byType(SHELTER, 'movement')).toHaveLength(0);
 
 		slow = false;
@@ -343,7 +344,26 @@ describe('chunk budget (FR-12)', () => {
 		expect(jobDoc().status).toBe('completed');
 	});
 
-	it('reports stopped when the lease was lost while over budget', async () => {
+	it('ends attempts_exhausted when every chunk overruns the budget (no endless loop)', async () => {
+		addEvacuee('active');
+		await createJob();
+		couch.hook = ({ db }) => {
+			if (db === SHELTER) now += 600;
+			return undefined;
+		};
+		for (let i = 0; i < 20 && jobDoc().status !== 'completed_with_errors'; i++) {
+			await step();
+			now += 1; // lease abandoned at `now`; let it read as expired
+		}
+		expect(jobDoc()).toMatchObject({
+			status: 'completed_with_errors',
+			end_reason: 'attempts_exhausted'
+		});
+		expect(closeShelter).not.toHaveBeenCalled();
+		expect(couch.get(CENTRAL, 'shelter_close_lock:SH001')).toBeUndefined();
+	});
+
+	it('does not overwrite a lease taken by another worker while over budget', async () => {
 		addEvacuee('active');
 		await createJob();
 		couch.hook = ({ db }) => {
@@ -354,7 +374,7 @@ describe('chunk budget (FR-12)', () => {
 			return undefined;
 		};
 		const r = (await step()) as Progress;
-		expect(r).toMatchObject({ budget_exceeded: true, stopped: true });
+		expect(r).toMatchObject({ budget_exceeded: true });
 		expect(jobDoc().lease_owner).toBe('other');
 	});
 });
@@ -593,4 +613,33 @@ describe('finalize errors', () => {
 		expect(jobDoc().lease_owner).toBeUndefined();
 		expect(jobDoc().status).toBe('running');
 	});
+});
+
+describe('load (AC-11): ~5,000 people', () => {
+	it('closes 5,000 people across ~2,000 households in bounded chunks with no duplicate movements', async () => {
+		const total = 5000;
+		let made = 0;
+		while (made < total) {
+			const size = Math.min(2 + (made % 2), total - made); // 2-3 members per household
+			const h = addHousehold('checked_in');
+			for (let i = 0; i < size; i++) addEvacuee(made % 11 === 0 ? 'pre_registered' : 'active', h);
+			made += size;
+		}
+		await createJob();
+		let steps = 0;
+		await drain({ max: 400, after: () => (steps += 1) });
+		const movements = couch.byType(SHELTER, 'movement');
+		expect(jobDoc()).toMatchObject({
+			status: 'completed',
+			end_reason: 'ok',
+			sweep_round: 0,
+			counters: { failed: 0 },
+			closed: true
+		});
+		expect(jobDoc().counters.checked_out + jobDoc().counters.cancelled).toBe(total);
+		expect(movements.length).toBeGreaterThanOrEqual(jobDoc().counters.checked_out);
+		expect(new Set(movements.map((m) => m._id)).size).toBe(movements.length);
+		expect(steps).toBeGreaterThan(total / 200); // ≤200 people per chunk (FR-17)
+		expect(closeShelter).toHaveBeenCalledTimes(1);
+	}, 60_000);
 });

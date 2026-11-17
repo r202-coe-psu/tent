@@ -112,7 +112,8 @@ export async function runShelterCloseWorkerStep(
 		}
 		// FR-20: written once, here only; an already-closed shelter is left alone.
 		if (!shelter.closed) await deps.closeShelter(job.shelter_code);
-		return { closed: true };
+		// "closed by this job" (CR-243 §2): false when the registry was already closed.
+		return { closed: !shelter.closed };
 	};
 
 	let result;
@@ -134,14 +135,11 @@ export async function runShelterCloseWorkerStep(
 	}
 
 	if (exceeded || !result) {
-		// Budget spent: keep the old cursor (writes already made are idempotent) and renew the lease.
-		const saved = await store.saveProgress(job, {}, workerId);
-		return {
-			kind: 'progress',
-			job: saved ?? job,
-			stopped: saved === null,
-			budget_exceeded: true
-		};
+		// Budget spent: keep the old cursor (writes already made are idempotent) and give the lease
+		// up, so the next claim is a takeover (FR-14) that counts an attempt. A chunk that always
+		// overruns therefore ends as `attempts_exhausted` instead of looping forever.
+		await store.abandonLease(job);
+		return { kind: 'progress', job, stopped: false, budget_exceeded: true };
 	}
 
 	const { state, outcome } = result;
