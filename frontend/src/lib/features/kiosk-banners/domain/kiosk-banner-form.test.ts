@@ -7,6 +7,7 @@ import {
 	type KioskBannerFormValues
 } from './kiosk-banner-form';
 import { kioskBannerInputSchema } from './kiosk-banner';
+import { emptyKioskBannerTemplate } from './kiosk-banner-template';
 
 const GROUP = 'kiosk_banner_group:A';
 
@@ -19,6 +20,8 @@ const valid = (over: Partial<KioskBannerFormValues> = {}): KioskBannerFormValues
 	end_at: '2026-10-15T18:00',
 	status: 'active',
 	screen_type: 'compact',
+	source: 'upload',
+	template: emptyKioskBannerTemplate(),
 	...over
 });
 
@@ -109,7 +112,9 @@ describe('bannerToFormValues', () => {
 			start_at: '2026-10-16T09:00',
 			end_at: '2026-10-16T12:00',
 			status: 'inactive',
-			screen_type: 'portrait'
+			screen_type: 'portrait',
+			source: 'upload',
+			template: emptyKioskBannerTemplate()
 		});
 		expect(bannerFormToInput(values)).toEqual(stored);
 	});
@@ -137,7 +142,88 @@ describe('emptyKioskBannerForm', () => {
 			start_at: '',
 			end_at: '',
 			status: 'active',
-			screen_type: 'compact'
+			screen_type: 'compact',
+			source: 'upload',
+			template: emptyKioskBannerTemplate()
+		});
+	});
+});
+
+describe('template source', () => {
+	const bannerWith = () => ({
+		group_id: GROUP,
+		title: 'ป้าย',
+		caption: null,
+		duration_sec: 10,
+		start_at: '2026-10-16T02:00:00.000Z',
+		end_at: '2026-10-16T05:00:00.000Z',
+		status: 'active' as const,
+		screen_type: 'compact' as const
+	});
+	const template = {
+		heading: 'ปิดถนน',
+		body: 'ใช้เส้นทางสำรอง',
+		align: 'left' as const,
+		bg_color: '#000000',
+		text_color: '#FFFFFF',
+		image: null
+	};
+
+	it('defaults a new form to upload with an empty template', () => {
+		const form = emptyKioskBannerForm();
+		expect(form.source).toBe('upload');
+		expect(form.template).toEqual({
+			heading: '',
+			body: '',
+			align: 'center',
+			bg_color: '#1e3a8a',
+			text_color: '#ffffff',
+			image: null
+		});
+	});
+
+	it('ignores an empty template while the source is upload', () => {
+		expect(kioskBannerFormSchema.safeParse(valid()).success).toBe(true);
+	});
+
+	it('requires heading or body when the source is template, reported under template.heading', () => {
+		const issues = issuePaths(valid({ source: 'template' }));
+		expect(issues).toEqual(['template.heading']);
+	});
+
+	it('reports a malformed colour under template.text_color', () => {
+		expect(
+			issuePaths(valid({ source: 'template', template: { ...template, text_color: '#12' } }))
+		).toEqual(['template.text_color']);
+	});
+
+	it('accepts a filled template when the source is template', () => {
+		expect(kioskBannerFormSchema.safeParse(valid({ source: 'template', template })).success).toBe(
+			true
+		);
+	});
+
+	it('maps a banner without a template to upload and keeps the default template', () => {
+		const form = bannerToFormValues(bannerWith());
+		expect(form.source).toBe('upload');
+		expect(form.template.heading).toBe('');
+	});
+
+	it('maps a banner with a template to template source and its stored template', () => {
+		const stored = { ...template, text_color: '#ffffff', image: 'template_image' as const };
+		const form = bannerToFormValues({ ...bannerWith(), template: stored });
+		expect(form.source).toBe('template');
+		expect(form.template).toEqual(stored);
+	});
+
+	it('omits template from the API input when the source is upload', () => {
+		expect(bannerFormToInput(valid({ template })).template).toBeUndefined();
+	});
+
+	it('includes the normalised template in the API input when the source is template', () => {
+		expect(bannerFormToInput(valid({ source: 'template', template })).template).toEqual({
+			...template,
+			text_color: '#ffffff'
 		});
 	});
 });
