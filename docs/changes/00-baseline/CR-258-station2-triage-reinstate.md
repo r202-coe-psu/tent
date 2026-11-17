@@ -64,6 +64,7 @@ affects:
 ## Impact
 
 - Domain: `screeningInputSchema` + `createScreening` รับ/stamp `triage_level`; `recommendZoneKind(evacuee, { symptoms, triage })`
+- M5: ไม่แก้ `defaultAcuity` — ใช้ `triage_level` ที่บันทึกจริงเท่านั้น
 - UI: `TriageBadge` (people barrel), `clinical-screening-form.svelte`, หน้าคิว/รายละเอียด Station 2-3, `zone-selection-fields.svelte`
 - M5 referral (D13) ตั้งค่าเริ่มต้น `acuity` จาก `triage_level` ล่าสุด — screening ใหม่ทุกตัวมีสี (อย่างน้อย `green` จากค่าเริ่มต้น) ฟอร์มส่งต่อของคนที่คัดกรองหลังจากนี้จึงเริ่มที่ acuity เขียว แม้เจ้าหน้าที่ไม่ได้เปลี่ยนสีที่ Station 2 (เดิมคนที่คัดกรองช่วง 2026-09-07 → 2026-11-17 ไม่มีค่า เจ้าหน้าที่เลือก acuity เอง)
 - เกณฑ์ทางการแพทย์ของแต่ละสี (D-TRIAGE-RULES ใน CR-072) ยังไม่ล็อก — ระบบเก็บสีตามที่เจ้าหน้าที่เลือก ไม่คำนวณอัตโนมัติ
@@ -75,5 +76,6 @@ affects:
 ## Decision log
 
 - 2026-11-17 — proposed. เจ้าของโครงการเลือก: track ด้วย CR ใหม่; สโคป = ฟอร์ม + badge + แนะนำโซน; ค่าเริ่มต้นเขียว
+- 2026-11-17 — เจ้าของโครงการยืนยัน: ฟอร์ม M5 **ไม่** เติมเขียวให้ screening ที่ไม่มีสี — เว้นว่างและบังคับเลือก acuity ตาม D13 (ต่างจากสถานี 1–3 ที่แสดงเป็นเขียว โดยตั้งใจ)
 - 2026-11-17 — เจ้าของโครงการ: screening ที่ไม่มีสีให้ UI แสดงเป็นเขียว (แก้ FR-06 เดิมที่ไม่แสดง badge) · M5 acuity ยังใช้ค่าที่บันทึกจริงตาม D13 (ไม่มีสี → ว่างและบังคับเลือก)
 - 2026-11-17 — **approved** โดยเจ้าของโครงการ รวม FR-04 (เลือกสีไม่เปลี่ยน `care_track` / สถานะส่งต่ออัตโนมัติ)
