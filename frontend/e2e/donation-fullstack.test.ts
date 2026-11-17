@@ -465,7 +465,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await clearSession(page);
 		await page.goto(`/donations/track/${trackingToken}`);
 		await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
-		await expect(page.getByText('หมดอายุ', { exact: true })).toBeVisible();
+		await expect(
+			page.getByText(`หมดอายุ — ${rejectNoteTemplate('expired')}`, { exact: true })
+		).toBeVisible();
 		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
 	});
 
