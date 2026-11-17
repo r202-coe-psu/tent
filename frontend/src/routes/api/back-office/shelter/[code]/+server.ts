@@ -21,6 +21,7 @@ import {
 } from '$lib/features/shelters/server';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { provisionShelterManager } from '$lib/features/shelters/server/manager-account';
 
 export const prerender = false;
 
@@ -176,7 +177,12 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 			return { patch: next as Partial<ShelterMaster> };
 		});
 
-		return json({ ok: true, code, rev: newRev });
+		// Only SA may mint a shelter_manager login (assertCanGrant); an SM saving the form never does.
+		const manager_account =
+			caller.isSA && 'contact' in patch
+				? await provisionShelterManager(code, input.contact)
+				: { status: 'skipped' as const };
+		return json({ ok: true, code, rev: newRev, manager_account });
 	} catch (e) {
 		// The guard's 403 / the close-block 400 keep their status (CR-219 FR-22).
 		return serviceOrHttpError(e);

@@ -27,6 +27,9 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 vi.mock('$lib/server/master-data-server', () => ({
 	readMasterDoc: vi.fn()
 }));
+vi.mock('$lib/features/shelters/server/manager-account', () => ({
+	provisionShelterManager: vi.fn().mockResolvedValue({ status: 'skipped' })
+}));
 vi.mock('$lib/server/shelters.admin', () => ({
 	updateMaster: vi.fn().mockResolvedValue({ id: 'shelter:SH001', rev: '2-new' }),
 	findMasterByCode: vi.fn(),
@@ -38,6 +41,7 @@ import { GET, PATCH } from './+server';
 import { requireShelterManagerOrSA } from '$lib/server/couch-admin';
 import { updateMaster, findMasterByCode, migrate } from '$lib/server/shelters.admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
+import { provisionShelterManager } from '$lib/features/shelters/server/manager-account';
 import type { MasterData } from '$lib/features/master-data/domain';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 
@@ -82,7 +86,25 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 		expect(updateMock).toHaveBeenCalledTimes(1);
 		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ ok: true, code: 'SH001', rev: '2-new' });
+		expect(await res.json()).toEqual({
+			ok: true,
+			code: 'SH001',
+			rev: '2-new',
+			manager_account: { status: 'skipped' }
+		});
+	});
+
+	it('creates the manager account when SA saves a contact', async () => {
+		mgrMock.mockResolvedValueOnce({ ...caller, isSA: true });
+		const contact = { name: 'สมชาย', phone: '0812345678' };
+		await callPATCH('SH001', { contact });
+		expect(vi.mocked(provisionShelterManager)).toHaveBeenCalledWith('SH001', contact);
+	});
+
+	it('does not create a manager account when an SM saves a contact', async () => {
+		vi.mocked(provisionShelterManager).mockClear();
+		await callPATCH('SH001', { contact: { name: 'สมชาย', phone: '0812345678' } });
+		expect(vi.mocked(provisionShelterManager)).not.toHaveBeenCalled();
 	});
 
 	it('does not update when the scope guard rejects a cross-shelter edit', async () => {

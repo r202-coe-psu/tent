@@ -21,6 +21,7 @@ import { readMasterDoc } from '$lib/server/master-data-server';
 import { migrate, listShelterMasters } from '$lib/server/shelters.admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { provisionShelter } from '$lib/features/shelters/server/provisioner';
+import { provisionShelterManager } from '$lib/features/shelters/server/manager-account';
 
 export const prerender = false;
 
@@ -43,7 +44,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			(await readMasterDoc('site_kind'))?.items ?? []
 		);
 		if (siteKindError) throw new ServiceError('VALIDATION', siteKindError);
-		return json(await provisionShelter(input));
+		const provisioned = await provisionShelter(input);
+		const manager_account = await provisionShelterManager(provisioned.code, input.contact);
+		return json({ ...provisioned, manager_account });
 	} catch (e) {
 		return serviceError(e);
 	}

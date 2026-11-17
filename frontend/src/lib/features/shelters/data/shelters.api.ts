@@ -8,6 +8,13 @@ export type { ShelterSummary };
 
 const SHELTER_ENDPOINT = '/api/back-office/shelter';
 
+/** Outcome of auto-creating the centre manager login from the shelter contact. */
+export type ManagerAccountOutcome =
+	| { status: 'created'; username: string }
+	| { status: 'exists'; message: string }
+	| { status: 'skipped' }
+	| { status: 'failed'; message: string };
+
 export async function listShelters(init: RequestInit = {}): Promise<ShelterSummary[]> {
 	const shelters = await serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT, {
 		cache: 'no-store',
@@ -23,7 +30,9 @@ export function getShelter(code: string): Promise<ShelterSummary> {
 	return serviceFetch<ShelterSummary>(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}`);
 }
 
-export function createShelter(input: Shelter): Promise<{ ok: true; code: string }> {
+export function createShelter(
+	input: Shelter
+): Promise<{ ok: true; code: string; manager_account?: ManagerAccountOutcome }> {
 	return serviceFetch(SHELTER_ENDPOINT, {
 		method: 'POST',
 		body: JSON.stringify(input)
@@ -34,7 +43,7 @@ export function updateShelter(
 	code: string,
 	input: Partial<Shelter>,
 	rev?: string
-): Promise<{ ok: true; code: string; rev: string }> {
+): Promise<{ ok: true; code: string; rev: string; manager_account?: ManagerAccountOutcome }> {
 	// A cleared capacity (External shelter) is `undefined`, which JSON.stringify drops, so the
 	// server would keep the old value. Send an explicit `null`; the server reads it as "clear".
 	// Only a full form save (carries `is_external`) does this, never a partial patch.

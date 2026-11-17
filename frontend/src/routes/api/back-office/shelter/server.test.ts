@@ -22,6 +22,9 @@ vi.mock('$lib/features/shelters/server/provisioner', () => ({
 vi.mock('$lib/server/master-data-server', () => ({
 	readMasterDoc: vi.fn()
 }));
+vi.mock('$lib/features/shelters/server/manager-account', () => ({
+	provisionShelterManager: vi.fn().mockResolvedValue({ status: 'skipped' })
+}));
 
 import { GET, POST } from './+server';
 import { requireShelterScopeOrSA, requireSystemAdmin } from '$lib/server/couch-admin';

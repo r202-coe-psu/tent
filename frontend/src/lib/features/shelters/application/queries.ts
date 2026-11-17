@@ -14,6 +14,7 @@ import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.remote
 import {
 	createShelter,
 	updateShelter,
+	type ManagerAccountOutcome,
 	closeZone,
 	reopenZone,
 	getShelterClosePreview,
@@ -100,6 +101,18 @@ export const useSubdistricts = (province: () => string | null, district: () => s
 		staleTime: Infinity
 	}));
 
+/** Tell the user what happened to the manager login. A taken phone is only worth a note on create. */
+function toastManagerAccount(outcome: ManagerAccountOutcome | undefined, isCreate: boolean) {
+	if (!outcome) return;
+	if (outcome.status === 'created') {
+		toast.success(`สร้างบัญชีผู้จัดการศูนย์ (username ${outcome.username}) แล้ว`);
+	} else if (outcome.status === 'failed') {
+		toast.error(`บันทึกศูนย์แล้ว แต่สร้างบัญชีผู้จัดการศูนย์ไม่สำเร็จ: ${outcome.message}`);
+	} else if (outcome.status === 'exists' && isCreate) {
+		toast.warning(`ไม่ได้สร้างบัญชีผู้จัดการศูนย์: ${outcome.message}`);
+	}
+}
+
 export const useCreateShelter = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
@@ -110,6 +123,7 @@ export const useCreateShelter = () => {
 				queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(result.code) });
 			}
 			toast.success(`บันทึกข้อมูลและสร้างศูนย์พักพิง ${result?.code ?? ''} สำเร็จ`);
+			toastManagerAccount(result?.manager_account, true);
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'เกิดข้อผิดพลาดในการสร้างศูนย์พักพิง');
@@ -124,10 +138,11 @@ export const useUpdateShelter = () => {
 			updateShelter(code, input, rev),
 		// The detail refetch is awaited before toasting so the edit form (which waits on this
 		// mutation) sees the doc it must reload from the moment the save is reported.
-		onSuccess: async (_, variables) => {
+		onSuccess: async (result, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
 			await queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			toast.success(`อัปเดตข้อมูลศูนย์พักพิง ${variables.code} สำเร็จ`);
+			toastManagerAccount(result?.manager_account, false);
 		},
 		onError: async (err: Error, variables) => {
 			// Stale `_rev` (409): refetch so the form reloads the latest doc; unsaved edits are replaced.
