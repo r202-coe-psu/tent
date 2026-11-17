@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -34,11 +35,13 @@
 	const noteRequired = $derived(code === 'other');
 	const preview = $derived(code ? donorRejectMessage(code, note) : '');
 	/**
-	 * Picking a reason puts its formal message in the detail for staff to edit; changing the reason
-	 * swaps (or drops) that message — one written for another reason must not reach the donor.
-	 * Once staff reworded or removed the message, a new reason leaves their text alone.
+	 * Picking a reason puts its formal message in the detail for staff to edit. While that message is
+	 * untouched, changing the reason swaps (or drops) it. Once staff reworded or removed it, the text
+	 * is theirs and a new reason leaves it alone. A detail that is already written when this mounts
+	 * (the parent remounts it when a line's decision is toggled) counts as filled, so the message is
+	 * not stacked after it.
 	 */
-	let filled = false;
+	let filled = untrack(() => note.trim() !== '');
 	function pickReason(next: DonationRejectReasonCode) {
 		code = next;
 		if (filled && note.trim() !== '' && !containsRejectNoteTemplate(note)) return;

@@ -92,13 +92,54 @@ describe('RejectReasonFields (#1166)', () => {
 		expect(noteBox().value).toBe(`นมหมดอายุ ${rejectNoteTemplate('not_eligible')}`);
 	});
 
-	it('does not stack a second message on a message staff already reworded (#1256)', () => {
+	it('leaves a note staff rewrote from scratch alone when the reason changes (#1256)', () => {
 		mountFields();
 		pickReason('over_need');
 		type('ขออภัยครับ ศูนย์มีของพอแล้ว ลองส่งต่อศูนย์อื่นนะครับ');
 		pickReason('not_eligible');
 
 		expect(noteBox().value).toBe('ขออภัยครับ ศูนย์มีของพอแล้ว ลองส่งต่อศูนย์อื่นนะครับ');
+	});
+
+	it('keeps an auto-filled message staff edited when the reason changes — it is theirs now (#1256)', () => {
+		mountFields();
+		pickReason('over_need');
+		const edited = `${rejectNoteTemplate('over_need')} ขอบคุณที่ตั้งใจนะครับ`.replace(
+			'ศูนย์',
+			'ที่นี่'
+		);
+		expect(edited).not.toBe(`${rejectNoteTemplate('over_need')} ขอบคุณที่ตั้งใจนะครับ`);
+		type(edited);
+		pickReason('expired');
+
+		expect(noteBox().value).toBe(edited);
+	});
+
+	it('does not stack a second message on a note already written when it mounts (#1256)', () => {
+		const written = 'ขออภัยครับ ศูนย์มีของพอแล้ว ลองส่งต่อศูนย์อื่นนะครับ';
+		mountFields({ note: written });
+		pickReason('expired');
+
+		expect(noteBox().value).toBe(written);
+	});
+
+	it('still swaps an untouched message that was already there when it mounts (#1256)', () => {
+		mountFields({ note: rejectNoteTemplate('over_need') });
+		pickReason('expired');
+
+		expect(noteBox().value).toBe(rejectNoteTemplate('expired'));
+	});
+
+	it('swaps the message for the new reason after staff typed their own words first (#1256)', () => {
+		mountFields();
+		type('นมหมดอายุ 2 กล่อง');
+		pickReason('over_need');
+		expect(noteBox().value).toBe(`นมหมดอายุ 2 กล่อง ${rejectNoteTemplate('over_need')}`);
+		pickReason('not_eligible');
+
+		expect(noteBox().value).toBe(`นมหมดอายุ 2 กล่อง ${rejectNoteTemplate('not_eligible')}`);
+		const template = rejectNoteTemplate('not_eligible') as string;
+		expect(noteBox().value.split(template)).toHaveLength(2);
 	});
 
 	it('puts the message after words staff typed before picking a reason (#1256)', () => {

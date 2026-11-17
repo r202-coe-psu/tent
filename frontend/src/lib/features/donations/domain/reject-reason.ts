@@ -124,8 +124,9 @@ function swapIn(note: string, from: string, to: string): string {
 /**
  * The detail box after staff pick `code`: that reason's message goes in. An empty box takes it; a
  * message already there (alone, or among staff's words) is swapped for the new reason's, or dropped
- * when the new reason has none; staff's own words stay and the message goes after them. A message
- * must never reach the donor under a reason it was not written for. Where adding or swapping would
+ * when the new reason has none; staff's own words stay and the message goes after them. Only an
+ * untouched message follows the reason; text staff reworded is theirs and is not this function's to
+ * judge (the caller decides whether to call it). Where adding or swapping would
  * pass {@link REJECT_NOTE_MAX}, staff's text wins: the box is left as it was (or loses just the old
  * message) instead of cutting a sentence.
  */
