@@ -1,4 +1,8 @@
-"""Evacuee public search use case — reads public_persons projection."""
+"""Evacuee search use case — reads the public_persons projection.
+
+CR-257: the projection holds plaintext PII; this module decides exposure per endpoint
+(`person_view`): the anonymous public search is masked, legacy `/external/v1/occupants` is full.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ from ...utils.masking import (
 )
 from ...utils.search_query import ParsedSearchQuery, SearchQueryKind, parse_search_query
 from ...utils.ulid import new_ulid
+from . import person_view
 from .schemas import (
     ExternalSearchResponse,
     ExternalSearchResult,
@@ -64,14 +69,14 @@ def map_public_status(stay_status: str) -> str:
 _SHELTER_STATUSES: frozenset[str] = frozenset({"open", "closed", "full", "standby"})
 
 
-def _shelter_status(shelter: PublicShelter | None) -> ShelterStatus | None:
+def shelter_status(shelter: PublicShelter | None) -> ShelterStatus | None:
     """`public_shelters.status` for the response; unknown values are reported as null."""
     if shelter is None or shelter.status not in _SHELTER_STATUSES:
         return None
     return shelter.status  # type: ignore[return-value]
 
 
-def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
+def shelter_address(shelter: PublicShelter | None) -> str | None:
     if not shelter:
         return None
     raw = shelter.raw_data or {}
@@ -129,7 +134,7 @@ def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
     return None
 
 
-def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> str | None:
+def resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> str | None:
     """Partner-facing zone label (`/external/v1/occupants`, EXT-012); never on the public search."""
     if not care_zone:
         return None
@@ -174,7 +179,8 @@ class EvacueeUseCase:
         await self._write_external_audit(
             parsed=parsed, client_ip=client_ip, result_count=len(persons)
         )
-        results = await self.build_external_results(persons)
+        # D-6 (CR-257): the legacy partner search returns the full values.
+        results = await self.build_external_results(persons, full=True)
         return ExternalSearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
 
     async def _parse_and_find(self, raw_query: str) -> tuple[ParsedSearchQuery, list[PublicPerson]]:
@@ -191,32 +197,31 @@ class EvacueeUseCase:
             )
         return parsed, await self.find_persons(parsed)
 
-    async def build_results(
-        self, persons: list[PublicPerson], *, include_family: bool = True
-    ) -> list[SearchResult]:
-        """Masked `SearchResult`s for `persons`, in order.
-
-        `include_family=False` skips the household lookup entirely (EXT-012 never returns
-        `family_members`), leaving that field empty.
-        """
-        shelters = await self._load_shelters({person.shelter_code for person in persons})
+    async def build_results(self, persons: list[PublicPerson]) -> list[SearchResult]:
+        """Masked `SearchResult`s for the anonymous public search, in order."""
+        shelters = await self.load_shelters({person.shelter_code for person in persons})
         return [
-            await self._to_result(
-                person, shelters.get(person.shelter_code), include_family=include_family
-            )
+            await self._to_result(person, shelters.get(person.shelter_code), full=False)
             for person in persons
         ]
 
     async def build_external_results(
-        self, persons: list[PublicPerson], *, include_family: bool = True
+        self, persons: list[PublicPerson], *, full: bool, include_family: bool = True
     ) -> list[ExternalSearchResult]:
-        """`build_results` plus the resolved zone, for partner endpoints only."""
-        shelters = await self._load_shelters({person.shelter_code for person in persons})
+        """`SearchResult` plus the resolved zone, for partner endpoints only.
+
+        `full` is explicit on purpose (CR-257 FR-25): legacy `/external/v1/occupants` passes
+        `True`, EXT-012 without `pii-full` passes `False`. `include_family=False` skips the
+        household lookup entirely, leaving `family_members` empty.
+        """
+        shelters = await self.load_shelters({person.shelter_code for person in persons})
         results = []
         for person in persons:
             shelter = shelters.get(person.shelter_code)
-            result = await self._to_result(person, shelter, include_family=include_family)
-            zone_name = _resolve_zone_name(shelter, person.care_zone)
+            result = await self._to_result(
+                person, shelter, full=full, include_family=include_family
+            )
+            zone_name = resolve_zone_name(shelter, person.care_zone)
             results.append(
                 ExternalSearchResult(
                     **result.model_dump(), care_zone=zone_name, zone_name=zone_name
@@ -361,63 +366,70 @@ class EvacueeUseCase:
             ]
         }
 
-    async def _load_shelters(self, codes: set[str]) -> dict[str, PublicShelter]:
+    async def load_shelters(self, codes: set[str]) -> dict[str, PublicShelter]:
         if not codes:
             return {}
 
         shelters = await PublicShelter.find({"shelter_code": {"$in": list(codes)}}).to_list()
         return {shelter.shelter_code: shelter for shelter in shelters}
 
+    async def find_household_members(
+        self, person: PublicPerson, *, exclude_statuses: Collection[str] = ()
+    ) -> list[PublicPerson]:
+        """Other searchable people of `person`'s household in the same shelter."""
+        if not person.household_id:
+            return []
+        conditions: list[dict] = [
+            {"household_id": person.household_id},
+            {"shelter_code": person.shelter_code},
+            {"search_excluded": {"$ne": True}},
+            {"_id": {"$ne": person.id}},
+        ]
+        if exclude_statuses:
+            conditions.append({"status": {"$nin": list(exclude_statuses)}})
+        return await PublicPerson.find(*conditions).to_list()
+
     async def _load_family_members(
         self,
         person: PublicPerson,
         shelter_name: str,
-        shelter_status: ShelterStatus | None,
+        status_of_shelter: ShelterStatus | None,
+        *,
+        full: bool,
     ) -> list[FamilyMember]:
-        if not person.household_id:
-            return []
-
-        members = await PublicPerson.find(
-            PublicPerson.household_id == person.household_id,
-            PublicPerson.shelter_code == person.shelter_code,
-            PublicPerson.search_excluded != True,  # noqa: E712
-        ).to_list()
-
         return [
             FamilyMember(
-                name=f"{member.first_name} {member.last_name_masked}",
+                name=person_view.display_name(member, full=full),
                 status=map_public_status(member.status),
                 shelter_name=shelter_name,
-                shelter_status=shelter_status,
+                shelter_status=status_of_shelter,
             )
-            for member in members
-            if member.id != person.id
+            for member in await self.find_household_members(person)
         ]
 
     async def _to_result(
         self,
         person: PublicPerson,
         shelter: PublicShelter | None = None,
-        shelter_name: str | None = None,
         *,
+        full: bool,
         include_family: bool = True,
     ) -> SearchResult:
-        name = shelter_name or (shelter.name if shelter and shelter.name else person.shelter_code)
-        shelter_address = _extract_shelter_address(shelter)
-        shelter_status = _shelter_status(shelter)
+        name = shelter.name if shelter and shelter.name else person.shelter_code
+        status_of_shelter = shelter_status(shelter)
 
         return SearchResult(
-            name=f"{person.first_name} {person.last_name_masked}",
+            name=person_view.display_name(person, full=full),
             status=map_public_status(person.status),
-            national_id=person.national_id_masked,
+            national_id=person_view.national_id(person, full=full),
             gender=person.gender,
             shelter_name=name,
-            shelter_address=shelter_address,
-            origin_address=person.address_masked,
+            shelter_address=shelter_address(shelter),
+            origin_address=person_view.origin_address(person, full=full),
             checked_in_at=person.checked_in_at,
-            shelter_status=shelter_status,
+            shelter_status=status_of_shelter,
             family_members=(
-                await self._load_family_members(person, name, shelter_status)
+                await self._load_family_members(person, name, status_of_shelter, full=full)
                 if include_family
                 else []
             ),
