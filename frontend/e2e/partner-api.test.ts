@@ -7,17 +7,18 @@
  * `@critical` (local, or staging with `ALLOW_REMOTE_WRITES=true`): the run provisions its own
  * `E2E partner …` shelter and partner client through the staff UI (System management → API
  * Keys), then
- *   - A1/A2  creates a client with all eight scopes and mints a token for it,
+ *   - A1/A2  creates a client with all nine scopes and mints a token for it,
  *   - A3     walks every EXT endpoint's happy path (booking create / idempotency / cancel),
  *   - B1/B2  `accepts_booking` (#751) on EXT-003 / EXT-002 (+ the `?accepts_booking=` filter), for the
  *            run's bookable shelter and a second `E2E partner closed …` shelter that is not,
  *   - A3b    proves one client cannot read or cancel another client's booking,
  *   - B3/B4  EXT-008 on the not-bookable shelter: `booking-write` alone is 409 `location_not_bookable`,
  *            with `booking-bypass` (EOC) it is booked (201 → BOOKED → cancelled),
- *   - E12-1…5 EXT-012 person search (#736): masked hit, no-store, purpose, validation, cancelled dropped,
+ *   - E12-1…6 EXT-012 person search (#736): masked hit, no-store, purpose, validation, cancelled dropped,
+ *            full values with `pii-full` (CR-257),
  *   - A4     scope matrix: removes each scope in turn via the BFF and asserts every endpoint
  *            that needs it answers 403 `insufficient_scope` while the rest keep working; a scope
- *            with no endpoint of its own (`booking-bypass`) is checked by its probe instead,
+ *            with no endpoint of its own (`booking-bypass`, `pii-full`) is checked by its probe instead,
  *   - A5     least privilege (`location-read` only),
  *   - A6-A8  edit scopes / revoke / delete through the UI.
  *
@@ -196,6 +197,24 @@ const closedCtxOf = (r: Run): ExtCtx => ({ ...ctxOf(r), code: r.closedCode, cid:
 /** Mint a token for the main client with its current scopes (cheap: no rate limit). */
 async function mintMain(r: Run) {
 	return mintToken(r.api, r.clientId, r.secret);
+}
+
+/**
+ * A token for the main client without `pii-full` (CR-257), i.e. the masked view of EXT-007 /
+ * EXT-012. The client's scopes are restored before returning; the token stays valid.
+ */
+async function mintMaskedMain(r: Run): Promise<string> {
+	await r.admin.patchScopes(
+		r.clientRowId,
+		PARTNER_SCOPES.filter((s) => s !== 'pii-full')
+	);
+	try {
+		const minted = await mintMain(r);
+		expect(minted.scopes).not.toContain('pii-full');
+		return minted.access_token;
+	} finally {
+		await r.admin.patchScopes(r.clientRowId, PARTNER_SCOPES);
+	}
 }
 
 /**
@@ -405,13 +424,14 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		}
 	});
 
-	test('A1 UI: create a client with all eight scopes', async () => {
+	test('A1 UI: create a client with all nine scopes', async () => {
 		test.setTimeout(120_000);
 		const r = state();
 		const { page } = r;
-		// #751: `booking-bypass` joins the seven scopes of ADR 0002 and is ticked like the rest.
+		// #751 `booking-bypass` and CR-257 `pii-full` join the seven scopes of ADR 0002.
 		expect(PARTNER_SCOPES as readonly string[]).toContain('booking-bypass');
-		expect(PARTNER_SCOPES).toHaveLength(8);
+		expect(PARTNER_SCOPES as readonly string[]).toContain('pii-full');
+		expect(PARTNER_SCOPES).toHaveLength(9);
 		await openApiKeys(page);
 		// Name first: if the run dies before the id is known, teardown still finds this client.
 		ledger.add('clientNames', CLIENT_NAME);
@@ -566,7 +586,8 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 
 	test('A3 EXT-007 occupants carry a purpose and expose no PII fields', async () => {
 		const r = state();
-		const res = await call(r, r.token, byExt('EXT-007'));
+		// Masked view: `occupancy-pii-read` without `pii-full` (CR-257).
+		const res = await call(r, await mintMaskedMain(r), byExt('EXT-007'));
 		expect(res.status).toBe(200);
 		expect(Array.isArray(res.body.result)).toBe(true);
 		const pii = ['cid', 'national_id', 'first_name', 'last_name', 'phone', 'address', 'name'];
@@ -650,14 +671,15 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		test.setTimeout(120_000);
 		const r = state();
 		await waitForProjectedStay(r.cid, 'pre_registered');
-		const res = await call(r, r.token, byExt('EXT-012'));
+		// Masked view: `occupant-search` without `pii-full` (CR-257).
+		const res = await call(r, await mintMaskedMain(r), byExt('EXT-012'));
 		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
 		expect(res.body).toMatchObject({ status: 200, message: 'Found Data.' });
 		expect(res.body.result).toHaveLength(1);
 		const [hit] = res.body.result as Record<string, unknown>[];
 		expect(hit.status).toBe('pre_registered');
 		expect(hit.national_id).toMatch(/^\d{3}-XXXX-XX-\d{3}$/);
-		for (const key of ['family_members', 'phone', 'passport']) {
+		for (const key of ['family_members', 'phone', 'passport_id', 'first_name', 'last_name']) {
 			expect(hit, `EXT-012 hit has no "${key}"`).not.toHaveProperty(key);
 		}
 		// Boolean only: a failing assertion must not echo the CID or the body.
@@ -665,6 +687,29 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 			JSON.stringify(res.body).includes(r.cid),
 			'EXT-012 response never contains the CID in plaintext'
 		).toBe(false);
+	});
+
+	test('E12-6 EXT-012 with pii-full returns the whole values (CR-257)', async () => {
+		test.setTimeout(120_000);
+		const r = state();
+		await waitForProjectedStay(r.cid, 'pre_registered');
+		// The main client holds every scope, `pii-full` included.
+		const res = await call(r, r.token, byExt('EXT-012'));
+		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
+		expect(res.body.result).toHaveLength(1);
+		const [hit] = res.body.result as Record<string, unknown>[];
+		expect(hit).toMatchObject({
+			first_name: 'E2E',
+			last_name: 'Partner',
+			name: 'E2E Partner',
+			id_card_type: 'national_id',
+			status: 'pre_registered'
+		});
+		// Boolean only: a failing assertion must not echo the CID.
+		expect(hit.national_id === r.cid, 'EXT-012 full mode returns the whole CID').toBe(true);
+		expect(typeof hit.phone, 'EXT-012 full mode returns the phone').toBe('string');
+		expect(Array.isArray(hit.family_members), 'family_members is a list').toBe(true);
+		expect(JSON.stringify(res.body).includes('XXXX'), 'nothing is masked').toBe(false);
 	});
 
 	test('E12-2 EXT-012 answers Cache-Control: no-store', async () => {
@@ -855,11 +900,20 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 					});
 					expectExtError(res, 403, 'insufficient_scope', `${endpoint.ext} without ${scope}`);
 				}
-				if (probe) {
+				if (probe?.kind === 'refused') {
 					// No endpoint of its own: without `booking-bypass` the closed-for-bookings shelter
 					// is refused by the normal rule (409), not by the scope gate (403).
 					const res = await bookClosedShelter(r, minted.access_token, r.clientId);
 					expectExtError(res, probe.status, probe.code, `${probe.ext} without ${scope}`);
+				} else if (probe?.kind === 'masked') {
+					// Not a gate (CR-257): without `pii-full` the search still answers 200, in the masked
+					// shape. The run's booking is cancelled by now, so no hit is required — E12-1 asserts
+					// the masked values on a real hit.
+					const res = await call(r, minted.access_token, byExt(probe.ext));
+					expect(res.status, `${probe.ext} without ${scope}`).toBe(200);
+					for (const hit of res.body.result as Record<string, unknown>[]) {
+						expect(hit, `${probe.ext} has no phone without ${scope}`).not.toHaveProperty('phone');
+					}
 				}
 				if (scope === 'occupancy-read') {
 					// EXT-006 is gated on location-read: it stays 200 but hides the occupancy total.

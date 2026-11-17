@@ -1,4 +1,9 @@
-"""Privacy transforms for public API responses."""
+"""Privacy transforms for API responses.
+
+Since CR-257 the Mongo projections hold plaintext PII and every mask is applied here, at
+response time. The `mask_*` outputs must stay byte-identical to what the worker stored before
+(golden values in `tests/test_masking.py`), so the anonymous public search does not change.
+"""
 
 from __future__ import annotations
 
@@ -74,6 +79,73 @@ def mask_national_id(national_id: str) -> str:
     if len(digits) >= 13:
         return f"{digits[:3]}-XXXX-XX-{digits[10:13]}"
     return f"{digits[:3]}***{digits[-3:]}"
+
+
+def mask_passport(passport_id: str) -> str:
+    """Mask passport — e.g. ``A...67*****`` (byte-identical to the pre-CR-257 worker output)."""
+    value = passport_id.upper()
+    if len(value) <= 4:
+        return f"{value[0]}****" if value else "****"
+    return f"{value[0]}...{value[-2:]}{'*' * max(0, len(value) - 4)}"
+
+
+def mask_address(subdistrict: str | None, district: str | None, province: str | None) -> str | None:
+    """Public-tier residence — house number and village hidden (pre-CR-257 worker output)."""
+    parts: list[str] = []
+    if subdistrict:
+        parts.append(f"ต.{subdistrict}")
+    if district:
+        parts.append(f"อ.{district}")
+    if province:
+        parts.append(f"จ.{province}")
+    if not parts:
+        return None
+    return f"**/* {' '.join(parts)}"
+
+
+def _with_prefix(value: str, short: str, long: str) -> str:
+    value = value.strip()
+    return value if value.startswith((short, long)) else f"{short}{value}"
+
+
+def format_full_address(
+    *,
+    address_no: str | None,
+    village_no: str | None,
+    subdistrict: str | None,
+    district: str | None,
+    province: str | None,
+    postal_code: str | None,
+) -> str | None:
+    """Whole residence for partner full mode (CR-257 FR-17) — empty parts are skipped."""
+    parts = [
+        address_no.strip() if address_no else "",
+        village_no.strip() if village_no else "",
+        _with_prefix(subdistrict, "ต.", "ตำบล") if subdistrict else "",
+        _with_prefix(district, "อ.", "อำเภอ") if district else "",
+        _with_prefix(province, "จ.", "จังหวัด") if province else "",
+        postal_code.strip() if postal_code else "",
+    ]
+    joined = " ".join(part for part in parts if part)
+    return joined or None
+
+
+def mask_occupant_name(first_name: str | None, last_name: str | None) -> str:
+    """EXT-007 masked name (`สมชาย ใ.`) — byte-identical to the pre-CR-257 worker output."""
+    fn = (first_name or "").strip()
+    ln = (last_name or "").strip()
+    if not fn and not ln:
+        return "ไม่ระบุชื่อ"
+    if fn and ln:
+        return f"{fn} {ln[0]}."
+    return fn or ln
+
+
+def full_name(first_name: str | None, last_name: str | None) -> str:
+    """`first last`, either part may be empty."""
+    return " ".join(
+        part for part in ((first_name or "").strip(), (last_name or "").strip()) if part
+    )
 
 
 _INTL_PHONE = re.compile(r"^\+?66(\d{8,9})$")

@@ -1,8 +1,16 @@
 """Tests for masking helpers."""
 
+import pytest
+
 from apiapp.utils.masking import (
+    format_full_address,
+    full_name,
     last_name_hash,
+    mask_address,
     mask_last_name,
+    mask_national_id,
+    mask_occupant_name,
+    mask_passport,
     name_key,
     national_id_hash,
     normalize_phone,
@@ -85,3 +93,105 @@ def test_search_key_vectors_are_pinned():
     )
     assert last_name_hash("") is None
     assert last_name_hash(None) is None
+
+
+# --- CR-257 golden values ---------------------------------------------------------------------
+# Captured from the worker's masking (worker/src/worker/masking.py, projectors/occupant.py) at
+# PROJECTION_VERSION 22, before masking moved to the API. The public search must keep producing
+# exactly these strings.
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("ใจดี", "ใ****"),
+        ("ศรีสุวรรณ", "ศรี****รณ"),
+        ("Smith", "Sm****th"),
+        ("van der Berg", "va****rg"),
+        ("", "****"),
+        ("ก", "ก****"),
+        ("กิ่งแก้ว", "กิ่ง****ก้ว"),
+    ],
+)
+def test_mask_last_name_golden(value, expected):
+    assert mask_last_name(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("3901234567192", "390-XXXX-XX-192"),
+        ("3-9012-34567-19-2", "390-XXXX-XX-192"),
+        ("12345", "****"),
+        ("1234567", "123***567"),
+        ("AB12345678", "AB1***678"),
+    ],
+)
+def test_mask_national_id_golden(value, expected):
+    assert mask_national_id(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("AA1234567", "A...67*****"), ("ab12", "A****"), ("x", "X****"), ("E123", "E****")],
+)
+def test_mask_passport_golden(value, expected):
+    assert mask_passport(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("parts", "expected"),
+    [
+        ((None, None, None), None),
+        (("คอหงส์", "หาดใหญ่", "สงขลา"), "**/* ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา"),
+        ((None, None, "สงขลา"), "**/* จ.สงขลา"),
+    ],
+)
+def test_mask_address_golden(parts, expected):
+    assert mask_address(*parts) == expected
+
+
+@pytest.mark.parametrize(
+    ("first", "last", "expected"),
+    [
+        ("สมชาย", "ใจดี", "สมชาย ใ."),
+        ("สมชาย", None, "สมชาย"),
+        (None, "ใจดี", "ใจดี"),
+        (None, None, "ไม่ระบุชื่อ"),
+        ("  สมชาย ", "  ใจดี", "สมชาย ใ."),
+        ("John", "Doe", "John D."),
+    ],
+)
+def test_mask_occupant_name_golden(first, last, expected):
+    assert mask_occupant_name(first, last) == expected
+
+
+def test_format_full_address_keeps_house_number_and_skips_empty_parts():
+    assert (
+        format_full_address(
+            address_no="12/3",
+            village_no="หมู่ 2",
+            subdistrict="คอหงส์",
+            district="อำเภอหาดใหญ่",
+            province="สงขลา",
+            postal_code="90110",
+        )
+        == "12/3 หมู่ 2 ต.คอหงส์ อำเภอหาดใหญ่ จ.สงขลา 90110"
+    )
+    assert (
+        format_full_address(
+            address_no=None,
+            village_no="",
+            subdistrict=None,
+            district=None,
+            province=None,
+            postal_code=None,
+        )
+        is None
+    )
+
+
+def test_full_name_skips_an_empty_part():
+    assert full_name("สมชาย", "ใจดี") == "สมชาย ใจดี"
+    assert full_name("สมชาย", "") == "สมชาย"
+    assert full_name(None, None) == ""
