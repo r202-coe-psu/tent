@@ -28,7 +28,16 @@ export type KioskDeviceInfo = {
 };
 
 /** Answer of the kiosk machine about itself; empty when it cannot say (plain browser, error). */
-export type KioskHostInfo = { hostname: string | null; ips: string[] };
+export type KioskHostInfo = {
+	hostname: string | null;
+	ips: string[];
+	/** Short hash of the kiosk client checkout it runs. */
+	commit: string | null;
+	/** When the boot updater last changed that commit (kiosk local time, ISO). */
+	updatedAt: string | null;
+	/** What the last boot's update check said, e.g. `up-to-date`, `offline`, `updated`. */
+	lastCheck: { at: string; outcome: string } | null;
+};
 
 export function toKioskDeviceInfo(wire: z.infer<typeof kioskDeviceInfoSchema>): KioskDeviceInfo {
 	return {

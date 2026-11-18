@@ -6,9 +6,6 @@ import pytest
 
 from worker.masking import (
     last_name_hash,
-    mask_last_name,
-    mask_national_id,
-    mask_passport,
     name_key,
     national_id_hash,
     passport_hash,
@@ -61,18 +58,6 @@ def test_search_key_vectors_are_pinned():
     )
     assert last_name_hash("") is None
     assert last_name_hash(None) is None
-
-
-def test_mask_last_name_long_thai():
-    assert mask_last_name("ประเสริฐ") == "ปร****ริฐ"
-
-
-def test_mask_last_name_short():
-    assert mask_last_name("ดี") == "ดี****"
-
-
-def test_mask_national_id_thirteen_digits():
-    assert mask_national_id("3900100244192") == "390-XXXX-XX-192"
 
 
 def test_phone_hash_none_for_missing():
@@ -434,7 +419,7 @@ def test_classify_registry_shelter_variants():
     )
 
 
-def test_project_evacuee_maps_person_id_and_masked_fields():
+def test_project_evacuee_maps_person_id_and_plaintext_fields():
     doc = {
         "_id": "evacuee:01TEST",
         "type": "evacuee",
@@ -462,17 +447,27 @@ def test_project_evacuee_maps_person_id_and_masked_fields():
     assert payload is not None
     assert payload["first_name"] == "สมชาย"
     assert payload["first_name_key"] == "สมชาย"
-    assert payload["last_name_masked"] == mask_last_name("ใจดี")
+    # CR-257: plaintext PII; the API masks it per endpoint/scope.
+    assert payload["last_name"] == "ใจดี"
     assert payload["last_name_hash"] == last_name_hash("ใจดี")
+    assert payload["national_id"] == "3900100244192"
     assert payload["national_id_hash"] == national_id_hash("3900100244192")
-    assert payload["national_id_masked"] == mask_national_id("3900100244192")
+    assert payload["id_card_type"] == "national_id"
+    assert payload["passport_id"] is None
+    assert payload["phone"] == "0811111111"
     assert payload["phone_hash"] == sha256_hex("0811111111")
     assert payload["gender"] == "male"
     assert payload["care_zone"] == "โซนที่ General"
     assert payload["household_id"] == "household:01HH"
-    assert payload["address_masked"].startswith("**/*")
-    assert "last_name" not in payload
-    assert "phone" not in payload
+    assert payload["address"] == {
+        "address_no": None,
+        "village_no": None,
+        "subdistrict": "หาดใหญ่",
+        "district": "หาดใหญ่",
+        "province": "สงขลา",
+        "postal_code": None,
+    }
+    assert not [key for key in payload if key.endswith("_masked")]
 
 
 def test_project_evacuee_search_keys_are_normalized():
@@ -489,7 +484,6 @@ def test_project_evacuee_search_keys_are_normalized():
     assert payload["first_name"] == "  John   PAUL "  # display value is untouched
     assert payload["first_name_key"] == "john paul"
     assert payload["last_name_hash"] == last_name_hash("vanderberg")
-    assert "van der Berg" not in payload.values()
 
 
 def test_project_evacuee_without_a_surname_has_no_surname_hash():
@@ -521,7 +515,10 @@ def test_project_evacuee_passport():
     assert action == "upsert"
     assert payload is not None
     assert payload["passport_hash"] == passport_hash("AB1234567")
-    assert payload["passport_id_masked"] == mask_passport("AB1234567")
+    assert payload["passport_id"] == "AB1234567"
+    assert payload["id_card_type"] == "passport"
+    assert payload["national_id"] is None
+    assert payload["national_id_hash"] is None
 
 
 @pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered", "cancelled"])
@@ -574,7 +571,8 @@ def test_project_evacuee_pink_card_hashes_national_id_field():
     assert action == "upsert"
     assert payload is not None
     assert payload["national_id_hash"] == national_id_hash("3900100244192")
-    assert payload["national_id_masked"] == mask_national_id("3900100244192")
+    assert payload["national_id"] == "3900100244192"
+    assert payload["id_card_type"] == "pink_card"
 
 
 def test_project_evacuee_other_card_hashes_national_id_field():
@@ -591,7 +589,8 @@ def test_project_evacuee_other_card_hashes_national_id_field():
     assert action == "upsert"
     assert payload is not None
     assert payload["national_id_hash"] == national_id_hash("DOC-999")
-    assert payload["national_id_masked"] == mask_national_id("DOC-999")
+    assert payload["national_id"] == "DOC-999"
+    assert payload["id_card_type"] == "other"
 
 
 def test_project_evacuee_search_excluded_deletes():

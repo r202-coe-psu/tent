@@ -1029,7 +1029,6 @@ name = "sync-worker"
 version = "0.1.0"
 source = { editable = "worker" }
 dependencies = [
-    { name = "grapheme" },
     { name = "httpx" },
     { name = "python-dateutil" },
     { name = "tent-model" },
@@ -1043,7 +1042,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "grapheme", specifier = ">=0.6" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "python-dateutil", specifier = ">=2.8.2" },
     { name = "tent-model", editable = "packages/tent-model" },

@@ -5,6 +5,7 @@ import {
 	RELIGION_CHOICES,
 	ROLE_CHOICES,
 	SPECIAL_NEED_CHOICES,
+	STAY_STATUS_CHOICES,
 	type EnumChoice
 } from '../domain/columns';
 
@@ -36,8 +37,19 @@ function labelOf<T extends string>(choices: readonly EnumChoice<T>[], value: T):
 	return found.label;
 }
 
+/** Fixed, past example times in the file's own format (BE year, Thai time). */
+const SAMPLE_ARRIVED_AT = '10/11/2569 14:00';
+const SAMPLE_DEPARTED_AT = '12/11/2569 09:30';
+/** Zone label used when the shelter's real zones are not known (tests / blank template). */
+export const SAMPLE_ZONE = 'โซน A';
+
 /** Build the example household's cell values. */
-export function buildSampleWorkbook(): SampleWorkbook {
+export function buildSampleWorkbook(zoneName = SAMPLE_ZONE): SampleWorkbook {
+	const stayingAt = {
+		[H.stay_status]: labelOf(STAY_STATUS_CHOICES, 'active'),
+		[H.arrived_at]: SAMPLE_ARRIVED_AT,
+		[H.zone]: zoneName
+	};
 	const household: Record<string, string | number> = {
 		[H.label]: 'ครอบครัวสมชาย ใจดี',
 		[H.card_type]: labelOf(CARD_TYPE_CHOICES, 'national_id'),
@@ -45,6 +57,7 @@ export function buildSampleWorkbook(): SampleWorkbook {
 		[H.first_name]: 'สมชาย',
 		[H.last_name]: 'ใจดี',
 		[H.nickname]: 'ชาย',
+		...stayingAt,
 		[H.gender]: labelOf(GENDER_CHOICES, 'male'),
 		[H.birth_year]: 2520,
 		[H.phone]: '0812345678',
@@ -71,6 +84,7 @@ export function buildSampleWorkbook(): SampleWorkbook {
 
 	const members: Record<string, string | number>[] = [
 		{
+			...stayingAt,
 			[H.card_type]: labelOf(CARD_TYPE_CHOICES, 'national_id'),
 			[H.id_number]: '1234567890124',
 			[H.first_name]: 'สมหญิง',
@@ -81,6 +95,7 @@ export function buildSampleWorkbook(): SampleWorkbook {
 			[H.religion]: labelOf(RELIGION_CHOICES, 'buddhist')
 		},
 		{
+			...stayingAt,
 			[H.id_number]: '1234567890125',
 			[H.first_name]: 'สมศรี',
 			[H.last_name]: 'ใจดี',
@@ -90,6 +105,11 @@ export function buildSampleWorkbook(): SampleWorkbook {
 			[H.special_needs]: labelOf(SPECIAL_NEED_CHOICES, 'infant')
 		},
 		{
+			// Already left — shows the "กลับแล้ว" shape: a departure time, zone optional.
+			[H.stay_status]: labelOf(STAY_STATUS_CHOICES, 'checked_out'),
+			[H.arrived_at]: SAMPLE_ARRIVED_AT,
+			[H.departed_at]: SAMPLE_DEPARTED_AT,
+			[H.zone]: zoneName,
 			[H.id_number]: '1234567890126',
 			[H.first_name]: 'สมปอง',
 			[H.last_name]: 'ใจดี',
@@ -106,8 +126,8 @@ export function buildSampleWorkbook(): SampleWorkbook {
 }
 
 /** The same example as flat CSV rows — one row per person, head first. */
-export function buildSampleCsvRows(): Record<string, string | number>[] {
-	const { household, members } = buildSampleWorkbook();
+export function buildSampleCsvRows(zoneName?: string): Record<string, string | number>[] {
+	const { household, members } = buildSampleWorkbook(zoneName);
 	const headRole = labelOf(ROLE_CHOICES, 'head');
 	const memberRole = labelOf(ROLE_CHOICES, 'member');
 	return [

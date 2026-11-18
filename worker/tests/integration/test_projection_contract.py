@@ -1,6 +1,6 @@
 """Integration-style tests for projector → API field contract."""
 
-from worker.masking import last_name_hash, mask_last_name, name_key, national_id_hash
+from worker.masking import last_name_hash, name_key, national_id_hash
 from worker.projectors.evacuee import project_evacuee
 
 
@@ -22,7 +22,7 @@ def test_projected_evacuee_supports_family_search_lookup():
     _, payload = project_evacuee(doc, shelter_code="SH001")
     assert payload is not None
     assert payload["national_id_hash"] == national_id_hash("3900100244192")
-    assert payload["last_name_masked"] == mask_last_name("ระบบ")
+    assert payload["last_name"] == "ระบบ"  # plaintext; the API masks it (CR-257)
     assert payload["first_name_key"] == name_key("ทดสอบ")
     assert payload["last_name_hash"] == last_name_hash("ระบบ")
     assert payload["status"] == "active"

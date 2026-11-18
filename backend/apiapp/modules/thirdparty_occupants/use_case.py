@@ -1,9 +1,10 @@
-"""Use case for EXT-007 occupant-detail scaffold (partner ODT, ADR 0002 §6).
+"""Use case for EXT-007 occupant list (partner ODT, ADR 0002 §6).
 
-Denied by default: every attempt is logged (granted or not) per PDPA auditability,
-`purpose` is mandatory, and no occupant PII is ever returned in this slice — see
-CR-109 / ext-spec.md "Out of Scope" (returning real payloads is a later CR, once an
-authority has actually approved `occupancy-pii-read` for a specific module).
+Denied by default: every attempt is logged (granted or not) per PDPA auditability and
+`purpose` is mandatory. Two response modes (CR-257):
+- `occupancy-pii-read` only → masked (`name_masked`, `age_range`);
+- `occupancy-pii-read` + `pii-full` → plus the whole name, age, ID and phone (`granted_full`
+  in the log). `pii-full` alone grants nothing.
 """
 
 from __future__ import annotations
@@ -16,11 +17,14 @@ from tent_model.public_shelter import PublicShelter
 from tent_model.shelter_occupant import ShelterOccupant
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
+from ...utils.masking import full_name, mask_occupant_name
 from ...utils.ulid import new_ulid
 from ..thirdparty_auth.scopes import ThirdPartyClaims
-from .schemas import OccupantItem, OccupantsEnvelope, PaginationMeta
+from .schemas import OccupantFullItem, OccupantItem, OccupantsEnvelope, PaginationMeta
 
 _REQUIRED_SCOPE = "occupancy-pii-read"
+#: Modifier on top of `_REQUIRED_SCOPE`: unmasked values (CR-257).
+_FULL_SCOPE = "pii-full"
 _SCOPE_DENIED_DETAIL = "ต้องได้รับอนุมัติสิทธิ์เป็นรายกรณีก่อนใช้งาน"
 
 
@@ -53,6 +57,38 @@ def _location_not_found_error(location_code: str) -> HTTPException:
                 "message": f"No location with code '{location_code}'",
             }
         },
+    )
+
+
+def _masked_name(doc: ShelterOccupant) -> str:
+    # A row projected before PROJECTION_VERSION 23 carries only the stored mask.
+    if doc.name_masked is not None:
+        return doc.name_masked
+    return mask_occupant_name(doc.first_name, doc.last_name)
+
+
+def _masked_item(doc: ShelterOccupant) -> OccupantItem:
+    return OccupantItem(
+        occupant_ref=doc.occupant_ref,
+        name_masked=_masked_name(doc),
+        age_range=doc.age_range,
+        gender=doc.gender,
+        care_flags=doc.care_flags,
+        checked_in_at=doc.checked_in_at,
+    )
+
+
+def _full_item(doc: ShelterOccupant) -> OccupantFullItem:
+    return OccupantFullItem(
+        **_masked_item(doc).model_dump(),
+        first_name=doc.first_name,
+        last_name=doc.last_name,
+        name=full_name(doc.first_name, doc.last_name) or None,
+        age=doc.age,
+        national_id=doc.national_id,
+        passport_id=doc.passport_id,
+        id_card_type=doc.id_card_type,
+        phone=doc.phone,
     )
 
 
@@ -127,24 +163,15 @@ class ThirdPartyOccupantsUseCase:
         total_pages = math.ceil(total / limit) if total > 0 else 0
         docs = await cursor.sort("+occupant_ref").skip((page - 1) * limit).limit(limit).to_list()
 
-        items = [
-            OccupantItem(
-                occupant_ref=doc.occupant_ref,
-                name_masked=doc.name_masked,
-                age_range=doc.age_range,
-                gender=doc.gender,
-                care_flags=doc.care_flags,
-                checked_in_at=doc.checked_in_at,
-            )
-            for doc in docs
-        ]
+        full = _FULL_SCOPE in claims.scopes
+        items = [_full_item(doc) if full else _masked_item(doc) for doc in docs]
 
         await self._log(
             claims=claims,
             location_code=location_code,
             purpose=purpose,
             client_ip=client_ip,
-            outcome="granted",
+            outcome="granted_full" if full else "granted",
             result_count=len(items),
         )
 

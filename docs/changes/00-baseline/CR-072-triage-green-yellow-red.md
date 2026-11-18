@@ -1,14 +1,15 @@
 ---
 id: CR-072
-title: คัดกรองผู้พัก 3 ระดับ เขียว / เหลือง / แดง — ยกเลิก ไม่ทำแล้ว
+title: คัดกรองผู้พัก 3 ระดับ เขียว / เหลือง / แดง — ยกเลิก 2026-09-07, คืนโดย CR-258
 status: superseded
 date: 2026-08-13
-updated: 2026-09-07
+updated: 2026-11-17
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ
 layer: volatile
 parent: CR-066
 superseded_by: CR-106-decoupled-registration-medical-screening-flow.md
+reinstated_by: CR-258-station2-triage-reinstate.md
 affects:
   - docs/data/schema.md §1.2 medical.track / §1.5 screening (เลิกใช้ triage_level)
   - docs/task-breakdown/00-baseline.md (T-49 overlap)
@@ -18,6 +19,8 @@ affects:
 ---
 
 # CR-072 — Triage เขียว / เหลือง / แดง — **SUPERSEDED**
+
+> **2026-11-17 — คืนแล้วโดย [CR-258](CR-258-station2-triage-reinstate.md):** Station 2 กลับมาเลือกเขียว/เหลือง/แดง และ Station 3 แนะนำโซนกักตัวเมื่อเหลือง/แดง. ข้อห้ามในเอกสารนี้ด้านล่างไม่มีผลแล้ว — ใช้ CR-258 เป็นสเปกปัจจุบัน. เกณฑ์การแพทย์ (D-TRIAGE-RULES) ยังไม่ล็อก.
 
 ## สรุป (TL;DR)
 
@@ -70,3 +73,4 @@ N/A สำหรับสโคปใหม่. Doc `screening` ที่มี 
 - 2026-09-01 — ปรับสถานะเป็น **open decision** (รอเจ้าของโครงการเคาะกฎการแพทย์)
 - 2026-09-02 — CR-106 เคย ratify `triage_level` ใน screening schema_v 2 (ถูกทับโดยแถวถัดไป)
 - **2026-09-07 — เจ้าของโครงการตัดสินใจตัดเขียว/เหลือง/แดงออกจากระบบทั้งหมด.** สถานะ → **`superseded`**. สเปกฟอร์มคัดกรองใหม่บันทึกใน CR-106. T-74 / FR-75 / D-TRIAGE-* ปิด
+- **2026-11-17 — เจ้าของโครงการคืน triage 3 สี** ผ่าน [CR-258](CR-258-station2-triage-reinstate.md) (ฟอร์ม Station 2 + badge คิว + แนะนำโซน). เกณฑ์การแพทย์ไม่คำนวณอัตโนมัติ — เจ้าหน้าที่เลือกสีเอง
