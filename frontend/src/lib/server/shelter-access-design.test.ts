@@ -1980,6 +1980,57 @@ describe('buildValidateDocUpdate', () => {
 				).not.toThrow();
 			});
 
+			it.each([
+				['missing', undefined],
+				['null', null],
+				['without a status', { zone: 'A1' }]
+			])(
+				'rejects registration_staff stripping current_stay (%s) from an active doc',
+				(_l, stay) => {
+					const { current_stay: _dropped, ...rest } = evacuee({}, { status: 'active' });
+					void _dropped;
+					expectForbidden(
+						() =>
+							compile()(
+								stay === undefined ? rest : { ...rest, current_stay: stay },
+								evacuee({}, { status: 'active' }),
+								REGISTRATION
+							),
+						/Reverting current_stay.status/
+					);
+				}
+			);
+
+			it('rejects stripping current_stay from a room_confirmed doc', () => {
+				const { current_stay: _dropped, ...rest } = evacuee({}, { status: 'room_confirmed' });
+				void _dropped;
+				expectForbidden(
+					() => compile()(rest, evacuee({}, { status: 'room_confirmed' }), REGISTRATION),
+					/Reverting current_stay.status/
+				);
+			});
+
+			it.each([
+				['shelter manager', MANAGER],
+				['system admin', ADMIN]
+			])('allows a %s to strip current_stay from an active doc', (_label, user) => {
+				const { current_stay: _dropped, ...rest } = evacuee({}, { status: 'active' });
+				void _dropped;
+				expect(() =>
+					compile()({ ...rest, current_stay: null }, evacuee({}, { status: 'active' }), user)
+				).not.toThrow();
+			});
+
+			it('still lets registration_staff delete an evacuee (failed-registration compensation)', () => {
+				expect(() =>
+					compile()(
+						{ _id: 'evacuee:01J', _rev: '2-b', _deleted: true, type: 'evacuee' },
+						evacuee({}, { status: 'active' }),
+						REGISTRATION
+					)
+				).not.toThrow();
+			});
+
 			it('rejects a shelter_manager of another shelter', () => {
 				expectForbidden(
 					() =>

@@ -1471,14 +1471,20 @@ ${consentVduClause()}
       throw { forbidden: 'revert_status to_status must be pre_registered, arriving or active' };
     }
   }
-  if (newDoc.type === 'evacuee' && oldDoc && oldDoc.current_stay && newDoc.current_stay) {
+  // Dropping current_stay (or its status) from an active/room_confirmed doc counts as a backward
+  // change too — otherwise a stripped write followed by a second write dodges the guard. A delete
+  // (compensation of a failed registration) is not a status change.
+  if (newDoc.type === 'evacuee' && newDoc._deleted !== true && oldDoc && oldDoc.current_stay) {
     var stayRank = { pre_registered: 0, arriving: 1, active: 2, room_confirmed: 3 };
     var revertOldRank = stayRank.hasOwnProperty(oldDoc.current_stay.status)
       ? stayRank[oldDoc.current_stay.status] : -1;
-    var revertNewRank = stayRank.hasOwnProperty(newDoc.current_stay.status)
-      ? stayRank[newDoc.current_stay.status] : -1;
-    if (revertOldRank >= stayRank.active && revertNewRank !== -1 &&
-        revertNewRank < revertOldRank && !isRole('shelter_manager')) {
+    var revertNewStatus = newDoc.current_stay ? newDoc.current_stay.status : undefined;
+    var stayStripped = typeof revertNewStatus !== 'string' || revertNewStatus === '';
+    var revertNewRank = !stayStripped && stayRank.hasOwnProperty(revertNewStatus)
+      ? stayRank[revertNewStatus] : -1;
+    if (revertOldRank >= stayRank.active &&
+        (stayStripped || (revertNewRank !== -1 && revertNewRank < revertOldRank)) &&
+        !isRole('shelter_manager')) {
       throw { forbidden: 'Reverting current_stay.status requires shelter_manager or system_admin' };
     }
   }
