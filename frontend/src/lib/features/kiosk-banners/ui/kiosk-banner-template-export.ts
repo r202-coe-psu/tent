@@ -1,5 +1,4 @@
-import { toPng as htmlToPng } from 'html-to-image';
-import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
+import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared';
 import { KIOSK_BANNER_IMAGE_MAX_BYTES } from '../domain/kiosk-banner-image';
 import type { BannerImagePayload } from '../data/kiosk-banner-file';
 
@@ -9,15 +8,34 @@ const TEMPLATE_FONT_WEIGHTS = new Set(['400', '700']);
 const FONT_FACE_RULE = 5;
 const WOFF2_URL = /url\(\s*["']?([^"')]+)["']?\s*\)\s*format\(\s*["']woff2["']\s*\)/;
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
+/** A font or logo that has not loaded by then is not coming; the save button must not hang. */
+const LOAD_TIMEOUT_MS = 10_000;
 
 /** A failure whose Thai message tells staff what to change; anything else is a generic error. */
 export class TemplateExportError extends Error {}
 
+type ToPng = typeof import('html-to-image').toPng;
+
 export interface TemplateExportDeps {
-	toPng?: typeof htmlToPng;
+	/** Defaults to html-to-image, loaded on first export so it stays out of other bundles. */
+	toPng?: ToPng;
 	fonts?: Pick<FontFaceSet, 'load' | 'ready'>;
 	/** `@font-face` css to embed; empty lets html-to-image collect the fonts itself. */
 	fontEmbedCss?: () => Promise<string>;
+	timeoutMs?: number;
+}
+
+/** `work`, or a {@link TemplateExportError} with `message` once `ms` have passed. */
+async function within<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const timeout = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new TemplateExportError(message)), ms);
+	});
+	try {
+		return await Promise.race([work, timeout]);
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -93,17 +111,33 @@ export async function exportTemplatePng(
 	screen: KioskScreenType,
 	deps: TemplateExportDeps = {}
 ): Promise<BannerImagePayload> {
-	const { toPng = htmlToPng, fonts = document.fonts, fontEmbedCss = templateFontCss } = deps;
+	const {
+		fonts = document.fonts,
+		fontEmbedCss = templateFontCss,
+		timeoutMs = LOAD_TIMEOUT_MS
+	} = deps;
 	const { width, height } = KIOSK_SCREENS[screen];
 
-	await fonts.load(`700 64px ${TEMPLATE_FONT}`);
-	await fonts.load(`400 32px ${TEMPLATE_FONT}`);
-	await fonts.ready;
-	try {
-		await Promise.all(Array.from(node.querySelectorAll('img'), (img) => img.decode()));
-	} catch {
-		throw new TemplateExportError('โหลดรูป/โลโก้ไม่สำเร็จ ลองเลือกรูปใหม่หรือลบรูปออก');
-	}
+	const fontFailed = 'โหลดฟอนต์ไม่สำเร็จ ลองบันทึกอีกครั้ง';
+	const logoFailed = 'โหลดรูป/โลโก้ไม่สำเร็จ ลองเลือกรูปใหม่หรือลบรูปออก';
+	await within(
+		(async () => {
+			await fonts.load(`700 64px ${TEMPLATE_FONT}`);
+			await fonts.load(`400 32px ${TEMPLATE_FONT}`);
+			await fonts.ready;
+		})(),
+		timeoutMs,
+		fontFailed
+	);
+	await within(
+		Promise.all(Array.from(node.querySelectorAll('img'), (img) => img.decode())).catch(() => {
+			throw new TemplateExportError(logoFailed);
+		}),
+		timeoutMs,
+		logoFailed
+	);
+
+	const toPng = deps.toPng ?? (await import('html-to-image')).toPng;
 
 	const fontEmbedCSS = await fontEmbedCss();
 	const dataUrl = await toPng(node, {

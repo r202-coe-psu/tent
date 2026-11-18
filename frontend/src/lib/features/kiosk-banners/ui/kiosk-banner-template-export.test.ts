@@ -127,6 +127,38 @@ describe('exportTemplatePng', () => {
 		);
 	});
 
+	it('gives up with a message when the font never finishes loading', async () => {
+		const { toPng, fonts } = setup();
+		const stuck = { ...fonts, ready: new Promise<FontFaceSet>(() => {}) };
+
+		await expect(
+			exportTemplatePng(node, 'tv', {
+				toPng: toPng as never,
+				fonts: stuck,
+				fontEmbedCss: noFontCss,
+				timeoutMs: 5
+			})
+		).rejects.toThrow(new TemplateExportError('โหลดฟอนต์ไม่สำเร็จ ลองบันทึกอีกครั้ง'));
+		expect(toPng).not.toHaveBeenCalled();
+	});
+
+	it('gives up with a message when the logo never finishes decoding', async () => {
+		const { toPng, fonts } = setup();
+		const hanging = nodeWithImages(() => new Promise<void>(() => {}));
+
+		await expect(
+			exportTemplatePng(hanging, 'tv', {
+				toPng: toPng as never,
+				fonts,
+				fontEmbedCss: noFontCss,
+				timeoutMs: 5
+			})
+		).rejects.toThrow(
+			new TemplateExportError('โหลดรูป/โลโก้ไม่สำเร็จ ลองเลือกรูปใหม่หรือลบรูปออก')
+		);
+		expect(toPng).not.toHaveBeenCalled();
+	});
+
 	it('embeds only the given template font css when there is one', async () => {
 		const { toPng, fonts } = setup();
 

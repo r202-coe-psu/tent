@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
+	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared';
 	import {
 		bannerColorSchema,
 		emptyKioskBannerTemplate,
