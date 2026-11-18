@@ -136,10 +136,13 @@ describe('ShelterFilterPanel — radius presets (#1419)', () => {
 		document.body.innerHTML = '';
 	});
 
+	// The buttons show just the number; the unit sits once at the end of the row and in each
+	// button's accessible name, so "5 กม." still names the 5 km preset.
 	const presets = () =>
 		[...document.body.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].filter((b) =>
-			/กม/.test(b.textContent ?? '')
+			/กม/.test(b.getAttribute('aria-label') ?? '')
 		);
+	const names = (buttons: HTMLElement[]) => buttons.map((b) => b.getAttribute('aria-label'));
 
 	it('shows 5 km pressed by default', async () => {
 		await render({
@@ -149,7 +152,7 @@ describe('ShelterFilterPanel — radius presets (#1419)', () => {
 		});
 
 		const pressed = presets().filter((b) => b.getAttribute('aria-pressed') === 'true');
-		expect(pressed.map((b) => b.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['5 กม.']);
+		expect(names(pressed)).toEqual(['5 กม.']);
 	});
 
 	it('shows no preset pressed when the radius was cleared (distance=)', async () => {
@@ -176,7 +179,46 @@ describe('ShelterFilterPanel — radius presets (#1419)', () => {
 		});
 
 		const pressed = presets().filter((b) => b.getAttribute('aria-pressed') === 'true');
-		expect(pressed.map((b) => b.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['10 กม.']);
+		expect(names(pressed)).toEqual(['10 กม.']);
+	});
+
+	it('keeps the whole radius filter on one row: presets, custom field and unit', async () => {
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968' }
+		});
+
+		const row = document.body.querySelector<HTMLElement>('[data-testid="radius-row"]')!;
+		expect(row).not.toBeNull();
+		// no wrapping onto a second row
+		expect(row.className).toContain('flex-nowrap');
+		expect(row.className).not.toContain('flex-wrap');
+		// the five presets and the custom field live in that one row
+		expect(row.querySelectorAll('button[aria-pressed]')).toHaveLength(5);
+		expect(row.querySelector('input[aria-label="กำหนดเอง"]')).not.toBeNull();
+		expect(row.textContent).toContain('กม.');
+	});
+
+	it('shows only the number on a preset button, and keeps the unit in its name', async () => {
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968' }
+		});
+
+		expect(presets().map((b) => b.textContent?.trim())).toEqual(['1', '2', '4', '5', '10']);
+		expect(names(presets())).toEqual(['1 กม.', '2 กม.', '4 กม.', '5 กม.', '10 กม.']);
+	});
+
+	it('does not let the radius heading wrap', async () => {
+		await render({});
+
+		const heading = [...document.body.querySelectorAll<HTMLElement>('div')].find(
+			(el) => el.children.length === 0 && el.textContent === 'รัศมีจากตำแหน่งของคุณ (GPS)'
+		);
+		expect(heading).toBeDefined();
+		expect(heading!.className).toContain('whitespace-nowrap');
 	});
 
 	it('clears the radius (distance=) when the pressed preset is pressed again', async () => {

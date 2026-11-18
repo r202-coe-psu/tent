@@ -605,10 +605,12 @@
 				</div>
 
 				<!-- Distance presets + custom km -->
-				<div class="space-y-3">
-					<div class="text-xs font-bold text-foreground">{t.radiusLabel}</div>
+				<div class="space-y-2">
+					<div class="text-xs font-bold whitespace-nowrap text-foreground">{t.radiusLabel}</div>
+					<!-- One row: presets, the custom km field and the unit (#1419). -->
 					<div
-						class="flex flex-wrap gap-1 rounded-lg border border-border bg-muted/20 p-1"
+						class="flex flex-nowrap items-center gap-1 rounded-lg border border-border bg-muted/20 p-1"
+						data-testid="radius-row"
 						title={geoHint || undefined}
 					>
 						<input type="hidden" name="distance" value={hasPosition ? distanceValue : ''} />
@@ -617,39 +619,34 @@
 								type="button"
 								disabled={distanceLocked}
 								aria-pressed={distanceValue === km}
-								class="min-w-[3.25rem] flex-1 rounded-md px-1 py-1.5 text-center text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
+								aria-label="{km} {t.km}"
+								class="min-w-0 flex-1 rounded-md px-1 py-1.5 text-center text-xs font-medium whitespace-nowrap transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
 								km
 									? 'bg-primary-dark font-bold text-white'
 									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
 								onclick={() => selectDistance(km)}
 							>
 								{km}
-								{t.km}
 							</button>
 						{/each}
-					</div>
-					<div class="flex items-center gap-2" title={geoHint || undefined}>
-						<span
-							class="shrink-0 text-xs font-medium {isCustomDistance
-								? 'font-bold text-foreground'
-								: 'text-muted-foreground'}">{t.radiusCustom}</span
-						>
+						<span class="h-5 w-px shrink-0 bg-border" aria-hidden="true"></span>
 						<Input
 							type="text"
 							inputmode="decimal"
 							disabled={distanceLocked}
 							bind:value={customDistanceDraft}
-							placeholder={t.radiusCustomPlaceholder}
+							placeholder={t.radiusCustom}
 							aria-invalid={customDistanceError}
 							aria-label={t.radiusCustom}
-							class="h-8 w-full rounded-md text-xs {isCustomDistance
+							class="h-8 w-[4.75rem] shrink-0 rounded-md px-2 text-xs {isCustomDistance
 								? 'border-primary-dark/40'
 								: ''} {customDistanceError ? 'border-destructive' : ''}"
 							onfocus={() => onCustomDistanceFocus()}
 							onblur={() => applyCustomDistance()}
 							onchange={() => applyCustomDistance()}
 						/>
-						<span class="shrink-0 text-xs text-muted-foreground">{t.km}</span>
+						<span class="shrink-0 pr-1 text-xs whitespace-nowrap text-muted-foreground">{t.km}</span
+						>
 					</div>
 					{#if customDistanceError}
 						<p class="text-2xs text-destructive">{t.radiusInvalid}</p>

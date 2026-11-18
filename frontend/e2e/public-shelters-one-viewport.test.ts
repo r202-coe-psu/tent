@@ -71,6 +71,37 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 			await expect(page.locator('footer')).toHaveCount(0);
 		});
 
+		test('the radius filter is one line: heading, presets, custom field and unit in one row', async ({
+			page
+		}) => {
+			await mockPublicApi(page);
+			await page.goto('/shelters');
+			const row = page.locator('[data-testid="radius-row"]:visible');
+			await expect(row).toBeVisible(READY);
+
+			const m = await row.evaluate((el) => {
+				const box = el.getBoundingClientRect();
+				const inside = [...el.children]
+					.filter((c) => !(c instanceof HTMLInputElement && c.type === 'hidden'))
+					.map((c) => c.getBoundingClientRect());
+				const heading = el.previousElementSibling as HTMLElement;
+				return {
+					// every control sits within the row's own height: nothing wrapped below it
+					wrapped: inside.some((r) => r.bottom > box.bottom + 1 || r.top < box.top - 1),
+					overflows: el.scrollWidth > el.clientWidth + 1,
+					headingLines: Math.round(
+						heading.getBoundingClientRect().height /
+							parseFloat(getComputedStyle(heading).lineHeight)
+					),
+					buttons: el.querySelectorAll('button[aria-pressed]').length
+				};
+			});
+			expect(m.wrapped).toBe(false);
+			expect(m.overflows).toBe(false);
+			expect(m.headingLines).toBe(1);
+			expect(m.buttons).toBe(5);
+		});
+
 		test('every map legend label stays on one line', async ({ page }) => {
 			await mockPublicApi(page);
 			await page.goto('/shelters');
