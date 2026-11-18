@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { BANNER_SLIDE_FADE } from './kiosk-banner-fade';
+	import { BANNER_SLIDE_FADE, hideOutgoing } from './kiosk-banner-fade';
 	import { fetchKioskBanners } from '../data/kiosk-banners.api';
 	import type { KioskBannerSlide } from '../domain/kiosk-banner-feed';
 	import { KioskBannerAttractController } from './kiosk-banner-attract.svelte.js';
@@ -130,6 +130,7 @@
 				draggable="false"
 				onerror={() => markBroken(current.id)}
 				transition:fade={BANNER_SLIDE_FADE}
+				onoutrostart={hideOutgoing}
 			/>
 		{/key}
 	</div>
