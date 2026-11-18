@@ -17,12 +17,7 @@
 	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
 	import { safeExternalUrl } from '../domain/mappers';
 	import { useShelterTypeLabelMap, useSiteKinds } from '../application/queries';
-	import {
-		HOST_HOUSE_SITE_KIND,
-		isHostHouseKind,
-		shelterPinKind,
-		siteKindLabel
-	} from '../domain/site-kind';
+	import { isHostHouseKind, shelterPinKind, siteKindLabel } from '../domain/site-kind';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 	import { Button } from '$lib/components/ui/button';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -866,6 +861,7 @@
 						>{shelterPinLegendKind ? getSiteKindText(shelterPinLegendKind) : t.otherSiteKinds}</span
 					>
 				</div>
+				<!-- legend บ้านพี่เลี้ยง: ยังไม่ใช้งานตอนนี้ (#1419 ซ่อน host house ที่ไม่ใช่ external) เปิดกลับเมื่อมี host house แบบ external
 				<div class="flex shrink-0 items-center gap-1.5">
 					<svg
 						width="14"
@@ -895,6 +891,7 @@
 						>{getSiteKindText(HOST_HOUSE_SITE_KIND)}</span
 					>
 				</div>
+				-->
 			</div>
 			<div class="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
 				<span class="font-bold whitespace-nowrap text-foreground">{t.shelterStatus}:</span>

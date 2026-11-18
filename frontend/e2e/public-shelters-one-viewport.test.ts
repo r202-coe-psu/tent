@@ -121,7 +121,7 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 					})
 			);
 			expect(labels.map((l) => l.text)).toEqual(
-				expect.arrayContaining(['ศูนย์อพยพ', 'บ้านพี่เลี้ยง', 'กำลังเตรียมการ', 'ไม่ทราบสถานะ'])
+				expect.arrayContaining(['ศูนย์อพยพ', 'กำลังเตรียมการ', 'ไม่ทราบสถานะ'])
 			);
 			for (const label of labels) {
 				expect(label, label.text).toMatchObject({ nowrap: true, lines: 1 });
