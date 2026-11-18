@@ -78,7 +78,7 @@ describe('EvacueeStatusModal toasts', () => {
 	});
 });
 
-describe('EvacueeStatusModal revert (draft-evacuee-status-revert)', () => {
+describe('EvacueeStatusModal revert (CR-262)', () => {
 	const confirmed = {
 		_id: 'evacuee:test-456',
 		current_stay: { status: 'room_confirmed', zone: 'Z1', since: '2026-09-02T10:00:00.000Z' }

@@ -1454,7 +1454,7 @@ ${consentVduClause()}
       }
     }
   }
-  // 2c. Evacuee status revert (draft CR evacuee-status-revert, schema.md §1.4). Stepping a stay
+  // 2c. Evacuee status revert (CR-262, schema.md §1.4). Stepping a stay
   // back to an earlier pipeline status (pre_registered < arriving < active < room_confirmed) is
   // manager-level: system_admin or the shelter_manager of this shelter (isRole covers both).
   // Two doors must stay shut together — the revert_status movement, and a direct evacuee write

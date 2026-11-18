@@ -747,7 +747,7 @@ export interface Movement extends BaseDoc {
 	zone: string | null;
 	destination?: MovementDestination;
 	reason?: string;
-	/** `revert_status` only: the stay status before / after the revert (draft-evacuee-status-revert). */
+	/** `revert_status` only: the stay status before / after the revert (CR-262). */
 	from_status?: StayStatus;
 	to_status?: StayStatus;
 	occurred_at: Timestamp;
@@ -2065,7 +2065,7 @@ export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
 
 /**
  * Forward order of the intake pipeline. A `revert_status` target must rank strictly below the
- * current status (draft-evacuee-status-revert). Statuses outside this order are never revert
+ * current status (CR-262). Statuses outside this order are never revert
  * sources or targets.
  */
 const REVERT_STATUS_RANK: Partial<Record<StayStatus, number>> = {

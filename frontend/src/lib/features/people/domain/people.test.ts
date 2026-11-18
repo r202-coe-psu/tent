@@ -1307,7 +1307,7 @@ describe('statusChangeHandlerKind', () => {
 	});
 });
 
-describe('revert_status (draft-evacuee-status-revert)', () => {
+describe('revert_status (CR-262)', () => {
 	const stayOf = (status: StayStatus, zone: string | null = 'Z1') => {
 		const e = createEvacuee(
 			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },

@@ -1864,7 +1864,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
-	describe('evacuee status revert (draft CR evacuee-status-revert)', () => {
+	describe('evacuee status revert (CR-262)', () => {
 		const revertMovement = (over: Doc = {}): Doc => ({
 			...envelope,
 			schema_v: 1,

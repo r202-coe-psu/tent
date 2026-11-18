@@ -1292,7 +1292,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	}
 
 	/**
-	 * Step an evacuee back to an earlier stay status (draft-evacuee-status-revert). Appends a
+	 * Step an evacuee back to an earlier stay status (CR-262). Appends a
 	 * `revert_status` movement carrying `from_status` / `to_status` / `reason`, then applies it
 	 * (zone cleared below `active`). Role gating (shelter_manager / system_admin) is a UI concern.
 	 * Append-only `station_log` rows written by earlier forward steps are left untouched.

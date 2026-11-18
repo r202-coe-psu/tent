@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-262
 title: ย้อนสถานะการพักพิงของผู้อพยพกลับขั้นก่อนหน้า (revert_status) กรณีเช็คอินผิดคน
-status: proposed
+status: approved
 date: 2026-11-18
 updated: 2026-11-18
 requested_by: Feedback ระบบลงทะเบียน — GitHub #1447 (ข้อ 2)
-decided_by:
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-11-18
 layer: volatile
 affects:
   - docs/data/schema.md §1.4 movement (`action` += `revert_status`; field ใหม่ `from_status` / `to_status`; `reason` บังคับเมื่อ `revert_status`)
@@ -18,7 +19,7 @@ affects:
   - frontend/src/lib/features/shared/domain/in-shelter-day.ts
 ---
 
-# draft-evacuee-status-revert — ย้อนสถานะการพักพิงกลับขั้นก่อนหน้า
+# CR-262 — ย้อนสถานะการพักพิงกลับขั้นก่อนหน้า
 
 > **สรุป (TL;DR):**
 >
@@ -86,6 +87,6 @@ Feedback ระบบลงทะเบียน (#1447 ข้อ 2): ต้อ�
 
 ## Decision log
 
+- 2026-11-18 — **approved** โดย Soravit Sukkarn (Team Lead) — ได้เลข CR-262 (CR-259–261 ถูกใช้ไปแล้วบน `develop`). ยอมรับช่องที่เหลือเป็น edge case: REG ที่เขียน CouchDB ตรงยังไปถึงสถานะก่อนหน้าได้หลายขั้นตอน (status ที่ไม่รู้จัก, `checked_out` → `pre_registered`, ลบแล้วสร้างใหม่) เพราะ VDU ไม่มี whitelist การเปลี่ยนสถานะเต็มรูปแบบ (#1447 / PR #1458).
 - 2026-11-18 — เจ้าของโครงการอนุมัติให้เพิ่มการบังคับใน CouchDB `validate_doc_update` (แตะ stable core) — เพิ่ม FR-13, FR-14.
 - 2026-11-18 — proposed (ร่างจาก #1447 ข้อ 2). เจ้าของโครงการตัดสินแล้ว: ย้อนได้ทุกขั้นถอยหลังผ่าน action เดียว `revert_status`; เหตุผลบังคับ; เฉพาะ SM (ศูนย์ปัจจุบัน) + SA; `deceased` / `cancelled` terminal; ไม่แตะ `station_log`; ไม่แก้ `validate_doc_update` (ภายหลังเปลี่ยนเป็นแก้ — ดูรายการก่อนหน้า).
-- decided_by / status: รอเจ้าของโครงการ approve (เลขถัดไปหลัง approve = CR-259).

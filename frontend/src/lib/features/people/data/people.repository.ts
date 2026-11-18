@@ -340,7 +340,7 @@ export interface PeopleRepository {
 	): Promise<Evacuee>;
 	/**
 	 * Step back to an earlier stay status via a `revert_status` movement (nonempty `reason`
-	 * required; zone cleared below `active`). draft-evacuee-status-revert.
+	 * required; zone cleared below `active`). CR-262.
 	 */
 	revertEvacueeStatus(
 		evacuee: Evacuee,
