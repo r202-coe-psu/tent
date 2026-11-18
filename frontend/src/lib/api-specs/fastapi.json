@@ -1284,6 +1284,87 @@
 							"title": "Radius Km"
 						},
 						"description": "Search radius in kilometers"
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "Case-insensitive text in the name, code, province or district",
+							"title": "Q"
+						},
+						"description": "Case-insensitive text in the name, code, province or district"
+					},
+					{
+						"name": "admin_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "Shelter (building) type code, e.g. school, temple",
+							"title": "Admin Type"
+						},
+						"description": "Shelter (building) type code, e.g. school, temple"
+					},
+					{
+						"name": "hide_full",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out shelters that are full",
+							"default": false,
+							"title": "Hide Full"
+						},
+						"description": "Leave out shelters that are full"
+					},
+					{
+						"name": "hide_evacuation",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out non-external evacuation centres",
+							"default": false,
+							"title": "Hide Evacuation"
+						},
+						"description": "Leave out non-external evacuation centres"
+					},
+					{
+						"name": "hide_external",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out external shelters",
+							"default": false,
+							"title": "Hide External"
+						},
+						"description": "Leave out external shelters"
+					},
+					{
+						"name": "hide_host_house",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out host houses that are not external",
+							"default": false,
+							"title": "Hide Host House"
+						},
+						"description": "Leave out host houses that are not external"
+					},
+					{
+						"name": "parking",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }],
+							"description": "Vehicle types the shelter must take (all of them)",
+							"title": "Parking"
+						},
+						"description": "Vehicle types the shelter must take (all of them)"
 					}
 				],
 				"responses": {
@@ -1292,6 +1373,47 @@
 						"content": {
 							"application/json": {
 								"schema": { "$ref": "#/components/schemas/ShelterListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/shelters/summary": {
+			"get": {
+				"tags": ["Shelters"],
+				"summary": "Shelter Summary",
+				"description": "Shelter head counts for the public search cards, independent of the list filters.",
+				"operationId": "shelter_summary_public_v1_shelters_summary_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "hide_host_house",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out host houses that are not external",
+							"default": false,
+							"title": "Hide Host House"
+						},
+						"description": "Leave out host houses that are not external"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ShelterSummaryResponse" }
 							}
 						}
 					},
@@ -7000,6 +7122,23 @@
 				"type": "object",
 				"required": ["code", "name", "needs"],
 				"title": "ShelterNeedsResponse"
+			},
+			"ShelterSummaryResponse": {
+				"properties": {
+					"shelters_total": { "type": "integer", "title": "Shelters Total" },
+					"shelters_open": { "type": "integer", "title": "Shelters Open" },
+					"counts_by_site_kind": {
+						"additionalProperties": { "type": "integer" },
+						"type": "object",
+						"title": "Counts By Site Kind",
+						"description": "Shelters per master site_kind code; a row without one is an evacuation_center"
+					},
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["shelters_total", "shelters_open", "as_of"],
+				"title": "ShelterSummaryResponse",
+				"description": "Head counts for the public search cards — never narrowed by the list filters (#1419)."
 			},
 			"ShelterTravelDetail": {
 				"properties": {

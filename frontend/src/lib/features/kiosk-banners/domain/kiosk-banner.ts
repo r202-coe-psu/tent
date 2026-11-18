@@ -7,6 +7,7 @@ import {
 	type KioskScreenType
 } from '$lib/features/shared/domain/kiosk-screen';
 import { KIOSK_BANNER_IMAGE_MAX_BYTES } from './kiosk-banner-image';
+import { kioskBannerTemplateSchema } from './kiosk-banner-template';
 
 export const KIOSK_BANNER_LIMITS = {
 	titleMax: 120,
@@ -67,7 +68,10 @@ export const kioskBannerInputSchema = kioskBannerFieldsSchema
 	.omit({ order: true })
 	.extend({
 		screen_type: kioskScreenTypeSchema.default('compact'),
-		group_id: z.string('เลือกกลุ่มแบนเนอร์').startsWith('kiosk_banner_group:', 'เลือกกลุ่มแบนเนอร์')
+		group_id: z
+			.string('เลือกกลุ่มแบนเนอร์')
+			.startsWith('kiosk_banner_group:', 'เลือกกลุ่มแบนเนอร์'),
+		template: kioskBannerTemplateSchema.optional()
 	})
 	.refine(endAfterStart.check, endAfterStart.params);
 
@@ -104,10 +108,22 @@ const kioskBannerDocV3Schema = kioskBannerFieldsSchema
 	})
 	.refine(endAfterStart.check, endAfterStart.params);
 
+/** v4 adds the optional structured `template` (a banner made from a template), otherwise v3. */
+const kioskBannerDocV4Schema = kioskBannerFieldsSchema
+	.extend({
+		...kioskBannerEnvelope,
+		schema_v: z.literal(4),
+		group_id: z.string().startsWith('kiosk_banner_group:'),
+		screen_type: kioskScreenTypeSchema.optional(),
+		template: kioskBannerTemplateSchema.optional()
+	})
+	.refine(endAfterStart.check, endAfterStart.params);
+
 export const kioskBannerDocSchema = z.discriminatedUnion('schema_v', [
 	kioskBannerDocV1Schema,
 	kioskBannerDocV2Schema,
-	kioskBannerDocV3Schema
+	kioskBannerDocV3Schema,
+	kioskBannerDocV4Schema
 ]);
 
 export type KioskBannerDoc = z.infer<typeof kioskBannerDocSchema>;
@@ -130,7 +146,7 @@ export function createKioskBanner(
 	return {
 		_id: makeDocId('kiosk_banner'),
 		type: 'kiosk_banner',
-		schema_v: 3,
+		schema_v: 4,
 		shelter_code: ctx.shelterCode,
 		group_id: input.group_id,
 		title: input.title,
@@ -143,7 +159,8 @@ export function createKioskBanner(
 		screen_type: input.screen_type,
 		created_at: ts,
 		updated_at: ts,
-		created_by: ctx.createdBy
+		created_by: ctx.createdBy,
+		...(input.template ? { template: input.template } : {})
 	};
 }
 

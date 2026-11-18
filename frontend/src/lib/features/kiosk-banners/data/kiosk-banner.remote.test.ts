@@ -115,6 +115,55 @@ describe('create', () => {
 	});
 });
 
+describe('template image', () => {
+	const templateImage = { content_type: 'image/png', data_base64: 'TE9HTw==' };
+
+	it('create sends template_image next to image only when a logo is given', async () => {
+		fetchMock.mockResolvedValueOnce(respond(201, summary));
+		await repo.create('SH-01', input, image, templateImage);
+		expect(JSON.parse(lastCall().init.body as string)).toEqual({
+			...input,
+			image,
+			template_image: templateImage
+		});
+
+		fetchMock.mockResolvedValueOnce(respond(201, summary));
+		await repo.create('SH-01', input, image);
+		expect(JSON.parse(lastCall().init.body as string)).not.toHaveProperty('template_image');
+	});
+
+	it('update sends template_image only when a new logo is given', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, summary));
+		await repo.update('kiosk_banner:01J', '1-abc', input, image, templateImage);
+		expect(JSON.parse(lastCall().init.body as string)).toEqual({
+			_rev: '1-abc',
+			...input,
+			image,
+			template_image: templateImage
+		});
+
+		fetchMock.mockResolvedValueOnce(respond(200, summary));
+		await repo.update('kiosk_banner:01J', '1-abc', input, image);
+		expect(JSON.parse(lastCall().init.body as string)).not.toHaveProperty('template_image');
+	});
+
+	it('update can send a new logo without a new image', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, summary));
+		await repo.update('kiosk_banner:01J', '1-abc', input, undefined, templateImage);
+		const body = JSON.parse(lastCall().init.body as string);
+		expect(body).toEqual({ _rev: '1-abc', ...input, template_image: templateImage });
+	});
+
+	it('templateImageUrl points at the template-image route and busts the cache with rev', () => {
+		expect(repo.templateImageUrl('kiosk_banner:01J')).toBe(
+			`${BASE}/kiosk_banner%3A01J/template-image`
+		);
+		expect(repo.templateImageUrl('kiosk_banner:01J', '2-def')).toBe(
+			`${BASE}/kiosk_banner%3A01J/template-image?v=2-def`
+		);
+	});
+});
+
 describe('update', () => {
 	it('PUTs _rev + fields + image', async () => {
 		fetchMock.mockResolvedValueOnce(respond(200, summary));

@@ -28,6 +28,7 @@
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { shelterTypeLabel } from '../domain/master-labels';
+	import { RADIUS_PRESETS_KM } from '../domain/active-filters';
 
 	interface Filters {
 		search?: string;
@@ -58,7 +59,6 @@
 		utility_truck_access?: boolean;
 		hide_evacuation?: boolean | string;
 		hide_external?: boolean | string;
-		hide_host_house?: boolean | string;
 	}
 
 	let {
@@ -83,7 +83,8 @@
 	} = $props();
 
 	const STATUS_VALUES = ['open', 'full', 'prepare', 'closed', 'unknown'] as const;
-	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
+	const DISTANCE_PRESETS = RADIUS_PRESETS_KM;
+	const ADVANCED_ITEM = 'advanced-filters';
 	const SEARCH_DEBOUNCE_MS = 300;
 
 	let searchQuery = $state<string>('');
@@ -93,6 +94,7 @@
 	let selectedType = $state<string>('');
 	// CR-252 FR-23: one status at a time, as the list API takes (URL value is lowercase).
 	let selectedStatus = $state<string>('');
+	// 5 km by default; '' means the visitor cleared the radius (pressed the active preset again).
 	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
 	let customDistanceDraft = $state<string>('');
@@ -103,7 +105,8 @@
 	let parkBoatChecked = $state(false);
 	let showEvacuation = $state(true);
 	let showExternal = $state(true);
-	let showHostHouse = $state(true);
+	/** Open item of the "advanced filters" accordion (province / district / subdistrict). */
+	let advancedOpen = $state<string>('');
 	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -150,7 +153,8 @@
 		if (userLat && userLng) {
 			params.set('user_lat', userLat);
 			params.set('user_lng', userLng);
-			if (distanceValue) params.set('distance', distanceValue);
+			// An empty value is kept (`distance=`) so a cleared radius does not fall back to 5 km.
+			params.set('distance', distanceValue);
 		}
 		if (hideFullToggle) params.set('hide_full', 'true');
 		if (parkCarChecked) params.set('parking_car', 'on');
@@ -158,7 +162,6 @@
 		if (parkBoatChecked) params.set('parking_boat', 'on');
 		if (!showEvacuation) params.set('hide_evacuation', 'on');
 		if (!showExternal) params.set('hide_external', 'on');
-		if (!showHostHouse) params.set('hide_host_house', 'on');
 		return params;
 	}
 
@@ -206,8 +209,7 @@
 			f.parking_motorcycle,
 			f.parking_boat,
 			f.hide_evacuation,
-			f.hide_external,
-			f.hide_host_house
+			f.hide_external
 		];
 
 		untrack(() => {
@@ -219,7 +221,8 @@
 			selectedType = f.type ?? '';
 			selectedStatus =
 				STATUS_VALUES.find((v) => v === f.status?.split(',')[0]?.toLowerCase()) ?? '';
-			const nextDistance = f.distance || '5';
+			// `??`, not `||`: an explicit '' is a cleared radius, a missing one is the default.
+			const nextDistance = f.distance ?? '5';
 			distanceValue = nextDistance;
 			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
 			customDistanceError = false;
@@ -229,13 +232,14 @@
 			parkBoatChecked = isOn(f.parking_boat);
 			showEvacuation = !isOn(f.hide_evacuation);
 			showExternal = !isOn(f.hide_external);
-			showHostHouse = !isOn(f.hide_host_house);
 
 			if (f.user_lat) userLat = f.user_lat.toString();
 			if (f.user_lng) userLng = f.user_lng.toString();
 
 			lastProvince = f.province ?? '';
 			lastDistrict = f.district ?? '';
+			// An area filter in effect is never tucked away in a closed section.
+			if (f.province || f.district || f.subdistrict) advancedOpen = ADVANCED_ITEM;
 
 			void tick().then(() => {
 				hydrating = false;
@@ -301,7 +305,6 @@
 			parkMotorChecked,
 			parkBoatChecked,
 			showEvacuation,
-			showHostHouse,
 			showExternal
 		];
 
@@ -318,6 +321,15 @@
 	]);
 
 	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
+
+	// A control that narrows the list is tinted, so the visitor sees what is on (#1419).
+	// Read from the live state, which the URL hydrates, so it holds after a reload too.
+	const ACTIVE_CLASS = 'border-primary/50 bg-primary/5';
+	let groupsActive = $derived(!showEvacuation || !showExternal);
+	let parkingActive = $derived(parkCarChecked || parkMotorChecked || parkBoatChecked);
+	let advancedActive = $derived(
+		Boolean(selectedProvince || selectedDistrict || selectedSubdistrict) || parkingActive
+	);
 
 	let locationData = $state<{ province: string; district: string; subdistrict: string }[]>([]);
 	let loadingLocations = $state(true);
@@ -520,7 +532,14 @@
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
 			<div class="space-y-4">
 				<!-- Shelter type groups -->
-				<div class="overflow-hidden rounded-xl border border-border">
+				<div
+					data-filter="shelter-groups"
+					data-active={groupsActive}
+					class={[
+						'overflow-hidden rounded-xl border',
+						groupsActive ? ACTIVE_CLASS : 'border-border'
+					]}
+				>
 					<Accordion.Root type="single" class="w-full">
 						<Accordion.Item value="shelter-groups" class="border-none">
 							<Accordion.Trigger
@@ -538,10 +557,6 @@
 										<span class="text-sm font-medium text-foreground">{t.groupExternal}</span>
 										<Switch bind:checked={showExternal} aria-label={t.groupExternal} />
 									</label>
-									<label class="flex cursor-pointer items-center justify-between gap-3">
-										<span class="text-sm font-medium text-foreground">{t.groupHostHouse}</span>
-										<Switch bind:checked={showHostHouse} aria-label={t.groupHostHouse} />
-									</label>
 								</div>
 							</Accordion.Content>
 						</Accordion.Item>
@@ -555,61 +570,18 @@
 					>
 					<div class="relative">
 						<Input
-							id="search"
+							id={`${idPrefix}search`}
 							name="q"
 							type="text"
 							bind:value={searchQuery}
 							placeholder={t.searchPlaceholder}
-							class="w-full rounded-xl pl-9"
+							data-filter="search"
+							data-active={searchQuery.trim() !== ''}
+							class={['w-full rounded-xl pl-9', searchQuery.trim() && ACTIVE_CLASS]}
 						/>
 						<Search class="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
 					</div>
 				</div>
-				<!-- Province -->
-				<div class="w-full space-y-1.5">
-					<Label for={`${idPrefix}province`} class="text-xs font-semibold text-muted-foreground"
-						>{t.provinceLabel}</Label
-					>
-					<SearchSelect
-						name="province"
-						id={`${idPrefix}province`}
-						placeholder={t.provincePlaceholder}
-						bind:value={selectedProvince}
-						options={provincesList}
-						loading={loadingLocations}
-					/>
-				</div>
-
-				<!-- District -->
-				<div class="w-full space-y-1.5">
-					<Label for={`${idPrefix}district`} class="text-xs font-semibold text-muted-foreground"
-						>{t.districtLabel}</Label
-					>
-					<SearchSelect
-						name="district"
-						id={`${idPrefix}district`}
-						placeholder={t.districtPlaceholder}
-						bind:value={selectedDistrict}
-						options={districtsList}
-						loading={loadingLocations}
-					/>
-				</div>
-
-				<!-- Sub-district -->
-				<div class="w-full space-y-1.5">
-					<Label for={`${idPrefix}subdistrict`} class="text-xs font-semibold text-muted-foreground"
-						>{t.subdistrictLabel}</Label
-					>
-					<SearchSelect
-						name="subdistrict"
-						id={`${idPrefix}subdistrict`}
-						placeholder={t.subdistrictPlaceholder}
-						bind:value={selectedSubdistrict}
-						options={subdistrictsList}
-						loading={loadingLocations}
-					/>
-				</div>
-
 				<!-- Status (CR-252 FR-23) -->
 				<div class="space-y-1.5">
 					<Label for={`${idPrefix}status`} class="text-xs font-semibold text-muted-foreground"
@@ -621,7 +593,12 @@
 						bind:value={selectedStatus}
 						items={statusOptions}
 					>
-						<Select.Trigger id={`${idPrefix}status`} class="w-full rounded-xl">
+						<Select.Trigger
+							id={`${idPrefix}status`}
+							data-filter="status"
+							data-active={selectedStatus !== ''}
+							class={['w-full rounded-xl', selectedStatus && ACTIVE_CLASS]}
+						>
 							<Select.Value placeholder={t.statusAll} />
 						</Select.Trigger>
 						<Select.Content>
@@ -639,7 +616,12 @@
 						>{t.typeLabel}</Label
 					>
 					<Select.Root type="single" name="type" bind:value={selectedType}>
-						<Select.Trigger id={`${idPrefix}type`} class="w-full rounded-xl">
+						<Select.Trigger
+							id={`${idPrefix}type`}
+							data-filter="type"
+							data-active={selectedType !== ''}
+							class={['w-full rounded-xl', selectedType && ACTIVE_CLASS]}
+						>
 							<Select.Value placeholder={t.typePlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
@@ -652,10 +634,12 @@
 				</div>
 
 				<!-- Distance presets + custom km -->
-				<div class="space-y-3">
-					<div class="text-xs font-bold text-foreground">{t.radiusLabel}</div>
+				<div class="space-y-2">
+					<div class="text-xs font-bold whitespace-nowrap text-foreground">{t.radiusLabel}</div>
+					<!-- One row: presets, the custom km field and the unit (#1419). -->
 					<div
-						class="flex flex-wrap gap-1 rounded-lg border border-border bg-muted/20 p-1"
+						class="flex flex-nowrap items-center gap-1 rounded-lg border border-border bg-muted/20 p-1"
+						data-testid="radius-row"
 						title={geoHint || undefined}
 					>
 						<input type="hidden" name="distance" value={hasPosition ? distanceValue : ''} />
@@ -663,39 +647,35 @@
 							<button
 								type="button"
 								disabled={distanceLocked}
-								class="min-w-[3.25rem] flex-1 rounded-md px-1 py-1.5 text-center text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
+								aria-pressed={distanceValue === km}
+								aria-label="{km} {t.km}"
+								class="min-w-0 flex-1 rounded-md px-1 py-1.5 text-center text-xs font-medium whitespace-nowrap transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
 								km
 									? 'bg-primary-dark font-bold text-white'
 									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
 								onclick={() => selectDistance(km)}
 							>
 								{km}
-								{t.km}
 							</button>
 						{/each}
-					</div>
-					<div class="flex items-center gap-2" title={geoHint || undefined}>
-						<span
-							class="shrink-0 text-xs font-medium {isCustomDistance
-								? 'font-bold text-foreground'
-								: 'text-muted-foreground'}">{t.radiusCustom}</span
-						>
+						<span class="h-5 w-px shrink-0 bg-border" aria-hidden="true"></span>
 						<Input
 							type="text"
 							inputmode="decimal"
 							disabled={distanceLocked}
 							bind:value={customDistanceDraft}
-							placeholder={t.radiusCustomPlaceholder}
+							placeholder={t.radiusCustom}
 							aria-invalid={customDistanceError}
 							aria-label={t.radiusCustom}
-							class="h-8 w-full rounded-md text-xs {isCustomDistance
+							class="h-8 w-[4.75rem] shrink-0 rounded-md px-2 text-xs {isCustomDistance
 								? 'border-primary-dark/40'
 								: ''} {customDistanceError ? 'border-destructive' : ''}"
 							onfocus={() => onCustomDistanceFocus()}
 							onblur={() => applyCustomDistance()}
 							onchange={() => applyCustomDistance()}
 						/>
-						<span class="shrink-0 text-xs text-muted-foreground">{t.km}</span>
+						<span class="shrink-0 pr-1 text-xs whitespace-nowrap text-muted-foreground">{t.km}</span
+						>
 					</div>
 					{#if customDistanceError}
 						<p class="text-2xs text-destructive">{t.radiusInvalid}</p>
@@ -710,7 +690,14 @@
 				<input type="hidden" name="user_lng" id={`${idPrefix}user_lng`} value={userLng} />
 
 				<!-- Capacity Switch Card -->
-				<div class="flex items-start gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
+				<div
+					data-filter="hide_full"
+					data-active={hideFullToggle}
+					class={[
+						'flex items-start gap-4 rounded-xl border p-4 shadow-sm',
+						hideFullToggle ? ACTIVE_CLASS : 'border-border bg-card'
+					]}
+				>
 					<Switch bind:checked={hideFullToggle} class="mt-1" />
 					<input
 						type="checkbox"
@@ -730,9 +717,16 @@
 				</div>
 
 				<!-- Advanced Filters -->
-				<div class="overflow-hidden rounded-xl border border-border">
-					<Accordion.Root type="single" class="w-full">
-						<Accordion.Item value="advanced-filters" class="border-none">
+				<div
+					data-filter="advanced"
+					data-active={advancedActive}
+					class={[
+						'overflow-hidden rounded-xl border',
+						advancedActive ? ACTIVE_CLASS : 'border-border'
+					]}
+				>
+					<Accordion.Root type="single" class="w-full" bind:value={advancedOpen}>
+						<Accordion.Item value={ADVANCED_ITEM} class="border-none">
 							<Accordion.Trigger
 								class="px-4 py-3 transition-colors hover:bg-muted/50 hover:no-underline"
 							>
@@ -740,6 +734,73 @@
 							</Accordion.Trigger>
 							<Accordion.Content class="pb-2">
 								<div class="space-y-6 px-2 pt-2 pb-2">
+									<!-- Area: province / district / subdistrict (#1419) -->
+									<div class="space-y-4 px-2">
+										<!-- Province -->
+										<div class="w-full space-y-1.5">
+											<Label
+												for={`${idPrefix}province`}
+												class="text-xs font-semibold text-muted-foreground">{t.provinceLabel}</Label
+											>
+											<SearchSelect
+												name="province"
+												id={`${idPrefix}province`}
+												placeholder={t.provincePlaceholder}
+												bind:value={selectedProvince}
+												options={provincesList}
+												loading={loadingLocations}
+												controlProps={{
+													'data-filter': 'province',
+													'data-active': Boolean(selectedProvince)
+												}}
+												class={selectedProvince ? ACTIVE_CLASS : ''}
+											/>
+										</div>
+
+										<!-- District -->
+										<div class="w-full space-y-1.5">
+											<Label
+												for={`${idPrefix}district`}
+												class="text-xs font-semibold text-muted-foreground">{t.districtLabel}</Label
+											>
+											<SearchSelect
+												name="district"
+												id={`${idPrefix}district`}
+												placeholder={t.districtPlaceholder}
+												bind:value={selectedDistrict}
+												options={districtsList}
+												loading={loadingLocations}
+												controlProps={{
+													'data-filter': 'district',
+													'data-active': Boolean(selectedDistrict)
+												}}
+												class={selectedDistrict ? ACTIVE_CLASS : ''}
+											/>
+										</div>
+
+										<!-- Sub-district -->
+										<div class="w-full space-y-1.5">
+											<Label
+												for={`${idPrefix}subdistrict`}
+												class="text-xs font-semibold text-muted-foreground"
+												>{t.subdistrictLabel}</Label
+											>
+											<SearchSelect
+												name="subdistrict"
+												id={`${idPrefix}subdistrict`}
+												placeholder={t.subdistrictPlaceholder}
+												bind:value={selectedSubdistrict}
+												options={subdistrictsList}
+												loading={loadingLocations}
+												controlProps={{
+													'data-filter': 'subdistrict',
+													'data-active': Boolean(selectedSubdistrict)
+												}}
+												class={selectedSubdistrict ? ACTIVE_CLASS : ''}
+											/>
+										</div>
+									</div>
+
 									<!-- Category 1 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-xs font-bold text-foreground">{t.cat1}</div>
@@ -844,7 +905,14 @@
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-xs font-bold text-foreground">{t.cat3}</div>
 										<div class="flex flex-col gap-3">
-											<label class="group flex cursor-pointer items-start gap-3">
+											<label
+												data-filter="parking_car"
+												data-active={parkCarChecked}
+												class={[
+													'group -mx-1.5 -my-1 flex cursor-pointer items-start gap-3 rounded-md border px-1.5 py-1',
+													parkCarChecked ? ACTIVE_CLASS : 'border-transparent'
+												]}
+											>
 												<Checkbox
 													name="parking_car"
 													bind:checked={parkCarChecked}
@@ -855,7 +923,14 @@
 													>{t.parkCar}</span
 												>
 											</label>
-											<label class="group flex cursor-pointer items-start gap-3">
+											<label
+												data-filter="parking_motorcycle"
+												data-active={parkMotorChecked}
+												class={[
+													'group -mx-1.5 -my-1 flex cursor-pointer items-start gap-3 rounded-md border px-1.5 py-1',
+													parkMotorChecked ? ACTIVE_CLASS : 'border-transparent'
+												]}
+											>
 												<Checkbox
 													name="parking_motorcycle"
 													bind:checked={parkMotorChecked}
@@ -866,7 +941,14 @@
 													>{t.parkMotor}</span
 												>
 											</label>
-											<label class="group flex cursor-pointer items-start gap-3">
+											<label
+												data-filter="parking_boat"
+												data-active={parkBoatChecked}
+												class={[
+													'group -mx-1.5 -my-1 flex cursor-pointer items-start gap-3 rounded-md border px-1.5 py-1',
+													parkBoatChecked ? ACTIVE_CLASS : 'border-transparent'
+												]}
+											>
 												<Checkbox
 													name="parking_boat"
 													bind:checked={parkBoatChecked}

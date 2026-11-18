@@ -10,6 +10,7 @@ import {
 	loadBannerInScope,
 	parseBannerInput,
 	readJsonObject,
+	TEMPLATE_IMAGE_LIMIT,
 	requireBannerManager
 } from '$lib/server/kiosk-banners/kiosk-banner-access';
 import {
@@ -46,15 +47,19 @@ export const PUT: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await requireBannerManager(request);
 
-		const { _rev, image, ...fields } = await readJsonObject(request);
+		const { _rev, image, template_image, ...fields } = await readJsonObject(request);
 		assertNoShelterCode(fields);
 		const rev = requireRev(_rev);
 		const input = parseBannerInput(fields);
 		const decoded = image === undefined ? null : decodeImageField(image);
+		const templateImage =
+			template_image === undefined
+				? undefined
+				: decodeImageField(template_image, TEMPLATE_IMAGE_LIMIT);
 
 		const banner = await loadBannerInScope(caller, params.id);
 		await assertGroupInShelter(input.group_id, banner.shelter_code);
-		return json(await updateBanner(banner._id, rev, input, decoded));
+		return json(await updateBanner(banner._id, rev, input, { image: decoded, templateImage }));
 	} catch (error) {
 		return bannerErrorResponse(error);
 	}

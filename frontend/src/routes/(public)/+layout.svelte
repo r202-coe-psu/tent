@@ -6,6 +6,10 @@
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children?: Snippet } = $props();
+	// `/shelters` is one full viewport (#1419): the map fills the screen, so no footer under it.
+	const isShelterSearch = $derived(
+		page.url.pathname === '/shelters' || page.url.pathname === '/shelters/'
+	);
 	const isVolunteerPortal = $derived(
 		page.url.pathname === '/volunteer/portal' ||
 			page.url.pathname === '/volunteers/portal' ||
@@ -25,6 +29,8 @@
 		<main class="flex-1">
 			{@render children?.()}
 		</main>
-		<PublicFooter configData={data.configData} />
+		{#if !isShelterSearch}
+			<PublicFooter configData={data.configData} />
+		{/if}
 	</div>
 {/if}

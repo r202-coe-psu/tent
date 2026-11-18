@@ -42,7 +42,8 @@
 			await create.mutateAsync({
 				shelterCode: activeShelter,
 				input: payload.input,
-				image: payload.image
+				image: payload.image,
+				templateImage: payload.templateImage
 			});
 		} catch {
 			return;

@@ -3,6 +3,7 @@ import {
 	activeSiteKinds,
 	countBySiteKind,
 	hiddenShelterGroups,
+	SHELTER_GROUP_HIDE_PARAMS,
 	isHostHouseKind,
 	normalizeSiteKind,
 	shelterGroup,
@@ -153,8 +154,13 @@ describe('shelter groups (type toggles)', () => {
 
 	it('reads only switched-off groups from the URL (default all on)', () => {
 		expect(hiddenShelterGroups(new URLSearchParams(''))).toEqual([]);
-		expect(hiddenShelterGroups(new URLSearchParams('hide_external=on&hide_host_house=on'))).toEqual(
-			['external', 'host_house']
+		expect(hiddenShelterGroups(new URLSearchParams('hide_evacuation=on&hide_external=on'))).toEqual(
+			['evacuation', 'external']
 		);
+	});
+
+	it('has no switch for host houses: a stale hide_host_house in the URL is ignored (#1419)', () => {
+		expect(hiddenShelterGroups(new URLSearchParams('hide_host_house=on'))).toEqual([]);
+		expect(Object.keys(SHELTER_GROUP_HIDE_PARAMS)).toEqual(['hide_evacuation', 'hide_external']);
 	});
 });
