@@ -64,7 +64,7 @@ describe('buildSampleCsvRows', () => {
 	it('flattens the household into one head row followed by its members', () => {
 		const rows = buildSampleCsvRows();
 
-		expect(rows).toHaveLength(4);
+		expect(rows).toHaveLength(5);
 		expect(rows[0][H.role]).toBe('หัวหน้าครัวเรือน');
 		expect(rows.slice(1).every((r) => r[H.role] === 'สมาชิก')).toBe(true);
 		expect(rows.every((r) => r[H.ref] === 1)).toBe(true);

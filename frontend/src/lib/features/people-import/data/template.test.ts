@@ -54,7 +54,7 @@ describe('xlsx template → parse round trip', () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0].errors).toEqual([]);
 		expect(rows[0].ok).toBe(true);
-		expect(rows[0].memberCount).toBe(3);
+		expect(rows[0].memberCount).toBe(4);
 	});
 
 	it('keeps a leading-zero phone number as text instead of a number', async () => {
@@ -95,7 +95,7 @@ describe('csv template → parse round trip', () => {
 
 		expect(households).toHaveLength(1);
 		expect(households[0].cells[H.first_name]).toBe('สมชาย');
-		expect(members).toHaveLength(3);
+		expect(members).toHaveLength(4);
 	});
 
 	it('produces the same importable household as the workbook', async () => {
@@ -103,7 +103,7 @@ describe('csv template → parse round trip', () => {
 
 		expect(rows[0].errors).toEqual([]);
 		expect(rows[0].ok).toBe(true);
-		expect(rows[0].memberCount).toBe(3);
+		expect(rows[0].memberCount).toBe(4);
 		expect(rows[0].payload?.household.address_no).toBe('99/1');
 	});
 
@@ -189,8 +189,10 @@ describe('Backfill Import columns (#1399)', () => {
 		const csvHeader = (await buildPeopleCsvTemplateBlob(EMPTY_MASTERS).text())
 			.replace(/^\uFEFF/, '')
 			.split('\r\n')[0];
-		expect(csvHeader).toContain(`${H.stay_status} *`);
-		expect(csvHeader).toContain(`${H.arrived_at} *`);
+		// Blank status = pre_registered (#1448): neither column is required, so no `*` marker.
+		expect(csvHeader).toContain(H.stay_status);
+		expect(csvHeader).not.toContain(`${H.stay_status} *`);
+		expect(csvHeader).not.toContain(`${H.arrived_at} *`);
 		expect(csvHeader).toContain(H.departed_at);
 	});
 
@@ -244,7 +246,9 @@ describe('Backfill Import columns (#1399)', () => {
 		});
 		expect(rows[0].errors).toEqual([]);
 		// One sample member has already left, one household member is still housed.
-		expect(rows[0].payload?.members.map((m) => m.stay.status)).toContain('checked_out');
+		expect(rows[0].payload?.members.map((m) => m.stay?.status)).toContain('checked_out');
+		// …and one is blank-status: pre_registered, waiting for Report-in (#1448).
+		expect(rows[0].payload?.members.some((m) => m.stay === null)).toBe(true);
 		expect(rows[0].payload?.household.status).toBe('checked_in');
 	});
 
