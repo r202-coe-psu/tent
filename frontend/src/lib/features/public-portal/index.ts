@@ -38,6 +38,7 @@ export type {
 	PublicShelterDetail,
 	PublicShelterItem,
 	PublicShelterListResponse,
+	PublicShelterSummary,
 	PublicSiteKind
 } from './domain/types';
 export {
@@ -61,7 +62,6 @@ export {
 	isHostHouseKind,
 	shelterGroup,
 	hiddenShelterGroups,
-	isShownOnPublicSearch,
 	siteKindLabel,
 	siteKindTiles,
 	type SiteKindOption
@@ -104,6 +104,7 @@ export {
 	PublicApiError,
 	getPublicShelter,
 	listPublicShelters,
+	fetchShelterSummary,
 	fetchShelterTypes,
 	fetchSiteKinds,
 	type ShelterTypeOption

@@ -92,7 +92,8 @@
 	let selectedType = $state<string>('');
 	// CR-252 FR-23: one status at a time, as the list API takes (URL value is lowercase).
 	let selectedStatus = $state<string>('');
-	let distanceValue = $state<string>('5');
+	// No radius until the visitor picks one (#1419): an empty value lists every shelter.
+	let distanceValue = $state<string>('');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
 	let customDistanceDraft = $state<string>('');
 	let customDistanceError = $state(false);
@@ -215,7 +216,7 @@
 			selectedType = f.type ?? '';
 			selectedStatus =
 				STATUS_VALUES.find((v) => v === f.status?.split(',')[0]?.toLowerCase()) ?? '';
-			const nextDistance = f.distance || '5';
+			const nextDistance = f.distance || '';
 			distanceValue = nextDistance;
 			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
 			customDistanceError = false;
@@ -653,6 +654,7 @@
 							<button
 								type="button"
 								disabled={distanceLocked}
+								aria-pressed={distanceValue === km}
 								class="min-w-[3.25rem] flex-1 rounded-md px-1 py-1.5 text-center text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 {distanceValue ===
 								km
 									? 'bg-primary-dark font-bold text-white'

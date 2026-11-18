@@ -52,7 +52,7 @@ function committedUrl(): URLSearchParams {
 	return new URLSearchParams(href.split('?')[1] ?? '');
 }
 
-describe('ShelterFilterPanel — first-visit GPS radius', () => {
+describe('ShelterFilterPanel — first-visit GPS position (no default radius, #1419)', () => {
 	beforeEach(() => {
 		env.url = new URL('http://localhost/shelters');
 		env.pending = null;
@@ -64,28 +64,39 @@ describe('ShelterFilterPanel — first-visit GPS radius', () => {
 		document.body.innerHTML = '';
 	});
 
-	it('puts the GPS position and the default 5 km radius in the URL', async () => {
+	it('puts the GPS position in the URL, and no radius until the visitor picks one', async () => {
 		await render({});
 
 		const params = committedUrl();
 		expect(params.get('user_lat')).toBe('7.0086');
-		expect(params.get('distance')).toBe('5');
+		expect(params.has('distance')).toBe(false);
 		// One navigation, not one per commit path (GPS resolve, userLat effect, onMount).
 		expect(env.goto).toHaveBeenCalledTimes(1);
 	});
 
-	it('still commits the radius when the page already resolved the shared position', async () => {
+	it('still commits the position when the page already resolved the shared position', async () => {
 		// The /shelters page asks for GPS too and binds the result into the panel; when it
 		// wins the race the panel already "has" a position on mount.
 		await render({ userLat: '7.0086', userLng: '100.4968' });
 
 		const params = committedUrl();
 		expect(params.get('user_lng')).toBe('100.4968');
-		expect(params.get('distance')).toBe('5');
+		expect(params.has('distance')).toBe(false);
 		expect(env.goto).toHaveBeenCalledTimes(1);
 	});
 
-	it('does not navigate when the URL already carries the position and radius', async () => {
+	it('does not navigate when the URL already carries the position', async () => {
+		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968');
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968' }
+		});
+
+		expect(env.goto).not.toHaveBeenCalled();
+	});
+
+	it('does not navigate when the URL already carries the position and a chosen radius', async () => {
 		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968&distance=5');
 		await render({
 			userLat: '7.0086',
@@ -94,6 +105,81 @@ describe('ShelterFilterPanel — first-visit GPS radius', () => {
 		});
 
 		expect(env.goto).not.toHaveBeenCalled();
+	});
+
+	it('keeps a radius the visitor picked from the URL and writes it back unchanged', async () => {
+		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968&distance=10');
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968', distance: '10' }
+		});
+		// toggling an unrelated filter must not drop or change the radius
+		document.body.querySelector<HTMLElement>('[name="parking_car"]')!.click();
+		for (let i = 0; i < 3; i++) await tick();
+
+		expect(committedUrl().get('distance')).toBe('10');
+	});
+});
+
+describe('ShelterFilterPanel — radius presets (#1419)', () => {
+	beforeEach(() => {
+		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968');
+		env.pending = null;
+		env.goto.mockClear();
+	});
+	afterEach(() => {
+		if (component) unmount(component);
+		component = undefined;
+		document.body.innerHTML = '';
+	});
+
+	const presets = () =>
+		[...document.body.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].filter((b) =>
+			/กม/.test(b.textContent ?? '')
+		);
+
+	it('shows no preset pressed until one is picked', async () => {
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968' }
+		});
+
+		expect(presets().length).toBeGreaterThan(0);
+		expect(presets().map((b) => b.getAttribute('aria-pressed'))).toEqual(
+			presets().map(() => 'false')
+		);
+	});
+
+	it('shows the radius from the URL as pressed, and only that one', async () => {
+		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968&distance=10');
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968', distance: '10' }
+		});
+
+		const pressed = presets().filter((b) => b.getAttribute('aria-pressed') === 'true');
+		expect(pressed.map((b) => b.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['10 กม.']);
+	});
+
+	it('drops the radius from the URL when the pressed preset is pressed again', async () => {
+		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968&distance=10');
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters: { user_lat: '7.0086', user_lng: '100.4968', distance: '10' }
+		});
+		env.goto.mockClear();
+
+		presets()
+			.find((b) => b.getAttribute('aria-pressed') === 'true')!
+			.click();
+		for (let i = 0; i < 3; i++) await tick();
+
+		expect(committedUrl().has('distance')).toBe(false);
+		expect(committedUrl().get('user_lat')).toBe('7.0086');
 	});
 });
 

@@ -64,12 +64,18 @@ test.describe(
 		test('R1 the directory shell and filter panel are rendered', async ({ page }) => {
 			await page.goto('/shelters');
 			// First visit: GPS → URL commit → page load re-runs before the URL changes (~3 s locally).
-			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
+			await expect(page).toHaveURL(/user_lat=/, { timeout: GPS_URL_TIMEOUT_MS });
+			// No radius is set until the visitor picks one (#1419).
+			await expect(page).not.toHaveURL(/distance=/);
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทอาคาร' })).toBeVisible();
 			await expect(page.getByRole('button', { name: '5 กม' })).toBeVisible();
+			await expect(page.getByRole('button', { name: '5 กม' })).toHaveAttribute(
+				'aria-pressed',
+				'false'
+			);
 		});
 	}
 );
@@ -132,7 +138,7 @@ test.describe(
 			test.setTimeout(GPS_URL_TIMEOUT_MS + 60_000 + 15_000);
 			await page.goto('/shelters');
 			// First visit: GPS → URL commit → page load re-runs before the URL changes (~3 s locally).
-			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
+			await expect(page).toHaveURL(/user_lat=/, { timeout: GPS_URL_TIMEOUT_MS });
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 
 			// These shelters were just created — the worker's registry listener only
@@ -146,15 +152,25 @@ test.describe(
 				});
 			}).toPass({ intervals: [2_000], timeout: 60_000 });
 			await expect(page).toHaveURL(/q=/);
-			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
-			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+			// No radius: the far centre is listed too, the host house never is (#1419).
+			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: HOST_HIDDEN.name })).toHaveCount(0);
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 		});
 
 		test('widens and narrows the GPS radius', async ({ page }) => {
 			// GPS commit + radius reloads of the full list
 			test.setTimeout(GPS_URL_TIMEOUT_MS + 60_000);
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}`);
-			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
+			await expect(page).toHaveURL(/user_lat=/, { timeout: GPS_URL_TIMEOUT_MS });
+			// Everything to start with: no radius is chosen for the visitor.
+			await expect(page).not.toHaveURL(/distance=/);
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
+
+			await page.getByRole('button', { name: '5 กม' }).click();
+			await expect(page).toHaveURL(/distance=5/);
+			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
 			await page.getByRole('button', { name: '10 กม' }).click();
@@ -166,6 +182,11 @@ test.describe(
 			await expect(page).toHaveURL(/distance=1(&|$)/);
 			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+
+			// Pressing the active radius again clears it: back to everything.
+			await page.getByRole('button', { name: '1 กม' }).click();
+			await expect(page).not.toHaveURL(/distance=/);
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 		});
 
 		test('filters by shelter type toggle', async ({ page }) => {

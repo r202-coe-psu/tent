@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 
 from ...utils.shelter_booking import accepts_pre_registration
-from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse
+from .schemas import (
+    ShelterDetailResponse,
+    ShelterItem,
+    ShelterListResponse,
+    ShelterSummaryResponse,
+)
 
 # Public occupancy triple (CR-112). `occupancy` response key = Forecast.
 # Kitchen/SOP and partner head-counts stay `active`-only (CR-022 / Q48) and
@@ -24,6 +30,38 @@ FORECAST_OCCUPANCY_STATUSES = (
 PRESENT_OCCUPANCY_STATUSES = ("active", "room_confirmed", "temporary_leave")
 IN_ZONE_OCCUPANCY_STATUSES = ("room_confirmed",)
 OCCUPANCY_STATUSES = FORECAST_OCCUPANCY_STATUSES
+
+
+HOST_HOUSE_SITE_KIND = "host_house"
+DEFAULT_SITE_KIND = "evacuation_center"
+# Statuses the page counts as running (its "open" card).
+RUNNING_STATUSES = ("open", "full")
+
+
+def _plain(group: dict[str, object]) -> dict[str, object]:
+    """A row that is not external; rows projected before `is_external` carry no flag."""
+    return {"is_external": {"$ne": True}, **group}
+
+
+def _group_conditions(
+    *, hide_evacuation: bool, hide_external: bool, hide_host_house: bool
+) -> dict[str, object]:
+    """Mongo conditions for the public type toggles.
+
+    `external` is exactly `is_external`; a host house or evacuation centre never is. An external
+    shelter whose site kind is `host_house` is grouped as external (#1417, #1419).
+    """
+    conditions: dict[str, object] = {}
+    nor: list[dict[str, object]] = []
+    if hide_external:
+        conditions["is_external"] = {"$ne": True}
+    if hide_host_house:
+        nor.append(_plain({"site_kind": HOST_HOUSE_SITE_KIND}))
+    if hide_evacuation:
+        nor.append(_plain({"site_kind": {"$ne": HOST_HOUSE_SITE_KIND}}))
+    if nor:
+        conditions["$nor"] = nor
+    return conditions
 
 
 async def _count_persons(code: str, statuses: tuple[str, ...]) -> int:
@@ -46,6 +84,13 @@ class ShelterUseCase:
         lat: float | None = None,
         lng: float | None = None,
         radius_km: float | None = None,
+        q: str | None = None,
+        admin_type: str | None = None,
+        hide_full: bool = False,
+        hide_evacuation: bool = False,
+        hide_external: bool = False,
+        hide_host_house: bool = False,
+        parking: list[str] | None = None,
     ) -> ShelterListResponse:
         filters: dict[str, object] = {}
         if province:
@@ -54,10 +99,38 @@ class ShelterUseCase:
             filters["district"] = district
         if subdistrict:
             filters["subdistrict"] = subdistrict
+        # `status` and `hide_full` can both apply: Mongo wants one condition document for the field.
+        status_condition: dict[str, object] = {}
         if status:
-            filters["status"] = status
+            status_condition["$eq"] = status
+        if hide_full:
+            status_condition["$ne"] = "full"
+        if status_condition:
+            filters["status"] = status_condition
         if site_kind:
             filters["site_kind"] = site_kind
+        if admin_type:
+            filters["location_subtype"] = admin_type
+        if parking:
+            filters["parking_vehicle_types"] = {"$all": parking}
+        filters.update(
+            _group_conditions(
+                hide_evacuation=hide_evacuation,
+                hide_external=hide_external,
+                hide_host_house=hide_host_house,
+            )
+        )
+
+        text = (q or "").strip()
+        if text:
+            # Escaped, so what is typed is text, never a pattern.
+            pattern = {"$regex": re.escape(text), "$options": "i"}
+            filters["$or"] = [
+                {"name": pattern},
+                {"shelter_code": pattern},
+                {"province": pattern},
+                {"district": pattern},
+            ]
 
         has_near = False
         if lat is not None and lng is not None:
@@ -137,6 +210,36 @@ class ShelterUseCase:
         return ShelterListResponse(
             shelters=shelters,
             count=len(shelters),
+            as_of=datetime.now(UTC),
+        )
+
+    async def summary(self, *, hide_host_house: bool = False) -> ShelterSummaryResponse:
+        """Head counts over every shelter, grouped in Mongo — no list is loaded."""
+        match = _group_conditions(
+            hide_evacuation=False, hide_external=False, hide_host_house=hide_host_house
+        )
+        pipeline: list[dict[str, object]] = []
+        if match:
+            pipeline.append({"$match": match})
+        pipeline.append(
+            {
+                "$group": {
+                    "_id": {"$ifNull": ["$site_kind", DEFAULT_SITE_KIND]},
+                    "total": {"$sum": 1},
+                    "running": {
+                        "$sum": {"$cond": [{"$in": ["$status", list(RUNNING_STATUSES)]}, 1, 0]}
+                    },
+                }
+            }
+        )
+        cursor = await PublicShelter.get_pymongo_collection().aggregate(pipeline)
+        rows = await cursor.to_list()
+
+        by_kind = {row["_id"]: row["total"] for row in rows}
+        return ShelterSummaryResponse(
+            shelters_total=sum(by_kind.values()),
+            shelters_open=sum(row["running"] for row in rows),
+            counts_by_site_kind=by_kind,
             as_of=datetime.now(UTC),
         )
 

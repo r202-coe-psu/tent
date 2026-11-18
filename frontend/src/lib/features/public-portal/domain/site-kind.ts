@@ -100,8 +100,8 @@ export function siteKindTiles(
  * Shelter-type toggles on the `/shelters` filter panel. Both are on by default, so the URL only
  * records the ones switched off (`hide_*=on`). `external` is exactly `is_external === true`; the
  * other never includes external shelters. There is no switch for host houses: the public search
- * never shows a plain one (#1419, see {@link isShownOnPublicSearch}), so a stale `hide_host_house`
- * in an old link is ignored.
+ * never shows a plain one (#1419; the load asks the API to leave them out), so a stale
+ * `hide_host_house` in an old link is ignored.
  */
 export const SHELTER_GROUP_HIDE_PARAMS = {
 	hide_evacuation: 'evacuation',
@@ -123,16 +123,4 @@ export function hiddenShelterGroups(params: URLSearchParams): ShelterGroup[] {
 	return Object.entries(SHELTER_GROUP_HIDE_PARAMS)
 		.filter(([key]) => params.get(key) === 'on')
 		.map(([, group]) => group);
-}
-
-/**
- * Whether the evacuee-facing `/shelters` search shows this shelter: everything except a host
- * house that is not external (#1419). An external shelter keeps its place even when its site kind
- * is `host_house`, because it is grouped as external.
- */
-export function isShownOnPublicSearch(s: {
-	is_external?: boolean | null;
-	site_kind?: string | null;
-}): boolean {
-	return shelterGroup(s) !== 'host_house';
 }

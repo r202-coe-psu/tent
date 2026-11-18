@@ -3,7 +3,6 @@ import {
 	activeSiteKinds,
 	countBySiteKind,
 	hiddenShelterGroups,
-	isShownOnPublicSearch,
 	SHELTER_GROUP_HIDE_PARAMS,
 	isHostHouseKind,
 	normalizeSiteKind,
@@ -163,14 +162,5 @@ describe('shelter groups (type toggles)', () => {
 	it('has no switch for host houses: a stale hide_host_house in the URL is ignored (#1419)', () => {
 		expect(hiddenShelterGroups(new URLSearchParams('hide_host_house=on'))).toEqual([]);
 		expect(Object.keys(SHELTER_GROUP_HIDE_PARAMS)).toEqual(['hide_evacuation', 'hide_external']);
-	});
-
-	it('never shows a plain host house on the public search, and keeps an external one (#1419)', () => {
-		expect(isShownOnPublicSearch({ is_external: false, site_kind: 'host_house' })).toBe(false);
-		expect(isShownOnPublicSearch({ is_external: true, site_kind: 'host_house' })).toBe(true);
-		expect(isShownOnPublicSearch({ is_external: false, site_kind: 'evacuation_center' })).toBe(
-			true
-		);
-		expect(isShownOnPublicSearch({})).toBe(true);
 	});
 });

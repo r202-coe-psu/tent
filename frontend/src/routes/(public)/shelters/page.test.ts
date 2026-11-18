@@ -6,12 +6,14 @@ vi.mock('$lib/features/public-portal', async (importOriginal) => {
 	return {
 		...actual,
 		listPublicShelters: vi.fn(),
+		fetchShelterSummary: vi.fn(),
 		fetchShelterTypes: vi.fn().mockResolvedValue([])
 	};
 });
 
 import {
 	listPublicShelters,
+	fetchShelterSummary,
 	fetchShelterTypes,
 	type PublicShelterListResponse,
 	type PublicShelterCardModel
@@ -30,11 +32,17 @@ type LoadResult = {
 	available_types: string[];
 };
 
+const SUMMARY = {
+	shelters_total: 210,
+	shelters_open: 150,
+	counts_by_site_kind: { evacuation_center: 200, field_hospital: 10 }
+};
+
 /**
  * `load` is typed against SvelteKit's full `LoadEvent`, but this page reads only
  * `url` and `fetch`. Building the rest of the event would test SvelteKit, not the
  * page — so the narrowing lives here once, described, rather than as a pair of
- * bare `as any` at each of the five call sites.
+ * bare `as any` at each of the call sites.
  */
 async function runLoad(url: URL): Promise<LoadResult> {
 	const result = await load({ url, fetch: vi.fn() } as unknown as Parameters<typeof load>[0]);
@@ -44,9 +52,28 @@ async function runLoad(url: URL): Promise<LoadResult> {
 	return result as LoadResult;
 }
 
+const listCall = () => vi.mocked(listPublicShelters).mock.calls[0][0];
+
+const item = (code: string, extra: Record<string, unknown> = {}) => ({
+	code,
+	name: code,
+	status: 'open',
+	capacity: 1,
+	accepts_pre_registration: false,
+	updated_at: '2026-08-19T00:00:00Z',
+	...extra
+});
+
 describe('public/shelters load function', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(fetchShelterTypes).mockResolvedValue([]);
+		vi.mocked(fetchShelterSummary).mockResolvedValue(SUMMARY);
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [],
+			count: 0,
+			as_of: '2026-08-19T10:00:00Z'
+		});
 	});
 
 	it('returns empty shelters list gracefully when listPublicShelters throws an error', async () => {
@@ -54,59 +81,25 @@ describe('public/shelters load function', () => {
 			new Error('Network error / Service unavailable')
 		);
 
-		const url = new URL('http://localhost/shelters');
-		const result = await runLoad(url);
+		const result = await runLoad(new URL('http://localhost/shelters'));
 
-		expect(result).toBeDefined();
 		expect(result.shelters).toEqual([]);
 		expect(result.count).toBe(0);
-		expect(result.summary.shelters_total).toBe(0);
-		expect(result.summary.shelters_open).toBe(0);
+		// the cards do not depend on the list
+		expect(result.summary).toEqual(SUMMARY);
 	});
 
-	it('passes the unknown status filter to the API and maps external shelters (CR-252)', async () => {
+	it('still lists shelters when the shelter-type labels cannot be loaded', async () => {
+		vi.mocked(fetchShelterTypes).mockRejectedValue(new Error('labels down'));
 		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: [
-				{
-					code: 'EXT1',
-					name: 'ศูนย์ภายนอก',
-					status: 'unknown',
-					capacity: 0,
-					is_external: true,
-					external_url: 'https://example.org/x'
-				}
-			],
+			shelters: [item('SH001', { admin_type: '01K_SCHOOL_ID' })],
 			count: 1,
-			as_of: '2026-11-12T10:00:00Z'
+			as_of: '2026-08-19T10:00:00Z'
 		} as unknown as PublicShelterListResponse);
 
-		const result = await runLoad(new URL('http://localhost/shelters?status=unknown'));
+		const result = await runLoad(new URL('http://localhost/shelters'));
 
-		expect(vi.mocked(listPublicShelters).mock.calls[0][0]).toMatchObject({ status: 'unknown' });
-		expect(result.shelters[0]).toMatchObject({
-			status: 'UNKNOWN',
-			is_external: true,
-			external_url: 'https://example.org/x'
-		});
-		// not "open": an unknown-status shelter is not counted as running
-		expect(result.summary.shelters_open).toBe(0);
-	});
-
-	it('handles empty shelters array correctly', async () => {
-		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: [],
-			count: 0,
-			as_of: '2026-08-19T10:00:00Z'
-		});
-
-		const url = new URL('http://localhost/shelters');
-		const result = await runLoad(url);
-
-		expect(result.shelters).toEqual([]);
-		expect(result.count).toBe(0);
-		expect(result.summary.shelters_total).toBe(0);
-		expect(result.summary.shelters_open).toBe(0);
-		expect(result.as_of).toBe('2026-08-19T10:00:00Z');
+		expect(result.shelters.map((s) => s.code)).toEqual(['SH001']);
 	});
 
 	it('handles null or undefined shelters property safely', async () => {
@@ -118,180 +111,86 @@ describe('public/shelters load function', () => {
 			as_of: '2026-08-19T10:00:00Z'
 		} as unknown as PublicShelterListResponse);
 
-		const url = new URL('http://localhost/shelters');
-		const result = await runLoad(url);
+		const result = await runLoad(new URL('http://localhost/shelters'));
 
 		expect(result.shelters).toEqual([]);
 		expect(result.count).toBe(0);
-		expect(result.summary.shelters_total).toBe(0);
-		expect(result.summary.shelters_open).toBe(0);
+		expect(result.as_of).toBe('2026-08-19T10:00:00Z');
 	});
 
 	it('maps valid shelter items with safe property handling', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [
-				{
-					code: 'SH001',
+				item('SH001', {
 					name: 'ศูนย์ช่วยเหลือเทศบาล',
-					status: 'open',
 					capacity: 150,
 					geo: { lat: 7.008, lng: 100.476 },
 					province: 'สงขลา',
 					district: 'หาดใหญ่',
-					subdistrict: 'หาดใหญ่',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'SH002',
+					subdistrict: 'หาดใหญ่'
+				}),
+				item('SH002', {
 					name: 'ศูนย์พักพิงโรงเรียน',
 					status: 'closed',
 					capacity: 80,
 					geo: null,
 					province: 'สงขลา',
 					district: 'หาดใหญ่',
-					subdistrict: 'คอหงส์',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				}
+					subdistrict: 'คอหงส์'
+				})
 			],
 			count: 2,
 			as_of: '2026-08-19T10:00:00Z'
-		});
+		} as unknown as PublicShelterListResponse);
 
-		const url = new URL('http://localhost/shelters');
-		const result = await runLoad(url);
+		const result = await runLoad(new URL('http://localhost/shelters'));
 
 		expect(result.shelters).toHaveLength(2);
 		expect(result.count).toBe(2);
-		expect(result.summary.shelters_total).toBe(2);
-		expect(result.summary.shelters_open).toBe(1);
 		expect(result.shelters[0].name).toBe('ศูนย์ช่วยเหลือเทศบาล');
 		expect(result.shelters[0].status).toBe('OPEN');
 		expect(result.shelters[1].status).toBe('CLOSED');
 	});
 
-	it('counts OPEN+FULL as open and maps standby to PREPARE', async () => {
+	it('maps standby to PREPARE and keeps open and full as they are', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [
-				{
-					code: 'SH001',
-					name: 'สแตนด์บาย',
-					status: 'standby',
-					capacity: 100,
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'SH002',
-					name: 'เปิด',
-					status: 'open',
-					capacity: 100,
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'SH003',
-					name: 'เต็ม',
-					status: 'full',
-					capacity: 100,
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				}
+				item('SH001', { status: 'standby' }),
+				item('SH002', { status: 'open' }),
+				item('SH003', { status: 'full' })
 			],
 			count: 3,
 			as_of: '2026-08-19T10:00:00Z'
-		});
+		} as unknown as PublicShelterListResponse);
 
-		const url = new URL('http://localhost/shelters');
-		const result = await runLoad(url);
+		const result = await runLoad(new URL('http://localhost/shelters'));
 
-		expect(result.summary.shelters_total).toBe(3);
-		expect(result.summary.shelters_open).toBe(2);
-		expect(result.shelters[0].status).toBe('PREPARE');
-		expect(result.shelters[1].status).toBe('OPEN');
-		expect(result.shelters[2].status).toBe('FULL');
+		expect(result.shelters.map((s) => s.status)).toEqual(['PREPARE', 'OPEN', 'FULL']);
 	});
 
-	it('filters by search keyword safely even if fields are partially missing', async () => {
+	it('passes the unknown status filter to the API and maps external shelters (CR-252)', async () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [
-				{
-					code: 'SH001',
-					name: 'ศูนย์หาดใหญ่',
-					status: 'open',
-					capacity: 100,
-					province: 'สงขลา',
-					district: 'หาดใหญ่',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'SH002',
-					name: 'ศูนย์เมือง',
-					status: 'open',
-					capacity: 50,
-					province: 'ยะลา',
-					district: 'เมืองยะลา',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				}
+				item('EXT1', {
+					name: 'ศูนย์ภายนอก',
+					status: 'unknown',
+					capacity: 0,
+					is_external: true,
+					external_url: 'https://example.org/x'
+				})
 			],
-			count: 2,
-			as_of: '2026-08-19T10:00:00Z'
+			count: 1,
+			as_of: '2026-11-12T10:00:00Z'
+		} as unknown as PublicShelterListResponse);
+
+		const result = await runLoad(new URL('http://localhost/shelters?status=unknown'));
+
+		expect(listCall()).toMatchObject({ status: 'unknown' });
+		expect(result.shelters[0]).toMatchObject({
+			status: 'UNKNOWN',
+			is_external: true,
+			external_url: 'https://example.org/x'
 		});
-
-		const url = new URL('http://localhost/shelters?q=หาดใหญ่');
-		const result = await runLoad(url);
-
-		expect(result.shelters).toHaveLength(1);
-		expect(result.shelters[0].code).toBe('SH001');
-	});
-
-	it('sorts shelters closest-first when user_lat/user_lng are set', async () => {
-		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: [
-				{
-					code: 'FAR',
-					name: 'ไกล',
-					status: 'open',
-					capacity: 50,
-					geo: { lat: 7.1, lng: 100.6 },
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'NEAR',
-					name: 'ใกล้',
-					status: 'open',
-					capacity: 50,
-					geo: { lat: 7.01, lng: 100.48 },
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'NOGEO',
-					name: 'ไม่มีพิกัด',
-					status: 'open',
-					capacity: 50,
-					geo: null,
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				}
-			],
-			count: 3,
-			as_of: '2026-08-19T10:00:00Z'
-		});
-
-		const url = new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476&distance=50');
-		const result = await runLoad(url);
-
-		expect(result.shelters.map((s: PublicShelterCardModel) => s.code)).toEqual([
-			'NEAR',
-			'FAR',
-			'NOGEO'
-		]);
-		expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
 	});
 
 	it('resolves shelter_type / admin_type ref id to human-readable label', async () => {
@@ -299,245 +198,216 @@ describe('public/shelters load function', () => {
 			{ code: '01K_SCHOOL_ID', label_th: 'โรงเรียน', label_en: 'School' },
 			{ code: '01K_TEMPLE_ID', label_th: 'วัด', label_en: 'Temple' }
 		]);
-
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [
-				{
-					code: 'SH001',
-					name: 'ศูนย์โรงเรียน',
-					admin_type: '01K_SCHOOL_ID',
-					status: 'open',
-					capacity: 100,
-					province: 'เชียงใหม่',
-					district: 'เมือง',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'SH002',
-					name: 'ศูนย์วัด',
-					admin_type: '01K_TEMPLE_ID',
-					status: 'open',
-					capacity: 50,
-					province: 'เชียงใหม่',
-					district: 'เมือง',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				}
+				item('SH001', { admin_type: '01K_SCHOOL_ID' }),
+				item('SH002', { admin_type: '01K_TEMPLE_ID' })
 			],
 			count: 2,
 			as_of: '2026-08-19T10:00:00Z'
-		});
+		} as unknown as PublicShelterListResponse);
 
-		const url = new URL('http://localhost/shelters');
-		const result = await runLoad(url);
+		const result = await runLoad(new URL('http://localhost/shelters'));
 
 		expect(result.shelters[0].admin_type).toBe('โรงเรียน');
 		expect(result.shelters[1].admin_type).toBe('วัด');
 		expect(result.available_types).toEqual(['โรงเรียน', 'วัด']);
 	});
 
-	it('filters by shelter_type label correctly', async () => {
-		vi.mocked(fetchShelterTypes).mockResolvedValue([
-			{ code: '01K_SCHOOL_ID', label_th: 'โรงเรียน', label_en: 'School' },
-			{ code: '01K_TEMPLE_ID', label_th: 'วัด', label_en: 'Temple' }
-		]);
-
-		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: [
-				{
-					code: 'SH001',
-					name: 'ศูนย์โรงเรียน',
-					admin_type: '01K_SCHOOL_ID',
-					status: 'open',
-					capacity: 100,
-					province: 'เชียงใหม่',
-					district: 'เมือง',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				},
-				{
-					code: 'SH002',
-					name: 'ศูนย์วัด',
-					admin_type: '01K_TEMPLE_ID',
-					status: 'open',
-					capacity: 50,
-					province: 'เชียงใหม่',
-					district: 'เมือง',
-					accepts_pre_registration: false,
-					updated_at: '2026-08-19T00:00:00Z'
-				}
-			],
-			count: 2,
-			as_of: '2026-08-19T10:00:00Z'
-		});
-
-		const url = new URL('http://localhost/shelters?type=โรงเรียน');
-		const result = await runLoad(url);
-
-		expect(result.shelters).toHaveLength(1);
-		expect(result.shelters[0].code).toBe('SH001');
-		expect(result.shelters[0].admin_type).toBe('โรงเรียน');
-	});
-
-	it('counts shelters per site_kind code, including codes added in master data', async () => {
-		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: [
-				{ code: 'A', name: 'ก', status: 'open', capacity: 1, site_kind: 'evacuation_center' },
-				{ code: 'C', name: 'ค', status: 'open', capacity: 1, site_kind: 'field_hospital' },
-				{ code: 'D', name: 'ง', status: 'open', capacity: 1, site_kind: 'field_hospital' },
-				{ code: 'E', name: 'จ', status: 'open', capacity: 1 }
-			],
-			count: 4,
-			as_of: '2026-08-19T10:00:00Z'
-		} as unknown as PublicShelterListResponse);
-
-		const result = await runLoad(new URL('http://localhost/shelters'));
-
-		expect(result.summary.counts_by_site_kind).toEqual({
-			evacuation_center: 2,
-			field_hospital: 2
-		});
-	});
-
-	// #1419 / draft CR "hide host houses": a host house that is not external never reaches the page.
-	it('leaves a host house out of the totals and the per-kind counts', async () => {
-		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: [
-				{ code: 'A', name: 'ก', status: 'open', capacity: 1, site_kind: 'evacuation_center' },
-				{ code: 'B', name: 'ข', status: 'open', capacity: 1, site_kind: 'host_house' },
-				{ code: 'F', name: 'ฉ', status: 'full', capacity: 1, site_kind: 'host_house' }
-			],
-			count: 3,
-			as_of: '2026-11-18T10:00:00Z'
-		} as unknown as PublicShelterListResponse);
-
-		const result = await runLoad(new URL('http://localhost/shelters'));
-
-		expect(result.shelters.map((s) => s.code)).toEqual(['A']);
-		expect(result.summary).toEqual({
-			shelters_total: 1,
-			shelters_open: 1,
-			counts_by_site_kind: { evacuation_center: 1 }
-		});
-	});
-
 	it('ignores a legacy ?site_kind= param: the panel has no control for it any more', async () => {
-		vi.mocked(listPublicShelters).mockResolvedValue({
-			shelters: [],
-			count: 0,
-			as_of: '2026-08-19T10:00:00Z'
-		});
-
 		const result = await runLoad(new URL('http://localhost/shelters?site_kind=host_house'));
-		expect(vi.mocked(listPublicShelters).mock.calls[0][0]?.site_kind).toBeUndefined();
+
+		expect(listCall()?.site_kind).toBeUndefined();
 		expect(result.filters.site_kind).toBeUndefined();
 	});
 
-	describe('shelter type toggles (hide_*)', () => {
-		const item = (code: string, extra: Record<string, unknown>) => ({
-			code,
-			name: code,
-			status: 'open',
-			capacity: 1,
-			...extra
+	// #1419 — the database filters; the page only passes the visitor's choices on.
+	describe('filters run in the database', () => {
+		it('asks for nothing narrow by default, except leaving out plain host houses', async () => {
+			await runLoad(new URL('http://localhost/shelters'));
+
+			expect(listCall()).toMatchObject({
+				hide_host_house: true,
+				hide_full: false,
+				hide_evacuation: false,
+				hide_external: false,
+				parking: []
+			});
+			expect(listCall()?.q).toBe('');
+			expect(listCall()?.admin_type).toBeUndefined();
+			expect(listCall()?.radius_km).toBeUndefined();
 		});
 
-		beforeEach(() => {
-			vi.mocked(listPublicShelters).mockResolvedValue({
-				shelters: [
-					item('EVAC', { site_kind: 'evacuation_center' }),
-					item('HOST', { site_kind: 'host_house' }),
-					item('EXT', { is_external: true, site_kind: 'evacuation_center' }),
-					item('EXT_HOST', { is_external: true, site_kind: 'host_house' })
-				],
-				count: 4,
-				as_of: '2026-11-16T10:00:00Z'
-			} as PublicShelterListResponse);
-		});
-
-		const codesFor = async (query: string) =>
-			(await runLoad(new URL(`http://localhost/shelters${query}`))).shelters.map((s) => s.code);
-
-		it('shows evacuation and external shelters by default, never a plain host house, and echoes no hide_* flag', async () => {
-			const result = await runLoad(new URL('http://localhost/shelters'));
-			expect(result.shelters.map((s) => s.code)).toEqual(['EVAC', 'EXT', 'EXT_HOST']);
-			expect(result.filters.hide_evacuation).toBe('');
-			expect(result.filters.hide_external).toBe('');
-			expect(result.filters).not.toHaveProperty('hide_host_house');
-		});
-
-		it('hide_external drops every external shelter and keeps the rest', async () => {
-			expect(await codesFor('?hide_external=on')).toEqual(['EVAC']);
-		});
-
-		it('ignores a stale hide_host_house — the host house is hidden either way', async () => {
-			expect(await codesFor('?hide_host_house=on')).toEqual(['EVAC', 'EXT', 'EXT_HOST']);
-			const result = await runLoad(new URL('http://localhost/shelters?hide_host_house=on'));
-			expect(result.filters).not.toHaveProperty('hide_host_house');
-		});
-
-		it('hide_evacuation drops only non-external evacuation centers', async () => {
-			expect(await codesFor('?hide_evacuation=on')).toEqual(['EXT', 'EXT_HOST']);
-		});
-
-		it('keeps an external host house as external: it stays until external is switched off', async () => {
-			expect(await codesFor('?hide_evacuation=on')).toContain('EXT_HOST');
-			expect(await codesFor('?hide_external=on')).not.toContain('EXT_HOST');
-		});
-
-		it('returns an empty list when both types are off', async () => {
-			const result = await runLoad(
-				new URL('http://localhost/shelters?hide_evacuation=on&hide_external=on')
+		it('passes the search text, location, status and the full toggle', async () => {
+			await runLoad(
+				new URL(
+					'http://localhost/shelters?q=บ้านพรุ&province=สงขลา&district=หาดใหญ่&subdistrict=คอหงส์&status=full&hide_full=true'
+				)
 			);
-			expect(result.shelters).toEqual([]);
-			expect(result.count).toBe(0);
+
+			expect(listCall()).toMatchObject({
+				q: 'บ้านพรุ',
+				province: 'สงขลา',
+				district: 'หาดใหญ่',
+				subdistrict: 'คอหงส์',
+				status: 'full',
+				hide_full: true
+			});
 		});
 
-		it('echoes the switched-off types back in filters', async () => {
-			const result = await runLoad(new URL('http://localhost/shelters?hide_external=on'));
-			expect(result.filters.hide_external).toBe('on');
-			expect(result.filters.hide_evacuation).toBe('');
-		});
-	});
+		it('turns the type label from the URL into the type code the database holds', async () => {
+			vi.mocked(fetchShelterTypes).mockResolvedValue([
+				{ code: '01K_SCHOOL_ID', label_th: 'โรงเรียน', label_en: 'School' },
+				{ code: '01K_TEMPLE_ID', label_th: 'วัด', label_en: 'Temple' }
+			]);
 
-	describe('parking filter (CR-253 FR-33/FR-34)', () => {
-		const item = (code: string, parking_vehicle_types: string[]) => ({
-			code,
-			name: code,
-			status: 'open',
-			capacity: 10,
-			province: 'สงขลา',
-			accepts_pre_registration: false,
-			updated_at: '2026-11-13T00:00:00Z',
-			parking_vehicle_types
+			const result = await runLoad(new URL('http://localhost/shelters?type=โรงเรียน'));
+
+			expect(listCall()?.admin_type).toBe('01K_SCHOOL_ID');
+			expect(result.filters.type).toBe('โรงเรียน');
 		});
 
-		beforeEach(() => {
-			vi.mocked(listPublicShelters).mockResolvedValue({
-				shelters: [item('SH_CAR', ['car']), item('SH_BOTH', ['car', 'boat']), item('SH_NONE', [])],
-				count: 3,
-				as_of: '2026-11-13T00:00:00Z'
-			} as unknown as PublicShelterListResponse);
+		it('passes an unknown type through as typed, so it matches nothing rather than everything', async () => {
+			await runLoad(new URL('http://localhost/shelters?type=ไม่มีประเภทนี้'));
+
+			expect(listCall()?.admin_type).toBe('ไม่มีประเภทนี้');
 		});
 
-		it('keeps only shelters that take the ticked type and echoes the flag back', async () => {
-			const result = await runLoad(new URL('http://localhost/shelters?parking_car=on'));
-			expect(result.shelters.map((s) => s.code)).toEqual(['SH_CAR', 'SH_BOTH']);
-			expect(result.filters.parking_car).toBe('on');
-			expect(result.filters.parking_boat).toBe('');
-		});
-
-		it('needs every ticked type at once', async () => {
+		it('passes the ticked parking types and echoes them back', async () => {
 			const result = await runLoad(
 				new URL('http://localhost/shelters?parking_car=on&parking_boat=on')
 			);
-			expect(result.shelters.map((s) => s.code)).toEqual(['SH_BOTH']);
+
+			expect(listCall()?.parking).toEqual(['car', 'boat']);
+			expect(result.filters.parking_car).toBe('on');
+			expect(result.filters.parking_boat).toBe('on');
+			expect(result.filters.parking_motorcycle).toBe('');
 		});
 
-		it('does not filter when nothing is ticked', async () => {
+		it('passes the switched-off shelter types and echoes them back', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?hide_evacuation=on&hide_external=on')
+			);
+
+			expect(listCall()).toMatchObject({ hide_evacuation: true, hide_external: true });
+			expect(result.filters.hide_evacuation).toBe('on');
+			expect(result.filters.hide_external).toBe('on');
+		});
+
+		it('always leaves host houses out and ignores a stale hide_host_house', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters?hide_host_house=on'));
+
+			expect(listCall()?.hide_host_house).toBe(true);
+			expect(result.filters).not.toHaveProperty('hide_host_house');
+		});
+
+		it('does not filter the list it gets back — what the database sent is what the page shows', async () => {
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [item('A', { name: 'ไม่ตรงคำค้น' }), item('B', { status: 'full' })],
+				count: 2,
+				as_of: '2026-08-19T10:00:00Z'
+			} as unknown as PublicShelterListResponse);
+
+			const result = await runLoad(new URL('http://localhost/shelters?q=xyz&hide_full=true'));
+
+			expect(result.shelters.map((s) => s.code)).toEqual(['A', 'B']);
+		});
+	});
+
+	describe('distance (no radius until the visitor picks one)', () => {
+		const near = item('NEAR', { geo: { lat: 7.01, lng: 100.48 } });
+		const far = item('FAR', { geo: { lat: 7.1, lng: 100.6 } });
+		const nogeo = item('NOGEO', { geo: null });
+
+		beforeEach(() => {
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [far, nogeo, near],
+				count: 3,
+				as_of: '2026-08-19T10:00:00Z'
+			} as unknown as PublicShelterListResponse);
+		});
+
+		it('has no default radius: nothing set, nothing echoed', async () => {
 			const result = await runLoad(new URL('http://localhost/shelters'));
-			expect(result.shelters).toHaveLength(3);
+
+			expect(result.filters.distance).toBe('');
+			expect(listCall()?.radius_km).toBeUndefined();
+			expect(listCall()?.lat).toBeUndefined();
+		});
+
+		it('with a position but no radius, keeps every shelter and orders them closest-first', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476')
+			);
+
+			// the database is not asked to cut by distance, or it would lose shelters with no pin
+			expect(listCall()?.radius_km).toBeUndefined();
+			expect(listCall()?.lat).toBeUndefined();
+			expect(result.shelters.map((s) => s.code)).toEqual(['NEAR', 'FAR', 'NOGEO']);
+			expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
+			expect(result.filters.distance).toBe('');
+		});
+
+		it('with a position and a radius, hands both to the database', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476&distance=10')
+			);
+
+			expect(listCall()).toMatchObject({ lat: 7.008, lng: 100.476, radius_km: 10 });
+			expect(result.filters.distance).toBe('10');
+			expect(result.shelters[0].code).toBe('NEAR');
+		});
+
+		it('ignores a radius when there is no position to measure from', async () => {
+			await runLoad(new URL('http://localhost/shelters?distance=10'));
+
+			expect(listCall()?.radius_km).toBeUndefined();
+		});
+	});
+
+	describe('the cards come from the summary, not from the list', () => {
+		it('shows the summary the endpoint gave, whatever the list holds', async () => {
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [item('ONLY')],
+				count: 1,
+				as_of: '2026-08-19T10:00:00Z'
+			} as unknown as PublicShelterListResponse);
+
+			const result = await runLoad(new URL('http://localhost/shelters?q=ONLY&hide_external=on'));
+
+			expect(result.shelters).toHaveLength(1);
+			expect(result.summary).toEqual(SUMMARY);
+		});
+
+		it('asks for the summary without any filter, but leaving plain host houses out', async () => {
+			await runLoad(new URL('http://localhost/shelters?q=x&province=สงขลา&hide_full=true'));
+
+			expect(vi.mocked(fetchShelterSummary)).toHaveBeenCalledTimes(1);
+			expect(vi.mocked(fetchShelterSummary).mock.calls[0][0]).toMatchObject({
+				hide_host_house: true
+			});
+			expect(Object.keys(vi.mocked(fetchShelterSummary).mock.calls[0][0] ?? {}).sort()).toEqual([
+				'fetch',
+				'hide_host_house'
+			]);
+		});
+
+		it('falls back to zeros, and still lists, when the summary is unavailable', async () => {
+			vi.mocked(fetchShelterSummary).mockRejectedValue(new Error('down'));
+			vi.mocked(listPublicShelters).mockResolvedValue({
+				shelters: [item('SH001')],
+				count: 1,
+				as_of: '2026-08-19T10:00:00Z'
+			} as unknown as PublicShelterListResponse);
+
+			const result = await runLoad(new URL('http://localhost/shelters'));
+
+			expect(result.shelters).toHaveLength(1);
+			expect(result.summary).toEqual({
+				shelters_total: 0,
+				shelters_open: 0,
+				counts_by_site_kind: {}
+			});
 		});
 	});
 });

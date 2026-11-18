@@ -197,9 +197,6 @@
 		const params = new SvelteURLSearchParams(page.url.searchParams);
 		params.set('user_lat', liveUserLat);
 		params.set('user_lng', liveUserLng);
-		if (!params.get('distance')) {
-			params.set('distance', data?.filters?.distance || '5');
-		}
 		void goto(resolve(`/shelters?${params.toString()}`), { keepFocus: true, noScroll: true });
 	}
 
