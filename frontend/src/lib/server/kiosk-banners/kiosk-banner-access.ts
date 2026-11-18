@@ -8,7 +8,10 @@ import {
 } from '$lib/server/shelter-capability-access';
 import {
 	decodeBannerImage,
+	KIOSK_BANNER_IMAGE_MAX_BYTES,
 	kioskBannerInputSchema,
+	TEMPLATE_IMAGE_MAX_BYTES,
+	TEMPLATE_IMAGE_TOO_LARGE_MESSAGE,
 	type KioskBannerInput
 } from '$lib/features/kiosk-banners';
 import { z } from 'zod';
@@ -118,12 +121,38 @@ const IMAGE_MESSAGES = {
 
 const imagePayloadSchema = z.object({ content_type: z.string(), data_base64: z.string() });
 
-/** Validate and decode the `image` field (FR-KBR-04); any failure is `422` with a Thai message. */
-export function decodeImageField(raw: unknown): DecodedBannerImage {
+/** Size cap and its message for one image field; the template logo has a smaller cap. */
+export interface ImageLimit {
+	maxBytes: number;
+	tooLarge: string;
+}
+
+const BANNER_IMAGE_LIMIT: ImageLimit = {
+	maxBytes: KIOSK_BANNER_IMAGE_MAX_BYTES,
+	tooLarge: IMAGE_MESSAGES.too_large
+};
+
+export const TEMPLATE_IMAGE_LIMIT: ImageLimit = {
+	maxBytes: TEMPLATE_IMAGE_MAX_BYTES,
+	tooLarge: TEMPLATE_IMAGE_TOO_LARGE_MESSAGE
+};
+
+/**
+ * Validate and decode an image field (FR-KBR-04): `image` by default, or the template logo with
+ * {@link TEMPLATE_IMAGE_LIMIT}. Any failure is `422` with a Thai message.
+ */
+export function decodeImageField(
+	raw: unknown,
+	limit: ImageLimit = BANNER_IMAGE_LIMIT
+): DecodedBannerImage {
 	const payload = imagePayloadSchema.safeParse(raw);
 	if (!payload.success) throw new ServiceError('VALIDATION', 'ข้อมูลรูปภาพไม่ถูกต้อง');
-	const decoded = decodeBannerImage(payload.data);
-	if (!decoded.ok) throw new ServiceError('VALIDATION', IMAGE_MESSAGES[decoded.reason]);
+	const decoded = decodeBannerImage(payload.data, limit.maxBytes);
+	if (!decoded.ok) {
+		const message =
+			decoded.reason === 'too_large' ? limit.tooLarge : IMAGE_MESSAGES[decoded.reason];
+		throw new ServiceError('VALIDATION', message);
+	}
 	return { bytes: decoded.bytes, contentType: decoded.contentType };
 }
 

@@ -84,6 +84,7 @@ describe('GET /api/v1/kiosk/banners/[id]/image', () => {
 		const response = await GET(ev);
 
 		expect(response.headers.get('cache-control')).toBe('private, max-age=60');
+		expect(response.headers.get('x-content-type-options')).toBe('nosniff');
 	});
 
 	it('rejects a tampered signature with 403 without touching the repository', async () => {

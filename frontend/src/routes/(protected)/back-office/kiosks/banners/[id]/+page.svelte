@@ -43,7 +43,8 @@
 				id,
 				rev: payload.rev,
 				input: payload.input,
-				image: payload.image
+				image: payload.image,
+				templateImage: payload.templateImage
 			});
 		} catch {
 			return;

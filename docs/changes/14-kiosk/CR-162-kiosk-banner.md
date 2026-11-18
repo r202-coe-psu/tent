@@ -4,7 +4,7 @@ title: Kiosk banner — แบนเนอร์รูปภาพประช�
 status: approved
 date: 2026-10-11
 created: 2026-10-11
-updated: 2026-11-10
+updated: 2026-11-18
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team Lead) — อนุมัติ 2026-10-11 (Asia/Bangkok) scope เดิม · Team Lead อนุมัติส่วนที่ปรับ/เพิ่ม 2026-10-15..17 ทั้งหมด รวม §7 Q1–Q5 ตามข้อเสนอ เมื่อ 2026-10-18 · Team Lead อนุมัติส่วนที่ปรับ 2026-10-21 (banner group) ทั้งหมด รวมการไม่ migrate (§6) เมื่อ 2026-10-22 — merge ได้
 decision_date: 2026-10-22
@@ -40,6 +40,9 @@ affects:
   - (2026-10-21) frontend/src/lib/features/kiosk-banners/{domain/kiosk-banner-group.ts (ใหม่),domain/kiosk-banner.ts (v1/v2 + `matchesSlot`),domain/kiosk-banner-form.ts,data,application,ui/kiosk-banner-group-{card,form,device-picker}.svelte (ใหม่)} · frontend/src/lib/server/kiosk-banners/{kiosk-banner-group.server.ts (ใหม่),kiosk-banner.server.ts} · frontend/src/lib/server/registry-design.ts (VDU branch `kiosk_banner_group` + `kiosk_banner` v1/v2) · frontend/src/lib/server/scanners/{device-repository (`setBannerGroup`),device-credentials (principal `banner_group_id`)}.ts · frontend/src/routes/api/back-office/kiosk-banner-groups/** (ใหม่) · frontend/src/routes/api/back-office/kiosk-banners/{+server,[id]/+server,order/+server}.ts · frontend/src/routes/api/v1/kiosk/{banners/+server.ts,devices/[id]/+server.ts} · frontend/src/lib/features/kiosk-devices/** (ตัด `banner_enabled` Switch · badge กลุ่ม) · frontend/src/routes/(protected)/back-office/kiosks/banners/{groups/new,groups/[group],groups/[group]/[screen=kioskScreen]}/** (ใหม่ · route `[screen=kioskScreen]` เดิมเหลือเป็น redirect ไป `/back-office/kiosks/banners`)
   - (2026-11-10 · #1299 A–D · ทีมเสนอ / รอ PO ยืนยัน) จอ TV ภายในศูนย์ — docs/data/schema.md §3.11 (`scanner_device.screen_type` คง `compact` \| `portrait` · ไม่ bump) · §3.12 (`kiosk_banner` schema_v 2 → 3 · `screen_type` + `tv`) · §3.13 (`kiosk_banner_group` schema_v 1 → 2 + `tv_code`) · §7 index registry (+ `kiosk-banner-group-by-tv-code` = `(type, tv_code)`) · VDU `REGISTRY_DESIGN_VERSION` 8 → 9 · docs/data/api-contract.md §2.3 (+ `GET /api/v1/kiosk/internal/{shelter}/banners`) · §2.3.1 (+ `POST …/kiosk-banner-groups/{id}/tv-code` · `KioskBannerGroupSummary.tv_code`)
   - (2026-11-10) frontend/src/lib/features/shared/domain/kiosk-screen.ts (`tv` + `kioskDeviceScreenTypeSchema`) · frontend/src/lib/features/kiosk-banners/domain/{kiosk-banner.ts (v3),kiosk-banner-group.ts (v2 · `tvCodeSchema` · `generateTvCode` · `internalBannerUrl`)} · frontend/src/lib/features/kiosk-banners/ui/kiosk-banner-group-tv-code.svelte (ใหม่) · frontend/src/lib/server/kiosk-banners/{kiosk-banner-group.server.ts (`findGroupByTvCode` · `rotateTvCode` · `ensureTvCode`),kiosk-banner.server.ts (เขียน v3)} · frontend/src/lib/server/registry-design.ts (VDU v9 · `KIOSK_BANNER_TV_CODE_MANGO_INDEX`) · frontend/src/routes/api/v1/kiosk/internal/[shelter]/banners/+server.ts (ใหม่) · frontend/src/routes/api/back-office/kiosk-banner-groups/[id]/tv-code/+server.ts (ใหม่) · frontend/src/lib/features/kiosk/{data/internal-banners.api.ts,ui/internal-banner-display.svelte.ts} (ใหม่) · frontend/src/routes/banner/[shelter]/internal/** (ใหม่)
+  - (2026-11-18 · #1299 E · ทีมเสนอ / รอ PO ยืนยัน) ประกาศจาก template — docs/data/schema.md §3.12 (`kiosk_banner` schema_v 3 → 4 + `template` · attachment `template_image` ≤512 KB · VDU `REGISTRY_DESIGN_VERSION` 9 → 10) · docs/data/api-contract.md §2.3 (POST / PUT รับ `template` + `template_image` · `GET …/kiosk-banners/{id}/template-image`)
+  - (2026-11-18) frontend/src/lib/features/kiosk-banners/domain/{kiosk-banner-template.ts (ใหม่),kiosk-banner.ts (v4),kiosk-banner-form.ts (`source`)} · ui/{kiosk-banner-template-canvas,kiosk-banner-template-editor}.svelte (ใหม่) · ui/{kiosk-banner-template-export,kiosk-banner-template-logo}.ts (ใหม่) · ui/kiosk-banner-form.svelte · frontend/src/lib/server/kiosk-banners/{kiosk-banner.server.ts (`template_image`),kiosk-banner-access.ts (`decodeTemplateImageField`)} · frontend/src/lib/server/registry-design.ts (VDU v10) · frontend/src/routes/api/back-office/kiosk-banners/{+server.ts,[id]/+server.ts,[id]/template-image/+server.ts (ใหม่)} · dependency ใหม่ `html-to-image`
+  - (2026-11-18) frontend/src/lib/features/kiosk/ui/{kiosk-banner-fade.ts (ใหม่),kiosk-banner-attract.svelte,internal-banner-display.svelte} (crossfade 600 ms)
 why: >
   หน้าแรก kiosk ค้างอยู่โดยไม่มีผู้ใช้เกือบตลอดเวลา ศูนย์ต้องใช้หน้าจอนี้แจ้งข่าวสาร (ตารางแจกอาหาร, จุดบริการ, คำเตือน)
   ทีมเคยใช้ banner รูปภาพบน kiosk ในระบบก่อนหน้า (ghosa) และพิสูจน์แล้วว่าพอสำหรับงานประชาสัมพันธ์หน้าตู้ ·
@@ -47,6 +50,7 @@ why: >
   หน้า `/back-office/kiosk-banners` อยู่นอก route ที่ `kiosk_staff` เข้าได้ (FR-SBO-29) ·
   banner หลายศูนย์ทำให้ต้องตรวจสิทธิ์ทั้งค่าเดิมและค่าใหม่และต้องมี multi-select ขณะที่หน้า kiosk อื่นใช้ active shelter อย่างเดียว (FR-SBO-27) ·
   (2026-11-10 · #1299) ศูนย์ต้องขึ้นประกาศภายในศูนย์บน TV ทั่วไปโดยไม่ต้อง login และไม่ต้องลงทะเบียน TV เป็นเครื่อง kiosk — feed เดิมส่งให้เฉพาะเครื่องที่มี device secret
+  (2026-11-18 · #1299 E) staff ที่ไม่มีโปรแกรมทำรูปต้องขึ้นประกาศตัวอักษรได้เองจากหน้าจัดการ โดยตู้และจอ TV ยังแสดงรูปตามเดิม
 migration: >
   N/A สำหรับ data — doc type ใหม่ ไม่มีข้อมูลเดิม (ยังไม่มี doc `kiosk_banner` ใน `registry`) จึงคง `schema_v 1` และเปลี่ยนรูปร่างได้โดยไม่ต้อง migrate ·
   `scanner_device.banner_enabled` / `screen_type` และ `kiosk_banner.screen_type` เป็น additive optional ไม่ backfill ·
@@ -57,6 +61,8 @@ migration: >
   (2026-11-10 · #1299) ไม่มี migration script — `kiosk_banner` v1/v2 คงเดิม (มีได้แค่ `compact` \| `portrait`) · app เขียน v3 ตอนสร้าง/แก้ ·
   `kiosk_banner_group` v1 ถูก backfill แบบ lazy เป็น v2 (+ `tv_code`) เมื่อ server อ่านกลุ่มนั้นทีละกลุ่ม ·
   deploy: `pnpm db:sync` ให้ VDU ของ `registry` เป็น version 9 + index `kiosk-banner-group-by-tv-code` **ก่อน** deploy frontend · ไม่แก้ kiosk client · ไม่แก้ nginx (§6)
+  (2026-11-18 · #1299 E) ไม่มี migration script — `kiosk_banner` v1–v3 คงเดิม · app เขียน v4 ตอนสร้าง/แก้ (ทั้งโหมดอัปโหลดและ template) ·
+  deploy: `pnpm db:sync` ให้ VDU ของ `registry` เป็น version 10 **ก่อน** deploy frontend · ไม่แก้ kiosk client · ไม่แก้ nginx (§6)
 ---
 
 # CR-162: Kiosk banner — แบนเนอร์รูปภาพบนหน้าแรก kiosk
@@ -82,7 +88,14 @@ migration: >
 > - **Section ที่เพิ่ม/แก้:** TL;DR · §1.5 (ใหม่) · §2.1.2 (ใหม่ before → after) · §2.2 (หมายเหตุไฟล์เพิ่ม) · §2.3 (`screen_type` + `tv` · v3 · VDU v9) · §2.3.1 (`tv_code` · v2 · index ใหม่) · §2.4 (feed จอภายใน · `POST …/tv-code`) · §2.5 (f) (ใหม่) · §3.5 (out of scope) · §3.9 (ใหม่ FR-KBT-01..44) · §4.6 (ใหม่ AC-KBT-01..16) · §4.3 DoD · §5 · §6 · Decision log
 > - **แถวที่ถูกแทนที่:** ไม่มี — เป็นส่วนเพิ่ม (additive) · FR-KBG-05 / FR-KBG-50 (VDU v8, ไม่เพิ่ม index) ยังเป็นจริงสำหรับรุ่น 2026-10-22 และถูกต่อยอดโดย FR-KBT-06 / FR-KBT-44
 > - **ไม่กระทบ:** response shape + พฤติกรรมของ `POST /api/v1/kiosk/banners` (ตู้ไม่ได้ banner `tv`) · `scanner_device.screen_type` (คง `compact` \| `portrait`) · `kiosk/app/manager.py` allowlist · role / capability (`requireBannerManager` เดิม) · signed image URL · nginx (`/api/v1/kiosk/` อยู่ใน zone `tent_kiosk` แล้ว — CR-188)
-> - **ไม่อยู่ในส่วนนี้:** #1299 ข้อ E (สร้างประกาศจาก template HTML · field `template` ใน `kiosk_banner`) — จะเพิ่มเป็น amendment ถัดไปของ CR นี้ใน PR แยก · ส่วนนี้ **ไม่** ระบุ field `template` ใน schema
+> - **ไม่อยู่ในส่วนนี้:** #1299 ข้อ E (สร้างประกาศจาก template HTML · field `template` ใน `kiosk_banner`) — จะเพิ่มเป็น amendment ถัดไปของ CR นี้ใน PR แยก · ส่วนนี้ **ไม่** ระบุ field `template` ใน schema · (2026-11-18: เพิ่มแล้วในส่วนถัดไป)
+
+> **ส่วนที่ปรับ 2026-11-18 (#1299 ข้อ E) — ทีมเสนอ / รอ PO ยืนยัน (ยังไม่อนุมัติ):** เพิ่ม **ประกาศจาก template** — staff กรอกหัวข้อ / เนื้อหา / จัดชิด / สีพื้น / สีตัวอักษร / โลโก้ แล้วระบบสร้างรูป PNG ให้ · เก็บ `template` แบบโครงสร้าง (ไม่เก็บ HTML) · crossfade ตอนเปลี่ยนสไลด์ · ทุกจุดที่แก้มีเครื่องหมาย "(2026-11-18)"
+>
+> - **สถานะ:** ส่วน 2026-11-18 เป็น **proposed** จนกว่า PO ยืนยัน (แบบเดียวกับส่วน 2026-11-10)
+> - **Section ที่เพิ่ม/แก้:** frontmatter · TL;DR · §3.10 (ใหม่ FR-KBE-01..44) · §4.7 (ใหม่ AC-KBE-01..12) · §4.3 DoD · §5 · §6 · Decision log
+> - **แถวที่ถูกแทนที่:** FR-KBN-44 เฉพาะเรื่อง fade (≤300 ms → crossfade 600 ms — FR-KBE-40)
+> - **ไม่กระทบ:** response shape ของ feed ตู้และจอ TV (ยังเป็น `image_url` รูปเดียว) · signed image URL · `kiosk/app/manager.py` allowlist · role / capability · nginx · worker / Mongo / FastAPI
 
 > **สรุป (TL;DR)**
 >
@@ -95,6 +108,7 @@ migration: >
 > - **Design pattern:** [`docs/features/kiosk-banner-design-guideline.md`](../../features/kiosk-banner-design-guideline.md)
 > - **(2026-10-21) banner group:** เพิ่ม doc `kiosk_banner_group:{ulid}` (ต่อศูนย์ · มีชื่อ · แก้ชื่อได้) · เครื่อง 1 เครื่อง = 0 หรือ 1 กลุ่ม (`scanner_device.banner_group_id`) แทน `banner_enabled` · banner 1 อัน = 1 กลุ่ม (`kiosk_banner` v2 + `group_id`) · ข้างในกลุ่มยังแยก resolution (ตู้เล็ก/ตู้ใหญ่) และจัดลำดับแยกต่อ (`group_id`, `screen_type`) · ตู้เห็นเฉพาะ banner ของกลุ่มตัวเอง (ไม่มีกลุ่ม = ไม่แสดง) · **ไม่ migrate** (banner v1 / เครื่องเดิม = ไม่มีกลุ่ม → ไม่แสดงบนตู้จนกว่าจัดกลุ่ม) · Dev build: group CRUD + `PUT …/devices` + `group_id` ใน banner/order API + feed กรองตามกลุ่ม + หน้า `/back-office/kiosks/banners/groups/**` + VDU v8 · เหตุผล §1.4
 > - **(2026-11-10 · #1299 A–D · ทีมเสนอ / รอ PO ยืนยัน) จอ TV ภายในศูนย์:** กลุ่มมี `tv_code` เลขสุ่ม 6 หลัก ไม่ซ้ำทั้งระบบ (`kiosk_banner_group` v1 → v2 · backfill แบบ lazy) · banner มี screen type ที่ 3 `tv` 1920×1080 (`kiosk_banner` v2 → v3 · เครื่อง kiosk ยังเป็น `compact` / `portrait` เท่านั้น) · TV เปิด `/banner/{shelter_code}/internal?c={tv_code}` โดยไม่ login → เล่น banner `tv` ของกลุ่มเต็มจอ · feed `GET /api/v1/kiosk/internal/{shelter}/banners?c=` (anonymous · รหัสผิด/ศูนย์ไม่ตรง = `404 TV_CODE_NOT_FOUND` แบบเดียวกันทุกกรณี) · ออกรหัสใหม่ `POST …/kiosk-banner-groups/{id}/tv-code` (รหัสเก่าใช้ไม่ได้ทันที) · VDU v9 + index `kiosk-banner-group-by-tv-code` · ความเสี่ยง: feed ไม่ต้อง login และรหัส 6 หลักเดาได้ภายในเพดาน nginx (§5) · เหตุผล §1.5
+> - **(2026-11-18 · #1299 E · ทีมเสนอ / รอ PO ยืนยัน) ประกาศจาก template:** ฟอร์ม banner มี 2 วิธี「อัปโหลดรูป」/「สร้างจาก template」· template = หัวข้อ ≤120 + เนื้อหา ≤600 (อย่างน้อย 1 ช่อง) + จัดชิด + สีพื้น/สีตัวอักษร `#rrggbb` (ชุดสี + เลือกเอง + เตือน contrast < 4.5 แบบไม่บล็อก) + โลโก้ (opt) · พรีวิวขนาดจอจริง แล้ว export PNG ด้วย `html-to-image` ส่งผ่าน upload เดิม · `kiosk_banner` v3 → v4 + `template` · โลโก้เป็น attachment ที่ 2 `template_image` ≤512 KB (ย่ออัตโนมัติ) · ตู้/TV ยังเล่นรูป `image` เหมือนเดิม · เปลี่ยนสไลด์แบบ crossfade 600 ms ทั้งตู้และ TV
 
 ---
 
@@ -541,7 +555,7 @@ TV (browser · ไม่ login)
 | FR-KBN-41 | ดึงรายการเมื่อเข้า `/kiosk` และทุก 5 นาทีระหว่างอยู่หน้าเดิม                                                                                                                                                                                                                                    |
 | FR-KBN-42 | ไม่มีการแตะ/คลิก/กดปุ่มบนหน้า `/kiosk` 30 วินาที และมี banner ≥1 → แสดง attract overlay เต็มจอ                                                                                                                                                                                                  |
 | FR-KBN-43 | แตะจอ/กดปุ่มใด ๆ ขณะ overlay แสดง → ปิด overlay กลับหน้าเลือกวิธี (ปรับ 2026-11-10: กลับหน้าเลือกภาษา — FR-KBL-01) และ event นั้นไม่ทริกเกอร์การ์ดที่อยู่ข้างใต้ · เสียบบัตร = kiosk client นำทางออกจาก `/kiosk` ตามเดิม                                                                                                                         |
-| FR-KBN-44 | สไลด์เปลี่ยนตาม `duration_sec` ของแต่ละรายการ วนต่อเนื่อง · fade ≤300 ms · รายการเดียว = ไม่หมุน · **ไม่แสดง** dot indicator และข้อความ「แตะหน้าจอเพื่อเริ่มใช้งาน」(ปรับ 2026-10-17 — เดิมมีทั้งสอง · ดู FR-KBR-46)                                                                            |
+| FR-KBN-44 | สไลด์เปลี่ยนตาม `duration_sec` ของแต่ละรายการ วนต่อเนื่อง · ~~fade ≤300 ms~~ (2026-11-18: crossfade 600 ms — แทนที่โดย FR-KBE-40) · รายการเดียว = ไม่หมุน · **ไม่แสดง** dot indicator และข้อความ「แตะหน้าจอเพื่อเริ่มใช้งาน」(ปรับ 2026-10-17 — เดิมมีทั้งสอง · ดู FR-KBR-46)                                                                            |
 | FR-KBN-45 | รูป `object-contain` (ไม่ crop) เต็มพื้นที่ overlay ไม่มี padding · **ไม่แสดง** `caption` ใต้รูป (ปรับ 2026-10-17 · ดู FR-KBR-46) · พอดีไม่ scroll ที่ 1024×600 (`kiosk-compact`) และ 1080×1920 (`kiosk-portrait`) · ใช้ media literal เดียวกับ `kiosk-layout.ts` (ผ่าน `kiosk-layout.test.ts`) |
 | FR-KBN-46 | overlay ต้องไม่บัง `SystemBannerHost` (ประกาศระบบ fixed bottom)                                                                                                                                                                                                                                 |
 | FR-KBN-47 | ไม่มี banner / API ล้มเหลว / รูปโหลดไม่ได้ → ไม่แสดง overlay (หรือข้ามสไลด์ที่รูปเสีย) · ไม่มี JS error · หน้าเลือกวิธีทำงานปกติ (ปรับ 2026-11-10: idle 30 วินาทีโดยไม่มี overlay → กลับหน้าเลือกภาษา — FR-KBL-02)                                                                                                                                                               |
@@ -775,6 +789,63 @@ TV (browser · ไม่ login)
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR-KBT-44 | deploy: `pnpm db:sync` ให้ VDU `registry` เป็น `REGISTRY_DESIGN_VERSION` 9 + index `kiosk-banner-group-by-tv-code` **ก่อน** deploy frontend · ไม่มี data migration script (§6) · ไม่แก้ nginx · ไม่แก้ kiosk client |
 
+### 3.10 ประกาศจาก template (FR-KBE-01..44 — 2026-11-18 · #1299 E)
+
+> **ทีมเสนอ / รอ PO ยืนยัน (ยังไม่อนุมัติ)** — เป็นส่วนเพิ่ม · ตู้และจอ TV ไม่ต้องรู้จัก template (เล่นรูป `image` ที่ระบบสร้างให้)
+
+#### 3.10.1 Data
+
+| ID        | Requirement |
+| --------- | ----------- |
+| FR-KBE-01 | `kiosk_banner` schema_v 3 → 4 · v4 = v3 + `template` (opt) · banner ที่ไม่มี `template` = banner อัปโหลดรูปตามเดิม · app เขียน `schema_v: 4` ทุกครั้งที่สร้างหรือแก้ (ทั้งสองโหมด) |
+| FR-KBE-02 | `template` = object ที่มี key ครบ 6 ตัวพอดี: `heading` (trim ≤120) · `body` (trim ≤600 · ขึ้นบรรทัดใหม่ได้) · `align` ∈ {`left`,`center`,`right`} · `bg_color` · `text_color` · `image` · key อื่น (เช่น `html`, `image_url`) → `422` |
+| FR-KBE-03 | `heading` กับ `body` ว่างพร้อมกันไม่ได้ (「ระบุหัวข้อหรือเนื้อหาประกาศ」) |
+| FR-KBE-04 | `bg_color` / `text_color` ต้องเป็น `#rrggbb` (รับตัวพิมพ์ใหญ่ เก็บเป็นตัวเล็ก) · ไม่รับชื่อสี / `rgb()` / `url()` — กัน CSS injection |
+| FR-KBE-05 | `template.image` = `null` หรือ `'template_image'` เท่านั้น (อ้าง attachment ของ doc เอง · ไม่รับ URL) |
+| FR-KBE-06 | โลโก้เก็บเป็น attachment ที่ 2 `_attachments.template_image` (png / jpeg / webp ตาม magic bytes · ≤512 KB หลัง decode) · มีได้เฉพาะเมื่อ `template.image = 'template_image'` |
+| FR-KBE-07 | `_attachments.image` ยัง req · สำหรับ banner template = PNG ที่ export จากพรีวิว (≤2 MB เหมือนรูปอัปโหลด) |
+| FR-KBE-08 | VDU `registry` (`REGISTRY_DESIGN_VERSION` 9 → 10): `schema_v` ∈ {1, 2, 3, 4} · `template` มีได้เฉพาะ v4 · ตรวจซ้ำ FR-KBE-02..05 (key ครบ 6, ความยาว, ไม่ว่างทั้งคู่, `align`, hex, `image`) · `screen_type = 'tv'` ต้องเป็น v ≥ 3 |
+
+#### 3.10.2 Back-office API
+
+| ID        | Requirement |
+| --------- | ----------- |
+| FR-KBE-10 | `POST` / `PUT /api/back-office/kiosk-banners[/{id}]` รับ `template` (opt) และ `template_image: { content_type, data_base64 }` (opt) · template ผิดรูปแบบ → `422 VALIDATION` (ตาม route banner เดิม) |
+| FR-KBE-11 | `template_image` เกิน 512 KB → `422`「รูป/โลโก้ต้องมีขนาดไม่เกิน 512 KB」· ผิดชนิด / base64 ไม่ canonical → `422` ข้อความเดียวกับ `image` |
+| FR-KBE-12 | ส่ง `template_image` แต่ `template.image ≠ 'template_image'` → `422`「รูปในประกาศใช้ได้เฉพาะประกาศที่มีรูปในแม่แบบ」· `template.image = 'template_image'` แต่ไม่ส่งและไม่มีโลโก้เดิม → `422`「เลือกรูปในประกาศ」 |
+| FR-KBE-13 | `PUT` ที่ไม่ส่ง `template_image` คงโลโก้เดิมไว้ ถ้า template ยังอ้างถึง · ส่งใหม่ = แทนที่ · template ไม่อ้างแล้ว = ลบ `template_image` |
+| FR-KBE-14 | `PUT` ที่ไม่มี `template` (กลับเป็นโหมดอัปโหลด) ลบทั้ง `template` และ `template_image` |
+| FR-KBE-15 | `PATCH` (สถานะ) และ `PUT …/order` เก็บ `template` และ attachment ทั้งสองไว้ครบ |
+| FR-KBE-16 | `GET /api/back-office/kiosk-banners/{id}/template-image` → `200` + รูปโลโก้ · `cache-control: private, no-store` · ไม่มีโลโก้ / ไม่พบ / นอก scope `404` · สิทธิ์และ scope เดียวกับ `…/image` |
+| FR-KBE-17 | `KioskBannerSummary` ของ banner v4 มี `template` (ถ้ามี) |
+
+#### 3.10.3 Back-office UI
+
+| ID        | Requirement |
+| --------- | ----------- |
+| FR-KBE-20 | ฟอร์มสร้าง/แก้มีปุ่มเลือกวิธี「อัปโหลดรูป」/「สร้างจาก template」· แก้ banner ที่มี `template` เปิดในโหมด template พร้อมค่าเดิมและโลโก้เดิม |
+| FR-KBE-21 | โหมด template: ช่องหัวข้อ · เนื้อหา · ปุ่มจัดชิด 3 แบบ · สีพื้น + สีตัวอักษร (ชุดสี 6 สี ขาว ดำ น้ำเงิน แดง เหลือง เขียว + color picker + ช่อง `#RRGGBB`) · โลโก้ (opt) + ปุ่มลบ · ค่าเริ่มต้น จัดกลาง พื้น `#1e3a8a` ตัวอักษร `#ffffff` |
+| FR-KBE-22 | contrast ratio (WCAG) ของสีตัวอักษรกับสีพื้น < 4.5 → แสดง「สีตัวอักษรกับสีพื้นอ่านยาก」ใน live region (`role="status"`) · ไม่บล็อกการบันทึก |
+| FR-KBE-23 | พรีวิวสดเป็นกล่องขนาดจอจริงของ `screen_type` (1024×600 / 1080×1920 / 1920×1080) ย่อให้พอดีพื้นที่ (สูงสุด 480 px) · ฟอนต์ล็อกเป็น IBM Plex Sans Thai Looped · ข้อความเป็น text เท่านั้น (ไม่มี `{@html}`) |
+| FR-KBE-24 | บันทึก: รอฟอนต์และรูปในพรีวิวโหลดเสร็จ (รอได้ไม่เกิน 10 วินาที) แล้ว export PNG ขนาดจอจริง (`pixelRatio` 1) ด้วย `html-to-image` (โหลดแบบ lazy ตอน export ครั้งแรก) → ส่งเป็น `image` · ฝังเฉพาะฟอนต์ IBM Plex Sans Thai Looped 400/700 · โลโก้โหลดไม่ได้ → ไม่บันทึก + toast「โหลดรูป/โลโก้ไม่สำเร็จ ลองเลือกรูปใหม่หรือลบรูปออก」· ฟอนต์โหลดไม่ทัน → toast「โหลดฟอนต์ไม่สำเร็จ ลองบันทึกอีกครั้ง」· ระหว่างบันทึกช่อง template แก้ไม่ได้ |
+| FR-KBE-25 | PNG เกิน 2 MB → ไม่ส่ง + toast「รูปประกาศใหญ่เกิน 2 MB ลองใช้รูป/โลโก้ที่เรียบขึ้นหรือลบรูปออก」 |
+| FR-KBE-26 | โลโก้ที่เลือกถูกย่อเป็น WebP ด้านยาว ≤1024 px คุณภาพ 0.85 (คงไฟล์เดิมถ้าย่อแล้วไม่เล็กลง) · ยังเกิน 512 KB → แสดง error · เลือกไม่ผ่านขณะมีโลโก้เดิม = คงโลโก้เดิม · กดบันทึกขณะมี error → toast + focus ช่องโลโก้ |
+| FR-KBE-27 | ปุ่ม「ดูตัวอย่างบน kiosk」ซ่อนในโหมด template (พรีวิวสดแทน) |
+| FR-KBE-28 | `.svelte` ที่แตะผ่าน `svelte-autofixer` · UI ตาม civic-design-system |
+
+#### 3.10.4 ตู้และจอ TV
+
+| ID        | Requirement |
+| --------- | ----------- |
+| FR-KBE-40 | เปลี่ยนสไลด์แบบ crossfade 600 ms (รูปเก่าจางออกพร้อมรูปใหม่จางเข้า) ทั้ง overlay บนตู้ (`/kiosk`) และหน้าจอ TV (`/banner/{shelter}/internal`) · แทนที่ fade ≤300 ms ของ FR-KBN-44 |
+| FR-KBE-41 | feed ตู้และจอ TV ไม่เปลี่ยน — ไม่ส่ง `template` ออกไป · เล่น `image` เหมือน banner อัปโหลด |
+
+#### 3.10.5 Deploy
+
+| ID        | Requirement |
+| --------- | ----------- |
+| FR-KBE-44 | deploy: `pnpm db:sync` ให้ VDU `registry` เป็น `REGISTRY_DESIGN_VERSION` 10 **ก่อน** deploy frontend (VDU 9 reject doc v4 → สร้าง/แก้ banner ทุกตัว `403`) · ไม่มี data migration script · ไม่แก้ nginx · ไม่แก้ kiosk client · `BODY_SIZE_LIMIT=4M` เดิมพอ (PNG ≤2 MB + โลโก้ ≤512 KB ≈ 3.4 MB หลัง base64) |
+
 ---
 
 ## 4. Acceptance
@@ -874,11 +945,29 @@ TV (browser · ไม่ login)
 | AC-KBT-15 | สร้าง / แก้ banner (รวม banner v1 / v2 เดิม)                                                                   | doc ที่เขียนเป็น `schema_v: 3`                                                                                                          | 05             |
 | AC-KBT-16 | ตู้เล็ก / ตู้ใหญ่ หลัง deploy (regression)                                                                     | overlay บน `/kiosk` แสดง banner เหมือนเดิม · `kiosk/tests/test_manager.py` ผ่านโดยไม่ต้องแก้                                             | 26             |
 
+### 4.7 Acceptance — ประกาศจาก template (AC-KBE-01..12 — 2026-11-18 · ทีมเสนอ / รอ PO ยืนยัน)
+
+| ID        | ขั้นตอน | ผลที่คาด | FR |
+| --------- | ------- | -------- | -- |
+| AC-KBE-01 | SM เลือก「สร้างจาก template」กรอกหัวข้อ + เนื้อหา 2 บรรทัด เลือกสีแดง แล้วบันทึก | doc `schema_v: 4` มี `template` ตามที่กรอก (สีตัวเล็ก) · `image` = PNG ขนาดจอจริง · ตู้/TV แสดงรูปนั้น | FR-KBE-01, 02, 24, 41 |
+| AC-KBE-02 | ไม่กรอกทั้งหัวข้อและเนื้อหา แล้วบันทึก | ไม่ส่ง request · แสดง「ระบุหัวข้อหรือเนื้อหาประกาศ」 | FR-KBE-03 |
+| AC-KBE-03 | กรอก `<b>ด่วน</b>` ในหัวข้อ | พรีวิวและ PNG แสดงเป็นตัวอักษรตามที่พิมพ์ | FR-KBE-23 |
+| AC-KBE-04 | เลือกสีตัวอักษรเท่าหรือใกล้สีพื้น | เห็นคำเตือนอ่านยาก · ยังบันทึกได้ | FR-KBE-22 |
+| AC-KBE-05 | เรียก API ด้วย `template` ที่มี key `html` / สี `red` / `image` เป็น URL | `422` · ไม่เขียน doc | FR-KBE-02, 04, 05, 10 |
+| AC-KBE-06 | เลือกรูปถ่ายจากมือถือ ~5 MB เป็นโลโก้ แล้วบันทึกบนจอ TV และตู้ใหญ่ | ย่อแล้วบันทึกสำเร็จ (ไม่โดน `413`) · `template_image` ≤512 KB | FR-KBE-06, 26, 44 |
+| AC-KBE-07 | เรียก API ส่ง `template_image` 600 KB | `422`「รูป/โลโก้ต้องมีขนาดไม่เกิน 512 KB」 | FR-KBE-11 |
+| AC-KBE-08 | แก้เฉพาะชื่อของ banner template ที่มีโลโก้ | โลโก้เดิมยังอยู่ทั้งใน PNG ใหม่และ `template_image` | FR-KBE-13, 24 |
+| AC-KBE-09 | แก้ banner template แล้วเปลี่ยนเป็น「อัปโหลดรูป」 | doc ไม่มี `template` และ `template_image` | FR-KBE-14 |
+| AC-KBE-10 | ปิด/เปิดสถานะ และจัดลำดับ banner template | `template` และ `template_image` ยังอยู่ครบ | FR-KBE-15 |
+| AC-KBE-11 | เขียน doc v3 ที่มี `template` ตรงเข้า CouchDB | VDU reject | FR-KBE-08 |
+| AC-KBE-12 | ตู้และ TV วน banner 2 รายการขึ้นไป | เปลี่ยนสไลด์แบบ crossfade ไม่มีจอดำคั่น | FR-KBE-40 |
+
 ### 4.3 Definition of done
 
 - tests: domain (schema, active window, sort), signed URL, back-office + kiosk route `server.test.ts` (ครอบ AC-KBR-03..09, 11, 14, 15), `kiosk-banners.api.test.ts`, attract overlay component test (fake timers), `kiosk/tests/test_manager.py` allowlist case, e2e back-office CRUD
 - AC ใน §4.1 และ §4.2 ผ่านครบ · (2026-10-21) AC ใน §4.4 ผ่านครบ + tests: domain group / banner v2 / `matchesSlot`, VDU, group server, group routes (scope 403/404, ชื่อซ้ำ 409, ลบกลุ่มที่มี banner 409, เครื่องต่างศูนย์ 422), feed (ไม่มีกลุ่ม → `[]`, banner กลุ่มอื่นไม่หลุด)
 - (2026-11-10) AC ใน §4.6 ผ่านครบ + tests: unit — `tvCodeSchema` / `generateTvCode` (ไม่ bias · เลข 0 นำหน้า) / `internalBannerUrl` / `kiosk_banner` v3 + `matchesScreen('tv')` / controller slideshow + refresh ของจอภายใน · server — feed จอภายใน (รหัสถูก / ผิดรูป / ไม่รู้จัก / ศูนย์ไม่ตรง / หลังออกใหม่ / กรอง screen), `POST …/tv-code` (สิทธิ์ + scope), backfill v1, VDU v9 · e2e — กรอกรหัสบน `/banner/{shelter}/internal` → slideshow
+- (2026-11-18) AC ใน §4.7 ผ่านครบ + tests: unit — `kioskBannerTemplateSchema` / `bannerColorSchema` / `contrastRatio` / `kiosk_banner` v4 / form `source` / VDU v10 (table-driven) / `exportTemplatePng` (รอฟอนต์ + รูป · ขนาดจอจริง · เพดาน 2 MB) / `prepareTemplateLogo` · server — `mergeAttachments` ทุกกรณี + `PATCH` / reorder เก็บ `template_image` · route — `template` / `template_image` `422` + `GET …/template-image` · DOM — ฟอร์มโหมด template
 - `svelte-autofixer` ผ่านทุก `.svelte` ที่แตะ
 
 ---
@@ -901,6 +990,10 @@ TV (browser · ไม่ login)
   - **รหัส 6 หลักเดาได้:** 10⁶ ค่า · เพดาน nginx CR-188 (zone `tent_kiosk` 10,000 ครั้ง/นาที/IP) กัน flood ได้แต่กันการไล่รหัสไม่ได้ — IP เดียวไล่ครบในราว 100 นาที และเร็วขึ้นตามจำนวนกลุ่มของศูนย์เป้าหมายและจำนวน IP · ไม่มี lockout / rate limit ในแอป
   - **มาตรการลด:** ออกรหัสใหม่ได้ทันที (รหัสเก่า `404` ทันที) · feed คืนเฉพาะรายการ banner (`id`, `title`, `caption`, `duration_sec`, `image_url`) ไม่มีชื่อกลุ่ม / ศูนย์ / เครื่อง · ทุกกรณีที่ไม่ผ่านตอบ `404 TV_CODE_NOT_FOUND` เหมือนกัน · รหัสผิดรูปไม่ query DB · zone `tent_kiosk` ใช้ร่วมกับตู้ — การไล่รหัสจาก IP เดียวกับตู้จะกินโควตาของตู้
   - **รหัสซ้ำ:** best effort (ไม่มี unique constraint ใน CouchDB) — สร้าง/ออกรหัสพร้อมกันอาจชน (โอกาสต่ำมาก) · `findGroupByTvCode` คืนกลุ่มแรกที่พบ
+- **(2026-11-18 · ทีมเสนอ / รอ PO ยืนยัน) ใหม่:** domain `kiosk-banner-template.ts` · UI editor / canvas / export / logo · route `…/kiosk-banners/[id]/template-image` · dependency `html-to-image` · `kiosk/ui/kiosk-banner-fade.ts`
+- **(2026-11-18) แก้:** `kiosk_banner` v3 → v4 (domain, form, server, VDU 9 → 10) · ฟอร์ม banner (เลือกวิธี) · overlay ตู้ + หน้าจอ TV (crossfade)
+- **(2026-11-18) ไม่กระทบ:** feed ตู้ / TV · signed image URL · `kiosk/app/manager.py` · role / capability · nginx · worker / Mongo / FastAPI
+- **(2026-11-18) ความเสี่ยง:** PNG ถูกสร้างใน browser ของ staff — หน้าตาขึ้นกับการ render ของ browser นั้น (ล็อกฟอนต์และรอฟอนต์โหลดแล้ว) · แก้ banner template แต่ละครั้ง export PNG ใหม่ · ถ้าแท็บของจอถูกซ่อน browser จะหยุด animation จนกลับมาแสดง (จอ TV / ตู้เปิดค้างเต็มจอจึงไม่กระทบ)
 - **ความเสี่ยง:** SA ต้องสลับศูนย์ก่อนสร้าง banner ให้ศูนย์อื่น และ banner เดียวกันหลายศูนย์ต้องสร้างซ้ำ — ยอมรับเพื่อให้ตรงกับหน้า kiosk อื่น · `BODY_SIZE_LIMIT` เป็นค่า global ของ Node server (กระทบทุก route ฝั่ง SvelteKit)
 - **Base branch:** โค้ดยึด `feat/pre-register_kiosk` (ยังไม่ merge เข้า develop) — branch implementation ต้องแตกจาก branch นั้น และ merge ตามหลัง CR-151/152 · เอกสารของ CR นี้เข้า `develop` ผ่าน branch `docs/cr-162-kiosk-banner`
 
@@ -929,6 +1022,13 @@ TV (browser · ไม่ login)
 - **`scanner_device`:** ไม่เปลี่ยน · ไม่ bump
 - **Deploy:** `pnpm db:sync` (VDU `registry` version 9 + index `kiosk-banner-group-by-tv-code`) **บน central ก่อน deploy frontend** — VDU version 8 reject `kiosk_banner` v3 และ `kiosk_banner_group` v2 (สร้างกลุ่ม / แก้ banner / backfill จะล้ม) · ไม่มี env ใหม่ · ไม่แก้ nginx · ไม่ deploy kiosk client ใหม่
 - **Rollback:** frontend รุ่นก่อนหน้า parse `kiosk_banner` v3 และ `kiosk_banner_group` v2 ไม่ได้ — ถ้าต้อง rollback หลังมี doc v3 / v2 ต้อง rollback พร้อม VDU หรือ fix forward
+
+**(2026-11-18 · #1299 E · ทีมเสนอ / รอ PO ยืนยัน) Migration ของประกาศจาก template:**
+
+- **`kiosk_banner` v3 → v4:** additive (`template` opt + attachment `template_image` opt) · ไม่มี migration script · doc v1–v3 คงเดิมและยัง valid · app เขียน v4 ตอนสร้าง/แก้ทุกโหมด
+- **Deploy:** `pnpm db:sync` (VDU `registry` version 10 · ไม่เพิ่ม index) **บน central ก่อน deploy frontend** — VDU version 9 reject `kiosk_banner` v4 → สร้าง/แก้ banner ทุกตัว `403`
+- **Rollback:** frontend รุ่นก่อนหน้า parse `kiosk_banner` v4 ไม่ได้ (หน้ารายการ banner ของศูนย์ที่มี doc v4 จะพัง) และ `updateBanner` รุ่นเก่าเขียน `schema_v: 3` ทับโดยคง `template` ไว้ → VDU 10 reject · ห้ามถอย VDU กลับเป็น 9 หลังมี doc v4 · ถ้าต้อง rollback frontend ต้องลบ/แก้ banner v4 ให้เป็น v3 ก่อน
+- **Kiosk client / nginx / env:** ไม่เปลี่ยน
 
 ## 7. Open questions (ข้อเสนอของทีม kiosk — Team Lead อนุมัติตามข้อเสนอทั้งหมด 2026-10-18)
 
@@ -969,3 +1069,5 @@ TV (browser · ไม่ login)
 - 2026-10-22 — แก้ตาม PR review (#743): `deleteGroup` ลบ doc กลุ่มก่อนแล้วจึงล้าง `banner_group_id` ของเครื่อง (ตาม FR-KBG-06) · กลุ่มที่ไม่พบตอบ `404` ข้อความ `Banner group not found` · หน้าสรุปนับ「แสดงอยู่ / รอแสดง」ตามเวลาปัจจุบัน (refresh ทุก 30 วินาที) · path เดิม `/back-office/kiosks/banners/{compact|portrait}` redirect ไปหน้ารายการกลุ่ม
 - 2026-11-10 — **proposed โดยทีม kiosk** (ยังไม่อนุมัติ · แก้ในไฟล์นี้ ไม่เปิด CR ใหม่): เพิ่มหน้าเลือกภาษาบนตู้ (issue #1160) · ปิด overlay และ idle 30 วินาทีบน `/kiosk` ที่ไม่มี banner → reset เป็นไทย แล้วไปหน้าเลือกภาษา · จบการใช้งาน (กลับหน้าแรก / idle ใน flow) ก็ reset และไปหน้าเลือกภาษา เพื่อไม่ให้ภาษาค้างไปถึงคนถัดไป (FR-KBL-01..04, AC-KBL-01..04 · แทนส่วนนั้นของ FR-KBN-43/47 และ §2.1) · รอ Team Lead / Project Owner เคาะ
 - 2026-11-10 — **proposed โดยทีม kiosk — ทีมเสนอ / รอ PO ยืนยัน** (แก้ในไฟล์นี้ ไม่เปิด CR ใหม่ — owner เลือก amend CR-162 · ตาม #1299 ข้อ A–D): จอ TV ภายในศูนย์ — `kiosk_banner_group` schema_v 1 → 2 + `tv_code` 6 หลัก (server สุ่มด้วย `crypto.getRandomValues` · ไม่ซ้ำทั้งระบบแบบ best effort · ออกใหม่ได้ · v1 backfill แบบ lazy) · `kiosk_banner` schema_v 2 → 3 + screen type `tv` 1920×1080 (เครื่อง kiosk ยังเป็น `compact` / `portrait`) · feed anonymous `GET /api/v1/kiosk/internal/{shelter}/banners?c=` (`404 TV_CODE_NOT_FOUND` แบบเดียวกันทุกกรณี) · `POST …/kiosk-banner-groups/{id}/tv-code` · หน้า `/banner/{shelter}/internal` (แป้นตัวเลข + slideshow · refresh 5 นาที) · VDU version 9 + index `kiosk-banner-group-by-tv-code` (FR-KBT-01..44, AC-KBT-01..16 · ไม่แทนที่ FR เดิม) · เหตุผล §1.5 · ความเสี่ยง §5 (feed ไม่ต้อง login · รหัส 6 หลักเดาได้ภายในเพดาน nginx CR-188 · ลดด้วยการออกรหัสใหม่และ feed คืนแค่รายการ banner) · frontmatter คง `status: approved` สำหรับส่วนที่อนุมัติแล้ว — ส่วนนี้เป็น proposed จนกว่า PO ยืนยัน · #1299 ข้อ E (template HTML · field `template`) จะเพิ่มเป็น amendment ถัดไปใน PR แยก
+- 2026-11-18 — **proposed โดยทีม kiosk — ทีมเสนอ / รอ PO ยืนยัน** (amend CR-162 ไม่เปิด CR ใหม่ · #1299 ข้อ E): ประกาศจาก template (FR-KBE-01..44, AC-KBE-01..12) · เก็บ `template` แบบโครงสร้างแทน HTML · สีเลือกเองได้ `#rrggbb` + เตือน contrast ไม่บล็อก · export PNG ด้วย `html-to-image` ใน browser · โลโก้เป็น attachment `template_image` ≤512 KB ย่ออัตโนมัติ (ตาม PR review: PNG ≤2 MB + โลโก้ต้องไม่เกิน `BODY_SIZE_LIMIT=4M`) · template ผิดรูปแบบตอบ `422` ตาม route เดิม · `kiosk_banner` v3 → v4 (v3 deploy staging แล้ว) · VDU 9 → 10 · crossfade 600 ms แทน fade ≤300 ms (FR-KBN-44)
+- 2026-11-18 — แก้ตาม PR review (#1442): เลือก `html-to-image` แทน `html2canvas-pro` ที่มีอยู่ (`src/lib/utils/pdf.ts`) เพราะ `html-to-image` ให้ browser วาด DOM จริงผ่าน SVG `foreignObject` จึงได้การจัดวางและการวางสระ/วรรณยุกต์ไทยแบบเดียวกับพรีวิว ส่วน `html2canvas-pro` คำนวณ layout และวาดตัวอักษรเองบน canvas ซึ่งเสี่ยงให้ PNG ไม่ตรงกับพรีวิว · import `html-to-image` แบบ lazy ตอน export จึงไม่เข้า bundle อื่นและไม่อยู่ใน graph ของ server · อ่าน attachment ทีละไฟล์ (`adminAttachment`) แทน `?attachments=true` · VDU 10 รับสีเฉพาะ `#rrggbb` ตัวพิมพ์เล็ก (ตรงกับที่ app เก็บ)
