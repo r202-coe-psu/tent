@@ -225,6 +225,16 @@ export async function getDocWithConflicts<T extends { _id: string }>(
 	}
 }
 
+export function isAuditedWriteDb(dbName: string): boolean {
+	return dbName.startsWith('shelter_') || dbName === 'catalog';
+}
+
+export function stampWriter<T extends object>(dbName: string, doc: T): T {
+	const name = authStore.user?.name;
+	if (!name || !isAuditedWriteDb(dbName)) return doc;
+	return { ...doc, updated_by: name };
+}
+
 export interface PutDocOptions {
 	onConflict?: 'return-existing' | 'throw';
 }
@@ -237,6 +247,7 @@ export async function putDoc<T extends { _id: string; _rev?: string; type?: stri
 ): Promise<T> {
 	const isCreate = !doc._rev;
 	const onConflict = options.onConflict ?? 'return-existing';
+	const stamped = stampWriter(dbName, doc);
 	try {
 		const res = await withRetry(async () => {
 			const { data, status, ok } = await couchDbFetchRaw<PutResult>(
@@ -244,7 +255,7 @@ export async function putDoc<T extends { _id: string; _rev?: string; type?: stri
 				`/${encodeURIComponent(doc._id)}`,
 				{
 					method: 'PUT',
-					body: JSON.stringify(doc),
+					body: JSON.stringify(stamped),
 					...init
 				}
 			);
@@ -258,7 +269,7 @@ export async function putDoc<T extends { _id: string; _rev?: string; type?: stri
 			}
 			return data as PutResult;
 		});
-		return { ...doc, _rev: res.rev };
+		return { ...stamped, _rev: res.rev };
 	} catch (err) {
 		if (err instanceof ConflictError && isCreate && onConflict === 'return-existing') {
 			const existing = await getDoc<T>(dbName, doc._id, init);
@@ -285,6 +296,20 @@ export async function deleteDoc(
 		const latest = await getDoc<{ _id: string; _rev?: string }>(dbName, doc._id, init);
 		if (!latest?._rev) return;
 		doc = { ...doc, _rev: latest._rev };
+	}
+	if (isAuditedWriteDb(dbName)) {
+		const tombstone = stampWriter(dbName, {
+			_id: doc._id,
+			_rev: doc._rev,
+			_deleted: true,
+			updated_at: new Date().toISOString()
+		});
+		await couchDbFetch(dbName, `/${encodeURIComponent(doc._id)}`, {
+			method: 'PUT',
+			body: JSON.stringify(tombstone),
+			...init
+		});
+		return;
 	}
 	await couchDbFetch(
 		dbName,
@@ -435,9 +460,10 @@ export async function bulkDocs<T extends { _id: string; _rev?: string }>(
 	docs: T[],
 	init?: CouchFetchInit
 ): Promise<T[]> {
+	const stamped = docs.map((doc) => stampWriter(dbName, doc));
 	const results = await couchDbFetch<BulkDocResult[]>(dbName, '/_bulk_docs', {
 		method: 'POST',
-		body: JSON.stringify({ docs }),
+		body: JSON.stringify({ docs: stamped }),
 		...init
 	});
 
@@ -448,7 +474,7 @@ export async function bulkDocs<T extends { _id: string; _rev?: string }>(
 		throw new Error(`bulkDocs: ${failures.length} doc(s) failed: ${JSON.stringify(failures)}`);
 	}
 
-	return docs.map((doc) => {
+	return stamped.map((doc) => {
 		const res = results.find((r) => r.id === doc._id);
 		if (res?.rev) return { ...doc, _rev: res.rev };
 		return doc;
@@ -478,7 +504,7 @@ export async function bulkDocsDetailed<T extends { _id: string; _rev?: string }>
 	if (docs.length === 0) return [];
 	const results = await couchDbFetch<BulkDocResult[]>(dbName, '/_bulk_docs', {
 		method: 'POST',
-		body: JSON.stringify({ docs }),
+		body: JSON.stringify({ docs: docs.map((doc) => stampWriter(dbName, doc)) }),
 		...init
 	});
 

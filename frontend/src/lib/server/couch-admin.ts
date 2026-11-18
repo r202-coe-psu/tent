@@ -1,4 +1,5 @@
 import { env } from '$env/dynamic/private';
+import { setRequestActor, stampAdminWrite } from './request-actor';
 import { error, json, isHttpError, type HttpError } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
@@ -79,6 +80,7 @@ export async function adminRaw(
 	signal?: AbortSignal
 ): Promise<{ status: number; data: unknown }> {
 	const { base, authHeader } = adminConfig();
+	body = stampAdminWrite(path, method, body);
 	const res = await fetch(`${base}${path}`, {
 		method,
 		...(signal ? { signal } : {}),
@@ -146,6 +148,7 @@ export async function requireAdmin(cookie: string | null): Promise<string> {
 	const roles = data?.userCtx?.roles ?? [];
 	if (!name) throw error(401, 'Authentication required');
 	if (!roles.includes('_admin')) throw error(403, 'Admin privileges required');
+	setRequestActor(name);
 	return name;
 }
 
@@ -166,6 +169,7 @@ export async function requireSystemAdmin(cookie: string | null): Promise<Caller>
 	const roles = data?.userCtx?.roles ?? [];
 	if (!name) throw error(401, 'Authentication required');
 	if (!isSystemAdmin(roles)) throw error(403, 'System admin privileges required');
+	setRequestActor(name);
 	return { name, roles, isSA: true, shelterCode: shelterCodeFromRoles(roles) };
 }
 

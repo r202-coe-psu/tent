@@ -77,12 +77,18 @@ export async function findAsPublicWriter(
  * Returns `{ status, data }` shaped like {@link adminRaw}. Used by the public
  * donation PATCH (courier update) and the public booking POST (T-71 / CR-070).
  */
+function stampPublicWriter<T>(doc: T): T {
+	if (!doc || typeof doc !== 'object') return doc;
+	return { ...doc, updated_by: publicWriterName() ?? 'public' };
+}
+
 export async function putAsPublicWriter(
 	dbName: string,
 	docId: string,
 	doc: unknown
 ): Promise<{ status: number; data: unknown }> {
 	const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
+	doc = stampPublicWriter(doc);
 
 	if (writerUrl) {
 		const creds = parseCouchCredentialUrl(writerUrl);
@@ -194,7 +200,7 @@ export async function bulkAsPublicWriter(
 	failed: { id: string; reason: string }[];
 	written: { id: string; rev: string }[];
 }> {
-	const body = { docs, new_edits: true };
+	const body = { docs: docs.map(stampPublicWriter), new_edits: true };
 	const path = `/${dbName}/_bulk_docs`;
 
 	const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;

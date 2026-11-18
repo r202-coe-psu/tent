@@ -121,7 +121,9 @@ async def test_bulk_docs_returns_row_results():
     assert await client.bulk_docs("shelter_sh001", docs) == rows
     call = client._client.post.await_args
     assert call.args[0] == "/shelter_sh001/_bulk_docs"
-    assert call.kwargs["json"] == {"docs": docs}
+    assert call.kwargs["json"] == {
+        "docs": [{**doc, "updated_by": "worker"} for doc in docs]
+    }
 
     await client.close()
 

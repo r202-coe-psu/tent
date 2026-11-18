@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from worker.audit_diff import audit_diff_config
 from worker.couch.bootstrap import REGISTRY_DB, list_listened_shelters
 from worker.couch.changes import tail_database
-from worker.couch.client import CouchClient
+from worker.couch.checkpoint import get_checkpoint, save_checkpoint
+from worker.couch.client import CATALOG_DB, CouchClient
 from worker.masking import shelter_db_name
 
 logger = logging.getLogger(__name__)
@@ -26,7 +28,7 @@ class ListenerManager:
         for db_name in desired:
             await self.ensure_listener(db_name)
         for db_name in list(self._tasks):
-            if db_name != REGISTRY_DB and db_name not in desired:
+            if db_name not in (REGISTRY_DB, CATALOG_DB) and db_name not in desired:
                 await self.stop_listener(db_name)
 
     async def ensure_listener(self, database: str) -> None:
@@ -63,8 +65,19 @@ class ListenerManager:
                 logger.exception("Failed to sync shelter listeners")
             await asyncio.sleep(30)
 
+    async def start_catalog_listener(self) -> None:
+        if await get_checkpoint(
+            CATALOG_DB
+        ) is None and await self._couch.database_exists(CATALOG_DB):
+            await save_checkpoint(
+                CATALOG_DB, await self._couch.db_update_seq(CATALOG_DB)
+            )
+        await self.ensure_listener(CATALOG_DB)
+
     async def start(self) -> None:
         await self.ensure_listener(REGISTRY_DB)
+        if audit_diff_config().enabled:
+            await self.start_catalog_listener()
         await self.sync_shelter_listeners()
         asyncio.create_task(self.registry_watch_loop(), name="registry-watch")
 
