@@ -3,7 +3,7 @@ id: CR-243
 title: ปิดศูนย์ด้วย durable job — เช็คเอาต์คนในศูนย์ผ่าน shelter-close-worker แทนการทำใน request เดียว
 status: approved
 date: 2026-11-06
-updated: 2026-11-10
+updated: 2026-11-18 # decision sync: `SHELTER_CLOSE_WORKER_POLL_MS` default 2000 → 30000 (§4) — ไม่เปิด CR ใหม่ ไม่ bump schema_v · decided_by kong
 requested_by: Dev Team B issue #1216 (ต่อยอด CR-219 / #986)
 decided_by: kong
 layer: stable
@@ -200,7 +200,7 @@ $SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่
 | --------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `SHELTER_CLOSE_WORKER_TOKEN`      | บังคับ ไม่มี default               | Bearer token ของ internal route                                                                        |
 | `SHELTER_CLOSE_WORKER_URL`        | `http://host.docker.internal:5173` | ที่อยู่ frontend ที่ worker เรียก                                                                      |
-| `SHELTER_CLOSE_WORKER_POLL_MS`    | `2000`                             | ช่วง poll ตอนไม่มีงาน                                                                                  |
+| `SHELTER_CLOSE_WORKER_POLL_MS`    | `30000`                            | ช่วง poll ตอนไม่มีงาน                                                                                  |
 | `SHELTER_CLOSE_WORKER_TIMEOUT_MS` | `30000`                            | timeout ฝั่ง worker ต่อ request                                                                        |
 | `SHELTER_CLOSE_CHUNK_BUDGET_MS`   | `20000`                            | เวลาสูงสุดต่อ 1 chunk ใน route                                                                         |
 | `SHELTER_CLOSE_LEASE_MS`          | `60000`                            | อายุ lease                                                                                             |
@@ -255,6 +255,7 @@ $SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่
   และหยุดเมื่อได้ `409` · `end_reason` (§2) + FR-29 toast ตามสาเหตุ · view `jobs_claimable` (FR-1, FR-14, D-5) ·
   FR-16 ตรวจ `STALE_MS` · AC-12..AC-13 · ไม่มี decision ใหม่ด้าน scope
 - 2026-11-10 — แก้ตาม review รอบ 2 ข้อ 5: FR-19 ระบุพฤติกรรมเมื่อ sweep ครบ 3 รอบแล้วยังเหลือคน (`sweep_exhausted`)
+- 2026-11-18 — decision sync: ปรับ default `SHELTER_CLOSE_WORKER_POLL_MS` จาก `2000` เป็น `30000` (ลด request ว่างตอนไม่มี job) ผลคือหลังกดปิดศูนย์ job อาจรอได้สูงสุดประมาณ 30 วินาทีก่อนมี worker มารับ · ไม่กระทบลำดับ FR-16 (poll ไม่อยู่ในสาย `CHUNK_BUDGET < TIMEOUT < LEASE < STALE`) · แก้ default ใน §4 และ env/compose/`.env.example` · decided_by kong · ไม่เปิด CR ใหม่ · ไม่ bump schema_v
 
 ### ตัดสินแล้วใน #1216
 

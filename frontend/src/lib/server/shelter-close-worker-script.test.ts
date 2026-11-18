@@ -24,13 +24,13 @@ describe('parseConfig (FR-15, FR-16)', () => {
 			token: 'tok',
 			baseUrl: 'http://host.docker.internal:5173',
 			endpoint: 'http://host.docker.internal:5173/api/internal/shelter-close/worker/next',
-			pollMs: 2000,
+			pollMs: 30_000,
 			timeoutMs: 30_000,
 			chunkBudgetMs: 20_000,
 			leaseMs: 60_000,
 			staleMs: 600_000
 		});
-		expect(DEFAULTS).toMatchObject({ pollMs: 2000, timeoutMs: 30_000, leaseMs: 60_000 });
+		expect(DEFAULTS).toMatchObject({ pollMs: 30_000, timeoutMs: 30_000, leaseMs: 60_000 });
 		expect(c.workerId).toMatch(/^shelter-close-worker-/);
 	});
 

@@ -7,7 +7,7 @@ const LOG = '[shelter-close-worker]';
 
 export const DEFAULTS = Object.freeze({
 	url: 'http://host.docker.internal:5173',
-	pollMs: 2000,
+	pollMs: 30_000,
 	timeoutMs: 30_000,
 	chunkBudgetMs: 20_000,
 	leaseMs: 60_000,

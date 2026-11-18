@@ -135,7 +135,7 @@ describe('.env.example files (FR-36)', () => {
 	it('uses the same value in both files for every tunable and the documented defaults', () => {
 		const defaults: Record<string, string> = {
 			SHELTER_CLOSE_WORKER_URL: 'http://host.docker.internal:5173',
-			SHELTER_CLOSE_WORKER_POLL_MS: '2000',
+			SHELTER_CLOSE_WORKER_POLL_MS: '30000',
 			SHELTER_CLOSE_WORKER_TIMEOUT_MS: '30000',
 			SHELTER_CLOSE_CHUNK_BUDGET_MS: '20000',
 			SHELTER_CLOSE_LEASE_MS: '60000',
