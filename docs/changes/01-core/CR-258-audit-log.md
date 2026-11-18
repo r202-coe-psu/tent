@@ -128,7 +128,7 @@ migration: >
   | entity_type | value allowlist (ตั้งต้น) |
   | --- | --- |
   | `shelter` | `name`, `operation_status`, `capacity`, `site_kind`, `shelter_type`, `project_level`, `area_m2`, `area_type`, `floor_count`, `province`, `district`, `subdistrict` |
-  | `user` | `roles`, `display_name`, `disabled` |
+  | `user` | `roles`, `display_name`, `active` |
   | `master_data` | — (field เท่านั้น) |
   | `api_key` | `name`, `scopes`, `status`, `expires_at` |
   | `thirdparty_client` | `name`, `status`, `allowed_scopes` |
@@ -248,3 +248,4 @@ migration: >
 - 2026-11-17 — proposed
 - 2026-11-17 — Q1 = ไม่มีคอลัมน์ในหน้ารายการศูนย์ · Q2 = ตามข้อเสนอ (ไม่มี `audit_log` บน edge)
 - 2026-11-17 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-258
+- 2026-11-18 — แก้ allowlist ของ `user` จาก `disabled` เป็น `active` ให้ตรงกับ field จริงใน `_users` (ความหมายเดิม: สถานะเปิด/ปิดบัญชี)
