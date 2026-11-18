@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { adminRaw } from '$lib/server/couch-admin';
 import {
 	authorizeDonation,
+	donationShelters,
 	findDonationByQuery,
 	isInCallerScope,
 	routeErrorResponse
@@ -42,13 +43,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// A non-SA caller is looked up in their own shelter only: no read of other shelters'
 		// donations. Not found there is a 403 (AC-5), the same answer whether the ref exists in
 		// another shelter or nowhere — so the answer does not tell which.
-		if (!caller.isSA && !caller.shelterCode) {
+		const scope = caller.isSA ? undefined : donationShelters(caller);
+		if (scope && scope.length === 0) {
 			return json({ success: false, error: 'Forbidden' }, { status: 403, headers: NO_STORE });
 		}
-		const found = await findDonationByQuery(
-			query,
-			caller.isSA ? undefined : [caller.shelterCode as string]
-		);
+		const found = await findDonationByQuery(query, scope);
 		if (!found) {
 			return caller.isSA
 				? json({ success: false, error: 'Donation not found' }, { status: 404, headers: NO_STORE })

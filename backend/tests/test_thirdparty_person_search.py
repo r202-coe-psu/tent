@@ -4,6 +4,10 @@
 rules (`parse_search_query`, masking — CR-166 / CR-099) behind the partner envelope, drops
 `cancelled` people, never returns `family_members`, and leaves a `ThirdPartyAccessLog` row that
 holds no query text. It must NOT write a `search_audits` document.
+
+With `pii-full` on top (CR-257) it returns the whole values, passport, phone and the household.
+Most tests below seed pre-CR-257 rows (only `*_masked`) — the masked path must keep answering
+from them; the CR-257 section seeds plaintext rows.
 """
 
 from __future__ import annotations
@@ -489,3 +493,152 @@ async def test_checked_in_at_stays_null_before_check_in(
     response = await _search(client, CID)
     assert response.status_code == 200
     assert response.json()["result"][0]["checked_in_at"] is None
+
+
+# CR-257 — plaintext rows, masked vs full mode ────────────────────────────────────
+
+FULL = _bearer(["occupant-search", "pii-full"])
+ADDRESS = {
+    "address_no": "12/3",
+    "village_no": "หมู่ 2",
+    "subdistrict": "คอหงส์",
+    "district": "หาดใหญ่",
+    "province": "สงขลา",
+    "postal_code": "90110",
+}
+
+
+async def _plain_person(
+    suffix: str = "p1",
+    *,
+    first_name: str = FIRST_NAME,
+    status: str = "active",
+    household_id: str | None = None,
+    keyed: bool = True,
+    search_excluded: bool = False,
+) -> PublicPerson:
+    """A PROJECTION_VERSION 23 row: plaintext PII, no `*_masked` fields."""
+    return await PublicPerson(
+        id=f"evacuee:{suffix}",
+        shelter_code="SH001",
+        first_name=first_name,
+        first_name_key=name_key(first_name),
+        last_name=LAST_NAME,
+        last_name_hash=last_name_hash(LAST_NAME) if keyed else None,
+        national_id=CID,
+        national_id_hash=national_id_hash(CID) if keyed else None,
+        id_card_type="national_id",
+        passport_id=PASSPORT,
+        passport_hash=passport_hash(PASSPORT) if keyed else None,
+        phone=PHONE,
+        phone_hash=phone_hash(PHONE) if keyed else None,
+        address=ADDRESS,
+        gender="male",
+        household_id=household_id,
+        search_excluded=search_excluded,
+        status=status,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+
+async def test_masked_mode_masks_plaintext_rows_like_before(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    await _plain_person()
+
+    response = await _search(client, CID)
+    assert response.status_code == 200
+    item = response.json()["result"][0]
+    assert item["name"] == f"{FIRST_NAME} ใ****"
+    assert item["national_id"] == "390-XXXX-XX-192"
+    assert item["origin_address"] == "**/* ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา"
+    for key in ("first_name", "last_name", "passport_id", "phone", "id_card_type"):
+        assert key not in item
+    assert "family_members" not in item
+    for plaintext in (CID, PHONE, PASSPORT, LAST_NAME, "12/3"):
+        assert plaintext not in response.text
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["granted"]
+
+
+@pytest.mark.parametrize("query", [CID, NAME_QUERY, PHONE, PASSPORT])
+async def test_full_mode_returns_whole_values_and_household(
+    client: AsyncClient, shelter: PublicShelter, query: str
+) -> None:
+    await _plain_person("parent", household_id="household:01")
+    await _plain_person("child", first_name="ลูก", household_id="household:01", keyed=False)
+    await _plain_person(
+        "gone", first_name="ยกเลิก", household_id="household:01", keyed=False, status="cancelled"
+    )
+    await _plain_person(
+        "hidden", first_name="ซ่อน", household_id="household:01", keyed=False, search_excluded=True
+    )
+
+    response = await _search(client, query, headers=FULL)
+    assert response.status_code == 200
+    assert "no-store" in response.headers.get("cache-control", "")
+    (item,) = response.json()["result"]
+    assert item["name"] == f"{FIRST_NAME} {LAST_NAME}"
+    assert item["first_name"] == FIRST_NAME
+    assert item["last_name"] == LAST_NAME
+    assert item["national_id"] == CID
+    assert item["id_card_type"] == "national_id"
+    assert item["passport_id"] == PASSPORT
+    assert item["phone"] == PHONE
+    assert item["origin_address"] == "12/3 หมู่ 2 ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา 90110"
+    assert item["family_members"] == [
+        {
+            "first_name": "ลูก",
+            "last_name": LAST_NAME,
+            "name": f"ลูก {LAST_NAME}",
+            "status": "active",
+            "shelter_name": "ศูนย์หนึ่ง",
+            "shelter_status": "open",
+        }
+    ]
+
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["granted_full"]
+    assert logs[0].result_count == 1
+    assert query not in logs[0].model_dump_json()
+    assert await SearchAudit.find_all().count() == 0
+
+
+async def test_full_mode_still_drops_cancelled_and_search_excluded(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    await _plain_person("c", status="cancelled")
+    await _plain_person("x", search_excluded=True)
+
+    response = await _search(client, CID, headers=FULL)
+    assert response.status_code == 200
+    assert response.json()["result"] == []
+
+
+async def test_pii_full_alone_grants_nothing(client: AsyncClient, shelter: PublicShelter) -> None:
+    await _plain_person()
+
+    response = await _search(client, CID, headers=_bearer(["pii-full"]))
+    assert response.status_code == 403
+    assert response.json()["code"] == "insufficient_scope"
+    assert CID not in response.text
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["denied_insufficient_scope"]
+
+
+async def test_full_mode_never_falls_back_to_masked_values(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    """A row projected before PROJECTION_VERSION 23 has no plaintext: `null`, not a mask."""
+    await _person()
+
+    response = await _search(client, CID, headers=FULL)
+    assert response.status_code == 200
+    (item,) = response.json()["result"]
+    assert item["name"] == FIRST_NAME
+    assert item["last_name"] is None
+    assert item["national_id"] is None
+    assert item["passport_id"] is None
+    assert item["origin_address"] is None
+    assert "****" not in response.text
+    assert "XXXX" not in response.text

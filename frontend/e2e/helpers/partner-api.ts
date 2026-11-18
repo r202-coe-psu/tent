@@ -28,30 +28,38 @@ import { publicShelter, teardownShelter } from './public-cleanup';
 // ─── Scopes + endpoint table ───────────────────────────────────────────────────
 
 /**
- * The eight scopes a partner client can hold (`tent_model.third_party_client`, mirrored by the
+ * The nine scopes a partner client can hold (`tent_model.third_party_client`, mirrored by the
  * staff UI's `GRANTABLE_SCOPES`), imported so a new scope cannot be forgotten here.
  */
 export const PARTNER_SCOPES = GRANTABLE_SCOPES;
 export type PartnerScope = GrantableScope;
 
 /** What a scope without an endpoint of its own changes (a flag on another call, not a route). */
-export interface ScopeProbe {
-	/** The endpoint whose behaviour the scope alters. */
-	ext: 'EXT-008';
-	/** Answer a client WITHOUT the scope gets (the scope present would turn it into a 201). */
-	status: number;
-	code: string;
-}
+export type ScopeProbe =
+	| {
+			/** Without the scope the call is refused by another rule (not the 403 scope gate). */
+			kind: 'refused';
+			ext: 'EXT-008';
+			status: number;
+			code: string;
+	  }
+	| {
+			/** Without the scope the call still answers 200, with masked values (CR-257). */
+			kind: 'masked';
+			ext: 'EXT-012';
+	  };
 
 /**
  * A4 removes each scope in turn and asserts the endpoints that need it answer 403. A scope that
  * is not a gate on any route has nothing to assert that way, so it lists its probe here: the
  * call that behaves differently without it. `booking-bypass` (#751) lets a `booking-write`
  * client book a shelter that is closed to bookings; without it that call is a 409, never a 403.
+ * `pii-full` (CR-257) unmasks EXT-007 / EXT-012; without it EXT-012 answers masked.
  * A scope with neither an endpoint in {@link PARTNER_ENDPOINTS} nor a probe fails A4 loudly.
  */
 export const SCOPE_PROBES: Readonly<Record<string, ScopeProbe>> = {
-	'booking-bypass': { ext: 'EXT-008', status: 409, code: 'location_not_bookable' }
+	'booking-bypass': { kind: 'refused', ext: 'EXT-008', status: 409, code: 'location_not_bookable' },
+	'pii-full': { kind: 'masked', ext: 'EXT-012' }
 };
 
 /**

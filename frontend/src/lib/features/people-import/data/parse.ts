@@ -10,7 +10,8 @@ import {
 	SHEETS,
 	type SheetDef
 } from '../domain/columns';
-import type { Worksheet } from 'exceljs';
+import type { Cell, Worksheet } from 'exceljs';
+import { formatWallClock } from '../domain/datetime';
 import type { ParsedWorkbook, RawRow, RawSheetRow } from '../domain/import-row';
 
 /**
@@ -38,6 +39,16 @@ import type { ParsedWorkbook, RawRow, RawSheetRow } from '../domain/import-row';
  * shared app bundle.
  */
 
+/**
+ * A cell's text. A real spreadsheet date (the user overrode the Text format) comes back as a
+ * `Date`, not text — re-render it in the file's own date-time format so the validator sees one
+ * shape. `cell.text` would give an ISO string in UTC, which reads an hour-off Bangkok time.
+ */
+function cellText(cell: Cell): string {
+	if (cell.value instanceof Date) return formatWallClock(cell.value);
+	return String(cell.text ?? '').trim();
+}
+
 function readSheet(ws: Worksheet, sheet: SheetDef): RawSheetRow[] {
 	const headerToCol = new Map<string, number>();
 	ws.getRow(1).eachCell((cell, col) => {
@@ -57,7 +68,7 @@ function readSheet(ws: Worksheet, sheet: SheetDef): RawSheetRow[] {
 		const cells: RawRow = {};
 		let hasValue = false;
 		for (const header of known) {
-			const text = String(row.getCell(headerToCol.get(header)!).text ?? '').trim();
+			const text = cellText(row.getCell(headerToCol.get(header)!));
 			cells[header] = text;
 			// The join key alone is not data — the template pre-fills it.
 			if (text && header !== sheet.refHeader) hasValue = true;

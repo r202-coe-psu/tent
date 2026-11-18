@@ -72,6 +72,79 @@ export type RejectDonationInput = z.infer<typeof rejectDonationInputSchema>;
 
 export const rejectNoteSchema = noteSchema;
 
+/**
+ * The formal message put in the detail box the moment staff pick a reason (#1256), for them to edit.
+ * The donor reads the detail on the tracking page, so none of them names a person, a phone number
+ * or a shelter. Each reason says why in its own words — "we have enough" is never sent for an
+ * expired item. Expired and damaged goods share one message, which carries its own thanks and,
+ * unlike the other two, does not ask the donor to pass the goods on: spoiled or broken things
+ * should not reach another shelter either (no separate CR — see the CR-255 decision log).
+ * "other" and the legacy `not_needed` get none.
+ */
+const OVER_NEED =
+	'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง ขณะนี้ทางศูนย์มีสิ่งของประเภทนี้เพียงพอแล้ว จึงยังไม่สามารถรับเพิ่มได้ หากท่านยังประสงค์จะช่วยเหลือ รบกวนนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่ยังต้องการ จะเป็นประโยชน์ต่อผู้ที่กำลังเดือดร้อนอย่างมาก';
+
+const NOT_ELIGIBLE =
+	'ทางศูนย์ขอขอบคุณในน้ำใจของท่านเป็นอย่างยิ่ง สิ่งของนี้ไม่ตรงกับประเภทที่ทางศูนย์รับได้ รบกวนท่านนำไปมอบให้ศูนย์พักพิงแห่งอื่นที่รับสิ่งของลักษณะนี้ เพื่อให้ไปถึงมือผู้ที่ต้องการต่อไป';
+
+const SAFETY =
+	'เพื่อความปลอดภัยของผู้ใช้ ทางศูนย์ไม่สามารถรับสิ่งของที่หมดอายุหรือชำรุดได้ ขออภัยในความไม่สะดวก และขอบคุณในความตั้งใจดีของท่าน';
+
+const REJECT_NOTE_TEMPLATES: Partial<Record<DonationRejectReasonCode, string>> = {
+	over_need: OVER_NEED,
+	not_eligible: NOT_ELIGIBLE,
+	expired: SAFETY,
+	damaged: SAFETY
+};
+
+/** The message for `code`; null when the reason has none (or none is picked). */
+export function rejectNoteTemplate(code: DonationRejectReasonCode | undefined): string | null {
+	return (code && REJECT_NOTE_TEMPLATES[code]) || null;
+}
+
+/** All the messages, so a note can be checked for one — staff may have written around it. */
+const TEMPLATE_TEXTS: readonly string[] = [...new Set(Object.values(REJECT_NOTE_TEMPLATES))];
+
+function findTemplateIn(note: string): string | undefined {
+	return TEMPLATE_TEXTS.find((text) => note.includes(text));
+}
+
+/** True when `note` still holds one of the messages (alone, or with staff's words around it). */
+export function containsRejectNoteTemplate(note: string): boolean {
+	return findTemplateIn(note) !== undefined;
+}
+
+function swapIn(note: string, from: string, to: string): string {
+	return note
+		.replace(from, to)
+		.replace(/\s{2,}/g, ' ')
+		.trim();
+}
+
+/**
+ * The detail box after staff pick `code`: that reason's message goes in. An empty box takes it; a
+ * message already there (alone, or among staff's words) is swapped for the new reason's, or dropped
+ * when the new reason has none; staff's own words stay and the message goes after them. Only an
+ * untouched message follows the reason; text staff reworded is theirs and is not this function's to
+ * judge (the caller decides whether to call it). Where adding or swapping would
+ * pass {@link REJECT_NOTE_MAX}, staff's text wins: the box is left as it was (or loses just the old
+ * message) instead of cutting a sentence.
+ */
+export function noteForReason(note: string, code: DonationRejectReasonCode | undefined): string {
+	const replacement = rejectNoteTemplate(code) ?? '';
+	const current = note.trim();
+	const existing = findTemplateIn(current);
+	if (existing) {
+		if (existing === replacement) return note;
+		const swapped = swapIn(current, existing, replacement);
+		return swapped.length > REJECT_NOTE_MAX ? swapIn(current, existing, '') : swapped;
+	}
+	if (replacement === '') return note;
+	if (current === '') return replacement;
+	const appended = `${current} ${replacement}`;
+	return appended.length > REJECT_NOTE_MAX ? note : appended;
+}
+
 function truncate(text: string, max: number): string {
 	return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }

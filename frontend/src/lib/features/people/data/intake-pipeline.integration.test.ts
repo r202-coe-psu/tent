@@ -179,15 +179,16 @@ describe('intake pipeline integration (#209)', () => {
 		expect(screenings.filter((s) => s.evacuee_id === registered._id)).toHaveLength(0);
 	});
 
-	it('4. Station 2 simplified medical screening (CR-106): records screening without triage or vitals, empty EWAR for asymptomatic, and updates zoning recommendation', async () => {
+	it('4. Station 2 medical screening: records triage without vitals, empty EWAR for asymptomatic, and updates zoning recommendation', async () => {
 		const registered = await repo.createEvacuee(evInput({ special_needs: [] }), ctx);
 
-		// Record simplified screening: care track, empty EWAR (asymptomatic), free-text notes, no triage/vitals
+		// Record screening: care track, green triage, empty EWAR (asymptomatic), free-text notes, no vitals
 		const { screening, evacuee: afterScreen } = await repo.recordMedicalScreening(
 			{
 				screening: {
 					evacuee_id: registered._id,
 					track: 'normal',
+					triage_level: 'green',
 					symptoms: [],
 					notes: 'ผู้ประสบภัยแจ้งว่าไม่มีอาการป่วย สบายดี'
 				},
@@ -196,8 +197,8 @@ describe('intake pipeline integration (#209)', () => {
 			ctx
 		);
 
-		// Verified absent triage and vitals (never stamped at all, per CR-106 2026-09-07)
-		expect(screening.triage_level).toBeUndefined();
+		// Triage persists; vitals are never stamped (CR-106 2026-09-07)
+		expect(screening.triage_level).toBe('green');
 		expect(screening.vital_signs).toBeUndefined();
 		expect(screening.symptoms).toEqual([]);
 		expect(screening.notes).toBe('ผู้ประสบภัยแจ้งว่าไม่มีอาการป่วย สบายดี');
@@ -218,7 +219,13 @@ describe('intake pipeline integration (#209)', () => {
 			})
 		).toBe('pending');
 
-		// Zoning recommendation based on EWAR symptoms (empty = general)
-		expect(recommendZoneKind(mid!, screening.symptoms)).toBe('general');
+		// Zoning recommendation: no EWAR + green triage = general; yellow alone = quarantine
+		expect(
+			recommendZoneKind(mid!, {
+				symptoms: screening.symptoms,
+				triage: screening.triage_level
+			})
+		).toBe('general');
+		expect(recommendZoneKind(mid!, { symptoms: [], triage: 'yellow' })).toBe('quarantine');
 	});
 });

@@ -80,10 +80,10 @@
 	const hasSubject = $derived(evacuee != null || ewar_symptoms != null || triage_level != null);
 
 	const recommendedZoneType = $derived(
-		recommendZoneKind(
-			evacuee ?? { vulnerable_groups: [], special_needs: [] },
-			ewar_symptoms ?? triage_level
-		)
+		recommendZoneKind(evacuee ?? { vulnerable_groups: [], special_needs: [] }, {
+			symptoms: ewar_symptoms,
+			triage: triage_level
+		})
 	);
 
 	/** Null when no open zone has the recommended type — never another type's zone. */

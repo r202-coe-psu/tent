@@ -1413,7 +1413,17 @@ class FakeHostInfoRoute(FakePrintRoute):
         super().__init__(url="https://tent.example.go.th/api/v1/kiosk/host-info", **kwargs)
 
 
+NO_UPDATE_INFO = {"commit": None, "updated_at": None, "last_check": None}
+
+
 class KioskHostInfoRouteTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Never read the real checkout or ~/.local/state from a test.
+        self.update_info = patch.object(
+            manager.kiosk_updater, "update_info", return_value=NO_UPDATE_INFO
+        ).start()
+        self.addCleanup(patch.stopall)
+
     async def test_answers_locally_with_the_hostname_and_lan_ips_outbound_first(self):
         route = FakeHostInfoRoute()
         resolved = ("127.0.1.1", "10.0.0.5", "192.168.1.42")
@@ -1425,7 +1435,35 @@ class KioskHostInfoRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertEqual(
             route.fulfilled["body"],
-            {"hostname": "kiosk-07", "ips": ["192.168.1.42", "10.0.0.5"]},
+            {"hostname": "kiosk-07", "ips": ["192.168.1.42", "10.0.0.5"], **NO_UPDATE_INFO},
+        )
+
+    async def test_tells_the_running_commit_and_the_last_update_of_this_checkout(self):
+        route = FakeHostInfoRoute()
+        update = {
+            "commit": "6220c41",
+            "updated_at": "2026-11-17T08:01:12",
+            "last_check": {"at": "2026-11-17T08:01:12", "outcome": "updated"},
+        }
+        self.update_info.return_value = update
+
+        with fake_network(resolved=("192.168.1.42",)):
+            await manager.ScannerClientManager(valid_config())._route_kiosk_api(route)
+
+        self.update_info.assert_called_once_with(manager.KIOSK_DIR)
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertEqual(route.fulfilled["body"], {"hostname": "kiosk-07", "ips": ["192.168.1.42"], **update})
+
+    async def test_still_answers_the_host_when_the_update_info_fails(self):
+        route = FakeHostInfoRoute()
+        self.update_info.side_effect = RuntimeError("git is gone")
+
+        with fake_network(resolved=("192.168.1.42",)):
+            await manager.ScannerClientManager(valid_config())._route_kiosk_api(route)
+
+        self.assertEqual(
+            route.fulfilled["body"],
+            {"hostname": "kiosk-07", "ips": ["192.168.1.42"], **NO_UPDATE_INFO},
         )
 
     async def test_response_is_not_cacheable_and_carries_no_credentials(self):
@@ -1454,7 +1492,7 @@ class KioskHostInfoRouteTests(unittest.IsolatedAsyncioTestCase):
             await manager.ScannerClientManager(valid_config())._route_kiosk_api(route)
 
         self.assertEqual(route.fulfilled["status"], 200)
-        self.assertEqual(route.fulfilled["body"], {"hostname": None, "ips": []})
+        self.assertEqual(route.fulfilled["body"], {"hostname": None, "ips": [], **NO_UPDATE_INFO})
 
     async def test_still_answers_with_empty_info_when_the_lookup_is_too_slow(self):
         route = FakeHostInfoRoute()
@@ -1473,7 +1511,7 @@ class KioskHostInfoRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertLess(time.monotonic() - started, 0.4)
         self.assertEqual(route.fulfilled["status"], 200)
-        self.assertEqual(route.fulfilled["body"], {"hostname": None, "ips": []})
+        self.assertEqual(route.fulfilled["body"], {"hostname": None, "ips": [], **NO_UPDATE_INFO})
 
     async def test_foreign_origin_or_get_gets_a_local_404_and_never_reaches_the_server(self):
         client = manager.ScannerClientManager(valid_config())

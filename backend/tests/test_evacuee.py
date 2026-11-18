@@ -55,7 +55,8 @@ async def _insert_person(
 ) -> None:
     """Insert a `public_persons` row the way the worker projects it (CR-166 keys included).
 
-    `last_name` is the full surname the worker would hash; it is never stored.
+    `last_name` is the surname the worker would hash. Rows that leave `doc["last_name"]` out are
+    pre-CR-257 rows (only `*_masked`); rows that set it are PROJECTION_VERSION 23 rows.
     """
     doc = {
         "first_name_key": name_key(doc.get("first_name", "")),
@@ -842,14 +843,20 @@ async def _insert_twelve_matches(
                 "_id": f"evacuee:{index:02d}",
                 "shelter_code": "SH001",
                 "first_name": "สมศรี" if same_first_name else f"ทดสอบ{index:02d}",
-                # Distinct display surname per row so the response order is observable.
-                "last_name_masked": f"ใจ{index:02d}",
+                # Distinct surname per row (also once masked) so the response order is observable.
+                "last_name": f"ใจดีมาก{index:02d}",
                 field: hasher(query),
                 "search_excluded": False,
                 "status": "active",
                 "updated_at": now,
             },
         )
+
+
+def _surname(endpoint: tuple[str, dict[str, str]], index: int) -> str:
+    """Public search masks the surname; legacy `/external/v1/occupants` returns it (CR-257 D-6)."""
+    surname = f"ใจดีมาก{index:02d}"
+    return mask_last_name(surname) if endpoint[0].startswith("/public/") else surname
 
 
 async def _names(
@@ -872,7 +879,7 @@ async def test_id_search_returns_the_first_ten_by_first_name_key(
     """12 matches: the 10 returned are the first ten by first name, whatever the insert order."""
     await _insert_twelve_matches(db_client, settings, kind, same_first_name=False)
 
-    expected = [f"ทดสอบ{index:02d} ใจ{index:02d}" for index in range(1, 11)]
+    expected = [f"ทดสอบ{index:02d} {_surname(search_endpoint, index)}" for index in range(1, 11)]
     assert await _names(client, search_endpoint, _ID_QUERIES[kind][0]) == expected
 
 
@@ -887,7 +894,7 @@ async def test_id_search_breaks_first_name_ties_by_id(
     """Same first name for everyone: `_id` decides which 10 of 12 survive the cap."""
     await _insert_twelve_matches(db_client, settings, kind, same_first_name=True)
 
-    expected = [f"สมศรี ใจ{index:02d}" for index in range(1, 11)]
+    expected = [f"สมศรี {_surname(search_endpoint, index)}" for index in range(1, 11)]
     assert await _names(client, search_endpoint, _ID_QUERIES[kind][0]) == expected
 
 
@@ -927,7 +934,7 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
                 "_id": doc_id,
                 "shelter_code": "SH001",
                 "first_name": first_name,
-                "last_name_masked": mask_last_name("ใจดี"),
+                "last_name": "ใจดี",
                 "phone_hash": phone_hash(phone) if first_name == "พ่อ" else None,
                 "household_id": "household:cancelled",
                 "search_excluded": False,
@@ -943,7 +950,8 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
     assert body["count"] == 1
     assert body["results"][0]["status"] == "cancelled"
     members = body["results"][0]["family_members"]
-    assert [m["name"] for m in members] == [f"ลูก {mask_last_name('ใจดี')}"]
+    surname = mask_last_name("ใจดี") if path.startswith("/public/") else "ใจดี"
+    assert [m["name"] for m in members] == [f"ลูก {surname}"]
     assert members[0]["status"] == "cancelled"
 
 
@@ -1349,3 +1357,95 @@ async def test_public_search_stores_only_well_formed_request_id(
     assert response.status_code == 200, response.text
     audit = (await AuditEvent.find_all().to_list())[0]
     assert audit.request_id == stored
+
+
+# ─── CR-257: plaintext rows — public stays masked, legacy external is full ─────────────────
+
+_PLAIN_CID = "3900100244192"
+_PLAIN_PHONE = "0844444444"
+_PLAIN_PASSPORT = "AA7654321"
+
+
+async def _seed_plaintext_household(db_client: AsyncMongoClient, settings: Settings) -> None:
+    now = datetime.now(UTC)
+    for suffix, first_name, keyed in (("head", "สมชาย", True), ("kid", "ลูก", False)):
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:plain-{suffix}",
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name": "ศรีสุวรรณ",
+                "national_id": _PLAIN_CID if keyed else None,
+                "national_id_hash": national_id_hash(_PLAIN_CID) if keyed else None,
+                "id_card_type": "national_id" if keyed else None,
+                "passport_id": _PLAIN_PASSPORT if keyed else None,
+                "passport_hash": passport_hash(_PLAIN_PASSPORT) if keyed else None,
+                "phone": _PLAIN_PHONE if keyed else None,
+                "phone_hash": phone_hash(_PLAIN_PHONE) if keyed else None,
+                "address": {
+                    "address_no": "99/1",
+                    "village_no": "หมู่ 4",
+                    "subdistrict": "คอหงส์",
+                    "district": "หาดใหญ่",
+                    "province": "สงขลา",
+                    "postal_code": "90110",
+                },
+                "household_id": "household:plain",
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+            last_name="ศรีสุวรรณ" if keyed else None,
+        )
+
+
+@pytest.mark.parametrize("query", [_PLAIN_CID, _PLAIN_PHONE, _PLAIN_PASSPORT, "สมชาย ศรีสุวรรณ"])
+async def test_public_search_masks_plaintext_rows_and_leaks_nothing(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+    query: str,
+):
+    """Guard (CR-257 FR-8 / FR-11): the anonymous search output equals the pre-CR-257 masks."""
+    await _seed_plaintext_household(db_client, settings)
+
+    response = await client.post(
+        "/public/v1/occupants", json=public_search_payload(query), headers=auth_headers
+    )
+    assert response.status_code == 200
+    (result,) = response.json()["results"]
+    assert result["name"] == "สมชาย ศรี****รณ"
+    assert result["national_id"] == "390-XXXX-XX-192"
+    assert result["origin_address"] == "**/* ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา"
+    assert [m["name"] for m in result["family_members"]] == ["ลูก ศรี****รณ"]
+    for plaintext in (_PLAIN_CID, _PLAIN_PHONE, _PLAIN_PASSPORT, "ศรีสุวรรณ", "99/1", "หมู่ 4"):
+        assert plaintext not in response.text
+    for key in ("phone", "passport_id", "first_name", "last_name", "id_card_type", "address"):
+        assert key not in result
+
+
+async def test_legacy_external_search_returns_full_values(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+):
+    """CR-257 D-6 / OD-2: legacy `/external/v1/occupants` unmasks its existing fields only."""
+    path, headers = search_endpoint
+    if path.startswith("/public/"):
+        pytest.skip("legacy external endpoint only")
+    await _seed_plaintext_household(db_client, settings)
+
+    response = await client.post(path, json=search_body(path, _PLAIN_CID), headers=headers)
+    assert response.status_code == 200
+    (result,) = response.json()["results"]
+    assert result["name"] == "สมชาย ศรีสุวรรณ"
+    assert result["national_id"] == _PLAIN_CID
+    assert result["origin_address"] == "99/1 หมู่ 4 ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา 90110"
+    assert [m["name"] for m in result["family_members"]] == ["ลูก ศรีสุวรรณ"]
+    # OD-2: no new fields on the legacy plane.
+    for key in ("phone", "passport_id", "id_card_type"):
+        assert key not in result

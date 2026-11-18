@@ -19,7 +19,13 @@ const INFO: KioskDeviceInfo = {
 	staffPin: { isDefault: false, updatedAt: '2026-10-01T00:00:00Z' },
 	bannerGroup: { id: 'bg-1', name: 'กลุ่มแบนเนอร์ A' }
 };
-const HOST: KioskHostInfo = { hostname: 'kiosk3', ips: ['192.168.1.50'] };
+const HOST: KioskHostInfo = {
+	hostname: 'kiosk3',
+	ips: ['192.168.1.50'],
+	commit: '6220c41',
+	updatedAt: null,
+	lastCheck: null
+};
 
 function setup(
 	deviceInfo: KioskDeviceInfoResult = { kind: 'ok', info: INFO },
