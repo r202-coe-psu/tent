@@ -32,7 +32,8 @@
 		maskNationalId,
 		lookupFederatedByScanCode,
 		latestTriageByEvacuee,
-		displayTriageLevel
+		displayTriageLevel,
+		sortByCreatedAtAsc
 	} from '$lib/features/people';
 	import {
 		ClaimDialog,
@@ -91,10 +92,14 @@
 	let lookupInFlight = $state(false);
 
 	const pendingEvacuees = $derived(
-		allEvacuees.filter((e) => classifyScreeningQueueTab(e, screenedIds) === 'pending')
+		sortByCreatedAtAsc(allEvacuees).filter(
+			(e) => classifyScreeningQueueTab(e, screenedIds) === 'pending'
+		)
 	);
 	const screenedEvacuees = $derived(
-		allEvacuees.filter((e) => classifyScreeningQueueTab(e, screenedIds) === 'screened')
+		sortByCreatedAtAsc(allEvacuees).filter(
+			(e) => classifyScreeningQueueTab(e, screenedIds) === 'screened'
+		)
 	);
 
 	const tabEvacuees = $derived(activeTab === 'pending' ? pendingEvacuees : screenedEvacuees);
