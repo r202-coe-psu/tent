@@ -27,7 +27,7 @@ type LoadResult = {
 		shelters_total: number;
 		shelters_open: number;
 		counts_by_site_kind: Record<string, number>;
-	};
+	} | null;
 	filters: Record<string, string>;
 	available_types: string[];
 };
@@ -402,7 +402,7 @@ describe('public/shelters load function', () => {
 			]);
 		});
 
-		it('falls back to zeros, and still lists, when the summary is unavailable', async () => {
+		it('reports no summary — never zeros — and still lists, when the summary is unavailable', async () => {
 			vi.mocked(fetchShelterSummary).mockRejectedValue(new Error('down'));
 			vi.mocked(listPublicShelters).mockResolvedValue({
 				shelters: [item('SH001')],
@@ -413,11 +413,8 @@ describe('public/shelters load function', () => {
 			const result = await runLoad(new URL('http://localhost/shelters'));
 
 			expect(result.shelters).toHaveLength(1);
-			expect(result.summary).toEqual({
-				shelters_total: 0,
-				shelters_open: 0,
-				counts_by_site_kind: {}
-			});
+			// zeros would read as "no shelters at all"; the page shows a dash for null
+			expect(result.summary).toBeNull();
 		});
 	});
 });

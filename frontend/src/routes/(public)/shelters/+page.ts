@@ -27,12 +27,6 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 	return R * c;
 }
 
-const EMPTY_SUMMARY: PublicShelterSummary = {
-	shelters_total: 0,
-	shelters_open: 0,
-	counts_by_site_kind: {}
-};
-
 export const load: PageLoad = async ({ url, fetch }) => {
 	const search = url.searchParams.get('q') || '';
 	const province = url.searchParams.get('province') || '';
@@ -72,9 +66,11 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const hasRadius = hasUser && !Number.isNaN(maxDistance) && maxDistance > 0;
 
 	// The cards count every shelter the page can list, whatever the filters say (#1419).
-	const summaryPromise = fetchShelterSummary({ hide_host_house: true, fetch }).catch(
-		() => EMPTY_SUMMARY
-	);
+	// When it cannot be had the cards say so (`null` → a dash). Zeros would read as "no shelters".
+	const summaryPromise: Promise<PublicShelterSummary | null> = fetchShelterSummary({
+		hide_host_house: true,
+		fetch
+	}).catch(() => null);
 
 	let shelterTypes: MasterLabelOption[] = [];
 	try {

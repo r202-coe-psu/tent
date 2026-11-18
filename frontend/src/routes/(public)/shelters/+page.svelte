@@ -65,7 +65,7 @@
 	const cardT = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 	const siteKindsQuery = useSiteKinds();
 	const siteKindStatTiles = $derived(
-		siteKindTiles(data?.summary?.counts_by_site_kind ?? {}, siteKindsQuery.data)
+		data?.summary ? siteKindTiles(data.summary.counts_by_site_kind, siteKindsQuery.data) : []
 	);
 
 	onMount(() => {
@@ -292,7 +292,7 @@
 	>
 		<PublicShelterMetricCard
 			title={t.totalShelters}
-			value={data?.summary?.shelters_total ?? 0}
+			value={data?.summary?.shelters_total ?? '–'}
 			unit={t.locationsUnit}
 			icon={ClipboardList}
 			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple"
@@ -300,7 +300,7 @@
 
 		<PublicShelterMetricCard
 			title={t.openShelters}
-			value={data?.summary?.shelters_open ?? 0}
+			value={data?.summary?.shelters_open ?? '–'}
 			unit={t.locationsUnit}
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
