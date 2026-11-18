@@ -31,6 +31,7 @@ import type { EvacueeSearchCursor, EvacueeSearchPage } from '../domain/evacuee-s
 import type { EvacueeSort } from '../domain/evacuee-sort';
 import type { EvacueeFilters } from './people.repository';
 import {
+	createMovement,
 	createKioskEvacueeFromCard,
 	createKioskWalkInHousehold,
 	type CardSnapshot,
@@ -1082,6 +1083,81 @@ describe('check-in / check-out', () => {
 		});
 	});
 
+	describe('applyBackfilledStays (Backfill Import, #1399)', () => {
+		function stayOf(
+			evacuee: Awaited<ReturnType<typeof repo.createEvacuee>>,
+			status: 'active' | 'checked_out'
+		) {
+			const arrived = '2026-11-10T07:00:00.000Z';
+			const departed = '2026-11-12T02:30:00.000Z';
+			const checkIn = createMovement(
+				{ evacuee_id: evacuee._id, action: 'check_in', zone: 'A', occurred_at: arrived },
+				ctx
+			);
+			const movements =
+				status === 'active'
+					? [checkIn]
+					: [
+							checkIn,
+							createMovement(
+								{
+									evacuee_id: evacuee._id,
+									action: 'check_out',
+									zone: null,
+									reason: 'backfill_import',
+									occurred_at: departed
+								},
+								ctx
+							)
+						];
+			const last = movements[movements.length - 1];
+			return {
+				evacuee: {
+					...evacuee,
+					current_stay: {
+						status,
+						zone: status === 'active' ? 'A' : null,
+						since: last.occurred_at
+					}
+				},
+				movements
+			};
+		}
+
+		it('keeps the back-dated occurred_at, persists the stay and derives the household status', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครอบครัวทดสอบ', head_evacuee_id: null, status: 'pre_registered' } as never,
+				ctx
+			);
+			const head = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
+			const member = await repo.createEvacuee(
+				evInput({ first_name: 'Somying', household_id: household._id }),
+				ctx
+			);
+
+			await repo.applyBackfilledStays(household._id, [
+				stayOf(head, 'active'),
+				stayOf(member, 'checked_out')
+			]);
+
+			const movements = await repo.listMovementsByEvacuee(member._id);
+			expect(movements.map((m) => [m.action, m.occurred_at, m.reason ?? null])).toEqual(
+				expect.arrayContaining([
+					['check_in', '2026-11-10T07:00:00.000Z', null],
+					['check_out', '2026-11-12T02:30:00.000Z', 'backfill_import']
+				])
+			);
+			expect((await repo.getEvacuee(member._id))?.current_stay).toEqual({
+				status: 'checked_out',
+				zone: null,
+				since: '2026-11-12T02:30:00.000Z'
+			});
+			expect((await repo.getEvacuee(head._id))?.current_stay.status).toBe('active');
+			// One member still housed → the household reads as checked in.
+			expect((await repo.getHousehold(household._id))?.status).toBe('checked_in');
+		});
+	});
+
 	describe('checkOutEvacuee', () => {
 		it('records a check_out movement and updates current_stay to checked_out', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
@@ -1632,6 +1708,28 @@ describe('check-in / check-out', () => {
 			const fetched = await repo.getEvacuee(evacuee._id);
 			expect(fetched?.current_stay.status).toBe('arriving');
 			expect(fetched?.current_stay.zone).toBeNull();
+		});
+
+		it('persists triage_level from the Station 2 form', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({ first_name: 'Triage', status: 'arriving' }),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'normal',
+						triage_level: 'yellow',
+						symptoms: []
+					},
+					checkIn: false
+				},
+				ctx
+			);
+
+			expect(result.screening.triage_level).toBe('yellow');
 		});
 
 		it('creates screening doc and checks in evacuee to active when checkIn is true with zone', async () => {

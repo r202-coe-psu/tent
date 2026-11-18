@@ -6,9 +6,6 @@ import pytest
 
 from worker.masking import (
     last_name_hash,
-    mask_last_name,
-    mask_national_id,
-    mask_passport,
     name_key,
     national_id_hash,
     passport_hash,
@@ -20,7 +17,11 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
+from worker.projectors.occupancy import (
+    aggregate_occupancy,
+    count_stay_statuses,
+    count_zone_stay_statuses,
+)
 from worker.projectors.shelter import (
     RetentionPhase,
     classify_registry_shelter,
@@ -57,18 +58,6 @@ def test_search_key_vectors_are_pinned():
     )
     assert last_name_hash("") is None
     assert last_name_hash(None) is None
-
-
-def test_mask_last_name_long_thai():
-    assert mask_last_name("ประเสริฐ") == "ปร****ริฐ"
-
-
-def test_mask_last_name_short():
-    assert mask_last_name("ดี") == "ดี****"
-
-
-def test_mask_national_id_thirteen_digits():
-    assert mask_national_id("3900100244192") == "390-XXXX-XX-192"
 
 
 def test_phone_hash_none_for_missing():
@@ -279,6 +268,69 @@ def test_project_shelter_cancelled_deletes_by_code():
     assert project_shelter(doc) == ("delete", {"_id": "SH009"})
 
 
+def _registry_shelter(**overrides):
+    doc = {
+        "_id": "shelter:01VIS",
+        "type": "shelter",
+        "code": "SH011",
+        "name": "ศูนย์ทดสอบ",
+        "operation_status": "active",
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_project_shelter_public_visible_false_deletes_by_code():
+    """CR-251 FR-7 — hidden leaves the public plane
+    like cancelled; the `_id` lets the caller purge its shelter-scoped projections."""
+    doc = _registry_shelter(feature_flags={"public_visible": False})
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
+def test_project_shelter_public_hidden_wins_over_status_and_closed_retention():
+    """A hidden shelter is removed even when its status would otherwise soft-retain it (E-1)."""
+    doc = _registry_shelter(
+        operation_status="closed", feature_flags={"public_visible": False}
+    )
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
+def test_project_shelter_public_visible_true_upserts():
+    doc = _registry_shelter(feature_flags={"public_visible": True})
+    action, payload = project_shelter(doc)
+    assert action == "upsert"
+    assert payload is not None and payload["_id"] == "SH011"
+
+
+def test_project_shelter_missing_public_visible_key_upserts():
+    """FR-2 — a stored flags object without the key (or no flags at all) stays visible."""
+    action, payload = project_shelter(
+        _registry_shelter(feature_flags={"allow_pets": True})
+    )
+    assert action == "upsert"
+    assert payload is not None and payload["_id"] == "SH011"
+
+    action, payload = project_shelter(_registry_shelter())
+    assert action == "upsert"
+
+
+def test_project_shelter_only_boolean_false_hides():
+    """FR-2 — only a real boolean false takes effect; a string "false" does not."""
+    action, _ = project_shelter(
+        _registry_shelter(feature_flags={"public_visible": "false"})
+    )
+    assert action == "upsert"
+
+
+def test_project_shelter_cancelled_still_deletes_when_public_visible_true():
+    """FR-6 / regression — the cancelled branch is unaffected by the new flag."""
+    doc = _registry_shelter(
+        operation_status="cancelled", feature_flags={"public_visible": True}
+    )
+    assert project_shelter(doc) == ("delete", {"_id": "SH011"})
+
+
 def test_project_shelter_malformed_doc_deletes():
     """Only malformed/non-shelter docs hard-delete here — the true archive signal (a
     CouchDB tombstone) is handled separately via `apply_shelter_deactivate`."""
@@ -340,6 +392,24 @@ def test_classify_registry_shelter_variants():
     assert phase({"operation_status": "standby"}) is RetentionPhase.OPEN
     assert phase({"status": "open"}) is RetentionPhase.OPEN
     assert phase({"operation_status": "cancelled"}) is RetentionPhase.HIDDEN
+    # CR-251 FR-8: hidden (public_visible false) is never bootstrapped/listened; missing = open
+    hidden = {"operation_status": "active", "feature_flags": {"public_visible": False}}
+    assert phase(hidden) is RetentionPhase.HIDDEN
+    assert not phase(hidden).is_listened and not phase(hidden).is_bootstrapped
+    assert (
+        phase(
+            {"operation_status": "closed", "feature_flags": {"public_visible": False}}
+        )
+        is RetentionPhase.HIDDEN
+    )
+    assert (
+        phase({"operation_status": "active", "feature_flags": {"public_visible": True}})
+        is RetentionPhase.OPEN
+    )
+    assert (
+        phase({"operation_status": "active", "feature_flags": {}})
+        is RetentionPhase.OPEN
+    )
     assert phase({"operation_status": "closed"}) is RetentionPhase.CLOSED_WITHOUT_DATE
     assert (
         phase(
@@ -349,7 +419,7 @@ def test_classify_registry_shelter_variants():
     )
 
 
-def test_project_evacuee_maps_person_id_and_masked_fields():
+def test_project_evacuee_maps_person_id_and_plaintext_fields():
     doc = {
         "_id": "evacuee:01TEST",
         "type": "evacuee",
@@ -377,17 +447,27 @@ def test_project_evacuee_maps_person_id_and_masked_fields():
     assert payload is not None
     assert payload["first_name"] == "สมชาย"
     assert payload["first_name_key"] == "สมชาย"
-    assert payload["last_name_masked"] == mask_last_name("ใจดี")
+    # CR-257: plaintext PII; the API masks it per endpoint/scope.
+    assert payload["last_name"] == "ใจดี"
     assert payload["last_name_hash"] == last_name_hash("ใจดี")
+    assert payload["national_id"] == "3900100244192"
     assert payload["national_id_hash"] == national_id_hash("3900100244192")
-    assert payload["national_id_masked"] == mask_national_id("3900100244192")
+    assert payload["id_card_type"] == "national_id"
+    assert payload["passport_id"] is None
+    assert payload["phone"] == "0811111111"
     assert payload["phone_hash"] == sha256_hex("0811111111")
     assert payload["gender"] == "male"
     assert payload["care_zone"] == "โซนที่ General"
     assert payload["household_id"] == "household:01HH"
-    assert payload["address_masked"].startswith("**/*")
-    assert "last_name" not in payload
-    assert "phone" not in payload
+    assert payload["address"] == {
+        "address_no": None,
+        "village_no": None,
+        "subdistrict": "หาดใหญ่",
+        "district": "หาดใหญ่",
+        "province": "สงขลา",
+        "postal_code": None,
+    }
+    assert not [key for key in payload if key.endswith("_masked")]
 
 
 def test_project_evacuee_search_keys_are_normalized():
@@ -404,7 +484,6 @@ def test_project_evacuee_search_keys_are_normalized():
     assert payload["first_name"] == "  John   PAUL "  # display value is untouched
     assert payload["first_name_key"] == "john paul"
     assert payload["last_name_hash"] == last_name_hash("vanderberg")
-    assert "van der Berg" not in payload.values()
 
 
 def test_project_evacuee_without_a_surname_has_no_surname_hash():
@@ -436,7 +515,10 @@ def test_project_evacuee_passport():
     assert action == "upsert"
     assert payload is not None
     assert payload["passport_hash"] == passport_hash("AB1234567")
-    assert payload["passport_id_masked"] == mask_passport("AB1234567")
+    assert payload["passport_id"] == "AB1234567"
+    assert payload["id_card_type"] == "passport"
+    assert payload["national_id"] is None
+    assert payload["national_id_hash"] is None
 
 
 @pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered", "cancelled"])
@@ -489,7 +571,8 @@ def test_project_evacuee_pink_card_hashes_national_id_field():
     assert action == "upsert"
     assert payload is not None
     assert payload["national_id_hash"] == national_id_hash("3900100244192")
-    assert payload["national_id_masked"] == mask_national_id("3900100244192")
+    assert payload["national_id"] == "3900100244192"
+    assert payload["id_card_type"] == "pink_card"
 
 
 def test_project_evacuee_other_card_hashes_national_id_field():
@@ -506,7 +589,8 @@ def test_project_evacuee_other_card_hashes_national_id_field():
     assert action == "upsert"
     assert payload is not None
     assert payload["national_id_hash"] == national_id_hash("DOC-999")
-    assert payload["national_id_masked"] == mask_national_id("DOC-999")
+    assert payload["national_id"] == "DOC-999"
+    assert payload["id_card_type"] == "other"
 
 
 def test_project_evacuee_search_excluded_deletes():
@@ -821,6 +905,63 @@ def test_count_stay_statuses_counts_search_excluded_evacuees():
         ]
     )
     assert counts == {"active": 2, "pre_registered": 1, "checked_out": 1}
+
+
+# --- #1241: count_zone_stay_statuses (pure) ---
+
+
+def test_count_zone_stay_statuses_groups_by_zone_then_status():
+    """Every status is kept per zone (the API picks Present); search-excluded count too."""
+    counts = count_zone_stay_statuses(
+        [
+            {
+                "_id": "e1",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": "A"},
+            },
+            {
+                "_id": "e2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "room_confirmed", "zone": "A"},
+            },
+            {
+                "_id": "e3",
+                "type": "evacuee",
+                "current_stay": {"status": "temporary_leave", "zone": "B"},
+            },
+            {
+                "_id": "e4",
+                "type": "evacuee",
+                "current_stay": {"status": "checked_out", "zone": "B"},
+            },
+            # No zone, no status, or not an evacuee: skipped.
+            {
+                "_id": "e5",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": None},
+            },
+            {
+                "_id": "e6",
+                "type": "evacuee",
+                "current_stay": {"status": "active", "zone": ""},
+            },
+            {"_id": "e7", "type": "evacuee", "current_stay": {"zone": "A"}},
+            {
+                "_id": "h1",
+                "type": "household",
+                "current_stay": {"status": "active", "zone": "A"},
+            },
+        ]
+    )
+    assert counts == {
+        "A": {"active": 1, "room_confirmed": 1},
+        "B": {"temporary_leave": 1, "checked_out": 1},
+    }
+
+
+def test_count_zone_stay_statuses_empty_when_nobody_has_a_zone():
+    assert count_zone_stay_statuses([{"_id": "e1", "type": "evacuee"}]) == {}
 
 
 # --- EXT-005: aggregate_occupancy (pure) ---
@@ -1289,3 +1430,169 @@ async def test_project_needs_for_shelter_visible_on_home_and_urgency():
     assert payload["qty_target"] == Decimal(1000)
     assert payload["qty_needed"] == Decimal(1000)
     assert payload["urgency"] == "critical"
+
+
+# --- CR-253: parking_points + parking_vehicle_types ---
+
+
+def _parking_shelter(points=None, availability="available", legacy=(), **extra):
+    action, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "operation_status": "active",
+            "parking_policy": {
+                "availability": availability,
+                "supported_vehicles": list(legacy),
+            },
+            "parking_points": points,
+            "updated_at": "2026-01-01T00:00:00.000Z",
+            **extra,
+        }
+    )
+    assert action == "upsert" and payload is not None
+    return payload
+
+
+def _pp(point_id, name="ลานจอด", vehicles=(), **over):
+    return {"id": point_id, "name": name, "vehicles": list(vehicles), **over}
+
+
+def test_parking_points_only_pinned_points_leave_the_staff_plane():
+    payload = _parking_shelter(
+        [
+            _pp(
+                "a",
+                lat=7.0086,
+                lng=100.4747,
+                note="  ประตู 2 ",
+                vehicles=[{"type": "car", "max_capacity": 30}],
+            ),
+            _pp("b"),  # not pinned yet
+            _pp("c", lat=0, lng=0),  # (0,0) is not a pin
+            _pp("d", lat=91, lng=100),  # out of range
+        ]
+    )
+    assert payload["parking_points"] == [
+        {
+            "id": "a",
+            "name": "ลานจอด",
+            "note": "ประตู 2",
+            "geo": {"lat": 7.0086, "lng": 100.4747},
+            "vehicles": [{"type": "car", "max_capacity": 30}],
+        }
+    ]
+
+
+def test_parking_points_blank_note_is_null_and_bad_vehicles_are_dropped():
+    payload = _parking_shelter(
+        [
+            _pp(
+                "a",
+                lat=7,
+                lng=100,
+                note="  ",
+                vehicles=[
+                    {"type": "car", "max_capacity": -1},
+                    {"type": "car", "max_capacity": 9},  # duplicate type: first wins
+                    {"type": "plane", "max_capacity": 1},
+                    "junk",
+                ],
+            )
+        ]
+    )
+    [point] = payload["parking_points"]
+    assert point["note"] is None
+    assert point["vehicles"] == [{"type": "car", "max_capacity": None}]
+
+
+def test_parking_points_hidden_when_availability_is_none():
+    payload = _parking_shelter([_pp("a", lat=7, lng=100)], availability="none")
+    assert payload["parking_points"] == []
+
+
+@pytest.mark.parametrize(
+    "bad", [None, "x", {"a": 1}, [None, "x", 3], [{"id": 1, "name": "x"}]]
+)
+def test_parking_fields_survive_a_corrupt_doc(bad):
+    payload = _parking_shelter(bad)
+    assert payload["parking_points"] == []
+    assert payload["parking_vehicle_types"] == []
+
+
+def test_parking_fields_survive_a_corrupt_policy():
+    _, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH001",
+            "name": "x",
+            "parking_policy": "junk",
+            "updated_at": "2026-01-01",
+        }
+    )
+    assert payload["parking_points"] == [] and payload["parking_vehicle_types"] == []
+
+
+_LEGACY_CAR = [{"type": "car", "max_capacity": 200}]
+
+
+@pytest.mark.parametrize(
+    ("points", "availability", "legacy", "expected"),
+    [
+        # Same cases as the TS table in schema.test.ts ('effective vehicles').
+        (
+            [
+                _pp("a", vehicles=[{"type": "car", "max_capacity": 30}]),
+                _pp(
+                    "b",
+                    vehicles=[
+                        {"type": "car"},
+                        {"type": "boat"},
+                        {"type": "motorcycle"},
+                    ],
+                ),
+            ],
+            "available",
+            _LEGACY_CAR,
+            ["motorcycle", "car", "boat"],
+        ),
+        (
+            [_pp("a", vehicles=[{"type": "car", "max_capacity": None}])],
+            "available",
+            [],
+            ["car"],
+        ),
+        (
+            [_pp("a")],
+            "available",
+            _LEGACY_CAR,
+            ["car"],
+        ),  # points without vehicles -> legacy
+        ([], "available", _LEGACY_CAR, ["car"]),  # no points -> legacy
+        (
+            [_pp("a", vehicles=[{"type": "car", "max_capacity": 5}])],
+            "none",
+            _LEGACY_CAR,
+            [],
+        ),
+        (
+            [_pp("a", vehicles=[{"type": "boat", "max_capacity": 2}])],
+            None,
+            [],
+            ["boat"],
+        ),
+        # An unpinned point still counts: it passes the filter without a pin on the map (FR-34).
+        ([_pp("a", vehicles=[{"type": "truck"}])], "available", [], ["truck"]),
+    ],
+)
+def test_parking_vehicle_types_follow_the_effective_vehicle_rule(
+    points, availability, legacy, expected
+):
+    payload = _parking_shelter(points, availability=availability, legacy=legacy)
+    assert payload["parking_vehicle_types"] == expected
+
+
+def test_parking_capacity_total_never_decides_a_vehicle_type():
+    payload = _parking_shelter([], common_areas={"parking_capacity": 40})
+    assert payload["parking_vehicle_types"] == []

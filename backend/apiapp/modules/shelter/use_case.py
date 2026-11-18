@@ -125,7 +125,11 @@ class ShelterUseCase:
                     pet_policy=pet_status,
                     vulnerable_groups=vul_groups,
                     admin_type=admin_type,
-                    accepts_pre_registration=accepts_pre_registration(m),
+                    accepts_pre_registration=(not doc.is_external and accepts_pre_registration(m)),
+                    is_external=doc.is_external,
+                    external_url=doc.external_url,
+                    parking_points=doc.parking_points,
+                    parking_vehicle_types=doc.parking_vehicle_types,
                     updated_at=doc.updated_at,
                 )
             )
@@ -148,6 +152,8 @@ class ShelterUseCase:
             "full": "FULL",
             "standby": "PREPARE",
             "closed": "CLOSED",
+            # CR-252 FR-15: external shelter, real status not known here — its own value.
+            "unknown": "UNKNOWN",
         }
         # Prefer projected status (Mongo SoR for public) over re-deriving from raw_data.
         mapped_status = status_ui.get(doc.status, "CLOSED")
@@ -218,15 +224,30 @@ class ShelterUseCase:
 
         location = m.get("location") or {}
 
+        # #1241: per-zone Present from the worker's zone -> status counts (search-excluded
+        # people included, like `occupancy_by_status`). `None` = row not re-projected yet:
+        # no per-zone count rather than a `public_persons` fallback that would miss them.
+        by_zone = doc.occupancy_by_zone
+        if by_zone is not None and not doc.is_active:
+            by_zone = {}
+
         mapped_zones = []
         for z in zones:
             if isinstance(z, dict):
+                zone_code = z.get("code")
+                zone_present = None
+                if by_zone is not None:
+                    zone_counts = by_zone.get(zone_code, {}) if zone_code else {}
+                    zone_present = sum(zone_counts.get(s, 0) for s in PRESENT_OCCUPANCY_STATUSES)
                 mapped_zones.append(
                     {
+                        "code": zone_code,
                         "name": z.get("name"),
                         "type": z.get("type") or "general",
+                        "status": "closed" if z.get("status") == "closed" else "active",
                         "capacity": z.get("capacity"),
                         "area_m2": z.get("area_m2"),
+                        "present": zone_present,
                     }
                 )
 
@@ -273,9 +294,13 @@ class ShelterUseCase:
                 },
                 "zones": mapped_zones,
                 "contact": {"manager": manager_name, "phone": manager_phone},
-                "accepts_pre_registration": accepts_pre_registration(m),
+                "accepts_pre_registration": (not doc.is_external and accepts_pre_registration(m)),
+                "is_external": doc.is_external,
+                "external_url": doc.external_url,
                 # CR-205 FR-DP-15: the projected field only, never raw_data's sub_storage.
                 "donation_points": doc.donation_points,
+                "parking_points": doc.parking_points,
+                "parking_vehicle_types": doc.parking_vehicle_types,
                 "faq": m.get("faq")
                 or [
                     {

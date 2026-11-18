@@ -42,6 +42,7 @@ import {
 } from '$lib/server/security-mutation-lock';
 import {
 	BULK_RETURN_ENTRY_MANGO_INDEXES,
+	DISTRIBUTION_LOG_DAY_MANGO_INDEX,
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
 	DONATION_RECEIVED_MANGO_INDEX,
@@ -515,8 +516,9 @@ async function main() {
 					PEOPLE_MANGO_INDEXES.length +
 					REQUISITION_TICKET_MANGO_INDEXES.length +
 					BULK_RETURN_ENTRY_MANGO_INDEXES.length +
-					// Daily SOP role, the donor photo index, and the four donation / ledger indexes of #821.
-					6;
+					// Daily SOP role, the donor photo index, the four donation / ledger indexes of #821, and
+					// the distribution log day index.
+					7;
 				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
@@ -554,6 +556,14 @@ async function main() {
 			);
 			console.log(
 				`    ✓ bulk_return_entry mango indexes (${bulkReturnEntryIndexResult.created} created, ${bulkReturnEntryIndexResult.existing} existing)`
+			);
+			const distributionLogIndexResult = await deployMangoIndexes(
+				db,
+				[DISTRIBUTION_LOG_DAY_MANGO_INDEX],
+				false
+			);
+			console.log(
+				`    ✓ distribution_log day mango index (${distributionLogIndexResult.created} created, ${distributionLogIndexResult.existing} existing)`
 			);
 			const dailySopIndexResult = await deployMangoIndexes(db, [DAILY_SOP_ROLE_MANGO_INDEX], false);
 			console.log(

@@ -830,6 +830,356 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			}
 		},
 		{
+			name: 'กระเทียม',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'กะเพรา',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'ขิง',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'หอมใหญ่',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'ตะไคร้',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'เห็ดหูหนู',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'ต้นหอม',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'พริกชี้ฟ้าแดง',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'คะน้า',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'กะหล่ำปลี',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'ฟักทอง',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'น้ำตาลปิ๊บ',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'ผงปรุงรส',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'ผงพะโล้',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'พริกแกงคั่วกลิ้ง',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'หอมเจียว',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'พริกแห้งทอด',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'วุ้นเส้นแห้ง',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'หมูสามชั้น',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 3
+			}
+		},
+		{
+			name: 'หมูสันคอ',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 3
+			}
+		},
+		{
+			name: 'พริก',
+			category: 'item_category:food',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'พริกไทย',
+			category: 'item_category:food',
+			base_unit: 'g',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'พริกไทยดำ',
+			category: 'item_category:food',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'หอมแดง',
+			category: 'item_category:food',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'ใบมะกรูด',
+			category: 'item_category:food',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'รากผักชี',
+			category: 'item_category:food',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'ใบโหระพา',
+			category: 'item_category:food',
+			base_unit: 'piece',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'มะนาว',
+			category: 'item_category:food',
+			base_unit: 'fruit',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'CHILLED',
+				shelf_life_days: 7
+			}
+		},
+		{
+			name: 'มาม่ากึ่งสำเร็จรูป',
+			category: 'item_category:food',
+			base_unit: 'sachet',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 365
+			}
+		},
+		{
+			name: 'ซีอิ๊วขาว',
+			category: 'item_category:food',
+			base_unit: 'ml',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
+		},
+		{
+			name: 'ซีอิ๊วดำ',
+			category: 'item_category:food',
+			base_unit: 'ml',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
+		},
+		{
+			name: 'ซอสปรุงรส',
+			category: 'item_category:food',
+			base_unit: 'ml',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
+		},
+		{
+			name: 'ซอสหอยนางรม',
+			category: 'item_category:food',
+			base_unit: 'ml',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
+		},
+		{
+			name: 'น้ำมะขามเปียก',
+			category: 'item_category:food',
+			base_unit: 'ml',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
+		},
+		{
+			name: 'เต้าเจี้ยว',
+			category: 'item_category:food',
+			base_unit: 'ml',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
+		},
+		{
 			name: 'น้ำดื่ม 600 มล.',
 			category: 'item_category:water',
 			base_unit: 'bottle',
@@ -1254,58 +1604,253 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		return itemMasterDoc;
 	});
 
+	// Source: อาหาร.md (per-plate amounts). Recipe quantities are in the item's stock unit
+	// (meal-calc ignores `uom`): g/ml items use the sheet values; kg items (rice, chicken, sugar,
+	// salt) are converted from g; oil/fish sauce assume a 1 L bottle (15 ml = 0.015 bottle).
+	// Assumptions (not in the sheet): canned fish 100 g/can; ข้าวไก่ผัดขิง yields 3 plates and
+	// ข้าวผัดคะน้าปลากระป๋อง 2 (sheet amounts are multi-serving); other recipes are per 1 plate.
+	// Water/broth are omitted (not stocked); "หมู/ไก่" and "สะโพก/อกไก่" map to เนื้อไก่สด.
 	const recipesDef = [
-		{
-			label: 'ข้าวไข่เจียว',
-			ingredients: [
-				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'ไข่ไก่', quantity: '2', uom: 'egg' },
-				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' }
-			]
-		},
-		{
-			label: 'ข้าวต้มไก่สับ',
-			ingredients: [
-				{ name: 'ข้าวสาร', quantity: '0.15', uom: 'kg' },
-				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' },
-				{ name: 'เกลือ', quantity: '0.005', uom: 'kg' }
-			]
-		},
 		{
 			label: 'ข้าวกะเพราไก่สับ',
 			ingredients: [
-				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
 				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' },
-				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' },
-				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
+				{ name: 'กระเทียม', quantity: '15', uom: 'g' },
+				{ name: 'พริก', quantity: '3', uom: 'piece' },
+				{ name: 'กะเพรา', quantity: '20', uom: 'g' },
+				{ name: 'ซีอิ๊วขาว', quantity: '7.5', uom: 'ml' },
+				{ name: 'ซอสปรุงรส', quantity: '7.5', uom: 'ml' },
+				{ name: 'ซอสหอยนางรม', quantity: '18.75', uom: 'ml' },
+				{ name: 'น้ำตาลทราย', quantity: '0.0075', uom: 'kg' },
+				{ name: 'ซีอิ๊วดำ', quantity: '0.15', uom: 'ml' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
 			]
 		},
 		{
 			label: 'ข้าวไก่ผัดกระเทียม',
 			ingredients: [
-				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
 				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' },
-				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' },
-				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
+				{ name: 'กระเทียม', quantity: '35', uom: 'g' },
+				{ name: 'พริกไทยดำ', quantity: '10', uom: 'piece' },
+				{ name: 'ซีอิ๊วขาว', quantity: '10', uom: 'ml' },
+				{ name: 'ซอสหอยนางรม', quantity: '7.5', uom: 'ml' },
+				{ name: 'น้ำตาลทราย', quantity: '0.004', uom: 'kg' },
+				{ name: 'ผงปรุงรส', quantity: '2.5', uom: 'g' }
+			]
+		},
+		{
+			label: 'ข้าวไข่เจียว',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'egg' },
+				{ name: 'ซีอิ๊วขาว', quantity: '5', uom: 'ml' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
 			]
 		},
 		{
 			label: 'ข้าวไข่พะโล้ไก่',
 			ingredients: [
-				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
 				{ name: 'ไข่ไก่', quantity: '2', uom: 'egg' },
-				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' },
-				{ name: 'น้ำตาลทราย', quantity: '0.02', uom: 'kg' },
-				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
+				{ name: 'เนื้อไก่สด', quantity: '0.2', uom: 'kg' },
+				{ name: 'ซีอิ๊วดำ', quantity: '5', uom: 'ml' },
+				{ name: 'ซีอิ๊วขาว', quantity: '5', uom: 'ml' },
+				{ name: 'น้ำตาลปิ๊บ', quantity: '4', uom: 'g' },
+				{ name: 'ผงพะโล้', quantity: '1.25', uom: 'g' },
+				{ name: 'กระเทียม', quantity: '10', uom: 'g' }
+			]
+		},
+		{
+			label: 'ข้าวต้มไก่สับ',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.08', uom: 'kg' },
+				{ name: 'ซีอิ๊วขาว', quantity: '10', uom: 'ml' }
 			]
 		},
 		{
 			label: 'ข้าวปลากระป๋องทรงเครื่อง',
 			ingredients: [
-				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'ปลากระป๋อง', quantity: '0.5', uom: 'can' },
-				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' },
-				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'ปลากระป๋อง', quantity: '0.8', uom: 'can' },
+				{ name: 'หอมแดง', quantity: '2', uom: 'piece' },
+				{ name: 'ตะไคร้', quantity: '10', uom: 'g' },
+				{ name: 'ใบมะกรูด', quantity: '2', uom: 'piece' },
+				{ name: 'พริก', quantity: '2', uom: 'piece' },
+				{ name: 'มะนาว', quantity: '0.5', uom: 'fruit' }
+			]
+		},
+		{
+			label: 'ข้าวไก่ผัดขิง',
+			portions: '3',
+			ingredients: [
+				{ name: 'เนื้อไก่สด', quantity: '0.5', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.045', uom: 'bottle' },
+				{ name: 'กระเทียม', quantity: '30', uom: 'g' },
+				{ name: 'ขิง', quantity: '30', uom: 'g' },
+				{ name: 'หอมใหญ่', quantity: '50', uom: 'g' },
+				{ name: 'เต้าเจี้ยว', quantity: '45', uom: 'ml' },
+				{ name: 'น้ำตาลทราย', quantity: '0.015', uom: 'kg' },
+				{ name: 'ซีอิ๊วขาว', quantity: '30', uom: 'ml' },
+				{ name: 'เห็ดหูหนู', quantity: '25', uom: 'g' },
+				{ name: 'พริกชี้ฟ้าแดง', quantity: '15', uom: 'g' },
+				{ name: 'ต้นหอม', quantity: '10', uom: 'g' }
+			]
+		},
+		{
+			label: 'ข้าวไข่ดาว',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'egg' },
+				{ name: 'น้ำมันพืช', quantity: '0.03', uom: 'bottle' },
+				{ name: 'ซีอิ๊วขาว', quantity: '5', uom: 'ml' }
+			]
+		},
+		{
+			label: 'ข้าวผัดคะน้าปลากระป๋อง',
+			portions: '2',
+			ingredients: [
+				{ name: 'คะน้า', quantity: '250', uom: 'g' },
+				{ name: 'ปลากระป๋อง', quantity: '1', uom: 'can' },
+				{ name: 'กระเทียม', quantity: '25', uom: 'g' },
+				{ name: 'พริก', quantity: '4', uom: 'piece' },
+				{ name: 'ซอสหอยนางรม', quantity: '30', uom: 'ml' },
+				{ name: 'น้ำปลา', quantity: '0.015', uom: 'bottle' },
+				{ name: 'น้ำตาลทราย', quantity: '0.0075', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวคั่วกลิ้งไก่',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.09', uom: 'kg' },
+				{ name: 'พริกแกงคั่วกลิ้ง', quantity: '15', uom: 'g' },
+				{ name: 'น้ำปลา', quantity: '0.005', uom: 'bottle' },
+				{ name: 'น้ำตาลทราย', quantity: '0.0025', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวปลากระป๋องผัดไข่',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'ปลากระป๋อง', quantity: '1', uom: 'can' },
+				{ name: 'ไข่ไก่', quantity: '1', uom: 'egg' },
+				{ name: 'กระเทียม', quantity: '15', uom: 'g' },
+				{ name: 'หอมแดง', quantity: '2', uom: 'piece' },
+				{ name: 'พริก', quantity: '3', uom: 'piece' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'มาม่าผัดไข่',
+			ingredients: [
+				{ name: 'มาม่ากึ่งสำเร็จรูป', quantity: '1', uom: 'sachet' },
+				{ name: 'ไข่ไก่', quantity: '1', uom: 'egg' },
+				{ name: 'กะหล่ำปลี', quantity: '40', uom: 'g' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'วุ้นเส้นผัดซีอิ๊ว',
+			ingredients: [
+				{ name: 'วุ้นเส้นแห้ง', quantity: '40', uom: 'g' },
+				{ name: 'ไข่ไก่', quantity: '1', uom: 'egg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.05', uom: 'kg' },
+				{ name: 'กะหล่ำปลี', quantity: '40', uom: 'g' },
+				{ name: 'ซีอิ๊วขาว', quantity: '15', uom: 'ml' },
+				{ name: 'ซีอิ๊วดำ', quantity: '2.5', uom: 'ml' },
+				{ name: 'น้ำตาลทราย', quantity: '0.0025', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวผัดกระหล่ำปลีน้ำปลา',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'กะหล่ำปลี', quantity: '120', uom: 'g' },
+				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' },
+				{ name: 'กระเทียม', quantity: '15', uom: 'g' },
+				{ name: 'พริก', quantity: '2', uom: 'piece' },
+				{ name: 'เกลือ', quantity: '0.005', uom: 'kg' },
+				{ name: 'น้ำตาลทราย', quantity: '0.005', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวหมูผัดพริกเกลือ',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'หมูสามชั้น', quantity: '90', uom: 'g' },
+				{ name: 'กระเทียม', quantity: '15', uom: 'g' },
+				{ name: 'พริก', quantity: '3', uom: 'piece' },
+				{ name: 'เกลือ', quantity: '0.0025', uom: 'kg' },
+				{ name: 'ผงปรุงรส', quantity: '5', uom: 'g' },
+				{ name: 'น้ำตาลทราย', quantity: '0.005', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวไก่ทอด',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.12', uom: 'kg' },
+				{ name: 'น้ำปลา', quantity: '0.015', uom: 'bottle' },
+				{ name: 'น้ำตาลทราย', quantity: '0.0025', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.06', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวหมูทอด',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'หมูสันคอ', quantity: '90', uom: 'g' },
+				{ name: 'พริกไทย', quantity: '5', uom: 'g' },
+				{ name: 'รากผักชี', quantity: '1', uom: 'piece' },
+				{ name: 'ซีอิ๊วขาว', quantity: '5', uom: 'ml' },
+				{ name: 'น้ำตาลทราย', quantity: '0.0025', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.06', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวไข่ลูกเขย',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'egg' },
+				{ name: 'น้ำมะขามเปียก', quantity: '15', uom: 'ml' },
+				{ name: 'น้ำตาลปิ๊บ', quantity: '15', uom: 'g' },
+				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' },
+				{ name: 'หอมเจียว', quantity: '5', uom: 'g' },
+				{ name: 'พริกแห้งทอด', quantity: '1', uom: 'g' },
+				{ name: 'น้ำมันพืช', quantity: '0.06', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวผัดผักรวม',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.1', uom: 'kg' },
+				{ name: 'ผักรวม', quantity: '0.12', uom: 'kg' },
+				{ name: 'เนื้อไก่สด', quantity: '0.04', uom: 'kg' },
+				{ name: 'ซอสหอยนางรม', quantity: '15', uom: 'ml' },
+				{ name: 'น้ำปลา', quantity: '0.005', uom: 'bottle' },
+				{ name: 'น้ำตาลทราย', quantity: '0.0025', uom: 'kg' },
+				{ name: 'กระเทียม', quantity: '10', uom: 'g' },
+				{ name: 'น้ำมันพืช', quantity: '0.015', uom: 'bottle' }
+			]
+		},
+		{
+			label: 'ข้าวผัดฟักทอง',
+			ingredients: [
+				{ name: 'ข้าวสาร', quantity: '0.15', uom: 'kg' },
+				{ name: 'ฟักทอง', quantity: '200', uom: 'g' },
+				{ name: 'ไข่ไก่', quantity: '1', uom: 'egg' },
+				{ name: 'กระเทียม', quantity: '15', uom: 'g' },
+				{ name: 'ซีอิ๊วขาว', quantity: '15', uom: 'ml' },
+				{ name: 'พริกไทย', quantity: '15', uom: 'g' },
+				{ name: 'ใบโหระพา', quantity: '10', uom: 'piece' },
+				{ name: 'น้ำมันพืช', quantity: '0.005', uom: 'bottle' }
 			]
 		}
 	];
@@ -1333,7 +1878,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			'recipe',
 			{
 				label: r.label,
-				standard_portions: '1',
+				standard_portions: 'portions' in r ? r.portions : '1',
 				standard_duration_hours: '1',
 				ingredients: r.ingredients.map((ing) => ({
 					item_master_id: itemMasterIdByName.get(ing.name) ?? `item_master:${ing.name}`,

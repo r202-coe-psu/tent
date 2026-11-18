@@ -1,4 +1,4 @@
-import { allDocsByIds, allDocsByType, getDoc, putDoc } from '$lib/db/couch-db';
+import { allDocsByIds, allDocsByType, findDocsPage, getDoc, putDoc } from '$lib/db/couch-db';
 import { now, type AuthorContext } from '$lib/db/model';
 import { parseQty, qtyLte } from '$lib/utils/qty';
 import {
@@ -9,10 +9,14 @@ import {
 	type DistributionLog,
 	type DistributionLogInput,
 	type DistributionLogStatus,
+	thailandDayBounds,
 	type ReturnCondition
 } from '../../domain/food-supplies';
 import { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
+
+/** Docs per `_find` page in `listByDistributedDay`. */
+const FIND_PAGE_SIZE = 200;
 
 /** Ids per `_all_docs` keys request in `getMany`. */
 const GET_MANY_CHUNK_SIZE = 100;
@@ -88,6 +92,12 @@ export interface DistributionLogRepository {
 		filter?: DistributionLogListFilter
 	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
 	/**
+	 * Logs whose `distributed_at` falls in Thai calendar `day` (`[00:00, 24:00)` UTC+7), read through
+	 * `_find` page by page. A Mango index on `[type, distributed_at]` serves it; without the index
+	 * CouchDB still answers by scanning. Any failed request rejects.
+	 */
+	listByDistributedDay(day: string): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
+	/**
 	 * Batch get by id (`_all_docs` keys, chunked). Ids with no doc are simply absent from `items`;
 	 * malformed docs are reported in `skipped` instead of failing the read.
 	 */
@@ -137,6 +147,25 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 		const raw = await getDoc<DistributionLog>(this.dbName, logId);
 		if (!raw) return null;
 		return distributionLogDocSchema.parse(raw);
+	}
+
+	async listByDistributedDay(
+		day: string
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }> {
+		const { start, end } = thailandDayBounds(day);
+		const docs: unknown[] = [];
+		let bookmark: string | undefined;
+		for (;;) {
+			const page = await findDocsPage<unknown>(this.dbName, {
+				selector: { type: 'distribution_log', distributed_at: { $gte: start, $lt: end } },
+				limit: FIND_PAGE_SIZE,
+				...(bookmark ? { bookmark } : {})
+			});
+			docs.push(...page.docs);
+			if (page.docs.length < FIND_PAGE_SIZE || !page.bookmark || page.bookmark === bookmark) break;
+			bookmark = page.bookmark;
+		}
+		return parseDocsOrSkip<DistributionLog>(docs, distributionLogDocSchema);
 	}
 
 	async getMany(

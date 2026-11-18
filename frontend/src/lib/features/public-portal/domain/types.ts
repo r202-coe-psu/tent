@@ -4,13 +4,25 @@ export type FamilySearchResult = components['schemas']['SearchResult'];
 export type FamilySearchResponse = components['schemas']['SearchResponse'];
 /** `master_data:site_kind` code (CR-198) — `evacuation_center`, `host_house`, or any code SA adds. */
 export type PublicSiteKind = string;
-export type PublicShelterItem = Omit<components['schemas']['ShelterItem'], 'site_kind'> & {
+export type PublicShelterItem = Omit<
+	components['schemas']['ShelterItem'],
+	'site_kind' | 'is_external' | 'external_url'
+> & {
 	site_kind?: PublicSiteKind;
 	vulnerable_groups?: string[];
+	/** CR-252: run in another system — absent reads as `false` (older payloads / fixtures). */
+	is_external?: boolean;
+	external_url?: string | null;
 };
-export type PublicShelterDetail = Omit<components['schemas']['ShelterDetail'], 'site_kind'> & {
+export type PublicShelterDetail = Omit<
+	components['schemas']['ShelterDetail'],
+	'site_kind' | 'is_external' | 'external_url'
+> & {
 	site_kind?: PublicSiteKind;
 	code?: string;
+	/** CR-252: run in another system — absent reads as `false` (older payloads / fixtures). */
+	is_external?: boolean;
+	external_url?: string | null;
 };
 export type PublicShelterListResponse = Omit<
 	components['schemas']['ShelterListResponse'],
@@ -21,6 +33,8 @@ export type PublicShelterListResponse = Omit<
 export type PublicGeoPoint = components['schemas']['GeoPoint'];
 /** One ticked storage point of a shelter detail (CR-205 FR-DP-12). */
 export type PublicDonationPoint = components['schemas']['DonationPoint'];
+/** One pinned parking point of a shelter (CR-253 FR-25): name, note, geo, vehicles + capacity. */
+export type PublicParkingPoint = components['schemas']['ParkingPoint'];
 
 /** UI list/map shape derived from the public shelters API (no occupancy). */
 export type PublicShelterCardModel = {
@@ -40,6 +54,14 @@ export type PublicShelterCardModel = {
 	admin_type: string | null;
 	geo: PublicGeoPoint | null;
 	accepts_pre_registration: boolean;
+	/** CR-252 FR-20: run in another system — no capacity, no booking, links out. */
+	is_external: boolean;
+	/** CR-252 FR-2: `https://` only (already vetted by {@link safeExternalUrl}). */
+	external_url: string | null;
+	/** Pinned parking points; `[]` when the shelter has none (CR-253 FR-28). */
+	parking_points: PublicParkingPoint[];
+	/** Vehicle types the shelter takes, in motorcycle/car/truck/boat order (CR-253 FR-35). */
+	parking_vehicle_types: string[];
 };
 
 export type ListPublicSheltersParams = {

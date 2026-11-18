@@ -110,6 +110,69 @@ describe('POST /api/back-office/shelter — site_kind (CR-198 FR-7)', () => {
 	});
 });
 
+describe('POST /api/back-office/shelter — external shelter (CR-252)', () => {
+	const external = {
+		name: 'ศูนย์ภายนอก',
+		site_kind: 'evacuation_center',
+		is_external: true,
+		operation_status: 'unknown',
+		facilities: {},
+		common_areas: {},
+		utilities: {},
+		risk: {},
+		zones: []
+	};
+
+	it('creates an external shelter without capacity or url (system_admin only route)', async () => {
+		provisionMock.mockResolvedValue({} as never);
+		const res = await callPOST(external);
+		expect(res.status).toBe(200);
+		expect(provisionMock.mock.calls[0][0]).toMatchObject({
+			is_external: true,
+			external_url: null,
+			operation_status: 'unknown'
+		});
+	});
+
+	it('a non-admin never reaches provisioning', async () => {
+		saMock.mockImplementationOnce(async () => error(403, 'System admin privileges required'));
+		await expect(callPOST(external)).rejects.toMatchObject({ status: 403 });
+		expect(provisionMock).not.toHaveBeenCalled();
+	});
+
+	it.each(['standby', 'active', 'closed'])('422 for an external shelter at %s', async (status) => {
+		const res = await callPOST({ ...external, operation_status: status });
+		expect(res.status).toBe(422);
+		expect(provisionMock).not.toHaveBeenCalled();
+	});
+
+	it('422 for a regular shelter at unknown', async () => {
+		const res = await callPOST({ ...newShelter, operation_status: 'unknown' });
+		expect(res.status).toBe(422);
+	});
+
+	it('422 for a regular shelter without capacity', async () => {
+		const noCapacity: Partial<typeof newShelter> = { ...newShelter };
+		delete noCapacity.capacity;
+		const res = await callPOST(noCapacity);
+		expect(res.status).toBe(422);
+	});
+
+	it.each(['http://x.example', 'javascript:alert(1)', 'ftp://x.example'])(
+		'422 for external_url %s',
+		async (url) => {
+			const res = await callPOST({ ...external, external_url: url });
+			expect(res.status).toBe(422);
+		}
+	);
+
+	it('accepts an https url', async () => {
+		provisionMock.mockResolvedValue({} as never);
+		const res = await callPOST({ ...external, external_url: 'https://other.example/s/1' });
+		expect(res.status).toBe(200);
+	});
+});
+
 describe('GET /api/back-office/shelter — visibility (#477)', () => {
 	const masters = ['SH001', 'SH002', 'SH003'].map((code) => ({ code, name: code }));
 
@@ -141,5 +204,35 @@ describe('GET /api/back-office/shelter — visibility (#477)', () => {
 
 	it('returns every shelter to a system admin', async () => {
 		expect(await callGET(['system_admin'], true)).toEqual(['SH001', 'SH002', 'SH003']);
+	});
+});
+
+describe('GET /api/back-office/shelter — parking points (#1352)', () => {
+	it('returns parking_points, defaulting to [] for a schema_v 9 doc without the field', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sa',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
+		const pin = {
+			id: '01J0000000000000000000000A',
+			name: 'ลานจอดรถ',
+			note: null,
+			lat: null,
+			lng: null,
+			vehicles: []
+		};
+		vi.mocked(listShelterMasters).mockResolvedValueOnce([
+			{ code: 'SH001', name: 'ศูนย์ 1', schema_v: 9 },
+			{ code: 'SH002', name: 'ศูนย์ 2', schema_v: 11, parking_points: [pin] }
+		] as never);
+		const request = new Request('http://localhost/api/back-office/shelter', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request } as unknown as Parameters<typeof GET>[0]);
+		const rows = (await res.json()) as { code: string; parking_points: unknown }[];
+		expect(rows.find((r) => r.code === 'SH001')?.parking_points).toEqual([]);
+		expect(rows.find((r) => r.code === 'SH002')?.parking_points).toEqual([pin]);
 	});
 });

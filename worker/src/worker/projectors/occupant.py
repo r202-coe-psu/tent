@@ -1,6 +1,7 @@
 """Project shelter evacuee docs → shelter_occupants (EXT-007, ADR 0002 §6).
 
-Extracts and masks occupant data for authorized partner read plane with PDPA compliance.
+Copies occupant data in plaintext for the authorized partner read plane (CR-257) — the API
+masks it for `occupancy-pii-read` and returns it whole only with `pii-full`.
 Only evacuees in the shelter (`IN_SHELTER_STATUSES`: `active` + `room_confirmed`) are
 projected, and never one
 with `privacy.search_excluded` (opt-out / basic consent, #791) — they still count in
@@ -12,6 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from worker.projectors.evacuee import project_person_id
 from worker.projectors.occupancy import IN_SHELTER_STATUSES, resolve_age
 
 
@@ -48,15 +50,10 @@ def compute_age_range(age: float | None) -> str:
     return "60+"
 
 
-def mask_occupant_name(first_name: str | None, last_name: str | None) -> str:
-    """Masks name according to ODT convention (e.g. 'สมชาย ใ.')."""
-    fn = (first_name or "").strip()
-    ln = (last_name or "").strip()
-    if not fn and not ln:
-        return "ไม่ระบุชื่อ"
-    if fn and ln:
-        return f"{fn} {ln[0]}."
-    return fn or ln
+def _project_id(person_id: dict[str, Any] | None) -> dict[str, str | None]:
+    """Plaintext ID fields only — `shelter_occupants` is listed by shelter, never searched."""
+    ids = project_person_id(person_id)
+    return {key: ids[key] for key in ("national_id", "passport_id", "id_card_type")}
 
 
 def project_shelter_occupant(
@@ -85,11 +82,8 @@ def project_shelter_occupant(
     raw_id = doc_id.replace("evacuee:", "")
     occupant_ref = f"OCC-{raw_id}"[:32]
 
-    first_name = doc.get("first_name")
-    last_name = doc.get("last_name")
-    name_masked = mask_occupant_name(first_name, last_name)
-
-    age_range = compute_age_range(resolve_age(doc))
+    age = resolve_age(doc)
+    age_range = compute_age_range(age)
     gender = doc.get("gender")
 
     special_needs = doc.get("special_needs") or []
@@ -104,7 +98,11 @@ def project_shelter_occupant(
         "_id": f"{shelter_code}:{raw_id}",
         "shelter_code": shelter_code,
         "occupant_ref": occupant_ref,
-        "name_masked": name_masked,
+        "first_name": doc.get("first_name") or None,
+        "last_name": doc.get("last_name") or None,
+        "age": int(age) if age is not None else None,
+        **_project_id(doc.get("person_id")),
+        "phone": doc.get("phone") or None,
         "age_range": age_range,
         "gender": gender,
         "care_flags": care_flags,

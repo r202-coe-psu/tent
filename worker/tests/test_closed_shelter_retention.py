@@ -102,7 +102,8 @@ def _seed_operations(code: str):
             id=f"{code}:evacuee:01",
             shelter_code=code,
             occupant_ref="evacuee:01",
-            name_masked="ส***",
+            first_name="สมชาย",
+            last_name="ใจดี",
             age_range="18-59",
             updated_at=now,
         ),
@@ -129,7 +130,8 @@ async def _insert_person(code: str, person_id: str) -> None:
         id=person_id,
         shelter_code=code,
         first_name="สมชาย",
-        last_name_masked="ใ***",
+        last_name="ใจดี",  # plaintext since CR-257 — purged with the row
+        national_id="3900100244192",
         status="active",
         updated_at=datetime.now(UTC),
     ).insert()

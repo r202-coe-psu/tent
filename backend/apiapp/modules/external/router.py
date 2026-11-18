@@ -16,7 +16,7 @@ from ..evacuee.schemas import ApiErrorResponse, ExternalSearchResponse, SearchRe
 from ..evacuee.use_case import EvacueeUseCase, get_evacuee_use_case
 from ..needs.schemas import ExternalNeedsListResponse
 from ..needs.use_case import NeedsUseCase, get_needs_use_case
-from ..shelter.schemas import ShelterDetailResponse
+from ..shelter.schemas import ExternalShelterDetailResponse
 from ..shelter.use_case import ShelterUseCase, get_shelter_use_case
 
 router = APIRouter(
@@ -29,12 +29,12 @@ CACHE_CONTROL = "public, max-age=600"
 CONFIG_CACHE_CONTROL = "public, max-age=60"
 
 
-@router.get("/shelters/{code}", response_model=ShelterDetailResponse)
+@router.get("/shelters/{code}", response_model=ExternalShelterDetailResponse)
 async def get_shelter(
     code: str,
     response: Response,
     use_case: ShelterUseCase = Depends(get_shelter_use_case),  # noqa: B008
-) -> ShelterDetailResponse:
+) -> ExternalShelterDetailResponse:
     response.headers["Cache-Control"] = CACHE_CONTROL
     result = await use_case.get_shelter(code=code)
     if not result:
@@ -42,7 +42,8 @@ async def get_shelter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": {"code": "NOT_FOUND", "message": "Shelter not found"}},
         )
-    return result
+    # CR-254 D3: drop the per-zone fields the public detail carries.
+    return ExternalShelterDetailResponse.model_validate(result.model_dump())
 
 
 @router.get("/needs", response_model=ExternalNeedsListResponse)

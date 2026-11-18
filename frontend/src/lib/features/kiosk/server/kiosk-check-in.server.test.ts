@@ -4,6 +4,7 @@ import { findMasterByCode } from '$lib/server/shelters.admin';
 import { getEvacueeQrPrints, issueEvacueeQr } from '$lib/server/evacuee-qr-service';
 import {
 	checkInSelectedMembers,
+	HOUSEHOLD_EXPAND_BATCH_SIZE,
 	KioskInputError,
 	KioskLookupUnavailableError,
 	KioskThaidIdentityMismatchError,
@@ -486,15 +487,58 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		}
 	});
 
-	it('returns too_many after the sixth eligible household', async () => {
+	it('lists every eligible household even when more than five share the phone', async () => {
 		for (let index = 0; index < 6; index += 1) setHousehold([evacuee(index)]);
 
-		expect(await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone })).toEqual({
-			kind: 'too_many'
-		});
+		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
+		expect(result.kind).toBe('candidates');
+		if (result.kind === 'candidates') expect(result.candidates).toHaveLength(6);
 	});
 
-	it('keeps the five-household cap when a candidate id is supplied', async () => {
+	it('bounds concurrent household queries when many households share the phone', async () => {
+		// 45 stays under the 50-doc phone page so the scan is not treated as truncated.
+		const householdCount = 45;
+		for (let index = 0; index < householdCount; index += 1) {
+			// The shared `ids` fixture only has a dozen entries, so mint unique ids here.
+			const suffix = String(index).padStart(2, '0');
+			setHousehold([
+				evacuee(0, {
+					_id: `evacuee:01ARZ3NDEKTSV4RRFFQ69G5${suffix}`,
+					household_id: `household:bulk-${suffix}`,
+					first_name: `สมชาย${suffix}`,
+					created_at: `2026-09-01T00:${suffix}:00.000Z`
+				})
+			]);
+		}
+
+		const baseImpl = mockAdminFetch.getMockImplementation();
+		if (!baseImpl) throw new Error('mock not configured');
+		let inFlight = 0;
+		let maxInFlight = 0;
+		mockAdminFetch.mockImplementation(async (path, init) => {
+			const isHouseholdFind =
+				path.endsWith('/_find') &&
+				typeof (JSON.parse(String(init?.body ?? '{}')) as { selector?: { household_id?: unknown } })
+					.selector?.household_id === 'string';
+			if (!isHouseholdFind) return baseImpl(path, init);
+			inFlight += 1;
+			maxInFlight = Math.max(maxInFlight, inFlight);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			try {
+				return await baseImpl(path, init);
+			} finally {
+				inFlight -= 1;
+			}
+		});
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
+		expect(result.kind).toBe('candidates');
+		if (result.kind === 'candidates') expect(result.candidates).toHaveLength(householdCount);
+		expect(maxInFlight).toBeGreaterThan(1);
+		expect(maxInFlight).toBeLessThanOrEqual(HOUSEHOLD_EXPAND_BATCH_SIZE);
+	});
+
+	it('resolves a candidate id when more than five households share the phone', async () => {
 		let firstId = '';
 		for (let index = 0; index < 6; index += 1) {
 			const member = evacuee(index);
@@ -508,7 +552,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				phone,
 				primary_evacuee_id: firstId
 			})
-		).toEqual({ kind: 'too_many' });
+		).toMatchObject({ kind: 'household', primary_evacuee_id: firstId });
 	});
 
 	it('finds a kiosk walk-in by phone and lets only checked-in members be reprinted', async () => {

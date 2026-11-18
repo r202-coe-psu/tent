@@ -397,6 +397,85 @@ async def test_shelter_detail_occupancy_falls_back_to_persons_before_reprojectio
     assert (shelter["occupancy"], shelter["present"], shelter["in_zone"]) == (3, 2, 1)
 
 
+# --- #1241: per-zone Present headcount ---------------------------------------------------
+
+
+def _zoned_shelter_doc(code: str) -> dict:
+    doc = _shelter_doc(code, "open")
+    doc["raw_data"]["zones"] = [
+        {"code": "Z1", "name": "โซนครอบครัว", "type": "general", "capacity": 10, "status": "active"},
+        {"code": "Z2", "name": "โซนสัตว์เลี้ยง", "type": "pet", "capacity": 5, "status": "closed"},
+        {"code": "Z3", "name": "โซนว่าง", "type": "female", "capacity": 8},
+    ]
+    return doc
+
+
+async def test_shelter_detail_zone_present_counts_present_statuses_only(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _zoned_shelter_doc("SH001")
+    doc["occupancy_by_zone"] = {
+        "Z1": {
+            "active": 2,
+            "room_confirmed": 1,
+            "temporary_leave": 1,
+            # Not Present: not checked in yet, or gone.
+            "pre_registered": 3,
+            "checked_out": 4,
+        },
+        "Z2": {"active": 1},
+        # A zone code the shelter no longer has is not shown anywhere.
+        "GONE": {"active": 9},
+    }
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    zones = response.json()["shelter"]["zones"]
+    assert [(z["code"], z["status"], z["present"]) for z in zones] == [
+        ("Z1", "active", 4),
+        ("Z2", "closed", 1),
+        # Nobody in the zone: 0, not null. No `status` in raw_data: active.
+        ("Z3", "active", 0),
+    ]
+
+
+async def test_shelter_detail_zone_present_is_null_before_reprojection(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """No `occupancy_by_zone` yet: no per-zone count, and no `public_persons` fallback."""
+    await _insert_shelter_doc(db_client, settings, _zoned_shelter_doc("SH001"))
+    await _insert_person_doc(db_client, settings, "evacuee:a0", "SH001", "active")
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    zones = response.json()["shelter"]["zones"]
+    assert [z["present"] for z in zones] == [None, None, None]
+
+
+async def test_shelter_detail_zone_present_is_zero_when_deactivated(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _zoned_shelter_doc("SH001")
+    doc["is_active"] = False
+    doc["occupancy_by_zone"] = {"Z1": {"active": 3}}
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    zones = response.json()["shelter"]["zones"]
+    assert [z["present"] for z in zones] == [0, 0, 0]
+
+
 # --- #751 regression: public `accepts_pre_registration` is unchanged -----------------------
 # The flag logic moves into a helper shared with the partner plane (EXT-002/003/008). The public
 # field stays "the staff switch is exactly True" — a missing flag is False, and the shelter's
@@ -520,3 +599,95 @@ async def test_shelter_list_has_no_donation_points(
     assert response.status_code == 200
     item = next(s for s in response.json()["shelters"] if s["code"] == "SH203")
     assert "donation_points" not in item
+
+
+# --- CR-252: external shelter -------------------------------------------------------------
+
+
+async def test_external_shelter_list_and_detail(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _shelter_doc("SH301", "unknown", {"accepts_pre_registration": True})
+    doc.update(is_external=True, external_url="https://example.org/s", capacity=0)
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    listing = await client.get("/public/v1/shelters", headers=auth_headers)
+    (item,) = [s for s in listing.json()["shelters"] if s["code"] == "SH301"]
+    assert item["status"] == "unknown"
+    assert item["is_external"] is True
+    assert item["external_url"] == "https://example.org/s"
+    assert item["accepts_pre_registration"] is False
+
+    detail = await client.get("/public/v1/shelters/SH301", headers=auth_headers)
+    shelter = detail.json()["shelter"]
+    assert shelter["status"] == "UNKNOWN"  # never falls back to CLOSED
+    assert shelter["is_external"] is True
+    assert shelter["external_url"] == "https://example.org/s"
+    assert shelter["accepts_pre_registration"] is False
+
+
+async def test_regular_shelter_is_not_external(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _insert_shelter_doc(db_client, settings, _shelter_doc("SH302"))
+    detail = await client.get("/public/v1/shelters/SH302", headers=auth_headers)
+    shelter = detail.json()["shelter"]
+    assert shelter["is_external"] is False
+    assert shelter["external_url"] is None
+
+
+# --- CR-253: parking_points + parking_vehicle_types (projected fields only) ---
+
+
+_PARKING = {
+    "id": "p1",
+    "name": "ลานหน้าอาคาร",
+    "note": None,
+    "geo": {"lat": 7.0086, "lng": 100.4747},
+    "vehicles": [{"type": "car", "max_capacity": 30}],
+}
+
+
+async def test_shelter_list_and_detail_return_projected_parking_fields(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    doc = _shelter_doc("SH301")
+    doc["raw_data"]["parking_points"] = [{"id": "raw", "name": "ห้ามรั่ว"}]
+    doc["parking_points"] = [_PARKING]
+    doc["parking_vehicle_types"] = ["car"]
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    listed = await client.get("/public/v1/shelters", headers=auth_headers)
+    item = next(s for s in listed.json()["shelters"] if s["code"] == "SH301")
+    assert item["parking_points"] == [_PARKING]
+    assert item["parking_vehicle_types"] == ["car"]
+
+    detail = await client.get("/public/v1/shelters/SH301", headers=auth_headers)
+    assert detail.json()["shelter"]["parking_points"] == [_PARKING]
+    assert detail.json()["shelter"]["parking_vehicle_types"] == ["car"]
+    assert "ห้ามรั่ว" not in listed.text + detail.text
+
+
+async def test_shelter_parking_fields_default_to_empty_before_reprojection(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _insert_shelter_doc(db_client, settings, _shelter_doc("SH302"))
+
+    listed = await client.get("/public/v1/shelters", headers=auth_headers)
+    item = next(s for s in listed.json()["shelters"] if s["code"] == "SH302")
+    assert item["parking_points"] == [] and item["parking_vehicle_types"] == []
+    detail = await client.get("/public/v1/shelters/SH302", headers=auth_headers)
+    assert detail.json()["shelter"]["parking_points"] == []
+    assert detail.json()["shelter"]["parking_vehicle_types"] == []

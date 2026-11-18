@@ -121,3 +121,24 @@ async def test_get_summary_critical_items_only_lists_low_and_critical(
     assert critical == {"ยาสามัญประจำบ้าน": "low", "ของหมด": "critical"}
     assert "น้ำดื่ม 600 มล." not in critical  # healthy — omitted
     assert locations["SH002"]["critical_items"] == []
+
+
+async def test_summary_capacity_total_skips_external_shelter(
+    client: AsyncClient, two_shelters: None
+) -> None:
+    """CR-252 FR-16: an external shelter is listed but its capacity is not summed."""
+    await PublicShelter(
+        id="SH003",
+        shelter_code="SH003",
+        name="ศูนย์ภายนอก",
+        status="unknown",
+        location_status="open",
+        is_active=True,
+        is_external=True,
+        capacity=999,
+        occupancy_total=0,
+        updated_at=datetime(2026, 8, 11, 9, 15, 0, tzinfo=UTC),
+    ).insert()
+    response = await client.get("/external/summary", headers=_bearer(["location-read"]))
+    assert response.status_code == 200, response.text
+    assert response.json()["result"]["capacity_total"] == 600

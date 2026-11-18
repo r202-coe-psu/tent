@@ -31,8 +31,29 @@ def resolve_operation_status(doc: dict[str, Any]) -> str | None:
     return None
 
 
+def is_shelter_external(doc: dict[str, Any]) -> bool:
+    """CR-252: a shelter run in another system — listed publicly, never operated here."""
+    return doc.get("is_external") is True
+
+
+def resolve_external_url(doc: dict[str, Any]) -> str | None:
+    """``external_url`` only when it is a non-blank ``https://`` link (CR-252 FR-2)."""
+    raw = doc.get("external_url") if is_shelter_external(doc) else None
+    if not isinstance(raw, str):
+        return None
+    url = raw.strip()
+    return url if url.lower().startswith("https://") else None
+
+
 def is_shelter_cancelled(doc: dict[str, Any]) -> bool:
     return resolve_operation_status(doc) in CANCELLED_STATUSES
+
+
+def is_shelter_public_hidden(doc: dict[str, Any]) -> bool:
+    """Staff switched the shelter off the public plane (`feature_flags.public_visible`
+    explicitly false; missing = visible). Handled like `cancelled`."""
+    flags = doc.get("feature_flags")
+    return isinstance(flags, dict) and flags.get("public_visible") is False
 
 
 DEFAULT_RETENTION_MONTHS_AFTER_CLOSE = 3
@@ -48,6 +69,9 @@ class RetentionPhase(StrEnum):
     CLOSED_WITHOUT_DATE = "closed_without_date"
     # Cancelled, or no status at all: never part of the public plane.
     HIDDEN = "hidden"
+    # CR-252: external shelter — no shelter DB content here, so no listener, no
+    # bootstrap, no occupancy (FR-12).
+    EXTERNAL = "external"
 
     @property
     def is_listened(self) -> bool:
@@ -73,6 +97,7 @@ def classify_retention(
     closed_at: datetime | None,
     retention_months: int,
     now: datetime,
+    is_external: bool = False,
 ) -> RetentionPhase:
     """Classify a shelter by its status and close time.
 
@@ -80,6 +105,8 @@ def classify_retention(
     projected ``public_shelters.status``; both spell a closed shelter ``closed``."""
     if status is None or status in CANCELLED_STATUSES:
         return RetentionPhase.HIDDEN
+    if is_external:
+        return RetentionPhase.EXTERNAL
     if status not in CLOSED_STATUSES:
         return RetentionPhase.OPEN
     if closed_at is None:
@@ -95,11 +122,15 @@ def classify_retention(
 def classify_registry_shelter(
     doc: dict[str, Any], *, retention_months: int, now: datetime
 ) -> RetentionPhase:
+    # CR-251 FR-8: a hidden shelter is never bootstrapped or listened to (like cancelled).
+    if is_shelter_public_hidden(doc):
+        return RetentionPhase.HIDDEN
     return classify_retention(
         status=resolve_operation_status(doc),
         closed_at=_parse_timestamp(doc.get("closed_at")),
         retention_months=retention_months,
         now=now,
+        is_external=is_shelter_external(doc),
     )
 
 
@@ -120,6 +151,10 @@ def map_public_shelter_status(doc: dict[str, Any]) -> str:
         return "full"
     if status == "standby":
         return "standby"
+    if status == "unknown":
+        # CR-252: external shelter, real status not known here — a status of its own,
+        # neither hidden nor "open".
+        return "unknown"
     # active / legacy "open"
     return "open"
 
@@ -135,6 +170,10 @@ def backfill_capacity(doc: dict[str, Any]) -> int:
     capacity = doc.get("capacity")
     if isinstance(capacity, (int, float)) and capacity > 0:
         return int(capacity)
+    if is_shelter_external(doc):
+        # CR-252 (decision sync 2026-11-13): an external shelter shows its own optional
+        # max capacity, but never falls back to zones / 100 — 0 means "not given".
+        return 0
     zones = doc.get("zones") or []
     zone_sum = sum(int(z.get("capacity") or 0) for z in zones if isinstance(z, dict))
     if zone_sum > 0:
@@ -232,6 +271,91 @@ def project_donation_points(doc: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+#: Vehicle types a parking point may take, in the order ``parking_vehicle_types`` lists them.
+_VEHICLE_TYPES = ("motorcycle", "car", "truck", "boat")
+
+
+def _parking_policy(doc: dict[str, Any]) -> dict[str, Any]:
+    policy = doc.get("parking_policy")
+    return policy if isinstance(policy, dict) else {}
+
+
+def _point_vehicles(point: dict[str, Any]) -> list[dict[str, Any]]:
+    """Valid ``vehicles[]`` of a parking point: known type once, capacity int >= 0 or null."""
+    raw = point.get("vehicles")
+    if not isinstance(raw, list):
+        return []
+    seen: dict[str, dict[str, Any]] = {}
+    for vehicle in raw:
+        if not isinstance(vehicle, dict) or vehicle.get("type") not in _VEHICLE_TYPES:
+            continue
+        capacity = vehicle.get("max_capacity")
+        if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 0:
+            capacity = None
+        seen.setdefault(
+            vehicle["type"], {"type": vehicle["type"], "max_capacity": capacity}
+        )
+    return list(seen.values())
+
+
+def _parking_points_of(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    points = doc.get("parking_points")
+    return (
+        [p for p in points if isinstance(p, dict)] if isinstance(points, list) else []
+    )
+
+
+def project_parking_points(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """``public_shelters.parking_points`` (CR-253 FR-25/26).
+
+    Only points with a persisted ``id``, a name and a real pin (both coordinates in range, not
+    (0,0)) leave the staff plane; ``availability = none`` hides every saved point.
+    """
+    if _parking_policy(doc).get("availability") == "none":
+        return []
+    out: list[dict[str, Any]] = []
+    for point in _parking_points_of(doc):
+        point_id = point.get("id")
+        name = point.get("name")
+        lat = _pin_coordinate(point.get("lat"), 90)
+        lng = _pin_coordinate(point.get("lng"), 180)
+        if not point_id or not isinstance(point_id, str):
+            continue
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if lat is None or lng is None or (lat == 0 and lng == 0):
+            continue
+        note = point.get("note")
+        note = note.strip() if isinstance(note, str) else ""
+        out.append(
+            {
+                "id": point_id,
+                "name": name.strip(),
+                "note": note or None,
+                "geo": {"lat": lat, "lng": lng},
+                "vehicles": _point_vehicles(point),
+            }
+        )
+    return out
+
+
+def project_parking_vehicle_types(doc: dict[str, Any]) -> list[str]:
+    """``public_shelters.parking_vehicle_types`` (CR-253 FR-35) — same rule as the form's
+    ``effectiveParkingVehicles``: points win once any names a vehicle (pinned or not), else the
+    legacy ``parking_policy.supported_vehicles``; ``availability = none`` is no parking. The
+    total ``common_areas.parking_capacity`` never decides a type (Q6).
+    """
+    policy = _parking_policy(doc)
+    if policy.get("availability") == "none":
+        return []
+    types = {v["type"] for p in _parking_points_of(doc) for v in _point_vehicles(p)}
+    if not types:
+        legacy = policy.get("supported_vehicles")
+        legacy = legacy if isinstance(legacy, list) else []
+        types = {v.get("type") for v in legacy if isinstance(v, dict)}
+    return [t for t in _VEHICLE_TYPES if t in types]
+
+
 def project_shelter(
     doc: dict[str, Any],
 ) -> tuple[ProjectionAction, dict[str, Any] | None]:
@@ -258,7 +382,7 @@ def project_shelter(
     if not code:
         return ("delete", None)
 
-    if is_shelter_cancelled(doc):
+    if is_shelter_cancelled(doc) or is_shelter_public_hidden(doc):
         return ("delete", {"_id": code})
 
     registry_id = doc.get("_id")
@@ -290,6 +414,8 @@ def project_shelter(
         # Own stored field mirroring `status` — see PublicShelter.location_status.
         "location_status": mapped_status,
         "is_active": True,
+        "is_external": is_shelter_external(doc),
+        "external_url": resolve_external_url(doc),
         "location_type": "shelter",
         "location_subtype": doc.get("shelter_type"),
         "capacity": backfill_capacity(doc),
@@ -301,6 +427,8 @@ def project_shelter(
         "contact_phone": contact.get("phone"),
         "opened_at": _parse_timestamp(doc.get("opened_at")),
         "donation_points": project_donation_points(doc),
+        "parking_points": project_parking_points(doc),
+        "parking_vehicle_types": project_parking_vehicle_types(doc),
         "raw_data": doc,
         "updated_at": updated_at,
     }

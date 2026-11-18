@@ -248,7 +248,7 @@
 
 	<!-- Filters -->
 	<div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2">
-		<div class="relative max-w-full space-y-2">
+		<div class="w-full min-w-0 space-y-2">
 			<label for="household-search" class="text-xs font-semibold text-foreground">ค้นหา</label>
 			<div class="relative">
 				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -269,7 +269,7 @@
 			<Select.Root type="single" bind:value={selectedStatus} onValueChange={resetPageOnFilter}>
 				<Select.Trigger
 					id="household-status-filter"
-					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
+					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
 					aria-label="สถานะครัวเรือน"
 				>
 					<span class="truncate">

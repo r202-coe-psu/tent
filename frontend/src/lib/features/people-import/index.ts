@@ -28,6 +28,7 @@ export {
 	ROLE_CHOICES,
 	SHEETS,
 	SPECIAL_NEED_CHOICES,
+	STAY_STATUS_CHOICES,
 	VEHICLE_TYPE_CHOICES,
 	isTextColumn,
 	normalizeHeader,
@@ -40,10 +41,13 @@ export {
 export {
 	buildMasterLookup,
 	emptyLookups,
+	isLegacyTemplate,
 	orphanMemberRows,
 	validateRow,
 	validateWorkbook,
 	type HouseholdImportPayload,
+	type ImportStay,
+	type ImportZone,
 	type Lookups,
 	type MasterLookup,
 	type MemberPayload,
@@ -54,6 +58,8 @@ export {
 	type RowStatus,
 	type RowValidation
 } from './domain/import-row';
+export { capacityWarnings, type CapacityInput } from './domain/capacity';
+export { buildBackfilledStay } from './domain/backfill';
 export {
 	existingPersonKey,
 	findExistingDuplicates,

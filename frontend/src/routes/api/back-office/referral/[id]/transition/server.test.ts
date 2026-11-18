@@ -203,4 +203,25 @@ describe('PATCH /api/back-office/referral/[id]/transition', () => {
 		expect(data.error).toBe('Invalid referral transition');
 		expect(mockTransition).toHaveBeenCalledTimes(2);
 	});
+
+	it.each(['sent', 'accepted'])(
+		'returns 422 when the repository refuses a %s to a closed-intake shelter (CR-251)',
+		async (to) => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'sm_user',
+				roles: ['shelter_manager', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			// The repository module is mocked above, so mirror CouchDbReferralError's shape.
+			mockTransition.mockRejectedValueOnce(
+				Object.assign(new Error('ศูนย์ปลายทางปิดรับการส่งต่อ'), { status: 422 })
+			);
+
+			const res = await PATCH(createMockEvent('referral:1', { to }));
+
+			expect(res.status).toBe(422);
+			expect((await res.json()).error).toContain('ปิดรับการส่งต่อ');
+		}
+	);
 });

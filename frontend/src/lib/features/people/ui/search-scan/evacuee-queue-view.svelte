@@ -37,9 +37,12 @@
 	import {
 		isInShelterStatus,
 		nextQueueLabel,
-		nextQueueLabelText
+		nextQueueLabelText,
+		latestTriageByEvacuee,
+		displayTriageLevel
 	} from '../../domain/intake-pipeline';
 	import { peopleLabels } from '../../domain/people';
+	import { sortByCreatedAtAsc } from '../../domain/evacuee-sort';
 	import { EVACUEE_QUEUE_I18N } from '../_constants/evacuee-queue.i18n';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
@@ -94,6 +97,7 @@
 	const screenings = $derived(screeningsQuery.data ?? []);
 	const screenedIds = $derived(new Set(screenings.map((s) => s.evacuee_id)));
 	const screeningByEvacuee = $derived(new Map(screenings.map((s) => [s.evacuee_id, s])));
+	const triageByEvacuee = $derived(latestTriageByEvacuee(screenings));
 
 	let activeTab = $state<WorkflowTab>(untrack(() => initialTab));
 	let arrivingSubTab = $state<ArrivingSubTab>('all');
@@ -137,44 +141,38 @@
 	);
 
 	const preRegisteredFiltered = $derived(
-		preRegisteredEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				const isKiosk = e.registered_via === 'kiosk' || !!e.card_snapshot;
-				const isWeb = e.registered_via === 'web';
-				if (preRegChannelFilter === 'kiosk') return isKiosk;
-				if (preRegChannelFilter === 'web') return isWeb;
-				if (preRegChannelFilter === 'other') return !isKiosk && !isWeb;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(preRegisteredEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			const isKiosk = e.registered_via === 'kiosk' || !!e.card_snapshot;
+			const isWeb = e.registered_via === 'web';
+			if (preRegChannelFilter === 'kiosk') return isKiosk;
+			if (preRegChannelFilter === 'web') return isWeb;
+			if (preRegChannelFilter === 'other') return !isKiosk && !isWeb;
+			return true;
+		})
 	);
 
 	const arrivingFiltered = $derived(
-		arrivingEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				const hasScreening = screenedIds.has(e._id);
-				if (arrivingSubTab === 'medical') return enableMedical && !hasScreening;
-				if (arrivingSubTab === 'zoning') return !enableMedical || hasScreening;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(arrivingEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			const hasScreening = screenedIds.has(e._id);
+			if (arrivingSubTab === 'medical') return enableMedical && !hasScreening;
+			if (arrivingSubTab === 'zoning') return !enableMedical || hasScreening;
+			return true;
+		})
 	);
 
 	const allFiltered = $derived(
-		allEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				if (allStatusFilter === IN_SHELTER_FILTER) {
-					if (!isInShelterStatus(e)) return false;
-				} else if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) {
-					return false;
-				}
-				if (allZoneFilter !== 'all' && e.current_stay?.zone !== allZoneFilter) return false;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(allEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			if (allStatusFilter === IN_SHELTER_FILTER) {
+				if (!isInShelterStatus(e)) return false;
+			} else if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) {
+				return false;
+			}
+			if (allZoneFilter !== 'all' && e.current_stay?.zone !== allZoneFilter) return false;
+			return true;
+		})
 	);
 
 	const activeFiltered = $derived(
@@ -288,8 +286,8 @@
 	{#if screening}
 		<span class="inline-flex items-center gap-1 font-medium text-emerald-700">
 			<CheckCircle2 class="size-3.5 shrink-0 text-emerald-600" />
-			{t.screened}{#if screening.triage_level}
-				({t.triage[screening.triage_level] ?? screening.triage_level}){/if}
+			{t.screened}
+			({t.triage[displayTriageLevel(triageByEvacuee.get(row._id))]})
 		</span>
 	{:else}
 		<span class="font-medium text-amber-700">{t.awaitingScreening}</span>

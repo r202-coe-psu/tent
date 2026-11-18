@@ -9,7 +9,8 @@ export const GRANTABLE_SCOPES = [
 	'booking-write',
 	'booking-bypass',
 	'residency-read',
-	'occupant-search'
+	'occupant-search',
+	'pii-full'
 ] as const;
 export type GrantableScope = (typeof GRANTABLE_SCOPES)[number];
 
@@ -23,7 +24,9 @@ export const SCOPE_LABEL: Record<GrantableScope, string> = {
 		'booking-bypass — Book a shelter that is closed to bookings, EOC override (EXT-008)',
 	'residency-read': 'residency-read — Per-person shelter residency by national ID (EXT-011)',
 	'occupant-search':
-		'occupant-search — Search persons by name / national ID / passport / phone (EXT-012)'
+		'occupant-search — Search persons by name / national ID / passport / phone (EXT-012)',
+	'pii-full':
+		'pii-full — Unmasked personal data on EXT-007 / EXT-012, with occupancy-pii-read / occupant-search (CR-257)'
 };
 
 /** Scopes that expose individual-level PII/sensitive data under PDPA — flagged in the UI. */
@@ -32,7 +35,8 @@ export const SENSITIVE_SCOPES: readonly GrantableScope[] = [
 	'booking-write',
 	'booking-bypass',
 	'residency-read',
-	'occupant-search'
+	'occupant-search',
+	'pii-full'
 ];
 
 /** Per-scope PDPA warning shown beside each sensitive scope in the create/edit dialogs. */
@@ -46,7 +50,9 @@ export const SENSITIVE_SCOPE_WARNING: Partial<Record<GrantableScope, string>> = 
 	'residency-read':
 		'Reveals whether a given national ID is staying at a shelter, and where (PDPA-sensitive). Grant only with written approval on file for this module.',
 	'occupant-search':
-		'Lets this partner search for people by name, national ID, passport or phone number and see their status and shelter (PDPA-sensitive). Grant only with written approval on file for this module.'
+		'Lets this partner search for people by name, national ID, passport or phone number and see their status and shelter (PDPA-sensitive). Grant only with written approval on file for this module.',
+	'pii-full':
+		"Lets this partner see people's full name, national ID / passport, phone number, full home address, age and household members — nothing masked — on EXT-007 and EXT-012. Works only together with occupancy-pii-read or occupant-search (PDPA-sensitive). Grant only per case, with written approval on file for this module."
 };
 
 /** Partner systems on the OAuth plane (ADR 0002; M2 added by CR-154) — a closed set. */

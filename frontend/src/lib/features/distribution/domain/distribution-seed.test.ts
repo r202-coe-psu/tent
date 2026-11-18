@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { thailandCalendarDay } from './food-supplies';
 import { stockLedgerDocSchema, type StockLedger } from '$lib/features/operations';
 import {
 	buildBackOfficeDocs,
@@ -86,5 +87,30 @@ describe('distribution seed ledger (#772)', () => {
 		const { ledger } = await buildDistributionDocs(catalog, people, destinations, ctx, NOW);
 
 		expectValidLedger(ledger);
+	});
+});
+
+describe('distribution seed meal coverage logs (#1300)', () => {
+	const people = Array.from({ length: DISTRIBUTION_RECIPIENTS_NEEDED }, (_, i) => ({
+		id: `evacuee:01M5RCPT${String(i).padStart(18, '0')}`
+	}));
+
+	it('records meals on the previous Thai day, some people with two, some with one, one voided', async () => {
+		const { logs } = await buildDistributionDocs(catalog, people, destinations, ctx, NOW);
+		const yesterday = logs.filter(
+			(l) =>
+				thailandCalendarDay(l.distributed_at) ===
+				thailandCalendarDay(new Date(NOW - 24 * 3_600_000))
+		);
+		const countingBy = new Map<string, Set<string>>();
+		for (const l of yesterday) {
+			if (l.status === 'voided') continue;
+			countingBy.set(l.recipient_id!, (countingBy.get(l.recipient_id!) ?? new Set()).add(l.meal!));
+		}
+		const sizes = [...countingBy.values()].map((m) => m.size);
+		expect(sizes).toContain(2);
+		expect(sizes).toContain(1);
+		expect(yesterday.filter((l) => l.status === 'voided')).toHaveLength(1);
+		expect(new Set(logs.map((l) => l._id)).size).toBe(logs.length);
 	});
 });

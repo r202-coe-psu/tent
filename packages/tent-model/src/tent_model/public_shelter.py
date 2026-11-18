@@ -42,6 +42,23 @@ class DonationPoint(BaseModel):
     location_note: str | None = None
 
 
+class ParkingVehicle(BaseModel):
+    """A vehicle type a parking point takes, with its capacity (CR-253)."""
+
+    type: str
+    max_capacity: int | None = None
+
+
+class ParkingPoint(BaseModel):
+    """A pinned parking point of a shelter (CR-253). Never read from ``raw_data``."""
+
+    id: str
+    name: str
+    note: str | None = None
+    geo: GeoPoint
+    vehicles: list[ParkingVehicle] = Field(default_factory=list)
+
+
 class PublicShelterReadinessSummary(BaseModel):
     latest_assessment_id: str | None = None
     verdict: str | None = None
@@ -65,6 +82,10 @@ class PublicShelter(Document):
     status: str = "open"
     location_status: str = "open"
     is_active: bool = True
+    # CR-252: run in another system — status `unknown`, never bookable.
+    # Capacity is the entered value (0 = not entered).
+    is_external: bool = False
+    external_url: str | None = None
     location_type: str = "shelter"
     location_subtype: str | None = None
     location: GeoJsonPoint | None = None
@@ -89,9 +110,17 @@ class PublicShelter(Document):
     # `None` = row not re-projected since this field was added: readers fall back to
     # counting `public_persons` (legacy, misses search-excluded people).
     occupancy_by_status: dict[str, int] | None = None
+    # `current_stay.zone` -> `current_stay.status` -> count, over the same evacuees as
+    # `occupancy_by_status` (draft-public-zone-occupancy, #1241). The API joins it with
+    # `raw_data.zones` and sums the Present statuses per zone. `None` = not re-projected
+    # yet: readers report no per-zone count (no `public_persons` fallback).
+    occupancy_by_zone: dict[str, dict[str, int]] | None = None
     readiness: PublicShelterReadinessSummary | None = None
     # Only ticked storage points with a pin; never read the points from `raw_data`.
     donation_points: list[DonationPoint] = Field(default_factory=list)
+    parking_points: list[ParkingPoint] = Field(default_factory=list)
+    # Effective vehicle types for the list filter (CR-253 FR-35): motorcycle, car, truck, boat order.
+    parking_vehicle_types: list[str] = Field(default_factory=list)
     raw_data: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime
 

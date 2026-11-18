@@ -48,7 +48,8 @@ describe('template → parse round trip', () => {
 		const { shelters, zones, foodDistributionPoints, hasFoodDistributionPointsSheet } =
 			await generateAndParse();
 
-		expect(shelters).toHaveLength(1);
+		// the sample holds a normal shelter plus the CR-252 external example
+		expect(shelters).toHaveLength(2);
 		expect(shelters[0].cells[H.name]).toBeTruthy();
 		expect(shelters[0].cells[H.capacity]).toBeTruthy();
 		// A column on a non-main 1:1 sheet — proves the merge still joins on ลำดับที่.
@@ -85,5 +86,29 @@ describe('template → parse round trip', () => {
 		expect(zones.length).toBeGreaterThan(0);
 		expect(zones[0].ref).toBe('1');
 		expect(zones[0].cells[H.zone_code]).toBeTruthy();
+	});
+});
+
+describe('external columns in the template (CR-252)', () => {
+	it('adds both headers to the main sheet and an external sample row', async () => {
+		const { shelters } = await generateAndParse();
+		expect(shelters[0].cells[H.is_external] ?? '').toBe('');
+		expect(shelters[1].cells[H.is_external]).toBe('ใช่');
+		expect(shelters[1].cells[H.external_url]).toMatch(/^https:\/\//);
+	});
+
+	it('lists the ใช่/ไม่ใช่ dropdown and documents the rule on the README sheet', async () => {
+		const ExcelJS = (await import('exceljs')).default;
+		const wb = new ExcelJS.Workbook();
+		await wb.xlsx.load(await (await buildShelterTemplateBlob(MASTERS)).arrayBuffer());
+		const readme = wb.getWorksheet('คำแนะนำ')!;
+		const texts: string[] = [];
+		readme.eachRow((row) => texts.push(String(row.getCell(2).value ?? '')));
+		expect(texts.some((t) => t.includes(H.is_external))).toBe(true);
+		expect(texts).toContain(H.external_url);
+		const main = wb.worksheets.find((w) => w.name !== 'lists' && w.name !== 'คำแนะนำ')!;
+		const headers = main.getRow(1).values as unknown[];
+		const col = headers.findIndex((v) => String(v).startsWith(H.is_external));
+		expect(main.getCell(2, col).dataValidation?.type).toBe('list');
 	});
 });

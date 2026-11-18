@@ -75,7 +75,7 @@ describe('POST /api/public/v1/registrations/check-duplicate', () => {
 		expect(body.evacuee).toBeUndefined();
 	});
 
-	it('detects duplicate phone in shelter active holds', async () => {
+	it('does not report a duplicate for a shared phone (#1049)', async () => {
 		vi.mocked(findConflictingHold).mockResolvedValue({
 			current_stay: { status: 'pre_registered' },
 			phone: '0812345678'
@@ -84,9 +84,8 @@ describe('POST /api/public/v1/registrations/check-duplicate', () => {
 		const res = await POST(event({ phone: '081-234-5678' }));
 		expect(res.status).toBe(200);
 		const body = await res.json();
-		expect(body.duplicate).toBe(true);
-		expect(body.field).toBe('phone');
-		expect(body.name).toBeUndefined();
+		expect(body.duplicate).toBe(false);
+		expect(body.field).toBeNull();
 	});
 
 	it('detects duplicate in central unassigned pool', async () => {

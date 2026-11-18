@@ -23,6 +23,8 @@ export type StaffPinEntryDeps = {
 	oncancel: () => void;
 	/** The keys are usable again after a wrong PIN or a failed check (the panel refocuses them). */
 	onretry?: () => void;
+	/** The server refused because the kiosk is closed: the panel is closed and the closed page shows. */
+	onclosed?: () => void;
 };
 
 /**
@@ -117,6 +119,11 @@ export class StaffPinEntry {
 				return;
 			case 'not_set':
 				this.status = { kind: 'blocked' };
+				return;
+			case 'closed':
+				this.status = { kind: 'idle' };
+				this.close();
+				this.deps.onclosed?.();
 		}
 	}
 }

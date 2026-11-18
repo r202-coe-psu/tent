@@ -2329,6 +2329,77 @@ export interface components {
 			/** Zone Name */
 			zone_name?: string | null;
 		};
+		/** ExternalShelterDetail */
+		ExternalShelterDetail: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/**
+			 * Site Kind
+			 * @description Master code from master_data:site_kind (e.g. evacuation_center, host_house)
+			 * @default evacuation_center
+			 */
+			site_kind: string;
+			/** Status */
+			status: string;
+			/** Admin Type */
+			admin_type: string;
+			/** Address */
+			address: string;
+			capacity: components['schemas']['ShelterCapacityDetail'];
+			/**
+			 * Occupancy
+			 * @description Forecast Occupancy headcount
+			 */
+			occupancy: number;
+			/**
+			 * Present
+			 * @description Present Occupancy headcount
+			 */
+			present: number;
+			/**
+			 * In Zone
+			 * @description In-zone Occupancy headcount (room_confirmed)
+			 */
+			in_zone: number;
+			/** Occupancy Rate */
+			occupancy_rate: number;
+			/** Building Status */
+			building_status: string;
+			geo?: components['schemas']['GeoPoint'] | null;
+			location?: components['schemas']['GeoJsonPoint'] | null;
+			admission_policy: components['schemas']['ShelterAdmissionPolicyDetail'];
+			travel: components['schemas']['ShelterTravelDetail'];
+			facilities: components['schemas']['ShelterFacilitiesDetail'];
+			/** Zones */
+			zones?: components['schemas']['ExternalShelterZoneDetail'][] | null;
+			contact: components['schemas']['ShelterContactDetail'];
+			/** Faq */
+			faq: components['schemas']['ShelterFaqDetail'][];
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
+			/** External Url */
+			external_url?: string | null;
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
+			/** Parking Points */
+			parking_points?: components['schemas']['ParkingPoint'][];
+			/** Parking Vehicle Types */
+			parking_vehicle_types?: string[];
+		};
+		/** ExternalShelterDetailResponse */
+		ExternalShelterDetailResponse: {
+			shelter: components['schemas']['ExternalShelterDetail'];
+		};
 		/** ExternalShelterNeedsResponse */
 		ExternalShelterNeedsResponse: {
 			/** Code */
@@ -2337,6 +2408,21 @@ export interface components {
 			name: string;
 			/** Needs */
 			needs: components['schemas']['ExternalNeedItemResponse'][];
+		};
+		/**
+		 * ExternalShelterZoneDetail
+		 * @description Partner zone shape: without the per-zone `code` / `status` / `present` the public
+		 *     detail gained in CR-254 — the partner API stays as it was (CR-254 D3).
+		 */
+		ExternalShelterZoneDetail: {
+			/** Name */
+			name?: string | null;
+			/** Type */
+			type: string;
+			/** Capacity */
+			capacity?: number | null;
+			/** Area M2 */
+			area_m2?: number | null;
 		};
 		/** FamilyMember */
 		FamilyMember: {
@@ -2603,6 +2689,11 @@ export interface components {
 			closed_at: string | null;
 			/** Is Active */
 			is_active: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
 			/** Occupancy Total */
 			occupancy_total: number;
 			/**
@@ -2670,6 +2761,11 @@ export interface components {
 			closed_at: string | null;
 			/** Is Active */
 			is_active: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
 			/** Occupancy Total */
 			occupancy_total: number;
 			/**
@@ -3392,6 +3488,49 @@ export interface components {
 		OccupancyErrorResponse: {
 			error: components['schemas']['OccupancyErrorDetail'];
 		};
+		/**
+		 * OccupantFullItem
+		 * @description Unmasked occupant — only with `occupancy-pii-read` + `pii-full` (CR-257 OD-3).
+		 *
+		 *     A field is `null` when the person has no such data or the row predates PROJECTION_VERSION 23
+		 *     (never a masked value). `name_masked` / `age_range` stay for clients that read them.
+		 */
+		OccupantFullItem: {
+			/** Occupant Ref */
+			occupant_ref: string;
+			/** Name Masked */
+			name_masked: string;
+			/** Age Range */
+			age_range: string;
+			/** Gender */
+			gender?: string | null;
+			/**
+			 * Care Flags
+			 * @default []
+			 */
+			care_flags: string[];
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** First Name */
+			first_name?: string | null;
+			/** Last Name */
+			last_name?: string | null;
+			/** Name */
+			name?: string | null;
+			/** Age */
+			age?: number | null;
+			/** National Id */
+			national_id?: string | null;
+			/** Passport Id */
+			passport_id?: string | null;
+			/**
+			 * Id Card Type
+			 * @description national_id | passport | pink_card | other
+			 */
+			id_card_type?: string | null;
+			/** Phone */
+			phone?: string | null;
+		};
 		/** OccupantItem */
 		OccupantItem: {
 			/** Occupant Ref */
@@ -3426,7 +3565,7 @@ export interface components {
 			 * Result
 			 * @default []
 			 */
-			result: components['schemas']['OccupantItem'][];
+			result: (components['schemas']['OccupantFullItem'] | components['schemas']['OccupantItem'])[];
 			pagination?: components['schemas']['PaginationMeta'] | null;
 		};
 		/** OccupantsErrorResponse */
@@ -3551,6 +3690,31 @@ export interface components {
 			/** Total Pages */
 			total_pages: number;
 		};
+		/**
+		 * ParkingPoint
+		 * @description A pinned parking point of a shelter (CR-253). Never read from ``raw_data``.
+		 */
+		ParkingPoint: {
+			/** Id */
+			id: string;
+			/** Name */
+			name: string;
+			/** Note */
+			note?: string | null;
+			geo: components['schemas']['GeoPoint'];
+			/** Vehicles */
+			vehicles?: components['schemas']['ParkingVehicle'][];
+		};
+		/**
+		 * ParkingVehicle
+		 * @description A vehicle type a parking point takes, with its capacity (CR-253).
+		 */
+		ParkingVehicle: {
+			/** Type */
+			type: string;
+			/** Max Capacity */
+			max_capacity?: number | null;
+		};
 		/** PersonIdInput */
 		PersonIdInput: {
 			/**
@@ -3589,9 +3753,11 @@ export interface components {
 			message: string;
 			/**
 			 * Result
-			 * @description สูงสุด 10 รายการ; ว่างเมื่อไม่พบ
+			 * @description สูงสุด 10 รายการ; ว่างเมื่อไม่พบ — masked เมื่อมีแค่ scope occupant-search, ข้อมูลเต็มเมื่อมี pii-full ด้วย (CR-257)
 			 */
-			result: components['schemas']['PersonSearchItem'][];
+			result: (
+				components['schemas']['PersonSearchFullItem'] | components['schemas']['PersonSearchItem']
+			)[];
 		};
 		/** PersonSearchErrorResponse */
 		PersonSearchErrorResponse: {
@@ -3605,8 +3771,74 @@ export interface components {
 			detail?: string | null;
 		};
 		/**
+		 * PersonSearchFamilyMember
+		 * @description A household member in full mode (CR-257 FR-18) — same household, same shelter.
+		 */
+		PersonSearchFamilyMember: {
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name?: string | null;
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Status */
+			shelter_status?: string | null;
+		};
+		/**
+		 * PersonSearchFullItem
+		 * @description Unmasked match — only with `occupant-search` + `pii-full` (CR-257).
+		 *
+		 *     `national_id` / `origin_address` / `name` are the whole values. A field is `null` when the
+		 *     person has no such data — or when the row predates PROJECTION_VERSION 23: never a masked
+		 *     value.
+		 */
+		PersonSearchFullItem: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/**
+			 * Checked In At
+			 * @description วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in
+			 */
+			checked_in_at?: string | null;
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name?: string | null;
+			/** Passport Id */
+			passport_id?: string | null;
+			/**
+			 * Id Card Type
+			 * @description ประเภทเอกสารของ national_id/passport_id: national_id | passport | pink_card | other
+			 */
+			id_card_type?: string | null;
+			/** Phone */
+			phone?: string | null;
+			/** Family Members */
+			family_members?: components['schemas']['PersonSearchFamilyMember'][];
+		};
+		/**
 		 * PersonSearchItem
-		 * @description A masked match — same fields as public search minus `family_members` (#736 decision 4).
+		 * @description A masked match — public search fields minus `family_members` (`occupant-search` only).
 		 */
 		PersonSearchItem: {
 			/** Name */
@@ -4147,8 +4379,19 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
+			/** External Url */
+			external_url?: string | null;
 			/** Donation Points */
 			donation_points?: components['schemas']['DonationPoint'][];
+			/** Parking Points */
+			parking_points?: components['schemas']['ParkingPoint'][];
+			/** Parking Vehicle Types */
+			parking_vehicle_types?: string[];
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -4229,12 +4472,23 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
+			/** External Url */
+			external_url?: string | null;
 			/** Readiness Status */
 			readiness_status?: string | null;
 			/** Readiness Tier */
 			readiness_tier?: string | null;
 			/** Readiness Assessed At */
 			readiness_assessed_at?: string | null;
+			/** Parking Points */
+			parking_points?: components['schemas']['ParkingPoint'][];
+			/** Parking Vehicle Types */
+			parking_vehicle_types?: string[];
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -4273,14 +4527,27 @@ export interface components {
 		};
 		/** ShelterZoneDetail */
 		ShelterZoneDetail: {
+			/** Code */
+			code?: string | null;
 			/** Name */
 			name?: string | null;
 			/** Type */
 			type: string;
+			/**
+			 * Status
+			 * @default active
+			 * @enum {string}
+			 */
+			status: 'active' | 'closed';
 			/** Capacity */
 			capacity?: number | null;
 			/** Area M2 */
 			area_m2?: number | null;
+			/**
+			 * Present
+			 * @description Present headcount in this zone (active + room_confirmed + temporary_leave); null until the worker has projected per-zone counts (#1241)
+			 */
+			present?: number | null;
 		};
 		/**
 		 * SlotHold
@@ -5896,7 +6163,7 @@ export interface operations {
 					[name: string]: unknown;
 				};
 				content: {
-					'application/json': components['schemas']['ShelterDetailResponse'];
+					'application/json': components['schemas']['ExternalShelterDetailResponse'];
 				};
 			};
 			/** @description Validation Error */

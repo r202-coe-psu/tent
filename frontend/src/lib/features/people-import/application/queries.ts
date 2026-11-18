@@ -11,6 +11,7 @@ import {
 } from '$lib/db/subscribe-data-changes';
 import { peopleKeys, peopleRepository } from '$lib/features/people';
 import type { AuthorContext } from '$lib/db/model';
+import { importHousehold, PartialHouseholdImportError } from './import-household';
 import { PEOPLE_IMPORT_LOG_TYPE } from '../domain/import-log';
 import { createPeopleImportLog, type ImportRowResult } from '../domain/import-log';
 import type { RowValidation } from '../domain/import-row';
@@ -25,6 +26,9 @@ import { importLogDb, listImportLogs, writeImportLog } from '../data/import-log.
  * in a `people_import_log`, then invalidates the people lists. Partial success
  * is the contract: a household that fails leaves the ones already written in
  * place. Log reactivity rides the shelter DB's changes feed — no polling.
+ *
+ * Each person is then given their real stay (back-dated `check_in` / `check_out` movements —
+ * Backfill Import, #1399) in one `applyBackfilledStays` call per household.
  *
  * Write order per household is deliberately household → head → members, the
  * reverse of the wizard's. The wizard can afford head-first because a person
@@ -93,29 +97,16 @@ export function useImportPeople() {
 
 				const skippedLines = new Set((duplicate?.members ?? []).map((m) => m.line));
 				try {
-					const household = await repo.createHousehold(row.payload.household, ctx);
-					const head = await repo.createEvacuee(
-						{ ...row.payload.head, household_id: household._id },
-						ctx
-					);
-					await repo.patchHousehold(household._id, { head_evacuee_id: head._id });
-					createdPeople += 1;
-
-					let createdMembers = 0;
-					for (const member of row.payload.members) {
-						if (skippedLines.has(member.line)) continue;
-						await repo.createEvacuee({ ...member.evacuee, household_id: household._id }, ctx);
-						createdMembers += 1;
-					}
-					createdPeople += createdMembers;
+					const imported = await importHousehold(repo, row.payload, skippedLines, ctx);
+					createdPeople += imported.createdPeople;
 					skippedPeople += skippedLines.size;
 
 					results.push({
 						row: row.row,
 						label: row.label,
 						status: 'created',
-						household_id: household._id,
-						created_members: createdMembers,
+						household_id: imported.householdId,
+						created_members: imported.createdMembers,
 						skipped_members: skippedLines.size
 					});
 				} catch (e) {
@@ -123,6 +114,8 @@ export function useImportPeople() {
 						row: row.row,
 						label: row.label,
 						status: 'server_error',
+						// A half-written household must be findable from the log (see the error class).
+						...(e instanceof PartialHouseholdImportError ? { household_id: e.householdId } : {}),
 						errors: [
 							{ column: '-', message: e instanceof Error ? e.message : 'บันทึกข้อมูลไม่สำเร็จ' }
 						]

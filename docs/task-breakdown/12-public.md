@@ -2,9 +2,9 @@
 title: "Task Breakdown — Public Portal (PUB tier)"
 status: active
 created: 2026-06-22
-updated: 2026-08-13
+updated: 2026-11-13
 module: public
-note: เพิ่มตาม CR-005 (2026-06-22) — public/no-login portal surface (landing + /shelters + FAQ) ที่ task-breakdown เดิมยังไม่มี module รองรับ; 2026-08-13 — CR-066 T-67 map icons ตาม site_kind (CR-067 P1 **approved**); D-HEALTH-SURFACE=A สีหมุด 5 สีอยู่ T-69
+note: 2026-11-13 — CR-254 +T-77 ยอดคนต่อโซนหน้า `/shelters/[id]` (#1241; ยังไม่รวม Adj MD เข้ายอดโมดูล); เพิ่มตาม CR-005 (2026-06-22) — public/no-login portal surface (landing + /shelters + FAQ) ที่ task-breakdown เดิมยังไม่มี module รองรับ; 2026-08-13 — CR-066 T-67 map icons ตาม site_kind (CR-067 P1 **approved**); D-HEALTH-SURFACE=A สีหมุด 5 สีอยู่ T-69
 ---
 
 # Public Portal (PUB tier)
@@ -28,6 +28,7 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 | T-58 | 🔄 | Public Shelter Dashboard (`/shelters`) — cards + map + filter | CR-005 §D | R3 | prod | ส.ค. | 7 | ÷1.4 | 5 | T-57,T-47 |
 | T-59 | 🔄 | Public FAQ (dynamic) + EOC FAQ setup screen | CR-005 OP-1 | R3 | prod | ส.ค. | 4 | ÷1.6 | 2.5 | T-03 |
 | T-67 | ⬜ | Public map ไอคอนแยก `evacuation_center` vs `host_house` — CR-067 P1 | FR-62 | R3 | prod | in-scope | 3 | ÷1.4 | 2 | T-58,T-66 |
+| T-77 | 🔄 | Public shelter detail — ยอดคนต่อโซน (`/shelters/[id]`) — CR-254 | CR-254 | R3 | prod | in-scope | 4 | ÷1.6 | 2.5 | T-58, T-08 |
 |  |  | **รวมทั้งโมดูล** |  |  |  |  | **17** |  | **11.5** |  |
 
 ## Task Details
@@ -86,6 +87,22 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 - Demo: ศูนย์ + บ้านคนละไอคอน
 
 **Out of scope:** สี 5 แถบ (T-69); SOP-lite; เปิดปุ่มจอง (T-71)
+
+### T-77 — Public shelter detail: ยอดคนต่อโซน (CR-254)
+
+**Status:** 🔄 in progress — [CR-254](../changes/12-public/CR-254-public-zone-occupancy.md) **approved** 2026-11-13 (D1–D3 ตัดสินแล้ว) · GitHub #1241
+**Owner:** Phudit (public surface)
+**Depends:** T-58 (หน้า `/shelters/[id]`), T-08 (โครงโซน + capacity)
+
+**Description:** หน้า public รายละเอียดศูนย์แสดงยอดคน Present ต่อโซนเทียบ capacity พร้อมระดับความเต็ม (80% / 100% เดียวกับ CR-226) และป้ายโซนปิด. worker นับ `public_shelters.occupancy_by_zone` → FastAPI ส่ง `zones[].code/status/present` ทาง `/public/v1/shelters/{code}` เท่านั้น (partner API คงเดิม — D3).
+
+**Files likely touched:** `worker/.../projectors/occupancy.py`, `worker/.../mongo/shelter.py`, `packages/tent-model/.../public_shelter.py`, `backend/apiapp/modules/shelter/*`, `frontend/src/lib/components/shelter-zones.svelte`, `features/public-portal/domain`
+
+**Definition of Done:** ตาม Acceptance ของ CR-254 — ยอดต่อโซนตรงกับการ์ดความเต็มรายโซน back-office (CR-226) · นับคน `search_excluded` · โซนว่าง `0 / capacity` · โซนปิดจาง + ป้าย "ปิด" · `capacity = null` แสดงเฉพาะยอด · แถวที่ยังไม่ re-project ไม่แสดงยอด · `/external/v1/shelters/{code}` ไม่เปลี่ยน · tests worker / backend / frontend domain + dom
+
+**Out of scope:** dashboard รวมทุกโซนทุกศูนย์ (D1) · ส่งยอดต่อโซนให้ partner (D3 — PM จัดการแยก)
+
+> Adj MD ของ T-77 เป็น estimate ยัง **ไม่รวม** เข้ายอดโมดูล / 270 Adj MD (แบบเดียวกับ T-73..T-76)
 
 ## Effort by phase (Adj MD)
 

@@ -370,6 +370,21 @@ describe('activeNavHref — longest path-segment match (FR-KBR-24, draft CR kios
 		);
 	});
 
+	it('matches query-bearing nav targets when the full URL matches', () => {
+		const navWithQuery = [
+			'/back-office/supply',
+			'/back-office/supply?tab=catalog',
+			'/back-office/master-data'
+		];
+		expect(activeNavHref('/back-office/supply?tab=catalog', navWithQuery)).toBe(
+			'/back-office/supply?tab=catalog'
+		);
+		expect(activeNavHref('/back-office/supply?tab=inventory', navWithQuery)).toBe(
+			'/back-office/supply'
+		);
+		expect(activeNavHref('/back-office/supply', navWithQuery)).toBe('/back-office/supply');
+	});
+
 	it('returns null when nothing matches', () => {
 		expect(activeNavHref('/portal', hrefs)).toBeNull();
 		expect(activeNavHref('/back-office/kiosks', [])).toBeNull();
@@ -409,5 +424,14 @@ describe('navLeafHrefs', () => {
 		expect(hrefs).toContain('/back-office/distribution');
 		expect(hrefs).not.toContain(null);
 		expect(hrefs.every((h) => typeof h === 'string')).toBe(true);
+	});
+});
+
+describe('activeNavHref — trailing slash before the query string', () => {
+	it('matches a tab link when the current URL has a slash before ?', () => {
+		const hrefs = ['/back-office/supply?tab=catalog', '/back-office/supply'];
+		expect(activeNavHref('/back-office/supply/?tab=catalog', hrefs)).toBe(
+			'/back-office/supply?tab=catalog'
+		);
 	});
 });

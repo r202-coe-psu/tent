@@ -7,7 +7,10 @@ import type { UnassignedRegistrationReview } from '../domain/review';
 
 /** Staff Unassigned Registration repository — BFF-backed Mongo queue search/claim. */
 export interface UnassignedRegistrationRepository {
-	searchOpen(q: string): Promise<UnassignedRegistrationSearchResponse>;
+	searchOpen(
+		q: string,
+		options?: { signal?: AbortSignal }
+	): Promise<UnassignedRegistrationSearchResponse>;
 	claimMembers(
 		registrationId: string,
 		payload: UnassignedRegistrationClaimRequest

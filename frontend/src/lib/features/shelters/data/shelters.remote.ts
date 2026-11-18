@@ -7,6 +7,7 @@ import {
 	EMPTY_PARKING_POLICY,
 	DEFAULT_SHELTER_FEATURE_FLAGS,
 	DEFAULT_SITE_KIND,
+	isShelterAcceptingReferrals,
 	isShelterMasterDoc,
 	migrateShelterV2ToCurrent,
 	type ShelterMaster
@@ -26,8 +27,10 @@ function masterToBasic(master: ShelterMaster): ShelterBasic {
 		name: master.name,
 		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		operation_status: master.operation_status ?? 'standby',
+		is_external: master.is_external === true,
 		capacity: master.capacity ?? 0,
-		province: master.province ?? null
+		province: master.province ?? null,
+		accepts_referrals: isShelterAcceptingReferrals(master)
 	};
 }
 
@@ -39,6 +42,8 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		site_kind: master.site_kind ?? DEFAULT_SITE_KIND,
 		db: shelterDbName(master.code),
 		operation_status: master.operation_status ?? 'standby',
+		is_external: master.is_external === true,
+		external_url: master.external_url ?? null,
 		capacity: master.capacity ?? 0,
 		shelter_type: master.shelter_type ?? null,
 		floor_count: master.floor_count ?? null,
@@ -67,6 +72,7 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		risk: master.risk ?? {},
 		zones: master.zones ?? [],
 		food_distribution_points: master.food_distribution_points ?? [],
+		parking_points: master.parking_points ?? [],
 		admission_policy: master.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 		luggage_policy: master.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
 		parking_policy: master.parking_policy ?? { ...EMPTY_PARKING_POLICY },

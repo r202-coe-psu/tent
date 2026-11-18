@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
 	findExistingDuplicates,
+	applyExternalTypeRule,
+	externalTypeChangeVerdict,
 	findInFileDuplicates,
 	normalizeShelterName,
 	type ExistingShelter
@@ -36,6 +38,7 @@ describe('findExistingDuplicates', () => {
 	it('matches a row by normalized name', () => {
 		const matches = findExistingDuplicates([ok(1, '  ศูนย์   ก  ')], existing);
 		expect(matches.get(1)).toEqual({
+			existingIsExternal: false,
 			row: 1,
 			name: '  ศูนย์   ก  ',
 			existingCode: 'SH001',
@@ -104,5 +107,38 @@ describe('findInFileDuplicates', () => {
 	it('ignores rows that are not ok', () => {
 		const rows = [ok(1, 'ศูนย์ ก'), failed(2, 'ศูนย์ ก')];
 		expect(findInFileDuplicates(rows).size).toBe(0);
+	});
+});
+
+describe('external type change (CR-252 FR-31)', () => {
+	const existing: ExistingShelter[] = [
+		{ code: 'SH001', name: 'ศูนย์ ก' },
+		{ code: 'SH002', name: 'ศูนย์ ข', is_external: true }
+	];
+
+	it('findExistingDuplicates carries the stored type (missing flag = false)', () => {
+		const m = findExistingDuplicates([ok(1, 'ศูนย์ ก'), ok(2, 'ศูนย์ ข')], existing);
+		expect(m.get(1)?.existingIsExternal).toBe(false);
+		expect(m.get(2)?.existingIsExternal).toBe(true);
+	});
+
+	it('verdict is null for the same type and a message for a flip', () => {
+		expect(externalTypeChangeVerdict(true, true)).toBeNull();
+		expect(externalTypeChangeVerdict(false, false)).toBeNull();
+		expect(externalTypeChangeVerdict(true, false)).toContain('เปลี่ยนชนิดไม่ได้');
+		expect(externalTypeChangeVerdict(false, true)).toContain('เปลี่ยนชนิดไม่ได้');
+	});
+
+	it('fails a flipping row under update, leaves matching, new and skipped rows alone', () => {
+		const rows: RowValidation[] = [
+			{ ...ok(1, 'ศูนย์ ก'), isExternal: true }, // normal -> external
+			{ ...ok(2, 'ศูนย์ ข'), isExternal: true }, // external -> external
+			{ ...ok(3, 'ศูนย์ ค'), isExternal: true } // new
+		];
+		const dups = findExistingDuplicates(rows, existing);
+		const out = applyExternalTypeRule(rows, dups, 'update');
+		expect(out.map((r) => r.ok)).toEqual([false, true, true]);
+		expect(out[0].errors[0].message).toContain('เปลี่ยนชนิดไม่ได้');
+		expect(applyExternalTypeRule(rows, dups, 'skip').every((r) => r.ok)).toBe(true);
 	});
 });

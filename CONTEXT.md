@@ -85,6 +85,10 @@ _Avoid_: Bed booking, seating, housing.
 The formal entry action and movement log that assigns a zone and transitions stay to `active`.
 _Avoid_: Registration, arrival, Zone Arrival Confirmation.
 
+**Backfill Import**:
+The people-import file used to bring in evacuees who have actually stayed (still housed or already left) with their real check-in/check-out times — e.g. an LAO or caretaker-home shelter that opened before the system. Each row carries a stay status (`active` / `checked_out`), arrival time, departure time and zone, and writes back-dated `check_in` / `check_out` movements (the check-out reason is `backfill_import`).
+_Avoid_: Pre-registration, advance booking (a Backfill Import never creates `pre_registered` people).
+
 **Zone Arrival Confirmation**:
 The explicit confirmation that an Evacuee has physically reached their assigned zone/bed after check-in; persisted as stay status `room_confirmed` (after `active`).
 _Avoid_: Check-in, Active, bed scan (implementation detail), RE_ENTERED.

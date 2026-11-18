@@ -1158,10 +1158,10 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					// The shelter this station is working in. A shelter-scoped caller has the
-					// server ignore it (their own scope wins), but a system admin has no
-					// shelter of their own — without it the route can only answer
-					// SHELTER_REQUIRED, which is what the counter form used to hit.
+					// The shelter this station is working in. The server checks the caller's
+					// donation capability IN this shelter (#477, 403 otherwise) and a user of
+					// several shelters must name it; a system admin has no shelter of their
+					// own — without it the route can only answer SHELTER_REQUIRED.
 					shelter_code: getShelterCode(),
 					donor: {
 						name: walkinDonorName.trim(),
