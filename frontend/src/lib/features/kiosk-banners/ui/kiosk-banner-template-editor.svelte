@@ -31,7 +31,9 @@
 		hasLogo,
 		logoError,
 		onchooselogo,
-		onremovelogo
+		onremovelogo,
+		logoInput = $bindable(null),
+		disabled = false
 	}: {
 		form: SuperForm<KioskBannerFormValues>;
 		/** File name of a newly chosen logo. */
@@ -41,6 +43,10 @@
 		logoError: string | null;
 		onchooselogo: (file: File | null) => void;
 		onremovelogo: () => void;
+		/** The logo file input, so the parent can focus it when the logo blocks a save. */
+		logoInput?: HTMLInputElement | null;
+		/** Locks the fields while the PNG is rendered, so it matches the template that is saved. */
+		disabled?: boolean;
 	} = $props();
 
 	// The form is created once by the parent for the lifetime of this editor.
@@ -119,7 +125,7 @@
 	</Form.Field>
 {/snippet}
 
-<div class="space-y-4">
+<fieldset class="min-w-0 space-y-4" {disabled}>
 	<Form.Field {form} name="template.heading">
 		<Form.Control id="banner-template-heading">
 			{#snippet children({ props })}
@@ -192,6 +198,7 @@
 		</Label>
 		<Input
 			id="banner-template-image"
+			bind:ref={logoInput}
 			type="file"
 			accept="image/png,image/jpeg,image/webp"
 			class="h-11"
@@ -215,4 +222,4 @@
 			</Button>
 		{/if}
 	</div>
-</div>
+</fieldset>

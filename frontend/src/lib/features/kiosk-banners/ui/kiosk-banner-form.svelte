@@ -108,6 +108,7 @@
 	let newLogoUrl = $state<string | null>(null);
 	let keepStoredLogo = $state(storedLogoUrl !== null);
 	let canvasNode = $state<HTMLElement | null>(null);
+	let logoInput = $state<HTMLInputElement | null>(null);
 	const logoPreviewUrl = $derived(newLogoUrl ?? (keepStoredLogo ? storedLogoUrl : null));
 	const hasLogo = $derived(logoFile !== null || (keepStoredLogo && storedLogoUrl !== null));
 
@@ -116,8 +117,9 @@
 		newImageUrl = null;
 	}
 
-	// Unmount only (no reactive reads here): free the last preview.
+	// Unmount only (no reactive reads here): free the last preview and drop a logo still shrinking.
 	$effect(() => () => {
+		logoPick++;
 		if (newImageUrl) URL.revokeObjectURL(newImageUrl);
 		if (newLogoUrl) URL.revokeObjectURL(newLogoUrl);
 	});
@@ -131,9 +133,10 @@
 	 * A valid logo (shrunk to fit its 512 KB cap) replaces the current one; an invalid one keeps the
 	 * current logo and says why, which blocks saving until the staff picks again or removes it.
 	 */
-	async function prepareLogo(chosen: File | null) {
-		if (!chosen) return;
+	async function prepareLogo(chosen: File, isCurrent: () => boolean) {
 		const logo = await prepareTemplateLogo(chosen);
+		// A later pick, a removal or an unmount happened while this one was shrinking.
+		if (!isCurrent()) return;
 		if (!logo.ok) {
 			logoError = logo.error;
 			return;
@@ -144,13 +147,18 @@
 		newLogoUrl = URL.createObjectURL(logo.file);
 	}
 
-	// The logo being shrunk; a save waits for it so it never goes out without the chosen logo.
+	// The latest logo being shrunk; a save waits for it so it never goes out without the chosen
+	// logo. `logoPick` counts picks so only the latest one may land.
+	let logoPick = 0;
 	let logoTask: Promise<void> = Promise.resolve();
 	function chooseLogo(chosen: File | null) {
-		logoTask = prepareLogo(chosen);
+		if (!chosen) return;
+		const pick = ++logoPick;
+		logoTask = prepareLogo(chosen, () => pick === logoPick);
 	}
 
 	function removeLogo() {
+		logoPick++;
 		revokeNewLogo();
 		logoFile = null;
 		logoError = null;
@@ -199,9 +207,12 @@
 		await logoTask;
 		if (logoError) {
 			toast.error(logoError);
-			document.getElementById('banner-template-image')?.focus();
+			logoInput?.focus();
 			return;
 		}
+		// The PNG is rendered from the logo shown now, so send that one even if it changes meanwhile.
+		const logo = logoFile;
+		const logoRef: KioskBannerTemplate['image'] = hasLogo ? TEMPLATE_IMAGE_ATTACHMENT : null;
 		let image: BannerImagePayload;
 		try {
 			if (!canvasNode) throw new Error('no preview');
@@ -212,12 +223,11 @@
 		}
 		let templateImage: BannerImagePayload | undefined;
 		try {
-			templateImage = logoFile ? await readBannerFile(logoFile) : undefined;
+			templateImage = logo ? await readBannerFile(logo) : undefined;
 		} catch {
 			toast.error('อ่านไฟล์รูปภาพไม่สำเร็จ');
 			return;
 		}
-		const logoRef: KioskBannerTemplate['image'] = hasLogo ? TEMPLATE_IMAGE_ATTACHMENT : null;
 		const template = { ...values.template, image: logoRef };
 		await onsave({
 			input: bannerFormToInput({ ...values, template }),
@@ -254,7 +264,7 @@
 		}
 	});
 
-	const { form: formData, enhance, submitting } = form;
+	const { form: formData, errors, enhance, submitting } = form;
 
 	const imageHelp = $derived(
 		`แนะนำ ${KIOSK_SCREENS[$formData.screen_type].size} px · รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB`
@@ -278,8 +288,13 @@
 	const newGroupHref = resolve('/back-office/kiosks/banners/groups/new');
 </script>
 
+<!-- An error marks the missing half (date, time or both); a complete but wrong value marks both. -->
 {#snippet dateTimeField(name: 'start_at' | 'end_at', label: string, errorsId?: string)}
 	{@const parts = splitLocalInput($formData[name])}
+	{@const failed = ($errors[name]?.length ?? 0) > 0}
+	{@const complete = !!parts.date && !!parts.time}
+	{@const dateInvalid = failed && (complete || !parts.date)}
+	{@const timeInvalid = failed && (complete || !parts.time)}
 	<Form.Field {form} {name}>
 		<Form.Control id="banner-{name}">
 			{#snippet children({ props })}
@@ -290,6 +305,7 @@
 				<div class="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
 					<DatePicker
 						{...props}
+						aria-invalid={dateInvalid || undefined}
 						class="h-11"
 						ariaLabel="วันที่{label}"
 						bind:value={
@@ -298,6 +314,8 @@
 					/>
 					<TimePicker
 						id="banner-{name}-time"
+						invalid={timeInvalid}
+						describedBy={props['aria-describedby']}
 						bind:value={
 							() => parts.time, (time) => ($formData[name] = joinLocalInput(parts.date, time))
 						}
@@ -484,6 +502,8 @@
 				/>
 				<KioskBannerTemplateEditor
 					{form}
+					bind:logoInput
+					disabled={$submitting}
 					logoName={logoFile?.name ?? null}
 					{hasLogo}
 					{logoError}

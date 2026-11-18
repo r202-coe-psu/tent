@@ -248,6 +248,34 @@ describe('KioskBannerForm', () => {
 		expect(document.body.textContent).toContain('เลือกรูปภาพแบนเนอร์');
 	});
 
+	it('marks the time, not the date, when only the time is missing', async () => {
+		render();
+		type(field('title'), 'ป้ายใหม่');
+		type(field('start_at'), '2026-10-15');
+		await setDateTime('end_at', '2026-10-15', '18:00');
+		pick(png());
+
+		await submit();
+
+		expect(onsave).not.toHaveBeenCalled();
+		expect(q('#banner-start_at-time')?.getAttribute('aria-invalid')).toBe('true');
+		expect(field('start_at').getAttribute('aria-invalid')).not.toBe('true');
+		expect(document.body.textContent).toContain('เลือกเวลาเริ่ม');
+	});
+
+	it('marks both the date and the time when neither is chosen', async () => {
+		render();
+		type(field('title'), 'ป้ายใหม่');
+		await setDateTime('end_at', '2026-10-15', '18:00');
+		pick(png());
+
+		await submit();
+
+		expect(q('#banner-start_at-time')?.getAttribute('aria-invalid')).toBe('true');
+		expect(field('start_at').getAttribute('aria-invalid')).toBe('true');
+		expect(document.body.textContent).toContain('ระบุวันและเวลาเริ่ม');
+	});
+
 	it('shows the end-time error under the end field', async () => {
 		render();
 		type(field('title'), 'ป้ายใหม่');
@@ -524,6 +552,84 @@ describe('KioskBannerForm', () => {
 			await vi.waitFor(() => expect(onsave).toHaveBeenCalledTimes(1));
 			expect(onsave.mock.calls[0][0].templateImage).toMatchObject({ content_type: 'image/png' });
 			expect(onsave.mock.calls[0][0].input.template?.image).toBe('template_image');
+		});
+
+		/** Each logo pick waits until the test resolves it, in any order. */
+		function deferLogoPicks() {
+			const pending: ((file: File) => void)[] = [];
+			vi.mocked(prepareTemplateLogo).mockImplementation(
+				() => new Promise((resolve) => pending.push((file) => resolve({ ok: true, file })))
+			);
+			return pending;
+		}
+		const pngNamed = (name: string) =>
+			new File([new Uint8Array([137, 80, 78, 71])], name, { type: 'image/png' });
+
+		it('keeps the logo picked last even when an earlier pick finishes later', async () => {
+			const pending = deferLogoPicks();
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+			const slow = pngNamed('slow.png');
+			const fast = pngNamed('fast.png');
+			pick(slow);
+			pick(fast);
+
+			pending[1](fast);
+			await tick();
+			pending[0](slow);
+			await tick();
+			flushSync();
+
+			expect(document.body.textContent).toContain('เลือกแล้ว: fast.png');
+			await submit();
+			await vi.waitFor(() => expect(onsave).toHaveBeenCalledTimes(1));
+			expect(vi.mocked(exportTemplatePng)).toHaveBeenCalledTimes(1);
+			expect(createObjectURL).toHaveBeenCalledTimes(1);
+		});
+
+		it('drops a logo that finishes shrinking after it was removed', async () => {
+			const pending = deferLogoPicks();
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+			const first = pngNamed('first.png');
+			const second = pngNamed('second.png');
+			pick(first);
+			pending[0](first);
+			await vi.waitFor(() => expect(document.body.textContent).toContain('first.png'));
+			pick(second);
+			(
+				[...document.body.querySelectorAll('button')].find((b) =>
+					b.textContent?.includes('ลบรูป/โลโก้')
+				) as HTMLButtonElement
+			).click();
+			flushSync();
+
+			pending[1](second);
+			await submit();
+
+			await vi.waitFor(() => expect(onsave).toHaveBeenCalledTimes(1));
+			expect(onsave.mock.calls[0][0].templateImage).toBeUndefined();
+			expect(onsave.mock.calls[0][0].input.template?.image).toBeNull();
+			expect(createObjectURL).toHaveBeenCalledTimes(1);
+		});
+
+		it('does not make a preview for a logo that finishes after the form is gone', async () => {
+			const pending = deferLogoPicks();
+			render();
+			useTemplate();
+			const logo = png();
+			pick(logo);
+			unmount(instance as ReturnType<typeof mount>);
+			instance = null;
+
+			pending[0](logo);
+			await tick();
+
+			expect(createObjectURL).not.toHaveBeenCalled();
 		});
 
 		it('does not save a template with neither heading nor body', async () => {
