@@ -9,7 +9,11 @@ import {
 	shelterCloseJobViewSchema,
 	type ShelterCloseJobView
 } from './shelter-close-job';
-import { shelterCloseJobPhaseLabel, shelterCloseJobProgress } from './shelter-close-flow';
+import {
+	isShelterCloseJobWaitingForWorker,
+	shelterCloseJobPhaseLabel,
+	shelterCloseJobProgress
+} from './shelter-close-flow';
 
 const counters = (over: Partial<ShelterCloseJobView['counters']> = {}) => ({
 	checked_out: 0,
@@ -119,6 +123,15 @@ describe('shelterCloseJobProgress (FR-27)', () => {
 	it('is 100 % once completed and 0 % for an empty snapshot', () => {
 		expect(shelterCloseJobProgress(base({ checked_out: 10 }, 10, 'completed')).percent).toBe(100);
 		expect(shelterCloseJobProgress(base({}, 0)).percent).toBe(0);
+	});
+});
+
+describe('isShelterCloseJobWaitingForWorker (FR-27, decision sync 2026-11-18)', () => {
+	it('is true before the first poll result and while queued, false once running or finished', () => {
+		expect(isShelterCloseJobWaitingForWorker(undefined)).toBe(true);
+		expect(isShelterCloseJobWaitingForWorker({ status: 'queued' })).toBe(true);
+		expect(isShelterCloseJobWaitingForWorker({ status: 'running' })).toBe(false);
+		expect(isShelterCloseJobWaitingForWorker({ status: 'completed' })).toBe(false);
 	});
 });
 

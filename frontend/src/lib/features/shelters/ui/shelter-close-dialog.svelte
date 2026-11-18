@@ -19,6 +19,7 @@
 	import { isShelterCloseJobActive, type ShelterCloseJobView } from '../domain/shelter-close-job';
 	import {
 		canConfirmShelterClose,
+		isShelterCloseJobWaitingForWorker,
 		shelterCloseCountRows,
 		shelterCloseJobPhaseLabel,
 		shelterCloseJobProgress
@@ -62,6 +63,7 @@
 	);
 	const view = $derived(job.data);
 	const progress = $derived(view ? shelterCloseJobProgress(view) : null);
+	const waitingForWorker = $derived(isShelterCloseJobWaitingForWorker(view));
 
 	const starting = $derived(closeMutation.isPending);
 	const phrase = $derived(shelterCloseConfirmPhrase(code, name));
@@ -148,9 +150,18 @@
 				<div class="flex items-center gap-2 text-sm font-semibold text-slate-900">
 					<Loader2 class="h-4 w-4 animate-spin text-[#0284C7]" />
 					<span>
-						กำลังปิดศูนย์{view ? ` · ${shelterCloseJobPhaseLabel(view.phase)}` : '...'}
+						{#if waitingForWorker}
+							รอ worker รับงาน...
+						{:else if view}
+							กำลังปิดศูนย์ · {shelterCloseJobPhaseLabel(view.phase)}
+						{/if}
 					</span>
 				</div>
+				{#if waitingForWorker}
+					<p class="text-xs text-slate-600">
+						งานปิดศูนย์เข้าคิวแล้ว อาจใช้เวลาสูงสุดประมาณ 30 วินาทีก่อนเริ่มทำ
+					</p>
+				{/if}
 				{#if view && progress}
 					<div
 						class="h-2 overflow-hidden rounded-full bg-sky-100"

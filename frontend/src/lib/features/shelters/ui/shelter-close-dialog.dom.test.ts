@@ -119,6 +119,16 @@ describe('ShelterCloseDialog — progress (CR-243 FR-27, AC-1)', () => {
 		expect(toast.success).not.toHaveBeenCalled();
 	});
 
+	it('says "รอ worker รับงาน" while the job is queued and switches to the phase once a worker claims it', async () => {
+		api.getShelterCloseJob.mockResolvedValue(view({ status: 'queued', phase: 'people' }));
+		await render({ resumeJobId: 'JOB1' });
+		await settle();
+		const text = q('[role="status"]')!.textContent!.replace(/\s+/g, ' ');
+		expect(text).toContain('รอ worker รับงาน');
+		expect(text).toContain('30 วินาที');
+		expect(text).not.toContain('กำลังปิดศูนย์ ·');
+	});
+
 	it('dismissing mid-job calls oncancel and does not toast (the job keeps running)', async () => {
 		const oncancel = vi.fn();
 		await render({ oncancel });

@@ -255,7 +255,7 @@ $SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่
   และหยุดเมื่อได้ `409` · `end_reason` (§2) + FR-29 toast ตามสาเหตุ · view `jobs_claimable` (FR-1, FR-14, D-5) ·
   FR-16 ตรวจ `STALE_MS` · AC-12..AC-13 · ไม่มี decision ใหม่ด้าน scope
 - 2026-11-10 — แก้ตาม review รอบ 2 ข้อ 5: FR-19 ระบุพฤติกรรมเมื่อ sweep ครบ 3 รอบแล้วยังเหลือคน (`sweep_exhausted`)
-- 2026-11-18 — decision sync: ปรับ default `SHELTER_CLOSE_WORKER_POLL_MS` จาก `2000` เป็น `30000` (ลด request ว่างตอนไม่มี job) ผลคือหลังกดปิดศูนย์ job อาจรอได้สูงสุดประมาณ 30 วินาทีก่อนมี worker มารับ · ไม่กระทบลำดับ FR-16 (poll ไม่อยู่ในสาย `CHUNK_BUDGET < TIMEOUT < LEASE < STALE`) · แก้ default ใน §4 และ env/compose/`.env.example` · decided_by kong · ไม่เปิด CR ใหม่ · ไม่ bump schema_v
+- 2026-11-18 — decision sync: ปรับ default `SHELTER_CLOSE_WORKER_POLL_MS` จาก `2000` เป็น `30000` (ลด request ว่างตอนไม่มี job) ผลคือหลังกดปิดศูนย์ job อาจรอได้สูงสุดประมาณ 30 วินาทีก่อนมี worker มารับ · FR-27: dialog แสดง "รอ worker รับงาน..." + คำอธิบายขณะ job `queued` (ยังไม่มี worker รับ) · ไม่กระทบลำดับ FR-16 (poll ไม่อยู่ในสาย `CHUNK_BUDGET < TIMEOUT < LEASE < STALE`) · แก้ default ใน §4 และ env/compose/`.env.example` · decided_by kong · ไม่เปิด CR ใหม่ · ไม่ bump schema_v
 
 ### ตัดสินแล้วใน #1216
 

@@ -109,6 +109,16 @@ export function shelterCloseJobPhaseLabel(phase: ShelterCloseJobPhase): string {
 }
 
 /**
+ * CR-243 FR-27 (decision sync 2026-11-18): the job is queued and no worker has claimed it yet.
+ * With the 30 s default poll that wait can last up to ~30 s, so the dialog says so.
+ */
+export function isShelterCloseJobWaitingForWorker(
+	view: Pick<ShelterCloseJobView, 'status'> | null | undefined
+): boolean {
+	return !view || view.status === 'queued';
+}
+
+/**
  * CR-243 FR-27: share of the snapshot taken at start that is now checked out / cancelled
  * (0..100). People who arrive during the job are not in the denominator, so it is capped.
  */
