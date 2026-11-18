@@ -29,7 +29,7 @@ beforeEach(() => {
 	queryMock.mockReset().mockResolvedValue({ items: [], next_cursor: null });
 });
 
-describe('GET /api/back-office/audit-log (CR-258 FR-34/FR-35)', () => {
+describe('GET /api/back-office/audit-log (CR-259 FR-34/FR-35)', () => {
 	it('lets a system admin read every shelter', async () => {
 		sessionMock.mockResolvedValue({ name: 'sa', roles: ['system_admin'], isSA: true });
 		const res = await call('?entity_type=user');

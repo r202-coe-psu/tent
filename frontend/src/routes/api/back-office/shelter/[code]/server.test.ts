@@ -396,7 +396,7 @@ describe('GET /api/back-office/shelter/[code] — parking points (#1352)', () =>
 	});
 });
 
-describe('GET /api/back-office/shelter/[code] — creator and last editor (CR-258 FR-9)', () => {
+describe('GET /api/back-office/shelter/[code] — creator and last editor (CR-259 FR-9)', () => {
 	async function callGET(stored: Record<string, unknown>) {
 		vi.mocked(findMasterByCode).mockResolvedValue({ code: 'SH001' } as ShelterMaster);
 		vi.mocked(migrate).mockReturnValue({ code: 'SH001', _rev: '3-c', ...stored } as ShelterMaster);

@@ -129,7 +129,7 @@ describe('ShelterFormPage — the stored doc changes while the form is open', ()
 	});
 });
 
-describe('ShelterFormPage — creator and last editor (CR-258 FR-12/FR-13)', () => {
+describe('ShelterFormPage — creator and last editor (CR-259 FR-12/FR-13)', () => {
 	const actorsLine = () => document.body.querySelector('[data-testid="shelter-actors-line"]');
 
 	it('shows who created and who last edited the shelter', () => {

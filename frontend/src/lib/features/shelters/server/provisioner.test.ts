@@ -295,7 +295,7 @@ describe('provisionShelter seeding', () => {
 		expect(writtenMaster().closed_at).toBeNull();
 	});
 
-	it('stamps the actor as created_by and updated_by and ignores client values (CR-258 FR-1/FR-4)', async () => {
+	it('stamps the actor as created_by and updated_by and ignores client values (CR-259 FR-1/FR-4)', async () => {
 		await provisionShelter(
 			{
 				name: 'ศูนย์ใหม่',
