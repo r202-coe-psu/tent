@@ -5,7 +5,11 @@ import {
 	screenTypeOf,
 	type KioskScreenType
 } from '$lib/features/shared/domain/kiosk-screen';
-import { fromBangkokLocalInput, toBangkokLocalInput } from './kiosk-banner-datetime';
+import {
+	fromBangkokLocalInput,
+	splitLocalInput,
+	toBangkokLocalInput
+} from './kiosk-banner-datetime';
 import {
 	KIOSK_BANNER_LIMITS,
 	groupOf,
@@ -26,8 +30,21 @@ import {
  * times are `datetime-local` strings read as Asia/Bangkok so the errors land under the right
  * field; {@link bannerFormToInput} maps them to the API shape.
  */
-const localTime = (missing: string) =>
-	z.string().refine((value) => fromBangkokLocalInput(value) !== null, { message: missing });
+const localTime = (label: string) =>
+	z.string().superRefine((value, ctx) => {
+		if (fromBangkokLocalInput(value) !== null) return;
+		const { date, time } = splitLocalInput(value);
+		// Name the missing half, so the form can mark the date picker, the time picker or both.
+		const message =
+			!date && !time
+				? `ระบุวันและเวลา${label}`
+				: !time
+					? `เลือกเวลา${label}`
+					: !date
+						? `เลือกวันที่${label}`
+						: `ระบุเวลา${label}`;
+		ctx.addIssue({ code: 'custom', message });
+	});
 
 /** Where the banner image comes from: an uploaded file or one rendered from the template. */
 export const kioskBannerSourceSchema = z.enum(['upload', 'template']);
@@ -61,8 +78,8 @@ export const kioskBannerFormSchema = z
 			.int('วินาทีต้องเป็นจำนวนเต็ม')
 			.min(KIOSK_BANNER_LIMITS.durationMin, 'ระยะเวลาต่ำสุด 3 วินาที')
 			.max(KIOSK_BANNER_LIMITS.durationMax, 'ระยะเวลาสูงสุด 60 วินาที'),
-		start_at: localTime('ระบุเวลาเริ่ม'),
-		end_at: localTime('ระบุเวลาสิ้นสุด'),
+		start_at: localTime('เริ่ม'),
+		end_at: localTime('สิ้นสุด'),
 		status: kioskBannerStatusSchema,
 		screen_type: kioskScreenTypeSchema,
 		source: kioskBannerSourceSchema,

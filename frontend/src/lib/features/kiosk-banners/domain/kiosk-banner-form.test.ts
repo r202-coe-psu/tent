@@ -48,6 +48,17 @@ describe('kioskBannerFormSchema', () => {
 		);
 	});
 
+	it('says whether the date, the time or both are missing', () => {
+		const message = (start_at: string) =>
+			kioskBannerFormSchema
+				.safeParse(valid({ start_at }))
+				.error?.issues.find((i) => i.path[0] === 'start_at')?.message;
+
+		expect(message('')).toBe('ระบุวันและเวลาเริ่ม');
+		expect(message('2026-10-15T')).toBe('เลือกเวลาเริ่ม');
+		expect(message('T08:00')).toBe('เลือกวันที่เริ่ม');
+	});
+
 	it('rejects durations outside 3-60', () => {
 		expect(issuePaths(valid({ duration_sec: 2 }))).toContain('duration_sec');
 		expect(issuePaths(valid({ duration_sec: 61 }))).toContain('duration_sec');

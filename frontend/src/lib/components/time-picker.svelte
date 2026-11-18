@@ -22,6 +22,8 @@
 		minuteStep = 5,
 		disabled = false,
 		id,
+		invalid = false,
+		describedBy,
 		class: className = ''
 	}: {
 		/** `HH:mm`, or `''` when nothing is chosen. */
@@ -30,6 +32,10 @@
 		minuteStep?: number;
 		disabled?: boolean;
 		id?: string;
+		/** Marks the trigger as failing validation (red border, `aria-invalid`). */
+		invalid?: boolean;
+		/** Id of the error message that describes the trigger. */
+		describedBy?: string;
 		class?: string;
 	} = $props();
 
@@ -73,6 +79,8 @@
 				type="button"
 				variant="outline"
 				{disabled}
+				aria-invalid={invalid || undefined}
+				aria-describedby={invalid ? describedBy : undefined}
 				class={cn(
 					'!h-11 w-full justify-start px-3 font-normal',
 					!parsed && 'text-muted-foreground',
