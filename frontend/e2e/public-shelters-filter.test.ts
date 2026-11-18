@@ -77,11 +77,12 @@ test.describe(
 				'false'
 			);
 			await expect(page.getByRole('button', { name: 'จังหวัด', exact: true })).toBeHidden();
-			await expect(page.getByRole('button', { name: '5 กม' })).toBeVisible();
-			await expect(page.getByRole('button', { name: '5 กม' })).toHaveAttribute(
-				'aria-pressed',
-				'true'
-			);
+			await expect(
+				page.getByTestId('radius-row').getByRole('button', { name: '5 กม' })
+			).toBeVisible();
+			await expect(
+				page.getByTestId('radius-row').getByRole('button', { name: '5 กม' })
+			).toHaveAttribute('aria-pressed', 'true');
 		});
 	}
 );
@@ -174,23 +175,22 @@ test.describe(
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
-			await page.getByRole('button', { name: '10 กม' }).click();
+			await page.getByTestId('radius-row').getByRole('button', { name: '10 กม' }).click();
 			await expect(page).toHaveURL(/distance=10/);
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
-			await page.getByRole('button', { name: '1 กม' }).click();
+			await page.getByTestId('radius-row').getByRole('button', { name: '1 กม' }).click();
 			await expect(page).toHaveURL(/distance=1(&|$)/);
 			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
 			// Pressing the active radius again clears it (`distance=`, no 5 km fallback): everything.
-			await page.getByRole('button', { name: '1 กม' }).click();
+			await page.getByTestId('radius-row').getByRole('button', { name: '1 กม' }).click();
 			await expect(page).toHaveURL(/distance=(&|$)/);
-			await expect(page.getByRole('button', { name: '1 กม' })).toHaveAttribute(
-				'aria-pressed',
-				'false'
-			);
+			await expect(
+				page.getByTestId('radius-row').getByRole('button', { name: '1 กม' })
+			).toHaveAttribute('aria-pressed', 'false');
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 		});
 
