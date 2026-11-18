@@ -106,6 +106,7 @@ export {
 	SHELTER_CLOSE_CHECKOUT_STATUSES,
 	SHELTER_CLOSE_CANCEL_STATUSES,
 	SHELTER_CLOSE_AFFECTED_STATUSES,
+	BACKFILL_IMPORT_REASON,
 	SHELTER_CLOSED_REASON,
 	SHELTER_CLOSED_REASON_LABEL,
 	SHELTER_CLOSED_REASON_LABEL_EN,
@@ -189,6 +190,8 @@ export {
 	countStationQueues,
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
+	latestTriageByEvacuee,
+	displayTriageLevel,
 	pickRecommendedZone,
 	resolvePreferredZone,
 	ZONE_KIND_LABELS,
@@ -249,6 +252,7 @@ export {
 	DEFAULT_EVACUEE_SORT,
 	isEvacueeSort,
 	sortEvacuees,
+	sortByCreatedAtAsc,
 	type EvacueeSort
 } from './domain/evacuee-sort';
 
@@ -416,6 +420,7 @@ export {
 	default as StayStatusBadge,
 	STAY_STATUS_BADGE_STYLES
 } from './ui/shared/stay-status-badge.svelte';
+export { default as TriageBadge, TRIAGE_BADGE_CLASS } from './ui/shared/triage-badge.svelte';
 export {
 	default as RegisteredViaBadge,
 	REGISTERED_VIA_BADGE_STYLES,
@@ -447,6 +452,17 @@ export {
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
 export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-profile';
 export { stripThaiTitle } from './domain/thaid-profile';
+export {
+	scannerCardSchema,
+	scannerCardPhotoSchema,
+	cardToUnifiedMember,
+	applyScannedCard,
+	digitsOnly,
+	type ScannerCard,
+	type ScannerCardPhoto,
+	type ScannedCardPlacement,
+	type ScannedCardDuplicate
+} from './domain/scanner-card';
 export { default as ThaidActionButton } from './ui/registration/thaid-action-button.svelte';
 export { default as ThaidMemberScanDialog } from './ui/registration/thaid-member-scan-dialog.svelte';
 export { default as UnifiedRegistrationSummaryCard } from './ui/registration/unified-registration-summary-card.svelte';
@@ -481,6 +497,7 @@ export { default as InstantDuplicateDialog } from './ui/registration/instant-dup
 // UI — i18n dictionaries used directly by route pages
 export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';
 export { EVACUEE_PROFILE_I18N } from './ui/_constants/evacuee-profile.i18n';
+export { TRIAGE_I18N } from './ui/_constants/triage.i18n';
 export { EVACUEE_SEARCH_I18N, type EvacueeSearchI18n } from './ui/_constants/evacuee-search.i18n';
 
 // UI — shared sub-form components (Issue #205)
@@ -495,6 +512,7 @@ export {
 	PetAssetVehicleFields,
 	PetQuickSelect,
 	HealthMedicalFields,
+	TriageLevelFields,
 	ZoneSelectionFields,
 	type SpecialNeedTag,
 	type ZoneItem

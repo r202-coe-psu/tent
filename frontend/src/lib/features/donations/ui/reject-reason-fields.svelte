@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -6,7 +7,9 @@
 		DONATION_REJECT_REASON_SELECTABLE_CODES,
 		DONATION_REJECT_REASON_LABELS,
 		REJECT_NOTE_MAX,
+		containsRejectNoteTemplate,
 		donorRejectMessage,
+		noteForReason,
 		type DonationRejectReasonCode
 	} from '../domain/reject-reason';
 
@@ -31,23 +34,35 @@
 
 	const noteRequired = $derived(code === 'other');
 	const preview = $derived(code ? donorRejectMessage(code, note) : '');
+	/**
+	 * Picking a reason puts its formal message in the detail for staff to edit. While that message is
+	 * untouched, changing the reason swaps (or drops) it. Once staff reworded or removed it, the text
+	 * is theirs and a new reason leaves it alone. A detail that is already written when this mounts
+	 * (the parent remounts it when a line's decision is toggled) counts as filled, so the message is
+	 * not stacked after it.
+	 */
+	let filled = untrack(() => note.trim() !== '');
+	function pickReason(next: DonationRejectReasonCode) {
+		code = next;
+		if (filled && note.trim() !== '' && !containsRejectNoteTemplate(note)) return;
+		note = noteForReason(note, next);
+		filled = containsRejectNoteTemplate(note);
+	}
+
+	/** The "other" option spans both columns; the rest sit side by side. */
+	const optionClass = (option: string) =>
+		`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium ${option === 'other' ? 'sm:col-span-2' : ''}`;
 </script>
 
 <div class="space-y-3">
 	<RadioGroup.Root
-		bind:value={() => code ?? '', (next) => (code = next as DonationRejectReasonCode)}
+		bind:value={() => code ?? '', (next) => pickReason(next as DonationRejectReasonCode)}
 		{disabled}
 		aria-label="เหตุผลที่ไม่รับ"
 		class="grid grid-cols-1 gap-2 sm:grid-cols-2"
 	>
 		{#each DONATION_REJECT_REASON_SELECTABLE_CODES as option (option)}
-			<Label
-				for="{idPrefix}-code-{option}"
-				class="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-xs font-medium {option ===
-				'other'
-					? 'sm:col-span-2'
-					: ''}"
-			>
+			<Label for="{idPrefix}-code-{option}" class={optionClass(option)}>
 				<RadioGroup.Item id="{idPrefix}-code-{option}" value={option} />
 				{DONATION_REJECT_REASON_LABELS[option]}
 			</Label>

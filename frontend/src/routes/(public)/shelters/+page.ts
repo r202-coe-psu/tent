@@ -7,13 +7,12 @@ import {
 	type PublicShelterItem,
 	type MasterLabelOption,
 	countBySiteKind,
+	shelterGroup,
 	takesAllParkingTypes,
+	hiddenShelterGroups,
 	wantedParkingTypes
 } from '$lib/features/public-portal';
 import { formatMasterLabel } from '$lib/features/master-data';
-
-/** `site_kind` is any master code (CR-198); only the code shape is checked here. */
-const SITE_KIND_CODE = /^[a-z0-9_]+$/;
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
 	const R = 6371;
@@ -36,13 +35,12 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const subdistrict = url.searchParams.get('subdistrict') || '';
 	const typeFilter = url.searchParams.get('type') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
-	const siteKindParam = url.searchParams.get('site_kind') || '';
-	const siteKind = SITE_KIND_CODE.test(siteKindParam) ? siteKindParam : undefined;
 	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
 	const hide_full = url.searchParams.get('hide_full') === 'true';
 	const parkingWanted = wantedParkingTypes(url.searchParams);
+	const groupsHidden = hiddenShelterGroups(url.searchParams);
 
 	// FastAPI accepts a single Mongo status; map UI `prepare` → `standby`.
 	const statusRaw =
@@ -75,7 +73,6 @@ export const load: PageLoad = async ({ url, fetch }) => {
 				district: district || undefined,
 				subdistrict: subdistrict || undefined,
 				status: status || undefined,
-				site_kind: siteKind,
 				lat: hasUser ? userLatNum : undefined,
 				lng: hasUser ? userLngNum : undefined,
 				radius_km:
@@ -134,6 +131,11 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		shelters = shelters.filter((s) => s.admin_type === tf);
 	}
 
+	// Shelter-type toggles default to on; only the switched-off ones are in the URL.
+	if (groupsHidden.length > 0) {
+		shelters = shelters.filter((s) => !groupsHidden.includes(shelterGroup(s)));
+	}
+
 	if (hide_full) {
 		shelters = shelters.filter((s) => s.status !== 'FULL');
 	}
@@ -182,14 +184,16 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			subdistrict,
 			type: typeFilter,
 			status: statusParam,
-			site_kind: siteKind,
 			distance,
 			user_lat,
 			user_lng,
 			hide_full: hide_full ? 'true' : '',
 			parking_car: parkingWanted.includes('car') ? 'on' : '',
 			parking_motorcycle: parkingWanted.includes('motorcycle') ? 'on' : '',
-			parking_boat: parkingWanted.includes('boat') ? 'on' : ''
+			parking_boat: parkingWanted.includes('boat') ? 'on' : '',
+			hide_evacuation: groupsHidden.includes('evacuation') ? 'on' : '',
+			hide_external: groupsHidden.includes('external') ? 'on' : '',
+			hide_host_house: groupsHidden.includes('host_house') ? 'on' : ''
 		},
 		available_types
 	};

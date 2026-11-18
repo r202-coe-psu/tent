@@ -1,4 +1,4 @@
-"""EXT-007 — partner occupant-detail scaffold tests (partner ODT, ADR 0002 §6)."""
+"""EXT-007 — partner occupant list tests (partner ODT, ADR 0002 §6; full mode CR-257)."""
 
 from __future__ import annotations
 
@@ -182,3 +182,107 @@ async def test_get_occupants_with_scope_returns_real_data_and_pagination(
     assert len(rows) == 2
     assert all(r.status == "granted" for r in rows)
     assert rows[0].result_count == 1
+
+
+# CR-257 — plaintext rows: masked for `occupancy-pii-read`, whole with `pii-full` too ─────────
+
+URL = "/external/locations/SH001/occupants"
+PURPOSE = {"purpose": "eoc-handover"}
+
+
+async def _plain_occupant() -> ShelterOccupant:
+    """A PROJECTION_VERSION 23 row: plaintext, no `name_masked`."""
+    now = datetime.now(UTC)
+    return await ShelterOccupant(
+        id="SH001:plain",
+        shelter_code="SH001",
+        occupant_ref="OCC-PLAIN",
+        first_name="สมชาย",
+        last_name="ใจดี",
+        age=67,
+        national_id="0012345678901",
+        id_card_type="pink_card",
+        phone="0811111111",
+        age_range="60+",
+        gender="male",
+        care_flags=["bedridden"],
+        checked_in_at=now,
+        updated_at=now,
+    ).insert()
+
+
+async def test_masked_mode_masks_plaintext_rows_like_before(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    await _plain_occupant()
+
+    response = await client.get(URL, headers=_bearer(["occupancy-pii-read"]), params=PURPOSE)
+    assert response.status_code == 200
+    (item,) = response.json()["result"]
+    assert item["name_masked"] == "สมชาย ใ."
+    for key in ("first_name", "last_name", "name", "age", "national_id", "phone"):
+        assert key not in item
+    for plaintext in ("ใจดี", "0012345678901", "0811111111"):
+        assert plaintext not in response.text
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["granted"]
+
+
+async def test_full_mode_returns_whole_values(client: AsyncClient, shelter: PublicShelter) -> None:
+    await _plain_occupant()
+
+    response = await client.get(
+        URL, headers=_bearer(["occupancy-pii-read", "pii-full"]), params=PURPOSE
+    )
+    assert response.status_code == 200
+    (item,) = response.json()["result"]
+    assert item["first_name"] == "สมชาย"
+    assert item["last_name"] == "ใจดี"
+    assert item["name"] == "สมชาย ใจดี"
+    assert item["age"] == 67
+    assert item["national_id"] == "0012345678901"
+    assert item["passport_id"] is None
+    assert item["id_card_type"] == "pink_card"
+    assert item["phone"] == "0811111111"
+    # The masked fields stay for clients that already read them.
+    assert item["name_masked"] == "สมชาย ใ."
+    assert item["age_range"] == "60+"
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["granted_full"]
+    assert logs[0].result_count == 1
+
+
+async def test_pii_full_alone_grants_nothing(client: AsyncClient, shelter: PublicShelter) -> None:
+    await _plain_occupant()
+
+    response = await client.get(URL, headers=_bearer(["pii-full"]), params=PURPOSE)
+    assert response.status_code == 403
+    assert "0012345678901" not in response.text
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["denied_insufficient_scope"]
+
+
+async def test_full_mode_never_falls_back_to_masked_values(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    """A row projected before PROJECTION_VERSION 23: plaintext fields are `null`."""
+    now = datetime.now(UTC)
+    await ShelterOccupant(
+        id="SH001:legacy",
+        shelter_code="SH001",
+        occupant_ref="OCC-LEGACY",
+        name_masked="มาลี ส.",
+        age_range="20-59",
+        updated_at=now,
+    ).insert()
+
+    response = await client.get(
+        URL, headers=_bearer(["occupancy-pii-read", "pii-full"]), params=PURPOSE
+    )
+    assert response.status_code == 200
+    (item,) = response.json()["result"]
+    assert item["name_masked"] == "มาลี ส."
+    assert item["name"] is None
+    assert item["last_name"] is None
+    assert item["national_id"] is None
+    assert item["age"] is None

@@ -257,6 +257,18 @@ export type CheckoutDestinationType = z.infer<typeof checkoutDestinationTypeSche
 /** Movement `reason` / audit `reason` / `checkout_destination.type` of the shelter-close flow (CR-219 D-4). */
 export const SHELTER_CLOSED_REASON = 'shelter_closed';
 
+/**
+ * Movement `reason` of the `check_out` the people-import Backfill Import writes for a person who
+ * already left (#1399). A fixed code, like `shelter_closed` — never typed by staff.
+ */
+export const BACKFILL_IMPORT_REASON = 'backfill_import';
+
+/** Display copy for the `backfill_import` reason. */
+export const BACKFILL_IMPORT_REASON_LABEL = 'นำเข้าย้อนหลัง';
+
+/** English mirror of `BACKFILL_IMPORT_REASON_LABEL`. */
+export const BACKFILL_IMPORT_REASON_LABEL_EN = 'Backfill import';
+
 /** Display copy for the `shelter_closed` reason (CR-219 FR-21). */
 export const SHELTER_CLOSED_REASON_LABEL = 'ศูนย์ปิด';
 
@@ -272,6 +284,9 @@ export function movementReasonLabel(
 	language: LanguageCode = 'th'
 ): string {
 	if (!reason) return '';
+	if (reason === BACKFILL_IMPORT_REASON) {
+		return language === 'en' ? BACKFILL_IMPORT_REASON_LABEL_EN : BACKFILL_IMPORT_REASON_LABEL;
+	}
 	if (reason !== SHELTER_CLOSED_REASON) return reason;
 	return language === 'en' ? SHELTER_CLOSED_REASON_LABEL_EN : SHELTER_CLOSED_REASON_LABEL;
 }
@@ -745,7 +760,7 @@ export interface Screening extends BaseDoc {
 	temperature_c?: number | null;
 	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
 	needs_referral?: boolean;
-	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
+	/** Station 2 urgency colour (CR-258). Absent on 2026-09-07..11-17 docs. */
 	triage_level?: TriageLevel | null;
 	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
 	vital_signs?: {
@@ -1514,16 +1529,16 @@ export const movementInputSchema = z.object({
 export type MovementInput = z.input<typeof movementInputSchema>;
 
 /**
- * CR-106 2026-09-07 amendment: triage_level / vital_signs / temperature_c /
- * needs_referral are deprecated — a NEW screening write must never set them.
- * Old docs that already have these fields stay legacy-readable via the
- * `Screening` interface (no backfill, no forced removal); this input schema
- * just stops accepting them from any caller (Station 2 form or otherwise).
+ * CR-106 2026-09-07 amendment: vital_signs / temperature_c / needs_referral are
+ * deprecated — a NEW screening write must never set them (old docs stay
+ * legacy-readable via `Screening`). `triage_level` is back (CR-258);
+ * optional so non-Station-2 writers can omit it.
  */
 export const screeningInputSchema = z.object({
 	evacuee_id: z.string().min(1),
 	symptoms: z.array(z.string().trim().min(1)).default([]),
 	track: careTrackSchema,
+	triage_level: triageLevelSchema.nullish(),
 	notes: z.string().trim().optional(),
 	screened_at: z.string().optional()
 });
@@ -1947,8 +1962,8 @@ export function createMovement(input: MovementInput, ctx: AuthorContext, id?: st
 export function createScreening(input: ScreeningInput, ctx: AuthorContext): Screening {
 	const d = screeningInputSchema.parse(input);
 
-	// CR-106 2026-09-07: never stamp temperature_c / needs_referral / triage_level /
-	// vital_signs on a new doc — those fields are legacy-read only now.
+	// CR-106 2026-09-07: never stamp temperature_c / needs_referral / vital_signs on a
+	// new doc — those fields are legacy-read only now.
 	return makeDoc(
 		'screening',
 		2,
@@ -1956,6 +1971,7 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 			evacuee_id: d.evacuee_id,
 			symptoms: d.symptoms,
 			track: d.track,
+			...(d.triage_level ? { triage_level: d.triage_level } : {}),
 			...(d.notes ? { notes: d.notes } : {}),
 			screened_at: d.screened_at ?? now()
 		},

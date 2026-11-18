@@ -98,6 +98,32 @@ const th = {
 		confirming: 'กำลังรับเข้าศูนย์...',
 		confirmClaim: 'ยืนยันรับเข้าศูนย์',
 		petsAlongsideTitle: 'สัตว์เลี้ยงที่จะรับเข้าศูนย์พร้อมกัน'
+	},
+	scanner: {
+		alreadyInForm: 'บัตรนี้อยู่ในฟอร์มแล้ว',
+		dialogTitle: 'สมาชิกทุกคนมีข้อมูลแล้ว',
+		dialogDescription: (name: string) => `จะนำข้อมูลจากบัตรของ ${name} ไปใส่ที่ไหน`,
+		overwriteMember: (position: number) => `ทับคนที่ ${position}`,
+		addAsNewMember: 'เพิ่มเป็นสมาชิกใหม่',
+		cancel: 'ยกเลิก',
+		duplicateTitle: 'พบบุคคลนี้ในระบบแล้ว',
+		duplicateDescription: (name: string) => `${name} มีข้อมูลอยู่ในระบบแล้ว`,
+		goToPerson: 'ไปหน้าคนนั้น',
+		continueRegistering: 'ลงทะเบียนต่อ',
+		checkingDuplicate: 'กำลังตรวจรายชื่อซ้ำ…',
+		duplicateLookupFailed: 'ตรวจสอบรายชื่อซ้ำไม่สำเร็จ — ลงทะเบียนต่อได้ตามปกติ',
+		reading: 'กำลังอ่านบัตร…',
+		readingHint: 'อย่าเพิ่งดึงบัตรออกจนกว่าจะอ่านเสร็จ',
+		filledReadingPhoto: (position: number) =>
+			`เติมข้อมูลสมาชิกคนที่ ${position} แล้ว · กำลังอ่านรูป…`,
+		readDone: 'อ่านบัตรเรียบร้อย',
+		readFailed: 'อ่านบัตรไม่สำเร็จ ลองเสียบใหม่',
+		photoReadFailed: 'อ่านรูปจากบัตรไม่สำเร็จ',
+		photoSaveFailed: 'บันทึกรูปจากบัตรไม่สำเร็จ',
+		finishOpenDialog:
+			'มีหน้าต่างบัตรที่รอการตัดสินใจอยู่ — กรุณาจัดการให้เสร็จก่อนแล้วเสียบบัตรใหม่',
+		formLocked: 'กำลังบันทึกหรือฟอร์มถูกล็อก — ไม่ได้นำข้อมูลจากบัตรไปใส่ กรุณาเสียบบัตรใหม่',
+		selectShelterFirst: 'กรุณาเลือกศูนย์พักพิงที่เปิดอยู่ก่อน แล้วจึงเสียบบัตร'
 	}
 };
 
@@ -205,6 +231,31 @@ const en: typeof th = {
 		confirming: 'Admitting...',
 		confirmClaim: 'Confirm admission',
 		petsAlongsideTitle: 'Pets to admit at the same time'
+	},
+	scanner: {
+		alreadyInForm: 'This card is already in the form',
+		dialogTitle: 'Every member already has data',
+		dialogDescription: (name: string) => `Where should the data from ${name}'s card go?`,
+		overwriteMember: (position: number) => `Overwrite member ${position}`,
+		addAsNewMember: 'Add as a new member',
+		cancel: 'Cancel',
+		duplicateTitle: 'This person is already in the system',
+		duplicateDescription: (name: string) => `${name} already has a record in the system`,
+		goToPerson: 'Go to that person',
+		continueRegistering: 'Continue registering',
+		checkingDuplicate: 'Checking for duplicates…',
+		duplicateLookupFailed: 'Could not check for duplicates — you can keep registering as usual',
+		reading: 'Reading the card…',
+		readingHint: 'Keep the card in the reader until it finishes',
+		filledReadingPhoto: (position: number) => `Filled in member ${position} · reading the photo…`,
+		readDone: 'Card read',
+		readFailed: 'Could not read the card — please reinsert it',
+		photoReadFailed: 'Could not read the photo from the card',
+		photoSaveFailed: 'Could not save the photo from the card',
+		finishOpenDialog:
+			'A card dialog is waiting for your decision — finish it first, then insert the card again',
+		formLocked: 'The form is saving or locked — the card was not applied. Please insert it again',
+		selectShelterFirst: 'Select an active shelter first, then insert the card'
 	}
 };
 

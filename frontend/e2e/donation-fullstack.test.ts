@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { rejectNoteTemplate } from '../src/lib/features/donations/domain/reject-reason';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
 import {
@@ -323,14 +324,20 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			const confirm = page.getByRole('button', { name: 'ปฏิเสธทั้งใบ' });
 			await expect(confirm).toBeDisabled();
 			await page.getByRole('radio', { name: /^หมดอายุ$/ }).click();
-			await expect(page.getByTestId('line-0-reject-preview')).toHaveText('หมดอายุ');
+			// Picking a reason fills its formal message, which the donor reads after the label (#1256).
+			await expect(page.getByTestId('line-0-reject-preview')).toHaveText(
+				`หมดอายุ — ${rejectNoteTemplate('expired')}`
+			);
 			await confirm.click();
 
 			await expect
 				.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
 				.toBe('rejected');
 			const donation = await findDonation(shelter.code, bookingRef);
-			expect(donation).toMatchObject({ reject_reason: 'หมดอายุ', reject_reason_code: 'expired' });
+			expect(donation).toMatchObject({
+				reject_reason: `หมดอายุ — ${rejectNoteTemplate('expired')}`,
+				reject_reason_code: 'expired'
+			});
 			expect(await ledgerRowsFor(shelter.code, donation._id as string)).toEqual([]);
 
 			await clearSession(page);
@@ -458,7 +465,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await clearSession(page);
 		await page.goto(`/donations/track/${trackingToken}`);
 		await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
-		await expect(page.getByText('หมดอายุ', { exact: true })).toBeVisible();
+		await expect(
+			page.getByText(`หมดอายุ — ${rejectNoteTemplate('expired')}`, { exact: true })
+		).toBeVisible();
 		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
 	});
 

@@ -56,6 +56,13 @@ export interface FederatedDuplicateLookupDeps {
 	searchPool: (query: string) => Promise<{ results: UnassignedRegistrationSearchHit[] }>;
 }
 
+/** Where a duplicate hit opens: typed by route, so `resolve()` takes it without a cast. */
+export type InstantDuplicateHref =
+	| `/onsite/people/${string}/report-in`
+	| `/onsite/people/evacuee-profile-view/${string}`
+	| `/onsite/unassigned/${string}/report-in`
+	| `/onsite/unassigned/${string}/report-in?memberIds=${string}`;
+
 /**
  * Pure helper to resolve the destination URL and action label for a duplicate hit.
  */
@@ -64,7 +71,7 @@ export function resolveInstantDuplicateAction(match: {
 	id: string;
 	status?: string;
 	memberIds?: string[];
-}): { actionUrl: string; actionLabel: string } {
+}): { actionUrl: InstantDuplicateHref; actionLabel: string } {
 	if (match.source === 'local') {
 		if (match.status === 'pre_registered') {
 			return {
@@ -77,9 +84,10 @@ export function resolveInstantDuplicateAction(match: {
 			actionLabel: 'ไปที่ข้อมูลเดิม / เช็คอิน'
 		};
 	}
-	const memberParam = match.memberIds?.length ? `?memberIds=${match.memberIds.join(',')}` : '';
 	return {
-		actionUrl: `/onsite/unassigned/${match.id}/report-in${memberParam}`,
+		actionUrl: match.memberIds?.length
+			? `/onsite/unassigned/${match.id}/report-in?memberIds=${match.memberIds.join(',')}`
+			: `/onsite/unassigned/${match.id}/report-in`,
 		actionLabel: 'ไปที่ข้อมูลเดิม / เช็คอิน'
 	};
 }

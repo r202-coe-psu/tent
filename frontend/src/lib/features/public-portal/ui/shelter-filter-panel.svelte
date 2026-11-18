@@ -28,8 +28,6 @@
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { shelterTypeLabel } from '../domain/master-labels';
-	import { activeSiteKinds, siteKindLabel } from '../domain/site-kind';
-	import { useSiteKinds } from '../application/queries';
 
 	interface Filters {
 		search?: string;
@@ -37,7 +35,6 @@
 		district?: string;
 		subdistrict?: string;
 		type?: string;
-		site_kind?: string;
 		distance?: string;
 		user_lat?: string | number;
 		user_lng?: string | number;
@@ -59,6 +56,9 @@
 		utility_wifi?: boolean;
 		utility_high_ground?: boolean;
 		utility_truck_access?: boolean;
+		hide_evacuation?: boolean | string;
+		hide_external?: boolean | string;
+		hide_host_house?: boolean | string;
 	}
 
 	let {
@@ -90,22 +90,6 @@
 	let selectedProvince = $state<string>('');
 	let selectedDistrict = $state<string>('');
 	let selectedSubdistrict = $state<string>('');
-	let selectedSiteKind = $state<string>('');
-	const siteKindsQuery = useSiteKinds();
-	const activeKinds = $derived(activeSiteKinds(siteKindsQuery.data));
-	// Passed to Select.Root as `items` too: the closed trigger reads its label from there, else it shows the raw code.
-	const siteKindOptions = $derived(
-		[
-			...activeKinds.map((k) => k.code),
-			// A code from the URL that is no longer offered still needs a label in the trigger.
-			...(selectedSiteKind && !activeKinds.some((k) => k.code === selectedSiteKind)
-				? [selectedSiteKind]
-				: [])
-		].map((code) => ({
-			value: code,
-			label: siteKindLabel(code, siteKindsQuery.data, langState.current)
-		}))
-	);
 	let selectedType = $state<string>('');
 	// CR-252 FR-23: one status at a time, as the list API takes (URL value is lowercase).
 	let selectedStatus = $state<string>('');
@@ -117,6 +101,9 @@
 	let parkCarChecked = $state(false);
 	let parkMotorChecked = $state(false);
 	let parkBoatChecked = $state(false);
+	let showEvacuation = $state(true);
+	let showExternal = $state(true);
+	let showHostHouse = $state(true);
 	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -158,7 +145,6 @@
 		if (selectedProvince) params.set('province', selectedProvince);
 		if (selectedDistrict) params.set('district', selectedDistrict);
 		if (selectedSubdistrict) params.set('subdistrict', selectedSubdistrict);
-		if (selectedSiteKind) params.set('site_kind', selectedSiteKind);
 		if (selectedType) params.set('type', selectedType);
 		if (selectedStatus) params.set('status', selectedStatus);
 		if (userLat && userLng) {
@@ -170,6 +156,9 @@
 		if (parkCarChecked) params.set('parking_car', 'on');
 		if (parkMotorChecked) params.set('parking_motorcycle', 'on');
 		if (parkBoatChecked) params.set('parking_boat', 'on');
+		if (!showEvacuation) params.set('hide_evacuation', 'on');
+		if (!showExternal) params.set('hide_external', 'on');
+		if (!showHostHouse) params.set('hide_host_house', 'on');
 		return params;
 	}
 
@@ -207,7 +196,6 @@
 			f.province,
 			f.district,
 			f.subdistrict,
-			f.site_kind,
 			f.type,
 			f.status,
 			f.distance,
@@ -216,7 +204,10 @@
 			f.hide_full,
 			f.parking_car,
 			f.parking_motorcycle,
-			f.parking_boat
+			f.parking_boat,
+			f.hide_evacuation,
+			f.hide_external,
+			f.hide_host_house
 		];
 
 		untrack(() => {
@@ -225,7 +216,6 @@
 			selectedProvince = f.province ?? '';
 			selectedDistrict = f.district ?? '';
 			selectedSubdistrict = f.subdistrict ?? '';
-			selectedSiteKind = f.site_kind ?? '';
 			selectedType = f.type ?? '';
 			selectedStatus =
 				STATUS_VALUES.find((v) => v === f.status?.split(',')[0]?.toLowerCase()) ?? '';
@@ -237,6 +227,9 @@
 			parkCarChecked = isOn(f.parking_car);
 			parkMotorChecked = isOn(f.parking_motorcycle);
 			parkBoatChecked = isOn(f.parking_boat);
+			showEvacuation = !isOn(f.hide_evacuation);
+			showExternal = !isOn(f.hide_external);
+			showHostHouse = !isOn(f.hide_host_house);
 
 			if (f.user_lat) userLat = f.user_lat.toString();
 			if (f.user_lng) userLng = f.user_lng.toString();
@@ -298,7 +291,6 @@
 			selectedProvince,
 			selectedDistrict,
 			selectedSubdistrict,
-			selectedSiteKind,
 			selectedType,
 			selectedStatus,
 			distanceValue,
@@ -307,7 +299,10 @@
 			hideFullToggle,
 			parkCarChecked,
 			parkMotorChecked,
-			parkBoatChecked
+			parkBoatChecked,
+			showEvacuation,
+			showHostHouse,
+			showExternal
 		];
 
 		if (hydrating) return;
@@ -524,6 +519,35 @@
 	>
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
 			<div class="space-y-4">
+				<!-- Shelter type groups -->
+				<div class="overflow-hidden rounded-xl border border-border">
+					<Accordion.Root type="single" class="w-full">
+						<Accordion.Item value="shelter-groups" class="border-none">
+							<Accordion.Trigger
+								class="px-4 py-3 transition-colors hover:bg-muted/50 hover:no-underline"
+							>
+								<span class="text-sm font-bold text-primary-dark">{t.shelterTypeGroup}</span>
+							</Accordion.Trigger>
+							<Accordion.Content class="pb-2">
+								<div class="flex flex-col gap-3 px-4 pt-2 pb-2">
+									<label class="flex cursor-pointer items-center justify-between gap-3">
+										<span class="text-sm font-medium text-foreground">{t.groupEvacuation}</span>
+										<Switch bind:checked={showEvacuation} aria-label={t.groupEvacuation} />
+									</label>
+									<label class="flex cursor-pointer items-center justify-between gap-3">
+										<span class="text-sm font-medium text-foreground">{t.groupExternal}</span>
+										<Switch bind:checked={showExternal} aria-label={t.groupExternal} />
+									</label>
+									<label class="flex cursor-pointer items-center justify-between gap-3">
+										<span class="text-sm font-medium text-foreground">{t.groupHostHouse}</span>
+										<Switch bind:checked={showHostHouse} aria-label={t.groupHostHouse} />
+									</label>
+								</div>
+							</Accordion.Content>
+						</Accordion.Item>
+					</Accordion.Root>
+				</div>
+
 				<!-- Search -->
 				<div class="space-y-1.5">
 					<Label for={`${idPrefix}search`} class="text-xs font-semibold text-muted-foreground"
@@ -584,29 +608,6 @@
 						options={subdistrictsList}
 						loading={loadingLocations}
 					/>
-				</div>
-
-				<!-- Site kind -->
-				<div class="space-y-1.5">
-					<Label for={`${idPrefix}site_kind`} class="text-xs font-semibold text-muted-foreground"
-						>{t.siteKindLabel}</Label
-					>
-					<Select.Root
-						type="single"
-						name="site_kind"
-						bind:value={selectedSiteKind}
-						items={siteKindOptions}
-					>
-						<Select.Trigger id={`${idPrefix}site_kind`} class="w-full rounded-xl">
-							<Select.Value placeholder={t.siteKindPlaceholder} />
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="">{t.siteKindAll}</Select.Item>
-							{#each siteKindOptions as option (option.value)}
-								<Select.Item value={option.value}>{option.label}</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
 				</div>
 
 				<!-- Status (CR-252 FR-23) -->

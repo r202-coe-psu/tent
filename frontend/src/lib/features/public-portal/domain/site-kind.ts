@@ -95,3 +95,31 @@ export function siteKindTiles(
 	}
 	return tiles;
 }
+
+/**
+ * Shelter-type toggles on the `/shelters` filter panel. All are on by default, so the URL only
+ * records the ones switched off (`hide_*=on`). `external` is exactly `is_external === true`; the
+ * other two never include external shelters.
+ */
+export const SHELTER_GROUP_HIDE_PARAMS = {
+	hide_evacuation: 'evacuation',
+	hide_external: 'external',
+	hide_host_house: 'host_house'
+} as const;
+
+export type ShelterGroup =
+	(typeof SHELTER_GROUP_HIDE_PARAMS)[keyof typeof SHELTER_GROUP_HIDE_PARAMS];
+
+export function shelterGroup(s: {
+	is_external?: boolean | null;
+	site_kind?: string | null;
+}): ShelterGroup {
+	if (s.is_external) return 'external';
+	return isHostHouseKind(s.site_kind) ? 'host_house' : 'evacuation';
+}
+
+export function hiddenShelterGroups(params: URLSearchParams): ShelterGroup[] {
+	return Object.entries(SHELTER_GROUP_HIDE_PARAMS)
+		.filter(([key]) => params.get(key) === 'on')
+		.map(([, group]) => group);
+}

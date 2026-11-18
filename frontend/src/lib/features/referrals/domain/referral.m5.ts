@@ -132,8 +132,8 @@ export function referralStatusForM5(status: M5TransferStatus): ReferralStatus {
 }
 
 /**
- * UI default for a patient's acuity (D13): the legacy screening `triage_level` when present
- * (deprecated since CR-106, so usually absent); otherwise none and staff must pick.
+ * UI default for a patient's acuity (D13): the screening's stored `triage_level` (Station 2
+ * records one again since CR-258). None stored → none, and staff must pick; never green by default.
  */
 export function defaultAcuity(
 	screening: { triage_level?: 'green' | 'yellow' | 'red' | null } | null | undefined

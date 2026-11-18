@@ -37,8 +37,12 @@ import { publicShelter, teardownShelter } from './helpers/public-cleanup';
 import { createShelterViaUi } from './helpers/staff-ui';
 
 const FIXTURE = sheltersFixture();
-/** GPS fix + filter commit + the `/shelters` load it triggers, on a cold preview server. */
-const GPS_URL_TIMEOUT_MS = 15_000;
+/**
+ * GPS fix + filter commit + the `/shelters` load it triggers, on a cold preview server. The first
+ * load renders every shelter (736 on staging) before the radius applies, which blocks the main
+ * thread long enough on the CPU-starved CI agent to push the URL commit past 15 s.
+ */
+const GPS_URL_TIMEOUT_MS = 45_000;
 const { marker: MARKER, hostNear: HOST_NEAR, evacFar: EVAC_FAR } = FIXTURE;
 const USER_LOCATION = { latitude: 7.0086, longitude: 100.4968 };
 
@@ -61,7 +65,7 @@ test.describe(
 			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toBeVisible();
-			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toBeVisible();
+			await expect(page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทอาคาร' })).toBeVisible();
 			await expect(page.getByRole('button', { name: '5 กม' })).toBeVisible();
 		});
@@ -119,7 +123,8 @@ test.describe(
 		});
 
 		test('filters the list by shelter name', async ({ page }) => {
-			test.setTimeout(75_000); // outlasts the 60 s projection wait below
+			// GPS commit + the 60 s projection wait below + margin
+			test.setTimeout(GPS_URL_TIMEOUT_MS + 60_000 + 15_000);
 			await page.goto('/shelters');
 			// First visit: GPS → URL commit → page load re-runs before the URL changes (~3 s locally).
 			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
@@ -141,6 +146,8 @@ test.describe(
 		});
 
 		test('widens and narrows the GPS radius', async ({ page }) => {
+			// GPS commit + radius reloads of the full list
+			test.setTimeout(GPS_URL_TIMEOUT_MS + 60_000);
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}`);
 			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
@@ -156,23 +163,36 @@ test.describe(
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 		});
 
-		test('filters by site kind', async ({ page }) => {
+		test('filters by shelter type toggle', async ({ page }) => {
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
-			await page.getByRole('button', { name: 'ชนิดสถานที่' }).click();
-			await page.getByRole('option', { name: 'บ้านพี่เลี้ยง' }).click();
-			await expect(page).toHaveURL(/site_kind=host_house/);
-			// The closed trigger shows the master label, not the raw code (CR-198 FR-16).
-			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toHaveText('บ้านพี่เลี้ยง');
-			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible();
+			// Every type starts on, so the URL carries no hide_* flag.
+			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
+			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true })).toBeChecked();
+			await expect(page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' })).toBeChecked();
+			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพภายนอก' })).toBeChecked();
+			await expect(page).not.toHaveURL(/hide_/);
+
+			await page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' }).click();
+			await expect(page).toHaveURL(/hide_host_house=on/);
+			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeHidden();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
-			await page.getByRole('button', { name: 'ชนิดสถานที่' }).click();
-			await page.getByRole('option', { name: 'ศูนย์อพยพ' }).click();
-			await expect(page).toHaveURL(/site_kind=evacuation_center/);
-			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toHaveText('ศูนย์อพยพ');
-			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
+			// The off state survives a reload (hydrated from the URL).
+			await page.reload();
+			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
+			await expect(page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' })).not.toBeChecked();
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+
+			// Turning it back on and the evacuation toggle off swaps which shelter remains.
+			await page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' }).click();
+			await page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true }).click();
+			await expect(page).toHaveURL(/hide_evacuation=on/);
+			await expect(page).not.toHaveURL(/hide_host_house/);
+			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 		});
 
@@ -203,11 +223,13 @@ test.describe(
 		});
 
 		test('clears every filter', async ({ page }) => {
-			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&site_kind=host_house&distance=10`);
+			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&hide_host_house=on&distance=10`);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
+			// Let the first-visit GPS commit land first, or it re-applies the old filters after the clear.
+			await expect(page).toHaveURL(/user_lat=/, { timeout: GPS_URL_TIMEOUT_MS });
 			await page.getByRole('link', { name: 'ล้างค่า' }).click();
-			await expect(page).not.toHaveURL(/q=|site_kind=/);
+			await expect(page).not.toHaveURL(/q=|hide_/);
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toHaveValue('');
 			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible();
 		});

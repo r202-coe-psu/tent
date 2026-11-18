@@ -18,6 +18,8 @@
 		deriveDuplicateCheckQueries,
 		duplicateCheckKey,
 		hasFederatedIntakeHits,
+		formatPersonName,
+		resolveInstantDuplicateAction,
 		isIntakeNewRegistrationLocked,
 		intakeSearchCopyByLanguage,
 		EVACUEE_PAGE_I18N,
@@ -26,10 +28,15 @@
 		type IntakeNextStation,
 		type RegistrationConsent,
 		type RegistrationConsentConfig,
+		digitsOnly,
+		type ScannedCardDuplicate,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput
 	} from '$lib/features/people';
-	import { unassignedRegistrationRemote } from '$lib/features/unassigned-registration';
+	import {
+		formatOpenMemberName,
+		unassignedRegistrationRemote
+	} from '$lib/features/unassigned-registration';
 	import { resolveShelterCode } from '$lib/db/shelter';
 	import { UlidReservation } from '$lib/db/ulid-reservation';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -46,6 +53,25 @@
 	const formOpenedAt = new Date().toISOString();
 	// No 'SH001' fallback here: a walk-in must never be written to a guessed shelter.
 	const shelterCode = $derived(resolveShelterCode());
+
+	/** Without an active shelter the form is not mounted; scanned cards must not vanish silently. */
+	$effect(() => {
+		if (shelterCode) return;
+		const ackReading = (event: Event) => event.preventDefault();
+		const rejectCard = (event: Event) => {
+			event.preventDefault();
+			toast.warning(td.scanner.selectShelterFirst, { id: 'scanner-card' });
+		};
+		const ackPhoto = (event: Event) => event.preventDefault();
+		window.addEventListener('scanner:card-reading', ackReading);
+		window.addEventListener('scanner:card-read', rejectCard);
+		window.addEventListener('scanner:card-photo', ackPhoto);
+		return () => {
+			window.removeEventListener('scanner:card-reading', ackReading);
+			window.removeEventListener('scanner:card-read', rejectCard);
+			window.removeEventListener('scanner:card-photo', ackPhoto);
+		};
+	});
 
 	let completed = $state<{
 		household: Household;
@@ -89,6 +115,46 @@
 		return idReservation.ids;
 	}
 	let overrideResolver: ((confirmed: boolean) => void) | null = null;
+
+	/**
+	 * Scanned-card duplicate lookup (#1326 D3): the same shelter (Couch) + central unassigned queue
+	 * search as the save-time check, for one citizen ID. A hit anywhere wins; with no hit, a failed
+	 * source throws so the form can warn instead of reporting "nobody found".
+	 */
+	async function findScannedCardDuplicate(citizenId: string): Promise<ScannedCardDuplicate | null> {
+		const [local, pool] = await Promise.allSettled([
+			peopleRepository().searchEvacueesMany([citizenId]),
+			unassignedRegistrationRemote.searchOpen(citizenId, { signal: AbortSignal.timeout(8000) })
+		]);
+		if (local.status === 'fulfilled') {
+			const evacuee = local.value.get(citizenId)?.[0];
+			if (evacuee) {
+				const { actionUrl } = resolveInstantDuplicateAction({
+					source: 'local',
+					id: evacuee._id,
+					status: evacuee.current_stay?.status
+				});
+				return { name: formatPersonName(evacuee), href: actionUrl };
+			}
+		}
+		if (pool.status === 'fulfilled') {
+			const hit = pool.value.results.find((r) => r.open_members.length > 0);
+			if (hit) {
+				const member =
+					hit.open_members.find((m) => digitsOnly(m.person_id?.number) === citizenId) ??
+					hit.open_members[0];
+				const { actionUrl } = resolveInstantDuplicateAction({
+					source: 'unassigned',
+					id: hit.id,
+					memberIds: hit.open_members.map((m) => m.reserved_evacuee_id)
+				});
+				return { name: formatOpenMemberName(member), href: actionUrl };
+			}
+		}
+		if (local.status === 'rejected') throw local.reason;
+		if (pool.status === 'rejected') throw pool.reason;
+		return null;
+	}
 
 	/**
 	 * Re-runs the CR-115 federated hard anti-dupe search at the actual write
@@ -334,6 +400,8 @@
 				consent={consentConfig}
 				onsubmit={handleRegister}
 				onDirtyChange={(dirty) => (isDirty = dirty)}
+				{findScannedCardDuplicate}
+				scannerEnabled
 			/>
 		{/if}
 	{/if}

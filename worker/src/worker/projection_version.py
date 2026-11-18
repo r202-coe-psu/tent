@@ -52,4 +52,8 @@ per deploy, so batch related projector changes into one bump per release when po
 #: ``unknown`` for external shelters; ``capacity`` = entered value when external (no fallback 100).
 #: 22 — CR-253: ``public_shelters.parking_points`` (pinned points with per-point vehicles) and
 #: ``public_shelters.parking_vehicle_types`` (effective vehicle types for the list filter).
-PROJECTION_VERSION: int = 22
+#: 23 — CR-257: ``public_persons`` carries plaintext ``last_name`` / ``national_id`` /
+#: ``passport_id`` / ``id_card_type`` / ``phone`` / ``address{…}`` and no ``*_masked``;
+#: ``shelter_occupants`` carries ``first_name`` / ``last_name`` / ``age`` / ID / ``phone`` and no
+#: ``name_masked`` (masking moved to the API).
+PROJECTION_VERSION: int = 23

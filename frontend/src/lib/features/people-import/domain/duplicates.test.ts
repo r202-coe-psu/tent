@@ -9,11 +9,18 @@ import {
 	type ExistingPerson
 } from './duplicates';
 
+const STAYING: RawRow = {
+	[H.stay_status]: 'พักอยู่',
+	[H.arrived_at]: '10/11/2569 14:00',
+	[H.zone]: 'A'
+};
+
 function head(overrides: RawRow = {}): RawRow {
 	return {
 		[H.first_name]: 'สมชาย',
 		[H.last_name]: 'ใจดี',
 		[H.gender]: 'ชาย',
+		...STAYING,
 		...overrides
 	};
 }
@@ -74,6 +81,7 @@ describe('findExistingDuplicates', () => {
 					ref: '1',
 					line: 2,
 					cells: {
+						...STAYING,
 						[H.first_name]: 'สมหญิง',
 						[H.last_name]: 'ใจดี',
 						[H.gender]: 'หญิง',
@@ -107,6 +115,7 @@ describe('findExistingDuplicates', () => {
 describe('in-file duplicates', () => {
 	it('rejects the same person appearing as a member of two households', () => {
 		const member = {
+			...STAYING,
 			[H.first_name]: 'สมหญิง',
 			[H.last_name]: 'ใจดี',
 			[H.gender]: 'หญิง',
@@ -141,6 +150,7 @@ describe('in-file duplicates', () => {
 						ref: '1',
 						line: 1,
 						cells: {
+							...STAYING,
 							[H.first_name]: 'สมชาย',
 							[H.last_name]: 'ใจดี',
 							[H.gender]: 'ชาย',

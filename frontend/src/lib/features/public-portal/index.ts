@@ -59,6 +59,8 @@ export {
 	activeSiteKinds,
 	countBySiteKind,
 	isHostHouseKind,
+	shelterGroup,
+	hiddenShelterGroups,
 	siteKindLabel,
 	siteKindTiles,
 	type SiteKindOption
