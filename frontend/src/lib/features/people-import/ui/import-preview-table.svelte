@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import type { RowValidation } from '../domain/import-row';
+	import { countPendingReportIn, type RowValidation } from '../domain/import-row';
 	import type { DuplicateMatch } from '../domain/duplicates';
 
 	let {
@@ -22,6 +22,16 @@
 		</Badge>
 	{:else if v.ok}
 		<Badge variant="secondary">พร้อมนำเข้า</Badge>
+		{@const pending = v.payload ? countPendingReportIn(v.payload) : 0}
+		{#if pending > 0}
+			<Badge
+				variant="outline"
+				class="mt-1 border-sky-300 text-sky-700"
+				data-testid="pending-report-in"
+			>
+				รอรายงานตัว (Station 1){pending > 1 || v.memberCount > 0 ? ` ${pending} คน` : ''}
+			</Badge>
+		{/if}
 	{:else}
 		<Badge variant="destructive">ผิดพลาด</Badge>
 	{/if}
