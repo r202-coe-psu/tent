@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { H } from './columns';
 import {
+	countPendingReportIn,
 	emptyLookups,
 	isLegacyTemplate,
 	validateRow,
@@ -58,7 +59,7 @@ describe('stay: พักอยู่ (active)', () => {
 	});
 
 	it('accepts the zone by code as well as by name', () => {
-		expect(validateRow(person({ [H.zone]: 'A' }), 1, lookups()).payload?.headStay.zone).toBe('A');
+		expect(validateRow(person({ [H.zone]: 'A' }), 1, lookups()).payload?.headStay?.zone).toBe('A');
 	});
 
 	it('requires a zone (CR-112: a check_in needs one)', () => {
@@ -102,7 +103,7 @@ describe('stay: กลับแล้ว (checked_out)', () => {
 	it('allows a closed zone — it is history, not a placement', () => {
 		const result = validateRow(leftCells({ [H.zone]: 'โซน C' }), 1, lookups());
 		expect(result.ok).toBe(true);
-		expect(result.payload?.headStay.zone).toBe('C');
+		expect(result.payload?.headStay?.zone).toBe('C');
 	});
 
 	it('rejects a departure before the arrival', () => {
@@ -119,13 +120,8 @@ describe('stay: กลับแล้ว (checked_out)', () => {
 });
 
 describe('stay: shared rules', () => {
-	it('requires status and arrival on every row', () => {
-		const cols = columnsWithErrors({
-			[H.first_name]: 'สมชาย',
-			[H.last_name]: 'ใจดี',
-			[H.gender]: 'ชาย'
-		});
-		expect(cols).toContain(H.stay_status);
+	it('requires an arrival time once a status is given', () => {
+		const cols = columnsWithErrors(person({ [H.arrived_at]: '' }));
 		expect(cols).toContain(H.arrived_at);
 	});
 
@@ -185,9 +181,71 @@ describe('stay: members', () => {
 		]);
 
 		expect(result.ok).toBe(true);
-		expect(result.payload?.members[0].stay.status).toBe('checked_out');
+		expect(result.payload?.members[0].stay?.status).toBe('checked_out');
 		// Head still housed → household stays checked in.
 		expect(result.payload?.household.status).toBe('checked_in');
+	});
+});
+
+describe('stay: blank status → pre_registered (#1448)', () => {
+	const blankStatus = (overrides: RawRow = {}): RawRow => ({
+		[H.first_name]: 'สมชาย',
+		[H.last_name]: 'ใจดี',
+		[H.gender]: 'ชาย',
+		...overrides
+	});
+
+	it('imports a person with no stay at all', () => {
+		const result = validateRow(blankStatus(), 1, lookups());
+		expect(result.errors).toEqual([]);
+		expect(result.ok).toBe(true);
+		expect(result.payload?.headStay).toBeNull();
+		expect(result.payload?.household.status).toBe('pre_registered');
+		expect(result.payload?.household.checkout_destination).toBeNull();
+	});
+
+	it('errors on each of เวลามา / เวลากลับ / โซน filled while the status is blank', () => {
+		for (const [header, value] of [
+			[H.arrived_at, '10/11/2569 14:00'],
+			[H.departed_at, '12/11/2569 09:30'],
+			[H.zone, 'โซน A']
+		] as const) {
+			const result = validateRow(blankStatus({ [header]: value }), 1, lookups());
+			expect(result.ok).toBe(false);
+			expect(result.errors.map((e) => e.column)).toEqual([header]);
+		}
+	});
+
+	it('still rejects an unknown status word', () => {
+		expect(columnsWithErrors(person({ [H.stay_status]: 'ไม่รู้' }))).toContain(H.stay_status);
+	});
+
+	it('accepts a mixed household: blank head, active member — status derives from the member', () => {
+		const result = validateRow(blankStatus(), 1, lookups(), [
+			{ ref: '1', line: 1, cells: person({ [H.first_name]: 'สมหญิง' }) }
+		]);
+		expect(result.ok).toBe(true);
+		expect(result.payload?.headStay).toBeNull();
+		expect(result.payload?.members[0].stay?.status).toBe('active');
+		expect(result.payload?.household.status).toBe('checked_in');
+	});
+
+	it('flags a blank-status member that carries a zone, pointing at the member sheet row', () => {
+		const result = validateRow(person(), 1, lookups(), [
+			{ ref: '1', line: 3, cells: blankStatus({ [H.first_name]: 'สมหญิง', [H.zone]: 'โซน A' }) }
+		]);
+		expect(result.ok).toBe(false);
+		const err = result.errors.find((e) => e.column === H.zone);
+		expect(err?.sheet).toBe('สมาชิก');
+		expect(err?.line).toBe(3);
+	});
+
+	it('counts the people waiting for Report-in', () => {
+		const result = validateRow(blankStatus(), 1, lookups(), [
+			{ ref: '1', line: 1, cells: person({ [H.first_name]: 'สมหญิง' }) },
+			{ ref: '1', line: 2, cells: blankStatus({ [H.first_name]: 'สมศรี' }) }
+		]);
+		expect(result.payload && countPendingReportIn(result.payload)).toBe(2);
 	});
 });
 

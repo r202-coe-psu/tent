@@ -89,28 +89,36 @@ test.describe(
 			await download.saveAs(file);
 
 			await page.locator('input[type="file"]').setInputFiles(file);
-			// 1 household · 3 members (head + 3 people = 4) — the sample row uses an active zone.
+			// 1 household · 4 members (head + 4 people = 5) — the sample row uses an active zone.
 			await expect(page.getByText(/พร้อมนำเข้า 1\D+ผิดพลาด\s*0/)).toBeVisible({ timeout: 30_000 });
 			const importButton = page.getByRole('button', { name: /นำเข้า 1 ครัวเรือน \(4 คน\)/ });
 			await expect(importButton).toBeEnabled({ timeout: 30_000 });
 			await importButton.click();
 			// The toast — not the button, whose label carries the same text before the import runs.
 			await expect(
-				page.locator('[data-sonner-toast]').getByText('นำเข้า 1 ครัวเรือน (4 คน)')
+				page.locator('[data-sonner-toast]').getByText('นำเข้า 1 ครัวเรือน (5 คน)')
 			).toBeVisible({ timeout: 60_000 });
 
-			// Back-dated people landed in the registry: one active head, one already left.
+			// The preview flags the blank-status sample member as waiting for Report-in (#1448).
+			await expect(page.getByTestId('pending-report-in').first()).toContainText(
+				'รอรายงานตัว (Station 1)'
+			);
+			await expect(page.getByText(/ใช้ template เก่า/)).toHaveCount(0);
+
+			// Back-dated people landed in the registry: one active head, one already left, and the
+			// blank-status member imported as pre_registered.
 			await page.goto('/back-office/evacuee-management?tab=evacuee');
 			const row = (name: string) => page.locator('table tbody tr').filter({ hasText: name });
 			await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 				timeout: 30_000
 			});
-			for (const first of ['สมชาย', 'สมปอง']) {
+			for (const first of ['สมชาย', 'สมปอง', 'สมหมาย']) {
 				await expect(async () => {
 					await page.locator('#evacuee-search').fill(first);
 					await expect(row(first)).toBeVisible({ timeout: 3_000 });
 				}).toPass({ intervals: [2_000], timeout: 60_000 });
 			}
+			await expect(row('สมหมาย')).toContainText('ลงทะเบียนล่วงหน้า');
 		});
 
 		test('a template from before the stay columns is refused', async ({ page }) => {

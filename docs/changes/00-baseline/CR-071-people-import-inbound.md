@@ -7,7 +7,8 @@ requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (IMPS, approved 2026-08-13 — slice A/T-72 เท่านั้น; T-73 = รอบ CR ถัดไป)
 layer: volatile
 parent: CR-066
-note: decision sync 2026-11-15 (#1399) — superseded เฉพาะ T-72 initial stay=A (ทุกแถว pre_registered / ห้ามคอลัมน์สถานะ) และกติกาจัดโซนที่หน้าจัดโซนเท่านั้น (T-09): ไฟล์ import ตอนนี้เป็น Backfill Import มีคอลัมน์ สถานะ/เวลามา/เวลากลับ/โซน ดู Decision log ท้ายไฟล์ — ข้อความ T-72 ด้านบนที่อ้าง pre_registered ทุกแถวใช้ไม่ได้แล้ว
+updated: 2026-11-18
+note: decision sync 2026-11-18 (#1448) — `สถานะ` ว่างได้ → นำเข้าเป็น `pre_registered` รอรายงานตัวที่ Station 1 (กลับคำตัดสิน #1399 ข้อที่ว่า `สถานะ` บังคับทุกแถว / ห้ามนำเข้าเป็น pre_registered) ดู Decision log ท้ายไฟล์. decision sync 2026-11-15 (#1399) — superseded เฉพาะ T-72 initial stay=A (ทุกแถว pre_registered / ห้ามคอลัมน์สถานะ) และกติกาจัดโซนที่หน้าจัดโซนเท่านั้น (T-09): ไฟล์ import ตอนนี้เป็น Backfill Import มีคอลัมน์ สถานะ/เวลามา/เวลากลับ/โซน ดู Decision log ท้ายไฟล์ — ข้อความ T-72 ด้านบนที่อ้าง pre_registered ทุกแถวใช้ไม่ได้แล้ว
 affects:
   - docs/data/schema.md §1.1 `registered_via` (ร่วม CR-070)
   - docs/data/schema.md §1.7 `people_import_log` (ใหม่, schema_v 1 — T-72)
@@ -113,3 +114,10 @@ Additive. คนที่ import แล้วเป็น evacuee schema ปั�
   - **สิ่งที่บันทึก:** movement ย้อนหลัง `check_in` (`occurred_at`=เวลามา, `zone`=โซน) · `กลับแล้ว` เพิ่ม `check_out` (`occurred_at`=เวลากลับ, `reason`=`backfill_import` ค่าคงที่แบบ `shelter_closed`, ไม่ระบุ `destination`) · `current_stay` ตามสถานะล่าสุด, `since`=เวลา movement ล่าสุด · `registered_via=import` เหมือนเดิม.
   - **ครัวเรือนที่ทุกคน `กลับแล้ว`:** `status=checked_out` (derive จาก stay) และ preset `checkout_destination={type: returned_home}` (กลับบ้าน) เพราะไฟล์ไม่มี destination และ R-29-8 บังคับให้ครัวเรือน checked_out มี destination; ครัวเรือนที่ยังมีคนพักอยู่ = `null`.
   - **ผลกระทบที่ยอมรับ:** template เก่าไม่มีคอลัมน์สถานะ → อัปโหลดไม่ผ่าน (แจ้งให้โหลดใหม่) · ข้อความหน้า import ที่ว่า "ลงทะเบียนล่วงหน้าหลายครัวเรือน" แก้แล้ว · เอา `สถานะการเข้าพัก` และ `โซนพักพิงในศูนย์` ออกจาก `APP_ONLY_FIELDS` + แก้ README sheet.
+- 2026-11-18 — **decision sync (#1448 · ไม่ bump schema_v · ไม่แก้ `people_import_log`):** Backfill Import รับแถวที่ **`สถานะ` ว่าง** — กลับคำตัดสิน #1399 บางส่วน (ข้อ "`สถานะ` บังคับทุกแถว" และ "นำเข้าเป็น `pre_registered` ด้วยไฟล์ไม่ได้อีก").
+  - **กติกา (ตัดสินรายคน — หัวหน้า/สมาชิกในครัวเรือนเดียวกันมีสถานะผสมได้):** `สถานะ` ว่าง → `current_stay.status = pre_registered` **ไม่เขียน movement ใดๆ** และอยู่ในคิว Report-in ที่ Station 1 (ไม่ใช่ `arriving`). `สถานะ` มีค่า → กฎ #1399 เดิมทุกข้อ (`เวลามา` บังคับ ฯลฯ).
+  - **กฎตรวจใหม่ (error = แถวไม่ถูกนำเข้า):** `สถานะ` ว่างแต่กรอก `เวลามา` / `เวลากลับ` / `โซน` → error ที่เซลล์นั้น (เลือกสถานะ หรือล้างค่าออก). ไฟล์ที่ **ไม่มีหัวคอลัมน์ `สถานะ` เลย** ยังถูกปฏิเสธ ("ใช้ template เก่า — โหลดใหม่"); เซลล์ว่างเท่านั้นที่เป็น Station 1.
+  - **Household status:** ยังคำนวณจาก `deriveHouseholdStatus` (คน `pre_registered` นับรวม; ถ้าทุกคนว่าง = `pre_registered`; preset `returned_home` ใช้เฉพาะเมื่อทุกคน `กลับแล้ว` เหมือนเดิม).
+  - **Occupancy:** คน `pre_registered` จาก import นับใน Forecast Occupancy ตาม D-BOOK-OCC=C (ไม่แก้ logic occupancy); ไม่นับในคำเตือนความจุของ import (นับเฉพาะ `พักอยู่`).
+  - **Template/UI:** `สถานะ` และ `เวลามา` เป็น `required: false` (ไม่มี `*`); hint / README / แถวตัวอย่าง (เพิ่มสมาชิกสถานะว่าง) บอกว่า "ว่าง = รอรายงานตัวที่ Station 1"; preview แสดงป้าย "รอรายงานตัว (Station 1)" สำหรับแถวที่มีคนสถานะว่าง.
+  - **ที่อื่นที่แก้ตาม:** `CONTEXT.md` ข้อ **Backfill Import** (_Avoid_ ที่ว่า "ไม่เคยสร้าง `pre_registered`").
