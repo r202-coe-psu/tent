@@ -28,6 +28,7 @@
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { shelterTypeLabel } from '../domain/master-labels';
+	import { RADIUS_PRESETS_KM } from '../domain/active-filters';
 
 	interface Filters {
 		search?: string;
@@ -82,7 +83,7 @@
 	} = $props();
 
 	const STATUS_VALUES = ['open', 'full', 'prepare', 'closed', 'unknown'] as const;
-	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
+	const DISTANCE_PRESETS = RADIUS_PRESETS_KM;
 	const ADVANCED_ITEM = 'advanced-filters';
 	const SEARCH_DEBOUNCE_MS = 300;
 
@@ -321,6 +322,15 @@
 
 	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
 
+	// A control that narrows the list is tinted, so the visitor sees what is on (#1419).
+	// Read from the live state, which the URL hydrates, so it holds after a reload too.
+	const ACTIVE_CLASS = 'border-primary/50 bg-primary/5';
+	let groupsActive = $derived(!showEvacuation || !showExternal);
+	let parkingActive = $derived(parkCarChecked || parkMotorChecked || parkBoatChecked);
+	let advancedActive = $derived(
+		Boolean(selectedProvince || selectedDistrict || selectedSubdistrict) || parkingActive
+	);
+
 	let locationData = $state<{ province: string; district: string; subdistrict: string }[]>([]);
 	let loadingLocations = $state(true);
 
@@ -522,7 +532,14 @@
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
 			<div class="space-y-4">
 				<!-- Shelter type groups -->
-				<div class="overflow-hidden rounded-xl border border-border">
+				<div
+					data-filter="shelter-groups"
+					data-active={groupsActive}
+					class={[
+						'overflow-hidden rounded-xl border',
+						groupsActive ? ACTIVE_CLASS : 'border-border'
+					]}
+				>
 					<Accordion.Root type="single" class="w-full">
 						<Accordion.Item value="shelter-groups" class="border-none">
 							<Accordion.Trigger
@@ -553,12 +570,14 @@
 					>
 					<div class="relative">
 						<Input
-							id="search"
+							id={`${idPrefix}search`}
 							name="q"
 							type="text"
 							bind:value={searchQuery}
 							placeholder={t.searchPlaceholder}
-							class="w-full rounded-xl pl-9"
+							data-filter="search"
+							data-active={searchQuery.trim() !== ''}
+							class={['w-full rounded-xl pl-9', searchQuery.trim() && ACTIVE_CLASS]}
 						/>
 						<Search class="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
 					</div>
@@ -574,7 +593,12 @@
 						bind:value={selectedStatus}
 						items={statusOptions}
 					>
-						<Select.Trigger id={`${idPrefix}status`} class="w-full rounded-xl">
+						<Select.Trigger
+							id={`${idPrefix}status`}
+							data-filter="status"
+							data-active={selectedStatus !== ''}
+							class={['w-full rounded-xl', selectedStatus && ACTIVE_CLASS]}
+						>
 							<Select.Value placeholder={t.statusAll} />
 						</Select.Trigger>
 						<Select.Content>
@@ -592,7 +616,12 @@
 						>{t.typeLabel}</Label
 					>
 					<Select.Root type="single" name="type" bind:value={selectedType}>
-						<Select.Trigger id={`${idPrefix}type`} class="w-full rounded-xl">
+						<Select.Trigger
+							id={`${idPrefix}type`}
+							data-filter="type"
+							data-active={selectedType !== ''}
+							class={['w-full rounded-xl', selectedType && ACTIVE_CLASS]}
+						>
 							<Select.Value placeholder={t.typePlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
@@ -661,7 +690,14 @@
 				<input type="hidden" name="user_lng" id={`${idPrefix}user_lng`} value={userLng} />
 
 				<!-- Capacity Switch Card -->
-				<div class="flex items-start gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
+				<div
+					data-filter="hide_full"
+					data-active={hideFullToggle}
+					class={[
+						'flex items-start gap-4 rounded-xl border p-4 shadow-sm',
+						hideFullToggle ? ACTIVE_CLASS : 'border-border bg-card'
+					]}
+				>
 					<Switch bind:checked={hideFullToggle} class="mt-1" />
 					<input
 						type="checkbox"
@@ -681,7 +717,14 @@
 				</div>
 
 				<!-- Advanced Filters -->
-				<div class="overflow-hidden rounded-xl border border-border">
+				<div
+					data-filter="advanced"
+					data-active={advancedActive}
+					class={[
+						'overflow-hidden rounded-xl border',
+						advancedActive ? ACTIVE_CLASS : 'border-border'
+					]}
+				>
 					<Accordion.Root type="single" class="w-full" bind:value={advancedOpen}>
 						<Accordion.Item value={ADVANCED_ITEM} class="border-none">
 							<Accordion.Trigger
@@ -706,6 +749,11 @@
 												bind:value={selectedProvince}
 												options={provincesList}
 												loading={loadingLocations}
+												controlProps={{
+													'data-filter': 'province',
+													'data-active': Boolean(selectedProvince)
+												}}
+												class={selectedProvince ? ACTIVE_CLASS : ''}
 											/>
 										</div>
 
@@ -722,6 +770,11 @@
 												bind:value={selectedDistrict}
 												options={districtsList}
 												loading={loadingLocations}
+												controlProps={{
+													'data-filter': 'district',
+													'data-active': Boolean(selectedDistrict)
+												}}
+												class={selectedDistrict ? ACTIVE_CLASS : ''}
 											/>
 										</div>
 
@@ -739,6 +792,11 @@
 												bind:value={selectedSubdistrict}
 												options={subdistrictsList}
 												loading={loadingLocations}
+												controlProps={{
+													'data-filter': 'subdistrict',
+													'data-active': Boolean(selectedSubdistrict)
+												}}
+												class={selectedSubdistrict ? ACTIVE_CLASS : ''}
 											/>
 										</div>
 									</div>
@@ -847,7 +905,14 @@
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-xs font-bold text-foreground">{t.cat3}</div>
 										<div class="flex flex-col gap-3">
-											<label class="group flex cursor-pointer items-start gap-3">
+											<label
+												data-filter="parking_car"
+												data-active={parkCarChecked}
+												class={[
+													'group -mx-1.5 -my-1 flex cursor-pointer items-start gap-3 rounded-md border px-1.5 py-1',
+													parkCarChecked ? ACTIVE_CLASS : 'border-transparent'
+												]}
+											>
 												<Checkbox
 													name="parking_car"
 													bind:checked={parkCarChecked}
@@ -858,7 +923,14 @@
 													>{t.parkCar}</span
 												>
 											</label>
-											<label class="group flex cursor-pointer items-start gap-3">
+											<label
+												data-filter="parking_motorcycle"
+												data-active={parkMotorChecked}
+												class={[
+													'group -mx-1.5 -my-1 flex cursor-pointer items-start gap-3 rounded-md border px-1.5 py-1',
+													parkMotorChecked ? ACTIVE_CLASS : 'border-transparent'
+												]}
+											>
 												<Checkbox
 													name="parking_motorcycle"
 													bind:checked={parkMotorChecked}
@@ -869,7 +941,14 @@
 													>{t.parkMotor}</span
 												>
 											</label>
-											<label class="group flex cursor-pointer items-start gap-3">
+											<label
+												data-filter="parking_boat"
+												data-active={parkBoatChecked}
+												class={[
+													'group -mx-1.5 -my-1 flex cursor-pointer items-start gap-3 rounded-md border px-1.5 py-1',
+													parkBoatChecked ? ACTIVE_CLASS : 'border-transparent'
+												]}
+											>
 												<Checkbox
 													name="parking_boat"
 													bind:checked={parkBoatChecked}

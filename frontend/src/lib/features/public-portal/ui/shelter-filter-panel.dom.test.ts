@@ -365,3 +365,109 @@ describe('ShelterFilterPanel — advanced filters: province / district / subdist
 		expect(committedUrl().get('distance')).toBe('5');
 	});
 });
+
+describe('ShelterFilterPanel — active controls are highlighted (#1419)', () => {
+	const POSITION = { user_lat: '7.0086', user_lng: '100.4968', distance: '5' };
+
+	beforeEach(() => {
+		env.pending = null;
+		env.goto.mockClear();
+		env.locations = [{ province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'บ้านพรุ' }];
+	});
+	afterEach(() => {
+		if (component) unmount(component);
+		component = undefined;
+		document.body.innerHTML = '';
+		env.locations = [];
+	});
+
+	/** Which controls are marked active, by their `data-filter` name. */
+	const active = () =>
+		[...document.body.querySelectorAll<HTMLElement>('[data-filter][data-active="true"]')].map(
+			(el) => el.dataset.filter
+		);
+	const marked = (name: string) =>
+		document.body.querySelector<HTMLElement>(`[data-filter="${name}"]`);
+
+	it('marks nothing when only the default radius is in effect', async () => {
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(POSITION)}`);
+		await render({ userLat: '7.0086', userLng: '100.4968', filters: POSITION });
+
+		expect(active()).toEqual([]);
+		// every highlightable control is there to be marked
+		for (const name of [
+			'shelter-groups',
+			'search',
+			'status',
+			'type',
+			'hide_full',
+			'advanced',
+			'province',
+			'district',
+			'subdistrict',
+			'parking_car',
+			'parking_motorcycle',
+			'parking_boat'
+		]) {
+			expect(marked(name), name).not.toBeNull();
+		}
+	});
+
+	it('marks every control the URL turned on, with a tinted border', async () => {
+		const filters = {
+			...POSITION,
+			search: 'วัด',
+			status: 'open',
+			type: 'โรงเรียน',
+			province: 'สงขลา',
+			district: 'หาดใหญ่',
+			subdistrict: 'บ้านพรุ',
+			hide_full: 'true',
+			parking_car: 'on',
+			hide_external: 'on'
+		};
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(filters)}`);
+		await render({
+			userLat: '7.0086',
+			userLng: '100.4968',
+			filters,
+			availableTypes: ['โรงเรียน']
+		});
+
+		expect(active().sort()).toEqual(
+			[
+				'shelter-groups',
+				'search',
+				'status',
+				'type',
+				'hide_full',
+				'advanced',
+				'province',
+				'district',
+				'subdistrict',
+				'parking_car'
+			].sort()
+		);
+		for (const name of active()) {
+			expect(marked(name!)!.className, name).toContain('border-primary/50');
+		}
+		expect(marked('parking_boat')!.dataset.active).not.toBe('true');
+	});
+
+	it('marks the advanced section when only a parking box is ticked', async () => {
+		const filters = { ...POSITION, parking_boat: 'on' };
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(filters)}`);
+		await render({ userLat: '7.0086', userLng: '100.4968', filters });
+
+		expect(active().sort()).toEqual(['advanced', 'parking_boat']);
+	});
+
+	it('follows the control as the visitor changes it', async () => {
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(POSITION)}`);
+		await render({ userLat: '7.0086', userLng: '100.4968', filters: POSITION });
+
+		marked('hide_full')!.querySelector<HTMLElement>('[role="switch"]')!.click();
+		flushSync();
+		expect(active()).toEqual(['hide_full']);
+	});
+});
