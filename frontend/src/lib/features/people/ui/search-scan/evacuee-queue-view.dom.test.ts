@@ -81,6 +81,7 @@ const PRE_REG = {
 	phone: '0812345678',
 	household_id: 'household:SH001:0001',
 	special_needs: ['elderly'],
+	created_at: '2026-11-04T01:00:00.000Z',
 	updated_at: '2026-11-04T02:10:00.000Z',
 	current_stay: { status: 'pre_registered' }
 };
@@ -132,6 +133,7 @@ describe('EvacueeQueueView mobile cards', () => {
 			last_name: 'วงศ์สกุลเจริญรุ่งเรือง',
 			person_id: { number: '9876543210987' },
 			household_id: null,
+			created_at: '2026-11-04T01:00:00.000Z',
 			updated_at: '2026-11-04T03:00:00.000Z',
 			current_stay: { status: 'arriving' }
 		};
@@ -141,6 +143,7 @@ describe('EvacueeQueueView mobile cards', () => {
 			first_name: 'วันเพ็ญ',
 			last_name: 'แสงจันทร์',
 			household_id: 'household:SH001:0001',
+			created_at: '2026-11-04T01:30:00.000Z',
 			updated_at: '2026-11-04T02:00:00.000Z'
 		};
 		data.evacuees = [unscreened, screened];
@@ -268,7 +271,8 @@ describe('EvacueeQueueView mobile cards', () => {
 			...PRE_REG,
 			_id: `evacuee:SH001:${String(100 + i)}`,
 			first_name: `ผู้ประสบภัย${i}`,
-			// Newest first: the last fixture is the oldest and lands on page 2.
+			// Oldest registered first: the last fixture registered latest and lands on page 2.
+			created_at: `2026-11-04T01:${String(10 + i)}:00.000Z`,
 			updated_at: `2026-11-04T02:${String(50 - i)}:00.000Z`
 		}));
 		await render({ ...callbacks(), initialTab: 'pre_registered' });
@@ -283,5 +287,23 @@ describe('EvacueeQueueView mobile cards', () => {
 
 		expect(cards()).toHaveLength(1);
 		expect(cards()[0].textContent).toContain('ผู้ประสบภัย10');
+	});
+
+	it('lists the earliest registered first on every tab, ignoring later edits (#1426)', async () => {
+		const early = { ...PRE_REG, _id: 'evacuee:SH001:0201', first_name: 'มาก่อน' };
+		const late = {
+			...PRE_REG,
+			_id: 'evacuee:SH001:0202',
+			first_name: 'มาทีหลัง',
+			created_at: '2026-11-04T05:00:00.000Z',
+			// Edited most recently — used to jump to the top.
+			updated_at: '2026-11-05T09:00:00.000Z'
+		};
+		data.evacuees = [late, early];
+		await render({ ...callbacks(), initialTab: 'pre_registered' });
+
+		const names = () => cards().map((c) => c.textContent ?? '');
+		expect(names()[0]).toContain('มาก่อน');
+		expect(names()[1]).toContain('มาทีหลัง');
 	});
 });
