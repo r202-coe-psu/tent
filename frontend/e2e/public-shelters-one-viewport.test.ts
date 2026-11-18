@@ -4,6 +4,7 @@
  * Every API boundary is mocked — no CouchDB / Mongo / FastAPI needed. Fourteen shelters make the
  * lists far taller than the screen, so a page that still grew with its content would scroll.
  * Desktop keeps the metric cards above the map; mobile is the map or the list with nothing above.
+ * The map legend keeps every label on one line (it wraps between items, never inside one).
  */
 import { test, expect, type Page } from '@playwright/test';
 
@@ -68,6 +69,32 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 
 			expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
 			await expect(page.locator('footer')).toHaveCount(0);
+		});
+
+		test('every map legend label stays on one line', async ({ page }) => {
+			await mockPublicApi(page);
+			await page.goto('/shelters');
+			const legend = page.getByTestId('map-legend');
+			await expect(legend.getByText('ไม่ทราบสถานะ')).toBeVisible(READY);
+
+			const labels = await legend.evaluate((root) =>
+				[...root.querySelectorAll('span')]
+					.filter((el) => el.children.length === 0 && el.textContent?.trim())
+					.map((el) => {
+						const style = getComputedStyle(el);
+						return {
+							text: el.textContent!.trim(),
+							nowrap: style.whiteSpace === 'nowrap',
+							lines: Math.round(el.getBoundingClientRect().height / parseFloat(style.lineHeight))
+						};
+					})
+			);
+			expect(labels.map((l) => l.text)).toEqual(
+				expect.arrayContaining(['ศูนย์อพยพ', 'บ้านพี่เลี้ยง', 'กำลังเตรียมการ', 'ไม่ทราบสถานะ'])
+			);
+			for (const label of labels) {
+				expect(label, label.text).toMatchObject({ nowrap: true, lines: 1 });
+			}
 		});
 
 		test('the shelter list scrolls inside its own panel', async ({ page }) => {

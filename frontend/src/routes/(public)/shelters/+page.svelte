@@ -344,6 +344,11 @@
 				disablePopup={isMobile}
 				onSelectShelter={handleSelectShelter}
 				onLocationPick={applySearchOrigin}
+				legendClass={[
+					// keep the legend between the floating panels (left-4 + w-80/88, right-4 + w-88/96)
+					showFilterPanel && 'lg:left-[22rem] xl:left-[24rem]',
+					showListPanel && 'lg:right-[24rem] xl:right-[26rem]'
+				]}
 			/>
 		</div>
 
