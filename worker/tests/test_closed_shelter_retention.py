@@ -514,6 +514,7 @@ async def test_bootstrap_all_scans_closed_shelters_for_persons_only() -> None:
         patch.object(
             bs, "refresh_shelter_occupants", new_callable=AsyncMock
         ) as occupants,
+        patch.object(bs, "copy_all_audit_docs", new_callable=AsyncMock) as audit_copy,
     ):
         couch = AsyncMock()
         await bs.bootstrap_all(couch)
@@ -529,6 +530,7 @@ async def test_bootstrap_all_scans_closed_shelters_for_persons_only() -> None:
         call(couch, "SH004"),
     ]
     occupants.assert_not_awaited()
+    audit_copy.assert_awaited_once_with(couch, "shelter_sh004")
 
 
 async def test_bootstrap_persons_only_skips_operational_docs() -> None:

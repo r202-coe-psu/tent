@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from worker.audit_log import copy_all_audit_docs, copy_audit_doc
 from worker.couch.checkpoint import (
     get_checkpoint,
     get_projection_version,
@@ -137,6 +138,8 @@ async def bootstrap_database(
                 )
                 await apply_person(action, payload)
                 await sync_booking_stay(doc)
+            elif doc.get("type") == "audit":
+                await copy_audit_doc(couch, doc, database)
         await save_checkpoint(database, seq)
         logger.info("Bootstrap complete for %s, persons only (seq=%s)", database, seq)
         return
@@ -198,6 +201,8 @@ async def bootstrap_database(
             # projected here too, or their own profile screen comes back empty.
             action, payload = project_volunteer(doc, shelter_code=shelter_code)
             await apply_volunteer(action, payload)
+        elif doc_type == "audit":
+            await copy_audit_doc(couch, doc, database)
 
     for job_id, shift_id in sorted(shift_slots):
         await sync_job_shift_slot(job_id=job_id, shift_id=shift_id)
@@ -290,6 +295,7 @@ async def bootstrap_all(couch: CouchClient) -> None:
     listened = await list_listened_shelters(couch)
     for code, phase in listened.items():
         if not phase.is_bootstrapped:
+            await copy_all_audit_docs(couch, shelter_db_name(code))
             continue
         await bootstrap_database(
             couch,

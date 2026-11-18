@@ -10,6 +10,8 @@ import {
 import { ulid } from '$lib/db/ulid';
 import type { Zone } from '$lib/features/shelters/server';
 import { nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 
 export const prerender = false;
 
@@ -30,7 +32,7 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	if (!code || !zoneCode) return error(400, { message: 'Missing code or zoneCode' });
 
 	try {
-		await requireShelterManagerOrSA(request.headers.get('cookie'), code);
+		const caller = await requireShelterManagerOrSA(request.headers.get('cookie'), code);
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const parsed = closeZoneSchema.parse(body);
@@ -40,35 +42,35 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		// updateMaster retries on 409 (skill: couchdb-pouchdb-bestpractices §3).
 		// The mutator returns the new zone shape in `meta` so we can echo it
 		// back in the response without re-reading the master doc.
-		const { meta } = await updateMaster<{ updatedZone: Zone; previousStatus: string }>(
-			code,
-			(current) => {
-				const zones = current.zones ?? [];
-				const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
-				if (zoneIndex === -1) {
-					throw new ServiceError('VALIDATION', `Zone "${zoneCode}" not found in shelter ${code}`);
-				}
-				const target = zones[zoneIndex];
-				if (target.status === 'closed') {
-					throw new ServiceError('CONFLICT', `Zone "${zoneCode}" is already closed`);
-				}
-				const updatedZone: Zone = {
-					...target,
-					status: 'closed',
-					closed_at: nowIso(),
-					closed_by: closedBy,
-					reopened_at: null,
-					reopened_by: null,
-					reason
-				};
-				return {
-					patch: {
-						zones: zones.map((z, i) => (i === zoneIndex ? updatedZone : z))
-					},
-					meta: { updatedZone, previousStatus: target.status }
-				};
+		const { meta, before, after } = await updateMaster<{
+			updatedZone: Zone;
+			previousStatus: string;
+		}>(code, caller.name, (current) => {
+			const zones = current.zones ?? [];
+			const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
+			if (zoneIndex === -1) {
+				throw new ServiceError('VALIDATION', `Zone "${zoneCode}" not found in shelter ${code}`);
 			}
-		);
+			const target = zones[zoneIndex];
+			if (target.status === 'closed') {
+				throw new ServiceError('CONFLICT', `Zone "${zoneCode}" is already closed`);
+			}
+			const updatedZone: Zone = {
+				...target,
+				status: 'closed',
+				closed_at: nowIso(),
+				closed_by: closedBy,
+				reopened_at: null,
+				reopened_by: null,
+				reason
+			};
+			return {
+				patch: {
+					zones: zones.map((z, i) => (i === zoneIndex ? updatedZone : z))
+				},
+				meta: { updatedZone, previousStatus: target.status }
+			};
+		});
 
 		if (!meta) {
 			return error(500, { message: 'Zone update lost during write' });
@@ -90,6 +92,18 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			occurred_at: nowIso()
 		};
 		await adminRaw(`/registry/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
+		await recordAuditedWrite({
+			actor: caller.name,
+			event: AUDIT_EVENTS.shelterZoneClosed,
+			action: 'status_change',
+			entityType: 'shelter',
+			entityId: code,
+			label: after?.name ?? null,
+			shelterCode: code,
+			before: before as Record<string, unknown> | undefined,
+			after: after as Record<string, unknown> | undefined,
+			reason: reason ? `${zoneCode}: ${reason}` : zoneCode
+		});
 
 		return json({
 			ok: true,

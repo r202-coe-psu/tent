@@ -1,6 +1,7 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { createUser, deleteUser, listUsers, updateUser } from '../data/users.api';
 import { listShelterStaff } from '../data/staff-directory.api';
+import { auditLogKeys } from '$lib/features/audit-log';
 
 export const usersKeys = {
 	all: ['users'] as const,
@@ -83,7 +84,10 @@ export const useUpdateUser = () => {
 			const { name, ...rest } = input;
 			return updateUser(name, rest);
 		},
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
+			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		}
 	}));
 };
 

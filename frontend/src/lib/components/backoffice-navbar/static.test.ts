@@ -154,6 +154,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'ข้อมูลหลัก'
 	];
 	const incidentLog = 'บันทึกเหตุการณ์ประจำวัน';
+	const auditLog = 'บันทึกการใช้งาน (Audit Log)';
 	/** Tree-ordered ungated leaves plus the gated ones the role may open. */
 	const labelsFor = (...gated: (string | string[])[]): string[] => {
 		const allowed = new Set([...ungated, ...gated.flat()]);
@@ -172,7 +173,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	];
 	const withIncidents = (labels: string[]): string[] => {
 		const at = labels.indexOf('ครัวกลางและอาหาร') + 1;
-		return [...labels.slice(0, at), incidentLog, ...labels.slice(at)];
+		return [...labels.slice(0, at), incidentLog, auditLog, ...labels.slice(at)];
 	};
 	const scannerDevices = 'จัดการอุปกรณ์';
 	const bannerManagement = 'จัดการแบนเนอร์';

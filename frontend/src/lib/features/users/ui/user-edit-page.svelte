@@ -16,6 +16,7 @@
 		type ShelterAssignment
 	} from '$lib/auth/roles';
 	import UserForm from './user-form.svelte';
+	import { EntityHistory } from '$lib/features/audit-log';
 	import { useUsers, useUpdateUser } from '../application/queries';
 	import type { EditUserInput, ShelterAssignmentInput } from '../domain/schema';
 	import { safeReturnPath } from '../domain/user-edit-path';
@@ -211,6 +212,15 @@
 			/>
 		{/if}
 	</div>
+	{#if selectedUser && !outOfScope && (isSA || effectiveLock)}
+		<div class="mt-6">
+			<EntityHistory
+				entityType="user"
+				entityId={selectedUser.name}
+				shelterCode={isSA ? null : (effectiveLock ?? null)}
+			/>
+		</div>
+	{/if}
 </div>
 
 <Dialog.Root bind:open={demoteDialogOpen}>

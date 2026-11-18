@@ -20,6 +20,7 @@ const readMasterDocMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$env/dynamic/private', () => ({ env }));
 vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: readMasterDocMock }));
+vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite: vi.fn(async () => true) }));
 vi.mock('$lib/features/shelters/server', async () => ({
 	validateSiteKindChange: (await import('$lib/features/shelters/domain/schema'))
 		.validateSiteKindChange
@@ -63,6 +64,7 @@ const inactiveInput = { ...(input as object), site_kind: 'field_hospital' } as n
 function job(status: 'queued' | 'running' = 'queued') {
 	return {
 		_id: 'shelter_import_job:job-1',
+		imported_by: 'sa.importer',
 		status,
 		duplicate_action: 'skip'
 	} as { _id: string; status: 'queued' | 'running'; duplicate_action: 'skip' | 'update' };
@@ -140,6 +142,7 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 		expect(claimMock).toHaveBeenCalledTimes(1);
 		expect(provisionMock).toHaveBeenCalledWith(
 			input,
+			'sa.importer',
 			'SH001',
 			expect.objectContaining({
 				assertActive: expect.any(Function)
@@ -159,7 +162,12 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 		const response = await call();
 
 		expect(response.status).toBe(200);
-		expect(provisionMock).toHaveBeenCalledWith(partial.input, 'SH007', expect.any(Object));
+		expect(provisionMock).toHaveBeenCalledWith(
+			partial.input,
+			'sa.importer',
+			'SH007',
+			expect.any(Object)
+		);
 		expect(updateMasterMock).not.toHaveBeenCalled();
 	});
 
@@ -168,12 +176,13 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 		findByNameMock.mockResolvedValue({ code: 'SH009', name: 'ศูนย์ A' });
 		buildUpdatePayloadMock.mockReturnValue({ capacity: 250 });
 		const latest = { name: 'ศูนย์ A', capacity: 101 };
-		updateMasterMock.mockImplementation(async (_code, mutator) => {
+		updateMasterMock.mockImplementation(async (_code, _actor, mutator) => {
 			const result = await mutator(latest);
 			expect(buildUpdatePayloadMock).toHaveBeenCalledWith(input, latest, {
 				foodDistributionPointsProvided: false
 			});
 			expect(result.patch).toEqual({ capacity: 250, updated_at: '2026-09-17T00:00:00.000Z' });
+			return { id: 'shelter:SH009', rev: '2-b', before: latest, after: latest };
 		});
 
 		const response = await call();
@@ -181,6 +190,7 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 		expect(response.status).toBe(200);
 		expect(updateMasterMock).toHaveBeenCalledWith(
 			'SH009',
+			'sa.importer',
 			expect.any(Function),
 			expect.objectContaining({ assertActive: expect.any(Function) })
 		);
@@ -201,8 +211,9 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			listJobsMock.mockResolvedValue([{ ...job(), duplicate_action: 'update' }]);
 			findByNameMock.mockResolvedValue({ code: 'SH009', name: 'ศูนย์ A' });
 			buildUpdatePayloadMock.mockReturnValue({ capacity: 250 });
-			updateMasterMock.mockImplementation(async (_code, mutator) => {
+			updateMasterMock.mockImplementation(async (_code, _actor, mutator) => {
 				await mutator(stored);
+				return { id: 'shelter:SH009', rev: '2-b', before: stored, after: stored };
 			});
 		}
 
@@ -313,7 +324,12 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 
 			await call();
 
-			expect(provisionMock).toHaveBeenCalledWith(inactiveInput, 'SH007', expect.any(Object));
+			expect(provisionMock).toHaveBeenCalledWith(
+				inactiveInput,
+				'sa.importer',
+				'SH007',
+				expect.any(Object)
+			);
 		});
 	});
 

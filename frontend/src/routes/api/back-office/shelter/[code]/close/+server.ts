@@ -18,6 +18,8 @@ import {
 	ServiceError
 } from '$lib/server/couch-admin';
 import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { closeShelterPeople, previewShelterClose } from '$lib/server/shelter-close';
 import type { CouchReq } from '$lib/server/ensure-public-writer';
 import {
@@ -74,9 +76,20 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		// A repeat close of an already-closed shelter leaves the registry alone — rewriting it
 		// would only bump `_rev` and make the worker re-project an unchanged shelter.
 		if (closed && resolveOperationStatus(shelter) !== 'closed') {
-			await updateMaster(shelter.code, () => ({
+			const { before, after } = await updateMaster(shelter.code, caller.name, () => ({
 				patch: { operation_status: 'closed', updated_at: nowIso() }
 			}));
+			await recordAuditedWrite({
+				actor: caller.name,
+				event: AUDIT_EVENTS.shelterClosed,
+				action: 'status_change',
+				entityType: 'shelter',
+				entityId: shelter.code,
+				label: shelter.name,
+				shelterCode: shelter.code,
+				before: before as Record<string, unknown> | undefined,
+				after: after as Record<string, unknown> | undefined
+			});
 		}
 
 		const result: ShelterCloseResult = {

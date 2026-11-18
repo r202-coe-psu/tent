@@ -25,7 +25,11 @@ vi.mock('$lib/server/user-service', () => ({
 	createOrMergeUser: mockCreateOrMergeUser,
 	deleteUser: vi.fn(),
 	listUsers: vi.fn(),
-	updateUser: mockUpdateUser
+	updateUser: mockUpdateUser,
+	readUserDocForLink: vi.fn(async () => null)
+}));
+vi.mock('$lib/server/audit-log', () => ({
+	recordAuditedWrites: vi.fn(async () => undefined)
 }));
 vi.mock('$lib/features/volunteers/server/volunteer-access-grant', () => ({
 	assertVolunteerVerifiedForAccess: mockAssertVerified

@@ -77,6 +77,10 @@ export interface ShelterSummary {
 	feature_flags: ShelterFeatureFlags;
 	created_at: string;
 	updated_at: string;
+	created_by?: string | null;
+	updated_by?: string | null;
+	created_by_name?: string | null;
+	updated_by_name?: string | null;
 }
 
 export interface SheltersRepository {

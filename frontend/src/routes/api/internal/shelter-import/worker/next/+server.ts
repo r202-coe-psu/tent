@@ -17,6 +17,8 @@ import {
 	type ImportItemError
 } from '$lib/features/shelter-import/server/job-store';
 import { findMasterByName, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { allocateShelterCode, provisionShelter } from '$lib/features/shelters/server/provisioner';
 import { validateSiteKindChange } from '$lib/features/shelters/server';
 import { readMasterDoc } from '$lib/server/master-data-server';
@@ -197,9 +199,10 @@ export const POST: RequestHandler = async ({ request }) => {
 					const message = validateSiteKindChange(input.site_kind, siteKindItems, previous);
 					if (message) throw new SiteKindRejected(message);
 				};
-				const updateExisting = (code: string) =>
-					updateMaster(
+				const updateExisting = async (code: string) => {
+					const written = await updateMaster(
 						code,
+						job.imported_by,
 						(current) => {
 							// CR-252 FR-31: authoritative check against the stored doc (the preview list may be stale).
 							const typeMessage = externalTypeChangeVerdict(
@@ -221,6 +224,19 @@ export const POST: RequestHandler = async ({ request }) => {
 						},
 						{ assertActive: assertActiveClaim }
 					);
+					await recordAuditedWrite({
+						actor: job.imported_by,
+						event: AUDIT_EVENTS.shelterImported,
+						action: 'update',
+						entityType: 'shelter',
+						entityId: code,
+						label: written.after?.name ?? null,
+						shelterCode: code,
+						before: written.before as Record<string, unknown> | undefined,
+						after: written.after as Record<string, unknown> | undefined
+					});
+					return written;
+				};
 				const duplicate = await findMasterByName(input.name);
 				const resumingProvision = Boolean(item.code);
 
@@ -288,9 +304,18 @@ export const POST: RequestHandler = async ({ request }) => {
 								);
 							}
 						}
-						const result = await provisionShelter(input, allocatedCode, {
+						const result = await provisionShelter(input, job.imported_by, allocatedCode, {
 							lockOwnerId,
 							assertActive: assertActiveClaim
+						});
+						await recordAuditedWrite({
+							actor: job.imported_by,
+							event: AUDIT_EVENTS.shelterImported,
+							action: 'create',
+							entityType: 'shelter',
+							entityId: result.code,
+							label: input.name,
+							shelterCode: result.code
 						});
 						await updateImportItem(item, {
 							status: 'created',

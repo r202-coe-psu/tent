@@ -12,7 +12,8 @@ type Row = Record<string, unknown> & { item_id: string };
 const state = vi.hoisted(() => ({
 	roles: [] as string[],
 	doc: null as unknown as Record<string, unknown>,
-	ledger: [] as Record<string, unknown>[]
+	ledger: [] as Record<string, unknown>[],
+	actor: null as string | null
 }));
 
 vi.mock('$lib/server/couch-admin', async (importOriginal) => {
@@ -52,8 +53,13 @@ vi.mock('$lib/server/shelters.admin', () => ({
 	migrate: (d: unknown) => d,
 	nowIso: () => '2026-11-05T00:00:00.000Z',
 	updateMaster: vi.fn(
-		async (_code: string, mutator: (c: Doc) => Promise<{ patch: Record<string, unknown> }>) => {
+		async (
+			_code: string,
+			actor: string,
+			mutator: (c: Doc) => Promise<{ patch: Record<string, unknown> }>
+		) => {
 			const { patch } = await mutator(state.doc as Doc);
+			state.actor = actor;
 			const rev = `${Number.parseInt(String(state.doc._rev), 10) + 1}-new`;
 			state.doc = { ...state.doc, ...patch, _rev: rev };
 			return { id: 'shelter:SH001', rev };
@@ -113,6 +119,7 @@ describe('POST /storage-points (add)', () => {
 		expect(body.point.id).not.toBe('hacked');
 		expect(subStorage().map((p) => p.name)).toEqual(['ห้อง 1', 'คลังใหม่']);
 		expect(body.rev).toBe('2-new');
+		expect(state.actor).toBe('u');
 	});
 
 	it.each([['warehouse_staff'], ['shelter_manager']])('allows %s of the shelter', async (cap) => {

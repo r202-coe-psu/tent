@@ -15,6 +15,9 @@ vi.mock('$lib/server/shelters.admin', () => ({
 	nowIso: () => '2026-11-01T08:00:00.000Z',
 	updateMaster: vi.fn()
 }));
+vi.mock('$lib/server/audit-log', () => ({
+	recordAuditedWrite: vi.fn(async () => true)
+}));
 vi.mock('$lib/server/shelter-close', () => ({
 	closeShelterPeople: vi.fn(),
 	previewShelterClose: vi.fn()
@@ -24,6 +27,7 @@ import { GET, POST } from './+server';
 import { requireShelterManagerOrSA } from '$lib/server/couch-admin';
 import { findMasterByCode, updateMaster } from '$lib/server/shelters.admin';
 import { closeShelterPeople, previewShelterClose } from '$lib/server/shelter-close';
+import { recordAuditedWrite } from '$lib/server/audit-log';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 
 const guard = vi.mocked(requireShelterManagerOrSA);
@@ -107,7 +111,16 @@ describe('POST /api/back-office/shelter/[code]/close (FR-8..FR-14)', () => {
 		expect(await res.json()).toEqual({ closed: true, checked_out: 3, cancelled: 1, failed: [] });
 		expect(close).toHaveBeenCalledWith(expect.any(Function), 'SH001', { createdBy: 'mgr1' });
 		expect(update).toHaveBeenCalledTimes(1);
-		const mutator = update.mock.calls[0][1] as (c: unknown) => { patch: Record<string, unknown> };
+		expect(update.mock.calls[0][1]).toBe('mgr1');
+		expect(vi.mocked(recordAuditedWrite)).toHaveBeenCalledWith(
+			expect.objectContaining({
+				actor: 'mgr1',
+				event: 'shelter.closed',
+				action: 'status_change',
+				shelterCode: 'SH001'
+			})
+		);
+		const mutator = update.mock.calls[0][2] as (c: unknown) => { patch: Record<string, unknown> };
 		expect(mutator({}).patch).toEqual({
 			operation_status: 'closed',
 			updated_at: '2026-11-01T08:00:00.000Z'

@@ -55,7 +55,7 @@ describe('updateMaster closed_at (CR-183 FR-14/FR-15)', () => {
 				? { status: 200, data: { rows: [{ doc }] } }
 				: { status: 201, data: { id: doc._id, rev: '2-b' } }
 		);
-		await updateMaster('SH001', () => ({ patch }));
+		await updateMaster('SH001', 'sm.user', () => ({ patch }));
 		const put = adminRawMock.mock.calls.find(([, method]) => method === 'PUT');
 		return put?.[2] as Record<string, unknown>;
 	}
@@ -182,5 +182,63 @@ describe('deployRoleGrantAuditMangoIndex (CR-221)', () => {
 		await expect(deployRoleGrantAuditMangoIndex('shelter_sh001')).rejects.toThrow(
 			'role-grant-audit-by-target'
 		);
+	});
+});
+
+describe('updateMaster actor (CR-258 FR-6)', () => {
+	const NOW = '2026-11-17T03:00:00.000Z';
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(NOW));
+		adminRawMock.mockReset();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	async function update(current: Record<string, unknown>, patch: Record<string, unknown>) {
+		const doc = {
+			_id: 'shelter:01',
+			_rev: '1-a',
+			schema_v: 11,
+			code: 'SH001',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			...current
+		};
+		adminRawMock.mockImplementation(async (_path: string, method: string) =>
+			method === 'GET'
+				? { status: 200, data: { rows: [{ doc }] } }
+				: { status: 201, data: { id: doc._id, rev: '2-b' } }
+		);
+		await updateMaster('SH001', 'sm.user', () => ({ patch }));
+		const put = adminRawMock.mock.calls.find(([, method]) => method === 'PUT');
+		return put?.[2] as Record<string, unknown>;
+	}
+
+	it('stamps updated_by and updated_at on every write', async () => {
+		const written = await update({ created_by: 'sa.admin' }, { capacity: 150 });
+		expect(written).toMatchObject({
+			created_by: 'sa.admin',
+			updated_by: 'sm.user',
+			updated_at: NOW,
+			capacity: 150
+		});
+	});
+
+	it('ignores created_by and updated_by sent in the patch', async () => {
+		const written = await update(
+			{ created_by: 'sa.admin' },
+			{ created_by: 'mallory', updated_by: 'mallory' }
+		);
+		expect(written.created_by).toBe('sa.admin');
+		expect(written.updated_by).toBe('sm.user');
+	});
+
+	it('does not invent a creator for a shelter saved before actors were recorded', async () => {
+		const written = await update({}, { capacity: 120 });
+		expect(written.created_by).toBeUndefined();
+		expect(written.updated_by).toBe('sm.user');
 	});
 });

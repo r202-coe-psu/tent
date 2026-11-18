@@ -21,6 +21,8 @@ import { readMasterDoc } from '$lib/server/master-data-server';
 import { migrate, listShelterMasters } from '$lib/server/shelters.admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { provisionShelter } from '$lib/features/shelters/server/provisioner';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 
 export const prerender = false;
 
@@ -29,7 +31,7 @@ export const prerender = false;
  * SA (`system_admin`) or Couch `_admin` — provisioning itself runs on admin credentials.
  */
 export const POST: RequestHandler = async ({ request }) => {
-	await requireSystemAdmin(request.headers.get('cookie'));
+	const caller = await requireSystemAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const parsed = createShelterSchema.safeParse(body);
@@ -43,7 +45,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			(await readMasterDoc('site_kind'))?.items ?? []
 		);
 		if (siteKindError) throw new ServiceError('VALIDATION', siteKindError);
-		return json(await provisionShelter(input));
+		const result = await provisionShelter(input, caller.name);
+		await recordAuditedWrite({
+			actor: caller.name,
+			event: AUDIT_EVENTS.shelterCreated,
+			action: 'create',
+			entityType: 'shelter',
+			entityId: result.code,
+			label: input.name,
+			shelterCode: result.code
+		});
+		return json(result);
 	} catch (e) {
 		return serviceError(e);
 	}

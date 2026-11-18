@@ -36,6 +36,12 @@ import { backfillStaffPins } from '$lib/server/scanners/staff-pin-backfill';
 import { CENTRAL_MEMBER_DBS, syncCentralDbAccess } from '$lib/server/central-db-security';
 import { deployRegistryDesign, listShelterMasters } from '$lib/server/registry-redeploy';
 import { deployUsersGuardDesign, USERS_GUARD_DESIGN_ID } from '$lib/server/users-guard-design';
+import {
+	AUDIT_LOG_DB,
+	AUDIT_LOG_DESIGN_ID,
+	AUDIT_LOG_SECURITY,
+	deployAuditLogDesign
+} from '$lib/server/audit-log-design';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 
@@ -571,7 +577,14 @@ async function main() {
 	console.log('');
 
 	// 1. Ensure databases
-	const CENTRAL_DBS = ['registry', 'catalog', 'thailand_locations', 'central_ops', '_users'];
+	const CENTRAL_DBS = [
+		'registry',
+		'catalog',
+		'thailand_locations',
+		'central_ops',
+		'_users',
+		AUDIT_LOG_DB
+	];
 	for (const db of CENTRAL_DBS) {
 		const res = await ensureDb(db, DRY_RUN);
 		console.log(`  ✓ DB: ${db} (${res === 'created' && DRY_RUN ? 'would create' : res})`);
@@ -648,6 +661,13 @@ async function main() {
 	console.log(
 		`  ✓ _users: ${USERS_GUARD_DESIGN_ID} (${guard === 'deployed' && DRY_RUN ? 'would deploy' : guard})`
 	);
+
+	const auditDesign = await deployAuditLogDesign(couchReq, DRY_RUN);
+	console.log(
+		`  ✓ ${AUDIT_LOG_DB}: ${AUDIT_LOG_DESIGN_ID} (${auditDesign === 'deployed' && DRY_RUN ? 'would deploy' : auditDesign})`
+	);
+	const auditSecurity = await syncSecurity(AUDIT_LOG_DB, AUDIT_LOG_SECURITY, DRY_RUN);
+	console.log(`  ✓ ${AUDIT_LOG_DB}: _security (${auditSecurity})`);
 
 	console.log('');
 	console.log('✨ Central database synchronization completed successfully');

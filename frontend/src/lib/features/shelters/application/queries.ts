@@ -13,6 +13,7 @@ import {
 import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.remote';
 import {
 	createShelter,
+	getShelter,
 	updateShelter,
 	closeZone,
 	reopenZone,
@@ -27,12 +28,14 @@ import {
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import { withoutExternalShelters, type Shelter } from '../domain/schema';
 import type { ShelterBasic, ShelterSummary } from '../data/shelters.repository';
+import { auditLogKeys } from '$lib/features/audit-log';
 
 export const sheltersKeys = {
 	all: ['shelters'] as const,
 	list: () => [...sheltersKeys.all, 'list'] as const,
 	search: () => [...sheltersKeys.all, 'search'] as const,
 	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const,
+	actors: (code: string) => [...sheltersKeys.detail(code), 'actors'] as const,
 	storagePoints: (code: string) => [...sheltersKeys.all, 'storage-points', code] as const,
 	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const
 };
@@ -65,6 +68,19 @@ export const useShelter = (code: () => string, enabled: () => boolean = () => tr
 		queryKey: sheltersKeys.detail(code()),
 		queryFn: () => sheltersRepository().getShelter(code()),
 		enabled: !!code() && enabled()
+	}));
+
+export const useShelterActors = (code: () => string) =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.actors(code()),
+		queryFn: () => getShelter(code()),
+		enabled: !!code(),
+		select: (s: ShelterSummary) => ({
+			created_at: s.created_at,
+			updated_at: s.updated_at,
+			created_by_name: s.created_by_name ?? null,
+			updated_by_name: s.updated_by_name ?? null
+		})
 	}));
 
 // ===== Thailand province/district/subdistrict cascade (address selects) =====
@@ -126,6 +142,7 @@ export const useUpdateShelter = () => {
 		// mutation) sees the doc it must reload from the moment the save is reported.
 		onSuccess: async (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			await queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			toast.success(`อัปเดตข้อมูลศูนย์พักพิง ${variables.code} สำเร็จ`);
 		},

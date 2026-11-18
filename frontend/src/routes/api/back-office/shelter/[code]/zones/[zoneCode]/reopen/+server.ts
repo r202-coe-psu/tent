@@ -10,6 +10,8 @@ import {
 import { ulid } from '$lib/db/ulid';
 import type { Zone } from '$lib/features/shelters/server';
 import { nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 
 export const prerender = false;
 
@@ -29,41 +31,41 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	if (!code || !zoneCode) return error(400, { message: 'Missing code or zoneCode' });
 
 	try {
-		await requireShelterManagerOrSA(request.headers.get('cookie'), code);
+		const caller = await requireShelterManagerOrSA(request.headers.get('cookie'), code);
 
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		const parsed = reopenZoneSchema.parse(body);
 		const reopenedBy = parsed.reopened_by ?? null;
 
-		const { meta } = await updateMaster<{ updatedZone: Zone; previousStatus: string }>(
-			code,
-			(current) => {
-				const zones = current.zones ?? [];
-				const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
-				if (zoneIndex === -1) {
-					throw new ServiceError('VALIDATION', `Zone "${zoneCode}" not found in shelter ${code}`);
-				}
-				const target = zones[zoneIndex];
-				if (target.status === 'active') {
-					throw new ServiceError('CONFLICT', `Zone "${zoneCode}" is already active`);
-				}
-				const updatedZone: Zone = {
-					...target,
-					status: 'active',
-					closed_at: null,
-					closed_by: null,
-					reopened_at: nowIso(),
-					reopened_by: reopenedBy,
-					reason: null
-				};
-				return {
-					patch: {
-						zones: zones.map((z, i) => (i === zoneIndex ? updatedZone : z))
-					},
-					meta: { updatedZone, previousStatus: target.status }
-				};
+		const { meta, before, after } = await updateMaster<{
+			updatedZone: Zone;
+			previousStatus: string;
+		}>(code, caller.name, (current) => {
+			const zones = current.zones ?? [];
+			const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
+			if (zoneIndex === -1) {
+				throw new ServiceError('VALIDATION', `Zone "${zoneCode}" not found in shelter ${code}`);
 			}
-		);
+			const target = zones[zoneIndex];
+			if (target.status === 'active') {
+				throw new ServiceError('CONFLICT', `Zone "${zoneCode}" is already active`);
+			}
+			const updatedZone: Zone = {
+				...target,
+				status: 'active',
+				closed_at: null,
+				closed_by: null,
+				reopened_at: nowIso(),
+				reopened_by: reopenedBy,
+				reason: null
+			};
+			return {
+				patch: {
+					zones: zones.map((z, i) => (i === zoneIndex ? updatedZone : z))
+				},
+				meta: { updatedZone, previousStatus: target.status }
+			};
+		});
 
 		if (!meta) {
 			return error(500, { message: 'Zone update lost during write' });
@@ -85,6 +87,18 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			occurred_at: nowIso()
 		};
 		await adminRaw(`/registry/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
+		await recordAuditedWrite({
+			actor: caller.name,
+			event: AUDIT_EVENTS.shelterZoneReopened,
+			action: 'status_change',
+			entityType: 'shelter',
+			entityId: code,
+			label: after?.name ?? null,
+			shelterCode: code,
+			before: before as Record<string, unknown> | undefined,
+			after: after as Record<string, unknown> | undefined,
+			reason: zoneCode
+		});
 
 		return json({
 			ok: true,
