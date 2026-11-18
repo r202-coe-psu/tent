@@ -91,19 +91,18 @@ test.describe(
 			await page.locator('input[type="file"]').setInputFiles(file);
 			// 1 household · 4 members (head + 4 people = 5) — the sample row uses an active zone.
 			await expect(page.getByText(/พร้อมนำเข้า 1\D+ผิดพลาด\s*0/)).toBeVisible({ timeout: 30_000 });
-			const importButton = page.getByRole('button', { name: /นำเข้า 1 ครัวเรือน \(4 คน\)/ });
+			const importButton = page.getByRole('button', { name: /นำเข้า 1 ครัวเรือน \(5 คน\)/ });
 			await expect(importButton).toBeEnabled({ timeout: 30_000 });
-			await importButton.click();
-			// The toast — not the button, whose label carries the same text before the import runs.
-			await expect(
-				page.locator('[data-sonner-toast]').getByText('นำเข้า 1 ครัวเรือน (5 คน)')
-			).toBeVisible({ timeout: 60_000 });
-
 			// The preview flags the blank-status sample member as waiting for Report-in (#1448).
 			await expect(page.getByTestId('pending-report-in').first()).toContainText(
 				'รอรายงานตัว (Station 1)'
 			);
 			await expect(page.getByText(/ใช้ template เก่า/)).toHaveCount(0);
+			await importButton.click();
+			// The toast — not the button, whose label carries the same text before the import runs.
+			await expect(
+				page.locator('[data-sonner-toast]').getByText('นำเข้า 1 ครัวเรือน (5 คน)')
+			).toBeVisible({ timeout: 60_000 });
 
 			// Back-dated people landed in the registry: one active head, one already left, and the
 			// blank-status member imported as pre_registered.
