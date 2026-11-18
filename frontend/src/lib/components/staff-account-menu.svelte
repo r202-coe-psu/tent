@@ -30,8 +30,8 @@
 
 	const t = $derived(getTranslation(STAFF_CHROME_I18N, langState.current).accountMenu);
 
-	const displayName = $derived(authStore.user?.name ?? '');
-	const initials = $derived(displayName.substring(0, 2).toUpperCase() || 'US');
+	// Full name when the profile has one, else the login username.
+	const displayName = $derived(authStore.user?.display_name?.trim() || authStore.user?.name || '');
 	const roles = $derived(authStore.user?.roles ?? []);
 	const roleLabel = $derived(formatRoleList(roles));
 
@@ -57,15 +57,9 @@
 			className
 		)}
 	>
-		<span
-			class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
-			aria-hidden="true"
-		>
-			{initials}
-		</span>
+		<span class="max-w-[10rem] min-w-0 truncate">{displayName}</span>
 		{#if !compact}
-			<span class="hidden max-w-[10rem] min-w-0 truncate sm:inline">{displayName}</span>
-			<ChevronDown class="hidden size-4 shrink-0 text-muted-foreground sm:block" />
+			<ChevronDown class="size-4 shrink-0 text-muted-foreground" />
 		{/if}
 	</DropdownMenu.Trigger>
 
