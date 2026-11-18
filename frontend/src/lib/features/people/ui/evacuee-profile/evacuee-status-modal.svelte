@@ -129,12 +129,14 @@
 {#if show}
 	<ModalEscapeListener open={show} onEscape={onClose} />
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
+		class="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 backdrop-blur-xs sm:items-center sm:p-4"
 	>
 		<div
-			class="w-full max-w-md animate-in space-y-4 rounded-3xl border border-border bg-card p-6 shadow-xl duration-150 zoom-in-95 fade-in"
+			class="flex max-h-[90dvh] w-full animate-in flex-col rounded-t-3xl border border-border bg-card shadow-xl duration-150 zoom-in-95 fade-in sm:max-h-[calc(100dvh-2rem)] sm:max-w-xl sm:rounded-3xl"
 		>
-			<div class="flex items-center justify-between border-b border-border pb-2.5">
+			<div
+				class="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5 sm:px-6"
+			>
 				<h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">
 					{t.title}
 				</h3>
@@ -148,52 +150,56 @@
 				</button>
 			</div>
 
-			<div class="space-y-2" role="radiogroup" aria-label={t.groupAria}>
-				{#each selectableOptions as [statusKey, cfg] (statusKey)}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={pendingStatus === statusKey}
-						onclick={() => selectStatus(statusKey)}
-						disabled={saving}
-						class="flex w-full cursor-pointer items-center justify-between rounded-xl border p-3.5 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60 {pendingStatus ===
-						statusKey
-							? 'border-primary bg-primary/5 text-primary'
-							: 'border-border bg-background hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-900'}"
-					>
-						<div class="flex items-center gap-2">
-							<span class="size-2 rounded-full {cfg.dotClass}"></span>
-							<span class="text-sm">{cfg.label}</span>
-						</div>
-						{#if pendingStatus === statusKey}
-							<CheckCircle class="size-5 shrink-0 text-primary" />
-						{/if}
-					</button>
-				{/each}
+			<div class="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
+				<div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t.groupAria}>
+					{#each selectableOptions as [statusKey, cfg] (statusKey)}
+						<button
+							type="button"
+							role="radio"
+							aria-checked={pendingStatus === statusKey}
+							onclick={() => selectStatus(statusKey)}
+							disabled={saving}
+							class="flex min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60 {pendingStatus ===
+							statusKey
+								? 'border-primary bg-primary/5 text-primary'
+								: 'border-border bg-background hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-900'}"
+						>
+							<div class="flex min-w-0 items-center gap-2">
+								<span class="size-2 shrink-0 rounded-full {cfg.dotClass}"></span>
+								<span class="text-sm">{cfg.label}</span>
+							</div>
+							{#if pendingStatus === statusKey}
+								<CheckCircle class="size-5 shrink-0 text-primary" />
+							{/if}
+						</button>
+					{/each}
+				</div>
+
+				{#if needsReason}
+					<div class="space-y-1.5">
+						<label for="evacuee-status-reason" class="text-xs font-semibold text-foreground">
+							{t.reason} <span class="text-destructive">*</span>
+						</label>
+						<textarea
+							id="evacuee-status-reason"
+							bind:value={reason}
+							disabled={saving}
+							rows={3}
+							placeholder={isRevert ? t.revertReasonPlaceholder : t.reasonPlaceholder}
+							class="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none disabled:opacity-60"
+						></textarea>
+					</div>
+				{/if}
 			</div>
 
-			{#if needsReason}
-				<div class="space-y-1.5">
-					<label for="evacuee-status-reason" class="text-xs font-semibold text-foreground">
-						{t.reason} <span class="text-destructive">*</span>
-					</label>
-					<textarea
-						id="evacuee-status-reason"
-						bind:value={reason}
-						disabled={saving}
-						rows={3}
-						placeholder={isRevert ? t.revertReasonPlaceholder : t.reasonPlaceholder}
-						class="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none disabled:opacity-60"
-					></textarea>
-				</div>
-			{/if}
-
-			<div class="flex justify-end gap-2 border-t border-border pt-3">
+			<div
+				class="flex shrink-0 gap-2 border-t border-border px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:justify-end sm:px-6 sm:pb-3"
+			>
 				<button
 					type="button"
 					onclick={onClose}
 					disabled={saving}
-					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 dark:text-slate-200"
+					class="h-11 flex-1 cursor-pointer rounded-xl border border-border bg-background px-4 text-sm font-semibold text-slate-800 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:flex-none sm:text-xs dark:text-slate-200"
 				>
 					{t.cancel}
 				</button>
@@ -201,7 +207,7 @@
 					type="button"
 					onclick={handleConfirm}
 					disabled={confirmDisabled}
-					class="cursor-pointer rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+					class="h-11 flex-1 cursor-pointer rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:h-9 sm:flex-none sm:text-xs"
 				>
 					{saving ? t.saving : t.confirm}
 				</button>
