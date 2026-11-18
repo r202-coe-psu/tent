@@ -92,8 +92,8 @@
 	let selectedType = $state<string>('');
 	// CR-252 FR-23: one status at a time, as the list API takes (URL value is lowercase).
 	let selectedStatus = $state<string>('');
-	// No radius until the visitor picks one (#1419): an empty value lists every shelter.
-	let distanceValue = $state<string>('');
+	// 5 km by default; '' means the visitor cleared the radius (pressed the active preset again).
+	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
 	let customDistanceDraft = $state<string>('');
 	let customDistanceError = $state(false);
@@ -149,7 +149,8 @@
 		if (userLat && userLng) {
 			params.set('user_lat', userLat);
 			params.set('user_lng', userLng);
-			if (distanceValue) params.set('distance', distanceValue);
+			// An empty value is kept (`distance=`) so a cleared radius does not fall back to 5 km.
+			params.set('distance', distanceValue);
 		}
 		if (hideFullToggle) params.set('hide_full', 'true');
 		if (parkCarChecked) params.set('parking_car', 'on');
@@ -216,7 +217,8 @@
 			selectedType = f.type ?? '';
 			selectedStatus =
 				STATUS_VALUES.find((v) => v === f.status?.split(',')[0]?.toLowerCase()) ?? '';
-			const nextDistance = f.distance || '';
+			// `??`, not `||`: an explicit '' is a cleared radius, a missing one is the default.
+			const nextDistance = f.distance ?? '5';
 			distanceValue = nextDistance;
 			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
 			customDistanceError = false;

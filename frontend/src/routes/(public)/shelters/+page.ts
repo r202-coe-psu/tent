@@ -40,8 +40,8 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const subdistrict = url.searchParams.get('subdistrict') || '';
 	const typeFilter = url.searchParams.get('type') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
-	// No radius until the visitor picks one (#1419): without it every shelter is listed.
-	const distance = url.searchParams.get('distance') ?? '';
+	// 5 km unless the visitor chose otherwise; `distance=` (empty) means they cleared the radius.
+	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
 	const hide_full = url.searchParams.get('hide_full') === 'true';

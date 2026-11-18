@@ -314,7 +314,7 @@ describe('public/shelters load function', () => {
 		});
 	});
 
-	describe('distance (no radius until the visitor picks one)', () => {
+	describe('distance (5 km by default)', () => {
 		const near = item('NEAR', { geo: { lat: 7.01, lng: 100.48 } });
 		const far = item('FAR', { geo: { lat: 7.1, lng: 100.6 } });
 		const nogeo = item('NOGEO', { geo: null });
@@ -327,25 +327,22 @@ describe('public/shelters load function', () => {
 			} as unknown as PublicShelterListResponse);
 		});
 
-		it('has no default radius: nothing set, nothing echoed', async () => {
+		it('defaults the radius to 5 km, but sends nothing without a position', async () => {
 			const result = await runLoad(new URL('http://localhost/shelters'));
 
-			expect(result.filters.distance).toBe('');
+			expect(result.filters.distance).toBe('5');
 			expect(listCall()?.radius_km).toBeUndefined();
 			expect(listCall()?.lat).toBeUndefined();
+			expect(listCall()?.lng).toBeUndefined();
 		});
 
-		it('with a position but no radius, keeps every shelter and orders them closest-first', async () => {
+		it('with a position but no radius in the URL, hands the 5 km default to the database', async () => {
 			const result = await runLoad(
 				new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476')
 			);
 
-			// the database is not asked to cut by distance, or it would lose shelters with no pin
-			expect(listCall()?.radius_km).toBeUndefined();
-			expect(listCall()?.lat).toBeUndefined();
-			expect(result.shelters.map((s) => s.code)).toEqual(['NEAR', 'FAR', 'NOGEO']);
-			expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
-			expect(result.filters.distance).toBe('');
+			expect(listCall()).toMatchObject({ lat: 7.008, lng: 100.476, radius_km: 5 });
+			expect(result.filters.distance).toBe('5');
 		});
 
 		it('with a position and a radius, hands both to the database', async () => {
@@ -356,6 +353,19 @@ describe('public/shelters load function', () => {
 			expect(listCall()).toMatchObject({ lat: 7.008, lng: 100.476, radius_km: 10 });
 			expect(result.filters.distance).toBe('10');
 			expect(result.shelters[0].code).toBe('NEAR');
+		});
+
+		it('a cleared radius (distance=) keeps every shelter, closest-first', async () => {
+			const result = await runLoad(
+				new URL('http://localhost/shelters?user_lat=7.008&user_lng=100.476&distance=')
+			);
+
+			// the database is not asked to cut by distance, or it would lose shelters with no pin
+			expect(listCall()?.radius_km).toBeUndefined();
+			expect(listCall()?.lat).toBeUndefined();
+			expect(result.shelters.map((s) => s.code)).toEqual(['NEAR', 'FAR', 'NOGEO']);
+			expect(result.shelters[0].distance).toBeLessThan(result.shelters[1].distance);
+			expect(result.filters.distance).toBe('');
 		});
 
 		it('ignores a radius when there is no position to measure from', async () => {
