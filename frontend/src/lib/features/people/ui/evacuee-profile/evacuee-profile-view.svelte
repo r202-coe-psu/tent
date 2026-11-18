@@ -342,6 +342,21 @@
 	// Modal / sheet visibility state
 	let showActionsSheet = $state(false);
 	let showZoneModal = $state(false);
+	/**
+	 * A status change (check-in or manual override, CR-262 A1) parked while the zone modal collects
+	 * the zone it needs. Picking a zone completes it in one write — a zone-only patch of a
+	 * zoneless stay is rejected by the validator (rule 2b). Cleared when the zone modal closes.
+	 */
+	let pendingZoneStatus = $state<{
+		kind: 'check_in' | 'revert_status';
+		status: StayStatus;
+		reason?: string;
+	} | null>(null);
+
+	function closeZoneModal() {
+		showZoneModal = false;
+		pendingZoneStatus = null;
+	}
 	let showStatusModal = $state(false);
 	let showQrModal = $state(false);
 	let showHandoverSlip = $state(false);
@@ -388,8 +403,35 @@
 		};
 	}
 
+	async function completePendingZoneStatus(zoneCode: string) {
+		const pending = pendingZoneStatus;
+		if (!evacuee || !pending) return;
+		try {
+			const ctx = getAuthorContext();
+			if (pending.kind === 'check_in') {
+				await checkInMutation.mutateAsync({ evacuee, ctx, zone: zoneCode });
+			} else {
+				await revertStatusMutation.mutateAsync({
+					evacuee,
+					ctx,
+					toStatus: pending.status,
+					reason: pending.reason ?? '',
+					zone: zoneCode
+				});
+			}
+			toast.success(t.statusUpdated);
+			closeZoneModal();
+		} catch (err: unknown) {
+			toast.error(t.statusUpdateFailed(errorDetail(err)));
+		}
+	}
+
 	async function updateZone(zoneCode: string) {
 		if (!evacuee) return;
+		if (pendingZoneStatus) {
+			await completePendingZoneStatus(zoneCode);
+			return;
+		}
 		try {
 			if (canChangeEvacueeZone(evacuee)) {
 				await changeZoneMutation.mutateAsync({
@@ -436,6 +478,7 @@
 				if (revertNeedsZone(evacuee.current_stay, status)) {
 					// An in-shelter stay never has no zone — pick one first (same flow as check-in).
 					toast.error(t.revertNeedsZone);
+					pendingZoneStatus = { kind: 'revert_status', status, reason: trimmed };
 					showStatusModal = false;
 					showZoneModal = true;
 					return;
@@ -445,6 +488,7 @@
 				const zone = evacuee.current_stay.zone?.trim();
 				if (!zone) {
 					toast.error(t.checkInNeedsZone);
+					pendingZoneStatus = { kind: 'check_in', status };
 					showStatusModal = false;
 					showZoneModal = true;
 					return;
@@ -967,7 +1011,7 @@
 			{evacuee}
 			{screening}
 			{shelterZones}
-			onClose={() => (showZoneModal = false)}
+			onClose={closeZoneModal}
 			onUpdateZone={updateZone}
 		/>
 

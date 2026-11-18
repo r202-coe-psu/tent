@@ -1872,7 +1872,7 @@ describe('buildValidateDocUpdate', () => {
 			type: 'movement',
 			evacuee_id: 'evacuee:01J',
 			action: 'revert_status',
-			zone: null,
+			zone: 'A1',
 			reason: 'เช็คอินผิดคน',
 			from_status: 'room_confirmed',
 			to_status: 'active',
@@ -1934,7 +1934,53 @@ describe('buildValidateDocUpdate', () => {
 				'deceased',
 				'cancelled'
 			])('allows to_status %s (manual override, any status)', (to_status) => {
-				expect(() => compile()(revertMovement({ to_status }), null, MANAGER)).not.toThrow();
+				expect(() =>
+					compile()(
+						revertMovement({
+							from_status: to_status === 'cancelled' ? 'active' : 'cancelled',
+							to_status
+						}),
+						null,
+						MANAGER
+					)
+				).not.toThrow();
+			});
+
+			it.each([
+				['missing', undefined],
+				['null', null],
+				['empty', ''],
+				['whitespace', '   ']
+			])('rejects an in-shelter to_status with a %s zone', (_label, zone) => {
+				for (const to_status of ['active', 'room_confirmed']) {
+					expectForbidden(
+						() =>
+							compile()(
+								revertMovement({ from_status: 'checked_out', to_status, zone }),
+								null,
+								MANAGER
+							),
+						/requires a zone/
+					);
+				}
+			});
+
+			it('does not need a zone for a target outside the shelter', () => {
+				expect(() =>
+					compile()(revertMovement({ to_status: 'arriving', zone: null }), null, MANAGER)
+				).not.toThrow();
+			});
+
+			it('rejects from_status equal to to_status', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							revertMovement({ from_status: 'arriving', to_status: 'arriving', zone: null }),
+							null,
+							MANAGER
+						),
+					/from_status and to_status must differ/
+				);
 			});
 
 			it('allows an override from a terminal status (deceased -> active) by a system admin', () => {

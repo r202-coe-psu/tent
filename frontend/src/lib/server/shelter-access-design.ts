@@ -1473,6 +1473,13 @@ ${consentVduClause()}
         .indexOf(newDoc.to_status) === -1) {
       throw { forbidden: 'revert_status to_status must be a valid stay status' };
     }
+    if (newDoc.from_status === newDoc.to_status) {
+      throw { forbidden: 'revert_status from_status and to_status must differ' };
+    }
+    if ((newDoc.to_status === 'active' || newDoc.to_status === 'room_confirmed') &&
+        (typeof newDoc.zone !== 'string' || newDoc.zone.trim().length === 0)) {
+      throw { forbidden: 'revert_status to active or room_confirmed requires a zone' };
+    }
   }
   // Dropping current_stay (or its status) from an active/room_confirmed doc counts as a backward
   // change too — otherwise a stripped write followed by a second write dodges the guard. A delete
