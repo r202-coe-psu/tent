@@ -2013,6 +2013,20 @@ describe('buildValidateDocUpdate', () => {
 				).not.toThrow();
 			});
 
+			it('does not guard a first-write evacuee create (oldDoc null)', () => {
+				expect(() =>
+					compile()(evacuee({}, { status: 'room_confirmed', zone: 'A1' }), null, REGISTRATION)
+				).not.toThrow();
+			});
+
+			it('does not guard a stay set on a legacy doc with no current_stay', () => {
+				const legacy = evacuee();
+				delete legacy.current_stay;
+				expect(() =>
+					compile()(evacuee({}, { status: 'pre_registered', zone: null }), legacy, REGISTRATION)
+				).not.toThrow();
+			});
+
 			it('leaves a same-status rezone unaffected for registration_staff', () => {
 				expect(() =>
 					compile()(
