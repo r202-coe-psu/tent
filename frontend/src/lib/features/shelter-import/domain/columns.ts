@@ -241,6 +241,7 @@ export const H = {
 	lng: 'ลองจิจูด',
 	address_no: 'บ้านเลขที่',
 	village_no: 'หมู่ที่',
+	community: 'ชุมชน',
 	province: 'จังหวัด',
 	district: 'อำเภอ/เขต',
 	subdistrict: 'ตำบล/แขวง',
@@ -373,7 +374,7 @@ const LEGACY_HEADERS: Readonly<Record<string, string>> = {
 /**
  * master_data lists the importer resolves.
  *
- * Deliberately narrow: `municipality_zone`, `community` and `vulnerable_group`
+ * Deliberately narrow: `municipality_zone` and `vulnerable_group`
  * are configured per shelter in the app after import, not in the spreadsheet —
  * their values differ shelter by shelter and change often enough that a
  * downloaded template would go stale, so they are left out of the workbook
@@ -386,7 +387,6 @@ export const MASTER_COLUMNS: readonly MasterColumn[] = ['shelter_type', 'site_ki
 /** Shelter fields intentionally absent from the workbook — documented on the README sheet. */
 export const APP_ONLY_FIELDS: readonly string[] = [
 	'โซนเทศบาล',
-	'ชุมชน',
 	'กลุ่มเปราะบางที่ศูนย์รองรับได้',
 	'การตั้งค่า feature_flags'
 ];
@@ -557,6 +557,13 @@ const SHEET_MAIN: SheetDef = {
 			hint: 'บ้านเลขที่'
 		},
 		{ header: H.village_no, kind: 'string', required: false, path: 'village_no', hint: 'หมู่ที่' },
+		{
+			header: H.community,
+			kind: 'string',
+			required: false,
+			path: 'community',
+			hint: 'ชุมชน (ข้อความอิสระ) — เช่น บ้านพี่เลี้ยงที่แบ่งเขตตามชุมชน'
+		},
 		{ header: H.province, kind: 'string', required: false, path: 'province', hint: 'จังหวัด' },
 		{ header: H.district, kind: 'string', required: false, path: 'district', hint: 'อำเภอ/เขต' },
 		{

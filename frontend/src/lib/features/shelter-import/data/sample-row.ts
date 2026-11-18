@@ -82,6 +82,7 @@ export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
 		[H.lng]: 100.4747,
 		[H.address_no]: '99/1',
 		[H.village_no]: '3',
+		[H.community]: 'ชุมชนคอหงส์',
 		[H.province]: 'สงขลา',
 		[H.district]: 'หาดใหญ่',
 		[H.subdistrict]: 'คอหงส์',

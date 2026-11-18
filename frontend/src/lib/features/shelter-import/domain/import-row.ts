@@ -140,11 +140,11 @@ function keepStoredStoragePoints(
 /**
  * PATCH body for a row that updates an existing shelter.
  *
- * The workbook has no columns for `municipality_zone`, `community` or
+ * The workbook has no columns for `municipality_zone` or
  * `admission_policy.supported_vulnerable_groups` (`APP_ONLY_FIELDS`) —
  * {@link validateRow} only fills them with null/`[]` to satisfy the create
  * schema. The endpoint shallow-merges, so sending them would erase what an
- * admin configured in the app: the two top-level keys are dropped from the
+ * admin configured in the app: `municipality_zone` is dropped from the
  * body, and `admission_policy` (replaced wholesale, not merged) carries the
  * stored groups back so only its pet-policy half comes from the file.
  */
@@ -152,10 +152,9 @@ export function buildUpdatePayload(
 	shelter: ShelterInput,
 	existing: ExistingShelterPolicy | null,
 	options: { foodDistributionPointsProvided?: boolean; siteKindBlank?: boolean } = {}
-): Omit<ShelterInput, 'municipality_zone' | 'community'> {
+): Omit<ShelterInput, 'municipality_zone'> {
 	const rest: Partial<ShelterInput> = { ...shelter };
 	delete rest.municipality_zone;
-	delete rest.community;
 	// Operational fields are deliberately not workbook-owned. Preserve them
 	// from the stored document instead of replacing them with schema defaults.
 	delete rest.feature_flags;
@@ -164,7 +163,7 @@ export function buildUpdatePayload(
 	delete rest.parking_points;
 	if (options.siteKindBlank === true) delete rest.site_kind;
 	return {
-		...(rest as Omit<ShelterInput, 'municipality_zone' | 'community'>),
+		...(rest as Omit<ShelterInput, 'municipality_zone'>),
 		...(existing?.feature_flags !== undefined ? { feature_flags: existing.feature_flags } : {}),
 		...(options.foodDistributionPointsProvided === true
 			? { food_distribution_points: shelter.food_distribution_points }
@@ -729,9 +728,9 @@ export function validateRow(
 		area_type: areaType ?? null,
 		// Configured per shelter in the app, never in the workbook (APP_ONLY_FIELDS).
 		municipality_zone: null,
-		community: null,
 		address_no: strOrNull(cell(raw, H.address_no)),
 		village_no: strOrNull(cell(raw, H.village_no)),
+		community: strOrNull(cell(raw, H.community)),
 		province: strOrNull(cell(raw, H.province)),
 		district: strOrNull(cell(raw, H.district)),
 		subdistrict: strOrNull(cell(raw, H.subdistrict)),
