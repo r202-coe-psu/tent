@@ -66,7 +66,7 @@ function validTemplate(overrides: Record<string, unknown> = {}): Record<string, 
 		body: 'Please take a queue ticket',
 		align: 'center',
 		bg_color: '#0a1b2c',
-		text_color: '#FFFFFF',
+		text_color: '#ffffff',
 		image: 'template_image',
 		...overrides
 	};
@@ -194,6 +194,7 @@ describe('registry kiosk_banner validate_doc_update', () => {
 		['non-string bg_color', validTemplate({ bg_color: 123456 })],
 		['text_color named', validTemplate({ text_color: 'white' })],
 		['text_color non-hex digits', validTemplate({ text_color: '#zzzzzz' })],
+		['text_color uppercase (the app stores lowercase)', validTemplate({ text_color: '#FFFFFF' })],
 		['image url', validTemplate({ image: 'https://x/y.png' })],
 		['image other string', validTemplate({ image: 'banner_image' })],
 		['numeric image', validTemplate({ image: 1 })]

@@ -130,7 +130,7 @@ export function buildRegistryValidateDocUpdate(): string {
       if (tpl.align !== 'left' && tpl.align !== 'center' && tpl.align !== 'right') {
         throw({ forbidden: 'kiosk_banner template align must be left, center or right' });
       }
-      var hexColor = /^#[0-9a-fA-F]{6}$/;
+      var hexColor = /^#[0-9a-f]{6}$/;
       if (
         typeof tpl.bg_color !== 'string' ||
         !hexColor.test(tpl.bg_color) ||
