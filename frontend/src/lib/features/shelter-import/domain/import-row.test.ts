@@ -154,11 +154,16 @@ describe('validateRow — happy path', () => {
 		}
 	});
 
+	it('maps the ชุมชน column to community (trimmed); blank → null (#1432)', () => {
+		const filled = validateRow({ ...baseRow(), [H.community]: ' ชุมชนคอหงส์ ' }, 1, lookups());
+		expect(filled.shelter?.community).toBe('ชุมชนคอหงส์');
+		expect(validateRow(baseRow(), 1, lookups()).shelter?.community).toBeNull();
+	});
+
 	it('leaves the app-only fields unset — they are not in the workbook', () => {
 		const r = validateRow(baseRow(), 1, lookups());
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.municipality_zone).toBeNull();
-		expect(r.shelter?.community).toBeNull();
 		expect(r.shelter?.admission_policy?.supported_vulnerable_groups).toEqual([]);
 	});
 });
@@ -764,10 +769,18 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 		return r.shelter;
 	};
 
-	it('drops municipality_zone / community so PATCH keeps the stored values', () => {
+	it('drops municipality_zone so PATCH keeps the stored value', () => {
 		const payload = buildUpdatePayload(rowPayload(), null);
 		expect('municipality_zone' in payload).toBe(false);
-		expect('community' in payload).toBe(false);
+	});
+
+	it('sends community on update — the workbook column overwrites, blank clears (#1432)', () => {
+		const r = validateRow({ ...baseRow(), [H.community]: ' ชุมชนคอหงส์ ' }, 1, emptyLookups());
+		if (!r.shelter) throw new Error('fixture row should validate');
+		expect(buildUpdatePayload(r.shelter, null)).toMatchObject({ community: 'ชุมชนคอหงส์' });
+		const blank = validateRow(baseRow(), 1, emptyLookups());
+		if (!blank.shelter) throw new Error('fixture row should validate');
+		expect(buildUpdatePayload(blank.shelter, null)).toMatchObject({ community: null });
 	});
 
 	it('carries the stored supported_vulnerable_groups back into admission_policy', () => {
