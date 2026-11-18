@@ -252,6 +252,7 @@ export {
 	DEFAULT_EVACUEE_SORT,
 	isEvacueeSort,
 	sortEvacuees,
+	sortByCreatedAtAsc,
 	type EvacueeSort
 } from './domain/evacuee-sort';
 

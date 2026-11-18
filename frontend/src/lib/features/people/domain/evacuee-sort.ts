@@ -52,3 +52,17 @@ export function sortEvacuees<T extends SortableEvacuee>(
 			return copy.sort((a, b) => compareIds(b, a));
 	}
 }
+
+/**
+ * Onsite station queues (#1426): earliest `created_at` first, so whoever registered first is on
+ * top and editing a record never moves it. Ties fall back to `_id`. The input is not mutated.
+ */
+export function sortByCreatedAtAsc<T extends { _id: string; created_at?: string | null }>(
+	items: readonly T[]
+): T[] {
+	return [...items].sort(
+		(a, b) =>
+			(a.created_at ?? '').localeCompare(b.created_at ?? '') ||
+			(a._id < b._id ? -1 : a._id > b._id ? 1 : 0)
+	);
+}
