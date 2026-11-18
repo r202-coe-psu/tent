@@ -29,6 +29,8 @@ import {
 	resolveStatusChangeAction,
 	canRevertStatusTo,
 	listRevertTargets,
+	resolveRevertZone,
+	revertNeedsZone,
 	normalizeCheckoutRemark,
 	statusChangeHandlerKind,
 	matchesEvacueePhoneSearch,
@@ -1219,21 +1221,19 @@ describe('resolveStatusChangeAction', () => {
 
 	it('resolves active → room_confirmed to confirm_room', () => {
 		expect(resolveStatusChangeAction('active', 'room_confirmed')).toBe('confirm_room');
-		expect(resolveStatusChangeAction('pre_registered', 'room_confirmed')).toBeNull();
+		// No normal action fits: the manual override (revert_status) covers it (CR-262 A1).
+		expect(resolveStatusChangeAction('pre_registered', 'room_confirmed')).toBe('revert_status');
 	});
 
-	it('returns null for pre_registered → checked_out (must check in first)', () => {
-		expect(resolveStatusChangeAction('pre_registered', 'checked_out')).toBeNull();
+	it('falls back to revert_status when no normal action fits (CR-262 A1)', () => {
+		expect(resolveStatusChangeAction('pre_registered', 'checked_out')).toBe('revert_status');
+		expect(resolveStatusChangeAction('checked_out', 'temporary_leave')).toBe('revert_status');
+		expect(resolveStatusChangeAction('checked_out', 'transferred')).toBe('revert_status');
 	});
 
-	it('returns null for checked_out → temporary_leave / transferred (must check in first)', () => {
-		expect(resolveStatusChangeAction('checked_out', 'temporary_leave')).toBeNull();
-		expect(resolveStatusChangeAction('checked_out', 'transferred')).toBeNull();
-	});
-
-	it('returns null from terminal statuses (deceased, cancelled)', () => {
-		expect(resolveStatusChangeAction('deceased', 'active')).toBeNull();
-		expect(resolveStatusChangeAction('cancelled', 'active')).toBeNull();
+	it('resolves a way out of the terminal statuses (deceased, cancelled) to revert_status', () => {
+		expect(resolveStatusChangeAction('deceased', 'active')).toBe('revert_status');
+		expect(resolveStatusChangeAction('cancelled', 'active')).toBe('revert_status');
 	});
 
 	it('resolves valid transitions to their movement action', () => {
@@ -1307,7 +1307,8 @@ describe('statusChangeHandlerKind', () => {
 	});
 });
 
-describe('revert_status (CR-262)', () => {
+describe('revert_status — manual status override (CR-262 A1)', () => {
+	const ALL_STATUSES = stayStatusSchema.options;
 	const stayOf = (status: StayStatus, zone: string | null = 'Z1') => {
 		const e = createEvacuee(
 			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
@@ -1316,12 +1317,17 @@ describe('revert_status (CR-262)', () => {
 		);
 		return { ...e, current_stay: { status, zone, since: '2026-09-02T10:00:00.000Z' } };
 	};
-	const revert = (e: ReturnType<typeof stayOf>, to: StayStatus, reason = 'เช็คอินผิดคน') =>
+	const revert = (
+		e: ReturnType<typeof stayOf>,
+		to: StayStatus,
+		reason = 'บันทึกผิดคน',
+		zone: string | null = null
+	) =>
 		createMovement(
 			{
 				evacuee_id: e._id,
 				action: 'revert_status',
-				zone: null,
+				zone,
 				reason,
 				from_status: e.current_stay.status,
 				to_status: to
@@ -1329,36 +1335,36 @@ describe('revert_status (CR-262)', () => {
 			ctx
 		);
 
-	it('allows only strictly earlier pipeline statuses', () => {
-		expect(canRevertStatusTo('room_confirmed', 'active')).toBe(true);
-		expect(canRevertStatusTo('room_confirmed', 'arriving')).toBe(true);
-		expect(canRevertStatusTo('room_confirmed', 'pre_registered')).toBe(true);
-		expect(canRevertStatusTo('active', 'arriving')).toBe(true);
-		expect(canRevertStatusTo('active', 'pre_registered')).toBe(true);
-		expect(canRevertStatusTo('active', 'active')).toBe(false);
-		expect(canRevertStatusTo('active', 'room_confirmed')).toBe(false);
-		expect(canRevertStatusTo('arriving', 'pre_registered')).toBe(false);
-		expect(canRevertStatusTo('checked_out', 'active')).toBe(false);
-		expect(canRevertStatusTo('deceased', 'active')).toBe(false);
-		expect(canRevertStatusTo('cancelled', 'pre_registered')).toBe(false);
-		expect(canRevertStatusTo('active', 'checked_out')).toBe(false);
+	it('allows any status to any other status, and never the same one', () => {
+		for (const from of ALL_STATUSES) {
+			for (const to of ALL_STATUSES) {
+				expect(canRevertStatusTo(from, to)).toBe(from !== to);
+			}
+		}
 	});
 
-	it('lists revert targets earliest first', () => {
-		expect(listRevertTargets('room_confirmed')).toEqual(['pre_registered', 'arriving', 'active']);
-		expect(listRevertTargets('active')).toEqual(['pre_registered', 'arriving']);
-		expect(listRevertTargets('arriving')).toEqual([]);
-		expect(listRevertTargets('deceased')).toEqual([]);
+	it('lists every other status as an override target, terminal ones included', () => {
+		expect(listRevertTargets('arriving')).toContain('pre_registered');
+		expect(listRevertTargets('deceased')).toEqual(ALL_STATUSES.filter((s) => s !== 'deceased'));
+		expect(listRevertTargets('cancelled')).not.toContain('cancelled');
+		expect(listRevertTargets('active')).toHaveLength(ALL_STATUSES.length - 1);
 	});
 
-	it('resolves backward picks to revert_status and keeps forward resolution unchanged', () => {
-		expect(resolveStatusChangeAction('room_confirmed', 'active')).toBe('revert_status');
-		expect(resolveStatusChangeAction('active', 'arriving')).toBe('revert_status');
-		expect(resolveStatusChangeAction('room_confirmed', 'pre_registered')).toBe('revert_status');
+	it('resolves a pick to a normal action when one fits, otherwise to revert_status', () => {
 		expect(resolveStatusChangeAction('arriving', 'active')).toBe('check_in');
 		expect(resolveStatusChangeAction('active', 'room_confirmed')).toBe('confirm_room');
-		expect(resolveStatusChangeAction('checked_out', 'arriving')).toBeNull();
-		expect(resolveStatusChangeAction('deceased', 'arriving')).toBeNull();
+		expect(resolveStatusChangeAction('active', 'checked_out')).toBe('check_out');
+		expect(resolveStatusChangeAction('active', 'transferred')).toBe('transfer_out');
+		expect(resolveStatusChangeAction('active', 'temporary_leave')).toBe('leave_temporary');
+		expect(resolveStatusChangeAction('active', 'deceased')).toBe('mark_deceased');
+		expect(resolveStatusChangeAction('arriving', 'pre_registered')).toBe('revert_status');
+		expect(resolveStatusChangeAction('room_confirmed', 'active')).toBe('revert_status');
+		expect(resolveStatusChangeAction('active', 'arriving')).toBe('revert_status');
+		expect(resolveStatusChangeAction('checked_out', 'room_confirmed')).toBe('revert_status');
+		expect(resolveStatusChangeAction('temporary_leave', 'checked_out')).toBe('revert_status');
+		expect(resolveStatusChangeAction('deceased', 'active')).toBe('revert_status');
+		expect(resolveStatusChangeAction('cancelled', 'pre_registered')).toBe('revert_status');
+		expect(resolveStatusChangeAction('active', 'active')).toBeNull();
 	});
 
 	it('assertMovementAllowed requires a nonempty reason', () => {
@@ -1374,77 +1380,119 @@ describe('revert_status (CR-262)', () => {
 		).not.toThrow();
 	});
 
-	it('assertMovementAllowed rejects missing, forward and ineligible targets', () => {
+	it('assertMovementAllowed rejects a missing or unchanged target', () => {
 		expect(() =>
 			assertMovementAllowed(stayOf('active'), 'revert_status', { reason: 'x' })
 		).toThrow();
 		expect(() =>
 			assertMovementAllowed(stayOf('active'), 'revert_status', {
-				toStatus: 'room_confirmed',
-				reason: 'x'
-			})
-		).toThrow();
-		expect(() =>
-			assertMovementAllowed(stayOf('arriving'), 'revert_status', {
-				toStatus: 'pre_registered',
-				reason: 'x'
-			})
-		).toThrow();
-		expect(() =>
-			assertMovementAllowed(stayOf('checked_out'), 'revert_status', {
 				toStatus: 'active',
 				reason: 'x'
 			})
 		).toThrow();
 	});
 
-	it('deceased and cancelled stay terminal', () => {
+	it('assertMovementAllowed lets a revert_status leave deceased and cancelled, other actions stay blocked', () => {
 		expect(() =>
 			assertMovementAllowed(stayOf('deceased'), 'revert_status', {
 				toStatus: 'active',
 				reason: 'x'
 			})
-		).toThrow(/สุดท้าย/);
+		).not.toThrow();
 		expect(() =>
 			assertMovementAllowed(stayOf('cancelled'), 'revert_status', {
 				toStatus: 'pre_registered',
 				reason: 'x'
 			})
-		).toThrow(/สุดท้าย/);
+		).not.toThrow();
+		expect(() => assertMovementAllowed(stayOf('deceased'), 'check_out', { reason: 'x' })).toThrow(
+			/สุดท้าย/
+		);
+		expect(() => assertMovementAllowed(stayOf('cancelled'), 'check_in')).toThrow(/สุดท้าย/);
 	});
 
 	it('createMovement stamps reason and from/to status', () => {
 		const e = stayOf('room_confirmed');
 		const m = revert(e, 'active');
 		expect(m.action).toBe('revert_status');
-		expect(m.reason).toBe('เช็คอินผิดคน');
+		expect(m.reason).toBe('บันทึกผิดคน');
 		expect(m.from_status).toBe('room_confirmed');
 		expect(m.to_status).toBe('active');
 	});
 
-	it('room_confirmed → active keeps the zone', () => {
-		const e = stayOf('room_confirmed', 'Z1');
-		const updated = applyMovementToStay(e, revert(e, 'active'));
-		expect(updated.current_stay.status).toBe('active');
-		expect(updated.current_stay.zone).toBe('Z1');
+	it.each(['pre_registered', 'kiosk_registered', 'arriving', 'cancelled'] as const)(
+		'clears the zone when overriding to %s',
+		(target) => {
+			const e = stayOf('active', 'Z1');
+			expect(applyMovementToStay(e, revert(e, target)).current_stay).toMatchObject({
+				status: target,
+				zone: null
+			});
+			expect(resolveRevertZone(e.current_stay, target, 'Z9')).toBeNull();
+		}
+	);
+
+	it.each(['active', 'room_confirmed'] as const)(
+		'keeps the current zone when overriding to %s',
+		(target) => {
+			const e = stayOf('checked_out', 'Z1');
+			expect(applyMovementToStay(e, revert(e, target)).current_stay).toMatchObject({
+				status: target,
+				zone: 'Z1'
+			});
+		}
+	);
+
+	it('uses the picked zone for an in-shelter target when the stay has none', () => {
+		const e = stayOf('arriving', null);
+		expect(revertNeedsZone(e.current_stay, 'active')).toBe(true);
+		expect(revertNeedsZone(stayOf('arriving', 'Z1').current_stay, 'active')).toBe(false);
+		expect(revertNeedsZone(e.current_stay, 'checked_out')).toBe(false);
+		expect(
+			applyMovementToStay(e, revert(e, 'room_confirmed', 'x', 'Z7')).current_stay
+		).toMatchObject({
+			status: 'room_confirmed',
+			zone: 'Z7'
+		});
 	});
 
-	it('reverting below active clears the zone', () => {
-		const a = stayOf('active', 'Z1');
-		expect(applyMovementToStay(a, revert(a, 'arriving')).current_stay).toMatchObject({
-			status: 'arriving',
-			zone: null
-		});
-		const r = stayOf('room_confirmed', 'Z2');
-		expect(applyMovementToStay(r, revert(r, 'pre_registered')).current_stay).toMatchObject({
-			status: 'pre_registered',
-			zone: null
-		});
-	});
+	it.each(['active', 'room_confirmed'] as const)(
+		'refuses an in-shelter override to %s when no zone exists',
+		(target) => {
+			const e = stayOf('checked_out', null);
+			expect(() =>
+				assertMovementAllowed(e, 'revert_status', { toStatus: target, reason: 'x' })
+			).toThrow(/โซน/);
+			expect(() => applyMovementToStay(e, revert(e, target))).toThrow(/โซน/);
+			expect(() => resolveRevertZone(e.current_stay, target, '  ')).toThrow(/โซน/);
+		}
+	);
 
-	it('applyMovementToStay refuses a revert without a reason', () => {
+	it.each(['checked_out', 'temporary_leave', 'transferred', 'deceased'] as const)(
+		'keeps the current zone when overriding to %s, like the normal action',
+		(target) => {
+			const e = stayOf('active', 'Z1');
+			expect(applyMovementToStay(e, revert(e, target)).current_stay).toMatchObject({
+				status: target,
+				zone: 'Z1'
+			});
+			const noZone = stayOf('arriving', null);
+			expect(applyMovementToStay(noZone, revert(noZone, target)).current_stay.zone).toBeNull();
+		}
+	);
+
+	it('applyMovementToStay refuses an override without a reason or to the same status', () => {
 		const e = stayOf('active');
 		expect(() => applyMovementToStay(e, revert(e, 'arriving', ''))).toThrow(/เหตุผล/);
+		expect(() => applyMovementToStay(e, revert(e, 'active'))).toThrow();
+	});
+
+	it('overrides out of deceased', () => {
+		const e = stayOf('deceased', 'Z1');
+		expect(applyMovementToStay(e, revert(e, 'active')).current_stay).toMatchObject({
+			status: 'active',
+			zone: 'Z1'
+		});
 	});
 });
 

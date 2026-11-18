@@ -1269,6 +1269,62 @@ describe('check-in / check-out', () => {
 			);
 			expect(await repo.listMovements()).toHaveLength(before);
 		});
+
+		it('overrides arriving → pre_registered', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const arriving = await repo.revertEvacueeStatus(evacuee, ctx, 'arriving', 'ตั้งต้น');
+			const updated = await repo.revertEvacueeStatus(arriving, ctx, 'pre_registered', 'ผิดคน');
+			expect(updated.current_stay.status).toBe('pre_registered');
+			expect((await repo.listMovements()).at(-1)).toMatchObject({
+				action: 'revert_status',
+				from_status: 'arriving',
+				to_status: 'pre_registered',
+				zone: null
+			});
+		});
+
+		it('overrides checked_out → room_confirmed, keeping the zone', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const out = await repo.checkOutEvacuee(checkedIn, ctx, { reason: 'กลับบ้าน' });
+			const updated = await repo.revertEvacueeStatus(out, ctx, 'room_confirmed', 'เช็คเอาต์ผิด');
+			expect(updated.current_stay).toMatchObject({ status: 'room_confirmed', zone: 'zone-a' });
+			expect((await repo.listMovements()).at(-1)).toMatchObject({
+				to_status: 'room_confirmed',
+				zone: 'zone-a'
+			});
+		});
+
+		it('overrides out of deceased', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const dead = await repo.recordMovement(checkedIn, 'mark_deceased', ctx);
+			const updated = await repo.revertEvacueeStatus(dead, ctx, 'active', 'บันทึกผิดคน');
+			expect(updated.current_stay.status).toBe('active');
+		});
+
+		it('refuses an in-shelter target with no zone unless one is picked', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const before = (await repo.listMovements()).length;
+			await expect(repo.revertEvacueeStatus(evacuee, ctx, 'room_confirmed', 'x')).rejects.toThrow(
+				/โซน/
+			);
+			expect(await repo.listMovements()).toHaveLength(before);
+			const updated = await repo.revertEvacueeStatus(evacuee, ctx, 'room_confirmed', 'x', {
+				zone: 'zone-b'
+			});
+			expect(updated.current_stay).toMatchObject({ status: 'room_confirmed', zone: 'zone-b' });
+		});
+
+		it('refreshes the derived household status', async () => {
+			const household = await repo.createHousehold({ label: 'ครัวเรือนปรับสถานะ' }, ctx);
+			const evacuee = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
+			await repo.revertEvacueeStatus(evacuee, ctx, 'cancelled', 'ผิดคน');
+			expect((await repo.getHousehold(household._id))?.status).toBe('cancelled');
+			const cancelled = (await repo.getEvacuee(evacuee._id))!;
+			await repo.revertEvacueeStatus(cancelled, ctx, 'arriving', 'กู้คืน');
+			expect((await repo.getHousehold(household._id))?.status).toBe('arriving');
+		});
 	});
 
 	describe('confirmRoomForHousehold', () => {

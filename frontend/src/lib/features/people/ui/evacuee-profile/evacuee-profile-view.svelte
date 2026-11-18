@@ -31,6 +31,7 @@
 		useRevertEvacueeStatus,
 		useRecordMovement,
 		resolveStatusChangeAction,
+		revertNeedsZone,
 		normalizeCheckoutRemark,
 		statusChangeHandlerKind,
 		canChangeEvacueeZone,
@@ -107,7 +108,7 @@
 	});
 	const profileReadonly = $derived(readonly || !canEditProfile);
 
-	/** Reverting a stay status backwards is manager-level: system_admin, or shelter_manager of the current shelter. */
+	/** Overriding a stay status (any → any, CR-262 A1) is manager-level: system_admin, or shelter_manager of the current shelter. */
 	const canRevertStatus = $derived.by(() => {
 		if (profileReadonly || !authStore.user) return false;
 		const roles = authStore.user.roles;
@@ -430,6 +431,13 @@
 				const trimmed = (reason ?? '').trim();
 				if (!trimmed) {
 					toast.error(t.revertNeedsReason);
+					return;
+				}
+				if (revertNeedsZone(evacuee.current_stay, status)) {
+					// An in-shelter stay never has no zone — pick one first (same flow as check-in).
+					toast.error(t.revertNeedsZone);
+					showStatusModal = false;
+					showZoneModal = true;
 					return;
 				}
 				await revertStatusMutation.mutateAsync({ evacuee, ctx, toStatus: status, reason: trimmed });

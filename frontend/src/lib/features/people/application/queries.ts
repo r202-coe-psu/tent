@@ -411,13 +411,16 @@ export const useRevertEvacueeStatus = () => {
 			evacuee,
 			ctx,
 			toStatus,
-			reason
+			reason,
+			zone
 		}: {
 			evacuee: Evacuee;
 			ctx: AuthorContext;
 			toStatus: StayStatus;
 			reason: string;
-		}) => peopleRepository().revertEvacueeStatus(evacuee, ctx, toStatus, reason),
+			/** Required when `toStatus` is in-shelter and the stay has no zone. */
+			zone?: string | null;
+		}) => peopleRepository().revertEvacueeStatus(evacuee, ctx, toStatus, reason, { zone }),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });

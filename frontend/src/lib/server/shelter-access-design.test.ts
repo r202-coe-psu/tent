@@ -1864,7 +1864,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
-	describe('evacuee status revert (CR-262)', () => {
+	describe('evacuee status override (CR-262)', () => {
 		const revertMovement = (over: Doc = {}): Doc => ({
 			...envelope,
 			schema_v: 1,
@@ -1922,12 +1922,33 @@ describe('buildValidateDocUpdate', () => {
 				);
 			});
 
-			it.each(['room_confirmed', 'checked_out', 'deceased', undefined])(
-				'rejects to_status %s',
+			it.each([
+				'pre_registered',
+				'kiosk_registered',
+				'arriving',
+				'active',
+				'room_confirmed',
+				'temporary_leave',
+				'transferred',
+				'checked_out',
+				'deceased',
+				'cancelled'
+			])('allows to_status %s (manual override, any status)', (to_status) => {
+				expect(() => compile()(revertMovement({ to_status }), null, MANAGER)).not.toThrow();
+			});
+
+			it('allows an override from a terminal status (deceased -> active) by a system admin', () => {
+				expect(() =>
+					compile()(revertMovement({ from_status: 'deceased', to_status: 'active' }), null, ADMIN)
+				).not.toThrow();
+			});
+
+			it.each(['archived', 'unknown', '', undefined, null])(
+				'rejects to_status %s (not a stay status)',
 				(to_status) => {
 					expectForbidden(
 						() => compile()(revertMovement({ to_status }), null, MANAGER),
-						/to_status must be/
+						/to_status must be a valid stay status/
 					);
 				}
 			);

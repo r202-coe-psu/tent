@@ -339,14 +339,16 @@ export interface PeopleRepository {
 		opts?: { reason?: string }
 	): Promise<Evacuee>;
 	/**
-	 * Step back to an earlier stay status via a `revert_status` movement (nonempty `reason`
-	 * required; zone cleared below `active`). CR-262.
+	 * Manual stay-status override to any other status via a `revert_status` movement (nonempty
+	 * `reason` required; zone cleared for pre_registered / arriving / cancelled, `opts.zone`
+	 * required for an in-shelter target when the stay has none). CR-262 A1.
 	 */
 	revertEvacueeStatus(
 		evacuee: Evacuee,
 		ctx: AuthorContext,
 		toStatus: StayStatus,
-		reason: string
+		reason: string,
+		opts?: { zone?: string | null }
 	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade

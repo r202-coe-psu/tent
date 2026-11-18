@@ -1454,12 +1454,13 @@ ${consentVduClause()}
       }
     }
   }
-  // 2c. Evacuee status revert (CR-262, schema.md §1.4). Stepping a stay
-  // back to an earlier pipeline status (pre_registered < arriving < active < room_confirmed) is
-  // manager-level: system_admin or the shelter_manager of this shelter (isRole covers both).
-  // Two doors must stay shut together — the revert_status movement, and a direct evacuee write
-  // that lowers current_stay.status without a movement. Mirror REVERT_* in
-  // frontend/src/lib/features/people/domain/people.ts if those lists ever change.
+  // 2c. Evacuee status override (CR-262 + A1, schema.md §1.4). A manual stay-status override
+  // (revert_status movement, any status to any other) is manager-level: system_admin or the
+  // shelter_manager of this shelter (isRole covers both), with a reason. Two doors must stay
+  // shut together — the revert_status movement, and a direct evacuee write that lowers
+  // current_stay.status from active/room_confirmed without a movement (registration_staff
+  // must not step an in-shelter evacuee back). Mirror REVERT_TARGET_STATUSES in
+  // frontend/src/lib/features/people/domain/people.ts if the status list ever changes.
   if (newDoc.type === 'movement' && newDoc.action === 'revert_status') {
     if (!isRole('shelter_manager')) {
       throw { forbidden: 'revert_status requires shelter_manager or system_admin' };
@@ -1467,8 +1468,10 @@ ${consentVduClause()}
     if (typeof newDoc.reason !== 'string' || newDoc.reason.trim().length === 0) {
       throw { forbidden: 'revert_status requires a non-empty reason' };
     }
-    if (['pre_registered', 'arriving', 'active'].indexOf(newDoc.to_status) === -1) {
-      throw { forbidden: 'revert_status to_status must be pre_registered, arriving or active' };
+    if (['pre_registered', 'kiosk_registered', 'arriving', 'active', 'room_confirmed',
+         'temporary_leave', 'transferred', 'checked_out', 'deceased', 'cancelled']
+        .indexOf(newDoc.to_status) === -1) {
+      throw { forbidden: 'revert_status to_status must be a valid stay status' };
     }
   }
   // Dropping current_stay (or its status) from an active/room_confirmed doc counts as a backward

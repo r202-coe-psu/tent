@@ -16,9 +16,8 @@
 	}
 
 	/**
-	 * Manual picker targets only — transferred / terminal statuses are excluded. The intake
-	 * statuses (`pre_registered`, `arriving`) appear only as backward revert targets, and only
-	 * when `canRevert` is set (shelter manager / system admin).
+	 * Picker targets for everyone: the normal forward statuses only — transferred / terminal
+	 * statuses and the intake statuses are excluded.
 	 */
 	const MANUAL_STATUS_OPTIONS: readonly StayStatus[] = [
 		'pre_registered',
@@ -27,6 +26,23 @@
 		'room_confirmed',
 		'temporary_leave',
 		'checked_out'
+	];
+
+	/**
+	 * Manual override picker (`canRevert`, shelter manager / system admin, CR-262 A1): every stay
+	 * status, whatever the current one is. Targets with no normal action resolve to `revert_status`.
+	 */
+	const OVERRIDE_STATUS_OPTIONS: readonly StayStatus[] = [
+		'pre_registered',
+		'kiosk_registered',
+		'arriving',
+		'active',
+		'room_confirmed',
+		'temporary_leave',
+		'transferred',
+		'checked_out',
+		'deceased',
+		'cancelled'
 	];
 
 	let {
@@ -40,7 +56,7 @@
 		show: boolean;
 		evacuee: Evacuee;
 		statusConfig: Partial<Record<StayStatus, StatusConfig>>;
-		/** Allow backward (`revert_status`) targets — shelter_manager / system_admin only. */
+		/** Allow manual override (`revert_status`) targets — shelter_manager / system_admin only. */
 		canRevert?: boolean;
 		onClose: () => void;
 		onUpdateStatus: (status: StayStatus, reason?: string) => Promise<void>;
@@ -55,7 +71,7 @@
 	let saving = $state(false);
 
 	const selectableOptions = $derived(
-		MANUAL_STATUS_OPTIONS.flatMap((statusKey) => {
+		(canRevert ? OVERRIDE_STATUS_OPTIONS : MANUAL_STATUS_OPTIONS).flatMap((statusKey) => {
 			const action = resolveStatusChangeAction(evacuee.current_stay.status, statusKey);
 			const reachable =
 				statusKey === evacuee.current_stay.status ||

@@ -29,15 +29,20 @@ const LEAVES = new Set(['check_out', 'transfer_out', 'leave_temporary', 'mark_de
 export interface PresenceMovement {
 	action: string;
 	occurred_at: string;
-	/** `revert_status` only: stepping back to a pre-arrival status counts as leaving. */
+	/**
+	 * `revert_status` only (manual status override, CR-262 A1): ending in `active` /
+	 * `room_confirmed` counts as entering, any other status as leaving.
+	 */
 	to_status?: string | null;
 }
 
-/** A `revert_status` below `active` takes the person out of the shelter (same as a leave). */
-const REVERT_LEAVE_TARGETS = new Set(['pre_registered', 'arriving', 'kiosk_registered']);
+function isEnter(m: { action: string; to_status?: string | null }): boolean {
+	if (m.action === 'revert_status') return isInShelterStayStatus(m.to_status);
+	return ENTERS.has(m.action);
+}
 
 function isLeave(m: { action: string; to_status?: string | null }): boolean {
-	if (m.action === 'revert_status') return REVERT_LEAVE_TARGETS.has(m.to_status ?? '');
+	if (m.action === 'revert_status') return !!m.to_status && !isInShelterStayStatus(m.to_status);
 	return LEAVES.has(m.action);
 }
 
@@ -71,7 +76,7 @@ export function wasInShelterAllDay({ day, movements, current_stay }: PresenceInp
 			if (!inside || isLeave(m)) return false;
 			continue;
 		}
-		if (ENTERS.has(m.action)) inside = true;
+		if (isEnter(m)) inside = true;
 		else if (isLeave(m)) inside = false;
 	}
 	return inside;

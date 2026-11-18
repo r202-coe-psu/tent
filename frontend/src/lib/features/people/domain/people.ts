@@ -2064,40 +2064,58 @@ export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
 ] as const satisfies readonly StayStatus[];
 
 /**
- * Forward order of the intake pipeline. A `revert_status` target must rank strictly below the
- * current status (CR-262). Statuses outside this order are never revert
- * sources or targets.
+ * Every status a `revert_status` (manual status override by shelter manager / system admin,
+ * CR-262 A1) may land on — any stay status except the current one. Mirrored by the CouchDB
+ * validator (`shelter-access-design.ts` rule 2c).
  */
-const REVERT_STATUS_RANK: Partial<Record<StayStatus, number>> = {
-	pre_registered: 0,
-	arriving: 1,
-	active: 2,
-	room_confirmed: 3
-};
+export const REVERT_TARGET_STATUSES: readonly StayStatus[] = stayStatusSchema.options;
 
-/** Stay statuses a `revert_status` may start from. */
-export const REVERT_ELIGIBLE_FROM_STATUSES = [
-	'active',
-	'room_confirmed'
-] as const satisfies readonly StayStatus[];
+/** Targets of a `revert_status` that put the person in the shelter and therefore need a zone. */
+const REVERT_ZONE_REQUIRED_STATUSES: readonly StayStatus[] = ['active', 'room_confirmed'];
 
-/** Every status a `revert_status` may land on (still subject to the strictly-earlier rule). */
-export const REVERT_TARGET_STATUSES = [
+/** Targets of a `revert_status` that take the person out of any zone. */
+const REVERT_ZONE_CLEARED_STATUSES: readonly StayStatus[] = [
 	'pre_registered',
+	'kiosk_registered',
 	'arriving',
-	'active'
-] as const satisfies readonly StayStatus[];
+	'cancelled'
+];
 
-/** True when `current` → `target` is a permitted backward step. */
+/** True when `current` → `target` is a permitted manual override: any status to any other. */
 export function canRevertStatusTo(current: StayStatus, target: StayStatus): boolean {
-	if (!(REVERT_ELIGIBLE_FROM_STATUSES as readonly StayStatus[]).includes(current)) return false;
-	if (!(REVERT_TARGET_STATUSES as readonly StayStatus[]).includes(target)) return false;
-	return (REVERT_STATUS_RANK[target] ?? Infinity) < (REVERT_STATUS_RANK[current] ?? -Infinity);
+	return current !== target && REVERT_TARGET_STATUSES.includes(target);
 }
 
-/** Statuses `current` may be reverted to, earliest first. Empty when no revert is possible. */
+/** Statuses `current` may be overridden to, in schema order. */
 export function listRevertTargets(current: StayStatus): StayStatus[] {
 	return REVERT_TARGET_STATUSES.filter((target) => canRevertStatusTo(current, target));
+}
+
+/** True when a `revert_status` to `toStatus` needs the caller to pick a zone (stay has none). */
+export function revertNeedsZone(
+	current: Pick<Evacuee['current_stay'], 'zone'>,
+	toStatus: StayStatus
+): boolean {
+	return REVERT_ZONE_REQUIRED_STATUSES.includes(toStatus) && !current.zone?.trim();
+}
+
+/**
+ * The zone a `revert_status` leaves the evacuee in. `pre_registered` / `kiosk_registered` /
+ * `arriving` / `cancelled` clear it; `active` / `room_confirmed` keep the current zone (or the
+ * `zone` the caller picked) and throw when there is none — an in-shelter stay never has no zone;
+ * the other targets keep the current zone, like their normal actions do (`applyMovementToStay`).
+ */
+export function resolveRevertZone(
+	current: Pick<Evacuee['current_stay'], 'zone'>,
+	toStatus: StayStatus,
+	zone?: string | null
+): string | null {
+	if (REVERT_ZONE_CLEARED_STATUSES.includes(toStatus)) return null;
+	const resolved = zone?.trim() || current.zone?.trim() || null;
+	if (REVERT_ZONE_REQUIRED_STATUSES.includes(toStatus) && !resolved) {
+		throw new Error('การเปลี่ยนสถานะเป็นเข้าพักต้องระบุโซน');
+	}
+	return resolved;
 }
 
 /** Stay statuses that may receive a `transfer_out` action — must be checked in first. */
@@ -2193,7 +2211,9 @@ export function listPendingZoneArrivalConfirmations(evacuees: readonly Evacuee[]
 
 /**
  * Guard movement transitions against impossible / terminal stay states.
- * `deceased` and `cancelled` are terminal — no reverse action except staying put.
+ * `deceased` and `cancelled` are terminal — no reverse action except staying put. The one
+ * exception is `revert_status`, the shelter manager / system admin manual override (CR-262 A1),
+ * which may leave and enter any status; its role gate lives in the UI and the CouchDB validator.
  */
 export function assertMovementAllowed(
 	evacuee: Evacuee,
@@ -2202,8 +2222,10 @@ export function assertMovementAllowed(
 		reason?: string | null;
 		notes?: string | null;
 		systemClose?: boolean;
-		/** Required for `revert_status`: the status to step back to. */
+		/** Required for `revert_status`: the status to override the stay to. */
 		toStatus?: StayStatus | null;
+		/** `revert_status` only: the zone picked for an in-shelter target when the stay has none. */
+		zone?: string | null;
 	} = {}
 ): void {
 	const status = evacuee.current_stay.status;
@@ -2215,10 +2237,10 @@ export function assertMovementAllowed(
 		assertShelterCloseCheckoutAllowed(evacuee, opts.reason);
 		return;
 	}
-	if (status === 'deceased' && action !== 'mark_deceased') {
+	if (status === 'deceased' && action !== 'mark_deceased' && action !== 'revert_status') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
 	}
-	if (status === 'cancelled') {
+	if (status === 'cancelled' && action !== 'revert_status') {
 		throw new Error(
 			'สถานะยกเลิกการลงทะเบียนล่วงหน้าเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก'
 		);
@@ -2244,11 +2266,12 @@ export function assertMovementAllowed(
 	}
 	if (action === 'revert_status') {
 		if (!opts.toStatus || !canRevertStatusTo(status, opts.toStatus)) {
-			throw new Error(`ไม่สามารถย้อนสถานะจาก ${status} เป็น ${opts.toStatus ?? '-'} ได้`);
+			throw new Error(`ไม่สามารถเปลี่ยนสถานะจาก ${status} เป็น ${opts.toStatus ?? '-'} ได้`);
 		}
 		if (!(opts.reason ?? '').trim()) {
-			throw new Error('การย้อนสถานะต้องระบุเหตุผล');
+			throw new Error('การเปลี่ยนสถานะด้วยตนเองต้องระบุเหตุผล');
 		}
+		resolveRevertZone(evacuee.current_stay, opts.toStatus, opts.zone);
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
 		throw new Error(`ไม่สามารถเปลี่ยนโซนจากสถานะ ${status} ได้`);
@@ -2308,19 +2331,19 @@ export function applyMovementToStay(
 		reason: movement.reason,
 		notes: undefined,
 		systemClose: opts.systemClose,
-		toStatus: movement.to_status
+		toStatus: movement.to_status,
+		zone: movement.zone
 	});
 	if (movement.action === 'revert_status') {
-		// assertMovementAllowed guarantees `to_status` is a valid earlier status. Below `active`
-		// the person has no zone; reverting room_confirmed → active keeps the zone (only the
-		// confirmation is undone).
+		// assertMovementAllowed guarantees `to_status` is a valid, different status and that an
+		// in-shelter target has a zone (resolveRevertZone — also what the movement was written with).
 		const target = movement.to_status as StayStatus;
 		return {
 			...evacuee,
 			updated_at: now(),
 			current_stay: {
 				status: target,
-				zone: target === 'active' ? evacuee.current_stay.zone : null,
+				zone: resolveRevertZone(evacuee.current_stay, target, movement.zone),
 				since: movement.occurred_at
 			}
 		};
@@ -2383,21 +2406,25 @@ export function applyMovementToStay(
 /**
  * Map a manual "set stay status to X" pick (evacuee-status-modal) to the movement
  * action that actually produces that status — `current_stay` is a snapshot only,
- * the movement stream is the source of truth (schema.md §1.1). Returns `null` when
- * the status is unchanged, when `current` isn't a valid source for that target per
- * the movement guards in `assertMovementAllowed` (e.g. `checked_out` → `temporary_leave`
- * skips a required check-in), or when no movement action reaches it: `pre_registered`
- * is only ever an initial state, never a manual forward target. A strictly earlier pipeline
- * status (`pre_registered` < `arriving` < `active` < `room_confirmed`) resolves to `revert_status`
- * — callers must additionally gate that action by role and require a reason.
+ * the movement stream is the source of truth (schema.md §1.1). Returns `null` only when
+ * the status is unchanged. When a normal action fits (`check_in`, `check_out`, `confirm_room`,
+ * `transfer_out`, `leave_temporary`, `mark_deceased`) it wins, so zone pickers and
+ * normalizations keep working; every other pick resolves to `revert_status`, the manual
+ * override of shelter manager / system admin (CR-262 A1) — callers must gate that action by
+ * role and require a reason.
  */
 export function resolveStatusChangeAction(
 	current: StayStatus,
 	target: StayStatus
 ): MovementAction | null {
 	if (current === target) return null;
-	if (current === 'deceased' || current === 'cancelled') return null;
-	if (canRevertStatusTo(current, target)) return 'revert_status';
+	return resolveNormalStatusChangeAction(current, target) ?? 'revert_status';
+}
+
+function resolveNormalStatusChangeAction(
+	current: StayStatus,
+	target: StayStatus
+): MovementAction | null {
 	switch (target) {
 		case 'active':
 			// CR-112 A1: temporary_leave return is Check-in → active (zone required),

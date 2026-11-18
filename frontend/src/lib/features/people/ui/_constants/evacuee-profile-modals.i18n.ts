@@ -9,8 +9,8 @@ const th = {
 		saving: 'กำลังบันทึก...',
 		checkedOutReasonRequired: 'การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ',
 		leaveReasonRequired: 'การออกชั่วคราวต้องระบุเหตุผล',
-		revertReasonPlaceholder: 'ระบุเหตุผลการย้อนสถานะ เช่น เช็คอินผิดคน',
-		revertReasonRequired: 'การย้อนสถานะต้องระบุเหตุผล'
+		revertReasonPlaceholder: 'ระบุเหตุผลการเปลี่ยนสถานะ เช่น บันทึกสถานะผิดคน',
+		revertReasonRequired: 'การเปลี่ยนสถานะด้วยตนเองต้องระบุเหตุผล'
 	},
 	zone: {
 		title: 'ย้ายโซนที่พัก (Change stay zone)',
@@ -112,8 +112,9 @@ const en: typeof th = {
 		saving: 'Saving...',
 		checkedOutReasonRequired: 'A reason or note is required to check out',
 		leaveReasonRequired: 'A reason is required for a temporary leave',
-		revertReasonPlaceholder: 'Enter the reason for reverting, e.g. checked in the wrong person',
-		revertReasonRequired: 'A reason is required to revert the status'
+		revertReasonPlaceholder:
+			'Enter the reason for the change, e.g. status recorded for the wrong person',
+		revertReasonRequired: 'A reason is required to override the status'
 	},
 	zone: {
 		title: 'Change stay zone',
