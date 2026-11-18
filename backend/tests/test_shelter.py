@@ -297,6 +297,79 @@ async def test_list_shelters_filters_by_radius(
     assert body_1000km["shelters"][0]["code"] == "SH001"
 
 
+async def test_list_shelters_radius_keeps_shelters_without_location(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
+    await db_client[db_name]["public_shelters"].create_index([("location", "2dsphere")])
+
+    now = datetime.now(UTC)
+    base = {"status": "open", "capacity": 10, "province": "สงขลา", "updated_at": now}
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            **base,
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ใกล้",
+            "location": {"type": "Point", "coordinates": [100.5, 7.0]},
+        },
+    )
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            **base,
+            "_id": "SH002",
+            "shelter_code": "SH002",
+            "name": "ศูนย์ไกล",
+            "location": {"type": "Point", "coordinates": [100.5, 13.75]},
+        },
+    )
+    # No `location` field at all: no pin on the map, only reachable from the list.
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {**base, "_id": "SH003", "shelter_code": "SH003", "name": "ศูนย์ไม่มีพิกัด"},
+    )
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            **base,
+            "_id": "SH004",
+            "shelter_code": "SH004",
+            "name": "ศูนย์ไม่มีพิกัดแต่ปิด",
+            "status": "closed",
+        },
+    )
+
+    resp = await client.get(
+        "/public/v1/shelters",
+        params={"lat": 7.0, "lng": 100.5, "radius_km": 5},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    # Nearby first, far one cut, unlocated ones appended.
+    assert [s["code"] for s in resp.json()["shelters"]] == ["SH001", "SH003", "SH004"]
+
+    # Other filters still apply to the unlocated shelters.
+    filtered = await client.get(
+        "/public/v1/shelters",
+        params={"lat": 7.0, "lng": 100.5, "radius_km": 5, "status": "open"},
+        headers=auth_headers,
+    )
+    assert [s["code"] for s in filtered.json()["shelters"]] == ["SH001", "SH003"]
+
+    # Without a position nothing changes: every shelter is listed by name.
+    plain = await client.get("/public/v1/shelters", headers=auth_headers)
+    assert plain.json()["count"] == 4
+
+
 async def _insert_person_doc(
     db_client: AsyncMongoClient,
     settings: Settings,

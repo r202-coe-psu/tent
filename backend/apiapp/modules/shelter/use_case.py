@@ -133,7 +133,12 @@ class ShelterUseCase:
             ]
 
         has_near = False
+        unlocated_filters: dict[str, object] | None = None
         if lat is not None and lng is not None:
+            # `$nearSphere` drops shelters that have no location. They have no pin on the map, so
+            # the list is the only way to reach them: fetch them separately and append them after
+            # the nearby ones.
+            unlocated_filters = {**filters, "location": None}
             near_query: dict[str, object] = {
                 "$geometry": {
                     "type": "Point",
@@ -147,6 +152,8 @@ class ShelterUseCase:
 
         if has_near:
             docs = await PublicShelter.find(filters).to_list()
+            if unlocated_filters is not None:
+                docs += await PublicShelter.find(unlocated_filters).sort("+name").to_list()
         elif filters:
             docs = await PublicShelter.find(filters).sort("+name").to_list()
         else:
