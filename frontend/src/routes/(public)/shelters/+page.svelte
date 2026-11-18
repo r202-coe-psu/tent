@@ -29,7 +29,6 @@
 		ExternalShelterChip,
 		ShelterFilterPanel,
 		ShelterMap,
-		PublicPageShell,
 		requestUserPosition,
 		canRequestGeolocation,
 		isHostHouseKind,
@@ -236,9 +235,16 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell class="space-y-3 sm:space-y-4" maxWidth="max-w-[1600px]">
+<!--
+	One viewport, no page scroll (#1419): the column is exactly as tall as what is left under the
+	fixed navbar, the map takes whatever the control bar / metric cards leave, and the mobile list
+	scrolls inside its own box.
+-->
+<div
+	class="mx-auto flex h-[calc(100dvh-var(--public-navbar-offset,4rem)-var(--testing-banner-height,0px))] w-full max-w-[1600px] flex-col gap-3 overflow-hidden px-3 py-3 sm:px-6 lg:px-8"
+>
 	<!-- Mobile Top Control Bar (< lg) -->
-	<div class="flex items-center justify-between gap-2 lg:hidden">
+	<div class="flex shrink-0 items-center justify-between gap-2 lg:hidden">
 		<!-- View Switcher Tabs -->
 		<div class="inline-flex rounded-xl border border-border/80 bg-muted/60 p-1 shadow-2xs">
 			<button
@@ -276,11 +282,9 @@
 		</button>
 	</div>
 
-	<!-- Metric Cards (Desktop always; Mobile only when viewing list) -->
+	<!-- Metric Cards (desktop only — the mobile page is the map or the list, nothing above it) -->
 	<div
-		class="{mobileViewMode === 'map'
-			? 'hidden lg:grid'
-			: 'grid'} grid-cols-2 gap-3 sm:gap-4 md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] lg:gap-6"
+		class="hidden shrink-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] lg:grid lg:gap-6"
 	>
 		<PublicShelterMetricCard
 			title={t.totalShelters}
@@ -321,7 +325,7 @@
 	<div
 		class="relative {mobileViewMode === 'list'
 			? 'hidden lg:block'
-			: 'block'} h-[calc(100dvh-10.5rem)] min-h-[460px] w-full overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-xs sm:h-[calc(100vh-14rem)] sm:min-h-[720px]"
+			: 'block'} min-h-0 w-full flex-1 overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-xs"
 	>
 		<!-- Full Map Canvas (Background) -->
 		<div class="absolute inset-0 z-0 h-full w-full">
@@ -341,14 +345,16 @@
 
 		<!-- Desktop Floating Filter Panel (Left) -->
 		{#if showFilterPanel}
-			<div class="absolute top-4 left-4 z-20 hidden max-h-[calc(100%-2rem)] w-80 lg:block xl:w-88">
+			<div
+				class="absolute top-4 left-4 z-20 hidden max-h-[calc(100%-2rem)] w-80 flex-col lg:flex xl:w-88"
+			>
 				<ShelterFilterPanel
 					filters={data?.filters || {}}
 					availableTypes={data?.available_types || []}
 					action="/shelters"
 					bind:userLat={liveUserLat}
 					bind:userLng={liveUserLng}
-					class="h-full max-h-[calc(100vh-17rem)]"
+					class="min-h-0 flex-1"
 					onClose={() => (showFilterPanel = false)}
 				/>
 			</div>
@@ -392,8 +398,7 @@
 
 				<div
 					bind:this={listContainerEl}
-					class="custom-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto p-3"
-					style="max-height: calc(100vh - 21rem);"
+					class="custom-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
 				>
 					{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
 						{@const shelterKey = shelter.id || shelter.code || String(i)}
@@ -556,7 +561,7 @@
 
 	<!-- Mobile Shelter List View (when mobileViewMode === 'list', < lg) -->
 	{#if mobileViewMode === 'list'}
-		<div class="space-y-3 pb-16 lg:hidden">
+		<div class="min-h-0 flex-1 space-y-3 overflow-y-auto pb-16 lg:hidden">
 			<div class="flex items-center justify-between px-1 text-xs text-muted-foreground">
 				<span class="font-bold text-foreground">
 					{displayShelters.length}
@@ -653,7 +658,7 @@
 			</div>
 		</div>
 	{/if}
-</PublicPageShell>
+</div>
 
 <style>
 	/* Custom scrollbar for the list */
