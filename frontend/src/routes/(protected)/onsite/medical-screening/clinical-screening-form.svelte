@@ -13,12 +13,15 @@
 		EwarSymptomsFields,
 		HealthMedicalFields,
 		SpecialNeedsFields,
+		TriageLevelFields,
+		TRIAGE_I18N,
 		VulnerableGroupsFields,
 		useRecordMedicalScreening,
 		useMedicals,
 		type Evacuee,
 		type CareTrack,
-		type Screening
+		type Screening,
+		type TriageLevel
 	} from '$lib/features/people';
 	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -48,6 +51,7 @@
 	} = $props();
 
 	const t = $derived(getTranslation(STAFF_MEDICAL_SCREENING_I18N, langState.current));
+	const tTriage = $derived(getTranslation(TRIAGE_I18N, langState.current));
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -81,6 +85,8 @@
 	let medications = $state<string>('');
 	let allergies = $state<string>('');
 	let care_track = $state<CareTrack>('normal');
+	// Urgency colour — green unless the latest screening says otherwise (FR-02)
+	let triage_level = $state<TriageLevel>('green');
 	let general_symptoms = $state<string>('');
 
 	// Section 2: Vulnerable Groups (editable, prefilled from Station 1)
@@ -102,6 +108,7 @@
 			medications: medications.trim(),
 			allergies: allergies.trim(),
 			care_track,
+			triage_level,
 			general_symptoms: general_symptoms.trim(),
 			vulnerable_groups: [...vulnerable_groups].sort(),
 			special_needs: [...special_needs].sort(),
@@ -136,6 +143,7 @@
 		if (latest) {
 			if (latest.symptoms?.length) symptoms = [...latest.symptoms];
 			if (latest.track) care_track = latest.track;
+			if (latest.triage_level) triage_level = latest.triage_level;
 			if (latest.notes) general_symptoms = latest.notes;
 		}
 
@@ -166,6 +174,7 @@
 					screening: {
 						evacuee_id: evacuee._id,
 						track: care_track,
+						triage_level,
 						symptoms,
 						notes: general_symptoms.trim() || undefined
 					},
@@ -207,6 +216,14 @@
 						{t.section1Desc}
 					</p>
 				</div>
+			</div>
+
+			<div class="space-y-2.5">
+				<div>
+					<h4 class="text-sm font-semibold text-foreground">{tTriage.title}</h4>
+					<p class="text-xs text-muted-foreground">{tTriage.desc}</p>
+				</div>
+				<TriageLevelFields bind:triage_level disabled={isSubmitting} idPrefix="med-triage" />
 			</div>
 
 			<HealthMedicalFields

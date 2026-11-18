@@ -4,12 +4,13 @@ title: Decoupled Registration, Medical Screening, and Zoning Flow with Shelter T
 status: done
 layer: stable + volatile
 created: 2026-09-02
-updated: 2026-09-07
+updated: 2026-11-17
 affects:
-  - docs/data/schema.md §1.1 (evacuee schema_v 9 — รวม `last_name` ว่างได้), §1.3 (household Residence semantics — ไม่ bump schema_v), §1.4 (movement zone_change), §1.5 (screening — deprecate triage_level / vital_signs), §3.1 (shelter feature_flags)
+  - docs/data/schema.md §1.1 (evacuee schema_v 9 — รวม `last_name` ว่างได้), §1.3 (household Residence semantics — ไม่ bump schema_v), §1.4 (movement zone_change), §1.5 (screening — deprecate vital_signs; `triage_level` กลับมาใช้ตาม CR-258), §3.1 (shelter feature_flags)
   - CONTEXT.md (Household UI label; Residence; Identity-document address)
   - docs/prd/role-permission-matrix.md
-  - docs/changes/00-baseline/CR-072-triage-green-yellow-red.md (superseded — ตัด triage 3 สี)
+  - docs/changes/00-baseline/CR-072-triage-green-yellow-red.md (superseded 2026-09-07 → reinstated โดย CR-258)
+  - docs/changes/00-baseline/CR-258-station2-triage-reinstate.md (คืน triage 3 สี — ทับข้อ 1 และ 6 ของ amendment 2026-09-07)
   - docs/adr/0001-decoupled-registration-and-medical-screening-flow.md
   - frontend/src/lib/features/people/
   - frontend/src/lib/features/shelters/
@@ -27,7 +28,8 @@ affects:
 > Station 3 = `/onsite/zoning` + movement `zone_change` สำหรับย้ายโซนหลังเข้าพัก.  
 > ขยาย `arriving` และ shared form sub-components ตามเดิม.  
 > `last_name` ว่างได้ (mononym / ชาวต่างชาติ) + UX hint + `formatPersonName` (FR-18..20).  
-> **Amendment 2026-09-07:** Station 2 ตัดเขียว/เหลือง/แดง · vitals · อุณหภูมิ · หมู่เลือด · สถานะส่งต่อ — ลำดับฟอร์ม = ซักประวัติ/แนวทางดูแล → อาการ textarea → EWAR (ไม่บังคับติ๊กเมื่อไม่มีอาการ). CR-072 superseded.
+> **Amendment 2026-09-07:** Station 2 ตัดเขียว/เหลือง/แดง · vitals · อุณหภูมิ · หมู่เลือด · สถานะส่งต่อ — ลำดับฟอร์ม = ซักประวัติ/แนวทางดูแล → อาการ textarea → EWAR (ไม่บังคับติ๊กเมื่อไม่มีอาการ). CR-072 superseded.  
+> **CR-258 (2026-11-17):** triage เขียว/เหลือง/แดงกลับมาในฟอร์ม Station 2 และใช้แนะนำโซน — ทับเฉพาะส่วนตัด triage; vitals / อุณหภูมิ / หมู่เลือด / สถานะส่งต่อยังตัด.
 
 ---
 
@@ -144,7 +146,7 @@ affects:
   2. **อาการ (ฟรีเท็กซ์)** — textarea ให้กรอกอาการ (ไม่ใช่ checklist)
   3. **EWAR checkboxes** — กลุ่มอาการเฝ้าระวังเดิม; **ถ้าไม่มีอาการไม่ต้องติ๊กอะไร** (ไม่บังคับ choice 「ไม่มีอาการป่วย」; ไม่บังคับเลือกอย่างน้อยหนึ่งอาการ)
   **ตัดออกจากฟอร์มคัดกรอง / UI แพทย์ที่เกี่ยว (ห้ามแสดง ห้ามบังคับกรอก ห้ามเขียนใหม่จาก Station 2):**
-  - เขียว / เหลือง / แดง (`triage_level`) — CR-072 superseded
+  - ~~เขียว / เหลือง / แดง (`triage_level`)~~ — **กลับมาตาม [CR-258](CR-258-station2-triage-reinstate.md)** (ระดับความเร่งด่วนใน section 1, ค่าเริ่มต้น `green`)
   - Vital signs (ความดัน / ชีพจร / SpO2) และ **อุณหภูมิร่างกาย**
   - หมู่เลือด (`blood_group`) — ตัดจากฟอร์มคัดกรองและจาก profile / medical UI ที่เคยเก็บตอน intake
   - สถานะการส่งต่อ (`needs_referral` toggle) — ตัดจากฟอร์มและ UI ที่เกี่ยวข้อง
@@ -159,7 +161,7 @@ affects:
 - **FR-11 (Pending queue):**
   - Flag on: `arriving` + มี screening + `zone == null`
   - Flag off: `arriving` + `zone == null` (ไม่ต้องมี screening)
-- **FR-12 (Detail assign):** ใช้ `EvacueeSelectZone` / `ZoneSelectionFields`; แนะนำโซน: **EWAR มีอาการเฝ้าระวัง → quarantine** แล้ว special_needs / vulnerable_groups → vulnerable (เลิกพึ่ง `triage_level`); แสดง headcount ต่อโซน; อนุญาตเกิน capacity
+- **FR-12 (Detail assign):** ใช้ `EvacueeSelectZone` / `ZoneSelectionFields`; แนะนำโซน: **EWAR มีอาการเฝ้าระวัง หรือ `triage_level` `yellow`/`red` → quarantine** (CR-258) แล้ว special_needs / vulnerable_groups → vulnerable; แสดง headcount ต่อโซน; อนุญาตเกิน capacity
 - **FR-13 (First assign):** atomic `checkIn` → toast + กลับคิว — **ไม่มี** Person QR ceremony ที่ Station 3
 - **FR-14 (Household):** person-primary; checkbox สมาชิกครัวเรือนที่ยังอยู่ในคิวรอจัด; default isolation เมื่อ quarantine recommended; **ห้าม** ตัด `household_id`
 - **FR-15 (Rezone):** จากแท็บจัดแล้ว → detail rezone mode; bulk สมาชิก active ในครัวเรือนได้; toast หลัง rezone
@@ -186,7 +188,7 @@ affects:
 
 ### 3.2 `screening` — schema_v 2 (Additive initially) · **deprecation 2026-09-07**
 - **เคยเพิ่ม (CR-072/CR-106 เดิม):** `triage_level` `enum('green','yellow','red') | null`; `vital_signs` `{blood_pressure_sys?, blood_pressure_dia?, heart_rate?, spo2_percent?}`
-- **2026-09-07 — เลิกใช้ในผลิตภัณฑ์:** UI / write path ใหม่ **ห้าม** ตั้ง `triage_level`, `vital_signs`, `temperature_c` (ตัดอุณหภูมิ), `needs_referral` จาก Station 2  
+- **2026-09-07 — เลิกใช้ในผลิตภัณฑ์:** UI / write path ใหม่ **ห้าม** ตั้ง ~~`triage_level`~~ (กลับมาเขียนได้ตาม CR-258), `vital_signs`, `temperature_c` (ตัดอุณหภูมิ), `needs_referral` จาก Station 2  
   - Doc เก่าที่มีค่าเหล่านี้ = **legacy อ่านได้** ไม่บังคับ backfill ไม่บังคับลบฟิลด์ออกจากเอกสาร  
   - `symptoms` (EWAR id list) + `notes` (รวมอาการฟรีเท็กซ์ตามที่ implement) + `track` (`care_track`) **ยังใช้**
 - **หมู่เลือด:** เลิกเก็บ/แสดงจาก Station 2 และ profile medical UI ที่เกี่ยว; ฟิลด์ `medical.blood_group` ถ้ามีใน doc เก่า = legacy
@@ -231,6 +233,7 @@ affects:
   4. ลำดับฟอร์ม: (1) ซักประวัติ/แนวทางดูแล → (2) อาการ textarea → (3) EWAR checkboxes  
   5. EWAR: **ไม่มีอาการ = ไม่ต้องติ๊ก** (ไม่บังคับ healthy choice)  
   6. Zoning recommend: พึ่ง EWAR / special needs — **ไม่พึ่ง triage_level**
+- **2026-11-17 — CR-258 (เจ้าของโครงการ):** ข้อ 1 และ 6 ของแถว 2026-09-07 ถูกทับ — triage เขียว/เหลือง/แดงกลับมาในฟอร์ม Station 2 และ `yellow`/`red` → แนะนำ quarantine; ข้อ 2–5 คงเดิม
 
 ---
 
@@ -249,8 +252,8 @@ affects:
 - [ ] Leave + forced head pick atomic เมื่อหัวหน้าออกและครัวเรือนยังมีสมาชิกอื่น; หัวหน้าใหม่เลือกได้เฉพาะสมาชิกในครัวเรือนนั้น; สมาชิกคนสุดท้ายออก → ยุบครัวเรือนเดิม
 - [ ] `/new` และ Report-in จบด้วย **Person QR** (+ Handover ถ้า flag on) + CTA S2/S3
 - [ ] Station 2 save มีปุ่มไป `/onsite/zoning/[id]` และกลับคิว
-- [ ] Station 2 ตาม FR-07 (2026-09-07): ลำดับ ซักประวัติ/care_track → อาการ textarea → EWAR; **ไม่มี** triage สี / vitals / อุณหภูมิ / หมู่เลือด / referral toggle; EWAR ว่างได้เมื่อไม่มีอาการ
-- [ ] Zoning recommend ไม่พึ่ง `triage_level` (FR-12)
+- [ ] Station 2 ตาม FR-07 (2026-09-07): ลำดับ ซักประวัติ/care_track → อาการ textarea → EWAR; มี triage สี (CR-258); **ไม่มี** vitals / อุณหภูมิ / หมู่เลือด / referral toggle; EWAR ว่างได้เมื่อไม่มีอาการ
+- [ ] Zoning recommend: EWAR หรือ `triage_level` `yellow`/`red` → quarantine (FR-12, CR-258)
 - [ ] Station 3 pending/assigned queues ตาม FR-11; first assign = check_in; rezone = zone_change
 - [ ] schema.md §1.4 ระบุ `zone_change`; §1.3 ระบุ Residence semantics; tests domain/utils ผ่าน
 - [ ] `last_name` ว่างผ่าน validation; แสดงชื่อไม่เหลือช่องว่างท้าย; hint ต่างชาติ/บัตรต่างด้าว (FR-18..20)

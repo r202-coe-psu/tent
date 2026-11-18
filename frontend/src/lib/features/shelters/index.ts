@@ -103,6 +103,7 @@ export {
 	type ShelterMasterV2,
 	type ShelterMaster
 } from './domain/schema';
+export { filterShelterList, type ShelterListFilter } from './domain/shelter-list-filter';
 
 export {
 	luggageRuleLabels,

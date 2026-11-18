@@ -22,6 +22,8 @@
 		zoneKindLabelsByLanguage,
 		formatPersonName,
 		StationCompletionSummary,
+		TRIAGE_I18N,
+		displayTriageLevel,
 		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
@@ -37,6 +39,7 @@
 	let { data } = $props();
 
 	const t = $derived(getTranslation(STAFF_MEDICAL_SCREENING_I18N, langState.current));
+	const tTriage = $derived(getTranslation(TRIAGE_I18N, langState.current));
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const enableMedical = $derived(
@@ -82,7 +85,12 @@
 	const savedFacts = $derived.by(() => {
 		if (!evacuee) return [];
 		const symptoms = latestScreening?.symptoms ?? [];
+		const triage = displayTriageLevel(latestScreening?.triage_level);
 		return [
+			{
+				label: t.factTriage,
+				value: tTriage.levels[triage].label
+			},
 			{
 				label: t.factCareTrack,
 				value: latestScreening?.track === 'fast_track' ? t.factFastTrack : t.factNormalCare
@@ -100,7 +108,10 @@
 			},
 			{
 				label: t.factZone,
-				value: zoneKindLabelsByLanguage[langState.current][recommendZoneKind(evacuee, symptoms)]
+				value:
+					zoneKindLabelsByLanguage[langState.current][
+						recommendZoneKind(evacuee, { symptoms, triage })
+					]
 			}
 		];
 	});

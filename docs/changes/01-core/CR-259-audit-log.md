@@ -1,5 +1,5 @@
 ---
-id: CR-258
+id: CR-259
 title: Audit log กลาง (เฟส A+B) — ผู้สร้าง/ผู้แก้ศูนย์ + DB `audit_log` + หน้า Audit Log
 status: approved
 date: 2026-11-17
@@ -36,7 +36,7 @@ migration: >
   · ไม่มี event ย้อนหลังของการ CRUD ก่อน deploy
 ---
 
-# CR-258 — Audit log กลาง (เฟส A+B)
+# CR-259 — Audit log กลาง (เฟส A+B)
 
 > **สรุป (TL;DR):**
 >
@@ -247,5 +247,6 @@ migration: >
 - 2026-11-17 — รวมเฟส A (#1356) และเฟส B (#1357) เป็น CR ใบเดียว · เฟส C แยกเป็น CR/ADR ภายหลัง
 - 2026-11-17 — proposed
 - 2026-11-17 — Q1 = ไม่มีคอลัมน์ในหน้ารายการศูนย์ · Q2 = ตามข้อเสนอ (ไม่มี `audit_log` บน edge)
-- 2026-11-17 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-258
+- 2026-11-17 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-259
+- 2026-11-18 — เปลี่ยนเลขจาก CR-258 เป็น CR-259 เพราะ CR-258 ถูกใช้โดย `00-baseline/CR-258-station2-triage-reinstate.md` (#1438) ที่ merge เข้า develop ก่อน · เนื้อหาไม่เปลี่ยน
 - 2026-11-18 — แก้ allowlist ของ `user` จาก `disabled` เป็น `active` ให้ตรงกับ field จริงใน `_users` (ความหมายเดิม: สถานะเปิด/ปิดบัญชี)
