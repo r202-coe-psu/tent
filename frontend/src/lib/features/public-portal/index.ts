@@ -4,6 +4,10 @@ export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-c
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
 export { default as ExternalShelterChip } from './ui/external-shelter-chip.svelte';
 export { default as ShelterMap } from './ui/shelter-map.svelte';
+export { default as ShelterListPanel } from './ui/shelter-list-panel.svelte';
+export { default as ShelterMobileFilterSheet } from './ui/shelter-mobile-filter-sheet.svelte';
+export { default as ShelterMobileList } from './ui/shelter-mobile-list.svelte';
+export { default as ShelterMobileSelectedCard } from './ui/shelter-mobile-selected-card.svelte';
 export { default as DonationNeedsMap } from './ui/donation-needs-map.svelte';
 export { default as DropOffShelterMap } from './ui/drop-off-shelter-map.svelte';
 export { default as DonationPinBadge } from './ui/donation-pin-badge.svelte';
@@ -54,6 +58,13 @@ export {
 	type ParkingMapPoint
 } from './domain/parking';
 export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
+export { haversineKm, rankByUserOrigin, sortByDistance } from './domain/shelter-geo';
+export { isShelterSelected } from './domain/shelter-list';
+export {
+	shelterStatusClass,
+	shelterStatusLabel,
+	type ShelterStatusLabels
+} from './domain/shelter-status';
 export {
 	DEFAULT_SITE_KIND,
 	activeSiteKinds,
