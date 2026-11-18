@@ -12,7 +12,6 @@
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Users from '@lucide/svelte/icons/users';
-	import Zap from '@lucide/svelte/icons/zap';
 
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -268,7 +267,7 @@
 {#snippet reportInButton(row: Evacuee, card: boolean)}
 	<Button
 		size="sm"
-		class="gap-1.5 rounded-lg bg-blue-600 px-3 font-semibold text-white shadow-2xs hover:bg-blue-700 {card
+		class="gap-1.5 rounded-lg bg-[#0A2647] px-3 font-semibold text-white shadow-2xs hover:bg-[#051930] {card
 			? 'min-h-11 w-full'
 			: ''}"
 		onclick={(e) => {
@@ -276,7 +275,6 @@
 			onReportIn(row);
 		}}
 	>
-		<Zap class="size-3.5" />
 		<span>{t.reportIn}</span>
 	</Button>
 {/snippet}
