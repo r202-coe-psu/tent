@@ -1,0 +1,84 @@
+---
+id: draft
+title: ย้อนสถานะการพักพิงของผู้อพยพกลับขั้นก่อนหน้า (revert_status) กรณีเช็คอินผิดคน
+status: proposed
+date: 2026-11-18
+updated: 2026-11-18
+requested_by: Feedback ระบบลงทะเบียน — GitHub #1447 (ข้อ 2)
+decided_by:
+layer: volatile
+affects:
+  - docs/data/schema.md §1.4 movement (`action` += `revert_status`; field ใหม่ `from_status` / `to_status`; `reason` บังคับเมื่อ `revert_status`)
+  - docs/prd/role-permission-matrix.md §3 (แถวใหม่ Evacuee status revert)
+  - no schema_v bump (movement ไม่มี `schema_v`; evacuee stay enum ไม่ขยาย — ดู Migration)
+  - frontend/src/lib/features/people/domain (`movementActionSchema`, `Movement`, `assertMovementAllowed`, `applyMovementToStay`, `resolveStatusChangeAction`, `canRevertStatusTo`)
+  - frontend/src/lib/features/people/data (`revertEvacueeStatus`) · application (`useRevertEvacueeStatus`)
+  - frontend/src/lib/features/people/ui/evacuee-profile (status modal, profile view, movement history)
+  - frontend/src/lib/features/shared/domain/in-shelter-day.ts
+---
+
+# draft-evacuee-status-revert — ย้อนสถานะการพักพิงกลับขั้นก่อนหน้า
+
+> **สรุป (TL;DR):**
+>
+> - **เปลี่ยนอะไร:** เพิ่ม movement action `revert_status` ให้ย้อน `current_stay.status` กลับขั้นก่อนหน้าได้ (เช่น `room_confirmed` → `active`, `active` → `arriving`)
+> - **เพื่อใคร/ทำไม:** แก้กรณีเจ้าหน้าที่เช็คอิน / ยืนยันถึงโซนผิดคน — ปัจจุบันไม่มีทางย้อนกลับ
+> - **dev ต้อง build:** domain guard + write path + ตัวเลือกย้อนในโมดัลแก้สถานะ (เฉพาะ SM / SA) + บังคับระบุเหตุผล
+> - **กระทบ:** `schema.md` §1.4 (enum + 2 field optional), role matrix 1 แถว · ไม่ bump `schema_v` · ไม่แก้ `validate_doc_update`
+
+## Why
+
+Feedback ระบบลงทะเบียน (#1447 ข้อ 2): ต้องแก้สถานะผู้อพยพย้อนกลับได้เมื่อเช็คอินผิดคน โดยต้องมีเหตุผลประกอบ. เดิมสถานะเดินหน้าอย่างเดียว (`pre_registered` → `arriving` → `active` → `room_confirmed`) — `assertMovementAllowed` ไม่มี action ย้อน และ `resolveStatusChangeAction` คืน `null` สำหรับทุกการย้อน.
+
+## Change
+
+### Requirements
+
+- **FR-01** — เพิ่ม `revert_status` ใน `movementActionSchema` (action เดียวสำหรับทุกการย้อน; ผลลัพธ์ระบุด้วย `to_status`).
+- **FR-02** — ลำดับ pipeline = `pre_registered` < `arriving` < `active` < `room_confirmed`. `to_status` ต้องอยู่ **ก่อน** สถานะปัจจุบันอย่างเคร่งครัด.
+- **FR-03** — ย้อนได้จาก `active` / `room_confirmed` เท่านั้น; `to_status` ∈ {`pre_registered`, `arriving`, `active`}. ขั้นต่ำที่ต้องรองรับ: `room_confirmed` → `active`; `active` / `room_confirmed` → `arriving`; `active` / `room_confirmed` → `pre_registered`.
+- **FR-04** — `deceased` และ `cancelled` เป็น terminal เหมือนเดิม — ย้อนไม่ได้. `temporary_leave`, `checked_out`, `transferred` ไม่ใช่ต้นทางของการย้อน (กลับเข้าด้วย `check_in` ตามเดิม).
+- **FR-05** — `reason` **บังคับ** nonempty หลัง trim (เหมือน `check_out`) — บังคับทั้งใน `assertMovementAllowed` (domain) และโมดัลแก้สถานะ (UI).
+- **FR-06** — movement doc บันทึก `reason`, `created_by`, `from_status`, `to_status` เพื่อให้ audit trail / ประวัติการเคลื่อนไหวแสดงว่าใคร ย้อนจากอะไรเป็นอะไร เพราะอะไร.
+- **FR-07** — ผลต่อ `current_stay`: `status` = `to_status`; `since` = `occurred_at`; `zone` **ล้างเป็น `null`** เมื่อ `to_status` ต่ำกว่า `active` (`arriving` / `pre_registered`); `room_confirmed` → `active` **คง `zone`** (ล้างเฉพาะการยืนยันถึงโซน — `confirm_room` ตั้งแค่ `status`/`since`, ไม่มี field ยืนยันแยก).
+- **FR-08** — สิทธิ์: เฉพาะ `shelter_manager` (ศูนย์ปัจจุบัน) และ `system_admin`. `registration_staff` ต้องไม่เห็นตัวเลือกย้อนและทำรายการไม่ได้ (UI ซ่อนตัวเลือก + `updateStatus` ปฏิเสธ).
+- **FR-09** — แถว `station_log` (append-only) ที่เขียนโดยขั้นเดินหน้า (เช่น Station 3 `complete` ตอน check-in) **ไม่ถูกแก้ / ลบ** เมื่อย้อน.
+- **FR-10** — ประวัติการเคลื่อนไหวในโปรไฟล์แสดงป้าย "ย้อนสถานะ (Status reverted)" (TH + EN), สถานะต้นทาง → ปลายทาง, เหตุผล และผู้ทำรายการ.
+- **FR-11** — `household.status` ยัง derive จากสถานะสมาชิก (CR-112 A2) — ไม่เขียนแยก.
+- **FR-12** — presence รายวัน (`wasInShelterAllDay`) ถือ `revert_status` ที่ `to_status` ต่ำกว่า `active` เป็นการออกจากศูนย์; ย้อน `room_confirmed` → `active` ไม่เปลี่ยน presence.
+
+### ที่ไม่เปลี่ยน
+
+- CouchDB `validate_doc_update` **ไม่แก้** (stable core): movement เป็น append-only และไม่มี transition check อยู่เดิม — การบังคับ FR-02..FR-05 และ FR-08 อยู่ที่ **domain + UI เท่านั้น** (ไม่มี server-side enforcement ของ role / reason สำหรับ `revert_status`; ผู้ใช้ที่เขียน movement ตรงเข้า CouchDB ได้ยังข้ามได้ — ข้อจำกัดเดียวกับ transition อื่นของ movement).
+- Worker projectors (`worker/.../projectors/evacuee.py`, `occupant.py`) อ่าน `current_stay.status` / `zone` / `since` เท่านั้น ไม่มี enum ของ movement action — ย้อนไป `arriving` / `pre_registered` ทำให้ `checked_in_at = null` และถูกถอดออกจาก `shelter_occupants` อัตโนมัติ; ไม่ต้องแก้ worker หรือ bump `PROJECTION_VERSION`. FastAPI / BFF ไม่มี allow-list ของ movement action.
+
+### Acceptance / DoD
+
+- [ ] SM / SA เปิดโมดัลแก้สถานะของคน `room_confirmed` เห็นตัวเลือก ลงทะเบียนล่วงหน้า / รอส่งต่อ / เข้าพัก; REG ไม่เห็น
+- [ ] เลือกตัวเลือกย้อนโดยไม่ใส่เหตุผล → ยืนยันไม่ได้ (toast) และ domain throw
+- [ ] ย้อน `room_confirmed` → `active` คงโซน; ย้อนเป็น `arriving` / `pre_registered` ล้างโซน
+- [ ] `deceased` / `cancelled` ย้อนไม่ได้
+- [ ] movement ใหม่มี `reason`, `created_by`, `from_status`, `to_status`; ประวัติในโปรไฟล์แสดงรายการ
+- [ ] unit tests: `assertMovementAllowed`, `applyMovementToStay`, `resolveStatusChangeAction`, `revertEvacueeStatus`, `wasInShelterAllDay`; DOM test โมดัล (บังคับเหตุผล + ซ่อนตามสิทธิ์)
+
+## Impact
+
+- **Domain:** `revert_status`, `Movement.from_status` / `to_status`, `canRevertStatusTo`, `listRevertTargets`; `resolveStatusChangeAction` คืน `revert_status` สำหรับการย้อน; `statusChangeHandlerKind` เพิ่ม `revert_status`.
+- **Data / application:** `PeopleRepository.revertEvacueeStatus` + `useRevertEvacueeStatus` (fetch latest → `assertMovementAllowed` → เขียน movement → apply snapshot → refresh household).
+- **UI:** `evacuee-status-modal.svelte` (prop `canRevert`, เหตุผลบังคับ), `evacuee-profile-view.svelte` (gate `canRevertStatus` = SA หรือ SM ของศูนย์ปัจจุบัน), label movement + `MOVEMENT_DOT_CLASS`.
+- **Specs:** `schema.md` §1.4, `role-permission-matrix.md` §3.
+- **Known limitation:** `zoneOnDay` (รายงานมื้ออาหารย้อนหลัง) ข้าม movement ที่ `zone = null` จึงยังเห็นโซนก่อนย้อนในวันก่อนหน้า — ตรงกับพฤติกรรมของ `check_out` ที่ `zone = null`.
+- **เปิดให้ตัดสิน:** `pre_registered` เป็นตัวเลือกย้อนสำหรับทุกคนที่ `active` / `room_confirmed` (ระบบไม่เก็บว่าคนนั้นเคยลงทะเบียนล่วงหน้าหรือไม่) — เจ้าหน้าที่เลือกเอง.
+
+## Migration
+
+ไม่ bump `schema_v`. เทียบ precedent:
+
+- **CR-070** bump evacuee `schema_v` เพราะขยาย **stay status enum** ของ evacuee (`cancelled`) ซึ่ง Zod / `validate_doc_update` ตรวจ. CR นี้ **ไม่เพิ่มค่า stay status** — `to_status` ใช้ค่าที่มีอยู่แล้ว.
+- **CR-112** เพิ่ม movement action `confirm_room` โดยไม่ bump — movement doc ไม่มี `schema_v` ใน `schema.md` §1.4 (factory stamp `1`).
+- `from_status` / `to_status` เป็น field optional ใหม่ (additive); movement เดิมไม่ต้อง backfill; reader ที่ไม่รู้จัก action ใหม่ต้องไม่พัง (UI ใช้ label fallback).
+
+## Decision log
+
+- 2026-11-18 — proposed (ร่างจาก #1447 ข้อ 2). เจ้าของโครงการตัดสินแล้ว: ย้อนได้ทุกขั้นถอยหลังผ่าน action เดียว `revert_status`; เหตุผลบังคับ; เฉพาะ SM (ศูนย์ปัจจุบัน) + SA; `deceased` / `cancelled` terminal; ไม่แตะ `station_log`; ไม่แก้ `validate_doc_update`.
+- decided_by / status: รอเจ้าของโครงการ approve (เลขถัดไปหลัง approve = CR-259).

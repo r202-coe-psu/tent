@@ -238,7 +238,8 @@ const th = {
 			leave_temporary: 'ออกชั่วคราว (Temporary leave)',
 			return_from_leave: 'กลับจากออกชั่วคราว (Return from leave)',
 			mark_deceased: 'เสียชีวิต (Deceased)',
-			zone_change: 'ย้ายโซน (Zone change)'
+			zone_change: 'ย้ายโซน (Zone change)',
+			revert_status: 'ย้อนสถานะ (Status reverted)'
 		} as Record<string, string>,
 		auditLog: 'บันทึกการตรวจสอบ (Audit Log)',
 		updated: 'แก้ไขข้อมูลล่าสุด (Updated)',
@@ -251,6 +252,8 @@ const th = {
 		zoneMoveFailed: (detail: string) => `ไม่สามารถย้ายโซนได้: ${detail}`,
 		checkInNeedsZone: 'การเช็คอินต้องระบุโซน',
 		leaveNeedsReason: 'การออกชั่วคราวต้องระบุเหตุผล',
+		revertNeedsReason: 'การย้อนสถานะต้องระบุเหตุผล',
+		revertNotAllowed: 'เฉพาะผู้จัดการศูนย์หรือผู้ดูแลระบบเท่านั้นที่ย้อนสถานะได้',
 		statusUpdated: 'อัปเดตสถานะการพักพิงเรียบร้อย',
 		statusUpdateFailed: (detail: string) => `ไม่สามารถอัปเดตสถานะได้: ${detail}`,
 		noHouseholdForAddress: 'ไม่พบข้อมูลครัวเรือนสำหรับบันทึกที่อยู่',
@@ -515,7 +518,8 @@ const en: typeof th = {
 			leave_temporary: 'Temporary leave',
 			return_from_leave: 'Returned from leave',
 			mark_deceased: 'Deceased',
-			zone_change: 'Zone change'
+			zone_change: 'Zone change',
+			revert_status: 'Status reverted'
 		},
 		auditLog: 'Audit log',
 		updated: 'Last updated',
@@ -528,6 +532,8 @@ const en: typeof th = {
 		zoneMoveFailed: (detail: string) => `Could not change zone: ${detail}`,
 		checkInNeedsZone: 'A zone is required to check in',
 		leaveNeedsReason: 'A reason is required for temporary leave',
+		revertNeedsReason: 'A reason is required to revert the status',
+		revertNotAllowed: 'Only a shelter manager or system admin can revert a status',
 		statusUpdated: 'Stay status updated',
 		statusUpdateFailed: (detail: string) => `Could not update status: ${detail}`,
 		noHouseholdForAddress: 'No household found to save the address to',

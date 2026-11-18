@@ -307,7 +307,8 @@ export const movementActionSchema = z.enum([
 	'leave_temporary',
 	'return_from_leave',
 	'mark_deceased',
-	'zone_change'
+	'zone_change',
+	'revert_status'
 ]);
 export type MovementAction = z.infer<typeof movementActionSchema>;
 
@@ -746,6 +747,9 @@ export interface Movement extends BaseDoc {
 	zone: string | null;
 	destination?: MovementDestination;
 	reason?: string;
+	/** `revert_status` only: the stay status before / after the revert (draft-evacuee-status-revert). */
+	from_status?: StayStatus;
+	to_status?: StayStatus;
 	occurred_at: Timestamp;
 }
 
@@ -1524,6 +1528,8 @@ export const movementInputSchema = z.object({
 		})
 		.optional(),
 	reason: z.string().trim().optional(),
+	from_status: stayStatusSchema.optional(),
+	to_status: stayStatusSchema.optional(),
 	occurred_at: z.string().optional() // defaults to now() in the factory
 });
 export type MovementInput = z.input<typeof movementInputSchema>;
@@ -1952,6 +1958,8 @@ export function createMovement(input: MovementInput, ctx: AuthorContext, id?: st
 			zone: d.zone,
 			...(d.destination ? { destination: d.destination } : {}),
 			...(d.reason ? { reason: d.reason } : {}),
+			...(d.from_status ? { from_status: d.from_status } : {}),
+			...(d.to_status ? { to_status: d.to_status } : {}),
 			occurred_at: d.occurred_at ?? now()
 		},
 		ctx,
@@ -2055,6 +2063,43 @@ export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
 	'room_confirmed'
 ] as const satisfies readonly StayStatus[];
 
+/**
+ * Forward order of the intake pipeline. A `revert_status` target must rank strictly below the
+ * current status (draft-evacuee-status-revert). Statuses outside this order are never revert
+ * sources or targets.
+ */
+const REVERT_STATUS_RANK: Partial<Record<StayStatus, number>> = {
+	pre_registered: 0,
+	arriving: 1,
+	active: 2,
+	room_confirmed: 3
+};
+
+/** Stay statuses a `revert_status` may start from. */
+export const REVERT_ELIGIBLE_FROM_STATUSES = [
+	'active',
+	'room_confirmed'
+] as const satisfies readonly StayStatus[];
+
+/** Every status a `revert_status` may land on (still subject to the strictly-earlier rule). */
+export const REVERT_TARGET_STATUSES = [
+	'pre_registered',
+	'arriving',
+	'active'
+] as const satisfies readonly StayStatus[];
+
+/** True when `current` → `target` is a permitted backward step. */
+export function canRevertStatusTo(current: StayStatus, target: StayStatus): boolean {
+	if (!(REVERT_ELIGIBLE_FROM_STATUSES as readonly StayStatus[]).includes(current)) return false;
+	if (!(REVERT_TARGET_STATUSES as readonly StayStatus[]).includes(target)) return false;
+	return (REVERT_STATUS_RANK[target] ?? Infinity) < (REVERT_STATUS_RANK[current] ?? -Infinity);
+}
+
+/** Statuses `current` may be reverted to, earliest first. Empty when no revert is possible. */
+export function listRevertTargets(current: StayStatus): StayStatus[] {
+	return REVERT_TARGET_STATUSES.filter((target) => canRevertStatusTo(current, target));
+}
+
 /** Stay statuses that may receive a `transfer_out` action — must be checked in first. */
 export const TRANSFER_OUT_ELIGIBLE_STATUSES = [
 	'active',
@@ -2153,7 +2198,13 @@ export function listPendingZoneArrivalConfirmations(evacuees: readonly Evacuee[]
 export function assertMovementAllowed(
 	evacuee: Evacuee,
 	action: MovementAction,
-	opts: { reason?: string | null; notes?: string | null; systemClose?: boolean } = {}
+	opts: {
+		reason?: string | null;
+		notes?: string | null;
+		systemClose?: boolean;
+		/** Required for `revert_status`: the status to step back to. */
+		toStatus?: StayStatus | null;
+	} = {}
 ): void {
 	const status = evacuee.current_stay.status;
 	if (opts.systemClose) {
@@ -2189,6 +2240,14 @@ export function assertMovementAllowed(
 		const remark = (opts.reason ?? opts.notes ?? '').trim();
 		if (!remark) {
 			throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
+		}
+	}
+	if (action === 'revert_status') {
+		if (!opts.toStatus || !canRevertStatusTo(status, opts.toStatus)) {
+			throw new Error(`ไม่สามารถย้อนสถานะจาก ${status} เป็น ${opts.toStatus ?? '-'} ได้`);
+		}
+		if (!(opts.reason ?? '').trim()) {
+			throw new Error('การย้อนสถานะต้องระบุเหตุผล');
 		}
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
@@ -2248,8 +2307,24 @@ export function applyMovementToStay(
 	assertMovementAllowed(evacuee, movement.action, {
 		reason: movement.reason,
 		notes: undefined,
-		systemClose: opts.systemClose
+		systemClose: opts.systemClose,
+		toStatus: movement.to_status
 	});
+	if (movement.action === 'revert_status') {
+		// assertMovementAllowed guarantees `to_status` is a valid earlier status. Below `active`
+		// the person has no zone; reverting room_confirmed → active keeps the zone (only the
+		// confirmation is undone).
+		const target = movement.to_status as StayStatus;
+		return {
+			...evacuee,
+			updated_at: now(),
+			current_stay: {
+				status: target,
+				zone: target === 'active' ? evacuee.current_stay.zone : null,
+				since: movement.occurred_at
+			}
+		};
+	}
 	if (movement.action === 'zone_change') {
 		const nextZone = movement.zone?.trim() || null;
 		if (!nextZone) {
@@ -2284,7 +2359,7 @@ export function applyMovementToStay(
 		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
 	}
 	const statusByAction: Record<
-		Exclude<MovementAction, 'zone_change' | 'check_in' | 'return_from_leave'>,
+		Exclude<MovementAction, 'zone_change' | 'check_in' | 'return_from_leave' | 'revert_status'>,
 		StayStatus
 	> = {
 		check_out: 'checked_out',
@@ -2312,7 +2387,9 @@ export function applyMovementToStay(
  * the status is unchanged, when `current` isn't a valid source for that target per
  * the movement guards in `assertMovementAllowed` (e.g. `checked_out` → `temporary_leave`
  * skips a required check-in), or when no movement action reaches it: `pre_registered`
- * is only ever an initial state, never a manual return target.
+ * is only ever an initial state, never a manual forward target. A strictly earlier pipeline
+ * status (`pre_registered` < `arriving` < `active` < `room_confirmed`) resolves to `revert_status`
+ * — callers must additionally gate that action by role and require a reason.
  */
 export function resolveStatusChangeAction(
 	current: StayStatus,
@@ -2320,6 +2397,7 @@ export function resolveStatusChangeAction(
 ): MovementAction | null {
 	if (current === target) return null;
 	if (current === 'deceased' || current === 'cancelled') return null;
+	if (canRevertStatusTo(current, target)) return 'revert_status';
 	switch (target) {
 		case 'active':
 			// CR-112 A1: temporary_leave return is Check-in → active (zone required),
@@ -2363,12 +2441,14 @@ export function normalizeCheckoutRemark(reason: string | null | undefined): stri
  * Which staff mutation path executes a resolved movement action.
  * `confirm_room` uses the dedicated Zone Arrival Confirmation write path.
  */
-export type StatusChangeHandlerKind = 'check_in' | 'check_out' | 'confirm_room' | 'record';
+export type StatusChangeHandlerKind =
+	'check_in' | 'check_out' | 'confirm_room' | 'revert_status' | 'record';
 
 export function statusChangeHandlerKind(action: MovementAction): StatusChangeHandlerKind {
 	if (action === 'check_in') return 'check_in';
 	if (action === 'check_out') return 'check_out';
 	if (action === 'confirm_room') return 'confirm_room';
+	if (action === 'revert_status') return 'revert_status';
 	return 'record';
 }
 

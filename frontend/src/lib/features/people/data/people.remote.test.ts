@@ -1235,6 +1235,42 @@ describe('check-in / check-out', () => {
 		});
 	});
 
+	describe('revertEvacueeStatus', () => {
+		it('reverts room_confirmed → active with an audited movement', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const confirmed = await repo.confirmRoom(checkedIn, ctx);
+			const updated = await repo.revertEvacueeStatus(confirmed, ctx, 'active', ' ผิดคน ');
+			expect(updated.current_stay.status).toBe('active');
+			expect(updated.current_stay.zone).toBe('zone-a');
+			expect((await repo.listMovements()).at(-1)).toMatchObject({
+				action: 'revert_status',
+				reason: 'ผิดคน',
+				from_status: 'room_confirmed',
+				to_status: 'active',
+				created_by: ctx.createdBy
+			});
+		});
+
+		it('reverts active → arriving and clears the zone', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const updated = await repo.revertEvacueeStatus(checkedIn, ctx, 'arriving', 'ผิดคน');
+			expect(updated.current_stay.status).toBe('arriving');
+			expect(updated.current_stay.zone).toBeNull();
+		});
+
+		it('rejects a blank reason and writes no movement', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const before = (await repo.listMovements()).length;
+			await expect(repo.revertEvacueeStatus(checkedIn, ctx, 'arriving', '  ')).rejects.toThrow(
+				/เหตุผล/
+			);
+			expect(await repo.listMovements()).toHaveLength(before);
+		});
+	});
+
 	describe('confirmRoomForHousehold', () => {
 		it('bulk-confirms only pending household members (active with zone)', async () => {
 			const household = await repo.createHousehold({ label: 'ครัวเรือนยืนยันโซน' }, ctx);

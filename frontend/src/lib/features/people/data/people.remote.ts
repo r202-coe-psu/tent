@@ -46,6 +46,7 @@ import {
 	type MedicalInput,
 	type Movement,
 	type MovementAction,
+	type StayStatus,
 	dormFieldsFor,
 	memberExtrasFor,
 	registrationMedicalInput,
@@ -1290,11 +1291,43 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return updated;
 	}
 
+	/**
+	 * Step an evacuee back to an earlier stay status (draft-evacuee-status-revert). Appends a
+	 * `revert_status` movement carrying `from_status` / `to_status` / `reason`, then applies it
+	 * (zone cleared below `active`). Role gating (shelter_manager / system_admin) is a UI concern.
+	 * Append-only `station_log` rows written by earlier forward steps are left untouched.
+	 */
+	async revertEvacueeStatus(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		toStatus: StayStatus,
+		reason: string
+	): Promise<Evacuee> {
+		const trimmed = reason.trim();
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'revert_status', { reason: trimmed, toStatus });
+		const movement = createMovement(
+			{
+				evacuee_id: latest._id,
+				action: 'revert_status',
+				zone: toStatus === 'active' ? latest.current_stay.zone : null,
+				reason: trimmed,
+				from_status: latest.current_stay.status,
+				to_status: toStatus
+			},
+			ctx
+		);
+		await this.repo.put(movement);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
+	}
+
 	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
 	 *  Fetches the latest revision first (see fetchLatestOrThrow). */
 	async recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
 	): Promise<Evacuee> {

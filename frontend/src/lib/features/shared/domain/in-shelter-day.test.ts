@@ -181,4 +181,29 @@ describe('wasInShelterAllDay for a day that is still running', () => {
 			})
 		).toBe(true);
 	});
+
+	it('is false after a revert to arriving before the day (person is no longer in the shelter)', () => {
+		expect(
+			wasInShelterAllDay({
+				day: DAY,
+				movements: [
+					{ action: 'check_in', ...at('2026-11-07T03:00:00Z') },
+					{ action: 'revert_status', to_status: 'arriving', ...at('2026-11-08T03:00:00Z') }
+				]
+			})
+		).toBe(false);
+	});
+
+	it('stays true after a revert room_confirmed → active (still in the shelter)', () => {
+		expect(
+			wasInShelterAllDay({
+				day: DAY,
+				movements: [
+					{ action: 'check_in', ...at('2026-11-07T03:00:00Z') },
+					{ action: 'confirm_room', ...at('2026-11-07T04:00:00Z') },
+					{ action: 'revert_status', to_status: 'active', ...at('2026-11-08T03:00:00Z') }
+				]
+			})
+		).toBe(true);
+	});
 });

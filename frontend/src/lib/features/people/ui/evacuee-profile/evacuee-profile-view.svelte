@@ -28,6 +28,7 @@
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
 		useConfirmRoom,
+		useRevertEvacueeStatus,
 		useRecordMovement,
 		resolveStatusChangeAction,
 		normalizeCheckoutRemark,
@@ -105,6 +106,18 @@
 		);
 	});
 	const profileReadonly = $derived(readonly || !canEditProfile);
+
+	/** Reverting a stay status backwards is manager-level: system_admin, or shelter_manager of the current shelter. */
+	const canRevertStatus = $derived.by(() => {
+		if (profileReadonly || !authStore.user) return false;
+		const roles = authStore.user.roles;
+		if (isSystemAdmin(roles)) return true;
+		const scopedShelter = shelterCodeFromRoles(roles);
+		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
+		return (
+			!!scopedShelter && scopedShelter.toUpperCase() === currentShelter && isShelterManager(roles)
+		);
+	});
 
 	const STATUS_STYLE: Record<StayStatus, { colorClass: string; dotClass: string }> = {
 		active: {
@@ -206,6 +219,7 @@
 	const checkInMutation = useCheckInEvacuee();
 	const checkOutMutation = useCheckOutEvacuee();
 	const confirmRoomMutation = useConfirmRoom();
+	const revertStatusMutation = useRevertEvacueeStatus();
 	const recordMovementMutation = useRecordMovement();
 	const createMedicalMutation = useCreateMedical();
 	const patchMedicalMutation = usePatchMedical();
@@ -287,7 +301,8 @@
 		leave_temporary: 'fill-amber-500 text-amber-500',
 		return_from_leave: 'fill-emerald-500 text-emerald-500',
 		mark_deceased: 'fill-slate-950 text-slate-950 dark:fill-slate-100 dark:text-slate-100',
-		zone_change: 'fill-amber-600 text-amber-600'
+		zone_change: 'fill-amber-600 text-amber-600',
+		revert_status: 'fill-rose-500 text-rose-500'
 	};
 
 	const isLoading = $derived(
@@ -407,7 +422,18 @@
 			}
 			const ctx = getAuthorContext();
 			const kind = statusChangeHandlerKind(action);
-			if (kind === 'check_in') {
+			if (kind === 'revert_status') {
+				if (!canRevertStatus) {
+					toast.error(t.statusUpdateFailed(t.revertNotAllowed));
+					return;
+				}
+				const trimmed = (reason ?? '').trim();
+				if (!trimmed) {
+					toast.error(t.revertNeedsReason);
+					return;
+				}
+				await revertStatusMutation.mutateAsync({ evacuee, ctx, toStatus: status, reason: trimmed });
+			} else if (kind === 'check_in') {
 				const zone = evacuee.current_stay.zone?.trim();
 				if (!zone) {
 					toast.error(t.checkInNeedsZone);
@@ -421,7 +447,12 @@
 				await checkOutMutation.mutateAsync({ evacuee, ctx, reason: normalized });
 			} else if (kind === 'confirm_room') {
 				await confirmRoomMutation.mutateAsync({ evacuee, ctx });
-			} else if (action !== 'check_in' && action !== 'check_out' && action !== 'confirm_room') {
+			} else if (
+				action !== 'check_in' &&
+				action !== 'check_out' &&
+				action !== 'confirm_room' &&
+				action !== 'revert_status'
+			) {
 				if (action === 'leave_temporary') {
 					const trimmed = (reason ?? '').trim();
 					if (!trimmed) {
@@ -846,6 +877,13 @@
 								<div class="min-w-0 flex-1 space-y-0.5">
 									<div class="font-semibold break-words text-foreground">
 										{t.movement[m.action]}
+										{#if m.action === 'revert_status' && m.from_status && m.to_status}
+											<span class="font-normal text-muted-foreground">
+												· {t.status[m.from_status]?.shortLabel ?? m.from_status} → {t.status[
+													m.to_status
+												]?.shortLabel ?? m.to_status}
+											</span>
+										{/if}
 										{#if m.zone}
 											<span class="font-normal text-muted-foreground">
 												· {t.movementZone(zoneLabel(m.zone, shelterZones))}
@@ -856,6 +894,9 @@
 										{formatDateTime(m.occurred_at)}
 										{#if m.reason}
 											· {movementReasonLabel(m.reason, langState.current)}
+										{/if}
+										{#if m.action === 'revert_status' && m.created_by}
+											· {t.registeredBy(m.created_by)}
 										{/if}
 									</div>
 								</div>
@@ -928,6 +969,7 @@
 					show={true}
 					{evacuee}
 					{statusConfig}
+					canRevert={canRevertStatus}
 					onClose={() => (showStatusModal = false)}
 					onUpdateStatus={updateStatus}
 				/>

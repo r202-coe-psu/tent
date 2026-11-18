@@ -33,7 +33,8 @@ import type {
 	Medical,
 	MedicalInput,
 	MovementAction,
-	ScreeningInput
+	ScreeningInput,
+	StayStatus
 } from '../domain/people';
 import type {
 	FamilyReportInPayload,
@@ -385,7 +386,7 @@ export const useRecordMovement = () => {
 			reason
 		}: {
 			evacuee: Evacuee;
-			action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>;
+			action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>;
 			ctx: AuthorContext;
 			reason?: string;
 		}) =>
@@ -395,6 +396,28 @@ export const useRecordMovement = () => {
 				ctx,
 				reason !== undefined ? { reason } : undefined
 			),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
+	}));
+};
+
+export const useRevertEvacueeStatus = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			evacuee,
+			ctx,
+			toStatus,
+			reason
+		}: {
+			evacuee: Evacuee;
+			ctx: AuthorContext;
+			toStatus: StayStatus;
+			reason: string;
+		}) => peopleRepository().revertEvacueeStatus(evacuee, ctx, toStatus, reason),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });

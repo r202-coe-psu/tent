@@ -27,6 +27,8 @@ import {
 	CHECK_IN_ELIGIBLE_STATUSES,
 	CHECK_OUT_ELIGIBLE_STATUSES,
 	resolveStatusChangeAction,
+	canRevertStatusTo,
+	listRevertTargets,
 	normalizeCheckoutRemark,
 	statusChangeHandlerKind,
 	matchesEvacueePhoneSearch,
@@ -1298,6 +1300,151 @@ describe('statusChangeHandlerKind', () => {
 		expect(statusChangeHandlerKind('confirm_room')).toBe('confirm_room');
 		expect(statusChangeHandlerKind('leave_temporary')).toBe('record');
 		expect(statusChangeHandlerKind('return_from_leave')).toBe('record');
+	});
+
+	it('routes revert_status to its own handler', () => {
+		expect(statusChangeHandlerKind('revert_status')).toBe('revert_status');
+	});
+});
+
+describe('revert_status (draft-evacuee-status-revert)', () => {
+	const stayOf = (status: StayStatus, zone: string | null = 'Z1') => {
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
+		return { ...e, current_stay: { status, zone, since: '2026-09-02T10:00:00.000Z' } };
+	};
+	const revert = (e: ReturnType<typeof stayOf>, to: StayStatus, reason = 'เช็คอินผิดคน') =>
+		createMovement(
+			{
+				evacuee_id: e._id,
+				action: 'revert_status',
+				zone: null,
+				reason,
+				from_status: e.current_stay.status,
+				to_status: to
+			},
+			ctx
+		);
+
+	it('allows only strictly earlier pipeline statuses', () => {
+		expect(canRevertStatusTo('room_confirmed', 'active')).toBe(true);
+		expect(canRevertStatusTo('room_confirmed', 'arriving')).toBe(true);
+		expect(canRevertStatusTo('room_confirmed', 'pre_registered')).toBe(true);
+		expect(canRevertStatusTo('active', 'arriving')).toBe(true);
+		expect(canRevertStatusTo('active', 'pre_registered')).toBe(true);
+		expect(canRevertStatusTo('active', 'active')).toBe(false);
+		expect(canRevertStatusTo('active', 'room_confirmed')).toBe(false);
+		expect(canRevertStatusTo('arriving', 'pre_registered')).toBe(false);
+		expect(canRevertStatusTo('checked_out', 'active')).toBe(false);
+		expect(canRevertStatusTo('deceased', 'active')).toBe(false);
+		expect(canRevertStatusTo('cancelled', 'pre_registered')).toBe(false);
+		expect(canRevertStatusTo('active', 'checked_out')).toBe(false);
+	});
+
+	it('lists revert targets earliest first', () => {
+		expect(listRevertTargets('room_confirmed')).toEqual(['pre_registered', 'arriving', 'active']);
+		expect(listRevertTargets('active')).toEqual(['pre_registered', 'arriving']);
+		expect(listRevertTargets('arriving')).toEqual([]);
+		expect(listRevertTargets('deceased')).toEqual([]);
+	});
+
+	it('resolves backward picks to revert_status and keeps forward resolution unchanged', () => {
+		expect(resolveStatusChangeAction('room_confirmed', 'active')).toBe('revert_status');
+		expect(resolveStatusChangeAction('active', 'arriving')).toBe('revert_status');
+		expect(resolveStatusChangeAction('room_confirmed', 'pre_registered')).toBe('revert_status');
+		expect(resolveStatusChangeAction('arriving', 'active')).toBe('check_in');
+		expect(resolveStatusChangeAction('active', 'room_confirmed')).toBe('confirm_room');
+		expect(resolveStatusChangeAction('checked_out', 'arriving')).toBeNull();
+		expect(resolveStatusChangeAction('deceased', 'arriving')).toBeNull();
+	});
+
+	it('assertMovementAllowed requires a nonempty reason', () => {
+		const e = stayOf('room_confirmed');
+		expect(() => assertMovementAllowed(e, 'revert_status', { toStatus: 'active' })).toThrow(
+			/เหตุผล/
+		);
+		expect(() =>
+			assertMovementAllowed(e, 'revert_status', { toStatus: 'active', reason: '   ' })
+		).toThrow(/เหตุผล/);
+		expect(() =>
+			assertMovementAllowed(e, 'revert_status', { toStatus: 'active', reason: 'ผิดคน' })
+		).not.toThrow();
+	});
+
+	it('assertMovementAllowed rejects missing, forward and ineligible targets', () => {
+		expect(() =>
+			assertMovementAllowed(stayOf('active'), 'revert_status', { reason: 'x' })
+		).toThrow();
+		expect(() =>
+			assertMovementAllowed(stayOf('active'), 'revert_status', {
+				toStatus: 'room_confirmed',
+				reason: 'x'
+			})
+		).toThrow();
+		expect(() =>
+			assertMovementAllowed(stayOf('arriving'), 'revert_status', {
+				toStatus: 'pre_registered',
+				reason: 'x'
+			})
+		).toThrow();
+		expect(() =>
+			assertMovementAllowed(stayOf('checked_out'), 'revert_status', {
+				toStatus: 'active',
+				reason: 'x'
+			})
+		).toThrow();
+	});
+
+	it('deceased and cancelled stay terminal', () => {
+		expect(() =>
+			assertMovementAllowed(stayOf('deceased'), 'revert_status', {
+				toStatus: 'active',
+				reason: 'x'
+			})
+		).toThrow(/สุดท้าย/);
+		expect(() =>
+			assertMovementAllowed(stayOf('cancelled'), 'revert_status', {
+				toStatus: 'pre_registered',
+				reason: 'x'
+			})
+		).toThrow(/สุดท้าย/);
+	});
+
+	it('createMovement stamps reason and from/to status', () => {
+		const e = stayOf('room_confirmed');
+		const m = revert(e, 'active');
+		expect(m.action).toBe('revert_status');
+		expect(m.reason).toBe('เช็คอินผิดคน');
+		expect(m.from_status).toBe('room_confirmed');
+		expect(m.to_status).toBe('active');
+	});
+
+	it('room_confirmed → active keeps the zone', () => {
+		const e = stayOf('room_confirmed', 'Z1');
+		const updated = applyMovementToStay(e, revert(e, 'active'));
+		expect(updated.current_stay.status).toBe('active');
+		expect(updated.current_stay.zone).toBe('Z1');
+	});
+
+	it('reverting below active clears the zone', () => {
+		const a = stayOf('active', 'Z1');
+		expect(applyMovementToStay(a, revert(a, 'arriving')).current_stay).toMatchObject({
+			status: 'arriving',
+			zone: null
+		});
+		const r = stayOf('room_confirmed', 'Z2');
+		expect(applyMovementToStay(r, revert(r, 'pre_registered')).current_stay).toMatchObject({
+			status: 'pre_registered',
+			zone: null
+		});
+	});
+
+	it('applyMovementToStay refuses a revert without a reason', () => {
+		const e = stayOf('active');
+		expect(() => applyMovementToStay(e, revert(e, 'arriving', ''))).toThrow(/เหตุผล/);
 	});
 });
 

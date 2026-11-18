@@ -15,8 +15,14 @@
 		dotClass: string;
 	}
 
-	/** Manual picker targets only — transferred / terminal / intake statuses are excluded. */
+	/**
+	 * Manual picker targets only — transferred / terminal statuses are excluded. The intake
+	 * statuses (`pre_registered`, `arriving`) appear only as backward revert targets, and only
+	 * when `canRevert` is set (shelter manager / system admin).
+	 */
 	const MANUAL_STATUS_OPTIONS: readonly StayStatus[] = [
+		'pre_registered',
+		'arriving',
 		'active',
 		'room_confirmed',
 		'temporary_leave',
@@ -27,12 +33,15 @@
 		show,
 		evacuee,
 		statusConfig,
+		canRevert = false,
 		onClose,
 		onUpdateStatus
 	}: {
 		show: boolean;
 		evacuee: Evacuee;
 		statusConfig: Partial<Record<StayStatus, StatusConfig>>;
+		/** Allow backward (`revert_status`) targets — shelter_manager / system_admin only. */
+		canRevert?: boolean;
 		onClose: () => void;
 		onUpdateStatus: (status: StayStatus, reason?: string) => Promise<void>;
 	} = $props();
@@ -47,17 +56,27 @@
 
 	const selectableOptions = $derived(
 		MANUAL_STATUS_OPTIONS.flatMap((statusKey) => {
+			const action = resolveStatusChangeAction(evacuee.current_stay.status, statusKey);
 			const reachable =
 				statusKey === evacuee.current_stay.status ||
-				resolveStatusChangeAction(evacuee.current_stay.status, statusKey) !== null;
+				(action !== null && (action !== 'revert_status' || canRevert));
 			const cfg = statusConfig[statusKey];
 			if (!reachable || !cfg) return [];
 			return [[statusKey, cfg] as const];
 		})
 	);
 
-	const needsReason = $derived(
-		pendingStatus === 'temporary_leave' || pendingStatus === 'checked_out'
+	function requiresReason(status: StayStatus): boolean {
+		return (
+			status === 'temporary_leave' ||
+			status === 'checked_out' ||
+			resolveStatusChangeAction(evacuee.current_stay.status, status) === 'revert_status'
+		);
+	}
+
+	const needsReason = $derived(requiresReason(pendingStatus));
+	const isRevert = $derived(
+		resolveStatusChangeAction(evacuee.current_stay.status, pendingStatus) === 'revert_status'
 	);
 
 	const confirmDisabled = $derived(saving || pendingStatus === evacuee.current_stay.status);
@@ -65,7 +84,7 @@
 	function selectStatus(statusKey: StayStatus) {
 		if (saving) return;
 		pendingStatus = statusKey;
-		if (statusKey !== 'temporary_leave' && statusKey !== 'checked_out') {
+		if (!requiresReason(statusKey)) {
 			reason = '';
 		}
 	}
@@ -74,7 +93,11 @@
 		if (confirmDisabled) return;
 		if (needsReason && !reason.trim()) {
 			toast.error(
-				pendingStatus === 'checked_out' ? t.checkedOutReasonRequired : t.leaveReasonRequired
+				isRevert
+					? t.revertReasonRequired
+					: pendingStatus === 'checked_out'
+						? t.checkedOutReasonRequired
+						: t.leaveReasonRequired
 			);
 			return;
 		}
@@ -143,7 +166,7 @@
 						bind:value={reason}
 						disabled={saving}
 						rows={3}
-						placeholder={t.reasonPlaceholder}
+						placeholder={isRevert ? t.revertReasonPlaceholder : t.reasonPlaceholder}
 						class="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none disabled:opacity-60"
 					></textarea>
 				</div>

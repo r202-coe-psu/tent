@@ -334,9 +334,19 @@ export interface PeopleRepository {
 	 */
 	recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
+	): Promise<Evacuee>;
+	/**
+	 * Step back to an earlier stay status via a `revert_status` movement (nonempty `reason`
+	 * required; zone cleared below `active`). draft-evacuee-status-revert.
+	 */
+	revertEvacueeStatus(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		toStatus: StayStatus,
+		reason: string
 	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade

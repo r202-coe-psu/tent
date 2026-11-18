@@ -29,6 +29,16 @@ const LEAVES = new Set(['check_out', 'transfer_out', 'leave_temporary', 'mark_de
 export interface PresenceMovement {
 	action: string;
 	occurred_at: string;
+	/** `revert_status` only: stepping back to a pre-arrival status counts as leaving. */
+	to_status?: string | null;
+}
+
+/** A `revert_status` below `active` takes the person out of the shelter (same as a leave). */
+const REVERT_LEAVE_TARGETS = new Set(['pre_registered', 'arriving', 'kiosk_registered']);
+
+function isLeave(m: { action: string; to_status?: string | null }): boolean {
+	if (m.action === 'revert_status') return REVERT_LEAVE_TARGETS.has(m.to_status ?? '');
+	return LEAVES.has(m.action);
 }
 
 export interface PresenceInput {
@@ -47,18 +57,22 @@ export function wasInShelterAllDay({ day, movements, current_stay }: PresenceInp
 	}
 
 	const sorted = movements
-		.map((m) => ({ action: m.action, at: new Date(m.occurred_at).getTime() }))
+		.map((m) => ({
+			action: m.action,
+			to_status: m.to_status,
+			at: new Date(m.occurred_at).getTime()
+		}))
 		.sort((a, b) => a.at - b.at);
 
 	let inside = false;
 	for (const m of sorted) {
 		if (m.at >= dayEnd) break;
 		if (m.at >= dayStart) {
-			if (!inside || LEAVES.has(m.action)) return false;
+			if (!inside || isLeave(m)) return false;
 			continue;
 		}
 		if (ENTERS.has(m.action)) inside = true;
-		else if (LEAVES.has(m.action)) inside = false;
+		else if (isLeave(m)) inside = false;
 	}
 	return inside;
 }
