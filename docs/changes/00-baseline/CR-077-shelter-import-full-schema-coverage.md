@@ -5,6 +5,8 @@ status: approved
 date: 2026-08-15
 requested_by: ทีมพัฒนา (branch `refactor-import-shelter-excel`)
 decided_by: project owner (2026-08-21)
+updated: 2026-11-18
+note: decision sync 2026-11-18 (#1432) — FR-77-8 ไม่ครอบคลุม `community` แล้ว (มีคอลัมน์ `ชุมชน` ในไฟล์ อัปเดตทับ = เขียนทับ) ดู Decision log ท้ายไฟล์
 layer: volatile
 extends: CR-039
 affects:
@@ -61,7 +63,7 @@ template generator, parser และ validator ใช้ร่วมกัน (�
 | กรณี | วิธี |
 | --- | --- |
 | enum ของ schema | dropdown เก็บ **label ไทย** → validator resolve เป็น code (คงหลัก CR-039) |
-| master_data | เฉพาะ `shelter_type`; `municipality_zone` / `community` / `vulnerable_group` **ไม่อยู่ในไฟล์** |
+| master_data | เฉพาะ `shelter_type`; `municipality_zone` / `vulnerable_group` **ไม่อยู่ในไฟล์** (`community` เพิ่มเป็นคอลัมน์ข้อความอิสระ — #1432) |
 | array ที่เลือกได้หลายค่า (`communications`, `pet conditions`) | แตกเป็นคอลัมน์ ใช่/ไม่ใช่ ต่อค่า แล้วประกอบกลับ (Excel data validation เลือกได้ค่าเดียวต่อเซลล์) |
 | list ที่มีอันดับ (`luggage.rules`, `parking.rules`) | เซลล์เดียว คั่นด้วย `\|` |
 | composite (`sub_storage`) | `ชื่อ:ประเภท:ตร.ม.` คั่นแต่ละรายการด้วย `\|` |
@@ -75,7 +77,7 @@ template generator, parser และ validator ใช้ร่วมกัน (�
 | ชื่อซ้ำกันเองในไฟล์ | แถวหลังถูก reject เป็น validation error |
 | การเทียบชื่อ | normalize: trim + ยุบช่องว่าง + lowercase |
 
-**อัปเดตทับต้องไม่ลบสิ่งที่ไฟล์ไม่มี:** ฟิลด์ที่ workbook ไม่มีคอลัมน์ (`municipality_zone`, `community`,
+**อัปเดตทับต้องไม่ลบสิ่งที่ไฟล์ไม่มี:** ฟิลด์ที่ workbook ไม่มีคอลัมน์ (`municipality_zone`,
 `admission_policy.supported_vulnerable_groups`) ต้องคงค่าเดิมที่ตั้งไว้ในระบบ — endpoint `PATCH` merge ระดับบนสุด
 การส่ง `null`/`[]` ไปจึงเท่ากับลบทิ้ง
 
@@ -103,8 +105,11 @@ ID ระดับ CR (`FR-77-x`) — ใช้ตรวจรับงานข
 - **FR-77-6** — ทุกแถวที่ validate ไม่ผ่าน ต้องมีข้อความผิดพลาดอย่างน้อยหนึ่งข้อ ระบุคอลัมน์เสมอ
   (ห้ามมีแถว "ผิดพลาด" ที่ไม่มีเหตุผล)
 - **FR-77-7** — ตรวจชื่อซ้ำกับศูนย์ในระบบและซ้ำกันเองในไฟล์ ตามพฤติกรรมใน §3
-- **FR-77-8** — เมื่อเลือก "อัปเดตทับ" ระบบต้องคง `municipality_zone`, `community`,
+- **FR-77-8** — เมื่อเลือก "อัปเดตทับ" ระบบต้องคง `municipality_zone`,
   `admission_policy.supported_vulnerable_groups` ของศูนย์เดิมไว้
+  > **Note (#1432, 2026-11-18):** FR-77-8 **ไม่ครอบคลุม `community` แล้ว** — ชีต `ข้อมูลศูนย์` มีคอลัมน์ `ชุมชน`
+  > (ข้อความอิสระ ไม่บังคับ ตาม CR-137) "อัปเดตทับ" เขียนทับ `community` ตามไฟล์ (ช่องว่าง = ล้างเป็น `null`
+  > เหมือนคอลัมน์อื่น); "ข้าม" ไม่แตะศูนย์เดิม. `municipality_zone` ยังเป็นช่องที่ตั้งในแอปเท่านั้น.
 - **FR-77-9** — บันทึก `shelter_import_log` v2 ต่อหนึ่ง batch ตาม §4 พร้อม counters ที่นับครบทุกแถว
 - **FR-77-10** — สิทธิ์ใช้งานหน้า import คง **system_admin เท่านั้น** (ไม่เปลี่ยนจาก CR-039)
 
@@ -113,8 +118,8 @@ ID ระดับ CR (`FR-77-x`) — ใช้ตรวจรับงานข
 - ดาวน์โหลดเทมเพลต → กรอก → อัปโหลด → preview แสดงจำนวนศูนย์/โซน/พร้อมนำเข้า/ผิดพลาด/ชื่อซ้ำ ครบ
 - นำเข้าไฟล์ที่มีศูนย์ 1 แห่ง + โซน 3 แถว → ได้ศูนย์ 1 แห่งที่มี 3 โซน
 - นำเข้าไฟล์เดิมซ้ำโดยเลือก "ข้าม" → ไม่มีศูนย์ใหม่, log นับ `skipped_count`
-- นำเข้าไฟล์เดิมซ้ำโดยเลือก "อัปเดตทับ" หลังตั้ง `municipality_zone`/`community`/กลุ่มเปราะบางในระบบ →
-  ค่าทั้งสามยังอยู่ครบหลัง import
+- นำเข้าไฟล์เดิมซ้ำโดยเลือก "อัปเดตทับ" หลังตั้ง `municipality_zone`/กลุ่มเปราะบางในระบบ →
+  ค่าทั้งสองยังอยู่ครบหลัง import
 - กรอกค่าผิดในคอลัมน์ที่ validator ประกอบเอง (เช่น จำนวนที่จอดรถติดลบ) → แถวขึ้นผิดพลาดพร้อมชื่อคอลัมน์
 - ไฟล์เทมเพลตรุ่นก่อน (ชีตโซนหัว `ลำดับที่`, `*` เป็นคอลัมน์แยก) ยัง import ได้
 - `pnpm lint` / `pnpm check` / `pnpm test` ผ่าน
@@ -171,3 +176,4 @@ ID ระดับ CR (`FR-77-x`) — ใช้ตรวจรับงานข
 - 2026-08-15 — proposed (ร่างจาก branch `refactor-import-shelter-excel`; ยังมี 5 ข้อรอเคาะ)
 - 2026-08-21 — approved (project owner อนุมัติสเปก CR-077)
 - 2026-11-12 — amended โดย [CR-252](CR-252-external-shelter.md) (external shelter columns + validation; approved)
+- 2026-11-18 — **decision sync (#1432 · ไม่ bump schema_v):** เพิ่มคอลัมน์ `ชุมชน` (ข้อความอิสระ ไม่บังคับ) ในชีต `ข้อมูลศูนย์`; FR-77-8 ไม่ครอบคลุม `community` แล้ว (อัปเดตทับ = เขียนทับ รวมล้างเป็น `null` เมื่อว่าง); `municipality_zone` คงเดิม

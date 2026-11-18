@@ -87,7 +87,8 @@ _Avoid_: Registration, arrival, Zone Arrival Confirmation.
 
 **Backfill Import**:
 The people-import file used to bring in evacuees who have actually stayed (still housed or already left) with their real check-in/check-out times — e.g. an LAO or caretaker-home shelter that opened before the system. Each row carries a stay status (`active` / `checked_out`), arrival time, departure time and zone, and writes back-dated `check_in` / `check_out` movements (the check-out reason is `backfill_import`).
-_Avoid_: Pre-registration, advance booking (a Backfill Import never creates `pre_registered` people).
+A row whose stay status is blank (#1448) carries no stay: that person is imported `pre_registered` with no movement and waits in the Station 1 Report-in queue (decided per person, so a household may mix statuses); a blank status with a time or zone filled in is a validation error.
+_Avoid_: Advance booking (a booking comes from public booking / the registration page, not a stay that happened — a blank-status row is only a roster entry awaiting Report-in).
 
 **Zone Arrival Confirmation**:
 The explicit confirmation that an Evacuee has physically reached their assigned zone/bed after check-in; persisted as stay status `room_confirmed` (after `active`).
