@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-261
 title: หน้า public /shelters — ไม่แสดงบ้านพี่เลี้ยงที่ไม่ใช่ External, กรองที่ DB, คงรัศมีเริ่มต้น 5 กม., การ์ดสรุปจาก endpoint ใหม่ (#1419)
-status: proposed
+status: approved
 date: 2026-11-18
 requested_by: "GitHub #1419 (ทีม — Before Floods)"
-decided_by: รอ approve (Team Lead)
+decided_by: kong
+decision_date: 2026-11-18
 layer: volatile
 affects:
   - docs/changes/00-baseline/CR-067-shelter-site-kind.md (Phase 1: "Public map: ไอคอนศูนย์ ≠ ไอคอนบ้านพี่เลี้ยง" — แก้เฉพาะหน้า /shelters)
@@ -101,3 +102,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่
 - 2026-11-18 — owner เพิ่มขอบเขตใน #1419: กรองที่ DB, การ์ดไม่ตามตัวกรองด้วย endpoint ใหม่ — รวมเป็น CR เดียวกันและ PR โค้ดเดียว
 - 2026-11-18 owner: คงรัศมี 5 กม. ตามเดิม (ตามสรุปประชุม)
 - 2026-11-18 — proposed (ร่าง CR จาก #1419)
+- 2026-11-18 — approved โดย kong; รันเลข CR-261 (เปลี่ยนชื่อจาก draft-public-shelters-search)
