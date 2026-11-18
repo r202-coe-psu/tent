@@ -11,4 +11,5 @@ export { default as HouseholdAddressFields } from './household-address-fields.sv
 export { default as PetAssetVehicleFields } from './pet-asset-vehicle-fields.svelte';
 export { default as PetQuickSelect } from './pet-quick-select.svelte';
 export { default as HealthMedicalFields } from './health-medical-fields.svelte';
+export { default as TriageLevelFields } from './triage-level-fields.svelte';
 export { default as ZoneSelectionFields, type ZoneItem } from './zone-selection-fields.svelte';

@@ -3,10 +3,14 @@
 Same order of checks as EXT-007 / EXT-011 (ADR 0002 §6): `purpose` → scope → validation →
 query. The scope is checked here (not on the router) so denied attempts are still logged.
 
-The search rules and masking are the public ones (`EvacueeUseCase`); on top of them EXT-012
-drops `cancelled` people in the Mongo query (before the 10-row cap), returns no
-`family_members`, and writes only a `ThirdPartyAccessLog` row — never the query text, and never
-a `search_audits` document.
+The search rules are the public ones (`EvacueeUseCase`); on top of them EXT-012 drops
+`cancelled` people in the Mongo query (before the 10-row cap) and writes only a
+`ThirdPartyAccessLog` row — never the query text, and never a `search_audits` document.
+
+Two response modes (CR-257):
+- `occupant-search` only → masked, no `family_members` (CR-181);
+- `occupant-search` + `pii-full` → the whole values plus passport, phone and the household
+  (`granted_full` in the log). `pii-full` alone grants nothing.
 """
 
 from __future__ import annotations
@@ -15,16 +19,31 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
+from tent_model.public_person import PublicPerson
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
 from ...utils.search_query import parse_search_query
 from ...utils.ulid import new_ulid
-from ..evacuee.use_case import EvacueeUseCase
+from ..evacuee import person_view
+from ..evacuee.use_case import (
+    EvacueeUseCase,
+    map_public_status,
+    resolve_zone_name,
+    shelter_address,
+    shelter_status,
+)
 from ..thirdparty_auth.scopes import ThirdPartyClaims
-from .schemas import PersonSearchEnvelope, PersonSearchItem
+from .schemas import (
+    PersonSearchEnvelope,
+    PersonSearchFamilyMember,
+    PersonSearchFullItem,
+    PersonSearchItem,
+)
 
 ENDPOINT = "EXT-012"
 _REQUIRED_SCOPE = "occupant-search"
+#: Modifier on top of `_REQUIRED_SCOPE`: unmasked values + household (CR-257).
+_FULL_SCOPE = "pii-full"
 #: Hidden from partners — a cancelled booking is not a person on site (CR-176, #736 decision 3).
 _EXCLUDED_STATUSES = ("cancelled",)
 #: Same cap the public search form accepts (`SearchRequest.search`).
@@ -126,24 +145,75 @@ class ThirdPartyPersonSearchUseCase:
             )
 
         persons = await self._evacuee.find_persons(parsed, exclude_statuses=_EXCLUDED_STATUSES)
-        # No household lookup (#736 decision 4); `family_members` is dropped from the item.
-        results = await self._evacuee.build_external_results(persons, include_family=False)
-        items = [
-            PersonSearchItem(
-                **r.model_dump(exclude={"family_members", "checked_in_at"}),
-                checked_in_at=_to_bangkok_iso(r.checked_in_at),
-            )
-            for r in results
-        ]
+        full = _FULL_SCOPE in claims.scopes
+        items: list[PersonSearchFullItem] | list[PersonSearchItem] = (
+            await self._full_items(persons) if full else await self._masked_items(persons)
+        )
 
         await self._log(
             claims=claims,
             purpose=purpose,
             client_ip=client_ip,
-            outcome="granted",
+            outcome="granted_full" if full else "granted",
             result_count=len(items),
         )
         return PersonSearchEnvelope(result=items)
+
+    async def _masked_items(self, persons: list[PublicPerson]) -> list[PersonSearchItem]:
+        # No household lookup (#736 decision 4); `family_members` is dropped from the item.
+        results = await self._evacuee.build_external_results(
+            persons, full=False, include_family=False
+        )
+        return [
+            PersonSearchItem(
+                **r.model_dump(exclude={"family_members", "checked_in_at", "shelter_status"}),
+                checked_in_at=_to_bangkok_iso(r.checked_in_at),
+            )
+            for r in results
+        ]
+
+    async def _full_items(self, persons: list[PublicPerson]) -> list[PersonSearchFullItem]:
+        shelters = await self._evacuee.load_shelters({p.shelter_code for p in persons})
+        items = []
+        for person in persons:
+            shelter = shelters.get(person.shelter_code)
+            shelter_name = shelter.name if shelter and shelter.name else person.shelter_code
+            status_of_shelter = shelter_status(shelter)
+            zone_name = resolve_zone_name(shelter, person.care_zone)
+            members = await self._evacuee.find_household_members(
+                person, exclude_statuses=_EXCLUDED_STATUSES
+            )
+            items.append(
+                PersonSearchFullItem(
+                    name=person_view.display_name(person, full=True),
+                    first_name=person.first_name,
+                    last_name=person.last_name,
+                    status=map_public_status(person.status),
+                    national_id=person_view.national_id(person, full=True),
+                    passport_id=person_view.passport_id(person, full=True),
+                    id_card_type=person.id_card_type,
+                    phone=person.phone,
+                    gender=person.gender,
+                    shelter_name=shelter_name,
+                    shelter_address=shelter_address(shelter),
+                    origin_address=person_view.origin_address(person, full=True),
+                    checked_in_at=_to_bangkok_iso(person.checked_in_at),
+                    care_zone=zone_name,
+                    zone_name=zone_name,
+                    family_members=[
+                        PersonSearchFamilyMember(
+                            first_name=member.first_name,
+                            last_name=member.last_name,
+                            name=person_view.display_name(member, full=True),
+                            status=map_public_status(member.status),
+                            shelter_name=shelter_name,
+                            shelter_status=status_of_shelter,
+                        )
+                        for member in members
+                    ],
+                )
+            )
+        return items
 
 
 def get_thirdparty_person_search_use_case() -> ThirdPartyPersonSearchUseCase:

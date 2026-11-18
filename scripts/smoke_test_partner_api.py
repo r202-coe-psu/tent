@@ -30,7 +30,7 @@ Endpoints exercised (prefix + path):
   POST {prefix}/external/bookings                      (M2, EXT-008, scope booking-write)
   GET  {prefix}/external/bookings/{booking_id}         (M2, EXT-010)
   GET  {prefix}/external/persons/shelter-residency     (M2, EXT-011, scope residency-read)
-  POST {prefix}/external/persons/search                (EXT-012, scope occupant-search)
+  POST {prefix}/external/persons/search                (EXT-012, scope occupant-search; masked — no pii-full)
   POST {prefix}/external/bookings/{booking_id}/cancel  (M2, EXT-009)
 
 Normal mode also covers the CR-169 group rules at API level (persons[] of 2-3, cid
@@ -468,6 +468,8 @@ class SmokeTestRunner:
                 "module_name": ADMIN_CLIENT_MODULE,
                 # `booking-bypass` (#751, EOC override) is deliberately not granted: the smoke
                 # run checks the normal EXT-008 rule.
+                # `pii-full` (CR-257) is deliberately not granted either: a smoke run against
+                # staging must never pull unmasked personal data (backend tests cover full mode).
                 "allowed_scopes": [
                     "location-read",
                     "location-stock-read",

@@ -54,7 +54,7 @@ describe('xlsx template → parse round trip', () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0].errors).toEqual([]);
 		expect(rows[0].ok).toBe(true);
-		expect(rows[0].memberCount).toBe(3);
+		expect(rows[0].memberCount).toBe(4);
 	});
 
 	it('keeps a leading-zero phone number as text instead of a number', async () => {
@@ -95,7 +95,7 @@ describe('csv template → parse round trip', () => {
 
 		expect(households).toHaveLength(1);
 		expect(households[0].cells[H.first_name]).toBe('สมชาย');
-		expect(members).toHaveLength(3);
+		expect(members).toHaveLength(4);
 	});
 
 	it('produces the same importable household as the workbook', async () => {
@@ -103,7 +103,7 @@ describe('csv template → parse round trip', () => {
 
 		expect(rows[0].errors).toEqual([]);
 		expect(rows[0].ok).toBe(true);
-		expect(rows[0].memberCount).toBe(3);
+		expect(rows[0].memberCount).toBe(4);
 		expect(rows[0].payload?.household.address_no).toBe('99/1');
 	});
 
@@ -157,5 +157,149 @@ describe('README lists master-backed free-text options (CR-186 FR-10)', () => {
 		const hint = await readmeHint(EMPTY_MASTERS);
 
 		expect(hint).not.toContain('รายการ:');
+	});
+});
+
+describe('Backfill Import columns (#1399)', () => {
+	const ZONES: TemplateMasters = {
+		zone: [
+			{ value: 'A', label: 'โซน A' },
+			{ value: 'B', label: 'โซน B' }
+		]
+	};
+
+	async function loadTemplate(masters: TemplateMasters) {
+		const ExcelJS = (await import('exceljs')).default;
+		const wb = new ExcelJS.Workbook();
+		await wb.xlsx.load(await (await buildPeopleTemplateBlob(masters)).arrayBuffer());
+		return wb;
+	}
+
+	it('adds สถานะ / เวลามา / เวลากลับ / โซน to the head sheet, the member sheet and the CSV', async () => {
+		const wb = await loadTemplate(EMPTY_MASTERS);
+		for (const sheetName of ['ครัวเรือน', 'สมาชิก']) {
+			const headers: string[] = [];
+			wb.getWorksheet(sheetName)!
+				.getRow(1)
+				.eachCell((c) => headers.push(normalizeHeader(c.text)));
+			expect(headers).toEqual(
+				expect.arrayContaining([H.stay_status, H.arrived_at, H.departed_at, H.zone])
+			);
+		}
+		const csvHeader = (await buildPeopleCsvTemplateBlob(EMPTY_MASTERS).text())
+			.replace(/^\uFEFF/, '')
+			.split('\r\n')[0];
+		// Blank status = pre_registered (#1448): neither column is required, so no `*` marker.
+		expect(csvHeader).toContain(H.stay_status);
+		expect(csvHeader).not.toContain(`${H.stay_status} *`);
+		expect(csvHeader).not.toContain(`${H.arrived_at} *`);
+		expect(csvHeader).toContain(H.departed_at);
+	});
+
+	it('gives สถานะ a พักอยู่/กลับแล้ว dropdown and โซน a dropdown of the shelter zones', async () => {
+		const wb = await loadTemplate(ZONES);
+		const ws = wb.getWorksheet('ครัวเรือน')!;
+		const col = (header: string) => {
+			let idx = 0;
+			ws.getRow(1).eachCell((c, i) => {
+				if (normalizeHeader(c.text) === header) idx = i;
+			});
+			return idx;
+		};
+		const lists = wb.getWorksheet('lists')!;
+		const listValues = (formula: string) => {
+			const [, letter, lastRow] = /\$([A-Z]+)\$1:\$[A-Z]+\$(\d+)/.exec(formula)!;
+			const out: string[] = [];
+			for (let r = 1; r <= Number(lastRow); r++) out.push(lists.getCell(`${letter}${r}`).text);
+			return out;
+		};
+		const dv = (header: string) => ws.getCell(2, col(header)).dataValidation;
+
+		expect(listValues(dv(H.stay_status).formulae![0])).toEqual(['พักอยู่', 'กลับแล้ว']);
+		expect(listValues(dv(H.zone).formulae![0])).toEqual(['โซน A', 'โซน B']);
+		// Dates are free typing — no dropdown, and stamped Text so Excel keeps the wall-clock.
+		expect(dv(H.arrived_at)).toBeUndefined();
+		expect(ws.getColumn(col(H.arrived_at)).numFmt).toBe('@');
+	});
+
+	it('has no zone dropdown when the shelter zones are unknown', async () => {
+		const wb = await loadTemplate(EMPTY_MASTERS);
+		const ws = wb.getWorksheet('ครัวเรือน')!;
+		let zoneCol = 0;
+		ws.getRow(1).eachCell((c, i) => {
+			if (normalizeHeader(c.text) === H.zone) zoneCol = i;
+		});
+		expect(ws.getCell(2, zoneCol).dataValidation).toBeUndefined();
+	});
+
+	it('writes a sample that imports cleanly against the shelter zones, using a real zone name', async () => {
+		const blob = await buildPeopleTemplateBlob(ZONES, { withSample: true });
+		const wb = await parsePeopleWorkbook(new File([await blob.arrayBuffer()], 't.xlsx'));
+		expect(wb.households[0].cells[H.zone]).toBe('โซน A');
+
+		const rows = validateWorkbook(wb, {
+			zones: [
+				{ code: 'A', name: 'โซน A' },
+				{ code: 'B', name: 'โซน B' }
+			],
+			now: new Date('2026-11-15T05:00:00.000Z')
+		});
+		expect(rows[0].errors).toEqual([]);
+		// One sample member has already left, one household member is still housed.
+		expect(rows[0].payload?.members.map((m) => m.stay?.status)).toContain('checked_out');
+		// …and one is blank-status: pre_registered, waiting for Report-in (#1448).
+		expect(rows[0].payload?.members.some((m) => m.stay === null)).toBe(true);
+		expect(rows[0].payload?.household.status).toBe('checked_in');
+	});
+
+	it('skips a closed first zone when picking the sample zone', async () => {
+		const masters: TemplateMasters = {
+			zone: [
+				{ value: 'X', label: 'โซน X (ปิด)', inactive: true },
+				{ value: 'A', label: 'โซน A' }
+			]
+		};
+		const blob = await buildPeopleTemplateBlob(masters, { withSample: true });
+		const wb = await parsePeopleWorkbook(new File([await blob.arrayBuffer()], 't.xlsx'));
+		expect(wb.households[0].cells[H.zone]).toBe('โซน A');
+
+		const rows = validateWorkbook(wb, {
+			zones: [
+				{ code: 'X', name: 'โซน X (ปิด)', status: 'closed' },
+				{ code: 'A', name: 'โซน A', status: 'active' }
+			],
+			now: new Date('2026-11-15T05:00:00.000Z')
+		});
+		expect(rows[0].errors).toEqual([]);
+	});
+
+	it('documents the stay columns and the Backfill Import purpose on the README', async () => {
+		const wb = await loadTemplate(EMPTY_MASTERS);
+		const text: string[] = [];
+		wb.getWorksheet('คำแนะนำ')!.eachRow((row) => text.push(row.getCell(4).text));
+		const all = text.join('\n');
+
+		expect(all).toContain('Backfill Import');
+		expect(all).toContain('ไม่เลยเวลาปัจจุบัน');
+		// Stay status and zone moved into the file — only the photo is still "app only".
+		expect(all).not.toContain('สถานะการเข้าพัก');
+		expect(all).toContain('รูปถ่ายผู้ประสบภัย');
+	});
+
+	it('reads a real spreadsheet date cell back as the file text format (Excel Text format overridden)', async () => {
+		const wb = await loadTemplate(EMPTY_MASTERS);
+		const ws = wb.getWorksheet('ครัวเรือน')!;
+		let col = 0;
+		ws.getRow(1).eachCell((c, i) => {
+			if (normalizeHeader(c.text) === H.arrived_at) col = i;
+		});
+		ws.getCell(2, 3).value = 'สมชาย'; // any data cell so the row counts
+		ws.getCell(2, col).value = new Date(Date.UTC(2026, 10, 10, 14, 0));
+		// A user who re-formats the cell as a date (instead of Text) gets a real date back.
+		ws.getCell(2, col).numFmt = 'dd/mm/yyyy hh:mm';
+		const buffer = await wb.xlsx.writeBuffer();
+
+		const parsed = await parsePeopleWorkbook(new File([buffer], 'dates.xlsx'));
+		expect(parsed.households[0].cells[H.arrived_at]).toBe('10/11/2569 14:00');
 	});
 });

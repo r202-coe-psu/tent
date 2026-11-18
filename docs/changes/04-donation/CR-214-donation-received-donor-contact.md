@@ -3,7 +3,7 @@ id: CR-214 # renumbered from draft-donation-received-donor-contact
 title: "รายการของบริจาคที่รับแล้ว + ข้อมูลติดต่อผู้บริจาคแบบปิดบางส่วน (#821)"
 status: approved
 date: 2026-10-28
-updated: 2026-10-29
+updated: 2026-11-16 # Amendment A1 proposed — FR-9b ผู้ใช้หลายศูนย์ (#477, CR-227 A1)
 requested_by: "GitHub #821 (roleplay 23/10/69 feedback) · epic #826"
 decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
@@ -85,6 +85,11 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 **สิทธิ์**
 - **FR-9** — เข้าถึงได้เฉพาะบทบาทที่ผ่าน `authorizeWarehouse`: `warehouse_staff`, `shelter_manager`, `system_admin` (เหมือน API บริจาค back-office อื่น)
 - **FR-9a** — `?status=received` เห็นเฉพาะศูนย์ที่เลือก / ศูนย์ของผู้ใช้ · ไม่รวมหลายศูนย์ในรายการเดียว · `system_admin` ต้องส่งรหัสศูนย์ (ไม่ส่ง = 400) · ผู้ใช้อื่นขอศูนย์นอกสิทธิ์ = 403 · **กฎนี้ใช้กับ `status=received` เท่านั้น** — status อื่น (คิวรอประเมิน ฯลฯ) ทำงานเหมือนเดิม: `system_admin` เห็นทุกศูนย์รวมกัน
+- **FR-9b** *(Amendment A1 — proposed 2026-11-16, #477 · ดู [CR-227 A1](../01-core/CR-227-donation-staff-role.md))* — "ศูนย์ของผู้ใช้" ใน FR-9a = ศูนย์ที่ผู้ใช้ถือ capability บริจาค (SM / WS / DON) **ในศูนย์นั้น** ไม่ใช่ศูนย์แรกที่เป็นสมาชิก:
+  - ส่ง `shelter` ที่มี capability → อ่านศูนย์นั้น · ส่งศูนย์ที่ไม่มี capability → `403` (ข้อความระบุรหัสศูนย์)
+  - ไม่ส่ง และมี capability ศูนย์เดียว → ใช้ศูนย์นั้น
+  - ไม่ส่ง และมี capability หลายศูนย์ → `400` (ไม่เดาศูนย์แรก) — กฎเดียวกันใช้กับ `POST received/search` (FR-8c)
+  - `POST {query}/contact` (FR-10a) ไม่รับรหัสศูนย์: หาใบในทุกศูนย์ที่ผู้ใช้มี capability · ใบที่อยู่นอกศูนย์เหล่านั้น = `403` (เหมือนไม่พบ)
 - **FR-10** — API รายการ (และผลค้นหา) ส่ง**เฉพาะค่าที่ปิดแล้ว** · ห้ามมีชื่อเต็ม / เบอร์เต็ม / อีเมลเต็มใน response
 - **FR-10a** — ข้อมูลติดต่อเต็มมาจาก endpoint ของใบ `POST /api/back-office/donations/{query}/contact` · `{query}` = `booking_ref` หรือ `_id` หาใบด้วย `findDonationByQuery` เหมือน route อื่นใต้ `[query]/` · `POST` เพราะทุกครั้งที่เรียกเขียน audit (FR-10b) — แบบเดียวกับปุ่มดู PIN เครื่อง kiosk (`kiosk/devices/[id]/staff-pin/reveal`) · response มี `Cache-Control: no-store` · สิทธิ์ตาม FR-9/FR-9a (ใบต้องอยู่ในศูนย์ที่ผู้เรียกมีสิทธิ์) · เรียกเมื่อกด "แสดงข้อมูลติดต่อ" เท่านั้น
 - **FR-10b** — ทุกครั้งที่เรียก FR-10a บันทึก `audit` (§2.12) `action: other`, `target_type: donation`, `target_id`, `reason: "donor_contact_view"`, `created_by` = ผู้เรียก, `occurred_at` · ไม่เก็บค่าข้อมูลติดต่อใน audit
@@ -189,3 +194,4 @@ migration: ไม่เปลี่ยนรูปร่าง doc — ไม่
 - 2026-10-29 — ไม่จำกัดอัตราการค้น (FR-8e, AC-6b): แทนที่ "rate limit ต่อ IP ที่ nginx" ในบรรทัดทำจริงด้านบน · เหตุผลใน Why
 - 2026-10-29 — ค้นด้วยเลขใบใช้ Mango index ใหม่ `(type, booking_ref)` (FR-8, Migration): shelter DB ไม่มี index `booking_ref` อยู่ก่อน (index unique อยู่ใน Mongo) · ไม่มี index ต้องค้นผ่าน index รายการ "รับแล้ว" แล้วกรองในหน่วยความจำ ช้าลงตามจำนวนใบ และไม่ตรง AC-6
 - 2026-10-29 — approved (Soravit Sukkarn, Team Lead): อนุมัติ Change Record (#821) รันเลข CR-214 ย้ายเข้า 04-donation/ ตามผลการรีวิว PR #974
+- 2026-11-16 — Amendment A1 proposed (#477, PR #1387): เพิ่ม FR-9b กรณีผู้ใช้หลายศูนย์ (ตามรีวิว PR #1387 W1) · รอ approve

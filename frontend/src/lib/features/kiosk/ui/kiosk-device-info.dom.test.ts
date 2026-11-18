@@ -57,10 +57,13 @@ async function openPanelWithPin() {
 	await vi.waitFor(() => expect(byTestId('kiosk-device-info-panel')).not.toBeNull());
 }
 
+let hostInfoBody: Record<string, unknown>;
+
 beforeEach(() => {
+	hostInfoBody = { hostname: 'kiosk-01', ips: [] };
 	fetchMock = vi.fn(async (url: string) => {
 		if (url === '/api/v1/kiosk/device-info') return json(200, DEVICE_INFO_BODY);
-		if (url === '/api/v1/kiosk/host-info') return json(200, { hostname: 'kiosk-01', ips: [] });
+		if (url === '/api/v1/kiosk/host-info') return json(200, hostInfoBody);
 		if (url === '/api/v1/kiosk/print') return json(200, { printed: 1 });
 		return json(404, {});
 	});
@@ -107,6 +110,33 @@ describe('KioskDeviceInfo screen row (DOM)', () => {
 		await openPanelWithPin();
 
 		expect(byTestId('kiosk-device-info-screen')?.textContent?.trim()).toBe('ตู้ใหญ่ · 1080×1920');
+	});
+});
+
+describe('KioskDeviceInfo update rows (DOM)', () => {
+	const text = (id: string) => byTestId(id)?.textContent?.replace(/\s+/g, ' ').trim();
+
+	it('shows the commit the kiosk runs, when it last updated and what the last boot check said', async () => {
+		hostInfoBody = {
+			hostname: 'kiosk-01',
+			ips: [],
+			commit: '6220c41',
+			updated_at: '2026-11-17T08:01:12',
+			last_check: { at: '2026-11-18T07:59:40', outcome: 'up-to-date' }
+		};
+		await openPanelWithPin();
+
+		expect(text('kiosk-device-info-commit')).toBe('Commit 6220c41');
+		expect(text('kiosk-device-info-last-update')).toMatch(
+			/2569.*ตรวจล่าสุด .*2569.* · up-to-date$/
+		);
+	});
+
+	it('says the kiosk was never auto-updated when the machine has no update to tell', async () => {
+		await openPanelWithPin();
+
+		expect(text('kiosk-device-info-commit')).toBe('—');
+		expect(text('kiosk-device-info-last-update')).toBe('ยังไม่เคยอัปเดตอัตโนมัติ');
 	});
 });
 

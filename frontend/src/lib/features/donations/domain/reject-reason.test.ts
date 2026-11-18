@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+	containsRejectNoteTemplate,
+	noteForReason,
 	combineLineRejectReasons,
 	DONATION_REJECT_REASON_SELECTABLE_CODES,
 	donationRejectReasonCodeSchema,
 	donorRejectMessage,
 	rejectDonationInputSchema,
+	REJECT_NOTE_MAX,
+	rejectNoteTemplate,
 	REJECT_REASON_MAX
 } from './reject-reason';
 
@@ -115,5 +119,91 @@ describe('combineLineRejectReasons (FR-12)', () => {
 			reject_reason: '',
 			reject_reason_code: 'other'
 		});
+	});
+});
+
+describe('reject note template (#1256)', () => {
+	const PRESET_CODES = ['not_eligible', 'over_need', 'expired', 'damaged'] as const;
+	const t = (code: Parameters<typeof rejectNoteTemplate>[0]) => rejectNoteTemplate(code)!;
+
+	it('has one formal message for each reason that gets one, inside the note limit', () => {
+		for (const code of PRESET_CODES) {
+			expect(t(code), code).toBeTruthy();
+			expect(t(code).length, code).toBeLessThanOrEqual(REJECT_NOTE_MAX);
+		}
+	});
+
+	it('writes each message for its own reason, expired and damaged sharing one', () => {
+		expect(new Set([t('over_need'), t('not_eligible'), t('expired')]).size).toBe(3);
+		expect(t('damaged')).toBe(t('expired'));
+	});
+
+	it('thanks the donor in every message', () => {
+		for (const code of PRESET_CODES) expect(t(code), code).toContain('ขอบคุณ');
+	});
+
+	it('offers nothing for "other", for the legacy code, or before a reason is picked', () => {
+		expect(rejectNoteTemplate('other')).toBeNull();
+		expect(rejectNoteTemplate('not_needed')).toBeNull();
+		expect(rejectNoteTemplate(undefined)).toBeNull();
+	});
+
+	it('recognises a template anywhere in a note, and nothing else', () => {
+		expect(containsRejectNoteTemplate(t('over_need'))).toBe(true);
+		expect(containsRejectNoteTemplate(`นมหมดอายุ ${t('expired')} ติดต่อหน้างาน`)).toBe(true);
+		expect(containsRejectNoteTemplate('นมหมดอายุ 2 กล่อง')).toBe(false);
+		expect(containsRejectNoteTemplate('')).toBe(false);
+	});
+});
+
+// The message goes in as soon as a reason is picked, and a message written for one reason must
+// never reach the donor under another (#1256 review round 3, B1).
+describe('noteForReason (#1256)', () => {
+	const t = (code: Parameters<typeof rejectNoteTemplate>[0]) => rejectNoteTemplate(code)!;
+
+	it('fills an empty note with the reason’s message', () => {
+		expect(noteForReason('', 'over_need')).toBe(t('over_need'));
+		expect(noteForReason('   ', 'expired')).toBe(t('expired'));
+	});
+
+	it('swaps the message when the reason changes', () => {
+		expect(noteForReason(t('over_need'), 'expired')).toBe(t('expired'));
+		expect(noteForReason(t('not_eligible'), 'over_need')).toBe(t('over_need'));
+	});
+
+	it('keeps what staff wrote around the message, whichever side', () => {
+		expect(noteForReason(`นมหมดอายุ ${t('over_need')}`, 'damaged')).toBe(
+			`นมหมดอายุ ${t('damaged')}`
+		);
+		expect(noteForReason(`${t('over_need')} ติดต่อหน้างาน`, 'damaged')).toBe(
+			`${t('damaged')} ติดต่อหน้างาน`
+		);
+	});
+
+	it('puts the message after staff’s own words when none is in the note yet', () => {
+		expect(noteForReason('นมหมดอายุ 2 กล่อง', 'expired')).toBe(`นมหมดอายุ 2 กล่อง ${t('expired')}`);
+	});
+
+	it('drops the message, keeping staff text, when the new reason has none', () => {
+		expect(noteForReason(t('over_need'), 'other')).toBe('');
+		expect(noteForReason(`นมหมดอายุ ${t('over_need')}`, 'other')).toBe('นมหมดอายุ');
+		expect(noteForReason('นมหมดอายุ 2 กล่อง', 'other')).toBe('นมหมดอายุ 2 กล่อง');
+		expect(noteForReason(t('over_need'), undefined)).toBe('');
+	});
+
+	it('leaves the note alone when the message already fits the reason', () => {
+		expect(noteForReason(t('expired'), 'damaged')).toBe(t('expired'));
+	});
+
+	it('leaves staff text alone rather than pass the limit when adding the message', () => {
+		const filler = 'ก'.repeat(REJECT_NOTE_MAX - 10);
+		expect(noteForReason(filler, 'over_need')).toBe(filler);
+	});
+
+	it('drops the old message rather than pass the limit when the new one is longer', () => {
+		const over = t('over_need');
+		const filler = 'ก'.repeat(REJECT_NOTE_MAX - over.length - 1);
+		const result = noteForReason(`${filler} ${over}`, 'not_eligible');
+		expect(result.length).toBeLessThanOrEqual(REJECT_NOTE_MAX);
 	});
 });

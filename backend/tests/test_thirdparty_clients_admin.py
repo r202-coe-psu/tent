@@ -266,6 +266,22 @@ async def test_create_allows_occupant_search_scope(
     assert updated.json()["allowed_scopes"] == ["occupant-search"]
 
 
+async def test_create_allows_pii_full_scope(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-257: `pii-full` is grantable next to the base scopes it unmasks."""
+    scopes = ["occupant-search", "occupancy-pii-read", "pii-full"]
+    response = await client.post(
+        "/v1/admin/thirdparty-clients",
+        headers=auth_headers,
+        json={"name": "EOC full data", "allowed_scopes": scopes},
+    )
+    assert response.status_code == 201, response.text
+    created = await ThirdPartyClient.get(response.json()["id"])
+    assert created is not None
+    assert set(created.allowed_scopes) == set(scopes)
+
+
 async def test_create_allows_booking_bypass_scope(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

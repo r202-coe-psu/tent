@@ -20,7 +20,7 @@ class PersonSearchRequest(BaseModel):
 
 
 class PersonSearchItem(BaseModel):
-    """A masked match — same fields as public search minus `family_members` (#736 decision 4)."""
+    """A masked match — public search fields minus `family_members` (`occupant-search` only)."""
 
     name: str
     status: str
@@ -36,10 +36,47 @@ class PersonSearchItem(BaseModel):
     zone_name: str | None = None
 
 
+class PersonSearchFamilyMember(BaseModel):
+    """A household member in full mode (CR-257 FR-18) — same household, same shelter."""
+
+    first_name: str
+    last_name: str | None = None
+    name: str
+    status: str
+    shelter_name: str
+    shelter_status: str | None = None
+
+
+class PersonSearchFullItem(PersonSearchItem):
+    """Unmasked match — only with `occupant-search` + `pii-full` (CR-257).
+
+    `national_id` / `origin_address` / `name` are the whole values. A field is `null` when the
+    person has no such data — or when the row predates PROJECTION_VERSION 23: never a masked
+    value.
+    """
+
+    first_name: str
+    last_name: str | None = None
+    passport_id: str | None = None
+    id_card_type: str | None = Field(
+        default=None,
+        description=(
+            "ประเภทเอกสารของ national_id/passport_id: national_id | passport | pink_card | other"
+        ),
+    )
+    phone: str | None = None
+    family_members: list[PersonSearchFamilyMember] = Field(default_factory=list)
+
+
 class PersonSearchEnvelope(BaseModel):
     status: int = 200
     message: str = "Found Data."
-    result: list[PersonSearchItem] = Field(description="สูงสุด 10 รายการ; ว่างเมื่อไม่พบ")
+    result: list[PersonSearchFullItem | PersonSearchItem] = Field(
+        description=(
+            "สูงสุด 10 รายการ; ว่างเมื่อไม่พบ — masked เมื่อมีแค่ scope occupant-search, "
+            "ข้อมูลเต็มเมื่อมี pii-full ด้วย (CR-257)"
+        )
+    )
 
 
 class PersonSearchErrorResponse(BaseModel):

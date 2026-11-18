@@ -404,12 +404,12 @@ How they obey §4:
 - **FastAPI origin guard.** `partnerApiUrl()` uses `E2E_FASTAPI_URL` only on a remote run (`E2E_BASE_URL` set); a local
   run must stay on loopback and throws if a copied `.env` points `E2E_FASTAPI_URL` elsewhere. A remote run without
   `E2E_FASTAPI_URL` throws a clear error instead of falling back to localhost.
-- **Scope matrix (A4).** For each of the eight scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
+- **Scope matrix (A4).** For each of the nine scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
   mint a new token (it must not carry the scope), assert every endpoint that needs it answers 403
   `insufficient_scope` (EXT-006 without `occupancy-read` stays 200 with `occupancy_total: null`) and that every
   endpoint on another scope still answers. `booking-bypass` gates no endpoint: it is covered by a probe
   (`SCOPE_PROBES`), EXT-008 on the not-bookable shelter answers 409 `location_not_bookable` (not 403) without it, and a scope with
-  neither an endpoint nor a probe fails the matrix. EXT-007 / EXT-011 / EXT-012 always send `purpose` (checked before the scope).
+  neither an endpoint nor a probe fails the matrix. `pii-full` (CR-257) gates no endpoint either: its probe is EXT-012 still answering 200 in the masked shape (no `phone`) without it. EXT-007 / EXT-011 / EXT-012 always send `purpose` (checked before the scope).
 - **Current token behaviour is asserted, not wished for (ADR 0002 §6).** `verify_thirdparty_token` trusts the JWT
   claims and never reads the DB, so a token minted before a scope removal (A6) or a revoke (A7) keeps working until
   it expires (3,600 s); only a token minted afterwards reflects the change. The edit / revoke dialogs say so too.
@@ -435,9 +435,13 @@ How they obey §4:
   `E2E_ALLOW_AUDIT_ROWS=true`.
 - **EXT-012 (person search, #736).** E12-1…5 search by CID only (every booking in the run shares the same name and phone,
   so name / phone / passport searches are covered by `backend/tests/test_thirdparty_person_search.py`): a
-  `pre_registered` hit is masked, has no `family_members` / `phone` / `passport` and never echoes the CID, the response is
+  `pre_registered` hit is masked, has no `family_members` / `phone` / `passport_id` and never echoes the CID, the response is
   `no-store`, a missing `purpose` is 400, a one-character query is 422, and once the worker projected the cancel the
   same search returns an empty `result` (`cancelled` is dropped). The matrix probes it with a fresh CID: 200 with `result: []`.
+  **CR-257:** the main client holds `pii-full`, so the masked tests (A3 EXT-007, E12-1) mint a token without it
+  (`mintMaskedMain`, scopes restored right after); E12-6 asserts the full view with the main token — whole name, `id_card_type`,
+  the CID itself (boolean check, never echoed), a phone and a `family_members` list, nothing `XXXX`. EXT-007 full mode has
+  no in-shelter occupant in this run and is covered by `backend/tests/test_thirdparty_occupants.py`.
 - EXT-011's 200 path needs someone really checked in and stays with the Python smoke script; here only 400 / 404.
 
 Local run (the preview server must see `FASTAPI_INTERNAL_URL` and `EXTERNAL_API_SECRET`; `fastapi` and `worker`

@@ -1,8 +1,10 @@
 import {
+	deriveHouseholdStatus,
 	evacueeInputSchema,
 	householdInputSchema,
 	type EvacueeInput,
-	type HouseholdInput
+	type HouseholdInput,
+	type StayStatus
 } from '$lib/features/people';
 import {
 	CARD_TYPE_CHOICES,
@@ -16,10 +18,12 @@ import {
 	PET_SPECIES_CHOICES,
 	RELIGION_CHOICES,
 	SPECIAL_NEED_CHOICES,
+	STAY_STATUS_CHOICES,
 	VEHICLE_TYPE_CHOICES,
 	type EnumChoice
 } from './columns';
 import { isThaiMobilePhone, normalizeThaiPhone, THAI_MOBILE_PHONE_MESSAGE } from '$lib/db/model';
+import { parseImportDateTime } from './datetime';
 import { findInFileDuplicates, personDuplicateKey } from './duplicates';
 import { resolveMasterCode, type MasterLabelFields } from '$lib/features/master-data/domain';
 
@@ -36,10 +40,10 @@ import { resolveMasterCode, type MasterLabelFields } from '$lib/features/master-
  * the final gate — the same schemas the pre-registration wizard submits
  * through, so the file cannot create anything the form could not.
  *
- * Two rules are locked by CR-071 and are NOT expressible in the file: every
- * imported person is `registered_via: 'import'` and every household lands as
- * `pre_registered` (the factory stamps `current_stay.status` to match). There
- * is deliberately no status column.
+ * One rule is locked by CR-071: every imported person is `registered_via: 'import'`. The stay
+ * itself is NOT locked any more — since the Backfill Import (#1399, decision sync on CR-071 T-72)
+ * every row carries its real stay: status (`active` / `checked_out`), arrival time, departure
+ * time and zone. `pre_registered` can no longer be imported from a file.
  *
  * Errors carry the Thai column header + sheet name so the UI can point at the
  * cell. The member sheet repeats the head's person headers, so sheet names come
@@ -77,11 +81,27 @@ export interface RowFieldError {
 
 export type RowStatus = 'created' | 'skipped_duplicate' | 'validation_error' | 'server_error';
 
+/**
+ * The stay a row reports, resolved and ready to turn into movements (#1399). A row with a blank
+ * `สถานะ` has no stay (`null`, #1448): the person stays `pre_registered` and waits for Report-in.
+ */
+export interface ImportStay {
+	status: 'active' | 'checked_out';
+	/** UTC ISO instant of the real check-in. */
+	arrivedAt: string;
+	/** UTC ISO instant of the real check-out; null while `active`. */
+	departedAt: string | null;
+	/** Zone code — always set for `active`, optional history for `checked_out`. */
+	zone: string | null;
+}
+
 /** One member of an importable household, tagged with the sheet row it came from. */
 export interface MemberPayload {
 	/** 1-based data row on the member sheet — shown when a member is skipped. */
 	line: number;
 	evacuee: EvacueeInput;
+	/** `null` = blank `สถานะ` → left `pre_registered`, no movement (#1448). */
+	stay: ImportStay | null;
 	/** Identity key used for duplicate detection; null when the row has none. */
 	duplicateKey: string | null;
 }
@@ -91,8 +111,15 @@ export interface HouseholdImportPayload {
 	/** `head_evacuee_id` stays null here — the writer fills it once the head exists. */
 	household: HouseholdInput;
 	head: EvacueeInput;
+	/** `null` = blank `สถานะ` → left `pre_registered`, no movement (#1448). */
+	headStay: ImportStay | null;
 	headDuplicateKey: string | null;
 	members: MemberPayload[];
+}
+
+/** How many people in a validated household have no stay and so wait for Report-in (#1448). */
+export function countPendingReportIn(payload: HouseholdImportPayload): number {
+	return [payload.headStay, ...payload.members.map((m) => m.stay)].filter((s) => s === null).length;
 }
 
 export interface RowValidation {
@@ -121,6 +148,22 @@ export interface MasterLookup {
  */
 export interface Lookups {
 	medical_conditions?: readonly MasterLabelFields[];
+	/**
+	 * The importing shelter's zones (#1399). Present → a zone cell must name one of them (by code
+	 * or name) and an `active` person cannot take a closed one. Absent → the cell is taken as a
+	 * code, unchecked (unit tests / a shelter whose zones could not be read).
+	 */
+	zones?: readonly ImportZone[];
+	/** The clock for the "not in the future" rule — injected so tests are deterministic. */
+	now?: Date;
+}
+
+/** The slice of a shelter zone the importer needs. */
+export interface ImportZone {
+	code: string;
+	name: string;
+	status?: string;
+	capacity?: number | null;
 }
 
 /** Build a {@link MasterLookup} from a master_data items array. Pure. */
@@ -424,6 +467,92 @@ function readPerson(raw: RawRow, sink: ErrorSink, lookups: Lookups, warn: ErrorS
 	} satisfies EvacueeInput;
 }
 
+// ===== stay (Backfill Import, #1399) =====
+
+function resolveInstant(raw: RawRow, header: string, sink: ErrorSink, now: Date): Date | null {
+	const value = cell(raw, header);
+	if (value === '') return null;
+	const parsed = parseImportDateTime(value);
+	if (!parsed) {
+		sink.push(header, `รูปแบบเวลาไม่ถูกต้อง — ใช้ วว/ดด/ปปปป ชช:นน (พ.ศ.) เช่น 10/11/2569 14:00`);
+		return null;
+	}
+	if (parsed.getTime() > now.getTime()) {
+		sink.push(header, 'เวลาต้องไม่เลยเวลาปัจจุบัน');
+		return null;
+	}
+	return parsed;
+}
+
+/** Match a zone cell against the shelter's zones by code or by name. */
+function matchZone(value: string, zones: readonly ImportZone[]): ImportZone | undefined {
+	return zones.find((z) => z.code === value || z.name.trim() === value);
+}
+
+/**
+ * Read one person's stay columns. Returns `null` for a blank `สถานะ` (no stay — the person is
+ * imported `pre_registered`, #1448) and also when any column is wrong; the second case always
+ * leaves errors in `sink`, so callers must check `sink` before building a payload.
+ */
+function readStay(raw: RawRow, sink: ErrorSink, lookups: Lookups): ImportStay | null {
+	const before = sink.errors.length;
+	const now = lookups.now ?? new Date();
+
+	if (cell(raw, H.stay_status) === '') {
+		// Blank status = waits for Report-in at Station 1: nothing else about a stay may be given.
+		for (const header of [H.arrived_at, H.departed_at, H.zone]) {
+			if (cell(raw, header) !== '') {
+				sink.push(
+					header,
+					`ไม่ได้ระบุ "${H.stay_status}" — เลือกสถานะ (${optionList(STAY_STATUS_CHOICES)}) หรือล้างค่า "${header}" ออก (ว่าง = รอรายงานตัวที่ Station 1)`
+				);
+			}
+		}
+		return null;
+	}
+	const status = resolveEnum(raw, H.stay_status, STAY_STATUS_CHOICES, sink);
+
+	const arrived = resolveInstant(raw, H.arrived_at, sink, now);
+	if (cell(raw, H.arrived_at) === '') sink.push(H.arrived_at, 'ต้องระบุเวลามา');
+	const departed = resolveInstant(raw, H.departed_at, sink, now);
+
+	if (status === 'active' && cell(raw, H.departed_at) !== '') {
+		sink.push(H.departed_at, 'สถานะ "พักอยู่" ห้ามกรอกเวลากลับ');
+	}
+	if (status === 'checked_out' && cell(raw, H.departed_at) === '') {
+		sink.push(H.departed_at, 'สถานะ "กลับแล้ว" ต้องระบุเวลากลับ');
+	}
+	if (arrived && departed && departed.getTime() < arrived.getTime()) {
+		sink.push(H.departed_at, 'เวลากลับต้องไม่ก่อนเวลามา');
+	}
+
+	// Zone: required to be housed (CR-112 — a check_in needs a zone), optional history once left.
+	const zoneCell = cell(raw, H.zone);
+	let zone: string | null = null;
+	if (zoneCell === '') {
+		if (status === 'active') sink.push(H.zone, 'สถานะ "พักอยู่" ต้องระบุโซน');
+	} else if (lookups.zones) {
+		const match = matchZone(zoneCell, lookups.zones);
+		if (!match) {
+			sink.push(H.zone, `ไม่พบโซน "${zoneCell}" ในศูนย์นี้`);
+		} else if (status === 'active' && match.status === 'closed') {
+			sink.push(H.zone, `โซน "${match.name}" ปิดอยู่ — คนที่พักอยู่เลือกโซนที่ปิดไม่ได้`);
+		} else {
+			zone = match.code;
+		}
+	} else {
+		zone = zoneCell;
+	}
+
+	if (sink.errors.length > before || !status || !arrived) return null;
+	return {
+		status,
+		arrivedAt: arrived.toISOString(),
+		departedAt: status === 'checked_out' && departed ? departed.toISOString() : null,
+		zone
+	};
+}
+
 /** Run the person through the same Zod gate the wizard submits through. */
 function validatePerson(
 	person: EvacueeInput,
@@ -463,9 +592,15 @@ function validateMembers(
 		const warn = createSink(MEMBER_SHEET_NAME, row.line);
 		const person = readPerson(row.cells, sink, lookups, warn);
 		warnings.push(...warn.errors);
+		const stay = readStay(row.cells, sink, lookups);
 		const ok = validatePerson(person, sink, MEMBER_PATH_TO_HEADER);
 		if (ok && sink.errors.length === 0) {
-			members.push({ line: row.line, evacuee: person, duplicateKey: personDuplicateKey(person) });
+			members.push({
+				line: row.line,
+				evacuee: person,
+				stay,
+				duplicateKey: personDuplicateKey(person)
+			});
 		} else {
 			errors.push(...sink.errors);
 		}
@@ -484,19 +619,30 @@ export function validateRow(
 	const sink = createSink(null);
 	const warn = createSink(null);
 	const head = readPerson(raw, sink, lookups, warn);
+	const headStay = readStay(raw, sink, lookups);
 	const headOk = validatePerson(head, sink, PATH_TO_HEADER);
 	const headName = fullName(head) || null;
 
 	const labelCell = cell(raw, H.label);
 	const label = labelCell || (headName ? `ครอบครัว${headName}` : '');
 
+	const memberResult = validateMembers(memberRows, lookups);
 	const assetDescription = cell(raw, H.assets);
+	// A person without a stay (blank `สถานะ`) is `pre_registered`, and counts that way here.
+	const stayStatuses: StayStatus[] = [
+		headStay?.status ?? 'pre_registered',
+		...memberResult.members.map((m) => m.stay?.status ?? 'pre_registered')
+	];
+	const householdStatus = deriveHouseholdStatus(stayStatuses);
 	const household = {
 		label,
 		head_evacuee_id: null,
-		// Locked by CR-071 / T-72 — no per-row status column exists.
-		status: 'pre_registered' as const,
-		checkout_destination: null,
+		// Derived from the people's stays (#1399) — the same rule the repository applies on write.
+		status: householdStatus,
+		// A household where everyone already left needs a destination (R-29-8); the file has none,
+		// so it is preset to `returned_home` (#1399 decision). Never set while someone is housed.
+		checkout_destination:
+			householdStatus === 'checked_out' ? { type: 'returned_home' as const } : null,
 		municipality_zone: strOrNull(cell(raw, H.municipality_zone)),
 		community: strOrNull(cell(raw, H.community)),
 		pets: resolvePets(raw, sink),
@@ -525,11 +671,7 @@ export function validateRow(
 		}
 	}
 
-	const {
-		members,
-		errors: memberErrors,
-		warnings: memberWarnings
-	} = validateMembers(memberRows, lookups);
+	const { members, errors: memberErrors, warnings: memberWarnings } = memberResult;
 	const errors = [...sink.errors, ...memberErrors];
 	const warnings = [...warn.errors, ...memberWarnings];
 
@@ -543,6 +685,7 @@ export function validateRow(
 			payload: {
 				household,
 				head,
+				headStay,
 				headDuplicateKey: personDuplicateKey(head),
 				members
 			},
@@ -615,4 +758,13 @@ export function validateWorkbook(wb: ParsedWorkbook, lookups: Lookups): RowValid
 export function orphanMemberRows(wb: ParsedWorkbook): RawSheetRow[] {
 	const refs = new Set(wb.households.map((h, i) => (h.ref === '' ? String(i + 1) : h.ref)));
 	return wb.members.filter((m) => !refs.has(m.ref));
+}
+
+/**
+ * A file made from the pre-#1399 template has no `สถานะ` column at all (the parser only keeps
+ * headers it knows, so an absent column is an absent key). Every row would then fail with the same
+ * "status required" error — worth one clear message instead: download the new template.
+ */
+export function isLegacyTemplate(wb: ParsedWorkbook): boolean {
+	return wb.households.length > 0 && wb.households.every((h) => !(H.stay_status in h.cells));
 }

@@ -29,13 +29,16 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
+		TriageBadge,
+		latestTriageByEvacuee,
+		displayTriageLevel,
 		maskNationalId,
 		matchesEvacueeSearch,
 		formatPersonName,
 		classifyZoningQueueTab,
 		buildZoningPath,
 		formatQueueWait,
-		sortByZoningQueueSince,
+		sortByCreatedAtAsc,
 		zoningQueueSince,
 		useConfirmRoom,
 		useConfirmRoomForHousehold,
@@ -119,6 +122,7 @@
 		}
 		return map;
 	});
+	const triageByEvacuee = $derived(latestTriageByEvacuee(screenings));
 	const occupantCounts = $derived(countPresentOccupantsByZone(allEvacuees));
 	/** Latest screening time per evacuee — when they became ready for zoning. */
 	const latestScreeningAt = $derived.by(() => {
@@ -166,22 +170,20 @@
 	/** Guards against bits-ui toggling the single box after a Shift range select. */
 	let skipNextCheckboxChange = false;
 
-	// Oldest-waiting first: this queue is the primary worklist, scanning is a shortcut
+	// Oldest-registered first on every tab (#1426); editing a record never moves it
+	const queueEvacuees = $derived(sortByCreatedAtAsc(allEvacuees));
 	const pendingEvacuees = $derived(
-		sortByZoningQueueSince(
-			allEvacuees.filter(
-				(e) =>
-					classifyZoningQueueTab(e, {
-						enableMedicalScreening: enableMedical,
-						hasScreening: screenedIds.has(e._id)
-					}) === 'pending'
-			),
-			latestScreeningAt
+		queueEvacuees.filter(
+			(e) =>
+				classifyZoningQueueTab(e, {
+					enableMedicalScreening: enableMedical,
+					hasScreening: screenedIds.has(e._id)
+				}) === 'pending'
 		)
 	);
 	const awaitingConfirmEvacuees = $derived(
 		listPendingZoneArrivalConfirmations(
-			allEvacuees.filter(
+			queueEvacuees.filter(
 				(e) =>
 					classifyZoningQueueTab(e, {
 						enableMedicalScreening: enableMedical,
@@ -191,7 +193,7 @@
 		)
 	);
 	const assignedEvacuees = $derived(
-		allEvacuees.filter(
+		queueEvacuees.filter(
 			(e) =>
 				classifyZoningQueueTab(e, {
 					enableMedicalScreening: enableMedical,
@@ -663,6 +665,15 @@
 	</Badge>
 {/snippet}
 
+{#snippet triageBadge(evacueeId: string)}
+	{#if screenedIds.has(evacueeId)}
+		<TriageBadge
+			level={displayTriageLevel(triageByEvacuee.get(evacueeId))}
+			class="mt-1 flex w-fit"
+		/>
+	{/if}
+{/snippet}
+
 {#snippet chipList(rawLabels: string[], tone: string, heading: string)}
 	{@const labels = [...new Set(rawLabels)]}
 	{#if labels.length === 0}
@@ -1066,6 +1077,7 @@
 									>
 										{formatPersonName(row)}
 									</button>
+									{@render triageBadge(row._id)}
 									<p class="text-xs text-slate-600 tabular-nums">
 										{t.colCard}: {maskNationalId(row.person_id?.number)}
 									</p>
@@ -1177,6 +1189,7 @@
 									</Table.Cell>
 									<Table.Cell class="py-3 font-semibold text-slate-900">
 										{formatPersonName(row)}
+										{@render triageBadge(row._id)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs text-slate-600 tabular-nums">
 										{maskNationalId(row.person_id?.number)}
