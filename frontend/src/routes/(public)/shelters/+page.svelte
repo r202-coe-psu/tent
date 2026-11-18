@@ -335,7 +335,7 @@
 	{#if filterCount > 0}
 		<span
 			aria-hidden="true"
-			class="min-w-5 rounded-full bg-primary px-1.5 py-0.5 text-center text-2xs leading-none font-bold text-primary-foreground"
+			class="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-2xs leading-none font-bold text-primary-foreground tabular-nums"
 			>{filterCount}</span
 		>
 		<span class="sr-only">({filterCountText})</span>
