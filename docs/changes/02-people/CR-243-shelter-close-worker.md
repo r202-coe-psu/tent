@@ -3,7 +3,7 @@ id: CR-243
 title: ปิดศูนย์ด้วย durable job — เช็คเอาต์คนในศูนย์ผ่าน shelter-close-worker แทนการทำใน request เดียว
 status: approved
 date: 2026-11-06
-updated: 2026-11-18 # decision sync: `SHELTER_CLOSE_WORKER_POLL_MS` default 2000 → 30000 (§4) — ไม่เปิด CR ใหม่ ไม่ bump schema_v · decided_by kong
+updated: 2026-11-18 # decision sync: `SHELTER_CLOSE_WORKER_POLL_MS` default 2000 → 30000 (§4) · FR-12 budget soft หลังเริ่มเขียน · บันทึก deviation FR-19/FR-32 — ไม่เปิด CR ใหม่ ไม่ bump schema_v · decided_by kong
 requested_by: Dev Team B issue #1216 (ต่อยอด CR-219 / #986)
 decided_by: kong
 layer: stable
@@ -256,6 +256,7 @@ $SHELTER_CLOSE_WORKER_TOKEN` ไม่มี/ผิด token → `401` ไม่
   FR-16 ตรวจ `STALE_MS` · AC-12..AC-13 · ไม่มี decision ใหม่ด้าน scope
 - 2026-11-10 — แก้ตาม review รอบ 2 ข้อ 5: FR-19 ระบุพฤติกรรมเมื่อ sweep ครบ 3 รอบแล้วยังเหลือคน (`sweep_exhausted`)
 - 2026-11-18 — decision sync: ปรับ default `SHELTER_CLOSE_WORKER_POLL_MS` จาก `2000` เป็น `30000` (ลด request ว่างตอนไม่มี job) ผลคือหลังกดปิดศูนย์ job อาจรอได้สูงสุดประมาณ 30 วินาทีก่อนมี worker มารับ · FR-27: dialog แสดง "รอ worker รับงาน..." + คำอธิบายขณะ job `queued` (ยังไม่มี worker รับ) · ไม่กระทบลำดับ FR-16 (poll ไม่อยู่ในสาย `CHUNK_BUDGET < TIMEOUT < LEASE < STALE`) · แก้ default ใน §4 และ env/compose/`.env.example` · decided_by kong · ไม่เปิด CR ใหม่ · ไม่ bump schema_v
+- 2026-11-18 — decision sync (จาก code review): **FR-12** `SHELTER_CLOSE_CHUNK_BUDGET_MS` บังคับเฉพาะก่อน chunk เริ่มเขียน — เมื่อเขียน evacuee แล้ว chunk ต้องทำจนจบ (evacuee → movement → rollback → household) เพราะถ้าหยุดกลางทาง คนที่ถูกเช็คเอาต์แล้วจะไม่มี movement/audit และ FR-12 ข้ามพวกเขาในรอบถัดไป · budget ที่เกินก่อนเขียนยังคืน lease ให้ worker อื่นรับต่อและนับ `attempt` (FR-14) · แก้ **FR-32 / FR-26**: `--dry-run` ใช้ `dryRunShelterClose` (preview + นับ household ค้าง ไม่เขียน) แทนการเรียก step function เพราะ step function ไม่มีโหมดอ่านอย่างเดียว ตัวเลขเท่ากับที่ job จะทำ · แก้ **FR-19**: การเริ่ม sweep รอบใหม่ล้าง `counters.failed` และ `failures[]` ของรอบก่อน (ไม่งั้น failure ชั่วคราวที่สำเร็จในรอบถัดไปจะบล็อกการปิดศูนย์ตลอดไป) · ข้อจำกัดที่รับทราบ: ถ้า process ตายระหว่างเขียน registry `closed` กับเขียน job จบ worker ที่รับต่อ (lease หมด) จะ finalize ซ้ำและจบ `completed` โดย `closed = false` (registry ปิดอยู่แล้ว) แต่ถ้าไม่มี worker รันเกิน `SHELTER_CLOSE_STALE_MS` job จะถูกตัดเป็น `stale` ทั้งที่ศูนย์ปิดแล้ว · decided_by kong · ไม่เปิด CR ใหม่ · ไม่ bump schema_v
 
 ### ตัดสินแล้วใน #1216
 

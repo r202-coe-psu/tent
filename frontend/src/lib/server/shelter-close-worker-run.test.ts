@@ -344,6 +344,29 @@ describe('chunk budget (FR-12)', () => {
 		expect(jobDoc().status).toBe('completed');
 	});
 
+	it('lets a chunk finish once it has started writing: no checked-out person without a movement', async () => {
+		for (let i = 0; i < 5; i++) addEvacuee('active');
+		await createJob();
+		let bulk = 0;
+		couch.hook = ({ db, method, path }) => {
+			if (db === SHELTER && method === 'POST' && path.includes('_bulk_docs')) {
+				bulk += 1;
+				if (bulk === 1) now += 600; // evacuee write lands, then the budget is spent
+			}
+			return undefined;
+		};
+		const r = (await step()) as Progress;
+		expect(r.budget_exceeded).toBe(false);
+		couch.hook = null;
+		await drain();
+		const checkedOut = (couch.byType(SHELTER, 'evacuee') as FakeDoc[]).filter(
+			(e) => (e.current_stay as { status: string }).status === 'checked_out'
+		).length;
+		expect(checkedOut).toBe(5);
+		expect(couch.byType(SHELTER, 'movement')).toHaveLength(5);
+		expect(jobDoc()).toMatchObject({ status: 'completed', counters: { checked_out: 5 } });
+	});
+
 	it('ends attempts_exhausted when every chunk overruns the budget (no endless loop)', async () => {
 		addEvacuee('active');
 		await createJob();

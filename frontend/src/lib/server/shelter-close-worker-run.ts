@@ -52,6 +52,14 @@ const stateOf = (job: ShelterCloseJob): ShelterCloseStepState => ({
 	failures: job.failures
 });
 
+/** `_find` / `_all_docs` / `_design/.../_view` reads are POSTs on CouchDB but write nothing. */
+function isReadOnlyPost(method: string, path: string): boolean {
+	return (
+		method === 'POST' &&
+		(/\/_find(\?|$)/.test(path) || /\/_all_docs(\?|$)/.test(path) || /\/_view\//.test(path))
+	);
+}
+
 const patchOf = (state: ShelterCloseStepState) => ({
 	phase: state.phase,
 	cursor: state.cursor,
@@ -72,11 +80,16 @@ export async function runShelterCloseWorkerStep(
 
 	const startedAt = nowMs();
 	let exceeded = false;
+	// The budget is only enforced until the chunk issues its first write. Once evacuees are
+	// written the chunk must finish (evacuee → movement → rollback → household): aborting in
+	// between leaves people checked out without a movement, and a re-run skips them (FR-12).
+	let writing = false;
 	const guarded: CouchReq = async (method, path, body) => {
-		if (nowMs() - startedAt > config.chunkBudgetMs) {
+		if (!writing && nowMs() - startedAt > config.chunkBudgetMs) {
 			exceeded = true;
 			throw new ChunkBudgetExceeded('chunk budget exceeded');
 		}
+		if (method !== 'GET' && method !== 'HEAD' && !isReadOnlyPost(method, path)) writing = true;
 		return deps.couchReq(method, path, body);
 	};
 
