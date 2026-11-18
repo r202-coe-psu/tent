@@ -14,7 +14,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import {
 		ShelterList,
-		isShelterPublicVisible,
+		filterShelterList,
 		useShelters,
 		type ShelterSummary,
 		type SiteKind
@@ -46,24 +46,7 @@
 	const sheltersQuery = useShelters({ includeExternal: true }); // CR-252: the only list that shows external shelters
 	const shelters = $derived(sheltersQuery.data ?? []);
 	const filteredShelters = $derived(
-		shelters.filter((shelter) => {
-			if (siteKindFilter !== 'all' && shelter.site_kind !== siteKindFilter) {
-				return false;
-			}
-			if (hideHidden && !isShelterPublicVisible(shelter)) return false;
-			const q = searchQuery.trim().toLowerCase();
-			if (q) {
-				const nameMatch = shelter.name?.toLowerCase().includes(q);
-				const codeMatch = shelter.code?.toLowerCase().includes(q);
-				const provMatch = shelter.province?.toLowerCase().includes(q);
-				const distMatch = shelter.district?.toLowerCase().includes(q);
-				const subdistMatch = shelter.subdistrict?.toLowerCase().includes(q);
-				if (!nameMatch && !codeMatch && !provMatch && !distMatch && !subdistMatch) {
-					return false;
-				}
-			}
-			return true;
-		})
+		filterShelterList(shelters, { siteKind: siteKindFilter, hideHidden, query: searchQuery })
 	);
 	const total = $derived(filteredShelters.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
@@ -167,7 +150,7 @@
 			</div>
 
 			<!-- Segmented site kind filter & counter -->
-			<div class="flex items-center justify-between gap-2.5 sm:justify-end">
+			<div class="flex flex-wrap items-center justify-between gap-x-2.5 gap-y-2 sm:justify-end">
 				<div
 					class="inline-flex rounded-lg border border-slate-200/80 bg-slate-50/70 p-0.5"
 					role="tablist"
