@@ -99,6 +99,45 @@ describe('importHousehold (Backfill Import write sequence)', () => {
 		expect(household?.checkout_destination).toEqual({ type: 'returned_home' });
 	});
 
+	it('leaves a blank-status person pre_registered with no movement (#1448)', async () => {
+		const repo = peopleRepository();
+		const blank = (first: string): RawRow => ({
+			[H.first_name]: first,
+			[H.last_name]: 'ใจดี',
+			[H.gender]: 'ชาย'
+		});
+		const out = await importHousehold(
+			repo,
+			payloadOf(blank('สมชาย'), [person('สมหญิง')]),
+			new Set(),
+			ctx
+		);
+
+		expect(out).toMatchObject({ createdPeople: 2, createdMembers: 1 });
+		const members = await repo.listHouseholdMembers(out.householdId);
+		const byName = Object.fromEntries(members.map((m) => [m.first_name, m]));
+		expect(byName['สมชาย'].current_stay.status).toBe('pre_registered');
+		expect(await repo.listMovementsByEvacuee(byName['สมชาย']._id)).toEqual([]);
+		expect(byName['สมหญิง'].current_stay.status).toBe('active');
+		// Mixed household: derived from the housed member.
+		expect((await repo.getHousehold(out.householdId))?.status).toBe('checked_in');
+	});
+
+	it('writes no stays at all when everyone is blank-status', async () => {
+		const repo = peopleRepository();
+		const spy = vi.spyOn(repo, 'applyBackfilledStays');
+		const out = await importHousehold(
+			repo,
+			payloadOf({ [H.first_name]: 'สมชาย', [H.last_name]: 'ใจดี', [H.gender]: 'ชาย' }),
+			new Set(),
+			ctx
+		);
+
+		expect(spy).not.toHaveBeenCalled();
+		expect(out.createdPeople).toBe(1);
+		expect((await repo.getHousehold(out.householdId))?.status).toBe('pre_registered');
+	});
+
 	it('leaves out members already registered (skipped lines)', async () => {
 		const repo = peopleRepository();
 		const out = await importHousehold(

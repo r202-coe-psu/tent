@@ -233,7 +233,7 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 			expect(response.status).toBe(201);
 			expect(mockCreate).toHaveBeenLastCalledWith(
 				expect.objectContaining({ title: 'ประกาศ' }),
-				expect.objectContaining({ contentType: 'image/png' }),
+				{ image: expect.objectContaining({ contentType: 'image/png' }) },
 				{ shelterCode: 'SH001', createdBy: session.name }
 			);
 		}
@@ -245,7 +245,7 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 		expect(response.status).toBe(201);
 		expect(mockCreate).toHaveBeenLastCalledWith(
 			expect.objectContaining({ title: 'ประกาศ' }),
-			expect.objectContaining({ contentType: 'image/png' }),
+			{ image: expect.objectContaining({ contentType: 'image/png' }) },
 			{ shelterCode: 'SH001', createdBy: 'pr-a' }
 		);
 	});
@@ -305,6 +305,84 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 			expect((await response.json()).error.message).toMatch(/[฀-๿]/);
 		}
 		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	describe('template banners', () => {
+		const template = {
+			heading: 'ปิดปรับปรุง',
+			body: 'ศูนย์ปิดวันเสาร์',
+			align: 'center',
+			bg_color: '#1E3A8A',
+			text_color: '#ffffff',
+			image: 'template_image'
+		};
+		const templateImage = { content_type: 'image/png', data_base64: PNG_B64 };
+
+		it('passes the parsed template and the decoded logo to createBanner', async () => {
+			const response = await post('?shelter_code=SH001', {
+				...input,
+				image,
+				template,
+				template_image: templateImage
+			});
+			expect(response.status).toBe(201);
+			expect(mockCreate).toHaveBeenLastCalledWith(
+				expect.objectContaining({ template: { ...template, bg_color: '#1e3a8a' } }),
+				{
+					image: expect.objectContaining({ contentType: 'image/png' }),
+					templateImage: expect.objectContaining({ contentType: 'image/png' })
+				},
+				{ shelterCode: 'SH001', createdBy: 'sm-a' }
+			);
+			expect(mockCreate.mock.calls[0][0]).not.toHaveProperty('template_image');
+		});
+
+		it('returns 422 for a template with an unknown key or an external image url', async () => {
+			for (const bad of [
+				{ ...template, html: '<b>x</b>' },
+				{ ...template, image: 'https://x/y.png' }
+			]) {
+				const response = await post('?shelter_code=SH001', {
+					...input,
+					image,
+					template: bad,
+					template_image: templateImage
+				});
+				expect(response.status).toBe(422);
+			}
+			expect(mockCreate).not.toHaveBeenCalled();
+		});
+
+		it('returns 422 when template_image is not a real image', async () => {
+			const response = await post('?shelter_code=SH001', {
+				...input,
+				image,
+				template,
+				template_image: {
+					content_type: 'image/png',
+					data_base64: Buffer.from('hello world!').toString('base64')
+				}
+			});
+			expect(response.status).toBe(422);
+			expect(mockCreate).not.toHaveBeenCalled();
+		});
+
+		it('returns 422 when template_image is over 512 KB', async () => {
+			const oversized = new Uint8Array(512 * 1024 + 1);
+			oversized.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+			const response = await post('?shelter_code=SH001', {
+				...input,
+				image,
+				template,
+				template_image: {
+					content_type: 'image/png',
+					data_base64: Buffer.from(oversized).toString('base64')
+				}
+			});
+			expect(response.status).toBe(422);
+			expect((await response.json()).error.message).toBe('รูป/โลโก้ต้องมีขนาดไม่เกิน 512 KB');
+			expect(mockCreate).not.toHaveBeenCalled();
+		});
 	});
 
 	it('returns 422 when the group is missing or belongs to another shelter', async () => {

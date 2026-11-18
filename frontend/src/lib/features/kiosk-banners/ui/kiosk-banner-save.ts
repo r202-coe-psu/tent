@@ -6,6 +6,8 @@ export type KioskBannerSavePayload = {
 	input: KioskBannerInput;
 	/** Omitted on edit when no new file was chosen (the stored image is kept). */
 	image?: BannerImagePayload;
+	/** Template mode only: a newly chosen logo (omitted when none was chosen or the stored one is kept). */
+	templateImage?: BannerImagePayload;
 	/** Edit only: the `_rev` the form was opened on, so a concurrent save answers 409. */
 	rev?: string;
 };

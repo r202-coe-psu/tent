@@ -63,13 +63,30 @@ export const kioskBannerRemoteRepository: KioskBannerRepository = {
 		return parseOne(await request(itemPath(id)));
 	},
 
-	async create(shelterCode: string, input: KioskBannerInput, image: BannerImagePayload) {
+	async create(
+		shelterCode: string,
+		input: KioskBannerInput,
+		image: BannerImagePayload,
+		templateImage?: BannerImagePayload
+	) {
 		const url = `${BASE}?shelter_code=${encodeURIComponent(shelterCode)}`;
-		return parseOne(await request(url, jsonInit('POST', { ...input, image })));
+		const body = { ...input, image, ...(templateImage ? { template_image: templateImage } : {}) };
+		return parseOne(await request(url, jsonInit('POST', body)));
 	},
 
-	async update(id: string, rev: string, input: KioskBannerInput, image?: BannerImagePayload) {
-		const body = image ? { _rev: rev, ...input, image } : { _rev: rev, ...input };
+	async update(
+		id: string,
+		rev: string,
+		input: KioskBannerInput,
+		image?: BannerImagePayload,
+		templateImage?: BannerImagePayload
+	) {
+		const body = {
+			_rev: rev,
+			...input,
+			...(image ? { image } : {}),
+			...(templateImage ? { template_image: templateImage } : {})
+		};
 		return parseOne(await request(itemPath(id), jsonInit('PUT', body)));
 	},
 
@@ -98,6 +115,11 @@ export const kioskBannerRemoteRepository: KioskBannerRepository = {
 
 	imageUrl(id: string, rev?: string) {
 		const url = `${itemPath(id)}/image`;
+		return rev ? `${url}?v=${encodeURIComponent(rev)}` : url;
+	},
+
+	templateImageUrl(id: string, rev?: string) {
+		const url = `${itemPath(id)}/template-image`;
 		return rev ? `${url}?v=${encodeURIComponent(rev)}` : url;
 	}
 };

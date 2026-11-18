@@ -31,7 +31,7 @@ export function capacityWarnings({
 	for (const row of rows) {
 		if (!row.ok || !row.payload) continue;
 		for (const stay of [row.payload.headStay, ...row.payload.members.map((m) => m.stay)]) {
-			if (stay.status !== 'active') continue;
+			if (!stay || stay.status !== 'active') continue;
 			incomingTotal += 1;
 			if (stay.zone) incoming.set(stay.zone, (incoming.get(stay.zone) ?? 0) + 1);
 		}

@@ -1,9 +1,22 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import { toast } from 'svelte-sonner';
 import type { KioskBannerSummary } from '../data/kiosk-banner.repository';
 import KioskBannerForm from './kiosk-banner-form.svelte';
+import { TemplateExportError, exportTemplatePng } from './kiosk-banner-template-export';
+import { prepareTemplateLogo } from './kiosk-banner-template-logo';
 import type { KioskBannerSavePayload } from './kiosk-banner-save';
+
+vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('./kiosk-banner-template-export', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./kiosk-banner-template-export')>()),
+	exportTemplatePng: vi.fn()
+}));
+// The real one shrinks through a canvas, which happy-dom cannot draw.
+vi.mock('./kiosk-banner-template-logo', () => ({ prepareTemplateLogo: vi.fn() }));
+
+const exported = { content_type: 'image/png', data_base64: 'RVhQT1JURUQ=' };
 
 const stored: KioskBannerSummary = {
 	_id: 'kiosk_banner:abc',
@@ -136,6 +149,8 @@ beforeEach(() => {
 		}
 	});
 	onsave = vi.fn<(payload: KioskBannerSavePayload) => Promise<void>>().mockResolvedValue(undefined);
+	vi.mocked(exportTemplatePng).mockResolvedValue(exported);
+	vi.mocked(prepareTemplateLogo).mockImplementation(async (file) => ({ ok: true, file }));
 	let n = 0;
 	createObjectURL.mockImplementation(() => `blob:preview-${++n}`);
 	URL.createObjectURL = createObjectURL;
@@ -231,6 +246,34 @@ describe('KioskBannerForm', () => {
 
 		expect(onsave).not.toHaveBeenCalled();
 		expect(document.body.textContent).toContain('เลือกรูปภาพแบนเนอร์');
+	});
+
+	it('marks the time, not the date, when only the time is missing', async () => {
+		render();
+		type(field('title'), 'ป้ายใหม่');
+		type(field('start_at'), '2026-10-15');
+		await setDateTime('end_at', '2026-10-15', '18:00');
+		pick(png());
+
+		await submit();
+
+		expect(onsave).not.toHaveBeenCalled();
+		expect(q('#banner-start_at-time')?.getAttribute('aria-invalid')).toBe('true');
+		expect(field('start_at').getAttribute('aria-invalid')).not.toBe('true');
+		expect(document.body.textContent).toContain('เลือกเวลาเริ่ม');
+	});
+
+	it('marks both the date and the time when neither is chosen', async () => {
+		render();
+		type(field('title'), 'ป้ายใหม่');
+		await setDateTime('end_at', '2026-10-15', '18:00');
+		pick(png());
+
+		await submit();
+
+		expect(q('#banner-start_at-time')?.getAttribute('aria-invalid')).toBe('true');
+		expect(field('start_at').getAttribute('aria-invalid')).toBe('true');
+		expect(document.body.textContent).toContain('ระบุวันและเวลาเริ่ม');
 	});
 
 	it('shows the end-time error under the end field', async () => {
@@ -406,6 +449,321 @@ describe('KioskBannerForm', () => {
 			render({ ...stored, screen_type: 'portrait' });
 			expect(radio('portrait').getAttribute('aria-checked')).toBe('true');
 			expect(radio('compact').getAttribute('aria-checked')).toBe('false');
+		});
+	});
+
+	describe('template mode', () => {
+		const templated: KioskBannerSummary = {
+			...stored,
+			schema_v: 4,
+			group_id: GROUP_B,
+			template: {
+				heading: 'ปิดถนนชั่วคราว',
+				body: 'ใช้เส้นทางสำรอง',
+				align: 'left',
+				bg_color: '#000000',
+				text_color: '#ffffff',
+				image: 'template_image'
+			}
+		};
+
+		const modeButton = (label: string) =>
+			[...document.body.querySelectorAll('button')].find(
+				(b) => b.textContent?.trim() === label
+			) as HTMLButtonElement;
+		const swatch = (group: string, color: string) =>
+			q<HTMLButtonElement>(
+				`[role="group"][aria-label="${group}"] button[aria-label="${color}"]`
+			) as HTMLButtonElement;
+		const heading = () => q<HTMLInputElement>('#banner-template-heading') as HTMLInputElement;
+		const body = () => q<HTMLTextAreaElement>('#banner-template-body') as HTMLTextAreaElement;
+		const canvas = () => q('[data-testid="banner-template-canvas"]') as HTMLElement;
+		const WARNING = 'สีตัวอักษรกับสีพื้นอ่านยาก';
+
+		function useTemplate() {
+			modeButton('สร้างจาก template').click();
+			flushSync();
+		}
+
+		async function fillBase() {
+			type(field('title'), 'ป้ายจาก template');
+			await setDateTime('start_at', '2026-10-15', '08:00');
+			await setDateTime('end_at', '2026-10-15', '18:00');
+		}
+
+		it('saves the structured template and the exported PNG as the image', async () => {
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			type(body(), 'บรรทัดแรก\nบรรทัดสอง');
+			swatch('สีพื้นหลัง', 'แดง').click();
+			flushSync();
+			type(q<HTMLInputElement>('#banner-template-text_color-hex') as HTMLInputElement, '#AA00FF');
+			await fillBase();
+
+			await submit();
+
+			expect(onsave).toHaveBeenCalledTimes(1);
+			const payload = onsave.mock.calls[0][0];
+			expect(payload.input.template).toEqual({
+				heading: 'ประกาศสำคัญ',
+				body: 'บรรทัดแรก\nบรรทัดสอง',
+				align: 'center',
+				bg_color: '#b91c1c',
+				text_color: '#aa00ff',
+				image: null
+			});
+			expect(payload.image).toEqual(exported);
+			expect(payload.templateImage).toBeUndefined();
+			expect(exportTemplatePng).toHaveBeenCalledWith(expect.any(HTMLElement), 'compact');
+		});
+
+		it('sends a chosen logo as templateImage and points the template at it', async () => {
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			pick(png());
+			await fillBase();
+
+			await submit();
+
+			expect(onsave).toHaveBeenCalledTimes(1);
+			const payload = onsave.mock.calls[0][0];
+			expect(payload.templateImage).toMatchObject({ content_type: 'image/png' });
+			expect(payload.input.template?.image).toBe('template_image');
+		});
+
+		it('waits for a logo that is still being shrunk before saving', async () => {
+			let finish: (file: File) => void = () => {};
+			vi.mocked(prepareTemplateLogo).mockImplementation(
+				() => new Promise((resolve) => (finish = (file) => resolve({ ok: true, file })))
+			);
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+			const logo = png();
+			pick(logo);
+
+			await submit();
+			expect(onsave).not.toHaveBeenCalled();
+
+			finish(logo);
+			await vi.waitFor(() => expect(onsave).toHaveBeenCalledTimes(1));
+			expect(onsave.mock.calls[0][0].templateImage).toMatchObject({ content_type: 'image/png' });
+			expect(onsave.mock.calls[0][0].input.template?.image).toBe('template_image');
+		});
+
+		/** Each logo pick waits until the test resolves it, in any order. */
+		function deferLogoPicks() {
+			const pending: ((file: File) => void)[] = [];
+			vi.mocked(prepareTemplateLogo).mockImplementation(
+				() => new Promise((resolve) => pending.push((file) => resolve({ ok: true, file })))
+			);
+			return pending;
+		}
+		const pngNamed = (name: string) =>
+			new File([new Uint8Array([137, 80, 78, 71])], name, { type: 'image/png' });
+
+		it('keeps the logo picked last even when an earlier pick finishes later', async () => {
+			const pending = deferLogoPicks();
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+			const slow = pngNamed('slow.png');
+			const fast = pngNamed('fast.png');
+			pick(slow);
+			pick(fast);
+
+			pending[1](fast);
+			await tick();
+			pending[0](slow);
+			await tick();
+			flushSync();
+
+			expect(document.body.textContent).toContain('เลือกแล้ว: fast.png');
+			await submit();
+			await vi.waitFor(() => expect(onsave).toHaveBeenCalledTimes(1));
+			expect(vi.mocked(exportTemplatePng)).toHaveBeenCalledTimes(1);
+			expect(createObjectURL).toHaveBeenCalledTimes(1);
+		});
+
+		it('drops a logo that finishes shrinking after it was removed', async () => {
+			const pending = deferLogoPicks();
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+			const first = pngNamed('first.png');
+			const second = pngNamed('second.png');
+			pick(first);
+			pending[0](first);
+			await vi.waitFor(() => expect(document.body.textContent).toContain('first.png'));
+			pick(second);
+			(
+				[...document.body.querySelectorAll('button')].find((b) =>
+					b.textContent?.includes('ลบรูป/โลโก้')
+				) as HTMLButtonElement
+			).click();
+			flushSync();
+
+			pending[1](second);
+			await submit();
+
+			await vi.waitFor(() => expect(onsave).toHaveBeenCalledTimes(1));
+			expect(onsave.mock.calls[0][0].templateImage).toBeUndefined();
+			expect(onsave.mock.calls[0][0].input.template?.image).toBeNull();
+			expect(createObjectURL).toHaveBeenCalledTimes(1);
+		});
+
+		it('does not make a preview for a logo that finishes after the form is gone', async () => {
+			const pending = deferLogoPicks();
+			render();
+			useTemplate();
+			const logo = png();
+			pick(logo);
+			unmount(instance as ReturnType<typeof mount>);
+			instance = null;
+
+			pending[0](logo);
+			await tick();
+
+			expect(createObjectURL).not.toHaveBeenCalled();
+		});
+
+		it('does not save a template with neither heading nor body', async () => {
+			render();
+			useTemplate();
+			await fillBase();
+
+			await submit();
+
+			expect(onsave).not.toHaveBeenCalled();
+			expect(exportTemplatePng).not.toHaveBeenCalled();
+			expect(document.body.textContent).toContain('ระบุหัวข้อหรือเนื้อหาประกาศ');
+		});
+
+		it('toasts and does not save when the PNG cannot be rendered', async () => {
+			vi.mocked(exportTemplatePng).mockRejectedValue(new Error('boom'));
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+
+			await submit();
+
+			expect(onsave).not.toHaveBeenCalled();
+			expect(toast.error).toHaveBeenCalledWith('สร้างรูปประกาศไม่สำเร็จ');
+		});
+
+		it('toasts the actionable reason when the PNG is too large or the logo did not load', async () => {
+			const reason = 'รูปประกาศใหญ่เกิน 2 MB ลองใช้รูป/โลโก้ที่เรียบขึ้นหรือลบรูปออก';
+			vi.mocked(exportTemplatePng).mockRejectedValue(new TemplateExportError(reason));
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+			await fillBase();
+
+			await submit();
+
+			expect(onsave).not.toHaveBeenCalled();
+			expect(toast.error).toHaveBeenCalledWith(reason);
+		});
+
+		it('warns when the text and background colours are hard to read, and only then', () => {
+			render();
+			useTemplate();
+			expect(document.body.textContent).not.toContain(WARNING);
+
+			type(q<HTMLInputElement>('#banner-template-text_color-hex') as HTMLInputElement, '#1e3a8a');
+			expect(document.body.textContent).toContain(WARNING);
+
+			swatch('สีตัวอักษร', 'เหลือง').click();
+			flushSync();
+			expect(document.body.textContent).not.toContain(WARNING);
+		});
+
+		it('opens a template banner in template mode with its fields and stored logo', async () => {
+			render(templated);
+
+			expect(heading().value).toBe('ปิดถนนชั่วคราว');
+			expect(body().value).toBe('ใช้เส้นทางสำรอง');
+			expect(swatch('สีพื้นหลัง', 'ดำ').getAttribute('aria-pressed')).toBe('true');
+			expect(canvas().querySelector('img')?.getAttribute('src')).toBe(
+				'/api/back-office/kiosk-banners/kiosk_banner%3Aabc/template-image?v=3-xyz'
+			);
+
+			await submit();
+
+			expect(onsave).toHaveBeenCalledTimes(1);
+			const payload = onsave.mock.calls[0][0];
+			expect(payload.input.template?.heading).toBe('ปิดถนนชั่วคราว');
+			expect(payload.input.template?.image).toBe('template_image');
+			expect(payload.templateImage).toBeUndefined();
+			expect(payload.image).toEqual(exported);
+			expect(payload.rev).toBe('3-xyz');
+		});
+
+		it('keeps the stored logo after an invalid pick, and toasts instead of saving', async () => {
+			vi.mocked(prepareTemplateLogo).mockResolvedValue({
+				ok: false,
+				error: 'รูป/โลโก้ต้องมีขนาดไม่เกิน 512 KB'
+			});
+			render(templated);
+			pick(png());
+
+			await vi.waitFor(() =>
+				expect(document.body.textContent).toContain('รูป/โลโก้ต้องมีขนาดไม่เกิน 512 KB')
+			);
+			expect(canvas().querySelector('img')?.getAttribute('src')).toContain('/template-image');
+
+			await submit();
+
+			expect(onsave).not.toHaveBeenCalled();
+			expect(exportTemplatePng).not.toHaveBeenCalled();
+			expect(toast.error).toHaveBeenCalledWith('รูป/โลโก้ต้องมีขนาดไม่เกิน 512 KB');
+			expect(document.activeElement?.id).toBe('banner-template-image');
+		});
+
+		it('sends template.image null once the stored logo is removed', async () => {
+			render(templated);
+			const remove = [...document.body.querySelectorAll('button')].find((b) =>
+				b.textContent?.includes('ลบรูป/โลโก้')
+			) as HTMLButtonElement;
+			remove.click();
+			flushSync();
+
+			await submit();
+
+			expect(onsave.mock.calls[0][0].input.template?.image).toBeNull();
+			expect(onsave.mock.calls[0][0].templateImage).toBeUndefined();
+		});
+
+		it('shows the heading and body as literal text, never as markup', () => {
+			render();
+			useTemplate();
+			type(heading(), '<b>ด่วน</b>');
+			type(body(), '<img src=x onerror=alert(1)>');
+
+			expect(canvas().textContent).toContain('<b>ด่วน</b>');
+			expect(canvas().textContent).toContain('<img src=x onerror=alert(1)>');
+			expect(canvas().querySelector('b')).toBeNull();
+			expect(canvas().querySelector('img')).toBeNull();
+		});
+
+		it('keeps what was typed when switching between upload and template', () => {
+			render();
+			useTemplate();
+			type(heading(), 'ประกาศสำคัญ');
+
+			modeButton('อัปโหลดรูป').click();
+			flushSync();
+			expect(q('#banner-template-heading')).toBeNull();
+			expect(q('label[for="banner-image"]')).not.toBeNull();
+
+			useTemplate();
+			expect(heading().value).toBe('ประกาศสำคัญ');
 		});
 	});
 });

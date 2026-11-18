@@ -119,6 +119,16 @@ export function buildSampleWorkbook(zoneName = SAMPLE_ZONE): SampleWorkbook {
 			[H.special_needs]: `${labelOf(SPECIAL_NEED_CHOICES, 'elderly')} | ${labelOf(SPECIAL_NEED_CHOICES, 'chronic_illness')}`,
 			[H.medical_conditions]: 'เบาหวาน',
 			[H.medical_allergies]: 'เพนิซิลลิน'
+		},
+		{
+			// Not here yet — `สถานะ` blank (and no time / zone): imported "ลงทะเบียนล่วงหน้า",
+			// waits for Report-in at Station 1 (#1448).
+			[H.id_number]: '1234567890127',
+			[H.first_name]: 'สมหมาย',
+			[H.last_name]: 'ใจดี',
+			[H.gender]: labelOf(GENDER_CHOICES, 'male'),
+			[H.birth_year]: 2545,
+			[H.phone]: 'ไม่มี'
 		}
 	];
 
