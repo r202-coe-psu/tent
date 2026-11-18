@@ -5,6 +5,10 @@
 	import ItemCategoryForm from './item-category-form.svelte';
 	import ItemMasterForm from './item-master-form.svelte';
 	import RecipeForm from './recipe-form.svelte';
+	import { EntityHistory } from '$lib/features/audit-log';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { canAccessManagerPages, isSystemAdmin } from '$lib/auth/roles';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let {
 		entity,
@@ -30,6 +34,19 @@
 		}`
 	);
 
+	const historyEntityType = $derived(
+		entity === 'item-categories'
+			? 'item_category'
+			: entity === 'item-masters'
+				? 'item_master'
+				: 'recipe'
+	);
+	const roles = $derived(authStore.user?.roles ?? []);
+	const historyShelterCode = $derived(isSystemAdmin(roles) ? null : getShelterCode());
+	const canSeeHistory = $derived(
+		mode === 'edit' && Boolean(id) && canAccessManagerPages(roles, getShelterCode())
+	);
+
 	function handleBack() {
 		goto(resolve(basePath as '/back-office/catalog'));
 	}
@@ -53,4 +70,13 @@
 			<RecipeForm {id} isEdit={mode === 'edit'} {basePath} onsuccess={handleBack} />
 		{/if}
 	</div>
+	{#if canSeeHistory}
+		<div class="mt-6">
+			<EntityHistory
+				entityType={historyEntityType}
+				entityId={id}
+				shelterCode={historyShelterCode}
+			/>
+		</div>
+	{/if}
 </div>

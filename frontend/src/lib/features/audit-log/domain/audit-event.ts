@@ -1,7 +1,7 @@
 export const AUDIT_ACTIONS = ['create', 'update', 'delete', 'status_change', 'other'] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-export const AUDIT_ACTOR_KINDS = ['user', 'system', 'worker'] as const;
+export const AUDIT_ACTOR_KINDS = ['user', 'system', 'worker', 'unknown'] as const;
 export type AuditActorKind = (typeof AUDIT_ACTOR_KINDS)[number];
 
 export const AUDIT_ENTITY_TYPES = [
@@ -9,7 +9,17 @@ export const AUDIT_ENTITY_TYPES = [
 	'user',
 	'master_data',
 	'api_key',
-	'thirdparty_client'
+	'thirdparty_client',
+	'item_category',
+	'item_master',
+	'recipe',
+	'unit_of_measure',
+	'food_sphere_standard',
+	'requirement_group',
+	'replenishment_policy',
+	'evacuee',
+	'household',
+	'medical'
 ] as const;
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
 
@@ -26,13 +36,15 @@ export const AUDIT_EVENTS = {
 	userRolesChanged: 'user.roles_changed',
 	userDeleted: 'user.deleted',
 	userPasswordReset: 'user.password_reset',
+	userStaffCardRotated: 'user.staff_card_rotated',
 	masterDataUpdated: 'master_data.updated',
 	apiKeyCreated: 'api_key.created',
 	apiKeyUpdated: 'api_key.updated',
 	apiKeyRevoked: 'api_key.revoked',
 	thirdpartyClientCreated: 'thirdparty_client.created',
 	thirdpartyClientUpdated: 'thirdparty_client.updated',
-	thirdpartyClientDeleted: 'thirdparty_client.deleted'
+	thirdpartyClientDeleted: 'thirdparty_client.deleted',
+	thirdpartyClientSecretViewed: 'thirdparty_client.secret_viewed'
 } as const;
 export type AuditEventName = (typeof AUDIT_EVENTS)[keyof typeof AUDIT_EVENTS];
 
@@ -58,8 +70,9 @@ export interface AuditEvent {
 	shelter_code: string | null;
 	changes?: AuditChange[];
 	reason?: string | null;
-	source: 'bff' | 'worker_copy';
+	source: 'bff' | 'worker_copy' | 'worker_diff';
 	source_ref?: string | null;
+	changes_unknown?: boolean;
 }
 
 export const AUDIT_VALUE_ALLOWLIST: Record<AuditEntityType, readonly string[]> = {
@@ -80,7 +93,30 @@ export const AUDIT_VALUE_ALLOWLIST: Record<AuditEntityType, readonly string[]> =
 	user: ['roles', 'display_name', 'active'],
 	master_data: [],
 	api_key: ['name', 'scopes', 'status', 'expires_at'],
-	thirdparty_client: ['name', 'status', 'allowed_scopes']
+	thirdparty_client: ['name', 'status', 'allowed_scopes'],
+	item_category: ['name', 'default_class', 'is_default', 'deactivated'],
+	item_master: [
+		'name',
+		'sku',
+		'category',
+		'base_unit',
+		'distribution_type',
+		'type_class',
+		'qty_per_person',
+		'returnable',
+		'shelf_life_days',
+		'storage_type',
+		'deactivated',
+		'merged_into'
+	],
+	recipe: ['label', 'standard_portions', 'standard_duration_hours', 'deactivated'],
+	unit_of_measure: ['code', 'label_th', 'label_en', 'dimension', 'sort_order', 'deactivated'],
+	food_sphere_standard: [],
+	requirement_group: [],
+	replenishment_policy: [],
+	evacuee: ['household_id', 'preferred_zone', 'registered_via', 'anonymized'],
+	household: ['status', 'head_evacuee_id', 'housing_type'],
+	medical: []
 };
 
 const IGNORED_FIELDS = new Set([

@@ -199,6 +199,9 @@ async function syncCatalogAccessDesign(
   if (userCtx.roles.indexOf('_admin') !== -1) {
     return;
   }
+  if (newDoc.updated_by !== undefined && newDoc.updated_by !== null && newDoc.updated_by !== userCtx.name) {
+    throw({ forbidden: 'updated_by must match the authenticated user' });
+  }
   if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
     if (newDoc._deleted === true) {
       throw({ forbidden: 'Cannot delete system protected category: ' + oldDoc._id });

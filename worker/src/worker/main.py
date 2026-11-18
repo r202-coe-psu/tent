@@ -10,6 +10,7 @@ import signal
 
 from tent_model import close_db, init_db
 
+from worker.audit_diff import configure_audit_diff
 from worker.config import load_settings
 from worker.couch.bootstrap import maybe_bootstrap
 from worker.couch.client import CouchClient
@@ -35,6 +36,10 @@ logger = logging.getLogger(__name__)
 
 async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     settings = load_settings()
+    configure_audit_diff(
+        enabled=settings.audit_diff_enabled,
+        public_writer=settings.public_writer_name,
+    )
     await init_db(settings.mongodb_uri)
     couch = CouchClient(settings)
     manager = ListenerManager(couch)

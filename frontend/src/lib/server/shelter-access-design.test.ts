@@ -8437,3 +8437,49 @@ describe('buildValidateDocUpdate — lot_counter (CR-244 FR-11–FR-13)', () => 
 		expect(() => compile()(del, counter(3), COUCH_ADMIN)).not.toThrow();
 	});
 });
+
+describe('updated_by must be the writer (CR-260 FR-C10)', () => {
+	const evacuee = (over: Doc = {}): Doc => ({
+		_id: 'evacuee:01J',
+		type: 'evacuee',
+		...envelope,
+		created_by: 'reg',
+		...over
+	});
+
+	it('rejects a member who stamps someone else', () => {
+		expectForbidden(
+			() => compile()(evacuee({ updated_by: 'sm' }), evacuee(), REGISTRATION),
+			/updated_by must match/
+		);
+	});
+
+	it('rejects a tombstone that names someone else', () => {
+		expectForbidden(
+			() =>
+				compile()(
+					{ _id: 'evacuee:01J', _deleted: true, updated_by: 'sm' },
+					evacuee(),
+					REGISTRATION
+				),
+			/updated_by must match/
+		);
+	});
+
+	it('lets admin and the shelter replication account write any updated_by', () => {
+		const admin: UserCtx = { name: 'admin', roles: ['_admin'] };
+		const repl: UserCtx = { name: 'repl_sh001_x', roles: ['repl:SH001'] };
+		expect(() => compile()(evacuee({ updated_by: 'worker' }), evacuee(), admin)).not.toThrow();
+		expect(() => compile()(evacuee({ updated_by: 'reg' }), evacuee(), repl)).not.toThrow();
+	});
+
+	it('does not reject a write for this rule when updated_by matches or is absent', () => {
+		for (const doc of [evacuee({ updated_by: 'reg' }), evacuee()]) {
+			try {
+				compile()(doc, evacuee(), REGISTRATION);
+			} catch (e) {
+				expect((e as { forbidden?: string }).forbidden ?? '').not.toMatch(/updated_by/);
+			}
+		}
+	});
+});

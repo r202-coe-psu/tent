@@ -6,8 +6,10 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from worker.audit_diff import audit_diff
 from worker.audit_log import copy_audit_doc, is_audit_doc
 from worker.couch.checkpoint import save_checkpoint
+from worker.couch.client import CATALOG_DB
 from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
     apply_donation,
@@ -122,6 +124,11 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
     if seq is None:
         return
 
+    if database == CATALOG_DB:
+        await audit_diff(couch, database, change)
+        await save_checkpoint(database, seq)
+        return
+
     if database != REGISTRY_DB:
         gated_code = shelter_code_from_db_name(database)
         public_status = (
@@ -136,6 +143,8 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             # CR-252: external shelter — it has no operational DB content to project.
             await save_checkpoint(database, seq)
             return
+        if gated_code:
+            await audit_diff(couch, database, change)
         if gated_code and not change.get("deleted") and is_audit_doc(change.get("doc")):
             await copy_audit_doc(couch, change["doc"], database)
             await save_checkpoint(database, seq)
