@@ -83,6 +83,8 @@
 		onGoMedical?: (evacuee: Evacuee) => void;
 		onGoZoning?: (evacuee: Evacuee) => void;
 	} = $props();
+	/** Arriving people go to screening (Station 2) when the shelter screens, else straight to zoning (Station 3). */
+	const arrivingLabel = $derived(enableMedical ? t.arrivingToScreening : t.arrivingToZoning);
 
 	const allEvacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
@@ -397,7 +399,7 @@
 			: 'border-slate-200/80 bg-white shadow-2xs'}"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-semibold text-amber-900">{t.arrivingTitle}</span>
+			<span class="text-xs font-semibold text-amber-900">{arrivingLabel}</span>
 			<div
 				class="flex size-7 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
 			>
@@ -512,7 +514,7 @@
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 			>
 				<Clock class="size-4" />
-				<span>{t.tabArriving}</span>
+				<span>{arrivingLabel}</span>
 				<span
 					class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 tabular-nums dark:bg-amber-950 dark:text-amber-300"
 				>

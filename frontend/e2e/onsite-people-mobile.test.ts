@@ -76,7 +76,7 @@ const SEED_DOCS = [
 
 const TABS = [
 	{ name: /รอรายงานตัว/, cards: 2 },
-	{ name: /รอส่งต่อ Station 2/, cards: 1 },
+	{ name: /รอส่งต่อ(คัดกรอง|จัดสรรที่พัก)/, cards: 1 },
 	{ name: /ผู้ประสบภัยทั้งหมด/, cards: 4 }
 ];
 
