@@ -215,6 +215,13 @@ export {
 } from './domain/intake-pipeline';
 
 export {
+	parseEvacueeSearchQuery,
+	type EvacueeSearchPlan,
+	type EvacueeSearchCursor,
+	type EvacueeSearchPage
+} from './domain/evacuee-search';
+
+export {
 	buildEvacueeQrLabel,
 	EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 	type EvacueeQrLabel,
@@ -364,6 +371,7 @@ export {
 	usePendingScreeningEvacuees,
 	useEvacueesPaginated,
 	useSearchEvacuees,
+	useEvacueeServerSearch,
 	useCreateEvacuee,
 	useCreateFamilyRegistration,
 	useSubmitFamilyReportIn,
