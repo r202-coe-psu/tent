@@ -1,4 +1,4 @@
-import { adminRaw, ServiceError } from '$lib/server/couch-admin';
+import { adminAttachment, adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	TEMPLATE_IMAGE_ATTACHMENT,
 	createKioskBanner,
@@ -368,24 +368,17 @@ export async function listActiveForShelter(
 	);
 }
 
+/** One attachment's bytes; `?attachments=true` would also pull the other one (image + logo). */
 async function readAttachment(
 	id: string,
 	name: string
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
-	const res = await adminRaw(`${docPath(id)}?attachments=true`, 'GET');
+	const res = await adminAttachment(`${docPath(id)}/${encodeURIComponent(name)}`);
 	if (res.status === 404) return null;
-	if (res.status >= 400) {
+	if (!res.bytes || !res.contentType) {
 		throw new ServiceError('INTERNAL', `Could not read banner image ${id} (${res.status})`);
 	}
-	const image = (
-		res.data as { _attachments?: Record<string, { content_type: string; data?: string }> }
-	)._attachments?.[name];
-	if (!image?.data) return null;
-	const buf = Buffer.from(image.data, 'base64');
-	return {
-		bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
-		contentType: image.content_type
-	};
+	return { bytes: res.bytes, contentType: res.contentType };
 }
 
 export const getBannerImage = (id: string) => readAttachment(id, IMAGE_ATTACHMENT);

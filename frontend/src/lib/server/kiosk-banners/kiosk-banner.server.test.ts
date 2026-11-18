@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('$lib/server/couch-admin', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/couch-admin')>()),
-	adminRaw: vi.fn()
+	adminRaw: vi.fn(),
+	adminAttachment: vi.fn()
 }));
 
-import { adminRaw, ServiceError } from '$lib/server/couch-admin';
+import { adminAttachment, adminRaw, ServiceError } from '$lib/server/couch-admin';
 import type { KioskBannerInput, KioskBannerTemplate } from '$lib/features/kiosk-banners';
 import {
 	BannerNotFoundError,
@@ -22,6 +23,7 @@ import {
 } from './kiosk-banner.server';
 
 const adminRawMock = vi.mocked(adminRaw);
+const adminAttachmentMock = vi.mocked(adminAttachment);
 
 const NOW = new Date('2026-10-15T03:00:00.000Z');
 const GROUP_A = 'kiosk_banner_group:A';
@@ -41,6 +43,7 @@ const pngBase64 = Buffer.from(png).toString('base64');
 
 beforeEach(() => {
 	adminRawMock.mockReset();
+	adminAttachmentMock.mockReset();
 });
 
 const BYTES = { bytes: png, contentType: 'image/png' } as const;
@@ -1077,65 +1080,49 @@ describe('listActiveForShelter by slot', () => {
 	});
 });
 
+const attachmentOf = (bytes: Uint8Array, contentType: string) => ({
+	status: 200,
+	bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+	contentType
+});
+const MISSING = { status: 404, bytes: null, contentType: null };
+
 describe('getBannerImage', () => {
-	it('decodes the inline attachment fetched with attachments=true', async () => {
-		adminRawMock.mockResolvedValue({
-			status: 200,
-			data: existingDoc({ _attachments: { image: { content_type: 'image/png', data: pngBase64 } } })
-		});
+	it('fetches only the image attachment, not the whole doc with every attachment', async () => {
+		adminAttachmentMock.mockResolvedValue(attachmentOf(png, 'image/png'));
 
 		const image = await getBannerImage('kiosk_banner:b1');
 
-		expect(adminRawMock).toHaveBeenCalledWith(
-			'/registry/kiosk_banner%3Ab1?attachments=true',
-			'GET'
-		);
+		expect(adminAttachmentMock).toHaveBeenCalledWith('/registry/kiosk_banner%3Ab1/image');
+		expect(adminRawMock).not.toHaveBeenCalled();
 		expect(image?.contentType).toBe('image/png');
 		expect(Array.from(new Uint8Array(image!.bytes))).toEqual(Array.from(png));
 	});
 
 	it('returns null when the doc or attachment is missing', async () => {
-		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
+		adminAttachmentMock.mockResolvedValue(MISSING);
 		expect(await getBannerImage('kiosk_banner:x')).toBeNull();
+	});
 
-		adminRawMock.mockResolvedValueOnce({
-			status: 200,
-			data: existingDoc({ _attachments: undefined })
-		});
-		expect(await getBannerImage('kiosk_banner:y')).toBeNull();
+	it('fails on any other CouchDB error', async () => {
+		adminAttachmentMock.mockResolvedValue({ status: 500, bytes: null, contentType: null });
+		await expect(getBannerImage('kiosk_banner:x')).rejects.toBeInstanceOf(ServiceError);
 	});
 });
 
 describe('getBannerTemplateImage', () => {
-	it('decodes the template_image attachment fetched with attachments=true', async () => {
-		adminRawMock.mockResolvedValue({
-			status: 200,
-			data: existingDoc({
-				_attachments: {
-					image: { content_type: 'image/png', data: pngBase64 },
-					template_image: { content_type: 'image/jpeg', data: logoBase64 }
-				}
-			})
-		});
+	it('fetches only the template_image attachment', async () => {
+		adminAttachmentMock.mockResolvedValue(attachmentOf(LOGO_BYTES.bytes, 'image/jpeg'));
 
 		const logo = await getBannerTemplateImage('kiosk_banner:b1');
 
-		expect(adminRawMock).toHaveBeenCalledWith(
-			'/registry/kiosk_banner%3Ab1?attachments=true',
-			'GET'
-		);
+		expect(adminAttachmentMock).toHaveBeenCalledWith('/registry/kiosk_banner%3Ab1/template_image');
 		expect(logo?.contentType).toBe('image/jpeg');
 		expect(Array.from(new Uint8Array(logo!.bytes))).toEqual([9, 8, 7]);
 	});
 
 	it('returns null when the doc is missing or has no template_image', async () => {
-		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
+		adminAttachmentMock.mockResolvedValue(MISSING);
 		expect(await getBannerTemplateImage('kiosk_banner:x')).toBeNull();
-
-		adminRawMock.mockResolvedValueOnce({
-			status: 200,
-			data: existingDoc({ _attachments: { image: { content_type: 'image/png', data: pngBase64 } } })
-		});
-		expect(await getBannerTemplateImage('kiosk_banner:y')).toBeNull();
 	});
 });
