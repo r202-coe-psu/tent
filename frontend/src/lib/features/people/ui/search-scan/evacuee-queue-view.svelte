@@ -42,6 +42,7 @@
 		displayTriageLevel
 	} from '../../domain/intake-pipeline';
 	import { peopleLabels } from '../../domain/people';
+	import { sortByCreatedAtAsc } from '../../domain/evacuee-sort';
 	import { EVACUEE_QUEUE_I18N } from '../_constants/evacuee-queue.i18n';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
@@ -140,44 +141,38 @@
 	);
 
 	const preRegisteredFiltered = $derived(
-		preRegisteredEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				const isKiosk = e.registered_via === 'kiosk' || !!e.card_snapshot;
-				const isWeb = e.registered_via === 'web';
-				if (preRegChannelFilter === 'kiosk') return isKiosk;
-				if (preRegChannelFilter === 'web') return isWeb;
-				if (preRegChannelFilter === 'other') return !isKiosk && !isWeb;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(preRegisteredEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			const isKiosk = e.registered_via === 'kiosk' || !!e.card_snapshot;
+			const isWeb = e.registered_via === 'web';
+			if (preRegChannelFilter === 'kiosk') return isKiosk;
+			if (preRegChannelFilter === 'web') return isWeb;
+			if (preRegChannelFilter === 'other') return !isKiosk && !isWeb;
+			return true;
+		})
 	);
 
 	const arrivingFiltered = $derived(
-		arrivingEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				const hasScreening = screenedIds.has(e._id);
-				if (arrivingSubTab === 'medical') return enableMedical && !hasScreening;
-				if (arrivingSubTab === 'zoning') return !enableMedical || hasScreening;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(arrivingEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			const hasScreening = screenedIds.has(e._id);
+			if (arrivingSubTab === 'medical') return enableMedical && !hasScreening;
+			if (arrivingSubTab === 'zoning') return !enableMedical || hasScreening;
+			return true;
+		})
 	);
 
 	const allFiltered = $derived(
-		allEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				if (allStatusFilter === IN_SHELTER_FILTER) {
-					if (!isInShelterStatus(e)) return false;
-				} else if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) {
-					return false;
-				}
-				if (allZoneFilter !== 'all' && e.current_stay?.zone !== allZoneFilter) return false;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(allEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			if (allStatusFilter === IN_SHELTER_FILTER) {
+				if (!isInShelterStatus(e)) return false;
+			} else if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) {
+				return false;
+			}
+			if (allZoneFilter !== 'all' && e.current_stay?.zone !== allZoneFilter) return false;
+			return true;
+		})
 	);
 
 	const activeFiltered = $derived(
