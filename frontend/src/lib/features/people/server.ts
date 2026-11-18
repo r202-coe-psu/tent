@@ -78,6 +78,15 @@ export {
 	type StationTimeRow
 } from './domain/station-log';
 
+export {
+	emptySearchNormalizeCounts,
+	normalizeEvacueeSearchFields,
+	planEvacueeSearchNormalize,
+	type SearchNormalizeCandidate,
+	type SearchNormalizeCounts,
+	type SearchNormalizeField
+} from './domain/evacuee-search-normalize';
+
 export { registeredViaSchema } from '$lib/db/model';
 
 export type {
