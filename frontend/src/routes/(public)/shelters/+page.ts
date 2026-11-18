@@ -1,14 +1,13 @@
 import type { PageLoad } from './$types';
 import {
+	fetchShelterSummary,
 	fetchShelterTypes,
 	listPublicShelters,
 	toPublicShelterCard,
 	type PublicShelterListResponse,
 	type PublicShelterItem,
+	type PublicShelterSummary,
 	type MasterLabelOption,
-	countBySiteKind,
-	shelterGroup,
-	takesAllParkingTypes,
 	hiddenShelterGroups,
 	wantedParkingTypes
 } from '$lib/features/public-portal';
@@ -35,6 +34,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const subdistrict = url.searchParams.get('subdistrict') || '';
 	const typeFilter = url.searchParams.get('type') || '';
 	const statusParam = url.searchParams.getAll('status').join(',') || '';
+	// 5 km unless the visitor chose otherwise; `distance=` (empty) means they cleared the radius.
 	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
@@ -63,33 +63,57 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const userLngNum = user_lng ? parseFloat(user_lng) : NaN;
 	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
 	const maxDistance = distance ? parseFloat(distance) : NaN;
+	const hasRadius = hasUser && !Number.isNaN(maxDistance) && maxDistance > 0;
 
-	let data: PublicShelterListResponse | null;
+	// The cards count every shelter the page can list, whatever the filters say (#1419).
+	// When it cannot be had the cards say so (`null` → a dash). Zeros would read as "no shelters".
+	const summaryPromise: Promise<PublicShelterSummary | null> = fetchShelterSummary({
+		hide_host_house: true,
+		fetch
+	}).catch(() => null);
+
 	let shelterTypes: MasterLabelOption[] = [];
 	try {
-		const [sheltersRes, typesRes] = await Promise.all([
-			listPublicShelters({
-				province: province || undefined,
-				district: district || undefined,
-				subdistrict: subdistrict || undefined,
-				status: status || undefined,
-				lat: hasUser ? userLatNum : undefined,
-				lng: hasUser ? userLngNum : undefined,
-				radius_km:
-					hasUser && !Number.isNaN(maxDistance) && maxDistance > 0 ? maxDistance : undefined,
-				fetch
-			}),
-			fetchShelterTypes(fetch)
-		]);
-		data = sheltersRes;
-		shelterTypes = typesRes;
+		shelterTypes = await fetchShelterTypes(fetch);
 	} catch {
-		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
+		/* no labels: the list still loads, with the raw type codes */
 	}
 
 	const typeMap = new Map<string, string>();
 	for (const t of shelterTypes) {
 		typeMap.set(t.code, formatMasterLabel(t, 'th'));
+	}
+	// The URL and the filter panel speak labels; the database holds the type code.
+	const adminTypeCode = typeFilter.trim()
+		? (shelterTypes.find((t) => formatMasterLabel(t, 'th') === typeFilter.trim())?.code ??
+			typeFilter.trim())
+		: undefined;
+
+	let data: PublicShelterListResponse | null;
+	try {
+		data = await listPublicShelters({
+			province: province || undefined,
+			district: district || undefined,
+			subdistrict: subdistrict || undefined,
+			status: status || undefined,
+			// With a radius the database cuts and orders by distance (`$nearSphere`). Without one it
+			// would drop every shelter that has no pin, so the position stays here and only the
+			// distances and the order are worked out below.
+			lat: hasRadius ? userLatNum : undefined,
+			lng: hasRadius ? userLngNum : undefined,
+			radius_km: hasRadius ? maxDistance : undefined,
+			q: search,
+			admin_type: adminTypeCode,
+			hide_full,
+			hide_evacuation: groupsHidden.includes('evacuation'),
+			hide_external: groupsHidden.includes('external'),
+			// The evacuee-facing search never lists a plain host house (#1419).
+			hide_host_house: true,
+			parking: parkingWanted,
+			fetch
+		});
+	} catch {
+		data = { shelters: [], count: 0, as_of: new Date().toISOString() };
 	}
 
 	const rawShelters = (Array.isArray(data?.shelters) ? data.shelters : []) as PublicShelterItem[];
@@ -115,40 +139,6 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		);
 	});
 
-	if (search.trim()) {
-		const q = search.trim().toLowerCase();
-		shelters = shelters.filter(
-			(s) =>
-				(s.name && s.name.toLowerCase().includes(q)) ||
-				(s.code && s.code.toLowerCase().includes(q)) ||
-				(s.province && s.province.toLowerCase().includes(q)) ||
-				(s.district && s.district.toLowerCase().includes(q))
-		);
-	}
-
-	if (typeFilter.trim()) {
-		const tf = typeFilter.trim();
-		shelters = shelters.filter((s) => s.admin_type === tf);
-	}
-
-	// Shelter-type toggles default to on; only the switched-off ones are in the URL.
-	if (groupsHidden.length > 0) {
-		shelters = shelters.filter((s) => !groupsHidden.includes(shelterGroup(s)));
-	}
-
-	if (hide_full) {
-		shelters = shelters.filter((s) => s.status !== 'FULL');
-	}
-
-	// Client-side like `q` / `type`; several ticked types = the shelter takes every one (CR-253 FR-34).
-	if (parkingWanted.length > 0) {
-		shelters = shelters.filter((s) => takesAllParkingTypes(s.parking_vehicle_types, parkingWanted));
-	}
-
-	if (hasUser && !Number.isNaN(maxDistance) && maxDistance > 0) {
-		shelters = shelters.filter((s) => !s.geo || s.distance <= maxDistance);
-	}
-
 	// Closest-first when a search origin (GPS or map pin) is present.
 	if (hasUser) {
 		shelters = [...shelters].sort((a, b) => {
@@ -157,8 +147,6 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			return da - db;
 		});
 	}
-
-	const openCount = shelters.filter((s) => s.status === 'OPEN' || s.status === 'FULL').length;
 
 	const available_types = Array.from(
 		new Set(
@@ -172,11 +160,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		shelters,
 		count: shelters.length,
 		as_of: data?.as_of ?? new Date().toISOString(),
-		summary: {
-			shelters_total: shelters.length,
-			shelters_open: openCount,
-			counts_by_site_kind: countBySiteKind(shelters)
-		},
+		summary: await summaryPromise,
 		filters: {
 			search,
 			province,
@@ -192,8 +176,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			parking_motorcycle: parkingWanted.includes('motorcycle') ? 'on' : '',
 			parking_boat: parkingWanted.includes('boat') ? 'on' : '',
 			hide_evacuation: groupsHidden.includes('evacuation') ? 'on' : '',
-			hide_external: groupsHidden.includes('external') ? 'on' : '',
-			hide_host_house: groupsHidden.includes('host_house') ? 'on' : ''
+			hide_external: groupsHidden.includes('external') ? 'on' : ''
 		},
 		available_types
 	};

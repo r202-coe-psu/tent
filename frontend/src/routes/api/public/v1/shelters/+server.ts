@@ -13,10 +13,21 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		'site_kind',
 		'lat',
 		'lng',
-		'radius_km'
+		'radius_km',
+		// Filters that run in the database (#1419)
+		'q',
+		'admin_type',
+		'hide_full',
+		'hide_evacuation',
+		'hide_external',
+		'hide_host_house'
 	] as const) {
 		const value = url.searchParams.get(key);
 		if (value) upstream.searchParams.set(key, value);
+	}
+	// Every ticked vehicle type must reach FastAPI, so this one is repeated, not read once.
+	for (const type of url.searchParams.getAll('parking')) {
+		if (type) upstream.searchParams.append('parking', type);
 	}
 
 	try {
