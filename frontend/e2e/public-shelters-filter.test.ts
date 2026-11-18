@@ -71,6 +71,12 @@ test.describe(
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทอาคาร' })).toBeVisible();
+			// Province / district / subdistrict sit in a collapsed "advanced filters" section (#1419).
+			await expect(page.getByRole('button', { name: 'ตัวกรองขั้นสูง' })).toHaveAttribute(
+				'aria-expanded',
+				'false'
+			);
+			await expect(page.getByRole('button', { name: 'จังหวัด', exact: true })).toBeHidden();
 			await expect(page.getByRole('button', { name: '5 กม' })).toBeVisible();
 			await expect(page.getByRole('button', { name: '5 กม' })).toHaveAttribute(
 				'aria-pressed',
@@ -237,6 +243,7 @@ test.describe(
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
+			await page.getByRole('button', { name: 'ตัวกรองขั้นสูง' }).click();
 			await page.getByRole('button', { name: 'จังหวัด', exact: true }).click();
 			await page.getByRole('textbox', { name: 'ค้นหา...' }).fill('สงขลา');
 			await page.getByRole('button', { name: 'สงขลา' }).click();
@@ -249,6 +256,11 @@ test.describe(
 			await page.getByRole('button', { name: 'ตำบล/แขวง' }).click();
 			await page.getByRole('button', { name: 'บ้านพรุ' }).click();
 			await expect(page).toHaveURL(/subdistrict=/);
+			// The active area filter stays in view after the reload the filter triggers.
+			await expect(page.getByRole('button', { name: 'ตัวกรองขั้นสูง' })).toHaveAttribute(
+				'aria-expanded',
+				'true'
+			);
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 

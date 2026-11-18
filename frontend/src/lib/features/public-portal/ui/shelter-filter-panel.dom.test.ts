@@ -10,7 +10,8 @@ const env = vi.hoisted(() => ({
 	goto: vi.fn(async (href: string) => {
 		env.pending = new URL(href, 'http://localhost');
 	}),
-	position: { lat: '7.0086', lng: '100.4968' }
+	position: { lat: '7.0086', lng: '100.4968' },
+	locations: [] as { province: string; district: string; subdistrict: string }[]
 }));
 
 vi.mock('$app/navigation', () => ({ goto: env.goto }));
@@ -27,7 +28,7 @@ vi.mock('$app/state', () => ({
 		}
 	}
 }));
-vi.mock('$lib/features/shelters', () => ({ getAllLocations: async () => [] }));
+vi.mock('$lib/features/shelters', () => ({ getAllLocations: async () => env.locations }));
 vi.mock('../application/queries', () => ({ useSiteKinds: () => ({ data: [] }) }));
 vi.mock('../data/geolocation', () => ({
 	geolocationBlockReason: () => null,
@@ -236,5 +237,89 @@ describe('ShelterFilterPanel — parking filter (CR-253 FR-33)', () => {
 		for (let i = 0; i < 3; i++) await tick();
 		expect(committedUrl().get('parking_car')).toBe('on');
 		expect(committedUrl().has('parking_boat')).toBe(false);
+	});
+});
+
+describe('ShelterFilterPanel — advanced filters: province / district / subdistrict (#1419)', () => {
+	const URL_WITH_POSITION =
+		'http://localhost/shelters?user_lat=7.0086&user_lng=100.4968&distance=5';
+	const POSITION = { user_lat: '7.0086', user_lng: '100.4968', distance: '5' };
+
+	beforeEach(() => {
+		env.url = new URL(URL_WITH_POSITION);
+		env.pending = null;
+		env.goto.mockClear();
+		env.locations = [{ province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'บ้านพรุ' }];
+	});
+	afterEach(() => {
+		if (component) unmount(component);
+		component = undefined;
+		document.body.innerHTML = '';
+		env.locations = [];
+	});
+
+	const trigger = () =>
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+			b.textContent?.includes('ตัวกรองขั้นสูง')
+		);
+	const areaSelects = () =>
+		['province', 'district', 'subdistrict'].map((n) =>
+			document.body.querySelector(`[data-name="${n}"]`)
+		);
+	/** The section the trigger controls is open and every area select sits inside it. */
+	const areaShown = () => {
+		const content = trigger()!
+			.closest('[data-accordion-item]')
+			?.querySelector<HTMLElement>('[data-accordion-content]');
+		if (!content || content.getAttribute('data-state') !== 'open' || content.hidden) return false;
+		return areaSelects().every((el) => el !== null && content.contains(el));
+	};
+
+	it('starts collapsed, with the area selects hidden until it is expanded', async () => {
+		await render({ userLat: '7.0086', userLng: '100.4968', filters: POSITION });
+
+		expect(trigger()).toBeDefined();
+		expect(trigger()!.getAttribute('aria-expanded')).toBe('false');
+		expect(areaShown()).toBe(false);
+
+		trigger()!.click();
+		flushSync();
+		await tick();
+
+		expect(trigger()!.getAttribute('aria-expanded')).toBe('true');
+		expect(areaShown()).toBe(true);
+	});
+
+	it.each([
+		['province', { province: 'สงขลา' }],
+		['district', { province: 'สงขลา', district: 'หาดใหญ่' }],
+		['subdistrict', { province: 'สงขลา', district: 'หาดใหญ่', subdistrict: 'บ้านพรุ' }]
+	])('opens by itself when the URL already filters by %s', async (_name, area) => {
+		const qs = new URLSearchParams({ ...POSITION, ...area });
+		env.url = new URL(`http://localhost/shelters?${qs}`);
+		await render({ userLat: '7.0086', userLng: '100.4968', filters: { ...POSITION, ...area } });
+
+		expect(trigger()!.getAttribute('aria-expanded')).toBe('true');
+		expect(areaShown()).toBe(true);
+		expect(env.goto).not.toHaveBeenCalled();
+	});
+
+	it('still writes a picked province to the URL', async () => {
+		await render({ userLat: '7.0086', userLng: '100.4968', filters: POSITION });
+		trigger()!.click();
+		flushSync();
+		await tick();
+		env.goto.mockClear();
+
+		document.body.querySelector<HTMLElement>('[data-name="province"]')!.click();
+		flushSync();
+		await tick();
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')]
+			.find((b) => b.textContent?.trim() === 'สงขลา')!
+			.click();
+		for (let i = 0; i < 3; i++) await tick();
+
+		expect(committedUrl().get('province')).toBe('สงขลา');
+		expect(committedUrl().get('distance')).toBe('5');
 	});
 });

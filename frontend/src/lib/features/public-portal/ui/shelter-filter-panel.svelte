@@ -83,6 +83,7 @@
 
 	const STATUS_VALUES = ['open', 'full', 'prepare', 'closed', 'unknown'] as const;
 	const DISTANCE_PRESETS = ['1', '2', '4', '5', '10'] as const;
+	const ADVANCED_ITEM = 'advanced-filters';
 	const SEARCH_DEBOUNCE_MS = 300;
 
 	let searchQuery = $state<string>('');
@@ -103,6 +104,8 @@
 	let parkBoatChecked = $state(false);
 	let showEvacuation = $state(true);
 	let showExternal = $state(true);
+	/** Open item of the "advanced filters" accordion (province / district / subdistrict). */
+	let advancedOpen = $state<string>('');
 	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -234,6 +237,8 @@
 
 			lastProvince = f.province ?? '';
 			lastDistrict = f.district ?? '';
+			// An area filter in effect is never tucked away in a closed section.
+			if (f.province || f.district || f.subdistrict) advancedOpen = ADVANCED_ITEM;
 
 			void tick().then(() => {
 				hydrating = false;
@@ -558,51 +563,6 @@
 						<Search class="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
 					</div>
 				</div>
-				<!-- Province -->
-				<div class="w-full space-y-1.5">
-					<Label for={`${idPrefix}province`} class="text-xs font-semibold text-muted-foreground"
-						>{t.provinceLabel}</Label
-					>
-					<SearchSelect
-						name="province"
-						id={`${idPrefix}province`}
-						placeholder={t.provincePlaceholder}
-						bind:value={selectedProvince}
-						options={provincesList}
-						loading={loadingLocations}
-					/>
-				</div>
-
-				<!-- District -->
-				<div class="w-full space-y-1.5">
-					<Label for={`${idPrefix}district`} class="text-xs font-semibold text-muted-foreground"
-						>{t.districtLabel}</Label
-					>
-					<SearchSelect
-						name="district"
-						id={`${idPrefix}district`}
-						placeholder={t.districtPlaceholder}
-						bind:value={selectedDistrict}
-						options={districtsList}
-						loading={loadingLocations}
-					/>
-				</div>
-
-				<!-- Sub-district -->
-				<div class="w-full space-y-1.5">
-					<Label for={`${idPrefix}subdistrict`} class="text-xs font-semibold text-muted-foreground"
-						>{t.subdistrictLabel}</Label
-					>
-					<SearchSelect
-						name="subdistrict"
-						id={`${idPrefix}subdistrict`}
-						placeholder={t.subdistrictPlaceholder}
-						bind:value={selectedSubdistrict}
-						options={subdistrictsList}
-						loading={loadingLocations}
-					/>
-				</div>
-
 				<!-- Status (CR-252 FR-23) -->
 				<div class="space-y-1.5">
 					<Label for={`${idPrefix}status`} class="text-xs font-semibold text-muted-foreground"
@@ -725,8 +685,8 @@
 
 				<!-- Advanced Filters -->
 				<div class="overflow-hidden rounded-xl border border-border">
-					<Accordion.Root type="single" class="w-full">
-						<Accordion.Item value="advanced-filters" class="border-none">
+					<Accordion.Root type="single" class="w-full" bind:value={advancedOpen}>
+						<Accordion.Item value={ADVANCED_ITEM} class="border-none">
 							<Accordion.Trigger
 								class="px-4 py-3 transition-colors hover:bg-muted/50 hover:no-underline"
 							>
@@ -734,6 +694,58 @@
 							</Accordion.Trigger>
 							<Accordion.Content class="pb-2">
 								<div class="space-y-6 px-2 pt-2 pb-2">
+									<!-- Area: province / district / subdistrict (#1419) -->
+									<div class="space-y-4 px-2">
+										<!-- Province -->
+										<div class="w-full space-y-1.5">
+											<Label
+												for={`${idPrefix}province`}
+												class="text-xs font-semibold text-muted-foreground">{t.provinceLabel}</Label
+											>
+											<SearchSelect
+												name="province"
+												id={`${idPrefix}province`}
+												placeholder={t.provincePlaceholder}
+												bind:value={selectedProvince}
+												options={provincesList}
+												loading={loadingLocations}
+											/>
+										</div>
+
+										<!-- District -->
+										<div class="w-full space-y-1.5">
+											<Label
+												for={`${idPrefix}district`}
+												class="text-xs font-semibold text-muted-foreground">{t.districtLabel}</Label
+											>
+											<SearchSelect
+												name="district"
+												id={`${idPrefix}district`}
+												placeholder={t.districtPlaceholder}
+												bind:value={selectedDistrict}
+												options={districtsList}
+												loading={loadingLocations}
+											/>
+										</div>
+
+										<!-- Sub-district -->
+										<div class="w-full space-y-1.5">
+											<Label
+												for={`${idPrefix}subdistrict`}
+												class="text-xs font-semibold text-muted-foreground"
+												>{t.subdistrictLabel}</Label
+											>
+											<SearchSelect
+												name="subdistrict"
+												id={`${idPrefix}subdistrict`}
+												placeholder={t.subdistrictPlaceholder}
+												bind:value={selectedSubdistrict}
+												options={subdistrictsList}
+												loading={loadingLocations}
+											/>
+										</div>
+									</div>
+
 									<!-- Category 1 -->
 									<div class="space-y-3 rounded-lg bg-muted/50 p-4">
 										<div class="text-xs font-bold text-foreground">{t.cat1}</div>
