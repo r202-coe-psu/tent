@@ -2,6 +2,7 @@ import type { UlidReservation } from '$lib/db/ulid-reservation';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import type {
+	CheckoutDestination,
 	Evacuee,
 	EvacueeInput,
 	Household,
@@ -15,6 +16,7 @@ import type {
 	MovementAction,
 	StayStatus
 } from '../domain/people';
+import type { EvacueeSearchCursor, EvacueeSearchPage } from '../domain/evacuee-search';
 import type { StationNumber } from '../domain/station-log';
 import type { EvacueeSort } from '../domain/evacuee-sort';
 import type {
@@ -194,6 +196,14 @@ export interface PeopleRepository {
 	 * duplicate check across every member card. Keyed by the trimmed query.
 	 */
 	searchEvacueesMany(queries: readonly string[]): Promise<Map<string, Evacuee[]>>;
+	/**
+	 * Server-side (Mango) staff search, paged by CouchDB bookmark — never loads the shelter.
+	 * Pass the previous page's `nextCursor` to continue; `nextCursor: null` means exhausted.
+	 */
+	searchEvacueesPage(
+		query: string,
+		opts?: { cursor?: EvacueeSearchCursor | null; pageSize?: number }
+	): Promise<EvacueeSearchPage>;
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
@@ -248,6 +258,18 @@ export interface PeopleRepository {
 	deleteMedical(id: string): Promise<void>;
 	/** This evacuee's medical record via the evacuee_id Mango index, or `null` when absent. */
 	getMedicalByEvacuee(evacueeId: string): Promise<Medical | null>;
+	/**
+	 * Backfill Import (#1399): persist the already-built historical `movement` docs and the
+	 * evacuees' resulting `current_stay`, then re-derive the household status. Unlike
+	 * `checkInEvacuee` / `checkOutEvacuee` the movements keep their own `occurred_at` — the real
+	 * arrival/departure time — and no transition guard runs (the stay is reconstructed, not driven).
+	 */
+	applyBackfilledStays(
+		householdId: string,
+		entries: { evacuee: Evacuee; movements: Movement[] }[],
+		/** Set only when the derived household status ends up `checked_out` with no destination yet. */
+		checkoutDestination?: CheckoutDestination | null
+	): Promise<void>;
 	/** Every movement record in this shelter database. */
 	listMovements(): Promise<Movement[]>;
 	/** This evacuee's movement history, resolved through the evacuee_id Mango index. */

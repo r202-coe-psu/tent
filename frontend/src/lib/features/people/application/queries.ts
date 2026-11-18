@@ -1,5 +1,6 @@
 import type { UlidReservation } from '$lib/db/ulid-reservation';
 import {
+	createInfiniteQuery,
 	createMutation,
 	createQuery,
 	keepPreviousData,
@@ -44,6 +45,8 @@ import { canCancelHold } from '$lib/auth/roles';
 import { withStationLogWarning } from './station-log';
 import { authStore } from '$lib/stores/auth.svelte';
 import { extractScanLookupToken, toCouchEvacueeId } from '../domain/scan-lookup';
+import type { EvacueeSearchCursor } from '../domain/evacuee-search';
+import { getNextEvacueeSearchPageParam, isEvacueeSearchEnabled } from './evacuee-server-search';
 
 // Every key includes the active shelter code so switching the back-office
 // shelter selector (shelterStore.selectedShelterCode) invalidates and
@@ -67,6 +70,8 @@ export const peopleKeys = {
 		] as const,
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
+	evacueeServerSearch: (query: string) =>
+		[...peopleKeys.all, 'evacuees', getShelterCode(), 'server-search', query.trim()] as const,
 	/** Nested under `evacuees()` so evacuee mutations also refresh the looked-up names. */
 	evacueeNames: (ids: readonly string[], shelterCode: string = getShelterCode()) =>
 		[...peopleKeys.all, 'evacuees', shelterCode, 'names', ids] as const,
@@ -169,6 +174,17 @@ export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =
 		queryKey: peopleKeys.evacueesSearch(query()),
 		queryFn: () => peopleRepository().searchEvacuees(query()),
 		enabled: enabled()
+	}));
+
+/** Server-side (Mango) evacuee search paged by bookmark; a blank query makes no request. */
+export const useEvacueeServerSearch = (query: () => string, pageSize?: () => number) =>
+	createInfiniteQuery(() => ({
+		queryKey: peopleKeys.evacueeServerSearch(query()),
+		initialPageParam: null as EvacueeSearchCursor | null,
+		queryFn: ({ pageParam }: { pageParam: EvacueeSearchCursor | null }) =>
+			peopleRepository().searchEvacueesPage(query(), { cursor: pageParam, pageSize: pageSize?.() }),
+		getNextPageParam: getNextEvacueeSearchPageParam,
+		enabled: isEvacueeSearchEnabled(query())
 	}));
 
 export const useEvacuee = (id: () => string, enabled: () => boolean = () => true) =>

@@ -55,6 +55,7 @@
 		"audit:ledger-refid": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/audit-stock-ledger-refid.ts",
 		"backfill:evacuee-consent": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/backfill-evacuee-consent.ts",
 		"backfill:staff-card-token": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/backfill-staff-card-token.ts",
+		"normalize:evacuee-search": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/normalize-evacuee-search-fields.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"migrate:closed-shelter-checkout": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-closed-shelter-checkout.ts",
 		"migrate:shelter-closed-at": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter-closed-at.ts",

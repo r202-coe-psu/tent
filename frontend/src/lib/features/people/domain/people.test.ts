@@ -80,7 +80,8 @@ import {
 	checkoutDestinationTypeSchema,
 	SHELTER_CLOSED_REASON,
 	SHELTER_CLOSED_REASON_LABEL,
-	movementReasonLabel
+	movementReasonLabel,
+	BACKFILL_IMPORT_REASON
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
 import type { ScreeningInput, StayStatus } from './people';
@@ -2239,6 +2240,11 @@ describe('shelter-closed checkout display (CR-219 FR-1, FR-21)', () => {
 		expect(movementReasonLabel('')).toBe('');
 		expect(movementReasonLabel(null)).toBe('');
 		expect(movementReasonLabel(undefined)).toBe('');
+	});
+
+	it('maps the backfill_import reason to its label in both languages', () => {
+		expect(movementReasonLabel(BACKFILL_IMPORT_REASON)).toBe('นำเข้าย้อนหลัง');
+		expect(movementReasonLabel('backfill_import', 'en')).toBe('Backfill import');
 	});
 
 	it('accepts shelter_closed as a stored destination', () => {

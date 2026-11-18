@@ -14,6 +14,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import {
 		ShelterList,
+		filterShelterList,
 		useShelters,
 		type ShelterSummary,
 		type SiteKind
@@ -23,6 +24,7 @@
 	let currentPage = $state(1);
 	let siteKindFilter = $state<SiteKind | 'all'>('all');
 	let searchQuery = $state('');
+	let hideHidden = $state(false);
 
 	// CR-198 FR-10: "ทั้งหมด" + every active site kind, labelled from the global master.
 	const siteKindQuery = useMasterData(() => 'site_kind');
@@ -44,23 +46,7 @@
 	const sheltersQuery = useShelters({ includeExternal: true }); // CR-252: the only list that shows external shelters
 	const shelters = $derived(sheltersQuery.data ?? []);
 	const filteredShelters = $derived(
-		shelters.filter((shelter) => {
-			if (siteKindFilter !== 'all' && shelter.site_kind !== siteKindFilter) {
-				return false;
-			}
-			const q = searchQuery.trim().toLowerCase();
-			if (q) {
-				const nameMatch = shelter.name?.toLowerCase().includes(q);
-				const codeMatch = shelter.code?.toLowerCase().includes(q);
-				const provMatch = shelter.province?.toLowerCase().includes(q);
-				const distMatch = shelter.district?.toLowerCase().includes(q);
-				const subdistMatch = shelter.subdistrict?.toLowerCase().includes(q);
-				if (!nameMatch && !codeMatch && !provMatch && !distMatch && !subdistMatch) {
-					return false;
-				}
-			}
-			return true;
-		})
+		filterShelterList(shelters, { siteKind: siteKindFilter, hideHidden, query: searchQuery })
 	);
 	const total = $derived(filteredShelters.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
@@ -86,6 +72,11 @@
 
 	function handleSearchInput(e: Event) {
 		searchQuery = (e.target as HTMLInputElement).value;
+		currentPage = 1;
+	}
+
+	function toggleHideHidden(e: Event) {
+		hideHidden = (e.target as HTMLInputElement).checked;
 		currentPage = 1;
 	}
 
@@ -159,7 +150,7 @@
 			</div>
 
 			<!-- Segmented site kind filter & counter -->
-			<div class="flex items-center justify-between gap-2.5 sm:justify-end">
+			<div class="flex flex-wrap items-center justify-between gap-x-2.5 gap-y-2 sm:justify-end">
 				<div
 					class="inline-flex rounded-lg border border-slate-200/80 bg-slate-50/70 p-0.5"
 					role="tablist"
@@ -182,6 +173,16 @@
 						</button>
 					{/each}
 				</div>
+
+				<label class="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+					<input
+						type="checkbox"
+						checked={hideHidden}
+						onchange={toggleHideHidden}
+						class="size-3.5 rounded border-slate-300"
+					/>
+					ไม่แสดงศูนย์ที่ซ่อน
+				</label>
 
 				<span class="shrink-0 text-xs text-slate-500 tabular-nums">
 					พบ <strong class="font-bold text-slate-800">{total}</strong> แห่ง
