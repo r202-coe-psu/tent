@@ -61,6 +61,7 @@ export {
 	isHostHouseKind,
 	shelterGroup,
 	hiddenShelterGroups,
+	isShownOnPublicSearch,
 	siteKindLabel,
 	siteKindTiles,
 	type SiteKindOption

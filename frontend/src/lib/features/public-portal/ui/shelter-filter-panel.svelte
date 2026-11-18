@@ -58,7 +58,6 @@
 		utility_truck_access?: boolean;
 		hide_evacuation?: boolean | string;
 		hide_external?: boolean | string;
-		hide_host_house?: boolean | string;
 	}
 
 	let {
@@ -103,7 +102,6 @@
 	let parkBoatChecked = $state(false);
 	let showEvacuation = $state(true);
 	let showExternal = $state(true);
-	let showHostHouse = $state(true);
 	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -158,7 +156,6 @@
 		if (parkBoatChecked) params.set('parking_boat', 'on');
 		if (!showEvacuation) params.set('hide_evacuation', 'on');
 		if (!showExternal) params.set('hide_external', 'on');
-		if (!showHostHouse) params.set('hide_host_house', 'on');
 		return params;
 	}
 
@@ -206,8 +203,7 @@
 			f.parking_motorcycle,
 			f.parking_boat,
 			f.hide_evacuation,
-			f.hide_external,
-			f.hide_host_house
+			f.hide_external
 		];
 
 		untrack(() => {
@@ -229,7 +225,6 @@
 			parkBoatChecked = isOn(f.parking_boat);
 			showEvacuation = !isOn(f.hide_evacuation);
 			showExternal = !isOn(f.hide_external);
-			showHostHouse = !isOn(f.hide_host_house);
 
 			if (f.user_lat) userLat = f.user_lat.toString();
 			if (f.user_lng) userLng = f.user_lng.toString();
@@ -301,7 +296,6 @@
 			parkMotorChecked,
 			parkBoatChecked,
 			showEvacuation,
-			showHostHouse,
 			showExternal
 		];
 
@@ -537,10 +531,6 @@
 									<label class="flex cursor-pointer items-center justify-between gap-3">
 										<span class="text-sm font-medium text-foreground">{t.groupExternal}</span>
 										<Switch bind:checked={showExternal} aria-label={t.groupExternal} />
-									</label>
-									<label class="flex cursor-pointer items-center justify-between gap-3">
-										<span class="text-sm font-medium text-foreground">{t.groupHostHouse}</span>
-										<Switch bind:checked={showHostHouse} aria-label={t.groupHostHouse} />
 									</label>
 								</div>
 							</Accordion.Content>

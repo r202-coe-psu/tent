@@ -10,6 +10,7 @@ import {
 	shelterGroup,
 	takesAllParkingTypes,
 	hiddenShelterGroups,
+	isShownOnPublicSearch,
 	wantedParkingTypes
 } from '$lib/features/public-portal';
 import { formatMasterLabel } from '$lib/features/master-data';
@@ -115,6 +116,9 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		);
 	});
 
+	// The evacuee-facing search never shows a plain host house (#1419), whatever the URL says.
+	shelters = shelters.filter(isShownOnPublicSearch);
+
 	if (search.trim()) {
 		const q = search.trim().toLowerCase();
 		shelters = shelters.filter(
@@ -192,8 +196,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			parking_motorcycle: parkingWanted.includes('motorcycle') ? 'on' : '',
 			parking_boat: parkingWanted.includes('boat') ? 'on' : '',
 			hide_evacuation: groupsHidden.includes('evacuation') ? 'on' : '',
-			hide_external: groupsHidden.includes('external') ? 'on' : '',
-			hide_host_house: groupsHidden.includes('host_house') ? 'on' : ''
+			hide_external: groupsHidden.includes('external') ? 'on' : ''
 		},
 		available_types
 	};

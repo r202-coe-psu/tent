@@ -384,12 +384,11 @@ describe('public/shelters load function', () => {
 		vi.mocked(listPublicShelters).mockResolvedValue({
 			shelters: [
 				{ code: 'A', name: 'ก', status: 'open', capacity: 1, site_kind: 'evacuation_center' },
-				{ code: 'B', name: 'ข', status: 'open', capacity: 1, site_kind: 'host_house' },
 				{ code: 'C', name: 'ค', status: 'open', capacity: 1, site_kind: 'field_hospital' },
 				{ code: 'D', name: 'ง', status: 'open', capacity: 1, site_kind: 'field_hospital' },
 				{ code: 'E', name: 'จ', status: 'open', capacity: 1 }
 			],
-			count: 5,
+			count: 4,
 			as_of: '2026-08-19T10:00:00Z'
 		} as unknown as PublicShelterListResponse);
 
@@ -397,8 +396,29 @@ describe('public/shelters load function', () => {
 
 		expect(result.summary.counts_by_site_kind).toEqual({
 			evacuation_center: 2,
-			host_house: 1,
 			field_hospital: 2
+		});
+	});
+
+	// #1419 / draft CR "hide host houses": a host house that is not external never reaches the page.
+	it('leaves a host house out of the totals and the per-kind counts', async () => {
+		vi.mocked(listPublicShelters).mockResolvedValue({
+			shelters: [
+				{ code: 'A', name: 'ก', status: 'open', capacity: 1, site_kind: 'evacuation_center' },
+				{ code: 'B', name: 'ข', status: 'open', capacity: 1, site_kind: 'host_house' },
+				{ code: 'F', name: 'ฉ', status: 'full', capacity: 1, site_kind: 'host_house' }
+			],
+			count: 3,
+			as_of: '2026-11-18T10:00:00Z'
+		} as unknown as PublicShelterListResponse);
+
+		const result = await runLoad(new URL('http://localhost/shelters'));
+
+		expect(result.shelters.map((s) => s.code)).toEqual(['A']);
+		expect(result.summary).toEqual({
+			shelters_total: 1,
+			shelters_open: 1,
+			counts_by_site_kind: { evacuation_center: 1 }
 		});
 	});
 
@@ -439,44 +459,44 @@ describe('public/shelters load function', () => {
 		const codesFor = async (query: string) =>
 			(await runLoad(new URL(`http://localhost/shelters${query}`))).shelters.map((s) => s.code);
 
-		it('shows every type by default and echoes no hide_* flag', async () => {
+		it('shows evacuation and external shelters by default, never a plain host house, and echoes no hide_* flag', async () => {
 			const result = await runLoad(new URL('http://localhost/shelters'));
-			expect(result.shelters.map((s) => s.code)).toEqual(['EVAC', 'HOST', 'EXT', 'EXT_HOST']);
+			expect(result.shelters.map((s) => s.code)).toEqual(['EVAC', 'EXT', 'EXT_HOST']);
 			expect(result.filters.hide_evacuation).toBe('');
 			expect(result.filters.hide_external).toBe('');
-			expect(result.filters.hide_host_house).toBe('');
+			expect(result.filters).not.toHaveProperty('hide_host_house');
 		});
 
 		it('hide_external drops every external shelter and keeps the rest', async () => {
-			expect(await codesFor('?hide_external=on')).toEqual(['EVAC', 'HOST']);
+			expect(await codesFor('?hide_external=on')).toEqual(['EVAC']);
 		});
 
-		it('hide_host_house drops only non-external host houses', async () => {
+		it('ignores a stale hide_host_house — the host house is hidden either way', async () => {
 			expect(await codesFor('?hide_host_house=on')).toEqual(['EVAC', 'EXT', 'EXT_HOST']);
+			const result = await runLoad(new URL('http://localhost/shelters?hide_host_house=on'));
+			expect(result.filters).not.toHaveProperty('hide_host_house');
 		});
 
 		it('hide_evacuation drops only non-external evacuation centers', async () => {
-			expect(await codesFor('?hide_evacuation=on')).toEqual(['HOST', 'EXT', 'EXT_HOST']);
+			expect(await codesFor('?hide_evacuation=on')).toEqual(['EXT', 'EXT_HOST']);
 		});
 
-		it('counts an external host house as external, not as a host house', async () => {
-			expect(await codesFor('?hide_evacuation=on&hide_external=on')).toEqual(['HOST']);
+		it('keeps an external host house as external: it stays until external is switched off', async () => {
+			expect(await codesFor('?hide_evacuation=on')).toContain('EXT_HOST');
+			expect(await codesFor('?hide_external=on')).not.toContain('EXT_HOST');
 		});
 
-		it('returns an empty list when all three types are off', async () => {
+		it('returns an empty list when both types are off', async () => {
 			const result = await runLoad(
-				new URL('http://localhost/shelters?hide_evacuation=on&hide_external=on&hide_host_house=on')
+				new URL('http://localhost/shelters?hide_evacuation=on&hide_external=on')
 			);
 			expect(result.shelters).toEqual([]);
 			expect(result.count).toBe(0);
 		});
 
 		it('echoes the switched-off types back in filters', async () => {
-			const result = await runLoad(
-				new URL('http://localhost/shelters?hide_external=on&hide_host_house=on')
-			);
+			const result = await runLoad(new URL('http://localhost/shelters?hide_external=on'));
 			expect(result.filters.hide_external).toBe('on');
-			expect(result.filters.hide_host_house).toBe('on');
 			expect(result.filters.hide_evacuation).toBe('');
 		});
 	});
