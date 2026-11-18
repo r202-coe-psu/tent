@@ -10,6 +10,7 @@ layer: volatile
 affects:
   - docs/data/schema.md §1.4 movement (`action` += `revert_status`; field ใหม่ `from_status` / `to_status`; `reason` บังคับเมื่อ `revert_status`)
   - docs/prd/role-permission-matrix.md §3 (แถวใหม่ Evacuee status revert)
+  - frontend/src/lib/server/shelter-access-design.ts (`validate_doc_update` — stable core, เจ้าของโครงการอนุมัติ 2026-11-18)
   - no schema_v bump (movement ไม่มี `schema_v`; evacuee stay enum ไม่ขยาย — ดู Migration)
   - frontend/src/lib/features/people/domain (`movementActionSchema`, `Movement`, `assertMovementAllowed`, `applyMovementToStay`, `resolveStatusChangeAction`, `canRevertStatusTo`)
   - frontend/src/lib/features/people/data (`revertEvacueeStatus`) · application (`useRevertEvacueeStatus`)
@@ -23,8 +24,8 @@ affects:
 >
 > - **เปลี่ยนอะไร:** เพิ่ม movement action `revert_status` ให้ย้อน `current_stay.status` กลับขั้นก่อนหน้าได้ (เช่น `room_confirmed` → `active`, `active` → `arriving`)
 > - **เพื่อใคร/ทำไม:** แก้กรณีเจ้าหน้าที่เช็คอิน / ยืนยันถึงโซนผิดคน — ปัจจุบันไม่มีทางย้อนกลับ
-> - **dev ต้อง build:** domain guard + write path + ตัวเลือกย้อนในโมดัลแก้สถานะ (เฉพาะ SM / SA) + บังคับระบุเหตุผล
-> - **กระทบ:** `schema.md` §1.4 (enum + 2 field optional), role matrix 1 แถว · ไม่ bump `schema_v` · ไม่แก้ `validate_doc_update`
+> - **dev ต้อง build:** domain guard + write path + ตัวเลือกย้อนในโมดัลแก้สถานะ (เฉพาะ SM / SA) + บังคับระบุเหตุผล + กฎใน CouchDB `validate_doc_update`
+> - **กระทบ:** `schema.md` §1.4 (enum + 2 field optional), role matrix 1 แถว, `validate_doc_update` (ต้อง `pnpm redeploy:access`) · ไม่ bump `schema_v`
 
 ## Why
 
@@ -41,15 +42,19 @@ Feedback ระบบลงทะเบียน (#1447 ข้อ 2): ต้อ�
 - **FR-05** — `reason` **บังคับ** nonempty หลัง trim (เหมือน `check_out`) — บังคับทั้งใน `assertMovementAllowed` (domain) และโมดัลแก้สถานะ (UI).
 - **FR-06** — movement doc บันทึก `reason`, `created_by`, `from_status`, `to_status` เพื่อให้ audit trail / ประวัติการเคลื่อนไหวแสดงว่าใคร ย้อนจากอะไรเป็นอะไร เพราะอะไร.
 - **FR-07** — ผลต่อ `current_stay`: `status` = `to_status`; `since` = `occurred_at`; `zone` **ล้างเป็น `null`** เมื่อ `to_status` ต่ำกว่า `active` (`arriving` / `pre_registered`); `room_confirmed` → `active` **คง `zone`** (ล้างเฉพาะการยืนยันถึงโซน — `confirm_room` ตั้งแค่ `status`/`since`, ไม่มี field ยืนยันแยก).
-- **FR-08** — สิทธิ์: เฉพาะ `shelter_manager` (ศูนย์ปัจจุบัน) และ `system_admin`. `registration_staff` ต้องไม่เห็นตัวเลือกย้อนและทำรายการไม่ได้ (UI ซ่อนตัวเลือก + `updateStatus` ปฏิเสธ).
+- **FR-08** — สิทธิ์: เฉพาะ `shelter_manager` (ศูนย์ปัจจุบัน) และ `system_admin`. `registration_staff` ต้องไม่เห็นตัวเลือกย้อนและทำรายการไม่ได้ (UI ซ่อนตัวเลือก + `updateStatus` ปฏิเสธ) และ CouchDB ปฏิเสธการเขียน (FR-13, FR-14).
 - **FR-09** — แถว `station_log` (append-only) ที่เขียนโดยขั้นเดินหน้า (เช่น Station 3 `complete` ตอน check-in) **ไม่ถูกแก้ / ลบ** เมื่อย้อน.
 - **FR-10** — ประวัติการเคลื่อนไหวในโปรไฟล์แสดงป้าย "ย้อนสถานะ (Status reverted)" (TH + EN), สถานะต้นทาง → ปลายทาง, เหตุผล และผู้ทำรายการ.
 - **FR-11** — `household.status` ยัง derive จากสถานะสมาชิก (CR-112 A2) — ไม่เขียนแยก.
 - **FR-12** — presence รายวัน (`wasInShelterAllDay`) ถือ `revert_status` ที่ `to_status` ต่ำกว่า `active` เป็นการออกจากศูนย์; ย้อน `room_confirmed` → `active` ไม่เปลี่ยน presence.
 
+- **FR-13** — `validate_doc_update` (`shelter-access-design.ts`): movement ที่ `action = revert_status` ต้องมาจาก `system_admin` หรือ `shelter_manager` ของศูนย์นั้น (ตรวจด้วย `isRole('shelter_manager')` เดียวกับกฎ manager อื่น: `{code}:shelter_manager`, หรือ `shelter_manager` เปล่าที่ผู้ใช้มี scope `shelter:{code}` เพียงศูนย์เดียว) · `reason` ต้อง nonempty หลัง trim · `to_status` ∈ {`pre_registered`, `arriving`, `active`}. ผิดเงื่อนไข → `forbidden`.
+- **FR-14** — `validate_doc_update`: evacuee doc ที่ `current_stay.status` เดิมเป็น `active` / `room_confirmed` แล้วเขียนใหม่เป็นสถานะที่อยู่ก่อนตามลำดับ (`pre_registered` < `arriving` < `active` < `room_confirmed`) ต้องมาจาก `system_admin` / `shelter_manager` ของศูนย์นั้นเท่านั้น — ปิดช่องที่ `registration_staff` แก้ evacuee doc ตรงโดยข้าม movement. การเปลี่ยนไปสถานะนอกลำดับ (`checked_out`, `temporary_leave`, `transferred`, `deceased`, …), การเดินหน้า และ rezone ไม่ถูกกระทบ. `_admin` และ `repl:{code}` ข้าม validator ตามเดิม.
+
 ### ที่ไม่เปลี่ยน
 
-- CouchDB `validate_doc_update` **ไม่แก้** (stable core): movement เป็น append-only และไม่มี transition check อยู่เดิม — การบังคับ FR-02..FR-05 และ FR-08 อยู่ที่ **domain + UI เท่านั้น** (ไม่มี server-side enforcement ของ role / reason สำหรับ `revert_status`; ผู้ใช้ที่เขียน movement ตรงเข้า CouchDB ได้ยังข้ามได้ — ข้อจำกัดเดียวกับ transition อื่นของ movement).
+- **Rollout:** ไม่มี version constant — `_design/access.validate_doc_update` ถูกเทียบกับผลของ `buildValidateDocUpdate(code)` แบบ string. ศูนย์ที่สร้างใหม่ได้ validator ใหม่จาก provisioner (`provisioner.ts`) อัตโนมัติ; **ศูนย์เดิมต้องรัน `pnpm redeploy:access --write --confirm`** (หรือ `pnpm db:sync`) หนึ่งครั้งหลัง deploy. จนกว่าจะ redeploy ศูนย์เดิมยังบังคับสิทธิ์ที่ domain + UI เท่านั้น.
+- **Known gap:** `updateEvacuee` / `patchEvacuee` เขียนทับด้วย snapshot ฝั่ง client — ถ้า REG ถือ snapshot เก่า (เช่น ฟอร์มเปิดค้างตอนคนยัง `arriving` แต่ใน DB เป็น `active` แล้ว) การบันทึกจะเป็นการถอยสถานะโดยไม่ตั้งใจ และ FR-14 จะปฏิเสธ (เดิมเงียบ ๆ เขียนทับ). ถือเป็นพฤติกรรมที่ถูกต้อง; ไม่พบ flow ปกติที่ถอยสถานะโดยผู้ที่ไม่ใช่ manager.
 - Worker projectors (`worker/.../projectors/evacuee.py`, `occupant.py`) อ่าน `current_stay.status` / `zone` / `since` เท่านั้น ไม่มี enum ของ movement action — ย้อนไป `arriving` / `pre_registered` ทำให้ `checked_in_at = null` และถูกถอดออกจาก `shelter_occupants` อัตโนมัติ; ไม่ต้องแก้ worker หรือ bump `PROJECTION_VERSION`. FastAPI / BFF ไม่มี allow-list ของ movement action.
 
 ### Acceptance / DoD
@@ -59,6 +64,7 @@ Feedback ระบบลงทะเบียน (#1447 ข้อ 2): ต้อ�
 - [ ] ย้อน `room_confirmed` → `active` คงโซน; ย้อนเป็น `arriving` / `pre_registered` ล้างโซน
 - [ ] `deceased` / `cancelled` ย้อนไม่ได้
 - [ ] movement ใหม่มี `reason`, `created_by`, `from_status`, `to_status`; ประวัติในโปรไฟล์แสดงรายการ
+- [ ] CouchDB `validate_doc_update`: REG ถูกปฏิเสธทั้ง movement `revert_status` และการแก้ evacuee doc ตรงเพื่อถอยสถานะ; SM / SA ผ่าน; การเดินหน้าและ rezone ของ REG ไม่กระทบ; รัน `pnpm redeploy:access` แล้วในศูนย์เดิม
 - [ ] unit tests: `assertMovementAllowed`, `applyMovementToStay`, `resolveStatusChangeAction`, `revertEvacueeStatus`, `wasInShelterAllDay`; DOM test โมดัล (บังคับเหตุผล + ซ่อนตามสิทธิ์)
 
 ## Impact
@@ -80,5 +86,6 @@ Feedback ระบบลงทะเบียน (#1447 ข้อ 2): ต้อ�
 
 ## Decision log
 
-- 2026-11-18 — proposed (ร่างจาก #1447 ข้อ 2). เจ้าของโครงการตัดสินแล้ว: ย้อนได้ทุกขั้นถอยหลังผ่าน action เดียว `revert_status`; เหตุผลบังคับ; เฉพาะ SM (ศูนย์ปัจจุบัน) + SA; `deceased` / `cancelled` terminal; ไม่แตะ `station_log`; ไม่แก้ `validate_doc_update`.
+- 2026-11-18 — เจ้าของโครงการอนุมัติให้เพิ่มการบังคับใน CouchDB `validate_doc_update` (แตะ stable core) — เพิ่ม FR-13, FR-14.
+- 2026-11-18 — proposed (ร่างจาก #1447 ข้อ 2). เจ้าของโครงการตัดสินแล้ว: ย้อนได้ทุกขั้นถอยหลังผ่าน action เดียว `revert_status`; เหตุผลบังคับ; เฉพาะ SM (ศูนย์ปัจจุบัน) + SA; `deceased` / `cancelled` terminal; ไม่แตะ `station_log`; ไม่แก้ `validate_doc_update` (ภายหลังเปลี่ยนเป็นแก้ — ดูรายการก่อนหน้า).
 - decided_by / status: รอเจ้าของโครงการ approve (เลขถัดไปหลัง approve = CR-259).

@@ -249,7 +249,9 @@ ZONE_CHANGE eligible from: [active, room_confirmed]
 REVERT_STATUS eligible from: [active, room_confirmed]   (draft CR evacuee-status-revert)
   → to_status ∈ [pre_registered, arriving, active], rank(to_status) < rank(current)
   → reason required; zone cleared when to_status ≠ active; deceased / cancelled terminal (no revert)
-  → enforced in domain assertMovementAllowed + UI only (not validate_doc_update)
+  → enforced in domain assertMovementAllowed + UI, and in validate_doc_update: revert_status movement
+    and any evacuee write lowering current_stay.status from active/room_confirmed need
+    system_admin or shelter_manager of this shelter; reason + to_status checked on the movement
 ```
 
 **Index:** `(evacuee_id, occurred_at)` · view `occupancy`

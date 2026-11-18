@@ -1454,6 +1454,34 @@ ${consentVduClause()}
       }
     }
   }
+  // 2c. Evacuee status revert (draft CR evacuee-status-revert, schema.md §1.4). Stepping a stay
+  // back to an earlier pipeline status (pre_registered < arriving < active < room_confirmed) is
+  // manager-level: system_admin or the shelter_manager of this shelter (isRole covers both).
+  // Two doors must stay shut together — the revert_status movement, and a direct evacuee write
+  // that lowers current_stay.status without a movement. Mirror REVERT_* in
+  // frontend/src/lib/features/people/domain/people.ts if those lists ever change.
+  if (newDoc.type === 'movement' && newDoc.action === 'revert_status') {
+    if (!isRole('shelter_manager')) {
+      throw { forbidden: 'revert_status requires shelter_manager or system_admin' };
+    }
+    if (typeof newDoc.reason !== 'string' || newDoc.reason.trim().length === 0) {
+      throw { forbidden: 'revert_status requires a non-empty reason' };
+    }
+    if (['pre_registered', 'arriving', 'active'].indexOf(newDoc.to_status) === -1) {
+      throw { forbidden: 'revert_status to_status must be pre_registered, arriving or active' };
+    }
+  }
+  if (newDoc.type === 'evacuee' && oldDoc && oldDoc.current_stay && newDoc.current_stay) {
+    var stayRank = { pre_registered: 0, arriving: 1, active: 2, room_confirmed: 3 };
+    var revertOldRank = stayRank.hasOwnProperty(oldDoc.current_stay.status)
+      ? stayRank[oldDoc.current_stay.status] : -1;
+    var revertNewRank = stayRank.hasOwnProperty(newDoc.current_stay.status)
+      ? stayRank[newDoc.current_stay.status] : -1;
+    if (revertOldRank >= stayRank.active && revertNewRank !== -1 &&
+        revertNewRank < revertOldRank && !isRole('shelter_manager')) {
+      throw { forbidden: 'Reverting current_stay.status requires shelter_manager or system_admin' };
+    }
+  }
   // CR-244 FR-13: whoever may receive stock (stock_ledger receipt) may reserve lot numbers.
   // distribution_staff is excluded (loan returns mint no lot number).
   if (newDoc.type === 'lot_counter') {

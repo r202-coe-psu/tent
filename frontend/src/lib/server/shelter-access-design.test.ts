@@ -1864,6 +1864,167 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	describe('evacuee status revert (draft CR evacuee-status-revert)', () => {
+		const revertMovement = (over: Doc = {}): Doc => ({
+			...envelope,
+			schema_v: 1,
+			_id: 'movement:01R',
+			type: 'movement',
+			evacuee_id: 'evacuee:01J',
+			action: 'revert_status',
+			zone: null,
+			reason: 'เช็คอินผิดคน',
+			from_status: 'room_confirmed',
+			to_status: 'active',
+			occurred_at: '2026-11-18T03:00:00.000Z',
+			...over
+		});
+		const OTHER_SHELTER_MANAGER: UserCtx = {
+			name: 'sm2',
+			roles: ['shelter:SH002', 'shelter_manager']
+		};
+		const SCOPED_MANAGER: UserCtx = {
+			name: 'sm3',
+			roles: ['shelter:SH001', 'SH001:shelter_manager']
+		};
+
+		describe('revert_status movement', () => {
+			it('rejects registration_staff', () => {
+				expectForbidden(
+					() => compile()(revertMovement(), null, REGISTRATION),
+					/revert_status requires shelter_manager or system_admin/
+				);
+			});
+
+			it('rejects a shelter_manager of another shelter', () => {
+				expectForbidden(
+					() => compile()(revertMovement(), null, OTHER_SHELTER_MANAGER),
+					/revert_status requires shelter_manager/
+				);
+			});
+
+			it.each([
+				['shelter manager (bare role)', MANAGER],
+				['shelter manager (compound role)', SCOPED_MANAGER],
+				['system admin', ADMIN]
+			])('allows a %s', (_label, user) => {
+				expect(() => compile()(revertMovement(), null, user)).not.toThrow();
+			});
+
+			it.each([
+				['missing', undefined],
+				['empty', ''],
+				['whitespace', '   ']
+			])('rejects a %s reason', (_label, reason) => {
+				expectForbidden(
+					() => compile()(revertMovement({ reason }), null, MANAGER),
+					/revert_status requires a non-empty reason/
+				);
+			});
+
+			it.each(['room_confirmed', 'checked_out', 'deceased', undefined])(
+				'rejects to_status %s',
+				(to_status) => {
+					expectForbidden(
+						() => compile()(revertMovement({ to_status }), null, MANAGER),
+						/to_status must be/
+					);
+				}
+			);
+
+			it('still lets registration_staff write other movements', () => {
+				expect(() =>
+					compile()(
+						revertMovement({
+							action: 'check_in',
+							zone: 'A1',
+							reason: undefined,
+							to_status: undefined
+						}),
+						null,
+						REGISTRATION
+					)
+				).not.toThrow();
+			});
+		});
+
+		describe('direct evacuee current_stay.status regression', () => {
+			it.each([
+				['room_confirmed', 'active'],
+				['room_confirmed', 'arriving'],
+				['room_confirmed', 'pre_registered'],
+				['active', 'arriving'],
+				['active', 'pre_registered']
+			])('rejects %s -> %s by registration_staff', (from, to) => {
+				expectForbidden(
+					() =>
+						compile()(
+							evacuee({}, { status: to, zone: null }),
+							evacuee({}, { status: from, zone: 'A1' }),
+							REGISTRATION
+						),
+					/Reverting current_stay.status requires shelter_manager or system_admin/
+				);
+			});
+
+			it.each([
+				['shelter manager', MANAGER],
+				['system admin', ADMIN]
+			])('allows room_confirmed -> arriving by a %s', (_label, user) => {
+				expect(() =>
+					compile()(
+						evacuee({}, { status: 'arriving', zone: null }),
+						evacuee({}, { status: 'room_confirmed', zone: 'A1' }),
+						user
+					)
+				).not.toThrow();
+			});
+
+			it('rejects a shelter_manager of another shelter', () => {
+				expectForbidden(
+					() =>
+						compile()(
+							evacuee({}, { status: 'active' }),
+							evacuee({}, { status: 'room_confirmed' }),
+							OTHER_SHELTER_MANAGER
+						),
+					/Reverting current_stay.status/
+				);
+			});
+
+			it.each([
+				['pre_registered', 'arriving'],
+				['arriving', 'active'],
+				['active', 'room_confirmed'],
+				['active', 'checked_out'],
+				['active', 'temporary_leave'],
+				['active', 'transferred'],
+				['room_confirmed', 'checked_out'],
+				['arriving', 'pre_registered'],
+				['checked_out', 'active'],
+				['temporary_leave', 'active']
+			])('leaves %s -> %s unaffected for registration_staff', (from, to) => {
+				expect(() =>
+					compile()(
+						evacuee({}, { status: to, zone: 'A1' }),
+						evacuee({}, { status: from, zone: 'A1' }),
+						REGISTRATION
+					)
+				).not.toThrow();
+			});
+
+			it('leaves a same-status rezone unaffected for registration_staff', () => {
+				expect(() =>
+					compile()(
+						evacuee({}, { status: 'room_confirmed', zone: 'B2' }),
+						evacuee({}, { status: 'room_confirmed', zone: 'A1' }),
+						REGISTRATION
+					)
+				).not.toThrow();
+			});
+		});
+	});
+
 	// Module D (kitchen) was missing from the whitelist entirely — kitchen_staff
 	// could never actually write any of these without an _admin session, even
 	// though requireKitchen() lets them into the UI (bug found + fixed alongside
