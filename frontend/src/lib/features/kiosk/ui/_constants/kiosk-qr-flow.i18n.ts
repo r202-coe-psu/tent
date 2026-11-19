@@ -151,7 +151,8 @@ const th = {
 			rowQrIssueFailed: 'ออก QR ไม่สำเร็จ · ยังไม่ได้พิมพ์ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่',
 			qrIssueFailed: (count: number) =>
 				`ออก QR ไม่สำเร็จ ${count} คน (ยังไม่ได้พิมพ์) กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`,
-			retryQrIssue: 'ลองออก QR ใหม่'
+			retryQrIssue: 'ลองออก QR ใหม่',
+			showOnScreen: 'แสดง QR บนจอแทน'
 		},
 		qrNoPersonalData: 'QR ไม่มีข้อมูลส่วนบุคคล'
 	}
@@ -307,7 +308,8 @@ const en: typeof th = {
 			rowQrIssueFailed: 'Could not issue a QR · not printed. Please try again or contact staff.',
 			qrIssueFailed: (count: number) =>
 				`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'} (not printed). Please try again or contact staff.`,
-			retryQrIssue: 'Try issuing the QR again'
+			retryQrIssue: 'Try issuing the QR again',
+			showOnScreen: 'Show the QR on screen instead'
 		},
 		qrNoPersonalData: 'The QR holds no personal data'
 	}

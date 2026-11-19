@@ -11,6 +11,7 @@
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
+	import KioskLabelScreen from './kiosk-label-screen.svelte';
 	import KioskLabelSheet from './kiosk-label-sheet.svelte';
 	import KioskPrintStatus from './kiosk-print-status.svelte';
 	import {
@@ -124,6 +125,10 @@
 	let printError = $state('');
 	let printBusy = $state(false);
 	let printPhase = $state<'idle' | 'printing' | 'done'>('idle');
+	/** PNG labels read off the screen: a kiosk without a printer, or the visitor's choice after a failed print. */
+	let screenLabels = $state.raw<readonly string[]>([]);
+	/** Labels the printer did not take, offered on screen instead. */
+	let unprintedLabels = $state.raw<readonly string[]>([]);
 	let printedCount = $state(0);
 	/** True when every member had already reported: the visitor picks whose QR to reprint. */
 	let isReprintOnly = $state(false);
@@ -484,6 +489,7 @@
 	async function printWristbands(): Promise<void> {
 		if (printableResults.length === 0 || printBusy) return;
 		printBusy = true;
+		unprintedLabels = [];
 		onprintbusychange?.(true);
 		try {
 			if (!(await loadMissingLabels(printableResults))) return;
@@ -510,7 +516,12 @@
 				},
 				languageStore.current
 			);
-			if (result.kind === 'printed' || result.kind === 'screen') {
+			if (result.kind === 'screen') {
+				printPhase = 'idle';
+				screenLabels = result.labels;
+				return;
+			}
+			if (result.kind === 'printed') {
 				printPhase = 'done';
 				window.setTimeout(() => {
 					if (printPhase === 'done') printPhase = 'idle';
@@ -523,10 +534,23 @@
 			}
 			printPhase = 'idle';
 			printError = result.message;
+			unprintedLabels = result.labels ?? [];
 		} finally {
 			printBusy = false;
-			onprintbusychange?.(false);
+			onprintbusychange?.(screenLabels.length > 0);
 		}
+	}
+
+	function showUnprintedOnScreen(): void {
+		screenLabels = unprintedLabels;
+		unprintedLabels = [];
+		onprintbusychange?.(true);
+	}
+
+	function finishFromScreen(): void {
+		screenLabels = [];
+		onprintbusychange?.(false);
+		onreset();
 	}
 
 	function toLabels(items: KioskCheckInMemberResult[]): KioskQrLabel[] {
@@ -570,531 +594,554 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<section
-	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3"
-	aria-labelledby="check-in-title"
->
-	<KioskCheckInWizard
-		currentStep={wizardStep}
-		step2Label={isThaidGate ? t.stepThaid : undefined}
-		step3Label={verifiesIdentity ? t.stepVerify : undefined}
-	/>
-	<div class="no-print flex justify-start">
-		<KioskBackButton
-			href={backUrl}
-			onclick={isPhoneGate ? onreset : undefined}
-			label={isPhoneGate ? t.backToPhone : undefined}
-		/>
+{#if screenLabels.length > 0}
+	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
+		<KioskLabelScreen labels={screenLabels} ondone={finishFromScreen} />
 	</div>
-
-	<div class="flex flex-col gap-3 print:block">
-		<!-- Short screen: the face step's own heading says the same, so give the row to it. -->
-		<header class={['text-center', holdShown && 'kiosk-compact:sr-only']}>
-			<h1
-				id="check-in-title"
-				class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
-			>
-				{walkInOffered
-					? t.title.notPreRegistered
-					: alreadyKioskRegistered
-						? t.title.alreadyKioskRegistered
-						: lookupError
-							? t.title.lookupFailed
-							: results.length > 0
-								? t.title.results
-								: candidates.length > 0
-									? t.title.chooseHousehold
-									: lookup
-										? holdMembers
-											? t.title.verifyIdentity
-											: t.title.chooseMembers
-										: cardMode && !input
-											? t.title.waitingForCard
-											: t.title.searching}
-			</h1>
-			{#if cardMode && !input}
-				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					{t.sub.insertCard}
-				</p>
-			{:else if lookup && results.length === 0 && !holdMembers}
-				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					{t.sub.chooseArrived}
-				</p>
-			{:else if candidates.length > 0}
-				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					{t.sub.chooseHousehold}
-				</p>
-			{:else if isReprintOnly && successfulResults.length > 0}
-				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					{t.sub.reprintFound}
-				</p>
-			{:else if results.some((result) => result.status === 'already_checked_in')}
-				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					{t.sub.alreadyFound}
-				</p>
-			{:else if results.length > 0}
-				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-					{t.sub.reviewThenPrint}
-				</p>
-			{/if}
-		</header>
-
-		{#if cardMode && !input}
-			<div
-				class="no-print flex min-h-20 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-lg font-semibold text-slate-700 sm:text-xl kiosk-portrait:min-h-24 kiosk-portrait:text-3xl kiosk-compact:min-h-16"
-				role="status"
-				aria-live="polite"
-			>
-				<CreditCard
-					class="size-6 text-[#0A2647] kiosk-portrait:size-8"
-					aria-hidden="true"
-				/>{t.waitingForCard}
-			</div>
-		{/if}
-
-		{#if isLookingUp}
-			<div
-				class="no-print flex min-h-24 items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white text-lg font-semibold text-slate-700 shadow-2xs sm:text-xl kiosk-portrait:min-h-28 kiosk-portrait:text-3xl kiosk-compact:min-h-16"
-				role="status"
-			>
-				<span
-					class="size-7 animate-spin rounded-full border-[3px] border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-8"
-					aria-hidden="true"
-				></span>
-				{t.searchingData}
-			</div>
-		{/if}
-
-		{#if walkInOffered}
-			<KioskWalkInOffer
-				source={input?.source === 'thaid' ? 'thaid' : 'smart-card'}
-				{isLookingUp}
-				{retryAfterSeconds}
-				onretry={retryLookup}
-				onregister={() => {
-					if (input?.source === 'smart-card' || input?.source === 'thaid') onregister?.(input);
-				}}
+{:else}
+	<section
+		class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3"
+		aria-labelledby="check-in-title"
+	>
+		<KioskCheckInWizard
+			currentStep={wizardStep}
+			step2Label={isThaidGate ? t.stepThaid : undefined}
+			step3Label={verifiesIdentity ? t.stepVerify : undefined}
+		/>
+		<div class="no-print flex justify-start">
+			<KioskBackButton
+				href={backUrl}
+				onclick={isPhoneGate ? onreset : undefined}
+				label={isPhoneGate ? t.backToPhone : undefined}
 			/>
-		{:else if walkInClosed}
-			<KioskNoticePanel
-				tone="warning"
-				icon={CircleAlert}
-				title={t.walkInClosed.title}
-				role="alert"
-				data-testid="kiosk-walk-in-closed"
-			>
-				<p>{t.walkInClosed.body}</p>
-				{#snippet actions()}
-					<KioskLookupErrorActions
-						{lookupErrorCode}
-						{isPhoneGate}
-						{isThaidGate}
-						walkInClosed
-						{isLookingUp}
-						{retryAfterSeconds}
-						{homeUrl}
-						{backUrl}
-						onretry={retryLookup}
-						{onreset}
-						{onrescan}
-					/>
-				{/snippet}
-			</KioskNoticePanel>
-		{:else if lookupError}
-			<KioskNoticePanel tone="warning" icon={CircleAlert} title={lookupError} role="alert">
-				{#snippet actions()}
-					<KioskLookupErrorActions
-						{lookupErrorCode}
-						{isPhoneGate}
-						{isThaidGate}
-						{isLookingUp}
-						{retryAfterSeconds}
-						{homeUrl}
-						{backUrl}
-						onretry={retryLookup}
-						{onreset}
-						{onrescan}
-					/>
-				{/snippet}
-			</KioskNoticePanel>
-		{/if}
+		</div>
 
-		{#if alreadyKioskRegistered}
-			<KioskNoticePanel tone="warning" icon={UserCheck} title={t.alreadyKiosk.title} role="status">
-				{#if isThaidGate}
-					<p>{t.alreadyKiosk.bodyThaid}</p>
-				{:else}
-					<p>{t.alreadyKiosk.bodyCard}</p>
+		<div class="flex flex-col gap-3 print:block">
+			<!-- Short screen: the face step's own heading says the same, so give the row to it. -->
+			<header class={['text-center', holdShown && 'kiosk-compact:sr-only']}>
+				<h1
+					id="check-in-title"
+					class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
+				>
+					{walkInOffered
+						? t.title.notPreRegistered
+						: alreadyKioskRegistered
+							? t.title.alreadyKioskRegistered
+							: lookupError
+								? t.title.lookupFailed
+								: results.length > 0
+									? t.title.results
+									: candidates.length > 0
+										? t.title.chooseHousehold
+										: lookup
+											? holdMembers
+												? t.title.verifyIdentity
+												: t.title.chooseMembers
+											: cardMode && !input
+												? t.title.waitingForCard
+												: t.title.searching}
+				</h1>
+				{#if cardMode && !input}
+					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+						{t.sub.insertCard}
+					</p>
+				{:else if lookup && results.length === 0 && !holdMembers}
+					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+						{t.sub.chooseArrived}
+					</p>
+				{:else if candidates.length > 0}
+					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+						{t.sub.chooseHousehold}
+					</p>
+				{:else if isReprintOnly && successfulResults.length > 0}
+					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+						{t.sub.reprintFound}
+					</p>
+				{:else if results.some((result) => result.status === 'already_checked_in')}
+					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+						{t.sub.alreadyFound}
+					</p>
+				{:else if results.length > 0}
+					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+						{t.sub.reviewThenPrint}
+					</p>
 				{/if}
-				{#snippet actions()}
-					<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
-						>{t.alreadyKiosk.home}</Button
-					>
-				{/snippet}
-			</KioskNoticePanel>
-		{/if}
+			</header>
 
-		{#if candidates.length > 0 && !lookupError && !isLookingUp}
-			<section class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6">
-				<PhoneHouseholdPicker {candidates} onselect={chooseHousehold} />
-			</section>
-		{/if}
-
-		{#if holdShown}
-			{@render hold?.()}
-		{/if}
-
-		{#if lookup && centerMatches && results.length === 0 && !holdMembers}
-			<section
-				class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6"
-				aria-labelledby="household-title"
-			>
-				<div class="mb-4 flex items-center gap-3 kiosk-portrait:mb-6 kiosk-portrait:gap-5">
-					<div
-						class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#F0F4F8] text-[#0A2647] kiosk-portrait:h-20 kiosk-portrait:w-20 kiosk-compact:h-11 kiosk-compact:w-11"
+			{#if cardMode && !input}
+				<div
+					class="no-print flex min-h-20 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-lg font-semibold text-slate-700 sm:text-xl kiosk-portrait:min-h-24 kiosk-portrait:text-3xl kiosk-compact:min-h-16"
+					role="status"
+					aria-live="polite"
+				>
+					<CreditCard
+						class="size-6 text-[#0A2647] kiosk-portrait:size-8"
 						aria-hidden="true"
-					>
-						<UsersRound class="size-6 kiosk-portrait:size-10" />
-					</div>
-					<div class="min-w-0 flex-1">
-						<h2
-							id="household-title"
-							class="text-lg font-bold text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
-						>
-							{t.members.heading}
-						</h2>
-						<p class="text-base text-slate-600 kiosk-portrait:text-xl">
-							{t.members.shelter(lookup.shelter_code)}
-						</p>
-					</div>
-					{#if selectableMemberCount > 1}
-						<Button
-							type="button"
-							variant="outline"
-							disabled={isSubmitting}
-							onclick={toggleAllMembers}
-							class="{KIOSK_NOTICE_SECONDARY_ACTION} w-auto shrink-0 kiosk-portrait:px-10"
-						>
-							{allSelected ? t.members.clearAll : t.members.selectAll}
-						</Button>
+					/>{t.waitingForCard}
+				</div>
+			{/if}
+
+			{#if isLookingUp}
+				<div
+					class="no-print flex min-h-24 items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white text-lg font-semibold text-slate-700 shadow-2xs sm:text-xl kiosk-portrait:min-h-28 kiosk-portrait:text-3xl kiosk-compact:min-h-16"
+					role="status"
+				>
+					<span
+						class="size-7 animate-spin rounded-full border-[3px] border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-8"
+						aria-hidden="true"
+					></span>
+					{t.searchingData}
+				</div>
+			{/if}
+
+			{#if walkInOffered}
+				<KioskWalkInOffer
+					source={input?.source === 'thaid' ? 'thaid' : 'smart-card'}
+					{isLookingUp}
+					{retryAfterSeconds}
+					onretry={retryLookup}
+					onregister={() => {
+						if (input?.source === 'smart-card' || input?.source === 'thaid') onregister?.(input);
+					}}
+				/>
+			{:else if walkInClosed}
+				<KioskNoticePanel
+					tone="warning"
+					icon={CircleAlert}
+					title={t.walkInClosed.title}
+					role="alert"
+					data-testid="kiosk-walk-in-closed"
+				>
+					<p>{t.walkInClosed.body}</p>
+					{#snippet actions()}
+						<KioskLookupErrorActions
+							{lookupErrorCode}
+							{isPhoneGate}
+							{isThaidGate}
+							walkInClosed
+							{isLookingUp}
+							{retryAfterSeconds}
+							{homeUrl}
+							{backUrl}
+							onretry={retryLookup}
+							{onreset}
+							{onrescan}
+						/>
+					{/snippet}
+				</KioskNoticePanel>
+			{:else if lookupError}
+				<KioskNoticePanel tone="warning" icon={CircleAlert} title={lookupError} role="alert">
+					{#snippet actions()}
+						<KioskLookupErrorActions
+							{lookupErrorCode}
+							{isPhoneGate}
+							{isThaidGate}
+							{isLookingUp}
+							{retryAfterSeconds}
+							{homeUrl}
+							{backUrl}
+							onretry={retryLookup}
+							{onreset}
+							{onrescan}
+						/>
+					{/snippet}
+				</KioskNoticePanel>
+			{/if}
+
+			{#if alreadyKioskRegistered}
+				<KioskNoticePanel
+					tone="warning"
+					icon={UserCheck}
+					title={t.alreadyKiosk.title}
+					role="status"
+				>
+					{#if isThaidGate}
+						<p>{t.alreadyKiosk.bodyThaid}</p>
+					{:else}
+						<p>{t.alreadyKiosk.bodyCard}</p>
 					{/if}
-				</div>
-				{#if lookup.name_masked}
-					<p
-						class="mb-4 rounded-lg bg-sky-50 px-3 py-2 text-base font-medium text-sky-950 kiosk-portrait:mb-5 kiosk-portrait:px-4 kiosk-portrait:py-3 kiosk-portrait:text-xl kiosk-compact:text-sm"
-					>
-						{t.members.nameMasked}
-					</p>
-				{/if}
-
-				<div class="space-y-3 kiosk-portrait:space-y-4">
-					{#each lookup.members as member (member.evacuee_id)}
-						{@const selected = selectedIds.includes(member.evacuee_id)}
-						{@const locked = isSubmitting}
-						<!-- The whole row is the tap target: the label forwards taps to the checkbox. -->
-						<label
-							class={[
-								'flex min-h-20 items-center gap-4 rounded-xl border-2 px-4 py-3 kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 kiosk-compact:min-h-16 kiosk-compact:py-2',
-								!member.selectable && 'border-slate-200 bg-slate-50 opacity-75',
-								member.selectable &&
-									(selected
-										? 'border-[#0A2647] bg-sky-50'
-										: 'border-slate-200 bg-white active:bg-slate-50'),
-								member.selectable && !locked && 'cursor-pointer',
-								member.selectable && locked && 'cursor-not-allowed'
-							]}
+					{#snippet actions()}
+						<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
+							>{t.alreadyKiosk.home}</Button
 						>
-							{#if member.selectable}
-								<Checkbox
-									checked={selected}
-									onCheckedChange={(checked) => toggleMember(member, checked)}
-									disabled={locked}
-									aria-labelledby={`member-name-${member.evacuee_id}`}
-									class="size-12 shrink-0 kiosk-compact:size-10"
-								/>
-							{:else}
-								<span class="size-12 shrink-0 kiosk-compact:size-10" aria-hidden="true"></span>
-							{/if}
-							<div class="min-w-0 flex-1">
-								<p
-									id={`member-name-${member.evacuee_id}`}
-									class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-lg"
-								>
-									{fullName(member, t.noName)}
-									{#if input?.source === 'phone' ? member.phone_matched : member.is_primary}<span
-											class="ml-2 rounded-full bg-[#F0F4F8] px-2 py-1 text-sm font-bold text-[#0A2647] kiosk-portrait:px-3 kiosk-portrait:text-lg kiosk-compact:text-xs"
-											>{input?.source === 'phone'
-												? t.members.phoneMatch
-												: t.members.registrant}</span
-										>{/if}
-								</p>
-								<p
-									class="mt-1 text-base text-slate-600 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
-								>
-									{member.age === null ? t.members.ageUnknown : t.members.age(member.age)}
-									<span class="mx-1" aria-hidden="true">·</span>{statusLabel(member.status)}
-								</p>
-							</div>
-						</label>
-					{/each}
-				</div>
+					{/snippet}
+				</KioskNoticePanel>
+			{/if}
 
-				{#if selectedMembers.length > 0 && selectedMembers.length < selectableMemberCount}
-					<p
-						class="mt-4 text-base leading-relaxed text-slate-600 kiosk-portrait:mt-5 kiosk-portrait:text-xl kiosk-compact:text-sm"
-					>
-						{t.members.selectedNote(selectedMembers.length)}
-					</p>
-				{/if}
-
-				{#if actionError}
-					<p
-						class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-base font-semibold text-rose-900 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
-						role="alert"
-					>
-						{actionError}
-					</p>
-				{/if}
-
-				<div
-					class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end kiosk-portrait:mt-8 kiosk-portrait:gap-4"
+			{#if candidates.length > 0 && !lookupError && !isLookingUp}
+				<section
+					class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6"
 				>
-					<Button
-						type="button"
-						variant="outline"
-						onclick={onreset}
-						class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto sm:px-10 kiosk-portrait:px-14"
-						>{t.members.cancel}</Button
-					>
-					<Button
-						type="button"
-						disabled={!centerMatches || selectedIds.length === 0 || isSubmitting}
-						onclick={submitCheckIn}
-						class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
-					>
-						{#if isSubmitting}<span
-								class="size-5 animate-spin rounded-full border-2 border-white/40 border-t-white kiosk-portrait:size-6"
-								aria-hidden="true"
-							></span>{t.members.saving}{:else}<CheckCircle2
-								aria-hidden="true"
-							/>{t.members.confirm(selectedIds.length)}{/if}
-					</Button>
-				</div>
-				{#if !centerMatches}<p
-						class="mt-3 text-base font-semibold text-rose-800 kiosk-portrait:mt-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
-						role="alert"
-					>
-						{t.members.centerMismatch}
-					</p>{/if}
-			</section>
-		{/if}
+					<PhoneHouseholdPicker {candidates} onselect={chooseHousehold} />
+				</section>
+			{/if}
 
-		{#if results.length > 0}
-			<section
-				class="no-print rounded-2xl border border-emerald-200 bg-white p-5 shadow-2xs sm:p-7 kiosk-portrait:p-8 kiosk-compact:p-4"
-				aria-labelledby="result-title"
-				aria-live="polite"
-			>
-				<div
-					class="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between kiosk-portrait:gap-8"
+			{#if holdShown}
+				{@render hold?.()}
+			{/if}
+
+			{#if lookup && centerMatches && results.length === 0 && !holdMembers}
+				<section
+					class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6"
+					aria-labelledby="household-title"
 				>
-					<div class="flex min-w-0 flex-1 items-start gap-3 sm:basis-sm kiosk-portrait:gap-5">
+					<div class="mb-4 flex items-center gap-3 kiosk-portrait:mb-6 kiosk-portrait:gap-5">
 						<div
-							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 kiosk-portrait:h-20 kiosk-portrait:w-20 kiosk-compact:h-11 kiosk-compact:w-11"
+							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#F0F4F8] text-[#0A2647] kiosk-portrait:h-20 kiosk-portrait:w-20 kiosk-compact:h-11 kiosk-compact:w-11"
 							aria-hidden="true"
 						>
-							<CheckCircle2 class="size-6 kiosk-portrait:size-10" />
+							<UsersRound class="size-6 kiosk-portrait:size-10" />
 						</div>
-						<div>
+						<div class="min-w-0 flex-1">
 							<h2
-								id="result-title"
-								class="text-lg font-bold text-[#0A2647] sm:text-xl kiosk-portrait:text-3xl"
+								id="household-title"
+								class="text-lg font-bold text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
 							>
-								{retryableIds.length > 0
-									? t.results.partial
-									: results.some((result) => result.status === 'already_checked_in')
-										? t.results.reported
-										: successfulResults.length > 0 || qrFailedResults.length > 0
-											? t.results.saved
-											: t.results.none}
+								{t.members.heading}
 							</h2>
-							<p
-								class="mt-1 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl"
-							>
-								{#if retryableIds.length > 0}
-									{t.results.summaryPartial(
-										reportedResults.length,
-										retryableIds.length,
-										lookup?.shelter_code ?? ''
-									)}
-								{:else}
-									{t.results.summaryAll(
-										reportedResults.length,
-										results.length,
-										lookup?.shelter_code ?? ''
-									)}
-								{/if}
+							<p class="text-base text-slate-600 kiosk-portrait:text-xl">
+								{t.members.shelter(lookup.shelter_code)}
 							</p>
-							{#if lookup?.name_masked}
-								<p
-									class="mt-2 text-base font-medium text-slate-700 kiosk-portrait:mt-3 kiosk-portrait:text-xl"
-								>
-									{t.members.nameMasked}
-								</p>
-							{/if}
 						</div>
-					</div>
-					<div class="flex flex-col gap-2 sm:ml-auto sm:flex-row kiosk-portrait:gap-4">
-						{#if retryableIds.length > 0}
+						{#if selectableMemberCount > 1}
 							<Button
 								type="button"
-								disabled={!centerMatches || isSubmitting || printBusy}
 								variant="outline"
-								onclick={() => void submitCheckInIds(retryableIds)}
-								class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto"
+								disabled={isSubmitting}
+								onclick={toggleAllMembers}
+								class="{KIOSK_NOTICE_SECONDARY_ACTION} w-auto shrink-0 kiosk-portrait:px-10"
 							>
-								{isSubmitting ? t.results.saving : t.results.retryRemaining(retryableIds.length)}
+								{allSelected ? t.members.clearAll : t.members.selectAll}
 							</Button>
 						{/if}
-						<Button
-							type="button"
-							disabled={printableResults.length === 0 || printBusy || isSubmitting}
-							onclick={printWristbands}
-							class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
+					</div>
+					{#if lookup.name_masked}
+						<p
+							class="mb-4 rounded-lg bg-sky-50 px-3 py-2 text-base font-medium text-sky-950 kiosk-portrait:mb-5 kiosk-portrait:px-4 kiosk-portrait:py-3 kiosk-portrait:text-xl kiosk-compact:text-sm"
 						>
-							<Printer aria-hidden="true" />{printBusy || isSubmitting
-								? t.results.preparingQr
-								: isReprintOnly
-									? t.results.printQrCount(printableResults.length)
-									: t.results.printQr}
-						</Button>
+							{t.members.nameMasked}
+						</p>
+					{/if}
+
+					<div class="space-y-3 kiosk-portrait:space-y-4">
+						{#each lookup.members as member (member.evacuee_id)}
+							{@const selected = selectedIds.includes(member.evacuee_id)}
+							{@const locked = isSubmitting}
+							<!-- The whole row is the tap target: the label forwards taps to the checkbox. -->
+							<label
+								class={[
+									'flex min-h-20 items-center gap-4 rounded-xl border-2 px-4 py-3 kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 kiosk-compact:min-h-16 kiosk-compact:py-2',
+									!member.selectable && 'border-slate-200 bg-slate-50 opacity-75',
+									member.selectable &&
+										(selected
+											? 'border-[#0A2647] bg-sky-50'
+											: 'border-slate-200 bg-white active:bg-slate-50'),
+									member.selectable && !locked && 'cursor-pointer',
+									member.selectable && locked && 'cursor-not-allowed'
+								]}
+							>
+								{#if member.selectable}
+									<Checkbox
+										checked={selected}
+										onCheckedChange={(checked) => toggleMember(member, checked)}
+										disabled={locked}
+										aria-labelledby={`member-name-${member.evacuee_id}`}
+										class="size-12 shrink-0 kiosk-compact:size-10"
+									/>
+								{:else}
+									<span class="size-12 shrink-0 kiosk-compact:size-10" aria-hidden="true"></span>
+								{/if}
+								<div class="min-w-0 flex-1">
+									<p
+										id={`member-name-${member.evacuee_id}`}
+										class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-lg"
+									>
+										{fullName(member, t.noName)}
+										{#if input?.source === 'phone' ? member.phone_matched : member.is_primary}<span
+												class="ml-2 rounded-full bg-[#F0F4F8] px-2 py-1 text-sm font-bold text-[#0A2647] kiosk-portrait:px-3 kiosk-portrait:text-lg kiosk-compact:text-xs"
+												>{input?.source === 'phone'
+													? t.members.phoneMatch
+													: t.members.registrant}</span
+											>{/if}
+									</p>
+									<p
+										class="mt-1 text-base text-slate-600 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
+									>
+										{member.age === null ? t.members.ageUnknown : t.members.age(member.age)}
+										<span class="mx-1" aria-hidden="true">·</span>{statusLabel(member.status)}
+									</p>
+								</div>
+							</label>
+						{/each}
+					</div>
+
+					{#if selectedMembers.length > 0 && selectedMembers.length < selectableMemberCount}
+						<p
+							class="mt-4 text-base leading-relaxed text-slate-600 kiosk-portrait:mt-5 kiosk-portrait:text-xl kiosk-compact:text-sm"
+						>
+							{t.members.selectedNote(selectedMembers.length)}
+						</p>
+					{/if}
+
+					{#if actionError}
+						<p
+							class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-base font-semibold text-rose-900 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+							role="alert"
+						>
+							{actionError}
+						</p>
+					{/if}
+
+					<div
+						class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end kiosk-portrait:mt-8 kiosk-portrait:gap-4"
+					>
 						<Button
 							type="button"
 							variant="outline"
 							onclick={onreset}
-							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.done}</Button
+							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto sm:px-10 kiosk-portrait:px-14"
+							>{t.members.cancel}</Button
 						>
-					</div>
-				</div>
-				{#if actionError}
-					<p
-						class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
-						role="alert"
-					>
-						{actionError}
-					</p>
-				{/if}
-				{#if qrFailedResults.length > 0}
-					<div
-						class="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 sm:flex-row sm:items-center kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
-						role="alert"
-					>
-						<p class="flex-1">
-							{t.results.qrIssueFailed(qrFailedResults.length)}
-						</p>
 						<Button
 							type="button"
-							variant="outline"
-							disabled={isSubmitting || printBusy}
-							onclick={() => void retryQrIssue()}
-							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.retryQrIssue}</Button
+							disabled={!centerMatches || selectedIds.length === 0 || isSubmitting}
+							onclick={submitCheckIn}
+							class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
 						>
+							{#if isSubmitting}<span
+									class="size-5 animate-spin rounded-full border-2 border-white/40 border-t-white kiosk-portrait:size-6"
+									aria-hidden="true"
+								></span>{t.members.saving}{:else}<CheckCircle2
+									aria-hidden="true"
+								/>{t.members.confirm(selectedIds.length)}{/if}
+						</Button>
 					</div>
-				{/if}
-				{#if printError}<p
-						class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
-						role="alert"
-					>
-						{t.errors.printHint(printError)}
-					</p>{/if}
-				<div class="mt-5 space-y-3 kiosk-portrait:mt-8 kiosk-portrait:space-y-4">
-					{#each results as result (result.evacuee_id)}
-						{@const person = lookup?.members.find(
-							(member) => member.evacuee_id === result.evacuee_id
-						)}
-						<svelte:element
-							this={isReprintOnly && canPrintQr(result) ? 'label' : 'div'}
-							class="flex items-center gap-3 rounded-xl border kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 {isReprintOnly &&
-							result.qr_payload
-								? 'cursor-pointer'
-								: ''} {!isQrIssueFailed(result) &&
-							(result.qr_payload || result.status === 'already_checked_in')
-								? 'border-emerald-200 bg-emerald-50'
-								: 'border-amber-200 bg-amber-50'} p-4 kiosk-compact:p-3"
+					{#if !centerMatches}<p
+							class="mt-3 text-base font-semibold text-rose-800 kiosk-portrait:mt-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+							role="alert"
 						>
-							{#if isReprintOnly && canPrintQr(result)}<Checkbox
-									checked={printSelectedIds.includes(result.evacuee_id)}
-									onCheckedChange={(checked) => togglePrint(result.evacuee_id, checked)}
-									disabled={printBusy}
-									aria-labelledby={`result-name-${result.evacuee_id}`}
-									aria-describedby={`result-status-${result.evacuee_id}`}
-									class="size-12 shrink-0 bg-white kiosk-compact:size-10"
-								/>{:else if isReprintOnly}<span class="size-12 shrink-0" aria-hidden="true"
-								></span>{:else if !isQrIssueFailed(result) && (result.qr_payload || result.status === 'already_checked_in')}<CheckCircle2
-									class="size-6 shrink-0 text-emerald-800 kiosk-portrait:size-8"
-									aria-hidden="true"
-								/>{:else}<CircleAlert
-									class="size-6 shrink-0 text-amber-800 kiosk-portrait:size-8"
-									aria-hidden="true"
-								/>{/if}
-							<div class="min-w-0 flex-1">
-								<p
-									id={`result-name-${result.evacuee_id}`}
-									class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-base"
-								>
-									{person ? fullName(person, t.noName) : result.evacuee_id}
-								</p>
-								<p
-									id={`result-status-${result.evacuee_id}`}
-									class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
-								>
-									{isQrIssueFailed(result)
-										? t.results.rowQrIssueFailed
-										: result.status === 'checked_in'
-											? t.results.rowCheckedIn
-											: canPrintQr(result)
-												? t.results.rowReprintable
-												: result.status === 'already_checked_in'
-													? statusLabel(result.stay_status ?? 'unknown')
-													: t.results.rowFailed}
-								</p>
+							{t.members.centerMismatch}
+						</p>{/if}
+				</section>
+			{/if}
+
+			{#if results.length > 0}
+				<section
+					class="no-print rounded-2xl border border-emerald-200 bg-white p-5 shadow-2xs sm:p-7 kiosk-portrait:p-8 kiosk-compact:p-4"
+					aria-labelledby="result-title"
+					aria-live="polite"
+				>
+					<div
+						class="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between kiosk-portrait:gap-8"
+					>
+						<div class="flex min-w-0 flex-1 items-start gap-3 sm:basis-sm kiosk-portrait:gap-5">
+							<div
+								class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 kiosk-portrait:h-20 kiosk-portrait:w-20 kiosk-compact:h-11 kiosk-compact:w-11"
+								aria-hidden="true"
+							>
+								<CheckCircle2 class="size-6 kiosk-portrait:size-10" />
 							</div>
-						</svelte:element>
-					{/each}
-				</div>
-			</section>
+							<div>
+								<h2
+									id="result-title"
+									class="text-lg font-bold text-[#0A2647] sm:text-xl kiosk-portrait:text-3xl"
+								>
+									{retryableIds.length > 0
+										? t.results.partial
+										: results.some((result) => result.status === 'already_checked_in')
+											? t.results.reported
+											: successfulResults.length > 0 || qrFailedResults.length > 0
+												? t.results.saved
+												: t.results.none}
+								</h2>
+								<p
+									class="mt-1 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl"
+								>
+									{#if retryableIds.length > 0}
+										{t.results.summaryPartial(
+											reportedResults.length,
+											retryableIds.length,
+											lookup?.shelter_code ?? ''
+										)}
+									{:else}
+										{t.results.summaryAll(
+											reportedResults.length,
+											results.length,
+											lookup?.shelter_code ?? ''
+										)}
+									{/if}
+								</p>
+								{#if lookup?.name_masked}
+									<p
+										class="mt-2 text-base font-medium text-slate-700 kiosk-portrait:mt-3 kiosk-portrait:text-xl"
+									>
+										{t.members.nameMasked}
+									</p>
+								{/if}
+							</div>
+						</div>
+						<div class="flex flex-col gap-2 sm:ml-auto sm:flex-row kiosk-portrait:gap-4">
+							{#if retryableIds.length > 0}
+								<Button
+									type="button"
+									disabled={!centerMatches || isSubmitting || printBusy}
+									variant="outline"
+									onclick={() => void submitCheckInIds(retryableIds)}
+									class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto"
+								>
+									{isSubmitting ? t.results.saving : t.results.retryRemaining(retryableIds.length)}
+								</Button>
+							{/if}
+							<Button
+								type="button"
+								disabled={printableResults.length === 0 || printBusy || isSubmitting}
+								onclick={printWristbands}
+								class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
+							>
+								<Printer aria-hidden="true" />{printBusy || isSubmitting
+									? t.results.preparingQr
+									: isReprintOnly
+										? t.results.printQrCount(printableResults.length)
+										: t.results.printQr}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								onclick={onreset}
+								class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.done}</Button
+							>
+						</div>
+					</div>
+					{#if actionError}
+						<p
+							class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+							role="alert"
+						>
+							{actionError}
+						</p>
+					{/if}
+					{#if qrFailedResults.length > 0}
+						<div
+							class="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 sm:flex-row sm:items-center kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+							role="alert"
+						>
+							<p class="flex-1">
+								{t.results.qrIssueFailed(qrFailedResults.length)}
+							</p>
+							<Button
+								type="button"
+								variant="outline"
+								disabled={isSubmitting || printBusy}
+								onclick={() => void retryQrIssue()}
+								class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.retryQrIssue}</Button
+							>
+						</div>
+					{/if}
+					{#if printError}
+						<div
+							class="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 sm:flex-row sm:items-center kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+							role="alert"
+						>
+							<p class="flex-1">{t.errors.printHint(printError)}</p>
+							{#if unprintedLabels.length > 0}
+								<Button
+									type="button"
+									variant="outline"
+									onclick={showUnprintedOnScreen}
+									class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">{t.results.showOnScreen}</Button
+								>
+							{/if}
+						</div>
+					{/if}
+					<div class="mt-5 space-y-3 kiosk-portrait:mt-8 kiosk-portrait:space-y-4">
+						{#each results as result (result.evacuee_id)}
+							{@const person = lookup?.members.find(
+								(member) => member.evacuee_id === result.evacuee_id
+							)}
+							<svelte:element
+								this={isReprintOnly && canPrintQr(result) ? 'label' : 'div'}
+								class="flex items-center gap-3 rounded-xl border kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 {isReprintOnly &&
+								result.qr_payload
+									? 'cursor-pointer'
+									: ''} {!isQrIssueFailed(result) &&
+								(result.qr_payload || result.status === 'already_checked_in')
+									? 'border-emerald-200 bg-emerald-50'
+									: 'border-amber-200 bg-amber-50'} p-4 kiosk-compact:p-3"
+							>
+								{#if isReprintOnly && canPrintQr(result)}<Checkbox
+										checked={printSelectedIds.includes(result.evacuee_id)}
+										onCheckedChange={(checked) => togglePrint(result.evacuee_id, checked)}
+										disabled={printBusy}
+										aria-labelledby={`result-name-${result.evacuee_id}`}
+										aria-describedby={`result-status-${result.evacuee_id}`}
+										class="size-12 shrink-0 bg-white kiosk-compact:size-10"
+									/>{:else if isReprintOnly}<span class="size-12 shrink-0" aria-hidden="true"
+									></span>{:else if !isQrIssueFailed(result) && (result.qr_payload || result.status === 'already_checked_in')}<CheckCircle2
+										class="size-6 shrink-0 text-emerald-800 kiosk-portrait:size-8"
+										aria-hidden="true"
+									/>{:else}<CircleAlert
+										class="size-6 shrink-0 text-amber-800 kiosk-portrait:size-8"
+										aria-hidden="true"
+									/>{/if}
+								<div class="min-w-0 flex-1">
+									<p
+										id={`result-name-${result.evacuee_id}`}
+										class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-base"
+									>
+										{person ? fullName(person, t.noName) : result.evacuee_id}
+									</p>
+									<p
+										id={`result-status-${result.evacuee_id}`}
+										class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
+									>
+										{isQrIssueFailed(result)
+											? t.results.rowQrIssueFailed
+											: result.status === 'checked_in'
+												? t.results.rowCheckedIn
+												: canPrintQr(result)
+													? t.results.rowReprintable
+													: result.status === 'already_checked_in'
+														? statusLabel(result.stay_status ?? 'unknown')
+														: t.results.rowFailed}
+									</p>
+								</div>
+							</svelte:element>
+						{/each}
+					</div>
+				</section>
 
-			<KioskLabelSheet
-				labels={printableResults
-					.filter((result) => result.qr_payload)
-					.map((result) => ({
-						key: result.evacuee_id,
-						qrSrc: qrImages[result.evacuee_id]?.src,
-						qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
-						name: labelName(
-							result,
-							lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
-						),
-						emergencyPhone: result.label?.emergency_phone,
-						checkedCount: KIOSK_CHECK_IN_TICKS,
-						marker: result.label?.marker
-					}))}
-			/>
-		{/if}
+				<KioskLabelSheet
+					labels={printableResults
+						.filter((result) => result.qr_payload)
+						.map((result) => ({
+							key: result.evacuee_id,
+							qrSrc: qrImages[result.evacuee_id]?.src,
+							qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
+							name: labelName(
+								result,
+								lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
+							),
+							emergencyPhone: result.label?.emergency_phone,
+							checkedCount: KIOSK_CHECK_IN_TICKS,
+							marker: result.label?.marker
+						}))}
+				/>
+			{/if}
 
-		<p
-			class={[
-				'no-print flex items-center justify-center gap-2 text-base text-slate-600 kiosk-portrait:gap-3 kiosk-portrait:text-xl kiosk-compact:text-sm',
-				holdShown && 'kiosk-compact:hidden'
-			]}
-		>
-			<ShieldCheck
-				class="size-4 shrink-0 text-[#0A2647] kiosk-portrait:size-6"
-				aria-hidden="true"
-			/>{t.qrNoPersonalData}
-		</p>
-	</div>
-</section>
+			<p
+				class={[
+					'no-print flex items-center justify-center gap-2 text-base text-slate-600 kiosk-portrait:gap-3 kiosk-portrait:text-xl kiosk-compact:text-sm',
+					holdShown && 'kiosk-compact:hidden'
+				]}
+			>
+				<ShieldCheck
+					class="size-4 shrink-0 text-[#0A2647] kiosk-portrait:size-6"
+					aria-hidden="true"
+				/>{t.qrNoPersonalData}
+			</p>
+		</div>
+	</section>
+{/if}
 
 {#if printPhase !== 'idle'}
 	<KioskPrintStatus phase={printPhase} count={printedCount} />
