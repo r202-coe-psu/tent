@@ -311,7 +311,20 @@
 		</svg>`;
 	}
 
-	function getShelterPinSvg(siteKind: PublicSiteKind | undefined, fill: string): string {
+	/** Teardrop pin with an arrow-up-right glyph: a center run in another system, apart from the tent pin. */
+	function externalPinSvg(fill: string): string {
+		return `<svg class="marker-pin" width="30" height="40" viewBox="0 0 30 40" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.12));cursor:pointer;transition:transform 0.2s,filter 0.2s;">
+			<path d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z" fill="${fill}" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" stroke-dasharray="3 2"/>
+			<path d="M10.5 18.5l9-9M12 9.5h7.5V17" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</svg>`;
+	}
+
+	function getShelterPinSvg(
+		siteKind: PublicSiteKind | undefined,
+		fill: string,
+		isExternal = false
+	): string {
+		if (isExternal) return externalPinSvg(fill);
 		return isHostHouseKind(siteKind) ? hostHousePinSvg(fill) : evacCenterPinSvg(fill);
 	}
 
@@ -502,12 +515,12 @@
 				bounds.extend(lngLat);
 
 				const color = getStatusColorCode(shelter.status);
+				const isExternal = shelter.is_external === true;
 				const pinSvg = shelter.pin
 					? numberedPinSvg(shelter.pin)
-					: getShelterPinSvg(shelter.site_kind, color);
+					: getShelterPinSvg(shelter.site_kind, color, isExternal);
 				const shelterId = shelter.id || shelter.code || '';
 				const shelterCode = shelter.code || shelter.id || '';
-				const isExternal = shelter.is_external === true;
 				// CR-252 FR-20: only a vetted https link ever reaches the popup's href.
 				const externalHref = isExternal ? safeExternalUrl(shelter.external_url) : null;
 				const canBook =
@@ -860,6 +873,35 @@
 					<span class="whitespace-nowrap text-muted-foreground"
 						>{shelterPinLegendKind ? getSiteKindText(shelterPinLegendKind) : t.otherSiteKinds}</span
 					>
+				</div>
+				<div class="flex shrink-0 items-center gap-1.5" data-testid="external-legend">
+					<svg
+						width="14"
+						height="18"
+						viewBox="0 0 30 40"
+						aria-hidden="true"
+						class="shrink-0 drop-shadow-xs"
+					>
+						<path
+							d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z"
+							fill="none"
+							stroke="currentColor"
+							class="text-foreground"
+							stroke-width="2.5"
+							stroke-linejoin="round"
+							stroke-dasharray="4 3"
+						/>
+						<path
+							d="M10.5 18.5l9-9M12 9.5h7.5V17"
+							fill="none"
+							stroke="currentColor"
+							class="text-foreground"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					<span class="whitespace-nowrap text-muted-foreground">{t.externalShelter}</span>
 				</div>
 				<!-- legend บ้านพี่เลี้ยง: ยังไม่ใช้งานตอนนี้ (#1419 ซ่อน host house ที่ไม่ใช่ external) เปิดกลับเมื่อมี host house แบบ external
 				<div class="flex shrink-0 items-center gap-1.5">
