@@ -378,6 +378,7 @@ def test_feed_pool_is_capped_by_settings():
 def test_feed_cap_comes_from_the_environment(monkeypatch):
     from worker.config import load_settings
 
+    monkeypatch.delenv("COUCH_FEED_MAX_CONNECTIONS", raising=False)
     assert load_settings().couch_feed_max_connections == 500
     monkeypatch.setenv("COUCH_FEED_MAX_CONNECTIONS", "800")
     assert load_settings().couch_feed_max_connections == 800
