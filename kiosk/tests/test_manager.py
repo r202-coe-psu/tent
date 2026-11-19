@@ -856,19 +856,36 @@ class FakeLpProcess:
             return f"request id is label_q-{len(self.stdin_data)} (1 file(s))\n".encode(), b""
         return self.stdout, b""
 
+    def kill(self):
+        pass
+
+    async def wait(self):
+        return self.returncode
+
 
 READY_QUEUE = b"printer label_q is idle.  enabled since Mon 01 Jan 2024 08:00:00 AM +07\n"
 
 
-def cups_exec(lp_process, calls=None, lpstat_process=None, cancel_process=None):
-    """Fake asyncio.create_subprocess_exec: lpstat answers with a ready queue unless told otherwise."""
+def cups_exec(
+    lp_process, calls=None, lpstat_process=None, cancel_process=None,
+    pending_process=None, completed_process=None,
+):
+    """Fake asyncio.create_subprocess_exec: lpstat answers with a ready queue and no jobs unless told
+    otherwise (`lpstat -p` = lpstat_process, `-W not-completed` = pending_process,
+    `-l -W completed` = completed_process)."""
     lpstat_process = lpstat_process or FakeLpProcess(stdout=READY_QUEUE)
+    pending_process = pending_process or FakeLpProcess(stdout=b"")
+    completed_process = completed_process or FakeLpProcess(stdout=b"")
     cancel_process = cancel_process or FakeLpProcess(stdout=b"")
 
     async def fake_exec(*args, **kwargs):
         if calls is not None:
             calls.append(args)
         if args[0] == "lpstat":
+            if "not-completed" in args:
+                return pending_process
+            if "completed" in args:
+                return completed_process
             return lpstat_process
         return cancel_process if args[0] == "cancel" else lp_process
 
@@ -913,10 +930,10 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lp_calls[0][-1], "-")
         self.assertEqual(process.stdin_data, [PNG, PNG])
 
-    async def print_through_cups(self, client, *images, fails=True):
+    async def print_through_cups(self, client, *images, fails=True, **lpstat):
         route = FakePrintRoute(body=labels_body(*images))
         calls = []
-        exec_ = cups_exec(FakeLpProcess(), calls)
+        exec_ = cups_exec(FakeLpProcess(), calls, **lpstat)
         with ExitStack() as stack:
             stack.enter_context(patch.object(manager.asyncio, "create_subprocess_exec", new=exec_))
             stack.enter_context(patch.object(manager, "KIOSK_CUPS_POLL_SEC", 0))
@@ -957,15 +974,63 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
         self.assertIn(("cancel", "label_q-1"), calls)
 
-    async def test_a_job_the_queue_cannot_report_on_is_cancelled_when_its_budget_runs_out(self):
-        client = self.client()
-
+    def ipp_cannot_say(self, client):
         async def unreachable(_job_id, timeout=5.0):
             return None
 
         client._cups_job_state = unreachable
 
-        fulfilled, calls = await self.print_through_cups(client, PNG)
+    async def test_a_job_still_listed_when_ipp_cannot_say_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+        still_listed = FakeLpProcess(stdout=b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n")
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, pending_process=still_listed)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    async def test_a_job_that_left_the_queue_completed_per_lpstat_when_ipp_cannot_say_is_printed(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+        completed = FakeLpProcess(
+            stdout=(
+                b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n"
+                b"\tStatus: processing\n\tAlerts: job-completed-successfully\n"
+            )
+        )
+
+        fulfilled, calls = await self.print_through_cups(
+            client, PNG, fails=False, completed_process=completed
+        )
+
+        self.assertEqual(fulfilled, {"status": 200, "body": {"printed": 1}})
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_a_job_that_left_the_queue_without_success_per_lpstat_fails_without_cancel(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+        completed = FakeLpProcess(
+            stdout=(
+                b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n"
+                b"\tStatus: processing\n\tAlerts: job-canceled-by-user\n"
+            )
+        )
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, completed_process=completed)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 0)
+        self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_a_job_neither_ipp_nor_lpstat_can_report_on_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+
+        fulfilled, calls = await self.print_through_cups(
+            client, PNG, pending_process=FakeLpProcess(returncode=1)
+        )
 
         self.assertEqual(fulfilled["status"], 502)
         self.assertIn(("cancel", "label_q-1"), calls)
@@ -1051,6 +1116,41 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(route.fulfilled, not_ready)
                 self.assertEqual([call[0] for call in calls], ["lpstat"])
                 self.assertEqual(lp.stdin_data, [])
+
+    async def test_refuses_to_print_when_the_queue_reports_a_blocking_state_reason(self):
+        reasons = (
+            "offline-report", "media-empty", "media-needed", "door-open", "paused",
+            "media-empty-error", "media-needed-error", "door-open-error", "media-empty-report",
+        )
+        for reason in reasons:
+            with self.subTest(reason=reason):
+                client = self.client(PRINTER_NAME="label_q")
+                route = FakePrintRoute(body=labels_body(PNG))
+                lp = FakeLpProcess()
+                calls = []
+                alerts = READY_QUEUE + f"\tAlerts: {reason}\n".encode()
+                exec_ = cups_exec(lp, calls, FakeLpProcess(stdout=alerts))
+
+                with patch.object(manager.asyncio, "create_subprocess_exec", new=exec_):
+                    await client._route_kiosk_api(route)
+
+                self.assertEqual(route.fulfilled["status"], 503)
+                self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINTER_NOT_READY")
+                self.assertEqual([call[0] for call in calls], ["lpstat"])
+                self.assertEqual(lp.stdin_data, [])
+
+    async def test_prints_when_the_queue_has_no_blocking_state_reason(self):
+        for alerts in ("none", "media-empty-warning", "media-low-warning door-open-warning"):
+            with self.subTest(alerts=alerts):
+                client = self.client(PRINTER_NAME="label_q")
+                route = FakePrintRoute(body=labels_body(PNG))
+                quiet = READY_QUEUE + f"\tAlerts: {alerts}\n".encode()
+                exec_ = cups_exec(FakeLpProcess(), None, FakeLpProcess(stdout=quiet))
+
+                with patch.object(manager.asyncio, "create_subprocess_exec", new=exec_):
+                    await client._route_kiosk_api(route)
+
+                self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 1}})
 
     async def test_refuses_to_print_when_lpstat_cannot_run(self):
         client = self.client()
@@ -1494,21 +1594,30 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertGreater(target.stat().st_size, 0)
 
-    async def test_unusable_device_path_and_unconvertible_label_fail_with_printed_count(self):
+    async def test_missing_explicit_device_path_is_refused_as_not_ready_with_nothing_written(self):
+        sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"))
+        client = self.client(PRINTER_DEVICE=str(self.root / "nope"))
+
+        with self.assertLogs(manager.logger, level="ERROR") as logs:
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 503)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINTER_NOT_READY")
+        self.assertFalse((self.root / "nope").exists())
+        self.assertTrue(any(str(self.root / "nope") in line for line in logs.output))
+
+    async def test_unconvertible_label_fails_with_printed_count(self):
         sysfs, dev = self.fake_usb_printers()
-        cases = {
-            "device path missing": (str(self.root / "nope"), labels_body(real_png())),
-            # Passes the route's PNG-signature check but cannot be decoded.
-            "label not decodable": (str(self.root / "ok.bin"), labels_body(PNG)),
-        }
         (self.root / "ok.bin").touch()
-        for name, (device, body) in cases.items():
-            with self.subTest(name=name):
-                client = self.client(PRINTER_DEVICE=device)
-                with self.assertLogs(manager.logger, level="ERROR"):
-                    route = await self.print_with(client, sysfs, dev, body)
-                self.assertEqual(route.fulfilled["status"], 502)
-                self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        client = self.client(PRINTER_DEVICE=str(self.root / "ok.bin"))
+
+        with self.assertLogs(manager.logger, level="ERROR"):
+            # Passes the route's PNG-signature check but cannot be decoded.
+            route = await self.print_with(client, sysfs, dev, labels_body(PNG))
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
 
     async def test_permission_error_tells_the_operator_to_join_group_lp(self):
         sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
