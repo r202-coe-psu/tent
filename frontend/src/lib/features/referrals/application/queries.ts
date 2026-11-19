@@ -2,6 +2,7 @@ import {
 	createInfiniteQuery,
 	createMutation,
 	createQuery,
+	keepPreviousData,
 	type InfiniteData,
 	useQueryClient,
 	type QueryClient
@@ -39,8 +40,15 @@ export const referralKeys = {
 	details: () => [...referralKeys.all, 'detail', getShelterCode()] as const,
 	detail: (id: string) => [...referralKeys.details(), id] as const,
 	batches: () => [...referralKeys.all, 'batch', getShelterCode()] as const,
-	batch: (id: string) => [...referralKeys.all, 'batch', getShelterCode(), id] as const
+	batch: (id: string) => [...referralKeys.all, 'batch', getShelterCode(), id] as const,
+	/** Under `all`, so every referral mutation's `invalidateQueries(all)` refreshes the marks. */
+	activeFor: (evacueeIds: readonly string[]) =>
+		[...referralKeys.all, 'active', getShelterCode(), activeLookupKey(evacueeIds)] as const
 };
+
+/** Order-free cache key for a set of evacuee ids. */
+export const activeLookupKey = (evacueeIds: readonly string[]): string[] =>
+	[...new Set(evacueeIds)].sort();
 
 export type ReferralPagesParams = {
 	direction: ReferralDirectionFilter;
@@ -104,6 +112,21 @@ export const useReferralBatch = (id: () => string, enabled: () => boolean = () =
 		queryFn: () => referralRepository().getBatch(id()),
 		enabled: enabled() && !!id()
 	}));
+
+/**
+ * Which of the shown evacuees already has an active referral (#555), so the picker marks them
+ * before submit. Keeps the previous answer while a grown id list (load more) is refetched.
+ */
+export const useActiveReferralEvacueeIds = (evacueeIds: () => readonly string[]) =>
+	createQuery(() => {
+		const ids = activeLookupKey(evacueeIds());
+		return {
+			queryKey: referralKeys.activeFor(ids),
+			queryFn: async () => new Set(await referralRepository().activeReferralEvacueeIds(ids)),
+			enabled: ids.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
 
 /**
  * Seed for the detail query: the referral from any cached infinite list page, with the time that

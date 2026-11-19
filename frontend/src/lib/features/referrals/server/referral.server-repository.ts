@@ -92,6 +92,11 @@ export type TransitionOptions = {
 /** Cap on members read for one `batch_id` (an M5 batch is one transfer, far below this). */
 const BATCH_ID_LIMIT = 1000;
 const UPDATE_MAX_ATTEMPTS = 3;
+const ACTIVE_LOOKUP_PAGE_SIZE = 500;
+/** A referral in any other status blocks a new one for the same evacuee (FR-002). */
+const INACTIVE_REFERRAL_STATUSES = ['closed', 'rejected'];
+/** Upper bound on ids per `activeReferralEvacueeIds` request at the BFF. */
+export const ACTIVE_LOOKUP_MAX_IDS = 200;
 
 let centralOpsDbCreated = false;
 async function ensureCentralDb() {
@@ -519,13 +524,47 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			selector: {
 				type: 'referral',
 				evacuee_id: evacueeId,
-				status: { $nin: ['closed', 'rejected'] }
+				status: { $nin: INACTIVE_REFERRAL_STATUSES }
 			},
 			limit: 1,
 			fields: ['_id']
 		});
 		if (status !== HTTP_OK) return false;
 		return (data.docs || []).length > 0;
+	}
+
+	/**
+	 * Which of `evacueeIds` already have an active referral (#555) — the batch form of
+	 * `hasActiveReferral`, so the picker can mark them before submit instead of waiting for 409.
+	 * Pages with a bookmark because one evacuee may hold several active referrals.
+	 */
+	async activeReferralEvacueeIds(evacueeIds: readonly string[]): Promise<string[]> {
+		const wanted = [...new Set(evacueeIds)];
+		if (wanted.length === 0) return [];
+		const found = new Set<string>();
+		let bookmark: string | undefined;
+		for (;;) {
+			const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', {
+				selector: {
+					type: 'referral',
+					evacuee_id: { $in: wanted },
+					status: { $nin: INACTIVE_REFERRAL_STATUSES }
+				},
+				fields: ['evacuee_id'],
+				limit: ACTIVE_LOOKUP_PAGE_SIZE,
+				...(bookmark ? { bookmark } : {})
+			});
+			if (status !== HTTP_OK) {
+				throw new CouchDbReferralError('Failed to look up active referrals', status, data);
+			}
+			const docs = data.docs ?? [];
+			for (const doc of docs) {
+				if (typeof doc.evacuee_id === 'string') found.add(doc.evacuee_id);
+			}
+			if (docs.length < ACTIVE_LOOKUP_PAGE_SIZE || !data.bookmark) break;
+			bookmark = data.bookmark;
+		}
+		return wanted.filter((id) => found.has(id));
 	}
 
 	async get(id: string): Promise<Referral | null> {

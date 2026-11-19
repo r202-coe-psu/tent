@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
+	import type { Evacuee } from '$lib/features/people';
 	import type { Referral } from '../domain/referral.schema';
 	import type { ReferralBatchFailure } from '../data/referral.repository';
 	import { useIntegrationStatus } from '../application/m5-queries';
@@ -17,7 +18,8 @@
 	const statusQuery = useIntegrationStatus();
 	const gateState = $derived(statusQuery.data?.m5.state);
 
-	let selectedIds = $state<string[]>([]);
+	let selected = $state.raw<Evacuee[]>([]);
+	const selectedIds = $derived(selected.map((e) => e._id));
 </script>
 
 <!-- OneData M5 create (draft CR M5 D17): medical-emergency + M5 only, no type or mode to pick. -->
@@ -40,7 +42,7 @@
 				/>
 			{/if}
 
-			<EvacueePickerTable bind:selectedIds label="1. เลือกผู้ป่วยที่ต้องการส่งต่อ" />
+			<EvacueePickerTable bind:selected label="1. เลือกผู้ป่วยที่ต้องการส่งต่อ" />
 
 			<hr class="border-border/60" />
 
