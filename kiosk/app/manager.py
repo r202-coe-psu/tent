@@ -439,6 +439,7 @@ class ScannerClientManager:
                         "mode": self.face_mode if self.face_service else "off",
                         "flows": list(self.face_flows) if self.face_service else [],
                     },
+                    "printer": self.printer_backend,
                 }
             ),
         )
@@ -677,6 +678,11 @@ class ScannerClientManager:
         return f"queue {self.printer_name}"
 
     async def _print_labels(self, raw: Optional[bytes]) -> tuple[int, Dict[str, Any]]:
+        if self.printer_backend == "none":
+            return 409, {
+                "printed": 0,
+                "error": {"code": "PRINTER_DISABLED", "message": "ตู้นี้ไม่มีเครื่องพิมพ์"},
+            }
         images = self._decode_labels(raw)
         if images is None:
             return 400, {"error": {"code": "INVALID_LABELS", "message": "ข้อมูล label ไม่ถูกต้อง"}}

@@ -875,6 +875,28 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0][-1], "-")
         self.assertEqual(process.stdin_data, [PNG, PNG])
 
+    async def test_refuses_to_print_on_a_kiosk_without_a_printer(self):
+        client = self.client(PRINTER_BACKEND="none")
+        route = FakePrintRoute(body=labels_body(PNG))
+
+        async def fail_exec(*_args, **_kwargs):
+            raise AssertionError("lp must not run")
+
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=fail_exec):
+            await client._route_kiosk_api(route)
+
+        self.assertIsNone(route.continued_headers)
+        self.assertEqual(
+            route.fulfilled,
+            {
+                "status": 409,
+                "body": {
+                    "printed": 0,
+                    "error": {"code": "PRINTER_DISABLED", "message": "ตู้นี้ไม่มีเครื่องพิมพ์"},
+                },
+            },
+        )
+
     async def test_rejects_invalid_payloads_without_printing(self):
         client = self.client()
         bodies = {
@@ -1349,6 +1371,7 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
                 "camera_flip": True,
                 "reader_max_gap_ms": 40,
                 "face_check": {"mode": "off", "flows": []},
+                "printer": "cups",
             },
         )
         body = manager.json.dumps(route.fulfilled["body"])
@@ -1369,8 +1392,20 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
                 "camera_flip": False,
                 "reader_max_gap_ms": 50,
                 "face_check": {"mode": "off", "flows": []},
+                "printer": "cups",
             },
         )
+
+    async def test_reports_the_printer_backend_the_machine_has(self):
+        for backend in ("cups", "escpos", "none"):
+            with self.subTest(backend=backend):
+                route = FakeHardwareRoute()
+
+                await manager.ScannerClientManager(
+                    valid_config(PRINTER_BACKEND=backend)
+                )._route_kiosk_api(route)
+
+                self.assertEqual(route.fulfilled["body"]["printer"], backend)
 
     async def test_reports_qr_check_in_off_when_the_machine_turns_it_off(self):
         route = FakeHardwareRoute()
