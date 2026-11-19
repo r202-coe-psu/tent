@@ -3184,7 +3184,46 @@
 						"name": "skill",
 						"in": "query",
 						"required": false,
-						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Skill" }
+						"schema": {
+							"anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }],
+							"title": "Skill"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 100 }, { "type": "null" }],
+							"title": "Q"
+						}
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{ "enum": ["open", "near_full", "controlled"], "type": "string" },
+								{ "type": "null" }
+							],
+							"title": "Status"
+						}
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": { "type": "integer", "minimum": 1, "default": 1, "title": "Page" }
+					},
+					{
+						"name": "page_size",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "integer", "maximum": 50, "minimum": 1 }, { "type": "null" }],
+							"title": "Page Size"
+						}
 					}
 				],
 				"responses": {
@@ -6584,10 +6623,25 @@
 						"items": { "$ref": "#/components/schemas/PublicJobItem" },
 						"type": "array",
 						"title": "Jobs"
+					},
+					"total": { "type": "integer", "title": "Total", "default": 0 },
+					"shelters": {
+						"items": { "$ref": "#/components/schemas/PublicJobShelter" },
+						"type": "array",
+						"title": "Shelters"
 					}
 				},
 				"type": "object",
 				"title": "PublicJobListResponse"
+			},
+			"PublicJobShelter": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"name": { "type": "string", "title": "Name", "default": "" }
+				},
+				"type": "object",
+				"required": ["code"],
+				"title": "PublicJobShelter"
 			},
 			"PublicJobShift": {
 				"properties": {

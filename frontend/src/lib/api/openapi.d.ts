@@ -4036,6 +4036,23 @@ export interface components {
 			success: boolean;
 			/** Jobs */
 			jobs?: components['schemas']['PublicJobItem'][];
+			/**
+			 * Total
+			 * @default 0
+			 */
+			total: number;
+			/** Shelters */
+			shelters?: components['schemas']['PublicJobShelter'][];
+		};
+		/** PublicJobShelter */
+		PublicJobShelter: {
+			/** Code */
+			code: string;
+			/**
+			 * Name
+			 * @default
+			 */
+			name: string;
 		};
 		/**
 		 * PublicJobShift
@@ -8342,7 +8359,11 @@ export interface operations {
 		parameters: {
 			query?: {
 				shelter_code?: string | null;
-				skill?: string | null;
+				skill?: string[] | null;
+				q?: string | null;
+				status?: ('open' | 'near_full' | 'controlled') | null;
+				page?: number;
+				page_size?: number | null;
 			};
 			header?: never;
 			path?: never;

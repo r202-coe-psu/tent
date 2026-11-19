@@ -80,15 +80,76 @@ function enrichJobsWithQuotaCounts(jobs: JobDoc[]): void {
 	}
 }
 
+const BOARD_STATUSES = ['open', 'near_full', 'controlled'] as const;
+type BoardStatus = (typeof BOARD_STATUSES)[number];
+const MAX_PAGE_SIZE = 50;
+
+/** Positive integer from a query value, or undefined when absent or malformed. */
+function positiveInt(value: string | null): number | undefined {
+	if (!value || !/^\d+$/.test(value)) return undefined;
+	const n = Number(value);
+	return n >= 1 ? n : undefined;
+}
+
+/**
+ * Same filters FastAPI applies in Mongo, for the CouchDB fallback only: it already holds
+ * every job in memory, so narrowing and slicing here keeps the response shape identical.
+ */
+function filterFallbackJobs(
+	jobs: JobDoc[],
+	opts: {
+		q: string;
+		status?: BoardStatus;
+		skills: string[];
+		page?: number;
+		pageSize?: number;
+	}
+): { jobs: JobDoc[]; total: number } {
+	const remainingOf = (job: JobDoc): number[] =>
+		job.shifts && job.shifts.length > 0
+			? job.shifts.map((s) => s.slots_remaining ?? 0)
+			: [job.slots_remaining ?? 0];
+	const q = opts.q.toLowerCase();
+	const wanted = new Set(opts.skills);
+	const filtered = jobs.filter((job) => {
+		if (q) {
+			const hit =
+				(job.title ?? '').toLowerCase().includes(q) ||
+				(job.shelter_code ?? '').toLowerCase().includes(q) ||
+				(job.skills_required ?? []).some((sk) => sk.toLowerCase().includes(q));
+			if (!hit) return false;
+		}
+		if (wanted.size > 0 && !(job.skills_required ?? []).some((sk) => wanted.has(sk))) return false;
+		if (opts.status === 'open') return remainingOf(job).some((r) => r >= 1);
+		if (opts.status === 'near_full') return remainingOf(job).some((r) => r >= 1 && r <= 2);
+		if (opts.status === 'controlled') return job.tier === 'staff-capable';
+		return true;
+	});
+	if (!opts.pageSize) return { jobs: filtered, total: filtered.length };
+	const start = ((opts.page ?? 1) - 1) * opts.pageSize;
+	return { jobs: filtered.slice(start, start + opts.pageSize), total: filtered.length };
+}
+
 /**
  * กระดานงานอาสาสาธารณะ (CR-092 หน้าจอ 1) — the read half of the public board.
+ * Only whitelisted filters are forwarded to FastAPI; anything else is dropped.
  */
 export const GET: RequestHandler = async ({ url, fetch }) => {
 	const query = new URLSearchParams();
 	const shelterCode = url.searchParams.get('shelter_code') || url.searchParams.get('shelter');
-	const skill = url.searchParams.get('skill');
+	const skills = url.searchParams.getAll('skill').filter(Boolean);
+	const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
+	const statusParam = url.searchParams.get('status');
+	const status = BOARD_STATUSES.find((value) => value === statusParam);
+	const page = positiveInt(url.searchParams.get('page'));
+	const rawPageSize = positiveInt(url.searchParams.get('page_size'));
+	const pageSize = rawPageSize ? Math.min(rawPageSize, MAX_PAGE_SIZE) : undefined;
 	if (shelterCode) query.set('shelter_code', shelterCode);
-	if (skill) query.set('skill', skill);
+	for (const skill of skills) query.append('skill', skill);
+	if (q) query.set('q', q);
+	if (status) query.set('status', status);
+	if (page) query.set('page', String(page));
+	if (pageSize) query.set('page_size', String(pageSize));
 	const suffix = query.size > 0 ? `?${query}` : '';
 
 	try {
@@ -156,12 +217,6 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 							doc.status !== 'closed' &&
 							doc.status !== 'cancelled'
 						) {
-							if (
-								skill &&
-								!doc.skills_required?.some((sk) => sk.toLowerCase().includes(skill.toLowerCase()))
-							) {
-								continue;
-							}
 							jobs.push(doc);
 						}
 					}
@@ -171,9 +226,13 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 			}
 		}
 
-		enrichJobsWithQuotaCounts(jobs);
+		const result = filterFallbackJobs(jobs, { q, status, skills, page, pageSize });
+		enrichJobsWithQuotaCounts(result.jobs);
 
-		return json({ success: true, jobs, shelters }, { headers: { 'Cache-Control': 'no-store' } });
+		return json(
+			{ success: true, jobs: result.jobs, total: result.total, shelters },
+			{ headers: { 'Cache-Control': 'no-store' } }
+		);
 	} catch (err) {
 		console.warn('Failed to load public volunteer jobs:', err);
 		return json({ success: false, jobs: [], shelters: [] }, { status: 503 });
