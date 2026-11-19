@@ -86,6 +86,7 @@ services:
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
       M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
       M6_SYNC_INTERVAL_S: ${M6_SYNC_INTERVAL_S:-45}
+      COUCH_FEED_MAX_CONNECTIONS: ${COUCH_FEED_MAX_CONNECTIONS:-500}
       # Print housekeeping task (CR-222 FR-17) — dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the
       # PRINT_HOUSEKEEPING_TOKEN in frontend/.env. Not PRINT_HOUSEKEEPING_TOKEN: the root .env
       # carries a staging placeholder that would switch the task on against a token-less pnpm dev.
