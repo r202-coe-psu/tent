@@ -92,6 +92,9 @@ KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
 KIOSK_PRINT_TIMEOUT_SEC = 20.0
 KIOSK_LPSTAT_TIMEOUT_SEC = 5.0
 KIOSK_CUPS_POLL_SEC = 0.2
+KIOSK_CUPS_JOB_STATE_TIMEOUT_SEC = 1.0
+KIOSK_CUPS_MIN_LABEL_SEC = 8.0
+KIOSK_CUPS_CANCEL_RESERVE_SEC = 3.0
 CUPS_REQUEST_ID = re.compile(r"request id is (\S+)")
 # The frontend's fetch to KIOSK_PRINT_PATH (kiosk-print.api.ts) times out at 30s; with up to
 # KIOSK_PRINT_MAX_LABELS labels at KIOSK_PRINT_TIMEOUT_SEC each, a slow run could otherwise blow
@@ -711,7 +714,10 @@ class ScannerClientManager:
                     wait = ESCPOS_LABEL_PAUSE_SEC - (time.monotonic() - self._escpos_last_label_at)
                     if wait > 0:
                         await asyncio.sleep(wait)
-            if time.monotonic() >= deadline:
+            if time.monotonic() >= deadline or (
+                self.printer_backend == "cups"
+                and deadline - time.monotonic() < KIOSK_CUPS_MIN_LABEL_SEC
+            ):
                 logger.error(
                     f"Label print deadline exceeded on {self._print_target} ({printed}/{len(images)} sent)"
                 )
@@ -722,9 +728,10 @@ class ScannerClientManager:
                         "message": "พิมพ์ label ช้ากว่ากำหนด กรุณาลองอีกครั้ง",
                     },
                 }
-            label_deadline = time.monotonic() + min(
-                KIOSK_PRINT_TIMEOUT_SEC, deadline - time.monotonic()
-            )
+            budget = deadline - time.monotonic()
+            if self.printer_backend == "cups":
+                budget -= KIOSK_CUPS_CANCEL_RESERVE_SEC
+            label_deadline = time.monotonic() + min(KIOSK_PRINT_TIMEOUT_SEC, budget)
             if not await self._spool_label(image, first=index == 0, deadline=label_deadline):
                 logger.error(f"Label print failed on {self._print_target} ({printed}/{len(images)} sent)")
                 return 502, {
@@ -773,7 +780,7 @@ class ScannerClientManager:
     async def _spool_label(self, image: bytes, first: bool = True, deadline: float = 0.0) -> bool:
         if self.printer_backend == "escpos":
             return await self._write_escpos(image, init=first)
-        job_id = await self._submit_cups_job(image)
+        job_id = await self._submit_cups_job(image, deadline)
         if job_id is None:
             return False
         if await self._wait_for_cups_job(job_id, deadline):
@@ -781,7 +788,7 @@ class ScannerClientManager:
         await self._cancel_cups_job(job_id)
         return False
 
-    async def _submit_cups_job(self, image: bytes) -> Optional[str]:
+    async def _submit_cups_job(self, image: bytes, deadline: float) -> Optional[str]:
         # stdin keeps the label (evacuee name) off disk; the job title carries no personal data.
         try:
             process = await asyncio.create_subprocess_exec(
@@ -799,7 +806,8 @@ class ScannerClientManager:
             return None
         try:
             stdout, _ = await asyncio.wait_for(
-                process.communicate(image), timeout=KIOSK_PRINT_TIMEOUT_SEC
+                process.communicate(image),
+                timeout=min(KIOSK_PRINT_TIMEOUT_SEC, max(deadline - time.monotonic(), 0)),
             )
         except asyncio.TimeoutError:
             process.kill()
@@ -813,15 +821,18 @@ class ScannerClientManager:
     async def _wait_for_cups_job(self, job_id: str, deadline: float) -> bool:
         """A label is printed only when CUPS says its job is completed, not when it is queued."""
         while True:
-            state = await self._cups_job_state(job_id)
+            state = await self._cups_job_state(
+                job_id,
+                timeout=min(KIOSK_CUPS_JOB_STATE_TIMEOUT_SEC, max(deadline - time.monotonic(), 0)),
+            )
             if state == "completed":
                 return True
             if state in ("aborted", "canceled") or time.monotonic() >= deadline:
                 return False
             await asyncio.sleep(KIOSK_CUPS_POLL_SEC)
 
-    async def _ipp_job_state(self, job_id: str) -> Optional[str]:
-        return await asyncio.to_thread(ipp_job_state, job_id)
+    async def _ipp_job_state(self, job_id: str, timeout: float) -> Optional[str]:
+        return await asyncio.to_thread(ipp_job_state, job_id, timeout=timeout)
 
     async def _cancel_cups_job(self, job_id: str) -> None:
         try:
@@ -831,8 +842,14 @@ class ScannerClientManager:
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            await asyncio.wait_for(process.communicate(), timeout=KIOSK_LPSTAT_TIMEOUT_SEC)
-        except (OSError, asyncio.TimeoutError):
+        except OSError:
+            logger.error(f"Could not cancel CUPS job {job_id} on {self._print_target}")
+            return
+        try:
+            await asyncio.wait_for(process.communicate(), timeout=KIOSK_CUPS_CANCEL_RESERVE_SEC)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
             logger.error(f"Could not cancel CUPS job {job_id} on {self._print_target}")
 
     def _find_printer_device(self) -> Path | None:
