@@ -11,6 +11,12 @@ export {
 	type KioskLookupOutcome
 } from './kiosk-check-in.server';
 export {
+	checkOutSelectedMembers,
+	KioskCheckOutIdentityMismatchError,
+	kioskCheckOutInputSchema,
+	type KioskCheckOutMemberResult
+} from './kiosk-check-out.server';
+export {
 	decodeKioskPhoto,
 	deleteKioskCardImage,
 	KioskPhotoValidationError,

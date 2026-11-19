@@ -49,13 +49,16 @@ export interface KioskBannerRepository {
 	create(
 		shelterCode: string,
 		input: KioskBannerInput,
-		image: BannerImagePayload
+		image: BannerImagePayload,
+		/** Template banners only: a newly chosen logo (stored as the `template_image` attachment). */
+		templateImage?: BannerImagePayload
 	): Promise<KioskBannerSummary>;
 	update(
 		id: string,
 		rev: string,
 		input: KioskBannerInput,
-		image?: BannerImagePayload
+		image?: BannerImagePayload,
+		templateImage?: BannerImagePayload
 	): Promise<KioskBannerSummary>;
 	setStatus(id: string, rev: string, status: KioskBannerStatus): Promise<KioskBannerSummary>;
 	remove(id: string, rev: string): Promise<void>;
@@ -67,6 +70,8 @@ export interface KioskBannerRepository {
 	): Promise<KioskBannerSummary[]>;
 	/** URL of the stored image; pass `rev` so a replaced image is not served from cache. */
 	imageUrl(id: string, rev?: string): string;
+	/** URL of the stored template logo; pass `rev` so a replaced logo is not served from cache. */
+	templateImageUrl(id: string, rev?: string): string;
 }
 
 export interface KioskBannerGroupRepository {

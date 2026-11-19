@@ -1,6 +1,7 @@
 import type { ConsentDecision, ConsentMode } from '$lib/features/consent';
 import { languageStore } from '$lib/stores/language.svelte';
 import { getTranslation } from '$lib/utils/i18n';
+import type { KioskCheckoutChannel } from '../domain/checkout-channel';
 import type { KioskPhotoPayload } from '../domain/kiosk-photo';
 import { personQrVerdictMessage } from '$lib/utils/evacuee-qr';
 import type { VulnerabilityMarker } from '$lib/utils/vulnerability-marker';
@@ -55,7 +56,13 @@ export interface KioskHouseholdCandidate {
 export type KioskLookupResponse =
 	| ({ kind: 'household'; name_masked: boolean } & KioskLookupResult)
 	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] }
-	| { kind: 'kiosk_registered'; shelter_code: string };
+	| { kind: 'kiosk_registered'; shelter_code: string }
+	| {
+			kind: 'checked_out';
+			shelter_code: string;
+			checked_out_at: string;
+			channel: KioskCheckoutChannel | null;
+	  };
 
 export interface KioskCheckInMemberResult {
 	evacuee_id: string;

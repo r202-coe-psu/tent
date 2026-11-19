@@ -14,9 +14,16 @@ const evacuee = {
 } as Evacuee;
 
 const statusConfig = {
+	pre_registered: { label: 'Pre-registered', colorClass: '', dotClass: '' },
+	arriving: { label: 'Arriving', colorClass: '', dotClass: '' },
+	room_confirmed: { label: 'Room confirmed', colorClass: '', dotClass: '' },
 	active: { label: 'Staying', colorClass: '', dotClass: '' },
 	temporary_leave: { label: 'Temporary leave', colorClass: '', dotClass: '' },
-	checked_out: { label: 'Checked out', colorClass: '', dotClass: '' }
+	checked_out: { label: 'Checked out', colorClass: '', dotClass: '' },
+	kiosk_registered: { label: 'Kiosk registered', colorClass: '', dotClass: '' },
+	transferred: { label: 'Transferred', colorClass: '', dotClass: '' },
+	deceased: { label: 'Deceased', colorClass: '', dotClass: '' },
+	cancelled: { label: 'Cancelled', colorClass: '', dotClass: '' }
 };
 
 let instance: ReturnType<typeof mount> | null = null;
@@ -72,5 +79,138 @@ describe('EvacueeStatusModal toasts', () => {
 		langState.current = 'th';
 		await submitWithoutReason('temporary_leave');
 		expect(toast.error).toHaveBeenCalledWith('การออกชั่วคราวต้องระบุเหตุผล');
+	});
+});
+
+describe('EvacueeStatusModal manual override (CR-262)', () => {
+	const confirmed = {
+		_id: 'evacuee:test-456',
+		current_stay: { status: 'room_confirmed', zone: 'Z1', since: '2026-09-02T10:00:00.000Z' }
+	} as Evacuee;
+
+	const radioLabels = () =>
+		[...document.body.querySelectorAll<HTMLElement>('[role="radio"]')].map((el) =>
+			el.textContent?.trim()
+		);
+
+	async function open(props: {
+		canRevert?: boolean;
+		evacuee?: Evacuee;
+		onUpdateStatus?: () => Promise<void>;
+	}) {
+		instance = mount(EvacueeStatusModal, {
+			target: document.body,
+			props: {
+				show: true,
+				evacuee: confirmed,
+				statusConfig,
+				onClose: () => {},
+				onUpdateStatus: async () => {},
+				...props
+			}
+		});
+		await settle();
+	}
+
+	const pick = async (label: string) => {
+		[...document.body.querySelectorAll<HTMLElement>('[role="radio"]')]
+			.find((el) => el.textContent?.includes(label))
+			?.click();
+		await settle();
+	};
+
+	const confirmButton = () =>
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+			(el) => el.textContent?.trim() === 'ยืนยัน'
+		);
+
+	it('hides backward statuses when the viewer cannot revert (registration_staff)', async () => {
+		await open({ canRevert: false });
+		const labels = radioLabels();
+		expect(labels).not.toContain('Pre-registered');
+		expect(labels).not.toContain('Arriving');
+		expect(labels).not.toContain('Staying');
+		expect(labels).toContain('Room confirmed');
+	});
+
+	it('offers backward statuses to a shelter manager / system admin', async () => {
+		await open({ canRevert: true });
+		const labels = radioLabels();
+		expect(labels).toContain('Pre-registered');
+		expect(labels).toContain('Arriving');
+		expect(labels).toContain('Staying');
+	});
+
+	it('requires a reason before reverting', async () => {
+		const onUpdateStatus = vi.fn(async () => {});
+		await open({ canRevert: true, onUpdateStatus });
+		await pick('Staying');
+		expect(document.body.querySelector('#evacuee-status-reason')).not.toBeNull();
+		confirmButton()?.click();
+		await settle();
+		expect(toast.error).toHaveBeenCalledWith('การเปลี่ยนสถานะด้วยตนเองต้องระบุเหตุผล');
+		expect(onUpdateStatus).not.toHaveBeenCalled();
+	});
+
+	it('passes the trimmed reason with the target status', async () => {
+		const onUpdateStatus = vi.fn(async () => {});
+		await open({ canRevert: true, onUpdateStatus });
+		await pick('Arriving');
+		const textarea = document.body.querySelector<HTMLTextAreaElement>('#evacuee-status-reason')!;
+		textarea.value = '  เช็คอินผิดคน  ';
+		textarea.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		confirmButton()?.click();
+		await settle();
+		expect(onUpdateStatus).toHaveBeenCalledWith('arriving', 'เช็คอินผิดคน');
+	});
+
+	const stayOf = (status: Evacuee['current_stay']['status']) =>
+		({
+			_id: 'evacuee:test-789',
+			current_stay: { status, zone: null, since: '2026-09-02T10:00:00.000Z' }
+		}) as Evacuee;
+
+	it('lets a shelter manager / system admin go from arriving back to pre-registered', async () => {
+		await open({ canRevert: true, evacuee: stayOf('arriving') });
+		expect(radioLabels()).toContain('Pre-registered');
+	});
+
+	it('does not offer registration_staff the intake statuses from arriving', async () => {
+		await open({ canRevert: false, evacuee: stayOf('arriving') });
+		expect(radioLabels()).not.toContain('Pre-registered');
+		expect(radioLabels()).toContain('Staying');
+	});
+
+	it.each([
+		'arriving',
+		'active',
+		'checked_out',
+		'temporary_leave',
+		'transferred',
+		'deceased',
+		'cancelled'
+	] as const)(
+		'offers a shelter manager / system admin every stay status from %s',
+		async (status) => {
+			await open({ canRevert: true, evacuee: stayOf(status) });
+			const labels = radioLabels();
+			for (const cfg of Object.values(statusConfig)) expect(labels).toContain(cfg.label);
+		}
+	);
+
+	it('does not offer registration_staff anything from a terminal status', async () => {
+		await open({ canRevert: false, evacuee: stayOf('deceased') });
+		expect(radioLabels()).toEqual([]);
+	});
+
+	it('requires a reason for an override out of a terminal status', async () => {
+		const onUpdateStatus = vi.fn(async () => {});
+		await open({ canRevert: true, evacuee: stayOf('deceased'), onUpdateStatus });
+		await pick('Arriving');
+		confirmButton()?.click();
+		await settle();
+		expect(toast.error).toHaveBeenCalledWith('การเปลี่ยนสถานะด้วยตนเองต้องระบุเหตุผล');
+		expect(onUpdateStatus).not.toHaveBeenCalled();
 	});
 });

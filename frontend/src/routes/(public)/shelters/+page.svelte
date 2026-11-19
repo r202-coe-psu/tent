@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	// Icons
 	import Building2 from '@lucide/svelte/icons/building-2';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Filter from '@lucide/svelte/icons/filter';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
@@ -29,7 +28,6 @@
 		ExternalShelterChip,
 		ShelterFilterPanel,
 		ShelterMap,
-		PublicPageShell,
 		requestUserPosition,
 		canRequestGeolocation,
 		isHostHouseKind,
@@ -37,13 +35,32 @@
 		siteKindTiles,
 		useSiteKinds,
 		toParkingMapPoints,
+		ActiveFilterChips,
+		MapFilterOverlay,
+		ShelterListEmpty,
+		activeFilterChips,
+		activeFilterCount,
+		emptyListReason,
+		nextRadiusKm,
+		paramsWithoutAllFilters,
+		paramsWithoutFilter,
+		paramsWithoutPosition,
+		paramsWithRadius,
+		shelterTypeLabel,
+		showMapFilterOverlay,
+		type ActiveFilterChip,
+		type ActiveFilterLabels,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { directionsUrl } from '$lib/utils/maps';
-	import { PUBLIC_SHELTERS_I18N, PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
+	import {
+		PUBLIC_FILTER_PANEL_I18N,
+		PUBLIC_SHELTERS_I18N,
+		PUBLIC_SHELTER_CARD_I18N
+	} from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -66,7 +83,7 @@
 	const cardT = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 	const siteKindsQuery = useSiteKinds();
 	const siteKindStatTiles = $derived(
-		siteKindTiles(data?.summary?.counts_by_site_kind ?? {}, siteKindsQuery.data)
+		data?.summary ? siteKindTiles(data.summary.counts_by_site_kind, siteKindsQuery.data) : []
 	);
 
 	onMount(() => {
@@ -197,10 +214,85 @@
 		const params = new SvelteURLSearchParams(page.url.searchParams);
 		params.set('user_lat', liveUserLat);
 		params.set('user_lng', liveUserLng);
-		if (!params.get('distance')) {
+		// A cleared radius (`distance=`) stays cleared; a URL without one gets the default.
+		if (!params.has('distance')) {
 			params.set('distance', data?.filters?.distance || '5');
 		}
 		void goto(resolve(`/shelters?${params.toString()}`), { keepFocus: true, noScroll: true });
+	}
+
+	// ── Active filters (#1419): chips above the list, a count on the filter buttons ──
+	const filterT = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
+	const statusLabels = $derived<Record<string, string>>({
+		open: filterT.statusOpen,
+		full: filterT.statusFull,
+		prepare: filterT.statusPrepare,
+		standby: filterT.statusPrepare,
+		closed: filterT.statusClosed,
+		unknown: filterT.statusUnknown
+	});
+	const chipLabels = $derived<ActiveFilterLabels>({
+		radius: (km) => t.chipRadius.replace('{km}', km),
+		search: (q) => t.chipSearch.replace('{q}', q),
+		status: (value) => t.chipStatus.replace('{label}', statusLabels[value] ?? value),
+		type: (label) =>
+			t.chipType.replace('{label}', shelterTypeLabel(label, undefined, langState.current)),
+		province: (name) => t.chipProvince.replace('{name}', name),
+		district: (name) => t.chipDistrict.replace('{name}', name),
+		subdistrict: (name) => t.chipSubdistrict.replace('{name}', name),
+		hideFull: t.chipHideFull,
+		parking: {
+			car: t.chipParkingCar,
+			motorcycle: t.chipParkingMotorcycle,
+			boat: t.chipParkingBoat
+		},
+		hiddenGroup: { evacuation: t.chipHideEvacuation, external: t.chipHideExternal }
+	});
+	const filterChips = $derived(activeFilterChips(data?.filters ?? {}, chipLabels));
+	const filterCount = $derived(activeFilterCount(filterChips));
+	const emptyReason = $derived(emptyListReason(filterChips));
+	const radiusKm = $derived(String(data?.filters?.distance ?? ''));
+	const filterCountText = $derived(t.activeFilterCount.replace('{n}', String(filterCount)));
+	// Desktop, list panel collapsed: the chips / empty state go on the map instead.
+	const showMapOverlay = $derived(
+		!isMobile &&
+			showMapFilterOverlay({
+				listPanelOpen: showListPanel,
+				chipCount: filterChips.length,
+				resultCount: displayShelters.length
+			})
+	);
+
+	/** A filter's load is in flight: the list dims until the new result lands. */
+	const listBusy = $derived(navigating.to?.url.pathname === page.url.pathname);
+	let resultsAnnouncement = $state('');
+	// Screen readers hear the new count after a filter change, not on the first render.
+	afterNavigate((nav) => {
+		if (nav.type === 'enter' || nav.from?.url.pathname !== nav.to?.url.pathname) return;
+		resultsAnnouncement = t.resultsAnnounce.replace('{n}', String(displayShelters.length));
+	});
+
+	function navigateFilters(params: URLSearchParams) {
+		void goto(resolve(`/shelters?${params.toString()}`), { keepFocus: true, noScroll: true });
+	}
+
+	function removeFilter(chip: ActiveFilterChip) {
+		navigateFilters(paramsWithoutFilter(page.url.searchParams, chip));
+	}
+
+	function clearAllFilters() {
+		navigateFilters(paramsWithoutAllFilters(page.url.searchParams, filterChips));
+	}
+
+	function expandRadius() {
+		navigateFilters(paramsWithRadius(page.url.searchParams, nextRadiusKm(radiusKm)));
+	}
+
+	/** Forget the search origin: the URL and the live position (bound into the filter panel). */
+	function clearPosition() {
+		liveUserLat = '';
+		liveUserLng = '';
+		navigateFilters(paramsWithoutPosition(page.url.searchParams));
 	}
 
 	function getStatusColor(status: string) {
@@ -239,14 +331,44 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell class="space-y-3 sm:space-y-4" maxWidth="max-w-[1600px]">
+{#snippet filterCountBadge()}
+	{#if filterCount > 0}
+		<span
+			aria-hidden="true"
+			class="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 pt-[1.5px] text-2xs leading-none font-bold text-primary-foreground tabular-nums"
+			>{filterCount}</span
+		>
+		<span class="sr-only">({filterCountText})</span>
+	{/if}
+{/snippet}
+
+{#snippet emptyList()}
+	<ShelterListEmpty
+		reason={emptyReason}
+		{radiusKm}
+		onExpandRadius={expandRadius}
+		onClearPosition={clearPosition}
+		onClearFilters={clearAllFilters}
+	/>
+{/snippet}
+
+<p data-testid="results-announcer" class="sr-only" aria-live="polite">{resultsAnnouncement}</p>
+
+<!--
+	One viewport, no page scroll (#1419): the column is exactly as tall as what is left under the
+	fixed navbar, the map takes whatever the control bar / metric cards leave, and the mobile list
+	scrolls inside its own box.
+-->
+<div
+	class="mx-auto flex h-[calc(100dvh-var(--public-navbar-offset,4rem)-var(--testing-banner-height,0px))] w-full max-w-[1600px] flex-col gap-3 overflow-hidden px-3 py-3 sm:px-6 lg:px-8"
+>
 	<!-- Mobile Top Control Bar (< lg) -->
-	<div class="flex items-center justify-between gap-2 lg:hidden">
+	<div class="flex shrink-0 items-center justify-between gap-2 lg:hidden">
 		<!-- View Switcher Tabs -->
 		<div class="inline-flex rounded-xl border border-border/80 bg-muted/60 p-1 shadow-2xs">
 			<button
 				type="button"
-				class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {mobileViewMode ===
+				class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition-all {mobileViewMode ===
 				'map'
 					? 'bg-card text-primary shadow-xs'
 					: 'text-muted-foreground hover:text-foreground'}"
@@ -257,7 +379,7 @@
 			</button>
 			<button
 				type="button"
-				class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all {mobileViewMode ===
+				class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition-all {mobileViewMode ===
 				'list'
 					? 'bg-card text-primary shadow-xs'
 					: 'text-muted-foreground hover:text-foreground'}"
@@ -271,23 +393,22 @@
 		<!-- Mobile Filter Trigger Button -->
 		<button
 			type="button"
-			class="flex items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-2xs transition-all active:scale-95"
+			class="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-2 text-xs font-bold whitespace-nowrap text-foreground shadow-2xs transition-all active:scale-95"
 			onclick={() => (mobileFilterOpen = true)}
 		>
 			<Filter class="h-3.5 w-3.5 text-primary" />
 			<span>{t.filterBtn}</span>
+			{@render filterCountBadge()}
 		</button>
 	</div>
 
-	<!-- Metric Cards (Desktop always; Mobile only when viewing list) -->
+	<!-- Metric Cards (desktop only — the mobile page is the map or the list, nothing above it) -->
 	<div
-		class="{mobileViewMode === 'map'
-			? 'hidden lg:grid'
-			: 'grid'} grid-cols-2 gap-3 sm:gap-4 md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] lg:gap-6"
+		class="hidden shrink-0 grid-cols-2 gap-3 sm:gap-4 md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] lg:grid lg:gap-6"
 	>
 		<PublicShelterMetricCard
 			title={t.totalShelters}
-			value={data?.summary?.shelters_total ?? 0}
+			value={data?.summary?.shelters_total ?? '–'}
 			unit={t.locationsUnit}
 			icon={ClipboardList}
 			iconClass="border-accent-purple shadow-accent-purple/15 text-accent-purple"
@@ -295,7 +416,7 @@
 
 		<PublicShelterMetricCard
 			title={t.openShelters}
-			value={data?.summary?.shelters_open ?? 0}
+			value={data?.summary?.shelters_open ?? '–'}
 			unit={t.locationsUnit}
 			icon={Building2}
 			iconClass="border-success shadow-success/15 text-success"
@@ -324,7 +445,7 @@
 	<div
 		class="relative {mobileViewMode === 'list'
 			? 'hidden lg:block'
-			: 'block'} h-[calc(100dvh-10.5rem)] min-h-[460px] w-full overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-xs sm:h-[calc(100vh-14rem)] sm:min-h-[720px]"
+			: 'block'} min-h-0 w-full flex-1 overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-xs"
 	>
 		<!-- Full Map Canvas (Background) -->
 		<div class="absolute inset-0 z-0 h-full w-full">
@@ -339,19 +460,26 @@
 				disablePopup={isMobile}
 				onSelectShelter={handleSelectShelter}
 				onLocationPick={applySearchOrigin}
+				legendClass={[
+					// keep the legend between the floating panels (left-4 + w-80/88, right-4 + w-88/96)
+					showFilterPanel && 'lg:left-[22rem] xl:left-[24rem]',
+					showListPanel && 'lg:right-[24rem] xl:right-[26rem]'
+				]}
 			/>
 		</div>
 
 		<!-- Desktop Floating Filter Panel (Left) -->
 		{#if showFilterPanel}
-			<div class="absolute top-4 left-4 z-20 hidden max-h-[calc(100%-2rem)] w-80 lg:block xl:w-88">
+			<div
+				class="absolute top-4 left-4 z-20 hidden max-h-[calc(100%-2rem)] w-80 flex-col lg:flex xl:w-88"
+			>
 				<ShelterFilterPanel
 					filters={data?.filters || {}}
 					availableTypes={data?.available_types || []}
 					action="/shelters"
 					bind:userLat={liveUserLat}
 					bind:userLng={liveUserLng}
-					class="h-full max-h-[calc(100vh-17rem)]"
+					class="min-h-0 flex-1"
 					onClose={() => (showFilterPanel = false)}
 				/>
 			</div>
@@ -363,6 +491,7 @@
 			>
 				<Filter class="h-4 w-4 text-primary" />
 				<span>{t.searchAndFilter}</span>
+				{@render filterCountBadge()}
 				<ChevronRight class="h-3.5 w-3.5 text-muted-foreground" />
 			</button>
 		{/if}
@@ -393,10 +522,20 @@
 					</button>
 				</div>
 
+				<ActiveFilterChips
+					chips={filterChips}
+					onRemove={removeFilter}
+					onClearAll={clearAllFilters}
+					class="shrink-0 border-b border-border/60 px-3 py-2"
+				/>
+
 				<div
 					bind:this={listContainerEl}
-					class="custom-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto p-3"
-					style="max-height: calc(100vh - 21rem);"
+					aria-busy={listBusy}
+					class={[
+						'custom-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 transition-opacity duration-200',
+						listBusy && 'opacity-50'
+					]}
 				>
 					{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
 						{@const shelterKey = shelter.id || shelter.code || String(i)}
@@ -417,13 +556,7 @@
 							/>
 						</div>
 					{:else}
-						<div
-							class="flex flex-col items-center justify-center rounded-xl border border-dashed border-border p-6 text-center text-muted-foreground"
-						>
-							<AlertTriangle class="mb-2 h-7 w-7 text-muted-foreground/50" />
-							<p class="text-xs font-medium">{t.noShelters}</p>
-							<p class="text-2xs mt-1">{t.tryChangeFilter}</p>
-						</div>
+						{@render emptyList()}
 					{/each}
 				</div>
 			</div>
@@ -440,6 +573,27 @@
 					{displayShelters.length}
 				</span>
 			</button>
+		{/if}
+
+		<!-- Desktop, list panel collapsed: chips + empty state on the map, below the pin control -->
+		{#if showMapOverlay}
+			<div
+				class={[
+					'pointer-events-none absolute inset-x-3 top-[5.5rem] bottom-16 z-20 hidden justify-center lg:flex',
+					showFilterPanel && 'lg:left-[22rem] xl:left-[24rem]'
+				]}
+			>
+				<MapFilterOverlay
+					class="h-fit"
+					chips={filterChips}
+					resultCount={displayShelters.length}
+					{radiusKm}
+					onRemove={removeFilter}
+					onClearAll={clearAllFilters}
+					onExpandRadius={expandRadius}
+					onClearPosition={clearPosition}
+				/>
+			</div>
 		{/if}
 
 		<!-- Mobile Bottom Compact Selected Card (Map Mode Only, < lg) -->
@@ -559,9 +713,16 @@
 
 	<!-- Mobile Shelter List View (when mobileViewMode === 'list', < lg) -->
 	{#if mobileViewMode === 'list'}
-		<div class="space-y-3 pb-16 lg:hidden">
+		<div
+			aria-busy={listBusy}
+			class={[
+				'min-h-0 flex-1 space-y-3 overflow-y-auto pb-16 transition-opacity duration-200 lg:hidden',
+				listBusy && 'opacity-50'
+			]}
+		>
 			<div class="flex items-center justify-between px-1 text-xs text-muted-foreground">
 				<span class="font-bold text-foreground">
+					{t.listTitle}
 					{displayShelters.length}
 					{t.locationsUnit}
 				</span>
@@ -569,6 +730,13 @@
 					<span>{t.sortedByDistance}</span>
 				{/if}
 			</div>
+
+			<ActiveFilterChips
+				chips={filterChips}
+				onRemove={removeFilter}
+				onClearAll={clearAllFilters}
+				class="px-1"
+			/>
 
 			{#each displayShelters as shelter, i (shelter.id || shelter.code || i)}
 				{@const shelterKey = shelter.id || shelter.code || String(i)}
@@ -587,13 +755,7 @@
 					/>
 				</div>
 			{:else}
-				<div
-					class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-8 text-center text-muted-foreground"
-				>
-					<AlertTriangle class="mb-2.5 h-8 w-8 text-muted-foreground/50" />
-					<p class="text-sm font-semibold">{t.noShelters}</p>
-					<p class="mt-1 text-xs">{t.tryChangeFilter}</p>
-				</div>
+				{@render emptyList()}
 			{/each}
 
 			<!-- Mobile Floating Action to switch back to map -->
@@ -656,7 +818,7 @@
 			</div>
 		</div>
 	{/if}
-</PublicPageShell>
+</div>
 
 <style>
 	/* Custom scrollbar for the list */

@@ -33,18 +33,21 @@ vi.mock('@tanstack/svelte-query', () => ({
 import { scannerKeys } from '$lib/features/kiosk-devices';
 import {
 	KioskBannerApiError,
-	type KioskBannerGroupRepository
+	type KioskBannerGroupRepository,
+	type KioskBannerRepository
 } from '../data/kiosk-banner.repository';
 import {
 	kioskBannerErrorMessage,
 	kioskBannerGroupKeys,
 	kioskBannerKeys,
+	useCreateKioskBanner,
 	useCreateKioskBannerGroup,
 	useDeleteKioskBannerGroup,
 	useKioskBannerGroup,
 	useKioskBannerGroups,
 	useRotateTvCode,
 	useSetKioskBannerGroupDevices,
+	useUpdateKioskBanner,
 	useUpdateKioskBannerGroup
 } from './kiosk-banner.queries';
 
@@ -147,6 +150,43 @@ describe('group queries', () => {
 			enabled: boolean;
 		};
 		expect(idle.enabled).toBe(false);
+	});
+});
+
+describe('banner mutations with a template logo', () => {
+	const bannerRepo = {
+		create: vi.fn().mockResolvedValue(undefined),
+		update: vi.fn().mockResolvedValue(undefined)
+	} as unknown as KioskBannerRepository;
+	const input = { title: 'ป้าย' } as never;
+	const image = { content_type: 'image/png', data_base64: 'SU1H' };
+	const templateImage = { content_type: 'image/png', data_base64: 'TE9HTw==' };
+
+	it('create hands the logo to the repository', async () => {
+		await useCreateKioskBanner(bannerRepo).mutate({
+			shelterCode: 'SH-01',
+			input,
+			image,
+			templateImage
+		});
+		expect(bannerRepo.create).toHaveBeenCalledWith('SH-01', input, image, templateImage);
+	});
+
+	it('update hands the logo to the repository', async () => {
+		await useUpdateKioskBanner(bannerRepo).mutate({
+			id: 'kiosk_banner:1',
+			rev: '1-a',
+			input,
+			image,
+			templateImage
+		});
+		expect(bannerRepo.update).toHaveBeenCalledWith(
+			'kiosk_banner:1',
+			'1-a',
+			input,
+			image,
+			templateImage
+		);
 	});
 });
 

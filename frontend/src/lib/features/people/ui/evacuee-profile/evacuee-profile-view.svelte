@@ -28,8 +28,10 @@
 		useCheckInEvacuee,
 		useCheckOutEvacuee,
 		useConfirmRoom,
+		useRevertEvacueeStatus,
 		useRecordMovement,
 		resolveStatusChangeAction,
+		revertNeedsZone,
 		normalizeCheckoutRemark,
 		statusChangeHandlerKind,
 		canChangeEvacueeZone,
@@ -38,10 +40,10 @@
 		zoneLabel
 	} from '$lib/features/people';
 	import {
+		hasShelterScope,
 		hasStaffCapability,
 		isShelterManager,
-		isSystemAdmin,
-		shelterCodeFromRoles
+		isSystemAdmin
 	} from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -96,15 +98,26 @@
 		const roles = authStore.user.roles;
 		if (isSystemAdmin(roles)) return true;
 
-		const scopedShelter = shelterCodeFromRoles(roles);
 		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
 		return (
-			!!scopedShelter &&
-			scopedShelter.toUpperCase() === currentShelter &&
-			(isShelterManager(roles) || hasStaffCapability(roles, 'registration_staff'))
+			hasShelterScope(roles, currentShelter) &&
+			(isShelterManager(roles, currentShelter) ||
+				hasStaffCapability(roles, 'registration_staff', currentShelter))
 		);
 	});
 	const profileReadonly = $derived(readonly || !canEditProfile);
+
+	/** Overriding a stay status (any → any, CR-262 A1) is manager-level: system_admin, or shelter_manager of the current shelter. */
+	const canRevertStatus = $derived.by(() => {
+		if (profileReadonly || !authStore.user) return false;
+		const roles = authStore.user.roles;
+		if (isSystemAdmin(roles)) return true;
+		const scopedShelter = shelterCodeFromRoles(roles);
+		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
+		return (
+			!!scopedShelter && scopedShelter.toUpperCase() === currentShelter && isShelterManager(roles)
+		);
+	});
 
 	const STATUS_STYLE: Record<StayStatus, { colorClass: string; dotClass: string }> = {
 		active: {
@@ -206,6 +219,7 @@
 	const checkInMutation = useCheckInEvacuee();
 	const checkOutMutation = useCheckOutEvacuee();
 	const confirmRoomMutation = useConfirmRoom();
+	const revertStatusMutation = useRevertEvacueeStatus();
 	const recordMovementMutation = useRecordMovement();
 	const createMedicalMutation = useCreateMedical();
 	const patchMedicalMutation = usePatchMedical();
@@ -287,7 +301,8 @@
 		leave_temporary: 'fill-amber-500 text-amber-500',
 		return_from_leave: 'fill-emerald-500 text-emerald-500',
 		mark_deceased: 'fill-slate-950 text-slate-950 dark:fill-slate-100 dark:text-slate-100',
-		zone_change: 'fill-amber-600 text-amber-600'
+		zone_change: 'fill-amber-600 text-amber-600',
+		revert_status: 'fill-rose-500 text-rose-500'
 	};
 
 	const isLoading = $derived(
@@ -326,6 +341,21 @@
 	// Modal / sheet visibility state
 	let showActionsSheet = $state(false);
 	let showZoneModal = $state(false);
+	/**
+	 * A status change (check-in or manual override, CR-262 A1) parked while the zone modal collects
+	 * the zone it needs. Picking a zone completes it in one write — a zone-only patch of a
+	 * zoneless stay is rejected by the validator (rule 2b). Cleared when the zone modal closes.
+	 */
+	let pendingZoneStatus = $state<{
+		kind: 'check_in' | 'revert_status';
+		status: StayStatus;
+		reason?: string;
+	} | null>(null);
+
+	function closeZoneModal() {
+		showZoneModal = false;
+		pendingZoneStatus = null;
+	}
 	let showStatusModal = $state(false);
 	let showQrModal = $state(false);
 	let showHandoverSlip = $state(false);
@@ -372,8 +402,35 @@
 		};
 	}
 
+	async function completePendingZoneStatus(zoneCode: string) {
+		const pending = pendingZoneStatus;
+		if (!evacuee || !pending) return;
+		try {
+			const ctx = getAuthorContext();
+			if (pending.kind === 'check_in') {
+				await checkInMutation.mutateAsync({ evacuee, ctx, zone: zoneCode });
+			} else {
+				await revertStatusMutation.mutateAsync({
+					evacuee,
+					ctx,
+					toStatus: pending.status,
+					reason: pending.reason ?? '',
+					zone: zoneCode
+				});
+			}
+			toast.success(t.statusUpdated);
+			closeZoneModal();
+		} catch (err: unknown) {
+			toast.error(t.statusUpdateFailed(errorDetail(err)));
+		}
+	}
+
 	async function updateZone(zoneCode: string) {
 		if (!evacuee) return;
+		if (pendingZoneStatus) {
+			await completePendingZoneStatus(zoneCode);
+			return;
+		}
 		try {
 			if (canChangeEvacueeZone(evacuee)) {
 				await changeZoneMutation.mutateAsync({
@@ -407,10 +464,30 @@
 			}
 			const ctx = getAuthorContext();
 			const kind = statusChangeHandlerKind(action);
-			if (kind === 'check_in') {
+			if (kind === 'revert_status') {
+				if (!canRevertStatus) {
+					toast.error(t.statusUpdateFailed(t.revertNotAllowed));
+					return;
+				}
+				const trimmed = (reason ?? '').trim();
+				if (!trimmed) {
+					toast.error(t.revertNeedsReason);
+					return;
+				}
+				if (revertNeedsZone(evacuee.current_stay, status)) {
+					// An in-shelter stay never has no zone — pick one first (same flow as check-in).
+					toast.error(t.revertNeedsZone);
+					pendingZoneStatus = { kind: 'revert_status', status, reason: trimmed };
+					showStatusModal = false;
+					showZoneModal = true;
+					return;
+				}
+				await revertStatusMutation.mutateAsync({ evacuee, ctx, toStatus: status, reason: trimmed });
+			} else if (kind === 'check_in') {
 				const zone = evacuee.current_stay.zone?.trim();
 				if (!zone) {
 					toast.error(t.checkInNeedsZone);
+					pendingZoneStatus = { kind: 'check_in', status };
 					showStatusModal = false;
 					showZoneModal = true;
 					return;
@@ -421,7 +498,12 @@
 				await checkOutMutation.mutateAsync({ evacuee, ctx, reason: normalized });
 			} else if (kind === 'confirm_room') {
 				await confirmRoomMutation.mutateAsync({ evacuee, ctx });
-			} else if (action !== 'check_in' && action !== 'check_out' && action !== 'confirm_room') {
+			} else if (
+				action !== 'check_in' &&
+				action !== 'check_out' &&
+				action !== 'confirm_room' &&
+				action !== 'revert_status'
+			) {
 				if (action === 'leave_temporary') {
 					const trimmed = (reason ?? '').trim();
 					if (!trimmed) {
@@ -846,6 +928,13 @@
 								<div class="min-w-0 flex-1 space-y-0.5">
 									<div class="font-semibold break-words text-foreground">
 										{t.movement[m.action]}
+										{#if m.action === 'revert_status' && m.from_status && m.to_status}
+											<span class="font-normal text-muted-foreground">
+												· {t.status[m.from_status]?.shortLabel ?? m.from_status} → {t.status[
+													m.to_status
+												]?.shortLabel ?? m.to_status}
+											</span>
+										{/if}
 										{#if m.zone}
 											<span class="font-normal text-muted-foreground">
 												· {t.movementZone(zoneLabel(m.zone, shelterZones))}
@@ -856,6 +945,9 @@
 										{formatDateTime(m.occurred_at)}
 										{#if m.reason}
 											· {movementReasonLabel(m.reason, langState.current)}
+										{/if}
+										{#if m.action === 'revert_status' && m.created_by}
+											· {t.registeredBy(m.created_by)}
 										{/if}
 									</div>
 								</div>
@@ -918,7 +1010,7 @@
 			{evacuee}
 			{screening}
 			{shelterZones}
-			onClose={() => (showZoneModal = false)}
+			onClose={closeZoneModal}
 			onUpdateZone={updateZone}
 		/>
 
@@ -928,6 +1020,7 @@
 					show={true}
 					{evacuee}
 					{statusConfig}
+					canRevert={canRevertStatus}
 					onClose={() => (showStatusModal = false)}
 					onUpdateStatus={updateStatus}
 				/>

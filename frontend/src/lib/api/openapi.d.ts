@@ -619,6 +619,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/shelters/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Shelter Summary
+		 * @description Shelter head counts for the public search cards, independent of the list filters.
+		 */
+		get: operations['shelter_summary_public_v1_shelters_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/shelters/{code}': {
 		parameters: {
 			query?: never;
@@ -4516,6 +4536,28 @@ export interface components {
 			/** Needs */
 			needs: components['schemas']['NeedItemResponse'][];
 		};
+		/**
+		 * ShelterSummaryResponse
+		 * @description Head counts for the public search cards — never narrowed by the list filters (#1419).
+		 */
+		ShelterSummaryResponse: {
+			/** Shelters Total */
+			shelters_total: number;
+			/** Shelters Open */
+			shelters_open: number;
+			/**
+			 * Counts By Site Kind
+			 * @description Shelters per master site_kind code; a row without one is an evacuation_center
+			 */
+			counts_by_site_kind?: {
+				[key: string]: number;
+			};
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
+		};
 		/** ShelterTravelDetail */
 		ShelterTravelDetail: {
 			/** Route */
@@ -6794,6 +6836,20 @@ export interface operations {
 				lng?: number | null;
 				/** @description Search radius in kilometers */
 				radius_km?: number | null;
+				/** @description Case-insensitive text in the name, code, province or district */
+				q?: string | null;
+				/** @description Shelter (building) type code, e.g. school, temple */
+				admin_type?: string | null;
+				/** @description Leave out shelters that are full */
+				hide_full?: boolean;
+				/** @description Leave out non-external evacuation centres */
+				hide_evacuation?: boolean;
+				/** @description Leave out external shelters */
+				hide_external?: boolean;
+				/** @description Leave out host houses that are not external */
+				hide_host_house?: boolean;
+				/** @description Vehicle types the shelter must take (all of them) */
+				parking?: string[] | null;
 			};
 			header?: never;
 			path?: never;
@@ -6808,6 +6864,38 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['ShelterListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	shelter_summary_public_v1_shelters_summary_get: {
+		parameters: {
+			query?: {
+				/** @description Leave out host houses that are not external */
+				hide_host_house?: boolean;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ShelterSummaryResponse'];
 				};
 			};
 			/** @description Validation Error */

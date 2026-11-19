@@ -83,15 +83,24 @@ function useBannerMutation<TInput>(
 
 export const useCreateKioskBanner = (repo: KioskBannerRepository = kioskBannerRemoteRepository) =>
 	useBannerMutation(
-		(input: { shelterCode: string; input: KioskBannerInput; image: BannerImagePayload }) =>
-			repo.create(input.shelterCode, input.input, input.image),
+		(input: {
+			shelterCode: string;
+			input: KioskBannerInput;
+			image: BannerImagePayload;
+			templateImage?: BannerImagePayload;
+		}) => repo.create(input.shelterCode, input.input, input.image, input.templateImage),
 		'สร้างแบนเนอร์ไม่สำเร็จ'
 	);
 
 export const useUpdateKioskBanner = (repo: KioskBannerRepository = kioskBannerRemoteRepository) =>
 	useBannerMutation(
-		(input: { id: string; rev: string; input: KioskBannerInput; image?: BannerImagePayload }) =>
-			repo.update(input.id, input.rev, input.input, input.image),
+		(input: {
+			id: string;
+			rev: string;
+			input: KioskBannerInput;
+			image?: BannerImagePayload;
+			templateImage?: BannerImagePayload;
+		}) => repo.update(input.id, input.rev, input.input, input.image, input.templateImage),
 		'แก้ไขแบนเนอร์ไม่สำเร็จ'
 	);
 

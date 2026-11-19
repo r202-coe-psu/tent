@@ -18,7 +18,7 @@ import {
 	isShelterManager,
 	isDonationStaff,
 	isWarehouseStaff,
-	shelterCodeFromRoles
+	hasShelterScope
 } from '$lib/auth/roles';
 import type {
 	ItemCategory,
@@ -104,11 +104,10 @@ function enforceWriteAccess(shelterCode?: string | null) {
 	if (isSystemAdmin(roles)) return;
 
 	if (shelterCode) {
-		const isManager = isShelterManager(roles);
-		const isWS = isWarehouseStaff(roles);
-		const isDON = isDonationStaff(roles);
-		const userShelterCode = shelterCodeFromRoles(roles);
-		if ((isManager || isWS || isDON) && userShelterCode === shelterCode) {
+		const isManager = isShelterManager(roles, shelterCode);
+		const isWS = isWarehouseStaff(roles, shelterCode);
+		const isDON = isDonationStaff(roles, shelterCode);
+		if ((isManager || isWS || isDON) && hasShelterScope(roles, shelterCode)) {
 			return;
 		}
 	}

@@ -44,7 +44,10 @@ class FakeCouch:
 
     def client(self) -> CouchClient:
         settings = MagicMock(
-            couch_base_url="http://couch:5984", couchdb_user="a", couchdb_password="b"
+            couch_base_url="http://couch:5984",
+            couchdb_user="a",
+            couchdb_password="b",
+            couch_feed_max_connections=500,
         )
         client = CouchClient(settings)
         client._client = httpx.AsyncClient(
