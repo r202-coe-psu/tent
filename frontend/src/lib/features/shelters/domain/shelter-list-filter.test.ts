@@ -10,7 +10,13 @@ const shelters = [
 		feature_flags: { public_visible: false }
 	},
 	{ code: 'C', name: 'ศูนย์ยกเลิก', site_kind: 'warehouse', operation_status: 'cancelled' },
-	{ code: 'D', name: 'คลัง', site_kind: 'warehouse', district: 'หาดใหญ่' }
+	{
+		code: 'D',
+		name: 'คลัง',
+		site_kind: 'warehouse',
+		district: 'หาดใหญ่',
+		community: 'ชุมชนท่าข้าม'
+	}
 ];
 
 const all = { siteKind: 'all', hideHidden: false, query: '' };
@@ -44,5 +50,9 @@ describe('filterShelterList', () => {
 	it('searches name, code, province, district and subdistrict case-insensitively', () => {
 		expect(codes(filterShelterList(shelters, { ...all, query: 'b' }))).toEqual(['B']);
 		expect(codes(filterShelterList(shelters, { ...all, query: 'สงขลา' }))).toEqual(['A']);
+	});
+
+	it('searches community', () => {
+		expect(codes(filterShelterList(shelters, { ...all, query: 'ท่าข้าม' }))).toEqual(['D']);
 	});
 });
