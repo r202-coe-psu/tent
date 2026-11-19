@@ -1,11 +1,17 @@
 import { z } from 'zod';
 import { now } from '$lib/db/model';
-import { deriveHouseholdStatus, stayStatusSchema } from '$lib/features/people/domain/people';
+import {
+	assertCheckoutDestination,
+	deriveHouseholdStatus,
+	stayStatusSchema,
+	type CheckoutDestination
+} from '$lib/features/people/domain/people';
 import {
 	isAlreadyCheckedInStatus,
 	isListedHouseholdMember,
 	isReprintableStatus
 } from '../domain/check-in-status';
+import { checkoutChannelOf, type KioskCheckoutChannel } from '../domain/checkout-channel';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { groupPhoneMatches, isPhoneMatchEligible } from '../domain/phone-match';
 import { adminFetch } from '$lib/server/couch-admin';
@@ -38,7 +44,7 @@ export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 
 const evacueeQrTokenSchema = z.string().regex(new RegExp(`^evacuee:${ULID}(@[0-9a-f]{6})?$`, 'i'));
 const bareUlidPattern = new RegExp(`^${ULID}$`, 'i');
 
-const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
+export const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
 
 export const kioskGateInputSchema = z.discriminatedUnion('source', [
 	z.object({ source: z.literal('smart-card'), citizen_id: z.string().regex(/^\d{13}$/) }),
@@ -176,6 +182,8 @@ export type KioskLookupOutcome =
 	| ({ kind: 'household'; name_masked: boolean } & KioskLookupResult)
 	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] }
 	| { kind: 'kiosk_registered' }
+	/** The scanned person already checked out of this shelter; `channel` is null when unknown. */
+	| { kind: 'checked_out'; checked_out_at: string; channel: KioskCheckoutChannel | null }
 	/** CR-233 FR-EQR-32: a superseded Person QR (dates only, no personal data). */
 	| { kind: 'qr_expired'; issued_at: string | null; current_printed_at: string }
 	| { kind: 'qr_invalid' }
@@ -556,6 +564,35 @@ function asLookupUnavailable(error: unknown): never {
 	throw new KioskLookupUnavailableError();
 }
 
+type CheckOutMovement = { created_by?: string; reason?: string; occurred_at?: string };
+
+/**
+ * The newest check-out of a person already out of this shelter. The stay's `since` is the date;
+ * the channel comes from the latest `check_out` movement and is null when it cannot be read
+ * (a missing movement must never turn a known check-out into "not found").
+ */
+async function findCheckedOutNotice(
+	dbName: string,
+	checkedOut: EvacueeDoc
+): Promise<Extract<KioskLookupOutcome, { kind: 'checked_out' }>> {
+	const found = await adminFetch<{ docs?: CheckOutMovement[] }>(`/${dbName}/_find`, {
+		method: 'POST',
+		body: JSON.stringify({
+			selector: { type: 'movement', evacuee_id: checkedOut._id, action: 'check_out' },
+			limit: 100
+		})
+	}).catch(() => ({ docs: [] as CheckOutMovement[] }));
+	let latest: CheckOutMovement | null = null;
+	for (const movement of found.docs ?? []) {
+		if (!latest || (movement.occurred_at ?? '') > (latest.occurred_at ?? '')) latest = movement;
+	}
+	return {
+		kind: 'checked_out',
+		checked_out_at: latest?.occurred_at ?? checkedOut.current_stay?.since ?? '',
+		channel: latest ? checkoutChannelOf(latest) : null
+	};
+}
+
 /** Resolve a pre-registration or prior check-in only within the authenticated scanner's shelter. */
 export async function lookupPreRegisteredEvacuee(
 	shelterCode: string,
@@ -644,6 +681,14 @@ export async function lookupPreRegisteredEvacuee(
 	const eligible = candidates.filter(
 		(doc) => doc.shelter_code === shelterCode && isListedHouseholdMember(doc)
 	);
+	if (eligible.length === 0) {
+		const checkedOut = candidates
+			.filter(
+				(doc) => doc.shelter_code === shelterCode && doc.current_stay?.status === 'checked_out'
+			)
+			.sort((a, b) => (b.current_stay?.since ?? '').localeCompare(a.current_stay?.since ?? ''))[0];
+		if (checkedOut) return findCheckedOutNotice(dbName, checkedOut);
+	}
 	if (eligible.length !== 1) return { kind: 'not_found', can_register: false };
 
 	const primary = eligible[0];
@@ -871,11 +916,16 @@ export async function checkInSelectedMembers(
 	return results;
 }
 
-/** Keep the legacy household status projection aligned with the member stay records. */
+/**
+ * Keep the legacy household status projection aligned with the member stay records.
+ * `checkoutDestination` (kiosk self-checkout, #1401) is written only when the household
+ * derives to `checked_out` and has no destination yet (R-29-8); an existing one is kept.
+ */
 export async function refreshHouseholdStatus(
 	dbName: string,
 	householdId: string,
-	shelterCode: string
+	shelterCode: string,
+	checkoutDestination?: CheckoutDestination
 ): Promise<void> {
 	try {
 		const [household, memberResult] = await Promise.all([
@@ -884,6 +934,7 @@ export async function refreshHouseholdStatus(
 				_rev: string;
 				type: string;
 				status?: string;
+				checkout_destination?: CheckoutDestination | null;
 				[key: string]: unknown;
 			}>(`/${dbName}/${encodeURIComponent(householdId)}`),
 			adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
@@ -901,10 +952,20 @@ export async function refreshHouseholdStatus(
 			.filter((parsed) => parsed.success)
 			.map((parsed) => parsed.data);
 		const status = deriveHouseholdStatus(statuses);
-		if (status === household.status) return;
+		const destination =
+			status === 'checked_out' && checkoutDestination && !household.checkout_destination
+				? checkoutDestination
+				: undefined;
+		if (destination) assertCheckoutDestination(destination);
+		if (status === household.status && !destination) return;
 		await adminFetch(`/${dbName}/${encodeURIComponent(householdId)}`, {
 			method: 'PUT',
-			body: JSON.stringify({ ...household, status, updated_at: now() })
+			body: JSON.stringify({
+				...household,
+				status,
+				...(destination ? { checkout_destination: destination } : {}),
+				updated_at: now()
+			})
 		});
 	} catch (err) {
 		// The evacuee write is authoritative; a later read can repair this derived projection.
