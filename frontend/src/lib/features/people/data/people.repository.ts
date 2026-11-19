@@ -334,9 +334,21 @@ export interface PeopleRepository {
 	 */
 	recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
+	): Promise<Evacuee>;
+	/**
+	 * Manual stay-status override to any other status via a `revert_status` movement (nonempty
+	 * `reason` required; zone cleared for pre_registered / arriving / cancelled, `opts.zone`
+	 * required for an in-shelter target when the stay has none). CR-262 A1.
+	 */
+	revertEvacueeStatus(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		toStatus: StayStatus,
+		reason: string,
+		opts?: { zone?: string | null }
 	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade

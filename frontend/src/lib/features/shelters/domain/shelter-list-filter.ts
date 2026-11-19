@@ -15,6 +15,7 @@ type Filterable = {
 	province?: string | null;
 	district?: string | null;
 	subdistrict?: string | null;
+	community?: string | null;
 };
 
 /** Management-list filter: site kind, optional "hide non-public", then free-text search. */
@@ -32,7 +33,8 @@ export function filterShelterList<T extends Filterable>(
 			shelter.code,
 			shelter.province,
 			shelter.district,
-			shelter.subdistrict
+			shelter.subdistrict,
+			shelter.community
 		].some((field) => field?.toLowerCase().includes(q));
 	});
 }

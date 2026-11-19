@@ -87,7 +87,7 @@ test.describe(
 			await expect(
 				page.getByRole('heading', { name: 'จัดการศูนย์พักพิงและบ้านพี่เลี้ยง' })
 			).toBeVisible();
-			await page.getByPlaceholder('ค้นหาชื่อ, รหัส, จังหวัด, อำเภอ...').fill(code);
+			await page.getByPlaceholder('ค้นหาชื่อ, รหัส, ชุมชน, จังหวัด, อำเภอ...').fill(code);
 			await expect(page.getByText(code).first()).toBeVisible({ timeout: 15_000 });
 			await expect(page.getByText(SHELTER_NAME).first()).toBeVisible();
 			await expect(page.getByText(String(EDITED_CAPACITY)).first()).toBeVisible();

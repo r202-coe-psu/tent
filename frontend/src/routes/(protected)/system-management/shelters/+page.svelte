@@ -132,7 +132,7 @@
 				/>
 				<Input
 					type="text"
-					placeholder="ค้นหาชื่อ, รหัส, จังหวัด, อำเภอ..."
+					placeholder="ค้นหาชื่อ, รหัส, ชุมชน, จังหวัด, อำเภอ..."
 					value={searchQuery}
 					oninput={handleSearchInput}
 					class="h-8 rounded-lg border-slate-200/80 bg-slate-50/60 pr-7 pl-8 text-xs placeholder:text-slate-400 focus:bg-white"
