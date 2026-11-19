@@ -14,8 +14,14 @@ vi.mock('$lib/db/couch', () => ({
 	sessionLogout: (...args: unknown[]) => sessionLogoutMock(...args)
 }));
 
+const persistSelectedShelterMock = vi.fn();
+const shelterStoreMock = vi.hoisted(() => ({
+	selectedShelterCode: undefined as string | undefined
+}));
+
 vi.mock('$lib/stores/shelter.svelte', () => ({
-	shelterStore: { selectedShelterCode: undefined }
+	shelterStore: shelterStoreMock,
+	persistSelectedShelter: (...args: unknown[]) => persistSelectedShelterMock(...args)
 }));
 
 vi.mock('$lib/features/users', () => ({
@@ -215,5 +221,64 @@ describe('authStore session expiry', () => {
 		getSessionMock.mockResolvedValue({ name: 'demo', roles: ['staff'] });
 		await authStore.revalidateSession();
 		expect(authStore.needsReauth).toBe(false);
+	});
+});
+
+describe('authStore remembered shelter (#1473)', () => {
+	beforeEach(() => {
+		vi.resetModules();
+		storage.clear();
+		vi.stubGlobal('localStorage', {
+			getItem: (key: string) => storage.get(key) ?? null,
+			setItem: (key: string, value: string) => {
+				storage.set(key, value);
+			},
+			removeItem: (key: string) => {
+				storage.delete(key);
+			}
+		});
+		getSessionMock.mockReset();
+		persistSelectedShelterMock.mockReset();
+		shelterStoreMock.selectedShelterCode = 'SH001';
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('forgets the shelter when the session is a different account than the cached one', async () => {
+		storage.set('auth:user', JSON.stringify({ name: 'admin', roles: ['_admin'] }));
+		getSessionMock.mockResolvedValue({ name: 'somchai', roles: ['shelter:SH027'] });
+		const { authStore } = await import('./auth.svelte');
+
+		await authStore.ensureInitialized();
+		await vi.waitFor(() => expect(authStore.user?.name).toBe('somchai'));
+
+		expect(shelterStoreMock.selectedShelterCode).toBeUndefined();
+		expect(persistSelectedShelterMock).toHaveBeenCalledWith(undefined);
+	});
+
+	it('keeps the shelter when the same account is revalidated', async () => {
+		storage.set('auth:user', JSON.stringify({ name: 'somchai', roles: ['shelter:SH027'] }));
+		getSessionMock.mockResolvedValue({ name: 'somchai', roles: ['shelter:SH027'] });
+		const { authStore } = await import('./auth.svelte');
+
+		await authStore.ensureInitialized();
+		await vi.waitFor(() => expect(getSessionMock).toHaveBeenCalled());
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(shelterStoreMock.selectedShelterCode).toBe('SH001');
+		expect(persistSelectedShelterMock).not.toHaveBeenCalled();
+	});
+
+	it('clears the remembered shelter from localStorage on logout, not just from memory', async () => {
+		storage.set('auth:user', JSON.stringify({ name: 'somchai', roles: ['shelter:SH027'] }));
+		sessionLogoutMock.mockResolvedValue(undefined);
+		const { authStore } = await import('./auth.svelte');
+
+		await authStore.logout();
+
+		expect(shelterStoreMock.selectedShelterCode).toBeUndefined();
+		expect(persistSelectedShelterMock).toHaveBeenCalledWith(undefined);
 	});
 });

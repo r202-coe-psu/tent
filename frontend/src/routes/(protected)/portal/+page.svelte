@@ -20,6 +20,7 @@
 		PortalMenuSections,
 		PortalRolePreview,
 		createPortalPreviewState,
+		resolveActiveShelter,
 		resolvePortalPreview,
 		type PortalFeatures,
 		type PortalPreviewState
@@ -59,19 +60,19 @@
 	// Multi-shelter or System Admin can switch shelters
 	const canSwitchShelters = $derived(isSA || allowedShelters.length > 1);
 
-	// Synchronize selected shelter
+	// Synchronize selected shelter. The remembered choice can name a shelter this account has no
+	// role in (another account, or a logout, left it behind): follow the roles instead, without
+	// waiting for the shelter list (#1473).
 	$effect(() => {
-		if (!allowedShelters.length) return;
-		const current = shelterStore.selectedShelterCode;
-		if (current && allowedShelters.some((s) => s.code === current)) {
-			persistSelectedShelter(current);
-			return;
-		}
-		const preferred =
-			allowedShelters.find((s) => userShelterCodes.includes(s.code))?.code ??
-			allowedShelters[0].code;
-		shelterStore.selectedShelterCode = preferred;
-		persistSelectedShelter(preferred);
+		const next = resolveActiveShelter({
+			current: shelterStore.selectedShelterCode,
+			allowedCodes: allowedShelters.map((s) => s.code),
+			userShelterCodes,
+			isSystemAdmin: isSA
+		});
+		if (!next) return;
+		if (next !== shelterStore.selectedShelterCode) shelterStore.selectedShelterCode = next;
+		persistSelectedShelter(next);
 	});
 
 	function onShelterChange(code: string | undefined) {
