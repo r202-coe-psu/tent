@@ -89,6 +89,7 @@ DEFAULT_FACE_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 KIOSK_PRINT_MAX_LABELS = 20
 KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
 KIOSK_PRINT_TIMEOUT_SEC = 20.0
+KIOSK_LPSTAT_TIMEOUT_SEC = 5.0
 # The frontend's fetch to KIOSK_PRINT_PATH (kiosk-print.api.ts) times out at 30s; with up to
 # KIOSK_PRINT_MAX_LABELS labels at KIOSK_PRINT_TIMEOUT_SEC each, a slow run could otherwise blow
 # past that and the browser would show "failed" while labels keep printing, inviting a re-tap
@@ -688,6 +689,16 @@ class ScannerClientManager:
             return 400, {"error": {"code": "INVALID_LABELS", "message": "ข้อมูล label ไม่ถูกต้อง"}}
 
         deadline = time.monotonic() + KIOSK_PRINT_OVERALL_DEADLINE_SEC
+        if self.printer_backend == "cups" and not await self._cups_queue_ready():
+            logger.error(f"Label print refused: {self._print_target} is not ready")
+            return 503, {
+                "printed": 0,
+                "error": {
+                    "code": "PRINTER_NOT_READY",
+                    "message": "เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่",
+                },
+            }
+
         printed = 0
         for index, image in enumerate(images):
             if self.printer_backend == "escpos":
@@ -723,6 +734,27 @@ class ScannerClientManager:
             if self.printer_backend == "escpos":
                 self._escpos_last_label_at = time.monotonic()
         return 200, {"printed": printed}
+
+    async def _cups_queue_ready(self) -> bool:
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "lpstat", "-p", self.printer_name,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                env={**os.environ, "LC_ALL": "C"},
+            )
+        except OSError:
+            return False
+        try:
+            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=KIOSK_LPSTAT_TIMEOUT_SEC)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return False
+        if process.returncode != 0:
+            return False
+        return f"printer {self.printer_name} disabled" not in stdout.decode(errors="replace")
 
     async def _spool_label(self, image: bytes, first: bool = True) -> bool:
         if self.printer_backend == "escpos":
