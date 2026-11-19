@@ -58,6 +58,20 @@ describe('VolunteerCardSession', () => {
 		expect(session.step).toBe('done');
 	});
 
+	it('holds the labels on screen instead of finishing when the kiosk has no printer', async () => {
+		const print = vi
+			.fn<VolunteerCardSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'screen', labels: ['cG5nLTE='] });
+		const { session } = setup({ print });
+		session.phone = '0812345678';
+		await session.submitPhone();
+
+		await session.confirmPrint();
+
+		expect(session.step).toBe('on_screen');
+		expect(session.screenLabels).toEqual(['cG5nLTE=']);
+	});
+
 	it('stays on the phone step with a contact-staff message when no volunteer matches', async () => {
 		const lookup = vi
 			.fn<VolunteerCardSessionDeps['lookup']>()
@@ -138,6 +152,40 @@ describe('VolunteerCardSession', () => {
 		expect(deps.lookup).toHaveBeenCalledTimes(1);
 		expect(deps.print).toHaveBeenCalledTimes(2);
 		expect(deps.print).toHaveBeenLastCalledWith(FOUND.volunteer);
+	});
+
+	it('offers the labels that did not print on screen, without printing or looking up again', async () => {
+		const print = vi
+			.fn<VolunteerCardSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'error', message: 'เครื่องพิมพ์ไม่พร้อม', labels: ['cG5nLTE='] });
+		const { deps, session } = setup({ print });
+		session.phone = '0812345678';
+		await session.submitPhone();
+		await session.confirmPrint();
+		expect(session.step).toBe('print_failed');
+		expect(session.canShowOnScreen).toBe(true);
+
+		session.showOnScreen();
+
+		expect(session.step).toBe('on_screen');
+		expect(session.screenLabels).toEqual(['cG5nLTE=']);
+		expect(deps.lookup).toHaveBeenCalledTimes(1);
+		expect(deps.print).toHaveBeenCalledTimes(1);
+	});
+
+	it('has nothing to show on screen when the failure rendered no labels', async () => {
+		const print = vi
+			.fn<VolunteerCardSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'error', message: 'x' });
+		const { session } = setup({ print });
+		session.phone = '0812345678';
+		await session.submitPhone();
+		await session.confirmPrint();
+
+		session.showOnScreen();
+
+		expect(session.canShowOnScreen).toBe(false);
+		expect(session.step).toBe('print_failed');
 	});
 
 	it('goes back from confirm to the phone step and forgets the volunteer', async () => {

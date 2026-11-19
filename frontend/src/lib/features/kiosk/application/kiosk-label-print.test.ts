@@ -6,13 +6,15 @@ const mocks = vi.hoisted(() => ({
 	generateQrDataUrl: vi.fn(),
 	qrModuleCount: vi.fn(),
 	renderKioskLabelPng: vi.fn(),
-	printKioskLabels: vi.fn()
+	printKioskLabels: vi.fn(),
+	loadKioskHardware: vi.fn()
 }));
 
 vi.mock('$lib/utils/qrcode', () => ({
 	generateQrDataUrl: mocks.generateQrDataUrl,
 	qrModuleCount: mocks.qrModuleCount
 }));
+vi.mock('./kiosk-qr-input', () => ({ loadKioskHardware: mocks.loadKioskHardware }));
 vi.mock('./kiosk-label-image', () => ({ renderKioskLabelPng: mocks.renderKioskLabelPng }));
 vi.mock('../data/kiosk-print.api', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../data/kiosk-print.api')>()),
@@ -32,6 +34,7 @@ const labels = [
 
 beforeEach(() => {
 	vi.resetAllMocks();
+	mocks.loadKioskHardware.mockResolvedValue({ printer: 'cups' });
 });
 
 describe('renderKioskQrLabelPng', () => {
@@ -152,6 +155,24 @@ describe('printKioskQrLabels', () => {
 
 		const result = await printKioskQrLabels(labels, vi.fn());
 
-		expect(result).toEqual({ kind: 'error', message: 'ส่งงานพิมพ์ไม่สำเร็จ (พิมพ์ออกแล้ว 1 ดวง)' });
+		expect(result).toEqual({
+			kind: 'error',
+			message: 'ส่งงานพิมพ์ไม่สำเร็จ (พิมพ์ออกแล้ว 1 ดวง)',
+			labels: ['png']
+		});
+	});
+
+	it('shows the rendered labels on screen and never prints when the kiosk has no printer', async () => {
+		mocks.loadKioskHardware.mockResolvedValue({ printer: 'none' });
+		mocks.renderKioskLabelPng.mockImplementation(({ name }: { name: string }) =>
+			Promise.resolve(`png:${name}`)
+		);
+		const fallbackPrint = vi.fn();
+
+		const result = await printKioskQrLabels(labels, fallbackPrint);
+
+		expect(result).toEqual({ kind: 'screen', labels: ['png:สมชาย ใจดี', 'png:สมหญิง ใจดี'] });
+		expect(mocks.printKioskLabels).not.toHaveBeenCalled();
+		expect(fallbackPrint).not.toHaveBeenCalled();
 	});
 });

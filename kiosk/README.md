@@ -643,11 +643,13 @@ sudo usermod -aG lp kiosk
 
 | key | ค่า | default |
 | :-- | :-- | :-- |
-| `PRINTER_BACKEND` | `cups` \| `escpos` | `cups` |
+| `PRINTER_BACKEND` | `cups` \| `escpos` \| `none` (ตู้ไม่มีเครื่องพิมพ์ — แสดง label บนจอให้ถ่ายรูปแทน, ไม่อ่านค่า `PRINTER_*` อื่น) | `cups` |
 | `PRINTER_USB_ID` | `VID:PID` (hex) — หา `/dev/usb/lpN` จาก sysfs **ทุกครั้งที่พิมพ์** เลยถอด-เสียบ USB แล้วเลข `lpN` เปลี่ยนก็พิมพ์ต่อได้ | — |
 | `PRINTER_DEVICE` | path ตรง ๆ (ใช้แทน `PRINTER_USB_ID` ถ้าตั้ง) | — |
 | `PRINTER_WIDTH_DOTS` | ความกว้างหัวพิมพ์ (80 มม. ≈ 576) | `576` |
 
+- `cups`: ตรวจคิวด้วย `lpstat -l -p` ก่อนพิมพ์ (ไม่มีคิว / disabled / state-reasons `offline`, `media-empty`, `media-needed`, `door-open`, `paused` (มี suffix `-error`/`-report` หรือไม่มีก็นับ, `-warning` ไม่นับ) → `503 PRINTER_NOT_READY`) และนับว่าพิมพ์แล้วเมื่อ job เป็น `completed` (อ่าน IPP job-state; อ่านไม่ได้ → ถาม `lpstat`: job หลุดจากคิวและ Alerts เป็น `job-completed-successfully` = พิมพ์แล้ว, หลุดโดยไม่สำเร็จ = ล้มเหลว, ยังอยู่ในคิวหรือ `lpstat` ตอบไม่ได้ = รอต่อจนหมดเวลา) — job ที่ aborted หรือไม่จบในเวลาถูก `cancel` ทิ้ง ไม่ค้างคิวไปพิมพ์ทีหลัง · `escpos`: หา device ไม่เจอ (รวม `PRINTER_DEVICE` ที่ path ไม่มีอยู่) → `503 PRINTER_NOT_READY`
+- ถอดสาย printer แล้ว CUPS `ErrorPolicy stop-printer` อาจทิ้งคิวไว้ disabled → ทุกการพิมพ์ตอบ `503` จนกว่าจะ `cupsenable <queue>` หรือตั้งตอน setup ด้วย `lpadmin -p <queue> -o printer-error-policy=abort-job`
 - ใช้ label PNG ขนาดเดิม (80×60 มม.) — ตัดขอบขาว, ย่อให้พอดีหัวพิมพ์ (ไม่ขยาย) จัดกึ่งกลาง แล้วส่ง `GS v 0` + ตัด `ESC i` ทันที (ไม่เลื่อนกระดาษก่อนตัด) ตรงเข้า device (ไม่ใช้ `GS V` เพราะ printer ตู้ใหญ่ผูก `GS V` กับ black mark → เลื่อนกระดาษ ~17 ซม. ต่อดวงบนม้วนธรรมดา) (ไม่ผ่าน CUPS, ไม่เขียน label ลง disk)
 - ความยาวต่อดวงและการรอระหว่างคนกำหนดเป็นค่าคงที่ในโค้ด (ไม่ต้องตั้งใน `.env`): ทุกดวงยาว 60 มม. จากรอยตัดถึงรอยตัด (`LABEL_LENGTH_MM` ใน `app/escpos.py` — เนื้อหาที่สูงเกินถูกย่อ, ที่สั้นกว่าเติมที่ว่างบน-ล่าง) · หักระยะที่ printer kiosk3 เลื่อนกระดาษเองตอนตัด 10 มม. (`CUT_SELF_FEED_MM`) จึงเหลือให้เนื้อหา 50 มม. · ถ้าใบมีดตัดโดนบรรทัดล่าง เพิ่ม `DEFAULT_CUT_FEED_MM` ใน `app/escpos.py` · วัดจากดวงที่ 2 เป็นต้นไป เพราะดวงแรกเริ่มจากรอยตัด/ฉีกครั้งก่อน · รอ 2 วินาทีระหว่างแต่ละคน (`ESCPOS_LABEL_PAUSE_SEC` ใน `app/manager.py`) ไม่เช่นนั้น printer ไม่ตัดดวงก่อน
 - สติกเกอร์เส้นประ 60 มม. คร่อมเส้นประหลังใส่ม้วนใหม่ (เครื่องเลื่อน + ตัดเศษทิ้งเองตอนใส่): ฉีกปลายม้วนตรงเส้นประก่อนใส่ วัดความยาวเศษที่ถูกตัดทิ้ง แล้วรัน `venv/bin/python align_printer_paper.py --stub-mm <มม.>` หรือขีดมาร์คดำชิดเส้นประแล้วรัน `--mark` ให้เซนเซอร์ black mark หาเอง — รายละเอียดอยู่หัวไฟล์

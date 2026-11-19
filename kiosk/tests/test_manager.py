@@ -856,18 +856,76 @@ def labels_body(*images):
 
 
 class FakeLpProcess:
-    def __init__(self, returncode=0):
+    """stdout=None answers like `lp`: a fresh request id per submitted label."""
+
+    def __init__(self, returncode=0, stdout=None):
         self.returncode = returncode
+        self.stdout = stdout
         self.stdin_data = []
 
-    async def communicate(self, data):
-        self.stdin_data.append(data)
-        return b"", b""
+    async def communicate(self, data=None):
+        if data is not None:
+            self.stdin_data.append(data)
+        if self.stdout is None:
+            return f"request id is label_q-{len(self.stdin_data)} (1 file(s))\n".encode(), b""
+        return self.stdout, b""
+
+    def kill(self):
+        pass
+
+    async def wait(self):
+        return self.returncode
+
+
+READY_QUEUE = b"printer label_q is idle.  enabled since Mon 01 Jan 2024 08:00:00 AM +07\n"
+
+
+def cups_exec(
+    lp_process, calls=None, lpstat_process=None, cancel_process=None,
+    pending_process=None, completed_process=None,
+):
+    """Fake asyncio.create_subprocess_exec: lpstat answers with a ready queue and no jobs unless told
+    otherwise (`lpstat -p` = lpstat_process, `-W not-completed` = pending_process,
+    `-l -W completed` = completed_process)."""
+    lpstat_process = lpstat_process or FakeLpProcess(stdout=READY_QUEUE)
+    pending_process = pending_process or FakeLpProcess(stdout=b"")
+    completed_process = completed_process or FakeLpProcess(stdout=b"")
+    cancel_process = cancel_process or FakeLpProcess(stdout=b"")
+
+    async def fake_exec(*args, **kwargs):
+        if calls is not None:
+            calls.append(args)
+        if args[0] == "lpstat":
+            if "not-completed" in args:
+                return pending_process
+            if "completed" in args:
+                return completed_process
+            return lpstat_process
+        return cancel_process if args[0] == "cancel" else lp_process
+
+    return fake_exec
+
+
+async def completed_job_state(_job_id, timeout=5.0):
+    return "completed"
+
+
+def scripted_job_states(states_by_job):
+    """Fake job-state lookup: each job walks through its states and stays on the last one."""
+    remaining = {job_id: list(states) for job_id, states in states_by_job.items()}
+
+    async def job_state(job_id, timeout=5.0):
+        states = remaining[job_id]
+        return states.pop(0) if len(states) > 1 else states[0]
+
+    return job_state
 
 
 class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
     def client(self, **overrides):
-        return manager.ScannerClientManager(valid_config(DEBUG="false", **overrides))
+        client = manager.ScannerClientManager(valid_config(DEBUG="false", **overrides))
+        client._cups_job_state = completed_job_state
+        return client
 
     async def test_prints_each_label_through_lp_stdin_without_reaching_server(self):
         client = self.client(PRINTER_NAME="label_q")
@@ -875,19 +933,251 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         process = FakeLpProcess()
         calls = []
 
-        async def fake_exec(*args, **kwargs):
-            calls.append(args)
-            return process
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=cups_exec(process, calls)):
+            await client._route_kiosk_api(route)
 
-        with patch.object(manager.asyncio, "create_subprocess_exec", new=fake_exec):
+        lp_calls = [call for call in calls if call[0] == "lp"]
+        self.assertIsNone(route.continued_headers)
+        self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 2}})
+        self.assertEqual(len(lp_calls), 2)
+        self.assertEqual(lp_calls[0][:3], ("lp", "-d", "label_q"))
+        self.assertEqual(lp_calls[0][-1], "-")
+        self.assertEqual(process.stdin_data, [PNG, PNG])
+
+    async def print_through_cups(self, client, *images, fails=True, **lpstat):
+        route = FakePrintRoute(body=labels_body(*images))
+        calls = []
+        exec_ = cups_exec(FakeLpProcess(), calls, **lpstat)
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(manager.asyncio, "create_subprocess_exec", new=exec_))
+            stack.enter_context(patch.object(manager, "KIOSK_CUPS_POLL_SEC", 0))
+            stack.enter_context(patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 0.05))
+            if fails:
+                stack.enter_context(self.assertLogs(manager.logger, level="ERROR"))
+            await client._route_kiosk_api(route)
+        return route.fulfilled, calls
+
+    async def test_a_label_counts_as_printed_once_its_cups_job_completes(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["pending", "processing", "completed"]})
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, fails=False)
+
+        self.assertEqual(fulfilled, {"status": 200, "body": {"printed": 1}})
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_a_job_that_aborts_is_cancelled_and_reported_as_failed(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["processing", "aborted"]})
+
+        fulfilled, calls = await self.print_through_cups(client, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 0)
+        self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    async def test_a_job_that_never_completes_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["pending"]})
+
+        fulfilled, calls = await self.print_through_cups(client, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 0)
+        self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    def ipp_cannot_say(self, client):
+        async def unreachable(_job_id, timeout=5.0):
+            return None
+
+        client._cups_job_state = unreachable
+
+    async def test_a_job_still_listed_when_ipp_cannot_say_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+        still_listed = FakeLpProcess(stdout=b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n")
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, pending_process=still_listed)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    async def test_a_job_that_left_the_queue_completed_per_lpstat_when_ipp_cannot_say_is_printed(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+        completed = FakeLpProcess(
+            stdout=(
+                b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n"
+                b"\tStatus: processing\n\tAlerts: job-completed-successfully\n"
+            )
+        )
+
+        fulfilled, calls = await self.print_through_cups(
+            client, PNG, fails=False, completed_process=completed
+        )
+
+        self.assertEqual(fulfilled, {"status": 200, "body": {"printed": 1}})
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_a_job_that_left_the_queue_without_success_per_lpstat_fails_without_cancel(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+        completed = FakeLpProcess(
+            stdout=(
+                b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n"
+                b"\tStatus: processing\n\tAlerts: job-canceled-by-user\n"
+            )
+        )
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, completed_process=completed)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 0)
+        self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_a_job_neither_ipp_nor_lpstat_can_report_on_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+
+        fulfilled, calls = await self.print_through_cups(
+            client, PNG, pending_process=FakeLpProcess(returncode=1)
+        )
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    async def test_reports_the_labels_that_completed_before_one_aborted(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states(
+            {"label_q-1": ["completed"], "label_q-2": ["aborted"]}
+        )
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 1)
+        self.assertIn(("cancel", "label_q-2"), calls)
+        self.assertNotIn(("cancel", "label_q-1"), calls)
+
+    async def test_a_label_without_a_request_id_is_failed_without_cancel(self):
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG))
+        calls = []
+        exec_ = cups_exec(FakeLpProcess(stdout=b""), calls)
+
+        with (
+            patch.object(manager.asyncio, "create_subprocess_exec", new=exec_),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_refuses_to_print_on_a_kiosk_without_a_printer(self):
+        client = self.client(PRINTER_BACKEND="none")
+        route = FakePrintRoute(body=labels_body(PNG))
+
+        async def fail_exec(*_args, **_kwargs):
+            raise AssertionError("lp must not run")
+
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=fail_exec):
             await client._route_kiosk_api(route)
 
         self.assertIsNone(route.continued_headers)
-        self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 2}})
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0][:3], ("lp", "-d", "label_q"))
-        self.assertEqual(calls[0][-1], "-")
-        self.assertEqual(process.stdin_data, [PNG, PNG])
+        self.assertEqual(
+            route.fulfilled,
+            {
+                "status": 409,
+                "body": {
+                    "printed": 0,
+                    "error": {"code": "PRINTER_DISABLED", "message": "ตู้นี้ไม่มีเครื่องพิมพ์"},
+                },
+            },
+        )
+
+    async def test_refuses_to_print_when_the_queue_is_not_ready(self):
+        not_ready = {
+            "status": 503,
+            "body": {
+                "printed": 0,
+                "error": {
+                    "code": "PRINTER_NOT_READY",
+                    "message": "เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่",
+                },
+            },
+        }
+        disabled = b"printer label_q disabled since Mon 01 Jan 2024 08:00:00 AM +07 -\n\tPaused\n"
+        queues = {
+            "queue does not exist": FakeLpProcess(returncode=1),
+            "queue is disabled": FakeLpProcess(stdout=disabled),
+        }
+        for name, lpstat_process in queues.items():
+            with self.subTest(name=name):
+                client = self.client(PRINTER_NAME="label_q")
+                route = FakePrintRoute(body=labels_body(PNG))
+                lp = FakeLpProcess()
+                calls = []
+                exec_ = cups_exec(lp, calls, lpstat_process)
+
+                with patch.object(manager.asyncio, "create_subprocess_exec", new=exec_):
+                    await client._route_kiosk_api(route)
+
+                self.assertEqual(route.fulfilled, not_ready)
+                self.assertEqual([call[0] for call in calls], ["lpstat"])
+                self.assertEqual(lp.stdin_data, [])
+
+    async def test_refuses_to_print_when_the_queue_reports_a_blocking_state_reason(self):
+        reasons = (
+            "offline-report", "media-empty", "media-needed", "door-open", "paused",
+            "media-empty-error", "media-needed-error", "door-open-error", "media-empty-report",
+        )
+        for reason in reasons:
+            with self.subTest(reason=reason):
+                client = self.client(PRINTER_NAME="label_q")
+                route = FakePrintRoute(body=labels_body(PNG))
+                lp = FakeLpProcess()
+                calls = []
+                alerts = READY_QUEUE + f"\tAlerts: {reason}\n".encode()
+                exec_ = cups_exec(lp, calls, FakeLpProcess(stdout=alerts))
+
+                with patch.object(manager.asyncio, "create_subprocess_exec", new=exec_):
+                    await client._route_kiosk_api(route)
+
+                self.assertEqual(route.fulfilled["status"], 503)
+                self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINTER_NOT_READY")
+                self.assertEqual([call[0] for call in calls], ["lpstat"])
+                self.assertEqual(lp.stdin_data, [])
+
+    async def test_prints_when_the_queue_has_no_blocking_state_reason(self):
+        for alerts in ("none", "media-empty-warning", "media-low-warning door-open-warning"):
+            with self.subTest(alerts=alerts):
+                client = self.client(PRINTER_NAME="label_q")
+                route = FakePrintRoute(body=labels_body(PNG))
+                quiet = READY_QUEUE + f"\tAlerts: {alerts}\n".encode()
+                exec_ = cups_exec(FakeLpProcess(), None, FakeLpProcess(stdout=quiet))
+
+                with patch.object(manager.asyncio, "create_subprocess_exec", new=exec_):
+                    await client._route_kiosk_api(route)
+
+                self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 1}})
+
+    async def test_refuses_to_print_when_lpstat_cannot_run(self):
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG))
+
+        async def missing_binary(*_args, **_kwargs):
+            raise FileNotFoundError("lpstat")
+
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=missing_binary):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 503)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINTER_NOT_READY")
 
     async def test_rejects_invalid_payloads_without_printing(self):
         client = self.client()
@@ -913,8 +1203,7 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         client = self.client()
         route = FakePrintRoute(body=labels_body(PNG))
 
-        async def failing_exec(*_args, **_kwargs):
-            return FakeLpProcess(returncode=1)
+        failing_exec = cups_exec(FakeLpProcess(returncode=1))
 
         with patch.object(manager.asyncio, "create_subprocess_exec", new=failing_exec):
             with self.assertLogs(manager.logger, level="ERROR"):
@@ -932,17 +1221,14 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         process = FakeLpProcess()
         clock = [0.0]
 
-        async def fake_exec(*_args, **_kwargs):
-            return process
-
         async def advance_clock_past_the_deadline(_data):
             clock[0] += manager.KIOSK_PRINT_OVERALL_DEADLINE_SEC
-            return b"", b""
+            return b"request id is label_q-1 (1 file(s))\n", b""
 
         process.communicate = advance_clock_past_the_deadline
 
         with (
-            patch.object(manager.asyncio, "create_subprocess_exec", new=fake_exec),
+            patch.object(manager.asyncio, "create_subprocess_exec", new=cups_exec(process)),
             patch.object(manager.time, "monotonic", new=lambda: clock[0]),
             self.assertLogs(manager.logger, level="ERROR"),
         ):
@@ -952,9 +1238,144 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["body"]["printed"], 1)
         self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_TIMEOUT")
 
+    async def test_a_cups_label_is_not_started_with_too_little_time_left(self):
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG, PNG))
+        clock = [0.0]
+        process = FakeLpProcess()
+        communicate = process.communicate
+
+        async def first_label_uses_up_the_budget(data=None):
+            if not process.stdin_data:
+                clock[0] += 18.0
+            return await communicate(data)
+
+        process.communicate = first_label_uses_up_the_budget
+        calls = []
+
+        with (
+            patch.object(manager.asyncio, "create_subprocess_exec", new=cups_exec(process, calls)),
+            patch.object(manager.time, "monotonic", new=lambda: clock[0]),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(len([call for call in calls if call[0] == "lp"]), 1)
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 1)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_TIMEOUT")
+
+    async def test_a_cups_job_that_never_completes_is_answered_within_the_overall_deadline(self):
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG, PNG))
+        clock = [0.0]
+        process = FakeLpProcess()
+        communicate = process.communicate
+
+        async def first_label_takes_fourteen_seconds(data=None):
+            if not process.stdin_data:
+                clock[0] += 14.0
+            return await communicate(data)
+
+        process.communicate = first_label_takes_fourteen_seconds
+
+        async def slow_job_state(job_id, timeout=5.0):
+            if job_id == "label_q-1":
+                return "completed"
+            clock[0] += timeout
+            return "processing"
+
+        client._cups_job_state = slow_job_state
+        cancel_started_at = []
+
+        class RecordingCancel(FakeLpProcess):
+            async def communicate(self, data=None):
+                cancel_started_at.append(clock[0])
+                return b"", b""
+
+        with (
+            patch.object(
+                manager.asyncio,
+                "create_subprocess_exec",
+                new=cups_exec(process, cancel_process=RecordingCancel()),
+            ),
+            patch.object(manager.time, "monotonic", new=lambda: clock[0]),
+            patch.object(manager, "KIOSK_CUPS_POLL_SEC", 0),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["body"]["printed"], 1)
+        self.assertLessEqual(cancel_started_at[0], 22.0)  # 25s overall minus the 3s cancel reserve
+        self.assertLessEqual(clock[0], 28.0)  # overall deadline plus the cancel reserve
+
+    async def test_a_cups_submit_that_hangs_is_cut_off_by_the_time_left_not_the_fixed_timeout(self):
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG))
+        process = FakeLpProcess()
+
+        async def never_answers(_data=None):
+            await asyncio.sleep(30)
+
+        process.communicate = never_answers
+        process.kill = lambda: None
+
+        async def wait():
+            return 0
+
+        process.wait = wait
+        started = time.monotonic()
+
+        with (
+            patch.object(manager.asyncio, "create_subprocess_exec", new=cups_exec(process)),
+            patch.object(manager, "KIOSK_PRINT_OVERALL_DEADLINE_SEC", 1.0),
+            patch.object(manager, "KIOSK_CUPS_MIN_LABEL_SEC", 0.1),
+            patch.object(manager, "KIOSK_CUPS_CANCEL_RESERVE_SEC", 0.2),
+            patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 5.0),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+
+    async def test_a_cups_cancel_that_hangs_is_killed_and_awaited(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["pending"]})
+        route = FakePrintRoute(body=labels_body(PNG))
+        events = []
+
+        class HangingCancel(FakeLpProcess):
+            async def communicate(self, data=None):
+                await asyncio.sleep(30)
+
+            def kill(self):
+                events.append("kill")
+
+            async def wait(self):
+                events.append("wait")
+                return -9
+
+        with (
+            patch.object(
+                manager.asyncio,
+                "create_subprocess_exec",
+                new=cups_exec(FakeLpProcess(), cancel_process=HangingCancel()),
+            ),
+            patch.object(manager, "KIOSK_CUPS_POLL_SEC", 0),
+            patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 0.05),
+            patch.object(manager, "KIOSK_CUPS_CANCEL_RESERVE_SEC", 0.1),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            await asyncio.wait_for(client._route_kiosk_api(route), timeout=10)
+
+        self.assertEqual(events, ["kill", "wait"])
+
     async def test_prints_directly_in_every_mode_without_extra_config(self):
+        debug_client = manager.ScannerClientManager(valid_config(DEBUG="true"))
+        debug_client._cups_job_state = completed_job_state
         cases = {
-            "debug window": manager.ScannerClientManager(valid_config(DEBUG="true")),
+            "debug window": debug_client,
             "silent print off": self.client(KIOSK_SILENT_PRINT="false"),
         }
 
@@ -1153,16 +1574,27 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertGreater((dev / "lp5").stat().st_size, 0)
 
-    async def test_missing_printer_returns_print_failed_and_logs_no_label_content(self):
+    async def test_missing_printer_is_refused_as_not_ready_before_anything_is_written(self):
         sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"))
         client = self.client(PRINTER_USB_ID="28e9:5812")
 
         with self.assertLogs(manager.logger, level="ERROR") as logs:
-            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png(), real_png()))
 
-        self.assertEqual(route.fulfilled["status"], 502)
-        self.assertEqual(route.fulfilled["body"]["printed"], 0)
-        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertEqual(
+            route.fulfilled,
+            {
+                "status": 503,
+                "body": {
+                    "printed": 0,
+                    "error": {
+                        "code": "PRINTER_NOT_READY",
+                        "message": "เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่",
+                    },
+                },
+            },
+        )
+        self.assertEqual((dev / "lp0").read_bytes(), b"")
         self.assertTrue(any("not found" in line for line in logs.output))
 
     async def test_explicit_device_path_overrides_usb_id_lookup(self):
@@ -1176,21 +1608,30 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertGreater(target.stat().st_size, 0)
 
-    async def test_unusable_device_path_and_unconvertible_label_fail_with_printed_count(self):
+    async def test_missing_explicit_device_path_is_refused_as_not_ready_with_nothing_written(self):
+        sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"))
+        client = self.client(PRINTER_DEVICE=str(self.root / "nope"))
+
+        with self.assertLogs(manager.logger, level="ERROR") as logs:
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 503)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINTER_NOT_READY")
+        self.assertFalse((self.root / "nope").exists())
+        self.assertTrue(any(str(self.root / "nope") in line for line in logs.output))
+
+    async def test_unconvertible_label_fails_with_printed_count(self):
         sysfs, dev = self.fake_usb_printers()
-        cases = {
-            "device path missing": (str(self.root / "nope"), labels_body(real_png())),
-            # Passes the route's PNG-signature check but cannot be decoded.
-            "label not decodable": (str(self.root / "ok.bin"), labels_body(PNG)),
-        }
         (self.root / "ok.bin").touch()
-        for name, (device, body) in cases.items():
-            with self.subTest(name=name):
-                client = self.client(PRINTER_DEVICE=device)
-                with self.assertLogs(manager.logger, level="ERROR"):
-                    route = await self.print_with(client, sysfs, dev, body)
-                self.assertEqual(route.fulfilled["status"], 502)
-                self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        client = self.client(PRINTER_DEVICE=str(self.root / "ok.bin"))
+
+        with self.assertLogs(manager.logger, level="ERROR"):
+            # Passes the route's PNG-signature check but cannot be decoded.
+            route = await self.print_with(client, sysfs, dev, labels_body(PNG))
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
 
     async def test_permission_error_tells_the_operator_to_join_group_lp(self):
         sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
@@ -1290,18 +1731,16 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_default_backend_still_spools_through_lp(self):
         client = manager.ScannerClientManager(valid_config(DEBUG="false"))
+        client._cups_job_state = completed_job_state
         route = FakePrintRoute(body=labels_body(PNG))
         calls = []
 
-        async def fake_exec(*args, **_kwargs):
-            calls.append(args)
-            return FakeLpProcess()
-
-        with patch.object(manager.asyncio, "create_subprocess_exec", new=fake_exec):
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=cups_exec(FakeLpProcess(), calls)):
             await client._route_kiosk_api(route)
 
         self.assertEqual(route.fulfilled["status"], 200)
-        self.assertEqual(calls[0][:3], ("lp", "-d", "tent_xprinter"))
+        self.assertEqual([call[0] for call in calls], ["lpstat", "lp"])
+        self.assertEqual(calls[1][:3], ("lp", "-d", "tent_xprinter"))
 
     async def test_label_files_are_not_left_on_disk(self):
         sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
@@ -1363,6 +1802,7 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
                 "camera_flip": True,
                 "reader_max_gap_ms": 40,
                 "face_check": {"mode": "off", "flows": []},
+                "printer": "cups",
             },
         )
         body = manager.json.dumps(route.fulfilled["body"])
@@ -1383,8 +1823,20 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
                 "camera_flip": False,
                 "reader_max_gap_ms": 50,
                 "face_check": {"mode": "off", "flows": []},
+                "printer": "cups",
             },
         )
+
+    async def test_reports_the_printer_backend_the_machine_has(self):
+        for backend in ("cups", "escpos", "none"):
+            with self.subTest(backend=backend):
+                route = FakeHardwareRoute()
+
+                await manager.ScannerClientManager(
+                    valid_config(PRINTER_BACKEND=backend)
+                )._route_kiosk_api(route)
+
+                self.assertEqual(route.fulfilled["body"]["printer"], backend)
 
     async def test_reports_qr_check_in_off_when_the_machine_turns_it_off(self):
         route = FakeHardwareRoute()

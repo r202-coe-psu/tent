@@ -27,6 +27,7 @@ export type ReprintStep =
 	| 'staff_pin'
 	| 'printing'
 	| 'print_failed'
+	| 'on_screen'
 	| 'done';
 
 /** The server calls and the printer, injected so the step logic never touches `fetch` or the DOM. */
@@ -81,6 +82,10 @@ export class ReprintSession {
 	printedCount = $state(0);
 	/** Members of the last print whose QR could not be issued (not printed): tell the visitor. */
 	qrIssueFailedCount = $state(0);
+	/** Rendered label PNGs (base64) the visitor reads off the screen; empty unless step is `on_screen`. */
+	screenLabels = $state.raw<readonly string[]>([]);
+	/** Rendered PNGs of the last failed print, kept so the visitor can read them off the screen instead. */
+	unprintedLabels = $state.raw<readonly string[]>([]);
 
 	private phoneValue = $state('');
 	private last4Value = $state('');
@@ -284,6 +289,16 @@ export class ReprintSession {
 		}
 	}
 
+	/** After a printer failure: show the labels that did not print on screen; nothing is requested again. */
+	showFailedLabelsOnScreen(): void {
+		if (this.step !== 'print_failed' || this.busy || this.unprintedLabels.length === 0) return;
+		this.screenLabels = this.unprintedLabels;
+		this.unprintedLabels = [];
+		this.printable = [];
+		this.error = '';
+		this.step = 'on_screen';
+	}
+
 	back(): void {
 		if (this.busy) return;
 		this.error = '';
@@ -320,6 +335,8 @@ export class ReprintSession {
 		this.printable = [];
 		this.printedCount = 0;
 		this.qrIssueFailedCount = 0;
+		this.screenLabels = [];
+		this.unprintedLabels = [];
 		this.fromCandidates = false;
 		this.step = 'phone';
 	}
@@ -379,7 +396,14 @@ export class ReprintSession {
 		if (generation !== this.generation) return;
 		if (outcome.kind === 'error') {
 			this.error = outcome.message;
+			this.unprintedLabels = outcome.labels ?? [];
 			this.step = 'print_failed';
+			return;
+		}
+		if (outcome.kind === 'screen') {
+			this.screenLabels = outcome.labels;
+			this.printable = [];
+			this.step = 'on_screen';
 			return;
 		}
 		this.printedCount = this.printable.length;

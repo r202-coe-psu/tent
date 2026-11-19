@@ -64,6 +64,22 @@ describe('printKioskLabels', () => {
 		expect(sent.flat()).toEqual(labels);
 	});
 
+	it('prints a household of nine in requests of at most four labels', async () => {
+		const labels = Array.from({ length: 9 }, (_, index) => `label-${index}`);
+		const sizes: number[] = [];
+		const fetchFn = vi.fn<typeof fetch>(async (_input, init) => {
+			const body = JSON.parse(String(init?.body)) as { labels: string[] };
+			sizes.push(body.labels.length);
+			return json({ printed: body.labels.length }, 200);
+		});
+
+		await expect(printKioskLabels(labels, fetchFn)).resolves.toEqual({
+			kind: 'printed',
+			printed: 9
+		});
+		expect(sizes).toEqual([4, 4, 1]);
+	});
+
 	it('stops at a failed request and counts the labels of earlier requests as printed', async () => {
 		const labels = Array.from({ length: 25 }, (_, index) => `label-${index}`);
 		const fetchFn = vi

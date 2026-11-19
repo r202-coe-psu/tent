@@ -486,6 +486,40 @@ describe('ReprintSession printing', () => {
 		expect(deps.print).toHaveBeenCalledTimes(2);
 	});
 
+	it('holds the rendered labels on screen instead of reporting done when the kiosk has no printer', async () => {
+		const print = vi
+			.fn<ReprintSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'screen', labels: ['png-a', 'png-b'] });
+		const { session } = setup({ print });
+		await toVerify(session);
+		session.idLast4 = '1234';
+
+		await session.submitVerify();
+
+		expect(session.step).toBe('on_screen');
+		expect(session.screenLabels).toEqual(['png-a', 'png-b']);
+		expect(session.printedCount).toBe(0);
+		expect(session.busy).toBe(false);
+	});
+
+	it('shows the labels that did not print on screen after a failure, without a new request', async () => {
+		const print = vi
+			.fn<ReprintSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'error', message: 'เครื่องพิมพ์ไม่พร้อม', labels: ['png-b'] });
+		const { deps, session } = setup({ print });
+		await toVerify(session);
+		session.idLast4 = '1234';
+		await session.submitVerify();
+		expect(session.step).toBe('print_failed');
+
+		session.showFailedLabelsOnScreen();
+
+		expect(session.step).toBe('on_screen');
+		expect(session.screenLabels).toEqual(['png-b']);
+		expect(deps.reprint).toHaveBeenCalledTimes(1);
+		expect(deps.print).toHaveBeenCalledTimes(1);
+	});
+
 	it('prints only members with a payload and tells the visitor how many were skipped (FR-EQR-24)', async () => {
 		const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue({
 			shelter_code: 'SH001',

@@ -170,6 +170,15 @@ class HardwareConfigTests(unittest.TestCase):
 
         self.assertEqual(config["PRINTER_DEVICE"], "/dev/usb/lp3")
 
+    def test_printer_backend_none_is_valid_and_ignores_printer_settings(self):
+        config = self.validate(
+            PRINTER_BACKEND=" None ",
+            PRINTER_WIDTH_DOTS="abc",
+            PRINTER_USB_ID="not-a-usb-id",
+        )
+
+        self.assertEqual(config["PRINTER_BACKEND"], "none")
+
     def test_invalid_hardware_values_fail_before_startup(self):
         cases = {
             "printer backend": {"PRINTER_BACKEND": "sdk"},

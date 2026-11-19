@@ -89,6 +89,10 @@ export class TestPrint {
 				case 'fallback':
 					this.phase = 'idle';
 					return;
+				case 'screen':
+					this.error = KIOSK_PRINT_FLOW_I18N[language].disabled;
+					this.phase = 'error';
+					return;
 				case 'error':
 					this.error = result.message;
 					this.phase = 'error';

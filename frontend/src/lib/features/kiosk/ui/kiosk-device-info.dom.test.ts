@@ -58,13 +58,16 @@ async function openPanelWithPin() {
 }
 
 let hostInfoBody: Record<string, unknown>;
+let hardwareBody: Record<string, unknown> | null;
 
 beforeEach(() => {
 	hostInfoBody = { hostname: 'kiosk-01', ips: [] };
+	hardwareBody = null;
 	fetchMock = vi.fn(async (url: string) => {
 		if (url === '/api/v1/kiosk/device-info') return json(200, DEVICE_INFO_BODY);
 		if (url === '/api/v1/kiosk/host-info') return json(200, hostInfoBody);
 		if (url === '/api/v1/kiosk/print') return json(200, { printed: 1 });
+		if (url === '/api/v1/kiosk/hardware' && hardwareBody) return json(200, hardwareBody);
 		return json(404, {});
 	});
 	vi.stubGlobal('fetch', fetchMock);
@@ -102,6 +105,31 @@ describe('KioskDeviceInfo test print (DOM)', () => {
 		expect(byTestId('kiosk-device-info-pin')).toBeNull();
 		expect(byTestId('kiosk-staff-pin')).toBeNull();
 		expect(byTestId('kiosk-device-info-panel')).not.toBeNull();
+	});
+});
+
+describe('KioskDeviceInfo printer (DOM)', () => {
+	const hardware = (printer: string) => ({ qr_input: 'camera', printer });
+
+	it('says the kiosk has no printer and offers no test print when the machine has none', async () => {
+		hardwareBody = hardware('none');
+		await openPanelWithPin();
+
+		await vi.waitFor(() =>
+			expect(byTestId('kiosk-device-info-printer')?.textContent?.trim()).toBe(
+				'เครื่องพิมพ์: ไม่มี (แสดง QR บนจอ)'
+			)
+		);
+		expect(byTestId('kiosk-device-info-test-print')).toBeNull();
+	});
+
+	it('keeps the test print button and no printer row when the machine has a printer', async () => {
+		hardwareBody = hardware('escpos');
+		await openPanelWithPin();
+		await settle();
+
+		expect(byTestId('kiosk-device-info-test-print')).not.toBeNull();
+		expect(byTestId('kiosk-device-info-printer')).toBeNull();
 	});
 });
 

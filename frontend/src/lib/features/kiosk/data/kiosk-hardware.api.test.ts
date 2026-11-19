@@ -22,7 +22,8 @@ describe('fetchKioskHardware', () => {
 			cameraLabel: 'JSK-RGB',
 			cameraFlip: false,
 			readerMaxGapMs: 40,
-			faceCheck: { mode: 'off', flows: [] }
+			faceCheck: { mode: 'off', flows: [] },
+			printer: 'cups'
 		});
 		expect(fetchFn).toHaveBeenCalledWith(
 			KIOSK_HARDWARE_PATH,
@@ -95,6 +96,23 @@ describe('fetchKioskHardware', () => {
 		expect(DEFAULT_KIOSK_HARDWARE.cameraFlip).toBe(false);
 	});
 
+	it('reads which printer the machine has and keeps cups for a missing or unknown value', async () => {
+		const printer = async (value: unknown) =>
+			(
+				await fetchKioskHardware(
+					vi.fn<typeof fetch>().mockResolvedValue(json({ qr_input: 'camera', printer: value }))
+				)
+			).printer;
+
+		expect(await printer('cups')).toBe('cups');
+		expect(await printer('escpos')).toBe('escpos');
+		expect(await printer('none')).toBe('none');
+		expect(await printer(undefined)).toBe('cups'); // older scanner client
+		expect(await printer('laser')).toBe('cups');
+		expect(await printer(1)).toBe('cups');
+		expect(DEFAULT_KIOSK_HARDWARE.printer).toBe('cups');
+	});
+
 	it('treats a blank label as no label', async () => {
 		const result = await fetchKioskHardware(
 			vi
@@ -124,7 +142,8 @@ describe('fetchKioskHardware', () => {
 			cameraLabel: null,
 			cameraFlip: false,
 			readerMaxGapMs: 50,
-			faceCheck: { mode: 'off', flows: [] }
+			faceCheck: { mode: 'off', flows: [] },
+			printer: 'cups'
 		});
 	});
 

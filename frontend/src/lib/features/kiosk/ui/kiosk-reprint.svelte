@@ -4,11 +4,13 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Printer from '@lucide/svelte/icons/printer';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Search from '@lucide/svelte/icons/search';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { goToKioskClosed, navigateToKioskHome } from '../application/kiosk-navigation';
 	import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
+	import { KioskPrinterState } from '../application/kiosk-printer-state.svelte';
 	import {
 		ReprintSession,
 		REPRINT_LAST4_LENGTH,
@@ -20,6 +22,7 @@
 	import { formatPhoneForDisplay, phoneEntryHint } from '../domain/phone';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
+	import KioskLabelScreen from './kiosk-label-screen.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 	import type { KioskLabelSheetItem } from '../domain/kiosk-label-item';
 	import KioskLabelSheet from './kiosk-label-sheet.svelte';
@@ -45,6 +48,8 @@
 
 	let { contextQuery, deps }: Props = $props();
 	const t = $derived(getTranslation(KIOSK_REPRINT_I18N, languageStore.current));
+	const printerState = new KioskPrinterState();
+	const noPrinter = $derived(printerState.hasNoPrinter);
 
 	const LAST4_SLOTS = Array.from({ length: REPRINT_LAST4_LENGTH }, (_, slot) => slot);
 	const PRIMARY_BUTTON =
@@ -112,11 +117,13 @@
 	const displayPhone = $derived(formatPhoneForDisplay(session.phone));
 	const entryHint = $derived(phoneEntryHint(session.phone, languageStore.current));
 	const inFlow = $derived(session.step !== 'phone');
-	// Not sent home while the labels come out; resuming restarts the idle countdown.
 	const printing = $derived(session.step === 'printing');
+	const onScreen = $derived(session.step === 'on_screen');
 
+	// Not sent home while the labels come out or are read off the screen (which has its own idle
+	// timeout); resuming restarts the idle countdown.
 	$effect(() => {
-		idleTimeout.setPaused(printing);
+		idleTimeout.setPaused(printing || onScreen);
 	});
 
 	onMount(() => {
@@ -138,7 +145,7 @@
 </script>
 
 <svelte:head>
-	<title>{t.pageTitle}</title>
+	<title>{noPrinter ? t.onScreen.pageTitle : t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
@@ -174,6 +181,18 @@
 			{/snippet}
 		</KioskNoticePanel>
 	</div>
+{:else if session.step === 'on_screen'}
+	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
+		<KioskLabelScreen
+			labels={session.screenLabels}
+			ondone={returnHome}
+			notice={session.qrIssueFailedCount > 0
+				? noPrinter
+					? t.onScreen.qrIssueFailed(session.qrIssueFailedCount)
+					: t.done.qrIssueFailed(session.qrIssueFailedCount)
+				: undefined}
+		/>
+	</div>
 {:else if session.step === 'print_failed'}
 	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
 		<KioskNoticePanel
@@ -191,6 +210,15 @@
 					disabled={session.busy}
 					class={KIOSK_NOTICE_PRIMARY_ACTION}><Printer aria-hidden="true" />{t.failed.retry}</Button
 				>
+				{#if session.unprintedLabels.length > 0}
+					<Button
+						type="button"
+						variant="outline"
+						onclick={() => session.showFailedLabelsOnScreen()}
+						disabled={session.busy}
+						class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.failed.showOnScreen}</Button
+					>
+				{/if}
 				<Button
 					type="button"
 					variant="outline"
@@ -234,7 +262,7 @@
 								id="reprint-phone-title"
 								class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 							>
-								{t.phone.heading}
+								{noPrinter ? t.onScreen.phoneHeading : t.phone.heading}
 							</h1>
 							<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
 								{t.phone.hint}
@@ -298,6 +326,7 @@
 			<section class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6">
 				<PhoneHouseholdPicker
 					mode="reprint"
+					onScreen={noPrinter}
 					candidates={session.candidates}
 					disabled={session.busy}
 					onselect={(primaryEvacueeId) => void session.chooseCandidate(primaryEvacueeId)}
@@ -309,7 +338,7 @@
 				<KioskNoticePanel
 					tone="warning"
 					icon={CircleAlert}
-					title={t.members.blockedTitle}
+					title={noPrinter ? t.onScreen.blockedTitle : t.members.blockedTitle}
 					headingTag="h1"
 					role="status"
 				>
@@ -329,6 +358,7 @@
 					selectedIds={session.selectedIds}
 					allSelected={session.allSelected}
 					disabled={session.busy}
+					onScreen={noPrinter}
 					ontoggle={(id) => session.toggleMember(id)}
 					ontoggleall={() => session.toggleAll()}
 				/>
@@ -339,9 +369,10 @@
 						onclick={() => session.continueToVerify()}
 						class={PRIMARY_BUTTON}
 					>
-						<Printer class="h-5 w-5" aria-hidden="true" />{t.members.next(
-							session.selectedIds.length
-						)}
+						{#if noPrinter}<QrCode class="h-5 w-5" aria-hidden="true" />{:else}<Printer
+								class="h-5 w-5"
+								aria-hidden="true"
+							/>{/if}{t.members.next(session.selectedIds.length)}
 					</Button>
 				</div>
 			{/if}
@@ -350,7 +381,7 @@
 				class="flex min-h-0 flex-1 flex-col gap-3 kiosk-portrait:mt-4 kiosk-portrait:justify-start"
 			>
 				<KioskStaffPinEntry
-					description={t.staffPin.description}
+					description={noPrinter ? t.onScreen.staffPinDescription : t.staffPin.description}
 					verify={(pin) => session.verifyStaffPin(pin)}
 					onverified={() => void session.onStaffPinVerified()}
 					oncancel={() => session.cancelStaffPin()}
@@ -410,7 +441,9 @@
 									aria-hidden="true"
 								></span>{t.verify.checking}
 							{:else}
-								<KeyRound class="h-5 w-5" aria-hidden="true" />{t.verify.confirm}
+								<KeyRound class="h-5 w-5" aria-hidden="true" />{noPrinter
+									? t.onScreen.confirm
+									: t.verify.confirm}
 							{/if}
 						</Button>
 						<Button
@@ -436,6 +469,6 @@
 {#if sheetLabels.length > 0}
 	<KioskLabelSheet labels={sheetLabels} />
 {/if}
-{#if printing}
+{#if printing && !noPrinter}
 	<KioskPrintStatus phase="printing" count={session.selectedIds.length} />
 {/if}

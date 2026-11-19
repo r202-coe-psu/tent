@@ -3,12 +3,14 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Printer from '@lucide/svelte/icons/printer';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Search from '@lucide/svelte/icons/search';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { goToKioskClosed, navigateToKioskHome } from '../application/kiosk-navigation';
+	import { KioskPrinterState } from '../application/kiosk-printer-state.svelte';
 	import { REPRINT_PHONE_MAX_LENGTH } from '../application/reprint-session.svelte';
 	import {
 		VolunteerCardSession,
@@ -25,6 +27,7 @@
 	import { KIOSK_VOLUNTEER_I18N } from './_constants/kiosk-volunteer.i18n';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
+	import KioskLabelScreen from './kiosk-label-screen.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 	import {
 		KIOSK_NOTICE_PRIMARY_ACTION,
@@ -44,6 +47,8 @@
 	let { contextQuery, deps }: Props = $props();
 
 	const t = $derived(getTranslation(KIOSK_VOLUNTEER_I18N, languageStore.current));
+	const printerState = new KioskPrinterState();
+	const noPrinter = $derived(printerState.hasNoPrinter);
 
 	const PRIMARY_BUTTON =
 		'min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl';
@@ -85,9 +90,11 @@
 	const inFlow = $derived(session.step !== 'phone');
 	// Not sent home while the label comes out; resuming restarts the idle countdown.
 	const printing = $derived(session.step === 'printing');
+	// The label screen has its own, longer idle timeout.
+	const idlePaused = $derived(printing || session.step === 'on_screen');
 
 	$effect(() => {
-		idleTimeout.setPaused(printing);
+		idleTimeout.setPaused(idlePaused);
 	});
 
 	onMount(() => {
@@ -109,7 +116,7 @@
 </script>
 
 <svelte:head>
-	<title>{t.pageTitle}</title>
+	<title>{noPrinter ? t.onScreen.pageTitle : t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
@@ -125,7 +132,11 @@
 	</div>
 {/snippet}
 
-{#if session.step === 'done'}
+{#if session.step === 'on_screen'}
+	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
+		<KioskLabelScreen labels={session.screenLabels} ondone={returnHome} />
+	</div>
+{:else if session.step === 'done'}
 	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
 		<KioskNoticePanel
 			tone="success"
@@ -160,6 +171,15 @@
 					class={KIOSK_NOTICE_PRIMARY_ACTION}
 					><Printer aria-hidden="true" />{t.printFailed.retry}</Button
 				>
+				{#if session.canShowOnScreen}
+					<Button
+						type="button"
+						variant="outline"
+						onclick={() => session.showOnScreen()}
+						class={KIOSK_NOTICE_SECONDARY_ACTION}
+						><QrCode aria-hidden="true" />{t.printFailed.onScreen}</Button
+					>
+				{/if}
 				<Button
 					type="button"
 					variant="outline"
@@ -203,7 +223,7 @@
 								id="volunteer-phone-title"
 								class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 							>
-								{t.heading}
+								{noPrinter ? t.onScreen.heading : t.heading}
 							</h1>
 							<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
 								{t.phonePrompt}
@@ -287,7 +307,8 @@
 						onclick={() => void session.confirmPrint()}
 						class={PRIMARY_BUTTON}
 					>
-						<Printer class="h-5 w-5" aria-hidden="true" />{t.print}
+						{#if noPrinter}<QrCode class="h-5 w-5" aria-hidden="true" />{t.onScreen
+								.show}{:else}<Printer class="h-5 w-5" aria-hidden="true" />{t.print}{/if}
 					</Button>
 					<Button
 						type="button"
@@ -304,6 +325,6 @@
 {/if}
 
 <VolunteerLabelSheet {sheet} />
-{#if printing}
+{#if printing && !noPrinter}
 	<KioskPrintStatus phase="printing" count={1} />
 {/if}

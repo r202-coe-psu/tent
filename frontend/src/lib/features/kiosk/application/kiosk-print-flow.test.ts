@@ -26,7 +26,8 @@ describe('runKioskPrintFlow', () => {
 
 		expect(result).toEqual({
 			kind: 'error',
-			message: 'ส่งงานพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง (พิมพ์ออกแล้ว 2 ดวง)'
+			message: 'ส่งงานพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง (พิมพ์ออกแล้ว 2 ดวง)',
+			labels: ['label-3']
 		});
 		expect(fallbackPrint).not.toHaveBeenCalled();
 	});
@@ -39,7 +40,11 @@ describe('runKioskPrintFlow', () => {
 			fallbackPrint
 		});
 
-		expect(result).toEqual({ kind: 'error', message: 'เชื่อมต่อเครื่องพิมพ์ไม่ได้' });
+		expect(result).toEqual({
+			kind: 'error',
+			message: 'เชื่อมต่อเครื่องพิมพ์ไม่ได้',
+			labels: ['label-1']
+		});
 		expect(fallbackPrint).not.toHaveBeenCalled();
 	});
 
@@ -54,7 +59,8 @@ describe('runKioskPrintFlow', () => {
 
 		expect(result).toEqual({
 			kind: 'error',
-			message: 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง'
+			message: 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			labels: []
 		});
 		expect(printLabels).not.toHaveBeenCalled();
 		expect(fallbackPrint).not.toHaveBeenCalled();
@@ -68,5 +74,20 @@ describe('runKioskPrintFlow', () => {
 		});
 
 		expect(result).toEqual({ kind: 'printed', printed: 2 });
+	});
+
+	it("returns the rendered labels for the screen on a 'none' printer without printing", async () => {
+		const printLabels = vi.fn();
+		const fallbackPrint = vi.fn();
+		const result = await runKioskPrintFlow({
+			renderLabels: () => Promise.resolve(['label-1', 'label-2']),
+			printLabels,
+			fallbackPrint,
+			printer: 'none'
+		});
+
+		expect(result).toEqual({ kind: 'screen', labels: ['label-1', 'label-2'] });
+		expect(printLabels).not.toHaveBeenCalled();
+		expect(fallbackPrint).not.toHaveBeenCalled();
 	});
 });

@@ -52,6 +52,12 @@ const th = {
 		reprintSome: (members: number, printable: number) =>
 			`สมาชิก ${members} คน · พิมพ์ QR ได้ ${printable} คน`,
 		reprintState: (printable: number) => `พิมพ์ QR ได้ ${printable} คน`,
+		onScreen: {
+			reprintNone: (members: number) => `สมาชิก ${members} คน · ยังไม่มี QR ให้แสดง`,
+			reprintSome: (members: number, printable: number) =>
+				`สมาชิก ${members} คน · แสดง QR ได้ ${printable} คน`,
+			reprintState: (printable: number) => `แสดง QR ได้ ${printable} คน`
+		},
 		pendingState: (pending: number) => `รอรายงานตัว ${pending} คน`,
 		accessibleName: (contact: string, members: number, state: string) =>
 			`${contact}, สมาชิก ${members} คน, ${state}`
@@ -163,9 +169,21 @@ const th = {
 			rowQrIssueFailed: 'ออก QR ไม่สำเร็จ · ยังไม่ได้พิมพ์ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่',
 			qrIssueFailed: (count: number) =>
 				`ออก QR ไม่สำเร็จ ${count} คน (ยังไม่ได้พิมพ์) กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`,
-			retryQrIssue: 'ลองออก QR ใหม่'
+			retryQrIssue: 'ลองออก QR ใหม่',
+			showOnScreen: 'แสดง QR บนจอแทน'
 		},
-		qrNoPersonalData: 'QR ไม่มีข้อมูลส่วนบุคคล'
+		qrNoPersonalData: 'QR ไม่มีข้อมูลส่วนบุคคล',
+		/** The same texts for a kiosk without a printer: the QR is shown on screen, nothing is printed. */
+		onScreen: {
+			reprintFound: 'พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ · เลือกคนที่จะแสดง QR Code',
+			reviewThen: 'ตรวจผล แล้วแสดง QR Code',
+			showQr: 'แสดง QR Code',
+			showQrCount: (count: number) => `แสดง QR Code · ${count} คน`,
+			rowReprintable: 'รายงานตัวแล้ว · แสดง QR ใหม่ได้ (QR ใบเก่าจะใช้ไม่ได้)',
+			rowQrIssueFailed: 'ออก QR ไม่สำเร็จ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่',
+			qrIssueFailed: (count: number) =>
+				`ออก QR ไม่สำเร็จ ${count} คน กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`
+		}
 	}
 };
 
@@ -215,6 +233,12 @@ const en: typeof th = {
 		reprintSome: (members: number, printable: number) =>
 			`${memberCount(members)} · ${printable} can print QR`,
 		reprintState: (printable: number) => `${printable} can print QR`,
+		onScreen: {
+			reprintNone: (members: number) => `${memberCount(members)} · no QR to show yet`,
+			reprintSome: (members: number, printable: number) =>
+				`${memberCount(members)} · ${printable} can show QR`,
+			reprintState: (printable: number) => `${printable} can show QR`
+		},
 		pendingState: (pending: number) => `${pending} waiting to check in`,
 		accessibleName: (contact: string, members: number, state: string) =>
 			`${contact}, ${memberCount(members)}, ${state}`
@@ -331,9 +355,21 @@ const en: typeof th = {
 			rowQrIssueFailed: 'Could not issue a QR · not printed. Please try again or contact staff.',
 			qrIssueFailed: (count: number) =>
 				`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'} (not printed). Please try again or contact staff.`,
-			retryQrIssue: 'Try issuing the QR again'
+			retryQrIssue: 'Try issuing the QR again',
+			showOnScreen: 'Show the QR on screen instead'
 		},
-		qrNoPersonalData: 'The QR holds no personal data'
+		qrNoPersonalData: 'The QR holds no personal data',
+		onScreen: {
+			reprintFound:
+				'Existing check-in found, nothing is saved again · choose who to show a QR Code for',
+			reviewThen: 'Check the results, then show your QR Code',
+			showQr: 'Show QR Code',
+			showQrCount: (count: number) => `Show QR Code · ${count}`,
+			rowReprintable: 'Already checked in · a new QR can be shown (the old QR will stop working)',
+			rowQrIssueFailed: 'Could not issue a QR. Please try again or contact staff.',
+			qrIssueFailed: (count: number) =>
+				`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'}. Please try again or contact staff.`
+		}
 	}
 };
 

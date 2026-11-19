@@ -4,6 +4,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Printer from '@lucide/svelte/icons/printer';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -16,8 +17,10 @@
 		KIOSK_CHECK_IN_TICKS,
 		KioskCheckInWizard,
 		KioskInlineAlert,
+		KioskLabelScreen,
 		KioskLabelSheet,
 		KioskNoticePanel,
+		KioskPrinterState,
 		KioskPrintStatus,
 		navigateToKioskHome,
 		prepareKioskQrImage,
@@ -29,6 +32,8 @@
 	import { KIOSK_REGISTER_DONE_I18N } from './done-page.i18n';
 
 	const t = $derived(getTranslation(KIOSK_REGISTER_DONE_I18N, languageStore.current));
+	const printerState = new KioskPrinterState();
+	const noPrinter = $derived(printerState.hasNoPrinter);
 
 	/** How long «printed» stays on screen before the status card goes away. */
 	const PRINT_DONE_VISIBLE_MS = 2500;
@@ -44,6 +49,10 @@
 	let qrImage = $state.raw<KioskQrImage | null>(null);
 	let printPhase = $state<'idle' | 'printing' | 'done'>('idle');
 	let printError = $state('');
+	/** Rendered label PNGs shown on screen (no printer, or staff chose it after a failed print). */
+	let screenLabels = $state.raw<readonly string[] | null>(null);
+	/** The labels a failed print left unprinted: what the on-screen button can still show. */
+	let unprintedLabels = $state.raw<readonly string[]>([]);
 	let doneTimer: ReturnType<typeof setTimeout> | null = null;
 	const labels = $derived(
 		registration
@@ -84,14 +93,17 @@
 		if (!registration || printPhase === 'printing') return;
 		// CR-233 FR-EQR-24: no QR was issued for this person, so there is nothing valid to print.
 		if (registration.qr_issue_failed || !registration.qr_payload) {
-			printError = t.qrIssueFailed;
+			await printerState.ready;
+			printError = noPrinter ? t.onScreen.qrIssueFailed : t.qrIssueFailed;
 			return;
 		}
 		// Not sent home while the label comes out; resuming restarts the idle countdown.
 		idleTimeout.setPaused(true);
 		printError = '';
+		unprintedLabels = [];
 		if (doneTimer) clearTimeout(doneTimer);
-		printPhase = 'printing';
+		await printerState.ready;
+		if (!noPrinter) printPhase = 'printing';
 		try {
 			qrImage ??= await prepareKioskQrImage(registration.qr_payload);
 			// No scanner client (dev browser / browser print mode): print the CSS label instead.
@@ -119,13 +131,23 @@
 				return;
 			}
 			printPhase = 'idle';
-			if (result.kind === 'error') printError = result.message;
+			if (result.kind === 'screen') screenLabels = result.labels;
+			if (result.kind === 'error') {
+				printError = result.message;
+				unprintedLabels = result.labels ?? [];
+			}
 		} catch {
 			printPhase = 'idle';
-			printError = t.printRenderFailed;
+			printError = noPrinter ? t.onScreen.printRenderFailed : t.printRenderFailed;
 		} finally {
-			idleTimeout.setPaused(false);
+			idleTimeout.setPaused(screenLabels !== null);
 		}
+	}
+
+	function showOnScreen(): void {
+		screenLabels = unprintedLabels;
+		printError = '';
+		idleTimeout.setPaused(true);
 	}
 </script>
 
@@ -141,30 +163,47 @@
 		role="status"
 	>
 		{#if registration}
-			<p>
-				{viaThaid ? t.takeQrThaid : t.takeQrCard}
-			</p>
+			{#if screenLabels || noPrinter}
+				{#if !viaThaid}<p>{t.removeCard}</p>{/if}
+			{:else}
+				<p>
+					{viaThaid ? t.takeQrThaid : t.takeQrCard}
+				</p>
+			{/if}
 			<p class="text-base kiosk-portrait:text-xl">
 				{t.consentRef}:
 				<span class="font-mono tracking-wide">{registration.consent_ref}</span>
 			</p>
 			{#if printError}
 				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
-					>{t.printFailedHint(printError)}</KioskInlineAlert
+					>{noPrinter
+						? t.onScreen.failedHint(printError)
+						: t.printFailedHint(printError)}</KioskInlineAlert
 				>
+				{#if unprintedLabels.length > 0}
+					<Button
+						type="button"
+						variant="outline"
+						onclick={showOnScreen}
+						class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.showOnScreen}</Button
+					>
+				{/if}
 			{/if}
 		{:else}
 			{#if !viaThaid}<p>{t.removeCard}</p>{/if}
-			<p>{t.contactStaff}</p>
+			<p>{noPrinter ? t.onScreen.contactStaff : t.contactStaff}</p>
 		{/if}
 		{#snippet actions()}
-			{#if registration}
+			{#if registration && !screenLabels && (!noPrinter || printError)}
 				<Button
 					type="button"
 					variant="outline"
 					onclick={printLabel}
 					disabled={printPhase === 'printing'}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}><Printer aria-hidden="true" />{t.printAgain}</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}
+					>{#if noPrinter}<QrCode aria-hidden="true" />{t.onScreen.showAgain}{:else}<Printer
+							aria-hidden="true"
+						/>{t.printAgain}{/if}</Button
 				>
 			{/if}
 			<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
@@ -172,6 +211,9 @@
 			>
 		{/snippet}
 	</KioskNoticePanel>
+	{#if screenLabels}
+		<KioskLabelScreen labels={screenLabels} ondone={returnHome} />
+	{/if}
 </div>
 {#if registration}
 	<KioskLabelSheet {labels} />
