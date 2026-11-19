@@ -219,6 +219,57 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 	});
 });
 
+describe('ReferralRemoteRepository.activeReferralEvacueeIds (#555)', () => {
+	const fetchMock = vi.fn();
+	const repo = new ReferralRemoteRepository();
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	it('makes no request for an empty list', async () => {
+		await expect(repo.activeReferralEvacueeIds([])).resolves.toEqual([]);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('POSTs the ids for the active shelter and returns the answer', async () => {
+		fetchMock.mockResolvedValue({ ok: true, json: async () => ({ evacuee_ids: ['evacuee:B'] }) });
+
+		await expect(repo.activeReferralEvacueeIds(['evacuee:A', 'evacuee:B'])).resolves.toEqual([
+			'evacuee:B'
+		]);
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/back-office/referral/active?shelter_code=SH001');
+		expect(init).toMatchObject({ method: 'POST', credentials: 'include' });
+		expect(JSON.parse(init.body)).toEqual({ evacuee_ids: ['evacuee:A', 'evacuee:B'] });
+	});
+
+	it('splits more than 200 ids into requests of at most 200 and joins the answers', async () => {
+		fetchMock
+			.mockResolvedValueOnce({ ok: true, json: async () => ({ evacuee_ids: ['evacuee:0'] }) })
+			.mockResolvedValueOnce({ ok: true, json: async () => ({ evacuee_ids: ['evacuee:200'] }) });
+		const ids = Array.from({ length: 201 }, (_, i) => `evacuee:${i}`);
+
+		await expect(repo.activeReferralEvacueeIds(ids)).resolves.toEqual(['evacuee:0', 'evacuee:200']);
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		const sizes = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).evacuee_ids.length);
+		expect(sizes).toEqual([200, 1]);
+	});
+
+	it('throws on an error status', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: 'no' }) });
+		await expect(repo.activeReferralEvacueeIds(['evacuee:A'])).rejects.toThrow('(403)');
+	});
+
+	it('throws on a malformed answer instead of reporting nobody as active', async () => {
+		fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) });
+		await expect(repo.activeReferralEvacueeIds(['evacuee:A'])).rejects.toThrow();
+	});
+});
+
 describe('ReferralRemoteRepository.bulkTransition', () => {
 	const fetchMock = vi.fn();
 	const repo = new ReferralRemoteRepository();

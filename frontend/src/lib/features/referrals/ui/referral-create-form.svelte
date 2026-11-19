@@ -6,7 +6,7 @@
 	import { type Referral, type ReferralInput } from '../domain/referral.schema';
 	import type { ReferralBatchFailure, ReferralSubmitIntent } from '../data/referral.repository';
 	import { useCreateReferralBatch } from '../application/queries';
-	import { useEvacuees } from '$lib/features/people';
+	import type { Evacuee } from '$lib/features/people';
 	import { formatEvacueeFullName, getEvacueeSelectionError } from './referral.ui-helpers';
 	import RedactionBanner from './redaction-banner.svelte';
 	import EvacueePickerTable from './evacuee-picker-table.svelte';
@@ -30,20 +30,22 @@
 
 	const queryClient = useQueryClient();
 	const batchMutation = useCreateReferralBatch(queryClient);
-	const evacueesQuery = useEvacuees();
 
 	type PendingSend = {
 		formData: ReferralInput;
 		intent: ReferralSubmitIntent;
 		evacueeIds: string[];
+		/** Names snapshotted with the ids, so the dialog never shows a bare id. */
+		names: string[];
 	};
 	/** Set when a "ส่งข้อมูล" submit awaits confirmation; kept after close so the dialog stays mounted. */
 	let pendingSend = $state.raw<PendingSend | null>(null);
 	let sendConfirmOpen = $state(false);
-	// Resolved at render time so names fill in once the evacuee list has loaded.
-	const pendingNames = $derived(pendingSend ? namesFor(pendingSend.evacueeIds) : []);
+	const pendingNames = $derived(pendingSend?.names ?? []);
 
-	let selectedIds = $state<string[]>([]);
+	// The picker keeps the chosen evacuees, so names never need the whole shelter loaded (#555).
+	let selected = $state.raw<Evacuee[]>([]);
+	const selectedIds = $derived(selected.map((e) => e._id));
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
 
 	// Medical staff see medical-emergency only (D8, D16); the BFF enforces the same rule.
@@ -71,13 +73,6 @@
 		toast.error(error);
 	}
 
-	function namesFor(ids: string[]): string[] {
-		return ids.map((id) => {
-			const found = evacueesQuery.data?.find((e) => e._id === id);
-			return found ? formatEvacueeFullName(found) : id;
-		});
-	}
-
 	async function handleSubmit(formData: ReferralInput, intent: ReferralSubmitIntent) {
 		const selectionError = getEvacueeSelectionError(selectedIds);
 		if (selectionError) {
@@ -89,8 +84,12 @@
 		selectionAttempted = false;
 		if (intent === 'send') {
 			// Sending moves referrals out of draft, so confirm first. Snapshot the selection now.
-			const evacueeIds = [...selectedIds];
-			pendingSend = { formData, intent, evacueeIds };
+			pendingSend = {
+				formData,
+				intent,
+				evacueeIds: [...selectedIds],
+				names: selected.map(formatEvacueeFullName)
+			};
 			sendConfirmOpen = true;
 			return;
 		}
@@ -252,7 +251,7 @@
 
 			<hr class="border-border/60" />
 
-			<EvacueePickerTable bind:selectedIds error={evacueeError} />
+			<EvacueePickerTable bind:selected error={evacueeError} />
 
 			<hr class="border-border/60" />
 
