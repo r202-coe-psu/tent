@@ -12,9 +12,11 @@
 	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 	import { DeviceInfoSession } from '../application/device-info.svelte';
 	import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
+	import { loadKioskHardware } from '../application/kiosk-qr-input';
 	import { TestPrint } from '../application/test-print.svelte';
 	import { fetchKioskDeviceInfo } from '../data/kiosk-device-info.api';
 	import { fetchKioskHostInfo } from '../data/kiosk-host-info.api';
+	import type { KioskPrinter } from '../domain/kiosk-hardware';
 	import { KIOSK_COMMON_I18N } from './_constants/kiosk-common.i18n';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
 	import KioskLabelSheet from './kiosk-label-sheet.svelte';
@@ -65,6 +67,14 @@
 
 	/** Staff asked to see the PIN; every open starts masked again (see `onverified`). */
 	let pinVisible = $state(false);
+
+	/** Asked from the scanner client each time the panel opens; null until it answers. */
+	let printer = $state<KioskPrinter | null>(null);
+
+	function loadPrinter(): void {
+		printer = null;
+		void loadKioskHardware().then((hardware) => (printer = hardware.printer));
+	}
 
 	const info = $derived(session.info);
 	const host = $derived(session.host);
@@ -181,6 +191,7 @@
 				verify={(pin) => session.verify(pin)}
 				onverified={() => {
 					pinVisible = false;
+					loadPrinter();
 					session.pinVerified();
 				}}
 				oncancel={() => session.pinCancelled()}
@@ -343,19 +354,30 @@
 				</KioskInlineAlert>
 			{/if}
 
-			<div class="flex gap-3">
-				<Button
-					type="button"
-					variant="outline"
-					size="lg"
-					data-testid="kiosk-device-info-test-print"
-					disabled={testPrint.busy}
-					onclick={() => void printTestLabel()}
-					class="min-h-12 flex-1 gap-2 text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-20 kiosk-portrait:text-2xl kiosk-compact:min-h-11"
+			{#if printer === 'none'}
+				<p
+					class="text-center text-base font-semibold text-slate-600 kiosk-portrait:text-2xl kiosk-compact:text-sm"
+					data-testid="kiosk-device-info-printer"
 				>
-					<Printer class="size-5 kiosk-portrait:size-7" aria-hidden="true" />
-					{t.testPrint}
-				</Button>
+					{t.printerNone}
+				</p>
+			{/if}
+
+			<div class="flex gap-3">
+				{#if printer !== 'none'}
+					<Button
+						type="button"
+						variant="outline"
+						size="lg"
+						data-testid="kiosk-device-info-test-print"
+						disabled={testPrint.busy}
+						onclick={() => void printTestLabel()}
+						class="min-h-12 flex-1 gap-2 text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-20 kiosk-portrait:text-2xl kiosk-compact:min-h-11"
+					>
+						<Printer class="size-5 kiosk-portrait:size-7" aria-hidden="true" />
+						{t.testPrint}
+					</Button>
+				{/if}
 				<Button
 					type="button"
 					size="lg"

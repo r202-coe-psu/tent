@@ -69,6 +69,7 @@ const th = {
 		screenPortrait: 'ตู้ใหญ่',
 		testPrintFailed: (reason: string) => `ทดสอบการพิมพ์ไม่สำเร็จ: ${reason}`,
 		testPrint: 'ทดสอบการพิมพ์',
+		printerNone: 'เครื่องพิมพ์: ไม่มี (แสดง QR บนจอ)',
 		close: 'ปิด'
 	}
 };
@@ -143,6 +144,7 @@ const en: typeof th = {
 		screenPortrait: 'Large kiosk',
 		testPrintFailed: (reason: string) => `Test print failed: ${reason}`,
 		testPrint: 'Test print',
+		printerNone: 'Printer: none (QR shown on screen)',
 		close: 'Close'
 	}
 };
