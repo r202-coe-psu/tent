@@ -551,14 +551,7 @@
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
 			<div class="space-y-4">
 				<!-- Shelter type groups -->
-				<div
-					data-filter="shelter-groups"
-					data-active={groupsActive}
-					class={[
-						'space-y-1.5 rounded-xl border p-2 transition-colors',
-						groupsActive ? ACTIVE_CLASS : 'border-transparent'
-					]}
-				>
+				<div data-filter="shelter-groups" data-active={groupsActive} class="space-y-1.5">
 					<div class="text-xs font-semibold text-muted-foreground">{t.shelterTypeGroup}</div>
 					<RadioGroup.Root
 						value={groupChoice}

@@ -448,7 +448,8 @@ describe('ShelterFilterPanel — active controls are highlighted (#1419)', () =>
 				'parking_car'
 			].sort()
 		);
-		for (const name of active()) {
+		// the radio group has no frame of its own: the chosen radio card is its highlight
+		for (const name of active().filter((n) => n !== 'shelter-groups')) {
 			expect(marked(name!)!.className, name).toContain('border-primary/50');
 		}
 		expect(marked('parking_boat')!.dataset.active).not.toBe('true');
