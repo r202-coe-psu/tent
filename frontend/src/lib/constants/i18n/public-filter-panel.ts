@@ -2,8 +2,10 @@ export const PUBLIC_FILTER_PANEL_I18N = {
 	th: {
 		title: 'ค้นหาและตัวกรอง',
 		shelterTypeGroup: 'ประเภทศูนย์พักพิง',
+		groupAll: 'ทั้งหมด',
 		groupEvacuation: 'ศูนย์อพยพ',
 		groupExternal: 'ศูนย์อพยพภายนอก',
+		groupExternalShort: 'ภายนอก',
 		searchLabel: 'ค้นหา',
 		searchPlaceholder: 'ชื่อศูนย์...',
 		provinceLabel: 'จังหวัด',
@@ -59,8 +61,10 @@ export const PUBLIC_FILTER_PANEL_I18N = {
 	en: {
 		title: 'Search & Filters',
 		shelterTypeGroup: 'Shelter Type',
+		groupAll: 'All',
 		groupEvacuation: 'Evacuation Center',
 		groupExternal: 'External Evacuation Center',
+		groupExternalShort: 'External',
 		searchLabel: 'Search',
 		searchPlaceholder: 'Shelter name...',
 		provinceLabel: 'Province',
