@@ -713,6 +713,23 @@ GET /api/v1/kiosk/internal/{shelter}/banners?c={tv_code}
 | ------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/api/internal/referral-close/worker/next` | `Authorization: Bearer <REFERRAL_WORKER_TOKEN>` (constant-time compare) · claim/ประมวลผลไม่เกิน 1 batch ต่อ request (proposed default 50) · `204` เมื่อไม่มีงาน · ไม่ตั้ง token → API ไม่รับ job ใหม่ |
 
+### 2.4a ปิดศูนย์ด้วย durable job ([CR-219](../changes/02-people/CR-219-shelter-close-checkout.md), [CR-243](../changes/02-people/CR-243-shelter-close-worker.md))
+
+> **สถานะ:** approved · สิทธิ์ทุก route ฝั่งผู้ใช้ = `requireShelterManagerOrSA` (SA หรือ `shelter_manager` ของศูนย์ใน path) · ทุก response ตอบ `cache-control: no-store` · `job_id` ที่ API คืน = ULID (`job_ulid`) ไม่ใช่ `_id` เต็ม
+
+| Method | Path | หมายเหตุ |
+| --- | --- | --- |
+| `GET` | `/api/back-office/shelter/{code}/close` | preview เดิม (CR-219 FR-7: `{ by_status, total }`) + `active_job: { job_id, status }` เมื่อมี job `queued`\|`running` |
+| `POST` | `/api/back-office/shelter/{code}/close` | `{ confirm_text }` (ตรวจซ้ำฝั่ง server) · สร้าง job + lock แล้วตอบ `202 { job_id }` โดยไม่ประมวลผลคนในศูนย์ · มี job active → `409 { job_id, message }` ของ job เดิม · `confirm_text` ไม่ตรง → `400` · ศูนย์ external → `409` · `requested_by` มาจาก session เท่านั้น |
+| `GET` | `/api/back-office/shelter/{code}/close/jobs/{id}` | `{ job_id, shelter_code, mode, status, phase, sweep_round, counters, preview, failures[], closed, end_reason?, created_at, updated_at, started_at?, finished_at? }` · job ของศูนย์อื่น (`shelter_code` ไม่ตรง `{code}`) → `404` (ไม่ใช่ `403`) · ไม่คืน `lease_owner` / `cursor` / `requested_by` |
+| `PATCH` | `/api/back-office/shelter/{code}` | เพิ่ม: ขณะมี close job active การเปลี่ยน `operation_status` (รวมเปิดศูนย์กลับจาก `closed`) → `409 CONFLICT` · save ที่คงค่าเดิมผ่านได้ · ตั้ง `closed` ตรง ๆ ยัง `400` (CR-219 FR-22) |
+
+**Internal worker (private network เท่านั้น — nginx ต้อง deny `/api/internal/shelter-close/worker/` จาก public listener):**
+
+| Method | Path | หมายเหตุ |
+| --- | --- | --- |
+| `POST` | `/api/internal/shelter-close/worker/next` | `Authorization: Bearer <SHELTER_CLOSE_WORKER_TOKEN>` (constant-time compare; ไม่มี/ผิด/ไม่ตั้ง token → `401`) · header `x-shelter-close-worker-id` (optional, `[A-Za-z0-9._:-]{1,128}`) · 1 call = claim/ต่อ lease → ประมวลผล **1 chunk** → บันทึก cursor/counters · ไม่มีงาน → `204` · มีงาน → `200 { job_id, shelter_code, status, phase, counters, stopped, budget_exceeded }` (`stopped` = job จบ/ถูกรับโดย worker อื่นแล้ว ไม่เขียนทับ, FR-13) · เกิน `SHELTER_CLOSE_CHUNK_BUDGET_MS` → ทิ้งผล chunk เก็บ cursor เดิมแล้วคืน |
+
 ### 2.5 บัตร QR เจ้าหน้าที่ ([CR-211](../changes/03-C-supply/CR-211-staff-qr-card.md))
 
 > **สถานะ:** approved 2026-10-30 (#1011) · auth = central `_session` cookie · error shape ตามสัญญาข้างต้น ·

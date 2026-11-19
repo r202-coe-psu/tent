@@ -18,6 +18,7 @@ import {
 	closeZone,
 	reopenZone,
 	getShelterClosePreview,
+	getShelterCloseJob,
 	closeShelter,
 	getStoragePoints,
 	addStoragePoint,
@@ -29,6 +30,11 @@ import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand
 import { withoutExternalShelters, type Shelter } from '../domain/schema';
 import type { ShelterBasic, ShelterSummary } from '../data/shelters.repository';
 import { auditLogKeys } from '$lib/features/audit-log';
+import {
+	describeShelterCloseJobOutcome,
+	isShelterCloseJobActive,
+	type ShelterCloseJobView
+} from '../domain/shelter-close-job';
 
 export const sheltersKeys = {
 	all: ['shelters'] as const,
@@ -37,7 +43,10 @@ export const sheltersKeys = {
 	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const,
 	actors: (code: string) => [...sheltersKeys.detail(code), 'actors'] as const,
 	storagePoints: (code: string) => [...sheltersKeys.all, 'storage-points', code] as const,
-	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const
+	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const,
+	closeActive: (code: string) => [...sheltersKeys.all, 'close-active', code] as const,
+	closeJob: (code: string, jobId: string) =>
+		[...sheltersKeys.all, 'close-job', code, jobId] as const
 };
 
 export interface ShelterListOptions {
@@ -170,19 +179,74 @@ export const useShelterClosePreview = (code: () => string, enabled: () => boolea
 	}));
 
 /**
- * CR-219 FR-8: close the shelter (check out everyone first). Toasting is left to the caller —
- * the result decides between success and the "failed N" message. Only list/search caches are
- * refreshed here; the caller refreshes the detail (the edit form re-seeds itself from it, so a
- * refetch mid-save would drop the user's other edits).
+ * CR-243 FR-28: the close job queued / running for this shelter, if any — read from the close
+ * route's `active_job` so a freshly opened page still sees a job started earlier. Staff without
+ * close permission get a 403, which reads as "no job".
+ */
+export const useShelterActiveCloseJob = (code: () => string, enabled: () => boolean) =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.closeActive(code()),
+		queryFn: async () => {
+			try {
+				return (await getShelterClosePreview(code())).active_job ?? null;
+			} catch (err) {
+				if (err instanceof ServiceRequestError && (err.status === 403 || err.status === 404)) {
+					return null;
+				}
+				throw err;
+			}
+		},
+		enabled: !!code() && enabled(),
+		staleTime: 0,
+		refetchOnWindowFocus: false
+	}));
+
+/** CR-243 FR-27: poll one close job until it reaches a terminal status. */
+export const useShelterCloseJob = (
+	code: () => string,
+	jobId: () => string | null | undefined,
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.closeJob(code(), jobId() ?? ''),
+		queryFn: () => getShelterCloseJob(code(), jobId()!),
+		enabled: !!code() && !!jobId() && enabled(),
+		staleTime: 0,
+		refetchOnWindowFocus: false,
+		refetchInterval: (query: { state: { data: ShelterCloseJobView | undefined } }) => {
+			const view = query.state.data;
+			return view && !isShelterCloseJobActive(view) ? false : 2000;
+		}
+	}));
+
+const announcedCloseJobs = new Set<string>();
+
+/**
+ * CR-243 FR-29: toast the outcome of a finished close job — once per job, whichever of the
+ * dialog or the page banner sees it first. Returns true when it toasted.
+ */
+export function announceShelterCloseJob(view: ShelterCloseJobView): boolean {
+	if (isShelterCloseJobActive(view) || announcedCloseJobs.has(view.job_id)) return false;
+	announcedCloseJobs.add(view.job_id);
+	const outcome = describeShelterCloseJobOutcome(view);
+	if (outcome.kind === 'success') toast.success(outcome.message);
+	else toast.error(outcome.message);
+	return true;
+}
+
+/**
+ * CR-243 FR-6: start the close job (`202 { job_id }`). The work happens in the worker; callers
+ * poll {@link useShelterCloseJob}. Only list/search caches are refreshed here.
  */
 export const useCloseShelter = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: ({ code, confirmText }: { code: string; confirmText: string }) =>
 			closeShelter(code, confirmText),
-		onSettled: () => {
+		onSettled: (_data, _err, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.list() });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.search() });
+			queryClient.invalidateQueries({ queryKey: sheltersKeys.closeActive(variables.code) });
 		}
 	}));
 };

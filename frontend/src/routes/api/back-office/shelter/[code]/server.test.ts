@@ -24,6 +24,13 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 		requireShelterScopeOrSA: vi.fn().mockResolvedValue(c)
 	};
 });
+// CR-243 FR-9: the PATCH asks the close job store whether a job is active. Never the real admin
+// CouchDB — without this mock the status-changing cases below would hit a live `central_ops`.
+const closeStore = vi.hoisted(() => ({ getActiveJob: vi.fn() }));
+vi.mock('$lib/server/shelter-close-job-runtime', () => ({
+	getShelterCloseStore: () => closeStore,
+	adminCouchReq: vi.fn()
+}));
 vi.mock('$lib/server/master-data-server', () => ({
 	readMasterDoc: vi.fn()
 }));
@@ -82,6 +89,7 @@ beforeEach(() => {
 	mgrMock.mockReset().mockResolvedValue(caller);
 	updateMock.mockReset().mockResolvedValue({ id: 'shelter:SH001', rev: '2-new' });
 	readMasterDocMock.mockReset().mockResolvedValue(siteKindDoc);
+	closeStore.getActiveJob.mockReset().mockResolvedValue(null);
 });
 
 describe('PATCH /api/back-office/shelter/[code]', () => {
@@ -181,6 +189,57 @@ describe('PATCH /api/back-office/shelter/[code] — closing goes through the clo
 				message: 'ปิดศูนย์ต้องทำผ่าน POST /api/back-office/shelter/[code]/close'
 			}
 		});
+	});
+});
+
+describe('PATCH /api/back-office/shelter/[code] — blocked while a close job is active (CR-243 FR-9)', () => {
+	const activeJob = { job_ulid: 'JOB1', status: 'running' };
+
+	/** Run the PATCH against a stored shelter in `stored` status; returns the response. */
+	async function patchAgainst(stored: string, body: unknown) {
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
+			await mutator({ operation_status: stored } as ShelterMaster);
+			return { id: 'shelter:SH001', rev: '2-new' };
+		});
+		return callPATCH('SH001', body);
+	}
+
+	beforeEach(() => closeStore.getActiveJob.mockResolvedValue(activeJob));
+
+	it.each([
+		['active', 'standby'],
+		['standby', 'full_capacity'],
+		['closed', 'active']
+	])('409 when %s -> %s is attempted (incl. reopening a closed shelter)', async (stored, next) => {
+		const res = await patchAgainst(stored, { operation_status: next });
+		expect(res.status).toBe(409);
+		expect(await res.json()).toEqual({
+			error: {
+				code: 'CONFLICT',
+				message: 'กำลังปิดศูนย์อยู่ เปลี่ยนสถานะศูนย์ไม่ได้ในขณะนี้'
+			}
+		});
+		expect(closeStore.getActiveJob).toHaveBeenCalledWith('SH001');
+	});
+
+	it('still answers 400 (CR-219 FR-22) when the PATCH sets closed directly, job or not', async () => {
+		expect((await patchAgainst('active', { operation_status: 'closed' })).status).toBe(400);
+	});
+
+	it('allows resending the unchanged status together with other fields', async () => {
+		expect((await patchAgainst('standby', { operation_status: 'standby', name: 'x' })).status).toBe(
+			200
+		);
+	});
+
+	it('does not even look for a job when the body has no operation_status', async () => {
+		expect((await patchAgainst('standby', { name: 'x' })).status).toBe(200);
+		expect(closeStore.getActiveJob).not.toHaveBeenCalled();
+	});
+
+	it('allows the change once the job is gone', async () => {
+		closeStore.getActiveJob.mockResolvedValue(null);
+		expect((await patchAgainst('active', { operation_status: 'standby' })).status).toBe(200);
 	});
 });
 
