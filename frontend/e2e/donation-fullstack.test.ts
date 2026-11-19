@@ -155,7 +155,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				'true'
 			);
 			const listRow = page.getByRole('row').filter({ hasText: bookingRef });
-			await expect(listRow).toContainText('กำลังตรวจรับที่ศูนย์');
+			await expect(listRow).toContainText('อนุมัติแล้ว · รอนำส่ง');
 			await listRow.getByRole('button', { name: 'จัดการ' }).click();
 			await expect(
 				page.getByRole('heading', { name: `${bookingRef} - ตรวจรับพัสดุบริจาค` })
