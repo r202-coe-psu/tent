@@ -5,7 +5,8 @@ import { isKioskPhoneSubmittable } from '../domain/phone';
 import type { KioskVolunteerCardResult } from '../data/kiosk-volunteer-card.api';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
 
-export type VolunteerCardStep = 'phone' | 'confirm' | 'printing' | 'done' | 'print_failed';
+export type VolunteerCardStep =
+	'phone' | 'confirm' | 'printing' | 'done' | 'print_failed' | 'on_screen';
 
 export interface VolunteerCardSessionDeps {
 	lookup(phone: string): Promise<KioskVolunteerCardResult>;
@@ -56,6 +57,8 @@ export class VolunteerCardSession {
 	volunteer = $state.raw<KioskVolunteerCardResult['volunteer'] | null>(null);
 	/** A request is in flight: keys and buttons wait. */
 	busy = $state(false);
+	/** The rendered label PNGs (base64): shown on screen, or kept when printing them failed. */
+	screenLabels = $state.raw<readonly string[]>([]);
 
 	private phoneValue = $state('');
 	/** Bumped by `reset()` so an answer for an abandoned visit is dropped. */
@@ -118,6 +121,17 @@ export class VolunteerCardSession {
 		await this.printVolunteer();
 	}
 
+	/** After a failed print that rendered its labels, they can be shown on screen instead. */
+	get canShowOnScreen(): boolean {
+		return this.step === 'print_failed' && this.screenLabels.length > 0;
+	}
+
+	showOnScreen(): void {
+		if (!this.canShowOnScreen) return;
+		this.error = '';
+		this.step = 'on_screen';
+	}
+
 	back(): void {
 		if (this.step !== 'confirm') return;
 		this.error = '';
@@ -132,6 +146,7 @@ export class VolunteerCardSession {
 		this.volunteer = null;
 		this.error = '';
 		this.busy = false;
+		this.screenLabels = [];
 		this.step = 'phone';
 	}
 
@@ -140,6 +155,7 @@ export class VolunteerCardSession {
 		const generation = this.generation;
 		this.busy = true;
 		this.error = '';
+		this.screenLabels = [];
 		this.step = 'printing';
 		try {
 			let outcome: KioskPrintFlowResult;
@@ -151,7 +167,13 @@ export class VolunteerCardSession {
 			if (generation !== this.generation) return;
 			if (outcome.kind === 'error') {
 				this.error = outcome.message;
+				this.screenLabels = outcome.labels ?? [];
 				this.step = 'print_failed';
+				return;
+			}
+			if (outcome.kind === 'screen') {
+				this.screenLabels = outcome.labels;
+				this.step = 'on_screen';
 				return;
 			}
 			this.step = 'done';

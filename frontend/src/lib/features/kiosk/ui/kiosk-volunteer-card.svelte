@@ -3,6 +3,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Printer from '@lucide/svelte/icons/printer';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Search from '@lucide/svelte/icons/search';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -25,6 +26,7 @@
 	import { KIOSK_VOLUNTEER_I18N } from './_constants/kiosk-volunteer.i18n';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
+	import KioskLabelScreen from './kiosk-label-screen.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 	import {
 		KIOSK_NOTICE_PRIMARY_ACTION,
@@ -85,9 +87,11 @@
 	const inFlow = $derived(session.step !== 'phone');
 	// Not sent home while the label comes out; resuming restarts the idle countdown.
 	const printing = $derived(session.step === 'printing');
+	// The label screen has its own, longer idle timeout.
+	const idlePaused = $derived(printing || session.step === 'on_screen');
 
 	$effect(() => {
-		idleTimeout.setPaused(printing);
+		idleTimeout.setPaused(idlePaused);
 	});
 
 	onMount(() => {
@@ -125,7 +129,11 @@
 	</div>
 {/snippet}
 
-{#if session.step === 'done'}
+{#if session.step === 'on_screen'}
+	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
+		<KioskLabelScreen labels={session.screenLabels} ondone={returnHome} />
+	</div>
+{:else if session.step === 'done'}
 	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
 		<KioskNoticePanel
 			tone="success"
@@ -160,6 +168,15 @@
 					class={KIOSK_NOTICE_PRIMARY_ACTION}
 					><Printer aria-hidden="true" />{t.printFailed.retry}</Button
 				>
+				{#if session.canShowOnScreen}
+					<Button
+						type="button"
+						variant="outline"
+						onclick={() => session.showOnScreen()}
+						class={KIOSK_NOTICE_SECONDARY_ACTION}
+						><QrCode aria-hidden="true" />{t.printFailed.onScreen}</Button
+					>
+				{/if}
 				<Button
 					type="button"
 					variant="outline"
