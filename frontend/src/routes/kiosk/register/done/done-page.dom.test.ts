@@ -11,9 +11,8 @@ vi.mock('$app/state', () => ({
 }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 // Canvas / QR image rendering has no happy-dom implementation: stub the image makers only.
-vi.mock('$lib/features/kiosk/application/kiosk-label-image', () => ({
-	renderKioskLabelPng: vi.fn(async () => 'PNG-BASE64')
-}));
+const renderKioskLabelPng = vi.hoisted(() => vi.fn(async () => 'PNG-BASE64'));
+vi.mock('$lib/features/kiosk/application/kiosk-label-image', () => ({ renderKioskLabelPng }));
 vi.mock('$lib/utils/qrcode', () => ({
 	qrModuleCount: vi.fn(async () => 21),
 	generateQrDataUrl: vi.fn(async () => 'data:image/png;base64,QR')
@@ -44,14 +43,15 @@ async function settle() {
 	}
 }
 
-async function mountPage() {
+async function mountPage(issueFailed = false) {
 	walkInSession.registration = {
 		evacuee_id: 'evacuee:01',
-		qr_payload: 'qr-payload',
+		qr_payload: issueFailed ? null : 'qr-payload',
+		...(issueFailed ? { qr_issue_failed: true } : {}),
 		label: { name: 'สมชาย ใจดี', phone: null },
 		consent_ref: 'CR-1',
 		consent_mode: 'full'
-	};
+	} as never;
 	instance = mount(Page, { target: document.body });
 	flushSync();
 	await settle();
@@ -103,6 +103,32 @@ describe('walk-in done page on a kiosk without a printer (DOM)', () => {
 		expect(shownImage()?.getAttribute('src')).toBe('data:image/png;base64,PNG-BASE64');
 		expect(buttonByText('พิมพ์อีกครั้ง')).toBeUndefined();
 		expect(bodyText()).not.toContain('รับ QR Code');
+	});
+
+	it('shows no printing status and no printed-label wording while the label is prepared', async () => {
+		renderKioskLabelPng.mockReturnValueOnce(new Promise(() => {}));
+		await mountPage();
+
+		expect(shownImage()).toBeNull();
+		expect(bodyText()).not.toContain('กำลังพิมพ์');
+		expect(bodyText()).not.toContain('รับ QR Code');
+		expect(buttonByText('พิมพ์อีกครั้ง')).toBeUndefined();
+	});
+
+	it('asks staff to show a new QR, not to print one, when the QR could not be issued', async () => {
+		await mountPage(true);
+
+		expect(bodyText()).toContain('ออก QR ไม่สำเร็จ กรุณาติดต่อเจ้าหน้าที่เพื่อแสดง QR ใหม่');
+		expect(bodyText()).not.toContain('พิมพ์');
+	});
+
+	it('asks staff to show the QR, not to print it, when there is no registration left', async () => {
+		instance = mount(Page, { target: document.body });
+		flushSync();
+		await settle();
+
+		expect(bodyText()).toContain('กรุณาติดต่อเจ้าหน้าที่เพื่อแสดง QR Code');
+		expect(bodyText()).not.toContain('พิมพ์');
 	});
 
 	it('goes home from the label screen like the finish button', async () => {
@@ -159,5 +185,21 @@ describe('walk-in done page when the label prints (DOM)', () => {
 		expect(bodyText()).toContain('รับ QR Code แล้วไปที่จุดคัดกรอง');
 		expect(buttonByText('พิมพ์อีกครั้ง')).toBeDefined();
 		expect(shownImage()).toBeNull();
+	});
+});
+
+describe('walk-in done page when the printer is there and the QR could not be issued (DOM)', () => {
+	it('keeps asking staff to print a new QR', async () => {
+		await mountPage(true);
+
+		expect(bodyText()).toContain('ยังไม่ได้พิมพ์ กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR ใหม่');
+	});
+
+	it('keeps asking staff to print the QR when there is no registration left', async () => {
+		instance = mount(Page, { target: document.body });
+		flushSync();
+		await settle();
+
+		expect(bodyText()).toContain('กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR Code');
 	});
 });

@@ -84,6 +84,7 @@ export {
 	type KioskQrLabel
 } from './application/kiosk-label-print';
 export { loadKioskHardware } from './application/kiosk-qr-input';
+export { KioskPrinterState } from './application/kiosk-printer-state.svelte';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
 export { isFaceCheckEnabled, type FaceCheckOutcome } from './domain/face-check';

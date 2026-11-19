@@ -4,6 +4,7 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import Printer from '@lucide/svelte/icons/printer';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UsersRound from '@lucide/svelte/icons/users-round';
@@ -46,6 +47,7 @@
 	} from '../application/kiosk-label-print';
 	import { KIOSK_CHECK_IN_TICKS } from '../domain/print-label';
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
+	import { KioskPrinterState } from '../application/kiosk-printer-state.svelte';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -102,6 +104,8 @@
 	}: Props = $props();
 
 	const t = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).checkIn);
+	const printerState = new KioskPrinterState();
+	const noPrinter = $derived(printerState.hasNoPrinter);
 
 	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
 	/** When the current `lookup` succeeded (ISO) — sent with the check-in as the Station 1 start (CR-192). */
@@ -168,6 +172,11 @@
 	const successfulResults = $derived(results.filter((result) => canPrintQr(result)));
 	/** Members whose QR entry failed: not printed, the visitor may retry or ask staff. */
 	const qrFailedResults = $derived(results.filter((result) => isQrIssueFailed(result)));
+	const qrIssueFailedText = $derived(
+		noPrinter
+			? t.onScreen.qrIssueFailed(qrFailedResults.length)
+			: t.results.qrIssueFailed(qrFailedResults.length)
+	);
 	const printableResults = $derived(
 		isReprintOnly
 			? successfulResults.filter((result) => printSelectedIds.includes(result.evacuee_id))
@@ -513,7 +522,7 @@
 				return;
 			}
 			printedCount = toPrint.length;
-			printPhase = 'printing';
+			if (!noPrinter) printPhase = 'printing';
 			// No scanner client (dev browser / browser print mode): print the CSS labels instead.
 			const result = await printKioskQrLabels(
 				labels,
@@ -607,7 +616,11 @@
 
 {#if screenLabels.length > 0}
 	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
-		<KioskLabelScreen labels={screenLabels} ondone={finishFromScreen} />
+		<KioskLabelScreen
+			labels={screenLabels}
+			ondone={finishFromScreen}
+			notice={qrFailedResults.length > 0 ? qrIssueFailedText : undefined}
+		/>
 	</div>
 {:else}
 	<section
@@ -666,7 +679,7 @@
 					</p>
 				{:else if isReprintOnly && successfulResults.length > 0}
 					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-						{t.sub.reprintFound}
+						{noPrinter ? t.onScreen.reprintFound : t.sub.reprintFound}
 					</p>
 				{:else if results.some((result) => result.status === 'already_checked_in')}
 					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
@@ -674,7 +687,7 @@
 					</p>
 				{:else if results.length > 0}
 					<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
-						{t.sub.reviewThenPrint}
+						{noPrinter ? t.onScreen.reviewThen : t.sub.reviewThenPrint}
 					</p>
 				{/if}
 			</header>
@@ -1009,11 +1022,17 @@
 								onclick={printWristbands}
 								class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
 							>
-								<Printer aria-hidden="true" />{printBusy || isSubmitting
+								{#if noPrinter}<QrCode aria-hidden="true" />{:else}<Printer
+										aria-hidden="true"
+									/>{/if}{printBusy || isSubmitting
 									? t.results.preparingQr
-									: isReprintOnly
-										? t.results.printQrCount(printableResults.length)
-										: t.results.printQr}
+									: noPrinter
+										? isReprintOnly
+											? t.onScreen.showQrCount(printableResults.length)
+											: t.onScreen.showQr
+										: isReprintOnly
+											? t.results.printQrCount(printableResults.length)
+											: t.results.printQr}
 							</Button>
 							<Button
 								type="button"
@@ -1037,7 +1056,7 @@
 							role="alert"
 						>
 							<p class="flex-1">
-								{t.results.qrIssueFailed(qrFailedResults.length)}
+								{qrIssueFailedText}
 							</p>
 							<Button
 								type="button"
@@ -1106,11 +1125,15 @@
 										class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
 									>
 										{isQrIssueFailed(result)
-											? t.results.rowQrIssueFailed
+											? noPrinter
+												? t.onScreen.rowQrIssueFailed
+												: t.results.rowQrIssueFailed
 											: result.status === 'checked_in'
 												? t.results.rowCheckedIn
 												: canPrintQr(result)
-													? t.results.rowReprintable
+													? noPrinter
+														? t.onScreen.rowReprintable
+														: t.results.rowReprintable
 													: result.status === 'already_checked_in'
 														? statusLabel(result.stay_status ?? 'unknown')
 														: t.results.rowFailed}

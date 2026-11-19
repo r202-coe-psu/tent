@@ -24,6 +24,12 @@ const th = {
 		retry: 'ลองพิมพ์อีกครั้ง',
 		onScreen: 'แสดง QR บนจอแทน',
 		home: 'กลับหน้าแรก'
+	},
+	/** The same texts for a kiosk without a printer: the QR is shown on screen, nothing is printed. */
+	onScreen: {
+		pageTitle: 'แสดง QR จิตอาสา — SmartShelter Kiosk',
+		heading: 'แสดง QR จิตอาสา',
+		show: 'แสดง QR'
 	}
 };
 
@@ -52,6 +58,11 @@ const en: typeof th = {
 		retry: 'Try printing again',
 		onScreen: 'Show the QR on screen instead',
 		home: 'Back to home'
+	},
+	onScreen: {
+		pageTitle: 'Show volunteer QR — SmartShelter Kiosk',
+		heading: 'Show volunteer QR',
+		show: 'Show QR'
 	}
 };
 

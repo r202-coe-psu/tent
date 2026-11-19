@@ -10,6 +10,7 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { goToKioskClosed, navigateToKioskHome } from '../application/kiosk-navigation';
+	import { KioskPrinterState } from '../application/kiosk-printer-state.svelte';
 	import { REPRINT_PHONE_MAX_LENGTH } from '../application/reprint-session.svelte';
 	import {
 		VolunteerCardSession,
@@ -46,6 +47,8 @@
 	let { contextQuery, deps }: Props = $props();
 
 	const t = $derived(getTranslation(KIOSK_VOLUNTEER_I18N, languageStore.current));
+	const printerState = new KioskPrinterState();
+	const noPrinter = $derived(printerState.hasNoPrinter);
 
 	const PRIMARY_BUTTON =
 		'min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl';
@@ -113,7 +116,7 @@
 </script>
 
 <svelte:head>
-	<title>{t.pageTitle}</title>
+	<title>{noPrinter ? t.onScreen.pageTitle : t.pageTitle}</title>
 </svelte:head>
 
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
@@ -220,7 +223,7 @@
 								id="volunteer-phone-title"
 								class="text-2xl font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 							>
-								{t.heading}
+								{noPrinter ? t.onScreen.heading : t.heading}
 							</h1>
 							<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
 								{t.phonePrompt}
@@ -304,7 +307,8 @@
 						onclick={() => void session.confirmPrint()}
 						class={PRIMARY_BUTTON}
 					>
-						<Printer class="h-5 w-5" aria-hidden="true" />{t.print}
+						{#if noPrinter}<QrCode class="h-5 w-5" aria-hidden="true" />{t.onScreen
+								.show}{:else}<Printer class="h-5 w-5" aria-hidden="true" />{t.print}{/if}
 					</Button>
 					<Button
 						type="button"
@@ -321,6 +325,6 @@
 {/if}
 
 <VolunteerLabelSheet {sheet} />
-{#if printing}
+{#if printing && !noPrinter}
 	<KioskPrintStatus phase="printing" count={1} />
 {/if}

@@ -12,11 +12,20 @@
 		disabled?: boolean;
 		/** `reprint` counts members whose QR can be printed instead of those waiting to report. */
 		mode?: 'check-in' | 'reprint';
+		/** The kiosk has no printer: the reprint counts speak of showing the QR, not printing it. */
+		onScreen?: boolean;
 	}
 
-	let { candidates, onselect, disabled = false, mode = 'check-in' }: Props = $props();
+	let {
+		candidates,
+		onselect,
+		disabled = false,
+		mode = 'check-in',
+		onScreen = false
+	}: Props = $props();
 
-	const t = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).picker);
+	const picker = $derived(getTranslation(KIOSK_QR_FLOW_I18N, languageStore.current).picker);
+	const t = $derived(onScreen ? { ...picker, ...picker.onScreen } : picker);
 
 	function summary(candidate: KioskHouseholdCandidate): string {
 		if (mode === 'reprint') {

@@ -4,6 +4,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Printer from '@lucide/svelte/icons/printer';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -19,6 +20,7 @@
 		KioskLabelScreen,
 		KioskLabelSheet,
 		KioskNoticePanel,
+		KioskPrinterState,
 		KioskPrintStatus,
 		navigateToKioskHome,
 		prepareKioskQrImage,
@@ -30,6 +32,8 @@
 	import { KIOSK_REGISTER_DONE_I18N } from './done-page.i18n';
 
 	const t = $derived(getTranslation(KIOSK_REGISTER_DONE_I18N, languageStore.current));
+	const printerState = new KioskPrinterState();
+	const noPrinter = $derived(printerState.hasNoPrinter);
 
 	/** How long «printed» stays on screen before the status card goes away. */
 	const PRINT_DONE_VISIBLE_MS = 2500;
@@ -89,7 +93,8 @@
 		if (!registration || printPhase === 'printing') return;
 		// CR-233 FR-EQR-24: no QR was issued for this person, so there is nothing valid to print.
 		if (registration.qr_issue_failed || !registration.qr_payload) {
-			printError = t.qrIssueFailed;
+			await printerState.ready;
+			printError = noPrinter ? t.onScreen.qrIssueFailed : t.qrIssueFailed;
 			return;
 		}
 		// Not sent home while the label comes out; resuming restarts the idle countdown.
@@ -97,7 +102,8 @@
 		printError = '';
 		unprintedLabels = [];
 		if (doneTimer) clearTimeout(doneTimer);
-		printPhase = 'printing';
+		await printerState.ready;
+		if (!noPrinter) printPhase = 'printing';
 		try {
 			qrImage ??= await prepareKioskQrImage(registration.qr_payload);
 			// No scanner client (dev browser / browser print mode): print the CSS label instead.
@@ -132,7 +138,7 @@
 			}
 		} catch {
 			printPhase = 'idle';
-			printError = t.printRenderFailed;
+			printError = noPrinter ? t.onScreen.printRenderFailed : t.printRenderFailed;
 		} finally {
 			idleTimeout.setPaused(screenLabels !== null);
 		}
@@ -157,7 +163,7 @@
 		role="status"
 	>
 		{#if registration}
-			{#if screenLabels}
+			{#if screenLabels || noPrinter}
 				{#if !viaThaid}<p>{t.removeCard}</p>{/if}
 			{:else}
 				<p>
@@ -170,7 +176,9 @@
 			</p>
 			{#if printError}
 				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
-					>{t.printFailedHint(printError)}</KioskInlineAlert
+					>{noPrinter
+						? t.onScreen.failedHint(printError)
+						: t.printFailedHint(printError)}</KioskInlineAlert
 				>
 				{#if unprintedLabels.length > 0}
 					<Button
@@ -183,16 +191,19 @@
 			{/if}
 		{:else}
 			{#if !viaThaid}<p>{t.removeCard}</p>{/if}
-			<p>{t.contactStaff}</p>
+			<p>{noPrinter ? t.onScreen.contactStaff : t.contactStaff}</p>
 		{/if}
 		{#snippet actions()}
-			{#if registration && !screenLabels}
+			{#if registration && !screenLabels && (!noPrinter || printError)}
 				<Button
 					type="button"
 					variant="outline"
 					onclick={printLabel}
 					disabled={printPhase === 'printing'}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}><Printer aria-hidden="true" />{t.printAgain}</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}
+					>{#if noPrinter}<QrCode aria-hidden="true" />{t.onScreen.showAgain}{:else}<Printer
+							aria-hidden="true"
+						/>{t.printAgain}{/if}</Button
 				>
 			{/if}
 			<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}

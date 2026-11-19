@@ -109,6 +109,17 @@ describe('PhoneHouseholdPicker language', () => {
 		expect(body).toContain('aria-label="สมชาย ใ***, 3 members, 2 can print QR"');
 	});
 
+	it('describes each household to reprint as showing the QR when the kiosk has no printer', () => {
+		const { body } = render(PhoneHouseholdPicker, {
+			props: { candidates, onselect: noop, mode: 'reprint', onScreen: true }
+		});
+
+		expect(body).toContain('สมาชิก 3 คน · แสดง QR ได้ 2 คน');
+		expect(body).toContain('สมาชิก 1 คน · ยังไม่มี QR ให้แสดง');
+		expect(body).toContain('aria-label="สมชาย ใ***, สมาชิก 3 คน, แสดง QR ได้ 2 คน"');
+		expect(body).not.toContain('พิมพ์');
+	});
+
 	it('keeps the Thai copy byte-identical in Thai', () => {
 		const { body } = render(PhoneHouseholdPicker, { props: { candidates, onselect: noop } });
 

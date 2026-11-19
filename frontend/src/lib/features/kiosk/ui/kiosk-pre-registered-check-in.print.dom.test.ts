@@ -12,6 +12,8 @@ import {
 	type KioskLookupResponse
 } from '../data/kiosk-check-in.api';
 import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
+import { loadKioskHardware } from '../application/kiosk-qr-input';
+import { DEFAULT_KIOSK_HARDWARE } from '../domain/kiosk-hardware';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('../data/kiosk-check-in.api', async (importOriginal) => ({
@@ -23,6 +25,7 @@ vi.mock('../application/kiosk-label-print', () => ({
 	prepareKioskQrImage: vi.fn(),
 	printKioskQrLabels: vi.fn()
 }));
+vi.mock('../application/kiosk-qr-input', () => ({ loadKioskHardware: vi.fn() }));
 
 const HOUSEHOLD: KioskLookupResponse = {
 	kind: 'household',
@@ -105,6 +108,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mounted.props = {};
 	languageStore.setLanguage('th');
+	vi.mocked(loadKioskHardware).mockResolvedValue(DEFAULT_KIOSK_HARDWARE);
 	vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(HOUSEHOLD);
 	vi.mocked(prepareKioskQrImage).mockResolvedValue({
 		src: 'data:image/png;base64,AA==',
@@ -329,5 +333,122 @@ describe('KioskPreRegisteredCheckIn labels on screen', () => {
 			expect(screenText()).not.toContain('เครื่องพิมพ์ไม่พร้อม');
 			expect(screenText()).not.toContain('แสดง QR บนจอแทน');
 		});
+	});
+});
+
+describe('KioskPreRegisteredCheckIn on a kiosk without a printer', () => {
+	const TWO_MEMBERS: KioskLookupResponse = {
+		...HOUSEHOLD,
+		members: [
+			HOUSEHOLD.members[0],
+			{ ...HOUSEHOLD.members[0], evacuee_id: 'p2', first_name: 'Somying', is_primary: false }
+		]
+	};
+
+	beforeEach(() => {
+		vi.mocked(loadKioskHardware).mockResolvedValue({ ...DEFAULT_KIOSK_HARDWARE, printer: 'none' });
+	});
+
+	async function confirmCheckIn(
+		confirmLabel = 'ยืนยัน · 1 คน',
+		savedText = 'บันทึกผลรายงานตัวแล้ว'
+	) {
+		mountCheckIn();
+		await vi.waitFor(() => expect(screenText()).toContain('· 1'));
+		if (confirmLabel.includes('2')) {
+			buttonWith('เลือกทั้งหมด').click();
+			flushSync();
+		}
+		await vi.waitFor(() => expect(screenText()).toContain(confirmLabel));
+		buttonWith(confirmLabel.split(' ')[0]).click();
+		await vi.waitFor(() => expect(screenText()).toContain(savedText));
+	}
+
+	it('words the results as showing the QR, not printing it', async () => {
+		await confirmCheckIn();
+		await vi.waitFor(() => expect(screenText()).toContain('ตรวจผล แล้วแสดง QR Code'));
+
+		expect(buttonWith('แสดง QR Code')).toBeDefined();
+		expect(screenText()).not.toContain('พิมพ์ QR Code');
+	});
+
+	it('words the results in English as showing the QR', async () => {
+		languageStore.setLanguage('en');
+		await confirmCheckIn('Confirm · 1 person', 'Check-in saved');
+		await vi.waitFor(() =>
+			expect(screenText()).toContain('Check the results, then show your QR Code')
+		);
+
+		expect(buttonWith('Show QR Code')).toBeDefined();
+		expect(screenText()).not.toContain('Print QR Code');
+	});
+
+	it('words the reprint choice as showing the QR', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue({
+			...HOUSEHOLD,
+			members: [{ ...HOUSEHOLD.members[0], status: 'arriving', selectable: false }]
+		});
+		vi.mocked(checkInSelectedMembers).mockResolvedValue({
+			shelter_code: 'SH001',
+			members: [],
+			retryable_evacuee_ids: []
+		});
+		mountCheckIn();
+		await vi.waitFor(() => expect(screenText()).toContain('เลือกคนที่จะแสดง QR Code'));
+
+		expect(screenText()).not.toContain('พิมพ์');
+	});
+
+	it('does not show the printing overlay before the label screen', async () => {
+		let finishPrint: (result: Awaited<ReturnType<typeof printKioskQrLabels>>) => void = () => {};
+		vi.mocked(printKioskQrLabels).mockReturnValue(
+			new Promise((resolve) => {
+				finishPrint = resolve;
+			})
+		);
+		await confirmCheckIn();
+		buttonWith('แสดง QR Code').click();
+		await vi.waitFor(() => expect(printKioskQrLabels).toHaveBeenCalledTimes(1));
+
+		expect(screenText()).not.toContain('กำลังพิมพ์');
+
+		finishPrint({ kind: 'screen', labels: ['AAA'] });
+		await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
+	});
+
+	it('tells the visitor on the label screen when some members QR could not be issued', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(TWO_MEMBERS);
+		vi.mocked(checkInSelectedMembers).mockResolvedValue({
+			shelter_code: 'SH001',
+			members: [
+				{
+					evacuee_id: 'p1',
+					status: 'checked_in',
+					qr_payload: 'QR1',
+					label: { name: 'Somchai J', phone: null }
+				},
+				{ evacuee_id: 'p2', status: 'checked_in', qr_issue_failed: true, label: null }
+			],
+			retryable_evacuee_ids: []
+		} as never);
+		vi.mocked(printKioskQrLabels).mockResolvedValue({ kind: 'screen', labels: ['AAA'] });
+		await confirmCheckIn('ยืนยัน · 2 คน');
+		buttonWith('แสดง QR Code').click();
+		await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
+
+		expect(
+			document.querySelector('[data-testid="kiosk-label-screen"] [role="status"]')?.textContent
+		).toContain('ออก QR ไม่สำเร็จ 1 คน');
+	});
+});
+
+describe('KioskPreRegisteredCheckIn on a kiosk with a printer', () => {
+	it('keeps the print wording on the results', async () => {
+		mountCheckIn();
+		await vi.waitFor(() => expect(screenText()).toContain('ยืนยัน · 1 คน'));
+		buttonWith('ยืนยัน').click();
+		await vi.waitFor(() => expect(screenText()).toContain('ตรวจผล แล้วพิมพ์ QR Code'));
+
+		expect(buttonWith('พิมพ์ QR Code')).toBeDefined();
 	});
 });

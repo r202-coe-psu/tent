@@ -4,10 +4,13 @@ import { flushSync, mount, unmount } from 'svelte';
 import { goto } from '$app/navigation';
 import { languageStore } from '$lib/stores/language.svelte';
 import type { KioskPrintFlowResult } from '../application/kiosk-print-flow';
+import { loadKioskHardware } from '../application/kiosk-qr-input';
 import type { VolunteerCardSessionDeps } from '../application/volunteer-card-session.svelte';
+import { DEFAULT_KIOSK_HARDWARE } from '../domain/kiosk-hardware';
 import KioskVolunteerCard from './kiosk-volunteer-card.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+vi.mock('../application/kiosk-qr-input', () => ({ loadKioskHardware: vi.fn() }));
 
 const VOLUNTEER = {
 	display_name: 'สมชาย ใจดี',
@@ -40,7 +43,7 @@ const click = (button: HTMLButtonElement | undefined) => {
 };
 const labelScreen = () => document.querySelector('[data-testid="kiosk-label-screen"]');
 
-async function printVolunteer() {
+async function toConfirm() {
 	// The keys ignore taps closer than 80 ms; the keyboard path has no such guard.
 	const key = document.querySelector<HTMLButtonElement>('button[data-digit="1"]')!;
 	for (const digit of '0812345678') {
@@ -49,12 +52,19 @@ async function printVolunteer() {
 	}
 	click(buttonByText('ค้นหา'));
 	await vi.waitFor(() => expect(buttonByText('ไม่ใช่ฉัน')).toBeDefined());
-	click(buttonByText('พิมพ์ QR'));
 }
+
+async function printVolunteer(buttonText = 'พิมพ์ QR') {
+	await toConfirm();
+	click(buttonByText(buttonText));
+}
+
+const bodyText = () => document.body.textContent?.replace(/\s+/g, ' ') ?? '';
 
 beforeEach(() => {
 	languageStore.setLanguage('th');
 	vi.clearAllMocks();
+	vi.mocked(loadKioskHardware).mockResolvedValue(DEFAULT_KIOSK_HARDWARE);
 	// happy-dom has no Web Animations: svelte's transitions need a finishing stand-in.
 	Element.prototype.animate = vi.fn(() => {
 		const animation = {
@@ -142,5 +152,63 @@ describe('KioskVolunteerCard when the printer fails', () => {
 		await vi.waitFor(() => expect(buttonByText('ลองพิมพ์อีกครั้ง')).toBeDefined());
 
 		expect(buttonByText('แสดง QR บนจอแทน')).toBeUndefined();
+	});
+});
+
+describe('KioskVolunteerCard wording on a kiosk without a printer', () => {
+	beforeEach(() => {
+		vi.mocked(loadKioskHardware).mockResolvedValue({ ...DEFAULT_KIOSK_HARDWARE, printer: 'none' });
+	});
+
+	it('words the heading as showing the QR, not printing it', async () => {
+		mountCard({ kind: 'screen', labels: ['cG5nLTE='] });
+
+		await vi.waitFor(() => expect(bodyText()).toContain('แสดง QR จิตอาสา'));
+		expect(bodyText()).not.toContain('พิมพ์');
+	});
+
+	it('words the confirm button as showing the QR, not printing it', async () => {
+		mountCard({ kind: 'screen', labels: ['cG5nLTE='] });
+		await vi.waitFor(() => expect(bodyText()).toContain('แสดง QR จิตอาสา'));
+		await toConfirm();
+
+		expect(buttonByText('แสดง QR')).toBeDefined();
+		expect(bodyText()).not.toContain('พิมพ์');
+	});
+
+	it('words the page in English as showing the QR', async () => {
+		languageStore.setLanguage('en');
+		mountCard({ kind: 'screen', labels: ['cG5nLTE='] });
+
+		await vi.waitFor(() => expect(bodyText()).toContain('Show volunteer QR'));
+		expect(bodyText()).not.toMatch(/print/i);
+	});
+
+	it('does not show the printing overlay before the label screen', async () => {
+		let finishPrint: (result: KioskPrintFlowResult) => void = () => {};
+		const deps = mountCard({ kind: 'screen', labels: ['cG5nLTE='] });
+		vi.mocked(deps.print!).mockReturnValue(
+			new Promise((resolve) => {
+				finishPrint = resolve;
+			})
+		);
+		await vi.waitFor(() => expect(bodyText()).toContain('แสดง QR จิตอาสา'));
+		await printVolunteer('แสดง QR');
+		await vi.waitFor(() => expect(deps.print).toHaveBeenCalledTimes(1));
+
+		expect(bodyText()).not.toContain('กำลังพิมพ์');
+
+		finishPrint({ kind: 'screen', labels: ['cG5nLTE='] });
+		await vi.waitFor(() => expect(labelScreen()).not.toBeNull());
+	});
+});
+
+describe('KioskVolunteerCard wording on a kiosk with a printer', () => {
+	it('keeps the print wording on the heading and the confirm button', async () => {
+		mountCard({ kind: 'printed', printed: 1 });
+		await vi.waitFor(() => expect(bodyText()).toContain('พิมพ์ QR จิตอาสา'));
+		await toConfirm();
+
+		expect(buttonByText('พิมพ์ QR')).toBeDefined();
 	});
 });
