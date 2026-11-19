@@ -3,7 +3,7 @@ id: CR-262
 title: ย้อนสถานะการพักพิงของผู้อพยพกลับขั้นก่อนหน้า (revert_status) กรณีเช็คอินผิดคน
 status: approved
 date: 2026-11-18
-updated: 2026-11-18
+updated: 2026-11-19
 requested_by: Feedback ระบบลงทะเบียน — GitHub #1447 (ข้อ 2)
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-11-18
@@ -52,7 +52,7 @@ Feedback ระบบลงทะเบียน (#1447 ข้อ 2): ต้อ�
 - **FR-12** — presence รายวัน (`wasInShelterAllDay`) ถือ `revert_status` ที่ `to_status` ต่ำกว่า `active` เป็นการออกจากศูนย์; ย้อน `room_confirmed` → `active` ไม่เปลี่ยน presence.
 
 - **FR-13** — `validate_doc_update` (`shelter-access-design.ts`): movement ที่ `action = revert_status` ต้องมาจาก `system_admin` หรือ `shelter_manager` ของศูนย์นั้น (ตรวจด้วย `isRole('shelter_manager')` เดียวกับกฎ manager อื่น: `{code}:shelter_manager`, หรือ `shelter_manager` เปล่าที่ผู้ใช้มี scope `shelter:{code}` เพียงศูนย์เดียว) · `reason` ต้อง nonempty หลัง trim · `to_status` ∈ {`pre_registered`, `arriving`, `active`}. ผิดเงื่อนไข → `forbidden`.
-- **FR-14** — `validate_doc_update`: evacuee doc ที่ `current_stay.status` เดิมเป็น `active` / `room_confirmed` แล้วเขียนใหม่เป็นสถานะที่อยู่ก่อนตามลำดับ (`pre_registered` < `arriving` < `active` < `room_confirmed`) ต้องมาจาก `system_admin` / `shelter_manager` ของศูนย์นั้นเท่านั้น — ปิดช่องที่ `registration_staff` แก้ evacuee doc ตรงโดยข้าม movement. การเปลี่ยนไปสถานะนอกลำดับ (`checked_out`, `temporary_leave`, `transferred`, `deceased`, …), การเดินหน้า และ rezone ไม่ถูกกระทบ. การเขียนที่ **ตัด `current_stay` ทิ้ง** (ไม่มี / `null` / ไม่มี `status`) จาก doc ที่เดิมเป็น `active` / `room_confirmed` นับเป็นการถอยสถานะด้วย (กันการเขียนสองรอบเพื่อเลี่ยงกฎ); การลบ doc (`_deleted`) ไม่นับ. `_admin` และ `repl:{code}` ข้าม validator ตามเดิม.
+- **FR-14** — `validate_doc_update`: evacuee doc ที่ `current_stay.status` เดิมเป็น `active` / `room_confirmed` แล้วเขียนใหม่เป็นสถานะที่อยู่ก่อนตามลำดับ (`pre_registered` = `kiosk_registered` < `arriving` < `active` < `room_confirmed`) ต้องมาจาก `system_admin` / `shelter_manager` ของศูนย์นั้นเท่านั้น — ปิดช่องที่ `registration_staff` แก้ evacuee doc ตรงโดยข้าม movement. การเปลี่ยนไปสถานะนอกลำดับ (`checked_out`, `temporary_leave`, `transferred`, `deceased`, …), การเดินหน้า และ rezone ไม่ถูกกระทบ. การเขียนที่ **ตัด `current_stay` ทิ้ง** (ไม่มี / `null` / ไม่มี `status`) จาก doc ที่เดิมเป็น `active` / `room_confirmed` นับเป็นการถอยสถานะด้วย (กันการเขียนสองรอบเพื่อเลี่ยงกฎ); การลบ doc (`_deleted`) ไม่นับ. `_admin` และ `repl:{code}` ข้าม validator ตามเดิม.
 
 ### ที่ไม่เปลี่ยน
 
@@ -104,6 +104,7 @@ Feedback ระบบลงทะเบียน (#1447 ข้อ 2): ต้อ�
 
 ## Decision log
 
+- 2026-11-19 — FR-14: นับ `kiosk_registered` อยู่ขั้นเดียวกับ `pre_registered` ในลำดับของ VDU — REG เขียนตรง `active` / `room_confirmed` → `kiosk_registered` ถูกปฏิเสธเหมือน `pre_registered` (ปิด blocker จาก review PR #1458; ไม่เปลี่ยนกฎธุรกิจ แค่ให้ guard ครอบสถานะลงทะเบียนล่วงหน้าทั้งสองแบบ).
 - 2026-11-18 — **Amendment A1 approved** โดย Soravit Sukkarn (Team Lead) (#1447 / PR #1458): SM/SA เปลี่ยนสถานะได้ทุกสถานะ → ทุกสถานะ (override ผ่าน `revert_status` เดิม), เหตุผลบังคับ, ล้าง/คงโซนตามปลายทาง, VDU rule 2c ขยาย `to_status`, REG เหมือนเดิม.
 - 2026-11-18 — **approved** โดย Soravit Sukkarn (Team Lead) — ได้เลข CR-262 (CR-259–261 ถูกใช้ไปแล้วบน `develop`). ยอมรับช่องที่เหลือเป็น edge case: REG ที่เขียน CouchDB ตรงยังไปถึงสถานะก่อนหน้าได้หลายขั้นตอน (status ที่ไม่รู้จัก, `checked_out` → `pre_registered`, ลบแล้วสร้างใหม่) เพราะ VDU ไม่มี whitelist การเปลี่ยนสถานะเต็มรูปแบบ (#1447 / PR #1458).
 - 2026-11-18 — เจ้าของโครงการอนุมัติให้เพิ่มการบังคับใน CouchDB `validate_doc_update` (แตะ stable core) — เพิ่ม FR-13, FR-14.

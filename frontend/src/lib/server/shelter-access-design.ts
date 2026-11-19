@@ -1485,7 +1485,7 @@ ${consentVduClause()}
   // change too — otherwise a stripped write followed by a second write dodges the guard. A delete
   // (compensation of a failed registration) is not a status change.
   if (newDoc.type === 'evacuee' && newDoc._deleted !== true && oldDoc && oldDoc.current_stay) {
-    var stayRank = { pre_registered: 0, arriving: 1, active: 2, room_confirmed: 3 };
+    var stayRank = { pre_registered: 0, kiosk_registered: 0, arriving: 1, active: 2, room_confirmed: 3 };
     var revertOldRank = stayRank.hasOwnProperty(oldDoc.current_stay.status)
       ? stayRank[oldDoc.current_stay.status] : -1;
     var revertNewStatus = newDoc.current_stay ? newDoc.current_stay.status : undefined;

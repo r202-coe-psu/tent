@@ -2021,7 +2021,9 @@ describe('buildValidateDocUpdate', () => {
 				['room_confirmed', 'arriving'],
 				['room_confirmed', 'pre_registered'],
 				['active', 'arriving'],
-				['active', 'pre_registered']
+				['active', 'pre_registered'],
+				['active', 'kiosk_registered'],
+				['room_confirmed', 'kiosk_registered']
 			])('rejects %s -> %s by registration_staff', (from, to) => {
 				expectForbidden(
 					() =>
@@ -2043,6 +2045,16 @@ describe('buildValidateDocUpdate', () => {
 						evacuee({}, { status: 'arriving', zone: null }),
 						evacuee({}, { status: 'room_confirmed', zone: 'A1' }),
 						user
+					)
+				).not.toThrow();
+			});
+
+			it('still lets registration_staff move kiosk_registered forward to arriving', () => {
+				expect(() =>
+					compile()(
+						evacuee({}, { status: 'arriving', zone: null }),
+						evacuee({}, { status: 'kiosk_registered', zone: null }),
+						REGISTRATION
 					)
 				).not.toThrow();
 			});

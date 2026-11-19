@@ -254,6 +254,7 @@ REVERT_STATUS (manual override, SM/SA only)   (CR-262 + A1)
   → enforced in domain assertMovementAllowed + UI, and in validate_doc_update: revert_status movement
     needs system_admin or shelter_manager of this shelter, a non-empty reason and a valid to_status;
     a direct evacuee write lowering current_stay.status from active/room_confirmed
+    (order pre_registered = kiosk_registered < arriving < active < room_confirmed)
     (REG stepping back, incl. stripping current_stay) needs SM/SA (CR-262 FR-14, unchanged)
 ```
 
