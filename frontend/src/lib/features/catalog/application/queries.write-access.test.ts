@@ -64,6 +64,21 @@ describe('item_master write access on the client (CR-227)', () => {
 		expect(mocks.createItemMaster).not.toHaveBeenCalled();
 	});
 
+	it('lets a multi-shelter manager write in every shelter they hold, not just the first', async () => {
+		mocks.roles = [
+			'shelter:SH001',
+			'SH001:shelter_manager',
+			'shelter:SH002',
+			'SH002:shelter_manager'
+		];
+
+		await create('SH001');
+		await create('SH002');
+
+		expect(mocks.createItemMaster).toHaveBeenCalledTimes(2);
+		expect(() => create('SH003')).toThrow();
+	});
+
 	it('refuses staff that never had catalog write', () => {
 		mocks.roles = ['shelter:SH001', 'SH001:distribution_staff'];
 
