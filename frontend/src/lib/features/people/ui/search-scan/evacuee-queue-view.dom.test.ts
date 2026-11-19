@@ -98,6 +98,21 @@ afterEach(async () => {
 });
 
 describe('EvacueeQueueView mobile cards', () => {
+	it.each([
+		[true, 'รอส่งต่อคัดกรอง (Station 2)'],
+		[false, 'รอส่งต่อจัดสรรที่พัก (Station 3)']
+	])('names the arriving tab after the next station (medical %s)', async (enableMedical, label) => {
+		await render({ ...callbacks(), initialTab: 'arriving', enableMedical });
+
+		const tab = Array.from(document.querySelectorAll('button')).find(
+			(b) => b.textContent?.includes(label) && !b.textContent?.includes('ผู้ประสบภัยทั้งหมด')
+		);
+		expect(tab).toBeTruthy();
+		expect(document.body.textContent).not.toContain(
+			enableMedical ? 'รอส่งต่อจัดสรรที่พัก' : 'รอส่งต่อคัดกรอง'
+		);
+	});
+
 	it('pre-registered tab: a card shows every column and both row actions', async () => {
 		data.evacuees = [PRE_REG];
 		data.households = [{ _id: 'household:SH001:0001', label: 'ครอบครัวศรีสุวรรณพิทักษ์' }];

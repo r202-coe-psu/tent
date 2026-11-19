@@ -12,6 +12,7 @@ import {
 	createMovement,
 	assertMovementAllowed,
 	applyMovementToStay,
+	resolveRevertZone,
 	isEvacuee,
 	createMedical as buildMedical,
 	type Evacuee,
@@ -46,6 +47,7 @@ import {
 	type MedicalInput,
 	type Movement,
 	type MovementAction,
+	type StayStatus,
 	dormFieldsFor,
 	memberExtrasFor,
 	registrationMedicalInput,
@@ -1290,11 +1292,48 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return updated;
 	}
 
+	/**
+	 * Manual stay-status override to any other status (CR-262 A1). Appends a `revert_status`
+	 * movement carrying `from_status` / `to_status` / `reason`, then applies it. Zone: cleared for
+	 * pre_registered / arriving / cancelled; kept (or `opts.zone`, required when the stay has none)
+	 * for active / room_confirmed; kept for the departed targets, like their normal actions.
+	 * Role gating (shelter_manager / system_admin) is a UI concern plus validator rule 2c.
+	 * Like `confirmRoom` / `zone_change` it writes no `station_log` row (only the zoning
+	 * check-in of an `arriving` person does, and that still goes through `check_in`), and earlier
+	 * append-only `station_log` rows stay untouched. The derived household status is refreshed.
+	 */
+	async revertEvacueeStatus(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		toStatus: StayStatus,
+		reason: string,
+		opts: { zone?: string | null } = {}
+	): Promise<Evacuee> {
+		const trimmed = reason.trim();
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'revert_status', { reason: trimmed, toStatus, zone: opts.zone });
+		const movement = createMovement(
+			{
+				evacuee_id: latest._id,
+				action: 'revert_status',
+				zone: resolveRevertZone(latest.current_stay, toStatus, opts.zone),
+				reason: trimmed,
+				from_status: latest.current_stay.status,
+				to_status: toStatus
+			},
+			ctx
+		);
+		await this.repo.put(movement);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
+	}
+
 	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
 	 *  Fetches the latest revision first (see fetchLatestOrThrow). */
 	async recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
 	): Promise<Evacuee> {

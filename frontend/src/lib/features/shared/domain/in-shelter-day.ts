@@ -29,6 +29,21 @@ const LEAVES = new Set(['check_out', 'transfer_out', 'leave_temporary', 'mark_de
 export interface PresenceMovement {
 	action: string;
 	occurred_at: string;
+	/**
+	 * `revert_status` only (manual status override, CR-262 A1): ending in `active` /
+	 * `room_confirmed` counts as entering, any other status as leaving.
+	 */
+	to_status?: string | null;
+}
+
+function isEnter(m: { action: string; to_status?: string | null }): boolean {
+	if (m.action === 'revert_status') return isInShelterStayStatus(m.to_status);
+	return ENTERS.has(m.action);
+}
+
+function isLeave(m: { action: string; to_status?: string | null }): boolean {
+	if (m.action === 'revert_status') return !!m.to_status && !isInShelterStayStatus(m.to_status);
+	return LEAVES.has(m.action);
 }
 
 export interface PresenceInput {
@@ -47,18 +62,22 @@ export function wasInShelterAllDay({ day, movements, current_stay }: PresenceInp
 	}
 
 	const sorted = movements
-		.map((m) => ({ action: m.action, at: new Date(m.occurred_at).getTime() }))
+		.map((m) => ({
+			action: m.action,
+			to_status: m.to_status,
+			at: new Date(m.occurred_at).getTime()
+		}))
 		.sort((a, b) => a.at - b.at);
 
 	let inside = false;
 	for (const m of sorted) {
 		if (m.at >= dayEnd) break;
 		if (m.at >= dayStart) {
-			if (!inside || LEAVES.has(m.action)) return false;
+			if (!inside || isLeave(m)) return false;
 			continue;
 		}
-		if (ENTERS.has(m.action)) inside = true;
-		else if (LEAVES.has(m.action)) inside = false;
+		if (isEnter(m)) inside = true;
+		else if (isLeave(m)) inside = false;
 	}
 	return inside;
 }
