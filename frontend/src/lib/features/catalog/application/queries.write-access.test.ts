@@ -79,6 +79,19 @@ describe('item_master write access on the client (CR-227)', () => {
 		expect(() => create('SH003')).toThrow();
 	});
 
+	it('does not let a manager of one shelter write in another shelter where they are only staff', () => {
+		mocks.roles = [
+			'shelter:SH001',
+			'SH001:shelter_manager',
+			'shelter:SH002',
+			'SH002:registration_staff'
+		];
+
+		expect(() => create('SH001')).not.toThrow();
+		expect(() => create('SH002')).toThrow();
+		expect(mocks.createItemMaster).toHaveBeenCalledTimes(1);
+	});
+
 	it('refuses staff that never had catalog write', () => {
 		mocks.roles = ['shelter:SH001', 'SH001:distribution_staff'];
 

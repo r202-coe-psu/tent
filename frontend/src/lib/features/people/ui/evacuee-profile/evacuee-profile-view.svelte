@@ -99,7 +99,8 @@
 		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
 		return (
 			hasShelterScope(roles, currentShelter) &&
-			(isShelterManager(roles) || hasStaffCapability(roles, 'registration_staff'))
+			(isShelterManager(roles, currentShelter) ||
+				hasStaffCapability(roles, 'registration_staff', currentShelter))
 		);
 	});
 	const profileReadonly = $derived(readonly || !canEditProfile);

@@ -104,9 +104,9 @@ function enforceWriteAccess(shelterCode?: string | null) {
 	if (isSystemAdmin(roles)) return;
 
 	if (shelterCode) {
-		const isManager = isShelterManager(roles);
-		const isWS = isWarehouseStaff(roles);
-		const isDON = isDonationStaff(roles);
+		const isManager = isShelterManager(roles, shelterCode);
+		const isWS = isWarehouseStaff(roles, shelterCode);
+		const isDON = isDonationStaff(roles, shelterCode);
 		if ((isManager || isWS || isDON) && hasShelterScope(roles, shelterCode)) {
 			return;
 		}
