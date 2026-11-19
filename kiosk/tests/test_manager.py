@@ -842,7 +842,9 @@ def labels_body(*images):
 
 
 class FakeLpProcess:
-    def __init__(self, returncode=0, stdout=b""):
+    """stdout=None answers like `lp`: a fresh request id per submitted label."""
+
+    def __init__(self, returncode=0, stdout=None):
         self.returncode = returncode
         self.stdout = stdout
         self.stdin_data = []
@@ -850,6 +852,8 @@ class FakeLpProcess:
     async def communicate(self, data=None):
         if data is not None:
             self.stdin_data.append(data)
+        if self.stdout is None:
+            return f"request id is label_q-{len(self.stdin_data)} (1 file(s))\n".encode(), b""
         return self.stdout, b""
 
 
@@ -859,18 +863,38 @@ READY_QUEUE = b"printer label_q is idle.  enabled since Mon 01 Jan 2024 08:00:00
 def cups_exec(lp_process, calls=None, lpstat_process=None):
     """Fake asyncio.create_subprocess_exec: lpstat answers with a ready queue unless told otherwise."""
     lpstat_process = lpstat_process or FakeLpProcess(stdout=READY_QUEUE)
+    cancel_process = FakeLpProcess(stdout=b"")
 
     async def fake_exec(*args, **kwargs):
         if calls is not None:
             calls.append(args)
-        return lpstat_process if args[0] == "lpstat" else lp_process
+        if args[0] == "lpstat":
+            return lpstat_process
+        return cancel_process if args[0] == "cancel" else lp_process
 
     return fake_exec
 
 
+async def completed_job_state(_job_id):
+    return "completed"
+
+
+def scripted_job_states(states_by_job):
+    """Fake job-state lookup: each job walks through its states and stays on the last one."""
+    remaining = {job_id: list(states) for job_id, states in states_by_job.items()}
+
+    async def job_state(job_id):
+        states = remaining[job_id]
+        return states.pop(0) if len(states) > 1 else states[0]
+
+    return job_state
+
+
 class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
     def client(self, **overrides):
-        return manager.ScannerClientManager(valid_config(DEBUG="false", **overrides))
+        client = manager.ScannerClientManager(valid_config(DEBUG="false", **overrides))
+        client._cups_job_state = completed_job_state
+        return client
 
     async def test_prints_each_label_through_lp_stdin_without_reaching_server(self):
         client = self.client(PRINTER_NAME="label_q")
@@ -888,6 +912,92 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lp_calls[0][:3], ("lp", "-d", "label_q"))
         self.assertEqual(lp_calls[0][-1], "-")
         self.assertEqual(process.stdin_data, [PNG, PNG])
+
+    async def print_through_cups(self, client, *images, fails=True):
+        route = FakePrintRoute(body=labels_body(*images))
+        calls = []
+        exec_ = cups_exec(FakeLpProcess(), calls)
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(manager.asyncio, "create_subprocess_exec", new=exec_))
+            stack.enter_context(patch.object(manager, "KIOSK_CUPS_POLL_SEC", 0))
+            stack.enter_context(patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 0.05))
+            if fails:
+                stack.enter_context(self.assertLogs(manager.logger, level="ERROR"))
+            await client._route_kiosk_api(route)
+        return route.fulfilled, calls
+
+    async def test_a_label_counts_as_printed_once_its_cups_job_completes(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["pending", "processing", "completed"]})
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, fails=False)
+
+        self.assertEqual(fulfilled, {"status": 200, "body": {"printed": 1}})
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_a_job_that_aborts_is_cancelled_and_reported_as_failed(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["processing", "aborted"]})
+
+        fulfilled, calls = await self.print_through_cups(client, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 0)
+        self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    async def test_a_job_that_never_completes_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["pending"]})
+
+        fulfilled, calls = await self.print_through_cups(client, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 0)
+        self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    async def test_a_job_the_queue_cannot_report_on_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+
+        async def unreachable(_job_id):
+            return None
+
+        client._cups_job_state = unreachable
+
+        fulfilled, calls = await self.print_through_cups(client, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertIn(("cancel", "label_q-1"), calls)
+
+    async def test_reports_the_labels_that_completed_before_one_aborted(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states(
+            {"label_q-1": ["completed"], "label_q-2": ["aborted"]}
+        )
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 1)
+        self.assertIn(("cancel", "label_q-2"), calls)
+        self.assertNotIn(("cancel", "label_q-1"), calls)
+
+    async def test_a_label_without_a_request_id_is_failed_without_cancel(self):
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG))
+        calls = []
+        exec_ = cups_exec(FakeLpProcess(stdout=b""), calls)
+
+        with (
+            patch.object(manager.asyncio, "create_subprocess_exec", new=exec_),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        self.assertNotIn("cancel", [call[0] for call in calls])
 
     async def test_refuses_to_print_on_a_kiosk_without_a_printer(self):
         client = self.client(PRINTER_BACKEND="none")
@@ -999,7 +1109,7 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
 
         async def advance_clock_past_the_deadline(_data):
             clock[0] += manager.KIOSK_PRINT_OVERALL_DEADLINE_SEC
-            return b"", b""
+            return b"request id is label_q-1 (1 file(s))\n", b""
 
         process.communicate = advance_clock_past_the_deadline
 
@@ -1015,8 +1125,10 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_TIMEOUT")
 
     async def test_prints_directly_in_every_mode_without_extra_config(self):
+        debug_client = manager.ScannerClientManager(valid_config(DEBUG="true"))
+        debug_client._cups_job_state = completed_job_state
         cases = {
-            "debug window": manager.ScannerClientManager(valid_config(DEBUG="true")),
+            "debug window": debug_client,
             "silent print off": self.client(KIOSK_SILENT_PRINT="false"),
         }
 
@@ -1352,6 +1464,7 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_default_backend_still_spools_through_lp(self):
         client = manager.ScannerClientManager(valid_config(DEBUG="false"))
+        client._cups_job_state = completed_job_state
         route = FakePrintRoute(body=labels_body(PNG))
         calls = []
 
