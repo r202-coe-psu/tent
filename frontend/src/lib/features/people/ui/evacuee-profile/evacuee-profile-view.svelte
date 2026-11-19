@@ -38,10 +38,10 @@
 		zoneLabel
 	} from '$lib/features/people';
 	import {
+		hasShelterScope,
 		hasStaffCapability,
 		isShelterManager,
-		isSystemAdmin,
-		shelterCodeFromRoles
+		isSystemAdmin
 	} from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -96,12 +96,11 @@
 		const roles = authStore.user.roles;
 		if (isSystemAdmin(roles)) return true;
 
-		const scopedShelter = shelterCodeFromRoles(roles);
 		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
 		return (
-			!!scopedShelter &&
-			scopedShelter.toUpperCase() === currentShelter &&
-			(isShelterManager(roles) || hasStaffCapability(roles, 'registration_staff'))
+			hasShelterScope(roles, currentShelter) &&
+			(isShelterManager(roles, currentShelter) ||
+				hasStaffCapability(roles, 'registration_staff', currentShelter))
 		);
 	});
 	const profileReadonly = $derived(readonly || !canEditProfile);
