@@ -31,12 +31,13 @@ export async function runKioskPrintFlow(deps: KioskPrintFlowDeps): Promise<Kiosk
 		let message: string = t.renderFailed;
 		if (error instanceof KioskPrintError) {
 			// The printer's own message is kept as it came; only our stock wording follows the language.
-			const text =
-				error.code === 'connection'
-					? t.connection
-					: error.code === 'send-failed'
-						? t.sendFailed
-						: error.message;
+			const stockText = {
+				connection: t.connection,
+				'send-failed': t.sendFailed,
+				'not-ready': t.notReady,
+				disabled: t.disabled
+			};
+			const text = error.code ? stockText[error.code] : error.message;
 			message = error.printed > 0 ? t.printedSoFar(text, error.printed) : text;
 		}
 		return { kind: 'error', message };

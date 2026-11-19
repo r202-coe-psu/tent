@@ -65,6 +65,29 @@ describe('runKioskPrintFlow language', () => {
 			message: 'เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง (พิมพ์ออกแล้ว 1 ดวง)'
 		});
 	});
+
+	it.each([
+		{
+			code: 'not-ready' as const,
+			th: 'เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่',
+			en: 'The printer is not ready. Please ask a staff member.'
+		},
+		{
+			code: 'disabled' as const,
+			th: 'ตู้นี้ไม่มีเครื่องพิมพ์',
+			en: 'This kiosk has no printer.'
+		}
+	])('words the $code printer state in the visitor language', async ({ code, th, en }) => {
+		const run = (language: 'th' | 'en') =>
+			runKioskPrintFlow({
+				...base,
+				printLabels: () => Promise.reject(new KioskPrintError('ข้อความจากตู้', 0, code)),
+				language
+			});
+
+		expect(await run('th')).toEqual({ kind: 'error', message: th });
+		expect(await run('en')).toEqual({ kind: 'error', message: en });
+	});
 });
 
 describe('KIOSK_PRINT_FLOW_I18N', () => {
