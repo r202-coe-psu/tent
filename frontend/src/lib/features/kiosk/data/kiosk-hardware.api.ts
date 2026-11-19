@@ -29,6 +29,7 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 			camera_flip?: unknown;
 			reader_max_gap_ms?: unknown;
 			face_check?: unknown;
+			printer?: unknown;
 		} | null;
 		if (body?.qr_input !== 'camera' && body?.qr_input !== 'reader' && body?.qr_input !== 'both') {
 			return DEFAULT_KIOSK_HARDWARE;
@@ -51,7 +52,8 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 				gap <= MAX_READER_GAP_MS
 					? gap
 					: DEFAULT_READER_MAX_GAP_MS,
-			faceCheck: parseFaceCheckConfig(body.face_check)
+			faceCheck: parseFaceCheckConfig(body.face_check),
+			printer: body.printer === 'escpos' || body.printer === 'none' ? body.printer : 'cups'
 		};
 	} catch {
 		return DEFAULT_KIOSK_HARDWARE;

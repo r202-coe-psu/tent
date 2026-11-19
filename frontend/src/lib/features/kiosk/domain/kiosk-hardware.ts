@@ -2,6 +2,9 @@ import { FACE_CHECK_OFF, type FaceCheckConfig } from './face-check';
 
 export type KioskQrInput = 'camera' | 'reader' | 'both';
 
+/** Which printer the machine has: CUPS queue, ESC/POS receipt printer, or none. */
+export type KioskPrinter = 'cups' | 'escpos' | 'none';
+
 export type KioskHardware = {
 	/** `KIOSK_QR_CHECK_IN=off` on this machine hides the QR method and closes /kiosk/qr. */
 	qrCheckInEnabled: boolean;
@@ -12,6 +15,8 @@ export type KioskHardware = {
 	readerMaxGapMs: number;
 	/** Face check against the chip photo: off unless the scanner client turns it on. */
 	faceCheck: FaceCheckConfig;
+	/** Reported by the scanner client; machines without the field keep printing via `cups`. */
+	printer: KioskPrinter;
 };
 
 export const DEFAULT_READER_MAX_GAP_MS = 50;
@@ -25,7 +30,8 @@ export const DEFAULT_KIOSK_HARDWARE: KioskHardware = {
 	cameraLabel: null,
 	cameraFlip: false,
 	readerMaxGapMs: DEFAULT_READER_MAX_GAP_MS,
-	faceCheck: FACE_CHECK_OFF
+	faceCheck: FACE_CHECK_OFF,
+	printer: 'cups'
 };
 
 export type QrInputPlan = {
