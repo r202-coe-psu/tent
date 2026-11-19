@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import { languageStore } from '$lib/stores/language.svelte';
 import KioskLabelScreen from './kiosk-label-screen.svelte';
 
 let instance: ReturnType<typeof mount> | null = null;
-let ondone: ReturnType<typeof vi.fn>;
+let ondone: Mock<() => void>;
 
 const render = (labels: string[]) => {
 	instance = mount(KioskLabelScreen, { target: document.body, props: { labels, ondone } });

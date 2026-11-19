@@ -3,6 +3,7 @@ import { printKioskLabels } from '../data/kiosk-print.api';
 import { volunteerLabelIdentity } from '../domain/volunteer-label';
 import { prepareKioskQrImage } from './kiosk-label-print';
 import { runKioskPrintFlow, type KioskPrintFlowResult } from './kiosk-print-flow';
+import { loadKioskHardware } from './kiosk-qr-input';
 import { KIOSK_PRINT_FLOW_I18N } from './kiosk-print-flow.i18n';
 import { renderVolunteerLabelPng } from './volunteer-label-image';
 
@@ -30,14 +31,20 @@ export async function printVolunteerLabel(
 		const qr = await prepareKioskQrImage(volunteer.qr_payload);
 		sheet = { qrSrc: qr.src, qrSizeMm: qr.sizeMm, ...volunteerLabelIdentity(volunteer) };
 	} catch {
-		return { kind: 'error', message: KIOSK_PRINT_FLOW_I18N[language ?? 'th'].renderFailed };
+		return {
+			kind: 'error',
+			message: KIOSK_PRINT_FLOW_I18N[language ?? 'th'].renderFailed,
+			labels: []
+		};
 	}
+	const { printer } = await loadKioskHardware();
 	return runKioskPrintFlow({
 		renderLabels: async () => [
 			await renderVolunteerLabelPng({ qrSrc: sheet.qrSrc, name: sheet.name, badge: sheet.badge })
 		],
 		printLabels: printKioskLabels,
 		fallbackPrint: () => fallbackPrint(sheet),
-		language
+		language,
+		printer
 	});
 }

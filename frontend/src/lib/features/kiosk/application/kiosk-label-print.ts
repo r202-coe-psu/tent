@@ -5,6 +5,7 @@ import { printKioskLabels } from '../data/kiosk-print.api';
 import { KIOSK_QR_COLOR, kioskQrPrintSize } from '../domain/print-label';
 import { renderKioskLabelPng, type KioskLabelContent } from './kiosk-label-image';
 import { runKioskPrintFlow, type KioskPrintFlowResult } from './kiosk-print-flow';
+import { loadKioskHardware } from './kiosk-qr-input';
 
 export type KioskQrImage = { src: string; sizeMm: number };
 
@@ -53,17 +54,20 @@ export async function renderKioskQrLabelPng(
 /**
  * Render each label to a PNG (in order) and send them to the kiosk printer. `fallbackPrint` runs
  * only when no scanner client answered (dev browser / browser print mode). `language` words the
- * error message shown on screen; the labels themselves stay Thai.
+ * error message shown on screen; the labels themselves stay Thai. A kiosk without a printer gets
+ * the rendered labels back as a `screen` result instead of a print.
  */
-export function printKioskQrLabels(
+export async function printKioskQrLabels(
 	labels: readonly KioskQrLabel[],
 	fallbackPrint: () => void | Promise<void>,
 	language?: LanguageCode
 ): Promise<KioskPrintFlowResult> {
+	const { printer } = await loadKioskHardware();
 	return runKioskPrintFlow({
 		renderLabels: () => Promise.all(labels.map((label) => renderKioskLabelPng(label))),
 		printLabels: printKioskLabels,
 		fallbackPrint,
-		language
+		language,
+		printer
 	});
 }

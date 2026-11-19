@@ -510,7 +510,7 @@
 				},
 				languageStore.current
 			);
-			if (result.kind === 'printed') {
+			if (result.kind === 'printed' || result.kind === 'screen') {
 				printPhase = 'done';
 				window.setTimeout(() => {
 					if (printPhase === 'done') printPhase = 'idle';

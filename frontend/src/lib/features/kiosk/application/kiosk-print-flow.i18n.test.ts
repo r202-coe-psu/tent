@@ -20,7 +20,8 @@ describe('runKioskPrintFlow language', () => {
 
 		expect(result).toEqual({
 			kind: 'error',
-			message: 'Could not create the label to print. Please try again.'
+			message: 'Could not create the label to print. Please try again.',
+			labels: []
 		});
 	});
 
@@ -36,7 +37,8 @@ describe('runKioskPrintFlow language', () => {
 
 		expect(result).toEqual({
 			kind: 'error',
-			message: 'Could not reach the printer. Please try again. (2 printed)'
+			message: 'Could not reach the printer. Please try again. (2 printed)',
+			labels: []
 		});
 	});
 
@@ -47,7 +49,7 @@ describe('runKioskPrintFlow language', () => {
 			language: 'en'
 		});
 
-		expect(result).toEqual({ kind: 'error', message: 'กระดาษหมด' });
+		expect(result).toEqual({ kind: 'error', message: 'กระดาษหมด', labels: ['label-1'] });
 	});
 
 	it('keeps the Thai wording when the language is Thai', async () => {
@@ -62,7 +64,8 @@ describe('runKioskPrintFlow language', () => {
 
 		expect(result).toEqual({
 			kind: 'error',
-			message: 'เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง (พิมพ์ออกแล้ว 1 ดวง)'
+			message: 'เชื่อมต่อเครื่องพิมพ์ไม่ได้ กรุณาลองอีกครั้ง (พิมพ์ออกแล้ว 1 ดวง)',
+			labels: []
 		});
 	});
 
@@ -85,8 +88,8 @@ describe('runKioskPrintFlow language', () => {
 				language
 			});
 
-		expect(await run('th')).toEqual({ kind: 'error', message: th });
-		expect(await run('en')).toEqual({ kind: 'error', message: en });
+		expect(await run('th')).toEqual({ kind: 'error', message: th, labels: ['label-1'] });
+		expect(await run('en')).toEqual({ kind: 'error', message: en, labels: ['label-1'] });
 	});
 });
 
