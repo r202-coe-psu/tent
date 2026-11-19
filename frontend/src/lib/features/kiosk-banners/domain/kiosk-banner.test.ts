@@ -124,6 +124,15 @@ describe('kioskBannerInputSchema', () => {
 	});
 });
 
+const validTemplate = {
+	heading: 'ประกาศ',
+	body: 'บรรทัดแรก\nบรรทัดสอง',
+	align: 'center' as const,
+	bg_color: '#112233',
+	text_color: '#ffffff',
+	image: null
+};
+
 const legacyInput: Partial<typeof validInput> = { ...validInput };
 delete legacyInput.group_id;
 
@@ -154,7 +163,7 @@ describe('kioskBannerDocSchema', () => {
 			{ shelter_code: '' },
 			{ _id: 'announcement:01J9' },
 			{ type: 'announcement' },
-			{ schema_v: 4 },
+			{ schema_v: 5 },
 			{ created_by: '' }
 		]) {
 			expect(kioskBannerDocSchema.safeParse({ ...validDoc, ...patch }).success).toBe(false);
@@ -199,6 +208,23 @@ describe('kioskBannerDocSchema', () => {
 		expect(kioskBannerDocSchema.safeParse({ ...v3, group_id: GROUP }).success).toBe(true);
 	});
 
+	it('accepts a v4 doc with a template and one without', () => {
+		const v4 = { ...validDoc, schema_v: 4, group_id: GROUP };
+		expect(kioskBannerDocSchema.safeParse(v4).success).toBe(true);
+		const parsed = kioskBannerDocSchema.safeParse({ ...v4, template: validTemplate });
+		expect(parsed.success && parsed.data.schema_v === 4 && parsed.data.template).toEqual(
+			validTemplate
+		);
+	});
+
+	it('rejects a v4 doc whose template has an unknown key', () => {
+		const v4 = { ...validDoc, schema_v: 4, group_id: GROUP };
+		expect(
+			kioskBannerDocSchema.safeParse({ ...v4, template: { ...validTemplate, html: '<b>x</b>' } })
+				.success
+		).toBe(false);
+	});
+
 	it('still enforces end_at > start_at on v1, v2 and v3', () => {
 		const sameTime = { end_at: validDoc.start_at };
 		expect(kioskBannerDocSchema.safeParse({ ...validDoc, ...sameTime }).success).toBe(false);
@@ -222,7 +248,7 @@ describe('createKioskBanner', () => {
 		const doc = createKioskBanner(input, ctx, now);
 		expect(doc).toMatchObject({
 			type: 'kiosk_banner',
-			schema_v: 3,
+			schema_v: 4,
 			group_id: GROUP,
 			shelter_code: 'SH-007',
 			created_by: 'user:bob',
@@ -252,8 +278,30 @@ describe('createKioskBanner', () => {
 	it('can create a tv banner', () => {
 		const input = kioskBannerInputSchema.parse({ ...validInput, screen_type: 'tv' });
 		const doc = createKioskBanner(input, ctx, now);
-		expect(doc).toMatchObject({ schema_v: 3, screen_type: 'tv' });
+		expect(doc).toMatchObject({ schema_v: 4, screen_type: 'tv' });
 		expect(kioskBannerDocSchema.safeParse(doc).success).toBe(true);
+	});
+
+	it('stores a template on the doc and writes v4', () => {
+		const input = kioskBannerInputSchema.parse({ ...validInput, template: validTemplate });
+		const doc = createKioskBanner(input, ctx, now);
+		expect(doc).toMatchObject({ schema_v: 4, template: validTemplate });
+		expect(kioskBannerDocSchema.safeParse(doc).success).toBe(true);
+	});
+
+	it('leaves the template key off the doc when the input has none', () => {
+		const doc = createKioskBanner(kioskBannerInputSchema.parse(validInput), ctx, now);
+		expect(doc.schema_v).toBe(4);
+		expect('template' in doc).toBe(false);
+	});
+
+	it('rejects an input template with an unknown key', () => {
+		expect(
+			kioskBannerInputSchema.safeParse({
+				...validInput,
+				template: { ...validTemplate, image_url: 'https://x/y.png' }
+			}).success
+		).toBe(false);
 	});
 
 	it('mints a distinct _id per call and applies input defaults', () => {

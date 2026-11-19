@@ -52,6 +52,19 @@ class ShelterListResponse(BaseModel):
     as_of: datetime
 
 
+class ShelterSummaryResponse(BaseModel):
+    """Head counts for the public search cards — never narrowed by the list filters (#1419)."""
+
+    shelters_total: int
+    # `open` and `full` both count as running, as on the page's card.
+    shelters_open: int
+    counts_by_site_kind: dict[str, int] = Field(
+        default_factory=dict,
+        description="Shelters per master site_kind code; a row without one is an evacuation_center",
+    )
+    as_of: datetime
+
+
 class ShelterCapacityDetail(BaseModel):
     total: int
     available: int

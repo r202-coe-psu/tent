@@ -9,6 +9,7 @@ import {
 	decodeImageField,
 	parseBannerInput,
 	readJsonObject,
+	TEMPLATE_IMAGE_LIMIT,
 	requireBannerManager
 } from '$lib/server/kiosk-banners/kiosk-banner-access';
 import { createBanner, listBannersForShelter } from '$lib/server/kiosk-banners/kiosk-banner.server';
@@ -44,13 +45,21 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		const shelterCode = requireShelterCode(url);
 		assertCanManageShelter(caller, shelterCode);
 
-		const { image, ...fields } = await readJsonObject(request);
+		const { image, template_image, ...fields } = await readJsonObject(request);
 		assertNoShelterCode(fields);
 		const input = parseBannerInput(fields);
 		const decoded = decodeImageField(image);
+		const templateImage =
+			template_image === undefined
+				? undefined
+				: decodeImageField(template_image, TEMPLATE_IMAGE_LIMIT);
 		await assertGroupInShelter(input.group_id, shelterCode);
 
-		const created = await createBanner(input, decoded, { shelterCode, createdBy: caller.name });
+		const created = await createBanner(
+			input,
+			{ image: decoded, templateImage },
+			{ shelterCode, createdBy: caller.name }
+		);
 		return json(created, { status: 201 });
 	} catch (error) {
 		return bannerErrorResponse(error);

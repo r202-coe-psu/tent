@@ -65,6 +65,7 @@ describe('GET /api/back-office/kiosk-banners/[id]/image (FR-KBR-10/12)', () => {
 			expect(response.status).toBe(200);
 			expect(response.headers.get('content-type')).toBe('image/png');
 			expect(response.headers.get('cache-control')).toBe('private, no-store');
+			expect(response.headers.get('x-content-type-options')).toBe('nosniff');
 			expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([1, 2, 3]);
 		}
 	});

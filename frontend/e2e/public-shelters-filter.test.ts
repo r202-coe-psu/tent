@@ -3,12 +3,14 @@
  * no mocks (except the thin error-contract route in the smoke group).
  *
  * Writable target (local, or staging with `ALLOW_REMOTE_WRITES=true`): the critical group
- * creates two per-run `E2E…` shelters the way staff do (system management → create
- * shelter) — a host house next to the user and an evacuation centre ~7 km away — and tears
- * them down through the CouchDB admin API (the UI cannot delete shelters); the Z test
- * proves they are gone from CouchDB and from the public list. Read-only remote target
+ * creates three per-run `E2E…` shelters the way staff do (system management → create
+ * shelter) — an evacuation centre and a host house next to the user, and an evacuation
+ * centre ~7 km away — and tears them down through the CouchDB admin API (the UI cannot
+ * delete shelters); the Z test proves they are gone from CouchDB and from the public list.
+ * The host house must never show on the public list (#1419). Read-only remote target
  * (production): setup and teardown are skipped and the tests filter the provisioned E2E
- * fixture (see helpers/e2e-env.ts).
+ * fixture (see helpers/e2e-env.ts), which now needs an evacuation centre near the GPS fix
+ * where it used to have a host house.
  *
  * Every public test narrows the list with the fixture's name marker so other
  * shelters never affect the assertions.
@@ -43,7 +45,7 @@ const FIXTURE = sheltersFixture();
  * thread long enough on the CPU-starved CI agent to push the URL commit past 15 s.
  */
 const GPS_URL_TIMEOUT_MS = 45_000;
-const { marker: MARKER, hostNear: HOST_NEAR, evacFar: EVAC_FAR } = FIXTURE;
+const { marker: MARKER, evacNear: EVAC_NEAR, hostHidden: HOST_HIDDEN, evacFar: EVAC_FAR } = FIXTURE;
 const USER_LOCATION = { latitude: 7.0086, longitude: 100.4968 };
 
 let codes: string[] = [];
@@ -62,12 +64,25 @@ test.describe(
 		test('R1 the directory shell and filter panel are rendered', async ({ page }) => {
 			await page.goto('/shelters');
 			// First visit: GPS → URL commit → page load re-runs before the URL changes (~3 s locally).
-			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
+			await expect(page).toHaveURL(/user_lat=/, { timeout: GPS_URL_TIMEOUT_MS });
+			// The 5 km default radius comes with the GPS position.
+			await expect(page).toHaveURL(/distance=5/);
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทอาคาร' })).toBeVisible();
-			await expect(page.getByRole('button', { name: '5 กม' })).toBeVisible();
+			// Province / district / subdistrict sit in a collapsed "advanced filters" section (#1419).
+			await expect(page.getByRole('button', { name: 'ตัวกรองขั้นสูง' })).toHaveAttribute(
+				'aria-expanded',
+				'false'
+			);
+			await expect(page.getByRole('button', { name: 'จังหวัด', exact: true })).toBeHidden();
+			await expect(
+				page.getByTestId('radius-row').getByRole('button', { name: '5 กม' })
+			).toBeVisible();
+			await expect(
+				page.getByTestId('radius-row').getByRole('button', { name: '5 กม' })
+			).toHaveAttribute('aria-pressed', 'true');
 		});
 	}
 );
@@ -111,14 +126,17 @@ test.describe(
 
 		test.beforeAll(() => assertFixtureProvisioned(FIXTURE));
 
-		test('staff creates a nearby host house and a distant evacuation centre', async ({ page }) => {
+		test('staff creates a nearby evacuation centre, a nearby host house and a distant evacuation centre', async ({
+			page
+		}) => {
 			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 			test.setTimeout(120_000);
 			const admin = await bootstrapAdminSession();
 			await routeBrowserCouchThroughApp(page);
 			await injectSession(page, admin.user, admin.cookie);
 
-			codes.push(await createShelterViaUi(page, HOST_NEAR));
+			codes.push(await createShelterViaUi(page, EVAC_NEAR));
+			codes.push(await createShelterViaUi(page, HOST_HIDDEN));
 			codes.push(await createShelterViaUi(page, EVAC_FAR));
 		});
 
@@ -136,12 +154,14 @@ test.describe(
 			await expect(async () => {
 				await page.goto('/shelters');
 				await page.getByRole('textbox', { name: 'ค้นหา' }).fill(MARKER);
-				await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible({
+				await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible({
 					timeout: 3_000
 				});
 			}).toPass({ intervals: [2_000], timeout: 60_000 });
 			await expect(page).toHaveURL(/q=/);
+			// Default 5 km: the far centre (~7 km) is out, the host house never shows (#1419).
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
+			await expect(page.getByRole('heading', { name: HOST_HIDDEN.name })).toHaveCount(0);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 		});
 
@@ -149,51 +169,72 @@ test.describe(
 			// GPS commit + radius reloads of the full list
 			test.setTimeout(GPS_URL_TIMEOUT_MS + 60_000);
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}`);
+			// Default 5 km radius once the GPS position lands.
 			await expect(page).toHaveURL(/distance=5/, { timeout: GPS_URL_TIMEOUT_MS });
+			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
-			await page.getByRole('button', { name: '10 กม' }).click();
+			await page.getByTestId('radius-row').getByRole('button', { name: '10 กม' }).click();
 			await expect(page).toHaveURL(/distance=10/);
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
-			await page.getByRole('button', { name: '1 กม' }).click();
+			await page.getByTestId('radius-row').getByRole('button', { name: '1 กม' }).click();
 			await expect(page).toHaveURL(/distance=1(&|$)/);
-			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+
+			// Pressing the active radius again clears it (`distance=`, no 5 km fallback): everything.
+			await page.getByTestId('radius-row').getByRole('button', { name: '1 กม' }).click();
+			await expect(page).toHaveURL(/distance=(&|$)/);
+			await expect(
+				page.getByTestId('radius-row').getByRole('button', { name: '1 กม' })
+			).toHaveAttribute('aria-pressed', 'false');
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 		});
 
 		test('filters by shelter type toggle', async ({ page }) => {
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
-			// Every type starts on, so the URL carries no hide_* flag.
+			// Both types start on, so the URL carries no hide_* flag.
 			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
 			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true })).toBeChecked();
-			await expect(page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' })).toBeChecked();
 			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพภายนอก' })).toBeChecked();
 			await expect(page).not.toHaveURL(/hide_/);
 
-			await page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' }).click();
-			await expect(page).toHaveURL(/hide_host_house=on/);
-			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
-			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeHidden();
-			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+			// Turning evacuation centres off empties this run's list (the host house never shows).
+			await page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true }).click();
+			await expect(page).toHaveURL(/hide_evacuation=on/);
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
 			// The off state survives a reload (hydrated from the URL).
 			await page.reload();
 			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
-			await expect(page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' })).not.toBeChecked();
-			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true })).not.toBeChecked();
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
-			// Turning it back on and the evacuation toggle off swaps which shelter remains.
-			await page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' }).click();
 			await page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true }).click();
-			await expect(page).toHaveURL(/hide_evacuation=on/);
-			await expect(page).not.toHaveURL(/hide_host_house/);
-			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible();
-			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
-			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+			await expect(page).not.toHaveURL(/hide_evacuation/);
+			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
+		});
+
+		test('never shows a host house, and has no switch for one (#1419)', async ({ page }) => {
+			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
+			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: HOST_HIDDEN.name })).toHaveCount(0);
+
+			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
+			await expect(page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' })).toHaveCount(0);
+
+			// A stale link from before the switch was removed gives the same list, not an error.
+			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&hide_host_house=on&distance=10`);
+			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: HOST_HIDDEN.name })).toHaveCount(0);
+			await expect(page).not.toHaveURL(/hide_host_house=on&hide_host_house/);
 		});
 
 		test('cascades province → district → subdistrict and opens the detail page', async ({
@@ -202,6 +243,7 @@ test.describe(
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
+			await page.getByRole('button', { name: 'ตัวกรองขั้นสูง' }).click();
 			await page.getByRole('button', { name: 'จังหวัด', exact: true }).click();
 			await page.getByRole('textbox', { name: 'ค้นหา...' }).fill('สงขลา');
 			await page.getByRole('button', { name: 'สงขลา' }).click();
@@ -214,6 +256,11 @@ test.describe(
 			await page.getByRole('button', { name: 'ตำบล/แขวง' }).click();
 			await page.getByRole('button', { name: 'บ้านพรุ' }).click();
 			await expect(page).toHaveURL(/subdistrict=/);
+			// The active area filter stays in view after the reload the filter triggers.
+			await expect(page.getByRole('button', { name: 'ตัวกรองขั้นสูง' })).toHaveAttribute(
+				'aria-expanded',
+				'true'
+			);
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
 
@@ -223,21 +270,21 @@ test.describe(
 		});
 
 		test('clears every filter', async ({ page }) => {
-			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&hide_host_house=on&distance=10`);
-			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
+			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&hide_evacuation=on&distance=10`);
+			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
 			// Let the first-visit GPS commit land first, or it re-applies the old filters after the clear.
 			await expect(page).toHaveURL(/user_lat=/, { timeout: GPS_URL_TIMEOUT_MS });
 			await page.getByRole('link', { name: 'ล้างค่า' }).click();
 			await expect(page).not.toHaveURL(/q=|hide_/);
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toHaveValue('');
-			await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible();
+			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 		});
 
 		test('Z teardown leaves no shelter of this run', async () => {
 			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 			test.setTimeout(180_000);
-			expect(codes, 'setup created both shelters').toHaveLength(2);
+			expect(codes, 'setup created all three shelters').toHaveLength(3);
 			const created = codes;
 			for (const code of created) await teardownShelter(code);
 			codes = [];
