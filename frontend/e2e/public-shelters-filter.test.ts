@@ -69,7 +69,7 @@ test.describe(
 			await expect(page).toHaveURL(/distance=5/);
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toBeVisible();
-			await expect(page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' })).toBeVisible();
+			await expect(page.getByRole('radiogroup', { name: 'ประเภทศูนย์พักพิง' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ประเภทอาคาร' })).toBeVisible();
 			// Province / district / subdistrict sit in a collapsed "advanced filters" section (#1419).
 			await expect(page.getByRole('button', { name: 'ตัวกรองขั้นสูง' })).toHaveAttribute(
@@ -194,43 +194,43 @@ test.describe(
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 		});
 
-		test('filters by shelter type toggle', async ({ page }) => {
+		test('filters by shelter type radio', async ({ page }) => {
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
-			// Both types start on, so the URL carries no hide_* flag.
-			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
-			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true })).toBeChecked();
-			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพภายนอก' })).toBeChecked();
+			// "All" starts chosen, so the URL carries no hide_* flag. The radios are always visible.
+			const group = page.getByTestId('group-radio');
+			await expect(group.getByRole('radio', { name: 'ทั้งหมด' })).toBeChecked();
 			await expect(page).not.toHaveURL(/hide_/);
 
-			// Turning evacuation centres off empties this run's list (the host house never shows).
-			await page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true }).click();
+			// "External" hides the evacuation centres: this run's list empties (the host house never shows).
+			await group.getByRole('radio', { name: 'ศูนย์อพยพภายนอก' }).click();
 			await expect(page).toHaveURL(/hide_evacuation=on/);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
-			// The off state survives a reload (hydrated from the URL).
+			// The choice survives a reload (hydrated from the URL).
 			await page.reload();
-			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
-			await expect(page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true })).not.toBeChecked();
+			await expect(
+				page.getByTestId('group-radio').getByRole('radio', { name: 'ศูนย์อพยพภายนอก' })
+			).toBeChecked();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
-			await page.getByRole('switch', { name: 'ศูนย์อพยพ', exact: true }).click();
+			await page.getByTestId('group-radio').getByRole('radio', { name: 'ทั้งหมด' }).click();
 			await expect(page).not.toHaveURL(/hide_evacuation/);
 			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 		});
 
-		test('never shows a host house, and has no switch for one (#1419)', async ({ page }) => {
+		test('never shows a host house, and has no option for one (#1419)', async ({ page }) => {
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
 			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: HOST_HIDDEN.name })).toHaveCount(0);
 
-			await page.getByRole('button', { name: 'ประเภทศูนย์พักพิง' }).click();
-			await expect(page.getByRole('switch', { name: 'บ้านพี่เลี้ยง' })).toHaveCount(0);
+			await expect(page.getByTestId('group-radio').getByRole('radio')).toHaveCount(3);
+			await expect(page.getByRole('radio', { name: 'บ้านพี่เลี้ยง' })).toHaveCount(0);
 
-			// A stale link from before the switch was removed gives the same list, not an error.
+			// A stale link from before the option was removed gives the same list, not an error.
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&hide_host_house=on&distance=10`);
 			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: HOST_HIDDEN.name })).toHaveCount(0);
