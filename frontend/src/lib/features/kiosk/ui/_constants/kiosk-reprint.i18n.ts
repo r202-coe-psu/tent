@@ -42,6 +42,7 @@ const th = {
 		title: 'พิมพ์ไม่สำเร็จ',
 		body: (error: string) => `${error} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
 		retry: 'พิมพ์อีกครั้ง',
+		showOnScreen: 'แสดง QR บนจอแทน',
 		home: 'กลับหน้าแรก'
 	},
 	memberList: {
@@ -98,6 +99,7 @@ const en: typeof th = {
 		title: 'Printing failed',
 		body: (error: string) => `${error} Press print again or contact staff.`,
 		retry: 'Print again',
+		showOnScreen: 'Show the QR on screen instead',
 		home: 'Back to home'
 	},
 	memberList: {

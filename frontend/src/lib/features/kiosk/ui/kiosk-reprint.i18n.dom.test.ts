@@ -10,6 +10,7 @@ import {
 } from '../data/kiosk-check-in.api';
 import type { ReprintSessionDeps } from '../application/reprint-session.svelte';
 import KioskReprint from './kiosk-reprint.svelte';
+import { KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 
 const THAI = /[฀-๿]/;
 
@@ -246,5 +247,112 @@ describe('KioskReprint language', () => {
 		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ QR เรียบร้อย'));
 		expect(screenText()).toContain('รับ QR Code 1 ดวงที่ช่องพิมพ์ แล้วไปที่จุดคัดกรอง');
 		expect(screenText()).toContain('กลับหน้าแรก');
+	});
+});
+
+describe('KioskReprint labels on screen', () => {
+	async function toPrint(
+		print: ReprintSessionDeps['print'],
+		labels: { search: string; next: string; confirm: string; heading: string; nextText: string }
+	) {
+		mountReprint({
+			lookup: vi.fn().mockResolvedValue(HOUSEHOLD),
+			reprint: vi.fn().mockResolvedValue(REPRINT_RESULT),
+			print
+		});
+		await toMembers(labels.search, labels.heading);
+		document.querySelector<HTMLButtonElement>('button[role="checkbox"]')!.click();
+		await vi.waitFor(() => expect(screenText()).toContain(labels.nextText));
+		buttonWith(labels.next).click();
+		await vi.waitFor(() => expect(screenText()).toContain(labels.confirm));
+		await tapDigits('1234');
+		buttonWith(labels.confirm).click();
+	}
+
+	const THAI_FLOW = {
+		search: 'ค้นหา',
+		next: 'ต่อไป',
+		confirm: 'ยืนยันและพิมพ์',
+		heading: 'เลือกสมาชิกที่ต้องการพิมพ์ QR',
+		nextText: 'ต่อไป · 1 คน'
+	};
+	const shownImage = () => document.querySelector<HTMLImageElement>('img')?.getAttribute('src');
+
+	it('shows the labels on screen, not a done notice, when the kiosk has no printer', async () => {
+		await toPrint(
+			vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'screen', labels: ['AAA'] }),
+			THAI_FLOW
+		);
+
+		await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
+		expect(screenText()).not.toContain('พิมพ์ QR เรียบร้อย');
+
+		buttonWith('เสร็จสิ้น').click();
+		flushSync();
+		expect(document.querySelector('[data-testid="kiosk-label-screen"]')).toBeNull();
+	});
+
+	it('offers the labels that did not print on screen after a failed print', async () => {
+		await toPrint(
+			vi
+				.fn<ReprintSessionDeps['print']>()
+				.mockResolvedValue({ kind: 'error', message: 'เครื่องพิมพ์ไม่พร้อม', labels: ['BBB'] }),
+			THAI_FLOW
+		);
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ไม่สำเร็จ'));
+
+		buttonWith('แสดง QR บนจอแทน').click();
+
+		await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,BBB'));
+		expect(screenText()).not.toContain('พิมพ์ไม่สำเร็จ');
+	});
+
+	it('does not send the visitor home on its own idle timeout while the labels are on screen', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+		try {
+			await toPrint(
+				vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'screen', labels: ['AAA'] }),
+				THAI_FLOW
+			);
+			await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
+
+			vi.advanceTimersByTime(KIOSK_IDLE_TIMEOUT_MS + 1_000);
+			flushSync();
+
+			expect(shownImage()).toBe('data:image/png;base64,AAA');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('words the on-screen choice in English', async () => {
+		languageStore.setLanguage('en');
+		await toPrint(
+			vi
+				.fn<ReprintSessionDeps['print']>()
+				.mockResolvedValue({ kind: 'error', message: 'Printer is not ready', labels: ['BBB'] }),
+			{
+				search: 'Search',
+				next: 'Next',
+				confirm: 'Confirm and print',
+				heading: 'Choose members to print a QR for',
+				nextText: 'Next · 1 person'
+			}
+		);
+		await vi.waitFor(() => expect(screenText()).toContain('Printing failed'));
+
+		expect(buttonWith('Show the QR on screen instead')).toBeDefined();
+	});
+
+	it('does not offer the on-screen choice when no label is left to show', async () => {
+		await toPrint(
+			vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'error', message: 'x' }),
+			THAI_FLOW
+		);
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ไม่สำเร็จ'));
+
+		expect(
+			[...document.querySelectorAll('button')].some((b) => b.textContent?.includes('แสดง QR'))
+		).toBe(false);
 	});
 });

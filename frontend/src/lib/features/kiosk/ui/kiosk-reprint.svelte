@@ -20,6 +20,7 @@
 	import { formatPhoneForDisplay, phoneEntryHint } from '../domain/phone';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskInlineAlert from './kiosk-inline-alert.svelte';
+	import KioskLabelScreen from './kiosk-label-screen.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 	import type { KioskLabelSheetItem } from '../domain/kiosk-label-item';
 	import KioskLabelSheet from './kiosk-label-sheet.svelte';
@@ -112,11 +113,13 @@
 	const displayPhone = $derived(formatPhoneForDisplay(session.phone));
 	const entryHint = $derived(phoneEntryHint(session.phone, languageStore.current));
 	const inFlow = $derived(session.step !== 'phone');
-	// Not sent home while the labels come out; resuming restarts the idle countdown.
 	const printing = $derived(session.step === 'printing');
+	const onScreen = $derived(session.step === 'on_screen');
 
+	// Not sent home while the labels come out or are read off the screen (which has its own idle
+	// timeout); resuming restarts the idle countdown.
 	$effect(() => {
-		idleTimeout.setPaused(printing);
+		idleTimeout.setPaused(printing || onScreen);
 	});
 
 	onMount(() => {
@@ -174,6 +177,10 @@
 			{/snippet}
 		</KioskNoticePanel>
 	</div>
+{:else if session.step === 'on_screen'}
+	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
+		<KioskLabelScreen labels={session.screenLabels} ondone={returnHome} />
+	</div>
 {:else if session.step === 'print_failed'}
 	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
 		<KioskNoticePanel
@@ -191,6 +198,15 @@
 					disabled={session.busy}
 					class={KIOSK_NOTICE_PRIMARY_ACTION}><Printer aria-hidden="true" />{t.failed.retry}</Button
 				>
+				{#if session.unprintedLabels.length > 0}
+					<Button
+						type="button"
+						variant="outline"
+						onclick={() => session.showFailedLabelsOnScreen()}
+						disabled={session.busy}
+						class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.failed.showOnScreen}</Button
+					>
+				{/if}
 				<Button
 					type="button"
 					variant="outline"
