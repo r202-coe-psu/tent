@@ -238,6 +238,11 @@
 		selectedIds = [];
 		isReprintOnly = false;
 		printSelectedIds = [];
+		unprintedLabels = [];
+		if (screenLabels.length > 0) {
+			screenLabels = [];
+			onprintbusychange?.(false);
+		}
 		isLookingUp = true;
 		try {
 			const found = await lookupPreRegisteredEvacuee(gate);
@@ -488,16 +493,18 @@
 
 	async function printWristbands(): Promise<void> {
 		if (printableResults.length === 0 || printBusy) return;
+		const generation = lookupGeneration;
+		const superseded = () => generation !== lookupGeneration;
 		printBusy = true;
 		unprintedLabels = [];
 		onprintbusychange?.(true);
 		try {
-			if (!(await loadMissingLabels(printableResults))) return;
+			if (!(await loadMissingLabels(printableResults)) || superseded()) return;
 			// Re-read: a member who moved past arriving since the lookup has no QR to reprint any more.
 			// A member whose QR could not be issued is never printed (FR-EQR-24).
 			const toPrint = printableResults.filter((result) => result.qr_payload);
 			if (toPrint.length === 0) return;
-			if (!(await prepareQrImages(toPrint))) return;
+			if (!(await prepareQrImages(toPrint)) || superseded()) return;
 			let labels: KioskQrLabel[];
 			try {
 				labels = toLabels(toPrint);
@@ -516,6 +523,10 @@
 				},
 				languageStore.current
 			);
+			if (superseded()) {
+				printPhase = 'idle';
+				return;
+			}
 			if (result.kind === 'screen') {
 				printPhase = 'idle';
 				screenLabels = result.labels;
@@ -537,7 +548,7 @@
 			unprintedLabels = result.labels ?? [];
 		} finally {
 			printBusy = false;
-			onprintbusychange?.(screenLabels.length > 0);
+			onprintbusychange?.(!superseded() && screenLabels.length > 0);
 		}
 	}
 

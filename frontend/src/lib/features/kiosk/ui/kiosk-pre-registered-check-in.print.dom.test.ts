@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
+import { SvelteMap } from 'svelte/reactivity';
 import type { ComponentProps } from 'svelte';
 import { languageStore } from '$lib/stores/language.svelte';
 import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 import {
 	checkInSelectedMembers,
 	lookupPreRegisteredEvacuee,
+	type GateInput,
 	type KioskLookupResponse
 } from '../data/kiosk-check-in.api';
 import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
@@ -55,6 +57,28 @@ function mountCheckIn(props: Partial<ComponentProps<typeof KioskPreRegisteredChe
 		}
 	} as never);
 	flushSync();
+}
+
+/** Mount with an input that can be swapped afterwards, as the card scanner does with the next card. */
+function mountWithSwappableInput(first: GateInput) {
+	const current = new SvelteMap<'input', GateInput>([['input', first]]);
+	instance = mount(KioskPreRegisteredCheckIn, {
+		target: document.body,
+		props: {
+			contextQuery: '',
+			displayShelterCode: 'SH001',
+			onreset: () => {},
+			...mounted.props,
+			get input() {
+				return current.get('input') ?? null;
+			}
+		}
+	} as never);
+	flushSync();
+	return (next: GateInput) => {
+		current.set('input', next);
+		flushSync();
+	};
 }
 
 const screenText = () => document.body.textContent?.replace(/\s+/g, ' ') ?? '';
@@ -191,5 +215,119 @@ describe('KioskPreRegisteredCheckIn labels on screen', () => {
 		await vi.waitFor(() => expect(screenText()).toContain('Printer is not ready'));
 
 		expect(buttonWith('Show the QR on screen instead')).toBeDefined();
+	});
+
+	describe('when a new visitor starts a lookup', () => {
+		const NEXT: KioskLookupResponse = {
+			...HOUSEHOLD,
+			primary_evacuee_id: 'p2',
+			members: [{ ...HOUSEHOLD.members[0], evacuee_id: 'p2', first_name: 'Somying' }]
+		};
+
+		async function checkInThenScan(first: GateInput) {
+			const scanNext = mountWithSwappableInput(first);
+			await vi.waitFor(() => expect(screenText()).toContain('ยืนยัน · 1 คน'));
+			buttonWith('ยืนยัน').click();
+			await vi.waitFor(() => expect(screenText()).toContain('บันทึกผลรายงานตัวแล้ว'));
+			buttonWith('พิมพ์ QR Code').click();
+			return scanNext;
+		}
+
+		it('closes the previous visitor label screen, releases the busy report and lists the new members', async () => {
+			const onprintbusychange = vi.fn();
+			const onreset = vi.fn();
+			mounted.props = { onprintbusychange, onreset };
+			vi.mocked(printKioskQrLabels).mockResolvedValue({ kind: 'screen', labels: ['AAA'] });
+			const scanNext = await checkInThenScan({ source: 'qr', token: 'a' });
+			await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
+			vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(NEXT);
+
+			scanNext({ source: 'qr', token: 'b' });
+
+			await vi.waitFor(() => expect(screenText()).toContain('Somying'));
+			expect(shownImage()).toBeUndefined();
+			expect(onprintbusychange).toHaveBeenLastCalledWith(false);
+			expect(onreset).not.toHaveBeenCalled();
+		});
+
+		it('drops the previous visitor labels that did not print', async () => {
+			mounted.props = {};
+			vi.mocked(printKioskQrLabels).mockResolvedValue({
+				kind: 'error',
+				message: 'เครื่องพิมพ์ไม่พร้อม',
+				labels: ['BBB']
+			});
+			const scanNext = await checkInThenScan({ source: 'qr', token: 'a' });
+			await vi.waitFor(() => expect(screenText()).toContain('แสดง QR บนจอแทน'));
+			vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(NEXT);
+			vi.mocked(checkInSelectedMembers).mockResolvedValue({
+				shelter_code: 'SH001',
+				members: [{ evacuee_id: 'p2', status: 'checked_in', qr_payload: 'QR2', label: null }],
+				retryable_evacuee_ids: []
+			} as never);
+
+			vi.mocked(prepareKioskQrImage).mockRejectedValue(new Error('render failed'));
+
+			scanNext({ source: 'qr', token: 'b' });
+			await vi.waitFor(() => expect(screenText()).toContain('Somying'));
+			buttonWith('ยืนยัน').click();
+			await vi.waitFor(() => expect(screenText()).toContain('บันทึกผลรายงานตัวแล้ว'));
+			await vi.waitFor(() => expect(screenText()).toContain('ใช้ปุ่มพิมพ์อีกครั้ง'));
+
+			expect(screenText()).not.toContain('แสดง QR บนจอแทน');
+		});
+
+		it('discards a print of the previous visitor that resolves after the new lookup started', async () => {
+			const onprintbusychange = vi.fn();
+			mounted.props = { onprintbusychange };
+			let finishPrint: (result: Awaited<ReturnType<typeof printKioskQrLabels>>) => void = () => {};
+			vi.mocked(printKioskQrLabels).mockReturnValue(
+				new Promise((resolve) => {
+					finishPrint = resolve;
+				})
+			);
+			const scanNext = await checkInThenScan({ source: 'qr', token: 'a' });
+			await vi.waitFor(() => expect(printKioskQrLabels).toHaveBeenCalledTimes(1));
+			vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(NEXT);
+
+			scanNext({ source: 'qr', token: 'b' });
+			await vi.waitFor(() => expect(screenText()).toContain('Somying'));
+			finishPrint({ kind: 'screen', labels: ['AAA'] });
+			await vi.waitFor(() => expect(onprintbusychange).toHaveBeenLastCalledWith(false));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			expect(shownImage()).toBeUndefined();
+			expect(screenText()).toContain('Somying');
+			expect(onprintbusychange).toHaveBeenLastCalledWith(false);
+		});
+
+		it('drops the failed print of the previous visitor that resolves after the new lookup started', async () => {
+			let finishPrint: (result: Awaited<ReturnType<typeof printKioskQrLabels>>) => void = () => {};
+			vi.mocked(printKioskQrLabels).mockReturnValue(
+				new Promise((resolve) => {
+					finishPrint = resolve;
+				})
+			);
+			const scanNext = await checkInThenScan({ source: 'qr', token: 'a' });
+			await vi.waitFor(() => expect(printKioskQrLabels).toHaveBeenCalledTimes(1));
+			vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(NEXT);
+			vi.mocked(checkInSelectedMembers).mockResolvedValue({
+				shelter_code: 'SH001',
+				members: [{ evacuee_id: 'p2', status: 'checked_in', qr_payload: 'QR2', label: null }],
+				retryable_evacuee_ids: []
+			} as never);
+
+			vi.mocked(prepareKioskQrImage).mockRejectedValue(new Error('render failed'));
+
+			scanNext({ source: 'qr', token: 'b' });
+			await vi.waitFor(() => expect(screenText()).toContain('Somying'));
+			finishPrint({ kind: 'error', message: 'เครื่องพิมพ์ไม่พร้อม', labels: ['BBB'] });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			buttonWith('ยืนยัน').click();
+			await vi.waitFor(() => expect(screenText()).toContain('ใช้ปุ่มพิมพ์อีกครั้ง'));
+
+			expect(screenText()).not.toContain('เครื่องพิมพ์ไม่พร้อม');
+			expect(screenText()).not.toContain('แสดง QR บนจอแทน');
+		});
 	});
 });
