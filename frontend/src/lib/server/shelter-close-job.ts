@@ -226,6 +226,22 @@ export function createShelterCloseJobStore(deps: ShelterCloseJobStoreDeps) {
 		return ready;
 	};
 
+	/**
+	 * Self-heal: the per-process `ready` cache goes stale if `central_ops` or the design doc is
+	 * removed under a running server (DB reset / restore). A `404` from a write or view query
+	 * means exactly that (a missing *document* is `409`/created on PUT), so drop the cache,
+	 * re-create the infrastructure and retry once. Reads via {@link getDoc} keep `404 -> null`.
+	 */
+	async function withSelfHeal(
+		run: () => ReturnType<typeof couchReq>
+	): Promise<Awaited<ReturnType<typeof couchReq>>> {
+		const first = await run();
+		if (first.status !== 404) return first;
+		ready = null;
+		await ensureDesign();
+		return run();
+	}
+
 	async function getDoc<T>(id: string): Promise<T | null> {
 		const res = await couchReq('GET', `/${SHELTER_CLOSE_DB}/${enc(id)}`);
 		if (res.status === 404) return null;
@@ -235,7 +251,9 @@ export function createShelterCloseJobStore(deps: ShelterCloseJobStoreDeps) {
 
 	/** CAS put; `409` -> {@link ShelterCloseJobConflictError}. Returns the doc with the new `_rev`. */
 	async function putDoc<T extends { _id: string; _rev?: string }>(doc: T): Promise<T> {
-		const res = await couchReq('PUT', `/${SHELTER_CLOSE_DB}/${enc(doc._id)}`, doc);
+		const res = await withSelfHeal(() =>
+			couchReq('PUT', `/${SHELTER_CLOSE_DB}/${enc(doc._id)}`, doc)
+		);
 		if (res.status === 409) throw new ShelterCloseJobConflictError(doc._id);
 		if (res.status >= 300) throw new Error(`Could not write ${doc._id} (${res.status})`);
 		return { ...doc, _rev: (res.data as { rev?: string })?.rev ?? doc._rev };
@@ -373,9 +391,11 @@ export function createShelterCloseJobStore(deps: ShelterCloseJobStoreDeps) {
 		const qs =
 			`startkey=${enc(JSON.stringify(startkey))}&endkey=${enc(JSON.stringify(endkey))}` +
 			`&include_docs=true&limit=${limit}`;
-		const res = await couchReq(
-			'GET',
-			`/${SHELTER_CLOSE_DB}/${SHELTER_CLOSE_DESIGN_ID}/_view/${SHELTER_CLOSE_VIEW}?${qs}`
+		const res = await withSelfHeal(() =>
+			couchReq(
+				'GET',
+				`/${SHELTER_CLOSE_DB}/${SHELTER_CLOSE_DESIGN_ID}/_view/${SHELTER_CLOSE_VIEW}?${qs}`
+			)
 		);
 		if (res.status >= 400) throw new Error(`Could not read ${SHELTER_CLOSE_VIEW} (${res.status})`);
 		const rows = (res.data as { rows?: { doc?: ShelterCloseJob }[] })?.rows ?? [];

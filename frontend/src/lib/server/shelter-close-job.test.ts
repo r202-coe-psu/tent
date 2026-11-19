@@ -296,6 +296,46 @@ describe('getActiveJob — stale lock clearing (FR-3a, AC-13)', () => {
 	});
 });
 
+describe('self-heal after central_ops removed under a running store', () => {
+	it('createJob re-creates the db + design doc and succeeds', async () => {
+		await create('SH001'); // primes the per-store `ready` cache
+		couch.dbs.delete(CENTRAL); // DB reset / restore while the server keeps running
+		const res = await store.createJob({
+			shelter_code: 'SH002',
+			mode: 'close',
+			requested_by: 'mgr1',
+			preview: PREVIEW
+		});
+		expect(res.created).toBe(true);
+		expect(couch.get(CENTRAL, '_design/shelter_close')).toBeTruthy();
+	});
+
+	it('claimNext recovers when only the design doc was removed', async () => {
+		await create('SH001');
+		couch.dbs.get(CENTRAL)!.delete('_design/shelter_close');
+		const claimed = await store.claimNext('w1'); // view re-created + queried, no throw
+		expect(claimed?.shelter_code).toBe('SH001');
+		expect(couch.get(CENTRAL, '_design/shelter_close')).toBeTruthy();
+	});
+
+	it('still throws when the retry also fails (no retry loop)', async () => {
+		await create('SH001');
+		couch.dbs.delete(CENTRAL);
+		couch.hook = ({ method, db, path }) =>
+			method === 'PUT' && db === CENTRAL && path.includes('shelter_close_job')
+				? { status: 404, data: { error: 'not_found' } }
+				: undefined;
+		await expect(
+			store.createJob({
+				shelter_code: 'SH003',
+				mode: 'close',
+				requested_by: 'mgr1',
+				preview: PREVIEW
+			})
+		).rejects.toThrow(/Could not write/);
+	});
+});
+
 describe('claimNext (FR-12..FR-14)', () => {
 	it('returns null when nothing is claimable', async () => {
 		expect(await store.claimNext('w1')).toBeNull();
