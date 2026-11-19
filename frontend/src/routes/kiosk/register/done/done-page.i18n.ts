@@ -15,6 +15,7 @@ const th = {
 	removeCard: 'กรุณานำบัตรออกจากเครื่อง',
 	contactStaff: 'กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR Code',
 	printAgain: 'พิมพ์อีกครั้ง',
+	showOnScreen: 'แสดง QR บนจอแทน',
 	home: 'กลับหน้าแรก'
 };
 
@@ -33,6 +34,7 @@ const en: typeof th = {
 	removeCard: 'Please take your card out of the reader',
 	contactStaff: 'Please contact staff to print your QR Code',
 	printAgain: 'Print again',
+	showOnScreen: 'Show the QR on screen instead',
 	home: 'Back to home'
 };
 

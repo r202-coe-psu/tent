@@ -16,6 +16,7 @@
 		KIOSK_CHECK_IN_TICKS,
 		KioskCheckInWizard,
 		KioskInlineAlert,
+		KioskLabelScreen,
 		KioskLabelSheet,
 		KioskNoticePanel,
 		KioskPrintStatus,
@@ -44,6 +45,10 @@
 	let qrImage = $state.raw<KioskQrImage | null>(null);
 	let printPhase = $state<'idle' | 'printing' | 'done'>('idle');
 	let printError = $state('');
+	/** Rendered label PNGs shown on screen (no printer, or staff chose it after a failed print). */
+	let screenLabels = $state.raw<readonly string[] | null>(null);
+	/** The labels a failed print left unprinted: what the on-screen button can still show. */
+	let unprintedLabels = $state.raw<readonly string[]>([]);
 	let doneTimer: ReturnType<typeof setTimeout> | null = null;
 	const labels = $derived(
 		registration
@@ -90,6 +95,7 @@
 		// Not sent home while the label comes out; resuming restarts the idle countdown.
 		idleTimeout.setPaused(true);
 		printError = '';
+		unprintedLabels = [];
 		if (doneTimer) clearTimeout(doneTimer);
 		printPhase = 'printing';
 		try {
@@ -119,13 +125,23 @@
 				return;
 			}
 			printPhase = 'idle';
-			if (result.kind === 'error') printError = result.message;
+			if (result.kind === 'screen') screenLabels = result.labels;
+			if (result.kind === 'error') {
+				printError = result.message;
+				unprintedLabels = result.labels ?? [];
+			}
 		} catch {
 			printPhase = 'idle';
 			printError = t.printRenderFailed;
 		} finally {
-			idleTimeout.setPaused(false);
+			idleTimeout.setPaused(screenLabels !== null);
 		}
+	}
+
+	function showOnScreen(): void {
+		screenLabels = unprintedLabels;
+		printError = '';
+		idleTimeout.setPaused(true);
 	}
 </script>
 
@@ -141,9 +157,13 @@
 		role="status"
 	>
 		{#if registration}
-			<p>
-				{viaThaid ? t.takeQrThaid : t.takeQrCard}
-			</p>
+			{#if screenLabels}
+				{#if !viaThaid}<p>{t.removeCard}</p>{/if}
+			{:else}
+				<p>
+					{viaThaid ? t.takeQrThaid : t.takeQrCard}
+				</p>
+			{/if}
 			<p class="text-base kiosk-portrait:text-xl">
 				{t.consentRef}:
 				<span class="font-mono tracking-wide">{registration.consent_ref}</span>
@@ -152,13 +172,21 @@
 				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
 					>{t.printFailedHint(printError)}</KioskInlineAlert
 				>
+				{#if unprintedLabels.length > 0}
+					<Button
+						type="button"
+						variant="outline"
+						onclick={showOnScreen}
+						class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.showOnScreen}</Button
+					>
+				{/if}
 			{/if}
 		{:else}
 			{#if !viaThaid}<p>{t.removeCard}</p>{/if}
 			<p>{t.contactStaff}</p>
 		{/if}
 		{#snippet actions()}
-			{#if registration}
+			{#if registration && !screenLabels}
 				<Button
 					type="button"
 					variant="outline"
@@ -172,6 +200,9 @@
 			>
 		{/snippet}
 	</KioskNoticePanel>
+	{#if screenLabels}
+		<KioskLabelScreen labels={screenLabels} ondone={returnHome} />
+	{/if}
 </div>
 {#if registration}
 	<KioskLabelSheet {labels} />
