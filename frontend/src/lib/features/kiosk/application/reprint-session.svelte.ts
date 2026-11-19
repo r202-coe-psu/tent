@@ -336,7 +336,8 @@ export class ReprintSession {
 				this.step = 'candidates';
 				return;
 			}
-			if (found.kind === 'kiosk_registered') {
+			// Nobody to reprint for: registered at the kiosk only, or already checked out.
+			if (found.kind === 'kiosk_registered' || found.kind === 'checked_out') {
 				this.error = this.messages.notFound;
 				this.step = 'phone';
 				return;

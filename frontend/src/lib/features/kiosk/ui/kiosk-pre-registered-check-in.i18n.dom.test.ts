@@ -416,3 +416,60 @@ describe('KioskPreRegisteredCheckIn self-checkout (#1401)', () => {
 		await vi.waitFor(() => expect(onprintbusychange).toHaveBeenLastCalledWith(false));
 	});
 });
+
+describe('KioskPreRegisteredCheckIn already checked out', () => {
+	const CARD = { source: 'smart-card', citizen_id: '1234567890123' } as const;
+	const checkedOut = (channel: 'kiosk' | 'staff' | 'shelter_closed' | null) =>
+		({
+			kind: 'checked_out',
+			shelter_code: 'SH001',
+			checked_out_at: '2026-11-17T09:30:00.000Z',
+			channel
+		}) as const;
+	const panelText = () =>
+		document
+			.querySelector('[data-testid="kiosk-already-checked-out"]')
+			?.textContent?.replace(/\s+/g, ' ') ?? '';
+
+	it('says once that this evacuee checked out, with the channel and date', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(checkedOut('kiosk'));
+
+		mountCheckIn({ input: CARD, cardMode: true });
+		await vi.waitFor(() => expect(screenText()).toContain('ผู้อพยพรายนี้เช็คเอาต์แล้ว'));
+
+		expect(screenText().match(/เช็คเอาต์แล้ว/g)).toHaveLength(1);
+		expect(panelText()).toContain('หากต้องการกลับเข้าศูนย์ กรุณาติดต่อเจ้าหน้าที่');
+		expect(panelText()).toContain('ช่องทาง ตู้ kiosk');
+		expect(panelText()).toContain('วันที่เช็คเอาต์ 17 พ.ย. 2569 16:30');
+		expect(panelText()).toContain('กลับหน้าแรก');
+	});
+
+	it('names staff and shelter closure as channels', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(checkedOut('staff'));
+		mountCheckIn({ input: CARD, cardMode: true });
+		await vi.waitFor(() => expect(panelText()).toContain('ช่องทาง เจ้าหน้าที่'));
+		unmount(instance!);
+		document.body.innerHTML = '';
+
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(checkedOut('shelter_closed'));
+		mountCheckIn({ input: CARD, cardMode: true });
+		await vi.waitFor(() => expect(panelText()).toContain('ช่องทาง ปิดศูนย์'));
+	});
+
+	it('leaves the channel row out when it is unknown', async () => {
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(checkedOut(null));
+		mountCheckIn({ input: CARD, cardMode: true });
+		await vi.waitFor(() => expect(panelText()).toContain('วันที่เช็คเอาต์'));
+		expect(panelText()).not.toContain('ช่องทาง');
+	});
+
+	it('words the notice in English with no Thai', async () => {
+		languageStore.setLanguage('en');
+		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(checkedOut('kiosk'));
+		mountCheckIn({ input: CARD, cardMode: true });
+		await vi.waitFor(() => expect(screenText()).toContain('This evacuee has checked out'));
+		expect(panelText()).toContain('Channel Kiosk');
+		expect(panelText()).toContain('Checked out on');
+		expect(screenText()).not.toMatch(THAI);
+	});
+});

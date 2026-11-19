@@ -11,6 +11,7 @@ import {
 	isListedHouseholdMember,
 	isReprintableStatus
 } from '../domain/check-in-status';
+import { checkoutChannelOf, type KioskCheckoutChannel } from '../domain/checkout-channel';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { groupPhoneMatches, isPhoneMatchEligible } from '../domain/phone-match';
 import { adminFetch } from '$lib/server/couch-admin';
@@ -181,6 +182,8 @@ export type KioskLookupOutcome =
 	| ({ kind: 'household'; name_masked: boolean } & KioskLookupResult)
 	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] }
 	| { kind: 'kiosk_registered' }
+	/** The scanned person already checked out of this shelter; `channel` is null when unknown. */
+	| { kind: 'checked_out'; checked_out_at: string; channel: KioskCheckoutChannel | null }
 	/** CR-233 FR-EQR-32: a superseded Person QR (dates only, no personal data). */
 	| { kind: 'qr_expired'; issued_at: string | null; current_printed_at: string }
 	| { kind: 'qr_invalid' }
@@ -561,6 +564,35 @@ function asLookupUnavailable(error: unknown): never {
 	throw new KioskLookupUnavailableError();
 }
 
+type CheckOutMovement = { created_by?: string; reason?: string; occurred_at?: string };
+
+/**
+ * The newest check-out of a person already out of this shelter. The stay's `since` is the date;
+ * the channel comes from the latest `check_out` movement and is null when it cannot be read
+ * (a missing movement must never turn a known check-out into "not found").
+ */
+async function findCheckedOutNotice(
+	dbName: string,
+	checkedOut: EvacueeDoc
+): Promise<Extract<KioskLookupOutcome, { kind: 'checked_out' }>> {
+	const found = await adminFetch<{ docs?: CheckOutMovement[] }>(`/${dbName}/_find`, {
+		method: 'POST',
+		body: JSON.stringify({
+			selector: { type: 'movement', evacuee_id: checkedOut._id, action: 'check_out' },
+			limit: 100
+		})
+	}).catch(() => ({ docs: [] as CheckOutMovement[] }));
+	let latest: CheckOutMovement | null = null;
+	for (const movement of found.docs ?? []) {
+		if (!latest || (movement.occurred_at ?? '') > (latest.occurred_at ?? '')) latest = movement;
+	}
+	return {
+		kind: 'checked_out',
+		checked_out_at: latest?.occurred_at ?? checkedOut.current_stay?.since ?? '',
+		channel: latest ? checkoutChannelOf(latest) : null
+	};
+}
+
 /** Resolve a pre-registration or prior check-in only within the authenticated scanner's shelter. */
 export async function lookupPreRegisteredEvacuee(
 	shelterCode: string,
@@ -649,6 +681,14 @@ export async function lookupPreRegisteredEvacuee(
 	const eligible = candidates.filter(
 		(doc) => doc.shelter_code === shelterCode && isListedHouseholdMember(doc)
 	);
+	if (eligible.length === 0) {
+		const checkedOut = candidates
+			.filter(
+				(doc) => doc.shelter_code === shelterCode && doc.current_stay?.status === 'checked_out'
+			)
+			.sort((a, b) => (b.current_stay?.since ?? '').localeCompare(a.current_stay?.since ?? ''))[0];
+		if (checkedOut) return findCheckedOutNotice(dbName, checkedOut);
+	}
 	if (eligible.length !== 1) return { kind: 'not_found', can_register: false };
 
 	const primary = eligible[0];

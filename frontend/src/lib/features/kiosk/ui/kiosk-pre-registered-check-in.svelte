@@ -6,6 +6,7 @@
 	import Printer from '@lucide/svelte/icons/printer';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import UserCheck from '@lucide/svelte/icons/user-check';
+	import LogOut from '@lucide/svelte/icons/log-out';
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
@@ -48,6 +49,7 @@
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
+	import { formatDisplayDateTime } from '$lib/utils/date';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { KIOSK_QR_FLOW_I18N } from './_constants/kiosk-qr-flow.i18n';
 	import { KIOSK_SELF_CHECKOUT_I18N } from './_constants/kiosk-self-checkout.i18n';
@@ -116,6 +118,8 @@
 	let lookupErrorCode = $state<string | null>(null);
 	let canRegister = $state(false);
 	let alreadyKioskRegistered = $state(false);
+	/** The scanned person already checked out of this shelter: say when and through which channel. */
+	let checkedOutNotice = $state<Extract<KioskLookupResponse, { kind: 'checked_out' }> | null>(null);
 	let retryAfterSeconds = $state(0);
 	let isLookingUp = $state(false);
 	let isSubmitting = $state(false);
@@ -248,6 +252,7 @@
 		lookupErrorCode = null;
 		canRegister = false;
 		alreadyKioskRegistered = false;
+		checkedOutNotice = null;
 		retryAfterSeconds = 0;
 		results = [];
 		retryableIds = [];
@@ -272,6 +277,10 @@
 			}
 			if (found.kind === 'kiosk_registered') {
 				alreadyKioskRegistered = true;
+				return;
+			}
+			if (found.kind === 'checked_out') {
+				checkedOutNotice = found;
 				return;
 			}
 			lookup = found;
@@ -648,21 +657,23 @@
 					? checkoutT.heading
 					: walkInOffered
 						? t.title.notPreRegistered
-						: alreadyKioskRegistered
-							? t.title.alreadyKioskRegistered
-							: lookupError
-								? t.title.lookupFailed
-								: results.length > 0
-									? t.title.results
-									: candidates.length > 0
-										? t.title.chooseHousehold
-										: lookup
-											? holdMembers
-												? t.title.verifyIdentity
-												: t.title.chooseMembers
-											: cardMode && !input
-												? t.title.waitingForCard
-												: t.title.searching}
+						: checkedOutNotice
+							? t.title.alreadyCheckedOut
+							: alreadyKioskRegistered
+								? t.title.alreadyKioskRegistered
+								: lookupError
+									? t.title.lookupFailed
+									: results.length > 0
+										? t.title.results
+										: candidates.length > 0
+											? t.title.chooseHousehold
+											: lookup
+												? holdMembers
+													? t.title.verifyIdentity
+													: t.title.chooseMembers
+												: cardMode && !input
+													? t.title.waitingForCard
+													: t.title.searching}
 			</h1>
 			{#if cardMode && !input}
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
@@ -767,6 +778,38 @@
 						{onreset}
 						{onrescan}
 					/>
+				{/snippet}
+			</KioskNoticePanel>
+		{/if}
+
+		{#if checkedOutNotice}
+			<KioskNoticePanel
+				tone="info"
+				icon={LogOut}
+				title={t.alreadyCheckedOut.title}
+				role="status"
+				data-testid="kiosk-already-checked-out"
+			>
+				<dl
+					class="mx-auto grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-xl bg-slate-50 px-5 py-4 text-left kiosk-portrait:max-w-lg kiosk-portrait:gap-y-3 kiosk-portrait:px-7 kiosk-portrait:py-5"
+				>
+					{#if checkedOutNotice.channel}
+						<dt class="text-slate-600">{t.alreadyCheckedOut.channelLabel}</dt>
+						<dd class="font-semibold text-slate-900">
+							{t.alreadyCheckedOut.channel[checkedOutNotice.channel]}
+						</dd>
+					{/if}
+					{#if checkedOutNotice.checked_out_at}
+						<dt class="text-slate-600">{t.alreadyCheckedOut.dateLabel}</dt>
+						<dd class="font-semibold text-slate-900 tabular-nums">
+							{formatDisplayDateTime(checkedOutNotice.checked_out_at, languageStore.current)}
+						</dd>
+					{/if}
+				</dl>
+				{#snippet actions()}
+					<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
+						>{t.alreadyCheckedOut.home}</Button
+					>
 				{/snippet}
 			</KioskNoticePanel>
 		{/if}
