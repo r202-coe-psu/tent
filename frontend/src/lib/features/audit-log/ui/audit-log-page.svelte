@@ -165,10 +165,16 @@
 	<section class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs sm:p-6">
 		{#if query.isLoading}
 			<p class="text-sm text-slate-500" role="status">กำลังโหลด...</p>
-		{:else if items.length === 0}
+		{:else if items.length === 0 && !query.hasNextPage}
 			<p class="text-sm text-slate-500">ไม่พบรายการ</p>
 		{:else}
-			<AuditEventList {items} showShelter={isSystemAdmin} />
+			{#if items.length === 0}
+				<p class="text-sm text-slate-500">
+					ยังไม่พบรายการในช่วงที่ค้นไปแล้ว — กดโหลดเพิ่มเพื่อค้นต่อ
+				</p>
+			{:else}
+				<AuditEventList {items} showShelter={isSystemAdmin} />
+			{/if}
 			{#if query.hasNextPage}
 				<div class="pt-3">
 					<Button

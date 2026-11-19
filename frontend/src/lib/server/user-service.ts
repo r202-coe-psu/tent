@@ -1795,6 +1795,14 @@ export async function readUserDocForLink(name: string): Promise<CouchUserDoc | n
 	}
 }
 
+export async function readUserDocAfterWrite(name: string): Promise<CouchUserDoc | null> {
+	try {
+		return await readUserDocForLink(name);
+	} catch {
+		return null;
+	}
+}
+
 /** Record user PDPA and NDA consent acceptance with audit trail (issue #1246). */
 export async function recordUserConsent(
 	username: string

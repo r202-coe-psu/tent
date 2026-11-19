@@ -38,6 +38,22 @@ describe('parseAuditLogQuery', () => {
 		expect(() => parse({ action: 'hack' })).toThrow();
 	});
 
+	it('widens a bare to-date to the end of that day so its events stay in range', () => {
+		const query = parse({ from: '2026-11-17', to: '2026-11-18' });
+		expect(query.from).toBe('2026-11-17T00:00:00.000Z');
+		expect(query.to).toBe('2026-11-18T23:59:59.999Z');
+		expect(matchesAuditQuery(event({ occurred_at: '2026-11-18T16:30:00.000Z' }), query)).toBe(true);
+	});
+
+	it('normalises an offset to UTC so the string compare is sound', () => {
+		const query = parse({ to: '2026-11-18T23:59:59.999+07:00' });
+		expect(query.to).toBe('2026-11-18T16:59:59.999Z');
+		expect(matchesAuditQuery(event({ occurred_at: '2026-11-18T16:00:00.000Z' }), query)).toBe(true);
+		expect(matchesAuditQuery(event({ occurred_at: '2026-11-18T17:00:00.000Z' }), query)).toBe(
+			false
+		);
+	});
+
 	it('rejects an invalid date', () => {
 		expect(() => parse({ from: 'yesterday' })).toThrow();
 	});

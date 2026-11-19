@@ -1,7 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
-import { readUserDocForLink, resetUserPasswordByAdmin } from '$lib/server/user-service';
+import {
+	readUserDocAfterWrite,
+	readUserDocForLink,
+	resetUserPasswordByAdmin
+} from '$lib/server/user-service';
 import { recordAuditedWrites } from '$lib/server/audit-log';
 import { AUDIT_EVENTS, auditShelterCodesFromRoles } from '$lib/features/audit-log/server';
 
@@ -18,8 +22,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			throw new ServiceError('VALIDATION', 'name is required');
 		}
 
+		const before = await readUserDocForLink(name);
 		const result = await resetUserPasswordByAdmin(name, caller);
-		const user = await readUserDocForLink(name);
+		const user = (await readUserDocAfterWrite(name)) ?? before;
 		await recordAuditedWrites(
 			{
 				actor: caller.name,

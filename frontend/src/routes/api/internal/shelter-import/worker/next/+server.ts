@@ -308,6 +308,13 @@ export const POST: RequestHandler = async ({ request }) => {
 							lockOwnerId,
 							assertActive: assertActiveClaim
 						});
+						await updateImportItem(item, {
+							status: 'created',
+							code: result.code,
+							lease_until: undefined,
+							worker_id: undefined,
+							claim_token: undefined
+						});
 						await recordAuditedWrite({
 							actor: job.imported_by,
 							event: AUDIT_EVENTS.shelterImported,
@@ -316,13 +323,6 @@ export const POST: RequestHandler = async ({ request }) => {
 							entityId: result.code,
 							label: input.name,
 							shelterCode: result.code
-						});
-						await updateImportItem(item, {
-							status: 'created',
-							code: result.code,
-							lease_until: undefined,
-							worker_id: undefined,
-							claim_token: undefined
 						});
 					}
 				}

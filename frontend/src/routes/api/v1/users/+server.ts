@@ -9,7 +9,9 @@ import {
 import {
 	createOrMergeUser,
 	deleteUser,
+	isDeletedUserDoc,
 	listUsers,
+	readUserDocAfterWrite,
 	readUserDocForLink,
 	updateUser
 } from '$lib/server/user-service';
@@ -142,7 +144,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			// A merge into an existing volunteer account checks that account's own profile (A1-7).
 			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
-		const created = await readUserDocForLink(name);
+		const created = await readUserDocAfterWrite(name);
 		await recordAuditedWrites(
 			{
 				actor: caller.name,
@@ -239,7 +241,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 			// (CR-221 A1-7); a save that adds no role is not checked.
 			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
-		const after = await readUserDocForLink(name);
+		const after = await readUserDocAfterWrite(name);
 		const rolesChanged =
 			JSON.stringify([...(before?.roles ?? [])].sort()) !==
 			JSON.stringify([...(after?.roles ?? [])].sort());
@@ -285,16 +287,29 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
 		assertUsersWritable();
 		const before = await readUserDocForLink(name);
 		await deleteUser(name, caller);
+		const after = await readUserDocAfterWrite(name);
+		const removed = after === null || isDeletedUserDoc(after);
 		await recordAuditedWrites(
-			{
-				actor: caller.name,
-				event: AUDIT_EVENTS.userDeleted,
-				action: 'delete',
-				entityType: 'user',
-				entityId: name,
-				label: before?.display_name ?? null
-			},
-			auditShelterCodesFromRoles(before?.roles)
+			removed
+				? {
+						actor: caller.name,
+						event: AUDIT_EVENTS.userDeleted,
+						action: 'delete',
+						entityType: 'user',
+						entityId: name,
+						label: before?.display_name ?? null
+					}
+				: {
+						actor: caller.name,
+						event: AUDIT_EVENTS.userRolesChanged,
+						action: 'update',
+						entityType: 'user',
+						entityId: name,
+						label: after?.display_name ?? before?.display_name ?? null,
+						before: before as unknown as Record<string, unknown> | null,
+						after: after as unknown as Record<string, unknown> | null
+					},
+			auditShelterCodesFromRoles(before?.roles, after?.roles)
 		);
 		return json({ ok: true });
 	} catch (e) {

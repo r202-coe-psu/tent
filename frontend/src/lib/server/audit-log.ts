@@ -54,6 +54,7 @@ export type AuditedWrite = {
 	before?: Record<string, unknown> | null;
 	after?: Record<string, unknown> | null;
 	reason?: string | null;
+	onlyWhenChanged?: boolean;
 };
 
 export async function recordAuditedWrites(
@@ -68,6 +69,7 @@ export function recordAuditedWrite(write: AuditedWrite): Promise<boolean> {
 		write.action === 'create' || write.action === 'delete'
 			? undefined
 			: computeAuditChanges(write.entityType, write.before, write.after);
+	if (write.onlyWhenChanged && changes && changes.length === 0) return Promise.resolve(false);
 	return recordAudit({
 		actor: write.actor,
 		action: write.action,
@@ -91,7 +93,13 @@ export async function recordProxiedWrite(
 	const bodyId =
 		typeof body?.id === 'string' || typeof body?.id === 'number' ? String(body.id) : null;
 	const entityId = write.entityId ?? bodyId;
-	if (!entityId) return;
+	if (!entityId) {
+		console.warn('[audit-log] event not written: upstream body carried no id', {
+			event: write.event,
+			entityType: write.entityType
+		});
+		return;
+	}
 	await recordAuditedWrite({
 		...write,
 		entityId,

@@ -193,18 +193,17 @@ export const useCloseZone = () => {
 		mutationFn: ({
 			code,
 			zoneCode,
-			reason,
-			closedBy
+			reason
 		}: {
 			code: string;
 			zoneCode: string;
 			zoneName?: string;
 			reason?: string;
-			closedBy?: string;
-		}) => closeZone(code, zoneCode, reason, closedBy),
+		}) => closeZone(code, zoneCode, reason),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			const label = variables.zoneName?.trim() || variables.zoneCode;
 			toast.success(`ปิดโซน ${label} ของศูนย์ ${variables.code} เรียบร้อย`);
 		},
@@ -217,19 +216,12 @@ export const useCloseZone = () => {
 export const useReopenZone = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({
-			code,
-			zoneCode,
-			reopenedBy
-		}: {
-			code: string;
-			zoneCode: string;
-			zoneName?: string;
-			reopenedBy?: string;
-		}) => reopenZone(code, zoneCode, reopenedBy),
+		mutationFn: ({ code, zoneCode }: { code: string; zoneCode: string; zoneName?: string }) =>
+			reopenZone(code, zoneCode),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			const label = variables.zoneName?.trim() || variables.zoneCode;
 			toast.success(`เปิดโซน ${label} ของศูนย์ ${variables.code} อีกครั้ง`);
 		},
@@ -289,6 +281,7 @@ export const useSaveStoragePoint = () => {
 			pointId ? editStoragePoint(code, pointId, rev, point) : addStoragePoint(code, rev, point),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			toast.success(variables.pointId ? 'บันทึกจุดเก็บของสำเร็จ' : 'เพิ่มจุดเก็บของสำเร็จ');
 		},
 		onError: (err: Error, variables) => {
@@ -305,6 +298,7 @@ export const useDeleteStoragePoint = () => {
 			deleteStoragePoint(code, pointId, rev),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			toast.success('ลบจุดเก็บของสำเร็จ');
 		},
 		onError: (err: Error, variables) => {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -68,13 +69,19 @@ def to_audit_event(
     }
 
 
+class AuditCopy(StrEnum):
+    COPIED = "copied"
+    SKIPPED = "skipped"
+    RETRY = "retry"
+
+
 async def copy_audit_doc(
     couch: Any,
     source: dict[str, Any],
     db_name: str,
     *,
     now: datetime | None = None,
-) -> bool:
+) -> AuditCopy:
     event = to_audit_event(source, db_name, now or datetime.now(UTC))
     if event is None:
         logger.warning(
@@ -82,13 +89,13 @@ async def copy_audit_doc(
             source.get("_id"),
             db_name,
         )
-        return False
+        return AuditCopy.SKIPPED
     try:
         await couch.put_doc(AUDIT_LOG_DB, event, retry_conflict=False)
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         if status == 409:
-            return True
+            return AuditCopy.COPIED
         if status == 404:
             logger.warning(
                 "Database %s does not exist — audit doc %s from %s not copied",
@@ -96,14 +103,14 @@ async def copy_audit_doc(
                 source.get("_id"),
                 db_name,
             )
-            return False
+            return AuditCopy.SKIPPED
         logger.exception(
             "Failed to copy audit doc %s from %s to %s",
             source.get("_id"),
             db_name,
             AUDIT_LOG_DB,
         )
-        return False
+        return AuditCopy.RETRY
     except Exception:
         logger.exception(
             "Failed to copy audit doc %s from %s to %s",
@@ -111,8 +118,8 @@ async def copy_audit_doc(
             db_name,
             AUDIT_LOG_DB,
         )
-        return False
-    return True
+        return AuditCopy.RETRY
+    return AuditCopy.COPIED
 
 
 async def copy_all_audit_docs(couch: Any, db_name: str) -> int:

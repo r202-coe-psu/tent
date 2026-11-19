@@ -126,6 +126,41 @@ describe('recordProxiedWrite', () => {
 		});
 		expect(await ok.json()).toEqual({ id: 'key-1', name: 'EOC' });
 	});
+
+	it("keeps the caller's own entityId and label over the upstream body", async () => {
+		adminRawMock.mockResolvedValue({ status: 201, data: {} });
+		const ok = new Response(JSON.stringify({ id: 'ignored', name: 'ignored' }), { status: 200 });
+
+		await recordProxiedWrite(ok, {
+			actor: 'sa',
+			event: 'thirdparty_client.revoked',
+			action: 'status_change',
+			entityType: 'thirdparty_client',
+			entityId: 'client-9',
+			label: 'พันธมิตร ก',
+			shelterCode: null
+		});
+
+		expect(adminRawMock.mock.calls[0][2].entity).toEqual({
+			type: 'thirdparty_client',
+			id: 'client-9',
+			label: 'พันธมิตร ก'
+		});
+	});
+
+	it('writes nothing when a successful upstream body carries no id', async () => {
+		adminRawMock.mockResolvedValue({ status: 201, data: {} });
+
+		await recordProxiedWrite(new Response(JSON.stringify({ ok: true }), { status: 200 }), {
+			actor: 'sa',
+			event: 'api_key.revoked',
+			action: 'status_change',
+			entityType: 'api_key',
+			shelterCode: null
+		});
+
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
 });
 
 describe('queryAuditLog', () => {

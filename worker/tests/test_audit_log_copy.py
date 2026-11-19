@@ -8,6 +8,7 @@ import pytest
 
 from worker.audit_log import (
     AUDIT_LOG_DB,
+    AuditCopy,
     copy_all_audit_docs,
     copy_audit_doc,
     to_audit_event,
@@ -123,7 +124,10 @@ def test_non_audit_id_is_not_mapped():
 async def test_copy_puts_without_overwriting():
     couch = AsyncMock()
 
-    assert await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW) is True
+    assert (
+        await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW)
+        is AuditCopy.COPIED
+    )
 
     couch.put_doc.assert_awaited_once()
     database, doc = couch.put_doc.await_args.args
@@ -137,7 +141,10 @@ async def test_conflict_means_already_copied():
     couch = AsyncMock()
     couch.put_doc.side_effect = _http_error(409)
 
-    assert await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW) is True
+    assert (
+        await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW)
+        is AuditCopy.COPIED
+    )
     couch.put_doc.assert_awaited_once()
 
 
@@ -145,7 +152,10 @@ async def test_missing_audit_log_database_does_not_raise(caplog):
     couch = AsyncMock()
     couch.put_doc.side_effect = _http_error(404)
 
-    assert await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW) is False
+    assert (
+        await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW)
+        is AuditCopy.SKIPPED
+    )
     assert "does not exist" in caplog.text
     couch.ensure_database.assert_not_awaited()
 
@@ -153,11 +163,14 @@ async def test_missing_audit_log_database_does_not_raise(caplog):
 @pytest.mark.parametrize(
     "error", [_http_error(500), httpx.ConnectError("down"), RuntimeError("boom")]
 )
-async def test_other_write_failures_do_not_raise(error):
+async def test_other_write_failures_ask_for_a_retry(error):
     couch = AsyncMock()
     couch.put_doc.side_effect = error
 
-    assert await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW) is False
+    assert (
+        await copy_audit_doc(couch, _audit(), "shelter_sh001", now=NOW)
+        is AuditCopy.RETRY
+    )
 
 
 def _change(seq: int, doc: dict | None = None, *, deleted: bool = False) -> dict:
@@ -216,7 +229,7 @@ async def test_processor_skips_audit_of_cancelled_and_external_shelters(status):
     save_cp.assert_awaited_once_with("shelter_sh001", 8)
 
 
-async def test_processor_checkpoints_even_when_the_copy_fails():
+async def test_processor_holds_the_checkpoint_when_the_copy_can_be_retried():
     couch = AsyncMock()
     couch.put_doc.side_effect = _http_error(503)
 
@@ -233,6 +246,25 @@ async def test_processor_checkpoints_even_when_the_copy_fails():
         await process_change(couch, "shelter_sh001", _change(9, _audit()))
 
     couch.put_doc.assert_awaited_once()
+    save_cp.assert_not_awaited()
+
+
+async def test_processor_checkpoints_past_an_audit_doc_it_can_never_copy():
+    couch = AsyncMock()
+    couch.put_doc.side_effect = _http_error(404)
+
+    with (
+        patch(
+            "worker.couch.processor.projected_shelter_status",
+            new_callable=AsyncMock,
+            return_value="open",
+        ),
+        patch(
+            "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
+        ) as save_cp,
+    ):
+        await process_change(couch, "shelter_sh001", _change(9, _audit()))
+
     save_cp.assert_awaited_once_with("shelter_sh001", 9)
 
 

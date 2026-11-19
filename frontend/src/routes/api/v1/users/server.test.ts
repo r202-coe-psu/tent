@@ -1,9 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockCreateOrMergeUser, mockUpdateUser, mockAssertVerified } = vi.hoisted(() => ({
+const {
+	mockCreateOrMergeUser,
+	mockUpdateUser,
+	mockAssertVerified,
+	mockDeleteUser,
+	mockReadForLink,
+	mockReadAfterWrite,
+	mockRecordAuditedWrites
+} = vi.hoisted(() => ({
 	mockCreateOrMergeUser: vi.fn(),
 	mockUpdateUser: vi.fn(),
-	mockAssertVerified: vi.fn()
+	mockAssertVerified: vi.fn(),
+	mockDeleteUser: vi.fn(),
+	mockReadForLink: vi.fn(async () => null),
+	mockReadAfterWrite: vi.fn(async () => null),
+	mockRecordAuditedWrites: vi.fn(async () => undefined)
 }));
 
 vi.mock('$lib/server/couch-admin', () => ({
@@ -23,13 +35,16 @@ vi.mock('$lib/server/couch-admin', () => ({
 }));
 vi.mock('$lib/server/user-service', () => ({
 	createOrMergeUser: mockCreateOrMergeUser,
-	deleteUser: vi.fn(),
+	deleteUser: mockDeleteUser,
 	listUsers: vi.fn(),
 	updateUser: mockUpdateUser,
-	readUserDocForLink: vi.fn(async () => null)
+	isDeletedUserDoc: (doc: { deleted_at?: string | null } | null | undefined) =>
+		Boolean(doc && doc.deleted_at),
+	readUserDocForLink: mockReadForLink,
+	readUserDocAfterWrite: mockReadAfterWrite
 }));
 vi.mock('$lib/server/audit-log', () => ({
-	recordAuditedWrites: vi.fn(async () => undefined)
+	recordAuditedWrites: mockRecordAuditedWrites
 }));
 vi.mock('$lib/features/volunteers/server/volunteer-access-grant', () => ({
 	assertVolunteerVerifiedForAccess: mockAssertVerified
@@ -38,7 +53,7 @@ vi.mock('$lib/server/password-policy', () => ({
 	validateProvisionedPassword: vi.fn((p: string) => p)
 }));
 
-import { POST, PUT } from './+server';
+import { DELETE, POST, PUT } from './+server';
 
 function post(body: Record<string, unknown>) {
 	const request = new Request('http://localhost/api/v1/users', {
@@ -129,5 +144,76 @@ describe('PUT /api/v1/users — CR-221 A1-7', () => {
 			expect.objectContaining({ isSA: true }),
 			{ verifyVolunteerRoles: mockAssertVerified }
 		);
+	});
+});
+
+function del(name: string) {
+	const request = new Request(`http://localhost/api/v1/users?name=${name}`, {
+		method: 'DELETE',
+		headers: { cookie: 'AuthSession=x' }
+	});
+	return DELETE({
+		request,
+		url: new URL(`http://localhost/api/v1/users?name=${name}`)
+	} as Parameters<typeof DELETE>[0]);
+}
+
+describe('DELETE /api/v1/users — CR-259 audit reflects what the write did', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockDeleteUser.mockResolvedValue(undefined);
+	});
+
+	it('records user.deleted once the account is soft deleted', async () => {
+		mockReadForLink.mockResolvedValue({
+			display_name: 'Staff 01',
+			roles: ['shelter:SH001']
+		} as never);
+		mockReadAfterWrite.mockResolvedValue({
+			display_name: 'Staff 01',
+			roles: [],
+			deleted_at: '2026-11-19T00:00:00.000Z'
+		} as never);
+
+		const res = await del('staff01');
+
+		expect(res.status).toBe(200);
+		expect(mockRecordAuditedWrites).toHaveBeenCalledTimes(1);
+		expect(mockRecordAuditedWrites.mock.calls[0][0]).toMatchObject({
+			event: 'user.deleted',
+			action: 'delete',
+			entityType: 'user',
+			entityId: 'staff01'
+		});
+	});
+
+	it('records user.roles_changed when the account survives with other shelters', async () => {
+		mockReadForLink.mockResolvedValue({
+			display_name: 'Staff 01',
+			roles: ['shelter:SH001', 'shelter:SH002']
+		} as never);
+		mockReadAfterWrite.mockResolvedValue({
+			display_name: 'Staff 01',
+			roles: ['shelter:SH002']
+		} as never);
+
+		const res = await del('staff01');
+
+		expect(res.status).toBe(200);
+		expect(mockRecordAuditedWrites).toHaveBeenCalledTimes(1);
+		const write = mockRecordAuditedWrites.mock.calls[0][0] as Record<string, unknown>;
+		expect(write).toMatchObject({ event: 'user.roles_changed', action: 'update' });
+		expect(write.before).toMatchObject({ roles: ['shelter:SH001', 'shelter:SH002'] });
+		expect(write.after).toMatchObject({ roles: ['shelter:SH002'] });
+	});
+
+	it('still answers 200 when the read after the write faults', async () => {
+		mockReadForLink.mockResolvedValue({ display_name: 'Staff 01', roles: [] } as never);
+		mockReadAfterWrite.mockResolvedValue(null);
+
+		const res = await del('staff01');
+
+		expect(res.status).toBe(200);
+		expect(mockRecordAuditedWrites.mock.calls[0][0]).toMatchObject({ action: 'delete' });
 	});
 });

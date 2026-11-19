@@ -10,12 +10,22 @@ const optionalText = z
 	.transform((v) => (v === '' ? undefined : v))
 	.optional();
 
-const optionalIso = z
-	.string()
-	.trim()
-	.optional()
-	.transform((v) => (v ? v : undefined))
-	.refine((v) => v === undefined || !Number.isNaN(Date.parse(v)), 'วันที่ไม่ถูกต้อง');
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+const isoBound = (edge: 'start' | 'end') =>
+	z
+		.string()
+		.trim()
+		.optional()
+		.transform((v) => (v ? v : undefined))
+		.refine((v) => v === undefined || !Number.isNaN(Date.parse(v)), 'วันที่ไม่ถูกต้อง')
+		.transform((v) => {
+			if (v === undefined) return undefined;
+			if (DATE_ONLY.test(v)) {
+				return `${v}T${edge === 'start' ? '00:00:00.000' : '23:59:59.999'}Z`;
+			}
+			return new Date(v).toISOString();
+		});
 
 export const auditLogQuerySchema = z.object({
 	shelter_code: optionalText,
@@ -23,8 +33,8 @@ export const auditLogQuerySchema = z.object({
 	entity_id: optionalText,
 	actor: optionalText,
 	action: z.enum(AUDIT_ACTIONS).optional(),
-	from: optionalIso,
-	to: optionalIso,
+	from: isoBound('start'),
+	to: isoBound('end'),
 	cursor: optionalText,
 	limit: z.preprocess(
 		(v) => (v === '' || v === undefined ? undefined : v),

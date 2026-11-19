@@ -17,10 +17,11 @@ const isNameLockHeldMock = vi.hoisted(() => vi.fn());
 const releaseNameLockMock = vi.hoisted(() => vi.fn());
 const buildUpdatePayloadMock = vi.hoisted(() => vi.fn());
 const readMasterDocMock = vi.hoisted(() => vi.fn());
+const recordAuditMock = vi.hoisted(() => vi.fn(async () => true));
 
 vi.mock('$env/dynamic/private', () => ({ env }));
 vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: readMasterDocMock }));
-vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite: vi.fn(async () => true) }));
+vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite: recordAuditMock }));
 vi.mock('$lib/features/shelters/server', async () => ({
 	validateSiteKindChange: (await import('$lib/features/shelters/domain/schema'))
 		.validateSiteKindChange
@@ -109,6 +110,7 @@ beforeEach(() => {
 		_rev: '2-item'
 	}));
 	resumeRetryMock.mockReset();
+	recordAuditMock.mockReset().mockResolvedValue(true);
 	findByNameMock.mockReset().mockResolvedValue(null);
 	updateMasterMock.mockReset();
 	buildUpdatePayloadMock.mockReset();
@@ -152,6 +154,31 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			expect.objectContaining({ _id: 'shelter_import_item:job-1:000001' }),
 			expect.objectContaining({ status: 'created', code: 'SH001' })
 		);
+	});
+
+	it('records one shelter.imported event, after the item is marked created', async () => {
+		await call();
+
+		expect(recordAuditMock).toHaveBeenCalledTimes(1);
+		expect(recordAuditMock.mock.calls[0][0]).toMatchObject({
+			actor: 'sa.importer',
+			event: 'shelter.imported',
+			action: 'create',
+			entityType: 'shelter',
+			entityId: 'SH001',
+			shelterCode: 'SH001'
+		});
+		expect(updateItemMock.mock.invocationCallOrder[0]).toBeLessThan(
+			recordAuditMock.mock.invocationCallOrder[0]
+		);
+	});
+
+	it('writes no audit event when marking the item created fails', async () => {
+		updateItemMock.mockRejectedValueOnce(new Error('couch down'));
+
+		await call();
+
+		expect(recordAuditMock).not.toHaveBeenCalled();
 	});
 
 	it('resumes a partial provision even when duplicate action is skip', async () => {
