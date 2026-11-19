@@ -695,13 +695,10 @@ class ScannerClientManager:
         deadline = time.monotonic() + KIOSK_PRINT_OVERALL_DEADLINE_SEC
         if self.printer_backend == "cups" and not await self._cups_queue_ready():
             logger.error(f"Label print refused: {self._print_target} is not ready")
-            return 503, {
-                "printed": 0,
-                "error": {
-                    "code": "PRINTER_NOT_READY",
-                    "message": "เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่",
-                },
-            }
+            return self._printer_not_ready()
+        if self.printer_backend == "escpos" and self._find_printer_device() is None:
+            logger.error(f"ESC/POS printer {self.printer_usb_id or '(no id)'} not found; is it on and plugged in?")
+            return self._printer_not_ready()
 
         printed = 0
         for index, image in enumerate(images):
@@ -741,6 +738,16 @@ class ScannerClientManager:
             if self.printer_backend == "escpos":
                 self._escpos_last_label_at = time.monotonic()
         return 200, {"printed": printed}
+
+    @staticmethod
+    def _printer_not_ready() -> tuple[int, Dict[str, Any]]:
+        return 503, {
+            "printed": 0,
+            "error": {
+                "code": "PRINTER_NOT_READY",
+                "message": "เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่",
+            },
+        }
 
     async def _cups_queue_ready(self) -> bool:
         try:

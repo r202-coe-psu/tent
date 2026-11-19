@@ -1327,16 +1327,27 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertGreater((dev / "lp5").stat().st_size, 0)
 
-    async def test_missing_printer_returns_print_failed_and_logs_no_label_content(self):
+    async def test_missing_printer_is_refused_as_not_ready_before_anything_is_written(self):
         sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"))
         client = self.client(PRINTER_USB_ID="28e9:5812")
 
         with self.assertLogs(manager.logger, level="ERROR") as logs:
-            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png(), real_png()))
 
-        self.assertEqual(route.fulfilled["status"], 502)
-        self.assertEqual(route.fulfilled["body"]["printed"], 0)
-        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertEqual(
+            route.fulfilled,
+            {
+                "status": 503,
+                "body": {
+                    "printed": 0,
+                    "error": {
+                        "code": "PRINTER_NOT_READY",
+                        "message": "เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่",
+                    },
+                },
+            },
+        )
+        self.assertEqual((dev / "lp0").read_bytes(), b"")
         self.assertTrue(any("not found" in line for line in logs.output))
 
     async def test_explicit_device_path_overrides_usb_id_lookup(self):
