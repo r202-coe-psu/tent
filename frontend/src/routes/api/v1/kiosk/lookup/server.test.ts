@@ -194,6 +194,23 @@ describe('POST /api/v1/kiosk/lookup', () => {
 		expect(body).not.toHaveProperty('members');
 	});
 
+	it('answers 200 checked_out with the date and channel and no household', async () => {
+		mockLookup.mockResolvedValueOnce({
+			kind: 'checked_out',
+			checked_out_at: '2026-11-17T09:30:00.000Z',
+			channel: 'kiosk'
+		} as never);
+		const response = await send({ source: 'smart-card', citizen_id: '1234567890123' });
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body).toEqual({
+			kind: 'checked_out',
+			shelter_code: 'SH001',
+			checked_out_at: '2026-11-17T09:30:00.000Z',
+			channel: 'kiosk'
+		});
+	});
+
 	it('checks the walk-in flag only after a smart-card miss', async () => {
 		mockLookup.mockResolvedValueOnce({ kind: 'not_found', can_register: true } as never);
 

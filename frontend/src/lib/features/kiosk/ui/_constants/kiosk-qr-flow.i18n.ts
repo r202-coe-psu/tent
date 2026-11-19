@@ -92,6 +92,7 @@ const th = {
 		title: {
 			notPreRegistered: 'ยังไม่ได้ลงทะเบียนล่วงหน้า',
 			alreadyKioskRegistered: 'ลงทะเบียนที่ตู้แล้ว',
+			alreadyCheckedOut: 'ผู้อพยพรายนี้เช็คเอาต์แล้ว',
 			lookupFailed: 'ค้นหาไม่สำเร็จ',
 			results: 'ผลรายงานตัว',
 			chooseHousehold: 'เลือกครัวเรือน',
@@ -118,6 +119,17 @@ const th = {
 			title: 'ไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล',
 			bodyThaid: 'ข้อมูลนี้ลงทะเบียนที่ตู้ไว้แล้ว กรุณาติดต่อเจ้าหน้าที่',
 			bodyCard: 'บัตรนี้ลงทะเบียนที่ตู้ไว้แล้ว ไม่ต้องลงทะเบียนซ้ำ',
+			home: 'กลับหน้าแรก'
+		},
+		alreadyCheckedOut: {
+			title: 'หากต้องการกลับเข้าศูนย์ กรุณาติดต่อเจ้าหน้าที่',
+			channelLabel: 'ช่องทาง',
+			dateLabel: 'วันที่เช็คเอาต์',
+			channel: {
+				kiosk: 'ตู้ kiosk',
+				staff: 'เจ้าหน้าที่',
+				shelter_closed: 'ปิดศูนย์'
+			},
 			home: 'กลับหน้าแรก'
 		},
 		members: {
@@ -263,6 +275,7 @@ const en: typeof th = {
 		title: {
 			notPreRegistered: 'Not pre-registered',
 			alreadyKioskRegistered: 'Already registered at the kiosk',
+			alreadyCheckedOut: 'This evacuee has checked out',
 			lookupFailed: 'Lookup failed',
 			results: 'Check-in results',
 			chooseHousehold: 'Choose household',
@@ -290,6 +303,17 @@ const en: typeof th = {
 			title: 'Please see staff to confirm your details',
 			bodyThaid: 'These details are already registered at the kiosk. Please contact staff.',
 			bodyCard: 'This card is already registered at the kiosk. No need to register again.',
+			home: 'Back to home'
+		},
+		alreadyCheckedOut: {
+			title: 'To come back into the shelter, please contact staff',
+			channelLabel: 'Channel',
+			dateLabel: 'Checked out on',
+			channel: {
+				kiosk: 'Kiosk',
+				staff: 'Staff',
+				shelter_closed: 'Shelter closure'
+			},
 			home: 'Back to home'
 		},
 		members: {
