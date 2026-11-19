@@ -5,7 +5,7 @@ const th = {
 	done: 'เสร็จสิ้น',
 	hint: 'ถ่ายรูป QR นี้เก็บไว้ แล้วแสดงให้เจ้าหน้าที่สแกน',
 	counter: (index: number, total: number) => `${index} / ${total}`,
-	imageAlt: (index: number, total: number) => `QR ${index} / ${total}`
+	imageAlt: (index: number, total: number) => `QR ของคนที่ ${index} จาก ${total}`
 };
 
 const en: typeof th = {
@@ -14,7 +14,7 @@ const en: typeof th = {
 	done: 'Done',
 	hint: 'Take a photo of this QR code and show it to staff to scan.',
 	counter: (index: number, total: number) => `${index} / ${total}`,
-	imageAlt: (index: number, total: number) => `QR ${index} / ${total}`
+	imageAlt: (index: number, total: number) => `QR for person ${index} of ${total}`
 };
 
 export const KIOSK_LABEL_SCREEN_I18N = { th, en };
