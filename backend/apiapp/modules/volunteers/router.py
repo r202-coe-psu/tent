@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from ...core.security import verify_external_secret
@@ -39,12 +41,25 @@ async def list_jobs(
     request: Request,
     response: Response,
     shelter_code: str | None = Query(default=None),
-    skill: str | None = Query(default=None),
+    skill: list[str] | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=100),
+    job_status: Literal["open", "near_full", "controlled"] | None = Query(
+        default=None, alias="status"
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=50),
     use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
 ) -> PublicJobListResponse:
     # Quota moves with every application; a cached board sends people to a full job.
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.list_jobs(shelter_code=shelter_code, skill=skill)
+    return await use_case.list_jobs(
+        shelter_code=shelter_code,
+        skills=skill,
+        q=q,
+        job_status=job_status,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post(

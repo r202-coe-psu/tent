@@ -61,4 +61,5 @@ class PublicJobApplication(Document):
             IndexModel([("tracking_token_hash", 1)]),
             IndexModel([("phone_hash", 1)]),
             IndexModel([("job_id", 1)]),
+            IndexModel([("job_id", 1), ("status", 1)]),
         ]

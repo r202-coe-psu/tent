@@ -1511,3 +1511,184 @@ async def test_access_resolve_prefers_a_per_application_token_when_both_match(
     )
     assert response.status_code == 200
     assert response.json()["profile"] is not None
+
+
+async def _board_job(
+    job_id: str,
+    title: str,
+    *,
+    shelter_code: str = "SH001",
+    skills: list[str] | None = None,
+    tier: str = "operational",
+    remaining: int = 5,
+) -> None:
+    await PublicJob(
+        id=job_id,
+        shelter_code=shelter_code,
+        title=title,
+        tier=tier,
+        skills_required=skills or [],
+        quota=5,
+        slots_remaining=remaining,
+        status="open" if remaining > 0 else "full",
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+
+async def test_list_jobs_paginates_in_the_db_and_reports_total(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    for index in range(5):
+        await _board_job(f"job:p{index}", f"งาน {index}")
+
+    unpaged = (await client.get("/public/v1/jobs", headers=auth_headers)).json()
+    assert unpaged["total"] == 5
+    assert len(unpaged["jobs"]) == 5
+
+    third = (await client.get("/public/v1/jobs?page_size=2&page=3", headers=auth_headers)).json()
+    assert third["total"] == 5
+    assert [job["title"] for job in third["jobs"]] == ["งาน 4"]
+
+    beyond = (await client.get("/public/v1/jobs?page_size=2&page=9", headers=auth_headers)).json()
+    assert beyond["total"] == 5
+    assert beyond["jobs"] == []
+
+
+async def test_list_jobs_searches_title_shelter_and_skills_literally(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _board_job("job:q1", "ผู้ช่วยครัว")
+    await _board_job("job:q2", "ดูแลเด็ก", skills=["nursing"])
+
+    async def titles(params: str) -> list[str]:
+        response = await client.get(f"/public/v1/jobs?{params}", headers=auth_headers)
+        return [job["title"] for job in response.json()["jobs"]]
+
+    assert await titles("q=ครัว") == ["ผู้ช่วยครัว"]
+    assert await titles("q=NURS") == ["ดูแลเด็ก"]
+    assert sorted(await titles("q=ศูนย์ทดสอบ")) == sorted(["ผู้ช่วยครัว", "ดูแลเด็ก"])
+    assert await titles("q=.*") == []
+
+
+async def test_list_jobs_status_filters(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _board_job("job:s1", "ว่างมาก", remaining=5)
+    await _board_job("job:s2", "ใกล้เต็ม", remaining=2)
+    await _board_job("job:s3", "เต็ม", remaining=0)
+    await _board_job("job:s4", "ต้องรีวิว", tier="staff-capable", remaining=4)
+
+    async def titles(status_value: str) -> list[str]:
+        response = await client.get(f"/public/v1/jobs?status={status_value}", headers=auth_headers)
+        assert response.status_code == 200
+        return sorted(job["title"] for job in response.json()["jobs"])
+
+    assert await titles("open") == sorted(["ว่างมาก", "ใกล้เต็ม", "ต้องรีวิว"])
+    assert await titles("near_full") == ["ใกล้เต็ม"]
+    assert await titles("controlled") == ["ต้องรีวิว"]
+    bogus = await client.get("/public/v1/jobs?status=bogus", headers=auth_headers)
+    assert bogus.status_code == 422
+
+
+async def test_list_jobs_status_open_uses_shift_remaining(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _board_job("job:sh1", "กะเต็ม", remaining=0)
+    job = await PublicJob.get("job:sh1")
+    assert job is not None
+    job.shifts = [
+        JobShift(shift_id="shift:a", date="2026-09-04", quota=3, slots_remaining=0),
+        JobShift(shift_id="shift:b", date="2026-09-05", quota=3, slots_remaining=3),
+    ]
+    await job.save()
+
+    response = await client.get("/public/v1/jobs?status=open", headers=auth_headers)
+
+    assert [item["job_id"] for item in response.json()["jobs"]] == ["job:sh1"]
+
+
+async def test_list_jobs_matches_skill_by_code_or_label(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _board_job("job:k1", "เก็บด้วยรหัส", skills=["cooking"])
+    await _board_job("job:k2", "เก็บด้วยป้าย", skills=["ทำอาหาร"])
+    await _board_job("job:k3", "ไม่เกี่ยว", skills=["driving"])
+
+    response = await client.get("/public/v1/jobs?skill=cooking&skill=ทำอาหาร", headers=auth_headers)
+
+    assert sorted(job["title"] for job in response.json()["jobs"]) == [
+        "เก็บด้วยป้าย",
+        "เก็บด้วยรหัส",
+    ]
+    single = await client.get("/public/v1/jobs?skill=driving", headers=auth_headers)
+    assert [job["title"] for job in single.json()["jobs"]] == ["ไม่เกี่ยว"]
+
+
+async def test_list_jobs_shelters_ignore_filters(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await PublicShelter(
+        id="SH002",
+        shelter_code="SH002",
+        name="ศูนย์สอง",
+        status="open",
+        capacity=10,
+        updated_at=datetime.now(UTC),
+    ).insert()
+    await _board_job("job:h1", "งานหนึ่ง")
+    await _board_job("job:h2", "งานสอง", shelter_code="SH002")
+
+    body = (await client.get("/public/v1/jobs?shelter_code=SH002", headers=auth_headers)).json()
+
+    assert [job["job_id"] for job in body["jobs"]] == ["job:h2"]
+    assert body["total"] == 1
+    assert {item["code"] for item in body["shelters"]} == {"SH001", "SH002"}
+
+
+async def test_list_jobs_counts_applicants_without_loading_applications(
+    client: AsyncClient,
+    shelter: PublicShelter,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _board_job("job:c1", "นับผู้สมัคร")
+    for index, (shift, status_value) in enumerate(
+        [("shift:a", "confirmed"), ("shift:a", "pending_review"), (None, "confirmed")]
+    ):
+        await PublicJobApplication(
+            id=f"job_application:agg{index}",
+            shelter_code="SH001",
+            job_id="job:c1",
+            shift_id=shift,
+            tracking_token_hash=f"t{index}",
+            status=status_value,
+            updated_at=datetime.now(UTC),
+        ).insert()
+    await PublicJobApplication(
+        id="job_application:agg-old",
+        shelter_code="SH001",
+        job_id="job:c1",
+        tracking_token_hash="told",
+        selected_shift=SelectedShift(shift_id="shift:a"),
+        status="confirmed",
+        updated_at=datetime.now(UTC),
+    ).insert()
+    await PublicJobApplication(
+        id="job_application:agg-cancel",
+        shelter_code="SH001",
+        job_id="job:c1",
+        shift_id="shift:a",
+        tracking_token_hash="tc",
+        status="cancelled",
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise AssertionError("applications must be counted by aggregation, not loaded")
+
+    monkeypatch.setattr(PublicJobApplication, "find", _boom)
+
+    response = await client.get("/public/v1/jobs", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["jobs"][0]["applicants_count"] == 4
