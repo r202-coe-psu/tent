@@ -3011,6 +3011,44 @@ closed   → (terminal)
 | `job_id`       | str  | req | `_id` เต็มของ job ที่ถือ lock |
 | `acquired_at`  | ts   | req | —                             |
 
+### 5.4.3 `shelter_close_job` — `shelter_close_job:{ulid}` (CR-243) · schema_v 1
+
+> **สถานะ:** approved (CR-243) · งานปิดศูนย์/เช็คเอาต์คนในศูนย์หนึ่งครั้ง ประมวลผลโดย `shelter-close-worker` (Node, image เดียวกับ frontend) ทีละ chunk — ไม่ใช่ Python sync worker และไม่ projection ไป Mongo · จัดเก็บใน `central_ops` (**ห้าม**เก็บใน `shelter_{code}`) · view `jobs_claimable` ใน `_design/shelter_close` เป็น index ให้ worker (emit key `[status, lease_until ?? created_at]` เฉพาะ `status` = `queued`\|`running`)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `type` / `schema_v` | `'shelter_close_job'` / `1` | req | — |
+| `job_ulid` | str | req | ส่วน ULID ของ `_id` — คือ `job_id` ที่ API คืนให้ client |
+| `shelter_code` | str | req | ศูนย์ที่ปิด |
+| `mode` | enum(`close`,`backfill`) | req | `backfill` = script `migrate-closed-shelter-checkout` (ไม่แตะ registry) |
+| `requested_by` | str | req | จาก session ฝั่ง server เท่านั้น (backfill = `BACKFILL_CREATED_BY`) · worker ใช้เป็น `createdBy` ของ movement/audit ทุก chunk |
+| `status` | enum(`queued`,`running`,`completed`,`completed_with_errors`) | req | active = `queued`\|`running` · **ไม่เพิ่ม** `closing` ใน `operation_status` ของศูนย์ |
+| `phase` | enum(`people`,`households`,`sweep`,`finalize`,`done`) | req | — |
+| `cursor` | {`after?`: str, `reported?`: str[]} | sys | ตำแหน่งต่อใน phase ปัจจุบัน (`after` = sort key `(household_id, _id)` / `household_id` ล่าสุดที่ทำแล้ว) |
+| `sweep_round` | int (0..3) | sys | re-count > 0 → กลับ `people` รอบใหม่ สูงสุด 3 รอบ |
+| `counters` | {`checked_out`,`cancelled`,`households_repaired`,`failed`: int≥0} | sys | ขึ้นรอบ sweep ใหม่ `failed` และ `failures[]` รีเซ็ต (ผู้ที่ยังล้มเหลวถูกรายงานซ้ำในรอบใหม่) |
+| `preview` | {`by_status`, `total`} | sys | snapshot CR-219 FR-7 ตอนสั่ง |
+| `failures` | [{`evacuee_id`, `error`}] | sys | จำกัด `SHELTER_CLOSE_MAX_FAILURES` (default 50) ส่วนเกินนับใน `counters.failed` |
+| `lease_owner` / `lease_until` | str / ts | opt | lease ผ่าน `_rev` CAS, `SHELTER_CLOSE_LEASE_MS` (default 60000) |
+| `attempt` | int | sys | เพิ่มเมื่อ claim ครั้งแรกและเมื่อรับต่อจาก lease หมด · เกิน `SHELTER_CLOSE_MAX_ATTEMPTS` (default 5) → `attempts_exhausted` |
+| `created_at` / `updated_at` | ts | req | ทุก chunk bump `updated_at` (ใช้ตรวจ job ค้าง, `SHELTER_CLOSE_STALE_MS` default 600000) |
+| `started_at` / `finished_at` | ts | opt | — |
+| `closed` | bool | req | registry ถูกปิดโดย job นี้หรือไม่ |
+| `end_reason` | enum(`ok`,`failed`,`stale`,`sweep_exhausted`,`attempts_exhausted`) | opt | ตั้งเมื่อ job จบเท่านั้น · ลำดับเมื่อมีหลายสาเหตุ: `stale` > `attempts_exhausted` > `sweep_exhausted` > `failed` |
+
+**Rules:** registry `operation_status = closed` + `closed_at` เขียนครั้งเดียวที่ phase `finalize` ของ `mode = close` เมื่อ re-count = 0 และ `counters.failed = 0` · `completed_with_errors` ไม่ปิดศูนย์ (กดปิดซ้ำ = job ใหม่) · logic เช็คเอาต์/ยกเลิก/derive household ใช้ domain เดิมของ CR-219 (ห้าม set `current_stay.status` ตรง)
+
+### 5.4.4 `shelter_close_lock` — `shelter_close_lock:{shelter_code}` (CR-243) · schema_v 1
+
+> กัน job active ซ้อนกันต่อศูนย์ (สร้างด้วย CAS: PUT ไม่มี `_rev`) · เก็บใน `central_ops` · ปล่อยเมื่อ job terminal · route ที่อ่าน lock ตรวจ job ที่ชี้ก่อน (FR-3a): job terminal/หาไม่พบ → ลบ lock · job active ที่ `updated_at` เก่ากว่า `SHELTER_CLOSE_STALE_MS` → ตั้ง `completed_with_errors` (`end_reason = stale`, CAS ด้วย `_rev` ของ job) แล้วปล่อย lock
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `type` / `schema_v` | `'shelter_close_lock'` / `1` | req | — |
+| `shelter_code` | str | req | ส่วนของ `_id` (ตัวพิมพ์ใหญ่) |
+| `job_id` | str | req | `_id` เต็มของ job ที่ถือ lock |
+| `created_at` | ts | req | — |
+
 ### 5.5 `stock_transfer` — `stock_transfer:{ulid}` · state machine (forward-only, CR-059, Centralized Architecture)
 
 > **ย้ายมาจาก `shelter_{shelter_code}` (§2.2 เดิม, superseded) — CR-059, approved 2026-08-22:**

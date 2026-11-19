@@ -37,7 +37,8 @@
 		canClose = true,
 		storedStatus,
 		isSystemAdmin = false,
-		isEdit = false
+		isEdit = false,
+		statusLocked = false
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
@@ -49,6 +50,8 @@
 		/** CR-252 FR-8: only system_admin may mark a shelter external, and only while creating. */
 		isSystemAdmin?: boolean;
 		isEdit?: boolean;
+		/** CR-243 FR-28: a close job is queued / running — the status cannot be changed. */
+		statusLocked?: boolean;
 	} = $props();
 
 	// CR-252: an external shelter is run in another system — a basic-info-only form, locked at
@@ -86,7 +89,7 @@
 	// FR-23: a closed shelter shows its value read-only to anyone who cannot reopen/close it.
 	// FR-4: an external shelter's status is locked unless the system_admin edits it (takedown).
 	const operationStatusLocked = $derived(
-		isExternal ? !canCancelExternal : !canClose && storedStatus === 'closed'
+		statusLocked || (isExternal ? !canCancelExternal : !canClose && storedStatus === 'closed')
 	);
 
 	// draft-shelter-cancelled-status: cancelling hides the shelter from every public page and the
