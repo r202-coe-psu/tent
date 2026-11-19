@@ -55,22 +55,26 @@ export async function importHousehold(
 		const head = await repo.createEvacuee({ ...payload.head, household_id: household._id }, ctx);
 		await repo.patchHousehold(household._id, { head_evacuee_id: head._id });
 
-		const stays = [buildBackfilledStay(head, payload.headStay, ctx)];
+		// A person with no stay (blank `สถานะ`, #1448) is left exactly as created: `pre_registered`,
+		// no movement, waiting in the Station 1 Report-in queue.
+		const stays: ReturnType<typeof buildBackfilledStay>[] = [];
+		if (payload.headStay) stays.push(buildBackfilledStay(head, payload.headStay, ctx));
+		let createdMembers = 0;
 		for (const member of payload.members) {
 			if (skippedLines.has(member.line)) continue;
 			const created = await repo.createEvacuee(
 				{ ...member.evacuee, household_id: household._id },
 				ctx
 			);
-			stays.push(buildBackfilledStay(created, member.stay, ctx));
+			createdMembers += 1;
+			if (member.stay) stays.push(buildBackfilledStay(created, member.stay, ctx));
 		}
-		// Stays last, once everyone exists: the household status is derived from them.
-		await repo.applyBackfilledStays(household._id, stays, payload.household.checkout_destination);
-		return {
-			householdId: household._id,
-			createdPeople: stays.length,
-			createdMembers: stays.length - 1
-		};
+		// Stays last, once everyone exists: the household status is derived from them. Nothing to
+		// write (everyone pre_registered) leaves the household as created.
+		if (stays.length > 0) {
+			await repo.applyBackfilledStays(household._id, stays, payload.household.checkout_destination);
+		}
+		return { householdId: household._id, createdPeople: createdMembers + 1, createdMembers };
 	} catch (e) {
 		throw new PartialHouseholdImportError(household._id, e);
 	}

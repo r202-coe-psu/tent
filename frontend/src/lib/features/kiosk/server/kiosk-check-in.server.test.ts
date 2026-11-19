@@ -105,6 +105,7 @@ interface FixtureHousehold {
 
 let evacuees: FixtureEvacuee[] = [];
 let households: FixtureHousehold[] = [];
+let movements: Array<Record<string, unknown>> = [];
 
 function evacuee(index: number, overrides: Partial<FixtureEvacuee> = {}): FixtureEvacuee {
 	return {
@@ -330,6 +331,15 @@ function configureCouchMocks(): void {
 				fields?: string[];
 			};
 			const selector = body.selector ?? {};
+			if (selector.type === 'movement') {
+				return {
+					docs: movements.filter(
+						(doc) =>
+							doc.evacuee_id === selector.evacuee_id &&
+							(selector.action === undefined || doc.action === selector.action)
+					)
+				} as never;
+			}
 			let docs = evacuees.filter((doc) => doc.type === selector.type);
 			if (typeof selector.shelter_code === 'string') {
 				docs = docs.filter((doc) => doc.shelter_code === selector.shelter_code);
@@ -978,6 +988,107 @@ describe('lookupPreRegisteredEvacuee thaid', () => {
 				citizen_id: '1234567890123'
 			})
 		).toEqual({ kind: 'kiosk_registered' });
+	});
+});
+
+describe('lookupPreRegisteredEvacuee already checked out', () => {
+	const checkedOutAt = '2026-11-17T09:30:00.000Z';
+	const movement = (overrides: Record<string, unknown> = {}) => ({
+		type: 'movement',
+		evacuee_id: `evacuee:${ids[0]}`,
+		action: 'check_out',
+		created_by: 'scanner:kiosk-sh001-01',
+		occurred_at: checkedOutAt,
+		...overrides
+	});
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [
+			evacuee(0, { current_stay: { status: 'checked_out', zone: null, since: checkedOutAt } })
+		];
+		households = [];
+		movements = [];
+		configureCouchMocks();
+	});
+	const byCard = () =>
+		lookupPreRegisteredEvacuee(shelterCode, { source: 'smart-card', citizen_id: '1234567890123' });
+
+	it('says a card holder checked out at the kiosk, with when', async () => {
+		movements = [movement()];
+		expect(await byCard()).toEqual({
+			kind: 'checked_out',
+			checked_out_at: checkedOutAt,
+			channel: 'kiosk'
+		});
+	});
+
+	it('says a ThaiD holder checked out by staff', async () => {
+		movements = [movement({ created_by: 'user:somchai' })];
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'thaid',
+				citizen_id: '1234567890123'
+			})
+		).toEqual({ kind: 'checked_out', checked_out_at: checkedOutAt, channel: 'staff' });
+	});
+
+	it('says a QR holder was checked out by the shelter closing', async () => {
+		movements = [movement({ created_by: 'system', reason: 'shelter_closed' })];
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: `evacuee:${ids[0]}` })
+		).toEqual({ kind: 'checked_out', checked_out_at: checkedOutAt, channel: 'shelter_closed' });
+	});
+
+	it('uses the newest check-out when the evacuee has checked out more than once', async () => {
+		movements = [
+			movement({ occurred_at: '2026-11-10T01:00:00.000Z', created_by: 'user:somchai' }),
+			movement()
+		];
+		expect(await byCard()).toMatchObject({ checked_out_at: checkedOutAt, channel: 'kiosk' });
+	});
+
+	it('still reports the date when no check-out movement can be found', async () => {
+		expect(await byCard()).toEqual({
+			kind: 'checked_out',
+			checked_out_at: checkedOutAt,
+			channel: null
+		});
+	});
+
+	it('still reports the date when the movement lookup fails', async () => {
+		const base = mockAdminFetch.getMockImplementation();
+		mockAdminFetch.mockImplementation(async (path, init) => {
+			if (String(init?.body).includes('"movement"')) throw new Error('couch down');
+			return base!(path, init);
+		});
+		expect(await byCard()).toEqual({
+			kind: 'checked_out',
+			checked_out_at: checkedOutAt,
+			channel: null
+		});
+	});
+
+	it('does not reveal a check-out recorded in another shelter', async () => {
+		evacuees = [
+			evacuee(0, {
+				shelter_code: 'SH002',
+				current_stay: { status: 'checked_out', zone: null, since: checkedOutAt }
+			})
+		];
+		expect(await byCard()).toEqual({ kind: 'not_found', can_register: true });
+	});
+
+	it('keeps offering the household when the same citizen is back in the shelter', async () => {
+		evacuees = [
+			evacuee(0, { current_stay: { status: 'checked_out', zone: null, since: checkedOutAt } }),
+			evacuee(1, {
+				current_stay: { status: 'active', zone: 'A', since: '2026-11-18T01:00:00.000Z' }
+			})
+		];
+		expect(await byCard()).toMatchObject({
+			kind: 'household',
+			primary_evacuee_id: evacuees[1]._id
+		});
 	});
 });
 

@@ -125,6 +125,11 @@ export {
 	assertCheckoutDestination,
 	applyMovementToStay,
 	resolveStatusChangeAction,
+	canRevertStatusTo,
+	listRevertTargets,
+	revertNeedsZone,
+	resolveRevertZone,
+	REVERT_TARGET_STATUSES,
 	normalizeCheckoutRemark,
 	statusChangeHandlerKind,
 	maskNationalId,
@@ -215,6 +220,13 @@ export {
 } from './domain/intake-pipeline';
 
 export {
+	parseEvacueeSearchQuery,
+	type EvacueeSearchPlan,
+	type EvacueeSearchCursor,
+	type EvacueeSearchPage
+} from './domain/evacuee-search';
+
+export {
 	buildEvacueeQrLabel,
 	EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 	type EvacueeQrLabel,
@@ -252,6 +264,7 @@ export {
 	DEFAULT_EVACUEE_SORT,
 	isEvacueeSort,
 	sortEvacuees,
+	sortByCreatedAtAsc,
 	type EvacueeSort
 } from './domain/evacuee-sort';
 
@@ -363,6 +376,7 @@ export {
 	usePendingScreeningEvacuees,
 	useEvacueesPaginated,
 	useSearchEvacuees,
+	useEvacueeServerSearch,
 	useCreateEvacuee,
 	useCreateFamilyRegistration,
 	useSubmitFamilyReportIn,
@@ -375,6 +389,7 @@ export {
 	useConfirmRoomForHousehold,
 	useChangeEvacueeZone,
 	useRecordMovement,
+	useRevertEvacueeStatus,
 	lookupEvacueeByScanCode,
 	lookupFederatedByScanCode,
 	lookupFederatedByScanCodeWithDeps,

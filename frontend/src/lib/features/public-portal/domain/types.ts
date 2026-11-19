@@ -73,5 +73,23 @@ export type ListPublicSheltersParams = {
 	lat?: number;
 	lng?: number;
 	radius_km?: number;
+	/** Text in the name, code, province or district — matched by the database (#1419). */
+	q?: string;
+	/** Shelter (building) type code, not its label. */
+	admin_type?: string;
+	hide_full?: boolean;
+	hide_evacuation?: boolean;
+	hide_external?: boolean;
+	hide_host_house?: boolean;
+	/** Vehicle types the shelter must take, all of them. */
+	parking?: string[];
 	fetch?: typeof globalThis.fetch;
+};
+
+/** Head counts for the `/shelters` cards; never narrowed by the list filters (#1419). */
+export type PublicShelterSummary = {
+	shelters_total: number;
+	shelters_open: number;
+	counts_by_site_kind: Record<string, number>;
+	as_of?: string;
 };

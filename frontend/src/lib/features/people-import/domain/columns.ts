@@ -311,15 +311,15 @@ function personColumns(role: string): ColumnDef[] {
 		{
 			header: H.stay_status,
 			kind: 'enum',
-			required: true,
+			required: false,
 			choices: STAY_STATUS_CHOICES,
-			hint: 'พักอยู่ = ได้ที่พักแล้ว / กลับแล้ว = ออกจากศูนย์ถาวรแล้ว (ไม่ใช่ลาชั่วคราว)'
+			hint: 'พักอยู่ = ได้ที่พักแล้ว / กลับแล้ว = ออกจากศูนย์ถาวรแล้ว (ไม่ใช่ลาชั่วคราว) / ว่าง = รอรายงานตัวที่ Station 1 (ห้ามกรอกเวลามา/เวลากลับ/โซน)'
 		},
 		{
 			header: H.arrived_at,
 			kind: 'datetime',
-			required: true,
-			hint: `เวลาเช็คอินจริง ${DATETIME_FORMAT_HINT} — ตั้งคอลัมน์เป็น Text`
+			required: false,
+			hint: `เวลาเช็คอินจริง ${DATETIME_FORMAT_HINT} — ตั้งคอลัมน์เป็น Text — จำเป็นเมื่อระบุสถานะ (ว่างเมื่อสถานะว่าง)`
 		},
 		{
 			header: H.departed_at,

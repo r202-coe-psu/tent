@@ -297,6 +297,79 @@ async def test_list_shelters_filters_by_radius(
     assert body_1000km["shelters"][0]["code"] == "SH001"
 
 
+async def test_list_shelters_radius_keeps_shelters_without_location(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
+    await db_client[db_name]["public_shelters"].create_index([("location", "2dsphere")])
+
+    now = datetime.now(UTC)
+    base = {"status": "open", "capacity": 10, "province": "สงขลา", "updated_at": now}
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            **base,
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ใกล้",
+            "location": {"type": "Point", "coordinates": [100.5, 7.0]},
+        },
+    )
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            **base,
+            "_id": "SH002",
+            "shelter_code": "SH002",
+            "name": "ศูนย์ไกล",
+            "location": {"type": "Point", "coordinates": [100.5, 13.75]},
+        },
+    )
+    # No `location` field at all: no pin on the map, only reachable from the list.
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {**base, "_id": "SH003", "shelter_code": "SH003", "name": "ศูนย์ไม่มีพิกัด"},
+    )
+    await _insert_shelter_doc(
+        db_client,
+        settings,
+        {
+            **base,
+            "_id": "SH004",
+            "shelter_code": "SH004",
+            "name": "ศูนย์ไม่มีพิกัดแต่ปิด",
+            "status": "closed",
+        },
+    )
+
+    resp = await client.get(
+        "/public/v1/shelters",
+        params={"lat": 7.0, "lng": 100.5, "radius_km": 5},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    # Nearby first, far one cut, unlocated ones appended.
+    assert [s["code"] for s in resp.json()["shelters"]] == ["SH001", "SH003", "SH004"]
+
+    # Other filters still apply to the unlocated shelters.
+    filtered = await client.get(
+        "/public/v1/shelters",
+        params={"lat": 7.0, "lng": 100.5, "radius_km": 5, "status": "open"},
+        headers=auth_headers,
+    )
+    assert [s["code"] for s in filtered.json()["shelters"]] == ["SH001", "SH003"]
+
+    # Without a position nothing changes: every shelter is listed by name.
+    plain = await client.get("/public/v1/shelters", headers=auth_headers)
+    assert plain.json()["count"] == 4
+
+
 async def _insert_person_doc(
     db_client: AsyncMongoClient,
     settings: Settings,
@@ -691,3 +764,283 @@ async def test_shelter_parking_fields_default_to_empty_before_reprojection(
     detail = await client.get("/public/v1/shelters/SH302", headers=auth_headers)
     assert detail.json()["shelter"]["parking_points"] == []
     assert detail.json()["shelter"]["parking_vehicle_types"] == []
+
+
+# --- #1419: filters run in Mongo, and a summary that ignores them ---
+
+
+def _doc(code: str, **fields) -> dict:
+    """A public_shelters row with sensible defaults; `fields` override or add."""
+    doc = {
+        "_id": code,
+        "shelter_code": code,
+        "name": f"ศูนย์ {code}",
+        "site_kind": "evacuation_center",
+        "status": "open",
+        "capacity": 100,
+        "province": "สงขลา",
+        "district": "หาดใหญ่",
+        "is_external": False,
+        "parking_vehicle_types": [],
+        "updated_at": datetime.now(UTC),
+        "raw_data": {},
+    }
+    doc.update(fields)
+    return doc
+
+
+async def _seed(db_client: AsyncMongoClient, settings: Settings, *docs: dict) -> None:
+    for doc in docs:
+        await _insert_shelter_doc(db_client, settings, doc)
+
+
+async def _codes(client: AsyncClient, headers: dict[str, str], **params) -> list[str]:
+    response = await client.get("/public/v1/shelters", params=params, headers=headers)
+    assert response.status_code == 200, response.text
+    return sorted(s["code"] for s in response.json()["shelters"])
+
+
+async def test_list_shelters_search_matches_name_code_province_and_district(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("SH001", name="โรงเรียนบ้านพรุ"),
+        _doc("SH002", name="วัดคอหงส์", province="ยะลา", district="เมืองยะลา"),
+        _doc("SH003", name="ศูนย์กีฬา"),
+    )
+
+    assert await _codes(client, auth_headers, q="บ้านพรุ") == ["SH001"]
+    assert await _codes(client, auth_headers, q="sh003") == ["SH003"]  # code, case-insensitive
+    assert await _codes(client, auth_headers, q="ยะลา") == ["SH002"]  # province / district
+    assert await _codes(client, auth_headers, q="เมืองยะ") == ["SH002"]
+    assert await _codes(client, auth_headers, q="  บ้านพรุ  ") == ["SH001"]  # trimmed
+    assert await _codes(client, auth_headers, q="ไม่มีอะไรตรง") == []
+
+
+async def test_list_shelters_search_treats_regex_characters_literally(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("SH001", name="ศูนย์ (A+B)"),
+        _doc("SH002", name="ศูนย์ AAB"),
+    )
+
+    assert await _codes(client, auth_headers, q="(A+B)") == ["SH001"]
+    assert await _codes(client, auth_headers, q=".*") == []
+
+
+async def test_list_shelters_filters_by_admin_type_code(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("SH001", location_subtype="school", raw_data={"shelter_type": "school"}),
+        _doc("SH002", location_subtype="temple", raw_data={"shelter_type": "temple"}),
+        _doc("SH003"),
+    )
+
+    assert await _codes(client, auth_headers, admin_type="school") == ["SH001"]
+    assert await _codes(client, auth_headers, admin_type="temple") == ["SH002"]
+    assert await _codes(client, auth_headers, admin_type="stadium") == []
+
+
+async def test_list_shelters_hides_full_and_combines_with_status(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("SH001", status="open"),
+        _doc("SH002", status="full"),
+        _doc("SH003", status="closed"),
+    )
+
+    assert await _codes(client, auth_headers, hide_full="true") == ["SH001", "SH003"]
+    assert await _codes(client, auth_headers) == ["SH001", "SH002", "SH003"]
+    assert await _codes(client, auth_headers, status="closed", hide_full="true") == ["SH003"]
+    # asking for the full ones and hiding them cannot both hold
+    assert await _codes(client, auth_headers, status="full", hide_full="true") == []
+
+
+async def test_list_shelters_hides_groups_like_the_public_toggles(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("EVAC"),
+        _doc("HOST", site_kind="host_house"),
+        _doc("EXT", is_external=True),
+        _doc("EXT_HOST", is_external=True, site_kind="host_house"),
+        # rows projected before is_external existed carry no flag at all
+        {k: v for k, v in _doc("OLD").items() if k != "is_external"},
+    )
+
+    assert await _codes(client, auth_headers) == ["EVAC", "EXT", "EXT_HOST", "HOST", "OLD"]
+    assert await _codes(client, auth_headers, hide_external="true") == ["EVAC", "HOST", "OLD"]
+    assert await _codes(client, auth_headers, hide_host_house="true") == [
+        "EVAC",
+        "EXT",
+        "EXT_HOST",
+        "OLD",
+    ]
+    assert await _codes(client, auth_headers, hide_evacuation="true") == [
+        "EXT",
+        "EXT_HOST",
+        "HOST",
+    ]
+    # an external host house is external, not a host house
+    assert await _codes(client, auth_headers, hide_evacuation="true", hide_external="true") == [
+        "HOST"
+    ]
+    assert (
+        await _codes(
+            client,
+            auth_headers,
+            hide_evacuation="true",
+            hide_external="true",
+            hide_host_house="true",
+        )
+        == []
+    )
+
+
+async def test_list_shelters_parking_filter_needs_every_ticked_type(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("CAR", parking_vehicle_types=["car"]),
+        _doc("BOTH", parking_vehicle_types=["car", "boat"]),
+        _doc("NONE"),
+    )
+
+    response = await client.get(
+        "/public/v1/shelters", params={"parking": ["car"]}, headers=auth_headers
+    )
+    assert sorted(s["code"] for s in response.json()["shelters"]) == ["BOTH", "CAR"]
+    response = await client.get(
+        "/public/v1/shelters", params={"parking": ["car", "boat"]}, headers=auth_headers
+    )
+    assert [s["code"] for s in response.json()["shelters"]] == ["BOTH"]
+
+
+async def test_list_shelters_filters_combine(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("SH001", name="โรงเรียนหนึ่ง", status="open"),
+        _doc("SH002", name="โรงเรียนสอง", status="full"),
+        _doc("SH003", name="วัดหนึ่ง", status="open"),
+    )
+
+    assert await _codes(client, auth_headers, q="โรงเรียน", hide_full="true") == ["SH001"]
+
+
+async def test_shelter_summary_requires_bearer(client: AsyncClient):
+    assert (await client.get("/public/v1/shelters/summary")).status_code == 401
+
+
+async def test_shelter_summary_counts_without_any_filter(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("A", status="open"),
+        _doc("B", status="full"),
+        _doc("C", status="closed"),
+        _doc("D", status="standby", site_kind="field_hospital"),
+        _doc("H", site_kind="host_house"),
+        _doc("X", status="unknown", is_external=True),
+        {k: v for k, v in _doc("OLD").items() if k != "site_kind"},
+    )
+
+    response = await client.get("/public/v1/shelters/summary", headers=auth_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["shelters_total"] == 7
+    # open and full both count as running (same as the page's card)
+    assert body["shelters_open"] == 4  # A, B, H, OLD
+    # a row without site_kind reads as an evacuation centre, like the list does
+    assert body["counts_by_site_kind"] == {
+        "evacuation_center": 5,  # A, B, C, X, OLD
+        "field_hospital": 1,  # D
+        "host_house": 1,  # H
+    }
+    assert "as_of" in body
+    assert "max-age" in response.headers["cache-control"]
+
+
+async def test_shelter_summary_can_leave_out_plain_host_houses(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    await _seed(
+        db_client,
+        settings,
+        _doc("A"),
+        _doc("H1", site_kind="host_house"),
+        _doc("H2", site_kind="host_house", status="full"),
+        _doc("XH", site_kind="host_house", is_external=True, status="unknown"),
+    )
+
+    everything = (await client.get("/public/v1/shelters/summary", headers=auth_headers)).json()
+    assert everything["shelters_total"] == 4
+
+    body = (
+        await client.get(
+            "/public/v1/shelters/summary",
+            params={"hide_host_house": "true"},
+            headers=auth_headers,
+        )
+    ).json()
+    # the external host house stays: it is grouped as external
+    assert body["shelters_total"] == 2
+    assert body["shelters_open"] == 1
+    assert body["counts_by_site_kind"] == {"evacuation_center": 1, "host_house": 1}
+
+
+async def test_shelter_summary_on_an_empty_projection(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+):
+    body = (await client.get("/public/v1/shelters/summary", headers=auth_headers)).json()
+    assert body["shelters_total"] == 0
+    assert body["shelters_open"] == 0
+    assert body["counts_by_site_kind"] == {}

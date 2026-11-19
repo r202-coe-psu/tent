@@ -1,5 +1,6 @@
 import type { UlidReservation } from '$lib/db/ulid-reservation';
 import {
+	createInfiniteQuery,
 	createMutation,
 	createQuery,
 	keepPreviousData,
@@ -32,7 +33,8 @@ import type {
 	Medical,
 	MedicalInput,
 	MovementAction,
-	ScreeningInput
+	ScreeningInput,
+	StayStatus
 } from '../domain/people';
 import type {
 	FamilyReportInPayload,
@@ -44,6 +46,8 @@ import { canCancelHold } from '$lib/auth/roles';
 import { withStationLogWarning } from './station-log';
 import { authStore } from '$lib/stores/auth.svelte';
 import { extractScanLookupToken, toCouchEvacueeId } from '../domain/scan-lookup';
+import type { EvacueeSearchCursor } from '../domain/evacuee-search';
+import { getNextEvacueeSearchPageParam, isEvacueeSearchEnabled } from './evacuee-server-search';
 
 // Every key includes the active shelter code so switching the back-office
 // shelter selector (shelterStore.selectedShelterCode) invalidates and
@@ -67,6 +71,8 @@ export const peopleKeys = {
 		] as const,
 	evacueesSearch: (query: string) =>
 		[...peopleKeys.all, 'evacuees', getShelterCode(), 'search', query] as const,
+	evacueeServerSearch: (query: string) =>
+		[...peopleKeys.all, 'evacuees', getShelterCode(), 'server-search', query.trim()] as const,
 	/** Nested under `evacuees()` so evacuee mutations also refresh the looked-up names. */
 	evacueeNames: (ids: readonly string[], shelterCode: string = getShelterCode()) =>
 		[...peopleKeys.all, 'evacuees', shelterCode, 'names', ids] as const,
@@ -169,6 +175,17 @@ export const useSearchEvacuees = (query: () => string, enabled: () => boolean) =
 		queryKey: peopleKeys.evacueesSearch(query()),
 		queryFn: () => peopleRepository().searchEvacuees(query()),
 		enabled: enabled()
+	}));
+
+/** Server-side (Mango) evacuee search paged by bookmark; a blank query makes no request. */
+export const useEvacueeServerSearch = (query: () => string, pageSize?: () => number) =>
+	createInfiniteQuery(() => ({
+		queryKey: peopleKeys.evacueeServerSearch(query()),
+		initialPageParam: null as EvacueeSearchCursor | null,
+		queryFn: ({ pageParam }: { pageParam: EvacueeSearchCursor | null }) =>
+			peopleRepository().searchEvacueesPage(query(), { cursor: pageParam, pageSize: pageSize?.() }),
+		getNextPageParam: getNextEvacueeSearchPageParam,
+		enabled: isEvacueeSearchEnabled(query())
 	}));
 
 export const useEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
@@ -369,7 +386,7 @@ export const useRecordMovement = () => {
 			reason
 		}: {
 			evacuee: Evacuee;
-			action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>;
+			action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>;
 			ctx: AuthorContext;
 			reason?: string;
 		}) =>
@@ -379,6 +396,31 @@ export const useRecordMovement = () => {
 				ctx,
 				reason !== undefined ? { reason } : undefined
 			),
+		onSuccess: (updated) => {
+			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+		}
+	}));
+};
+
+export const useRevertEvacueeStatus = () => {
+	const qc = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			evacuee,
+			ctx,
+			toStatus,
+			reason,
+			zone
+		}: {
+			evacuee: Evacuee;
+			ctx: AuthorContext;
+			toStatus: StayStatus;
+			reason: string;
+			/** Required when `toStatus` is in-shelter and the stay has no zone. */
+			zone?: string | null;
+		}) => peopleRepository().revertEvacueeStatus(evacuee, ctx, toStatus, reason, { zone }),
 		onSuccess: (updated) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
 			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });

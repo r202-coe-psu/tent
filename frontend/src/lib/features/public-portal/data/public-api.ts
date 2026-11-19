@@ -7,7 +7,8 @@ import type {
 	FamilySearchResponse,
 	ListPublicSheltersParams,
 	PublicShelterDetail,
-	PublicShelterListResponse
+	PublicShelterListResponse,
+	PublicShelterSummary
 } from '../domain/types';
 import type { SearchConsent } from '../domain/search-consent';
 import type { MasterLabelOption } from '../domain/master-labels';
@@ -82,6 +83,14 @@ export async function listPublicShelters(
 	if (params.radius_km !== undefined && !Number.isNaN(params.radius_km) && params.radius_km > 0) {
 		url.searchParams.set('radius_km', params.radius_km.toString());
 	}
+	// These run in the database, not in the browser (#1419).
+	if (params.q?.trim()) url.searchParams.set('q', params.q.trim());
+	if (params.admin_type) url.searchParams.set('admin_type', params.admin_type);
+	if (params.hide_full) url.searchParams.set('hide_full', 'true');
+	if (params.hide_evacuation) url.searchParams.set('hide_evacuation', 'true');
+	if (params.hide_external) url.searchParams.set('hide_external', 'true');
+	if (params.hide_host_house) url.searchParams.set('hide_host_house', 'true');
+	for (const type of params.parking ?? []) url.searchParams.append('parking', type);
 
 	const fetchFn = params.fetch ?? fetch;
 	const response = await fetchFn(`${url.pathname}${url.search}`);
@@ -90,6 +99,25 @@ export async function listPublicShelters(
 		throw publicApiError(data, response.status, 'ไม่สามารถโหลดรายการศูนย์พักพิงได้');
 	}
 	return data as PublicShelterListResponse;
+}
+
+/**
+ * Head counts for the `/shelters` cards. They ignore the list filters, so the numbers hold still
+ * while a visitor searches. `hide_host_house` leaves out the host houses the page never lists.
+ */
+export async function fetchShelterSummary(
+	options: { hide_host_house?: boolean; fetch?: typeof globalThis.fetch } = {}
+): Promise<PublicShelterSummary> {
+	const url = new URL('/api/public/v1/shelters/summary', 'http://local.invalid');
+	if (options.hide_host_house) url.searchParams.set('hide_host_house', 'true');
+
+	const fetchFn = options.fetch ?? fetch;
+	const response = await fetchFn(`${url.pathname}${url.search}`);
+	const data = await response.json().catch(() => null);
+	if (!response.ok || !data) {
+		throw publicApiError(data, response.status, 'ไม่สามารถโหลดจำนวนศูนย์พักพิงได้');
+	}
+	return data as PublicShelterSummary;
 }
 
 /** Single shelter by code. Throws `PublicApiError` on 404 / 503 so callers can degrade. */

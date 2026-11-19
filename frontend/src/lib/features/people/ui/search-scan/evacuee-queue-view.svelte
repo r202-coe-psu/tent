@@ -12,7 +12,6 @@
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import Users from '@lucide/svelte/icons/users';
-	import Zap from '@lucide/svelte/icons/zap';
 
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { Badge } from '$lib/components/ui/badge';
@@ -42,6 +41,7 @@
 		displayTriageLevel
 	} from '../../domain/intake-pipeline';
 	import { peopleLabels } from '../../domain/people';
+	import { sortByCreatedAtAsc } from '../../domain/evacuee-sort';
 	import { EVACUEE_QUEUE_I18N } from '../_constants/evacuee-queue.i18n';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
@@ -83,6 +83,8 @@
 		onGoMedical?: (evacuee: Evacuee) => void;
 		onGoZoning?: (evacuee: Evacuee) => void;
 	} = $props();
+	/** Arriving people go to screening (Station 2) when the shelter screens, else straight to zoning (Station 3). */
+	const arrivingLabel = $derived(enableMedical ? t.arrivingToScreening : t.arrivingToZoning);
 
 	const allEvacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
@@ -140,44 +142,38 @@
 	);
 
 	const preRegisteredFiltered = $derived(
-		preRegisteredEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				const isKiosk = e.registered_via === 'kiosk' || !!e.card_snapshot;
-				const isWeb = e.registered_via === 'web';
-				if (preRegChannelFilter === 'kiosk') return isKiosk;
-				if (preRegChannelFilter === 'web') return isWeb;
-				if (preRegChannelFilter === 'other') return !isKiosk && !isWeb;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(preRegisteredEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			const isKiosk = e.registered_via === 'kiosk' || !!e.card_snapshot;
+			const isWeb = e.registered_via === 'web';
+			if (preRegChannelFilter === 'kiosk') return isKiosk;
+			if (preRegChannelFilter === 'web') return isWeb;
+			if (preRegChannelFilter === 'other') return !isKiosk && !isWeb;
+			return true;
+		})
 	);
 
 	const arrivingFiltered = $derived(
-		arrivingEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				const hasScreening = screenedIds.has(e._id);
-				if (arrivingSubTab === 'medical') return enableMedical && !hasScreening;
-				if (arrivingSubTab === 'zoning') return !enableMedical || hasScreening;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(arrivingEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			const hasScreening = screenedIds.has(e._id);
+			if (arrivingSubTab === 'medical') return enableMedical && !hasScreening;
+			if (arrivingSubTab === 'zoning') return !enableMedical || hasScreening;
+			return true;
+		})
 	);
 
 	const allFiltered = $derived(
-		allEvacuees
-			.filter((e) => {
-				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				if (allStatusFilter === IN_SHELTER_FILTER) {
-					if (!isInShelterStatus(e)) return false;
-				} else if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) {
-					return false;
-				}
-				if (allZoneFilter !== 'all' && e.current_stay?.zone !== allZoneFilter) return false;
-				return true;
-			})
-			.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+		sortByCreatedAtAsc(allEvacuees).filter((e) => {
+			if (!matchesEvacueeSearch(e, filterQuery)) return false;
+			if (allStatusFilter === IN_SHELTER_FILTER) {
+				if (!isInShelterStatus(e)) return false;
+			} else if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) {
+				return false;
+			}
+			if (allZoneFilter !== 'all' && e.current_stay?.zone !== allZoneFilter) return false;
+			return true;
+		})
 	);
 
 	const activeFiltered = $derived(
@@ -273,7 +269,7 @@
 {#snippet reportInButton(row: Evacuee, card: boolean)}
 	<Button
 		size="sm"
-		class="gap-1.5 rounded-lg bg-blue-600 px-3 font-semibold text-white shadow-2xs hover:bg-blue-700 {card
+		class="gap-1.5 rounded-lg bg-[#0A2647] px-3 font-semibold text-white shadow-2xs hover:bg-[#051930] {card
 			? 'min-h-11 w-full'
 			: ''}"
 		onclick={(e) => {
@@ -281,7 +277,6 @@
 			onReportIn(row);
 		}}
 	>
-		<Zap class="size-3.5" />
 		<span>{t.reportIn}</span>
 	</Button>
 {/snippet}
@@ -404,7 +399,7 @@
 			: 'border-slate-200/80 bg-white shadow-2xs'}"
 	>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-semibold text-amber-900">{t.arrivingTitle}</span>
+			<span class="text-xs font-semibold text-amber-900">{arrivingLabel}</span>
 			<div
 				class="flex size-7 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
 			>
@@ -519,7 +514,7 @@
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 			>
 				<Clock class="size-4" />
-				<span>{t.tabArriving}</span>
+				<span>{arrivingLabel}</span>
 				<span
 					class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 tabular-nums dark:bg-amber-950 dark:text-amber-300"
 				>

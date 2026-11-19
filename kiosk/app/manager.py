@@ -373,6 +373,7 @@ class ScannerClientManager:
         allowed_paths = {
             "/api/v1/kiosk/lookup",
             "/api/v1/kiosk/check-in",
+            "/api/v1/kiosk/check-out",
             "/api/v1/kiosk/reprint",
             "/api/v1/kiosk/volunteer-card",
             "/api/v1/kiosk/config",

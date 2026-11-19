@@ -17,7 +17,11 @@ function stay(status: ImportStay['status'], zone: string | null): ImportStay {
 	};
 }
 
-function row(n: number, headStay: ImportStay, members: ImportStay[] = []): RowValidation {
+function row(
+	n: number,
+	headStay: ImportStay | null,
+	members: (ImportStay | null)[] = []
+): RowValidation {
 	return {
 		row: n,
 		label: null,
@@ -73,5 +77,17 @@ describe('capacityWarnings (non-blocking)', () => {
 			{ ...row(2, stay('active', 'A'), [stay('active', 'A'), stay('active', 'A')]), ok: false }
 		];
 		expect(capacityWarnings({ rows, zones: ZONES, existing: [], shelterCapacity: 1 })).toEqual([]);
+	});
+});
+
+describe('capacityWarnings — blank-status people (#1448)', () => {
+	it('does not count a person with no stay towards incoming occupancy', () => {
+		const warnings = capacityWarnings({
+			rows: [row(1, null, [null, stay('active', 'A')])],
+			zones: [{ code: 'A', name: 'โซน A', capacity: 1 }],
+			existing: [],
+			shelterCapacity: 1
+		});
+		expect(warnings).toEqual([]);
 	});
 });

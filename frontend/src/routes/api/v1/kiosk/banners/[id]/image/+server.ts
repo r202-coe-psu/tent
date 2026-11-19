@@ -32,7 +32,11 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		const maxAge = Math.max(0, Number(exp) - Math.ceil(now.getTime() / 1000));
 		return new Response(image.bytes, {
 			status: 200,
-			headers: { 'content-type': image.contentType, 'cache-control': `private, max-age=${maxAge}` }
+			headers: {
+				'content-type': image.contentType,
+				'cache-control': `private, max-age=${maxAge}`,
+				'x-content-type-options': 'nosniff'
+			}
 		});
 	} catch {
 		return fail(503, DEPENDENCY_UNAVAILABLE, 'บริการแบนเนอร์ kiosk ไม่พร้อมใช้งาน');

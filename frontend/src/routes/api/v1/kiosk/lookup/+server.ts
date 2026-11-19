@@ -136,7 +136,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				{ status: 404, headers: noStoreHeaders }
 			);
 		}
-		if (result.kind === 'kiosk_registered') {
+		if (result.kind === 'kiosk_registered' || result.kind === 'checked_out') {
 			return json({ ...result, shelter_code: principal.shelter_code }, { headers: noStoreHeaders });
 		}
 		if (result.kind === 'qr_expired') {

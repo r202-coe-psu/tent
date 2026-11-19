@@ -16,6 +16,7 @@ import type {
 	MovementAction,
 	StayStatus
 } from '../domain/people';
+import type { EvacueeSearchCursor, EvacueeSearchPage } from '../domain/evacuee-search';
 import type { StationNumber } from '../domain/station-log';
 import type { EvacueeSort } from '../domain/evacuee-sort';
 import type {
@@ -195,6 +196,14 @@ export interface PeopleRepository {
 	 * duplicate check across every member card. Keyed by the trimmed query.
 	 */
 	searchEvacueesMany(queries: readonly string[]): Promise<Map<string, Evacuee[]>>;
+	/**
+	 * Server-side (Mango) staff search, paged by CouchDB bookmark — never loads the shelter.
+	 * Pass the previous page's `nextCursor` to continue; `nextCursor: null` means exhausted.
+	 */
+	searchEvacueesPage(
+		query: string,
+		opts?: { cursor?: EvacueeSearchCursor | null; pageSize?: number }
+	): Promise<EvacueeSearchPage>;
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
@@ -325,9 +334,21 @@ export interface PeopleRepository {
 	 */
 	recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
+	): Promise<Evacuee>;
+	/**
+	 * Manual stay-status override to any other status via a `revert_status` movement (nonempty
+	 * `reason` required; zone cleared for pre_registered / arriving / cancelled, `opts.zone`
+	 * required for an in-shelter target when the stay has none). CR-262 A1.
+	 */
+	revertEvacueeStatus(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		toStatus: StayStatus,
+		reason: string,
+		opts?: { zone?: string | null }
 	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade

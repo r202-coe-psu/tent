@@ -6,7 +6,6 @@
 	import Search from '@lucide/svelte/icons/search';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import X from '@lucide/svelte/icons/x';
-	import Zap from '@lucide/svelte/icons/zap';
 
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button';
@@ -259,7 +258,6 @@
 										class="h-11 w-full shrink-0 gap-1.5 sm:h-9 sm:w-auto"
 										onclick={() => goReportIn(evacuee._id)}
 									>
-										<Zap class="size-4" />
 										{copy.reportInCta}
 									</Button>
 								{:else}
