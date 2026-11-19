@@ -71,4 +71,6 @@ class PublicJob(Document):
         indexes = [
             IndexModel([("shelter_code", 1)]),
             IndexModel([("status", 1)]),
+            IndexModel([("skills_required", 1)]),
+            IndexModel([("shelter_code", 1), ("title", 1)]),
         ]
