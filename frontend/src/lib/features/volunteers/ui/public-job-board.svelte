@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteSet, SvelteURLSearchParams } from 'svelte/reactivity';
 	import Filter from '@lucide/svelte/icons/filter';
 	import Search from '@lucide/svelte/icons/search';
 	import Briefcase from '@lucide/svelte/icons/briefcase';
@@ -116,27 +116,17 @@
 	}
 
 	let rawJobs = $state<RawPublicJob[]>([]);
+	// Jobs matching the filters across every page; the API slices, we only render one page.
+	let totalJobs = $state(0);
 	let sheltersList = $state<{ code: string; name: string }[]>([]);
 	// Skills come only from the effective volunteer_skills Master Data endpoint.
 	let skillOptions = $state<VolunteerSkillOption[]>([]);
+	// True only until the first page arrives; later fetches keep the cards and dim them.
 	let isLoading = $state(true);
+	let isFetching = $state(false);
 
 	function resolvedSkillLabel(value: string): string {
 		return skillLabel(value, skillOptions, languageStore.current);
-	}
-
-	/** Compare filter values and stored job values by Master Data code or label. */
-	function skillsMatch(left: string, right: string): boolean {
-		if (!left || !right) return false;
-		if (left.trim().toLowerCase() === right.trim().toLowerCase()) return true;
-		const leftOption = findSkillOption(left, skillOptions);
-		const rightOption = findSkillOption(right, skillOptions);
-		if (leftOption && rightOption && leftOption.code === rightOption.code) return true;
-		if (leftOption && leftOption.label.trim().toLowerCase() === right.trim().toLowerCase())
-			return true;
-		if (rightOption && rightOption.label.trim().toLowerCase() === left.trim().toLowerCase())
-			return true;
-		return false;
 	}
 
 	const weekdayIndexes: Record<string, number> = {
@@ -226,19 +216,43 @@
 		return option?.category?.toLowerCase() === 'controlled';
 	}
 
-	async function fetchPublicJobs() {
+	let requestSeq = 0;
+
+	/** Both the master code and its label, so jobs stored in either form match (server-side). */
+	function skillQueryValues(selected: string): string[] {
+		const option = findSkillOption(selected, skillOptions);
+		return [...new Set([selected, option?.code, option?.label].filter((v): v is string => !!v))];
+	}
+
+	async function fetchPublicJobs(page: number) {
+		const seq = ++requestSeq;
+		isFetching = true;
 		try {
-			isLoading = true;
-			const res = await fetch('/api/public/v1/volunteer/jobs');
+			const params = new SvelteURLSearchParams();
+			if (debouncedQuery) params.set('q', debouncedQuery);
+			if (selectedFilter !== 'all') params.set('status', selectedFilter);
+			if (selectedShelter !== 'all') params.set('shelter_code', selectedShelter);
+			if (selectedSkill !== 'all') {
+				for (const value of skillQueryValues(selectedSkill)) params.append('skill', value);
+			}
+			params.set('page', String(page));
+			params.set('page_size', String(PAGE_SIZE));
+			const res = await fetch(`/api/public/v1/volunteer/jobs?${params}`);
+			if (seq !== requestSeq) return;
 			if (res.ok) {
 				const data = await res.json();
+				if (seq !== requestSeq) return;
 				rawJobs = Array.isArray(data.jobs) ? data.jobs : [];
+				totalJobs = typeof data.total === 'number' ? data.total : rawJobs.length;
 				sheltersList = Array.isArray(data.shelters) ? data.shelters : [];
 			}
 		} catch (err) {
 			console.warn('Failed to load public volunteer jobs:', err);
 		} finally {
-			isLoading = false;
+			if (seq === requestSeq) {
+				isLoading = false;
+				isFetching = false;
+			}
 		}
 	}
 
@@ -257,7 +271,6 @@
 	}
 
 	onMount(() => {
-		fetchPublicJobs();
 		fetchMasterSkills();
 	});
 
@@ -443,11 +456,7 @@
 	const availableShelters = $derived.by<{ code: string; name: string }[]>(() => {
 		const shelters: Record<string, string> = {};
 		for (const s of sheltersList) {
-			if (s.code && s.name) shelters[s.code] = s.name;
-		}
-		for (const job of displayedJobs) {
-			const code = job.shelter_code || job.shelter;
-			if (code && job.shelter && !shelters[code]) shelters[code] = job.shelter;
+			if (s.code) shelters[s.code] = s.name || s.code;
 		}
 		return Object.entries(shelters).map(([code, name]) => ({ code, name }));
 	});
@@ -479,67 +488,40 @@
 		return result;
 	});
 
-	let filteredJobs = $derived(
-		displayedJobs.filter((j) => {
-			if (searchQuery.trim()) {
-				const q = searchQuery.toLowerCase().trim();
-				const matchText =
-					j.title.toLowerCase().includes(q) ||
-					j.shelter.toLowerCase().includes(q) ||
-					j.tags.some((tg) => tg.label.toLowerCase().includes(q)) ||
-					j.skills.some((skill) => skill.label.toLowerCase().includes(q));
-				if (!matchText) return false;
-			}
-
-			if (selectedShelter !== 'all' && (j.shelter_code || j.shelter) !== selectedShelter) {
-				return false;
-			}
-
-			if (selectedSkill !== 'all') {
-				const hasSkill =
-					j.skills_required?.some((s) => skillsMatch(s, selectedSkill)) ||
-					j.skills.some((skill) => skillsMatch(skill.label, selectedSkill)) ||
-					skillsMatch(j.title, selectedSkill);
-				if (!hasSkill) return false;
-			}
-
-			if (selectedFilter === 'open') {
-				return !j.closed && j.shifts.some((s) => s.quota - s.confirmed > 0);
-			}
-			if (selectedFilter === 'near_full') {
-				return (
-					!j.closed &&
-					j.shifts.some((s) => {
-						const rem = s.quota - s.confirmed;
-						return rem > 0 && rem <= 2;
-					})
-				);
-			}
-			if (selectedFilter === 'controlled') {
-				return j.isControlled;
-			}
-
-			return true;
-		})
-	);
-
-	const filterState = $derived(
-		`${searchQuery}\u0000${selectedFilter}\u0000${selectedShelter}\u0000${selectedSkill}`
-	);
-	const totalPages = $derived(Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE)));
-	const paginatedJobs = $derived(
-		filteredJobs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-	);
-
-	// A changed search/filter should always show the first page of the new result set.
+	// Typing waits for a pause before it costs a request; everything else applies at once.
+	const SEARCH_DEBOUNCE_MS = 300;
+	let debouncedQuery = $state('');
 	$effect(() => {
-		void filterState;
-		currentPage = 1;
+		const value = searchQuery.trim();
+		const handle = setTimeout(() => (debouncedQuery = value), SEARCH_DEBOUNCE_MS);
+		return () => clearTimeout(handle);
 	});
 
-	// Keep the current page valid when a filter removes the last visible page.
+	const filterState = $derived(
+		`${debouncedQuery}\u0000${selectedFilter}\u0000${selectedShelter}\u0000${selectedSkill}`
+	);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalJobs / PAGE_SIZE)));
+	let appliedFilterState = '';
+
+	// One fetch per (filters, page). A changed filter always restarts at page 1 first.
 	$effect(() => {
-		if (currentPage > totalPages) currentPage = totalPages;
+		const key = filterState;
+		const page = currentPage;
+		untrack(() => {
+			if (key !== appliedFilterState) {
+				appliedFilterState = key;
+				if (page !== 1) {
+					currentPage = 1;
+					return;
+				}
+			}
+			void fetchPublicJobs(page);
+		});
+	});
+
+	// Keep the current page valid when the result set shrinks under the reader.
+	$effect(() => {
+		if (!isFetching && currentPage > totalPages) currentPage = totalPages;
 	});
 
 	function openApplyModal(jobId: string, shiftId: string) {
@@ -609,7 +591,7 @@
 						? 'bg-primary text-white shadow-sm'
 						: 'border border-border/80 bg-white text-muted-foreground hover:bg-muted/30'}"
 				>
-					{t.filterAll} ({displayedJobs.length})
+					{t.filterAll}{selectedFilter === 'all' ? ` (${totalJobs})` : ''}
 				</button>
 
 				<button
@@ -743,9 +725,11 @@
 		aria-label={t.jobBoardSectionTitle}
 		class={[
 			'grid min-h-0 scroll-mt-28 items-stretch gap-4 focus:outline-none sm:gap-5',
-			paginatedJobs.length > 0 && 'xl:grid-cols-2'
+			displayedJobs.length > 0 && 'xl:grid-cols-2'
 		]}
-		class:flex-1={!isLoading && paginatedJobs.length === 0}
+		class:flex-1={!isLoading && displayedJobs.length === 0}
+		class:opacity-60={isFetching && !isLoading}
+		aria-busy={isFetching}
 	>
 		{#if isLoading}
 			<div class="space-y-4">
@@ -753,7 +737,7 @@
 				<Skeleton class="h-44 rounded-2xl" />
 			</div>
 		{:else}
-			{#each paginatedJobs as job (job.id)}
+			{#each displayedJobs as job (job.id)}
 				<JobCard {job} onApply={openApplyModal} />
 			{:else}
 				<div
@@ -769,15 +753,15 @@
 		{/if}
 	</div>
 
-	{#if !isLoading && filteredJobs.length > 0}
+	{#if !isLoading && totalJobs > 0}
 		<div
 			class="grid grid-cols-1 items-center gap-4 border-t border-border/60 pt-4 sm:grid-cols-[1fr_auto_1fr]"
 		>
 			<p class="text-xs text-muted-foreground sm:justify-self-start">
 				{t.paginationSummary(
-					filteredJobs.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1,
-					Math.min(currentPage * PAGE_SIZE, filteredJobs.length),
-					filteredJobs.length
+					(currentPage - 1) * PAGE_SIZE + 1,
+					Math.min(currentPage * PAGE_SIZE, totalJobs),
+					totalJobs
 				)}
 			</p>
 
@@ -785,7 +769,7 @@
 				<div class="w-fit justify-self-center">
 					<Pagination.Root
 						bind:page={currentPage}
-						count={filteredJobs.length}
+						count={totalJobs}
 						perPage={PAGE_SIZE}
 						onPageChange={showNewPage}
 					>

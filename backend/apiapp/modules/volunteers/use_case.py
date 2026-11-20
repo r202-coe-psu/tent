@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -64,6 +65,7 @@ from .schemas import (
     JobShiftTemplate,
     PublicJobItem,
     PublicJobListResponse,
+    PublicJobShelter,
     PublicJobShift,
     ScheduleActionResponse,
     ScheduleShift,
@@ -244,6 +246,119 @@ async def _shelter_names(codes: set[str]) -> dict[str, str]:
         return {}
     shelters = await PublicShelter.find({"shelter_code": {"$in": sorted(codes)}}).to_list()
     return {s.shelter_code: s.name for s in shelters}
+
+
+def _contains(value: str) -> dict[str, str]:
+    """Case-insensitive literal substring match (regex metacharacters are plain text)."""
+    return {"$regex": re.escape(value), "$options": "i"}
+
+
+async def _board_query(
+    *,
+    shelter_code: str | None,
+    skills: list[str] | None,
+    q: str | None,
+    job_status: str | None,
+    controlled: frozenset[str],
+) -> dict[str, object]:
+    """Mongo filter for the public board: every parameter narrows (AND)."""
+    clauses: list[dict[str, object]] = [{"status": {"$in": sorted(_BOARD_STATUSES)}}]
+    if shelter_code:
+        clauses.append({"shelter_code": shelter_code.upper()})
+    wanted = [value.strip() for value in skills or [] if value and value.strip()]
+    if wanted:
+        # The caller sends both the master code and its label so either stored form hits.
+        clauses.append({"skills_required": {"$in": wanted}})
+    text = (q or "").strip()
+    if text:
+        matched = await PublicShelter.find(
+            {"$or": [{"name": _contains(text)}, {"shelter_code": _contains(text)}]}
+        ).to_list()
+        clauses.append(
+            {
+                "$or": [
+                    {"title": _contains(text)},
+                    {"skills_required": _contains(text)},
+                    {"shelter_code": {"$in": sorted({s.shelter_code for s in matched})}},
+                ]
+            }
+        )
+    if job_status == "open":
+        clauses.append(_remaining_between(1, None))
+    elif job_status == "near_full":
+        clauses.append(_remaining_between(1, 2))
+    elif job_status == "controlled":
+        clauses.append(
+            {
+                "$or": [
+                    {"tier": "staff-capable"},
+                    {"skills_required": {"$in": sorted(controlled)}},
+                ]
+            }
+        )
+    return {"$and": clauses}
+
+
+def _remaining_between(low: int, high: int | None) -> dict[str, object]:
+    """Some shift (or the job itself when it has none) has ``low..high`` slots left."""
+    bound: dict[str, int] = {"$gte": low}
+    if high is not None:
+        bound["$lte"] = high
+    return {
+        "$or": [
+            {"shifts": {"$elemMatch": {"slots_remaining": bound}}},
+            {"shifts.0": {"$exists": False}, "slots_remaining": bound},
+        ]
+    }
+
+
+async def _board_shelters() -> list[PublicJobShelter]:
+    """Every shelter with a board job, unfiltered, so the picker stays complete."""
+    codes = await PublicJob.get_pymongo_collection().distinct(
+        "shelter_code", {"status": {"$in": sorted(_BOARD_STATUSES)}}
+    )
+    names = await _shelter_names({code for code in codes if code})
+    return [PublicJobShelter(code=code, name=names.get(code, "")) for code in sorted(codes) if code]
+
+
+async def _applicant_counts(
+    job_ids: list[str],
+) -> tuple[dict[str, int], dict[tuple[str, str], int]]:
+    """Non-cancelled applications per job and per shift, counted inside Mongo.
+
+    A ``$group`` returns one row per (job, shift) instead of every application document.
+    The shift is ``shift_id`` or, for older projections, ``selected_shift.shift_id``.
+    """
+    by_job: dict[str, int] = {}
+    by_shift: dict[tuple[str, str], int] = {}
+    if not job_ids:
+        return by_job, by_shift
+    pipeline = [
+        {"$match": {"job_id": {"$in": job_ids}, "status": {"$ne": "cancelled"}}},
+        {
+            "$group": {
+                "_id": {
+                    "job_id": "$job_id",
+                    "shift_id": {
+                        "$cond": [
+                            {"$gt": [{"$strLenCP": {"$ifNull": ["$shift_id", ""]}}, 0]},
+                            "$shift_id",
+                            {"$ifNull": ["$selected_shift.shift_id", ""]},
+                        ]
+                    },
+                },
+                "count": {"$sum": 1},
+            }
+        },
+    ]
+    cursor = await PublicJobApplication.get_pymongo_collection().aggregate(pipeline)
+    for row in await cursor.to_list():
+        job_id = row["_id"]["job_id"]
+        shift_id = row["_id"]["shift_id"]
+        by_job[job_id] = by_job.get(job_id, 0) + row["count"]
+        if shift_id:
+            by_shift[(job_id, shift_id)] = row["count"]
+    return by_job, by_shift
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -472,17 +587,31 @@ class VolunteersUseCase:
         )
 
     async def list_jobs(
-        self, *, shelter_code: str | None = None, skill: str | None = None
+        self,
+        *,
+        shelter_code: str | None = None,
+        skills: list[str] | None = None,
+        q: str | None = None,
+        job_status: str | None = None,
+        page: int = 1,
+        page_size: int | None = None,
     ) -> PublicJobListResponse:
-        query: dict[str, object] = {"status": {"$in": sorted(_BOARD_STATUSES)}}
-        if shelter_code:
-            query["shelter_code"] = shelter_code.upper()
-        if skill:
-            query["skills_required"] = skill
-
-        jobs = await PublicJob.find(query).to_list()
-        names = await _shelter_names({job.shelter_code for job in jobs})
         controlled = await controlled_skills()
+        query = await _board_query(
+            shelter_code=shelter_code,
+            skills=skills,
+            q=q,
+            job_status=job_status,
+            controlled=controlled,
+        )
+
+        total = await PublicJob.find(query).count()
+        finder = PublicJob.find(query).sort([("shelter_code", 1), ("title", 1), ("_id", 1)])
+        if page_size is not None:
+            finder = finder.skip((page - 1) * page_size).limit(page_size)
+        jobs = await finder.to_list()
+        names = await _shelter_names({job.shelter_code for job in jobs})
+        shelters = await _board_shelters()
 
         # One read of the live counters rather than trusting the projected snapshot:
         # the snapshot only moves when staff edit the job, so between edits it would
@@ -494,20 +623,7 @@ class VolunteersUseCase:
         ).to_list()
         by_shift_id = {(slot.job_id, slot.shift_id): slot for slot in shift_slot_rows}
 
-        applications = await PublicJobApplication.find(
-            {
-                "job_id": {"$in": [job.id for job in jobs]},
-                "status": {"$ne": "cancelled"},
-            }
-        ).to_list()
-        applicants_by_job: dict[str, int] = {}
-        applicants_by_shift: dict[tuple[str, str], int] = {}
-        for application in applications:
-            applicants_by_job[application.job_id] = applicants_by_job.get(application.job_id, 0) + 1
-            application_shift_id = application.shift_id or application.selected_shift.shift_id
-            if application_shift_id:
-                key = (application.job_id, application_shift_id)
-                applicants_by_shift[key] = applicants_by_shift.get(key, 0) + 1
+        applicants_by_job, applicants_by_shift = await _applicant_counts([job.id for job in jobs])
 
         items: list[PublicJobItem] = []
         for job in jobs:
@@ -569,8 +685,7 @@ class VolunteersUseCase:
                     requires_review=_needs_review(job, [], controlled),
                 )
             )
-        items.sort(key=lambda item: (item.shelter_code, item.title))
-        return PublicJobListResponse(jobs=items)
+        return PublicJobListResponse(jobs=items, total=total, shelters=shelters)
 
     async def preflight(
         self, job_id: str, payload: VolunteerPreflightRequest

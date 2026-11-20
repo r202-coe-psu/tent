@@ -60,9 +60,19 @@ class PublicJobItem(BaseModel):
     requires_review: bool = False
 
 
+class PublicJobShelter(BaseModel):
+    code: str
+    name: str = ""
+
+
 class PublicJobListResponse(BaseModel):
     success: bool = True
     jobs: list[PublicJobItem] = Field(default_factory=list)
+    #: Jobs matching the filters across every page (equals ``len(jobs)`` unpaged).
+    total: int = 0
+    #: Every shelter with a job on the board, ignoring the filters, so the shelter
+    #: picker does not shrink to whatever happens to be on the current page.
+    shelters: list[PublicJobShelter] = Field(default_factory=list)
 
 
 class VolunteerApplyRequest(BaseModel):
