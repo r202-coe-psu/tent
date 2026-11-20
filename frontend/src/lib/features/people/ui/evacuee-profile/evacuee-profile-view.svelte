@@ -112,11 +112,8 @@
 		if (profileReadonly || !authStore.user) return false;
 		const roles = authStore.user.roles;
 		if (isSystemAdmin(roles)) return true;
-		const scopedShelter = shelterCodeFromRoles(roles);
 		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
-		return (
-			!!scopedShelter && scopedShelter.toUpperCase() === currentShelter && isShelterManager(roles)
-		);
+		return isShelterManager(roles, currentShelter);
 	});
 
 	const STATUS_STYLE: Record<StayStatus, { colorClass: string; dotClass: string }> = {
