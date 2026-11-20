@@ -77,6 +77,54 @@ describe('classifyEvacuee', () => {
 		expect(classifyEvacuee(evacuee('X', 'staff', 'active'), ['staff'])).toBe('reset');
 		expect(classifyEvacuee(evacuee('X', 'web', 'active'), ['api'])).toBe('delete');
 	});
+
+	it.each([
+		['web', 'active'],
+		['api', 'room_confirmed'],
+		['staff', 'pre_registered'],
+		['kiosk', 'cancelled'],
+		['staff', 'active']
+	])('--all-evacuees deletes %s/%s too', (via, status) => {
+		expect(classifyEvacuee(evacuee('X', via, status), keep, true)).toBe('delete');
+	});
+});
+
+describe('planShelterCleanup — people with allEvacuees', () => {
+	const docs: CouchDoc[] = [
+		doc('household:A', { status: 'checked_in', head_evacuee_id: 'evacuee:A1' }),
+		evacuee('A1', 'staff', 'active', { household_id: 'household:A' }),
+		evacuee('A2', 'web', 'room_confirmed', { household_id: 'household:A' }),
+		doc('household:C', { status: 'pre_registered', head_evacuee_id: 'evacuee:C1' }),
+		evacuee('C1', 'web', 'pre_registered', { household_id: 'household:C' }),
+		evacuee('D1', 'kiosk', 'cancelled'),
+		doc('medical:M2', { evacuee_id: 'evacuee:A2' }),
+		doc('evacuee_qr:C1', { evacuee_id: 'evacuee:C1' }),
+		doc('volunteer:V1')
+	];
+	const plan = planShelterCleanup('shelter_sh001', docs, {
+		...ALL,
+		keepChannels: [],
+		allEvacuees: true
+	});
+
+	it('deletes every evacuee, their medical/QR docs and every household; resets nobody', () => {
+		expect(plan.deletes.map((d) => d.id)).toEqual(
+			[
+				'evacuee:A1',
+				'evacuee:A2',
+				'evacuee:C1',
+				'evacuee:D1',
+				'evacuee_qr:C1',
+				'household:A',
+				'household:C',
+				'medical:M2'
+			].sort()
+		);
+		expect(plan.updates).toEqual([]);
+		expect(plan.evacueesUntouched).toBe(0);
+		expect(plan.evacueesReset).toEqual({});
+		expect(plan.householdsDeleted).toBe(2);
+	});
 });
 
 describe('planShelterCleanup — people', () => {
@@ -274,6 +322,22 @@ describe('parseCliArgs / assertHostConfirmed', () => {
 	it('rejects unknown --keep-channels so a typo cannot delete every web booking', () => {
 		expect(() => parseCliArgs(['--keep-channels=wed'])).toThrow(/Unknown --keep-channels: wed/);
 		expect(parseCliArgs(['--keep-channels=web,kiosk']).keepChannels).toEqual(['web', 'kiosk']);
+	});
+
+	it('parses --all-evacuees and refuses it with --keep-channels or without people', () => {
+		expect(parseCliArgs([]).allEvacuees).toBe(false);
+		expect(parseCliArgs(['--all-evacuees', '--shelter=SH001'])).toMatchObject({
+			allEvacuees: true,
+			keepChannels: [],
+			shelter: 'SH001'
+		});
+		expect(() => parseCliArgs(['--all-evacuees', '--keep-channels=web'])).toThrow(
+			/--all-evacuees and --keep-channels/
+		);
+		expect(() => parseCliArgs(['--all-evacuees', '--only=stock'])).toThrow(
+			/--all-evacuees needs the people category/
+		);
+		expect(parseCliArgs(['--all-evacuees', '--only=people']).categories).toEqual(['people']);
 	});
 
 	it('parses --expect-shelters as a whole number', () => {

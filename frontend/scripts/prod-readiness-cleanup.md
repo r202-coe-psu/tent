@@ -63,6 +63,23 @@ Useful flags: `--shelter=SH001` (one shelter; central_ops is only touched with `
 `--only=stock,food` (subset of `people,stock,food,distribution,tickets,donations`),
 `--keep-channels=web,api`.
 
+### Clear every evacuee in one shelter — `--all-evacuees`
+
+`--all-evacuees` deletes **every** evacuee instead of following the table above: seed or real,
+any `registered_via`, and `pre_registered` / `cancelled` too. Nobody is reset, so every household
+goes with them (plus medical, `evacuee_qr`, photos and all check-in history). It cannot be combined
+with `--keep-channels`, and `--only` must include `people`.
+
+```bash
+# dry-run: shows how many evacuees/households would go — nothing is written
+pnpm migrate:prod-cleanup --shelter=SH001 --only=people --all-evacuees
+# apply (local); off localhost add --confirm-host=<host> --expect-shelters=1
+pnpm migrate:prod-cleanup --shelter=SH001 --only=people --all-evacuees --apply
+```
+
+Web/api pre-registrations deleted this way are gone from the public plane too (the worker removes
+their projections). Same backup / `--restore` as every other `--apply`.
+
 ## 0. Before you start — design docs
 
 The cleanup never touches `_design/*`. But a shelter DB whose design docs are older than the app

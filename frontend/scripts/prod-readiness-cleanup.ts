@@ -8,6 +8,8 @@
  *   - Evacuee that came through a pre-registration channel (`registered_via` ∈ --keep-channels,
  *     default `web,api`) → reset to `current_stay = { status: 'pre_registered', zone: null }`.
  *   - Every other evacuee → deleted together with its `medical` doc and its photo `image`.
+ *   - With --all-evacuees: every evacuee is deleted instead, whatever its channel or stay status
+ *     (pre-registered and cancelled included), so the shelter is left with no people at all.
  *   - Every `movement`, `screening`, `station_log`, `people_import_log` → deleted (check-in and
  *     import history); `evacuee_qr` only for deleted evacuees (kept people's printed QR stays valid).
  *   - Households: no member left → deleted (+ pet/asset images); otherwise status re-derived
@@ -25,6 +27,8 @@
  *   pnpm migrate:prod-cleanup                                  # dry-run (default), all shelters
  *   pnpm migrate:prod-cleanup --shelter=SH001                  # dry-run one shelter
  *   pnpm migrate:prod-cleanup --only=stock,food                # limit categories
+ *   pnpm migrate:prod-cleanup --shelter=SH001 --only=people --all-evacuees
+ *                                                              # dry-run: delete every evacuee
  *   pnpm migrate:prod-cleanup --apply                          # backup, then write (local host)
  *   pnpm migrate:prod-cleanup --apply --confirm-host=<host> --expect-shelters=<n>
  *                                                              # any other host (incl. `couchdb`)
@@ -153,6 +157,8 @@ export type ShelterPlan = {
 export type CleanupOptions = {
 	categories: readonly Category[];
 	keepChannels: readonly string[];
+	/** Delete every evacuee — no channel is kept, pre-registered/cancelled ones included. */
+	allEvacuees?: boolean;
 	now: string;
 };
 
@@ -179,8 +185,10 @@ function imageIdsOfHousehold(doc: CouchDoc): string[] {
 /** What happens to one evacuee: left alone, reset to pre-registered, or deleted. */
 export function classifyEvacuee(
 	doc: CouchDoc,
-	keepChannels: readonly string[]
+	keepChannels: readonly string[],
+	allEvacuees = false
 ): 'untouched' | 'reset' | 'delete' {
+	if (allEvacuees) return 'delete';
 	if (UNTOUCHED_STAYS.includes(stayOf(doc))) return 'untouched';
 	return keepChannels.includes(String(doc.registered_via)) ? 'reset' : 'delete';
 }
@@ -246,7 +254,7 @@ function planPeople(
 
 	for (const doc of evacuees) {
 		const key = `${String(doc.registered_via ?? 'unknown')}/${stayOf(doc)}`;
-		const action = classifyEvacuee(doc, options.keepChannels);
+		const action = classifyEvacuee(doc, options.keepChannels, options.allEvacuees);
 		if (action === 'untouched') {
 			plan.evacueesUntouched += 1;
 			keptStay.set(doc._id, stayOf(doc));
@@ -327,6 +335,7 @@ export type CliArgs = {
 	shelter: string;
 	categories: Category[];
 	keepChannels: string[];
+	allEvacuees: boolean;
 	confirmHost: string | null;
 	expectShelters: number | null;
 	backupDir: string | null;
@@ -383,11 +392,19 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 			`Unknown --only categories: ${unknown.join(', ')} (use ${CATEGORIES.join(',')})`
 		);
 	}
+	const allEvacuees = argv.includes('--all-evacuees');
+	if (allEvacuees && keepChannels) {
+		throw new Error('--all-evacuees and --keep-channels are mutually exclusive');
+	}
+	if (allEvacuees && only && !only.includes('people')) {
+		throw new Error('--all-evacuees needs the people category (add people to --only)');
+	}
 	return {
 		apply: argv.includes('--apply'),
 		shelter: flagValue(argv, 'shelter') ?? 'all',
 		categories: (only as Category[] | null) ?? [...CATEGORIES],
-		keepChannels: keepChannels ?? [...DEFAULT_KEEP_CHANNELS],
+		keepChannels: allEvacuees ? [] : (keepChannels ?? [...DEFAULT_KEEP_CHANNELS]),
+		allEvacuees,
 		confirmHost: flagValue(argv, 'confirm-host'),
 		expectShelters,
 		backupDir: flagValue(argv, 'backup-dir'),
@@ -567,7 +584,7 @@ export async function runCleanup(
 		`\nProd-readiness cleanup → ${deps.displayUrl ?? displayCouchUrl()} — ${args.apply ? 'APPLY' : 'DRY RUN (nothing is written)'}`
 	);
 	console.log(
-		`Categories: ${args.categories.join(', ')} · keep channels: ${args.keepChannels.join(', ')}`
+		`Categories: ${args.categories.join(', ')} · ${args.allEvacuees ? 'ALL EVACUEES deleted (pre-registered and cancelled included)' : `keep channels: ${args.keepChannels.join(', ')}`}`
 	);
 
 	const shelterDbs = await resolveShelterDbs(args.shelter, req);
@@ -575,6 +592,7 @@ export async function runCleanup(
 	const options: CleanupOptions = {
 		categories: args.categories,
 		keepChannels: args.keepChannels,
+		allEvacuees: args.allEvacuees,
 		now
 	};
 	const shelters: ShelterPlan[] = [];
@@ -695,13 +713,15 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
 		console.log(`
 Usage (from frontend/):
   pnpm migrate:prod-cleanup [--shelter=SH001|all] [--only=${CATEGORIES.join(',')}]
-                            [--keep-channels=web,api] [--backup-dir=<dir>]
+                            [--keep-channels=web,api | --all-evacuees] [--backup-dir=<dir>]
                             [--apply [--confirm-host=<host> --expect-shelters=<n>]]
   pnpm migrate:prod-cleanup --restore=<backup-dir> [--apply [--confirm-host=<host>]]
 
 Dry-run by default. --apply needs COUCHDB_ADMIN_URL set explicitly and backs up every touched
 database (owner-only files) before writing. Off localhost, --apply also needs --confirm-host and
 --expect-shelters (the shelter count from the dry-run).
+--all-evacuees deletes every evacuee (pre-registered and cancelled included) instead of keeping
+web/api bookings; pair it with --shelter=<code> --only=people to clear one shelter's people.
 Runbook: scripts/prod-readiness-cleanup.md
 `);
 		return;
