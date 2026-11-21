@@ -83,7 +83,9 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		parking_policy: master.parking_policy ?? { ...EMPTY_PARKING_POLICY },
 		feature_flags: master.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS },
 		created_at: master.created_at ?? '',
-		updated_at: master.updated_at ?? ''
+		updated_at: master.updated_at ?? '',
+		created_by: master.created_by ?? null,
+		updated_by: master.updated_by ?? null
 	};
 }
 

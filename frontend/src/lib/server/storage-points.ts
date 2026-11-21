@@ -11,6 +11,8 @@ import {
 import { adminRaw, authorizeSession, ServiceError, type Caller } from './couch-admin';
 import { shelterDbName } from './shelter-access-design';
 import { findMasterByCode, migrate, nowIso, updateMaster } from './shelters.admin';
+import { recordAuditedWrite } from './audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 
 /** Rows per `_find` page when the ledger is read in full; the same page size the ledger screens use. */
 const LEDGER_PAGE_LIMIT = 1000;
@@ -124,10 +126,11 @@ type PointMutation = (points: readonly SubStorageItem[]) => Promise<SubStorageIt
  */
 async function mutateStoragePoints(
 	code: string,
+	actor: string,
 	rev: string,
 	mutate: PointMutation
 ): Promise<{ rev: string }> {
-	const result = await updateMaster(code, async (current: ShelterMaster) => {
+	const result = await updateMaster(code, actor, async (current: ShelterMaster) => {
 		if (!rev || current._rev !== rev) {
 			throw new ServiceError(
 				'CONFLICT',
@@ -142,6 +145,17 @@ async function mutateStoragePoints(
 			}
 		};
 	});
+	await recordAuditedWrite({
+		actor,
+		event: AUDIT_EVENTS.shelterStoragePointChanged,
+		action: 'update',
+		entityType: 'shelter',
+		entityId: code,
+		label: result.after?.name ?? null,
+		shelterCode: code,
+		before: result.before as Record<string, unknown> | undefined,
+		after: result.after as Record<string, unknown> | undefined
+	});
 	return { rev: result.rev };
 }
 
@@ -153,22 +167,24 @@ function parsePoint(raw: unknown, id: string): SubStorageItem {
 
 export async function addStoragePoint(
 	code: string,
+	actor: string,
 	rev: string,
 	raw: unknown
 ): Promise<{ rev: string; point: SubStorageItem }> {
 	const point = parsePoint(raw, ulid());
-	const written = await mutateStoragePoints(code, rev, async (points) => [...points, point]);
+	const written = await mutateStoragePoints(code, actor, rev, async (points) => [...points, point]);
 	return { ...written, point };
 }
 
 export async function editStoragePoint(
 	code: string,
+	actor: string,
 	pointId: string,
 	rev: string,
 	raw: unknown
 ): Promise<{ rev: string; point: SubStorageItem }> {
 	const point = parsePoint(raw, pointId);
-	const written = await mutateStoragePoints(code, rev, async (points) => {
+	const written = await mutateStoragePoints(code, actor, rev, async (points) => {
 		if (!points.some((p) => p.id === pointId)) throw pointNotFound(pointId);
 		return points.map((p) => (p.id === pointId ? point : p));
 	});
@@ -177,10 +193,11 @@ export async function editStoragePoint(
 
 export async function removeStoragePoint(
 	code: string,
+	actor: string,
 	pointId: string,
 	rev: string
 ): Promise<{ rev: string }> {
-	return mutateStoragePoints(code, rev, async (points) => {
+	return mutateStoragePoints(code, actor, rev, async (points) => {
 		if (!points.some((p) => p.id === pointId)) throw pointNotFound(pointId);
 		const stocked = await countStockedLots(code, pointId);
 		if (stocked > 0) {

@@ -187,7 +187,7 @@ describe('provisionShelter catalog write-policy precondition', () => {
 		});
 
 		await expect(
-			provisionShelter({ name: 'ศูนย์ทดสอบ' } as Parameters<typeof provisionShelter>[0])
+			provisionShelter({ name: 'ศูนย์ทดสอบ' } as Parameters<typeof provisionShelter>[0], 'sa.admin')
 		).rejects.toThrow(/no write policy/);
 
 		const touched = adminRawMock.mock.calls.map(([path, method]) => `${method} ${path}`);
@@ -258,6 +258,7 @@ describe('provisionShelter seeding', () => {
 	it('creates a shelter without writing evacuee docs or seed:* steps', async () => {
 		const result = await provisionShelter(
 			{ name: 'ศูนย์ทดสอบ' } as Parameters<typeof provisionShelter>[0],
+			'sa.admin',
 			'SH001'
 		);
 
@@ -273,6 +274,7 @@ describe('provisionShelter seeding', () => {
 	it('stamps closed_at when a shelter is created already closed (CR-183 FR-14)', async () => {
 		await provisionShelter(
 			{ name: 'ศูนย์ปิด', operation_status: 'closed' } as Parameters<typeof provisionShelter>[0],
+			'sa.admin',
 			'SH002'
 		);
 
@@ -286,10 +288,25 @@ describe('provisionShelter seeding', () => {
 				operation_status: 'active',
 				closed_at: '2020-01-01T00:00:00.000Z'
 			} as Parameters<typeof provisionShelter>[0],
+			'sa.admin',
 			'SH003'
 		);
 
 		expect(writtenMaster().closed_at).toBeNull();
+	});
+
+	it('stamps the actor as created_by and updated_by and ignores client values (CR-259 FR-1/FR-4)', async () => {
+		await provisionShelter(
+			{
+				name: 'ศูนย์ใหม่',
+				created_by: 'mallory',
+				updated_by: 'mallory'
+			} as Parameters<typeof provisionShelter>[0],
+			'sa.admin',
+			'SH006'
+		);
+
+		expect(writtenMaster()).toMatchObject({ created_by: 'sa.admin', updated_by: 'sa.admin' });
 	});
 
 	it('creates an external shelter as an empty database with grants only (CR-252 FR-11)', async () => {
@@ -297,6 +314,7 @@ describe('provisionShelter seeding', () => {
 			{ name: 'ศูนย์ภายนอก', is_external: true, operation_status: 'unknown' } as Parameters<
 				typeof provisionShelter
 			>[0],
+			'sa.admin',
 			'SH004'
 		);
 
@@ -310,6 +328,7 @@ describe('provisionShelter seeding', () => {
 	it('still deploys views and indexes for a regular shelter', async () => {
 		const result = await provisionShelter(
 			{ name: 'ศูนย์ปกติ' } as Parameters<typeof provisionShelter>[0],
+			'sa.admin',
 			'SH005'
 		);
 		expect(result.steps.map((s) => s.step)).toContain('design-dashboard');

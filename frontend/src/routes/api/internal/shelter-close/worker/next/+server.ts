@@ -4,9 +4,11 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { ulid } from '$lib/db/ulid';
 import { resolveOperationStatus } from '$lib/features/shelters/server';
-import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { findMasterByCode, migrate, updateMaster } from '$lib/server/shelters.admin';
 import { adminCouchReq, getShelterCloseStore } from '$lib/server/shelter-close-job-runtime';
 import { runShelterCloseWorkerStep } from '$lib/server/shelter-close-worker-run';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 
 export const prerender = false;
 
@@ -58,10 +60,21 @@ export const POST: RequestHandler = async ({ request }) => {
 					closed_at: typeof shelter.closed_at === 'string' ? shelter.closed_at : null
 				};
 			},
-			closeShelter: async (code) => {
-				await updateMaster(code, () => ({
-					patch: { operation_status: 'closed', updated_at: nowIso() }
+			closeShelter: async (code, actor) => {
+				const { before, after } = await updateMaster(code, actor, () => ({
+					patch: { operation_status: 'closed' }
 				}));
+				await recordAuditedWrite({
+					actor,
+					event: AUDIT_EVENTS.shelterClosed,
+					action: 'status_change',
+					entityType: 'shelter',
+					entityId: code,
+					label: after.name,
+					shelterCode: code,
+					before: before as Record<string, unknown> | undefined,
+					after: after as Record<string, unknown> | undefined
+				});
 			}
 		});
 		if (result.kind === 'idle') return new Response(null, { status: 204 });

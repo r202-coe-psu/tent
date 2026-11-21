@@ -11,7 +11,6 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { toast } from 'svelte-sonner';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import { ulid } from '$lib/db/ulid';
 	import { useCloseZone, useReopenZone } from '../application/queries';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -118,7 +117,6 @@
 		const action = confirmAction;
 		const zoneCode = confirmZoneCode;
 		const reason = confirmReason.trim();
-		const actor = authStore.user?.name ?? null;
 
 		if (action === 'close') {
 			closeZoneMutation.mutate(
@@ -126,8 +124,7 @@
 					code: shelterCode,
 					zoneCode,
 					zoneName: confirmZoneName,
-					reason: reason || undefined,
-					closedBy: actor ?? undefined
+					reason: reason || undefined
 				},
 				{
 					onSuccess: () => {
@@ -144,8 +141,7 @@
 				{
 					code: shelterCode,
 					zoneCode,
-					zoneName: confirmZoneName,
-					reopenedBy: actor ?? undefined
+					zoneName: confirmZoneName
 				},
 				{
 					onSuccess: () => {
