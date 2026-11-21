@@ -5,6 +5,8 @@
  * lists far taller than the screen, so a page that still grew with its content would scroll.
  * Desktop keeps the metric cards above the map; mobile is the map or the list with nothing above.
  * The map legend keeps every label on one line (it wraps between items, never inside one).
+ * Mobile map view shows the active filter chips (#1460); at 1024px the legend folds into a toggle
+ * while both floating panels are open (#1461).
  */
 import { test, expect, type Page } from '@playwright/test';
 
@@ -156,6 +158,30 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 			await expect(page.locator('footer')).toHaveCount(0);
 		});
 
+		test('map view: the filters in use show as chips, and the filter button turns solid (#1460)', async ({
+			page
+		}) => {
+			await mockPublicApi(page);
+			await page.goto('/shelters');
+			const filterBtn = page.getByTestId('mobile-filter-btn');
+			await expect(filterBtn).toBeVisible(READY);
+			// no filter yet: outlined button, no counted chips
+			await expect(filterBtn).not.toHaveAttribute('data-active', /.*/);
+
+			await page.goto('/shelters?hide_full=true');
+			await expect(filterBtn).toHaveAttribute('data-active', 'true', READY);
+			const chips = page.getByRole('group', { name: 'ตัวกรองที่ใช้อยู่' });
+			await expect(chips).toBeVisible(READY);
+			await expect(chips.getByRole('button', { name: /ซ่อน/ }).first()).toBeVisible();
+
+			// one scrolling row, and the map still fills the screen
+			expect(await chips.evaluate((el) => getComputedStyle(el).flexWrap)).toBe('nowrap');
+			expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+
+			await chips.getByRole('button', { name: 'ล้างทั้งหมด' }).click();
+			await expect(filterBtn).not.toHaveAttribute('data-active', /.*/, READY);
+		});
+
 		test('list view: no cards above, the list scrolls inside, the page does not', async ({
 			page
 		}) => {
@@ -173,6 +199,43 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 			expect(await scroller.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
 			await expect(page.getByText(TOTAL_CARD)).toBeHidden();
 			expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+		});
+	});
+
+	test.describe('1024px: both panels open', () => {
+		test.use({ viewport: { width: 1024, height: 768 } });
+
+		test('the legend folds into a toggle and opens across the map on demand (#1461)', async ({
+			page
+		}) => {
+			await mockPublicApi(page);
+			await page.goto('/shelters');
+			const toggle = page.getByTestId('map-legend-toggle');
+			await expect(toggle).toBeVisible(READY);
+			// folded: one small button, not a tall stack of rows over the map
+			expect((await toggle.boundingBox())!.height).toBeLessThan(40);
+			await expect(page.getByText('ไม่ทราบสถานะ')).toBeHidden();
+
+			await toggle.click();
+			const legend = page.getByTestId('map-legend');
+			await expect(legend.getByText('ไม่ทราบสถานะ')).toBeVisible();
+			// open: across the map, above the floating panels (nothing clips or covers a label)
+			expect((await legend.boundingBox())!.width).toBeGreaterThan(500);
+			for (const label of ['เปิดใช้งาน', 'กำลังเตรียมการ', 'เต็มความจุ', 'ปิดทำการ']) {
+				await expect(legend.getByText(label)).toBeVisible();
+			}
+			// the close button takes a real click, so no panel covers the legend
+			await page.getByTestId('map-legend-close').click();
+			await expect(toggle).toBeVisible();
+		});
+
+		test('with one panel closed there is room for the whole legend', async ({ page }) => {
+			await mockPublicApi(page);
+			await page.goto('/shelters');
+			await expect(page.getByTestId('map-legend-toggle')).toBeVisible(READY);
+			await page.getByTitle('ย่อรายการศูนย์').click();
+			await expect(page.getByTestId('map-legend-toggle')).toHaveCount(0);
+			await expect(page.getByTestId('map-legend').getByText('ไม่ทราบสถานะ')).toBeVisible();
 		});
 	});
 });

@@ -9,11 +9,14 @@
 		chips,
 		onRemove,
 		onClearAll,
+		scroll = false,
 		class: className = ''
 	}: {
 		chips: ActiveFilterChip[];
 		onRemove: (chip: ActiveFilterChip) => void;
 		onClearAll: () => void;
+		/** One horizontally scrolling row instead of wrapping (the mobile map view, #1460). */
+		scroll?: boolean;
 		class?: string;
 	} = $props();
 
@@ -26,12 +29,19 @@
 	<div
 		role="group"
 		aria-label={t.activeFiltersLabel}
-		class={['flex min-w-0 flex-wrap items-center gap-1.5', className]}
+		data-scroll={scroll || undefined}
+		class={[
+			'flex min-w-0 items-center gap-1.5',
+			scroll ? '[scrollbar-width:none] overflow-x-auto [&::-webkit-scrollbar]:hidden' : 'flex-wrap',
+			className
+		]}
 	>
 		{#each chips as chip (chip.key)}
 			<button
 				type="button"
-				class="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/5 py-1 pr-1.5 pl-2.5 text-xs font-medium text-primary-dark transition-colors hover:border-primary/50 hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+				class="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full {scroll
+					? 'shrink-0'
+					: ''} border border-primary/30 bg-primary/5 py-1 pr-1.5 pl-2.5 text-xs font-medium text-primary-dark transition-colors hover:border-primary/50 hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				aria-label={t.removeChip.replace('{label}', chip.label)}
 				title={t.removeChip.replace('{label}', chip.label)}
 				onclick={() => onRemove(chip)}
@@ -43,7 +53,9 @@
 		{#if canClearAll}
 			<button
 				type="button"
-				class="rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+				class="rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground {scroll
+					? 'shrink-0 whitespace-nowrap'
+					: ''} underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				onclick={onClearAll}
 			>
 				{t.clearAll}
