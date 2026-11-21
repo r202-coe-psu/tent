@@ -28,7 +28,7 @@ MIN_TIMEOUT_MS = 10_000
 class ImportShelterJob:
     name = "import-shelter"
     budget_env = "JOBS_IMPORT_BUDGET_SECONDS"
-    default_budget_seconds = 30.0
+    default_budget_seconds = 12.0
 
     def __init__(self, env: Mapping[str, str] | None = None) -> None:
         env = os.environ if env is None else env

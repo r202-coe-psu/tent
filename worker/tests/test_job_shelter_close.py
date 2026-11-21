@@ -41,7 +41,7 @@ def test_metadata_and_defaults():
     job = ShelterCloseJob(ENV)
     assert job.name == "shelter-close"
     assert job.budget_env == "JOBS_CLOSE_BUDGET_SECONDS"
-    assert job.default_budget_seconds == 30
+    assert job.default_budget_seconds == 10
     assert (
         job.endpoint
         == "http://host.docker.internal:5173/api/internal/shelter-close/worker/next"

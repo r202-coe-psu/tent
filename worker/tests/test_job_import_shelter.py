@@ -37,7 +37,7 @@ def test_metadata_and_defaults():
     job = ImportShelterJob(ENV)
     assert job.name == "import-shelter"
     assert job.budget_env == "JOBS_IMPORT_BUDGET_SECONDS"
-    assert job.default_budget_seconds == 30
+    assert job.default_budget_seconds == 12
     assert (
         job.endpoint == "http://frontend:3000/api/internal/shelter-import/worker/next"
     )
