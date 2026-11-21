@@ -57,15 +57,15 @@ why: ลดจำนวน container ต่อ environment — worker เบ็�
 - **tick** `JOBS_TICK_SECONDS` (30) · ลำดับใน 1 tick: **printing → edge-users-copy → import → close** (เป็นลำดับรัน ไม่ใช่ลำดับ implement) · ถ้า tick เกิน 30 วิ รอบถัดไปเริ่มทันที ไม่ทับกัน
 - **budget แยกต่อ job ผ่าน env:**
 
-| job              | env                                       | ค่าเริ่มต้นชั่วคราว |
+| job              | env                                       | ค่าเริ่มต้น |
 | ---------------- | ----------------------------------------- | ------------------- |
 | printing         | — (1 POST ไม่มี budget)                   | —                   |
 | edge-users-copy  | `JOBS_EDGE_USERS_COPY_BUDGET_SECONDS`     | 10                  |
-| import-shelter   | `JOBS_IMPORT_BUDGET_SECONDS`              | 30                  |
-| shelter-close    | `JOBS_CLOSE_BUDGET_SECONDS`               | 30                  |
+| import-shelter   | `JOBS_IMPORT_BUDGET_SECONDS`              | 12                  |
+| shelter-close    | `JOBS_CLOSE_BUDGET_SECONDS`               | 10                  |
 
   - งานค้าง (import / close / backfill) ทำต่อจนว่างหรือหมด budget แล้วส่งต่อ job ถัดไป · budget ตรวจ**ระหว่าง call** (ไม่ตัด call ที่กำลังทำ) — close มี chunk budget ฝั่ง server 20 วิต่อ call จึงอาจได้ 1 chunk ต่อ tick ถ้า chunk ใกล้เพดาน
-  - ค่าข้างบนเป็นค่าเริ่มต้นชั่วคราว — ล็อกหลังวัดเวลาจริงต่อ chunk (close) และต่อ item (import) ด้วยศูนย์ขนาดใหญ่บน staging (ศูนย์ ~3,000 คน ≈ 15 chunk ≈ 7 นาที ถ้า 1 chunk ต่อ tick) แล้วแก้ค่าใน compose / `.env.example` + บันทึกใน Decision log
+  - ค่าข้างบนเลือกจาก load test บน mock frontend (ดู Decision log): tick ที่แย่สุด ≈ edge + budget import + budget close + overshoot 1 call ≲ 30 วิ ทำให้ user ใหม่ขึ้น edge ≤ ~30 วิ (ที่ import/close ค้างพร้อมกัน) · เป็นค่าที่ยังต้องยืนยัน — วัดเวลาจริงต่อ chunk (close) และต่อ item (import) ด้วยศูนย์ขนาดใหญ่บน staging (ถ้า chunk close จริง > ~10 วิ จะได้ 1 chunk ต่อ tick — ศูนย์ ~3,000 คน ≈ 15 chunk ≈ 7 นาที และ tick อาจเกิน 30 วิจาก call เดียว) แล้วแก้ค่าใน compose / `.env.example` + บันทึกใน Decision log
 - **แยกความล้มเหลว:** แต่ละ job ห่อ try/except ของตัวเอง ล้มตัวหนึ่งไม่ล้มทั้ง tick · log ไม่มี token/body
 - **healthcheck:** ใช้ `worker-healthcheck` เดิมของ image `worker/Dockerfile` · เขียน OK file แยกต่อ job หลัง tick สำเร็จ (204 / ว่างนับว่าสำเร็จ) · unhealthy เมื่อ job ใดเก่ากว่า `max(120 วิ, 4 × tick)` ตามกติกาเดิมของ housekeeping
 - **env ที่ service ถือ (union ของที่ถูกแทน):** `COUCHDB_URL/USER/PASSWORD` (จาก `edge-users-copy`) · `PRINT_HOUSEKEEPING_URL/TOKEN` · `SHELTER_IMPORT_WORKER_URL/TOKEN` · `SHELTER_CLOSE_WORKER_URL/TOKEN` · `JOBS_TICK_SECONDS` · `JOBS_*_BUDGET_SECONDS` — **ชื่อ env token เดิมคงไว้ทั้งหมด** (ไม่ต้องหมุน/เปลี่ยน secret ที่ deploy แล้ว) · ไม่มี env MongoDB (MongoDB ล่มไม่กระทบ job เหล่านี้ ตามเจตนาเดิมของ CR-247)
@@ -95,4 +95,5 @@ N/A (ไม่มี doc ที่ persist เปลี่ยนรูป · ไ
 ## Decision log
 
 - 2026-11-19 — grill #1479: ตกลงรวม 4 งาน, `sync-worker` ไม่รวม, PR เดียว, budget แยกต่อ job ผ่าน env, cutover/ชื่อ token ตามข้างบน
-- 2026-11-21 — proposed (ร่างจาก #1479 ข้อ 6–7) — **รอ project owner อนุมัติก่อนเริ่มโค้ด** · ตัวเลข budget เป็นค่าชั่วคราว รอวัดบน staging
+- 2026-11-21 — proposed (ร่างจาก #1479 ข้อ 6–7) — **รอ project owner อนุมัติก่อนเริ่มโค้ด**
+- 2026-11-21 — ตัวเลข budget: import **12** · close **10** · edge-users-copy 10 (เดิมร่างไว้ 10/30/30) — จาก load test (100 ศูนย์ / 3,000 users, import 300 items, close 15 chunks, mock frontend): 30/30 → edge p95 53 / max 60 วิ ❌ · 10/10 → max 30.1 วิ แต่ import ช้า (~533 วิ) · 16/8 → max 30.1 วิ แต่ close 1 chunk/tick (~431 วิ) · **12/10 → max 30.2 วิ, import ~471 วิ, close ~261 วิ** · 20/10 → import ~352 วิ แต่ edge p95 33 / max 36 วิ ❌ · ผลดิบ/สคริปต์อยู่ใน `jobs-worker-load-test/` ของ branch `feat/1479-jobs-worker` (ไม่ได้ commit) · ตัวเลขยังต้องยืนยันบน staging
