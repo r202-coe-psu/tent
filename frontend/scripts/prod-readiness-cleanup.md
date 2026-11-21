@@ -61,7 +61,42 @@ are removed); an older worker leaves the old stock visible on the partner API.
 
 Useful flags: `--shelter=SH001` (one shelter; central_ops is only touched with `all`),
 `--only=stock,food` (subset of `people,stock,food,distribution,tickets,donations`),
-`--keep-channels=web,api`.
+`--keep-channels=web,api`, `--all-evacuees` (below). Without `--shelter` the run covers **every**
+shelter; without `--only` it covers **every** category.
+
+### Clear every evacuee in one shelter — `--all-evacuees`
+
+`--all-evacuees` deletes **every** evacuee instead of following the table above: seed or real,
+any `registered_via`, and `pre_registered` / `cancelled` too. Nobody is reset, so every household
+goes with them (plus medical, `evacuee_qr`, photos and all check-in history).
+
+Scope is narrow on purpose:
+
+- `--shelter=<code>` is required; `--shelter=all` or no `--shelter` is an error.
+- Categories default to `people` only (not every category). `--only` may widen it but must keep
+  `people`.
+- It cannot be combined with `--keep-channels`.
+
+```bash
+# dry-run: shows how many evacuees/households would go — nothing is written
+pnpm migrate:prod-cleanup --shelter=SH001 --all-evacuees
+# apply (local); off localhost add --confirm-host=<host> --expect-shelters=1
+pnpm migrate:prod-cleanup --shelter=SH001 --all-evacuees --apply
+```
+
+**Refs left behind.** With `people` only, docs of other categories that name a deleted evacuee
+stay: `distribution_issue` / `distribution_log` / `bulk_return_*` / `distribution_issue_idempotency`
+(and `shelter_incident`, which is always kept). The dry-run prints them as
+`kept docs still pointing at a deleted evacuee: <type>=<n>`. If that line is not `-` and you want
+the shelter fully clean, add `distribution` to the run:
+`--shelter=SH001 --all-evacuees --only=people,distribution` (deletes **all** of that shelter's
+distribution docs, not only those of the deleted people).
+
+**Public plane and partners.** The worker removes the deleted people's `public_persons` and
+refreshes occupancy, so web/api pre-registrations disappear from public search. Partner booking
+rows in `external_bookings` are not deleted: their status lookup falls back to the stay copied on
+the row (`_stay_of` in `backend/apiapp/modules/thirdparty_bookings/use_case.py`), so a partner
+still sees the booking with its last known stay. Same backup / `--restore` as every other `--apply`.
 
 ## 0. Before you start — design docs
 
