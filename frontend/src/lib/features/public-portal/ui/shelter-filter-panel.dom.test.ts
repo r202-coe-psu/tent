@@ -448,7 +448,8 @@ describe('ShelterFilterPanel — active controls are highlighted (#1419)', () =>
 				'parking_car'
 			].sort()
 		);
-		for (const name of active()) {
+		// the radio group has no frame of its own: the chosen radio card is its highlight
+		for (const name of active().filter((n) => n !== 'shelter-groups')) {
 			expect(marked(name!)!.className, name).toContain('border-primary/50');
 		}
 		expect(marked('parking_boat')!.dataset.active).not.toBe('true');
@@ -469,5 +470,100 @@ describe('ShelterFilterPanel — active controls are highlighted (#1419)', () =>
 		marked('hide_full')!.querySelector<HTMLElement>('[role="switch"]')!.click();
 		flushSync();
 		expect(active()).toEqual(['hide_full']);
+	});
+});
+
+describe('ShelterFilterPanel — shelter type radio (#1463)', () => {
+	/** Let the navigation the last click started finish, as SvelteKit does, before the next click. */
+	const settle = () => {
+		if (env.pending) env.url = env.pending;
+		env.pending = null;
+	};
+	const POS = { user_lat: '7.0086', user_lng: '100.4968', distance: '5' };
+	const radios = () => [
+		...document.body.querySelectorAll<HTMLElement>('[data-testid="group-radio"] [role="radio"]')
+	];
+	const checkedLabels = () =>
+		radios()
+			.filter((r) => r.getAttribute('aria-checked') === 'true')
+			.map((r) => r.getAttribute('aria-label'));
+
+	beforeEach(() => {
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(POS)}`);
+		env.pending = null;
+		env.goto.mockClear();
+	});
+	afterEach(() => {
+		if (component) unmount(component);
+		component = undefined;
+		document.body.innerHTML = '';
+	});
+
+	it('offers all / evacuation / external as three radios, "all" chosen by default', async () => {
+		await render({ filters: POS });
+		expect(radios().map((r) => r.getAttribute('aria-label'))).toEqual([
+			'ทั้งหมด',
+			'ศูนย์อพยพ',
+			'ศูนย์อพยพภายนอก'
+		]);
+		expect(checkedLabels()).toEqual(['ทั้งหมด']);
+		expect(
+			document.body.querySelector('[data-filter="shelter-groups"]')!.getAttribute('data-active')
+		).toBe('false');
+	});
+
+	it('keeps the three radios on one row', async () => {
+		await render({ filters: POS });
+		const group = document.body.querySelector('[data-testid="group-radio"]')!;
+		expect(group.className).toContain('grid-cols-[1fr_1.2fr_1fr]');
+		for (const label of group.querySelectorAll('label')) {
+			expect(label.className).toContain('whitespace-nowrap');
+		}
+	});
+
+	it('reads hide_external=on as "evacuation only", and hide_evacuation=on as "external only"', async () => {
+		env.url = new URL(
+			`http://localhost/shelters?${new URLSearchParams({ ...POS, hide_external: 'on' })}`
+		);
+		await render({ filters: { ...POS, hide_external: 'on' } });
+		expect(checkedLabels()).toEqual(['ศูนย์อพยพ']);
+		unmount(component!);
+		component = undefined;
+		document.body.innerHTML = '';
+
+		env.url = new URL(
+			`http://localhost/shelters?${new URLSearchParams({ ...POS, hide_evacuation: 'on' })}`
+		);
+		await render({ filters: { ...POS, hide_evacuation: 'on' } });
+		expect(checkedLabels()).toEqual(['ศูนย์อพยพภายนอก']);
+	});
+
+	it('reads a link that hides both groups as "all" (hiding both would list nothing)', async () => {
+		const filters = { ...POS, hide_evacuation: 'on', hide_external: 'on' };
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(filters)}`);
+		await render({ filters });
+		expect(checkedLabels()).toEqual(['ทั้งหมด']);
+	});
+
+	it('writes the pick to the same query as before: evacuation -> hide_external, external -> hide_evacuation', async () => {
+		await render({ filters: POS });
+		env.goto.mockClear();
+
+		radios()[1].click();
+		for (let i = 0; i < 3; i++) await tick();
+		expect(committedUrl().get('hide_external')).toBe('on');
+		expect(committedUrl().has('hide_evacuation')).toBe(false);
+
+		settle();
+		radios()[2].click();
+		for (let i = 0; i < 3; i++) await tick();
+		expect(committedUrl().get('hide_evacuation')).toBe('on');
+		expect(committedUrl().has('hide_external')).toBe(false);
+
+		settle();
+		radios()[0].click();
+		for (let i = 0; i < 3; i++) await tick();
+		expect(committedUrl().has('hide_evacuation')).toBe(false);
+		expect(committedUrl().has('hide_external')).toBe(false);
 	});
 });

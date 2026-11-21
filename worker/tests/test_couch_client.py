@@ -14,6 +14,7 @@ async def test_put_doc_retries_with_rev_on_409():
     settings.couch_base_url = "http://couch:5984"
     settings.couchdb_user = "admin"
     settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
 
     client = CouchClient(settings)
     conflict = httpx.Response(
@@ -43,6 +44,7 @@ async def test_put_doc_raises_when_409_and_doc_missing():
     settings.couch_base_url = "http://couch:5984"
     settings.couchdb_user = "admin"
     settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
 
     client = CouchClient(settings)
     conflict = httpx.Response(
@@ -62,6 +64,7 @@ def _client() -> CouchClient:
     settings.couch_base_url = "http://couch:5984"
     settings.couchdb_user = "admin"
     settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
     return CouchClient(settings)
 
 
@@ -285,6 +288,7 @@ async def test_get_doc_sends_the_encoded_id_on_the_wire():
     settings.couch_base_url = "http://couch:5984"
     settings.couchdb_user = "admin"
     settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
     client = CouchClient(settings)
     client._client = httpx.AsyncClient(
         base_url="http://couch:5984", transport=httpx.MockTransport(handler)
@@ -303,6 +307,7 @@ async def test_put_doc_without_conflict_retry_raises_on_409():
     settings.couch_base_url = "http://couch:5984"
     settings.couchdb_user = "admin"
     settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
 
     client = CouchClient(settings)
     conflict = httpx.Response(
@@ -321,3 +326,59 @@ async def test_put_doc_without_conflict_retry_raises_on_409():
     client.get_doc.assert_not_awaited()
 
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_changes_feeds_do_not_use_the_request_pool():
+    """Long-lived ``_changes`` feeds must not eat the pool short requests rely on.
+
+    One feed per listened shelter used to share httpx's default 100-connection pool, so
+    past ~100 shelters every other call failed with ``PoolTimeout``.
+    """
+    settings = MagicMock()
+    settings.couch_base_url = "http://couch:5984"
+    settings.couchdb_user = "admin"
+    settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
+    client = CouchClient(settings)
+
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(200, text='{"id":"a","seq":"1-x"}\n')
+
+    client._feed_client = httpx.AsyncClient(
+        base_url="http://couch:5984", transport=httpx.MockTransport(handler)
+    )
+    client._client.stream = AsyncMock(side_effect=AssertionError("shared pool used"))
+
+    changes = [c async for c in client.stream_changes("shelter_sh001", since=0)]
+
+    assert changes == [{"id": "a", "seq": "1-x"}]
+    assert seen == ["/shelter_sh001/_changes"]
+    assert client._feed_client is not client._client
+
+    await client.close()
+
+
+def test_feed_pool_is_capped_by_settings():
+    settings = MagicMock()
+    settings.couch_base_url = "http://couch:5984"
+    settings.couchdb_user = "admin"
+    settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
+    client = CouchClient(settings)
+
+    assert client.feed_max_connections == 500
+    pool = client._feed_client._transport._pool
+    assert pool._max_connections == 500
+
+
+def test_feed_cap_comes_from_the_environment(monkeypatch):
+    from worker.config import load_settings
+
+    monkeypatch.delenv("COUCH_FEED_MAX_CONNECTIONS", raising=False)
+    assert load_settings().couch_feed_max_connections == 500
+    monkeypatch.setenv("COUCH_FEED_MAX_CONNECTIONS", "800")
+    assert load_settings().couch_feed_max_connections == 800

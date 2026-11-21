@@ -19,6 +19,10 @@ class Settings:
     m5_sync_interval_s: float = 45.0
     # Same for M6 central warehouse (`/v1/integrations/m6/sync`, draft CR — M6 §1).
     m6_sync_interval_s: float = 45.0
+    # Cap on concurrent CouchDB ``_changes`` feeds (one long-lived connection per listened
+    # shelter). Kept above the shelter count so feeds never starve ``CouchClient``'s request
+    # pool, but finite so a leaking feed fails loudly instead of eating the host's sockets.
+    couch_feed_max_connections: int = 500
 
     @property
     def couch_base_url(self) -> str:
@@ -39,4 +43,7 @@ def load_settings() -> Settings:
         external_api_secret=os.environ.get("EXTERNAL_API_SECRET", ""),
         m5_sync_interval_s=float(os.environ.get("M5_SYNC_INTERVAL_S", "45")),
         m6_sync_interval_s=float(os.environ.get("M6_SYNC_INTERVAL_S", "45")),
+        couch_feed_max_connections=int(
+            os.environ.get("COUCH_FEED_MAX_CONNECTIONS", "500")
+        ),
     )

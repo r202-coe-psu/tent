@@ -10,6 +10,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Switch } from '$lib/components/ui/switch';
 	import * as Accordion from '$lib/components/ui/accordion';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import * as Select from '$lib/components/ui/select';
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import Search from '@lucide/svelte/icons/search';
@@ -105,6 +106,19 @@
 	let parkBoatChecked = $state(false);
 	let showEvacuation = $state(true);
 	let showExternal = $state(true);
+	/** One choice over the two hide flags; hiding both would list nothing, so that reads as "all". */
+	type GroupChoice = 'all' | 'evacuation' | 'external';
+	let groupChoice = $derived<GroupChoice>(
+		showEvacuation && !showExternal
+			? 'evacuation'
+			: !showEvacuation && showExternal
+				? 'external'
+				: 'all'
+	);
+	function setGroupChoice(next: string) {
+		showEvacuation = next !== 'external';
+		showExternal = next !== 'evacuation';
+	}
 	/** Open item of the "advanced filters" accordion (province / district / subdistrict). */
 	let advancedOpen = $state<string>('');
 	let hydrating = false;
@@ -114,6 +128,11 @@
 	let lastDistrict: string | null = null;
 
 	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
+	const groupOptions = $derived<{ value: GroupChoice; label: string; short: string }[]>([
+		{ value: 'all', label: t.groupAll, short: t.groupAll },
+		{ value: 'evacuation', label: t.groupEvacuation, short: t.groupEvacuation },
+		{ value: 'external', label: t.groupExternal, short: t.groupExternalShort }
+	]);
 
 	/** URL flags arrive as 'on'; direct callers may pass a boolean. */
 	function isOn(value: boolean | string | undefined): boolean {
@@ -325,7 +344,7 @@
 	// A control that narrows the list is tinted, so the visitor sees what is on (#1419).
 	// Read from the live state, which the URL hydrates, so it holds after a reload too.
 	const ACTIVE_CLASS = 'border-primary/50 bg-primary/5';
-	let groupsActive = $derived(!showEvacuation || !showExternal);
+	let groupsActive = $derived(groupChoice !== 'all');
 	let parkingActive = $derived(parkCarChecked || parkMotorChecked || parkBoatChecked);
 	let advancedActive = $derived(
 		Boolean(selectedProvince || selectedDistrict || selectedSubdistrict) || parkingActive
@@ -532,35 +551,29 @@
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
 			<div class="space-y-4">
 				<!-- Shelter type groups -->
-				<div
-					data-filter="shelter-groups"
-					data-active={groupsActive}
-					class={[
-						'overflow-hidden rounded-xl border',
-						groupsActive ? ACTIVE_CLASS : 'border-border'
-					]}
-				>
-					<Accordion.Root type="single" class="w-full">
-						<Accordion.Item value="shelter-groups" class="border-none">
-							<Accordion.Trigger
-								class="px-4 py-3 transition-colors hover:bg-muted/50 hover:no-underline"
+				<div data-filter="shelter-groups" data-active={groupsActive} class="space-y-1.5">
+					<div class="text-xs font-semibold text-muted-foreground">{t.shelterTypeGroup}</div>
+					<RadioGroup.Root
+						value={groupChoice}
+						onValueChange={setGroupChoice}
+						aria-label={t.shelterTypeGroup}
+						data-testid="group-radio"
+						class="grid grid-cols-[1fr_1.2fr_1fr] gap-1.5"
+					>
+						{#each groupOptions as option (option.value)}
+							<label
+								class={[
+									'flex min-w-0 cursor-pointer items-center justify-center gap-1 rounded-xl border px-1 py-2 text-xs font-medium whitespace-nowrap transition-colors hover:bg-muted/50',
+									groupChoice === option.value
+										? 'border-primary/60 bg-primary/10'
+										: 'border-border bg-card'
+								]}
 							>
-								<span class="text-sm font-bold text-primary-dark">{t.shelterTypeGroup}</span>
-							</Accordion.Trigger>
-							<Accordion.Content class="pb-2">
-								<div class="flex flex-col gap-3 px-4 pt-2 pb-2">
-									<label class="flex cursor-pointer items-center justify-between gap-3">
-										<span class="text-sm font-medium text-foreground">{t.groupEvacuation}</span>
-										<Switch bind:checked={showEvacuation} aria-label={t.groupEvacuation} />
-									</label>
-									<label class="flex cursor-pointer items-center justify-between gap-3">
-										<span class="text-sm font-medium text-foreground">{t.groupExternal}</span>
-										<Switch bind:checked={showExternal} aria-label={t.groupExternal} />
-									</label>
-								</div>
-							</Accordion.Content>
-						</Accordion.Item>
-					</Accordion.Root>
+								<RadioGroup.Item value={option.value} aria-label={option.label} class="size-3.5" />
+								<span class="text-foreground" aria-hidden="true">{option.short}</span>
+							</label>
+						{/each}
+					</RadioGroup.Root>
 				</div>
 
 				<!-- Search -->
