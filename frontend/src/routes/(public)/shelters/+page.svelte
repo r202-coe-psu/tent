@@ -76,6 +76,8 @@
 
 	// Mobile UI states
 	let isMobile = $state(false);
+	// xl and up: the strip between the two floating panels is wide enough for the whole legend.
+	let isXl = $state(false);
 	let mobileViewMode = $state<'map' | 'list'>('map');
 	let mobileFilterOpen = $state(false);
 
@@ -94,6 +96,12 @@
 				isMobile = e.matches;
 			};
 			mql.addEventListener('change', handler);
+			const xl = window.matchMedia('(min-width: 1280px)');
+			isXl = xl.matches;
+			const xlHandler = (e: MediaQueryListEvent) => {
+				isXl = e.matches;
+			};
+			xl.addEventListener('change', xlHandler);
 
 			if (!liveUserLat || !liveUserLng) {
 				if (canRequestGeolocation()) {
@@ -108,7 +116,10 @@
 				}
 			}
 
-			return () => mql.removeEventListener('change', handler);
+			return () => {
+				mql.removeEventListener('change', handler);
+				xl.removeEventListener('change', xlHandler);
+			};
 		}
 	});
 
@@ -263,6 +274,9 @@
 			})
 	);
 
+	// lg–xl with both panels open leaves ~100px for the legend (#1461): collapse it to a toggle.
+	const legendCompact = $derived(!isMobile && !isXl && showFilterPanel && showListPanel);
+
 	/** A filter's load is in flight: the list dims until the new result lands. */
 	const listBusy = $derived(navigating.to?.url.pathname === page.url.pathname);
 	let resultsAnnouncement = $state('');
@@ -331,12 +345,14 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-{#snippet filterCountBadge()}
+{#snippet filterCountBadge(onPrimary = false)}
 	{#if filterCount > 0}
 		<span
 			aria-hidden="true"
-			class="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 pt-[1.5px] text-2xs leading-none font-bold text-primary-foreground tabular-nums"
-			>{filterCount}</span
+			class={[
+				'inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 pt-[1.5px] text-2xs leading-none font-bold tabular-nums',
+				onPrimary ? 'bg-primary-foreground text-primary' : 'bg-primary text-primary-foreground'
+			]}>{filterCount}</span
 		>
 		<span class="sr-only">({filterCountText})</span>
 	{/if}
@@ -393,14 +409,34 @@
 		<!-- Mobile Filter Trigger Button -->
 		<button
 			type="button"
-			class="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/80 bg-card px-3 py-2 text-xs font-bold whitespace-nowrap text-foreground shadow-2xs transition-all active:scale-95"
+			data-testid="mobile-filter-btn"
+			data-active={filterCount > 0 ? 'true' : undefined}
+			class={[
+				'flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold whitespace-nowrap shadow-2xs transition-all active:scale-95',
+				filterCount > 0
+					? 'border-primary bg-primary text-primary-foreground'
+					: 'border-border/80 bg-card text-foreground'
+			]}
 			onclick={() => (mobileFilterOpen = true)}
 		>
-			<Filter class="h-3.5 w-3.5 text-primary" />
+			<Filter
+				class={['h-3.5 w-3.5', filterCount > 0 ? 'text-primary-foreground' : 'text-primary']}
+			/>
 			<span>{t.filterBtn}</span>
-			{@render filterCountBadge()}
+			{@render filterCountBadge(filterCount > 0)}
 		</button>
 	</div>
+
+	<!-- Map view: the filters in use, one scrolling row (the list view shows its own chips) -->
+	{#if mobileViewMode === 'map' && filterChips.length > 0}
+		<ActiveFilterChips
+			chips={filterChips}
+			onRemove={removeFilter}
+			onClearAll={clearAllFilters}
+			scroll
+			class="shrink-0 lg:hidden"
+		/>
+	{/if}
 
 	<!-- Metric Cards (desktop only — the mobile page is the map or the list, nothing above it) -->
 	<div
@@ -447,8 +483,9 @@
 			? 'hidden lg:block'
 			: 'block'} min-h-0 w-full flex-1 overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-xs"
 	>
-		<!-- Full Map Canvas (Background) -->
-		<div class="absolute inset-0 z-0 h-full w-full">
+		<!-- Full Map Canvas (Background). No z-index here: the map isolates itself, and the opened
+			legend must be able to rise above the floating panels (#1461). -->
+		<div class="absolute inset-0 h-full w-full">
 			<ShelterMap
 				shelters={displayShelters}
 				parkingPoints={parkingPins}
@@ -460,6 +497,7 @@
 				disablePopup={isMobile}
 				onSelectShelter={handleSelectShelter}
 				onLocationPick={applySearchOrigin}
+				{legendCompact}
 				legendClass={[
 					// keep the legend between the floating panels (left-4 + w-80/88, right-4 + w-88/96)
 					showFilterPanel && 'lg:left-[22rem] xl:left-[24rem]',

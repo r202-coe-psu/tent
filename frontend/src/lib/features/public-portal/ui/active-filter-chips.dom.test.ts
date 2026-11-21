@@ -22,12 +22,12 @@ const hideFull: ActiveFilterChip = {
 	counts: true
 };
 
-function render(chips: ActiveFilterChip[]) {
+function render(chips: ActiveFilterChip[], extra: { scroll?: boolean } = {}) {
 	const onRemove = vi.fn();
 	const onClearAll = vi.fn();
 	component = mount(ActiveFilterChips, {
 		target: document.body,
-		props: { chips, onRemove, onClearAll }
+		props: { chips, onRemove, onClearAll, ...extra }
 	});
 	flushSync();
 	return { onRemove, onClearAll };
@@ -84,5 +84,22 @@ describe('ActiveFilterChips (#1419)', () => {
 		render([hideFull]);
 		expect(button('Remove ซ่อนที่เต็ม')).toBeDefined();
 		expect(button('Clear all')).toBeDefined();
+	});
+
+	it('wraps by default and scrolls in one row with `scroll` (the mobile map view, #1460)', () => {
+		render([radius, hideFull]);
+		const group = () => document.body.querySelector('[role="group"]')!;
+		expect(group().classList.contains('flex-wrap')).toBe(true);
+		expect(group().classList.contains('overflow-x-auto')).toBe(false);
+		unmount(component!);
+		document.body.innerHTML = '';
+
+		component = undefined;
+		render([radius, hideFull], { scroll: true });
+		expect(group().classList.contains('flex-wrap')).toBe(false);
+		expect(group().classList.contains('overflow-x-auto')).toBe(true);
+		// chips keep their size so a row of them scrolls instead of squeezing the labels
+		expect(button('เอา ซ่อนที่เต็ม ออก')!.classList.contains('shrink-0')).toBe(true);
+		expect(button('ล้างทั้งหมด')!.classList.contains('shrink-0')).toBe(true);
 	});
 });
