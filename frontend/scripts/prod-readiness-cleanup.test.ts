@@ -127,6 +127,35 @@ describe('planShelterCleanup — people with allEvacuees', () => {
 	});
 });
 
+describe('planShelterCleanup — evacuee refs left behind', () => {
+	const docs: CouchDoc[] = [
+		evacuee('A1', 'staff', 'active'),
+		evacuee('K1', 'web', 'active'),
+		doc('distribution_issue:1', { lines: [{ evacuee_id: 'evacuee:A1' }] }),
+		doc('distribution_log:1', { recipient_id: 'evacuee:A1' }),
+		doc('distribution_log:2', { recipient_id: 'evacuee:K1' }),
+		doc('shelter_incident:1', { reporter: { evacuee_id: 'evacuee:A1' } }),
+		doc('medical:M1', { evacuee_id: 'evacuee:A1' })
+	];
+
+	it('counts kept docs that still point at a deleted evacuee, by type', () => {
+		const plan = planShelterCleanup('shelter_sh001', docs, { ...ALL, categories: ['people'] });
+		expect(plan.danglingEvacueeRefs).toEqual({
+			distribution_issue: 1,
+			distribution_log: 1,
+			shelter_incident: 1
+		});
+	});
+
+	it('does not count refs in docs that are deleted in the same run', () => {
+		const plan = planShelterCleanup('shelter_sh001', docs, {
+			...ALL,
+			categories: ['people', 'distribution']
+		});
+		expect(plan.danglingEvacueeRefs).toEqual({ shelter_incident: 1 });
+	});
+});
+
 describe('planShelterCleanup — people', () => {
 	const docs: CouchDoc[] = [
 		// Household A: a walk-in head (deleted) + a web booker (reset) → stays, head moves.
@@ -329,15 +358,26 @@ describe('parseCliArgs / assertHostConfirmed', () => {
 		expect(parseCliArgs(['--all-evacuees', '--shelter=SH001'])).toMatchObject({
 			allEvacuees: true,
 			keepChannels: [],
-			shelter: 'SH001'
+			shelter: 'SH001',
+			categories: ['people']
 		});
-		expect(() => parseCliArgs(['--all-evacuees', '--keep-channels=web'])).toThrow(
-			/--all-evacuees and --keep-channels/
-		);
-		expect(() => parseCliArgs(['--all-evacuees', '--only=stock'])).toThrow(
+		expect(() =>
+			parseCliArgs(['--all-evacuees', '--shelter=SH001', '--keep-channels=web'])
+		).toThrow(/--all-evacuees and --keep-channels/);
+		expect(() => parseCliArgs(['--all-evacuees', '--shelter=SH001', '--only=stock'])).toThrow(
 			/--all-evacuees needs the people category/
 		);
-		expect(parseCliArgs(['--all-evacuees', '--only=people']).categories).toEqual(['people']);
+		expect(
+			parseCliArgs(['--all-evacuees', '--shelter=SH001', '--only=people,distribution']).categories
+		).toEqual(['people', 'distribution']);
+	});
+
+	it('--all-evacuees needs exactly one named shelter and takes no value', () => {
+		expect(() => parseCliArgs(['--all-evacuees'])).toThrow(/needs one shelter/);
+		expect(() => parseCliArgs(['--all-evacuees', '--shelter=all'])).toThrow(/needs one shelter/);
+		expect(() => parseCliArgs(['--all-evacuees=true', '--shelter=SH001'])).toThrow(
+			/--all-evacuees takes no value/
+		);
 	});
 
 	it('parses --expect-shelters as a whole number', () => {
@@ -625,6 +665,35 @@ describe('runCleanup / runRestore against a fake CouchDB', () => {
 		await expect(
 			runRestore(parseCliArgs([`--restore=${join(dir, 'nope')}`]), deps(couch.req))
 		).rejects.toThrow(/Backup directory not found/);
+	});
+
+	it('--all-evacuees: dry-run writes nothing, apply deletes every person in that shelter only', async () => {
+		const couch = seed();
+		const dry = await runCleanup(
+			parseCliArgs(['--shelter=SH001', '--all-evacuees']),
+			deps(couch.req)
+		);
+		expect(dry.backupDir).toBeNull();
+		expect(dry.shelters[0].evacueesReset).toEqual({});
+		expect(couch.get('shelter_sh001', 'evacuee:W')?._rev).toBe('1-a');
+
+		await runCleanup(
+			parseCliArgs([
+				'--shelter=SH001',
+				'--all-evacuees',
+				'--apply',
+				`--backup-dir=${join(dir, 'ae')}`
+			]),
+			deps(couch.req)
+		);
+		expect(couch.live('shelter_sh001')).toEqual([
+			'_design/app',
+			'requisition_ticket:1',
+			'stock_ledger:1',
+			'volunteer:V'
+		]);
+		expect(couch.live('shelter_sh002')).toEqual(['meal_plan:1']);
+		expect(couch.live('central_ops')).toContain('referral:1');
 	});
 
 	it('--shelter scopes the run to one DB and skips central_ops', async () => {

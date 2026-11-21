@@ -27,8 +27,8 @@
  *   pnpm migrate:prod-cleanup                                  # dry-run (default), all shelters
  *   pnpm migrate:prod-cleanup --shelter=SH001                  # dry-run one shelter
  *   pnpm migrate:prod-cleanup --only=stock,food                # limit categories
- *   pnpm migrate:prod-cleanup --shelter=SH001 --only=people --all-evacuees
- *                                                              # dry-run: delete every evacuee
+ *   pnpm migrate:prod-cleanup --shelter=SH001 --all-evacuees   # dry-run: delete every evacuee
+ *                                                              # (one shelter, people only)
  *   pnpm migrate:prod-cleanup --apply                          # backup, then write (local host)
  *   pnpm migrate:prod-cleanup --apply --confirm-host=<host> --expect-shelters=<n>
  *                                                              # any other host (incl. `couchdb`)
@@ -148,6 +148,8 @@ export type ShelterPlan = {
 	householdsUpdated: number;
 	/** Kept evacuees whose `household_id` points at no household (must be 0 after --apply). */
 	danglingHouseholdRefs: number;
+	/** Kept docs (`_id` prefix → count) still naming a deleted evacuee anywhere in their body. */
+	danglingEvacueeRefs: Record<string, number>;
 	/** `_id` prefix (`movement`, `stock_ledger`, …) → count of docs deleted. */
 	deletedByType: Record<string, number>;
 	updates: CouchDoc[];
@@ -207,6 +209,7 @@ export function planShelterCleanup(
 		householdsDeleted: 0,
 		householdsUpdated: 0,
 		danglingHouseholdRefs: 0,
+		danglingEvacueeRefs: {},
 		deletedByType: {},
 		updates: [],
 		deletes: []
@@ -228,9 +231,9 @@ export function planShelterCleanup(
 		}
 	}
 
-	if (options.categories.includes('people')) {
-		planPeople(byId, options, plan, markDelete);
-	}
+	const removed = options.categories.includes('people')
+		? planPeople(byId, options, plan, markDelete)
+		: new Set<string>();
 
 	for (const id of [...deleteIds].sort()) {
 		const doc = byId.get(id)!;
@@ -238,7 +241,28 @@ export function planShelterCleanup(
 		plan.deletes.push({ id, rev: doc._rev });
 		bump(plan.deletedByType, typeOfId(id));
 	}
+	if (removed.size) {
+		for (const doc of byId.values()) {
+			if (deleteIds.has(doc._id) || PEOPLE_OWN_PREFIXES.some((p) => doc._id.startsWith(p))) {
+				continue;
+			}
+			if (refersTo(doc, removed)) bump(plan.danglingEvacueeRefs, typeOfId(doc._id));
+		}
+	}
 	return plan;
+}
+
+/** Docs the people plan rewrites itself — their refs are handled, not left behind. */
+const PEOPLE_OWN_PREFIXES = ['evacuee:', 'household:'] as const;
+
+/** True when any string anywhere in `value` (fields, arrays, nested objects) is in `ids`. */
+function refersTo(value: unknown, ids: ReadonlySet<string>): boolean {
+	if (typeof value === 'string') return ids.has(value);
+	if (Array.isArray(value)) return value.some((v) => refersTo(v, ids));
+	if (value && typeof value === 'object') {
+		return Object.entries(value).some(([k, v]) => k !== '_id' && refersTo(v, ids));
+	}
+	return false;
 }
 
 function planPeople(
@@ -246,7 +270,7 @@ function planPeople(
 	options: CleanupOptions,
 	plan: ShelterPlan,
 	markDelete: (id: string) => void
-): void {
+): Set<string> {
 	const evacuees = [...byId.values()].filter((d) => d._id.startsWith('evacuee:'));
 	const removed = new Set<string>();
 	/** Evacuee id → stay status after cleanup, for kept people only. */
@@ -314,6 +338,7 @@ function planPeople(
 			updated_at: options.now
 		});
 	}
+	return removed;
 }
 
 /** Pure plan for central_ops: delete referral / stock_transfer docs of the chosen categories. */
@@ -392,7 +417,15 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 			`Unknown --only categories: ${unknown.join(', ')} (use ${CATEGORIES.join(',')})`
 		);
 	}
+	if (argv.some((a) => a.startsWith('--all-evacuees='))) {
+		throw new Error('--all-evacuees takes no value');
+	}
 	const allEvacuees = argv.includes('--all-evacuees');
+	const shelter = flagValue(argv, 'shelter');
+	// Deleting every person is never a whole-system default: one named shelter, people only.
+	if (allEvacuees && (shelter === null || shelter === 'all')) {
+		throw new Error('--all-evacuees needs one shelter: --shelter=<code>');
+	}
 	if (allEvacuees && keepChannels) {
 		throw new Error('--all-evacuees and --keep-channels are mutually exclusive');
 	}
@@ -401,8 +434,8 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 	}
 	return {
 		apply: argv.includes('--apply'),
-		shelter: flagValue(argv, 'shelter') ?? 'all',
-		categories: (only as Category[] | null) ?? [...CATEGORIES],
+		shelter: shelter ?? 'all',
+		categories: (only as Category[] | null) ?? (allEvacuees ? ['people'] : [...CATEGORIES]),
 		keepChannels: allEvacuees ? [] : (keepChannels ?? [...DEFAULT_KEEP_CHANNELS]),
 		allEvacuees,
 		confirmHost: flagValue(argv, 'confirm-host'),
@@ -562,6 +595,9 @@ function printPlan(plan: ShelterPlan): void {
 		`  households: delete ${plan.householdsDeleted} · update ${plan.householdsUpdated} · dangling refs ${plan.danglingHouseholdRefs}`
 	);
 	console.log(`  docs deleted by type: ${formatCounts(plan.deletedByType)}`);
+	console.log(
+		`  kept docs still pointing at a deleted evacuee: ${formatCounts(plan.danglingEvacueeRefs)}`
+	);
 }
 
 export async function runCleanup(
@@ -721,7 +757,8 @@ Dry-run by default. --apply needs COUCHDB_ADMIN_URL set explicitly and backs up 
 database (owner-only files) before writing. Off localhost, --apply also needs --confirm-host and
 --expect-shelters (the shelter count from the dry-run).
 --all-evacuees deletes every evacuee (pre-registered and cancelled included) instead of keeping
-web/api bookings; pair it with --shelter=<code> --only=people to clear one shelter's people.
+web/api bookings. It needs --shelter=<code> (not all) and defaults to --only=people; add
+distribution to --only to also clear issues/logs that point at those people.
 Runbook: scripts/prod-readiness-cleanup.md
 `);
 		return;
