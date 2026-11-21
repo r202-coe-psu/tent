@@ -249,7 +249,7 @@ curl -s $E/_scheduler/docs/_replicator \
 **AC-8 — user ที่ถูกถอดสิทธิ์ใช้งานที่ edge ไม่ได้**
 
 1. ที่ central ถอด role `shelter:<CODE>` ของ staff ทดสอบ (หรือ soft delete) ผ่านแอป
-2. รอเวลา sync ปกติ (`edge-users-copy` ที่ central + `users_<code>_pull` ที่ edge — ราว 1 นาที) · ถ้ารอนานให้ผู้ดูแล central ตรวจ `scripts/central-repl-user.sh <CODE> --status`
+2. รอเวลา sync ปกติ (job `edge-users-copy` ของ `jobs-worker` ที่ central + `users_<code>_pull` ที่ edge — ราว 1 นาที) · ถ้ารอนานให้ผู้ดูแล central ตรวจ `scripts/central-repl-user.sh <CODE> --status`
 3. ที่ edge ด้วย staff คนนั้น:
    - **soft delete** → login ไม่ผ่าน (`401`) เพราะ soft delete เปลี่ยนรหัสผ่านด้วย
    - **ถอด role อย่างเดียว** → `POST /_session` ยังได้ `200` แต่ `roles` ว่าง และอ่าน `shelter_<code>` ได้ `403`

@@ -156,7 +156,7 @@ job "${CODE_LC}_push" "$LOC/$SHELTER_DB" "$LOC_AUTH" "$CEN/$SHELTER_DB" "$CEN_AU
 	"\"selector\":{\"_id\":{\"\$not\":{\"\$regex\":\"^_design/\"}}}"
 
 # _users: pull จาก DB `edge_users_<code>` ที่ central ซึ่งมีเฉพาะ _users doc ของศูนย์นี้อยู่แล้ว (FR-15)
-# CR-171 selector (`edge_shelters` OR `roles`) ย้ายไปอยู่ใน service `edge-users-copy` ฝั่ง central ที่ copy
+# CR-171 selector (`edge_shelters` OR `roles`) ย้ายไปอยู่ใน job `edge-users-copy` (service `jobs-worker`) ฝั่ง central ที่ copy
 # `_users` → `edge_users_<code>` (worker/, CR-247 FR-11) — ฝั่ง edge จึงไม่กรอง user
 # กรองแค่ `_design/*`: `_design/readonly` ของ edge_users_<code> (เขียนได้เฉพาะ _admin) ไม่ใช่ของ _users ที่ edge
 job "users_${CODE_LC}_pull" "$CEN/edge_users_${CODE_LC}" "$CEN_AUTH" "$LOC/_users" "$LOC_AUTH" \

@@ -182,13 +182,13 @@ repl_creds; R2U=$RU; R2P=$RP
 echo "SH001 repl user: $R1U   SH002 repl user: $R2U"
 
 # CR-247: the _users copy into edge_users_<code> is no longer a _replicator job created by central-repl-user.sh;
-# it is the central service `edge-users-copy` (worker/). Run the real one against the throwaway central CouchDB
+# it is the `edge-users-copy` job of the central `jobs-worker` service (worker/). Run the real one against the throwaway central CouchDB
 # in the background (it finds edge_users_* every ~30 s, backfills, then follows _users/_changes).
-# Needs `uv` on the host; takes only COUCHDB_URL / COUCHDB_USER / COUCHDB_PASSWORD, no CLI flags.
-command -v uv >/dev/null || { echo "uv is required to run edge-users-copy"; exit 2; }
-COPY_LOG="$WORK/edge-users-copy.log"
+# Needs `uv` on the host; takes only COUCHDB_URL / COUCHDB_USER / COUCHDB_PASSWORD (print/import/close jobs stay off without their URL/token envs), no CLI flags.
+command -v uv >/dev/null || { echo "uv is required to run jobs-worker"; exit 2; }
+COPY_LOG="$WORK/jobs-worker.log"
 COUCHDB_URL="$CU" COUCHDB_USER="$CA" COUCHDB_PASSWORD="$CPW" \
-	uv run --project "$ROOT/worker" edge-users-copy >"$COPY_LOG" 2>&1 &
+	uv run --project "$ROOT/worker" jobs-worker >"$COPY_LOG" 2>&1 &
 COPY_PID=$!
 
 # ------------------------------------------------------------------ edge-init
@@ -461,7 +461,7 @@ mod_user staff2_sh001 'd["display_name"]="changed while the copy service was dow
 sleep 5
 ck_code AC-12 "while the service is down ac12_new is NOT in edge_users_sh001" "$(code -u "$CA:$CPW" "$CU/edge_users_sh001/org.couchdb.user:ac12_new")" '^404$'
 COUCHDB_URL="$CU" COUCHDB_USER="$CA" COUCHDB_PASSWORD="$CPW" \
-	uv run --project "$ROOT/worker" edge-users-copy >>"$COPY_LOG" 2>&1 &
+	uv run --project "$ROOT/worker" jobs-worker >>"$COPY_LOG" 2>&1 &
 COPY_PID=$!
 AC12_IDS="ac12_new ac12_user1 ac12_user2 ac12_user3 ac12_user4 ac12_user5 staff_sh001 staff2_sh001"
 rev_of() { jget _rev; } # stdin: a doc

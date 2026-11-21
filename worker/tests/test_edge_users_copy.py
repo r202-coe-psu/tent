@@ -1,4 +1,4 @@
-"""Unit tests for edge-users-copy (CR-247 FR-11, FR-11a, FR-13) against a fake CouchDB."""
+"""Unit tests for the edge-users-copy job (CR-247 FR-11, FR-11a, FR-13) against a fake CouchDB."""
 
 import json
 from typing import Any
@@ -6,8 +6,8 @@ from typing import Any
 import httpx
 import pytest
 
-from worker.cli import edge_users_copy as euc
-from worker.cli.edge_users_copy import (
+from worker.jobs import edge_users_copy as euc
+from worker.jobs.edge_users_copy import (
     EdgeUsersCopier,
     destination_dbs,
     doc_shelter_codes,
@@ -33,6 +33,7 @@ class FakeCouch:
         self.users_pages: list[int] = []
         self.bulk_gets: list[int] = []
         self.changes: list[dict] = []
+        self.changes_params: list[dict] = []
         self._client = self
         self.status_override: dict[str, int] = {}
 
@@ -49,7 +50,10 @@ class FakeCouch:
             self.users_pages.append(len(page))
             return {"rows": [{"id": i, "doc": {**self.users[i]}} for i in page]}
         if path == "/_users/_changes":
-            return {"results": self.changes, "last_seq": f"{len(self.changes)}-x"}
+            self.changes_params.append(dict(params))
+            start = int(str(params.get("since", 0)).split("-")[0])
+            page = self.changes[start : start + params.get("limit", len(self.changes))]
+            return {"results": page, "last_seq": f"{start + len(page)}-x"}
         raise httpx.HTTPStatusError(
             "nf", request=httpx.Request("GET", "http://x"), response=_resp(404)
         )
@@ -148,7 +152,8 @@ async def test_checkpoint_saved_and_resumed():
     copier = EdgeUsersCopier(couch)
     since = await copier.load_checkpoint()
     assert since == 0
-    seq = await copier.run_once(since)
+    seq, count = await copier.run_once(since)
+    assert count == 1
     cp = couch.local["_users/_local/edge_users_copy"]
     assert cp["last_seq"] == seq == "1-x"
     assert cp["last_error"] is None and cp["updated_at"]
@@ -259,3 +264,57 @@ async def test_failure_leaves_checkpoint_and_records_error(monkeypatch):
         await copier.run_once(0)
     await copier.save_checkpoint(last_seq=0, error="boom")
     assert couch.local["_users/_local/edge_users_copy"]["last_error"] == "boom"
+
+
+class Ctx:
+    """JobContext stand-in: allows ``calls`` budget checks, then stops."""
+
+    def __init__(self, calls: int = 1000) -> None:
+        self.calls = calls
+
+    def should_continue(self) -> bool:
+        self.calls -= 1
+        return self.calls >= 0
+
+
+async def test_drain_uses_normal_feed_and_pages_until_caught_up(monkeypatch):
+    monkeypatch.setattr(euc, "CHANGES_BATCH", 2)
+    users = {f"u{i}": user(f"u{i}", roles=["shelter:SH001"]) for i in range(5)}
+    couch = FakeCouch(users, ["edge_users_sh001"])
+    couch.changes = [{"id": i, "changes": [{"rev": "1-a"}]} for i in sorted(users)]
+    copier = EdgeUsersCopier(couch)
+    await copier.drain(Ctx())
+    assert {p["feed"] for p in couch.changes_params} == {"normal"}
+    assert [p["since"] for p in couch.changes_params] == [0, "2-x", "4-x"]
+    assert couch.local["_users/_local/edge_users_copy"]["last_seq"] == "5-x"
+
+
+async def test_drain_stops_when_budget_exhausted(monkeypatch):
+    monkeypatch.setattr(euc, "CHANGES_BATCH", 2)
+    users = {f"u{i}": user(f"u{i}", roles=["shelter:SH001"]) for i in range(6)}
+    couch = FakeCouch(users, ["edge_users_sh001"])
+    couch.changes = [{"id": i, "changes": [{"rev": "1-a"}]} for i in sorted(users)]
+    copier = EdgeUsersCopier(couch)
+    await copier.drain(Ctx(calls=1))  # one step only
+    assert len(couch.changes_params) == 1
+    assert couch.local["_users/_local/edge_users_copy"]["last_seq"] == "2-x"
+    await copier.drain(Ctx())  # next tick resumes from the checkpoint
+    assert couch.local["_users/_local/edge_users_copy"]["last_seq"] == "6-x"
+
+
+async def test_drain_records_error_and_raises():
+    couch = FakeCouch({"u1": user("u1", roles=["shelter:SH001"])}, ["edge_users_sh001"])
+    couch.changes = [{"id": "u1", "changes": [{"rev": "1-a"}]}]
+    copier = EdgeUsersCopier(couch)
+    await copier.refresh_dbs(force=True)
+    couch.status_override["edge_users_sh001"] = 401
+    with pytest.raises(httpx.HTTPStatusError):
+        await copier.drain(Ctx())
+    assert couch.local["_users/_local/edge_users_copy"]["last_error"]
+
+
+def test_job_metadata():
+    job = euc.EdgeUsersCopyJob()
+    assert job.name == "edge-users-copy"
+    assert job.budget_env == "JOBS_EDGE_USERS_COPY_BUDGET_SECONDS"
+    assert job.default_budget_seconds == 10

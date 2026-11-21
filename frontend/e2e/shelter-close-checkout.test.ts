@@ -11,8 +11,8 @@
  * FR-18 cancel writes nothing · FR-10/FR-4/FR-5/FR-6/FR-6a writes · FR-12 re-run ·
  * FR-13 registry closed only after the people · FR-22 403 / PATCH 400 · FR-25 reopen.
  *
- * CR-243: the close runs in the `shelter-close-worker` (compose service, or `pnpm
- * shelter-close-worker` locally with SHELTER_CLOSE_WORKER_TOKEN matching the app's) — without it
+ * CR-243: the close runs in the `jobs-worker` close job (compose service, or
+ * `uv run --project worker jobs-worker` locally with SHELTER_CLOSE_WORKER_TOKEN matching the app's) — without it
  * the modal never finishes and these tests time out.
  *
  * Local: `docker compose up -d`, `pnpm seed:master`, then

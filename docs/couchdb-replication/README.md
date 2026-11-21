@@ -54,7 +54,7 @@ couch-central :5985         couch-edge :5986 ── network: lan
 
 | หลักการ                                                                               | ผลต่อการ setup                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **edge เป็นฝ่ายเปิด connection** — edge อยู่หลัง NAT ของศูนย์ central เรียกเข้าไม่ได้ | job ทุกตัวอยู่ใน `_replicator` ของ **edge** · central ไม่ต้องตั้ง job replication — มีแค่ service `edge-users-copy` คัดลอก user ลง `edge_users_<code>` กับเปิดทางให้ edge เข้ามา |
+| **edge เป็นฝ่ายเปิด connection** — edge อยู่หลัง NAT ของศูนย์ central เรียกเข้าไม่ได้ | job ทุกตัวอยู่ใน `_replicator` ของ **edge** · central ไม่ต้องตั้ง job replication — มีแค่ job `edge-users-copy` ใน service `jobs-worker` คัดลอก user ลง `edge_users_<code>` กับเปิดทางให้ edge เข้ามา |
 | **replication คือ HTTP ปกติ** (`_changes`, `_revs_diff`, `_bulk_get`, `_bulk_docs`)   | วิ่งผ่าน nginx ได้ แต่ต้องตั้ง nginx ไม่ให้ buffer, รับ body ใหญ่, timeout ยาว                                                                                                   |
 | **job ใช้สิทธิ์ของ user ที่ใส่ไว้** เหมือน client ทั่วไป                              | ต้องมี replication user ต่อศูนย์ที่ central (ไม่ใช้ admin เพราะรหัสผ่านถูกเก็บ plaintext ที่ edge)                                                                               |
 | **`_security` ไม่ถูก replicate**                                                      | edge ต้องตั้ง `_security` ของตัวเอง (`edge-init.sh` ทำให้)                                                                                                                       |
@@ -156,7 +156,7 @@ rep sh001_pull     $CEN/shelter_sh001 $LOC/shelter_sh001
 rep sh001_push     $LOC/shelter_sh001 $CEN/shelter_sh001
 
 # filtered _users (เฉพาะ user ของ SH001) — POC ตอนแรกใช้ `roles` อย่างเดียว · production ใช้ `$or` กับ
-# `edge_shelters` ตาม CR-171 — **หลัง CR-247 การกรองนี้ย้ายไปอยู่ที่ service `edge-users-copy` ของ central (ไม่ใช่ job ใน `_replicator`)**
+# `edge_shelters` ตาม CR-171 — **หลัง CR-247 การกรองนี้ย้ายไปอยู่ที่ job `edge-users-copy` ใน service `jobs-worker` ของ central (ไม่ใช่ job ใน `_replicator`)**
 # และ edge ดึงจาก `$CEN/edge_users_sh001` (selector กรองแค่ `_design/*`) (ดู scripts/edge-init.sh · SETUP-EDGE.md)
 rep users_sh001_pull $CEN/_users $LOC/_users \
   '"selector": {"$or": [{"edge_shelters": {"$elemMatch": {"$eq": "SH001"}}}, {"roles": {"$elemMatch": {"$eq": "shelter:SH001"}}}]}'
@@ -598,7 +598,7 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 **ทางแก้ (CR-171, อนุมัติ 2026-10-17):**
 
 - เพิ่ม field `_users.edge_shelters` (รหัสศูนย์ทุกศูนย์ที่ user เคยมี `shelter:<CODE>` — เพิ่มได้อย่างเดียว) แล้ว selector กรองด้วย field นี้ **หรือ** `roles` (กันช่วงก่อน backfill) → revision ที่ถอด role / soft delete ยังตรง selector และ replicate ไป edge
-- **หลัง [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md):** กฎกรองนี้ใช้ใน service `edge-users-copy` ที่ **central** (คัดลอก `_users` → `edge_users_<code>` ด้วย `new_edits: false`) ส่วน `users_<code>_pull` ที่ edge ดึง `edge_users_<code>` โดยไม่มี selector — กฎกรองเหมือนเดิม
+- **หลัง [CR-247](../changes/01-core/CR-247-edge-per-shelter-repl-user.md):** กฎกรองนี้ใช้ใน job `edge-users-copy` ใน service `jobs-worker` ที่ **central** (คัดลอก `_users` → `edge_users_<code>` ด้วย `new_edits: false`) ส่วน `users_<code>_pull` ที่ edge ดึง `edge_users_<code>` โดยไม่มี selector — กฎกรองเหมือนเดิม
 - "ลบ user" ทุกเส้นทางเป็น soft delete (`roles: []`, สุ่มรหัส, `deleted_at`) ห้าม `DELETE` · ชื่อของ user ที่ถูกลบใช้ซ้ำไม่ได้
 - Google / ThaiD login ปฏิเสธบัญชีที่ถูกลบ · ขั้นตอน deploy: ดู SETUP-EDGE "อัปเกรดเป็น CR-171"
 - ทางเลือกที่ตัดทิ้ง (reconcile ใน watchdog, ตัด selector, `$or` กับ `_deleted`, runbook ลบมือ): ดู Decision log ใน CR

@@ -7,10 +7,10 @@
 #   scripts/central-repl-user.sh SH001              # create repl_sh001_<8 hex> + edge_users_sh001
 #   scripts/central-repl-user.sh SH001 --rotate     # new password for the existing user
 #   scripts/central-repl-user.sh SH001 --remove     # delete the user(s), the role and DROP edge_users_sh001
-#   scripts/central-repl-user.sh SH001 --status     # health of the edge-users-copy service + this shelter's edge
+#   scripts/central-repl-user.sh SH001 --status     # health of the edge-users-copy job (jobs-worker) + this shelter's edge
 #
 # The copy of the shelter's _users docs into edge_users_<code> is NOT done here: it is the separate central
-# service `edge-users-copy` (worker/, CR-247 FR-11), which picks up the new DB within ~30 s and backfills it.
+# job `edge-users-copy` of the jobs-worker service (worker/, CR-247 FR-11), which picks up the new DB within ~30 s and backfills it.
 #
 # What `create` sets up (in this order):
 #   1. edge_users_<code>   DB with _security members = ONLY role repl:<CODE> and a _design/readonly VDU that
@@ -252,7 +252,7 @@ def ts(v):
     return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)
 
 if ckpt.get("error"):
-    print("edge-users-copy: ไม่พบ checkpoint (_users/_local/edge_users_copy) — service ไม่เคยรัน?")
+    print("edge-users-copy: ไม่พบ checkpoint (_users/_local/edge_users_copy) — jobs-worker ไม่เคยรัน?")
     fail.append("checkpoint doc missing")
 else:
     last, cur = ckpt.get("last_seq"), usinfo.get("update_seq")
@@ -432,7 +432,7 @@ Credentials for the edge of ${CODE_UC} (shown once — store the password now). 
   EDGE_REPL_PASSWORD=${new_pw}
 
 The edge uses this account for every job against central (registry / catalog / shelter_${CODE_LC} pull+push and
-the _users copy from ${EDGE_USERS_DB}). The edge-users-copy service fills ${EDGE_USERS_DB} within ~1 minute.
+the _users copy from ${EDGE_USERS_DB}). The edge-users-copy job (jobs-worker) fills ${EDGE_USERS_DB} within ~1 minute.
 Check it with: scripts/central-repl-user.sh ${CODE_UC} --status
 EOF
 else

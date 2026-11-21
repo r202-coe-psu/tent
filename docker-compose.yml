@@ -87,22 +87,18 @@ services:
       M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
       M6_SYNC_INTERVAL_S: ${M6_SYNC_INTERVAL_S:-45}
       COUCH_FEED_MAX_CONNECTIONS: ${COUCH_FEED_MAX_CONNECTIONS:-500}
-      # Print housekeeping task (CR-222 FR-17) — dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the
-      # PRINT_HOUSEKEEPING_TOKEN in frontend/.env. Not PRINT_HOUSEKEEPING_TOKEN: the root .env
-      # carries a staging placeholder that would switch the task on against a token-less pnpm dev.
-      PRINT_HOUSEKEEPING_URL: ${PRINT_HOUSEKEEPING_URL:-http://host.docker.internal:5173}
-      PRINT_HOUSEKEEPING_TOKEN: ${DEV_PRINT_HOUSEKEEPING_TOKEN:-}
-      PRINT_HOUSEKEEPING_INTERVAL_MS: ${PRINT_HOUSEKEEPING_INTERVAL_MS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
-  edge-users-copy:
+  # Single container for the miscellaneous periodic jobs (#1479): print housekeeping (CR-222),
+  # edge-users-copy (CR-247), shelter import (CR-123/126), shelter close (CR-243). 1 instance only.
+  jobs-worker:
     build:
       context: .
       dockerfile: worker/Dockerfile
-    container_name: edge-users-copy
-    command: ["uv", "run", "--project", "worker", "edge-users-copy"]
+    container_name: jobs-worker
+    command: ["uv", "run", "--project", "worker", "jobs-worker"]
     depends_on:
       couchdb:
         condition: service_healthy
@@ -110,6 +106,21 @@ services:
       COUCHDB_URL: http://couchdb:5984
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-password}
+      # Dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the PRINT_HOUSEKEEPING_TOKEN in frontend/.env.
+      # Not PRINT_HOUSEKEEPING_TOKEN: the root .env carries a staging placeholder that would switch
+      # the job on against a token-less pnpm dev. Unset -> job off, worker stays healthy.
+      PRINT_HOUSEKEEPING_URL: ${PRINT_HOUSEKEEPING_URL:-http://host.docker.internal:5173}
+      PRINT_HOUSEKEEPING_TOKEN: ${DEV_PRINT_HOUSEKEEPING_TOKEN:-}
+      SHELTER_IMPORT_WORKER_URL: ${SHELTER_IMPORT_WORKER_URL:-http://host.docker.internal:5173}
+      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN:?SHELTER_IMPORT_WORKER_TOKEN is required}
+      SHELTER_CLOSE_WORKER_URL: ${SHELTER_CLOSE_WORKER_URL:-http://host.docker.internal:5173}
+      SHELTER_CLOSE_WORKER_TOKEN: ${SHELTER_CLOSE_WORKER_TOKEN:?SHELTER_CLOSE_WORKER_TOKEN is required}
+      JOBS_TICK_SECONDS: ${JOBS_TICK_SECONDS:-30}
+      JOBS_EDGE_USERS_COPY_BUDGET_SECONDS: ${JOBS_EDGE_USERS_COPY_BUDGET_SECONDS:-10}
+      JOBS_IMPORT_BUDGET_SECONDS: ${JOBS_IMPORT_BUDGET_SECONDS:-30}
+      JOBS_CLOSE_BUDGET_SECONDS: ${JOBS_CLOSE_BUDGET_SECONDS:-30}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     mem_limit: 256m
     restart: unless-stopped
 
@@ -141,41 +152,6 @@ services:
       - "9000:9000"
     volumes:
       - ./backend/apiapp:/app/backend/apiapp
-    restart: unless-stopped
-
-  import-worker:
-    image: tent/frontend:local
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-    environment:
-      SHELTER_IMPORT_WORKER_URL: ${SHELTER_IMPORT_WORKER_URL:-http://host.docker.internal:5173}
-      SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN:?SHELTER_IMPORT_WORKER_TOKEN is required}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["pnpm", "import-worker"]
-    healthcheck:
-      disable: true
-    restart: unless-stopped
-
-  shelter-close-worker:
-    image: tent/frontend:local
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-    environment:
-      SHELTER_CLOSE_WORKER_URL: ${SHELTER_CLOSE_WORKER_URL:-http://host.docker.internal:5173}
-      SHELTER_CLOSE_WORKER_TOKEN: ${SHELTER_CLOSE_WORKER_TOKEN:?SHELTER_CLOSE_WORKER_TOKEN is required}
-      SHELTER_CLOSE_WORKER_POLL_MS: ${SHELTER_CLOSE_WORKER_POLL_MS:-30000}
-      SHELTER_CLOSE_WORKER_TIMEOUT_MS: ${SHELTER_CLOSE_WORKER_TIMEOUT_MS:-30000}
-      SHELTER_CLOSE_CHUNK_BUDGET_MS: ${SHELTER_CLOSE_CHUNK_BUDGET_MS:-20000}
-      SHELTER_CLOSE_LEASE_MS: ${SHELTER_CLOSE_LEASE_MS:-60000}
-      SHELTER_CLOSE_STALE_MS: ${SHELTER_CLOSE_STALE_MS:-600000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["pnpm", "shelter-close-worker"]
-    healthcheck:
-      disable: true
     restart: unless-stopped
 
 networks:

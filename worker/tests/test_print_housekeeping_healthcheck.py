@@ -1,83 +1,96 @@
-"""Print housekeeping healthcheck (CR-222 FR-17) — file read faked, no real fs."""
+"""jobs-worker healthcheck — file read faked, no real fs."""
 
 from __future__ import annotations
 
-from worker.printing.healthcheck import is_healthy
+from worker.jobs.healthcheck import is_healthy
 
-
-def never_read(path: str) -> str:
-    raise AssertionError(f"read_file should not be called, got {path}")
-
-
-def test_healthy_when_housekeeping_has_no_token() -> None:
-    assert is_healthy({}, now_ms=1_700_000_000_000, read_file=never_read) is True
-
-
-TOKEN_ENV = {
-    "PRINT_HOUSEKEEPING_TOKEN": "s3cret-token-value",
-    "PRINT_HOUSEKEEPING_OK_FILE": "/run/hk.ok",
-}
 NOW_MS = 1_700_000_200_000
+ENV = {"JOBS_OK_DIR": "/run/ok", "PRINT_HOUSEKEEPING_TOKEN": "t"}
 
 
-def reads(content: str):
+def reads(files: dict[str, str]):
     def read_file(path: str) -> str:
-        assert path == "/run/hk.ok"
-        return content
+        if path not in files:
+            raise FileNotFoundError(path)
+        return files[path]
 
     return read_file
 
 
-def test_healthy_when_ok_file_is_60_seconds_old() -> None:
-    assert (
-        is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=reads("1700000140000")) is True
+def stamp(age_s: int) -> str:
+    return str(NOW_MS - age_s * 1000)
+
+
+def test_healthy_when_only_edge_copy_enabled_and_fresh() -> None:
+    env = {"JOBS_OK_DIR": "/run/ok"}
+    assert is_healthy(
+        env, now_ms=NOW_MS, read_file=reads({"/run/ok/edge-users-copy.ok": stamp(60)})
     )
 
 
-def test_unhealthy_when_ok_file_is_121_seconds_old() -> None:
-    assert (
-        is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=reads("1700000079000")) is False
+def test_disabled_jobs_are_skipped() -> None:
+    # printing has no token -> only edge-users-copy is checked.
+    env = {"JOBS_OK_DIR": "/run/ok"}
+    assert is_healthy(
+        env, now_ms=NOW_MS, read_file=reads({"/run/ok/edge-users-copy.ok": stamp(1)})
     )
 
 
-def test_healthy_when_ok_file_is_exactly_120_seconds_old() -> None:
-    assert (
-        is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=reads("1700000080000")) is True
+def test_unhealthy_when_enabled_job_file_missing() -> None:
+    files = {"/run/ok/edge-users-copy.ok": stamp(1)}
+    assert not is_healthy(
+        ENV, is_dir=lambda _p: True, now_ms=NOW_MS, read_file=reads(files)
     )
 
 
-def test_unhealthy_when_ok_file_is_missing() -> None:
-    def read_file(path: str) -> str:
-        raise FileNotFoundError(path)
+def all_files(printing_age: int) -> dict[str, str]:
+    return {
+        "/run/ok/printing.ok": stamp(printing_age),
+        "/run/ok/edge-users-copy.ok": stamp(1),
+    }
 
-    assert is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=read_file) is False
+
+def test_healthy_at_exactly_120_seconds() -> None:
+    assert is_healthy(
+        ENV, is_dir=lambda _p: True, now_ms=NOW_MS, read_file=reads(all_files(120))
+    )
 
 
-def test_unhealthy_when_ok_file_is_unreadable() -> None:
+def test_unhealthy_at_121_seconds() -> None:
+    assert not is_healthy(
+        ENV, is_dir=lambda _p: True, now_ms=NOW_MS, read_file=reads(all_files(121))
+    )
+
+
+def test_slow_tick_allows_four_missed_ticks() -> None:
+    env = {**ENV, "JOBS_TICK_SECONDS": "60"}
+    assert is_healthy(
+        env, is_dir=lambda _p: True, now_ms=NOW_MS, read_file=reads(all_files(200))
+    )
+    assert not is_healthy(
+        env, is_dir=lambda _p: True, now_ms=NOW_MS, read_file=reads(all_files(241))
+    )
+
+
+def test_unhealthy_when_file_is_garbage_or_empty() -> None:
+    for bad in ("", "not-a-time"):
+        files = {**all_files(1), "/run/ok/printing.ok": bad}
+        assert not is_healthy(
+            ENV, is_dir=lambda _p: True, now_ms=NOW_MS, read_file=reads(files)
+        )
+
+
+def test_unhealthy_when_file_unreadable() -> None:
     def read_file(path: str) -> str:
         raise PermissionError(path)
 
-    assert is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=read_file) is False
+    assert not is_healthy(
+        ENV, is_dir=lambda _p: True, now_ms=NOW_MS, read_file=read_file
+    )
 
 
-def test_unhealthy_when_ok_file_is_empty() -> None:
-    assert is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=reads("")) is False
-
-
-def test_unhealthy_when_ok_file_is_not_a_number() -> None:
-    assert is_healthy(TOKEN_ENV, now_ms=NOW_MS, read_file=reads("not-a-time")) is False
-
-
-SLOW_ENV = {**TOKEN_ENV, "PRINT_HOUSEKEEPING_INTERVAL_MS": "60000"}
-
-
-def test_slow_interval_allows_four_missed_ticks() -> None:
-    # 60 s interval -> limit 240 s; the ok file is 200 s old.
-    assert is_healthy(SLOW_ENV, now_ms=NOW_MS, read_file=reads("1700000000000")) is True
-
-
-def test_slow_interval_is_unhealthy_past_four_ticks() -> None:
-    # 60 s interval -> limit 240 s; the ok file is 241 s old.
-    assert (
-        is_healthy(SLOW_ENV, now_ms=NOW_MS, read_file=reads("1699999959000")) is False
+def test_healthy_when_ok_dir_absent_not_a_jobs_worker():
+    # sync-worker shares the image HEALTHCHECK but never creates the OK dir.
+    assert is_healthy(
+        ENV, now_ms=NOW_MS, read_file=lambda p: "", is_dir=lambda _p: False
     )

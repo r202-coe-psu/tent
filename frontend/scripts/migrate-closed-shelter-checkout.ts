@@ -15,7 +15,7 @@
  * synchronously and writes nothing (CR-243 FR-32). `--write --confirm` does NOT process anyone
  * itself: it creates one `shelter_close_job` with `mode = backfill` per shelter (skipping a
  * shelter that already has an active job) in `central_ops`, prints each `job_id` and returns
- * without waiting (CR-243 FR-31). The `shelter-close-worker` then checks people out
+ * without waiting (CR-243 FR-31). The `jobs-worker` (shelter-close job) then checks people out
  * (reason `shelter_closed`), cancels `pre_registered`, re-derives households, and writes one
  * summary audit per shelter (CR-219 FR-30a) with `context = { backfill, shelter_closed_at,
  * checked_out, cancelled, failed, households_repaired }` authored by BACKFILL_CREATED_BY.
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
 	console.log(
 		DRY_RUN
 			? `\nTotal that would be closed out: ${totalAffected} · households to repair: ${totalHouseholds}`
-			: `\nQueued ${queued} job(s), skipped ${skipped} (active job), problems=${problems}. The shelter-close-worker processes them.`
+			: `\nQueued ${queued} job(s), skipped ${skipped} (active job), problems=${problems}. The jobs-worker processes them.`
 	);
 	if (problems > 0) process.exitCode = 1;
 }

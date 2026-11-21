@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Integration test for central-repl-user.sh (CR #1298 FR-1..FR-4, FR-8, FR-10, FR-12, FR-13)
-# The copy itself is the separate edge-users-copy service (worker/tests covers it); here its docs are hand-written. against a REAL CouchDB.
+# The copy itself is the separate edge-users-copy job (jobs-worker service) (worker/tests covers it); here its docs are hand-written. against a REAL CouchDB.
 #
 # Usage: bash scripts/tests/central-repl-user.test.sh
 #

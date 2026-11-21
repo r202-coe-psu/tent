@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Remove orphaned user docs from the per-shelter edge_users_<code> databases on the central CouchDB (CR-247).
 #
-# The central service `edge-users-copy` (worker/) copies `_users` docs into edge_users_<code>. When a user is
+# The central `edge-users-copy` job of the `jobs-worker` service (worker/) copies `_users` docs into edge_users_<code>. When a user is
 # HARD-deleted from central `_users` (the tombstone has no roles) the copy is never removed, so the doc and its
 # password hash linger in every edge_users_* DB. The app itself soft-deletes (deleted_at set, doc kept), so only
 # direct CouchDB deletes cause orphans. This script reconciles: an orphan is a doc id in edge_users_<code> that
@@ -128,7 +128,7 @@ if [ "$central_n" = 0 ] && [ "$ALLOW_EMPTY" != 1 ]; then
 fi
 echo "central _users: $central_n live doc(s)"
 
-# 2. the edge_users_* DBs (same key range as the edge-users-copy worker), optionally restricted to given shelters
+# 2. the edge_users_* DBs (same key range as the edge-users-copy job), optionally restricted to given shelters
 all_dbs=$(cj -G "$URL/_all_dbs" --data-urlencode 'start_key="edge_users_"' --data-urlencode 'end_key="edge_users_￰"' |
 	python3 -c '
 import sys, json

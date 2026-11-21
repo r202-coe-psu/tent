@@ -6,7 +6,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { validateOrdering } from '../../../server/shelter-close-worker.mjs';
 
 const root = resolve(process.cwd(), '..');
 const read = (rel: string) => readFileSync(resolve(root, rel), 'utf8');
@@ -19,6 +18,8 @@ const WORKER_COMPOSE = [
 	'docker-compose.production.no-nginx.yml'
 ];
 const WITHOUT_WORKER = ['docker-compose.edge.yml', 'docker-compose.seed.yml'];
+// CR-243 runtime moved into the Python `jobs-worker` (#1479); the Node script is gone.
+const SERVICE = 'jobs-worker';
 
 /** Text of one top-level compose service (2-space indented key) up to the next one. */
 function service(file: string, name: string): string | null {
@@ -35,13 +36,24 @@ function service(file: string, name: string): string | null {
 	return lines.slice(start, end).join('\n');
 }
 
+/** FR-16 ordering (mirrors worker/src/worker/jobs/shelter_close.py::validate_ordering). */
+function validateOrdering(c: {
+	chunkBudgetMs: number;
+	timeoutMs: number;
+	leaseMs: number;
+	staleMs: number;
+}) {
+	if (!(c.chunkBudgetMs < c.timeoutMs && c.timeoutMs < c.leaseMs && c.leaseMs < c.staleMs)) {
+		throw new Error('CHUNK_BUDGET_MS < WORKER_TIMEOUT_MS < LEASE_MS < STALE_MS violated');
+	}
+}
+
 const envValue = (text: string, key: string) =>
 	new RegExp(`^${key}=(.*)$`, 'm').exec(text)?.[1]?.trim();
 
 const VARS = [
 	'SHELTER_CLOSE_WORKER_TOKEN',
 	'SHELTER_CLOSE_WORKER_URL',
-	'SHELTER_CLOSE_WORKER_POLL_MS',
 	'SHELTER_CLOSE_WORKER_TIMEOUT_MS',
 	'SHELTER_CLOSE_CHUNK_BUDGET_MS',
 	'SHELTER_CLOSE_LEASE_MS',
@@ -51,43 +63,24 @@ const VARS = [
 ];
 
 describe('compose files (FR-34, FR-35, AC-10)', () => {
-	it.each(WORKER_COMPOSE)('%s has a shelter-close-worker service like import-worker', (file) => {
-		const worker = service(file, 'shelter-close-worker');
-		expect(worker, `${file} must define shelter-close-worker`).not.toBeNull();
-		expect(worker).toContain('command: ["pnpm", "shelter-close-worker"]');
+	it.each(WORKER_COMPOSE)('%s has a jobs-worker service running the close job', (file) => {
+		const worker = service(file, SERVICE);
+		expect(worker, `${file} must define ${SERVICE}`).not.toBeNull();
 		expect(worker).toContain('restart: unless-stopped');
-		expect(worker).toMatch(/healthcheck:\s*\n\s+disable: true/);
 		// FR-35: the token is mandatory — compose refuses to start without it.
 		expect(worker).toContain(
 			'SHELTER_CLOSE_WORKER_TOKEN: ${SHELTER_CLOSE_WORKER_TOKEN:?SHELTER_CLOSE_WORKER_TOKEN is required}'
 		);
-		expect(service(file, 'import-worker'), 'sibling import-worker still present').not.toBeNull();
+		expect(service(file, 'shelter-close-worker'), 'old node service removed').toBeNull();
+		expect(service(file, 'import-worker'), 'old node service removed').toBeNull();
 	});
 
-	it.each(WORKER_COMPOSE)(
-		'%s: the worker env keeps CHUNK_BUDGET < TIMEOUT < LEASE < STALE (FR-16)',
-		(file) => {
-			const worker = service(file, 'shelter-close-worker')!;
-			const num = (key: string) =>
-				Number(new RegExp(`${key}: \\$\\{${key}:-(\\d+)\\}`).exec(worker)?.[1]);
-			const cfg = {
-				chunkBudgetMs: num('SHELTER_CLOSE_CHUNK_BUDGET_MS'),
-				timeoutMs: num('SHELTER_CLOSE_WORKER_TIMEOUT_MS'),
-				leaseMs: num('SHELTER_CLOSE_LEASE_MS'),
-				staleMs: num('SHELTER_CLOSE_STALE_MS')
-			};
-			expect(Object.values(cfg).every(Number.isFinite)).toBe(true);
-			expect(() => validateOrdering(cfg)).not.toThrow();
-		}
-	);
-
 	it.each(WORKER_COMPOSE.filter((f) => f !== 'docker-compose.yml'))(
-		'%s: worker reaches the frontend over the compose network, same image',
+		'%s: worker reaches the frontend over the compose network',
 		(file) => {
-			const worker = service(file, 'shelter-close-worker')!;
+			const worker = service(file, SERVICE)!;
 			expect(worker).toContain('SHELTER_CLOSE_WORKER_URL: http://frontend:3000');
-			expect(worker).toMatch(/image: tent\/frontend:latest/);
-			expect(worker).toMatch(/depends_on:\s*\n\s+frontend:\s*\n\s+condition: service_healthy/);
+			expect(worker).toMatch(/depends_on:[\s\S]*?\n\s+frontend:\s*\n\s+condition: service_healthy/);
 		}
 	);
 
@@ -108,9 +101,8 @@ describe('compose files (FR-34, FR-35, AC-10)', () => {
 		}
 	);
 
-	it.each(WITHOUT_WORKER)('%s does not get the worker (it has no import-worker either)', (file) => {
-		expect(service(file, 'import-worker')).toBeNull();
-		expect(service(file, 'shelter-close-worker')).toBeNull();
+	it.each(WITHOUT_WORKER)('%s does not get the worker', (file) => {
+		expect(service(file, SERVICE)).toBeNull();
 	});
 });
 
@@ -135,7 +127,6 @@ describe('.env.example files (FR-36)', () => {
 	it('uses the same value in both files for every tunable and the documented defaults', () => {
 		const defaults: Record<string, string> = {
 			SHELTER_CLOSE_WORKER_URL: 'http://host.docker.internal:5173',
-			SHELTER_CLOSE_WORKER_POLL_MS: '30000',
 			SHELTER_CLOSE_WORKER_TIMEOUT_MS: '30000',
 			SHELTER_CLOSE_CHUNK_BUDGET_MS: '20000',
 			SHELTER_CLOSE_LEASE_MS: '60000',
@@ -173,9 +164,9 @@ describe('nginx + package.json (FR-37, FR-38)', () => {
 		);
 	});
 
-	it('has the pnpm script', () => {
+	it('no longer has the node worker scripts', () => {
 		const pkg = JSON.parse(read('frontend/package.json')) as { scripts: Record<string, string> };
-		expect(pkg.scripts['shelter-close-worker']).toBe('node server/shelter-close-worker.mjs');
-		expect(pkg.scripts['import-worker']).toBe('node server/shelter-import-worker.mjs');
+		expect(pkg.scripts['shelter-close-worker']).toBeUndefined();
+		expect(pkg.scripts['import-worker']).toBeUndefined();
 	});
 });

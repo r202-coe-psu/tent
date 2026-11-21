@@ -1,44 +1,42 @@
-"""``edge-users-copy`` — CR-247 FR-11/FR-11a/FR-13.
+"""``edge-users-copy`` job — CR-247 FR-11/FR-11a/FR-13 (jobs-worker, #1479).
 
 Copies central ``_users`` into one ``edge_users_<code>`` database per shelter so an edge
-can pull its users from a database that holds nobody else's. CouchDB only: no MongoDB,
-no sync-worker bootstrap.
+can pull its users from a database that holds nobody else's. CouchDB only.
 
-* One ``_users/_changes`` feed (``style=all_docs``), ``_design/*`` skipped. The position
-  is checkpointed in ``_users/_local/edge_users_copy`` (never replicated) and resumed
-  after a restart. The same doc carries ``last_seq`` / ``last_error`` / ``updated_at``
-  for ``central-repl-user.sh --status`` (FR-13).
+Runs as a tick of the jobs-worker (not a daemon): each ``run`` drains
+``_users/_changes`` with ``feed=normal`` (short requests on the ordinary connection pool,
+not the capped long-lived ``_changes`` feed pool) until there is nothing left or the time
+budget is spent. The budget is only checked *between* calls; a call is never cut.
+
+* ``_design/*`` skipped. The position is checkpointed in
+  ``_users/_local/edge_users_copy`` (never replicated). The same doc carries
+  ``last_seq`` / ``last_error`` / ``updated_at`` for ``central-repl-user.sh --status``.
 * Destinations = ``edge_shelters`` ∪ ``roles`` ``shelter:<CODE>`` (CR-171 FR-9), limited to
   shelters whose ``edge_users_<code>`` database exists (listed every 30 s).
 * A doc is written as its winning revision plus ``_revisions`` with
   ``new_edits: false``, so revision ids match central and an edge never sees a conflict.
 * A database without ``_local/backfill_done`` is a new shelter: every existing user of
   that shelter is copied (paged, 500/page), then ``_local/backfill_done`` is written.
-
-    uv run --project worker edge-users-copy
+  One backfill per refresh call, so changes batches run between backfills.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from worker.config import load_settings
 from worker.couch.client import CouchClient
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
+if TYPE_CHECKING:
+    from worker.jobs.base import JobContext
+
 logger = logging.getLogger("edge-users-copy")
-# httpx logs every request at INFO: one line per edge DB on each 30 s refresh otherwise.
-logging.getLogger("httpx").setLevel(logging.WARNING)
 
 USERS_DB = "_users"
 CHECKPOINT_ID = "_local/edge_users_copy"
@@ -49,8 +47,6 @@ REFRESH_SECONDS = 30.0
 CHANGES_BATCH = 100
 BACKFILL_PAGE = 500
 BULK_GET_CHUNK = 100
-POLL_TIMEOUT_MS = 10_000
-ERROR_BACKOFF_SECONDS = 5.0
 
 
 def now_iso() -> str:
@@ -273,19 +269,22 @@ class EdgeUsersCopier:
                 self.invalidate_db_list()
 
     async def fetch_changes(self, since: Any) -> dict[str, Any]:
+        """One ``feed=normal`` page (returns immediately; no long-poll)."""
         return await self._couch.get_json(
             f"/{USERS_DB}/_changes",
             params={
                 "style": "all_docs",
-                "feed": "longpoll",
-                "timeout": POLL_TIMEOUT_MS,
+                "feed": "normal",
                 "since": since,
                 "limit": CHANGES_BATCH,
             },
         )
 
-    async def run_once(self, since: Any) -> Any:
-        """One loop turn: refresh DBs, read one changes batch, copy, checkpoint."""
+    async def run_once(self, since: Any) -> tuple[Any, int]:
+        """One step: refresh DBs, read one changes batch, copy, checkpoint.
+
+        Returns ``(last_seq, number_of_changes)``.
+        """
         await self.refresh_dbs()
         data = await self.fetch_changes(since)
         results = data.get("results") or []
@@ -293,37 +292,41 @@ class EdgeUsersCopier:
         last_seq = data.get("last_seq", since)
         if results or last_seq != since:
             await self.save_checkpoint(last_seq=last_seq, error=None)
-        return last_seq
+        return last_seq, len(results)
 
-    async def run(self) -> None:
+    async def drain(self, ctx: JobContext) -> None:
+        """Run steps until caught up (and no backfill pending) or the budget is spent."""
         since = await self.load_checkpoint()
-        logger.info("starting from seq %s", since)
-        while True:
+        try:
+            while ctx.should_continue():
+                since, count = await self.run_once(since)
+                if count < CHANGES_BATCH and not self._pass_open:
+                    return
+        except Exception as exc:
+            logger.exception("copy failed")
             try:
-                since = await self.run_once(since)
-            except Exception as exc:
-                logger.exception("copy failed")
-                try:
-                    await self.save_checkpoint(last_seq=since, error=str(exc)[:500])
-                except Exception:
-                    logger.exception("could not record status")
-                await asyncio.sleep(ERROR_BACKOFF_SECONDS)
+                await self.save_checkpoint(last_seq=since, error=str(exc)[:500])
+            except Exception:
+                logger.exception("could not record status")
+            raise
 
 
-async def _amain() -> None:
-    couch = CouchClient(load_settings())
-    try:
-        await EdgeUsersCopier(couch).run()
-    finally:
-        await couch.close()
+class EdgeUsersCopyJob:
+    name = "edge-users-copy"
+    budget_env = "JOBS_EDGE_USERS_COPY_BUDGET_SECONDS"
+    default_budget_seconds: float | None = 10
 
+    def __init__(self) -> None:
+        self._couch: CouchClient | None = None
+        self._copier: EdgeUsersCopier | None = None
 
-def main() -> None:
-    try:
-        asyncio.run(_amain())
-    except KeyboardInterrupt:
-        pass
+    async def run(self, ctx: JobContext) -> None:
+        if self._copier is None:
+            self._couch = CouchClient(load_settings())
+            self._copier = EdgeUsersCopier(self._couch)
+        await self._copier.drain(ctx)
 
-
-if __name__ == "__main__":
-    main()
+    async def aclose(self) -> None:
+        if self._couch is not None:
+            await self._couch.close()
+        self._couch = self._copier = None
