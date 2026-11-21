@@ -1,3 +1,4 @@
+import { parseCompoundCapability } from '$lib/auth/roles';
 export const AUDIT_ACTIONS = ['create', 'update', 'delete', 'status_change', 'other'] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -173,6 +174,40 @@ export function buildAuditEvent(input: AuditEventInput, id: string, now: string)
 		source: 'bff',
 		source_ref: null
 	};
+}
+
+function shelterRolesByCode(roles: readonly string[] | null | undefined): Map<string, Set<string>> {
+	const byCode = new Map<string, Set<string>>();
+	const add = (code: string, role: string) => {
+		const held = byCode.get(code) ?? new Set<string>();
+		held.add(role);
+		byCode.set(code, held);
+	};
+	for (const role of roles ?? []) {
+		if (role.startsWith('shelter:')) {
+			const code = role.slice('shelter:'.length);
+			if (code) add(code, role);
+			continue;
+		}
+		const compound = parseCompoundCapability(role);
+		if (compound) add(compound.code, role);
+	}
+	return byCode;
+}
+
+export function auditShelterCodesForRoleChange(
+	before: readonly string[] | null | undefined,
+	after: readonly string[] | null | undefined
+): Array<string | null> {
+	const was = shelterRolesByCode(before);
+	const now = shelterRolesByCode(after);
+	const changed = new Set<string>();
+	for (const code of new Set([...was.keys(), ...now.keys()])) {
+		const left = [...(was.get(code) ?? [])].sort().join('\u0000');
+		const right = [...(now.get(code) ?? [])].sort().join('\u0000');
+		if (left !== right) changed.add(code);
+	}
+	return changed.size > 0 ? [...changed].sort() : [null];
 }
 
 export function auditShelterCodesFromRoles(

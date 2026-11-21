@@ -126,7 +126,7 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 			patch: Record<string, unknown>;
 		};
 		const { patch } = mutator({ operation_status: 'closed' });
-		expect(patch).toEqual({ name: 'ศูนย์ใหม่', updated_at: '2026-01-01T00:00:00.000Z' });
+		expect(patch).toEqual({ name: 'ศูนย์ใหม่' });
 	});
 
 	it('leaves closed_at to updateMaster, even when the client sends one', async () => {
@@ -299,7 +299,7 @@ describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + sto
 	it('200 when _rev matches, and never writes _rev into the patch', async () => {
 		const { res, patch } = await patchAgainst({ _rev: '2-b' }, { name: 'x', _rev: '2-b' });
 		expect(res.status).toBe(200);
-		expect(patch).toEqual({ name: 'x', updated_at: '2026-01-01T00:00:00.000Z' });
+		expect(patch).toEqual({ name: 'x' });
 	});
 
 	it('stays optional: a body without _rev is accepted (e2e/direct callers)', async () => {

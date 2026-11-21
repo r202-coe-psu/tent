@@ -20,7 +20,7 @@ import {
 	validateSiteKindChange
 } from '$lib/features/shelters/server';
 import { readMasterDoc } from '$lib/server/master-data-server';
-import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { findMasterByCode, migrate, updateMaster } from '$lib/server/shelters.admin';
 import { getDisplayNames } from '$lib/server/user-service';
 import { recordAuditedWrite } from '$lib/server/audit-log';
 import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
@@ -197,7 +197,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 				);
 				if (siteKindError) throw new ServiceError('VALIDATION', siteKindError);
 			}
-			const next: Record<string, unknown> = { ...patch, updated_at: nowIso() };
+			const next: Record<string, unknown> = { ...patch };
 			if (input.common_areas && !sentSubStorage) {
 				// Keep the points added elsewhere (e.g. via /storage-points) since the form loaded.
 				next.common_areas = {

@@ -6,18 +6,14 @@ import {
 	serviceError,
 	ServiceError
 } from '$lib/server/couch-admin';
-import {
-	createOrMergeUser,
-	deleteUser,
-	isDeletedUserDoc,
-	listUsers,
-	readUserDocAfterWrite,
-	readUserDocForLink,
-	updateUser
-} from '$lib/server/user-service';
+import { createOrMergeUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
 import { recordAuditedWrites } from '$lib/server/audit-log';
 import { assertUsersWritable } from '$lib/server/edge-mode';
-import { AUDIT_EVENTS, auditShelterCodesFromRoles } from '$lib/features/audit-log/server';
+import {
+	AUDIT_EVENTS,
+	auditShelterCodesForRoleChange,
+	auditShelterCodesFromRoles
+} from '$lib/features/audit-log/server';
 import { validateProvisionedPassword } from '$lib/server/password-policy';
 import { shelterCodesFromRoles } from '$lib/auth/roles';
 import { assertVolunteerVerifiedForAccess } from '$lib/features/volunteers/server/volunteer-access-grant';
@@ -122,7 +118,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (volunteer_id)
 			await assertVolunteerVerifiedForAccess(shelterCodesFromRoles(roles), volunteer_id);
 		assertUsersWritable();
-		const existing = await readUserDocForLink(name);
 		const result = await createOrMergeUser(
 			{
 				name,
@@ -144,7 +139,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			// A merge into an existing volunteer account checks that account's own profile (A1-7).
 			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
-		const created = await readUserDocAfterWrite(name);
 		await recordAuditedWrites(
 			{
 				actor: caller.name,
@@ -153,8 +147,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				entityType: 'user',
 				entityId: name,
 				label: display_name,
-				before: existing as unknown as Record<string, unknown> | null,
-				after: created as unknown as Record<string, unknown> | null
+				before: result.before as unknown as Record<string, unknown> | null,
+				after: result.after as unknown as Record<string, unknown> | null
 			},
 			auditShelterCodesFromRoles(roles)
 		);
@@ -216,8 +210,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 				: undefined;
 
 		assertUsersWritable();
-		const before = await readUserDocForLink(name);
-		await updateUser(
+		const result = await updateUser(
 			name,
 			{
 				password,
@@ -241,9 +234,9 @@ export const PUT: RequestHandler = async ({ request }) => {
 			// (CR-221 A1-7); a save that adds no role is not checked.
 			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
-		const after = await readUserDocAfterWrite(name);
+		const { before: saved, after } = result;
 		const rolesChanged =
-			JSON.stringify([...(before?.roles ?? [])].sort()) !==
+			JSON.stringify([...(saved?.roles ?? [])].sort()) !==
 			JSON.stringify([...(after?.roles ?? [])].sort());
 		await recordAuditedWrites(
 			{
@@ -256,11 +249,13 @@ export const PUT: RequestHandler = async ({ request }) => {
 				action: 'update',
 				entityType: 'user',
 				entityId: name,
-				label: after?.display_name ?? before?.display_name ?? null,
-				before: before as unknown as Record<string, unknown> | null,
+				label: after?.display_name ?? saved?.display_name ?? null,
+				before: saved as unknown as Record<string, unknown> | null,
 				after: after as unknown as Record<string, unknown> | null
 			},
-			auditShelterCodesFromRoles(before?.roles, after?.roles)
+			rolesChanged
+				? auditShelterCodesForRoleChange(saved?.roles, after?.roles)
+				: auditShelterCodesFromRoles(saved?.roles, after?.roles)
 		);
 		return json({ ok: true });
 	} catch (e) {
@@ -285,10 +280,7 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
 		const name = url.searchParams.get('name');
 		if (!name) throw new ServiceError('VALIDATION', 'name is required');
 		assertUsersWritable();
-		const before = await readUserDocForLink(name);
-		await deleteUser(name, caller);
-		const after = await readUserDocAfterWrite(name);
-		const removed = after === null || isDeletedUserDoc(after);
+		const { deleted: removed, before, after } = await deleteUser(name, caller);
 		await recordAuditedWrites(
 			removed
 				? {
@@ -309,7 +301,9 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
 						before: before as unknown as Record<string, unknown> | null,
 						after: after as unknown as Record<string, unknown> | null
 					},
-			auditShelterCodesFromRoles(before?.roles, after?.roles)
+			removed
+				? auditShelterCodesFromRoles(before?.roles)
+				: auditShelterCodesForRoleChange(before?.roles, after?.roles)
 		);
 		return json({ ok: true });
 	} catch (e) {

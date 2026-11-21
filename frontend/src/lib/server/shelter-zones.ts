@@ -96,7 +96,13 @@ export async function applyZoneTransition(
 		context: { zone_code: zoneCode, previous_status: meta.previousStatus, actor },
 		occurred_at: nowIso()
 	};
-	await adminRaw(`/registry/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
+	const legacy = await adminRaw(`/registry/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
+	if (legacy.status >= 400) {
+		console.error('[audit-log] legacy zone audit doc not written', {
+			id: auditDoc._id,
+			status: legacy.status
+		});
+	}
 	await recordAuditedWrite({
 		actor,
 		event: spec.event,

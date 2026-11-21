@@ -78,6 +78,22 @@ describe('recordAudit', () => {
 		expect(console.error).toHaveBeenCalled();
 	});
 
+	it('stops at once on a permanent rejection instead of retrying', async () => {
+		adminRawMock.mockResolvedValue({ status: 403, data: {} });
+
+		await recordAudit(input);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps retrying a throttled write', async () => {
+		adminRawMock.mockResolvedValue({ status: 429, data: {} });
+
+		await recordAudit(input);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(3);
+	});
+
 	it('stops at once when audit_log does not exist', async () => {
 		adminRawMock.mockResolvedValue({ status: 404, data: { error: 'not_found' } });
 		expect(await recordAudit(input)).toBe(false);
@@ -146,6 +162,24 @@ describe('recordProxiedWrite', () => {
 			id: 'client-9',
 			label: 'พันธมิตร ก'
 		});
+	});
+
+	it('reads the label from a name nested under key or client', async () => {
+		adminRawMock.mockResolvedValue({ status: 201, data: {} });
+
+		await recordProxiedWrite(
+			new Response(JSON.stringify({ key: { id: 'k-1', name: 'EOC key' } }), { status: 200 }),
+			{
+				actor: 'sa',
+				event: 'api_key.revoked',
+				action: 'status_change',
+				entityType: 'api_key',
+				entityId: 'k-1',
+				shelterCode: null
+			}
+		);
+
+		expect(adminRawMock.mock.calls[0][2].entity).toMatchObject({ label: 'EOC key' });
 	});
 
 	it('writes nothing when a successful upstream body carries no id', async () => {

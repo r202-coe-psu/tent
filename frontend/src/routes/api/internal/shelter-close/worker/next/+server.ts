@@ -4,7 +4,7 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { ulid } from '$lib/db/ulid';
 import { resolveOperationStatus } from '$lib/features/shelters/server';
-import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { findMasterByCode, migrate, updateMaster } from '$lib/server/shelters.admin';
 import { adminCouchReq, getShelterCloseStore } from '$lib/server/shelter-close-job-runtime';
 import { runShelterCloseWorkerStep } from '$lib/server/shelter-close-worker-run';
 import { recordAuditedWrite } from '$lib/server/audit-log';
@@ -62,7 +62,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			},
 			closeShelter: async (code, actor) => {
 				const { before, after } = await updateMaster(code, actor, () => ({
-					patch: { operation_status: 'closed', updated_at: nowIso() }
+					patch: { operation_status: 'closed' }
 				}));
 				await recordAuditedWrite({
 					actor,

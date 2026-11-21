@@ -53,7 +53,10 @@ export const useCreateUser = () => {
 			must_change_password?: boolean;
 			affiliation_tags?: string[];
 		}) => createUser(input),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
+			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		}
 	}));
 };
 
@@ -95,6 +98,9 @@ export const useDeleteUser = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (name: string) => deleteUser(name),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
+			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		}
 	}));
 };

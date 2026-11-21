@@ -3,6 +3,8 @@ import type { AuditEvent } from './audit-event';
 import {
 	auditLogSearchParams,
 	chooseAuditView,
+	cursorMatchesRange,
+	cursorWithinQuery,
 	decodeAuditCursor,
 	encodeAuditCursor,
 	matchesAuditQuery,
@@ -68,8 +70,14 @@ describe('chooseAuditView', () => {
 		});
 	});
 
-	it('uses the actor view before the shelter view', () => {
-		expect(chooseAuditView(parse({ actor: 'sm', shelter_code: 'SH001' })).view).toBe('by_actor');
+	it('keeps a shelter-scoped query on the shelter view even when an actor is given', () => {
+		expect(chooseAuditView(parse({ actor: 'sm', shelter_code: 'SH001' })).view).toBe('by_shelter');
+	});
+
+	it('reads an entity type alone from the time view so the range still applies', () => {
+		const range = chooseAuditView(parse({ entity_type: 'user', to: '2026-11-18' }));
+		expect(range.view).toBe('by_occurred_at');
+		expect(range.startkey).toBe('2026-11-18T23:59:59.999Z');
 	});
 
 	it('bounds the shelter view by the date range', () => {
@@ -116,5 +124,42 @@ describe('cursor and search params', () => {
 		expect(
 			auditLogSearchParams({ actor: 'sm', action: undefined, entity_type: '' }).toString()
 		).toBe('actor=sm');
+	});
+});
+
+describe("cursor guards — CR-259 a cursor may not leave the caller's range", () => {
+	const scoped = parse({ shelter_code: 'SH001' });
+	const range = chooseAuditView(scoped);
+
+	it("accepts a cursor whose prefix is the caller's own shelter", () => {
+		expect(cursorMatchesRange(range, { key: ['SH001', '2026-11-18T00:00:00.000Z'], id: 'a' })).toBe(
+			true
+		);
+	});
+
+	it('rejects a cursor pointing at another shelter', () => {
+		expect(cursorMatchesRange(range, { key: ['SH002', '2099-01-01'], id: 'a' })).toBe(false);
+	});
+
+	it('rejects a cursor of the wrong shape', () => {
+		expect(cursorMatchesRange(range, { key: 'SH001', id: 'a' })).toBe(false);
+		expect(cursorMatchesRange(range, { key: ['SH001'], id: 'a' })).toBe(false);
+		expect(cursorMatchesRange(range, { key: ['SH001', 42], id: 'a' })).toBe(false);
+	});
+
+	it('keeps the time view on a plain string key', () => {
+		const plain = chooseAuditView(parse({}));
+		expect(cursorMatchesRange(plain, { key: '2026-11-18T00:00:00.000Z', id: 'a' })).toBe(true);
+		expect(cursorMatchesRange(plain, { key: ['SH002', 'x'], id: 'a' })).toBe(false);
+	});
+
+	it('rejects a cursor outside the requested date range', () => {
+		const bounded = parse({ shelter_code: 'SH001', from: '2026-11-01', to: '2026-11-18' });
+		expect(
+			cursorWithinQuery(bounded, { key: ['SH001', '2026-11-10T00:00:00.000Z'], id: 'a' })
+		).toBe(true);
+		expect(
+			cursorWithinQuery(bounded, { key: ['SH001', '2026-12-25T00:00:00.000Z'], id: 'a' })
+		).toBe(false);
 	});
 });

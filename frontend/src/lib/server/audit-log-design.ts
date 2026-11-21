@@ -36,11 +36,11 @@ export function buildAuditLogValidateDocUpdate(): string {
       throw({ forbidden: 'audit_event ' + strings[i] + ' must be a non-empty string' });
     }
   }
-  if (!newDoc.actor || typeof newDoc.actor.name !== 'string' || typeof newDoc.actor.kind !== 'string') {
-    throw({ forbidden: 'audit_event actor must have name and kind' });
+  if (!newDoc.actor || typeof newDoc.actor.name !== 'string' || newDoc.actor.name.length === 0 || typeof newDoc.actor.kind !== 'string' || newDoc.actor.kind.length === 0) {
+    throw({ forbidden: 'audit_event actor must have a non-empty name and kind' });
   }
-  if (!newDoc.entity || typeof newDoc.entity.type !== 'string' || typeof newDoc.entity.id !== 'string') {
-    throw({ forbidden: 'audit_event entity must have type and id' });
+  if (!newDoc.entity || typeof newDoc.entity.type !== 'string' || newDoc.entity.type.length === 0 || typeof newDoc.entity.id !== 'string' || newDoc.entity.id.length === 0) {
+    throw({ forbidden: 'audit_event entity must have a non-empty type and id' });
   }
   if (!('shelter_code' in newDoc) || (newDoc.shelter_code !== null && typeof newDoc.shelter_code !== 'string')) {
     throw({ forbidden: 'audit_event shelter_code must be a string or null' });

@@ -6,7 +6,12 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from worker.audit_log import AuditCopy, copy_audit_doc, is_audit_doc
+from worker.audit_log import (
+    AuditCopy,
+    AuditCopyIncomplete,
+    copy_audit_doc,
+    is_audit_doc,
+)
 from worker.couch.checkpoint import save_checkpoint
 from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
@@ -139,13 +144,10 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
         if gated_code and not change.get("deleted") and is_audit_doc(change.get("doc")):
             outcome = await copy_audit_doc(couch, change["doc"], database)
             if outcome is AuditCopy.RETRY:
-                logger.warning(
-                    "Holding checkpoint for %s at seq %s: audit doc %s not copied yet",
-                    database,
-                    seq,
-                    change["doc"].get("_id"),
+                raise AuditCopyIncomplete(
+                    f"{database}: audit doc {change['doc'].get('_id')} not copied; "
+                    f"holding the checkpoint at seq {seq}"
                 )
-                return
             await save_checkpoint(database, seq)
             return
         if gated_code and public_status == "closed":

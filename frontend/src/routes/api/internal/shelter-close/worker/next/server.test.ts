@@ -197,8 +197,7 @@ describe('POST /api/internal/shelter-close/worker/next — work (FR-12..FR-14)',
 		expect(registry.updateMaster.mock.calls[0][1]).toBe('mgr1');
 		const mutator = registry.updateMaster.mock.calls[0][2] as () => { patch: unknown };
 		expect(mutator().patch).toEqual({
-			operation_status: 'closed',
-			updated_at: '2026-11-10T00:00:00.000Z'
+			operation_status: 'closed'
 		});
 		expect(audit.recordAuditedWrite).toHaveBeenCalledTimes(1);
 		expect(audit.recordAuditedWrite).toHaveBeenCalledWith(

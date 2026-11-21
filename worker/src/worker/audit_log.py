@@ -21,6 +21,10 @@ def is_audit_doc(doc: dict[str, Any] | None) -> bool:
     return bool(doc) and doc.get("type") == "audit"
 
 
+def _non_empty(value: Any) -> bool:
+    return isinstance(value, str) and value.strip() != ""
+
+
 def to_audit_event(
     source: dict[str, Any], db_name: str, now: datetime
 ) -> dict[str, Any] | None:
@@ -42,6 +46,15 @@ def to_audit_event(
         actor = {"name": "system", "kind": "system"}
 
     action = source.get("action")
+    target_type = source.get("target_type")
+    target_id = source.get("target_id")
+    if (
+        not _non_empty(action)
+        or not _non_empty(target_type)
+        or not _non_empty(target_id)
+    ):
+        return None
+
     reason = source.get("reason") or None
     event = reason if action == "other" and reason else f"audit.{action}"
 
@@ -57,8 +70,8 @@ def to_audit_event(
         "action": "other",
         "event": event,
         "entity": {
-            "type": source.get("target_type"),
-            "id": source.get("target_id"),
+            "type": target_type,
+            "id": target_id,
             "label": None,
         },
         "shelter_code": source.get("shelter_code")
@@ -67,6 +80,13 @@ def to_audit_event(
         "source": "worker_copy",
         "source_ref": source_id,
     }
+
+
+RETRYABLE_STATUSES = frozenset({408, 429})
+
+
+class AuditCopyIncomplete(RuntimeError):
+    """Raised when a scan left an audit doc uncopied for a reason worth retrying."""
 
 
 class AuditCopy(StrEnum):
@@ -96,12 +116,13 @@ async def copy_audit_doc(
         status = exc.response.status_code
         if status == 409:
             return AuditCopy.COPIED
-        if status == 404:
+        if 400 <= status < 500 and status not in RETRYABLE_STATUSES:
             logger.warning(
-                "Database %s does not exist — audit doc %s from %s not copied",
+                "%s rejected audit doc %s from %s with HTTP %s — not copied",
                 AUDIT_LOG_DB,
                 source.get("_id"),
                 db_name,
+                status,
             )
             return AuditCopy.SKIPPED
         logger.exception(
@@ -126,7 +147,17 @@ async def copy_all_audit_docs(couch: Any, db_name: str) -> int:
     if not await couch.database_exists(db_name):
         return 0
     copied = 0
+    retry = False
     async for doc in couch.iter_all_docs(db_name):
-        if is_audit_doc(doc) and await copy_audit_doc(couch, doc, db_name):
+        if not is_audit_doc(doc):
+            continue
+        outcome = await copy_audit_doc(couch, doc, db_name)
+        if outcome is AuditCopy.COPIED:
             copied += 1
+        elif outcome is AuditCopy.RETRY:
+            retry = True
+    if retry:
+        raise AuditCopyIncomplete(
+            f"{db_name}: an audit doc could not be copied to {AUDIT_LOG_DB}"
+        )
     return copied

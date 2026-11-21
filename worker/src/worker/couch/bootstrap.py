@@ -8,7 +8,12 @@ from typing import Any
 
 import httpx
 
-from worker.audit_log import AuditCopy, copy_all_audit_docs, copy_audit_doc
+from worker.audit_log import (
+    AuditCopy,
+    AuditCopyIncomplete,
+    copy_all_audit_docs,
+    copy_audit_doc,
+)
 from worker.couch.checkpoint import (
     get_checkpoint,
     get_projection_version,
@@ -145,10 +150,9 @@ async def bootstrap_database(
             ):
                 audit_retry = True
         if audit_retry:
-            logger.warning(
-                "Bootstrap for %s left audit events uncopied; checkpoint held", database
+            raise AuditCopyIncomplete(
+                f"{database}: bootstrap left audit events uncopied; checkpoint held"
             )
-            return
         await save_checkpoint(database, seq)
         logger.info("Bootstrap complete for %s, persons only (seq=%s)", database, seq)
         return
@@ -241,10 +245,9 @@ async def bootstrap_database(
         await apply_need(action, payload)
 
     if audit_retry:
-        logger.warning(
-            "Bootstrap for %s left audit events uncopied; checkpoint held", database
+        raise AuditCopyIncomplete(
+            f"{database}: bootstrap left audit events uncopied; checkpoint held"
         )
-        return
     await save_checkpoint(database, seq)
     logger.info("Bootstrap complete for %s (seq=%s)", database, seq)
 

@@ -50,7 +50,7 @@
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
 	import ShelterActorsLine from './shelter-actors-line.svelte';
-	import { EntityHistory } from '$lib/features/audit-log';
+	import { auditLogKeys, EntityHistory } from '$lib/features/audit-log';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
@@ -152,6 +152,7 @@
 		announceShelterCloseJob(view);
 		queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(id) });
 		queryClient.invalidateQueries({ queryKey: sheltersKeys.closeActive(id) });
+		queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 	});
 
 	function revertOperationStatus() {
@@ -757,7 +758,7 @@
 							<ParkingPointsSection {form} {formData} />
 						{/if}
 					</form>
-					{#if isEdit && id}
+					{#if isEdit && id && canCloseShelter}
 						<div class="mt-6">
 							<EntityHistory entityType="shelter" entityId={id} shelterCode={id} />
 						</div>

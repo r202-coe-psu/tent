@@ -1,13 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockReset, mockReadForLink, mockReadAfterWrite, mockRecordAuditedWrites } = vi.hoisted(
-	() => ({
-		mockReset: vi.fn(),
-		mockReadForLink: vi.fn(),
-		mockReadAfterWrite: vi.fn(),
-		mockRecordAuditedWrites: vi.fn(async () => undefined)
-	})
-);
+const { mockReset, mockRecordAuditedWrites } = vi.hoisted(() => ({
+	mockReset: vi.fn(),
+	mockRecordAuditedWrites: vi.fn(async () => undefined)
+}));
 
 vi.mock('$lib/server/couch-admin', () => ({
 	authorizeUserWrite: vi.fn(async () => ({ name: 'sa', roles: ['system_admin'], isSA: true })),
@@ -24,9 +20,7 @@ vi.mock('$lib/server/couch-admin', () => ({
 	}
 }));
 vi.mock('$lib/server/user-service', () => ({
-	resetUserPasswordByAdmin: mockReset,
-	readUserDocForLink: mockReadForLink,
-	readUserDocAfterWrite: mockReadAfterWrite
+	resetUserPasswordByAdmin: mockReset
 }));
 vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrites: mockRecordAuditedWrites }));
 
@@ -44,15 +38,10 @@ function post(name: string) {
 describe('POST /api/v1/users/reset-password — CR-259 audit wiring', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		mockReset.mockResolvedValue({ temporary_password: 'calm-river-42' });
-		mockReadForLink.mockResolvedValue({
-			display_name: 'Staff 01',
-			roles: ['shelter:SH001']
-		} as never);
-		mockReadAfterWrite.mockResolvedValue({
-			display_name: 'Staff 01',
-			roles: ['shelter:SH001']
-		} as never);
+		mockReset.mockResolvedValue({
+			temporary_password: 'calm-river-42',
+			user: { display_name: 'Staff 01', roles: ['shelter:SH001'] }
+		});
 	});
 
 	it('records user.password_reset for the shelters the account holds', async () => {
@@ -70,9 +59,7 @@ describe('POST /api/v1/users/reset-password — CR-259 audit wiring', () => {
 		expect(mockRecordAuditedWrites.mock.calls[0][1]).toEqual(['SH001']);
 	});
 
-	it('still returns the temporary passphrase when the read after the write faults', async () => {
-		mockReadAfterWrite.mockResolvedValue(null);
-
+	it('returns the temporary passphrase without a second read of the account', async () => {
 		const res = await post('staff01');
 
 		expect(res.status).toBe(200);

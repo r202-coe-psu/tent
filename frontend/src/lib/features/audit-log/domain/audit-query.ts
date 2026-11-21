@@ -93,13 +93,6 @@ export function chooseAuditView(query: AuditLogQuery): AuditViewRange {
 				: [query.entity_type, query.entity_id]
 		};
 	}
-	if (query.actor) {
-		return {
-			view: 'by_actor',
-			startkey: [query.actor, to],
-			endkey: query.from ? [query.actor, query.from] : [query.actor]
-		};
-	}
 	if (query.shelter_code) {
 		return {
 			view: 'by_shelter',
@@ -107,10 +100,14 @@ export function chooseAuditView(query: AuditLogQuery): AuditViewRange {
 			endkey: query.from ? [query.shelter_code, query.from] : [query.shelter_code]
 		};
 	}
-	if (query.entity_type) {
-		return { view: 'by_entity', startkey: [query.entity_type, HIGH], endkey: [query.entity_type] };
+	if (query.actor) {
+		return {
+			view: 'by_actor',
+			startkey: [query.actor, to],
+			endkey: query.from ? [query.actor, query.from] : [query.actor]
+		};
 	}
-	return { view: 'by_occurred_at', startkey: query.to ?? '￰', endkey: query.from ?? '' };
+	return { view: 'by_occurred_at', startkey: to, endkey: query.from ?? '' };
 }
 
 export function matchesAuditQuery(event: AuditEvent, query: AuditLogQuery): boolean {
@@ -129,3 +126,22 @@ export type AuditEventView = Omit<AuditEvent, '_rev' | 'actor'> & {
 };
 
 export type AuditLogPage = { items: AuditEventView[]; next_cursor: string | null };
+
+export function cursorMatchesRange(range: AuditViewRange, cursor: AuditCursor): boolean {
+	if (range.view === 'by_occurred_at') return typeof cursor.key === 'string';
+	if (!Array.isArray(range.startkey) || !Array.isArray(cursor.key)) return false;
+	if (cursor.key.length !== range.startkey.length) return false;
+	const last = range.startkey.length - 1;
+	for (let i = 0; i < last; i++) {
+		if (cursor.key[i] !== range.startkey[i]) return false;
+	}
+	return typeof cursor.key[last] === 'string';
+}
+
+export function cursorWithinQuery(query: AuditLogQuery, cursor: AuditCursor): boolean {
+	const at = Array.isArray(cursor.key) ? cursor.key[cursor.key.length - 1] : cursor.key;
+	if (typeof at !== 'string') return false;
+	if (query.to && at > query.to) return false;
+	if (query.from && at < query.from) return false;
+	return true;
+}
