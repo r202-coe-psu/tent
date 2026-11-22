@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-11-15 # 2026-11-15 decision sync: ยกเลิกเพดาน 5 ครัวเรือนของช่องทางเบอร์ (FR-KPC-56/57) — แสดงทุกครัวเรือนที่เบอร์ตรง; `KIOSK_TOO_MANY_MATCHES` เหลือเฉพาะกรณีสแกน Couch ไม่ครบ (fail closed) — decided_by kong; ยิง `_find` ต่อครัวเรือนครั้งละไม่เกิน 8 (FR-KPC-65) · 2026-11-08 §16.5 ข้อ 6 (เบอร์ผู้ติดต่อฉุกเฉินบน label · FR-KPC-120 · AC-KPC-116) approved โดย Team Lead Soravit Sukkarn ตามคำขอของผู้อำนวยการกองพัฒน์ — FR-KPC-121/122 ยังรอ PO เคาะ · 2026-11-08 §16.5 ข้อ 6 ระบุที่มา (feedback จากการ demo) และขอบเขตเบอร์ผู้ติดต่อฉุกเฉิน · 2026-11-07 ทีมเสนอแก้ §16 (branch cleanup-i18n): checklist สองภาษา, ข้อความ「สำหรับใช้ภายในศูนย์」ใต้ QR, แถว「ติดต่อฉุกเฉิน」ใต้ Zone — รอ PO เคาะ · 2026-11-06 CR-233 supersedes FR-KPC-107 (reprint เขียน log `evacuee_qr`) และ payload ใน FR-KPC-81 · 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-11-22 # 2026-11-22 §18 ปรับตาม review PR #1472: FR-KPC-143 อ่านผล lpstat ให้ตรง CUPS 2.3.3, FR-KPC-144 cancel งานเมื่อ `lp` ไม่คืน request id, ระบุ AC-KPC-22 ในข้อเดิมที่แก้ · 2026-11-19 §18 ปรับตามโค้ดบน branch feat/kiosk-no-printer (FR-KPC-136/139–146 ละเอียดขึ้น, เพิ่ม FR-KPC-149/150, O-4/O-5) · 2026-11-19 ทีม kiosk เสนอ §18: `PRINTER_BACKEND=none` แสดง QR บนจอแทนพิมพ์ + ยืนยันพิมพ์ออกจริง (IPP job-state) — รอ PO เคาะ · 2026-11-15 2026-11-15 decision sync: ยกเลิกเพดาน 5 ครัวเรือนของช่องทางเบอร์ (FR-KPC-56/57) — แสดงทุกครัวเรือนที่เบอร์ตรง; `KIOSK_TOO_MANY_MATCHES` เหลือเฉพาะกรณีสแกน Couch ไม่ครบ (fail closed) — decided_by kong; ยิง `_find` ต่อครัวเรือนครั้งละไม่เกิน 8 (FR-KPC-65) · 2026-11-08 §16.5 ข้อ 6 (เบอร์ผู้ติดต่อฉุกเฉินบน label · FR-KPC-120 · AC-KPC-116) approved โดย Team Lead Soravit Sukkarn ตามคำขอของผู้อำนวยการกองพัฒน์ — FR-KPC-121/122 ยังรอ PO เคาะ · 2026-11-08 §16.5 ข้อ 6 ระบุที่มา (feedback จากการ demo) และขอบเขตเบอร์ผู้ติดต่อฉุกเฉิน · 2026-11-07 ทีมเสนอแก้ §16 (branch cleanup-i18n): checklist สองภาษา, ข้อความ「สำหรับใช้ภายในศูนย์」ใต้ QR, แถว「ติดต่อฉุกเฉิน」ใต้ Zone — รอ PO เคาะ · 2026-11-06 CR-233 supersedes FR-KPC-107 (reprint เขียน log `evacuee_qr`) และ payload ใน FR-KPC-81 · 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -660,6 +660,96 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 ### 17.7 Out of scope
 
 - วิธีออก/หมุน token (CR-127) · parse QR จิตอาสาฝั่ง scan (#650) · แก้ `phone_hash` ไม่อัปเดต (#693) · กันเบอร์ซ้ำ (#694)
+
+## 18. ข้อเสนอแก้ไข 2026-11-19 — ตู้ไม่มีเครื่องพิมพ์ + ยืนยันว่าพิมพ์ออกจริง (proposed)
+
+> **สถานะ:** ข้อเสนอทีม kiosk 2026-11-19 — **รอ PO เคาะ** · implement แล้วบน branch `feat/kiosk-no-printer` (ยังไม่ merge, ยังไม่ทดสอบบนตู้จริง)
+
+> **สรุป (TL;DR)**
+>
+> - **เปลี่ยนอะไร:** (ก) `kiosk/.env` รับ `PRINTER_BACKEND=none` — ตู้นี้ไม่สั่งพิมพ์ แต่แสดง QR บนจอให้ผู้ใช้ถ่ายรูปเก็บไว้แทน ใน 4 flow: check-in, walk-in, reprint, บัตรจิตอาสา (ข) ตู้ที่มีเครื่องพิมพ์: ตรวจสถานะเครื่องก่อนพิมพ์ และนับว่าพิมพ์สำเร็จเมื่อเครื่องพิมพ์ทำงานเสร็จจริง ไม่ใช่แค่ CUPS รับงานเข้าคิว · พิมพ์ไม่สำเร็จ → error + ปุ่ม「แสดง QR บนจอแทน」
+> - **เพื่อใคร/ทำไม:** บางศูนย์มีตู้ที่ไม่มีเครื่องพิมพ์ · ปัจจุบัน backend `cups` ตอบสำเร็จเมื่อ `lp` exit 0 — ถอดเครื่องพิมพ์อยู่จอก็ขึ้น「พิมพ์เสร็จ」ทั้งที่ไม่มี label ออก และงานค้างในคิวไปพิมพ์ออกเองเมื่อเสียบกลับ
+> - **Dev ต้อง build:** scanner client (`kiosk/app/config.py`, `manager.py`: ค่า `none`, field `printer` ใน `/api/v1/kiosk/hardware`, ตรวจสถานะ + รอ job completed) · frontend หน้าจอ QR + ทางแยก `printer` ใน 4 flow + แผง device info · ไม่แตะ server API
+> - **กระทบ schema:** ไม่มี field ใหม่ · ไม่ bump `schema_v` · QR ที่แสดงบนจอออกตาม CR-233 เหมือนการพิมพ์ทุกประการ
+
+**แก้ข้อเดิม:** CR-149 FR-KWR-72 (พิมพ์อัตโนมัติหน้า `/kiosk/register/done`) · CR-197 FR-16 (ปุ่ม「ทดสอบการพิมพ์」) · E-13 (พิมพ์ไม่สำเร็จ) · AC-KPC-22 (「พิมพ์ QR ได้ 3 ใบ」— ตู้ `none` อ่านเป็น「แสดง QR บนจอ 3 ใบ」ตาม AC-KPC-132) · เกณฑ์ `printed` ยืมจาก CR-222 FR-35 (ไม่แก้ CR-222)
+
+### 18.1 Config และ hardware
+
+| ID         | Requirement                                                                                                                                                                                  |
+| :--------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KPC-130 | `PRINTER_BACKEND` รับ `cups` \| `escpos` \| `none` · ไม่ตั้ง = `cups` (คงเดิม) · ค่าอื่น → scanner client ไม่ start (`ScannerConfigError` เหมือนเดิม)                                                |
+| FR-KPC-131 | `none` → ไม่อ่านและไม่ validate `PRINTER_NAME` / `PRINTER_USB_ID` / `PRINTER_DEVICE` / `PRINTER_WIDTH_DOTS`                                                                                         |
+| FR-KPC-132 | `POST /api/v1/kiosk/hardware` (ตอบโดย scanner client) คืน field เพิ่ม `printer: 'cups' \| 'escpos' \| 'none'`                                                                                     |
+| FR-KPC-133 | `none` → `POST /api/v1/kiosk/print` ตอบ `409 PRINTER_DISABLED` ไม่ spool อะไร (กันหน้าเว็บเวอร์ชันเก่าที่ยังเรียก)                                                                                    |
+| FR-KPC-134 | หน้าเว็บที่ไม่มี scanner client (`/hardware` ไม่ตอบ → `DEFAULT_KIOSK_HARDWARE`) ถือว่ามีเครื่องพิมพ์ → พฤติกรรมเดิม (fallback `window.print`)                                                          |
+
+### 18.2 แสดง QR บนจอแทนการพิมพ์ (`printer: 'none'`)
+
+| ID         | Requirement                                                                                                                                                                                                       |
+| :--------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KPC-135 | 4 flow — check-in (QR / บัตร / เบอร์ / ThaiD), walk-in (`/kiosk/register/done`), reprint, บัตรจิตอาสา — ไม่เรียก `/api/v1/kiosk/print` และไม่เรียก `window.print`; ได้ `qr_payload` แล้วเปิดหน้าจอ QR แทน              |
+| FR-KPC-136 | หน้าจอ QR ต่อคน = **รูป label PNG ใบเดียวกับที่ส่งไปพิมพ์** (`renderKioskLabelPng` / `renderVolunteerLabelPng`) ไม่สร้าง layout ใหม่ — เนื้อหาตรงกับ label ทุกช่อง (ชื่อ, QR, Zone, checklist, เบอร์ผู้ติดต่อฉุกเฉิน, สัญลักษณ์ระดับความเปราะบาง) (D6) · ขยายรูปแบบ pixelated ให้ตัว QR (ไม่รวม quiet zone) ด้านสั้น ≥ 240 CSS px ในกรณีเล็กสุด (มี marker, QR version 1) บนจอทั่วไปและ `kiosk-portrait` · `kiosk-compact` (≈1024×600) จัดรูปกับปุ่มเป็น 2 คอลัมน์และจำกัดความสูงรูป ได้ QR ≈ 160–190 px — ข้อยกเว้นรอ O-4 |
+| FR-KPC-137 | ข้อความบนหน้าจอ: 「ถ่ายรูป QR นี้เก็บไว้ แล้วแสดงให้เจ้าหน้าที่สแกน」(th / en ตาม i18n ของ flow; reprint คงไทยตามขอบเขต EN เดิม)                                                                                    |
+| FR-KPC-138 | หลายคน: แสดงทีละใบ + ปุ่ม「ก่อนหน้า / ถัดไป」+ ตัวนับ「1 / N」(D5)                                                                                                                                                     |
+| FR-KPC-139 | การแสดงบนจอไม่ออก QR เพิ่ม: check-in / walk-in ใช้ QR ที่ออกตอนบันทึก · reprint ออก QR ใหม่ 1 ครั้งต่อการกดยืนยันตาม CR-233 (เหมือนพิมพ์) · ปุ่ม「แสดง QR บนจอแทน」หลังพิมพ์ไม่สำเร็จใช้รูปที่ render ไว้แล้ว ไม่เรียก check-in / reprint ซ้ำ |
+| FR-KPC-140 | idle timeout หน้าจอ QR = 120 วินาที (แทน 60 วินาทีของ AC-KPC-24) นับใหม่ทุกครั้งที่แตะจอ + ปุ่ม「เสร็จสิ้น」จบการใช้งานแบบเดียวกับปุ่มจบเดิมของแต่ละ flow (check-in แบบสแกน QR กลับหน้ากล้อง, flow อื่นกลับ `/kiosk`) · ระหว่างหน้าจอ QR เปิด idle ของหน้าเดิมหยุดนับ · ออกจากหน้าแล้วไม่เก็บ QR ไว้ใน state |
+| FR-KPC-141 | `none` → ไม่แสดงปุ่ม「พิมพ์อีกครั้ง」และปุ่ม「ทดสอบการพิมพ์」(CR-197 FR-16) · แผง device info แสดง「เครื่องพิมพ์: ไม่มี (แสดง QR บนจอ)」 · หัวข้อ ปุ่ม และคำแนะนำของทั้ง 4 flow ใช้คำ「แสดง QR」แทน「พิมพ์」(ตู้รู้ชนิดเครื่องพิมพ์ตอนเปิดหน้า ระหว่างรอใช้คำเดิม) · ไม่แสดง overlay「กำลังพิมพ์」 · ข้อความ error ในชั้น session (reprint / volunteer「พิมพ์ไม่สำเร็จ」, render failed) และหน้าเลือกวิธีพิมพ์ QR ยังใช้คำเดิม — ดู O-5 |
+
+### 18.3 ยืนยันว่าพิมพ์ออกจริง (`cups` / `escpos`)
+
+| ID         | Requirement                                                                                                                                                                                                                                 |
+| :--------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR-KPC-142 | `cups`: ก่อน spool label แรกของ request ตรวจคิวด้วย `lpstat -l -p <PRINTER_NAME>` — ไม่มีคิว, คิว disabled, หรือบรรทัด `Alerts:` มี reason ที่ตัด suffix `-error` / `-report` แล้วเป็น `offline` / `media-empty` / `media-needed` / `door-open` / `paused` → ไม่ spool ตอบ `503 PRINTER_NOT_READY` `printed: 0` (reason ที่ลงท้าย `-warning` ไม่นับ) |
+| FR-KPC-143 | `cups`: นับ label เป็น `printed` เมื่อ IPP `job-state` = `completed` (แบบเดียวกับ CR-222 FR-35) ไม่ใช่ `lp` exit 0 · IPP ตอบไม่ได้ → ถาม `lpstat -W not-completed`: job ออกจากคิวแล้วให้อ่าน Alerts ใน `lpstat -l -W completed` — มี reason ที่มีคำ `cancel` / `abort` หรือลงท้าย `-error` = failed ไม่ต้อง cancel, อื่น ๆ = printed (CUPS 2.4 ขึ้น `job-completed-successfully`, 2.3.3 ขึ้น `processing-to-stop-point` บนงานที่พิมพ์สำเร็จ) · ยังอยู่ในคิว หรือไม่พบ job ในทั้งสองรายการ → รอต่อจนหมดงบ |
+| FR-KPC-144 | `cups`: job เป็น `aborted` / `canceled` หรือไม่ `completed` ภายในงบของ label → **cancel job** (ไม่ให้ค้างคิวไปพิมพ์ทีหลัง) แล้วตอบ `502 PRINT_FAILED` พร้อม `printed` · งบของ label = min(`KIOSK_PRINT_TIMEOUT_SEC` 20 วิ, เวลาที่เหลือ − สำรองไว้ให้ cancel 3 วิ) · ไม่เริ่ม label ใหม่ถ้าเหลือเวลาน้อยกว่า 8 วิ → `502 PRINT_TIMEOUT` พร้อม `printed` · `lp`, การถาม job-state (ครั้งละ ≤ 1 วิ) และ `lpstat` ทุกครั้งจำกัดด้วยเวลาที่เหลือ · `cancel` ที่ค้างถูก kill · `lp` ค้างจนถูก kill / exit ≠ 0 / ไม่คืน request id → `cancel -u <user kiosk> <PRINTER_NAME>` ทิ้งงานของ user kiosk ในคิว (cupsd อาจรับงานไปแล้ว) แล้วตอบ `502 PRINT_FAILED` |
+| FR-KPC-145 | `escpos`: หา device ไม่เจอ (ทั้ง `PRINTER_USB_ID` และ path ใน `PRINTER_DEVICE` ที่ไม่มีอยู่) ตั้งแต่ก่อน label แรก → `503 PRINTER_NOT_READY` · อ่านสถานะ real-time (กระดาษหมด / ฝาเปิด) ยังไม่ทำจนกว่าจะปิด O-2 — ระหว่างนี้นับ `printed` เมื่อเขียนครบเหมือนเดิม |
+| FR-KPC-146 | request เดียวตอบภายใน `KIOSK_PRINT_OVERALL_DEADLINE_SEC` (25 วิ) + สำรอง cancel ซึ่งต่ำกว่า frontend timeout 30 วิ · frontend ส่งไม่เกิน 4 label ต่อ request (`KIOSK_PRINT_MAX_LABELS_PER_REQUEST` 8 → 4) |
+| FR-KPC-147 | frontend: พิมพ์ไม่สำเร็จ (`PRINTER_NOT_READY`, `PRINT_FAILED`, `PRINT_TIMEOUT`, เชื่อมต่อไม่ได้) → ข้อความ error เดิม + ปุ่ม「แสดง QR บนจอแทน」เปิดหน้าจอ FR-KPC-136 ด้วย payload เดิม เฉพาะคนที่ยังไม่ได้พิมพ์ (label ลำดับที่ `printed + 1` เป็นต้นไป) |
+| FR-KPC-148 | ปุ่ม「พิมพ์อีกครั้ง」ยังใช้ได้หลัง error (ไม่บันทึก check-in ซ้ำ — E-13 คงเดิม)                                                                                                                                                                  |
+| FR-KPC-149 | check-in: เริ่ม lookup คนใหม่ (บัตร / QR ใบใหม่) → ปิดหน้าจอ QR และทิ้ง label ที่ยังไม่ได้พิมพ์ของคนก่อน · ผลการพิมพ์ของคนก่อนที่ตอบกลับหลัง lookup ใหม่เริ่มแล้วถูกทิ้ง ไม่แสดงกับคนใหม่ |
+| FR-KPC-150 | สมาชิกบางคนออก QR ไม่สำเร็จ (CR-233 FR-EQR-24) → หน้าจอ QR แสดงข้อความแจ้งจำนวนคนนั้นด้านบน (reprint, check-in) |
+
+### 18.4 Decisions (ข้อเสนอทีม 2026-11-19)
+
+| #   | ประเด็น                   | ข้อเสนอ                                                                                     |
+| :-- | :------------------------ | :------------------------------------------------------------------------------------------ |
+| D1  | วิธี track                 | §18 ของ CR-151 + โน้ตใต้ CR-149 FR-KWR-72 (ไม่เปิด CR ใหม่)                                  |
+| D2  | รูปแบบ flag               | ค่า `none` ของ `PRINTER_BACKEND` เดิม ไม่เพิ่ม flag ใหม่ — ตั้งค่าขัดกันไม่ได้                       |
+| D3  | flow ที่ครอบ               | ทั้ง 4 flow (check-in, walk-in, reprint, บัตรจิตอาสา)                                          |
+| D4  | ยืนยันการพิมพ์             | ทำรวมใน §18 · ใช้ IPP `job-state` แบบ CR-222                                                  |
+| D5  | หลายคน                    | ทีละใบ — QR ใหญ่พอถ่ายได้ทีละรูป                                                               |
+| D6  | หน้าตา QR บนจอ             | ใช้รูป label PNG เดียวกับที่พิมพ์ — ผู้ใช้เห็นและถ่ายรูปได้ของเหมือนกระดาษทุกอย่าง · ไม่มี layout ที่สองให้ดูแล |
+| D7  | idle timeout หน้าจอ QR     | 120 วินาที นับใหม่ทุกครั้งที่แตะจอ + ปุ่ม「เสร็จสิ้น」                                                                   |
+
+### 18.5 Acceptance
+
+- **AC-KPC-130** `PRINTER_BACKEND=none` → `/hardware` คืน `printer: 'none'` · ทั้ง 4 flow แสดง QR บนจอ ไม่มี request ไป `/api/v1/kiosk/print` และไม่เปิด print dialog
+- **AC-KPC-131** QR บนจอถ่ายด้วยมือถือแล้วสแกนผ่านที่ Station ได้ (ผู้พักพิง) / ที่จุดจิตอาสาได้ (บัตรจิตอาสา)
+- **AC-KPC-132** ครัวเรือน 3 คน → หน้าจอ QR 3 ใบ เลื่อนได้ · แต่ละใบเป็นรูปเดียวกับ PNG ที่ `/api/v1/kiosk/print` จะได้รับ (เทียบ data URL ได้ใน test)
+- **AC-KPC-133** `none` → ไม่มีปุ่ม「พิมพ์อีกครั้ง」/「ทดสอบการพิมพ์」· แผง device info แสดงว่าไม่มีเครื่องพิมพ์
+- **AC-KPC-134** `cups` + ถอดสาย USB เครื่องพิมพ์ → จอไม่ขึ้น「พิมพ์เสร็จ」· ขึ้น error + ปุ่ม「แสดง QR บนจอแทน」· เสียบกลับแล้วไม่มี label ค้างพิมพ์ออกเอง
+- **AC-KPC-135** `cups` + คิว disabled / ไม่มีคิว / Alerts เป็น `offline-report` หรือ `media-empty-error` → `PRINTER_NOT_READY` โดยไม่สร้าง job
+- **AC-KPC-137** check-in: label ของคนก่อนเปิดอยู่บนจอแล้วอ่านบัตรใบใหม่ → หน้าจอ QR ของคนก่อนปิด แสดงรายชื่อของคนใหม่
+- **AC-KPC-136** ไม่ตั้ง `PRINTER_BACKEND` → พฤติกรรมเดิมทุกอย่าง (ยกเว้น FR-KPC-142–144 ที่ทำให้รายงานผลตรงจริง)
+
+### 18.6 Open questions (เสนอให้ PO เคาะ)
+
+- **O-1** เครื่องสแกนที่ Station (CROWN QR wedge / กล้อง) อ่าน QR จากจอมือถือได้หรือไม่ — ต้องทดสอบหน้างานก่อน approve
+- **O-2** `escpos` (kiosk3) อ่านสถานะกลับผ่าน `/dev/usb/lpN` (DLE EOT) ได้หรือไม่ — ถ้าได้ เพิ่มเช็คกระดาษหมด / ฝาเปิดใน FR-KPC-145
+- **O-3** label เต็มใบ (ชื่อ + เบอร์ผู้ติดต่อฉุกเฉิน + QR) บนจอสาธารณะ 120 วินาที — ยอมรับได้หรือไม่ (บัตรจิตอาสาเป็น credential ถาวรตาม §17.6 — คนข้างหลังถ่ายรูปจอได้)
+- **O-4** จอ `kiosk-compact` (≈1024×600) ทำ QR ≥ 240 px ไม่ได้ถ้ายังใช้รูปใบเดียวกับที่พิมพ์ (ได้ ≈ 160–190 px) — ยอมรับเป็นข้อยกเว้น หรือยอมให้หน้าจอ compact แสดงเฉพาะ QR ขนาดใหญ่แทน label เต็มใบ (ขัด D6)
+- **O-5** ข้อความ error ในชั้น session (reprint / volunteer「พิมพ์ไม่สำเร็จ」, render failed) และหน้าเลือกวิธีพิมพ์ QR บนตู้ไม่มีเครื่องพิมพ์ — แก้ใน §18 นี้ หรือแยกงานต่อ
+
+### 18.7 Impact / ไฟล์ที่กระทบ
+
+- Scanner client: `kiosk/app/config.py` (`PRINTER_BACKENDS`), `kiosk/app/manager.py` (`_fulfill_hardware`, `_print_labels`, `_cups_queue_ready`, `_submit_cups_job`, `_wait_for_cups_job`, `_lpstat_job_outcome`, `_cancel_cups_job`, `_find_printer_device`), `kiosk/app/ipp.py` (สำเนาจาก `printer/printer/ipp.py`), `kiosk/.env.example`, `kiosk/README.md`, `kiosk/tests/{test_manager.py, test_config.py, test_ipp.py}`
+- Frontend: `features/kiosk/{domain/kiosk-hardware.ts, data/kiosk-hardware.api.ts, data/kiosk-print.api.ts, application/kiosk-print-flow.ts, application/kiosk-label-print.ts, application/volunteer-label-print.ts, application/kiosk-printer-state.svelte.ts, application/reprint-session.svelte.ts, application/volunteer-card-session.svelte.ts, application/test-print.svelte.ts}` · UI: `ui/kiosk-label-screen.svelte` (หน้าจอ QR ใหม่), `kiosk-pre-registered-check-in.svelte`, `kiosk-reprint.svelte`, `reprint-member-list.svelte`, `phone-household-picker.svelte`, `kiosk-volunteer-card.svelte`, `kiosk-device-info.svelte`, `routes/kiosk/register/done/+page.svelte` + i18n `_constants/*`
+- Server / CouchDB / Mongo: ไม่กระทบ
+
+### 18.8 Out of scope
+
+- ส่ง QR ทาง SMS / LINE / ดาวน์โหลด · บันทึกว่า QR ใบไหนแสดงบนจอแทนพิมพ์ (entry `evacuee_qr` ไม่มี field ช่องทาง — ไม่เพิ่ม) · station print server (CR-222)
 
 ---
 
