@@ -525,6 +525,23 @@ export const PORTAL_PUBLIC_LINK = {
 	icon: 'globe'
 } as const satisfies { label: string; href: Pathname; icon: PortalIconKey };
 
+/**
+ * Entry button to the daily operations assessment (`/back-office/dailysop`) — for every
+ * authenticated user with a role, deliberately not part of a department. The page itself has no
+ * role guard (#845, PO decision 2026-11-22), so this is the only way in without typing the URL.
+ */
+export const PORTAL_DAILY_SOP_LINK = {
+	label: 'การประเมินประจำวัน',
+	desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
+	href: '/back-office/dailysop',
+	icon: 'clipboard-list'
+} as const satisfies { label: string; desc: string; href: Pathname; icon: PortalIconKey };
+
+/** True when the daily assessment button should show (an authenticated user with ≥1 role). */
+export function canSeePortalDailySopLink(roles: readonly string[]): boolean {
+	return roles.length > 0;
+}
+
 /** True when the footer public-site link should show (an authenticated user with ≥1 role). */
 export function canSeePortalPublicLink(roles: readonly string[]): boolean {
 	return roles.length > 0;

@@ -3,6 +3,8 @@ import { DOMAIN_IDS } from '$lib/tokens';
 import {
 	PORTAL_DEPARTMENTS,
 	portalDepartmentCssVars,
+	PORTAL_DAILY_SOP_LINK,
+	canSeePortalDailySopLink,
 	canSeePortalPublicLink,
 	filterPortalMenu,
 	isPortalItemVisible,
@@ -366,6 +368,18 @@ describe('filterPortalMenu — no usable roles', () => {
 
 	it('does not let an unknown role see items for the selected shelter', () => {
 		expect(isPortalItemVisible(PORTAL_DEPARTMENTS[0].items[0], ['foo'], 'SH001')).toBe(false);
+	});
+});
+
+describe('canSeePortalDailySopLink', () => {
+	it('shows for every authenticated user with a role, including single-role staff', () => {
+		expect(canSeePortalDailySopLink([])).toBe(false);
+		expect(canSeePortalDailySopLink(staff('distribution_staff'))).toBe(true);
+		expect(canSeePortalDailySopLink(staff('kitchen_staff'))).toBe(true);
+	});
+
+	it('points at the unguarded daily assessment page', () => {
+		expect(PORTAL_DAILY_SOP_LINK.href).toBe('/back-office/dailysop');
 	});
 });
 

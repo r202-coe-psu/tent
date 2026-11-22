@@ -6,6 +6,7 @@
  */
 import {
 	PORTAL_GROUP_LABELS,
+	PORTAL_DAILY_SOP_LINK,
 	PORTAL_PUBLIC_LINK,
 	type PortalDepartment,
 	type PortalMenuItem
@@ -131,6 +132,10 @@ const groupLabelsEn: Record<NonNullable<PortalMenuItem['group']>, string> = {
 };
 
 const publicLinkEn = 'Public service website';
+const dailySopLinkEn: PortalText = {
+	label: 'Daily assessment',
+	desc: 'Daily operations assessment of the shelter'
+};
 
 export type PortalLanguage = string | undefined;
 
@@ -162,6 +167,13 @@ export function portalGroupLabel(
 	return isEn(language) ? groupLabelsEn[group] : PORTAL_GROUP_LABELS[group];
 }
 
+/** Daily assessment entry button text. */
+export function portalDailySopLinkText(language?: PortalLanguage): PortalText {
+	return isEn(language)
+		? dailySopLinkEn
+		: { label: PORTAL_DAILY_SOP_LINK.label, desc: PORTAL_DAILY_SOP_LINK.desc };
+}
+
 /** Footer public-site link label. */
 export function portalPublicLinkLabel(language?: PortalLanguage): string {
 	return isEn(language) ? publicLinkEn : PORTAL_PUBLIC_LINK.label;
@@ -172,5 +184,6 @@ export const portalMenuLabelsEn = {
 	departments: departmentsEn,
 	items: itemsEn,
 	groups: groupLabelsEn,
-	publicLink: publicLinkEn
+	publicLink: publicLinkEn,
+	dailySopLink: dailySopLinkEn
 };

@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { PORTAL_DEPARTMENTS, PORTAL_GROUP_LABELS, PORTAL_PUBLIC_LINK } from './portal-menu';
+import {
+	PORTAL_DEPARTMENTS,
+	PORTAL_GROUP_LABELS,
+	PORTAL_DAILY_SOP_LINK,
+	PORTAL_PUBLIC_LINK
+} from './portal-menu';
 import {
 	portalDepartmentText,
 	portalGroupLabel,
 	portalItemText,
 	portalMenuLabelsEn,
+	portalDailySopLinkText,
 	portalPublicLinkLabel
 } from './portal-menu-labels';
 
@@ -45,6 +51,7 @@ describe('portal menu EN mirror', () => {
 		}
 		expect(portalGroupLabel('stations', 'th')).toBe(PORTAL_GROUP_LABELS.stations);
 		expect(portalPublicLinkLabel('th')).toBe(PORTAL_PUBLIC_LINK.label);
+		expect(portalDailySopLinkText('th').label).toBe(PORTAL_DAILY_SOP_LINK.label);
 	});
 
 	it('returns English for en', () => {
@@ -52,5 +59,6 @@ describe('portal menu EN mirror', () => {
 		expect(portalItemText(allItems[0], 'en').label).toBe('Register Families and Households');
 		expect(portalGroupLabel('tools', 'en')).toBe('Registration tools');
 		expect(portalPublicLinkLabel('en')).toBe('Public service website');
+		expect(portalDailySopLinkText('en').label).toBe('Daily assessment');
 	});
 });
