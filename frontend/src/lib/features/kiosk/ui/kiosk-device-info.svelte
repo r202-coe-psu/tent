@@ -44,7 +44,9 @@
 		() =>
 			new TestPrint({
 				prepareQrImage: prepareKioskQrImage,
-				printLabels: printKioskQrLabels,
+				// The panel's own printer, resolved when it opened: not fetched again by the print.
+				printLabels: (labels, fallbackPrint, language) =>
+					printKioskQrLabels(labels, fallbackPrint, language, printer ?? undefined),
 				fallbackPrint: browserPrint,
 				language: () => languageStore.current
 			})

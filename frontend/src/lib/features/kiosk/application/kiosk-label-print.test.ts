@@ -162,17 +162,28 @@ describe('printKioskQrLabels', () => {
 		});
 	});
 
-	it('shows the rendered labels on screen and never prints when the kiosk has no printer', async () => {
-		mocks.loadKioskHardware.mockResolvedValue({ printer: 'none' });
+	it('shows the rendered labels on screen and never prints when told the kiosk has no printer', async () => {
+		// The printer the screen already resolved wins: the hardware endpoint says `cups` here, as a
+		// second fetch that answered differently would.
 		mocks.renderKioskLabelPng.mockImplementation(({ name }: { name: string }) =>
 			Promise.resolve(`png:${name}`)
 		);
 		const fallbackPrint = vi.fn();
 
-		const result = await printKioskQrLabels(labels, fallbackPrint);
+		const result = await printKioskQrLabels(labels, fallbackPrint, undefined, 'none');
 
 		expect(result).toEqual({ kind: 'screen', labels: ['png:สมชาย ใจดี', 'png:สมหญิง ใจดี'] });
 		expect(mocks.printKioskLabels).not.toHaveBeenCalled();
 		expect(fallbackPrint).not.toHaveBeenCalled();
+		expect(mocks.loadKioskHardware).not.toHaveBeenCalled();
+	});
+
+	it('does not ask the scanner client for its hardware again when it prints', async () => {
+		mocks.renderKioskLabelPng.mockResolvedValue('png');
+		mocks.printKioskLabels.mockResolvedValue({ kind: 'printed', printed: 2 });
+
+		await printKioskQrLabels(labels, vi.fn(), undefined, 'escpos');
+
+		expect(mocks.loadKioskHardware).not.toHaveBeenCalled();
 	});
 });

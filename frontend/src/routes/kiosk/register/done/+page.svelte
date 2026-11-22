@@ -89,8 +89,24 @@
 		navigateToKioskHome(contextQuery);
 	}
 
+	/**
+	 * Re-entry guard for the whole attempt. `printPhase` only turns `printing` on a kiosk with a
+	 * printer, so it cannot stop a second press on the label-screen path.
+	 */
+	let printInFlight = false;
+
 	async function printLabel(): Promise<void> {
-		if (!registration || printPhase === 'printing') return;
+		if (printInFlight) return;
+		printInFlight = true;
+		try {
+			await runPrintLabel();
+		} finally {
+			printInFlight = false;
+		}
+	}
+
+	async function runPrintLabel(): Promise<void> {
+		if (!registration) return;
 		// CR-233 FR-EQR-24: no QR was issued for this person, so there is nothing valid to print.
 		if (registration.qr_issue_failed || !registration.qr_payload) {
 			await printerState.ready;
@@ -121,7 +137,8 @@
 					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 					window.print();
 				},
-				languageStore.current
+				languageStore.current,
+				printerState.printer
 			);
 			if (result.kind === 'printed') {
 				printPhase = 'done';

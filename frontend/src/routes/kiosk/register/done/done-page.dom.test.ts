@@ -34,6 +34,8 @@ const buttonByText = (text: string) =>
 const shownImage = () =>
 	document.querySelector<HTMLImageElement>('[data-testid="kiosk-label-screen"] img');
 const printCalls = () => fetchMock.mock.calls.filter(([url]) => url === '/api/v1/kiosk/print');
+const hardwareCalls = () =>
+	fetchMock.mock.calls.filter(([url]) => url === '/api/v1/kiosk/hardware');
 
 /** Lets the fetch / render promises run: only setTimeout is faked, so real macrotasks still turn. */
 async function settle() {
@@ -103,6 +105,39 @@ describe('walk-in done page on a kiosk without a printer (DOM)', () => {
 		expect(shownImage()?.getAttribute('src')).toBe('data:image/png;base64,PNG-BASE64');
 		expect(buttonByText('พิมพ์อีกครั้ง')).toBeUndefined();
 		expect(bodyText()).not.toContain('รับ QR Code');
+	});
+
+	it('asks the scanner client for its hardware once, so the print follows what the screen shows', async () => {
+		// A second hardware fetch would time out here and fall back to `cups`: the print would then be
+		// sent to a kiosk that has no printer (409 PRINTER_DISABLED) while the screen words «show».
+		let asked = 0;
+		fetchMock.mockImplementation(async (url: string) => {
+			if (url === '/api/v1/kiosk/hardware') {
+				asked += 1;
+				return asked === 1 ? json(200, { qr_input: 'camera', printer }) : json(503, {});
+			}
+			if (url === '/api/v1/kiosk/print') return printResponse();
+			return json(404, {});
+		});
+		await mountPage();
+
+		expect(hardwareCalls()).toHaveLength(1);
+		expect(printCalls()).toHaveLength(0);
+		expect(shownImage()?.getAttribute('src')).toBe('data:image/png;base64,PNG-BASE64');
+	});
+
+	it('renders the label once when show-again is pressed twice at once', async () => {
+		renderKioskLabelPng.mockClear();
+		renderKioskLabelPng.mockRejectedValueOnce(new Error('canvas failed'));
+		await mountPage();
+		expect(renderKioskLabelPng).toHaveBeenCalledTimes(1);
+		const showAgain = buttonByText('แสดง QR อีกครั้ง')!;
+
+		showAgain.click();
+		showAgain.click();
+		await settle();
+
+		expect(renderKioskLabelPng).toHaveBeenCalledTimes(2);
 	});
 
 	it('shows no printing status and no printed-label wording while the label is prepared', async () => {
@@ -178,6 +213,12 @@ describe('walk-in done page when the print fails (DOM)', () => {
 });
 
 describe('walk-in done page when the label prints (DOM)', () => {
+	it('asks the scanner client for its hardware once', async () => {
+		await mountPage();
+
+		expect(hardwareCalls()).toHaveLength(1);
+	});
+
 	it('keeps telling the visitor to take the printed QR and offers print again', async () => {
 		await mountPage();
 

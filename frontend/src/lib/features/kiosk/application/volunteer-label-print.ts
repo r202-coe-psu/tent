@@ -1,9 +1,9 @@
 import type { LanguageCode } from '$lib/stores/language.svelte';
 import { printKioskLabels } from '../data/kiosk-print.api';
+import type { KioskPrinter } from '../domain/kiosk-hardware';
 import { volunteerLabelIdentity } from '../domain/volunteer-label';
 import { prepareKioskQrImage } from './kiosk-label-print';
 import { runKioskPrintFlow, type KioskPrintFlowResult } from './kiosk-print-flow';
-import { loadKioskHardware } from './kiosk-qr-input';
 import { KIOSK_PRINT_FLOW_I18N } from './kiosk-print-flow.i18n';
 import { renderVolunteerLabelPng } from './volunteer-label-image';
 
@@ -20,11 +20,14 @@ export type VolunteerLabelSheet = { qrSrc: string; qrSizeMm: number; name: strin
  * Render the volunteer role-card label to a PNG and send it to the kiosk printer. `fallbackPrint`
  * runs only when no scanner client answered, and receives the sheet data to render before
  * `window.print()`. `language` words the error shown on screen; the label itself stays Thai.
+ * `printer` is the kind the screen already resolved (`KioskPrinterState.printer`), never fetched
+ * again here; `none` shows the label on screen instead of printing.
  */
 export async function printVolunteerLabel(
 	volunteer: VolunteerLabelPrintInput,
 	fallbackPrint: (sheet: VolunteerLabelSheet) => void | Promise<void>,
-	language?: LanguageCode
+	language?: LanguageCode,
+	printer?: KioskPrinter
 ): Promise<KioskPrintFlowResult> {
 	let sheet: VolunteerLabelSheet;
 	try {
@@ -37,7 +40,6 @@ export async function printVolunteerLabel(
 			labels: []
 		};
 	}
-	const { printer } = await loadKioskHardware();
 	return runKioskPrintFlow({
 		renderLabels: async () => [
 			await renderVolunteerLabelPng({ qrSrc: sheet.qrSrc, name: sheet.name, badge: sheet.badge })

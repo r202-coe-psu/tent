@@ -5,12 +5,14 @@ import { goto } from '$app/navigation';
 import { languageStore } from '$lib/stores/language.svelte';
 import type { KioskPrintFlowResult } from '../application/kiosk-print-flow';
 import { loadKioskHardware } from '../application/kiosk-qr-input';
+import { printVolunteerLabel } from '../application/volunteer-label-print';
 import type { VolunteerCardSessionDeps } from '../application/volunteer-card-session.svelte';
 import { DEFAULT_KIOSK_HARDWARE } from '../domain/kiosk-hardware';
 import KioskVolunteerCard from './kiosk-volunteer-card.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('../application/kiosk-qr-input', () => ({ loadKioskHardware: vi.fn() }));
+vi.mock('../application/volunteer-label-print', () => ({ printVolunteerLabel: vi.fn() }));
 
 const VOLUNTEER = {
 	display_name: 'สมชาย ใจดี',
@@ -156,6 +158,23 @@ describe('KioskVolunteerCard when the printer fails', () => {
 });
 
 describe('KioskVolunteerCard wording on a kiosk without a printer', () => {
+	it('hands the print flow the printer it already resolved instead of fetching again', async () => {
+		vi.mocked(printVolunteerLabel).mockResolvedValue({ kind: 'screen', labels: ['cG5nLTE='] });
+		instance = mount(KioskVolunteerCard, {
+			target: document.body,
+			props: {
+				contextQuery: '?shelter_code=SH001',
+				deps: { lookup: vi.fn().mockResolvedValue({ shelter_code: 'SH001', volunteer: VOLUNTEER }) }
+			}
+		});
+		flushSync();
+		await vi.waitFor(() => expect(bodyText()).toContain('แสดง QR จิตอาสา'));
+		await printVolunteer('แสดง QR');
+		await vi.waitFor(() => expect(printVolunteerLabel).toHaveBeenCalledTimes(1));
+
+		expect(vi.mocked(printVolunteerLabel).mock.calls[0][3]).toBe('none');
+	});
+
 	beforeEach(() => {
 		vi.mocked(loadKioskHardware).mockResolvedValue({ ...DEFAULT_KIOSK_HARDWARE, printer: 'none' });
 	});

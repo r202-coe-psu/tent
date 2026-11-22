@@ -73,7 +73,15 @@
 			new VolunteerCardSession(
 				{
 					lookup: (phone) => requestKioskVolunteerCard(phone),
-					print: (volunteer) => printVolunteerLabel(volunteer, browserPrint, languageStore.current),
+					print: async (volunteer) => {
+						await printerState.ready;
+						return printVolunteerLabel(
+							volunteer,
+							browserPrint,
+							languageStore.current,
+							printerState.printer
+						);
+					},
 					onClosed: () => goToKioskClosed(contextQuery),
 					...deps
 				},

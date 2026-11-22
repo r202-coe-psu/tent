@@ -74,6 +74,7 @@
 			checkedCount: member.label.stations_passed,
 			marker: member.label.marker
 		}));
+		await printerState.ready;
 		try {
 			return await printKioskQrLabels(
 				members.map((member, index) => ({
@@ -90,7 +91,8 @@
 					await new Promise<void>((done) => requestAnimationFrame(() => done()));
 					window.print();
 				},
-				languageStore.current
+				languageStore.current,
+				printerState.printer
 			);
 		} finally {
 			sheetLabels = [];

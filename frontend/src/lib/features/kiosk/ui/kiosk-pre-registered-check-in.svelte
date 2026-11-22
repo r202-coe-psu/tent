@@ -580,6 +580,8 @@
 				return;
 			}
 			printedCount = toPrint.length;
+			await printerState.ready;
+			if (superseded()) return;
 			if (!noPrinter) printPhase = 'printing';
 			// No scanner client (dev browser / browser print mode): print the CSS labels instead.
 			const result = await printKioskQrLabels(
@@ -588,7 +590,8 @@
 					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 					window.print();
 				},
-				languageStore.current
+				languageStore.current,
+				printerState.printer
 			);
 			if (superseded()) {
 				printPhase = 'idle';

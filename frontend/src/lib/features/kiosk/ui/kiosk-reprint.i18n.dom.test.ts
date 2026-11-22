@@ -10,6 +10,7 @@ import {
 } from '../data/kiosk-check-in.api';
 import type { ReprintSessionDeps } from '../application/reprint-session.svelte';
 import { loadKioskHardware } from '../application/kiosk-qr-input';
+import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
 import { DEFAULT_KIOSK_HARDWARE } from '../domain/kiosk-hardware';
 import KioskReprint from './kiosk-reprint.svelte';
 import { KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
@@ -18,6 +19,10 @@ const THAI = /[฀-๿]/;
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('../application/kiosk-qr-input', () => ({ loadKioskHardware: vi.fn() }));
+vi.mock('../application/kiosk-label-print', () => ({
+	prepareKioskQrImage: vi.fn(),
+	printKioskQrLabels: vi.fn()
+}));
 
 function member(
 	id: string,
@@ -368,10 +373,14 @@ describe('KioskReprint on a kiosk without a printer', () => {
 
 	async function toVerify(
 		reprint: ReprintSessionDeps['reprint'],
-		print: ReprintSessionDeps['print'],
+		print: ReprintSessionDeps['print'] | undefined,
 		words: { search: string; heading: string; nextText: string; next: string; confirm: string }
 	) {
-		mountReprint({ lookup: vi.fn().mockResolvedValue(HOUSEHOLD), reprint, print });
+		mountReprint({
+			lookup: vi.fn().mockResolvedValue(HOUSEHOLD),
+			reprint,
+			...(print && { print })
+		});
 		await toMembers(words.search, words.heading);
 		document.querySelector<HTMLButtonElement>('button[role="checkbox"]')!.click();
 		await vi.waitFor(() => expect(screenText()).toContain(words.nextText));
@@ -388,6 +397,16 @@ describe('KioskReprint on a kiosk without a printer', () => {
 		confirm: 'ยืนยันและแสดง QR'
 	};
 	const reprintResult = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue(REPRINT_RESULT);
+
+	it('hands the print flow the printer it already resolved instead of fetching again', async () => {
+		vi.mocked(prepareKioskQrImage).mockResolvedValue({ src: 'data:qr', sizeMm: 30 });
+		vi.mocked(printKioskQrLabels).mockResolvedValue({ kind: 'screen', labels: ['AAA'] });
+		await toVerify(reprintResult, undefined, THAI_WORDS);
+		buttonWith(THAI_WORDS.confirm).click();
+		await vi.waitFor(() => expect(printKioskQrLabels).toHaveBeenCalledTimes(1));
+
+		expect(vi.mocked(printKioskQrLabels).mock.calls[0][3]).toBe('none');
+	});
 
 	it('words the member choice and the confirm button as showing the QR, not printing it', async () => {
 		const print = vi.fn<ReprintSessionDeps['print']>();

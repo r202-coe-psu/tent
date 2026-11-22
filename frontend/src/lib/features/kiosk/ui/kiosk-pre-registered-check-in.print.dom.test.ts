@@ -416,6 +416,15 @@ describe('KioskPreRegisteredCheckIn on a kiosk without a printer', () => {
 		await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
 	});
 
+	it('hands the print flow the printer it already resolved instead of fetching again', async () => {
+		vi.mocked(printKioskQrLabels).mockResolvedValue({ kind: 'screen', labels: ['AAA'] });
+		await confirmCheckIn();
+		buttonWith('แสดง QR Code').click();
+		await vi.waitFor(() => expect(printKioskQrLabels).toHaveBeenCalledTimes(1));
+
+		expect(vi.mocked(printKioskQrLabels).mock.calls[0][3]).toBe('none');
+	});
+
 	it('tells the visitor on the label screen when some members QR could not be issued', async () => {
 		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(TWO_MEMBERS);
 		vi.mocked(checkInSelectedMembers).mockResolvedValue({
@@ -443,6 +452,13 @@ describe('KioskPreRegisteredCheckIn on a kiosk without a printer', () => {
 });
 
 describe('KioskPreRegisteredCheckIn on a kiosk with a printer', () => {
+	it('hands the print flow the printer it already resolved instead of fetching again', async () => {
+		await checkInAndPrint({ kind: 'printed', printed: 1 });
+		await vi.waitFor(() => expect(printKioskQrLabels).toHaveBeenCalledTimes(1));
+
+		expect(vi.mocked(printKioskQrLabels).mock.calls[0][3]).toBe('cups');
+	});
+
 	it('keeps the print wording on the results', async () => {
 		mountCheckIn();
 		await vi.waitFor(() => expect(screenText()).toContain('ยืนยัน · 1 คน'));
