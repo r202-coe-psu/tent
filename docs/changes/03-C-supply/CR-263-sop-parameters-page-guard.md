@@ -87,3 +87,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่
 - 2026-11-16 — PO (Fishcanwalk) ตัดสินสิทธิ์: `/back-office/sop-parameters` = SA/SM/WS เข้าและทำได้, SC ดูอย่างเดียว, role อื่นเข้าไม่ได้; `/back-office/dailysop` = ทุก role คงเดิม — บันทึกคำตัดสินบน #845
 - 2026-11-16 — proposed (ร่าง CR ตาม R1 ของ #845) · ค้างยืนยันว่า "ทำได้ทุกอย่าง" ของ SA/SM/WS = สิทธิ์ระดับหน้า (ถ้าต้องการให้ WS แก้ master หรือ `sop_override` ได้ ต้องเปิด CR แยกเพราะแก้ `validate_doc_update`)
 - 2026-11-22 — approved (kong) → รันเลข CR-263 · ข้อ FR-4 (สิทธิ์ระดับหน้า ไม่ขยายสิทธิ์แก้) ใช้ตามที่ร่างไว้; ถ้าต้องการให้ WS แก้ master / `sop_override` ได้ เปิด CR แยก
+- 2026-11-22 — เคาะ (kong, 2026-11-22) — `warehouse_staff` แก้ `sop_override` ได้ (master ยัง SA เท่านั้น) · **ไม่อยู่ในขอบเขต CR-263** (FR-4 คงเดิม = สิทธิ์ระดับหน้า) — track เป็น decision sync note ใน [CR-235](CR-235-warehouse-stock-parameter-access.md) Decision log; โค้ดแก้ `validate_doc_update` แยก PR

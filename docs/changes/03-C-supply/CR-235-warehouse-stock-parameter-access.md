@@ -3,7 +3,7 @@ id: CR-235
 title: เจ้าหน้าที่คลังแก้พารามิเตอร์สต็อกของศูนย์ (SHELTER_OVERRIDE) — เพิ่มสิทธิ์ warehouse_staff + บังคับที่ CouchDB
 status: approved
 date: 2026-11-05
-updated: 2026-11-06
+updated: 2026-11-22
 requested_by: GitHub #1189
 decided_by: kong
 layer: stable
@@ -117,3 +117,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่
 - 2026-11-05 — proposed (GitHub #1189)
 - 2026-11-06 — เคาะ (kong, 2026-11-06) — approved; สิทธิ์เฉพาะ `warehouse_staff` (+ SM/SA), ตัด `supply_coordinator` ออก; track ด้วย CR ไฟล์
 - 2026-11-06 — เคาะ (kong, 2026-11-06) — `sop_override` สิทธิ์คง SA/SM แต่เพิ่ม gate ที่ `validate_doc_update`; gate ทุก type ครอบการลบ `_deleted` (เช็ก `oldDoc.type`); FR-7 ระบุปุ่ม "เพิ่ม…" ในแท็บ ไม่ใช่ "สร้างค่าปรับแต่ง" ระดับหน้า (review PR #1198)
+- 2026-11-22 — decision sync (kong, 2026-11-22; ที่มา #845 / CR-263) — `warehouse_staff` แก้ `sop_override` ได้ (ไม่รวม master `catalog` ที่ยัง SA เท่านั้น) · **ยังไม่ได้แก้ FR-3 / AC-3 / AC-4 / `validate_doc_update` ในไฟล์นี้** — ตัวนี้เป็นการแก้ stable-core (auth) ต้องแก้ role gate ที่ `shelter-access-design.ts` + `roles.ts` + UI แท็บ `sop_override` และ test ใน PR โค้ดแยก (ห้าม merge ก่อน review)
