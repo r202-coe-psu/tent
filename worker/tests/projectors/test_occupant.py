@@ -11,7 +11,6 @@ from tent_model import ShelterOccupant
 from worker.mongo.occupant import refresh_shelter_occupants
 from worker.projectors.occupant import (
     compute_age_range,
-    mask_occupant_name,
     project_shelter_occupant,
     resolve_age,
 )
@@ -71,14 +70,6 @@ def test_resolve_age_falls_back_to_birth_year_when_direct_age_invalid():
     assert resolve_age({"age": -5, "birth_year": _CURRENT_YEAR_BE - 40}) == 40
 
 
-def test_mask_occupant_name():
-    assert mask_occupant_name("สมชาย", "ใจดี") == "สมชาย ใ."
-    assert mask_occupant_name("John", "Doe") == "John D."
-    assert mask_occupant_name("สมชาย", "") == "สมชาย"
-    assert mask_occupant_name("", "ใจดี") == "ใจดี"
-    assert mask_occupant_name(None, None) == "ไม่ระบุชื่อ"
-
-
 def test_project_shelter_occupant_active():
     doc = {
         "_id": "evacuee:01HXYZ1234567890ABCDEF",
@@ -87,6 +78,8 @@ def test_project_shelter_occupant_active():
         "last_name": "ใบบุญ",
         "age": 65,
         "gender": "male",
+        "phone": "0811111111",
+        "person_id": {"cardType": "pink_card", "number": "0012345678901"},
         "special_needs": ["bedridden", "Bedridden", "diabetic"],
         "current_stay": {
             "status": "active",
@@ -98,7 +91,15 @@ def test_project_shelter_occupant_active():
     assert payload["_id"] == "SH001:01HXYZ1234567890ABCDEF"
     assert payload["shelter_code"] == "SH001"
     assert payload["occupant_ref"] == "OCC-01HXYZ1234567890ABCDEF"
-    assert payload["name_masked"] == "สมชาย ใ."
+    # CR-257: plaintext; the API masks the name for `occupancy-pii-read`.
+    assert payload["first_name"] == "สมชาย"
+    assert payload["last_name"] == "ใบบุญ"
+    assert payload["age"] == 65
+    assert payload["national_id"] == "0012345678901"
+    assert payload["passport_id"] is None
+    assert payload["id_card_type"] == "pink_card"
+    assert payload["phone"] == "0811111111"
+    assert "name_masked" not in payload
     assert payload["age_range"] == "60+"
     assert payload["gender"] == "male"
     assert payload["care_flags"] == ["bedridden", "diabetic"]
@@ -118,6 +119,7 @@ def test_project_shelter_occupant_falls_back_to_birth_year():
     payload = project_shelter_occupant(doc, "SH001")
     assert payload is not None
     assert payload["age_range"] == "60+"
+    assert payload["age"] == 65
 
 
 def test_project_shelter_occupant_unknown_without_age_or_birth_year():

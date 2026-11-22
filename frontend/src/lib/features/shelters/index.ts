@@ -103,6 +103,7 @@ export {
 	type ShelterMasterV2,
 	type ShelterMaster
 } from './domain/schema';
+export { filterShelterList, type ShelterListFilter } from './domain/shelter-list-filter';
 
 export {
 	luggageRuleLabels,
@@ -160,6 +161,13 @@ export {
 } from './domain/shelter-close';
 
 export {
+	describeShelterCloseJobOutcome,
+	isShelterCloseJobActive,
+	type ShelterCloseJobView,
+	type ShelterCloseActiveJob
+} from './domain/shelter-close-job';
+
+export {
 	needsShelterCloseModal,
 	selectableOperationStatuses,
 	shelterCloseCountRows,
@@ -177,6 +185,7 @@ export {
 	closeZone,
 	reopenZone,
 	getShelterClosePreview,
+	getShelterCloseJob,
 	closeShelter
 } from './data/shelters.api';
 export { sheltersRepository, SHELTER_REGISTRY_DB } from './data/shelters.remote';
@@ -202,6 +211,9 @@ export {
 	useCloseZone,
 	useReopenZone,
 	useShelterClosePreview,
+	useShelterActiveCloseJob,
+	useShelterCloseJob,
+	announceShelterCloseJob,
 	useCloseShelter
 } from './application/queries';
 

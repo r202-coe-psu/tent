@@ -26,10 +26,12 @@ import {
 } from './people.remote';
 import { UlidReservation } from '$lib/db/ulid-reservation';
 import { mintConsentStamp } from '$lib/features/consent/server';
-import type { EvacueeInput, Medical } from '../domain/people';
+import type { Evacuee, EvacueeInput, Medical } from '../domain/people';
+import type { EvacueeSearchCursor, EvacueeSearchPage } from '../domain/evacuee-search';
 import type { EvacueeSort } from '../domain/evacuee-sort';
 import type { EvacueeFilters } from './people.repository';
 import {
+	createMovement,
 	createKioskEvacueeFromCard,
 	createKioskWalkInHousehold,
 	type CardSnapshot,
@@ -586,6 +588,181 @@ describe('PeopleRemoteRepository', () => {
 		});
 	});
 
+	describe('searchEvacueesPage', () => {
+		let somchai: Evacuee;
+		let emergency: Evacuee;
+		let passport: Evacuee;
+
+		const names = (items: readonly Evacuee[]) => items.map((e) => e.first_name).sort();
+
+		const drain = async (query: string, pageSize: number): Promise<Evacuee[]> => {
+			const all: Evacuee[] = [];
+			let cursor: EvacueeSearchCursor | null = null;
+			do {
+				const page: EvacueeSearchPage = await repo.searchEvacueesPage(query, { cursor, pageSize });
+				all.push(...page.items);
+				cursor = page.nextCursor;
+			} while (cursor);
+			return all;
+		};
+
+		beforeEach(async () => {
+			somchai = await repo.createEvacuee(
+				evInput({
+					first_name: 'Somchai',
+					last_name: 'Jaidee',
+					nickname: 'Chai',
+					phone: '0812345678',
+					person_id: { cardType: 'national_id', number: '1103700123456' }
+				}),
+				ctx
+			);
+			await repo.createEvacuee(
+				evInput({ first_name: 'Malee', last_name: 'Suksan', phone: '0899999999' }),
+				ctx
+			);
+			emergency = await repo.createEvacuee(
+				evInput({
+					first_name: 'Emergency',
+					last_name: 'Somboon',
+					phone: null,
+					emergency_contact: { name: 'ญาติ', phone: '0823456789', relation: 'ญาติ' }
+				}),
+				ctx
+			);
+			passport = await repo.createEvacuee(
+				evInput({
+					first_name: 'Traveller',
+					last_name: 'Smith',
+					phone: '0855555555',
+					person_id: { cardType: 'passport', number: 'AA1234567' }
+				}),
+				ctx
+			);
+		});
+
+		it('never loads the whole shelter, for any kind of query', async () => {
+			const scan = vi.spyOn(memoryRepo, 'allByType');
+			for (const q of [
+				'Som',
+				'Somchai Jai',
+				'0812',
+				'+66 81-234',
+				'1103700123456',
+				'AA1234567',
+				somchai._id,
+				'   '
+			]) {
+				await repo.searchEvacueesPage(q);
+			}
+			expect(scan).not.toHaveBeenCalled();
+		});
+
+		it('does no I/O for an empty query', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			const get = vi.spyOn(memoryRepo, 'get');
+			expect(await repo.searchEvacueesPage('  ')).toEqual({ items: [], nextCursor: null });
+			expect(find).not.toHaveBeenCalled();
+			expect(get).not.toHaveBeenCalled();
+		});
+
+		it('matches one word as a prefix of first name, last name or nickname', async () => {
+			expect(names((await repo.searchEvacueesPage('Som')).items)).toEqual(['Emergency', 'Somchai']);
+			expect(names((await repo.searchEvacueesPage('Chai')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('Sux')).items)).toEqual([]);
+			expect(names((await repo.searchEvacueesPage('Suk')).items)).toEqual(['Malee']);
+		});
+
+		it('matches several words as first-name prefix and last-name prefix', async () => {
+			expect(names((await repo.searchEvacueesPage('Somchai Jai')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('Som Jai')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('Jaidee Somchai')).items)).toEqual([]);
+		});
+
+		it('matches a phone prefix on the own phone, formatted or international', async () => {
+			expect(names((await repo.searchEvacueesPage('081-234')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('+66 81-234')).items)).toEqual(['Somchai']);
+		});
+
+		it('matches a phone prefix on the emergency-contact phone', async () => {
+			const { items } = await repo.searchEvacueesPage('0823');
+			expect(items.map((e) => e._id)).toEqual([emergency._id]);
+		});
+
+		it('matches a card only by its exact number', async () => {
+			expect(names((await repo.searchEvacueesPage('1103700123456')).items)).toEqual(['Somchai']);
+			expect(names((await repo.searchEvacueesPage('1-1037-00123-45-6')).items)).toEqual([
+				'Somchai'
+			]);
+			expect((await repo.searchEvacueesPage('110370012345')).items).toEqual([]);
+			expect(names((await repo.searchEvacueesPage('AA1234567')).items)).toEqual(['Traveller']);
+			expect(names((await repo.searchEvacueesPage('aa1234567')).items)).toEqual(['Traveller']);
+			expect((await repo.searchEvacueesPage('AA12345')).items).toEqual([]);
+		});
+
+		it('resolves a scan with one get and no index query', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			const get = vi.spyOn(memoryRepo, 'get');
+			const bare = passport._id.slice('evacuee:'.length);
+
+			for (const raw of [`/onsite/zoning/${passport._id}`, bare.toLowerCase(), passport._id]) {
+				const page = await repo.searchEvacueesPage(raw);
+				expect(page.items.map((e) => e._id)).toEqual([passport._id]);
+				expect(page.nextCursor).toBeNull();
+			}
+			expect(get).toHaveBeenCalledTimes(3);
+			expect(find).not.toHaveBeenCalled();
+		});
+
+		it('answers an unknown scan with no items', async () => {
+			const page = await repo.searchEvacueesPage('01J8Z3K4M5N6P7Q8R9S0T1V2W3');
+			expect(page).toEqual({ items: [], nextCursor: null });
+		});
+
+		it('pages through every match without skip, covering the full result set', async () => {
+			for (let i = 0; i < 7; i++) {
+				await repo.createEvacuee(evInput({ first_name: `Sompong${i}`, phone: null }), ctx);
+			}
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			const first = await repo.searchEvacueesPage('Som', { pageSize: 3 });
+			expect(first.items.length).toBeGreaterThan(0);
+			expect(first.nextCursor).not.toBeNull();
+
+			const all = await drain('Som', 3);
+			const ids = all.map((e) => e._id);
+			const expected = [
+				somchai._id,
+				emergency._id,
+				...(await memoryRepo.find<Evacuee>({ selector: { type: 'evacuee' } }))
+					.filter((e) => e.first_name.startsWith('Sompong'))
+					.map((e) => e._id)
+			];
+			expect(new Set(ids)).toEqual(new Set(expected));
+			for (const call of find.mock.calls) expect(call[0]).not.toHaveProperty('skip');
+		});
+
+		it('keeps a clause open on a full raw page even when the post-filter drops its rows', async () => {
+			await repo.createEvacuee(evInput({ first_name: 'Zed', phone: null }), ctx);
+			const page = await repo.searchEvacueesPage('Z', { pageSize: 1 });
+			expect(names(page.items)).toEqual(['Zed']);
+			const next = await repo.searchEvacueesPage('Z', { pageSize: 1, cursor: page.nextCursor });
+			expect(next.items).toEqual([]);
+			expect(next.nextCursor).toBeNull();
+		});
+
+		it('queries only the clauses still open in the cursor', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			await repo.searchEvacueesPage('Som', { pageSize: 1, cursor: { first_name: '1' } });
+			expect(find).toHaveBeenCalledTimes(1);
+		});
+
+		it('caps the page size at 50', async () => {
+			const find = vi.spyOn(memoryRepo, 'findPage');
+			await repo.searchEvacueesPage('Som', { pageSize: 500 });
+			expect(find.mock.calls.every(([q]) => q.limit === 50)).toBe(true);
+		});
+	});
+
 	describe('listEvacueesPaginated filters', () => {
 		it('filters by supported vulnerable type and assigned zone before pagination', async () => {
 			const elderly = await repo.createEvacuee(
@@ -906,6 +1083,81 @@ describe('check-in / check-out', () => {
 		});
 	});
 
+	describe('applyBackfilledStays (Backfill Import, #1399)', () => {
+		function stayOf(
+			evacuee: Awaited<ReturnType<typeof repo.createEvacuee>>,
+			status: 'active' | 'checked_out'
+		) {
+			const arrived = '2026-11-10T07:00:00.000Z';
+			const departed = '2026-11-12T02:30:00.000Z';
+			const checkIn = createMovement(
+				{ evacuee_id: evacuee._id, action: 'check_in', zone: 'A', occurred_at: arrived },
+				ctx
+			);
+			const movements =
+				status === 'active'
+					? [checkIn]
+					: [
+							checkIn,
+							createMovement(
+								{
+									evacuee_id: evacuee._id,
+									action: 'check_out',
+									zone: null,
+									reason: 'backfill_import',
+									occurred_at: departed
+								},
+								ctx
+							)
+						];
+			const last = movements[movements.length - 1];
+			return {
+				evacuee: {
+					...evacuee,
+					current_stay: {
+						status,
+						zone: status === 'active' ? 'A' : null,
+						since: last.occurred_at
+					}
+				},
+				movements
+			};
+		}
+
+		it('keeps the back-dated occurred_at, persists the stay and derives the household status', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครอบครัวทดสอบ', head_evacuee_id: null, status: 'pre_registered' } as never,
+				ctx
+			);
+			const head = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
+			const member = await repo.createEvacuee(
+				evInput({ first_name: 'Somying', household_id: household._id }),
+				ctx
+			);
+
+			await repo.applyBackfilledStays(household._id, [
+				stayOf(head, 'active'),
+				stayOf(member, 'checked_out')
+			]);
+
+			const movements = await repo.listMovementsByEvacuee(member._id);
+			expect(movements.map((m) => [m.action, m.occurred_at, m.reason ?? null])).toEqual(
+				expect.arrayContaining([
+					['check_in', '2026-11-10T07:00:00.000Z', null],
+					['check_out', '2026-11-12T02:30:00.000Z', 'backfill_import']
+				])
+			);
+			expect((await repo.getEvacuee(member._id))?.current_stay).toEqual({
+				status: 'checked_out',
+				zone: null,
+				since: '2026-11-12T02:30:00.000Z'
+			});
+			expect((await repo.getEvacuee(head._id))?.current_stay.status).toBe('active');
+			// One member still housed → the household reads as checked in.
+			expect((await repo.getHousehold(household._id))?.status).toBe('checked_in');
+		});
+	});
+
 	describe('checkOutEvacuee', () => {
 		it('records a check_out movement and updates current_stay to checked_out', async () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
@@ -980,6 +1232,98 @@ describe('check-in / check-out', () => {
 			const evacuee = await repo.createEvacuee(evInput(), ctx);
 			await expect(repo.confirmRoom(evacuee, ctx)).rejects.toThrow(/ยืนยันถึงโซน/);
 			expect(await repo.listMovements()).toHaveLength(0);
+		});
+	});
+
+	describe('revertEvacueeStatus', () => {
+		it('reverts room_confirmed → active with an audited movement', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const confirmed = await repo.confirmRoom(checkedIn, ctx);
+			const updated = await repo.revertEvacueeStatus(confirmed, ctx, 'active', ' ผิดคน ');
+			expect(updated.current_stay.status).toBe('active');
+			expect(updated.current_stay.zone).toBe('zone-a');
+			expect((await repo.listMovements()).at(-1)).toMatchObject({
+				action: 'revert_status',
+				reason: 'ผิดคน',
+				from_status: 'room_confirmed',
+				to_status: 'active',
+				created_by: ctx.createdBy
+			});
+		});
+
+		it('reverts active → arriving and clears the zone', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const updated = await repo.revertEvacueeStatus(checkedIn, ctx, 'arriving', 'ผิดคน');
+			expect(updated.current_stay.status).toBe('arriving');
+			expect(updated.current_stay.zone).toBeNull();
+		});
+
+		it('rejects a blank reason and writes no movement', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const before = (await repo.listMovements()).length;
+			await expect(repo.revertEvacueeStatus(checkedIn, ctx, 'arriving', '  ')).rejects.toThrow(
+				/เหตุผล/
+			);
+			expect(await repo.listMovements()).toHaveLength(before);
+		});
+
+		it('overrides arriving → pre_registered', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const arriving = await repo.revertEvacueeStatus(evacuee, ctx, 'arriving', 'ตั้งต้น');
+			const updated = await repo.revertEvacueeStatus(arriving, ctx, 'pre_registered', 'ผิดคน');
+			expect(updated.current_stay.status).toBe('pre_registered');
+			expect((await repo.listMovements()).at(-1)).toMatchObject({
+				action: 'revert_status',
+				from_status: 'arriving',
+				to_status: 'pre_registered',
+				zone: null
+			});
+		});
+
+		it('overrides checked_out → room_confirmed, keeping the zone', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const out = await repo.checkOutEvacuee(checkedIn, ctx, { reason: 'กลับบ้าน' });
+			const updated = await repo.revertEvacueeStatus(out, ctx, 'room_confirmed', 'เช็คเอาต์ผิด');
+			expect(updated.current_stay).toMatchObject({ status: 'room_confirmed', zone: 'zone-a' });
+			expect((await repo.listMovements()).at(-1)).toMatchObject({
+				to_status: 'room_confirmed',
+				zone: 'zone-a'
+			});
+		});
+
+		it('overrides out of deceased', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const checkedIn = await repo.checkInEvacuee(evacuee, ctx, 'zone-a');
+			const dead = await repo.recordMovement(checkedIn, 'mark_deceased', ctx);
+			const updated = await repo.revertEvacueeStatus(dead, ctx, 'active', 'บันทึกผิดคน');
+			expect(updated.current_stay.status).toBe('active');
+		});
+
+		it('refuses an in-shelter target with no zone unless one is picked', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const before = (await repo.listMovements()).length;
+			await expect(repo.revertEvacueeStatus(evacuee, ctx, 'room_confirmed', 'x')).rejects.toThrow(
+				/โซน/
+			);
+			expect(await repo.listMovements()).toHaveLength(before);
+			const updated = await repo.revertEvacueeStatus(evacuee, ctx, 'room_confirmed', 'x', {
+				zone: 'zone-b'
+			});
+			expect(updated.current_stay).toMatchObject({ status: 'room_confirmed', zone: 'zone-b' });
+		});
+
+		it('refreshes the derived household status', async () => {
+			const household = await repo.createHousehold({ label: 'ครัวเรือนปรับสถานะ' }, ctx);
+			const evacuee = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
+			await repo.revertEvacueeStatus(evacuee, ctx, 'cancelled', 'ผิดคน');
+			expect((await repo.getHousehold(household._id))?.status).toBe('cancelled');
+			const cancelled = (await repo.getEvacuee(evacuee._id))!;
+			await repo.revertEvacueeStatus(cancelled, ctx, 'arriving', 'กู้คืน');
+			expect((await repo.getHousehold(household._id))?.status).toBe('arriving');
 		});
 	});
 
@@ -1456,6 +1800,28 @@ describe('check-in / check-out', () => {
 			const fetched = await repo.getEvacuee(evacuee._id);
 			expect(fetched?.current_stay.status).toBe('arriving');
 			expect(fetched?.current_stay.zone).toBeNull();
+		});
+
+		it('persists triage_level from the Station 2 form', async () => {
+			const evacuee = await repo.createEvacuee(
+				evInput({ first_name: 'Triage', status: 'arriving' }),
+				ctx
+			);
+
+			const result = await repo.recordMedicalScreening(
+				{
+					screening: {
+						evacuee_id: evacuee._id,
+						track: 'normal',
+						triage_level: 'yellow',
+						symptoms: []
+					},
+					checkIn: false
+				},
+				ctx
+			);
+
+			expect(result.screening.triage_level).toBe('yellow');
 		});
 
 		it('creates screening doc and checks in evacuee to active when checkIn is true with zone', async () => {

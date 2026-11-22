@@ -13,6 +13,8 @@ import {
 	nextScreeningQueueEvacuee,
 	parseZoningQrCode,
 	recommendZoneKind,
+	latestTriageByEvacuee,
+	displayTriageLevel,
 	pickRecommendedZone,
 	resolvePreferredZone,
 	sortByZoningQueueSince,
@@ -284,39 +286,80 @@ describe('nextScreeningQueueEvacuee', () => {
 });
 
 describe('recommendZoneKind', () => {
-	it('recommends quarantine when EWAR surveillance symptoms are present (CR-106)', () => {
+	const none = { vulnerable_groups: [], special_needs: [] };
+
+	it('recommends quarantine when EWAR surveillance symptoms are present, even with VG', () => {
 		expect(
-			recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, [
-				'fever',
-				'cough'
-			])
+			recommendZoneKind(
+				{ vulnerable_groups: ['wheelchair'], special_needs: [] },
+				{ symptoms: ['fever', 'cough'] }
+			)
 		).toBe('quarantine');
-		expect(
-			recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, ['watery_diarrhea'])
-		).toBe('quarantine');
-	});
-
-	it('uses vulnerable when EWAR symptoms are empty and evacuee has vulnerable groups', () => {
-		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, [])).toBe(
-			'vulnerable'
-		);
-	});
-
-	it('defaults to general when EWAR symptoms are empty and no special needs', () => {
-		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, [])).toBe('general');
-	});
-
-	it('preserves legacy triage support (red/yellow -> quarantine, green -> non-quarantine)', () => {
-		expect(recommendZoneKind({ vulnerable_groups: ['wheelchair'], special_needs: [] }, 'red')).toBe(
+		expect(recommendZoneKind(none, { symptoms: ['watery_diarrhea'], triage: 'green' })).toBe(
 			'quarantine'
 		);
-		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, 'yellow')).toBe(
-			'quarantine'
-		);
-		expect(recommendZoneKind({ vulnerable_groups: ['infant'], special_needs: [] }, 'green')).toBe(
-			'vulnerable'
-		);
-		expect(recommendZoneKind({ vulnerable_groups: [], special_needs: [] }, null)).toBe('general');
+	});
+
+	it('recommends quarantine for yellow or red triage with no EWAR symptoms', () => {
+		expect(recommendZoneKind(none, { symptoms: [], triage: 'yellow' })).toBe('quarantine');
+		expect(
+			recommendZoneKind(
+				{ vulnerable_groups: ['infant'], special_needs: [] },
+				{ symptoms: [], triage: 'red' }
+			)
+		).toBe('quarantine');
+	});
+
+	it('uses vulnerable for green triage, no EWAR, and vulnerable groups', () => {
+		expect(
+			recommendZoneKind(
+				{ vulnerable_groups: ['infant'], special_needs: [] },
+				{ symptoms: [], triage: 'green' }
+			)
+		).toBe('vulnerable');
+	});
+
+	it('defaults to general without EWAR, triage, or vulnerable tags', () => {
+		expect(recommendZoneKind(none, { symptoms: [], triage: 'green' })).toBe('general');
+		expect(recommendZoneKind(none, { symptoms: [], triage: null })).toBe('general');
+		expect(recommendZoneKind(none, null)).toBe('general');
+	});
+});
+
+describe('latestTriageByEvacuee', () => {
+	const sc = (
+		evacuee_id: string,
+		screened_at: string,
+		triage_level?: 'green' | 'yellow' | 'red'
+	) => ({
+		evacuee_id,
+		screened_at,
+		created_at: screened_at,
+		triage_level
+	});
+
+	it('takes the colour of the latest screening per evacuee, in any input order', () => {
+		const map = latestTriageByEvacuee([
+			sc('e1', '2026-11-17T10:00:00Z', 'red'),
+			sc('e1', '2026-11-17T08:00:00Z', 'green'),
+			sc('e2', '2026-11-17T09:00:00Z', 'yellow')
+		]);
+		expect(map.get('e1')).toBe('red');
+		expect(map.get('e2')).toBe('yellow');
+	});
+
+	it('gives no colour when the latest screening has none, even if an older one did', () => {
+		const map = latestTriageByEvacuee([
+			sc('e1', '2026-09-01T08:00:00Z', 'red'),
+			sc('e1', '2026-10-01T08:00:00Z')
+		]);
+		expect(map.has('e1')).toBe(false);
+	});
+
+	it('shows a screening saved without a colour as green', () => {
+		expect(displayTriageLevel(undefined)).toBe('green');
+		expect(displayTriageLevel(null)).toBe('green');
+		expect(displayTriageLevel('red')).toBe('red');
 	});
 });
 

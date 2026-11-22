@@ -619,6 +619,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/shelters/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Shelter Summary
+		 * @description Shelter head counts for the public search cards, independent of the list filters.
+		 */
+		get: operations['shelter_summary_public_v1_shelters_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/shelters/{code}': {
 		parameters: {
 			query?: never;
@@ -2382,8 +2402,19 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/**
+			 * Is External
+			 * @default false
+			 */
+			is_external: boolean;
+			/** External Url */
+			external_url?: string | null;
 			/** Donation Points */
 			donation_points?: components['schemas']['DonationPoint'][];
+			/** Parking Points */
+			parking_points?: components['schemas']['ParkingPoint'][];
+			/** Parking Vehicle Types */
+			parking_vehicle_types?: string[];
 		};
 		/** ExternalShelterDetailResponse */
 		ExternalShelterDetailResponse: {
@@ -3477,6 +3508,49 @@ export interface components {
 		OccupancyErrorResponse: {
 			error: components['schemas']['OccupancyErrorDetail'];
 		};
+		/**
+		 * OccupantFullItem
+		 * @description Unmasked occupant — only with `occupancy-pii-read` + `pii-full` (CR-257 OD-3).
+		 *
+		 *     A field is `null` when the person has no such data or the row predates PROJECTION_VERSION 23
+		 *     (never a masked value). `name_masked` / `age_range` stay for clients that read them.
+		 */
+		OccupantFullItem: {
+			/** Occupant Ref */
+			occupant_ref: string;
+			/** Name Masked */
+			name_masked: string;
+			/** Age Range */
+			age_range: string;
+			/** Gender */
+			gender?: string | null;
+			/**
+			 * Care Flags
+			 * @default []
+			 */
+			care_flags: string[];
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** First Name */
+			first_name?: string | null;
+			/** Last Name */
+			last_name?: string | null;
+			/** Name */
+			name?: string | null;
+			/** Age */
+			age?: number | null;
+			/** National Id */
+			national_id?: string | null;
+			/** Passport Id */
+			passport_id?: string | null;
+			/**
+			 * Id Card Type
+			 * @description national_id | passport | pink_card | other
+			 */
+			id_card_type?: string | null;
+			/** Phone */
+			phone?: string | null;
+		};
 		/** OccupantItem */
 		OccupantItem: {
 			/** Occupant Ref */
@@ -3511,7 +3585,7 @@ export interface components {
 			 * Result
 			 * @default []
 			 */
-			result: components['schemas']['OccupantItem'][];
+			result: (components['schemas']['OccupantFullItem'] | components['schemas']['OccupantItem'])[];
 			pagination?: components['schemas']['PaginationMeta'] | null;
 		};
 		/** OccupantsErrorResponse */
@@ -3699,9 +3773,11 @@ export interface components {
 			message: string;
 			/**
 			 * Result
-			 * @description สูงสุด 10 รายการ; ว่างเมื่อไม่พบ
+			 * @description สูงสุด 10 รายการ; ว่างเมื่อไม่พบ — masked เมื่อมีแค่ scope occupant-search, ข้อมูลเต็มเมื่อมี pii-full ด้วย (CR-257)
 			 */
-			result: components['schemas']['PersonSearchItem'][];
+			result: (
+				components['schemas']['PersonSearchFullItem'] | components['schemas']['PersonSearchItem']
+			)[];
 		};
 		/** PersonSearchErrorResponse */
 		PersonSearchErrorResponse: {
@@ -3715,8 +3791,74 @@ export interface components {
 			detail?: string | null;
 		};
 		/**
+		 * PersonSearchFamilyMember
+		 * @description A household member in full mode (CR-257 FR-18) — same household, same shelter.
+		 */
+		PersonSearchFamilyMember: {
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name?: string | null;
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Status */
+			shelter_status?: string | null;
+		};
+		/**
+		 * PersonSearchFullItem
+		 * @description Unmasked match — only with `occupant-search` + `pii-full` (CR-257).
+		 *
+		 *     `national_id` / `origin_address` / `name` are the whole values. A field is `null` when the
+		 *     person has no such data — or when the row predates PROJECTION_VERSION 23: never a masked
+		 *     value.
+		 */
+		PersonSearchFullItem: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/**
+			 * Checked In At
+			 * @description วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in
+			 */
+			checked_in_at?: string | null;
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name?: string | null;
+			/** Passport Id */
+			passport_id?: string | null;
+			/**
+			 * Id Card Type
+			 * @description ประเภทเอกสารของ national_id/passport_id: national_id | passport | pink_card | other
+			 */
+			id_card_type?: string | null;
+			/** Phone */
+			phone?: string | null;
+			/** Family Members */
+			family_members?: components['schemas']['PersonSearchFamilyMember'][];
+		};
+		/**
 		 * PersonSearchItem
-		 * @description A masked match — same fields as public search minus `family_members` (#736 decision 4).
+		 * @description A masked match — public search fields minus `family_members` (`occupant-search` only).
 		 */
 		PersonSearchItem: {
 			/** Name */
@@ -4393,6 +4535,28 @@ export interface components {
 			name: string;
 			/** Needs */
 			needs: components['schemas']['NeedItemResponse'][];
+		};
+		/**
+		 * ShelterSummaryResponse
+		 * @description Head counts for the public search cards — never narrowed by the list filters (#1419).
+		 */
+		ShelterSummaryResponse: {
+			/** Shelters Total */
+			shelters_total: number;
+			/** Shelters Open */
+			shelters_open: number;
+			/**
+			 * Counts By Site Kind
+			 * @description Shelters per master site_kind code; a row without one is an evacuation_center
+			 */
+			counts_by_site_kind?: {
+				[key: string]: number;
+			};
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
 		};
 		/** ShelterTravelDetail */
 		ShelterTravelDetail: {
@@ -6672,6 +6836,20 @@ export interface operations {
 				lng?: number | null;
 				/** @description Search radius in kilometers */
 				radius_km?: number | null;
+				/** @description Case-insensitive text in the name, code, province or district */
+				q?: string | null;
+				/** @description Shelter (building) type code, e.g. school, temple */
+				admin_type?: string | null;
+				/** @description Leave out shelters that are full */
+				hide_full?: boolean;
+				/** @description Leave out non-external evacuation centres */
+				hide_evacuation?: boolean;
+				/** @description Leave out external shelters */
+				hide_external?: boolean;
+				/** @description Leave out host houses that are not external */
+				hide_host_house?: boolean;
+				/** @description Vehicle types the shelter must take (all of them) */
+				parking?: string[] | null;
 			};
 			header?: never;
 			path?: never;
@@ -6686,6 +6864,38 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['ShelterListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	shelter_summary_public_v1_shelters_summary_get: {
+		parameters: {
+			query?: {
+				/** @description Leave out host houses that are not external */
+				hide_host_house?: boolean;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ShelterSummaryResponse'];
 				};
 			};
 			/** @description Validation Error */

@@ -1,4 +1,8 @@
-"""Project shelter evacuee docs → public_persons."""
+"""Project shelter evacuee docs → public_persons.
+
+CR-257: the row carries plaintext PII (surname, ID number, phone, address) — masking moved to
+the API, which decides per endpoint/scope what to expose. Search keys stay hashes.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +11,6 @@ from typing import Any, Literal
 
 from worker.masking import (
     last_name_hash,
-    mask_address,
-    mask_last_name,
-    mask_national_id,
-    mask_passport,
     name_key,
     national_id_hash,
     passport_hash,
@@ -36,57 +36,59 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
-def _project_person_id(person_id: dict[str, Any] | None) -> dict[str, str | None]:
+_ID_TYPES_IN_NATIONAL_SLOT = frozenset({"national_id", "pink_card", "other"})
+
+_ADDRESS_FIELDS = (
+    "address_no",
+    "village_no",
+    "subdistrict",
+    "district",
+    "province",
+    "postal_code",
+)
+
+
+def project_person_id(person_id: dict[str, Any] | None) -> dict[str, str | None]:
+    """ID number + its search hash. `pink_card` / `other` share the national-ID slot (and
+    hash) so a 13-digit public search still finds them; `id_card_type` tells them apart."""
+    empty: dict[str, str | None] = {
+        "national_id": None,
+        "national_id_hash": None,
+        "passport_id": None,
+        "passport_hash": None,
+        "id_card_type": None,
+    }
     if not person_id:
-        return {
-            "national_id_hash": None,
-            "national_id_masked": None,
-            "passport_hash": None,
-            "passport_id_masked": None,
-        }
+        return empty
 
     number = person_id.get("number")
     card_type = person_id.get("cardType", "national_id")
     if not number or not isinstance(number, str):
-        return {
-            "national_id_hash": None,
-            "national_id_masked": None,
-            "passport_hash": None,
-            "passport_id_masked": None,
-        }
+        return empty
 
     if card_type == "passport":
         return {
-            "national_id_hash": None,
-            "national_id_masked": None,
+            **empty,
+            "passport_id": number,
             "passport_hash": passport_hash(number),
-            "passport_id_masked": mask_passport(number),
+            "id_card_type": "passport",
         }
 
-    if card_type == "national_id":
+    if card_type in _ID_TYPES_IN_NATIONAL_SLOT:
         return {
+            **empty,
+            "national_id": number,
             "national_id_hash": national_id_hash(number),
-            "national_id_masked": mask_national_id(number),
-            "passport_hash": None,
-            "passport_id_masked": None,
+            "id_card_type": card_type,
         }
 
-    # pink_card / other — hash into national_id_hash so 13-digit (and
-    # normalized) public search still finds the person.
-    if card_type in {"pink_card", "other"}:
-        return {
-            "national_id_hash": national_id_hash(number),
-            "national_id_masked": mask_national_id(number),
-            "passport_hash": None,
-            "passport_id_masked": None,
-        }
+    return empty
 
-    return {
-        "national_id_hash": None,
-        "national_id_masked": None,
-        "passport_hash": None,
-        "passport_id_masked": None,
-    }
+
+def _project_address(household: dict[str, Any] | None) -> dict[str, str | None] | None:
+    if not household:
+        return None
+    return {field: household.get(field) or None for field in _ADDRESS_FIELDS}
 
 
 def project_evacuee(
@@ -117,18 +119,19 @@ def project_evacuee(
     )
 
     last_name = doc.get("last_name") or ""
-    id_fields = _project_person_id(doc.get("person_id"))
+    id_fields = project_person_id(doc.get("person_id"))
 
     payload: dict[str, Any] = {
         "_id": doc_id,
         "shelter_code": shelter_code,
         "first_name": doc.get("first_name") or "",
         "first_name_key": name_key(doc.get("first_name") or ""),
-        "last_name_masked": mask_last_name(last_name),
+        "last_name": last_name,
         "last_name_hash": last_name_hash(last_name),
+        "phone": doc.get("phone") or None,
         "phone_hash": phone_hash(doc.get("phone")),
         "gender": doc.get("gender"),
-        "address_masked": mask_address(household),
+        "address": _project_address(household),
         # These statuses have not completed Station 1 check-in yet. A stale
         # `since` value must not make any of them appear resident externally.
         # `cancelled` is only reachable from `pre_registered` / `kiosk_registered`

@@ -1,4 +1,5 @@
 import { matchesShelterCloseConfirm, type ShelterCloseResult } from './shelter-close';
+import type { ShelterCloseJobPhase, ShelterCloseJobView } from './shelter-close-job';
 
 /**
  * Pure UI helpers for the shelter close flow (CR-219 FR-15..FR-21). No I/O, no Svelte.
@@ -92,4 +93,41 @@ export function canConfirmShelterClose(input: {
 		input.previewLoaded &&
 		matchesShelterCloseConfirm(input.typed, input.code, input.name)
 	);
+}
+
+const PHASE_LABELS: Record<ShelterCloseJobPhase, string> = {
+	people: 'เช็คเอาต์ผู้พักพิง',
+	households: 'ตรวจสอบครัวเรือน',
+	sweep: 'ตรวจคนค้าง',
+	finalize: 'ปิดศูนย์',
+	done: 'เสร็จสิ้น'
+};
+
+/** CR-243 FR-27: Thai label of the job phase shown next to the progress. */
+export function shelterCloseJobPhaseLabel(phase: ShelterCloseJobPhase): string {
+	return PHASE_LABELS[phase] ?? phase;
+}
+
+/**
+ * CR-243 FR-27 (decision sync 2026-11-18): the job is queued and no worker has claimed it yet.
+ * With the 30 s default poll that wait can last up to ~30 s, so the dialog says so.
+ */
+export function isShelterCloseJobWaitingForWorker(
+	view: Pick<ShelterCloseJobView, 'status'> | null | undefined
+): boolean {
+	return !view || view.status === 'queued';
+}
+
+/**
+ * CR-243 FR-27: share of the snapshot taken at start that is now checked out / cancelled
+ * (0..100). People who arrive during the job are not in the denominator, so it is capped.
+ */
+export function shelterCloseJobProgress(
+	view: Pick<ShelterCloseJobView, 'counters' | 'preview' | 'status'>
+): { done: number; total: number; percent: number } {
+	const done = view.counters.checked_out + view.counters.cancelled;
+	const total = view.preview.total;
+	if (view.status === 'completed') return { done, total, percent: 100 };
+	const percent = total > 0 ? Math.min(99, Math.floor((done / total) * 100)) : 0;
+	return { done, total, percent };
 }

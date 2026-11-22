@@ -81,6 +81,7 @@ const PRE_REG = {
 	phone: '0812345678',
 	household_id: 'household:SH001:0001',
 	special_needs: ['elderly'],
+	created_at: '2026-11-04T01:00:00.000Z',
 	updated_at: '2026-11-04T02:10:00.000Z',
 	current_stay: { status: 'pre_registered' }
 };
@@ -97,6 +98,21 @@ afterEach(async () => {
 });
 
 describe('EvacueeQueueView mobile cards', () => {
+	it.each([
+		[true, 'รอส่งต่อคัดกรอง (Station 2)'],
+		[false, 'รอส่งต่อจัดสรรที่พัก (Station 3)']
+	])('names the arriving tab after the next station (medical %s)', async (enableMedical, label) => {
+		await render({ ...callbacks(), initialTab: 'arriving', enableMedical });
+
+		const tab = Array.from(document.querySelectorAll('button')).find(
+			(b) => b.textContent?.includes(label) && !b.textContent?.includes('ผู้ประสบภัยทั้งหมด')
+		);
+		expect(tab).toBeTruthy();
+		expect(document.body.textContent).not.toContain(
+			enableMedical ? 'รอส่งต่อจัดสรรที่พัก' : 'รอส่งต่อคัดกรอง'
+		);
+	});
+
 	it('pre-registered tab: a card shows every column and both row actions', async () => {
 		data.evacuees = [PRE_REG];
 		data.households = [{ _id: 'household:SH001:0001', label: 'ครอบครัวศรีสุวรรณพิทักษ์' }];
@@ -132,6 +148,7 @@ describe('EvacueeQueueView mobile cards', () => {
 			last_name: 'วงศ์สกุลเจริญรุ่งเรือง',
 			person_id: { number: '9876543210987' },
 			household_id: null,
+			created_at: '2026-11-04T01:00:00.000Z',
 			updated_at: '2026-11-04T03:00:00.000Z',
 			current_stay: { status: 'arriving' }
 		};
@@ -141,6 +158,7 @@ describe('EvacueeQueueView mobile cards', () => {
 			first_name: 'วันเพ็ญ',
 			last_name: 'แสงจันทร์',
 			household_id: 'household:SH001:0001',
+			created_at: '2026-11-04T01:30:00.000Z',
 			updated_at: '2026-11-04T02:00:00.000Z'
 		};
 		data.evacuees = [unscreened, screened];
@@ -268,7 +286,8 @@ describe('EvacueeQueueView mobile cards', () => {
 			...PRE_REG,
 			_id: `evacuee:SH001:${String(100 + i)}`,
 			first_name: `ผู้ประสบภัย${i}`,
-			// Newest first: the last fixture is the oldest and lands on page 2.
+			// Oldest registered first: the last fixture registered latest and lands on page 2.
+			created_at: `2026-11-04T01:${String(10 + i)}:00.000Z`,
 			updated_at: `2026-11-04T02:${String(50 - i)}:00.000Z`
 		}));
 		await render({ ...callbacks(), initialTab: 'pre_registered' });
@@ -283,5 +302,23 @@ describe('EvacueeQueueView mobile cards', () => {
 
 		expect(cards()).toHaveLength(1);
 		expect(cards()[0].textContent).toContain('ผู้ประสบภัย10');
+	});
+
+	it('lists the earliest registered first on every tab, ignoring later edits (#1426)', async () => {
+		const early = { ...PRE_REG, _id: 'evacuee:SH001:0201', first_name: 'มาก่อน' };
+		const late = {
+			...PRE_REG,
+			_id: 'evacuee:SH001:0202',
+			first_name: 'มาทีหลัง',
+			created_at: '2026-11-04T05:00:00.000Z',
+			// Edited most recently — used to jump to the top.
+			updated_at: '2026-11-05T09:00:00.000Z'
+		};
+		data.evacuees = [late, early];
+		await render({ ...callbacks(), initialTab: 'pre_registered' });
+
+		const names = () => cards().map((c) => c.textContent ?? '');
+		expect(names()[0]).toContain('มาก่อน');
+		expect(names()[1]).toContain('มาทีหลัง');
 	});
 });

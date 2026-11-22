@@ -257,6 +257,18 @@ export type CheckoutDestinationType = z.infer<typeof checkoutDestinationTypeSche
 /** Movement `reason` / audit `reason` / `checkout_destination.type` of the shelter-close flow (CR-219 D-4). */
 export const SHELTER_CLOSED_REASON = 'shelter_closed';
 
+/**
+ * Movement `reason` of the `check_out` the people-import Backfill Import writes for a person who
+ * already left (#1399). A fixed code, like `shelter_closed` — never typed by staff.
+ */
+export const BACKFILL_IMPORT_REASON = 'backfill_import';
+
+/** Display copy for the `backfill_import` reason. */
+export const BACKFILL_IMPORT_REASON_LABEL = 'นำเข้าย้อนหลัง';
+
+/** English mirror of `BACKFILL_IMPORT_REASON_LABEL`. */
+export const BACKFILL_IMPORT_REASON_LABEL_EN = 'Backfill import';
+
 /** Display copy for the `shelter_closed` reason (CR-219 FR-21). */
 export const SHELTER_CLOSED_REASON_LABEL = 'ศูนย์ปิด';
 
@@ -272,6 +284,9 @@ export function movementReasonLabel(
 	language: LanguageCode = 'th'
 ): string {
 	if (!reason) return '';
+	if (reason === BACKFILL_IMPORT_REASON) {
+		return language === 'en' ? BACKFILL_IMPORT_REASON_LABEL_EN : BACKFILL_IMPORT_REASON_LABEL;
+	}
 	if (reason !== SHELTER_CLOSED_REASON) return reason;
 	return language === 'en' ? SHELTER_CLOSED_REASON_LABEL_EN : SHELTER_CLOSED_REASON_LABEL;
 }
@@ -292,7 +307,8 @@ export const movementActionSchema = z.enum([
 	'leave_temporary',
 	'return_from_leave',
 	'mark_deceased',
-	'zone_change'
+	'zone_change',
+	'revert_status'
 ]);
 export type MovementAction = z.infer<typeof movementActionSchema>;
 
@@ -731,6 +747,9 @@ export interface Movement extends BaseDoc {
 	zone: string | null;
 	destination?: MovementDestination;
 	reason?: string;
+	/** `revert_status` only: the stay status before / after the revert (CR-262). */
+	from_status?: StayStatus;
+	to_status?: StayStatus;
 	occurred_at: Timestamp;
 }
 
@@ -745,7 +764,7 @@ export interface Screening extends BaseDoc {
 	temperature_c?: number | null;
 	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
 	needs_referral?: boolean;
-	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
+	/** Station 2 urgency colour (CR-258). Absent on 2026-09-07..11-17 docs. */
 	triage_level?: TriageLevel | null;
 	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
 	vital_signs?: {
@@ -1509,21 +1528,23 @@ export const movementInputSchema = z.object({
 		})
 		.optional(),
 	reason: z.string().trim().optional(),
+	from_status: stayStatusSchema.optional(),
+	to_status: stayStatusSchema.optional(),
 	occurred_at: z.string().optional() // defaults to now() in the factory
 });
 export type MovementInput = z.input<typeof movementInputSchema>;
 
 /**
- * CR-106 2026-09-07 amendment: triage_level / vital_signs / temperature_c /
- * needs_referral are deprecated — a NEW screening write must never set them.
- * Old docs that already have these fields stay legacy-readable via the
- * `Screening` interface (no backfill, no forced removal); this input schema
- * just stops accepting them from any caller (Station 2 form or otherwise).
+ * CR-106 2026-09-07 amendment: vital_signs / temperature_c / needs_referral are
+ * deprecated — a NEW screening write must never set them (old docs stay
+ * legacy-readable via `Screening`). `triage_level` is back (CR-258);
+ * optional so non-Station-2 writers can omit it.
  */
 export const screeningInputSchema = z.object({
 	evacuee_id: z.string().min(1),
 	symptoms: z.array(z.string().trim().min(1)).default([]),
 	track: careTrackSchema,
+	triage_level: triageLevelSchema.nullish(),
 	notes: z.string().trim().optional(),
 	screened_at: z.string().optional()
 });
@@ -1937,6 +1958,8 @@ export function createMovement(input: MovementInput, ctx: AuthorContext, id?: st
 			zone: d.zone,
 			...(d.destination ? { destination: d.destination } : {}),
 			...(d.reason ? { reason: d.reason } : {}),
+			...(d.from_status ? { from_status: d.from_status } : {}),
+			...(d.to_status ? { to_status: d.to_status } : {}),
 			occurred_at: d.occurred_at ?? now()
 		},
 		ctx,
@@ -1947,8 +1970,8 @@ export function createMovement(input: MovementInput, ctx: AuthorContext, id?: st
 export function createScreening(input: ScreeningInput, ctx: AuthorContext): Screening {
 	const d = screeningInputSchema.parse(input);
 
-	// CR-106 2026-09-07: never stamp temperature_c / needs_referral / triage_level /
-	// vital_signs on a new doc — those fields are legacy-read only now.
+	// CR-106 2026-09-07: never stamp temperature_c / needs_referral / vital_signs on a
+	// new doc — those fields are legacy-read only now.
 	return makeDoc(
 		'screening',
 		2,
@@ -1956,6 +1979,7 @@ export function createScreening(input: ScreeningInput, ctx: AuthorContext): Scre
 			evacuee_id: d.evacuee_id,
 			symptoms: d.symptoms,
 			track: d.track,
+			...(d.triage_level ? { triage_level: d.triage_level } : {}),
 			...(d.notes ? { notes: d.notes } : {}),
 			screened_at: d.screened_at ?? now()
 		},
@@ -2038,6 +2062,61 @@ export const ZONE_CHANGE_ELIGIBLE_STATUSES = [
 	'active',
 	'room_confirmed'
 ] as const satisfies readonly StayStatus[];
+
+/**
+ * Every status a `revert_status` (manual status override by shelter manager / system admin,
+ * CR-262 A1) may land on — any stay status except the current one. Mirrored by the CouchDB
+ * validator (`shelter-access-design.ts` rule 2c).
+ */
+export const REVERT_TARGET_STATUSES: readonly StayStatus[] = stayStatusSchema.options;
+
+/** Targets of a `revert_status` that put the person in the shelter and therefore need a zone. */
+const REVERT_ZONE_REQUIRED_STATUSES: readonly StayStatus[] = ['active', 'room_confirmed'];
+
+/** Targets of a `revert_status` that take the person out of any zone. */
+const REVERT_ZONE_CLEARED_STATUSES: readonly StayStatus[] = [
+	'pre_registered',
+	'kiosk_registered',
+	'arriving',
+	'cancelled'
+];
+
+/** True when `current` → `target` is a permitted manual override: any status to any other. */
+export function canRevertStatusTo(current: StayStatus, target: StayStatus): boolean {
+	return current !== target && REVERT_TARGET_STATUSES.includes(target);
+}
+
+/** Statuses `current` may be overridden to, in schema order. */
+export function listRevertTargets(current: StayStatus): StayStatus[] {
+	return REVERT_TARGET_STATUSES.filter((target) => canRevertStatusTo(current, target));
+}
+
+/** True when a `revert_status` to `toStatus` needs the caller to pick a zone (stay has none). */
+export function revertNeedsZone(
+	current: Pick<Evacuee['current_stay'], 'zone'>,
+	toStatus: StayStatus
+): boolean {
+	return REVERT_ZONE_REQUIRED_STATUSES.includes(toStatus) && !current.zone?.trim();
+}
+
+/**
+ * The zone a `revert_status` leaves the evacuee in. `pre_registered` / `kiosk_registered` /
+ * `arriving` / `cancelled` clear it; `active` / `room_confirmed` keep the current zone (or the
+ * `zone` the caller picked) and throw when there is none — an in-shelter stay never has no zone;
+ * the other targets keep the current zone, like their normal actions do (`applyMovementToStay`).
+ */
+export function resolveRevertZone(
+	current: Pick<Evacuee['current_stay'], 'zone'>,
+	toStatus: StayStatus,
+	zone?: string | null
+): string | null {
+	if (REVERT_ZONE_CLEARED_STATUSES.includes(toStatus)) return null;
+	const resolved = zone?.trim() || current.zone?.trim() || null;
+	if (REVERT_ZONE_REQUIRED_STATUSES.includes(toStatus) && !resolved) {
+		throw new Error('การเปลี่ยนสถานะเป็นเข้าพักต้องระบุโซน');
+	}
+	return resolved;
+}
 
 /** Stay statuses that may receive a `transfer_out` action — must be checked in first. */
 export const TRANSFER_OUT_ELIGIBLE_STATUSES = [
@@ -2132,12 +2211,22 @@ export function listPendingZoneArrivalConfirmations(evacuees: readonly Evacuee[]
 
 /**
  * Guard movement transitions against impossible / terminal stay states.
- * `deceased` and `cancelled` are terminal — no reverse action except staying put.
+ * `deceased` and `cancelled` are terminal — no reverse action except staying put. The one
+ * exception is `revert_status`, the shelter manager / system admin manual override (CR-262 A1),
+ * which may leave and enter any status; its role gate lives in the UI and the CouchDB validator.
  */
 export function assertMovementAllowed(
 	evacuee: Evacuee,
 	action: MovementAction,
-	opts: { reason?: string | null; notes?: string | null; systemClose?: boolean } = {}
+	opts: {
+		reason?: string | null;
+		notes?: string | null;
+		systemClose?: boolean;
+		/** Required for `revert_status`: the status to override the stay to. */
+		toStatus?: StayStatus | null;
+		/** `revert_status` only: the zone picked for an in-shelter target when the stay has none. */
+		zone?: string | null;
+	} = {}
 ): void {
 	const status = evacuee.current_stay.status;
 	if (opts.systemClose) {
@@ -2148,10 +2237,10 @@ export function assertMovementAllowed(
 		assertShelterCloseCheckoutAllowed(evacuee, opts.reason);
 		return;
 	}
-	if (status === 'deceased' && action !== 'mark_deceased') {
+	if (status === 'deceased' && action !== 'mark_deceased' && action !== 'revert_status') {
 		throw new Error('สถานะเสียชีวิตเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก');
 	}
-	if (status === 'cancelled') {
+	if (status === 'cancelled' && action !== 'revert_status') {
 		throw new Error(
 			'สถานะยกเลิกการลงทะเบียนล่วงหน้าเป็นสถานะสุดท้าย — ไม่สามารถเปลี่ยนสถานะได้อีก'
 		);
@@ -2174,6 +2263,15 @@ export function assertMovementAllowed(
 		if (!remark) {
 			throw new Error('การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ');
 		}
+	}
+	if (action === 'revert_status') {
+		if (!opts.toStatus || !canRevertStatusTo(status, opts.toStatus)) {
+			throw new Error(`ไม่สามารถเปลี่ยนสถานะจาก ${status} เป็น ${opts.toStatus ?? '-'} ได้`);
+		}
+		if (!(opts.reason ?? '').trim()) {
+			throw new Error('การเปลี่ยนสถานะด้วยตนเองต้องระบุเหตุผล');
+		}
+		resolveRevertZone(evacuee.current_stay, opts.toStatus, opts.zone);
 	}
 	if (action === 'zone_change' && !canChangeEvacueeZone(evacuee)) {
 		throw new Error(`ไม่สามารถเปลี่ยนโซนจากสถานะ ${status} ได้`);
@@ -2232,8 +2330,24 @@ export function applyMovementToStay(
 	assertMovementAllowed(evacuee, movement.action, {
 		reason: movement.reason,
 		notes: undefined,
-		systemClose: opts.systemClose
+		systemClose: opts.systemClose,
+		toStatus: movement.to_status,
+		zone: movement.zone
 	});
+	if (movement.action === 'revert_status') {
+		// assertMovementAllowed guarantees `to_status` is a valid, different status and that an
+		// in-shelter target has a zone (resolveRevertZone — also what the movement was written with).
+		const target = movement.to_status as StayStatus;
+		return {
+			...evacuee,
+			updated_at: now(),
+			current_stay: {
+				status: target,
+				zone: resolveRevertZone(evacuee.current_stay, target, movement.zone),
+				since: movement.occurred_at
+			}
+		};
+	}
 	if (movement.action === 'zone_change') {
 		const nextZone = movement.zone?.trim() || null;
 		if (!nextZone) {
@@ -2268,7 +2382,7 @@ export function applyMovementToStay(
 		throw new Error('การกลับจากลาชั่วคราวต้องเช็คอินใหม่ (ระบุโซน) — ไม่ใช้การกลับจากลาแบบเดิม');
 	}
 	const statusByAction: Record<
-		Exclude<MovementAction, 'zone_change' | 'check_in' | 'return_from_leave'>,
+		Exclude<MovementAction, 'zone_change' | 'check_in' | 'return_from_leave' | 'revert_status'>,
 		StayStatus
 	> = {
 		check_out: 'checked_out',
@@ -2292,18 +2406,25 @@ export function applyMovementToStay(
 /**
  * Map a manual "set stay status to X" pick (evacuee-status-modal) to the movement
  * action that actually produces that status — `current_stay` is a snapshot only,
- * the movement stream is the source of truth (schema.md §1.1). Returns `null` when
- * the status is unchanged, when `current` isn't a valid source for that target per
- * the movement guards in `assertMovementAllowed` (e.g. `checked_out` → `temporary_leave`
- * skips a required check-in), or when no movement action reaches it: `pre_registered`
- * is only ever an initial state, never a manual return target.
+ * the movement stream is the source of truth (schema.md §1.1). Returns `null` only when
+ * the status is unchanged. When a normal action fits (`check_in`, `check_out`, `confirm_room`,
+ * `transfer_out`, `leave_temporary`, `mark_deceased`) it wins, so zone pickers and
+ * normalizations keep working; every other pick resolves to `revert_status`, the manual
+ * override of shelter manager / system admin (CR-262 A1) — callers must gate that action by
+ * role and require a reason.
  */
 export function resolveStatusChangeAction(
 	current: StayStatus,
 	target: StayStatus
 ): MovementAction | null {
 	if (current === target) return null;
-	if (current === 'deceased' || current === 'cancelled') return null;
+	return resolveNormalStatusChangeAction(current, target) ?? 'revert_status';
+}
+
+function resolveNormalStatusChangeAction(
+	current: StayStatus,
+	target: StayStatus
+): MovementAction | null {
 	switch (target) {
 		case 'active':
 			// CR-112 A1: temporary_leave return is Check-in → active (zone required),
@@ -2347,12 +2468,14 @@ export function normalizeCheckoutRemark(reason: string | null | undefined): stri
  * Which staff mutation path executes a resolved movement action.
  * `confirm_room` uses the dedicated Zone Arrival Confirmation write path.
  */
-export type StatusChangeHandlerKind = 'check_in' | 'check_out' | 'confirm_room' | 'record';
+export type StatusChangeHandlerKind =
+	'check_in' | 'check_out' | 'confirm_room' | 'revert_status' | 'record';
 
 export function statusChangeHandlerKind(action: MovementAction): StatusChangeHandlerKind {
 	if (action === 'check_in') return 'check_in';
 	if (action === 'check_out') return 'check_out';
 	if (action === 'confirm_room') return 'confirm_room';
+	if (action === 'revert_status') return 'revert_status';
 	return 'record';
 }
 
@@ -2379,6 +2502,40 @@ export function buildShelterCloseCheckout(
 		ctx
 	);
 	return { movement, evacuee: applyMovementToStay(evacuee, movement, { systemClose: true }) };
+}
+
+/**
+ * #1401: an evacuee checks themselves out at the kiosk. Unlike {@link buildShelterCloseCheckout}
+ * this goes through the normal guard (`active` / `room_confirmed` only, non-empty `reason`), so a
+ * stay staff must move by hand is refused. `destinationType` also lands on the movement
+ * (`returned_home` → `home`, `other` → `other`) so per-person reports see where they went.
+ */
+export function buildKioskSelfCheckout(
+	evacuee: Evacuee,
+	ctx: AuthorContext,
+	reason: string,
+	destinationType?: Extract<CheckoutDestinationType, 'returned_home' | 'other'>,
+	occurredAt: Timestamp = now()
+): { movement: Movement; evacuee: Evacuee } {
+	const destination: MovementDestination | undefined =
+		destinationType === 'returned_home'
+			? { kind: 'home' }
+			: destinationType === 'other'
+				? { kind: 'other', detail: 'เช็คเอาต์ที่ตู้ kiosk' }
+				: undefined;
+	assertMovementAllowed(evacuee, 'check_out', { reason });
+	const movement = createMovement(
+		{
+			evacuee_id: evacuee._id,
+			action: 'check_out',
+			zone: null,
+			...(destination ? { destination } : {}),
+			reason,
+			occurred_at: occurredAt
+		},
+		ctx
+	);
+	return { movement, evacuee: applyMovementToStay(evacuee, movement) };
 }
 
 /**

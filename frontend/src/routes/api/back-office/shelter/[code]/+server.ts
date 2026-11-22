@@ -21,6 +21,7 @@ import {
 } from '$lib/features/shelters/server';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { getShelterCloseStore } from '$lib/server/shelter-close-job-runtime';
 
 export const prerender = false;
 
@@ -138,6 +139,13 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 
 		const siteKindItems = input.site_kind ? ((await readMasterDoc('site_kind'))?.items ?? []) : [];
 
+		// CR-243 FR-9: while a close job is queued / running the status is frozen (read once, before
+		// the updateMaster retries; a save that keeps the current value is still fine).
+		const closeJobActive =
+			patch.operation_status !== undefined
+				? (await getShelterCloseStore().getActiveJob(code)) !== null
+				: false;
+
 		// updateMaster re-reads the doc + retries 409s internally
 		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
 		const { rev: newRev } = await updateMaster(code, (current) => {
@@ -155,6 +163,13 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 				error(400, {
 					message: 'ปิดศูนย์ต้องทำผ่าน POST /api/back-office/shelter/[code]/close'
 				});
+			}
+			if (
+				closeJobActive &&
+				patch.operation_status !== undefined &&
+				patch.operation_status !== resolveOperationStatus(current)
+			) {
+				throw new ServiceError('CONFLICT', 'กำลังปิดศูนย์อยู่ เปลี่ยนสถานะศูนย์ไม่ได้ในขณะนี้');
 			}
 			if (input.site_kind) {
 				// FR-8: compared with the stored kind of the doc being written, so a retry sees the winner's value.

@@ -20,6 +20,9 @@ THIRD_PARTY_SCOPES = (
 	"residency-read",
 	# #736: EXT-012 person search by name / national ID / passport / phone (sensitive).
 	"occupant-search",
+	# CR-257: modifier on top of `occupant-search` (EXT-012) / `occupancy-pii-read` (EXT-007) —
+	# unmasked PII. Grants nothing on its own (sensitive, never preset).
+	"pii-full",
 )
 
 

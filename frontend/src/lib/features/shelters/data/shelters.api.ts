@@ -1,7 +1,12 @@
 import { serviceFetch } from '$lib/api/service';
 import { shelterStore } from '$lib/stores/shelter.svelte';
 import type { Shelter, SubStorageItem } from '../domain/schema';
-import type { ShelterClosePreview, ShelterCloseResult } from '../domain/shelter-close';
+import type { ShelterClosePreview } from '../domain/shelter-close';
+import type {
+	ShelterCloseActiveJob,
+	ShelterCloseJobStarted,
+	ShelterCloseJobView
+} from '../domain/shelter-close-job';
 import type { ShelterSummary } from './shelters.repository';
 
 export type { ShelterSummary };
@@ -49,20 +54,35 @@ export function updateShelter(
 	});
 }
 
-/** CR-219 FR-7: people the close would change, by stay status (live read). */
-export function getShelterClosePreview(code: string): Promise<ShelterClosePreview> {
-	return serviceFetch<ShelterClosePreview>(
+/** CR-219 FR-7 preview + CR-243 FR-5 `active_job` while a close job is queued / running. */
+export type ShelterClosePreviewWithJob = ShelterClosePreview & {
+	active_job?: ShelterCloseActiveJob;
+};
+
+export function getShelterClosePreview(code: string): Promise<ShelterClosePreviewWithJob> {
+	return serviceFetch<ShelterClosePreviewWithJob>(
 		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/close`,
 		{ cache: 'no-store' }
 	);
 }
 
-/** CR-219 FR-8: check out / cancel everyone on a stay, then close the shelter. */
-export function closeShelter(code: string, confirmText: string): Promise<ShelterCloseResult> {
-	return serviceFetch<ShelterCloseResult>(`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/close`, {
-		method: 'POST',
-		body: JSON.stringify({ confirm_text: confirmText })
-	});
+/** CR-243 FR-6: start the durable close job — answers `202 { job_id }` right away. */
+export function closeShelter(code: string, confirmText: string): Promise<ShelterCloseJobStarted> {
+	return serviceFetch<ShelterCloseJobStarted>(
+		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/close`,
+		{
+			method: 'POST',
+			body: JSON.stringify({ confirm_text: confirmText })
+		}
+	);
+}
+
+/** CR-243 FR-8: status / progress of one close job. */
+export function getShelterCloseJob(code: string, jobId: string): Promise<ShelterCloseJobView> {
+	return serviceFetch<ShelterCloseJobView>(
+		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/close/jobs/${encodeURIComponent(jobId)}`,
+		{ cache: 'no-store' }
+	);
 }
 
 export function closeZone(

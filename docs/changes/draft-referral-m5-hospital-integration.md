@@ -3,6 +3,7 @@ id: draft
 title: Referral — ส่งต่อผู้ป่วย medical-emergency ไปโรงพยาบาลผ่าน M5 (FastAPI outbound + health gate)
 status: proposed
 date: 2026-11-10
+updated: 2026-11-17
 requested_by: project owner
 decided_by: project owner (รอ approve)
 layer: stable # เพิ่ม outbound integration plane ใหม่ใน FastAPI + worker inbound loop และแก้ invariant PDPA ของ T-34 — ต้อง review ก่อน
@@ -114,7 +115,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 | `dispatch_mode` | enum(`tracking`,`m5`) | opt | ไม่มีค่า = `tracking` (ใบเดิมทั้งหมด) · `tracking` ใช้กฎ transition เดิมทุกข้อ ไม่ส่งข้อมูลออก · `m5` ส่งผ่าน M5 · เปลี่ยนได้เฉพาะตอน `draft` (D3) |
 | `batch_id` | ulid | opt | บังคับเมื่อ `dispatch_mode = m5` · referral ทุกใบที่มี `batch_id` เดียวกันอยู่ในใบ M5 ใบเดียว (D4) · ใบเดิมไม่ต้อง backfill heuristic `referral.batch-group.ts` ยังใช้กับใบที่ไม่มี `batch_id` |
 | `to_org.m5_facility_id` | int | opt | `facility_id` จาก TRF-001 บังคับเมื่อส่งผ่าน M5 ส่วน `to_org.name` ยังคงเป็น snapshot ชื่อ |
-| `acuity` | enum(`red`,`yellow`,`green`,`black`) | opt | บังคับเมื่อส่งผ่าน M5 · ค่าเริ่มต้นใน UI มาจาก `medical_screening.triage_level` เก่าถ้ามี (field deprecated ตั้งแต่ CR-106 — screening ใหม่ไม่มีค่านี้) ถ้าไม่มีให้ว่างและ staff ต้องเลือกเอง (D13) · แยกจาก `urgency` |
+| `acuity` | enum(`red`,`yellow`,`green`,`black`) | opt | บังคับเมื่อส่งผ่าน M5 · ค่าเริ่มต้นใน UI มาจาก `screening.triage_level` ของ screening ล่าสุดถ้ามี — Station 2 บันทึกสีทุกครั้งตั้งแต่ [CR-258](00-baseline/CR-258-station2-triage-reinstate.md) (ค่าเริ่มต้นเขียว); screening ที่ไม่มีสี (2026-09-07 → 2026-11-17 หรือ writer อื่น) หรือไม่เคยคัดกรอง → ว่างและ staff ต้องเลือกเอง แม้ Station 1–3 จะแสดงเป็นเขียว (D13) · แยกจาก `urgency` |
 | `transport` | {`vehicle_type`: enum(`ambulance`,`van`,`helicopter`,`other`), `note`: str?} | opt | บังคับเมื่อส่งผ่าน M5 พาหนะเป็นของศูนย์เสมอ |
 | `requester_contact` | {`name`: str, `role`: str, `phone`: str} | opt | snapshot ผู้ติดต่อ ณ ตอนส่ง บังคับเมื่อส่งผ่าน M5 `phone` คือช่องทางเดียวที่ สธ. และโรงพยาบาลใช้ติดต่อกลับ |
 | `external` | {`system`: `m5`, `external_ref`: str, `code`: str, `status`: enum M5, `original_m5_facility_id`: int?, `review`: {note, by, at}?, `last_synced_at`: ts} | sys | BFF เขียน `system`, `external_ref` และ `code` ตอนส่งสำเร็จ worker เขียนส่วนที่เหลือ |
@@ -264,7 +265,7 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - **D10 — fallback ของ D5-2** ✅ ตัดสินแล้ว (2026-11-11): ผู้ป่วยไม่มีเลขบัตรหรืออายุ **ส่งได้โดยเว้นว่าง** ไม่บล็อก (§3 ตาราง payload) — ทบทวนเมื่อทีม M5 ตอบ (ตัวเลือกที่ไม่เลือก: บล็อกจนกว่าจะกรอก)
 - **D11 — bulk ที่มีใบ `m5`** ✅ ตัดสินแล้ว (2026-11-11): **bulk ถอนทั้งชุดให้** ผ่าน FastAPI พร้อม dialog ที่แสดงทุกคนในชุด (§4 ข้อ 7) (ตัวเลือกที่ไม่เลือก: bulk ข้ามใบ `m5` และให้ใช้ปุ่มถอนรายชุด)
 - **D12 — fallback ของ D5-5** ✅ ตัดสินแล้ว (2026-11-11): **ไม่จำกัดจำนวนผู้ป่วยต่อชุด** ฝั่งระบบเรา ใช้ error ของ M5 เป็นตัวกั้น (§3 กฎของชุด) (ตัวเลือกที่ไม่เลือก: config default 10, หนึ่งคนต่อใบ)
-- **D13 — ค่าเริ่มต้นของ `acuity`** ✅ ตัดสินแล้ว (2026-11-11): ใช้ `triage_level` เก่าถ้ามี ไม่มีให้ว่างและบังคับเลือก (§3) (ตัวเลือกที่ไม่เลือก: ไม่มีค่าเริ่มต้นเลย, map จาก `track`)
+- **D13 — ค่าเริ่มต้นของ `acuity`** ✅ ตัดสินแล้ว (2026-11-11): ใช้ `triage_level` ถ้ามี ไม่มีให้ว่างและบังคับเลือก (§3) (ตัวเลือกที่ไม่เลือก: ไม่มีค่าเริ่มต้นเลย, map จาก `track`) · 2026-11-17 ยืนยันซ้ำหลัง [CR-258](00-baseline/CR-258-station2-triage-reinstate.md): ไม่เติมเขียวให้ screening ที่ไม่มีสี
 - **D14 — แก้ชุด `draft`** ✅ ตัดสินแล้ว (2026-11-11): **ตัด FR-B4 / `PATCH batch`** ให้ถอนแล้วสร้างใหม่ (§3)
 - **D15 — `schema_v` ของใบ tracking** ✅ ตัดสินแล้ว (2026-11-11): stamp v3 เฉพาะใบ `m5` ใบ `tracking` คง v2 (§Migration)
 - **D16 — list ของ `medical_staff`** ✅ ตัดสินแล้ว (2026-11-11): เห็นเฉพาะ `medical-emergency` ของศูนย์ตัวเอง (§4 ข้อ 10)
@@ -326,3 +327,4 @@ worker inbound loop ── อ่าน `m5_transfers` ที่เปลี่�
 - 2026-11-11 — implement ครบ Phase 1–5 บน branch `feat/m5-referral` (FastAPI `integrations_m5`, domain v3, BFF รายชุด, worker apply + tick, UI) และ sync docs (`schema.md` §1.4 §5.4 §9.9 §9.10, `api-contract.md` §2.10 §5.4, ADR-0003, `09-F-referral.md`, role matrix) · เปลี่ยนจากร่าง: `external_ref_in_use` ให้ FastAPI กู้คืนใบเดิมเอง (§5) แทนการรอ worker · ยังไม่ได้ทดสอบ end-to-end กับ M5 staging, e2e และเลข CR
 - 2026-11-11 — owner ตัดสิน D17: เพิ่มเมนู OneData Platform (Portal + Sidebar) มี M5 และ M6 ("เร็วๆ นี้") · M5 มีหน้าของตัวเอง `/back-office/onedata/m5` · ข้อความ end-user ใช้ "OneData ระบบส่งต่อผู้ป่วย (M5)" / "OneData ระบบบริหารทรัพยากร (M6)" · เมนูส่งต่อเดิมคงไว้สำหรับ tracking · เสนอ (รอยืนยัน): ตัดตัวเลือก M5 ออกจากฟอร์มเดิมและแสดงกล่องแนะนำ OneData · implement บน `feat/m5-referral`
 - 2026-11-11 — owner ยืนยันข้อเสนอใน D17: ฟอร์มส่งต่อเดิมไม่มีตัวเลือก "ส่งผ่าน M5" (ใบ `medical-emergency` จากฟอร์มนี้เป็น `tracking` เสมอ) และแสดงกล่องแนะนำ OneData
+- 2026-11-17 — CR-258 คืน triage เขียว/เหลือง/แดงที่ Station 2: `triage_level` ไม่ deprecated แล้ว screening ใหม่มีสีเสมอ จึงเติม `acuity` ให้เกือบทุกคนที่คัดกรองหลังวันนี้ · owner ยืนยัน D13 เดิม: ไม่มีสี → ว่างและบังคับเลือก · ไม่แก้โค้ด M5

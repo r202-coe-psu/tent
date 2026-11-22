@@ -1284,6 +1284,87 @@
 							"title": "Radius Km"
 						},
 						"description": "Search radius in kilometers"
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "Case-insensitive text in the name, code, province or district",
+							"title": "Q"
+						},
+						"description": "Case-insensitive text in the name, code, province or district"
+					},
+					{
+						"name": "admin_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "Shelter (building) type code, e.g. school, temple",
+							"title": "Admin Type"
+						},
+						"description": "Shelter (building) type code, e.g. school, temple"
+					},
+					{
+						"name": "hide_full",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out shelters that are full",
+							"default": false,
+							"title": "Hide Full"
+						},
+						"description": "Leave out shelters that are full"
+					},
+					{
+						"name": "hide_evacuation",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out non-external evacuation centres",
+							"default": false,
+							"title": "Hide Evacuation"
+						},
+						"description": "Leave out non-external evacuation centres"
+					},
+					{
+						"name": "hide_external",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out external shelters",
+							"default": false,
+							"title": "Hide External"
+						},
+						"description": "Leave out external shelters"
+					},
+					{
+						"name": "hide_host_house",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out host houses that are not external",
+							"default": false,
+							"title": "Hide Host House"
+						},
+						"description": "Leave out host houses that are not external"
+					},
+					{
+						"name": "parking",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }],
+							"description": "Vehicle types the shelter must take (all of them)",
+							"title": "Parking"
+						},
+						"description": "Vehicle types the shelter must take (all of them)"
 					}
 				],
 				"responses": {
@@ -1292,6 +1373,47 @@
 						"content": {
 							"application/json": {
 								"schema": { "$ref": "#/components/schemas/ShelterListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/shelters/summary": {
+			"get": {
+				"tags": ["Shelters"],
+				"summary": "Shelter Summary",
+				"description": "Shelter head counts for the public search cards, independent of the list filters.",
+				"operationId": "shelter_summary_public_v1_shelters_summary_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "hide_host_house",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean",
+							"description": "Leave out host houses that are not external",
+							"default": false,
+							"title": "Hide Host House"
+						},
+						"description": "Leave out host houses that are not external"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ShelterSummaryResponse" }
 							}
 						}
 					},
@@ -4463,10 +4585,25 @@
 						"title": "Accepts Pre Registration",
 						"default": false
 					},
+					"is_external": { "type": "boolean", "title": "Is External", "default": false },
+					"external_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "External Url"
+					},
 					"donation_points": {
 						"items": { "$ref": "#/components/schemas/DonationPoint" },
 						"type": "array",
 						"title": "Donation Points"
+					},
+					"parking_points": {
+						"items": { "$ref": "#/components/schemas/ParkingPoint" },
+						"type": "array",
+						"title": "Parking Points"
+					},
+					"parking_vehicle_types": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Parking Vehicle Types"
 					}
 				},
 				"type": "object",
@@ -5913,6 +6050,52 @@
 				"required": ["error"],
 				"title": "OccupancyErrorResponse"
 			},
+			"OccupantFullItem": {
+				"properties": {
+					"occupant_ref": { "type": "string", "title": "Occupant Ref" },
+					"name_masked": { "type": "string", "title": "Name Masked" },
+					"age_range": { "type": "string", "title": "Age Range" },
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
+					"care_flags": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Care Flags",
+						"default": []
+					},
+					"checked_in_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Checked In At"
+					},
+					"first_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "First Name"
+					},
+					"last_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Last Name"
+					},
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
+					"national_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "National Id"
+					},
+					"passport_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Passport Id"
+					},
+					"id_card_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Id Card Type",
+						"description": "national_id | passport | pink_card | other"
+					},
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" }
+				},
+				"type": "object",
+				"required": ["occupant_ref", "name_masked", "age_range"],
+				"title": "OccupantFullItem",
+				"description": "Unmasked occupant — only with `occupancy-pii-read` + `pii-full` (CR-257 OD-3).\n\nA field is `null` when the person has no such data or the row predates PROJECTION_VERSION 23\n(never a masked value). `name_masked` / `age_range` stay for clients that read them."
+			},
 			"OccupantItem": {
 				"properties": {
 					"occupant_ref": { "type": "string", "title": "Occupant Ref" },
@@ -5939,7 +6122,12 @@
 					"status": { "type": "integer", "title": "Status", "default": 200 },
 					"message": { "type": "string", "title": "Message", "default": "Found Data." },
 					"result": {
-						"items": { "$ref": "#/components/schemas/OccupantItem" },
+						"items": {
+							"anyOf": [
+								{ "$ref": "#/components/schemas/OccupantFullItem" },
+								{ "$ref": "#/components/schemas/OccupantItem" }
+							]
+						},
 						"type": "array",
 						"title": "Result",
 						"default": []
@@ -6132,10 +6320,15 @@
 					"status": { "type": "integer", "title": "Status", "default": 200 },
 					"message": { "type": "string", "title": "Message", "default": "Found Data." },
 					"result": {
-						"items": { "$ref": "#/components/schemas/PersonSearchItem" },
+						"items": {
+							"anyOf": [
+								{ "$ref": "#/components/schemas/PersonSearchFullItem" },
+								{ "$ref": "#/components/schemas/PersonSearchItem" }
+							]
+						},
 						"type": "array",
 						"title": "Result",
-						"description": "สูงสุด 10 รายการ; ว่างเมื่อไม่พบ"
+						"description": "สูงสุด 10 รายการ; ว่างเมื่อไม่พบ — masked เมื่อมีแค่ scope occupant-search, ข้อมูลเต็มเมื่อมี pii-full ด้วย (CR-257)"
 					}
 				},
 				"type": "object",
@@ -6152,6 +6345,83 @@
 				"type": "object",
 				"required": ["status", "message"],
 				"title": "PersonSearchErrorResponse"
+			},
+			"PersonSearchFamilyMember": {
+				"properties": {
+					"first_name": { "type": "string", "title": "First Name" },
+					"last_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Last Name"
+					},
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Status"
+					}
+				},
+				"type": "object",
+				"required": ["first_name", "name", "status", "shelter_name"],
+				"title": "PersonSearchFamilyMember",
+				"description": "A household member in full mode (CR-257 FR-18) — same household, same shelter."
+			},
+			"PersonSearchFullItem": {
+				"properties": {
+					"name": { "type": "string", "title": "Name" },
+					"status": { "type": "string", "title": "Status" },
+					"national_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "National Id"
+					},
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Shelter Address"
+					},
+					"origin_address": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Origin Address"
+					},
+					"checked_in_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Checked In At",
+						"description": "วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in"
+					},
+					"care_zone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Care Zone"
+					},
+					"zone_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Zone Name"
+					},
+					"first_name": { "type": "string", "title": "First Name" },
+					"last_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Last Name"
+					},
+					"passport_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Passport Id"
+					},
+					"id_card_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Id Card Type",
+						"description": "ประเภทเอกสารของ national_id/passport_id: national_id | passport | pink_card | other"
+					},
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" },
+					"family_members": {
+						"items": { "$ref": "#/components/schemas/PersonSearchFamilyMember" },
+						"type": "array",
+						"title": "Family Members"
+					}
+				},
+				"type": "object",
+				"required": ["name", "status", "shelter_name", "first_name"],
+				"title": "PersonSearchFullItem",
+				"description": "Unmasked match — only with `occupant-search` + `pii-full` (CR-257).\n\n`national_id` / `origin_address` / `name` are the whole values. A field is `null` when the\nperson has no such data — or when the row predates PROJECTION_VERSION 23: never a masked\nvalue."
 			},
 			"PersonSearchItem": {
 				"properties": {
@@ -6185,7 +6455,7 @@
 				"type": "object",
 				"required": ["name", "status", "shelter_name"],
 				"title": "PersonSearchItem",
-				"description": "A masked match — same fields as public search minus `family_members` (#736 decision 4)."
+				"description": "A masked match — public search fields minus `family_members` (`occupant-search` only)."
 			},
 			"PetCreated": {
 				"properties": {
@@ -6852,6 +7122,23 @@
 				"type": "object",
 				"required": ["code", "name", "needs"],
 				"title": "ShelterNeedsResponse"
+			},
+			"ShelterSummaryResponse": {
+				"properties": {
+					"shelters_total": { "type": "integer", "title": "Shelters Total" },
+					"shelters_open": { "type": "integer", "title": "Shelters Open" },
+					"counts_by_site_kind": {
+						"additionalProperties": { "type": "integer" },
+						"type": "object",
+						"title": "Counts By Site Kind",
+						"description": "Shelters per master site_kind code; a row without one is an evacuation_center"
+					},
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["shelters_total", "shelters_open", "as_of"],
+				"title": "ShelterSummaryResponse",
+				"description": "Head counts for the public search cards — never narrowed by the list filters (#1419)."
 			},
 			"ShelterTravelDetail": {
 				"properties": {

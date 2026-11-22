@@ -1,5 +1,10 @@
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
-import { isSystemAdmin, isShelterManager, shelterCodeFromRoles } from '$lib/auth/roles';
+import {
+	isSystemAdmin,
+	isShelterManager,
+	hasShelterScope,
+	shelterCodesFromRoles
+} from '$lib/auth/roles';
 import { authStore } from '$lib/stores/auth.svelte';
 import {
 	EMPTY_ADMISSION_POLICY,
@@ -82,20 +87,26 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 	};
 }
 
-function visibleSheltersSummary(all: ShelterSummary[]): ShelterSummary[] {
-	const roles = authStore.user?.roles ?? [];
-	if (isSystemAdmin(roles)) return all;
-	const scope = shelterCodeFromRoles(roles);
-	if (scope) return all.filter((s) => s.code === scope);
-	return [];
+/**
+ * Shelters a caller may see: SA sees all; everyone else sees every shelter they hold a
+ * `shelter:{code}` role for (not just the first), so a multi-shelter manager can switch.
+ */
+export function visibleShelters<T extends { code: string }>(
+	roles: readonly string[],
+	all: readonly T[]
+): T[] {
+	if (isSystemAdmin(roles)) return [...all];
+	const codes = new Set(shelterCodesFromRoles(roles));
+	return all.filter((s) => codes.has(s.code));
 }
 
-function visibleSheltersBasic(all: ShelterBasic[]): ShelterBasic[] {
-	const roles = authStore.user?.roles ?? [];
-	if (isSystemAdmin(roles) || isShelterManager(roles)) return all;
-	const scope = shelterCodeFromRoles(roles);
-	if (scope) return all.filter((s) => s.code === scope);
-	return [];
+/** Basic (search) list: a shelter manager keeps the wider view, as before. */
+export function visibleSheltersBasic<T extends { code: string }>(
+	roles: readonly string[],
+	all: readonly T[]
+): T[] {
+	if (isShelterManager(roles)) return [...all];
+	return visibleShelters(roles, all);
 }
 
 export class SheltersRemoteRepository implements SheltersRepository {
@@ -108,13 +119,13 @@ export class SheltersRemoteRepository implements SheltersRepository {
 	async listShelters(): Promise<ShelterSummary[]> {
 		const masters = await this.repo.allByType('shelter', isShelterMasterDoc);
 		const summaries = masters.map((m) => masterToSummary(migrateShelterV2ToCurrent(m)));
-		return visibleSheltersSummary(uniqueByShelterCode(summaries));
+		return visibleShelters(authStore.user?.roles ?? [], uniqueByShelterCode(summaries));
 	}
 
 	async searchShelters(): Promise<ShelterBasic[]> {
 		const masters = await this.repo.allByType('shelter', isShelterMasterDoc);
 		const basics = masters.map((m) => masterToBasic(migrateShelterV2ToCurrent(m)));
-		return visibleSheltersBasic(uniqueByShelterCode(basics));
+		return visibleSheltersBasic(authStore.user?.roles ?? [], uniqueByShelterCode(basics));
 	}
 
 	async getShelter(code: string): Promise<ShelterSummary> {
@@ -125,11 +136,8 @@ export class SheltersRemoteRepository implements SheltersRepository {
 		}
 		const summary = masterToSummary(migrateShelterV2ToCurrent(match));
 		const roles = authStore.user?.roles ?? [];
-		if (!isSystemAdmin(roles)) {
-			const scope = shelterCodeFromRoles(roles);
-			if (!scope || scope !== code) {
-				throw new Error('ไม่มีสิทธิ์เข้าถึงศูนย์พักพิงนี้');
-			}
+		if (!isSystemAdmin(roles) && !hasShelterScope(roles, code)) {
+			throw new Error('ไม่มีสิทธิ์เข้าถึงศูนย์พักพิงนี้');
 		}
 		return summary;
 	}

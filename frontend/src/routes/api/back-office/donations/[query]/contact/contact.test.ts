@@ -235,6 +235,30 @@ describe('POST /api/back-office/donations/[query]/contact (#821 FR-10a)', () => 
 		expect((await post()).status).toBe(200);
 	});
 
+	it('#477: looks in the shelter the capability is held in, not the first membership', async () => {
+		asCaller(['shelter:SH002', 'shelter:SH001', 'SH001:warehouse_staff'], 'SH002');
+		mockCouch();
+
+		const res = await post();
+
+		expect(res.status).toBe(200);
+		expect(bulkCalls()).toHaveLength(1);
+	});
+
+	it('#477: 403 for a member of the shelter whose capability is held only elsewhere', async () => {
+		asCaller(['shelter:SH001', 'shelter:SH002', 'SH002:warehouse_staff'], 'SH001');
+		mockCouch();
+
+		const res = await post();
+
+		expect(res.status).toBe(403);
+		expect(JSON.stringify(await res.json())).not.toContain('0812345678');
+		expect(
+			vi.mocked(adminRaw).mock.calls.some((c) => String(c[0]).includes('/shelter_sh001/'))
+		).toBe(false);
+		expect(bulkCalls()).toHaveLength(0);
+	});
+
 	it('AC-5: a system admin may read a donation of any shelter', async () => {
 		asCaller(['system_admin'], null, true);
 		mockCouch();

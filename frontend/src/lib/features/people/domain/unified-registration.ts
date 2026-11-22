@@ -31,6 +31,7 @@ import {
 	householdInputSchema,
 	isMeaningfulOtherPetNotes,
 	mintAnonymousId,
+	type CardSnapshot,
 	type Evacuee,
 	type EvacueeInput,
 	type Household,
@@ -441,23 +442,41 @@ function cleanAreaPrefix(name?: string | null): string {
 	return name.replace(/^(ตำบล|แขวง|อำเภอ|เขต|จังหวัด|ต\.|อ\.|จ\.)/, '').trim();
 }
 
+/** Address parts a smart-card read carries; every part may be missing or empty. */
+export type CardAddressSource = Pick<
+	CardSnapshot,
+	'address_no' | 'village_no' | 'lane' | 'road' | 'subdistrict' | 'district' | 'province'
+>;
+
+/** Household address fields from a smart-card address: lane/road fold into `village_no`, area prefixes drop. */
+export function cardAddressToHouseholdFields(
+	snap?: CardAddressSource | null
+): Pick<
+	UnifiedHouseholdInput,
+	'address_no' | 'village_no' | 'subdistrict' | 'district' | 'province'
+> {
+	return {
+		address_no: snap?.address_no ?? '',
+		village_no: [snap?.village_no, snap?.lane, snap?.road].filter(Boolean).join(' '),
+		subdistrict: cleanAreaPrefix(snap?.subdistrict),
+		district: cleanAreaPrefix(snap?.district),
+		province: cleanAreaPrefix(snap?.province)
+	};
+}
+
 /** Converts an existing CouchDB Household into form-compatible UnifiedHouseholdInput, with optional fallback to smart card snapshot. */
 export function householdToUnifiedInput(
 	household: Household | null | undefined,
 	fallbackEvacuee?: Evacuee | null
 ): UnifiedHouseholdInput {
 	const snap = fallbackEvacuee?.card_snapshot;
-	const villageParts = [snap?.village_no, snap?.lane, snap?.road].filter(Boolean).join(' ');
+	const fromCard = cardAddressToHouseholdFields(snap);
 
 	if (!household) {
 		return {
 			housing_type: 'owned_house',
 			residence_landmark: null,
-			address_no: snap?.address_no ?? '',
-			village_no: villageParts,
-			subdistrict: cleanAreaPrefix(snap?.subdistrict),
-			district: cleanAreaPrefix(snap?.district),
-			province: cleanAreaPrefix(snap?.province),
+			...fromCard,
 			postal_code: snap?.postal_code ?? '',
 			pets: [],
 			vehicles: [],
@@ -471,11 +490,11 @@ export function householdToUnifiedInput(
 		dorm_building: household.dorm_building ?? null,
 		dorm_floor: household.dorm_floor ?? null,
 		dorm_room: household.dorm_room ?? null,
-		address_no: household.address_no ?? snap?.address_no ?? '',
-		village_no: household.village_no ?? villageParts,
-		subdistrict: household.subdistrict ?? cleanAreaPrefix(snap?.subdistrict),
-		district: household.district ?? cleanAreaPrefix(snap?.district),
-		province: household.province ?? cleanAreaPrefix(snap?.province),
+		address_no: household.address_no ?? fromCard.address_no,
+		village_no: household.village_no ?? fromCard.village_no,
+		subdistrict: household.subdistrict ?? fromCard.subdistrict,
+		district: household.district ?? fromCard.district,
+		province: household.province ?? fromCard.province,
 		postal_code: household.postal_code ?? snap?.postal_code ?? '',
 		pets: household.pets ?? [],
 		vehicles: household.vehicles ?? [],

@@ -29,7 +29,15 @@ import {
 	type Movement,
 	type StayStatus
 } from '$lib/features/people/server';
-import type { ShelterClosePreview } from '$lib/features/shelters/server';
+import type {
+	ShelterCloseEndReason,
+	ShelterCloseJobCounters,
+	ShelterCloseJobCursor,
+	ShelterCloseJobFailure,
+	ShelterCloseJobMode,
+	ShelterCloseJobPhase as ShelterCloseJobPhaseT,
+	ShelterClosePreview
+} from '$lib/features/shelters/server';
 import type { CouchReq } from './ensure-public-writer';
 import { shelterDbName } from './shelter-access-design';
 
@@ -552,9 +560,342 @@ async function writeHouseholds(
 }
 
 /**
- * FR-9..FR-12: close out every affected stay in `shelter_<code>`. Idempotent —
- * a re-run only touches people still in an affected status, so it never adds a
- * second movement for the same person.
+ * FR-31/FR-32 dry-run: counts only, nothing is written. Same reads as the step function's
+ * `people` / `households` phases would act on.
+ */
+export async function dryRunShelterClose(
+	couchReq: CouchReq,
+	code: string
+): Promise<{ preview: ShelterClosePreview; stale_households: number }> {
+	const preview = await previewShelterClose(couchReq, code);
+	const stale_households = await countStaleHouseholds(couchReq, code);
+	return { preview, stale_households };
+}
+
+// ------------------------------------------------------------------ step function (CR-243 FR-26)
+
+/** CR-243 FR-19: a job restarts `people` at most this many times after a non-empty re-count. */
+export const SHELTER_CLOSE_MAX_SWEEPS = 3;
+
+const sortKey = (e: Evacuee) => `${e.household_id ?? `solo:${e._id}`}\u0000${e._id}`;
+const groupKey = (e: Evacuee) => e.household_id ?? `solo:${e._id}`;
+
+/**
+ * Next chunk (≤ `size`) of affected evacuees strictly after `after` in (household, id) order. A
+ * household stays in one chunk unless it alone exceeds `size`. `cursor` is the sort key of the
+ * last evacuee taken, `null` when nothing is left. Failed people stay behind the cursor, so a
+ * chunk is never retried inside one round.
+ */
+export function nextPeopleChunk(
+	affected: readonly Evacuee[],
+	after: string | null | undefined,
+	size: number
+): { chunk: Evacuee[]; cursor: string | null } {
+	const sorted = affected
+		.map((e) => ({ e, k: sortKey(e) }))
+		.filter((x) => after == null || x.k > after)
+		.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+	const groups: { e: Evacuee; k: string }[][] = [];
+	for (const item of sorted) {
+		const last = groups[groups.length - 1];
+		if (last && groupKey(last[0].e) === groupKey(item.e)) last.push(item);
+		else groups.push([item]);
+	}
+	let taken: { e: Evacuee; k: string }[] = [];
+	for (const group of groups) {
+		if (taken.length > 0 && taken.length + group.length > size) break;
+		if (group.length > size) {
+			taken = group.slice(0, size);
+			break;
+		}
+		taken = taken.concat(group);
+	}
+	return {
+		chunk: taken.map((x) => x.e),
+		cursor: taken.length > 0 ? taken[taken.length - 1].k : null
+	};
+}
+
+export type ShelterCloseJobPhase = ShelterCloseJobPhaseT;
+
+export interface ShelterCloseStepState {
+	phase: ShelterCloseJobPhase;
+	cursor: ShelterCloseJobCursor;
+	sweep_round: number;
+	counters: ShelterCloseJobCounters;
+	failures: ShelterCloseJobFailure[];
+}
+
+export const initialShelterCloseStepState = (): ShelterCloseStepState => ({
+	phase: 'people',
+	cursor: {},
+	sweep_round: 0,
+	counters: { checked_out: 0, cancelled: 0, households_repaired: 0, failed: 0 },
+	failures: []
+});
+
+export interface ShelterCloseStepOptions {
+	/** Author of movements / audits — the job's `requested_by` (FR-10a). */
+	createdBy: string;
+	mode?: ShelterCloseJobMode;
+	/** Extra audit `context` (backfill FR-30). */
+	auditContext?: Record<string, unknown>;
+	now?: () => string;
+	/** Instant stamped on this chunk's stays; defaults to `now()`. */
+	at?: string;
+	/** Cap on `failures[]` (FR-24); `counters.failed` keeps counting. Default unbounded. */
+	maxFailures?: number;
+	/** Evacuees already read (the one-shot wrapper reads once); default: read on every step. */
+	evacuees?: Evacuee[];
+	/**
+	 * `finalize` phase (FR-20/FR-21), called after a clean re-count. `close` mode is called only
+	 * when no one failed; `backfill` always (its audit records failures). Returns whether the
+	 * registry was closed by this job.
+	 */
+	finalize?: (state: ShelterCloseStepState) => Promise<{ closed: boolean }>;
+}
+
+export interface ShelterCloseStepOutcome {
+	status: 'completed' | 'completed_with_errors';
+	end_reason: ShelterCloseEndReason;
+	closed: boolean;
+}
+
+export interface ShelterCloseStepResult {
+	state: ShelterCloseStepState;
+	/** Set when the job reached `done`; the caller persists the terminal status. */
+	outcome: ShelterCloseStepOutcome | null;
+}
+
+function withFailures(
+	state: ShelterCloseStepState,
+	failed: readonly ShelterCloseFailure[],
+	max: number
+): ShelterCloseStepState {
+	if (failed.length === 0) return state;
+	const room = Math.max(0, max - state.failures.length);
+	return {
+		...state,
+		counters: { ...state.counters, failed: state.counters.failed + failed.length },
+		failures: [...state.failures, ...failed.slice(0, room)]
+	};
+}
+
+async function readSnapshot(couchReq: CouchReq, db: string, options: ShelterCloseStepOptions) {
+	const evacuees = options.evacuees ?? (await listEvacuees(couchReq, db));
+	const memberIds = new Map<string, string[]>();
+	for (const e of evacuees) {
+		if (!e.household_id) continue;
+		memberIds.set(e.household_id, [...(memberIds.get(e.household_id) ?? []), e._id]);
+	}
+	return { evacuees, memberIds };
+}
+
+async function peopleStep(
+	couchReq: CouchReq,
+	code: string,
+	state: ShelterCloseStepState,
+	options: ShelterCloseStepOptions
+): Promise<ShelterCloseStepState> {
+	const db = shelterDbName(code);
+	const now = options.now ?? (() => new Date().toISOString());
+	const at = options.at ?? now();
+	const max = options.maxFailures ?? Number.POSITIVE_INFINITY;
+	const ctx: AuthorContext = { shelterCode: code.toUpperCase(), createdBy: options.createdBy };
+	const { evacuees, memberIds } = await readSnapshot(couchReq, db, options);
+	const affected = evacuees.filter(
+		(e) => e.current_stay?.status && isShelterCloseAffectedStatus(e.current_stay.status)
+	);
+	const { chunk: group, cursor } = nextPeopleChunk(
+		affected,
+		state.cursor.after,
+		SHELTER_CLOSE_CHUNK_SIZE
+	);
+	if (group.length === 0) {
+		return { ...state, phase: 'households', cursor: { reported: state.cursor.reported } };
+	}
+
+	const failed: ShelterCloseFailure[] = [];
+	const planned: Planned[] = [];
+	for (const e of group) {
+		try {
+			const p = plan(e, ctx, at);
+			if (p) planned.push(p);
+		} catch (err) {
+			failed.push({ evacuee_id: e._id, error: err instanceof Error ? err.message : String(err) });
+		}
+	}
+
+	const written = await writeEvacuees(couchReq, db, planned, ctx, at, failed);
+	const unwritten = await writeMovements(
+		couchReq,
+		db,
+		written.flatMap((p) => (p.kind === 'checkout' ? [p.movement] : []))
+	);
+	const orphaned = written.filter((p) => unwritten.has(p.evacuee._id));
+	const restored = await rollbackCheckouts(couchReq, db, orphaned, at, now);
+	for (const p of orphaned) {
+		const why = `movement: ${unwritten.get(p.evacuee._id)}`;
+		failed.push({
+			evacuee_id: p.evacuee._id,
+			error: restored.has(p.evacuee._id)
+				? `${why} — stay restored, close again to retry`
+				: `${why} — stay NOT restored: checked out without a movement`
+		});
+	}
+	// Rolled-back people were not closed out; everyone else in `written` was.
+	const saved = written.filter((p) => !restored.has(p.evacuee._id));
+	let checked_out = 0;
+	let cancelled = 0;
+	for (const p of saved) {
+		if (p.kind === 'checkout') checked_out += 1;
+		else cancelled += 1;
+	}
+	const unresolved = await writeHouseholds(
+		couchReq,
+		db,
+		saved,
+		memberIds,
+		ctx,
+		options.auditContext ?? {},
+		failed
+	);
+	const next: ShelterCloseStepState = {
+		...state,
+		cursor: {
+			after: cursor ?? undefined,
+			reported: [...(state.cursor.reported ?? []), ...unresolved]
+		},
+		counters: {
+			...state.counters,
+			checked_out: state.counters.checked_out + checked_out,
+			cancelled: state.counters.cancelled + cancelled
+		}
+	};
+	return withFailures(next, failed, max);
+}
+
+async function householdsStep(
+	couchReq: CouchReq,
+	code: string,
+	state: ShelterCloseStepState,
+	options: ShelterCloseStepOptions
+): Promise<ShelterCloseStepState> {
+	const db = shelterDbName(code);
+	const max = options.maxFailures ?? Number.POSITIVE_INFINITY;
+	const { memberIds } = await readSnapshot(couchReq, db, options);
+	// FR-12a / FR-18: re-derive households whose stored status no longer matches their members.
+	const reported = new Set(state.cursor.reported ?? []);
+	const after = state.cursor.after;
+	const remaining = [...memberIds.keys()]
+		.filter((hh) => !reported.has(hh) && (after == null || hh > after))
+		.sort();
+	const ids = remaining.slice(0, SHELTER_CLOSE_CHUNK_SIZE);
+	if (ids.length === 0) return { ...state, phase: 'sweep', cursor: {} };
+	const failed: ShelterCloseFailure[] = [];
+	const { written } = await deriveHouseholds(
+		couchReq,
+		db,
+		ids,
+		memberIds,
+		(hh) => memberIds.get(hh)?.[0] ?? hh,
+		failed,
+		true
+	);
+	const next: ShelterCloseStepState = {
+		...state,
+		cursor: { after: ids[ids.length - 1], reported: state.cursor.reported },
+		counters: {
+			...state.counters,
+			households_repaired: state.counters.households_repaired + written
+		}
+	};
+	return withFailures(next, failed, max);
+}
+
+async function sweepStep(
+	couchReq: CouchReq,
+	code: string,
+	state: ShelterCloseStepState
+): Promise<{ state: ShelterCloseStepState; outcome: ShelterCloseStepOutcome | null }> {
+	const remaining = await previewShelterClose(couchReq, code);
+	if (remaining.total === 0)
+		return { state: { ...state, phase: 'finalize', cursor: {} }, outcome: null };
+	if (state.sweep_round >= SHELTER_CLOSE_MAX_SWEEPS) {
+		return {
+			state: { ...state, phase: 'done' },
+			outcome: { status: 'completed_with_errors', end_reason: 'sweep_exhausted', closed: false }
+		};
+	}
+	// A new round re-attempts everyone still affected, so last round's failures are dropped:
+	// whoever still fails is reported again, whoever succeeded no longer blocks the close.
+	return {
+		state: {
+			...state,
+			phase: 'people',
+			cursor: {},
+			sweep_round: state.sweep_round + 1,
+			counters: { ...state.counters, failed: 0 },
+			failures: []
+		},
+		outcome: null
+	};
+}
+
+async function finalizeStep(
+	couchReq: CouchReq,
+	code: string,
+	state: ShelterCloseStepState,
+	options: ShelterCloseStepOptions
+): Promise<{ state: ShelterCloseStepState; outcome: ShelterCloseStepOutcome | null }> {
+	const mode = options.mode ?? 'close';
+	const remaining = await previewShelterClose(couchReq, code);
+	if (remaining.total > 0)
+		return { state: { ...state, phase: 'sweep', cursor: {} }, outcome: null };
+	const failed = state.counters.failed > 0;
+	let closed = false;
+	if (mode === 'backfill' || !failed) {
+		if (options.finalize) closed = (await options.finalize(state)).closed;
+	}
+	const done: ShelterCloseStepState = { ...state, phase: 'done', cursor: {} };
+	return {
+		state: done,
+		outcome: failed
+			? { status: 'completed_with_errors', end_reason: 'failed', closed }
+			: { status: 'completed', end_reason: 'ok', closed }
+	};
+}
+
+/**
+ * CR-243 FR-26: run ONE chunk of work for the current phase and return the next state.
+ * Phases `people → households → sweep → finalize → done`. Domain logic (check-out, cancel,
+ * household derive, retries, rollback) is the same code the one-shot {@link closeShelterPeople}
+ * used. Never writes the registry itself — `finalize` is injected (FR-20/FR-21).
+ */
+export async function stepShelterClose(
+	couchReq: CouchReq,
+	code: string,
+	state: ShelterCloseStepState,
+	options: ShelterCloseStepOptions
+): Promise<ShelterCloseStepResult> {
+	switch (state.phase) {
+		case 'people':
+			return { state: await peopleStep(couchReq, code, state, options), outcome: null };
+		case 'households':
+			return { state: await householdsStep(couchReq, code, state, options), outcome: null };
+		case 'sweep':
+			return sweepStep(couchReq, code, state);
+		case 'finalize':
+			return finalizeStep(couchReq, code, state, options);
+		default:
+			return { state, outcome: null };
+	}
+}
+
+/**
+ * FR-9..FR-12: close out every affected stay in `shelter_<code>` in one go — the step function
+ * run through `people` and `households`. Idempotent — a re-run only touches people still in an
+ * affected status, so it never adds a second movement for the same person.
  */
 export async function closeShelterPeople(
 	couchReq: CouchReq,
@@ -563,93 +904,23 @@ export async function closeShelterPeople(
 ): Promise<ShelterCloseRun> {
 	const db = shelterDbName(code);
 	const now = options.now ?? (() => new Date().toISOString());
-	const ctx: AuthorContext = { shelterCode: code.toUpperCase(), createdBy: options.createdBy };
-	const at = now();
-
-	const evacuees = await listEvacuees(couchReq, db);
-	const memberIds = new Map<string, string[]>();
-	for (const e of evacuees) {
-		if (!e.household_id) continue;
-		memberIds.set(e.household_id, [...(memberIds.get(e.household_id) ?? []), e._id]);
+	const stepOptions: ShelterCloseStepOptions = {
+		createdBy: options.createdBy,
+		auditContext: options.auditContext,
+		now,
+		at: now(),
+		evacuees: await listEvacuees(couchReq, db)
+	};
+	let state = initialShelterCloseStepState();
+	while (state.phase === 'people' || state.phase === 'households') {
+		state = (await stepShelterClose(couchReq, code, state, stepOptions)).state;
 	}
-
-	const targets = evacuees.filter(
-		(e) => e.current_stay?.status && isShelterCloseAffectedStatus(e.current_stay.status)
-	);
-	const failed: ShelterCloseFailure[] = [];
-	let checked_out = 0;
-	let cancelled = 0;
-	/** Households already reported in `failed` this run — the stale pass does not repeat them. */
-	const reported = new Set<string>();
-
-	for (const group of chunkByHousehold(targets, SHELTER_CLOSE_CHUNK_SIZE)) {
-		const planned: Planned[] = [];
-		for (const e of group) {
-			try {
-				const p = plan(e, ctx, at);
-				if (p) planned.push(p);
-			} catch (err) {
-				failed.push({ evacuee_id: e._id, error: err instanceof Error ? err.message : String(err) });
-			}
-		}
-
-		const written = await writeEvacuees(couchReq, db, planned, ctx, at, failed);
-
-		const unwritten = await writeMovements(
-			couchReq,
-			db,
-			written.flatMap((p) => (p.kind === 'checkout' ? [p.movement] : []))
-		);
-		const orphaned = written.filter((p) => unwritten.has(p.evacuee._id));
-		const restored = await rollbackCheckouts(couchReq, db, orphaned, at, now);
-		for (const p of orphaned) {
-			const why = `movement: ${unwritten.get(p.evacuee._id)}`;
-			failed.push({
-				evacuee_id: p.evacuee._id,
-				error: restored.has(p.evacuee._id)
-					? `${why} — stay restored, close again to retry`
-					: `${why} — stay NOT restored: checked out without a movement`
-			});
-		}
-		// Rolled-back people were not closed out; everyone else in `written` was.
-		const saved = written.filter((p) => !restored.has(p.evacuee._id));
-
-		for (const p of saved) {
-			if (p.kind === 'checkout') checked_out += 1;
-			else cancelled += 1;
-		}
-
-		const unresolved = await writeHouseholds(
-			couchReq,
-			db,
-			saved,
-			memberIds,
-			ctx,
-			options.auditContext ?? {},
-			failed
-		);
-		for (const hh of unresolved) reported.add(hh);
-	}
-
-	// FR-12a: a run that stopped after its evacuee writes (household 409s, a failed household
-	// read, a crash mid-chunk) leaves households un-derived, and a re-run skips their members —
-	// they are closed out already. Re-derive every household whose stored status no longer
-	// matches its members, so the shelter is not closed over a stale `checked_in` household.
-	const stale = [...memberIds.keys()].filter((hh) => !reported.has(hh));
-	let households_repaired = 0;
-	for (const ids of chunk(stale, SHELTER_CLOSE_CHUNK_SIZE)) {
-		const { written } = await deriveHouseholds(
-			couchReq,
-			db,
-			ids,
-			memberIds,
-			(hh) => memberIds.get(hh)?.[0] ?? hh,
-			failed,
-			true
-		);
-		households_repaired += written;
-	}
-
 	const remaining = await previewShelterClose(couchReq, code);
-	return { checked_out, cancelled, households_repaired, failed, remaining };
+	return {
+		checked_out: state.counters.checked_out,
+		cancelled: state.counters.cancelled,
+		households_repaired: state.counters.households_repaired,
+		failed: state.failures,
+		remaining
+	};
 }

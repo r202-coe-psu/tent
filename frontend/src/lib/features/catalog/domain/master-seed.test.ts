@@ -388,7 +388,7 @@ describe('master seed unit-of-measure provisioning', () => {
 		const itemMasters = couch.putDoc.mock.calls
 			.map(([, doc]) => doc as Record<string, unknown>)
 			.filter((doc) => doc.type === 'item_master');
-		expect(itemMasters).toHaveLength(34);
+		expect(itemMasters).toHaveLength(69);
 		const rice = itemMasters.find((doc) => doc.name === 'ข้าวสาร');
 		const eggs = itemMasters.find((doc) => doc.name === 'ไข่ไก่');
 		const vest = itemMasters.find((doc) => doc.name === 'เสื้อกั๊กสะท้อนแสง');

@@ -12,6 +12,7 @@ import {
 	createMovement,
 	assertMovementAllowed,
 	applyMovementToStay,
+	resolveRevertZone,
 	isEvacuee,
 	createMedical as buildMedical,
 	type Evacuee,
@@ -19,6 +20,7 @@ import {
 	type EmergencyContact,
 	createHousehold as buildHousehold,
 	isHousehold,
+	type CheckoutDestination,
 	type Household,
 	type HouseholdInput,
 	createScreening as buildScreening,
@@ -45,6 +47,7 @@ import {
 	type MedicalInput,
 	type Movement,
 	type MovementAction,
+	type StayStatus,
 	dormFieldsFor,
 	memberExtrasFor,
 	registrationMedicalInput,
@@ -66,6 +69,13 @@ import {
 import { autoHouseholdLabel } from '../domain/registration-shell';
 import { planSearchVisibilityChange } from '../domain/search-visibility';
 import { DEFAULT_EVACUEE_SORT, sortEvacuees, type EvacueeSort } from '../domain/evacuee-sort';
+import {
+	evacueeSearchClauses,
+	matchesEvacueeSearchPlan,
+	parseEvacueeSearchQuery,
+	type EvacueeSearchCursor,
+	type EvacueeSearchPage
+} from '../domain/evacuee-search';
 import {
 	STATION_LOG_STALE_WINDOW_MS,
 	createStationLog,
@@ -126,6 +136,9 @@ function consentWrite(
 	if (!registrantEvacueeId) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 	return bindConsent(plan, registrantEvacueeId);
 }
+
+const SEARCH_PAGE_SIZE = 20;
+const SEARCH_MAX_PAGE_SIZE = 50;
 
 /**
  * Remote CouchDB repository for the people feature. Writes go to the active
@@ -473,6 +486,49 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			);
 		}
 		return results;
+	}
+
+	async searchEvacueesPage(
+		query: string,
+		opts: { cursor?: EvacueeSearchCursor | null; pageSize?: number } = {}
+	): Promise<EvacueeSearchPage> {
+		const plan = parseEvacueeSearchQuery(query);
+		if (plan.kind === 'empty') return { items: [], nextCursor: null };
+		if (plan.kind === 'scan') {
+			const doc = await this.repo.get<Evacuee>(plan.id);
+			return { items: isEvacuee(doc) ? [doc] : [], nextCursor: null };
+		}
+
+		const pageSize = Math.min(
+			Math.max(Math.trunc(opts.pageSize ?? SEARCH_PAGE_SIZE), 1),
+			SEARCH_MAX_PAGE_SIZE
+		);
+		const cursor = opts.cursor ?? null;
+		const open = evacueeSearchClauses(plan).filter(({ key }) => !cursor || key in cursor);
+		const pages = await Promise.all(
+			open.map(({ key, selector }) =>
+				this.repo.findPage<unknown>({
+					selector,
+					limit: pageSize,
+					...(cursor ? { bookmark: cursor[key] } : {})
+				})
+			)
+		);
+
+		const nextCursor: Record<string, string> = {};
+		const items = new Map<string, Evacuee>();
+		pages.forEach((page, i) => {
+			// Exhaustion is judged on the raw count: the post-filter drops rows but a full raw
+			// page can still have more behind it.
+			if (page.docs.length === pageSize && page.bookmark) nextCursor[open[i].key] = page.bookmark;
+			for (const doc of page.docs) {
+				if (isEvacuee(doc) && matchesEvacueeSearchPlan(doc, plan)) items.set(doc._id, doc);
+			}
+		});
+		return {
+			items: [...items.values()],
+			nextCursor: Object.keys(nextCursor).length > 0 ? nextCursor : null
+		};
 	}
 
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household> {
@@ -1160,6 +1216,30 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return updated;
 	}
 
+	async applyBackfilledStays(
+		householdId: string,
+		entries: { evacuee: Evacuee; movements: Movement[] }[],
+		checkoutDestination: CheckoutDestination | null = null
+	): Promise<void> {
+		for (const { evacuee, movements } of entries) {
+			// Movements first, like every other stay write: the stream is the source of truth, so a
+			// failure between the two leaves history without a stale snapshot, never the reverse.
+			for (const movement of movements) await this.repo.put(movement);
+			const latest = await this.fetchLatestOrThrow(evacuee._id);
+			await this.repo.put({ ...evacuee, _rev: latest._rev });
+		}
+		await this.refreshDerivedHouseholdStatus(householdId);
+		// A household whose people all left needs a destination (R-29-8); the import file has none,
+		// so the caller presets one. It cannot be set at creation: a `checked_out` household refuses
+		// new members.
+		if (checkoutDestination) {
+			const household = await this.repo.get<Household>(householdId);
+			if (household && household.status === 'checked_out' && !household.checkout_destination) {
+				await this.repo.put(touch({ ...household, checkout_destination: checkoutDestination }));
+			}
+		}
+	}
+
 	/** Zone Arrival Confirmation: active → room_confirmed (CR-112). */
 	async confirmRoom(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee> {
 		const latest = await this.fetchLatestOrThrow(evacuee._id);
@@ -1212,11 +1292,48 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return updated;
 	}
 
+	/**
+	 * Manual stay-status override to any other status (CR-262 A1). Appends a `revert_status`
+	 * movement carrying `from_status` / `to_status` / `reason`, then applies it. Zone: cleared for
+	 * pre_registered / arriving / cancelled; kept (or `opts.zone`, required when the stay has none)
+	 * for active / room_confirmed; kept for the departed targets, like their normal actions.
+	 * Role gating (shelter_manager / system_admin) is a UI concern plus validator rule 2c.
+	 * Like `confirmRoom` / `zone_change` it writes no `station_log` row (only the zoning
+	 * check-in of an `arriving` person does, and that still goes through `check_in`), and earlier
+	 * append-only `station_log` rows stay untouched. The derived household status is refreshed.
+	 */
+	async revertEvacueeStatus(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		toStatus: StayStatus,
+		reason: string,
+		opts: { zone?: string | null } = {}
+	): Promise<Evacuee> {
+		const trimmed = reason.trim();
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'revert_status', { reason: trimmed, toStatus, zone: opts.zone });
+		const movement = createMovement(
+			{
+				evacuee_id: latest._id,
+				action: 'revert_status',
+				zone: resolveRevertZone(latest.current_stay, toStatus, opts.zone),
+				reason: trimmed,
+				from_status: latest.current_stay.status,
+				to_status: toStatus
+			},
+			ctx
+		);
+		await this.repo.put(movement);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
+		await this.refreshDerivedHouseholdStatus(updated.household_id);
+		return updated;
+	}
+
 	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
 	 *  Fetches the latest revision first (see fetchLatestOrThrow). */
 	async recordMovement(
 		evacuee: Evacuee,
-		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
+		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room' | 'revert_status'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
 	): Promise<Evacuee> {
