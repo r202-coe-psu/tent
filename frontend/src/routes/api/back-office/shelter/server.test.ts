@@ -19,7 +19,9 @@ vi.mock('$lib/server/shelters.admin', async (importOriginal) => {
 vi.mock('$lib/features/shelters/server/provisioner', () => ({
 	provisionShelter: vi.fn()
 }));
-const recordAuditedWrite = vi.hoisted(() => vi.fn(async () => true));
+const recordAuditedWrite = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
 vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite }));
 vi.mock('$lib/server/master-data-server', () => ({
 	readMasterDoc: vi.fn()

@@ -153,8 +153,8 @@ async function mutateStoragePoints(
 		entityId: code,
 		label: result.after?.name ?? null,
 		shelterCode: code,
-		before: result.before as Record<string, unknown> | undefined,
-		after: result.after as Record<string, unknown> | undefined
+		before: result.before,
+		after: result.after
 	});
 	return { rev: result.rev };
 }

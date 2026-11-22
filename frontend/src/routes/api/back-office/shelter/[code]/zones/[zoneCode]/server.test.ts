@@ -44,20 +44,24 @@ vi.mock('$lib/server/shelters.admin', () => ({
 	)
 }));
 
-const recordAuditedWrite = vi.hoisted(() => vi.fn(async () => true));
+const recordAuditedWrite = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
 vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite }));
 
 import { POST as CLOSE } from './+server';
 import { POST as REOPEN } from './reopen/+server';
 
-function ctx(body: unknown) {
+function ctx<T>(body: unknown): T {
 	const request = new Request('http://localhost/api/back-office/shelter/SH001/zones/Z1', {
 		method: 'POST',
 		headers: { cookie: 'AuthSession=abc', 'content-type': 'application/json' },
 		body: JSON.stringify(body)
 	});
-	return { request, params: { code: 'SH001', zoneCode: 'Z1' } } as Parameters<typeof CLOSE>[0];
+	return { request, params: { code: 'SH001', zoneCode: 'Z1' } } as T;
 }
+const closeCtx = (body: unknown) => ctx<Parameters<typeof CLOSE>[0]>(body);
+const reopenCtx = (body: unknown) => ctx<Parameters<typeof REOPEN>[0]>(body);
 
 const zones = (status: string): Zone[] => [
 	{ code: 'Z1', name: 'โซน 1', status, closed_by: null, reopened_by: null }
@@ -72,7 +76,7 @@ beforeEach(() => {
 
 describe('POST zones/[zoneCode] — CR-259 the actor is the caller, never the body', () => {
 	it('ignores closed_by from the body and stamps the signed-in caller', async () => {
-		const res = await CLOSE(ctx({ reason: 'น้ำท่วม', closed_by: 'someone-else' }));
+		const res = await CLOSE(closeCtx({ reason: 'น้ำท่วม', closed_by: 'someone-else' }));
 
 		expect(res.status).toBe(200);
 		const zone = (state.doc as Doc).zones[0];
@@ -82,7 +86,7 @@ describe('POST zones/[zoneCode] — CR-259 the actor is the caller, never the bo
 	});
 
 	it('writes the same actor to the legacy audit doc and the central event', async () => {
-		await CLOSE(ctx({ reason: 'น้ำท่วม', closed_by: 'someone-else' }));
+		await CLOSE(closeCtx({ reason: 'น้ำท่วม', closed_by: 'someone-else' }));
 
 		expect((state.legacyAudit?.context as { actor?: string }).actor).toBe('sm01');
 		expect(recordAuditedWrite).toHaveBeenCalledTimes(1);
@@ -98,7 +102,7 @@ describe('POST zones/[zoneCode] — CR-259 the actor is the caller, never the bo
 	it('answers 409 and records nothing when the zone is already closed', async () => {
 		state.doc = { ...state.doc, zones: zones('closed') };
 
-		const res = await CLOSE(ctx({ reason: 'ซ้ำ' }));
+		const res = await CLOSE(closeCtx({ reason: 'ซ้ำ' }));
 
 		expect(res.status).toBe(409);
 		expect(recordAuditedWrite).not.toHaveBeenCalled();
@@ -109,7 +113,7 @@ describe('POST zones/[zoneCode]/reopen — CR-259', () => {
 	it('ignores reopened_by from the body and stamps the signed-in caller', async () => {
 		state.doc = { ...state.doc, zones: zones('closed') };
 
-		const res = await REOPEN(ctx({ reopened_by: 'someone-else' }));
+		const res = await REOPEN(reopenCtx({ reopened_by: 'someone-else' }));
 
 		expect(res.status).toBe(200);
 		const zone = (state.doc as Doc).zones[0];
@@ -119,7 +123,7 @@ describe('POST zones/[zoneCode]/reopen — CR-259', () => {
 	});
 
 	it('answers 409 and records nothing when the zone is already active', async () => {
-		const res = await REOPEN(ctx({}));
+		const res = await REOPEN(reopenCtx({}));
 
 		expect(res.status).toBe(409);
 		expect(recordAuditedWrite).not.toHaveBeenCalled();

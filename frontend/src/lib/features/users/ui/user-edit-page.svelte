@@ -8,6 +8,7 @@
 		isAppSystemAdmin,
 		isStaffOnly,
 		isSystemAdmin,
+		managerShelterCodes,
 		shelterCodeFromRoles,
 		shelterCodesFromRoles,
 		SYSTEM_ADMIN,
@@ -39,7 +40,7 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const ownShelterCode = $derived(shelterCodeFromRoles(roles));
+	const ownShelterCode = $derived(managerShelterCodes(roles)[0] ?? shelterCodeFromRoles(roles));
 	const effectiveLock = $derived(
 		lockedShelterCode || (!isSA ? (ownShelterCode ?? undefined) : undefined)
 	);

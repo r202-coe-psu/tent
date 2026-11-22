@@ -17,7 +17,9 @@ const isNameLockHeldMock = vi.hoisted(() => vi.fn());
 const releaseNameLockMock = vi.hoisted(() => vi.fn());
 const buildUpdatePayloadMock = vi.hoisted(() => vi.fn());
 const readMasterDocMock = vi.hoisted(() => vi.fn());
-const recordAuditMock = vi.hoisted(() => vi.fn(async () => true));
+const recordAuditMock = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
 
 vi.mock('$env/dynamic/private', () => ({ env }));
 vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: readMasterDocMock }));
@@ -196,6 +198,53 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			expect.any(Object)
 		);
 		expect(updateMasterMock).not.toHaveBeenCalled();
+	});
+
+	it('records shelter.imported after the item is marked updated, once (CR-259 FR-24)', async () => {
+		listJobsMock.mockResolvedValue([{ ...job(), duplicate_action: 'update' }]);
+		findByNameMock.mockResolvedValue({ code: 'SH009', name: 'ศูนย์ A' });
+		buildUpdatePayloadMock.mockReturnValue({ capacity: 250 });
+		updateMasterMock.mockImplementation(async (_code, _actor, mutator) => {
+			await mutator({ name: 'ศูนย์ A', capacity: 101 });
+			return {
+				id: 'shelter:SH009',
+				rev: '2-b',
+				before: { name: 'ศูนย์ A' },
+				after: { name: 'ศูนย์ A' }
+			};
+		});
+
+		await call();
+
+		expect(recordAuditMock).toHaveBeenCalledTimes(1);
+		expect(recordAuditMock.mock.calls[0][0]).toMatchObject({
+			actor: 'sa.importer',
+			event: 'shelter.imported',
+			action: 'update',
+			entityType: 'shelter',
+			entityId: 'SH009',
+			shelterCode: 'SH009'
+		});
+		expect(updateItemMock.mock.invocationCallOrder[0]).toBeLessThan(
+			recordAuditMock.mock.invocationCallOrder[0]
+		);
+	});
+
+	it('writes no update event when marking the item updated fails', async () => {
+		listJobsMock.mockResolvedValue([{ ...job(), duplicate_action: 'update' }]);
+		findByNameMock.mockResolvedValue({ code: 'SH009', name: 'ศูนย์ A' });
+		buildUpdatePayloadMock.mockReturnValue({ capacity: 250 });
+		updateMasterMock.mockResolvedValue({
+			id: 'shelter:SH009',
+			rev: '2-b',
+			before: { name: 'ศูนย์ A' },
+			after: { name: 'ศูนย์ A' }
+		});
+		updateItemMock.mockRejectedValueOnce(new Error('couch down'));
+
+		await call();
+
+		expect(recordAuditMock).not.toHaveBeenCalled();
 	});
 
 	it('builds duplicate updates from the latest document supplied by the MVCC helper', async () => {

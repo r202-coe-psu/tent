@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockReset, mockRecordAuditedWrites } = vi.hoisted(() => ({
 	mockReset: vi.fn(),
-	mockRecordAuditedWrites: vi.fn(async () => undefined)
+	mockRecordAuditedWrites: vi.fn<(write: unknown, codes: unknown) => Promise<void>>(
+		async () => undefined
+	)
 }));
 
 vi.mock('$lib/server/couch-admin', () => ({

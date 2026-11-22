@@ -216,8 +216,8 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 			entityId: code,
 			label: after?.name ?? null,
 			shelterCode: code,
-			before: before as Record<string, unknown> | undefined,
-			after: after as Record<string, unknown> | undefined,
+			before: before,
+			after: after,
 			onlyWhenChanged: true
 		});
 		return json({ ok: true, code, rev: newRev });

@@ -35,6 +35,17 @@ describe('audit_log validate_doc_update', () => {
 		expect(() => vdu({ ...valid, _deleted: true }, null, admin)).toThrow();
 	});
 
+	it('rejects a present but empty actor or entity field', () => {
+		expect(() => vdu({ ...valid, actor: { name: '', kind: 'user' } }, null, admin)).toThrow();
+		expect(() => vdu({ ...valid, actor: { name: 'sa', kind: '' } }, null, admin)).toThrow();
+		expect(() =>
+			vdu({ ...valid, entity: { type: '', id: 'SH001', label: null } }, null, admin)
+		).toThrow();
+		expect(() =>
+			vdu({ ...valid, entity: { type: 'shelter', id: '', label: null } }, null, admin)
+		).toThrow();
+	});
+
 	it('rejects other types and missing required fields', () => {
 		expect(() => vdu({ ...valid, type: 'audit' }, null, admin)).toThrow();
 		expect(() => vdu({ ...valid, actor: undefined }, null, admin)).toThrow();

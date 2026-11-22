@@ -84,6 +84,13 @@ const HIGH = {};
 
 export function chooseAuditView(query: AuditLogQuery): AuditViewRange {
 	const to = query.to ?? HIGH;
+	if (query.shelter_code) {
+		return {
+			view: 'by_shelter',
+			startkey: [query.shelter_code, to],
+			endkey: query.from ? [query.shelter_code, query.from] : [query.shelter_code]
+		};
+	}
 	if (query.entity_type && query.entity_id) {
 		return {
 			view: 'by_entity',
@@ -91,13 +98,6 @@ export function chooseAuditView(query: AuditLogQuery): AuditViewRange {
 			endkey: query.from
 				? [query.entity_type, query.entity_id, query.from]
 				: [query.entity_type, query.entity_id]
-		};
-	}
-	if (query.shelter_code) {
-		return {
-			view: 'by_shelter',
-			startkey: [query.shelter_code, to],
-			endkey: query.from ? [query.shelter_code, query.from] : [query.shelter_code]
 		};
 	}
 	if (query.actor) {

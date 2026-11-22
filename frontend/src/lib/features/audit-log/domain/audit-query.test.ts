@@ -74,6 +74,14 @@ describe('chooseAuditView', () => {
 		expect(chooseAuditView(parse({ actor: 'sm', shelter_code: 'SH001' })).view).toBe('by_shelter');
 	});
 
+	it('keeps a shelter-scoped query on the shelter view even when an entity is given', () => {
+		const range = chooseAuditView(
+			parse({ shelter_code: 'SH001', entity_type: 'shelter', entity_id: 'SH002' })
+		);
+		expect(range.view).toBe('by_shelter');
+		expect((range.startkey as unknown[])[0]).toBe('SH001');
+	});
+
 	it('reads an entity type alone from the time view so the range still applies', () => {
 		const range = chooseAuditView(parse({ entity_type: 'user', to: '2026-11-18' }));
 		expect(range.view).toBe('by_occurred_at');

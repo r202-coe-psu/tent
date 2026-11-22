@@ -41,7 +41,12 @@ vi.mock('$lib/server/user-service', () => ({
 	getDisplayNames: vi.fn().mockResolvedValue(new Map())
 }));
 vi.mock('$lib/server/shelters.admin', () => ({
-	updateMaster: vi.fn().mockResolvedValue({ id: 'shelter:SH001', rev: '2-new' }),
+	updateMaster: vi.fn().mockResolvedValue({
+		id: 'shelter:SH001',
+		rev: '2-new',
+		before: {} as ShelterMaster,
+		after: {} as ShelterMaster
+	}),
 	findMasterByCode: vi.fn(),
 	migrate: vi.fn(),
 	nowIso: () => '2026-01-01T00:00:00.000Z'
@@ -72,7 +77,12 @@ const siteKindDoc = {
 function useStoredKind(storedKind: string) {
 	updateMock.mockImplementation(async (_code, _actor, mutator) => {
 		await mutator({ site_kind: storedKind } as ShelterMaster);
-		return { id: 'shelter:SH001', rev: '2-new' };
+		return {
+			id: 'shelter:SH001',
+			rev: '2-new',
+			before: {} as ShelterMaster,
+			after: {} as ShelterMaster
+		};
 	});
 }
 
@@ -87,7 +97,12 @@ function callPATCH(code: string, body: unknown = {}) {
 
 beforeEach(() => {
 	mgrMock.mockReset().mockResolvedValue(caller);
-	updateMock.mockReset().mockResolvedValue({ id: 'shelter:SH001', rev: '2-new' });
+	updateMock.mockReset().mockResolvedValue({
+		id: 'shelter:SH001',
+		rev: '2-new',
+		before: {} as ShelterMaster,
+		after: {} as ShelterMaster
+	});
 	readMasterDocMock.mockReset().mockResolvedValue(siteKindDoc);
 	closeStore.getActiveJob.mockReset().mockResolvedValue(null);
 });
@@ -145,7 +160,12 @@ describe('PATCH /api/back-office/shelter/[code] — closing goes through the clo
 	async function patchAgainst(stored: string, body: unknown): Promise<number> {
 		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			await mutator({ operation_status: stored } as ShelterMaster);
-			return { id: 'shelter:SH001', rev: '2-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '2-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		return (await callPATCH('SH001', body)).status;
 	}
@@ -179,7 +199,12 @@ describe('PATCH /api/back-office/shelter/[code] — closing goes through the clo
 	it('answers the close block in the contract envelope so the UI can toast it', async () => {
 		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			await mutator({ operation_status: 'active' } as ShelterMaster);
-			return { id: 'shelter:SH001', rev: '2-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '2-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', { operation_status: 'closed' });
 		expect(res.status).toBe(400);
@@ -199,7 +224,12 @@ describe('PATCH /api/back-office/shelter/[code] — blocked while a close job is
 	async function patchAgainst(stored: string, body: unknown) {
 		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			await mutator({ operation_status: stored } as ShelterMaster);
-			return { id: 'shelter:SH001', rev: '2-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '2-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		return callPATCH('SH001', body);
 	}
@@ -283,7 +313,12 @@ describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + sto
 		let patch: Record<string, unknown> | undefined;
 		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
-			return { id: 'shelter:SH001', rev: '3-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '3-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', body);
 		return { res, patch };
@@ -359,7 +394,12 @@ describe('PATCH /api/back-office/shelter/[code] — external shelter (CR-252 FR-
 		let patch: Record<string, unknown> | undefined;
 		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
-			return { id: 'shelter:SH001', rev: '3-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '3-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', body);
 		return { res, patch };
@@ -512,7 +552,12 @@ describe('PATCH /api/back-office/shelter/[code] — parking points (#1352)', () 
 		let patch: Record<string, unknown> | undefined;
 		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
-			return { id: 'shelter:SH001', rev: '3-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '3-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', body);
 		return { res, patch };

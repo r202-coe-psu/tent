@@ -105,7 +105,7 @@ async def copy_audit_doc(
     event = to_audit_event(source, db_name, now or datetime.now(UTC))
     if event is None:
         logger.warning(
-            "Skipping audit doc %s in %s: not an audit:{ULID} id",
+            "Skipping audit doc %s in %s: bad id or a missing action/target field",
             source.get("_id"),
             db_name,
         )

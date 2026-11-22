@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	AUDIT_EVENTS,
+	auditShelterCodesForRoleChange,
 	auditShelterCodesFromRoles,
 	buildAuditEvent,
 	computeAuditChanges
@@ -119,5 +120,38 @@ describe('auditShelterCodesFromRoles', () => {
 
 	it('returns a single null for accounts without a shelter', () => {
 		expect(auditShelterCodesFromRoles(['system_admin'], undefined)).toEqual([null]);
+	});
+});
+
+describe('auditShelterCodesForRoleChange — CR-259 FR-28', () => {
+	it('names only the shelter whose roles moved', () => {
+		expect(
+			auditShelterCodesForRoleChange(
+				['shelter:SH001', 'shelter:SH002', 'SH002:kitchen_staff'],
+				['shelter:SH001', 'shelter:SH002']
+			)
+		).toEqual(['SH002']);
+	});
+
+	it('names a shelter the account joined or left', () => {
+		expect(
+			auditShelterCodesForRoleChange(['shelter:SH001'], ['shelter:SH001', 'shelter:SH002'])
+		).toEqual(['SH002']);
+		expect(
+			auditShelterCodesForRoleChange(['shelter:SH001', 'shelter:SH002'], ['shelter:SH002'])
+		).toEqual(['SH001']);
+	});
+
+	it('sees a capability change on a legacy flat account', () => {
+		expect(
+			auditShelterCodesForRoleChange(
+				['shelter:SH001', 'registration_staff'],
+				['shelter:SH001', 'kitchen_staff']
+			)
+		).toEqual(['SH001']);
+	});
+
+	it('falls back to null when nothing about the roles moved', () => {
+		expect(auditShelterCodesForRoleChange(['shelter:SH001'], ['shelter:SH001'])).toEqual([null]);
 	});
 });

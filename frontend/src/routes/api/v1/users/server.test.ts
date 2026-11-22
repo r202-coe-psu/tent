@@ -11,7 +11,9 @@ const {
 	mockUpdateUser: vi.fn(),
 	mockAssertVerified: vi.fn(),
 	mockDeleteUser: vi.fn(),
-	mockRecordAuditedWrites: vi.fn(async () => undefined)
+	mockRecordAuditedWrites: vi.fn<(write: unknown, codes: unknown) => Promise<void>>(
+		async () => undefined
+	)
 }));
 
 vi.mock('$lib/server/couch-admin', () => ({
@@ -153,6 +155,91 @@ function del(name: string) {
 	} as Parameters<typeof DELETE>[0]);
 }
 
+function put(body: Record<string, unknown>) {
+	const request = new Request('http://localhost/api/v1/users', {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', cookie: 'AuthSession=x' },
+		body: JSON.stringify(body)
+	});
+	return PUT({ request } as Parameters<typeof PUT>[0]);
+}
+
+describe('POST and PUT /api/v1/users — CR-259 FR-24 audit wiring', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockCreateOrMergeUser.mockResolvedValue({ merged: false, before: null, after: null });
+		mockUpdateUser.mockResolvedValue({ before: null, after: null });
+	});
+
+	it('records user.created for a fresh account', async () => {
+		await post({
+			name: 'staff01',
+			display_name: 'Staff 01',
+			password: 'Temp-Pass-123',
+			roles: ['shelter:SH001']
+		});
+
+		expect(mockRecordAuditedWrites).toHaveBeenCalledTimes(1);
+		expect(mockRecordAuditedWrites.mock.calls[0][0]).toMatchObject({
+			event: 'user.created',
+			action: 'create',
+			entityId: 'staff01'
+		});
+	});
+
+	it('records user.roles_changed with the saved name when a merge happens', async () => {
+		mockCreateOrMergeUser.mockResolvedValue({
+			merged: true,
+			before: { display_name: 'ชื่อจริง', roles: ['shelter:SH001'] },
+			after: { display_name: 'ชื่อจริง', roles: ['shelter:SH001', 'SH001:kitchen_staff'] }
+		});
+
+		await post({
+			name: 'staff01',
+			display_name: 'ชื่อจากฟอร์ม',
+			password: 'Temp-Pass-123',
+			roles: ['shelter:SH001', 'SH001:kitchen_staff']
+		});
+
+		expect(mockRecordAuditedWrites.mock.calls[0][0]).toMatchObject({
+			event: 'user.roles_changed',
+			action: 'update',
+			label: 'ชื่อจริง'
+		});
+	});
+
+	it('records user.roles_changed only for the shelter whose roles moved', async () => {
+		mockUpdateUser.mockResolvedValue({
+			before: { display_name: 'Staff 01', roles: ['shelter:SH001', 'shelter:SH002'] },
+			after: {
+				display_name: 'Staff 01',
+				roles: ['shelter:SH001', 'shelter:SH002', 'SH002:kitchen_staff']
+			}
+		});
+
+		await put({ name: 'staff01', roles: ['shelter:SH001', 'shelter:SH002'] });
+
+		expect(mockRecordAuditedWrites.mock.calls[0][0]).toMatchObject({
+			event: 'user.roles_changed'
+		});
+		expect(mockRecordAuditedWrites.mock.calls[0][1]).toEqual(['SH002']);
+	});
+
+	it('records user.updated when only the display name moves', async () => {
+		mockUpdateUser.mockResolvedValue({
+			before: { display_name: 'เดิม', roles: ['shelter:SH001'] },
+			after: { display_name: 'ใหม่', roles: ['shelter:SH001'] }
+		});
+
+		await put({ name: 'staff01', display_name: 'ใหม่' });
+
+		expect(mockRecordAuditedWrites.mock.calls[0][0]).toMatchObject({
+			event: 'user.updated',
+			action: 'update'
+		});
+	});
+});
+
 describe('DELETE /api/v1/users — CR-259 audit reflects what the write did', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -193,6 +280,7 @@ describe('DELETE /api/v1/users — CR-259 audit reflects what the write did', ()
 		expect(write).toMatchObject({ event: 'user.roles_changed', action: 'update' });
 		expect(write.before).toMatchObject({ roles: ['shelter:SH001', 'shelter:SH002'] });
 		expect(write.after).toMatchObject({ roles: ['shelter:SH002'] });
+		expect(mockRecordAuditedWrites.mock.calls[0][1]).toEqual(['SH001']);
 	});
 
 	it('never guesses a delete from a missing snapshot', async () => {

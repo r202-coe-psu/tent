@@ -12,7 +12,8 @@ import { assertUsersWritable } from '$lib/server/edge-mode';
 import {
 	AUDIT_EVENTS,
 	auditShelterCodesForRoleChange,
-	auditShelterCodesFromRoles
+	auditShelterCodesFromRoles,
+	computeAuditChanges
 } from '$lib/features/audit-log/server';
 import { validateProvisionedPassword } from '$lib/server/password-policy';
 import { shelterCodesFromRoles } from '$lib/auth/roles';
@@ -146,9 +147,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				action: result.merged ? 'update' : 'create',
 				entityType: 'user',
 				entityId: name,
-				label: display_name,
-				before: result.before as unknown as Record<string, unknown> | null,
-				after: result.after as unknown as Record<string, unknown> | null
+				label: result.after?.display_name ?? display_name,
+				before: result.before,
+				after: result.after
 			},
 			auditShelterCodesFromRoles(roles)
 		);
@@ -238,20 +239,21 @@ export const PUT: RequestHandler = async ({ request }) => {
 		const rolesChanged =
 			JSON.stringify([...(saved?.roles ?? [])].sort()) !==
 			JSON.stringify([...(after?.roles ?? [])].sort());
+		const otherFieldsChanged = computeAuditChanges('user', saved, after).length > 0;
 		await recordAuditedWrites(
 			{
 				actor: caller.name,
 				event: rolesChanged
 					? AUDIT_EVENTS.userRolesChanged
-					: password && !display_name && !roles
+					: password && !otherFieldsChanged
 						? AUDIT_EVENTS.userPasswordReset
 						: AUDIT_EVENTS.userUpdated,
 				action: 'update',
 				entityType: 'user',
 				entityId: name,
 				label: after?.display_name ?? saved?.display_name ?? null,
-				before: saved as unknown as Record<string, unknown> | null,
-				after: after as unknown as Record<string, unknown> | null
+				before: saved,
+				after: after
 			},
 			rolesChanged
 				? auditShelterCodesForRoleChange(saved?.roles, after?.roles)
@@ -298,8 +300,8 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
 						entityType: 'user',
 						entityId: name,
 						label: after?.display_name ?? before?.display_name ?? null,
-						before: before as unknown as Record<string, unknown> | null,
-						after: after as unknown as Record<string, unknown> | null
+						before: before,
+						after: after
 					},
 			removed
 				? auditShelterCodesFromRoles(before?.roles)

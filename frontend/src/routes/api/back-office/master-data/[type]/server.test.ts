@@ -40,7 +40,9 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 		adminRaw: vi.fn()
 	};
 });
-const recordAuditedWrite = vi.hoisted(() => vi.fn(async () => true));
+const recordAuditedWrite = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
 vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite }));
 vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),

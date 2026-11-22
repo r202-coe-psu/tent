@@ -54,8 +54,8 @@ export type AuditedWrite = {
 	entityId: string;
 	label?: string | null;
 	shelterCode: string | null;
-	before?: Record<string, unknown> | null;
-	after?: Record<string, unknown> | null;
+	before?: object | null;
+	after?: object | null;
 	reason?: string | null;
 	onlyWhenChanged?: boolean;
 };
@@ -130,6 +130,9 @@ type ViewRow = { id: string; key: unknown; doc?: AuditEvent | null };
 export async function queryAuditLog(query: AuditLogQuery): Promise<AuditLogPage> {
 	const range = chooseAuditView(query);
 	const cursor = decodeAuditCursor(query.cursor);
+	if (query.cursor && !cursor) {
+		throw new ServiceError('VALIDATION', 'cursor is not a valid page marker');
+	}
 	if (cursor && !(cursorMatchesRange(range, cursor) && cursorWithinQuery(query, cursor))) {
 		throw new ServiceError('VALIDATION', 'cursor does not belong to this query');
 	}

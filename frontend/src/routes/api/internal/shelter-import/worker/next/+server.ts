@@ -238,8 +238,8 @@ export const POST: RequestHandler = async ({ request }) => {
 						entityId: code,
 						label: written.after?.name ?? null,
 						shelterCode: code,
-						before: written.before as Record<string, unknown> | undefined,
-						after: written.after as Record<string, unknown> | undefined
+						before: written.before,
+						after: written.after
 					});
 				const duplicate = await findMasterByName(input.name);
 				const resumingProvision = Boolean(item.code);

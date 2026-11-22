@@ -201,6 +201,59 @@ describe('queryAuditLog', () => {
 	const rows = (events: AuditEvent[]) =>
 		events.map((doc) => ({ id: doc._id, key: [doc.shelter_code, doc.occurred_at], doc }));
 
+	it('keeps a shelter-scoped caller on by_shelter even with an entity filter', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		await queryAuditLog(
+			parseAuditLogQuery(
+				new URLSearchParams({
+					shelter_code: 'SH001',
+					entity_type: 'shelter',
+					entity_id: 'SH002'
+				})
+			)
+		);
+
+		expect(adminRawMock.mock.calls[0][0]).toContain('/_view/by_shelter?');
+		expect(adminRawMock.mock.calls[0][0]).toContain(encodeURIComponent('"SH001"'));
+	});
+
+	it('refuses a cursor that points at another shelter', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		await expect(
+			queryAuditLog(
+				parseAuditLogQuery(
+					new URLSearchParams({
+						shelter_code: 'SH001',
+						cursor: JSON.stringify({ key: ['SH002', '2099-01-01'], id: 'audit_event:01' })
+					})
+				)
+			)
+		).rejects.toMatchObject({ code: 'VALIDATION' });
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('refuses a cursor outside the requested date range', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		await expect(
+			queryAuditLog(
+				parseAuditLogQuery(
+					new URLSearchParams({
+						shelter_code: 'SH001',
+						to: '2026-11-18',
+						cursor: JSON.stringify({
+							key: ['SH001', '2026-12-25T00:00:00.000Z'],
+							id: 'audit_event:01'
+						})
+					})
+				)
+			)
+		).rejects.toMatchObject({ code: 'VALIDATION' });
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
 	it('returns the page newest first with display names and no _rev', async () => {
 		adminRawMock.mockResolvedValue({ status: 200, data: { rows: rows([event(3), event(2)]) } });
 		const page = await queryAuditLog(

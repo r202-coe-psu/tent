@@ -301,7 +301,7 @@ describe('provisionShelter seeding', () => {
 				name: 'ศูนย์ใหม่',
 				created_by: 'mallory',
 				updated_by: 'mallory'
-			} as Parameters<typeof provisionShelter>[0],
+			} as unknown as Parameters<typeof provisionShelter>[0],
 			'sa.admin',
 			'SH006'
 		);

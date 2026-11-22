@@ -48,7 +48,9 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	};
 });
 
-const recordAuditedWrite = vi.hoisted(() => vi.fn(async () => true));
+const recordAuditedWrite = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
 vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite }));
 
 vi.mock('$lib/server/shelters.admin', () => ({

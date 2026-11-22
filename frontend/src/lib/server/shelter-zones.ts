@@ -111,8 +111,8 @@ export async function applyZoneTransition(
 		entityId: code,
 		label: after?.name ?? null,
 		shelterCode: code,
-		before: before as Record<string, unknown> | undefined,
-		after: after as Record<string, unknown> | undefined,
+		before: before,
+		after: after,
 		reason: reason ? `${zoneCode}: ${reason}` : zoneCode
 	});
 
