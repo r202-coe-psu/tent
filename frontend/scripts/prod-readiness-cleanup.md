@@ -86,17 +86,50 @@ pnpm migrate:prod-cleanup --shelter=SH001 --all-evacuees --apply
 
 **Refs left behind.** With `people` only, docs of other categories that name a deleted evacuee
 stay: `distribution_issue` / `distribution_log` / `bulk_return_*` / `distribution_issue_idempotency`
-(and `shelter_incident`, which is always kept). The dry-run prints them as
-`kept docs still pointing at a deleted evacuee: <type>=<n>`. If that line is not `-` and you want
-the shelter fully clean, add `distribution` to the run:
+/ `distribution_one_time_guard`. Two types are always kept on purpose, whatever `--only` says:
+`shelter_incident` and `audit` (`target_id` / `context.triggered_by_evacuee_id`). The dry-run prints
+all of them as `kept docs still pointing at a deleted evacuee: <type>=<n>`. Add `distribution` to
+the run to clear the distribution ones:
 `--shelter=SH001 --all-evacuees --only=people,distribution` (deletes **all** of that shelter's
-distribution docs, not only those of the deleted people).
+distribution docs, not only those of the deleted people). The line still shows `audit=<n>` /
+`shelter_incident=<n>` after that, and that is expected.
+
+Without `--all-evacuees` the line can also show `evacuee=<n>`: a kept person (e.g. a web
+pre-registration) whose `consent.giver_evacuee_id` named a deleted one. No option clears that ref;
+fix the person by hand if it matters.
+
+The dry-run only scans the shelter's own DB. `central_ops` is skipped with one `--shelter`, so a
+`referral:*` that points at a deleted evacuee stays there and is **not** in that line; acting on it
+later fails because the evacuee is gone. Before `--apply`, check `central_ops` for open referrals
+of that shelter (`evacuee_id` of a person being deleted) and close or remove them first.
 
 **Public plane and partners.** The worker removes the deleted people's `public_persons` and
 refreshes occupancy, so web/api pre-registrations disappear from public search. Partner booking
-rows in `external_bookings` are not deleted: their status lookup falls back to the stay copied on
-the row (`_stay_of` in `backend/apiapp/modules/thirdparty_bookings/use_case.py`), so a partner
-still sees the booking with its last known stay. Same backup / `--restore` as every other `--apply`.
+rows in MongoDB `external_bookings` are **not** deleted, and they break:
+
+- EXT-010 (status) reads only the buffered row (`BOOKED` / `CANCELLED` / `REJECTED`) — the partner
+  keeps seeing `BOOKED` for a person who no longer exists.
+- An open row (`state: pending` or `written`) keeps its `(shelter_code, cid_hash)` slot in the
+  unique index `uniq_open_booking_per_shelter`, so EXT-008 re-booking that CID at that shelter
+  returns `409 duplicate_booking` for good. A `pending` row is also written to CouchDB by the worker
+  later, which brings a person back into the shelter you just cleaned.
+- EXT-009 (cancel) on a row whose `stay_status` is `pre_registered` (or `null`) returns `200`, then
+  the worker finds no CouchDB evacuee, rejects it as `not_cancellable` and the row flips back to
+  `BOOKED` — the slot stays taken.
+
+So **do not run `--all-evacuees` on a shelter with open partner bookings** unless you also clean up
+that shelter's open `external_bookings` rows in MongoDB in the same window, in this order:
+
+1. Dry-run and read the `api/<status>=<n>` part of the evacuee breakdown — that is how many partner
+   bookings the run would delete. Also check MongoDB for `pending` rows of the shelter and wait
+   until the worker has processed them (no `pending` left).
+2. `--apply` the cleanup.
+3. Only then set those rows to `state: cancelled` (keeps EXT-010 answering `CANCELLED` and frees
+   the slot). Doing it **before** the cleanup makes the worker's reconcile cancel the evacuees in
+   CouchDB and write partner audit docs mid-run (revision conflicts, extra kept `audit` docs).
+   Deleting the rows instead makes EXT-010 answer `404` for that booking.
+
+Same backup / `--restore` as every other `--apply` (the backup covers CouchDB only, not MongoDB).
 
 ## 0. Before you start — design docs
 

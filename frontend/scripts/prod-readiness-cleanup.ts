@@ -253,7 +253,7 @@ export function planShelterCleanup(
 }
 
 /** Docs the people plan rewrites itself — their refs are handled, not left behind. */
-const PEOPLE_OWN_PREFIXES = ['evacuee:', 'household:'] as const;
+const PEOPLE_OWN_PREFIXES = ['household:'] as const;
 
 /** True when any string anywhere in `value` (fields, arrays, nested objects) is in `ids`. */
 function refersTo(value: unknown, ids: ReadonlySet<string>): boolean {
@@ -421,9 +421,11 @@ export function parseCliArgs(argv: readonly string[]): CliArgs {
 		throw new Error('--all-evacuees takes no value');
 	}
 	const allEvacuees = argv.includes('--all-evacuees');
-	const shelter = flagValue(argv, 'shelter');
+	const shelterRaw = flagValue(argv, 'shelter');
+	// Normalise every spelling of "all" (ALL, All) so guards and central_ops agree with the resolver.
+	const shelter = shelterRaw === null || resolveShelterTarget(shelterRaw).all ? null : shelterRaw;
 	// Deleting every person is never a whole-system default: one named shelter, people only.
-	if (allEvacuees && (shelter === null || shelter === 'all')) {
+	if (allEvacuees && shelter === null) {
 		throw new Error('--all-evacuees needs one shelter: --shelter=<code>');
 	}
 	if (allEvacuees && keepChannels) {

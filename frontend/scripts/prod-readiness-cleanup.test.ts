@@ -154,6 +154,15 @@ describe('planShelterCleanup — evacuee refs left behind', () => {
 		});
 		expect(plan.danglingEvacueeRefs).toEqual({ shelter_incident: 1 });
 	});
+
+	it('counts a kept evacuee whose consent giver was deleted', () => {
+		const plan = planShelterCleanup(
+			'shelter_sh001',
+			[...docs, evacuee('K2', 'web', 'active', { consent: { giver_evacuee_id: 'evacuee:A1' } })],
+			{ ...ALL, categories: ['people', 'distribution'] }
+		);
+		expect(plan.danglingEvacueeRefs).toEqual({ evacuee: 1, shelter_incident: 1 });
+	});
 });
 
 describe('planShelterCleanup — people', () => {
@@ -374,10 +383,20 @@ describe('parseCliArgs / assertHostConfirmed', () => {
 
 	it('--all-evacuees needs exactly one named shelter and takes no value', () => {
 		expect(() => parseCliArgs(['--all-evacuees'])).toThrow(/needs one shelter/);
-		expect(() => parseCliArgs(['--all-evacuees', '--shelter=all'])).toThrow(/needs one shelter/);
+		for (const all of ['all', 'ALL', 'All']) {
+			expect(() => parseCliArgs(['--all-evacuees', `--shelter=${all}`])).toThrow(
+				/needs one shelter/
+			);
+		}
 		expect(() => parseCliArgs(['--all-evacuees=true', '--shelter=SH001'])).toThrow(
 			/--all-evacuees takes no value/
 		);
+	});
+
+	it('normalises any spelling of --shelter=all so central_ops is handled the same way', () => {
+		expect(parseCliArgs(['--shelter=ALL']).shelter).toBe('all');
+		expect(parseCliArgs(['--shelter=All']).shelter).toBe('all');
+		expect(parseCliArgs(['--shelter=SH001']).shelter).toBe('SH001');
 	});
 
 	it('parses --expect-shelters as a whole number', () => {
@@ -694,6 +713,13 @@ describe('runCleanup / runRestore against a fake CouchDB', () => {
 		]);
 		expect(couch.live('shelter_sh002')).toEqual(['meal_plan:1']);
 		expect(couch.live('central_ops')).toContain('referral:1');
+	});
+
+	it('--shelter=ALL covers every shelter and central_ops, same as all', async () => {
+		const couch = seed();
+		const dry = await runCleanup(parseCliArgs(['--shelter=ALL']), deps(couch.req));
+		expect(dry.shelters.map((p) => p.db)).toEqual(['shelter_sh001', 'shelter_sh002']);
+		expect(dry.centralOps.map((r) => r.id)).toContain('referral:1');
 	});
 
 	it('--shelter scopes the run to one DB and skips central_ops', async () => {
