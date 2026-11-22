@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-263
 title: เพิ่ม role guard หน้า /back-office/sop-parameters (SA / SM / WS เข้าและทำได้, SC ดูอย่างเดียว, role อื่นเข้าไม่ได้) — Daily SOP คงเดิม
-status: proposed
+status: approved
 date: 2026-11-16
+updated: 2026-11-22
 requested_by: "PO (Fishcanwalk) — คำตัดสินสิทธิ์ 2 หน้าที่เหลือ บน GitHub #845 (2026-11-16)"
-decided_by: รอ approve (Team Lead)
+decided_by: kong
 layer: volatile
 affects:
   - docs/prd/role-permission-matrix.md §3 (เพิ่มแถว SOP Parameters (หน้า) + decision sync note ของ /back-office/dailysop)
@@ -84,4 +85,5 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่
 
 - 2026-11-05 — PO (Fishcanwalk) ตัด `/back-office/shelters/readiness` ออกจากขอบเขต #845 (บันทึกใน decision sync ของ role matrix แล้ว)
 - 2026-11-16 — PO (Fishcanwalk) ตัดสินสิทธิ์: `/back-office/sop-parameters` = SA/SM/WS เข้าและทำได้, SC ดูอย่างเดียว, role อื่นเข้าไม่ได้; `/back-office/dailysop` = ทุก role คงเดิม — บันทึกคำตัดสินบน #845
-- 2026-11-16 — proposed (ร่าง CR ตาม R1 ของ #845) · รอ PO ยืนยันว่า "ทำได้ทุกอย่าง" ของ SA/SM/WS = สิทธิ์ระดับหน้า (ถ้าต้องการให้ WS แก้ master หรือ `sop_override` ได้ ต้องเปิด CR แยกเพราะแก้ `validate_doc_update`)
+- 2026-11-16 — proposed (ร่าง CR ตาม R1 ของ #845) · ค้างยืนยันว่า "ทำได้ทุกอย่าง" ของ SA/SM/WS = สิทธิ์ระดับหน้า (ถ้าต้องการให้ WS แก้ master หรือ `sop_override` ได้ ต้องเปิด CR แยกเพราะแก้ `validate_doc_update`)
+- 2026-11-22 — approved (kong) → รันเลข CR-263 · ข้อ FR-4 (สิทธิ์ระดับหน้า ไม่ขยายสิทธิ์แก้) ใช้ตามที่ร่างไว้; ถ้าต้องการให้ WS แก้ master / `sop_override` ได้ เปิด CR แยก
