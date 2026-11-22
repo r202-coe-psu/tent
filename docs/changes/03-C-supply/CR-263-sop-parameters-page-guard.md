@@ -35,7 +35,7 @@ affects:
 | FR-1 | ผู้ใช้เปิด `/back-office/sop-parameters` ได้เมื่อเป็น `system_admin` หรือเป็น `shelter_manager` / `warehouse_staff` / `supply_coordinator` ของศูนย์ที่เลือกอยู่ (`canAccessWarehouse`) |
 | FR-2 | Role อื่นทั้งหมด (เช่น `distribution_staff`, `kitchen_staff`, `donation_staff`, `registration_staff`, `volunteer_coordinator`, อาสาสมัครสิทธิ์จำกัด) และผู้ใช้ที่ไม่มีสิทธิ์ในศูนย์ที่เลือก เปิด URL ตรงแล้วถูก redirect ตามกติกาเดียวกับหน้าคลังอื่น (`requireWarehouseAccess`) |
 | FR-3 | เมนู "พารามิเตอร์" ใน sidebar back-office แสดงเฉพาะผู้ที่ผ่าน FR-1 — `visibleTo` เรียก predicate ตัวเดียวกับ guard (`canAccessWarehouse`) ไม่เขียนเงื่อนไขซ้ำ |
-| FR-4 | สิทธิ์ระดับหน้าเท่านั้น: ปุ่ม/การแก้ไขภายในหน้ายังเป็นไปตาม [CR-235](03-C-supply/CR-235-warehouse-stock-parameter-access.md) เดิม — master แก้ได้เฉพาะ SA, `sop_override` แก้ได้เฉพาะ SA/SM, override 3 type ของสต็อกแก้ได้โดย SA/SM/`warehouse_staff` (`supply_coordinator` ดูอย่างเดียว) |
+| FR-4 | สิทธิ์ระดับหน้าเท่านั้น: ปุ่ม/การแก้ไขภายในหน้ายังเป็นไปตาม [CR-235](03-C-supply/CR-235-warehouse-stock-parameter-access.md) เดิม — master แก้ได้เฉพาะ SA, `sop_override` แก้ได้เฉพาะ SA/SM, override 3 type ของสต็อกแก้ได้โดย SA/SM/`warehouse_staff` (`supply_coordinator` ดูอย่างเดียว) **[เปลี่ยนตาม decision sync 2026-11-22: `warehouse_staff` แก้ `sop_override` ได้ รอแก้ในโค้ด (ตาม CR-235) — มีผลกับ AC-5 ด้วย]** |
 | FR-5 | `/back-office/dailysop` คงเดิม: ทุก role เข้าได้ ไม่เพิ่ม guard; เนื้อหาในหน้ายังกรองตาม role ที่บัญชีนั้นประเมินได้ ([CR-153](07-B-sop/CR-153-daily-sop-role-assessments.md): SA/SM เห็นครบ 9 role) |
 | FR-6 | `/system-management/sop-parameters` (SA เท่านั้น) ไม่เปลี่ยน |
 
