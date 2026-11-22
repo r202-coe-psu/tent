@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Check from '@lucide/svelte/icons/check';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Globe from '@lucide/svelte/icons/globe';
@@ -69,22 +70,18 @@
 
 <div class="space-y-6">
 	{#if showDailySopLink}
-		<a
-			href={resolve(PORTAL_DAILY_SOP_LINK.href)}
-			data-testid="portal-daily-sop-link"
-			class="flex min-h-14 items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-		>
-			<span
-				class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700"
-				aria-hidden="true"
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+			<a
+				href={resolve(PORTAL_DAILY_SOP_LINK.href)}
+				data-testid="portal-daily-sop-link"
+				class="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 			>
-				<ClipboardList class="size-5" />
-			</span>
-			<span class="min-w-0">
-				<span class="block text-base font-semibold text-slate-900">{dailySopText.label}</span>
-				<span class="block text-sm text-slate-600">{dailySopText.desc}</span>
-			</span>
-		</a>
+				<ClipboardList class="size-4 shrink-0" aria-hidden="true" />
+				{dailySopText.label}
+				<ArrowRight class="size-4 shrink-0" aria-hidden="true" />
+			</a>
+			<span class="text-sm text-slate-600">{dailySopText.desc}</span>
+		</div>
 	{/if}
 
 	{#if views.length > 0 && mode === 'overview'}
