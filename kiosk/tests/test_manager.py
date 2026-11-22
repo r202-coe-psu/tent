@@ -1,4 +1,5 @@
 import asyncio
+import getpass
 import io
 import os
 import socket
@@ -877,6 +878,13 @@ class FakeLpProcess:
         return self.returncode
 
 
+class HangingLpProcess(FakeLpProcess):
+    """`lp` that cupsd may already have taken the job from but that never answers."""
+
+    async def communicate(self, data=None):
+        await asyncio.sleep(30)
+
+
 READY_QUEUE = b"printer label_q is idle.  enabled since Mon 01 Jan 2024 08:00:00 AM +07\n"
 
 
@@ -1021,6 +1029,33 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fulfilled, {"status": 200, "body": {"printed": 1}})
         self.assertNotIn("cancel", [call[0] for call in calls])
 
+    async def test_a_job_that_left_the_queue_at_a_stop_point_per_cups_2_3_is_printed(self):
+        # CUPS 2.3.3 leaves processing-to-stop-point on a job that printed fine.
+        client = self.client()
+        self.ipp_cannot_say(client)
+        completed = FakeLpProcess(
+            stdout=(
+                b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n"
+                b"\tStatus: processing\n\tAlerts: processing-to-stop-point\n"
+            )
+        )
+
+        fulfilled, calls = await self.print_through_cups(
+            client, PNG, fails=False, completed_process=completed
+        )
+
+        self.assertEqual(fulfilled, {"status": 200, "body": {"printed": 1}})
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
+    async def test_a_job_lpstat_lists_nowhere_is_cancelled_when_its_budget_runs_out(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+
+        fulfilled, calls = await self.print_through_cups(client, PNG)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertIn(("cancel", "label_q-1"), calls)
+
     async def test_a_job_that_left_the_queue_without_success_per_lpstat_fails_without_cancel(self):
         client = self.client()
         self.ipp_cannot_say(client)
@@ -1062,21 +1097,31 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("cancel", "label_q-2"), calls)
         self.assertNotIn(("cancel", "label_q-1"), calls)
 
-    async def test_a_label_without_a_request_id_is_failed_without_cancel(self):
+    async def submit_without_a_job_id(self, lp_process):
         client = self.client()
         route = FakePrintRoute(body=labels_body(PNG))
         calls = []
-        exec_ = cups_exec(FakeLpProcess(stdout=b""), calls)
+        exec_ = cups_exec(lp_process, calls)
 
         with (
             patch.object(manager.asyncio, "create_subprocess_exec", new=exec_),
+            patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 0.05),
             self.assertLogs(manager.logger, level="ERROR"),
         ):
             await client._route_kiosk_api(route)
 
         self.assertEqual(route.fulfilled["status"], 502)
         self.assertEqual(route.fulfilled["body"]["printed"], 0)
-        self.assertNotIn("cancel", [call[0] for call in calls])
+        self.assertIn(("cancel", "-u", getpass.getuser(), client.printer_name), calls)
+
+    async def test_a_label_without_a_request_id_cancels_the_kiosk_users_jobs_on_the_queue(self):
+        await self.submit_without_a_job_id(FakeLpProcess(stdout=b""))
+
+    async def test_an_lp_that_exits_non_zero_cancels_the_kiosk_users_jobs_on_the_queue(self):
+        await self.submit_without_a_job_id(FakeLpProcess(returncode=1))
+
+    async def test_an_lp_that_hangs_is_killed_and_the_kiosk_users_jobs_are_cancelled(self):
+        await self.submit_without_a_job_id(HangingLpProcess())
 
     async def test_refuses_to_print_on_a_kiosk_without_a_printer(self):
         client = self.client(PRINTER_BACKEND="none")
@@ -1324,19 +1369,18 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
             return 0
 
         process.wait = wait
-        started = time.monotonic()
 
         with (
             patch.object(manager.asyncio, "create_subprocess_exec", new=cups_exec(process)),
             patch.object(manager, "KIOSK_PRINT_OVERALL_DEADLINE_SEC", 1.0),
             patch.object(manager, "KIOSK_CUPS_MIN_LABEL_SEC", 0.1),
             patch.object(manager, "KIOSK_CUPS_CANCEL_RESERVE_SEC", 0.2),
-            patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 5.0),
+            patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 60.0),
             self.assertLogs(manager.logger, level="ERROR"),
         ):
-            await client._route_kiosk_api(route)
+            # Waiting out the fixed 60s timeout would blow this 10s bound; the 1s left does not.
+            await asyncio.wait_for(client._route_kiosk_api(route), timeout=10)
 
-        self.assertLess(time.monotonic() - started, 2.0)
         self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_FAILED")
 
     async def test_a_cups_cancel_that_hangs_is_killed_and_awaited(self):
@@ -1684,11 +1728,11 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
             patch.object(manager, "USB_DEV_DIR", dev),
             self.assertLogs(manager.logger, level="ERROR") as logs,
         ):
-            started = time.monotonic()
-            ok = await asyncio.to_thread(client._send_escpos, real_png(), 0.2)
+            ok = await asyncio.wait_for(
+                asyncio.to_thread(client._send_escpos, real_png(), 0.2), timeout=10
+            )
 
         self.assertFalse(ok)
-        self.assertLess(time.monotonic() - started, 2.0)
         self.assertEqual((dev / "lp3").stat().st_size, 0)  # nothing was written
         self.assertTrue(any("timed out" in line for line in logs.output))
 
@@ -1964,18 +2008,21 @@ class KioskHostInfoRouteTests(unittest.IsolatedAsyncioTestCase):
         route = FakeHostInfoRoute()
         client = manager.ScannerClientManager(valid_config())
 
+        dns_back = threading.Event()
+
         def hanging_lookup():
-            time.sleep(0.5)  # DNS that hangs while the WAN is down
+            dns_back.wait(30)  # DNS that hangs while the WAN is down
             return {"hostname": "kiosk-07", "ips": ["192.168.1.42"]}
 
-        started = time.monotonic()
-        with (
-            patch.object(manager, "HOST_INFO_TIMEOUT_S", 0.05),
-            patch.object(client, "_host_info", hanging_lookup),
-        ):
-            await client._route_kiosk_api(route)
+        try:
+            with (
+                patch.object(manager, "HOST_INFO_TIMEOUT_S", 0.05),
+                patch.object(client, "_host_info", hanging_lookup),
+            ):
+                await asyncio.wait_for(client._route_kiosk_api(route), timeout=10)
+        finally:
+            dns_back.set()
 
-        self.assertLess(time.monotonic() - started, 0.4)
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertEqual(route.fulfilled["body"], {"hostname": None, "ips": [], **NO_UPDATE_INFO})
 
