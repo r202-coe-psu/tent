@@ -32,8 +32,7 @@ const th = {
 		cancel: 'ยกเลิก',
 		confirmCheckIn: 'ยืนยันเช็คอิน',
 		checkoutDialogTitle: 'เหตุผลการเช็คเอาต์',
-		checkoutDialogDescription: 'ระบุเหตุผลหรือหมายเหตุ (บังคับ) เช่น ออกไปธุระนอกพื้นที่',
-		checkoutReasonLabel: 'เหตุผลการเช็คเอาต์',
+		checkoutDialogDescription: 'เลือกเหตุผล 1 ข้อ และเพิ่มรายละเอียดได้ถ้ามี',
 		confirmCheckOut: 'ยืนยันเช็คเอาต์',
 		toast: {
 			notFoundMessage: (code: string, shelter: string) =>
@@ -156,8 +155,7 @@ const en: typeof th = {
 		cancel: 'Cancel',
 		confirmCheckIn: 'Confirm check-in',
 		checkoutDialogTitle: 'Check-out reason',
-		checkoutDialogDescription: 'Enter a reason or note (required), e.g. leaving for an errand',
-		checkoutReasonLabel: 'Check-out reason',
+		checkoutDialogDescription: 'Pick one reason and add details if needed',
 		confirmCheckOut: 'Confirm check-out',
 		toast: {
 			notFoundMessage: (code: string, shelter: string) =>
