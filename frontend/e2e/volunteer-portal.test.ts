@@ -792,6 +792,23 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
 	});
 
+	/**
+	 * The board BFF filters and pages in the DB (#1464): answer like it does, so a test sees
+	 * only the shelter's jobs and only the requested page, with the full `total`.
+	 */
+	const boardReply = (url: string, all: { shelter_code: string }[]) => {
+		const params = new URL(url).searchParams;
+		const shelter = params.get('shelter_code') || params.get('shelter');
+		const matching = shelter ? all.filter((j) => j.shelter_code === shelter) : all;
+		const size = Number(params.get('page_size')) || matching.length;
+		const start = ((Number(params.get('page')) || 1) - 1) * size;
+		return json({
+			success: true,
+			jobs: matching.slice(start, start + size),
+			total: matching.length
+		});
+	};
+
 	test('opens filtered to the shelter a home-page card links to (#709)', async ({ page }) => {
 		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 		const boardJob = (code: string, name: string, title: string) => ({
@@ -819,16 +836,12 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 			requires_review: false
 		});
 		await mockPortalApi(page);
+		const jobs = [
+			boardJob('SH001', 'ศูนย์ทดสอบหนึ่ง', 'งานของศูนย์หนึ่ง'),
+			boardJob('SH002', 'ศูนย์ทดสอบสอง', 'งานของศูนย์สอง')
+		];
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
-			route.fulfill(
-				json({
-					success: true,
-					jobs: [
-						boardJob('SH001', 'ศูนย์ทดสอบหนึ่ง', 'งานของศูนย์หนึ่ง'),
-						boardJob('SH002', 'ศูนย์ทดสอบสอง', 'งานของศูนย์สอง')
-					]
-				})
-			)
+			route.fulfill(boardReply(route.request().url(), jobs))
 		);
 
 		await page.goto('/volunteers/jobs?shelter=SH002');
@@ -842,36 +855,32 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await mockPortalApi(page);
 		await mockJobBoard(page, { success: true });
 		// Eight jobs: page 1 holds six, page 2 the last two.
+		const jobs = Array.from({ length: 8 }, (_, i) => ({
+			job_id: `job:01PAGE${i}`,
+			shelter_code: 'SH001',
+			shelter_name: 'ศูนย์ทดสอบ',
+			title: `งานหน้า ${i + 1}`,
+			description: 'ทดสอบการเปลี่ยนหน้า',
+			tier: 'operational',
+			skills_required: [],
+			shifts: [
+				{
+					shift_id: `s${i}`,
+					date: day,
+					start_time: '08:00',
+					end_time: '12:00',
+					quota: 5,
+					slots_confirmed: 0
+				}
+			],
+			quota: 5,
+			slots_confirmed: 0,
+			slots_remaining: 5,
+			status: 'open',
+			requires_review: false
+		}));
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
-			route.fulfill(
-				json({
-					success: true,
-					jobs: Array.from({ length: 8 }, (_, i) => ({
-						job_id: `job:01PAGE${i}`,
-						shelter_code: 'SH001',
-						shelter_name: 'ศูนย์ทดสอบ',
-						title: `งานหน้า ${i + 1}`,
-						description: 'ทดสอบการเปลี่ยนหน้า',
-						tier: 'operational',
-						skills_required: [],
-						shifts: [
-							{
-								shift_id: `s${i}`,
-								date: day,
-								start_time: '08:00',
-								end_time: '12:00',
-								quota: 5,
-								slots_confirmed: 0
-							}
-						],
-						quota: 5,
-						slots_confirmed: 0,
-						slots_remaining: 5,
-						status: 'open',
-						requires_review: false
-					}))
-				})
-			)
+			route.fulfill(boardReply(route.request().url(), jobs))
 		);
 		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await page.setViewportSize({ width: 375, height: 812 });
