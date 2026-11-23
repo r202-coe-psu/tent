@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { STAFF_SYSTEM_OVERVIEW_I18N } from '$lib/constants/i18n/staff-system-overview';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -20,6 +23,8 @@
 	import OverviewDemographicsSection from './overview-demographics-section.svelte';
 	import OverviewSitesSection from './overview-sites-section.svelte';
 	import OverviewPreregPreview from './overview-prereg-preview.svelte';
+
+	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
 
 	const defaultRange = defaultMovementDateRange();
 	let filters = $state<OverviewFilters>(
@@ -44,17 +49,14 @@
 	);
 </script>
 
-<StaffPageShell
-	title="ภาพรวมระบบ"
-	description="สรุปสถานะศูนย์ คิวลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ"
->
+<StaffPageShell title={t.pageTitle} description={t.pageDescription}>
 	<OverviewFilterBar {filters} onChange={(next) => (filters = next)} />
 
 	{#if isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />
-			<AlertTitle>เกิดข้อผิดพลาด</AlertTitle>
-			<AlertDescription>ไม่สามารถโหลดข้อมูลภาพรวมได้ กรุณาลองใหม่อีกครั้ง</AlertDescription>
+			<AlertTitle>{t.errorTitle}</AlertTitle>
+			<AlertDescription>{t.errorBody}</AlertDescription>
 		</Alert>
 	{/if}
 

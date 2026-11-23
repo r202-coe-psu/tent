@@ -982,7 +982,7 @@ export async function searchHouseholds(
 				id: reg.reserved_household_id,
 				label,
 				status: 'unassigned',
-				statusLabel: 'ยังไม่ผูกศูนย์',
+				statusLabel: 'ยังไม่ได้เลือกศูนย์',
 				shelterCode: null,
 				shelterName: null,
 				province: reg.household.province ?? null,

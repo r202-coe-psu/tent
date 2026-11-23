@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { STAFF_SYSTEM_OVERVIEW_I18N } from '$lib/constants/i18n/staff-system-overview';
+	import { getTranslation } from '$lib/utils/i18n';
 	import { resolve } from '$app/paths';
 	import { parseDate } from '@internationalized/date';
 	import * as Card from '$lib/components/ui/card';
@@ -27,13 +29,7 @@
 
 	const maxValue = $derived(parseDate(thailandDateString()));
 
-	const STATUS_LABELS: Record<string, string> = {
-		standby: 'เตรียมการ',
-		active: 'เปิดรับ',
-		full_capacity: 'เต็มความจุ',
-		closed: 'ปิดศูนย์',
-		cancelled: 'ยกเลิกศูนย์'
-	};
+	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
 
 	function formatPct(value: number | null): string {
 		return value == null ? '—' : `${value}%`;
@@ -44,25 +40,26 @@
 		formatMasterLabelByCode(code, siteKindQuery.data?.items ?? [], langState.current);
 
 	function statusLabel(status: string): string {
-		return STATUS_LABELS[status] ?? status;
+		return t.operationStatus[status] ?? status;
 	}
 </script>
 
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 	<Card.Header class="grid-cols-[minmax(0,1fr)] space-y-4">
 		<div>
-			<Card.Title class="text-lg font-bold text-slate-900">ศูนย์ / ไซต์</Card.Title>
-			<Card.Description class="text-sm text-slate-500">เรียงตาม คาดการณ์ % จาก API</Card.Description
-			>
+			<Card.Title class="text-lg font-bold text-slate-900">{t.sitesTitle}</Card.Title>
+			<Card.Description class="text-sm text-slate-500">
+				{t.sitesDescription}
+			</Card.Description>
 		</div>
 		<div class="flex flex-wrap items-end gap-3">
 			<div class="max-w-full min-w-0 space-y-1.5">
 				<Label for="sites-movement-range" class="text-sm font-semibold text-slate-700">
-					ช่วงเข้า / ออก
+					{t.movementRange}
 				</Label>
 				<DateRangePicker
 					id="sites-movement-range"
-					ariaLabel="ช่วงวันที่เข้าออก"
+					ariaLabel={t.movementRange}
 					from={movementFrom}
 					to={movementTo}
 					{maxValue}
@@ -78,22 +75,22 @@
 		{#if loading && !sites}
 			<Skeleton class="h-48 w-full rounded-xl" />
 		{:else if !sites || sites.length === 0}
-			<p class="py-6 text-center text-sm text-slate-500">ไม่พบศูนย์ที่ตรงเงื่อนไข</p>
+			<p class="py-6 text-center text-sm text-slate-500">{t.sitesEmpty}</p>
 		{:else}
 			<div class="overflow-x-auto rounded-xl border border-slate-200/80">
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
-							<Table.Head>ชื่อ</Table.Head>
-							<Table.Head>ประเภท</Table.Head>
-							<Table.Head>สถานะ</Table.Head>
-							<Table.Head class="text-right">ปัจจุบัน</Table.Head>
-							<Table.Head class="text-right">คาดการณ์</Table.Head>
-							<Table.Head class="text-right">ปัจจุบัน%</Table.Head>
-							<Table.Head class="text-right">คาดการณ์%</Table.Head>
-							<Table.Head class="text-right">เข้า</Table.Head>
-							<Table.Head class="text-right">ออก</Table.Head>
-							<Table.Head>พิกัด</Table.Head>
+							<Table.Head>{t.colName}</Table.Head>
+							<Table.Head>{t.colKind}</Table.Head>
+							<Table.Head>{t.colStatus}</Table.Head>
+							<Table.Head class="text-right">{t.colPresent}</Table.Head>
+							<Table.Head class="text-right">{t.colForecast}</Table.Head>
+							<Table.Head class="text-right">{t.colPresentPct}</Table.Head>
+							<Table.Head class="text-right">{t.colForecastPct}</Table.Head>
+							<Table.Head class="text-right">{t.colCheckin}</Table.Head>
+							<Table.Head class="text-right">{t.colCheckout}</Table.Head>
+							<Table.Head>{t.colMap}</Table.Head>
 							<Table.Head></Table.Head>
 						</Table.Row>
 					</Table.Header>
@@ -130,11 +127,11 @@
 											variant="outline"
 											class="border-emerald-200 bg-emerald-50 text-emerald-900"
 										>
-											มีพิกัด
+											{t.hasMapLocation}
 										</Badge>
 									{:else}
 										<Badge variant="outline" class="border-slate-200 bg-slate-50 text-slate-600">
-											ไม่มี
+											{t.noMapLocation}
 										</Badge>
 									{/if}
 								</Table.Cell>
@@ -143,7 +140,7 @@
 										href={resolve(site.dashboard_href as '/back-office/evacuee-management')}
 										class="text-sm font-semibold text-[#0284C7] hover:underline"
 									>
-										แดชบอร์ด
+										{t.dashboard}
 									</a>
 								</Table.Cell>
 							</Table.Row>

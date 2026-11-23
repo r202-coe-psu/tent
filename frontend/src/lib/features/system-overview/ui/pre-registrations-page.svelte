@@ -75,7 +75,7 @@
 		<span
 			class="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-700"
 		>
-			{item.shelter_code ?? 'ผูกศูนย์'}
+			{item.shelter_code ?? 'เลือกศูนย์แล้ว'}
 		</span>
 	{/if}
 {/snippet}

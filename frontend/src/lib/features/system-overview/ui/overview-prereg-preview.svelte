@@ -33,7 +33,7 @@
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 	<Card.Header class="flex flex-row items-start justify-between gap-3 space-y-0">
 		<div class="space-y-1">
-			<Card.Title class="text-lg font-bold text-slate-900">Pre-registrations</Card.Title>
+			<Card.Title class="text-lg font-bold text-slate-900">รายการลงทะเบียนล่วงหน้า</Card.Title>
 			<Card.Description class="text-sm text-slate-500">
 				{#if total != null}
 					แสดงตัวอย่าง · ทั้งหมด {total.toLocaleString('th-TH')} รายการ
