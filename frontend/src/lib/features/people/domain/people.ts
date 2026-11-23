@@ -2456,6 +2456,37 @@ function resolveNormalStatusChangeAction(
 }
 
 /** Trim and validate a checkout remark (CR-112 nonempty reason/notes). */
+/** #1493: common checkout reasons staff pick from; the movement `reason` stays free text (stored in Thai). */
+export const CHECKOUT_REASON_PRESETS = [
+	'กลับที่พักอาศัยเดิม',
+	'พักอาศัยกับญาติ',
+	'ย้ายไปศูนย์พักพิงแห่งอื่น',
+	'ส่งต่อสถานพยาบาล',
+	'ย้ายไปพักอาศัยที่อื่น'
+] as const;
+export type CheckoutReasonPreset = (typeof CHECKOUT_REASON_PRESETS)[number];
+/** A preset, or `other` when staff describe the reason themselves. */
+export type CheckoutReasonChoice = CheckoutReasonPreset | 'other';
+
+export type ComposedCheckoutReason =
+	{ ok: true; reason: string } | { ok: false; error: 'choice_required' | 'detail_required' };
+
+/**
+ * #1493: the checkout remark from the picked reason + optional detail —
+ * `preset`, `preset — detail`, or the detail alone for `other` (which then needs it).
+ */
+export function composeCheckoutReason(
+	choice: CheckoutReasonChoice | null,
+	detail: string
+): ComposedCheckoutReason {
+	const note = detail.trim();
+	if (!choice) return { ok: false, error: 'choice_required' };
+	if (choice === 'other') {
+		return note ? { ok: true, reason: note } : { ok: false, error: 'detail_required' };
+	}
+	return { ok: true, reason: note ? `${choice} — ${note}` : choice };
+}
+
 export function normalizeCheckoutRemark(reason: string | null | undefined): string {
 	const remark = (reason ?? '').trim();
 	if (!remark) {

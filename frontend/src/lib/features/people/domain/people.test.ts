@@ -33,6 +33,8 @@ import {
 	resolveRevertZone,
 	revertNeedsZone,
 	normalizeCheckoutRemark,
+	CHECKOUT_REASON_PRESETS,
+	composeCheckoutReason,
 	statusChangeHandlerKind,
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
@@ -1291,6 +1293,41 @@ describe('normalizeCheckoutRemark', () => {
 		expect(() => normalizeCheckoutRemark('   ')).toThrow(/เหตุผล/);
 		expect(() => normalizeCheckoutRemark(null)).toThrow(/เหตุผล/);
 		expect(() => normalizeCheckoutRemark(undefined)).toThrow(/เหตุผล/);
+	});
+
+	it('checkout presets are unique, non-empty remarks (#1493)', () => {
+		expect(new Set(CHECKOUT_REASON_PRESETS).size).toBe(CHECKOUT_REASON_PRESETS.length);
+		for (const preset of CHECKOUT_REASON_PRESETS) {
+			expect(normalizeCheckoutRemark(preset)).toBe(preset);
+		}
+	});
+});
+
+describe('composeCheckoutReason (#1493)', () => {
+	it('requires a picked reason', () => {
+		expect(composeCheckoutReason(null, 'อะไรก็ได้')).toEqual({
+			ok: false,
+			error: 'choice_required'
+		});
+	});
+
+	it('uses the preset alone, or preset — detail', () => {
+		expect(composeCheckoutReason('ส่งต่อสถานพยาบาล', '  ')).toEqual({
+			ok: true,
+			reason: 'ส่งต่อสถานพยาบาล'
+		});
+		expect(composeCheckoutReason('ส่งต่อสถานพยาบาล', ' รพ.หาดใหญ่ ')).toEqual({
+			ok: true,
+			reason: 'ส่งต่อสถานพยาบาล — รพ.หาดใหญ่'
+		});
+	});
+
+	it('อื่นๆ needs the detail and stores only the detail', () => {
+		expect(composeCheckoutReason('other', ' ')).toEqual({ ok: false, error: 'detail_required' });
+		expect(composeCheckoutReason('other', 'ไปทำงานต่างจังหวัด')).toEqual({
+			ok: true,
+			reason: 'ไปทำงานต่างจังหวัด'
+		});
 	});
 });
 
