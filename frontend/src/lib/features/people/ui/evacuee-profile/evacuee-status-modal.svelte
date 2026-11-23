@@ -3,11 +3,19 @@
 	import { toast } from 'svelte-sonner';
 	import X from '@lucide/svelte/icons/x';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
-	import { resolveStatusChangeAction, type Evacuee, type StayStatus } from '$lib/features/people';
+	import {
+		composeCheckoutReason,
+		resolveStatusChangeAction,
+		type CheckoutReasonChoice,
+		type Evacuee,
+		type StayStatus
+	} from '$lib/features/people';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { EVACUEE_PROFILE_MODALS_I18N } from '../_constants/evacuee-profile-modals.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
+	import CheckoutReasonPresets from '../checkout-reason-presets.svelte';
+	import { CHECKOUT_REASON_I18N } from '../_constants/checkout-reason.i18n';
 
 	interface StatusConfig {
 		label: string;
@@ -68,6 +76,9 @@
 	// open / evacuee id change via `{#key}`).
 	let pendingStatus = $state<StayStatus>(untrack(() => evacuee.current_stay.status));
 	let reason = $state('');
+	let checkoutChoice = $state<CheckoutReasonChoice | null>(null);
+	let checkoutDetail = $state('');
+	let checkoutError = $state<string | null>(null);
 	let saving = $state(false);
 
 	const selectableOptions = $derived(
@@ -95,11 +106,15 @@
 		resolveStatusChangeAction(evacuee.current_stay.status, pendingStatus) === 'revert_status'
 	);
 
+	/** A normal checkout (not a manager override) picks a preset reason (#1493). */
+	const isCheckout = $derived(pendingStatus === 'checked_out' && !isRevert);
+
 	const confirmDisabled = $derived(saving || pendingStatus === evacuee.current_stay.status);
 
 	function selectStatus(statusKey: StayStatus) {
 		if (saving) return;
 		pendingStatus = statusKey;
+		checkoutError = null;
 		if (!requiresReason(statusKey)) {
 			reason = '';
 		}
@@ -107,14 +122,24 @@
 
 	async function handleConfirm() {
 		if (confirmDisabled) return;
+		if (isCheckout) {
+			const composed = composeCheckoutReason(checkoutChoice, checkoutDetail);
+			if (!composed.ok) {
+				const msg = getTranslation(CHECKOUT_REASON_I18N, langState.current);
+				checkoutError =
+					composed.error === 'choice_required' ? msg.choiceRequired : msg.detailRequired;
+				return;
+			}
+			saving = true;
+			try {
+				await onUpdateStatus(pendingStatus, composed.reason);
+			} finally {
+				saving = false;
+			}
+			return;
+		}
 		if (needsReason && !reason.trim()) {
-			toast.error(
-				isRevert
-					? t.revertReasonRequired
-					: pendingStatus === 'checked_out'
-						? t.checkedOutReasonRequired
-						: t.leaveReasonRequired
-			);
+			toast.error(isRevert ? t.revertReasonRequired : t.leaveReasonRequired);
 			return;
 		}
 		saving = true;
@@ -175,7 +200,16 @@
 					{/each}
 				</div>
 
-				{#if needsReason}
+				{#if isCheckout}
+					<CheckoutReasonPresets
+						bind:choice={checkoutChoice}
+						bind:detail={checkoutDetail}
+						error={checkoutError}
+						idPrefix="evacuee-status-checkout"
+						disabled={saving}
+						onchange={() => (checkoutError = null)}
+					/>
+				{:else if needsReason}
 					<div class="space-y-1.5">
 						<label for="evacuee-status-reason" class="text-xs font-semibold text-foreground">
 							{t.reason} <span class="text-destructive">*</span>

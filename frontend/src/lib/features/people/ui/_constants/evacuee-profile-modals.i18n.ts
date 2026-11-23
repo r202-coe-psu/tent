@@ -7,7 +7,6 @@ const th = {
 		cancel: 'ยกเลิก',
 		confirm: 'ยืนยัน',
 		saving: 'กำลังบันทึก...',
-		checkedOutReasonRequired: 'การเช็คเอาต์ต้องระบุเหตุผลหรือหมายเหตุ',
 		leaveReasonRequired: 'การออกชั่วคราวต้องระบุเหตุผล',
 		revertReasonPlaceholder: 'ระบุเหตุผลการเปลี่ยนสถานะ เช่น บันทึกสถานะผิดคน',
 		revertReasonRequired: 'การเปลี่ยนสถานะด้วยตนเองต้องระบุเหตุผล'
@@ -110,7 +109,6 @@ const en: typeof th = {
 		cancel: 'Cancel',
 		confirm: 'Confirm',
 		saving: 'Saving...',
-		checkedOutReasonRequired: 'A reason or note is required to check out',
 		leaveReasonRequired: 'A reason is required for a temporary leave',
 		revertReasonPlaceholder:
 			'Enter the reason for the change, e.g. status recorded for the wrong person',
