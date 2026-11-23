@@ -265,7 +265,8 @@ describe('authStore remembered shelter (#1473)', () => {
 
 		await authStore.ensureInitialized();
 		await vi.waitFor(() => expect(getSessionMock).toHaveBeenCalled());
-		await new Promise((r) => setTimeout(r, 0));
+		// Wait for a revalidation to finish, not a timer tick that may run before it does.
+		await authStore.revalidateSession();
 
 		expect(shelterStoreMock.selectedShelterCode).toBe('SH001');
 		expect(persistSelectedShelterMock).not.toHaveBeenCalled();
