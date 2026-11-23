@@ -458,6 +458,33 @@ def _wall_clock_window(
     return (start_utc, end_utc) if start_utc < end_utc else None
 
 
+def _shift_is_open(shift: dict, now: datetime) -> bool:
+    """CR-215 FR-1, same rule as frontend ``isShiftOpen`` (volunteers/domain/shift-closing.ts).
+
+    Open until the shift ENDS in Asia/Bangkok time. A row without start/end time closes at the
+    end (24:00) of its ``end_date`` or ``date``. A row too malformed to date stays open.
+    """
+    date = shift.get("date") or ""
+    end_date = shift.get("end_date") or None
+    start_time = shift.get("start_time") or ""
+    end_time = shift.get("end_time") or ""
+    if not start_time or not end_time:
+        last_day = end_date or date
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", last_day):
+            return True
+        return now.astimezone(_BANGKOK).date().isoformat() <= last_day
+    window = _wall_clock_window(
+        date=date, start_time=start_time, end_time=end_time, end_date=end_date
+    )
+    return True if window is None else now < window[1]
+
+
+def _job_has_open_shift(job: dict, now: datetime) -> bool:
+    """A job with no shift rows (an older projection) counts as open (CR-215 FR-1)."""
+    shifts = job.get("shifts") or []
+    return not shifts or any(_shift_is_open(shift, now) for shift in shifts)
+
+
 def _windows_overlap(left: tuple[datetime, datetime], right: tuple[datetime, datetime]) -> bool:
     """Half-open interval comparison; adjacent shifts do not conflict."""
     return left[0] < right[1] and right[0] < left[1]
@@ -605,11 +632,38 @@ class VolunteersUseCase:
             controlled=controlled,
         )
 
-        total = await PublicJob.find(query).count()
-        finder = PublicJob.find(query).sort([("shelter_code", 1), ("title", 1), ("_id", 1)])
+        # CR-215 FR-4: jobs with no open shift go after every open one across ALL pages, so the
+        # open/closed split is decided here over the whole filtered set (only the fields it
+        # needs), then the page is cut and loaded in that order.
+        order_rows = await (
+            PublicJob.get_pymongo_collection()
+            .find(
+                query,
+                {
+                    "_id": 1,
+                    "shelter_code": 1,
+                    "title": 1,
+                    "shifts.date": 1,
+                    "shifts.end_date": 1,
+                    "shifts.start_time": 1,
+                    "shifts.end_time": 1,
+                },
+            )
+            .sort([("shelter_code", 1), ("title", 1), ("_id", 1)])
+            .to_list(None)
+        )
+        now = datetime.now(UTC)
+        ordered_ids = [
+            row["_id"]
+            for row in sorted(order_rows, key=lambda row: not _job_has_open_shift(row, now))
+        ]
+        total = len(ordered_ids)
         if page_size is not None:
-            finder = finder.skip((page - 1) * page_size).limit(page_size)
-        jobs = await finder.to_list()
+            start = (page - 1) * page_size
+            ordered_ids = ordered_ids[start : start + page_size]
+        page_jobs = await PublicJob.find({"_id": {"$in": ordered_ids}}).to_list()
+        by_job_id = {job.id: job for job in page_jobs}
+        jobs = [by_job_id[job_id] for job_id in ordered_ids if job_id in by_job_id]
         names = await _shelter_names({job.shelter_code for job in jobs})
         shelters = await _board_shelters()
 

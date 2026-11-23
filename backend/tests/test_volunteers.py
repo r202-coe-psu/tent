@@ -1521,12 +1521,14 @@ async def _board_job(
     skills: list[str] | None = None,
     tier: str = "operational",
     remaining: int = 5,
+    shifts: list[JobShift] | None = None,
 ) -> None:
     await PublicJob(
         id=job_id,
         shelter_code=shelter_code,
         title=title,
         tier=tier,
+        shifts=shifts or [],
         skills_required=skills or [],
         quota=5,
         slots_remaining=remaining,
@@ -1552,6 +1554,39 @@ async def test_list_jobs_paginates_in_the_db_and_reports_total(
     beyond = (await client.get("/public/v1/jobs?page_size=2&page=9", headers=auth_headers)).json()
     assert beyond["total"] == 5
     assert beyond["jobs"] == []
+
+
+async def test_list_jobs_puts_ended_jobs_after_every_open_one_across_pages(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    # B1 (#1470 review), CR-215 FR-4: a job whose shifts have all ended sorts after every open
+    # job on every page, not just within the page. "ก" sorts first by title but has ended.
+    ended = JobShift(
+        shift_id="s-old", date="2020-01-01", start_time="08:00", end_time="12:00", quota=5
+    )
+    future = JobShift(
+        shift_id="s-new", date="2099-01-01", start_time="08:00", end_time="12:00", quota=5
+    )
+    flex_today_or_later = JobShift(shift_id="s-flex", date="2099-01-02", quota=5)
+    await _board_job("job:o1", "ก งานที่จบแล้ว", shifts=[ended])
+    await _board_job("job:o2", "ข งานเปิด", shifts=[future])
+    await _board_job("job:o3", "ค งานเปิด ไม่มีเวลา", shifts=[flex_today_or_later])
+    await _board_job("job:o4", "ง งานไม่มีกะ")  # no shift rows: counts as open
+    await _board_job("job:o5", "จ งานผสม", shifts=[ended, future])  # one shift still open
+
+    first = (await client.get("/public/v1/jobs?page_size=2&page=1", headers=auth_headers)).json()
+    second = (await client.get("/public/v1/jobs?page_size=2&page=2", headers=auth_headers)).json()
+    third = (await client.get("/public/v1/jobs?page_size=2&page=3", headers=auth_headers)).json()
+
+    titles = [job["title"] for page in (first, second, third) for job in page["jobs"]]
+    assert titles == [
+        "ข งานเปิด",
+        "ค งานเปิด ไม่มีเวลา",
+        "ง งานไม่มีกะ",
+        "จ งานผสม",
+        "ก งานที่จบแล้ว",
+    ]
+    assert first["total"] == 5
 
 
 async def test_list_jobs_refuses_a_page_past_the_bound(
