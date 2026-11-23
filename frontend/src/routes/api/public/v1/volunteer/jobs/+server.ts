@@ -2,6 +2,12 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { adminRaw } from '$lib/server/couch-admin';
+import { readMasterDoc } from '$lib/server/master-data-server';
+import {
+	boardShelters,
+	controlledValuesFromMaster,
+	filterFallbackJobs
+} from '$lib/features/volunteers/server/public-board-fallback';
 
 export const prerender = false;
 
@@ -81,7 +87,6 @@ function enrichJobsWithQuotaCounts(jobs: JobDoc[]): void {
 }
 
 const BOARD_STATUSES = ['open', 'near_full', 'controlled'] as const;
-type BoardStatus = (typeof BOARD_STATUSES)[number];
 const MAX_PAGE_SIZE = 50;
 /** Same bound as FastAPI (`le=` on `page`): far past any real board, so a huge value is refused. */
 const MAX_PAGE = 1000;
@@ -98,45 +103,6 @@ function pageOutOfRange(value: string | null): boolean {
 	if (!value || !/^\d+$/.test(value)) return false;
 	const n = Number(value);
 	return !Number.isSafeInteger(n) || n > MAX_PAGE;
-}
-
-/**
- * Same filters FastAPI applies in Mongo, for the CouchDB fallback only: it already holds
- * every job in memory, so narrowing and slicing here keeps the response shape identical.
- */
-function filterFallbackJobs(
-	jobs: JobDoc[],
-	opts: {
-		q: string;
-		status?: BoardStatus;
-		skills: string[];
-		page?: number;
-		pageSize?: number;
-	}
-): { jobs: JobDoc[]; total: number } {
-	const remainingOf = (job: JobDoc): number[] =>
-		job.shifts && job.shifts.length > 0
-			? job.shifts.map((s) => s.slots_remaining ?? 0)
-			: [job.slots_remaining ?? 0];
-	const q = opts.q.toLowerCase();
-	const wanted = new Set(opts.skills);
-	const filtered = jobs.filter((job) => {
-		if (q) {
-			const hit =
-				(job.title ?? '').toLowerCase().includes(q) ||
-				(job.shelter_code ?? '').toLowerCase().includes(q) ||
-				(job.skills_required ?? []).some((sk) => sk.toLowerCase().includes(q));
-			if (!hit) return false;
-		}
-		if (wanted.size > 0 && !(job.skills_required ?? []).some((sk) => wanted.has(sk))) return false;
-		if (opts.status === 'open') return remainingOf(job).some((r) => r >= 1);
-		if (opts.status === 'near_full') return remainingOf(job).some((r) => r >= 1 && r <= 2);
-		if (opts.status === 'controlled') return job.tier === 'staff-capable';
-		return true;
-	});
-	if (!opts.pageSize) return { jobs: filtered, total: filtered.length };
-	const start = ((opts.page ?? 1) - 1) * opts.pageSize;
-	return { jobs: filtered.slice(start, start + opts.pageSize), total: filtered.length };
 }
 
 /**
@@ -214,11 +180,10 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 			});
 		}
 
-		// Query jobs from relevant shelter databases
+		// Every shelter's jobs: the shelter picker lists all shelters with a job (FR-6), whatever
+		// the filters, like FastAPI. The shelter filter is applied below (case-insensitive).
 		const jobs: JobDoc[] = [];
-		const targetShelters = shelterCode ? shelters.filter((s) => s.code === shelterCode) : shelters;
-
-		for (const s of targetShelters) {
+		for (const s of shelters) {
 			try {
 				const jobRes = await adminRaw(
 					`/${s.db}/_all_docs?include_docs=true&startkey="job:"&endkey="job:\ufff0"`,
@@ -235,7 +200,8 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 							doc.status !== 'closed' &&
 							doc.status !== 'cancelled'
 						) {
-							jobs.push(doc);
+							// The DB names the shelter even when an older job doc does not.
+							jobs.push({ ...doc, shelter_code: doc.shelter_code || s.code });
 						}
 					}
 				}
@@ -244,11 +210,30 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 			}
 		}
 
-		const result = filterFallbackJobs(jobs, { q, status, skills, page, pageSize });
-		enrichJobsWithQuotaCounts(result.jobs);
+		const wantedShelter = shelterCode?.toUpperCase();
+		const inShelter = wantedShelter
+			? jobs.filter((job) => (job.shelter_code ?? '').toUpperCase() === wantedShelter)
+			: jobs;
+		const master = await readMasterDoc('volunteer_skills').catch(() => null);
+		const result = filterFallbackJobs(inShelter, {
+			q,
+			status,
+			skills,
+			page,
+			pageSize,
+			shelterNames: new Map(shelters.map((s) => [s.code.toUpperCase(), s.name])),
+			controlled: controlledValuesFromMaster(master?.items ?? [])
+		});
+		const pageJobs = result.jobs as JobDoc[];
+		enrichJobsWithQuotaCounts(pageJobs);
 
 		return json(
-			{ success: true, jobs: result.jobs, total: result.total, shelters },
+			{
+				success: true,
+				jobs: pageJobs,
+				total: result.total,
+				shelters: boardShelters(shelters, jobs)
+			},
 			{ headers: { 'Cache-Control': 'no-store' } }
 		);
 	} catch (err) {

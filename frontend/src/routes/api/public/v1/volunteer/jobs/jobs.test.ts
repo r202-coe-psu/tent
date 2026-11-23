@@ -226,6 +226,60 @@ describe('GET /api/public/v1/volunteer/jobs — board filters', () => {
 	});
 });
 
+describe('GET /api/public/v1/volunteer/jobs — CouchDB fallback matches FastAPI (W3)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path === '/registry/_all_docs?include_docs=true') {
+				return {
+					status: 200,
+					data: {
+						rows: [
+							{ doc: { type: 'shelter', code: 'SH001', name: 'A', db: 'shelter_sh001' } },
+							{ doc: { type: 'shelter', code: 'SH002', name: 'วัดคอหงส์', db: 'shelter_sh002' } },
+							{ doc: { type: 'shelter', code: 'SH003', name: 'ไม่มีงาน', db: 'shelter_sh003' } }
+						]
+					}
+				};
+			}
+			if (path.startsWith('/registry/')) return { status: 404, data: {} };
+			const db = path.split('/')[1];
+			const rows =
+				db === 'shelter_sh001'
+					? [{ doc: { _id: 'job:a', type: 'job', title: 'ครัว', status: 'open' } }]
+					: db === 'shelter_sh002'
+						? [{ doc: { _id: 'job:b', type: 'job', title: 'ขับรถ', status: 'open' } }]
+						: [];
+			return { status: 200, data: { rows } };
+		});
+	});
+
+	const getDown = (search: string) =>
+		GET({
+			url: new URL(`http://localhost/api/public/v1/volunteer/jobs${search}`),
+			fetch: vi.fn().mockRejectedValue(new Error('fastapi down')),
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+	it('takes a lower-case shelter code, like FastAPI (N1)', async () => {
+		const body = await (await getDown('?shelter_code=sh002')).json();
+		expect(body.jobs.map((j: { _id: string }) => j._id)).toEqual(['job:b']);
+	});
+
+	it('lists only shelters with a job, even when filtered to one shelter (FR-6)', async () => {
+		const body = await (await getDown('?shelter_code=SH002')).json();
+		expect(body.shelters).toEqual([
+			{ code: 'SH001', name: 'A' },
+			{ code: 'SH002', name: 'วัดคอหงส์' }
+		]);
+	});
+
+	it('matches q against the shelter name', async () => {
+		const body = await (await getDown('?q=คอหงส์')).json();
+		expect(body.jobs.map((j: { _id: string }) => j._id)).toEqual(['job:b']);
+	});
+});
+
 describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
