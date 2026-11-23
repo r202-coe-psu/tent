@@ -91,6 +91,33 @@ describe('assertCanGrant', () => {
 		expect(grantError(mgr, ['shelter:SH001', 'system_admin'])?.code).toBe('FORBIDDEN');
 	});
 
+	// Manages SH001 and SH002, working in SH002 (#477).
+	const multi = (working: string): Caller => ({
+		name: 'multi',
+		roles: ['shelter:SH001', 'SH001:shelter_manager', 'shelter:SH002', 'SH002:shelter_manager'],
+		isSA: false,
+		shelterCode: working
+	});
+
+	it('a multi-shelter manager grants in the shelter they work in, not the first (#477)', () => {
+		expect(grantError(multi('SH002'), ['shelter:SH002', 'registration_staff'])).toBeNull();
+		expect(grantError(multi('SH001'), ['shelter:SH001', 'registration_staff'])).toBeNull();
+	});
+
+	it('a multi-shelter manager may not grant in a managed shelter they are not working in (#477)', () => {
+		expect(grantError(multi('SH002'), ['shelter:SH001', 'registration_staff'])?.code).toBe(
+			'FORBIDDEN'
+		);
+		expect(
+			grantError(multi('SH002'), [
+				'shelter:SH001',
+				'shelter:SH002',
+				'SH001:kitchen_staff',
+				'SH002:kitchen_staff'
+			])?.code
+		).toBe('FORBIDDEN');
+	});
+
 	it('a manager without a shelter scope is forbidden', () => {
 		const noScope: Caller = {
 			name: 'x',
@@ -207,12 +234,12 @@ describe('serviceError envelope', () => {
 describe('authorizeUserWrite (generic /api/v1/users gate)', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
-	async function asRoles(roles: string[]) {
+	async function asRoles(roles: string[], requestedShelter?: string | null) {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () => Response.json({ userCtx: { name: 'u', roles } }))
 		);
-		return authorizeUserWrite('AuthSession=x');
+		return authorizeUserWrite('AuthSession=x', requestedShelter);
 	}
 
 	it('refuses a volunteer_coordinator: grants go through /api/v1/volunteer-access (#955)', async () => {
@@ -225,6 +252,62 @@ describe('authorizeUserWrite (generic /api/v1/users gate)', () => {
 		await expect(asRoles(['shelter:SH001', 'SH001:shelter_manager'])).resolves.toMatchObject({
 			name: 'u'
 		});
+	});
+});
+
+describe('authorizeUserWrite active shelter (#477)', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	const both = ['shelter:SH001', 'SH001:shelter_manager', 'shelter:SH002', 'SH002:shelter_manager'];
+	// Manager in SH002, only a registration desk in SH001.
+	const managerInSh002Only = [
+		'shelter:SH001',
+		'SH001:registration_staff',
+		'shelter:SH002',
+		'SH002:shelter_manager'
+	];
+
+	async function asRoles(roles: string[], requested: string | null | undefined) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ userCtx: { name: 'u', roles } }))
+		);
+		return authorizeUserWrite('AuthSession=x', requested);
+	}
+
+	it('returns the requested shelter as the caller shelterCode', async () => {
+		await expect(asRoles(both, 'SH002')).resolves.toMatchObject({ shelterCode: 'SH002' });
+		await expect(asRoles(managerInSh002Only, 'SH002')).resolves.toMatchObject({
+			shelterCode: 'SH002'
+		});
+	});
+
+	it('refuses a shelter where the caller is not a manager (403), even if they belong to it', async () => {
+		await expect(asRoles(managerInSh002Only, 'SH001')).rejects.toMatchObject({
+			code: 'FORBIDDEN'
+		});
+		await expect(asRoles(both, 'SH009')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+	});
+
+	it('asks a manager of several shelters to name one (400)', async () => {
+		await expect(asRoles(both, null)).rejects.toMatchObject({ code: 'VALIDATION' });
+	});
+
+	it('defaults a manager of one shelter to it', async () => {
+		await expect(asRoles(['shelter:SH001', 'SH001:shelter_manager'], null)).resolves.toMatchObject({
+			shelterCode: 'SH001'
+		});
+	});
+
+	it('leaves SA unrestricted', async () => {
+		await expect(asRoles(['system_admin'], null)).resolves.toMatchObject({ isSA: true });
+		await expect(asRoles(['system_admin'], 'SH009')).resolves.toMatchObject({
+			shelterCode: 'SH009'
+		});
+	});
+
+	it('only gates when the route names no shelter (undefined)', async () => {
+		await expect(asRoles(both, undefined)).resolves.toMatchObject({ name: 'u' });
 	});
 });
 

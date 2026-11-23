@@ -1,5 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { adminRaw, bootstrapAdminName, isProtectedBootstrapAdmin } from '$lib/server/couch-admin';
+import {
+	activeManagerShelter,
+	adminRaw,
+	bootstrapAdminName,
+	isProtectedBootstrapAdmin
+} from '$lib/server/couch-admin';
 import { ServiceError, serviceErrorFromCouch, type Caller } from '$lib/server/couch-admin';
 import {
 	SHELTER_MANAGER,
@@ -12,7 +17,6 @@ import {
 	isAppSystemAdmin,
 	isLastAppSystemAdmin,
 	isSystemAdmin,
-	managerShelterCodes,
 	mergeEdgeShelters,
 	mergeShelterAssignment,
 	rolesFromAssignments,
@@ -561,8 +565,7 @@ export async function createOrMergeUser(
 	} catch (e) {
 		if (!(e instanceof ServiceError) || e.code !== 'CONFLICT' || caller.isSA) throw e;
 		if (e instanceof DeletedNameConflictError) throw e; // reserved name: never merge into a deleted account
-		const managed = managerShelterCodes(caller.roles);
-		const code = managed[0] ?? caller.shelterCode;
+		const code = activeManagerShelter(caller);
 		if (!code) throw e;
 		const caps = capabilitiesForShelter(input.roles, code);
 		if (caps.length === 0) throw e;
@@ -946,15 +949,16 @@ export async function readShelterVolunteerAccounts(
 	});
 }
 
-/** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
+/** List users, scoped: SA sees all; a manager sees the users of the shelter they work in (#477). */
 export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const bootstrap = bootstrapAdminName();
 	const all = (await fetchAllUserDocs())
 		.filter((d) => !isProtectedBootstrapAdmin(d, bootstrap))
 		.map(toSummary);
 	if (caller.isSA) return all;
-	const managed = managerShelterCodes(caller.roles);
-	const codes = managed.length > 0 ? managed : caller.shelterCode ? [caller.shelterCode] : [];
+	// The shelter the manager works in (#477), not every shelter they manage.
+	const active = activeManagerShelter(caller);
+	const codes = active ? [active] : [];
 	return all.filter((u) => codes.some((code) => hasShelterScope(u.roles, code)));
 }
 
@@ -991,8 +995,7 @@ function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]):
 	if (isAppSystemAdmin(targetRoles)) {
 		throw new ServiceError('FORBIDDEN', 'A manager may not modify a system admin');
 	}
-	const managed = managerShelterCodes(caller.roles);
-	const code = managed[0] ?? caller.shelterCode;
+	const code = activeManagerShelter(caller);
 	if (!code) {
 		throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
 	}
@@ -1154,7 +1157,7 @@ export async function updateUser(
 
 	const permanentRoles = input.permanent_roles ?? [];
 	if (!caller.isSA) {
-		const code = managerShelterCodes(caller.roles)[0] ?? caller.shelterCode;
+		const code = activeManagerShelter(caller);
 		if (permanentRoles.some((role) => !code || !role.startsWith(`${code}:`))) {
 			throw new ServiceError('FORBIDDEN', 'A manager may only change grants in their own shelter');
 		}

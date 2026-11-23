@@ -1055,6 +1055,90 @@ describe('user-service', () => {
 			expect(doc.display_name).toBe('0820000008');
 		});
 	});
+	describe('multi-shelter manager works in the active shelter (#477)', () => {
+		// Manages SH001 and SH002; the request resolved SH002 (not the first shelter).
+		const inSh002 = {
+			name: 'sm02',
+			roles: ['shelter:SH001', 'SH001:shelter_manager', 'shelter:SH002', 'SH002:shelter_manager'],
+			isSA: false,
+			shelterCode: 'SH002'
+		};
+		const key = (n: string) => `org.couchdb.user:${n}`;
+
+		async function seed(name: string, roles: string[]) {
+			await createUser({
+				name,
+				password: 'Password123!',
+				display_name: name,
+				personnel_type: 'staff',
+				phone: name,
+				roles
+			});
+		}
+
+		it('lists only the users of the shelter they work in', async () => {
+			await seed('0830000001', ['shelter:SH001', 'registration_staff']);
+			await seed('0830000002', ['shelter:SH002', 'registration_staff']);
+			const names = (await listUsers(inSh002)).map((u) => u.name);
+			expect(names).toContain('0830000002');
+			expect(names).not.toContain('0830000001');
+		});
+
+		it('edits a user of the active shelter, and refuses one of another managed shelter', async () => {
+			await seed('0830000003', ['shelter:SH002', 'registration_staff']);
+			await seed('0830000004', ['shelter:SH001', 'registration_staff']);
+			await updateUser('0830000003', { display_name: 'renamed' }, inSh002, noCheck);
+			expect(fakeUsersDb[key('0830000003')].display_name).toBe('renamed');
+			await expect(
+				updateUser('0830000004', { display_name: 'hijacked' }, inSh002, noCheck)
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			expect(fakeUsersDb[key('0830000004')].display_name).toBe('0830000004');
+		});
+
+		it('removes only the active shelter assignment on delete', async () => {
+			await seed('0830000005', [
+				'shelter:SH001',
+				'SH001:registration_staff',
+				'shelter:SH002',
+				'SH002:triage_staff'
+			]);
+			await deleteUser('0830000005', inSh002);
+			const roles = fakeUsersDb[key('0830000005')].roles;
+			expect(roles).toContain('shelter:SH001');
+			expect(roles).not.toContain('shelter:SH002');
+		});
+
+		it('refuses to make permanent a grant of a shelter they are not working in', async () => {
+			await seed('0830000006', ['shelter:SH002', 'registration_staff']);
+			await expect(
+				updateUser(
+					'0830000006',
+					{ permanent_roles: ['SH001:registration_staff'] },
+					inSh002,
+					noCheck
+				)
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		});
+
+		it('merges an existing account into the active shelter, not the first', async () => {
+			await seed('0830000007', ['shelter:SH003', 'registration_staff']);
+			await createOrMergeUser(
+				{
+					name: '0830000007',
+					password: 'Password123!',
+					display_name: 'Existing',
+					personnel_type: 'staff',
+					roles: ['shelter:SH002', 'triage_staff']
+				},
+				inSh002,
+				noCheck
+			);
+			const roles = fakeUsersDb[key('0830000007')].roles;
+			expect(roles).toContain('shelter:SH002');
+			expect(roles).not.toContain('shelter:SH001');
+		});
+	});
+
 	describe('edge_shelters + soft delete (CR-171)', () => {
 		const sa = { name: 'root-sa', roles: ['system_admin'], isSA: true, shelterCode: null };
 		const manager = (code: string) => ({

@@ -47,7 +47,8 @@ vi.mock('$lib/server/password-policy', () => ({
 	validateProvisionedPassword: vi.fn((p: string) => p)
 }));
 
-import { DELETE, POST, PUT } from './+server';
+import { authorizeUserWrite } from '$lib/server/couch-admin';
+import { DELETE, GET, POST, PUT } from './+server';
 
 function post(body: Record<string, unknown>) {
 	const request = new Request('http://localhost/api/v1/users', {
@@ -294,5 +295,45 @@ describe('DELETE /api/v1/users — CR-259 audit reflects what the write did', ()
 
 		expect(res.status).toBe(200);
 		expect(mockRecordAuditedWrites.mock.calls[0][0]).toMatchObject({ action: 'update' });
+	});
+});
+
+describe('/api/v1/users names the shelter it works in (#477)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockCreateOrMergeUser.mockResolvedValue({ merged: false });
+	});
+
+	const call = (
+		handler: typeof GET | typeof POST | typeof PUT | typeof DELETE,
+		method: string,
+		query: string,
+		body?: Record<string, unknown>
+	) =>
+		handler({
+			request: new Request(`http://localhost/api/v1/users${query}`, {
+				method,
+				headers: { 'Content-Type': 'application/json', cookie: 'AuthSession=x' },
+				body: body ? JSON.stringify(body) : undefined
+			}),
+			url: new URL(`http://localhost/api/v1/users${query}`)
+		} as Parameters<typeof GET>[0]);
+
+	it.each([
+		['GET', GET, '?shelter_code=SH002', undefined],
+		['POST', POST, '?shelter_code=SH002', { name: 'staff01', display_name: 'S', password: 'x' }],
+		['PUT', PUT, '?shelter_code=SH002', { name: 'staff01' }],
+		['DELETE', DELETE, '?name=staff01&shelter_code=SH002', undefined]
+	] as const)(
+		'%s hands ?shelter_code= to the authorization',
+		async (method, handler, query, body) => {
+			await call(handler, method, query, body);
+			expect(authorizeUserWrite).toHaveBeenCalledWith('AuthSession=x', 'SH002');
+		}
+	);
+
+	it('passes null when the request names no shelter, so a multi-shelter manager gets a 400', async () => {
+		await call(GET, 'GET', '');
+		expect(authorizeUserWrite).toHaveBeenCalledWith('AuthSession=x', null);
 	});
 });

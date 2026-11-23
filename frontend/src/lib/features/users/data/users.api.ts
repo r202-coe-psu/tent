@@ -49,30 +49,44 @@ export interface UserSummary {
 	mfa_thaid_pid_masked?: string | null;
 }
 
-export function listUsers(): Promise<UserSummary[]> {
-	return serviceFetch<UserSummary[]>(USERS_ENDPOINT);
+/**
+ * `/api/v1/users` scoped to the shelter the caller works in (#477): the BFF checks their manager
+ * role in it, and a manager of several shelters must name one. A system admin passes none.
+ */
+function usersUrl(shelterCode?: string | null, extra: Record<string, string> = {}): string {
+	const params = new URLSearchParams(extra);
+	if (shelterCode) params.set('shelter_code', shelterCode);
+	const query = params.toString();
+	return query ? `${USERS_ENDPOINT}?${query}` : USERS_ENDPOINT;
 }
 
-export function createUser(input: {
-	name: string;
-	password: string;
-	display_name: string;
-	roles: string[];
-	personnel_type?: 'staff' | 'volunteer';
-	organization?: string | null;
-	position?: string | null;
-	phone?: string | null;
-	email?: string | null;
-	notes?: string | null;
-	volunteer_id?: string | null;
-	duty_window?: {
-		start_ts: string;
-		end_ts: string;
-	} | null;
-	must_change_password?: boolean;
-	affiliation_tags?: string[];
-}): Promise<{ ok: true; merged?: boolean }> {
-	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
+export function listUsers(shelterCode?: string | null): Promise<UserSummary[]> {
+	return serviceFetch<UserSummary[]>(usersUrl(shelterCode));
+}
+
+export function createUser(
+	input: {
+		name: string;
+		password: string;
+		display_name: string;
+		roles: string[];
+		personnel_type?: 'staff' | 'volunteer';
+		organization?: string | null;
+		position?: string | null;
+		phone?: string | null;
+		email?: string | null;
+		notes?: string | null;
+		volunteer_id?: string | null;
+		duty_window?: {
+			start_ts: string;
+			end_ts: string;
+		} | null;
+		must_change_password?: boolean;
+		affiliation_tags?: string[];
+	},
+	shelterCode?: string | null
+): Promise<{ ok: true; merged?: boolean }> {
+	return serviceFetch(usersUrl(shelterCode), { method: 'POST', body: JSON.stringify(input) });
 }
 
 /** What a scanned staff card resolves to: a staff member, or the volunteer linked to the account. */
@@ -115,8 +129,8 @@ export function rotateStaffCard(name: string): Promise<StaffCardForPrint> {
 	});
 }
 
-export function deleteUser(name: string): Promise<{ ok: true }> {
-	return serviceFetch(`${USERS_ENDPOINT}?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
+export function deleteUser(name: string, shelterCode?: string | null): Promise<{ ok: true }> {
+	return serviceFetch(usersUrl(shelterCode, { name }), { method: 'DELETE' });
 }
 
 export function updateUser(
@@ -141,9 +155,10 @@ export function updateUser(
 		affiliation_tags?: string[];
 		/** Compound roles (`SHxxx:<role>`) to make permanent ("ไม่มีวันหมด"): removes their grant. */
 		permanent_roles?: string[];
-	}
+	},
+	shelterCode?: string | null
 ): Promise<{ ok: true }> {
-	return serviceFetch(USERS_ENDPOINT, {
+	return serviceFetch(usersUrl(shelterCode), {
 		method: 'PUT',
 		body: JSON.stringify({ name, ...input })
 	});

@@ -4,12 +4,12 @@
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { resolveManagedShelterCode } from '$lib/db/shelter';
 	import {
 		isAppSystemAdmin,
 		isSystemAdmin,
 		isShelterManager,
 		roleDisplayLabel,
-		shelterCodeFromRoles,
 		shelterCodesFromRoles,
 		parseCompoundCapability,
 		SA_GRANTABLE_CAPABILITIES,
@@ -61,13 +61,19 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const ownShelterCode = $derived(shelterCodeFromRoles(roles));
+	// The shelter being worked in (selected shelter first), not the first `shelter:` role (#477).
+	const activeShelterCode = $derived(resolveManagedShelterCode());
 	const effectiveLock = $derived(
-		lockedShelterCode || (!isSA ? (ownShelterCode ?? undefined) : undefined)
+		lockedShelterCode || (!isSA ? (activeShelterCode ?? undefined) : undefined)
 	);
+	// Sent as `?shelter_code=`: the BFF checks the manager role there. SA names none.
+	const requestShelter = $derived(isSA ? undefined : effectiveLock);
 
 	const queryClient = useQueryClient();
-	const usersQuery = useUsers();
+	const usersQuery = useUsers(
+		() => true,
+		() => requestShelter
+	);
 	const deleteMutation = useDeleteUser();
 	const sheltersQuery = useShelters();
 
@@ -181,14 +187,17 @@
 
 	function handleDelete() {
 		if (!userToDelete) return;
-		deleteMutation.mutate(userToDelete, {
-			onSuccess: () => {
-				toast.success(`ลบผู้ใช้งาน "${userToDelete}" สำเร็จ`);
-				deleteDialogOpen = false;
-				userToDelete = null;
-			},
-			onError: (err: Error) => toast.error(err.message)
-		});
+		deleteMutation.mutate(
+			{ name: userToDelete, shelterCode: requestShelter },
+			{
+				onSuccess: () => {
+					toast.success(`ลบผู้ใช้งาน "${userToDelete}" สำเร็จ`);
+					deleteDialogOpen = false;
+					userToDelete = null;
+				},
+				onError: (err: Error) => toast.error(err.message)
+			}
+		);
 	}
 
 	function handleOpenReset(user: UserSummary) {

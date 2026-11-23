@@ -81,7 +81,7 @@ export async function grantVolunteerAccess(
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
 	if (hasInvalidAccessPhone(profile.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
 	const scope = shelterScopeRole(volunteer.shelter_code);
-	const users = await listUsers();
+	const users = await listUsers(volunteer.shelter_code);
 	const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 	// A legacy mixed-case account is found by any casing; its stored name is what we link.
 	const existing =
@@ -129,25 +129,34 @@ export async function grantVolunteerAccess(
 	if (existing && roleAdded) {
 		// A system admin's save replaces the roles, so it carries the other shelters' too; a manager
 		// sends their own shelter's only and the server keeps the rest. The password stays.
-		await updateUser(existing.name, {
-			roles: isSystemAdmin(callerRoles)
-				? mergeShelterAssignment(existing.roles, volunteer.shelter_code, [role])
-				: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }])
-		});
+		await updateUser(
+			existing.name,
+			{
+				roles: isSystemAdmin(callerRoles)
+					? mergeShelterAssignment(existing.roles, volunteer.shelter_code, [role])
+					: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }])
+			},
+			volunteer.shelter_code
+		);
 	}
 	if (created) {
-		const result = await createUser({
-			name: email,
-			password,
-			display_name: `${profile.first_name} ${profile.last_name}`.trim(),
-			roles: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }]),
-			personnel_type: 'volunteer',
-			organization: profile.organization ?? null,
-			phone: accountPhone(profile.phone),
-			email,
-			volunteer_id: volunteer._id,
-			must_change_password: isPhoneBootstrapPassword
-		});
+		const result = await createUser(
+			{
+				name: email,
+				password,
+				display_name: `${profile.first_name} ${profile.last_name}`.trim(),
+				roles: rolesFromAssignments([
+					{ shelter_code: volunteer.shelter_code, capabilities: [role] }
+				]),
+				personnel_type: 'volunteer',
+				organization: profile.organization ?? null,
+				phone: accountPhone(profile.phone),
+				email,
+				volunteer_id: volunteer._id,
+				must_change_password: isPhoneBootstrapPassword
+			},
+			volunteer.shelter_code
+		);
 		// A manager does not list accounts outside their shelter: an existing one is found by the
 		// server, which adds this shelter's role and keeps the password (A1-4).
 		if (result.merged) {

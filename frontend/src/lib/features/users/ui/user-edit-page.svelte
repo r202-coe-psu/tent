@@ -4,12 +4,11 @@
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { resolveManagedShelterCode } from '$lib/db/shelter';
 	import {
 		isAppSystemAdmin,
 		isStaffOnly,
 		isSystemAdmin,
-		managerShelterCodes,
-		shelterCodeFromRoles,
 		shelterCodesFromRoles,
 		SYSTEM_ADMIN,
 		rolesFromAssignments,
@@ -40,11 +39,17 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const ownShelterCode = $derived(managerShelterCodes(roles)[0] ?? shelterCodeFromRoles(roles));
+	// The shelter being worked in (#477): the selected one, else the first one this user manages.
+	const activeShelterCode = $derived(resolveManagedShelterCode());
 	const effectiveLock = $derived(
-		lockedShelterCode || (!isSA ? (ownShelterCode ?? undefined) : undefined)
+		lockedShelterCode || (!isSA ? (activeShelterCode ?? undefined) : undefined)
 	);
-	const usersQuery = useUsers();
+	// Sent as `?shelter_code=`: the BFF checks the manager role there. SA names none.
+	const requestShelter = $derived(isSA ? undefined : effectiveLock);
+	const usersQuery = useUsers(
+		() => true,
+		() => requestShelter
+	);
 	const updateMutation = useUpdateUser();
 
 	let demoteDialogOpen = $state(false);
@@ -125,7 +130,8 @@
 			volunteer_id: input.volunteer_id,
 			duty_window: input.duty_window,
 			affiliation_tags: input.affiliation_tags,
-			permanent_roles: input.permanent_roles
+			permanent_roles: input.permanent_roles,
+			shelterCode: requestShelter
 		});
 		toast.success(`อัปเดตข้อมูลผู้ใช้งาน "${target.name}" สำเร็จ`);
 		demoteDialogOpen = false;

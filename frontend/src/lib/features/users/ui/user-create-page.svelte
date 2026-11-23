@@ -4,9 +4,9 @@
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { resolveManagedShelterCode } from '$lib/db/shelter';
 	import {
 		isSystemAdmin,
-		shelterCodeFromRoles,
 		SYSTEM_ADMIN,
 		rolesFromAssignments,
 		type ShelterAssignment
@@ -34,10 +34,13 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const ownShelterCode = $derived(shelterCodeFromRoles(roles));
+	// The shelter being worked in (selected shelter first), not the first `shelter:` role (#477).
+	const activeShelterCode = $derived(resolveManagedShelterCode());
 	const effectiveLock = $derived(
-		lockedShelterCode || (!isSA ? (ownShelterCode ?? undefined) : undefined)
+		lockedShelterCode || (!isSA ? (activeShelterCode ?? undefined) : undefined)
 	);
+	// Sent as `?shelter_code=`: the BFF checks the manager role there. SA names none.
+	const requestShelter = $derived(isSA ? undefined : effectiveLock);
 	const createMutation = useCreateUser();
 
 	let credentialsDialogOpen = $state(false);
@@ -109,7 +112,8 @@
 			notes: input.notes,
 			volunteer_id: input.volunteer_id,
 			duty_window: input.duty_window,
-			affiliation_tags: input.affiliation_tags
+			affiliation_tags: input.affiliation_tags,
+			shelterCode: requestShelter
 		});
 		toast.success(
 			result.merged

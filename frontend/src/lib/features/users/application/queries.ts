@@ -5,7 +5,7 @@ import { auditLogKeys } from '$lib/features/audit-log';
 
 export const usersKeys = {
 	all: ['users'] as const,
-	list: () => [...usersKeys.all, 'list'] as const
+	list: (shelterCode?: string | null) => [...usersKeys.all, 'list', shelterCode ?? null] as const
 };
 
 export const shelterStaffDirectoryKeys = {
@@ -13,10 +13,13 @@ export const shelterStaffDirectoryKeys = {
 };
 
 /** `enabled` lets callers skip the request (`GET /api/v1/users` is SA/SM only → 403 otherwise). */
-export const useUsers = (enabled: () => boolean = () => true) =>
+export const useUsers = (
+	enabled: () => boolean = () => true,
+	shelterCode: () => string | null | undefined = () => undefined
+) =>
 	createQuery(() => ({
-		queryKey: usersKeys.list(),
-		queryFn: listUsers,
+		queryKey: usersKeys.list(shelterCode()),
+		queryFn: () => listUsers(shelterCode()),
 		enabled: enabled()
 	}));
 
@@ -52,7 +55,12 @@ export const useCreateUser = () => {
 			} | null;
 			must_change_password?: boolean;
 			affiliation_tags?: string[];
-		}) => createUser(input),
+			/** The shelter the caller works in; a manager of several must name one (#477). */
+			shelterCode?: string | null;
+		}) => {
+			const { shelterCode, ...rest } = input;
+			return createUser(rest, shelterCode);
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
@@ -83,9 +91,11 @@ export const useUpdateUser = () => {
 			must_change_password?: boolean;
 			affiliation_tags?: string[];
 			permanent_roles?: string[];
+			/** The shelter the caller works in; a manager of several must name one (#477). */
+			shelterCode?: string | null;
 		}) => {
-			const { name, ...rest } = input;
-			return updateUser(name, rest);
+			const { name, shelterCode, ...rest } = input;
+			return updateUser(name, rest, shelterCode);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
@@ -97,7 +107,8 @@ export const useUpdateUser = () => {
 export const useDeleteUser = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (name: string) => deleteUser(name),
+		mutationFn: (input: { name: string; shelterCode?: string | null }) =>
+			deleteUser(input.name, input.shelterCode),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
