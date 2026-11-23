@@ -50,6 +50,9 @@
 	}
 </script>
 
+<p class="mb-2 text-xs text-muted-foreground" data-testid="capacity-scope">
+	นับเป็นรายกะ จากงานที่เปิดรับอยู่ {capacityJobs.length} งาน ({capacities.length} กะ)
+</p>
 <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
 	<Card.Root class="border-0 shadow-sm">
 		<Card.Content
@@ -59,7 +62,7 @@
 				<TrendingUp class="h-5 w-5 text-primary" />
 			</div>
 			<div class="min-w-0">
-				<p class="text-xs text-muted-foreground">อัตราจองกะรวม</p>
+				<p class="text-xs text-muted-foreground">อัตราจองรวมทุกกะ</p>
 				<p class="mt-0.5 text-xl font-bold">{Math.round(overallRate * 100)}%</p>
 			</div>
 		</Card.Content>
@@ -78,7 +81,7 @@
 					<AlertTriangle class="h-5 w-5 text-destructive" />
 				</div>
 				<div class="min-w-0">
-					<p class="text-xs text-muted-foreground">ขาดแคลนหนัก (&lt;50%)</p>
+					<p class="text-xs text-muted-foreground">กะขาดแคลนหนัก (&lt;50%)</p>
 					<p class="mt-0.5 text-xl font-bold text-destructive">{counts.critical}</p>
 				</div>
 			</Card.Content>
@@ -98,7 +101,7 @@
 					<Gauge class="h-5 w-5 text-amber-600" />
 				</div>
 				<div class="min-w-0">
-					<p class="text-xs text-muted-foreground">ใกล้ครบเป้า (50–99%)</p>
+					<p class="text-xs text-muted-foreground">กะใกล้ครบเป้า (50–99%)</p>
 					<p class="mt-0.5 text-xl font-bold text-amber-600">{counts.near}</p>
 				</div>
 			</Card.Content>
@@ -118,7 +121,7 @@
 					<CheckCircle2 class="h-5 w-5 text-emerald-600" />
 				</div>
 				<div class="min-w-0">
-					<p class="text-xs text-muted-foreground">ครบตามเป้า (100%)</p>
+					<p class="text-xs text-muted-foreground">กะครบตามเป้า (100%)</p>
 					<p class="mt-0.5 text-xl font-bold text-emerald-600">{counts.met}</p>
 				</div>
 			</Card.Content>
