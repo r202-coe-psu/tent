@@ -8,8 +8,13 @@ import time
 import httpx
 
 from worker.jobs.base import JobContext
-from worker.jobs.config import is_job_enabled, job_budget_seconds
-from worker.jobs.runner import clear_stale_ok_files, run_job, run_loop, run_tick
+from worker.jobs.config import (
+    is_job_enabled,
+    job_budget_seconds,
+    job_interval_seconds,
+    max_age_seconds,
+)
+from worker.jobs.runner import clear_stale_ok_files, run_job, run_loop
 
 
 class FakeJob:
@@ -37,26 +42,96 @@ def client() -> httpx.AsyncClient:
     )
 
 
-async def test_tick_runs_in_order_and_writes_ok_files(tmp_path) -> None:
-    log: list[str] = []
-    jobs = [FakeJob("printing", log), FakeJob("edge-users-copy", log)]
-    env = {"JOBS_OK_DIR": str(tmp_path), "PRINT_HOUSEKEEPING_TOKEN": "t"}
+async def run_once(jobs, tmp_path, env_extra=None) -> list[str]:
+    """Run ``run_loop`` until every job has run once, then stop it."""
+    stop = asyncio.Event()
+    env = {
+        "JOBS_OK_DIR": str(tmp_path),
+        "JOBS_TICK_SECONDS": "3600",
+        **(env_extra or {}),
+    }
     async with client() as http:
-        await run_tick(jobs, http=http, stop=asyncio.Event(), env=env)
+        task = asyncio.create_task(run_loop(jobs, stop=stop, env=env, http=http))
+        enabled = [j for j in jobs if is_job_enabled(j.name, env)]
+        async with asyncio.timeout(2):
+            while not all(j.ctxs for j in enabled):
+                await asyncio.sleep(0.01)
+        await asyncio.sleep(0.02)
+        stop.set()
+        await asyncio.wait_for(task, 1.0)
+    return [j.name for j in jobs if j.ctxs]
 
-    assert log == ["printing", "edge-users-copy"]
+
+async def test_every_job_runs_in_its_own_loop_and_writes_ok_files(tmp_path) -> None:
+    jobs = [FakeJob("printing"), FakeJob("edge-users-copy")]
+    ran = await run_once(jobs, tmp_path, {"PRINT_HOUSEKEEPING_TOKEN": "t"})
+
+    assert ran == ["printing", "edge-users-copy"]
     assert (tmp_path / "printing.ok").read_text().isdigit()
     assert (tmp_path / "edge-users-copy.ok").read_text().isdigit()
+
+
+async def test_slow_job_does_not_delay_other_jobs(tmp_path) -> None:
+    stop = asyncio.Event()
+    fast_runs = 0
+
+    class Blocked(FakeJob):
+        async def run(self, ctx: JobContext) -> None:
+            await ctx.stop.wait()  # in-flight call that only ends on shutdown
+
+    class Fast(FakeJob):
+        async def run(self, ctx: JobContext) -> None:
+            nonlocal fast_runs
+            fast_runs += 1
+            if fast_runs >= 3:
+                stop.set()
+
+    env = {
+        "JOBS_OK_DIR": str(tmp_path),
+        "SHELTER_IMPORT_WORKER_TOKEN": "t",
+        "JOBS_EDGE_USERS_COPY_INTERVAL_SECONDS": "0.01",
+    }
+    async with client() as http:
+        await asyncio.wait_for(
+            run_loop(
+                [Blocked("import-shelter"), Fast("edge-users-copy")],
+                stop=stop,
+                env=env,
+                http=http,
+            ),
+            5,
+        )
+
+    assert fast_runs == 3
+
+
+def test_interval_resolution_and_healthcheck_age() -> None:
+    assert job_interval_seconds({}, "printing") == 10
+    assert job_interval_seconds({}, "edge-users-copy") == 10
+    assert job_interval_seconds({}, "import-shelter") == 30
+    assert job_interval_seconds({}, "shelter-close") == 30
+    assert job_interval_seconds({}, "unknown") == 30
+    # own env wins over the shared default, which wins over the built-in
+    env = {"JOBS_TICK_SECONDS": "60", "JOBS_IMPORT_INTERVAL_SECONDS": "5"}
+    assert job_interval_seconds(env, "import-shelter") == 5
+    assert job_interval_seconds(env, "printing") == 60
+    assert (
+        job_interval_seconds({"JOBS_CLOSE_INTERVAL_SECONDS": "bad"}, "shelter-close")
+        == 30
+    )
+    # healthcheck age = max(120 s, 4 x that job's interval)
+    assert max_age_seconds({}, "printing") == 120
+    assert (
+        max_age_seconds({"JOBS_IMPORT_INTERVAL_SECONDS": "60"}, "import-shelter") == 240
+    )
 
 
 async def test_failure_is_isolated_and_writes_no_ok(tmp_path, caplog) -> None:
     log: list[str] = []
     jobs = [FakeJob("printing", log, fail=True), FakeJob("edge-users-copy", log)]
-    env = {"JOBS_OK_DIR": str(tmp_path), "PRINT_HOUSEKEEPING_TOKEN": "t"}
-    async with client() as http:
-        await run_tick(jobs, http=http, stop=asyncio.Event(), env=env)
+    await run_once(jobs, tmp_path, {"PRINT_HOUSEKEEPING_TOKEN": "t"})
 
-    assert log == ["printing", "edge-users-copy"]
+    assert sorted(log) == ["edge-users-copy", "printing"]
     assert not (tmp_path / "printing.ok").exists()
     assert (tmp_path / "edge-users-copy.ok").exists()
     assert "ValueError" in caplog.text
@@ -67,8 +142,7 @@ async def test_disabled_job_is_skipped(tmp_path) -> None:
     log: list[str] = []
     jobs = [FakeJob("printing", log), FakeJob("edge-users-copy", log)]
     env = {"JOBS_OK_DIR": str(tmp_path)}  # no print token
-    async with client() as http:
-        await run_tick(jobs, http=http, stop=asyncio.Event(), env=env)
+    await run_once(jobs, tmp_path)
 
     assert log == ["edge-users-copy"]
     assert not is_job_enabled("import-shelter", env)

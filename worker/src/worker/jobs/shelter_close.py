@@ -75,7 +75,7 @@ def validate_ordering(t: Mapping[str, float]) -> None:
 class ShelterCloseJob:
     name = "shelter-close"
     budget_env = "JOBS_CLOSE_BUDGET_SECONDS"
-    default_budget_seconds = 10.0
+    default_budget_seconds = 30.0
 
     def __init__(self, env: Mapping[str, str] | None = None) -> None:
         self._env = os.environ if env is None else env

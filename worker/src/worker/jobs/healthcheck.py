@@ -24,12 +24,11 @@ def is_healthy(
     read_file: Callable[[str], str],
     is_dir: Callable[[str], bool] = os.path.isdir,
 ) -> bool:
-    """Healthy when every enabled job's OK file is fresher than ``max(120 s, 4 × tick)``."""
+    """Healthy when every enabled job's OK file is fresher than ``max(120 s, 4 × its own interval)``."""
     # The image's HEALTHCHECK also covers sync-worker, which never runs jobs: the jobs
     # runner creates the OK dir at startup, so no dir means "not a jobs-worker".
     if not is_dir(ok_dir(env)):
         return True
-    max_age_ms = max_age_seconds(env) * 1000
     for name in JOB_ENABLE_ENV:
         if not is_job_enabled(name, env):
             continue
@@ -37,7 +36,7 @@ def is_healthy(
             last_ok_ms = int(read_file(ok_path(env, name)).strip())
         except OSError, ValueError:
             return False
-        if now_ms - last_ok_ms > max_age_ms:
+        if now_ms - last_ok_ms > max_age_seconds(env, name) * 1000:
             return False
     return True
 

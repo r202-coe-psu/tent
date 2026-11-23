@@ -31,8 +31,28 @@ def _positive_float(raw: str | None, default: float) -> float:
     return value if value > 0 else default
 
 
+# Job name -> (interval env var, built-in interval seconds). Each job runs in its own loop.
+JOB_INTERVALS: dict[str, tuple[str, float]] = {
+    "printing": ("JOBS_PRINTING_INTERVAL_SECONDS", 10.0),
+    "edge-users-copy": ("JOBS_EDGE_USERS_COPY_INTERVAL_SECONDS", 10.0),
+    "import-shelter": ("JOBS_IMPORT_INTERVAL_SECONDS", 30.0),
+    "shelter-close": ("JOBS_CLOSE_INTERVAL_SECONDS", 30.0),
+}
+
+
 def tick_seconds(env: Mapping[str, str]) -> float:
     return _positive_float(env.get("JOBS_TICK_SECONDS"), DEFAULT_TICK_SECONDS)
+
+
+def job_interval_seconds(env: Mapping[str, str], name: str) -> float:
+    """Seconds between run starts of ``name``: its own env, else ``JOBS_TICK_SECONDS`` when set,
+    else the job's built-in default (30 s for an unknown job)."""
+    own_env, builtin = JOB_INTERVALS.get(name, ("", DEFAULT_TICK_SECONDS))
+    if own_env and env.get(own_env):
+        return _positive_float(env.get(own_env), builtin)
+    if env.get("JOBS_TICK_SECONDS"):
+        return tick_seconds(env)
+    return builtin
 
 
 def ok_dir(env: Mapping[str, str]) -> str:
@@ -43,8 +63,8 @@ def ok_path(env: Mapping[str, str], name: str) -> str:
     return f"{ok_dir(env).rstrip('/')}/{name}.ok"
 
 
-def max_age_seconds(env: Mapping[str, str]) -> float:
-    return max(MIN_MAX_AGE_SECONDS, MISSED_TICKS * tick_seconds(env))
+def max_age_seconds(env: Mapping[str, str], name: str) -> float:
+    return max(MIN_MAX_AGE_SECONDS, MISSED_TICKS * job_interval_seconds(env, name))
 
 
 def is_job_enabled(name: str, env: Mapping[str, str]) -> bool:

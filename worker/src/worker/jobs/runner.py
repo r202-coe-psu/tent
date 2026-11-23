@@ -1,9 +1,10 @@
-"""jobs-worker loop: one tick every ``JOBS_TICK_SECONDS`` running each enabled job in order.
+"""jobs-worker: every enabled job runs in its own loop, concurrently, at its own interval.
 
-Each job has its own try/except and budget; a failure never fails the tick. After a successful
-run a per-job OK file (epoch ms) is written for the container healthcheck. Ticks never overlap:
-if one overruns the tick length the next starts immediately, otherwise the remainder is slept
-(interruptible by shutdown).
+Each job has its own try/except and budget, so a slow or failing job never delays another.
+Loops are fixed-period (start to start): a run that overruns its interval is followed
+immediately by the next one, and runs of one job never overlap; otherwise the remainder is
+slept (interruptible by shutdown). After a successful run a per-job OK file (epoch ms) is
+written for the container healthcheck.
 """
 
 from __future__ import annotations
@@ -22,9 +23,9 @@ from worker.jobs.base import Job, JobContext
 from worker.jobs.config import (
     is_job_enabled,
     job_budget_seconds,
+    job_interval_seconds,
     ok_dir,
     ok_path,
-    tick_seconds,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,25 +72,6 @@ async def run_job(
     return True
 
 
-async def run_tick(
-    jobs: Sequence[Job],
-    *,
-    http: httpx.AsyncClient,
-    stop: asyncio.Event,
-    env: Mapping[str, str],
-    now_ms: Callable[[], int] = _now_ms,
-    write_ok: Callable[[str, str], None] = _write_ok_file,
-) -> None:
-    for job in jobs:
-        if stop.is_set():
-            return
-        if not is_job_enabled(job.name, env):
-            continue
-        await run_job(
-            job, http=http, stop=stop, env=env, now_ms=now_ms, write_ok=write_ok
-        )
-
-
 async def run_loop(
     jobs: Sequence[Job],
     *,
@@ -97,24 +79,35 @@ async def run_loop(
     env: Mapping[str, str],
     http: httpx.AsyncClient | None = None,
 ) -> None:
-    tick = tick_seconds(env)
     owns_http = http is None
     if http is None:
         http = httpx.AsyncClient()
-    enabled = [j.name for j in jobs if is_job_enabled(j.name, env)]
-    logger.info("jobs-worker: tick %ss, jobs %s", tick, enabled)
+    enabled = [j for j in jobs if is_job_enabled(j.name, env)]
+    logger.info(
+        "jobs-worker: %s",
+        ", ".join(
+            f"{j.name} every {job_interval_seconds(env, j.name):g}s" for j in enabled
+        ),
+    )
     Path(ok_dir(env)).mkdir(parents=True, exist_ok=True)
     clear_stale_ok_files(env, jobs)
-    try:
+    client = http
+
+    async def job_loop(job: Job) -> None:
+        interval = job_interval_seconds(env, job.name)
         while not stop.is_set():
             started = time.monotonic()
-            await run_tick(jobs, http=http, stop=stop, env=env)
-            remaining = tick - (time.monotonic() - started)
+            await run_job(job, http=client, stop=stop, env=env)
+            remaining = interval - (time.monotonic() - started)
             if remaining > 0 and not stop.is_set():
                 try:
                     await asyncio.wait_for(stop.wait(), remaining)
                 except TimeoutError:
                     pass
+
+    tasks = [asyncio.create_task(job_loop(j), name=f"job-{j.name}") for j in enabled]
+    try:
+        await asyncio.gather(*tasks)
     finally:
         for job in jobs:
             aclose = getattr(job, "aclose", None)
@@ -125,8 +118,10 @@ async def run_loop(
                     logger.warning(
                         "job %s close failed: %s", job.name, type(exc).__name__
                     )
+        for task in tasks:
+            task.cancel()
         if owns_http:
-            await http.aclose()
+            await client.aclose()
     logger.info("jobs-worker: stopped")
 
 
