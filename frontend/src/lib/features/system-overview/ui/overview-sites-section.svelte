@@ -3,6 +3,7 @@
 	import { parseDate } from '@internationalized/date';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { DateRangePicker } from '$lib/components/ui/date-picker';
 	import { Label } from '$lib/components/ui/label';
@@ -13,12 +14,20 @@
 
 	let {
 		sites,
+		total = 0,
+		limit = 20,
+		offset = 0,
+		onOffsetChange,
 		loading = false,
 		movementFrom,
 		movementTo,
 		onMovementRangeChange
 	}: {
 		sites: OverviewSiteRow[] | undefined;
+		total?: number;
+		limit?: number;
+		offset?: number;
+		onOffsetChange?: (next: number) => void;
 		loading?: boolean;
 		movementFrom: string; // YYYY-MM-DD
 		movementTo: string;
@@ -42,6 +51,11 @@
 	const siteKindQuery = useMasterData(() => 'site_kind');
 	const siteKindLabel = (code: string) =>
 		formatMasterLabelByCode(code, siteKindQuery.data?.items ?? [], langState.current);
+
+	const pageStart = $derived(total === 0 ? 0 : offset + 1);
+	const pageEnd = $derived(Math.min(offset + limit, total));
+	const canPrev = $derived(offset > 0);
+	const canNext = $derived(offset + limit < total);
 
 	function statusLabel(status: string): string {
 		return STATUS_LABELS[status] ?? status;
@@ -151,6 +165,29 @@
 					</Table.Body>
 				</Table.Root>
 			</div>
+			{#if onOffsetChange && total > limit}
+				<div class="mt-3 flex items-center justify-between gap-2 text-sm text-slate-600">
+					<span class="tabular-nums">{pageStart}–{pageEnd} / {total}</span>
+					<div class="flex gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={!canPrev}
+							onclick={() => onOffsetChange(Math.max(0, offset - limit))}
+						>
+							ก่อนหน้า
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={!canNext}
+							onclick={() => onOffsetChange(offset + limit)}
+						>
+							ถัดไป
+						</Button>
+					</div>
+				</div>
+			{/if}
 		{/if}
 	</Card.Content>
 </Card.Root>

@@ -460,9 +460,55 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 		});
 	});
 
-	it('ships occupancy_by_zone in view manifest v8 (CR-226)', () => {
-		expect(SHELTER_VIEW_MANIFEST.version).toBe(8);
+	it('ships occupancy_by_zone in the view manifest (CR-226)', () => {
+		expect(SHELTER_VIEW_MANIFEST.version).toBe(9);
 		expect(Object.keys(SHELTER_VIEW_MANIFEST.views)).toContain('occupancy_by_zone');
+	});
+
+	describe('system overview views (#1502)', () => {
+		it('demographics_by_country_age emits [country, birth_year] for in-shelter evacuees', () => {
+			const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.demographics_by_country_age.map);
+			mapFn(
+				{ type: 'evacuee', current_stay: { status: 'active' }, country: ' th ', birth_year: 1990 },
+				mockEmit
+			);
+			mapFn({ type: 'evacuee', current_stay: { status: 'active' } }, mockEmit);
+			mapFn({ type: 'evacuee', current_stay: { status: 'checked_out' }, country: 'TH' }, mockEmit);
+			expect(emitted).toEqual([
+				{ key: ['TH', 1990], value: 1 },
+				{ key: ['UNKNOWN', null], value: 1 }
+			]);
+		});
+
+		it('prereg_by_created keys pre-registered evacuees by created_at', () => {
+			const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.prereg_by_created.map);
+			mapFn(
+				{ type: 'evacuee', created_at: '2026-01-02', current_stay: { status: 'pre_registered' } },
+				mockEmit
+			);
+			mapFn(
+				{
+					type: 'evacuee',
+					created_at: '2026-01-03',
+					registered_via: 'kiosk',
+					current_stay: { status: 'active' }
+				},
+				mockEmit
+			);
+			mapFn(
+				{
+					type: 'evacuee',
+					created_at: '2026-01-04',
+					registered_via: 'staff',
+					current_stay: { status: 'active' }
+				},
+				mockEmit
+			);
+			expect(emitted).toEqual([
+				{ key: '2026-01-02', value: 1 },
+				{ key: '2026-01-03', value: 1 }
+			]);
+		});
 	});
 
 	it('keeps the received-donation search views in the manifest (#821)', () => {
