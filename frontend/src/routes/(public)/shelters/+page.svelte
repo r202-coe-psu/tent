@@ -274,7 +274,8 @@
 			})
 	);
 
-	// lg–xl with both panels open leaves ~100px for the legend (#1461): collapse it to a toggle.
+	// lg–xl with both panels open leaves little room for the legend (~220px at 1024, ~420px at 1280;
+	// #1461): collapse it to a toggle.
 	const legendCompact = $derived(!isMobile && !isXl && showFilterPanel && showListPanel);
 
 	/** A filter's load is in flight: the list dims until the new result lands. */

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import type { ClassValue } from 'svelte/elements';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type {
@@ -129,11 +129,30 @@
 	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
 	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 	const siteKindsQuery = useSiteKinds();
-	let legendOpen = $state(false);
-	// A legend left open must not pop open again the next time the strip narrows.
-	$effect(() => {
-		if (!legendCompact) legendOpen = false;
+	// Closed again whenever the strip stops being compact, so a legend left open does not pop open
+	// the next time it narrows. (A writable $derived: the buttons assign it, `legendCompact` resets it.)
+	let legendOpen = $derived.by(() => {
+		void legendCompact;
+		return false;
 	});
+	let legendToggleEl = $state<HTMLButtonElement | null>(null);
+	let legendCloseEl = $state<HTMLButtonElement | null>(null);
+
+	// The toggle and the close button replace each other in the DOM, so focus follows the swap
+	// (keyboard users keep their place instead of falling back to <body>).
+	async function openLegend() {
+		legendOpen = true;
+		await tick();
+		legendCloseEl?.focus();
+	}
+	async function closeLegend() {
+		legendOpen = false;
+		await tick();
+		legendToggleEl?.focus();
+	}
+	function onWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && legendCompact && legendOpen) void closeLegend();
+	}
 	const shelterPinLegendKind = $derived(shelterPinKind(siteKindsQuery.data));
 
 	const SEARCH_RADIUS_SOURCE = 'search-radius';
@@ -818,6 +837,8 @@
 	});
 </script>
 
+<svelte:window onkeydown={onWindowKeydown} />
+
 <svelte:head>
 	<link rel="stylesheet" href="/maplibre-gl.css" />
 </svelte:head>
@@ -855,6 +876,7 @@
 <!-- Legend overlay: spans the free map width and wraps between items, never inside a label -->
 {#if showLegend}
 	<div
+		id="shelter-map-legend"
 		data-testid="map-legend"
 		class={[
 			'pointer-events-none absolute inset-x-3 bottom-4 hidden justify-center sm:flex',
@@ -867,8 +889,10 @@
 				type="button"
 				data-testid="map-legend-toggle"
 				aria-expanded="false"
-				class="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card/95 px-3 py-1.5 text-2xs font-bold whitespace-nowrap text-foreground shadow-md backdrop-blur-md transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-				onclick={() => (legendOpen = true)}
+				aria-controls="shelter-map-legend"
+				bind:this={legendToggleEl}
+				class="pointer-events-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border/80 bg-card/95 px-4 text-2xs font-bold whitespace-nowrap text-foreground shadow-md backdrop-blur-md transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+				onclick={openLegend}
 			>
 				<Info class="h-3.5 w-3.5 text-primary" aria-hidden="true" />
 				{t.legendToggle}
@@ -877,7 +901,7 @@
 			<div
 				class={[
 					'pointer-events-auto relative flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-1.5 rounded-2xl border border-border/80 bg-card/95 px-4 py-2 text-2xs font-medium shadow-md backdrop-blur-md',
-					legendCompact && 'pr-9'
+					legendCompact && 'pr-14'
 				]}
 			>
 				{#if legendCompact}
@@ -885,10 +909,12 @@
 						type="button"
 						data-testid="map-legend-close"
 						aria-expanded="true"
+						aria-controls="shelter-map-legend"
 						aria-label={t.legendClose}
 						title={t.legendClose}
-						class="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-						onclick={() => (legendOpen = false)}
+						bind:this={legendCloseEl}
+						class="absolute top-0.5 right-0.5 flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+						onclick={closeLegend}
 					>
 						<X class="h-3.5 w-3.5" aria-hidden="true" />
 					</button>

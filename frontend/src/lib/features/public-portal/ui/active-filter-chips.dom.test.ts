@@ -102,4 +102,27 @@ describe('ActiveFilterChips (#1419)', () => {
 		expect(button('เอา ซ่อนที่เต็ม ออก')!.classList.contains('shrink-0')).toBe(true);
 		expect(button('ล้างทั้งหมด')!.classList.contains('shrink-0')).toBe(true);
 	});
+
+	it('in the scrolling row "clear all" leads, so it is never off-screen behind the chips', () => {
+		render([radius, hideFull], { scroll: true });
+		const buttons = [...document.body.querySelectorAll('button')];
+		expect(buttons[0].textContent?.trim()).toBe('ล้างทั้งหมด');
+		// in the wrapping layout it keeps its place at the end
+		unmount(component!);
+		document.body.innerHTML = '';
+		component = undefined;
+		render([radius, hideFull]);
+		const wrapped = [...document.body.querySelectorAll('button')];
+		expect(wrapped.at(-1)?.textContent?.trim()).toBe('ล้างทั้งหมด');
+	});
+
+	it('the scrolling row has room for the focus rings and 44px touch targets (a11y)', () => {
+		render([radius, hideFull], { scroll: true });
+		const group = document.body.querySelector('[role="group"]')!;
+		// the overflow would clip a ring drawn outside the chip, so the row pads it
+		expect(group.classList.contains('p-1')).toBe(true);
+		for (const b of document.body.querySelectorAll('button')) {
+			expect(b.classList.contains('min-h-11'), b.textContent ?? '').toBe(true);
+		}
+	});
 });
