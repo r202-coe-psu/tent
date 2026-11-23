@@ -5,7 +5,7 @@
  * list is derived from that menu and exported so /onsite chrome reads one source of truth.
  */
 export type { PortalFeatures } from './domain/portal-menu';
-export { resolveActiveShelter } from './domain/active-shelter';
+export { resolveActiveShelter, type ActiveShelterChoice } from './domain/active-shelter';
 export { ONSITE_STATIONS, resolveOnsiteStation, type OnsiteStation } from './domain/onsite-station';
 export {
 	createPortalPreviewState,

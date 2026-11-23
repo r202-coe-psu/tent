@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { resolveActiveShelter } from './active-shelter';
 import { filterPortalMenu } from './portal-menu';
 
-const base = { current: undefined, allowedCodes: [], userShelterCodes: [], isSystemAdmin: false };
+const base = {
+	current: undefined,
+	currentProvisional: false,
+	listLoaded: true,
+	allowedCodes: [] as string[],
+	userShelterCodes: [] as string[],
+	isSystemAdmin: false
+};
+const settled = (code: string | undefined) => ({ code, provisional: false });
+const provisional = (code: string) => ({ code, provisional: true });
 
 describe('resolveActiveShelter', () => {
 	it('keeps the current shelter when the user may use it', () => {
@@ -13,7 +22,7 @@ describe('resolveActiveShelter', () => {
 				allowedCodes: ['SH001', 'SH027'],
 				userShelterCodes: ['SH001', 'SH027']
 			})
-		).toBe('SH027');
+		).toEqual(settled('SH027'));
 	});
 
 	it('replaces a leftover shelter the user has no role in', () => {
@@ -24,16 +33,39 @@ describe('resolveActiveShelter', () => {
 				allowedCodes: ['SH027'],
 				userShelterCodes: ['SH027']
 			})
-		).toBe('SH027');
+		).toEqual(settled('SH027'));
 	});
 
-	it('falls back to the roles when the shelter list has not loaded (#1473)', () => {
-		expect(resolveActiveShelter({ ...base, current: 'SH001', userShelterCodes: ['SH027'] })).toBe(
-			'SH027'
-		);
+	it('follows the roles before the list loads, without remembering the guess (#1473, W1)', () => {
+		expect(
+			resolveActiveShelter({
+				...base,
+				listLoaded: false,
+				current: 'SH001',
+				userShelterCodes: ['SH027']
+			})
+		).toEqual(provisional('SH027'));
 	});
 
-	it('falls back to the roles when the list does not contain the user shelter', () => {
+	it('re-picks in list order once the list loads, like the navbar (W1)', () => {
+		// roles list SH002 first; the registry lists SH001 first.
+		const before = resolveActiveShelter({
+			...base,
+			listLoaded: false,
+			userShelterCodes: ['SH002', 'SH001']
+		});
+		expect(before).toEqual(provisional('SH002'));
+		const after = resolveActiveShelter({
+			...base,
+			current: before.code,
+			currentProvisional: true,
+			allowedCodes: ['SH001', 'SH002'],
+			userShelterCodes: ['SH002', 'SH001']
+		});
+		expect(after).toEqual(settled('SH001'));
+	});
+
+	it('settles on the roles when the loaded list has none of the user shelters', () => {
 		// allowedCodes is the list narrowed to the user's roles, so it is empty here.
 		expect(
 			resolveActiveShelter({
@@ -42,28 +74,36 @@ describe('resolveActiveShelter', () => {
 				allowedCodes: [],
 				userShelterCodes: ['SH027']
 			})
-		).toBe('SH027');
+		).toEqual(settled('SH027'));
 	});
 
-	it('keeps a current shelter that the roles allow while the list is missing', () => {
+	it('keeps a remembered shelter that the roles allow while the list is still loading', () => {
 		expect(
 			resolveActiveShelter({
 				...base,
+				listLoaded: false,
 				current: 'SH002',
 				userShelterCodes: ['SH001', 'SH002']
 			})
-		).toBe('SH002');
+		).toEqual(settled('SH002'));
 	});
 
-	it('picks the first role shelter when nothing is selected', () => {
-		expect(resolveActiveShelter({ ...base, userShelterCodes: ['SH027', 'SH028'] })).toBe('SH027');
+	it('forgets the remembered shelter when no shelter role is left (W2)', () => {
+		expect(resolveActiveShelter({ ...base, current: 'SH001', allowedCodes: ['SH001'] })).toEqual(
+			settled(undefined)
+		);
+		expect(resolveActiveShelter({ ...base, listLoaded: false, current: 'SH001' })).toEqual(
+			settled(undefined)
+		);
 	});
 
-	it('chooses nothing without roles, and for a system admin before the list loads', () => {
-		expect(resolveActiveShelter({ ...base, current: 'SH001' })).toBeUndefined();
+	it('leaves a system admin as is until the list loads', () => {
 		expect(
-			resolveActiveShelter({ ...base, current: 'SH001', isSystemAdmin: true })
-		).toBeUndefined();
+			resolveActiveShelter({ ...base, listLoaded: false, current: 'SH001', isSystemAdmin: true })
+		).toEqual(settled('SH001'));
+		expect(resolveActiveShelter({ ...base, listLoaded: false, isSystemAdmin: true })).toEqual(
+			settled(undefined)
+		);
 	});
 
 	it('lets a system admin keep any listed shelter', () => {
@@ -74,7 +114,7 @@ describe('resolveActiveShelter', () => {
 				allowedCodes: ['SH001', 'SH027'],
 				isSystemAdmin: true
 			})
-		).toBe('SH001');
+		).toEqual(settled('SH001'));
 	});
 });
 
@@ -86,8 +126,10 @@ describe('portal menu after a Google login with a leftover shelter (#1473)', () 
 		const stale = filterPortalMenu({ roles, shelterCode: 'SH001', features });
 		expect(stale).toEqual([]);
 
-		const shelterCode = resolveActiveShelter({
+		const { code: shelterCode } = resolveActiveShelter({
 			current: 'SH001',
+			currentProvisional: false,
+			listLoaded: false,
 			allowedCodes: [],
 			userShelterCodes: ['SH027'],
 			isSystemAdmin: false

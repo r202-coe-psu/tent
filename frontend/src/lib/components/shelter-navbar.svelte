@@ -3,7 +3,13 @@
 	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
 	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { useShelters } from '$lib/features/shelters';
-	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
+	import { resolveActiveShelter } from '$lib/features/portal';
+	import {
+		shelterStore,
+		persistSelectedShelter,
+		applyActiveShelterChoice,
+		isSelectionProvisional
+	} from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterCodesFromRoles, isSystemAdmin } from '$lib/auth/roles';
 	import { STAFF_CHROME_I18N } from '$lib/constants/i18n/staff-chrome';
@@ -27,18 +33,19 @@
 		allowedShelters.find((s) => s.code === selectedCode)?.name ?? t.selectShelter
 	);
 
+	// Same resolver and order as /portal (#1473): list order once loaded, a role stand-in before.
+	const activeShelter = $derived(
+		resolveActiveShelter({
+			current: shelterStore.selectedShelterCode,
+			currentProvisional: isSelectionProvisional(),
+			listLoaded: sheltersQuery.isSuccess,
+			allowedCodes: allowedShelters.map((s) => s.code),
+			userShelterCodes,
+			isSystemAdmin: isAdmin
+		})
+	);
 	$effect(() => {
-		if (!allowedShelters.length) return;
-		const current = shelterStore.selectedShelterCode;
-		if (current && allowedShelters.some((s) => s.code === current)) {
-			persistSelectedShelter(current);
-			return;
-		}
-		const preferred =
-			allowedShelters.find((s) => userShelterCodes.includes(s.code))?.code ??
-			allowedShelters[0].code;
-		shelterStore.selectedShelterCode = preferred;
-		persistSelectedShelter(preferred);
+		if (authStore.user) applyActiveShelterChoice(activeShelter);
 	});
 
 	function onShelterChange(code: string | undefined) {

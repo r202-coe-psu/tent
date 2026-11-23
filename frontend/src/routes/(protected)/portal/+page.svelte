@@ -7,7 +7,12 @@
 
 	import { dev } from '$app/environment';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
+	import {
+		shelterStore,
+		persistSelectedShelter,
+		applyActiveShelterChoice,
+		isSelectionProvisional
+	} from '$lib/stores/shelter.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { useShelters } from '$lib/features/shelters';
 	import {
@@ -60,19 +65,21 @@
 	// Multi-shelter or System Admin can switch shelters
 	const canSwitchShelters = $derived(isSA || allowedShelters.length > 1);
 
-	// Synchronize selected shelter. The remembered choice can name a shelter this account has no
-	// role in (another account, or a logout, left it behind): follow the roles instead, without
-	// waiting for the shelter list (#1473).
-	$effect(() => {
-		const next = resolveActiveShelter({
+	// The remembered shelter can name one this account has no role in (another account, or a
+	// logout, left it behind): follow the roles instead, without waiting for the shelter list,
+	// in the same order as the onsite navbar (#1473).
+	const activeShelter = $derived(
+		resolveActiveShelter({
 			current: shelterStore.selectedShelterCode,
+			currentProvisional: isSelectionProvisional(),
+			listLoaded: sheltersQuery.isSuccess,
 			allowedCodes: allowedShelters.map((s) => s.code),
 			userShelterCodes,
 			isSystemAdmin: isSA
-		});
-		if (!next) return;
-		if (next !== shelterStore.selectedShelterCode) shelterStore.selectedShelterCode = next;
-		persistSelectedShelter(next);
+		})
+	);
+	$effect(() => {
+		if (authStore.user) applyActiveShelterChoice(activeShelter);
 	});
 
 	function onShelterChange(code: string | undefined) {
