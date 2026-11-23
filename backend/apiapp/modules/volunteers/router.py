@@ -46,7 +46,8 @@ async def list_jobs(
     job_status: Literal["open", "near_full", "controlled"] | None = Query(
         default=None, alias="status"
     ),
-    page: int = Query(default=1, ge=1),
+    # Bounded like the BFF (MAX_PAGE): far past any real board.
+    page: int = Query(default=1, ge=1, le=1000),
     page_size: int | None = Query(default=None, ge=1, le=50),
     use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
 ) -> PublicJobListResponse:

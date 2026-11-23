@@ -162,6 +162,32 @@ describe('GET /api/public/v1/volunteer/jobs — board filters', () => {
 		);
 	});
 
+	it('refuses a page past the last allowed one, without asking FastAPI or CouchDB (B2)', async () => {
+		const fetch = upstream({ success: true, jobs: [], total: 0 });
+		const res = await get('?page=1000000000000000000000', fetch);
+
+		expect(res.status).toBe(400);
+		expect(fetch).not.toHaveBeenCalled();
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('hands a FastAPI 422 back to the caller instead of scanning CouchDB with admin rights (B2)', async () => {
+		const fetch = upstream({ detail: [{ loc: ['query', 'page'] }] }, false, 422);
+		const res = await get('?page=2', fetch);
+
+		expect(res.status).toBe(422);
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('still falls back to CouchDB when FastAPI itself fails (5xx)', async () => {
+		const fetch = upstream({ detail: 'boom' }, false, 503);
+		adminRaw.mockResolvedValue({ status: 200, data: { rows: [] } });
+		const res = await get('', fetch);
+
+		expect(res.status).toBe(200);
+		expect(adminRaw).toHaveBeenCalled();
+	});
+
 	it('filters and paginates the CouchDB fallback with the same params and reports total', async () => {
 		const fetch = vi.fn().mockRejectedValue(new Error('fastapi down'));
 		const job = (id: string, title: string, remaining: number) => ({

@@ -1554,6 +1554,18 @@ async def test_list_jobs_paginates_in_the_db_and_reports_total(
     assert beyond["jobs"] == []
 
 
+async def test_list_jobs_refuses_a_page_past_the_bound(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    # B2 (#1470 review): an unbounded page reached here as "1e+21"; it must be a clean 422.
+    huge = await client.get("/public/v1/jobs?page=1000000000000000000000", headers=auth_headers)
+    assert huge.status_code == 422
+    past = await client.get("/public/v1/jobs?page=1001", headers=auth_headers)
+    assert past.status_code == 422
+    last = await client.get("/public/v1/jobs?page=1000", headers=auth_headers)
+    assert last.status_code == 200
+
+
 async def test_list_jobs_searches_title_shelter_and_skills_literally(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:

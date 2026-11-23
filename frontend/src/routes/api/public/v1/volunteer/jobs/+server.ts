@@ -83,12 +83,21 @@ function enrichJobsWithQuotaCounts(jobs: JobDoc[]): void {
 const BOARD_STATUSES = ['open', 'near_full', 'controlled'] as const;
 type BoardStatus = (typeof BOARD_STATUSES)[number];
 const MAX_PAGE_SIZE = 50;
+/** Same bound as FastAPI (`le=` on `page`): far past any real board, so a huge value is refused. */
+const MAX_PAGE = 1000;
 
-/** Positive integer from a query value, or undefined when absent or malformed. */
+/** Positive safe integer from a query value, or undefined when absent or malformed. */
 function positiveInt(value: string | null): number | undefined {
 	if (!value || !/^\d+$/.test(value)) return undefined;
 	const n = Number(value);
-	return n >= 1 ? n : undefined;
+	return Number.isSafeInteger(n) && n >= 1 ? n : undefined;
+}
+
+/** A digits-only `page` too large to serve: refused rather than silently dropped. */
+function pageOutOfRange(value: string | null): boolean {
+	if (!value || !/^\d+$/.test(value)) return false;
+	const n = Number(value);
+	return !Number.isSafeInteger(n) || n > MAX_PAGE;
 }
 
 /**
@@ -141,7 +150,13 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 	const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
 	const statusParam = url.searchParams.get('status');
 	const status = BOARD_STATUSES.find((value) => value === statusParam);
-	const page = positiveInt(url.searchParams.get('page'));
+	const pageParam = url.searchParams.get('page');
+	// B2: an unbounded page reached FastAPI as "1e+21", got a 422 and sent the request into the
+	// admin CouchDB scan below. Refuse it here, before any upstream call.
+	if (pageOutOfRange(pageParam)) {
+		return json({ success: false, error: 'invalid_page' }, { status: 400 });
+	}
+	const page = positiveInt(pageParam);
 	const rawPageSize = positiveInt(url.searchParams.get('page_size'));
 	const pageSize = rawPageSize ? Math.min(rawPageSize, MAX_PAGE_SIZE) : undefined;
 	if (shelterCode) query.set('shelter_code', shelterCode);
@@ -163,8 +178,11 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 			}
 			return json(body, { headers: { 'Cache-Control': 'no-store' } });
 		}
-		if (res.status === 429 || res.status === 404 || res.status === 400) {
-			return json(await res.json(), { status: res.status });
+		// Any 4xx is FastAPI's answer to this request: pass it on. Only an unreachable or failing
+		// (5xx) FastAPI falls back to CouchDB, so a bad query can never trigger the admin scan.
+		if (res.status >= 400 && res.status < 500) {
+			const body = await res.json().catch(() => ({ success: false }));
+			return json(body, { status: res.status, headers: { 'Cache-Control': 'no-store' } });
 		}
 	} catch {
 		// Fall through to CouchDB fallback if FastAPI is offline
