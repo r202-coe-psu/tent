@@ -45,6 +45,7 @@
 		isShelterManager,
 		isSystemAdmin
 	} from '$lib/auth/roles';
+	import { canOverrideStayStatus } from '../../domain/stay-status-override';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -107,14 +108,15 @@
 	});
 	const profileReadonly = $derived(readonly || !canEditProfile);
 
-	/** Overriding a stay status (any → any, CR-262 A1) is manager-level: system_admin, or shelter_manager of the current shelter. */
-	const canRevertStatus = $derived.by(() => {
-		if (profileReadonly || !authStore.user) return false;
-		const roles = authStore.user.roles;
-		if (isSystemAdmin(roles)) return true;
-		const currentShelter = (shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase();
-		return hasShelterScope(roles, currentShelter) && isShelterManager(roles, currentShelter);
-	});
+	/** Overriding a stay status (any → any, CR-262 A1): see `canOverrideStayStatus`. */
+	const canRevertStatus = $derived(
+		!profileReadonly &&
+			!!authStore.user &&
+			canOverrideStayStatus(
+				authStore.user.roles,
+				shelterStore.selectedShelterCode ?? getShelterCode()
+			)
+	);
 
 	const STATUS_STYLE: Record<StayStatus, { colorClass: string; dotClass: string }> = {
 		active: {
