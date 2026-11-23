@@ -19,6 +19,7 @@ vi.mock('$lib/server/system-overview', () => ({
 		avg_present_pct: 50,
 		avg_forecast_pct: 85,
 		sites_by_status: { active: 1 },
+		sites_by_site_kind: { evacuation_center: 1 },
 		checkouts_in_window: 1,
 		sites_closed: 0,
 		sites_open_with_present: 1,

@@ -339,6 +339,14 @@ export async function buildOverviewSummary(
 		sites_by_status[s.operation_status] = (sites_by_status[s.operation_status] ?? 0) + 1;
 	}
 
+	// Same site set as sites_total (every status, External included). migrate() already
+	// defaults a missing site_kind to evacuation_center (CR-067); keep the guard for safety.
+	const sites_by_site_kind: Record<string, number> = {};
+	for (const s of sites) {
+		const kind = s.master.site_kind || 'evacuation_center';
+		sites_by_site_kind[kind] = (sites_by_site_kind[kind] ?? 0) + 1;
+	}
+
 	return overviewSummarySchema.parse({
 		unassigned_members: stats?.open_members ?? 0,
 		unassigned_registrations: stats?.open_registrations ?? 0,
@@ -348,6 +356,7 @@ export async function buildOverviewSummary(
 		avg_present_pct: pct(present_total, capacity_total),
 		avg_forecast_pct: pct(forecast_total, capacity_total),
 		sites_by_status,
+		sites_by_site_kind,
 		checkouts_in_window: checkouts,
 		sites_closed: sites.filter((s) => s.operation_status === 'closed').length,
 		sites_open_with_present: sites.filter(

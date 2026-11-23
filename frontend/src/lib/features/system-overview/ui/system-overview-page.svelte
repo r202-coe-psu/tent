@@ -17,6 +17,7 @@
 		useOverviewDemographics
 	} from '../application/queries';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
+	import OverviewSiteKindStrip from './overview-site-kind-strip.svelte';
 	import OverviewPhaseStrip from './overview-phase-strip.svelte';
 	import OverviewOriginSection from './overview-origin-section.svelte';
 	import OverviewDemographicsSection from './overview-demographics-section.svelte';
@@ -52,6 +53,8 @@
 			<AlertDescription>{t.errorBody}</AlertDescription>
 		</Alert>
 	{/if}
+
+	<OverviewSiteKindStrip summary={summaryQuery.data} loading={summaryQuery.isPending} />
 
 	<OverviewPhaseStrip summary={summaryQuery.data} loading={summaryQuery.isPending} />
 
