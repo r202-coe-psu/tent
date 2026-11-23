@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	jobShiftAttention,
 	shiftFillRate,
 	bucketFillRate,
 	overallBookingRate,
@@ -244,5 +245,71 @@ describe('jobShiftQuotaSplits', () => {
 		expect(splits.every((s) => s.confirmed >= 0 && s.dispatched >= 0 && s.remaining >= 0)).toBe(
 			true
 		);
+	});
+});
+
+describe('jobShiftAttention (#1521)', () => {
+	const shift = (n: number, quota: number, confirmed: number) => ({
+		id: `s${n}`,
+		date: `2026-12-${String((n % 28) + 1).padStart(2, '0')}`,
+		start_time: '08:00',
+		end_time: '12:00',
+		quota,
+		confirmed
+	});
+	const many = (count: number) =>
+		// every shift is full (met) except the LAST one, which is empty: the worst shortage is
+		// the latest by date, so a "first three by date" list would hide it.
+		Array.from({ length: count }, (_, i) => shift(i, 5, i === count - 1 ? 0 : 5));
+
+	it('lists the emptiest shifts first, not the earliest', () => {
+		const { rows } = jobShiftAttention(many(35));
+		expect(rows[0].id).toBe('s34');
+		expect(rows[0]).toMatchObject({ target: 5, confirmed: 0, missing: 5, bucket: 'critical' });
+	});
+
+	it.each([4, 35, 180])('shows at most three rows for %i shifts and counts the rest', (n) => {
+		const result = jobShiftAttention(many(n));
+		expect(result.rows.length).toBeLessThanOrEqual(3);
+		expect(result.hidden).toBe(n - result.rows.length);
+		expect(result.total).toBe(n);
+	});
+
+	it('splits the shifts into the three summary buckets, adding up to the shift count', () => {
+		const shifts = [
+			shift(0, 10, 0),
+			shift(1, 10, 4),
+			shift(2, 10, 5),
+			shift(3, 10, 9),
+			shift(4, 10, 10)
+		];
+		const { counts, total } = jobShiftAttention(shifts);
+		expect(counts).toEqual({ critical: 2, near: 2, met: 1 });
+		expect(counts.critical + counts.near + counts.met).toBe(total);
+	});
+
+	it('breaks ties by date, then id, so the list is stable', () => {
+		const { rows } = jobShiftAttention([shift(5, 10, 0), shift(2, 10, 0), shift(9, 10, 0)]);
+		expect(rows.map((r) => r.id)).toEqual(['s2', 's5', 's9']);
+	});
+
+	it('keeps the whole-job total as the sum over every shift', () => {
+		const { totalTarget, totalConfirmed } = jobShiftAttention([
+			shift(0, 5, 3),
+			shift(1, 10, 1),
+			shift(2, 5, 0)
+		]);
+		expect(totalTarget).toBe(20);
+		expect(totalConfirmed).toBe(4);
+	});
+
+	it('has no rows for a job without shifts', () => {
+		expect(jobShiftAttention([])).toMatchObject({ rows: [], hidden: 0, total: 0 });
+	});
+
+	it('counts a shift beyond its quota once, as met', () => {
+		const { rows, counts } = jobShiftAttention([shift(0, 5, 7)]);
+		expect(rows[0].missing).toBe(0);
+		expect(counts.met).toBe(1);
 	});
 });

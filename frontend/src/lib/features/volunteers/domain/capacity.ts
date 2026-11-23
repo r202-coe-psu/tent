@@ -186,3 +186,83 @@ export function jobShiftQuotaSplits(job: {
 		};
 	});
 }
+
+/** One shift as the job card shows it: when, how full, and how many seats are still empty. */
+export interface ShiftAttentionRow {
+	id: string;
+	date: string;
+	start_time: string;
+	end_time: string;
+	target: number;
+	confirmed: number;
+	/** Empty seats, never below 0 (a shift past its quota is not "negative"). */
+	missing: number;
+	bucket: FillBucket;
+}
+
+export interface ShiftAttention {
+	/** The shifts worth a look first, at most {@link SHIFT_ATTENTION_LIMIT}. */
+	rows: ShiftAttentionRow[];
+	/** Shifts not listed in `rows`. */
+	hidden: number;
+	/** Every shift of the job. */
+	total: number;
+	/** Shifts per summary bucket; adds up to `total`. */
+	counts: Record<FillBucket, number>;
+	/** Whole-job figures: the sum over every shift. */
+	totalTarget: number;
+	totalConfirmed: number;
+}
+
+/** A job card lists this many shifts, whatever the job has (a batch makes up to 180). */
+export const SHIFT_ATTENTION_LIMIT = 3;
+
+/**
+ * What a job card says about a job's shifts (#1521): the emptiest ones first — not the earliest,
+ * which would bury a late shift with nobody on it — capped so the card keeps one height for 4
+ * shifts or 180. Same buckets and rule as the summary bar (CR-094 FR-VOL-09.4, per shift).
+ */
+export function jobShiftAttention(
+	shifts: readonly {
+		id: string;
+		date: string;
+		start_time: string;
+		end_time: string;
+		quota: number;
+		confirmed: number;
+	}[],
+	limit: number = SHIFT_ATTENTION_LIMIT
+): ShiftAttention {
+	const rows: ShiftAttentionRow[] = shifts.map((s) => {
+		const rate = shiftFillRate({ target: s.quota, confirmed: s.confirmed });
+		return {
+			id: s.id,
+			date: s.date,
+			start_time: s.start_time,
+			end_time: s.end_time,
+			target: s.quota,
+			confirmed: s.confirmed,
+			missing: Math.max(s.quota - Math.max(s.confirmed, 0), 0),
+			bucket: bucketFillRate(rate)
+		};
+	});
+	const counts: Record<FillBucket, number> = { critical: 0, near: 0, met: 0 };
+	for (const row of rows) counts[row.bucket] += 1;
+	const rateOf = (row: ShiftAttentionRow) =>
+		shiftFillRate({ target: row.target, confirmed: row.confirmed });
+	const sorted = [...rows].sort(
+		(a, b) =>
+			rateOf(a) - rateOf(b) ||
+			(a.date < b.date ? -1 : a.date > b.date ? 1 : 0) ||
+			(a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+	);
+	const shown = sorted.slice(0, Math.max(limit, 0));
+	return {
+		rows: shown,
+		hidden: rows.length - shown.length,
+		total: rows.length,
+		counts,
+		totalTarget: rows.reduce((sum, r) => sum + r.target, 0),
+		totalConfirmed: rows.reduce((sum, r) => sum + Math.max(r.confirmed, 0), 0)
+	};
+}
