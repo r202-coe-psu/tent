@@ -118,17 +118,22 @@ describe('countBySiteKind', () => {
 
 describe('siteKindTiles', () => {
 	it('lists active kinds in master order, including zero counts', () => {
-		expect(siteKindTiles({ host_house: 2 }, KINDS)).toEqual([
+		expect(siteKindTiles({ field_hospital: 2 }, KINDS)).toEqual([
 			{ code: 'evacuation_center', count: 0 },
-			{ code: 'host_house', count: 2 },
-			{ code: 'field_hospital', count: 0 }
+			{ code: 'field_hospital', count: 2 }
 		]);
+	});
+
+	it('never has a host house tile: /shelters does not list host houses (#1419, CR-261 FR-2)', () => {
+		// active in the master list, at 0 or counted (an external host house), the tile stays out
+		expect(siteKindTiles({}, KINDS).map((t) => t.code)).not.toContain('host_house');
+		expect(siteKindTiles({ host_house: 2 }, KINDS).map((t) => t.code)).not.toContain('host_house');
+		expect(siteKindTiles({ host_house: 1 }, [])).toEqual([]);
 	});
 
 	it('adds an inactive or unknown code only when shelters use it, after the master items', () => {
 		expect(siteKindTiles({ old_camp: 1, mobile_clinic: 3, evacuation_center: 4 }, KINDS)).toEqual([
 			{ code: 'evacuation_center', count: 4 },
-			{ code: 'host_house', count: 0 },
 			{ code: 'field_hospital', count: 0 },
 			{ code: 'old_camp', count: 1 },
 			{ code: 'mobile_clinic', count: 3 }
@@ -136,7 +141,9 @@ describe('siteKindTiles', () => {
 	});
 
 	it('falls back to the counted codes when the master list is empty', () => {
-		expect(siteKindTiles({ host_house: 1 }, [])).toEqual([{ code: 'host_house', count: 1 }]);
+		expect(siteKindTiles({ field_hospital: 1 }, [])).toEqual([
+			{ code: 'field_hospital', count: 1 }
+		]);
 	});
 });
 
