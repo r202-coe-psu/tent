@@ -87,7 +87,7 @@
 			<div class="flex flex-wrap items-center justify-between gap-2">
 				<h3 class="inline-flex items-center gap-2 text-sm font-bold text-foreground">
 					<Award class="h-4 w-4 text-primary" />
-					ทักษะที่ต้องการเป็นพิเศษ (Volunteer Skill Master List)
+					ทักษะที่ต้องการเป็นพิเศษ
 				</h3>
 				<span class="text-xs text-muted-foreground">{skills.length} ทักษะที่ต้องการ</span>
 			</div>
