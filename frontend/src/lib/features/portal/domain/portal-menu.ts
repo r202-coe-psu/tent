@@ -35,6 +35,7 @@ export type PortalDepartmentId =
 	| 'management'
 	| 'pr'
 	| 'onedata'
+	| 'dailysop'
 	| 'central';
 
 export type PortalIconKey =
@@ -111,6 +112,11 @@ export type PortalMenuItem = {
 	group?: 'stations' | 'tools';
 	/** Shelter feature flag this item depends on. */
 	requires?: 'medicalScreening';
+	/**
+	 * Visible to every authenticated user with a role, whatever their capabilities (the daily
+	 * assessment page has no role guard — #845, PO decision 2026-11-22).
+	 */
+	everyone?: true;
 };
 
 export type PortalDepartment = {
@@ -479,6 +485,27 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		]
 	},
 	{
+		// #845: the daily operations assessment, a department of its own so it is a large tab like
+		// the others (replaces the loose button above the menu). Every user with a role sees it.
+		id: 'dailysop',
+		label: 'การประเมินประจำวัน',
+		desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
+		domain: 'admin',
+		icon: 'clipboard-list',
+		items: [
+			{
+				id: 'daily-sop',
+				label: 'การประเมินประจำวัน',
+				desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
+				icon: 'clipboard-list',
+				href: '/back-office/dailysop',
+				scope: 'shelter',
+				roles: [],
+				everyone: true
+			}
+		]
+	},
+	{
 		id: 'pr',
 		label: 'ฝ่ายประชาสัมพันธ์',
 		desc: 'ข่าวสารและประชาสัมพันธ์บนตู้ Kiosk ของศูนย์',
@@ -524,23 +551,6 @@ export const PORTAL_PUBLIC_LINK = {
 	href: '/',
 	icon: 'globe'
 } as const satisfies { label: string; href: Pathname; icon: PortalIconKey };
-
-/**
- * Entry button to the daily operations assessment (`/back-office/dailysop`) — for every
- * authenticated user with a role, deliberately not part of a department. The page itself has no
- * role guard (#845, PO decision 2026-11-22), so this is the only way in without typing the URL.
- */
-export const PORTAL_DAILY_SOP_LINK = {
-	label: 'การประเมินประจำวัน',
-	desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
-	href: '/back-office/dailysop',
-	icon: 'clipboard-list'
-} as const satisfies { label: string; desc: string; href: Pathname; icon: PortalIconKey };
-
-/** True when the daily assessment button should show (an authenticated user with ≥1 role). */
-export function canSeePortalDailySopLink(roles: readonly string[]): boolean {
-	return roles.length > 0;
-}
 
 /** True when the footer public-site link should show (an authenticated user with ≥1 role). */
 export function canSeePortalPublicLink(roles: readonly string[]): boolean {
@@ -593,6 +603,7 @@ export function isPortalItemVisible(
 	selectedShelterCode: string | null | undefined
 ): boolean {
 	if (roles.length === 0) return false;
+	if (item.everyone) return true;
 	if (isSystemAdmin(roles)) return true;
 	if (item.scope === 'system') return false;
 	if (isShelterManager(roles, selectedShelterCode)) return true;

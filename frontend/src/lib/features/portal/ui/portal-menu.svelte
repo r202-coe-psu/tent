@@ -1,23 +1,15 @@
 <script lang="ts">
-	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Check from '@lucide/svelte/icons/check';
-	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Globe from '@lucide/svelte/icons/globe';
 	import { resolve } from '$app/paths';
 	import {
-		PORTAL_DAILY_SOP_LINK,
 		PORTAL_PUBLIC_LINK,
-		canSeePortalDailySopLink,
 		canSeePortalPublicLink,
 		filterPortalMenu,
 		portalDepartmentCssVars,
 		type PortalFeatures
 	} from '../domain/portal-menu';
-	import {
-		portalDailySopLinkText,
-		portalDepartmentText,
-		portalPublicLinkLabel
-	} from '../domain/portal-menu-labels';
+	import { portalDepartmentText, portalPublicLinkLabel } from '../domain/portal-menu-labels';
 	import {
 		PORTAL_DEPARTMENT_ALL,
 		filterPortalDepartments,
@@ -47,8 +39,6 @@
 	const views = $derived(filterPortalMenu({ roles, shelterCode: selectedShelterCode, features }));
 	const mode = $derived(portalLayoutMode(views));
 	const showPublicLink = $derived(canSeePortalPublicLink(roles));
-	const showDailySopLink = $derived(canSeePortalDailySopLink(roles));
-	const dailySopText = $derived(portalDailySopLinkText(langState.current));
 
 	// The chip picked in this session, tagged with its user so a user switch never shows another
 	// user's choice. Until a chip is picked, the value comes from this user's stored choice.
@@ -69,21 +59,6 @@
 </script>
 
 <div class="space-y-6">
-	{#if showDailySopLink}
-		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-			<a
-				href={resolve(PORTAL_DAILY_SOP_LINK.href)}
-				data-testid="portal-daily-sop-link"
-				class="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-			>
-				<ClipboardList class="size-4 shrink-0" aria-hidden="true" />
-				{dailySopText.label}
-				<ArrowRight class="size-4 shrink-0" aria-hidden="true" />
-			</a>
-			<span class="text-sm text-slate-600">{dailySopText.desc}</span>
-		</div>
-	{/if}
-
 	{#if views.length > 0 && mode === 'overview'}
 		<div class="space-y-4">
 			<div

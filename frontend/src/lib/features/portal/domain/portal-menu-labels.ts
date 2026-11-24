@@ -6,7 +6,6 @@
  */
 import {
 	PORTAL_GROUP_LABELS,
-	PORTAL_DAILY_SOP_LINK,
 	PORTAL_PUBLIC_LINK,
 	type PortalDepartment,
 	type PortalMenuItem
@@ -31,6 +30,10 @@ const departmentsEn: Record<PortalDepartment['id'], PortalText> = {
 	onedata: {
 		label: 'OneData Platform',
 		desc: 'Refer patients and request resources through OneData'
+	},
+	dailysop: {
+		label: 'Daily Assessment',
+		desc: 'Daily operations assessment of the shelter'
 	},
 	pr: { label: 'Public Relations', desc: 'News and announcements on the shelter kiosks' },
 	central: { label: 'Central', desc: 'For central system administrators only' }
@@ -108,6 +111,7 @@ const itemsEn: Record<string, PortalText> = {
 		desc: 'Move to another shelter and track referrals'
 	},
 	'back-office': { label: 'Back Office', desc: 'Shelter settings and reports' },
+	'daily-sop': { label: 'Daily Assessment', desc: 'Daily operations assessment of the shelter' },
 	'onedata-m5': {
 		label: 'OneData Patient Referral (M5)',
 		desc: 'Send patients to a hospital for MOPH review'
@@ -132,10 +136,6 @@ const groupLabelsEn: Record<NonNullable<PortalMenuItem['group']>, string> = {
 };
 
 const publicLinkEn = 'Public service website';
-const dailySopLinkEn: PortalText = {
-	label: 'Daily assessment',
-	desc: 'Daily operations assessment of the shelter'
-};
 
 export type PortalLanguage = string | undefined;
 
@@ -167,13 +167,6 @@ export function portalGroupLabel(
 	return isEn(language) ? groupLabelsEn[group] : PORTAL_GROUP_LABELS[group];
 }
 
-/** Daily assessment entry button text. */
-export function portalDailySopLinkText(language?: PortalLanguage): PortalText {
-	return isEn(language)
-		? dailySopLinkEn
-		: { label: PORTAL_DAILY_SOP_LINK.label, desc: PORTAL_DAILY_SOP_LINK.desc };
-}
-
 /** Footer public-site link label. */
 export function portalPublicLinkLabel(language?: PortalLanguage): string {
 	return isEn(language) ? publicLinkEn : PORTAL_PUBLIC_LINK.label;
@@ -184,6 +177,5 @@ export const portalMenuLabelsEn = {
 	departments: departmentsEn,
 	items: itemsEn,
 	groups: groupLabelsEn,
-	publicLink: publicLinkEn,
-	dailySopLink: dailySopLinkEn
+	publicLink: publicLinkEn
 };
