@@ -84,8 +84,8 @@ describe('previewing pr_staff', () => {
 			preview: previewOf('pr_staff')
 		});
 		const views = filterPortalMenu({ roles, shelterCode: SH, features });
-		expect(views.map((v) => v.id)).toEqual(['dailysop', 'pr']);
-		expect(views[1].items.map((i) => i.item.id)).toEqual(['kiosk-banners']);
+		expect(views.map((v) => v.id)).toEqual(['pr', 'dailysop']);
+		expect(views[0].items.map((i) => i.item.id)).toEqual(['kiosk-banners']);
 	});
 
 	it('is offered in the picker after kiosk_staff as ประชาสัมพันธ์', () => {

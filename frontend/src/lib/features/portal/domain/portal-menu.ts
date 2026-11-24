@@ -485,27 +485,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		]
 	},
 	{
-		// #845: the daily operations assessment, a department of its own so it is a large tab like
-		// the others (replaces the loose button above the menu). Every user with a role sees it.
-		id: 'dailysop',
-		label: 'การประเมินประจำวัน',
-		desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
-		domain: 'admin',
-		icon: 'clipboard-list',
-		items: [
-			{
-				id: 'daily-sop',
-				label: 'การประเมินประจำวัน',
-				desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
-				icon: 'clipboard-list',
-				href: '/back-office/dailysop',
-				scope: 'shelter',
-				roles: [],
-				everyone: true
-			}
-		]
-	},
-	{
 		id: 'pr',
 		label: 'ฝ่ายประชาสัมพันธ์',
 		desc: 'ข่าวสารและประชาสัมพันธ์บนตู้ Kiosk ของศูนย์',
@@ -540,6 +519,28 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				href: '/system-management',
 				scope: 'system',
 				roles: []
+			}
+		]
+	},
+	{
+		// #845: the daily operations assessment, a department of its own so it is a large tab like
+		// the others (replaces the loose button above the menu). Every user with a role sees it;
+		// declared last so it is the last tab for everyone (SA/SM priority departments still lead).
+		id: 'dailysop',
+		label: 'การประเมินประจำวัน',
+		desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
+		domain: 'admin',
+		icon: 'clipboard-list',
+		items: [
+			{
+				id: 'daily-sop',
+				label: 'การประเมินประจำวัน',
+				desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
+				icon: 'clipboard-list',
+				href: '/back-office/dailysop',
+				scope: 'shelter',
+				roles: [],
+				everyone: true
 			}
 		]
 	}

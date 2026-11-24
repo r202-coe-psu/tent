@@ -399,6 +399,14 @@ describe('daily assessment department (#845)', () => {
 		});
 		expect(deptIds(all)).toEqual(['kitchen', 'dailysop']);
 	});
+
+	it('is the last tab for everyone, system admin included', () => {
+		const last = (roles: string[]) =>
+			filterPortalMenu({ roles, shelterCode: 'SH001', features: ON }).at(-1)?.id;
+		expect(last(SA)).toBe('dailysop');
+		expect(last(staff('shelter_manager'))).toBe('dailysop');
+		expect(last(staff('pr_staff'))).toBe('dailysop');
+	});
 });
 
 describe('canSeePortalPublicLink', () => {
@@ -413,9 +421,8 @@ describe('portal data integrity', () => {
 	const all = PORTAL_DEPARTMENTS.flatMap((d) => d.items.map((item) => ({ dept: d.id, item })));
 
 	it('lists departments in the fixed order', () => {
-		// The daily assessment tab sits after OneData; `ORDER` is the role-gated departments only.
-		const withDaily = ORDER.flatMap((id) => (id === 'onedata' ? [id, 'dailysop'] : [id]));
-		expect(PORTAL_DEPARTMENTS.map((d) => d.id)).toEqual(withDaily);
+		// The daily assessment tab is last; `ORDER` is the role-gated departments only.
+		expect(PORTAL_DEPARTMENTS.map((d) => d.id)).toEqual([...ORDER, 'dailysop']);
 	});
 
 	it('has unique item ids, each in exactly one department', () => {
