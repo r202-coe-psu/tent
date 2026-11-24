@@ -80,6 +80,7 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/users': requireManager,
 	'/back-office/master-data': requireManager,
 	'/back-office/incidents': requireIncidents,
+	'/back-office/audit-log': requireManager,
 	'/back-office/kiosks': requireKioskManagement,
 	'/back-office/kiosks/banners': requireBannerManagement,
 	'/back-office/printers': requirePrinterManagement

@@ -870,6 +870,8 @@ export interface ShelterMaster {
 	closed_at?: string | null;
 	created_at: string;
 	updated_at: string;
+	created_by?: string | null;
+	updated_by?: string | null;
 }
 
 /** Default-fill for CR-023 v4 policy objects — used by migration + read paths. */

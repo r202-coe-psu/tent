@@ -28,9 +28,9 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	const code = params.code;
 	if (!code) return error(400, { message: 'Missing code' });
 	try {
-		await requireStoragePointManager(request.headers.get('cookie'), code);
+		const caller = await requireStoragePointManager(request.headers.get('cookie'), code);
 		const body = storagePointBodySchema.parse(await request.json().catch(() => ({})));
-		const written = await addStoragePoint(code, body._rev, body.point);
+		const written = await addStoragePoint(code, caller.name, body._rev, body.point);
 		return json({ ok: true, ...written }, { status: 201 });
 	} catch (e) {
 		return serviceOrHttpError(validationError(e));
