@@ -9,13 +9,15 @@ from typing import Any
 from fastapi import HTTPException, status
 from tent_model.public_shelter import PublicShelter
 
-from ...utils.shelter_booking import accepts_booking, accepts_booking_query
+from ...utils.shelter_booking import accepts_booking, accepts_booking_query, accepts_delivery
+from ...utils.shelter_occupancy import capacity_available, occupancy_forecast, zone_present
 from .dopa_codes import lookup_dopa_codes
 from .schemas import (
     LocationDetailEnvelope,
     LocationDetailItem,
     LocationItem,
     LocationListEnvelope,
+    LocationZone,
     PaginationMeta,
 )
 
@@ -83,21 +85,53 @@ def _to_item(doc: PublicShelter) -> LocationItem:
         contact_name=doc.contact_name,
         operating_org=doc.operating_org,
         accepts_booking=accepts_booking(doc),
-        accepts_delivery=doc.accepts_delivery,
+        accepts_delivery=accepts_delivery(doc),
         delivery_note=doc.delivery_note,
         opened_at=doc.opened_at,
         closed_at=doc.closed_at,
         is_active=doc.is_active,
         is_external=doc.is_external,
         occupancy_total=doc.occupancy_total,
+        site_kind=doc.site_kind,
+        project_level=doc.project_level,
+        occupancy_forecast=occupancy_forecast(doc),
+        capacity_available=capacity_available(doc),
+        parking_vehicle_types=doc.parking_vehicle_types,
         updated_at=doc.updated_at,
     )
+
+
+def _profile_fields(doc: PublicShelter) -> dict[str, Any]:
+    """Detail-only fields from the projected `profile` — never `raw_data`. A row not re-projected
+    yet (`profile is None`) reports the schema defaults (null / [])."""
+    profile = doc.profile
+    if profile is None:
+        return {}
+    zones = [
+        LocationZone(
+            code=zone.code,
+            name=zone.name,
+            type=zone.type,
+            capacity=zone.capacity,
+            status="closed" if zone.status == "closed" else "active",
+            present=zone_present(doc, zone.code),
+        )
+        for zone in profile.zones
+    ]
+    return {
+        **profile.model_dump(exclude={"zones"}),
+        "zones": zones,
+    }
 
 
 def _to_detail(doc: PublicShelter) -> LocationDetailItem:
     return LocationDetailItem(
         **_to_item(doc).model_dump(),
         facilities=_compose_facilities(doc.raw_data),
+        external_url=doc.external_url,
+        parking_points=doc.parking_points,
+        donation_points=doc.donation_points,
+        **_profile_fields(doc),
     )
 
 
