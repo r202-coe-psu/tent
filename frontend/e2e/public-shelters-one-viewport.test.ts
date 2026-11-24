@@ -3,7 +3,8 @@
  *
  * Every API boundary is mocked — no CouchDB / Mongo / FastAPI needed. Fourteen shelters make the
  * lists far taller than the screen, so a page that still grew with its content would scroll.
- * Desktop keeps the metric cards above the map; mobile is the map or the list with nothing above.
+ * The map fills the screen and the counts float on it as small pills, desktop and mobile alike
+ * (CR-261 decision sync 2026-11-24); on mobile the list replaces the map under the same controls.
  * The map legend keeps every label on one line (it wraps between items, never inside one).
  */
 import { test, expect, type Page } from '@playwright/test';
@@ -51,7 +52,8 @@ async function mockPublicApi(page: Page): Promise<void> {
 const pageOverflow = (page: Page) =>
 	page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
 
-const TOTAL_CARD = 'ศูนย์พักพิงทั้งหมด';
+/** The row of count pills floating on the map. */
+const stats = (page: Page) => page.getByRole('group', { name: 'สรุปจำนวนศูนย์พักพิง' });
 /** The first paint of this client-rendered page can be slow on a cold server. */
 const READY = { timeout: 20_000 };
 
@@ -59,12 +61,12 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 	test.describe('desktop', () => {
 		test.use({ viewport: { width: 1440, height: 900 } });
 
-		test('the page does not scroll: cards on top, the map takes the rest, no footer', async ({
+		test('the page does not scroll: the map takes it all, counts float on it, no footer', async ({
 			page
 		}) => {
 			await mockPublicApi(page);
 			await page.goto('/shelters');
-			await expect(page.getByText(TOTAL_CARD)).toBeVisible(READY);
+			await expect(stats(page).getByText('ทั้งหมด')).toBeVisible(READY);
 			await expect(page.locator('[data-shelter-code="SH001"]')).toBeVisible(READY);
 
 			expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
@@ -146,19 +148,17 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 	test.describe('mobile', () => {
 		test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-		test('map view: no cards above, no page scroll', async ({ page }) => {
+		test('map view: counts float on the map, no page scroll', async ({ page }) => {
 			await mockPublicApi(page);
 			await page.goto('/shelters');
 			await expect(page.getByRole('button', { name: /รายการ/ }).first()).toBeVisible(READY);
 
-			await expect(page.getByText(TOTAL_CARD)).toBeHidden();
+			await expect(stats(page)).toBeVisible();
 			expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
 			await expect(page.locator('footer')).toHaveCount(0);
 		});
 
-		test('list view: no cards above, the list scrolls inside, the page does not', async ({
-			page
-		}) => {
+		test('list view: the list scrolls inside, the page does not', async ({ page }) => {
 			await mockPublicApi(page);
 			await page.goto('/shelters');
 			await page
@@ -171,7 +171,6 @@ test.describe('Public shelters: one viewport', { tag: ['@public', '@regression']
 			// The list is its own scroller, so it is taller than its box while the page is not.
 			const scroller = page.locator('div.overflow-y-auto').filter({ has: firstCard });
 			expect(await scroller.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
-			await expect(page.getByText(TOTAL_CARD)).toBeHidden();
 			expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
 		});
 	});

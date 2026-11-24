@@ -5,6 +5,8 @@
  * Output tells the page what to show and which URL keys to drop when a chip is removed.
  */
 
+import { HIDE_EVACUATION_PARAM, SHOW_EXTERNAL_PARAM, shelterGroupChoice } from './site-kind';
+
 /** The radius the page applies when the visitor has not chosen one (the load's `?? '5'`). */
 export const DEFAULT_RADIUS_KM = '5';
 /** Radius buttons in the filter panel, smallest first. */
@@ -27,7 +29,7 @@ export type ActiveFilterValues = {
 	parking_motorcycle?: FilterValue;
 	parking_boat?: FilterValue;
 	hide_evacuation?: FilterValue;
-	hide_external?: FilterValue;
+	show_external?: FilterValue;
 };
 
 export type ActiveFilterLabels = {
@@ -42,7 +44,8 @@ export type ActiveFilterLabels = {
 	subdistrict: (name: string) => string;
 	hideFull: string;
 	parking: Record<'car' | 'motorcycle' | 'boat', string>;
-	hiddenGroup: Record<'evacuation' | 'external', string>;
+	/** The group picks other than the default (centres in this system only). */
+	group: Record<'all' | 'external', string>;
 };
 
 export type ActiveFilterChip = {
@@ -118,10 +121,9 @@ export function activeFilterChips(
 	if (isOn(filters.parking_motorcycle))
 		add('parking_motorcycle', labels.parking.motorcycle, ['parking_motorcycle']);
 	if (isOn(filters.parking_boat)) add('parking_boat', labels.parking.boat, ['parking_boat']);
-	if (isOn(filters.hide_evacuation))
-		add('hide_evacuation', labels.hiddenGroup.evacuation, ['hide_evacuation']);
-	if (isOn(filters.hide_external))
-		add('hide_external', labels.hiddenGroup.external, ['hide_external']);
+	const group = shelterGroupChoice(filters);
+	if (group !== 'evacuation')
+		add('group', labels.group[group], [SHOW_EXTERNAL_PARAM, HIDE_EVACUATION_PARAM]);
 
 	return chips;
 }

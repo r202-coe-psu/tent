@@ -1,6 +1,6 @@
 export { default as PublicShelterCard } from './ui/public-shelter-card.svelte';
 export { default as ShelterParking } from './ui/shelter-parking.svelte';
-export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-card.svelte';
+export { default as PublicShelterStatPill } from './ui/public-shelter-stat-pill.svelte';
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
 export { default as ActiveFilterChips } from './ui/active-filter-chips.svelte';
 export { default as ShelterListEmpty } from './ui/shelter-list-empty.svelte';
@@ -78,12 +78,20 @@ export {
 } from './domain/parking';
 export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
 export {
+	DEFAULT_PUBLIC_AREA,
+	distanceKm,
+	orderShelters,
+	type SearchOrigin
+} from './domain/shelter-order';
+export {
 	DEFAULT_SITE_KIND,
 	activeSiteKinds,
 	countBySiteKind,
 	isHostHouseKind,
 	shelterGroup,
 	hiddenShelterGroups,
+	shelterGroupChoice,
+	type ShelterGroupChoice,
 	siteKindLabel,
 	siteKindTiles,
 	type SiteKindOption

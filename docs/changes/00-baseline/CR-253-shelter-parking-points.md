@@ -5,6 +5,7 @@ status: approved
 date: 2026-11-12
 requested_by: ทีม — GitHub #1352
 decided_by: kong
+updated: 2026-11-24 # หมุดจอดรถบน /shelters เปลี่ยนเป็นป้าย P สีน้ำเงิน ตาม CR-261 FR-16 (decision sync)
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 `shelter.parking_points` (field ใหม่) · `parking_policy.supported_vehicles` (legacy) · shelter schema_v 10 → 11
@@ -232,3 +233,4 @@ FastAPI `GET /public/v1/shelters` → `shelters[].parking_points` และ `she
 - 2026-11-13 — ส่วน (2): worker ฉาย `public_shelters.parking_points` และ `parking_vehicle_types` (FR-25, FR-26, FR-35) · `tent_model.ParkingPoint` (FR-28) · FastAPI ส่งสองฟิลด์ใน list และ detail (FR-28, FR-36) · `PROJECTION_VERSION` 20 → 21 เพราะค่าบน `develop` ตอน merge เป็น 20 (CR-251 ใช้ 19 และ CR-254 ใช้ 20) · ถ้ามีงานอื่นที่ bump merge ก่อน ให้ใช้เลขถัดไปและรัน bootstrap เต็มหนึ่งครั้งตอน deploy
 - 2026-11-13 — ส่วน (3): หน้า `/shelters` วางหมุดจุดจอดรถของทุกศูนย์ในผลค้นหา (ป๊อปอัปแสดงชื่อ หมายเหตุ ประเภทรถ+ความจุ) และต่อสายตัวกรองรถยนต์/มอเตอร์ไซค์/เรือ แบบ AND ฝั่ง client (FR-29, FR-30, FR-33, FR-34) · หน้ารายละเอียดศูนย์แสดงรายการจุดจอดรถ (FR-31) · ชื่อประเภทรถและถ้อยคำความจุใช้ชุดเดียวกันทั้งฟอร์ม แผนที่ และหน้ารายละเอียด
 - 2026-11-15 — แก้ `docs/data/schema.md` §3.1 ตามขั้น 5 ของ change-management ใน PR เดียวกับโค้ด: เพิ่ม field `parking_points`, บล็อก schema_v 11 และ migration v10 → v11 · ส่วน `public_shelters` ใน §9.1, `couchdb-mongodb-sync.md` และ `schema-er-diagram.md` ยังไม่แก้ในรอบนี้
+- 2026-11-24 — หมุดจุดจอดรถบนหน้า `/shelters` เปลี่ยนจากหมุดหยดน้ำสีเทา (slate) เป็นป้ายสากล: สี่เหลี่ยมมุมมนสีน้ำเงิน `#1D4ED8` ตัว P สีขาว — ติดตามใน CR-261 FR-16 (decision sync 2026-11-24); FR-29 ยังใช้ (ไอคอน P, ต่างจากหมุดศูนย์และจุดรับบริจาค)
