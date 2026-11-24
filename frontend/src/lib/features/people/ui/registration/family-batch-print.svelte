@@ -102,16 +102,18 @@
 
 		return Promise.all(
 			printable.map(async (member) => {
+				const qrPayload = issued.payloads.get(member._id);
+				if (!qrPayload) throw new ReportedRenderError('QR was not issued');
 				const screenings = await client.fetchQuery({
 					queryKey: peopleKeys.screeningsByEvacuee(member._id),
 					queryFn: () => peopleRepository().listScreeningsByEvacuee(member._id),
 					staleTime: 0
 				});
-				const { qrPayload, label } = buildEvacueeQrLabel(member, {
+				const { label } = buildEvacueeQrLabel(member, {
 					zones,
 					hasScreening: screenings.length > 0,
 					screenings,
-					qrPayload: issued.payloads.get(member._id)
+					qrPayload
 				});
 				// The printed card carries the marker the server recorded for this print.
 				return renderKioskQrLabelPng(qrPayload, {
