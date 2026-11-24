@@ -27,8 +27,12 @@ vi.mock('$lib/features/master-data', async () => {
 	};
 });
 
-const summary = (kinds: Record<string, number>) =>
-	({ sites_total: 5, sites_by_site_kind: kinds }) as unknown as OverviewSummary;
+const summary = (kinds: Record<string, number>, external = 0) =>
+	({
+		sites_total: 5,
+		sites_by_site_kind: kinds,
+		sites_external: external
+	}) as unknown as OverviewSummary;
 
 let instance: ReturnType<typeof mount> | undefined;
 function render(s: OverviewSummary) {
@@ -49,17 +53,26 @@ afterEach(() => {
 describe('OverviewSiteKindStrip (CR draft-overview-site-kind-counts)', () => {
 	it('shows one card per active kind in master order, including zero counts', () => {
 		const cards = render(summary({ evacuation_center: 3, host_house: 2 }));
-		expect(cards).toEqual(['ศูนย์อพยพ 3 ศูนย์', 'บ้านพี่เลี้ยง 2 ศูนย์', 'ค่ายสนาม 0 ศูนย์']);
+		expect(cards).toEqual([
+			'ศูนย์อพยพ 3 ศูนย์',
+			'บ้านพี่เลี้ยง 2 ศูนย์',
+			'ค่ายสนาม 0 ศูนย์',
+			'ศูนย์ภายนอก 0 ศูนย์'
+		]);
 	});
 
 	it('appends an inactive kind that still holds shelters', () => {
 		const cards = render(summary({ evacuation_center: 4, old_kind: 1 }));
-		expect(cards.at(-1)).toBe('ประเภทเดิม 1 ศูนย์');
+		expect(cards.at(-2)).toBe('ประเภทเดิม 1 ศูนย์');
 	});
 
 	it('uses English labels when the language is en', () => {
 		languageStore.setLanguage('en');
 		const cards = render(summary({ evacuation_center: 5 }));
 		expect(cards[0]).toBe('Evacuation center 5 shelters');
+	});
+
+	it('shows External shelters as their own last card, even at 0', () => {
+		expect(render(summary({ evacuation_center: 3 }, 2)).at(-1)).toBe('ศูนย์ภายนอก 2 ศูนย์');
 	});
 });

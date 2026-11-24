@@ -10,7 +10,11 @@
 import { adminRaw, requireShelterScopeOrSA, ServiceError } from '$lib/server/couch-admin';
 import { listShelterMasters, migrate } from '$lib/server/shelters.admin';
 import { fastapiBaseUrl, unwrapFastapiError } from '$lib/server/fastapi';
-import { resolveOperationStatus, type ShelterMaster } from '$lib/features/shelters/server';
+import {
+	isExternalShelter,
+	resolveOperationStatus,
+	type ShelterMaster
+} from '$lib/features/shelters/server';
 import { maskNationalId } from '$lib/features/people/domain/people';
 import {
 	ageBandForBirthYear,
@@ -339,10 +343,16 @@ export async function buildOverviewSummary(
 		sites_by_status[s.operation_status] = (sites_by_status[s.operation_status] ?? 0) + 1;
 	}
 
-	// Same site set as sites_total (every status, External included). migrate() already
-	// defaults a missing site_kind to evacuation_center (CR-067); keep the guard for safety.
+	// Same site set as sites_total (every status). External shelters get their own count and
+	// are left out of the per-kind map, so kinds + sites_external sum to sites_total.
+	// migrate() already defaults a missing site_kind to evacuation_center (CR-067).
 	const sites_by_site_kind: Record<string, number> = {};
+	let sites_external = 0;
 	for (const s of sites) {
+		if (isExternalShelter(s.master)) {
+			sites_external += 1;
+			continue;
+		}
 		const kind = s.master.site_kind || 'evacuation_center';
 		sites_by_site_kind[kind] = (sites_by_site_kind[kind] ?? 0) + 1;
 	}
@@ -357,6 +367,7 @@ export async function buildOverviewSummary(
 		avg_forecast_pct: pct(forecast_total, capacity_total),
 		sites_by_status,
 		sites_by_site_kind,
+		sites_external,
 		checkouts_in_window: checkouts,
 		sites_closed: sites.filter((s) => s.operation_status === 'closed').length,
 		sites_open_with_present: sites.filter(

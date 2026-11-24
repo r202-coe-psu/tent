@@ -18,7 +18,8 @@ vi.mock('$lib/server/fastapi', () => ({
 	unwrapFastapiError: vi.fn()
 }));
 vi.mock('$lib/features/shelters/server', () => ({
-	resolveOperationStatus: (m: { operation_status?: string }) => m.operation_status ?? 'active'
+	resolveOperationStatus: (m: { operation_status?: string }) => m.operation_status ?? 'active',
+	isExternalShelter: (m: { is_external?: boolean }) => m.is_external === true
 }));
 
 import { buildOverviewSummary } from './index';
@@ -54,7 +55,32 @@ describe('buildOverviewSummary sites_by_site_kind', () => {
 			null
 		);
 		expect(out.sites_by_site_kind).toEqual({ evacuation_center: 2, host_house: 2 });
+		expect(out.sites_external).toBe(0);
 		expect(Object.values(out.sites_by_site_kind).reduce((a, b) => a + b, 0)).toBe(out.sites_total);
+	});
+
+	it('counts external shelters only in sites_external, not inside a kind', async () => {
+		listShelterMasters.mockResolvedValue([
+			{ code: 'A', name: 'A', site_kind: 'evacuation_center' },
+			{ code: 'B', name: 'B', site_kind: 'evacuation_center', is_external: true },
+			{ code: 'C', name: 'C', site_kind: 'host_house', is_external: true }
+		]);
+		const out = await buildOverviewSummary(
+			{
+				movement_window: 'today',
+				stay_bucket: 'all',
+				source: 'all',
+				limit: 50,
+				offset: 0
+			} as never,
+			fetchStats,
+			null
+		);
+		expect(out.sites_by_site_kind).toEqual({ evacuation_center: 1 });
+		expect(out.sites_external).toBe(2);
+		expect(
+			Object.values(out.sites_by_site_kind).reduce((a, b) => a + b, 0) + out.sites_external
+		).toBe(out.sites_total);
 	});
 
 	it('follows the same filters as sites_total', async () => {

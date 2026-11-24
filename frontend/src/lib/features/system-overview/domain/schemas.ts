@@ -175,6 +175,8 @@ export const overviewSummarySchema = z.object({
 	sites_by_status: z.record(z.string(), z.number().int().nonnegative()),
 	/** CR draft-overview-site-kind-counts: shelters per `site_kind` code (sums to sites_total). */
 	sites_by_site_kind: z.record(z.string(), z.number().int().nonnegative()),
+	/** External shelters (`is_external`) — counted here only, never inside sites_by_site_kind. */
+	sites_external: z.number().int().nonnegative(),
 	checkouts_in_window: z.number().int().nonnegative(),
 	sites_closed: z.number().int().nonnegative(),
 	sites_open_with_present: z.number().int().nonnegative(),

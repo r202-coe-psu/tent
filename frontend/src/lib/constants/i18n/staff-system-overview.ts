@@ -24,6 +24,10 @@ const th = {
 	avgCapacityUse: 'อัตราการใช้ความจุเฉลี่ย',
 	avgCapacityValue: (now: string, forecast: string) => `ตอนนี้ ${now} · คาดการณ์ ${forecast}`,
 
+	// ---- shelter counts per kind
+	siteUnit: 'ศูนย์',
+	externalSites: 'ศูนย์ภายนอก',
+
 	// ---- sites table
 	sitesTitle: 'ศูนย์พักพิงทั้งหมด',
 	sitesDescription: 'เรียงตามสัดส่วนผู้ที่คาดว่าจะเข้าพักต่อความจุ (มาก → น้อย)',
@@ -105,6 +109,9 @@ const en: typeof th = {
 	forecast: 'Forecast',
 	avgCapacityUse: 'Average capacity in use',
 	avgCapacityValue: (now: string, forecast: string) => `Now ${now} · forecast ${forecast}`,
+
+	siteUnit: 'shelters',
+	externalSites: 'External shelters',
 
 	sitesTitle: 'All shelters',
 	sitesDescription: 'Sorted by expected occupants as a share of capacity (high → low)',

@@ -3,6 +3,8 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { formatMasterLabelByCode, useMasterData } from '$lib/features/master-data';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { STAFF_SYSTEM_OVERVIEW_I18N } from '$lib/constants/i18n/staff-system-overview';
+	import { getTranslation } from '$lib/utils/i18n';
 	import type { OverviewSummary } from '../domain/schemas';
 
 	let {
@@ -15,7 +17,7 @@
 
 	const siteKindQuery = useMasterData(() => 'site_kind');
 	const items = $derived(siteKindQuery.data?.items ?? []);
-	const unit = $derived(langState.current === 'en' ? 'shelters' : 'ศูนย์');
+	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
 
 	// Master order; active kinds always shown (even 0). A deactivated kind still holding
 	// shelters is appended so the cards keep summing to sites_total.
@@ -25,11 +27,16 @@
 		for (const code of Object.keys(counts)) {
 			if (!codes.includes(code) && (counts[code] ?? 0) > 0) codes.push(code);
 		}
-		return codes.map((code) => ({
+		const kindCards = codes.map((code) => ({
 			code,
 			label: formatMasterLabelByCode(code, items, langState.current),
 			count: counts[code] ?? 0
 		}));
+		// External shelters are their own card (always shown), never folded into a kind.
+		return [
+			...kindCards,
+			{ code: '__external__', label: t.externalSites, count: summary?.sites_external ?? 0 }
+		];
 	});
 </script>
 
@@ -52,7 +59,7 @@
 					>
 						{card.count}
 					</span>
-					<span class="text-sm text-slate-500">{unit}</span>
+					<span class="text-sm text-slate-500">{t.siteUnit}</span>
 				</Card.Content>
 			</Card.Root>
 		{/each}
