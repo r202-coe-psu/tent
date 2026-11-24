@@ -7,9 +7,10 @@ export type SiteKindOption = MasterLabelOption & { status?: string };
 // Mirrors the shelters domain constants; importing that barrel here breaks tests that mock it.
 export const DEFAULT_SITE_KIND = 'evacuation_center';
 export const HOST_HOUSE_SITE_KIND = 'host_house';
+const TEST_CENTER_SITE_KIND = 'test_center';
 
 /**
- * Labels for the two seeded codes, used only while the site-kinds list has not
+ * Labels for the seeded codes, used only while the site-kinds list has not
  * loaded (or the BFF degraded to an empty list). A master item always wins.
  */
 const SEEDED_SITE_KINDS: Record<string, SiteKindOption> = {
@@ -22,6 +23,11 @@ const SEEDED_SITE_KINDS: Record<string, SiteKindOption> = {
 		code: HOST_HOUSE_SITE_KIND,
 		label_th: 'บ้านพี่เลี้ยง',
 		label_en: 'Host House'
+	},
+	[TEST_CENTER_SITE_KIND]: {
+		code: TEST_CENTER_SITE_KIND,
+		label_th: 'ศูนย์ทดสอบ',
+		label_en: 'Test Center'
 	}
 };
 
