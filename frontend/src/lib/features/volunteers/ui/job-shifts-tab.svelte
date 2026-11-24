@@ -25,6 +25,7 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { ulid } from '$lib/db/ulid';
 	import { errorMessage } from '$lib/utils/errors';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
@@ -87,6 +88,15 @@
 			split: splits[index],
 			roster: shiftRoster(shift, job._id, assignmentsQuery.data ?? [], volunteersById)
 		}))
+	);
+
+	// A job can carry up to 180 shifts; one page keeps the grid readable. 12 fills 2, 3 and 4 columns.
+	const SHIFT_PAGE_SIZE = 12;
+	let shiftPage = $state(1);
+	const shiftTotalPages = $derived(Math.max(1, Math.ceil(rows.length / SHIFT_PAGE_SIZE)));
+	const safeShiftPage = $derived(Math.max(1, Math.min(shiftPage, shiftTotalPages)));
+	const pagedRows = $derived(
+		rows.slice((safeShiftPage - 1) * SHIFT_PAGE_SIZE, safeShiftPage * SHIFT_PAGE_SIZE)
 	);
 
 	let unassignTarget = $state<ShiftRosterEntry | null>(null);
@@ -342,7 +352,7 @@
 		</div>
 
 		<div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-			{#each rows as row (row.shift.id)}
+			{#each pagedRows as row (row.shift.id)}
 				<JobShiftCard
 					shift={row.shift}
 					split={row.split}
@@ -356,6 +366,18 @@
 				/>
 			{/each}
 		</div>
+
+		{#if shiftTotalPages > 1}
+			<div class="flex flex-col items-center justify-between gap-3 pt-3 sm:flex-row">
+				<p class="text-xs text-muted-foreground">
+					แสดงกะที่ {(safeShiftPage - 1) * SHIFT_PAGE_SIZE + 1} - {Math.min(
+						safeShiftPage * SHIFT_PAGE_SIZE,
+						rows.length
+					)} จากทั้งหมด {rows.length} กะ
+				</p>
+				<PaginationControls bind:page={shiftPage} count={rows.length} perPage={SHIFT_PAGE_SIZE} />
+			</div>
+		{/if}
 	</div>
 
 	<JobShiftRosterDialog
