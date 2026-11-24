@@ -14,15 +14,13 @@
 		useOverviewSummary,
 		useOverviewSites,
 		useOverviewOrigin,
-		useOverviewDemographics,
-		usePreRegistrations
+		useOverviewDemographics
 	} from '../application/queries';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
 	import OverviewPhaseStrip from './overview-phase-strip.svelte';
 	import OverviewOriginSection from './overview-origin-section.svelte';
 	import OverviewDemographicsSection from './overview-demographics-section.svelte';
 	import OverviewSitesSection from './overview-sites-section.svelte';
-	import OverviewPreregPreview from './overview-prereg-preview.svelte';
 
 	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
 
@@ -38,19 +36,14 @@
 	const sitesQuery = useOverviewSites(() => filters);
 	const originQuery = useOverviewOrigin(() => filters);
 	const demographicsQuery = useOverviewDemographics(() => filters);
-	const preRegsQuery = usePreRegistrations(() => ({ ...filters, limit: 8, offset: 0 }));
 
 	const isError = $derived(
-		summaryQuery.isError ||
-			sitesQuery.isError ||
-			originQuery.isError ||
-			demographicsQuery.isError ||
-			preRegsQuery.isError
+		summaryQuery.isError || sitesQuery.isError || originQuery.isError || demographicsQuery.isError
 	);
 </script>
 
 <StaffPageShell title={t.pageTitle} description={t.pageDescription}>
-	<OverviewFilterBar {filters} onChange={(next) => (filters = next)} />
+	<OverviewFilterBar {filters} onChange={(next) => (filters = next)} showSearch={false} />
 
 	{#if isError}
 		<Alert variant="destructive">
@@ -81,10 +74,4 @@
 			loading={demographicsQuery.isPending}
 		/>
 	</div>
-
-	<OverviewPreregPreview
-		items={preRegsQuery.data?.items}
-		total={preRegsQuery.data?.total}
-		loading={preRegsQuery.isPending}
-	/>
 </StaffPageShell>

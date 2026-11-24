@@ -5,6 +5,7 @@
 	import { parseDate } from '@internationalized/date';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import Eye from '@lucide/svelte/icons/eye';
 	import { Badge } from '$lib/components/ui/badge';
 	import { DateRangePicker } from '$lib/components/ui/date-picker';
 	import { Label } from '$lib/components/ui/label';
@@ -138,9 +139,11 @@
 								<Table.Cell>
 									<a
 										href={resolve(site.dashboard_href as '/back-office/evacuee-management')}
-										class="text-sm font-semibold text-[#0284C7] hover:underline"
+										class="inline-flex size-8 items-center justify-center rounded-md text-[#0284C7] hover:bg-sky-50"
+										aria-label={t.dashboard}
+										title={t.dashboard}
 									>
-										{t.dashboard}
+										<Eye class="size-4" aria-hidden="true" />
 									</a>
 								</Table.Cell>
 							</Table.Row>

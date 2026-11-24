@@ -64,22 +64,6 @@
 	{/if}
 {/snippet}
 
-{#snippet sourceBadge(item: PreRegistrationListItem)}
-	{#if item.source === 'unassigned'}
-		<span
-			class="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-		>
-			ส่วนกลาง
-		</span>
-	{:else}
-		<span
-			class="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-700"
-		>
-			{item.shelter_code ?? 'เลือกศูนย์แล้ว'}
-		</span>
-	{/if}
-{/snippet}
-
 <StaffPageShell
 	title="ลงทะเบียนล่วงหน้า"
 	description="ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง"
@@ -154,7 +138,7 @@
 								<dd class="break-words">{@render household(item)}</dd>
 								<dt class="text-slate-500">ศูนย์พักพิง</dt>
 								<dd class="break-words"><PreRegShelterCell {item} /></dd>
-								<dt class="text-slate-500">ต้นทาง</dt>
+								<dt class="text-slate-500">ที่อยู่ (จังหวัด / อำเภอ / ตำบล)</dt>
 								<dd class="break-words">{originLabel(item)}</dd>
 								<dt class="text-slate-500">ประเทศ</dt>
 								<dd>{item.country ?? '—'}</dd>
@@ -162,8 +146,6 @@
 								<dd>{AGE_BUCKET_LABELS[item.age_band] ?? item.age_band}</dd>
 								<dt class="text-slate-500">ลงทะเบียน</dt>
 								<dd class="tabular-nums">{formatWhen(item.registered_at)}</dd>
-								<dt class="text-slate-500">แหล่งข้อมูล</dt>
-								<dd>{@render sourceBadge(item)}</dd>
 							</dl>
 						</li>
 					{/each}
@@ -176,11 +158,10 @@
 								<Table.Head>ครอบครัว</Table.Head>
 								<Table.Head>สถานะการเข้าศูนย์</Table.Head>
 								<Table.Head>ศูนย์พักพิง</Table.Head>
-								<Table.Head>ต้นทาง</Table.Head>
+								<Table.Head>ที่อยู่ (จังหวัด / อำเภอ / ตำบล)</Table.Head>
 								<Table.Head>ประเทศ</Table.Head>
 								<Table.Head>ช่วงอายุ</Table.Head>
 								<Table.Head>เวลาลงทะเบียน</Table.Head>
-								<Table.Head>แหล่งข้อมูล</Table.Head>
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
@@ -205,9 +186,6 @@
 									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700 tabular-nums">
 										{formatWhen(item.registered_at)}
-									</Table.Cell>
-									<Table.Cell class="text-sm text-slate-600">
-										{@render sourceBadge(item)}
 									</Table.Cell>
 								</Table.Row>
 							{/each}

@@ -16,11 +16,14 @@
 	let {
 		filters,
 		onChange,
-		showHouseholdFilter = false
+		showHouseholdFilter = false,
+		showSearch = true
 	}: {
 		filters: OverviewFilters;
 		onChange: (next: OverviewFilters) => void;
 		showHouseholdFilter?: boolean;
+		/** Name / phone search of registrants; the overview page hides it (it only has the list page). */
+		showSearch?: boolean;
 	} = $props();
 
 	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
@@ -150,7 +153,7 @@
 		</Select.Root>
 	</div>
 
-	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[10rem]">
+	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[13.5rem]">
 		<Label for="overview-source" class="text-sm font-semibold text-slate-700"
 			>{t.filterPreRegSource}</Label
 		>
@@ -195,18 +198,20 @@
 		</div>
 	{/if}
 
-	<div class="w-full min-w-0 flex-1 space-y-1.5 sm:w-auto sm:min-w-[12rem]">
-		<Label for="overview-q" class="text-sm font-semibold text-slate-700">{t.filterSearch}</Label>
-		<Input
-			id="overview-q"
-			type="search"
-			placeholder={t.filterSearchPlaceholder}
-			class="h-9"
-			value={filters.q ?? ''}
-			oninput={(e) => {
-				const q = e.currentTarget.value.trim();
-				patch({ q: q || undefined });
-			}}
-		/>
-	</div>
+	{#if showSearch}
+		<div class="w-full min-w-0 space-y-1.5 sm:w-[12rem] sm:flex-none">
+			<Label for="overview-q" class="text-sm font-semibold text-slate-700">{t.filterSearch}</Label>
+			<Input
+				id="overview-q"
+				type="search"
+				placeholder={t.filterSearchPlaceholder}
+				class="h-9"
+				value={filters.q ?? ''}
+				oninput={(e) => {
+					const q = e.currentTarget.value.trim();
+					patch({ q: q || undefined });
+				}}
+			/>
+		</div>
+	{/if}
 </div>
