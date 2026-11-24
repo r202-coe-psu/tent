@@ -3,7 +3,7 @@ id: CR-233
 title: Person QR ของผู้อพยพออกใหม่ทุกครั้งที่ปริ้น — payload `evacuee:{ULID}@{hash6}` + log `evacuee_qr:{ULID}` ให้ใบเก่าหมดอายุ
 status: approved
 date: 2026-11-06
-updated: 2026-11-12 # A2 ตำแหน่งแถบระดับย้ายไปขอบซ้าย (decision sync · PR #1323) · 2026-11-11 # Amendment A2 approved by kong (#1301) · 2026-11-10 # Amendment A2 proposed
+updated: 2026-11-24 # Amendment A3 proposed (preview แสดง QR ใบปัจจุบัน) · 2026-11-12 # A2 ตำแหน่งแถบระดับย้ายไปขอบซ้าย (decision sync · PR #1323) · 2026-11-11 # Amendment A2 approved by kong (#1301) · 2026-11-10 # Amendment A2 proposed
 requested_by: feedback อบรมระบบ 03/11/2026 (GitHub issue #1156)
 decided_by: Project Owner (เจ้าของโครงการ) — อนุมัติ 2026-11-06 (grill #1156, ข้อ 1–9)
 decision_date: 2026-11-06
@@ -97,7 +97,7 @@ related:
 
 ### C. การออก QR (server-issued)
 
-- FR-EQR-15 — การออก Person QR ต้องทำฝั่ง server เท่านั้น ผ่านฟังก์ชันเดียว `issueEvacueeQr` (`frontend/src/lib/server/evacuee-qr-service.ts`) ที่รับ `shelter_code`, `evacuee_id`, `source`, `printed_by` และคืน `{ evacuee_id, qr_payload, printed_at }`; client ห้ามคำนวณ `hash6` หรือสร้าง payload เอง (`crypto.subtle` ใช้ไม่ได้บน http LAN ของ kiosk/edge)
+- FR-EQR-15 — _(A3 proposed: client ประกอบ payload ใบปัจจุบันจาก `prints[].hash` ที่ server เก็บไว้เพื่อแสดงได้ ดู FR-EQR-58)_ การออก Person QR ต้องทำฝั่ง server เท่านั้น ผ่านฟังก์ชันเดียว `issueEvacueeQr` (`frontend/src/lib/server/evacuee-qr-service.ts`) ที่รับ `shelter_code`, `evacuee_id`, `source`, `printed_by` และคืน `{ evacuee_id, qr_payload, printed_at }`; client ห้ามคำนวณ `hash6` หรือสร้าง payload เอง (`crypto.subtle` ใช้ไม่ได้บน http LAN ของ kiosk/edge)
 - FR-EQR-16 — `issueEvacueeQr` ต้องตรวจว่า `evacuee:{ULID}` มีอยู่ใน `shelter_{code}` ก่อน (ไม่มี = ไม่เขียนอะไร)
 - FR-EQR-17 — เวลาของ entry ใหม่ = `max(now, last.printed_at + 1 ms)` (รูปแบบตาม FR-EQR-2) เพื่อให้ FR-EQR-13 เป็นจริงแม้นาฬิกาเครื่องย้อน
 - FR-EQR-17a — ถ้า `hash` ที่คำนวณได้ของ entry ใหม่เท่ากับ `hash` ของ entry ใดก็ตามที่มีอยู่แล้วของคนเดียวกัน server ต้องออกใหม่โดยเลื่อน `printed_at` ไปอีก 1 ms แล้วคำนวณซ้ำ จนกว่า `hash` จะไม่ซ้ำกับทุก entry เดิม (การออกซ้ำนี้ยังต้องรักษา FR-EQR-13) — `hash` จึงไม่ซ้ำกันภายใน `prints[]` ของคนเดียวกัน
@@ -105,7 +105,7 @@ related:
 - FR-EQR-19 — เมื่อเขียนได้ `409` (สร้างชนกัน หรือ `_rev` เก่า) ต้องอ่าน doc ใหม่ คำนวณ `printed_at` ใหม่ตาม FR-EQR-17 แล้วลองใหม่ รวมไม่เกิน 5 ครั้ง; เกินแล้วถือว่าออกไม่สำเร็จ (`CONFLICT`)
 - FR-EQR-20 — ต้องเขียน entry สำเร็จ **ก่อน** คืน `qr_payload` และก่อนที่ client จะพิมพ์ ถ้าพิมพ์ไม่สำเร็จ entry ไม่ถูกยกเลิก (ใบเก่าหมดอายุไปแล้ว) ผู้ใช้ต้องสั่งพิมพ์ใหม่ ซึ่งออก entry ใหม่อีกอัน
 - FR-EQR-21 — 1 คำสั่งพิมพ์ต่อ 1 คน = 1 entry; ห้ามเขียน entry เมื่อเพียงแสดง/เปิดดูข้อมูล และห้าม cache payload ข้ามคำสั่งพิมพ์
-- FR-EQR-21a — เมื่อเปิด `evacuee-qr-modal` และ `family-batch-print` (รวม `evacuee-wristband-success` ที่ห่อ modal นี้) ต้องแสดง label พร้อม QR **placeholder** ที่ไม่ใช่ payload ใช้งานได้ และห้ามเรียก `POST /api/v1/evacuee-qr/issue` หรือเขียน entry ใด ๆ — การเปิดดูอย่างเดียวไม่ทำให้ QR เดิมหมดอายุ
+- FR-EQR-21a — _(A3 proposed: แทนด้วย FR-EQR-58 — preview แสดง QR ใบปัจจุบัน ไม่ใช่ placeholder)_ เมื่อเปิด `evacuee-qr-modal` และ `family-batch-print` (รวม `evacuee-wristband-success` ที่ห่อ modal นี้) ต้องแสดง label พร้อม QR **placeholder** ที่ไม่ใช่ payload ใช้งานได้ และห้ามเรียก `POST /api/v1/evacuee-qr/issue` หรือเขียน entry ใด ๆ — การเปิดดูอย่างเดียวไม่ทำให้ QR เดิมหมดอายุ
 - FR-EQR-21b — เมื่อผู้ใช้กดพิมพ์ (หรือดู PDF เพื่อพิมพ์) ต้องเรียก `POST /api/v1/evacuee-qr/issue` ได้ payload จริง แล้ว render label ด้วย payload จริงนั้น แล้วจึงพิมพ์ ตามลำดับนี้; ถ้า item ไม่ได้ `status: issued` ต้องไม่พิมพ์ item นั้น
 - FR-EQR-21c — ออก entry เฉพาะคนที่ถูกสั่งพิมพ์ (หน้า batch ไม่ออกให้สมาชิกที่ไม่ได้กดพิมพ์)
 
@@ -175,6 +175,21 @@ related:
 - FR-EQR-55 — บัตรที่พิมพ์ต้องใช้ระดับเดียวกับที่บันทึกใน entry ของการพิมพ์นั้น: kiosk (`check-in`, `reprint`, `register`) และ `POST /api/v1/evacuee-qr/issue` ส่ง `marker` ที่ได้จาก `issueEvacueeQr` กลับไปให้ client วาดบัตร · ตอนเปิดดูก่อนพิมพ์ (placeholder, FR-EQR-21a) client คำนวณระดับด้วย FR-EQR-51 จากข้อมูลที่หน้านั้นมีอยู่เพื่อแสดงตัวอย่างเท่านั้น
 - FR-EQR-56 — บัตรแสดง **เฉพาะระดับและความหมายสั้น ๆ** เป็นแถวเดียวบนสุดของคอลัมน์ข้อความ (เหนือชื่อ) ตัวดำบนพื้นขาว ไม่มีแถบหรือกรอบ: แดง = สี่เหลี่ยมทึบ ■ + "แดง · ดูแลเร่งด่วน" · เหลือง = สามเหลี่ยมโปร่ง △ + "เหลือง · ดูแลพิเศษ" (ข้อความเก็บที่เดียว `VULNERABILITY_MARKER_TEXT` ใน `frontend/src/lib/utils/vulnerability-marker.ts`) · ไม่ทับ QR และมีแถบแนวตั้งกว้าง 4 mm ชิดขอบซ้ายของบัตร (แดง = ดำทึบ, เหลือง = ขอบ 2 เส้นมีขีดเฉียงข้างใน, ไม่มีข้อความ; QR เล็กลงเพื่อเว้นที่) (ขนาด/ตำแหน่ง ดู CR-150 §7 FR-L8b) · ห้ามมีชื่อกลุ่ม โรค หรือความพิการบนบัตร · ไม่มีระดับ = บัตรหน้าตาเหมือนเดิม · ใช้กับทุกจุดพิมพ์ที่ใช้ `qr-id-card` / PNG label (kiosk check-in / reprint / register, `evacuee-qr-modal` รวม wristband หลังลงทะเบียน และ household summary, `family-batch-print`, PDF)
 - FR-EQR-57 — หน้าโปรไฟล์ผู้พักพิงแสดงคำเตือน "บัตรล้าสมัย — ระดับความเปราะบางเปลี่ยน" พร้อมปุ่มพิมพ์ใหม่ เมื่อมี entry ใน `prints[]` และระดับปัจจุบัน (FR-EQR-51) ไม่เท่ากับ `marker` ของ entry ล่าสุด · entry ล่าสุดที่ไม่มี `marker` (เขียนตอน v1) ถือว่าพิมพ์โดยไม่มีสัญลักษณ์ (= `null`) · ยังไม่เคยพิมพ์ = ไม่เตือน · คำเตือนไม่บังคับพิมพ์และไม่ทำให้ QR ใบเดิมหมดอายุ (หมดอายุเฉพาะเมื่อพิมพ์ใหม่ตาม FR-EQR-11)
+
+### L. Preview แสดง QR ใบปัจจุบัน (Amendment A3 — proposed)
+
+> **สถานะ:** proposed 2026-11-24 โดยทีมพัฒนา · รอ Project Owner อนุมัติ · แก้ FR-EQR-21a และขยาย FR-EQR-15 · ไม่เปลี่ยน payload, schema, กฎสแกน (D) และการออก QR ตอนกดพิมพ์ (FR-EQR-21b/21c)
+> **ปัญหา:** preview แบบ placeholder (`PREVIEW-QR-NOT-ISSUED`) หน้าตาเหมือน QR จริง แต่สแกนไม่ได้ เจ้าหน้าที่สแกนจากจอแล้วสับสน
+
+- FR-EQR-58 — `evacuee-qr-modal` และ `family-batch-print` (หน้าที่ใช้ modal นี้ทั้งหมด) ต้องแสดง label พร้อม **QR ใบปัจจุบันที่สแกนผ่าน** โดยไม่เรียก `POST /api/v1/evacuee-qr/issue` และไม่เขียน entry:
+  - มี entry ใน `prints[]` → `evacuee:{ULID}@{hash}` ของ entry ล่าสุด (กฎสแกนแถว 3)
+  - ไม่มี doc หรือ log ว่าง → `evacuee:{ULID}` (กฎสแกนแถว 1)
+  - เพิ่งกดพิมพ์ในหน้านี้ → payload ที่เพิ่งออก (เหมือนเดิม)
+- FR-EQR-59 — client ประกอบ payload ตาม FR-EQR-58 จากค่า `hash` ที่ server เก็บไว้เท่านั้น (ฟังก์ชัน `currentPersonQrPayload` ใน `frontend/src/lib/utils/evacuee-qr.ts`) ห้ามคำนวณ hash — การออก QR ใหม่ยังเป็นของ server ตาม FR-EQR-15
+- FR-EQR-60 — อ่าน `evacuee_qr` ไม่สำเร็จ → ไม่แสดง QR (ห้าม fallback เป็น `evacuee:{ULID}` เพราะอาจหมดอายุแล้ว) แสดงข้อความ "โหลด QR ปัจจุบันไม่สำเร็จ — ยังกดพิมพ์เพื่อออก QR ใหม่ได้" และปุ่มพิมพ์ยังใช้ได้
+- FR-EQR-61 — ข้อความใต้ preview: "QR ใบปัจจุบันที่ใช้ได้ — กดพิมพ์จะออก QR ใหม่ และใบนี้จะใช้ไม่ได้"
+- [ ] AC-EQR-19 — (A3) เปิด modal ของคนที่เคยพิมพ์แล้ว สแกน QR บนจอผ่าน และไม่มี entry ใหม่; คนที่ยังไม่เคยพิมพ์ได้ `evacuee:{ULID}` ที่สแกนผ่าน; อ่าน log ไม่ได้ไม่แสดง QR (`evacuee-qr.test.ts`, `evacuee-qr-modal.dom.test.ts`, e2e `expectPrintScreen`)
+- ข้อควรรู้: QR ที่ใช้ได้แสดงบนจอ staff จึงถ่ายรูปไปใช้ได้ — ยอมรับเพราะหน้าเปิดได้เฉพาะ staff ที่มีสิทธิ์ evacuee ของศูนย์นั้น และใบเดิมก็ใช้ได้อยู่แล้ว
 
 ### F. ขอบเขต (ไม่เปลี่ยน)
 
@@ -313,3 +328,4 @@ CR นี้แทนที่ข้อความต่อไปนี้ (ไ
 - 2026-11-10 — ปรับ A2 (proposed): ย้ายขีดระดับจากเหนือ QR ไปเป็นแนวตั้งชิดขอบขวาของบัตร — QR เล็กลงเมื่อมีระดับ (CR-150 §7 FR-L8b)
 - 2026-11-11 — approved Amendment A2 (kong; #1301 / PR #1323): สัญลักษณ์ระดับความเปราะบางบนบัตร (FR-EQR-51..57, AC-EQR-15..18), `evacuee_qr` `schema_v` 1 → 2 แบบ lazy · CR-150 §7 approved พร้อมกัน · migration: redeploy `_design/access` ของทุก `shelter_*` ก่อน client รุ่นใหม่ (`pnpm redeploy:access`), ไม่ backfill · บันทึกตามที่ผู้ร่วมงานแจ้งการอนุมัติของ kong ในแชต ไม่ได้ตรวจกับ kong โดยตรง
 - 2026-11-12 — decision sync (ติดตามการแก้ด้วย note ใน CR นี้ + CR-150 §7 ตามที่ผู้ร่วมงานเลือก ไม่เปิด CR ใหม่): แถบระดับย้ายจากขีดดำขอบขวา (แดง 2 / เหลือง 1) ไปเป็นแถบกว้าง 4 mm ที่ขอบซ้าย — แดงดำทึบ, เหลืองขอบ 2 เส้นมีขีดเฉียง — เนื้อหา FR-EQR-56 และ CR-150 FR-L8b แก้ตามนี้ · QR มีระดับเล็กเท่ากันทั้งสองระดับ (24.8 mm จาก v3) · ไม่เปลี่ยน schema/rule อื่นของ A2 · **สถานะ: รอ kong ยืนยันรูปแบบแถบใหม่** (บันทึกตามที่ผู้พัฒนา PR ปรับใน 60ee8016b และผู้ร่วมงานสั่งบันทึก ไม่ได้ตรวจกับ kong โดยตรง) · ยังไม่ได้ทดสอบพิมพ์บนเครื่อง XP-365B (AC-EQR-18)
+- 2026-11-24 — proposed Amendment A3 (ทีมพัฒนาเสนอ, ติดตามด้วยการแก้ CR-233 ตามที่ผู้ใช้เลือก): preview ใน `evacuee-qr-modal` / `family-batch-print` แสดง QR ใบปัจจุบันที่สแกนผ่าน (entry ล่าสุด หรือ `evacuee:{ULID}` ถ้ายังไม่เคยพิมพ์) แทน placeholder · ยังไม่ออก QR ตอนเปิด (FR-EQR-58..61, AC-EQR-19) · ทางที่ไม่เลือก: ออก QR ใหม่ทุกครั้งที่เปิด (ทำให้ใบในมือหมดอายุโดยไม่ได้พิมพ์), กล่องข้อความแทน QR · รอ Project Owner อนุมัติ
