@@ -203,9 +203,7 @@
 				<div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
 					<CalendarDays class="h-4.5 w-4.5" />
 				</div>
-				<h2 class="text-lg font-bold text-foreground">
-					ตารางกะและเช็คอินจิตอาสา (Roster &amp; Live Attendance)
-				</h2>
+				<h2 class="text-lg font-bold text-foreground">ตารางกะและเช็คอินจิตอาสา</h2>
 			</div>
 			<Badge
 				variant="outline"
@@ -215,8 +213,7 @@
 				Live On-Site Tracking
 			</Badge>
 			<p class="mt-1.5 max-w-2xl text-xs text-muted-foreground">
-				ติดตามสถานะรายงานตัวเข้ากะสดประจำวัน เช็คอิน/เช็คเอาต์ด้วยการสแกน QR ของอาสาสมัคร
-				หรือโดยไม่สแกนพร้อมระบุเหตุผล
+				ติดตามสถานะรายงานตัวเข้ากะประจำวัน เช็คอิน/เช็คเอาต์ด้วยการสแกน QR ของอาสาสมัคร
 			</p>
 		</div>
 

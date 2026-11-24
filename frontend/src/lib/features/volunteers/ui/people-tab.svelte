@@ -15,6 +15,7 @@
 	 * `VolunteerFilter` per keystroke/toggle.
 	 */
 	import Inbox from '@lucide/svelte/icons/inbox';
+	import UsersRound from '@lucide/svelte/icons/users-round';
 	import Zap from '@lucide/svelte/icons/zap';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -171,6 +172,12 @@
 </script>
 
 <div class="space-y-4">
+	<div class="flex items-center gap-2">
+		<div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+			<UsersRound class="h-4.5 w-4.5" />
+		</div>
+		<h2 class="text-lg font-bold text-foreground">รายชื่อและการอนุมัติ</h2>
+	</div>
 	<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 		{#if volunteersQuery.isPending}
 			<div class="flex gap-2">

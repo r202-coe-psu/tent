@@ -8,6 +8,7 @@
 	import { resolve } from '$app/paths';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Inbox from '@lucide/svelte/icons/inbox';
+	import BriefcaseBusiness from '@lucide/svelte/icons/briefcase-business';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -101,6 +102,12 @@
 </script>
 
 <div class="space-y-4">
+	<div class="flex items-center gap-2">
+		<div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+			<BriefcaseBusiness class="h-4.5 w-4.5" />
+		</div>
+		<h2 class="text-lg font-bold text-foreground">จัดการงานอาสา</h2>
+	</div>
 	{#if jobsQuery.isPending}
 		<div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
 			{#each kpiSkeletonKeys as key (key)}
