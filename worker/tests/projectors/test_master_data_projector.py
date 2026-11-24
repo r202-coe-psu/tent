@@ -138,7 +138,7 @@ def test_config_id_helper_matches_what_fastapi_reads():
 
 
 def test_projects_every_active_skill_for_label_search():
-    """CR-264 D3: non-controlled skills ride along (code + names); inactive ones do not."""
+    """CR-265 D3: non-controlled skills ride along (code + names); inactive ones do not."""
     _, payload = project_master_data(
         _doc(
             items=[

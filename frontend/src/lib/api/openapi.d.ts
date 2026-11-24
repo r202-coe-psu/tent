@@ -4279,7 +4279,7 @@ export interface components {
 		};
 		/**
 		 * PublicJobSummaryResponse
-		 * @description Board-wide counts, independent of any filter or page (CR-264 FR-9).
+		 * @description Board-wide counts, independent of any filter or page (CR-265 FR-9).
 		 */
 		PublicJobSummaryResponse: {
 			/**

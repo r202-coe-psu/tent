@@ -71,7 +71,7 @@ export function controlledValuesFromMaster(items: readonly MasterSkillItemLike[]
 }
 
 /** Same derivation as the worker projector and `public-application.ts`: quota − confirmed − dispatched. */
-/** Codes of skills whose code or display name contains `text` (CR-264 D3), like FastAPI. */
+/** Codes of skills whose code or display name contains `text` (CR-265 D3), like FastAPI. */
 export function skillCodesByLabel(
 	items: readonly MasterSkillItemLike[],
 	text: string
@@ -108,7 +108,7 @@ function remainingFrom(row: {
 	);
 }
 
-/** Remaining seats per shift still open at `now` (CR-264 FR-3: ended shifts never count). */
+/** Remaining seats per shift still open at `now` (CR-265 FR-3: ended shifts never count). */
 function remainingOf(job: FallbackJob, now: Date): number[] {
 	if (job.shifts && job.shifts.length > 0) {
 		return job.shifts
@@ -147,7 +147,7 @@ export function filterFallbackJobs(
 		shelterNames: ReadonlyMap<string, string>;
 		/** lower-cased controlled-skill values ({@link controlledValuesFromMaster}). */
 		controlled: ReadonlySet<string>;
-		/** Skill codes whose display name matches `q` ({@link skillCodesByLabel}, CR-264 D3). */
+		/** Skill codes whose display name matches `q` ({@link skillCodesByLabel}, CR-265 D3). */
 		skillCodesByLabel?: ReadonlySet<string>;
 		now?: Date;
 	}
@@ -210,7 +210,7 @@ export function boardShelters(
 		.sort((a, b) => byText(a.code, b.code));
 }
 
-/** Board-wide counts that ignore every filter and page (CR-264 FR-9/10/11), like FastAPI. */
+/** Board-wide counts that ignore every filter and page (CR-265 FR-9/10/11), like FastAPI. */
 export function summarizeFallbackJobs(
 	jobs: readonly FallbackJob[],
 	controlled: ReadonlySet<string>,

@@ -20,7 +20,7 @@ vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc }));
 
 const call = (fetch: typeof globalThis.fetch) => GET({ fetch } as unknown as GetEvent);
 
-describe('GET /api/public/v1/volunteer/jobs/summary (CR-264 FR-9)', () => {
+describe('GET /api/public/v1/volunteer/jobs/summary (CR-265 FR-9)', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		readMasterDoc.mockResolvedValue({ items: [] });

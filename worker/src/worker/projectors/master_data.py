@@ -62,7 +62,7 @@ def project_master_data(doc: dict[str, Any]) -> tuple[str, dict[str, Any] | None
         "controlled_labels": [
             str(item["label"]) for item in controlled if item.get("label")
         ],
-        # CR-264 D3: every active skill's code and display names, so the public board's
+        # CR-265 D3: every active skill's code and display names, so the public board's
         # search box can find a job by the label people read, not only by its stored code.
         "skills": [
             {

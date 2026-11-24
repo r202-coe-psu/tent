@@ -1660,7 +1660,7 @@ async def test_list_jobs_status_open_uses_shift_remaining(
 async def test_list_jobs_status_uses_live_counters_not_the_snapshot(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-264 D1 / AC-10: a job the snapshot calls open but the live counter filled is not open."""
+    """CR-265 D1 / AC-10: a job the snapshot calls open but the live counter filled is not open."""
     now = datetime.now(UTC)
     await _board_job("job:live-full", "เต็มจริง", remaining=5)
     await seed_job_slot(job_id="job:live-full", shelter_code="SH001", quota=5, now=now)
@@ -1684,7 +1684,7 @@ async def test_list_jobs_status_uses_live_counters_not_the_snapshot(
 async def test_list_jobs_status_skips_ended_shifts(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-264 D2 / AC-11: seats on a shift that already ended do not make a job open."""
+    """CR-265 D2 / AC-11: seats on a shift that already ended do not make a job open."""
     await _board_job(
         "job:ended",
         "กะจบแล้ว",
@@ -1704,7 +1704,7 @@ async def test_list_jobs_status_skips_ended_shifts(
 async def test_list_jobs_q_matches_the_skill_display_name(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-264 D3 / AC-12: typing a skill's label finds jobs stored under its code."""
+    """CR-265 D3 / AC-12: typing a skill's label finds jobs stored under its code."""
     await _board_job("job:code", "งานครัว", skills=["cooking"])
     await _board_job("job:other", "งานขับรถ", skills=["driving"])
     collection = PublicJob.get_pymongo_collection().database["public_config"]
@@ -1730,7 +1730,7 @@ async def test_list_jobs_q_matches_the_skill_display_name(
 async def test_jobs_summary_ignores_filters_and_counts_live(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-264 D4/D6 / AC-13: board-wide totals that do not follow the filters or page."""
+    """CR-265 D4/D6 / AC-13: board-wide totals that do not follow the filters or page."""
     await _board_job("job:a", "ว่าง", remaining=5)
     await _board_job("job:b", "ใกล้เต็ม", remaining=2)
     await _board_job("job:c", "เต็ม", remaining=0)

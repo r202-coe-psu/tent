@@ -77,7 +77,7 @@ class PublicJobListResponse(BaseModel):
 
 
 class PublicJobSummaryResponse(BaseModel):
-    """Board-wide counts, independent of any filter or page (CR-264 FR-9)."""
+    """Board-wide counts, independent of any filter or page (CR-265 FR-9)."""
 
     success: bool = True
     total: int = 0

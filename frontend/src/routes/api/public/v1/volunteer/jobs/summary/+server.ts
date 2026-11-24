@@ -13,7 +13,7 @@ export const prerender = false;
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
 /**
- * Board-wide counts for `/volunteers/jobs` (CR-264 FR-9/10/11): total, open, near-full and
+ * Board-wide counts for `/volunteers/jobs` (CR-265 FR-9/10/11): total, open, near-full and
  * controlled jobs, ignoring the board's filters and page. FastAPI answers; CouchDB only while
  * FastAPI is unreachable or failing.
  */

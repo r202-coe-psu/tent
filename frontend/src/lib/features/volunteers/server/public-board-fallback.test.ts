@@ -73,7 +73,7 @@ describe('filterFallbackJobs — same rules as FastAPI (#1470 review W3)', () =>
 	});
 });
 
-describe('filterFallbackJobs — remaining seats (#1470 review B1, CR-264 FR-3)', () => {
+describe('filterFallbackJobs — remaining seats (#1470 review B1, CR-265 FR-3)', () => {
 	// A Couch job doc keeps only `quota` on a fresh shift — no `slots_remaining` yet.
 	const fresh = { date: '2099-01-01', start_time: '08:00', end_time: '12:00', quota: 10 };
 
@@ -141,7 +141,7 @@ describe('boardShelters', () => {
 	});
 });
 
-describe('skill label search and summary (CR-264 D3, FR-9)', () => {
+describe('skill label search and summary (CR-265 D3, FR-9)', () => {
 	it('finds a job by the display name of its skill code', () => {
 		const items = [
 			{ code: 'cooking', label_th: 'ทำอาหาร', label_en: 'Cooking' },

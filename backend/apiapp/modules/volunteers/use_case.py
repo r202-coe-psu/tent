@@ -265,7 +265,7 @@ async def _board_query(
     """Mongo filter for the public board: every parameter narrows (AND).
 
     ``open`` / ``near_full`` are not Mongo clauses: they compare the *live* slot counters and
-    skip ended shifts (CR-264 FR-3), which only :func:`_open_remaining` can do.
+    skip ended shifts (CR-265 FR-3), which only :func:`_open_remaining` can do.
     """
     clauses: list[dict[str, object]] = [{"status": {"$in": sorted(_BOARD_STATUSES)}}]
     if shelter_code:
@@ -279,7 +279,7 @@ async def _board_query(
         matched = await PublicShelter.find(
             {"$or": [{"name": _contains(text)}, {"shelter_code": _contains(text)}]}
         ).to_list()
-        # CR-264 D3: the box also finds a job by the skill's display name (label_th / label_en),
+        # CR-265 D3: the box also finds a job by the skill's display name (label_th / label_en),
         # resolved to the stored skill codes via the projected Master Data.
         label_codes = await _skill_codes_by_label(text)
         clauses.append(
@@ -357,7 +357,7 @@ def _open_remaining(
     by_job: dict[str, VolunteerJobSlot],
     by_shift: dict[tuple[str, str], VolunteerJobShiftSlot],
 ) -> list[int]:
-    """Seats left per shift that has not ended, from the live counters (CR-264 FR-3).
+    """Seats left per shift that has not ended, from the live counters (CR-265 FR-3).
 
     The counters win over the projected snapshot; the snapshot is only the fallback when no
     live row exists yet. A job with no shift rows is judged as a whole.
@@ -710,7 +710,7 @@ class VolunteersUseCase:
         )
 
     async def jobs_summary(self) -> PublicJobSummaryResponse:
-        """Board-wide counts that ignore every filter and page (CR-264 FR-9/10/11)."""
+        """Board-wide counts that ignore every filter and page (CR-265 FR-9/10/11)."""
         controlled = await controlled_skills()
         base: dict[str, object] = {"status": {"$in": sorted(_BOARD_STATUSES)}}
         collection = PublicJob.get_pymongo_collection()
@@ -758,7 +758,7 @@ class VolunteersUseCase:
         )
         now = datetime.now(UTC)
         if job_status in ("open", "near_full"):
-            # CR-264 FR-3 / D1 / D2: judged on live counters, ended shifts never count.
+            # CR-265 FR-3 / D1 / D2: judged on live counters, ended shifts never count.
             by_job_live, by_shift_live = await _live_counters([row["_id"] for row in order_rows])
             upper = None if job_status == "open" else 2
             order_rows = [

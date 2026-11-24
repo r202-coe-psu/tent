@@ -19,7 +19,7 @@ export interface PublicBoardPage<Job = Record<string, unknown>> {
 	shelters: { code: string; name: string }[];
 }
 
-/** Board-wide counts that ignore filters and paging (CR-264 FR-9). */
+/** Board-wide counts that ignore filters and paging (CR-265 FR-9). */
 export interface PublicBoardSummary {
 	total: number;
 	open: number;
