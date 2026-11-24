@@ -281,9 +281,11 @@ async function medicalScreeningEnabled(): Promise<boolean> {
 }
 
 async function portalDepartments(page: Page): Promise<string[]> {
-	return page
+	const ids = await page
 		.locator('h2[id^="portal-dept-"]')
 		.evaluateAll((els) => els.map((el) => el.id.replace('portal-dept-', '')));
+	// #845: the daily assessment tab is open to every role, so it tells roles apart by nothing.
+	return ids.filter((id) => id !== 'dailysop');
 }
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
@@ -514,6 +516,11 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 						? row.portalDepartments.filter((id) => id !== 'registration')
 						: row.portalDepartments
 				);
+			// #845: every role is offered the daily assessment tab, always as the last department.
+			const allDepartments = await page
+				.locator('h2[id^="portal-dept-"]')
+				.evaluateAll((els) => els.map((el) => el.id.replace('portal-dept-', '')));
+			expect(allDepartments.at(-1), 'last portal department').toBe('dailysop');
 			for (const url of row.allowed) await expectLoads(page, url);
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
 			// #1037: the sidebar offers exactly the back-office pages the guards let this role open.
