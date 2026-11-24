@@ -4,6 +4,10 @@
 # Vitest cannot find the importers of a file that no longer exists, so when a non-test file under
 # frontend/ was deleted or renamed this runs the whole suite instead.
 set -eu
+# Git exports GIT_DIR to hooks. In a linked worktree that makes git treat this cwd (frontend/) as
+# the work tree root, so every file outside it looks deleted and the full suite runs. Drop it and
+# let git find the repository from the cwd.
+unset GIT_DIR GIT_WORK_TREE
 base="${TEST_CHANGED_BASE:-origin/develop}"
 
 removed=$(
