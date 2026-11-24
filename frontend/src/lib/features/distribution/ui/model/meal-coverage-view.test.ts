@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
 	attachHouseholdRecorded,
 	attachZones,
-	coverageDayMode,
+	COVERAGE_RANGE_PRESETS,
+	coverageEmptyReasons,
+	coverageTodayNote,
+	otherRecipientTotals,
+	coverageRangeLabel,
+	coverageRangeFor,
+	coverageRangeMode,
 	coverageCounts,
 	coverageResidents,
 	coverageZones,
@@ -24,9 +30,9 @@ const person = (id: string, status: string, since: string) => ({
 });
 
 describe('coverageResidents', () => {
-	it('marks presentAllDay from each evacuee own movements', () => {
+	it('derives each evacuee presence on the day from their own movements', () => {
 		const rows = coverageResidents({
-			day: '2026-11-09',
+			days: ['2026-11-09'],
 			evacuees: [
 				person('evacuee:A', 'active', '2026-11-01T00:00:00Z'),
 				person('evacuee:B', 'active', '2026-11-01T00:00:00Z')
@@ -37,24 +43,24 @@ describe('coverageResidents', () => {
 				{ evacuee_id: 'evacuee:B', action: 'check_out', occurred_at: '2026-11-09T05:00:00Z' }
 			]
 		});
-		expect(rows.map((r) => [r.id, r.presentAllDay])).toEqual([
-			['evacuee:A', true],
-			['evacuee:B', false]
+		expect(rows.map((r) => [r.id, r.presence['2026-11-09']])).toEqual([
+			['evacuee:A', 'all'],
+			['evacuee:B', 'partial']
 		]);
 	});
 
 	it('falls back to current_stay when an evacuee has no movements', () => {
 		const [row] = coverageResidents({
-			day: '2026-11-09',
+			days: ['2026-11-09'],
 			evacuees: [person('evacuee:A', 'active', '2026-11-01T00:00:00Z')],
 			movements: []
 		});
-		expect(row.presentAllDay).toBe(true);
+		expect(row.presence['2026-11-09']).toBe('all');
 	});
 
 	it('names with nickname like the history list', () => {
 		const [row] = coverageResidents({
-			day: '2026-11-09',
+			days: ['2026-11-09'],
 			evacuees: [
 				{
 					...person('evacuee:A', 'active', '2026-11-01T00:00:00Z'),
@@ -82,6 +88,10 @@ const row = (
 	counted: received.length,
 	complete,
 	distributedBy: [],
+	judgedDays: 1,
+	shortDays: complete ? 0 : 1,
+	partialDays: 0,
+	mealsReceived: received.length,
 	zone: null
 });
 const none = row('a', 'ศศิ', []);
@@ -92,7 +102,7 @@ const complete = row('e', 'บุญ', ['breakfast', 'lunch'], true);
 describe('coverageResidents zone', () => {
 	it('carries the current stay zone and attachZones joins it onto coverage rows', () => {
 		const residents = coverageResidents({
-			day: '2026-11-09',
+			days: ['2026-11-09'],
 			evacuees: [
 				{
 					...person('evacuee:A', 'active', '2026-11-01T00:00:00Z'),
@@ -111,7 +121,11 @@ describe('coverageResidents zone', () => {
 					missing: [],
 					counted: 0,
 					complete: false,
-					distributedBy: []
+					distributedBy: [],
+					judgedDays: 1,
+					shortDays: 1,
+					partialDays: 0,
+					mealsReceived: 0
 				},
 				{
 					id: 'evacuee:B',
@@ -120,7 +134,11 @@ describe('coverageResidents zone', () => {
 					missing: [],
 					counted: 0,
 					complete: false,
-					distributedBy: []
+					distributedBy: [],
+					judgedDays: 1,
+					shortDays: 1,
+					partialDays: 0,
+					mealsReceived: 0
 				}
 			],
 			residents
@@ -136,7 +154,8 @@ describe('coverageCounts', () => {
 			complete: 1,
 			incomplete: 3,
 			partial: 2,
-			none: 1
+			none: 1,
+			part_day: 0
 		});
 	});
 	it('does not count a complete row with one meal as partial (threshold 1)', () => {
@@ -146,11 +165,19 @@ describe('coverageCounts', () => {
 			complete: 1,
 			incomplete: 0,
 			partial: 0,
-			none: 0
+			none: 0,
+			part_day: 0
 		});
 	});
 	it('is zero for no rows', () => {
-		expect(coverageCounts([])).toEqual({ all: 0, complete: 0, incomplete: 0, partial: 0, none: 0 });
+		expect(coverageCounts([])).toEqual({
+			all: 0,
+			complete: 0,
+			incomplete: 0,
+			partial: 0,
+			none: 0,
+			part_day: 0
+		});
 	});
 });
 
@@ -223,6 +250,10 @@ describe('zone filter', () => {
 		counted: 0,
 		complete: false,
 		distributedBy: [],
+		judgedDays: 1,
+		shortDays: 1,
+		partialDays: 0,
+		mealsReceived: 0,
 		zone
 	});
 	const rows = [row('a', 'Z2'), row('b', 'Z1'), row('c', null), row('d', 'Z2')];
@@ -252,7 +283,7 @@ describe('coverageResidents on the selected day', () => {
 
 	it('uses the zone of the day, not the zone after a later move', () => {
 		const [row] = coverageResidents({
-			day: '2026-11-09',
+			days: ['2026-11-09'],
 			evacuees: [evacuee],
 			movements: [
 				{
@@ -273,15 +304,15 @@ describe('coverageResidents on the selected day', () => {
 	});
 
 	it('falls back to the current zone when no movement names one', () => {
-		const [row] = coverageResidents({ day: '2026-11-09', evacuees: [evacuee], movements: [] });
+		const [row] = coverageResidents({ days: ['2026-11-09'], evacuees: [evacuee], movements: [] });
 		expect(row.zone).toBe('NEW');
 	});
 
 	it('carries the household id', () => {
-		const [row] = coverageResidents({ day: '2026-11-09', evacuees: [evacuee], movements: [] });
+		const [row] = coverageResidents({ days: ['2026-11-09'], evacuees: [evacuee], movements: [] });
 		expect(row.householdId).toBe('household:1');
 		const [lone] = coverageResidents({
-			day: '2026-11-09',
+			days: ['2026-11-09'],
 			evacuees: [person('evacuee:B', 'active', '2026-11-01T00:00:00Z')],
 			movements: []
 		});
@@ -289,20 +320,187 @@ describe('coverageResidents on the selected day', () => {
 	});
 });
 
-describe('coverageDayMode', () => {
-	it('tells a finished day, today, and an unusable value apart', () => {
-		expect(coverageDayMode('2026-11-09', '2026-11-10')).toEqual({
-			kind: 'past',
-			day: '2026-11-09'
+describe('coverageRangeMode', () => {
+	it('lists every day of a usable range and says whether it is one day or includes today', () => {
+		expect(coverageRangeMode('2026-11-08', '2026-11-10', '2026-11-10')).toEqual({
+			kind: 'valid',
+			from: '2026-11-08',
+			to: '2026-11-10',
+			days: ['2026-11-08', '2026-11-09', '2026-11-10'],
+			single: false,
+			includesToday: true
 		});
-		expect(coverageDayMode('2026-11-10', '2026-11-10')).toEqual({
-			kind: 'today',
-			day: '2026-11-10'
+		expect(coverageRangeMode('2026-11-09', '2026-11-09', '2026-11-10')).toMatchObject({
+			kind: 'valid',
+			days: ['2026-11-09'],
+			single: true,
+			includesToday: false
 		});
-		expect(coverageDayMode('2026-11-11', '2026-11-10')).toEqual({ kind: 'invalid' });
-		expect(coverageDayMode('', '2026-11-10')).toEqual({ kind: 'invalid' });
-		expect(coverageDayMode('2026-02-31', '2026-11-10')).toEqual({ kind: 'invalid' });
-		expect(coverageDayMode('10/11/2026', '2026-11-10')).toEqual({ kind: 'invalid' });
+	});
+
+	it('rejects a day in the future, a reversed range and values that are not days', () => {
+		const bad = { kind: 'invalid' };
+		expect(coverageRangeMode('2026-11-09', '2026-11-11', '2026-11-10')).toEqual(bad);
+		expect(coverageRangeMode('2026-11-10', '2026-11-09', '2026-11-10')).toEqual(bad);
+		expect(coverageRangeMode('', '2026-11-10', '2026-11-10')).toEqual(bad);
+		expect(coverageRangeMode('2026-02-31', '2026-02-31', '2026-11-10')).toEqual(bad);
+		expect(coverageRangeMode('10/11/2026', '2026-11-10', '2026-11-10')).toEqual(bad);
+	});
+
+	it('has no limit on the length of a range', () => {
+		const mode = coverageRangeMode('2025-01-01', '2026-11-10', '2026-11-10');
+		expect(mode.kind === 'valid' && mode.days.length).toBe(679);
+	});
+});
+
+describe('coverageRangeFor (presets)', () => {
+	const today = '2026-11-10';
+	it('offers today first, then yesterday, 7, 14, 30 days and a custom range', () => {
+		expect(COVERAGE_RANGE_PRESETS).toEqual(['today', 'yesterday', '7d', '14d', '30d', 'custom']);
+	});
+
+	it('maps each preset to its days, N days counting today', () => {
+		expect(coverageRangeFor('today', today)).toEqual({ from: '2026-11-10', to: '2026-11-10' });
+		expect(coverageRangeFor('yesterday', today)).toEqual({ from: '2026-11-09', to: '2026-11-09' });
+		expect(coverageRangeFor('7d', today)).toEqual({ from: '2026-11-04', to: '2026-11-10' });
+		expect(coverageRangeFor('14d', today)).toEqual({ from: '2026-10-28', to: '2026-11-10' });
+		expect(coverageRangeFor('30d', today)).toEqual({ from: '2026-10-12', to: '2026-11-10' });
+	});
+
+	it('passes a custom range through, and has none until one is picked', () => {
+		expect(coverageRangeFor('custom', today, { from: '2026-11-01', to: '2026-11-03' })).toEqual({
+			from: '2026-11-01',
+			to: '2026-11-03'
+		});
+		expect(coverageRangeFor('custom', today)).toBeNull();
+	});
+});
+
+describe('coverageEmptyReasons', () => {
+	const base = {
+		single: true,
+		includesToday: false,
+		judgedPeople: 3,
+		logCount: 5
+	};
+
+	it('has nothing to say when there is data', () => {
+		expect(coverageEmptyReasons(base)).toEqual([]);
+	});
+
+	it('explains nobody being in the shelter all day, for one day and for a range', () => {
+		expect(coverageEmptyReasons({ ...base, judgedPeople: 0 })).toEqual([
+			'ไม่มีผู้ที่อยู่ในศูนย์ตลอดทั้งวันนี้'
+		]);
+		expect(coverageEmptyReasons({ ...base, includesToday: true, judgedPeople: 0 })).toEqual([
+			'ไม่มีผู้ที่อยู่ในศูนย์ตั้งแต่ 00:00 ถึงตอนนี้'
+		]);
+		expect(coverageEmptyReasons({ ...base, single: false, judgedPeople: 0 })).toEqual([
+			'ไม่มีผู้ที่อยู่ในศูนย์ตลอดทั้งวันในช่วงนี้'
+		]);
+	});
+
+	it('explains a range with no distribution logs', () => {
+		expect(coverageEmptyReasons({ ...base, logCount: 0 })).toEqual(['ไม่มีการแจกจ่ายในช่วงนี้']);
+	});
+
+	it('lists every reason that applies', () => {
+		expect(
+			coverageEmptyReasons({ ...base, single: false, judgedPeople: 0, logCount: 0 })
+		).toHaveLength(2);
+	});
+});
+
+describe('coverageResidents over a range', () => {
+	const days = ['2026-11-08', '2026-11-09', '2026-11-10'];
+	const evacuee = {
+		...person('evacuee:A', 'active', '2026-11-01T00:00:00Z'),
+		current_stay: { status: 'active', since: '2026-11-01T00:00:00Z', zone: 'NEW' }
+	};
+
+	it('gives the presence of every day: all, partial or none', () => {
+		const [row] = coverageResidents({
+			days,
+			evacuees: [evacuee],
+			movements: [
+				{ evacuee_id: 'evacuee:A', action: 'check_in', occurred_at: '2026-11-09T03:00:00Z' }
+			]
+		});
+		expect(row.presence).toEqual({
+			'2026-11-08': 'none',
+			'2026-11-09': 'partial',
+			'2026-11-10': 'all'
+		});
+	});
+
+	it('takes the zone at the end of the last day of the range', () => {
+		const [row] = coverageResidents({
+			days,
+			evacuees: [evacuee],
+			movements: [
+				{
+					evacuee_id: 'evacuee:A',
+					action: 'check_in',
+					zone: 'OLD',
+					occurred_at: '2026-11-01T00:00:00Z'
+				},
+				{
+					evacuee_id: 'evacuee:A',
+					action: 'zone_change',
+					zone: 'MID',
+					occurred_at: '2026-11-09T03:00:00Z'
+				},
+				{
+					evacuee_id: 'evacuee:A',
+					action: 'zone_change',
+					zone: 'NEW',
+					occurred_at: '2026-11-11T03:00:00Z'
+				}
+			]
+		});
+		expect(row.zone).toBe('MID');
+	});
+});
+
+describe('rows of people who were in the shelter only part of the day', () => {
+	const partDay: CoverageListRow = {
+		...row('p', 'ปราณี', ['breakfast']),
+		counted: 0,
+		judgedDays: 0,
+		shortDays: 0,
+		partialDays: 1
+	};
+
+	it('are in everyone but never in the complete, partial or none counts', () => {
+		expect(coverageCounts([none, complete, partDay])).toEqual({
+			all: 2,
+			complete: 1,
+			incomplete: 1,
+			partial: 0,
+			none: 1,
+			part_day: 1
+		});
+	});
+
+	it('can be filtered on their own and stay out of the incomplete filter', () => {
+		const rows = [none, complete, partDay];
+		expect(filterCoverageRows(rows, { filter: 'part_day', query: '' })).toEqual([partDay]);
+		expect(filterCoverageRows(rows, { filter: 'incomplete', query: '' })).toEqual([none]);
+		expect(filterCoverageRows(rows, { filter: 'all', query: '' })).toEqual(rows);
+	});
+
+	it('sort after the complete rows', () => {
+		expect(sortCoverageRows([partDay, complete, none]).map((r) => r.id)).toEqual(['a', 'e', 'p']);
+	});
+
+	it('keep a judged row that also has a part day in its own status', () => {
+		const mixed = { ...none, id: 'm', partialDays: 2 };
+		expect(coverageCounts([mixed]).none).toBe(1);
+		expect(coverageCounts([mixed]).part_day).toBe(1);
+	});
+
+	it('are left out of the zone coverage', () => {
+		expect(coverageByZone([{ ...partDay, zone: 'Z1' }])).toEqual([]);
 	});
 });
 
@@ -318,7 +516,7 @@ describe('attachHouseholdRecorded', () => {
 		id,
 		name: id,
 		zone: null,
-		presentAllDay: true,
+		presence: { [DAY]: 'all' as const },
 		householdId
 	});
 	const log = (id: string, meal: string, extra: Record<string, unknown> = {}) => ({
@@ -400,6 +598,10 @@ describe('coverageByZone', () => {
 		counted: complete ? 2 : 0,
 		complete,
 		distributedBy: [],
+		judgedDays: 1,
+		shortDays: complete ? 0 : 1,
+		partialDays: 0,
+		mealsReceived: 0,
 		zone
 	});
 
@@ -427,5 +629,96 @@ describe('coverageLevel', () => {
 			'poor',
 			'poor'
 		]);
+	});
+});
+
+describe('coverageRangeLabel', () => {
+	it('writes one day with its Buddhist year', () => {
+		expect(coverageRangeLabel('2026-11-24', '2026-11-24')).toBe('24 พ.ย. 2569');
+	});
+
+	it('shares the month and year inside one month', () => {
+		expect(coverageRangeLabel('2026-11-18', '2026-11-24')).toBe('18–24 พ.ย. 2569');
+	});
+
+	it('names both months across months of one year, and both years across years', () => {
+		expect(coverageRangeLabel('2026-10-28', '2026-11-24')).toBe('28 ต.ค. – 24 พ.ย. 2569');
+		expect(coverageRangeLabel('2025-12-30', '2026-01-02')).toBe('30 ธ.ค. 2568 – 2 ม.ค. 2569');
+	});
+});
+
+describe('otherRecipientTotals', () => {
+	const tally = (records: number, portions: number) => ({ records, portions });
+	const zero = tally(0, 0);
+	const meals = [
+		{ meal: 'breakfast' as const, outside: tally(7, 10), volunteer: tally(1, 3), staff: zero },
+		{ meal: 'lunch' as const, outside: tally(4, 6), volunteer: zero, staff: zero },
+		{ meal: 'dinner' as const, outside: zero, volunteer: zero, staff: zero }
+	];
+
+	it('sums each group over the meals: portions, records and both per meal', () => {
+		expect(otherRecipientTotals(meals)).toEqual([
+			{
+				group: 'outside',
+				portions: 16,
+				records: 11,
+				byMeal: { breakfast: tally(7, 10), lunch: tally(4, 6), dinner: zero }
+			},
+			{
+				group: 'volunteer',
+				portions: 3,
+				records: 1,
+				byMeal: { breakfast: tally(1, 3), lunch: zero, dinner: zero }
+			},
+			{
+				group: 'staff',
+				portions: 0,
+				records: 0,
+				byMeal: { breakfast: zero, lunch: zero, dinner: zero }
+			}
+		]);
+	});
+
+	it('keeps all three groups, zeros included, for no hand-overs', () => {
+		expect(otherRecipientTotals([]).map((g) => [g.group, g.portions, g.records])).toEqual([
+			['outside', 0, 0],
+			['volunteer', 0, 0],
+			['staff', 0, 0]
+		]);
+	});
+});
+
+describe('coverageTodayNote', () => {
+	it('says nothing has been handed out yet when no meal is served', () => {
+		expect(coverageTodayNote([])).toBe(
+			'วันนี้ยังไม่ได้แจกมื้อใด · ตัวเลขของวันนี้จะเริ่มนับเมื่อแจกมื้อเช้า'
+		);
+	});
+
+	it('names the one served meal and the next meal that can make 2', () => {
+		expect(coverageTodayNote(['breakfast'])).toBe(
+			'วันนี้แจกแล้ว 1 จาก 3 มื้อ (เช้า) · ยังไม่มีใครรับครบ 2 มื้อได้จนกว่าจะแจกมื้อกลางวัน'
+		);
+	});
+
+	it('takes the first unserved meal as next, whatever order meals were served in', () => {
+		expect(coverageTodayNote(['lunch'])).toBe(
+			'วันนี้แจกแล้ว 1 จาก 3 มื้อ (กลางวัน) · ยังไม่มีใครรับครบ 2 มื้อได้จนกว่าจะแจกมื้อเช้า'
+		);
+		expect(coverageTodayNote(['dinner'])).toContain('(เย็น)');
+	});
+
+	it('says who can still catch up in the remaining meal when two are served', () => {
+		expect(coverageTodayNote(['breakfast', 'lunch'])).toBe(
+			'วันนี้แจกแล้ว 2 จาก 3 มื้อ (เช้า, กลางวัน) · ผู้ที่ยังรับไม่ครบเกณฑ์ยังรับได้ในมื้อเย็น'
+		);
+		expect(coverageTodayNote(['dinner', 'breakfast'])).toBe(
+			'วันนี้แจกแล้ว 2 จาก 3 มื้อ (เช้า, เย็น) · ผู้ที่ยังรับไม่ครบเกณฑ์ยังรับได้ในมื้อกลางวัน'
+		);
+	});
+
+	it('has no note once all three meals are served, and ignores a snack', () => {
+		expect(coverageTodayNote(['breakfast', 'lunch', 'dinner'])).toBeNull();
+		expect(coverageTodayNote(['snack'])).toContain('วันนี้ยังไม่ได้แจกมื้อใด');
 	});
 });

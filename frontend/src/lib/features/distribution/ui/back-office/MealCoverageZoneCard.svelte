@@ -33,10 +33,13 @@
 			ความครบรายโซน
 		</Card.Title>
 		<Card.Description class="text-sm text-slate-500">
-			ได้รับครบเทียบผู้ที่อยู่ในโซน เรียงโซนที่ครบน้อยสุดก่อน
+			รับครบเกณฑ์เทียบผู้ที่อยู่ในโซน เรียงโซนที่ครบน้อยสุดก่อน
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="px-4 sm:px-5">
+		{#if zones.length === 0}
+			<p class="text-sm text-slate-500">ไม่มีผู้ที่อยู่ในศูนย์ในช่วงนี้</p>
+		{/if}
 		<ul class="space-y-3">
 			{#each zones as z (z.zone ?? '')}
 				{@const level = coverageLevel(z.percent)}

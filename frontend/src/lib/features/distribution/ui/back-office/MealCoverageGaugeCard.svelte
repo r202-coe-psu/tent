@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Gauge from '@lucide/svelte/icons/gauge';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { MIN_MEALS_PER_DAY } from '../../domain/food-supplies/meal-coverage';
 	import { coverageLevel, type CoverageLevel } from '../model/meal-coverage-view';
 
 	interface Props {
@@ -8,12 +9,11 @@
 		complete: number;
 		partial: number;
 		none: number;
-		/** Records a person needs; names the "complete" group. */
-		threshold: number;
-		showPartial: boolean;
+		/** The report covers several days: the legend says "every day" instead of a meal count. */
+		multiDay: boolean;
 	}
 
-	let { present, complete, partial, none, threshold, showPartial }: Props = $props();
+	let { present, complete, partial, none, multiDay }: Props = $props();
 
 	const RADIUS = 52;
 	const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
@@ -31,14 +31,22 @@
 	const legend = $derived([
 		{
 			id: 'complete',
-			label: `ได้รับครบ ${threshold} มื้อ`,
+			label: `รับครบเกณฑ์ (${MIN_MEALS_PER_DAY} มื้อ/วัน)`,
 			count: complete,
 			dot: 'bg-emerald-500'
 		},
-		...(showPartial
-			? [{ id: 'partial', label: 'มีบันทึก 1 มื้อ', count: partial, dot: 'bg-amber-500' }]
-			: []),
-		{ id: 'none', label: 'ยังไม่มีบันทึกเลย', count: none, dot: 'bg-red-500' }
+		{
+			id: 'partial',
+			label: multiDay ? 'รับไม่ครบเกณฑ์ – มีบันทึกบ้าง' : 'รับไม่ครบเกณฑ์ – รับแล้ว 1 มื้อ',
+			count: partial,
+			dot: 'bg-amber-500'
+		},
+		{
+			id: 'none',
+			label: 'รับไม่ครบเกณฑ์ – ยังไม่มีบันทึกรับ',
+			count: none,
+			dot: 'bg-red-500'
+		}
 	]);
 </script>
 
@@ -53,7 +61,7 @@
 		<div
 			class="relative size-36 shrink-0"
 			role="img"
-			aria-label="ได้รับครบ {completePercent}% ({complete} จาก {present} คน)"
+			aria-label="รับครบเกณฑ์ {completePercent}% ({complete} จาก {present} คน)"
 		>
 			<svg viewBox="0 0 120 120" class="size-full -rotate-90" aria-hidden="true">
 				<circle cx="60" cy="60" r={RADIUS} fill="none" stroke-width="12" class="stroke-slate-100" />
@@ -73,6 +81,9 @@
 				<span class="text-xs text-slate-500">{complete} / {present} คน</span>
 			</div>
 		</div>
+		{#if present === 0}
+			<p class="text-center text-sm text-slate-500">ไม่มีผู้ที่อยู่ในศูนย์ในช่วงนี้</p>
+		{/if}
 		<ul class="w-full space-y-1.5 text-sm">
 			{#each legend as item (item.id)}
 				<li class="flex items-center gap-2">

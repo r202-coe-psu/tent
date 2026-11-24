@@ -24,12 +24,12 @@
 			ผู้แจกอาหาร
 		</Card.Title>
 		<Card.Description class="text-sm text-slate-500">
-			จำนวนชุดที่แต่ละคนบันทึกแจกในวันที่เลือก
+			จำนวนชุดที่แต่ละคนบันทึกแจกในช่วงที่เลือก
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="px-4 sm:px-5">
 		{#if distributors.length === 0}
-			<p class="text-sm text-slate-500">ยังไม่มีบันทึกการแจกของวันนี้</p>
+			<p class="text-sm text-slate-500">ไม่มีการแจกจ่ายในช่วงนี้</p>
 		{:else}
 			<ol class="space-y-3">
 				{#each shown as d, i (d.by)}

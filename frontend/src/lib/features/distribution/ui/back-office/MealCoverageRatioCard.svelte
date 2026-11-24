@@ -19,7 +19,7 @@
 	interface Props {
 		title: string;
 		description: string;
-		unit: 'ชุด' | 'คน';
+		unit: 'ชุด' | 'คน' | 'คน-วัน';
 		/** Legend and tooltip name of the muted bar (the denominator). */
 		totalLabel: string;
 		/** Legend and tooltip name of the accent bar. */
@@ -30,6 +30,8 @@
 		rows: readonly RatioRow[];
 		/** A last footer cell, e.g. people with enough meals on record. */
 		summary?: { label: string; done: number; total: number };
+		/** Shown in place of the chart when no meal has anything to count. */
+		emptyMessage: string;
 	}
 
 	let {
@@ -41,7 +43,8 @@
 		icon: Icon,
 		accent,
 		rows,
-		summary
+		summary,
+		emptyMessage
 	}: Props = $props();
 
 	const uid = $props.id();
@@ -57,6 +60,8 @@
 	const chartData = $derived(
 		rows.map((r) => ({ meal: getMealPeriodLabel(r.meal), total: r.total ?? 0, done: r.done }))
 	);
+
+	const isEmpty = $derived(rows.every((r) => r.done === 0 && (r.total ?? 0) === 0));
 
 	const percent = (done: number, total: number | null) =>
 		total === null || total <= 0 ? null : Math.round((done / total) * 100);
@@ -111,49 +116,57 @@
 				<span class="size-3 rounded-full" style="background-color: {accent}"></span>{doneLabel}
 			</span>
 		</div>
-		<div aria-hidden="true">
-			<Chart.Container config={chartConfig} class="h-56 w-full">
-				<BarChart
-					data={chartData}
-					x="meal"
-					y={['total', 'done']}
-					series={[
-						{ key: 'total', value: 'total', color: MUTED },
-						{ key: 'done', value: 'done', color: accent }
-					]}
-					seriesLayout="group"
-					xScale={scaleBand().paddingInner(0.2).paddingOuter(0.1)}
-					padding={{ left: 32, bottom: 28 }}
-					props={{
-						bars: { radius: 4, strokeWidth: 0 },
-						xAxis: { tickLabelProps: { class: 'text-xs fill-muted-foreground', dy: 10 } },
-						yAxis: {
-							format: (d: number) => (Number.isInteger(d) ? d.toString() : ''),
-							tickLabelProps: { class: 'text-xs fill-muted-foreground', dx: -10 }
-						},
-						grid: { x: false, y: true, class: 'stroke-border stroke-1 stroke-dasharray-4' }
-					}}
-				>
-					{#snippet tooltip()}
-						<Chart.Tooltip>
-							{#snippet formatter({ value, name, item })}
-								<div
-									class="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-									style="background-color: {chartConfig[item.key as keyof typeof chartConfig]
-										?.color}"
-								></div>
-								<div class="flex flex-1 items-center justify-between gap-4 leading-none">
-									<span class="text-muted-foreground">
-										{chartConfig[item.key as keyof typeof chartConfig]?.label ?? name}
-									</span>
-									<span class="font-medium text-foreground tabular-nums">{value} {unit}</span>
-								</div>
-							{/snippet}
-						</Chart.Tooltip>
-					{/snippet}
-				</BarChart>
-			</Chart.Container>
-		</div>
+		{#if isEmpty}
+			<div
+				class="flex h-56 w-full items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-500"
+			>
+				{emptyMessage}
+			</div>
+		{:else}
+			<div aria-hidden="true">
+				<Chart.Container config={chartConfig} class="h-56 w-full">
+					<BarChart
+						data={chartData}
+						x="meal"
+						y={['total', 'done']}
+						series={[
+							{ key: 'total', value: 'total', color: MUTED },
+							{ key: 'done', value: 'done', color: accent }
+						]}
+						seriesLayout="group"
+						xScale={scaleBand().paddingInner(0.2).paddingOuter(0.1)}
+						padding={{ left: 32, bottom: 28 }}
+						props={{
+							bars: { radius: 4, strokeWidth: 0 },
+							xAxis: { tickLabelProps: { class: 'text-xs fill-muted-foreground', dy: 10 } },
+							yAxis: {
+								format: (d: number) => (Number.isInteger(d) ? d.toString() : ''),
+								tickLabelProps: { class: 'text-xs fill-muted-foreground', dx: -10 }
+							},
+							grid: { x: false, y: true, class: 'stroke-border stroke-1 stroke-dasharray-4' }
+						}}
+					>
+						{#snippet tooltip()}
+							<Chart.Tooltip>
+								{#snippet formatter({ value, name, item })}
+									<div
+										class="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+										style="background-color: {chartConfig[item.key as keyof typeof chartConfig]
+											?.color}"
+									></div>
+									<div class="flex flex-1 items-center justify-between gap-4 leading-none">
+										<span class="text-muted-foreground">
+											{chartConfig[item.key as keyof typeof chartConfig]?.label ?? name}
+										</span>
+										<span class="font-medium text-foreground tabular-nums">{value} {unit}</span>
+									</div>
+								{/snippet}
+							</Chart.Tooltip>
+						{/snippet}
+					</BarChart>
+				</Chart.Container>
+			</div>
+		{/if}
 		<dl
 			class="mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 sm:grid-cols-(--cols)"
 			style="--cols: repeat({cells.length}, minmax(0, 1fr))"

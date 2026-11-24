@@ -5,6 +5,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { MIN_MEALS_PER_DAY } from '../../domain/food-supplies/meal-coverage';
 	import { ALL_ZONES, type CoverageFilter } from '../model/meal-coverage-view';
 
 	interface Props {
@@ -14,10 +15,8 @@
 		zones: readonly { value: string; label: string }[];
 		shown: number;
 		total: number;
-		/** Whether a "one meal" status exists (it does not when only one record is needed). */
-		showPartial: boolean;
-		/** Records a person needs; names the "not enough" option. */
-		threshold: number;
+		/** The report covers several days: statuses speak of days, not of one day's meals. */
+		multiDay: boolean;
 		onExport: () => void;
 		onQueryChange: (query: string) => void;
 		onFilterChange: (filter: CoverageFilter) => void;
@@ -31,24 +30,23 @@
 		zones,
 		shown,
 		total,
-		showPartial,
-		threshold,
+		multiDay,
 		onExport,
 		onQueryChange,
 		onFilterChange,
 		onZoneChange
 	}: Props = $props();
 
+	// The same options on every day and range: an option nobody matches just gives the empty row.
 	const FILTER_LABELS = $derived<Record<CoverageFilter, string>>({
-		all: 'ทุกสถานะ',
-		complete: 'ได้รับครบ',
-		incomplete: `ยังไม่ถึง ${threshold} มื้อ`,
-		partial: 'มีบันทึก 1 มื้อ',
-		none: 'ยังไม่มีบันทึกเลย'
+		all: 'ทั้งหมด',
+		complete: `รับครบเกณฑ์ (${MIN_MEALS_PER_DAY} มื้อ/วัน)`,
+		incomplete: 'รับไม่ครบเกณฑ์',
+		partial: multiDay ? 'รับไม่ครบเกณฑ์ – มีบันทึกบ้าง' : 'รับไม่ครบเกณฑ์ – รับแล้ว 1 มื้อ',
+		none: 'รับไม่ครบเกณฑ์ – ยังไม่มีบันทึกรับ',
+		part_day: 'อยู่ในศูนย์ไม่เต็มวัน (ไม่นับเกณฑ์)'
 	});
-	const FILTERS = $derived(
-		(Object.keys(FILTER_LABELS) as CoverageFilter[]).filter((f) => showPartial || f !== 'partial')
-	);
+	const FILTERS = $derived(Object.keys(FILTER_LABELS) as CoverageFilter[]);
 
 	const zoneText = $derived(
 		zone === ALL_ZONES ? 'ทุกโซน' : (zones.find((z) => z.value === zone)?.label ?? zone)
@@ -59,7 +57,7 @@
 </script>
 
 <div
-	class="grid grid-cols-1 gap-3 border-b border-slate-200/80 px-4 py-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end"
+	class="grid grid-cols-1 items-end gap-3 border-b border-slate-200/80 px-4 py-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
 >
 	<div class="min-w-0 space-y-1.5 sm:col-span-2 lg:col-span-1">
 		<Label for="meal-coverage-search" class={fieldLabel}>ค้นหา</Label>

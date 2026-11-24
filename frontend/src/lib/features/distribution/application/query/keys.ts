@@ -19,8 +19,8 @@ export const distributionKeys = {
 	logs: (shelterCode: string, filter?: DistributionLogListFilter) =>
 		[...distributionKeys.shelter(shelterCode), 'logs', filter ?? {}] as const,
 	/** Under `logs` so `invalidateDistributionLogs` refreshes it too. */
-	logsByDay: (shelterCode: string, day: string) =>
-		[...distributionKeys.shelter(shelterCode), 'logs', 'by-day', day] as const,
+	logsByRange: (shelterCode: string, from: string, to: string) =>
+		[...distributionKeys.shelter(shelterCode), 'logs', 'by-range', from, to] as const,
 	/** Under `logs` so `invalidateDistributionLogs` refreshes it too (#1154). */
 	recipientsLogs: (shelterCode: string, recipientIds: readonly string[]) =>
 		[...distributionKeys.shelter(shelterCode), 'logs', 'recipients', [...recipientIds]] as const,
