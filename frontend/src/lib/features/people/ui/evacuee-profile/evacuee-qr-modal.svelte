@@ -225,6 +225,12 @@
 				{/if}
 			</div>
 
+			{#snippet loadingPreview()}
+				<div class="size-full animate-pulse bg-slate-100" role="status" aria-busy="true">
+					<span class="sr-only">{t.loadingQr}</span>
+				</div>
+			{/snippet}
+
 			<!-- Label preview: the same image that prints -->
 			<figure class="rounded-xl border border-slate-200/80 bg-slate-50 p-3 sm:p-4">
 				<div
@@ -232,7 +238,7 @@
 				>
 					{#if labelPng}
 						{#await labelPng}
-							<div class="size-full animate-pulse bg-slate-100"></div>
+							{@render loadingPreview()}
 						{:then png}
 							<img
 								src="data:image/png;base64,{png}"
@@ -253,7 +259,7 @@
 							{t.currentQrLoadFailed}
 						</div>
 					{:else}
-						<div class="size-full animate-pulse bg-slate-100"></div>
+						{@render loadingPreview()}
 					{/if}
 				</div>
 				<figcaption class="mt-3 text-center text-sm text-slate-500">
