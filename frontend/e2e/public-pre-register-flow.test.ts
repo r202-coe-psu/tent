@@ -1374,17 +1374,6 @@ test.describe(
 	'Pre-register: server and page-level errors (S)',
 	{ tag: ['@pre-register', '@smoke'] },
 	() => {
-		// The send is intercepted below, but the real reCAPTCHA gate still runs first and fails
-		// in a browser without a Google token — switch it off for the group, restore afterwards.
-		let restoreRecaptcha: (() => Promise<void>) | undefined;
-		test.beforeAll(async ({ browser }) => {
-			if (!CAN_WRITE) return;
-			restoreRecaptcha = await suspendRecaptcha(browser);
-		});
-		test.afterAll(async () => {
-			await restoreRecaptcha?.();
-		});
-
 		/** Fill the central-queue form with valid data; the POST is intercepted by the caller. */
 		async function fillValidQueueForm(page: Page) {
 			await openPreRegister(page);
