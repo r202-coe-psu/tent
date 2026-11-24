@@ -1,7 +1,7 @@
 /**
  * The public job board's CouchDB fallback (used only while FastAPI is unreachable or failing):
- * the same filters, order and shelter list FastAPI computes in Mongo (draft
- * public-jobs-db-filter FR-2/3/5/6, CR-215 FR-4), applied to jobs already held in memory so the
+ * the same filters, order and shelter list FastAPI computes in Mongo (CR-265
+ * FR-2/3/5/6, CR-215 FR-4), applied to jobs already held in memory so the
  * response matches either way (#1470 review W3).
  *
  * Server-only and pure: no I/O, no Svelte. Routes import it by path, not through the barrel,
