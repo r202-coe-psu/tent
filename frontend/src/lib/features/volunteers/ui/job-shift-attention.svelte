@@ -45,7 +45,7 @@
 
 <div class="rounded-xl bg-muted/35 p-3">
 	<div class="mb-2 flex items-center justify-between gap-2">
-		<span class="text-[11px] font-semibold text-muted-foreground">ความคืบหน้ารายกะ</span>
+		<span class="text-[11px] font-semibold text-muted-foreground">ความคืบหน้าโควตา</span>
 		<span class="text-[11px] text-muted-foreground tabular-nums">
 			รวม {attention.totalConfirmed}/{attention.totalTarget}
 		</span>
