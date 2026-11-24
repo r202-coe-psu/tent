@@ -228,7 +228,6 @@ export {
 
 export {
 	buildEvacueeQrLabel,
-	EVACUEE_QR_PLACEHOLDER_PAYLOAD,
 	type EvacueeQrLabel,
 	type EvacueeQrLabelInput
 } from './domain/evacuee-qr-label';
