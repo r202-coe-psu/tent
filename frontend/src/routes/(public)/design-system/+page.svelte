@@ -554,7 +554,7 @@
 					<div class="font-mono text-xs font-bold tracking-wider text-blue-600/70">03 / TYPE</div>
 					<h3 class="text-base font-bold text-slate-900">Large & Readable</h3>
 					<p class="text-xs leading-relaxed text-slate-500">
-						IBM Plex Sans Thai Looped ชัดเจนระยะ 1 เมตร พร้อม tabular-nums สำหรับจัดหลักตัวเลข
+						Noto Sans Thai Looped ชัดเจนระยะ 1 เมตร พร้อม tabular-nums สำหรับจัดหลักตัวเลข
 					</p>
 				</div>
 

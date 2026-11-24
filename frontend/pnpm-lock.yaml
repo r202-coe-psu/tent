@@ -203,6 +203,9 @@ importers:
       '@fontsource/ibm-plex-sans-thai-looped':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource/noto-sans-thai-looped':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@google-cloud/recaptcha-enterprise':
         specifier: ^7.2.0
         version: 7.2.0(supports-color@10.2.2)
@@ -686,6 +689,9 @@ packages:
 
   '@fontsource/ibm-plex-sans-thai@5.3.0':
     resolution: {integrity: sha512-olXzgcA/CTk0PibqGMJrheml3/z8N9VzNLcHkzv9tCoBqnaMoxYYwZp4PZrDkPuOCUe1gW942e9f5fGOOlr3zg==}
+
+  '@fontsource/noto-sans-thai-looped@5.3.0':
+    resolution: {integrity: sha512-10a1WIfSNARWUlkiHC709gUF92WyduKdspctM352s3WLt7EXVlf7HwQycjpQ3j17AfCZG/upu4mUtGADF+ppaw==}
 
   '@google-cloud/recaptcha-enterprise@7.2.0':
     resolution: {integrity: sha512-hovCLtW7DJYq2WkTVXumY8o9paFH1scHGYpsI0UIkVh+O9qdl570Gm294rMfaZHv/gOQPZS+anUunFSXkhYH2g==}
@@ -4107,6 +4113,8 @@ snapshots:
   '@fontsource/ibm-plex-sans-thai-looped@5.3.0': {}
 
   '@fontsource/ibm-plex-sans-thai@5.3.0': {}
+
+  '@fontsource/noto-sans-thai-looped@5.3.0': {}
 
   '@google-cloud/recaptcha-enterprise@7.2.0(supports-color@10.2.2)':
     dependencies:
