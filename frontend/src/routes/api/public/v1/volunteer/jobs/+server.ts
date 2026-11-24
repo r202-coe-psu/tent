@@ -123,8 +123,13 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		return json({ success: false, error: 'invalid_page' }, { status: 400 });
 	}
 	const page = positiveInt(pageParam);
-	const rawPageSize = positiveInt(url.searchParams.get('page_size'));
-	const pageSize = rawPageSize ? Math.min(rawPageSize, MAX_PAGE_SIZE) : undefined;
+	// S2: a digits-only `page_size` past MAX_SAFE_INTEGER is capped, not dropped (dropping it
+	// would serve the whole board unpaged).
+	const pageSizeParam = url.searchParams.get('page_size');
+	const pageSize =
+		pageSizeParam && /^\d+$/.test(pageSizeParam) && Number(pageSizeParam) >= 1
+			? Math.min(positiveInt(pageSizeParam) ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE)
+			: undefined;
 	if (shelterCode) query.set('shelter_code', shelterCode);
 	for (const skill of skills) query.append('skill', skill);
 	if (q) query.set('q', q);

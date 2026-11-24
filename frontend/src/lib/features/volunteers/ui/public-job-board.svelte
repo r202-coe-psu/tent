@@ -221,7 +221,13 @@
 	/** Both the master code and its label, so jobs stored in either form match (server-side). */
 	function skillQueryValues(selected: string): string[] {
 		const option = findSkillOption(selected, skillOptions);
-		return [...new Set([selected, option?.code, option?.label].filter((v): v is string => !!v))];
+		return [
+			...new Set(
+				[selected, option?.code, option?.label, option?.label_th, option?.label_en].filter(
+					(v): v is string => !!v
+				)
+			)
+		];
 	}
 
 	async function fetchPublicJobs(page: number) {

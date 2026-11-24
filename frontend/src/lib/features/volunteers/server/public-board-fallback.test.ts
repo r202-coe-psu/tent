@@ -71,6 +71,38 @@ describe('filterFallbackJobs — same rules as FastAPI (#1470 review W3)', () =>
 	});
 });
 
+describe('filterFallbackJobs — remaining seats (#1470 review B1, CR-264 FR-3)', () => {
+	// A Couch job doc keeps only `quota` on a fresh shift — no `slots_remaining` yet.
+	const fresh = { date: '2099-01-01', start_time: '08:00', end_time: '12:00', quota: 10 };
+
+	it('keeps a new job whose shifts only carry a quota under status=open', () => {
+		const jobs = [job('job:new', { slots_remaining: undefined, shifts: [fresh] })];
+		expect(filterFallbackJobs(jobs, { ...base, status: 'open' }).jobs).toHaveLength(1);
+	});
+
+	it('derives remaining as quota − confirmed − dispatched, so a full shift is not open', () => {
+		const full = { ...fresh, quota: 4, slots_confirmed: 3, slots_dispatched: 1 };
+		const almost = { ...fresh, quota: 4, slots_confirmed: 3, slots_dispatched: 0 };
+		const jobs = [
+			job('job:full', { slots_remaining: undefined, shifts: [full] }),
+			job('job:almost', { slots_remaining: undefined, shifts: [almost] })
+		];
+		expect(filterFallbackJobs(jobs, { ...base, status: 'open' }).jobs.map((j) => j._id)).toEqual([
+			'job:almost'
+		]);
+		expect(
+			filterFallbackJobs(jobs, { ...base, status: 'near_full' }).jobs.map((j) => j._id)
+		).toEqual(['job:almost']);
+	});
+
+	it('does not count an ended shift’s seats toward open / near_full (D2)', () => {
+		const jobs = [job('job:ended', { shifts: [ended] }), job('job:live', { shifts: [future] })];
+		expect(filterFallbackJobs(jobs, { ...base, status: 'open' }).jobs.map((j) => j._id)).toEqual([
+			'job:live'
+		]);
+	});
+});
+
 describe('controlledValuesFromMaster', () => {
 	it('takes the code and both labels of each active controlled item, lower-cased', () => {
 		const values = controlledValuesFromMaster([

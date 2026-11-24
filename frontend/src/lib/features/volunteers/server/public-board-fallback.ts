@@ -17,6 +17,11 @@ export interface FallbackShift {
 	end_date?: string | null;
 	start_time?: string;
 	end_time?: string;
+	/** Couch job docs keep only `quota` on a shift until someone applies (#1470 review B1). */
+	quota?: number;
+	slots_confirmed?: number;
+	confirmed?: number;
+	slots_dispatched?: number;
 	slots_remaining?: number;
 }
 
@@ -26,6 +31,9 @@ export interface FallbackJob {
 	shelter_code?: string;
 	tier?: string;
 	skills_required?: string[];
+	quota?: number;
+	slots_confirmed?: number;
+	slots_dispatched?: number;
 	slots_remaining?: number;
 	shifts?: FallbackShift[];
 }
@@ -62,10 +70,31 @@ export function controlledValuesFromMaster(items: readonly MasterSkillItemLike[]
 	return new Set(DEFAULT_CONTROLLED_SKILLS.map(norm).filter(Boolean));
 }
 
-function remainingOf(job: FallbackJob): number[] {
-	return job.shifts && job.shifts.length > 0
-		? job.shifts.map((shift) => shift.slots_remaining ?? 0)
-		: [job.slots_remaining ?? 0];
+/** Same derivation as the worker projector and `public-application.ts`: quota − confirmed − dispatched. */
+function remainingFrom(row: {
+	quota?: number;
+	slots_confirmed?: number;
+	confirmed?: number;
+	slots_dispatched?: number;
+	slots_remaining?: number;
+}): number {
+	return (
+		row.slots_remaining ??
+		Math.max(
+			(row.quota ?? 0) - (row.slots_confirmed ?? row.confirmed ?? 0) - (row.slots_dispatched ?? 0),
+			0
+		)
+	);
+}
+
+/** Remaining seats per shift still open at `now` (CR-264 FR-3: ended shifts never count). */
+function remainingOf(job: FallbackJob, now: Date): number[] {
+	if (job.shifts && job.shifts.length > 0) {
+		return job.shifts
+			.filter((shift) => isOpen({ _id: job._id, shifts: [shift] }, now))
+			.map(remainingFrom);
+	}
+	return [remainingFrom(job)];
 }
 
 function isOpen(job: FallbackJob, now: Date): boolean {
@@ -116,8 +145,8 @@ export function filterFallbackJobs(
 		if (wanted.size > 0 && !(job.skills_required ?? []).some((skill) => wanted.has(skill))) {
 			return false;
 		}
-		if (opts.status === 'open') return remainingOf(job).some((r) => r >= 1);
-		if (opts.status === 'near_full') return remainingOf(job).some((r) => r >= 1 && r <= 2);
+		if (opts.status === 'open') return remainingOf(job, now).some((r) => r >= 1);
+		if (opts.status === 'near_full') return remainingOf(job, now).some((r) => r >= 1 && r <= 2);
 		if (opts.status === 'controlled') {
 			return (
 				job.tier === 'staff-capable' ||
