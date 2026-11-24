@@ -77,7 +77,8 @@ export function countBySiteKind(
 /**
  * Stat-tile rows for `/shelters` (CR-198 D-3): master order, every active kind
  * (even at 0, so the page keeps its fixed tiles), then inactive or unknown codes
- * only when shelters actually use them.
+ * only when shelters actually use them. Never a host house tile: the page does not list
+ * host houses (#1419, CR-261 FR-2), and an external one is counted under its external group.
  */
 export function siteKindTiles(
 	counts: Readonly<Record<string, number>>,
@@ -87,11 +88,12 @@ export function siteKindTiles(
 	const listed = new Set<string>();
 	for (const k of kinds ?? []) {
 		listed.add(k.code);
+		if (isHostHouseKind(k.code)) continue;
 		const count = counts[k.code] ?? 0;
 		if (k.status !== 'inactive' || count > 0) tiles.push({ code: k.code, count });
 	}
 	for (const [code, count] of Object.entries(counts)) {
-		if (!listed.has(code) && count > 0) tiles.push({ code, count });
+		if (!listed.has(code) && !isHostHouseKind(code) && count > 0) tiles.push({ code, count });
 	}
 	return tiles;
 }
