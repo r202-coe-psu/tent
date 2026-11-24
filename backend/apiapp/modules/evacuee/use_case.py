@@ -62,6 +62,12 @@ PUBLIC_STAY_STATUSES = frozenset(
 )
 
 
+#: The only stays the anonymous public search returns (decision sync 2026-11-24): people
+#: physically in a shelter. Pre-registered, arriving, moved-out and cancelled people are hidden.
+#: Mirrors `isInShelterStatus` in the frontend public-portal feature.
+PUBLIC_SEARCH_VISIBLE_STATUSES = frozenset({"active", "room_confirmed", "temporary_leave"})
+
+
 def map_public_status(stay_status: str) -> str:
     return stay_status if stay_status in PUBLIC_STAY_STATUSES else "unknown"
 
@@ -159,8 +165,13 @@ class EvacueeUseCase:
         client_ip: str = "unknown",
         request_id: str | None = None,
     ) -> SearchResponse:
-        """`POST /public/v1/occupants` (CR-231): the audit is fail-closed (503, no results)."""
-        parsed, persons = await self._parse_and_find(raw_query)
+        """`POST /public/v1/occupants` (CR-231): the audit is fail-closed (503, no results).
+
+        Only people in a shelter are returned, without their household (decision sync 2026-11-24).
+        """
+        parsed, persons = await self._parse_and_find(
+            raw_query, only_statuses=PUBLIC_SEARCH_VISIBLE_STATUSES
+        )
         await self._write_public_audit(
             parsed=parsed,
             client_ip=client_ip,
@@ -183,7 +194,9 @@ class EvacueeUseCase:
         results = await self.build_external_results(persons, full=True)
         return ExternalSearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
 
-    async def _parse_and_find(self, raw_query: str) -> tuple[ParsedSearchQuery, list[PublicPerson]]:
+    async def _parse_and_find(
+        self, raw_query: str, *, only_statuses: Collection[str] = ()
+    ) -> tuple[ParsedSearchQuery, list[PublicPerson]]:
         parsed = parse_search_query(raw_query)
         if parsed is None:
             raise HTTPException(
@@ -195,13 +208,15 @@ class EvacueeUseCase:
                     }
                 },
             )
-        return parsed, await self.find_persons(parsed)
+        return parsed, await self.find_persons(parsed, only_statuses=only_statuses)
 
     async def build_results(self, persons: list[PublicPerson]) -> list[SearchResult]:
-        """Masked `SearchResult`s for the anonymous public search, in order."""
+        """Masked `SearchResult`s for the anonymous public search, in order — no household."""
         shelters = await self.load_shelters({person.shelter_code for person in persons})
         return [
-            await self._to_result(person, shelters.get(person.shelter_code), full=False)
+            await self._to_result(
+                person, shelters.get(person.shelter_code), full=False, include_family=False
+            )
             for person in persons
         ]
 
@@ -299,6 +314,7 @@ class EvacueeUseCase:
         parsed: ParsedSearchQuery,
         *,
         exclude_statuses: Collection[str] = (),
+        only_statuses: Collection[str] = (),
     ) -> list[PublicPerson]:
         """Find up to `NAME_RESULT_LIMIT` people matching a parsed query (shared finder).
 
@@ -306,7 +322,8 @@ class EvacueeUseCase:
         `search_excluded` opt-outs plus any `exclude_statuses` — and sorts by
         (`first_name_key`, `_id`) so the people that survive the cap are the same ones every
         time (CR-166 "sort every case", #736). Callers that must hide a status (EXT-012 drops
-        `cancelled`) pass it here rather than filtering the capped list afterwards.
+        `cancelled`) pass it here rather than filtering the capped list afterwards; the public
+        search passes `only_statuses` the same way.
         """
         if parsed.kind == SearchQueryKind.NATIONAL_ID:
             match: dict = {"national_id_hash": national_id_hash(parsed.normalized)}
@@ -320,6 +337,8 @@ class EvacueeUseCase:
         conditions: list[dict] = [match, {"search_excluded": {"$ne": True}}]
         if exclude_statuses:
             conditions.append({"status": {"$nin": list(exclude_statuses)}})
+        if only_statuses:
+            conditions.append({"status": {"$in": list(only_statuses)}})
 
         return (
             await PublicPerson.find(*conditions)
