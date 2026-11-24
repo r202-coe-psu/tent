@@ -80,6 +80,18 @@ export function evaluatePersonQr(
 	return { status: 'invalid' };
 }
 
+/**
+ * The Person QR that scans valid right now (FR-EQR-27 row 1 or 3), built from the stored log
+ * without issuing or hashing: the latest entry's `hash`, or the bare id while nothing was printed.
+ */
+export function currentPersonQrPayload(
+	evacueeId: string,
+	prints: readonly EvacueeQrPrintRef[]
+): string {
+	const last = prints[prints.length - 1];
+	return last ? `${evacueeId}@${last.hash}` : evacueeId;
+}
+
 function formatBangkok(iso: string, language: LanguageCode = 'th'): string {
 	return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'th-TH', {
 		timeZone: 'Asia/Bangkok',

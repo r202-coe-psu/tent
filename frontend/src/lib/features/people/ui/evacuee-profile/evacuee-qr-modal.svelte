@@ -18,10 +18,12 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { currentPersonQrPayload } from '$lib/utils/evacuee-qr';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 	import ModalEscapeListener from '../shared/modal-escape-listener.svelte';
+	import { useEvacueeQrPrints } from '../../application/evacuee-qr-prints';
 
 	const t = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
 
@@ -96,9 +98,18 @@
 		() => show
 	);
 
-	// The QR issued by the latest print click. It is the only valid one (older ones are rotated
-	// out), so the preview shows it instead of the placeholder once a print has issued one.
-	function labelContent(qrPayload?: string) {
+	const printsQuery = useEvacueeQrPrints(() => evacuee._id);
+
+	/**
+	 * The QR that scans valid right now, without issuing one (opening must not rotate it): the QR a
+	 * print here just issued, else the latest one in the log, else the bare id (nothing printed yet).
+	 */
+	const previewPayload = $derived(
+		issuedPayload ??
+			(printsQuery.data ? currentPersonQrPayload(evacuee._id, printsQuery.data) : undefined)
+	);
+
+	function labelContent(qrPayload: string) {
 		return buildEvacueeQrLabel(evacuee, {
 			zones: shelterQuery.data?.zones,
 			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
@@ -107,13 +118,10 @@
 		});
 	}
 
-	/**
-	 * The kiosk's own 80×60 mm label (base64 PNG) with a QR PLACEHOLDER: opening the modal must not
-	 * issue a QR (CR-233 FR-EQR-21a), so the preview shows the layout but no usable payload.
-	 */
+	/** The kiosk's own 80×60 mm label (base64 PNG) carrying the current QR. */
 	const labelPng = $derived.by(() => {
-		if (!show) return null;
-		const { qrPayload, label } = labelContent(issuedPayload);
+		if (!show || !previewPayload) return null;
+		const { qrPayload, label } = labelContent(previewPayload);
 		return renderKioskQrLabelPng(qrPayload, label);
 	});
 
@@ -150,7 +158,6 @@
 	}
 
 	async function handlePrintPreview() {
-		if (!labelPng) return;
 		// Open while the click still has user activation; opening after the render finishes can be
 		// treated as an unsolicited popup, especially outside localhost.
 		const previewWindow = window.open('', '_blank');
@@ -239,6 +246,14 @@
 								{t.labelRenderFailed}
 							</div>
 						{/await}
+					{:else if printsQuery.isError}
+						<div
+							class="flex size-full items-center justify-center p-4 text-center text-sm text-slate-500"
+						>
+							{t.currentQrLoadFailed}
+						</div>
+					{:else}
+						<div class="size-full animate-pulse bg-slate-100"></div>
 					{/if}
 				</div>
 				<figcaption class="mt-3 text-center text-sm text-slate-500">
@@ -251,7 +266,7 @@
 			</figure>
 
 			<div class="mt-5 flex flex-col gap-2">
-				{#if printable && labelPng}
+				{#if printable}
 					<PrintLabelsButton
 						bind:printing
 						bind:retryHeld
@@ -267,7 +282,7 @@
 					<Button
 						class="h-12 w-full gap-2 text-base"
 						onclick={handlePrintPreview}
-						disabled={isExportingPdf || !labelPng}
+						disabled={isExportingPdf}
 					>
 						<Printer class="size-4" />
 						{isExportingPdf ? t.generatingPdf : t.printIdCard}
