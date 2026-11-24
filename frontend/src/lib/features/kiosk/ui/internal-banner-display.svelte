@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { fade } from 'svelte/transition';
 	import { fetchInternalBanners } from '../data/internal-banners.api';
+	import { BANNER_SLIDE_FADE, hideOutgoing } from './kiosk-banner-fade';
 	import { InternalBannerDisplayController } from './internal-banner-display.svelte.js';
 
 	interface Props {
@@ -30,8 +32,10 @@
 			<img
 				src={controller.current.image_url}
 				alt={controller.current.title}
-				class="h-full w-full object-contain"
+				class="absolute inset-0 h-full w-full object-contain"
 				draggable="false"
+				transition:fade={BANNER_SLIDE_FADE}
+				onoutrostart={hideOutgoing}
 			/>
 		{/key}
 	{:else if controller.status === 'connecting'}

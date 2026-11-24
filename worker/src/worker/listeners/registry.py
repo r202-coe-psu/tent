@@ -34,6 +34,15 @@ class ListenerManager:
     async def ensure_listener(self, database: str) -> None:
         if database in self._tasks and not self._tasks[database].done():
             return
+        listening = sum(1 for t in self._tasks.values() if not t.done()) + 1
+        cap = self._couch.feed_max_connections
+        if listening > cap * 0.8:
+            logger.warning(
+                "%d listeners vs COUCH_FEED_MAX_CONNECTIONS=%d — raise the cap before "
+                "new shelters' feeds start failing with PoolTimeout",
+                listening,
+                cap,
+            )
         stop_event = asyncio.Event()
         self._stop_events[database] = stop_event
         task = asyncio.create_task(

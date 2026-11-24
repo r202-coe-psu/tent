@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -18,6 +19,10 @@ EVENT_PREFIX = "audit_event:"
 
 def is_audit_doc(doc: dict[str, Any] | None) -> bool:
     return bool(doc) and doc.get("type") == "audit"
+
+
+def _non_empty(value: Any) -> bool:
+    return isinstance(value, str) and value.strip() != ""
 
 
 def to_audit_event(
@@ -41,6 +46,15 @@ def to_audit_event(
         actor = {"name": "system", "kind": "system"}
 
     action = source.get("action")
+    target_type = source.get("target_type")
+    target_id = source.get("target_id")
+    if (
+        not _non_empty(action)
+        or not _non_empty(target_type)
+        or not _non_empty(target_id)
+    ):
+        return None
+
     reason = source.get("reason") or None
     event = reason if action == "other" and reason else f"audit.{action}"
 
@@ -56,8 +70,8 @@ def to_audit_event(
         "action": "other",
         "event": event,
         "entity": {
-            "type": source.get("target_type"),
-            "id": source.get("target_id"),
+            "type": target_type,
+            "id": target_id,
             "label": None,
         },
         "shelter_code": source.get("shelter_code")
@@ -68,42 +82,56 @@ def to_audit_event(
     }
 
 
+RETRYABLE_STATUSES = frozenset({408, 429})
+
+
+class AuditCopyIncomplete(RuntimeError):
+    """Raised when a scan left an audit doc uncopied for a reason worth retrying."""
+
+
+class AuditCopy(StrEnum):
+    COPIED = "copied"
+    SKIPPED = "skipped"
+    RETRY = "retry"
+
+
 async def copy_audit_doc(
     couch: Any,
     source: dict[str, Any],
     db_name: str,
     *,
     now: datetime | None = None,
-) -> bool:
+) -> AuditCopy:
     event = to_audit_event(source, db_name, now or datetime.now(UTC))
     if event is None:
         logger.warning(
-            "Skipping audit doc %s in %s: not an audit:{ULID} id",
+            "Skipping audit doc %s in %s: bad id or a missing action/target field",
             source.get("_id"),
             db_name,
         )
-        return False
+        return AuditCopy.SKIPPED
     try:
         await couch.put_doc(AUDIT_LOG_DB, event, retry_conflict=False)
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         if status == 409:
-            return True
-        if status == 404:
+            return AuditCopy.COPIED
+        if 400 <= status < 500 and status not in RETRYABLE_STATUSES:
             logger.warning(
-                "Database %s does not exist — audit doc %s from %s not copied",
+                "%s rejected audit doc %s from %s with HTTP %s — not copied",
                 AUDIT_LOG_DB,
                 source.get("_id"),
                 db_name,
+                status,
             )
-            return False
+            return AuditCopy.SKIPPED
         logger.exception(
             "Failed to copy audit doc %s from %s to %s",
             source.get("_id"),
             db_name,
             AUDIT_LOG_DB,
         )
-        return False
+        return AuditCopy.RETRY
     except Exception:
         logger.exception(
             "Failed to copy audit doc %s from %s to %s",
@@ -111,15 +139,25 @@ async def copy_audit_doc(
             db_name,
             AUDIT_LOG_DB,
         )
-        return False
-    return True
+        return AuditCopy.RETRY
+    return AuditCopy.COPIED
 
 
 async def copy_all_audit_docs(couch: Any, db_name: str) -> int:
     if not await couch.database_exists(db_name):
         return 0
     copied = 0
+    retry = False
     async for doc in couch.iter_all_docs(db_name):
-        if is_audit_doc(doc) and await copy_audit_doc(couch, doc, db_name):
+        if not is_audit_doc(doc):
+            continue
+        outcome = await copy_audit_doc(couch, doc, db_name)
+        if outcome is AuditCopy.COPIED:
             copied += 1
+        elif outcome is AuditCopy.RETRY:
+            retry = True
+    if retry:
+        raise AuditCopyIncomplete(
+            f"{db_name}: an audit doc could not be copied to {AUDIT_LOG_DB}"
+        )
     return copied

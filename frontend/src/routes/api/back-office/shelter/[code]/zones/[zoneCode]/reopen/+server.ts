@@ -1,27 +1,13 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { z } from 'zod';
-import {
-	adminRaw,
-	requireShelterManagerOrSA,
-	serviceError,
-	ServiceError
-} from '$lib/server/couch-admin';
-import { ulid } from '$lib/db/ulid';
-import type { Zone } from '$lib/features/shelters/server';
-import { nowIso, updateMaster } from '$lib/server/shelters.admin';
-import { recordAuditedWrite } from '$lib/server/audit-log';
-import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
+import { requireShelterManagerOrSA, serviceError } from '$lib/server/couch-admin';
+import { applyZoneTransition } from '$lib/server/shelter-zones';
 
 export const prerender = false;
 
-const reopenZoneSchema = z.object({
-	reopened_by: z.string().trim().optional().nullable()
-});
-
 /**
  * POST /api/back-office/shelter/{code}/zones/{zoneCode}/reopen
- * Body: { reopened_by?: string }
+ * Body: {}
  * - reopen: set status='active', record reopened_at/reopened_by, clear close metadata,
  *   append audit log. Returns 409 if the zone is already active.
  */
@@ -33,79 +19,21 @@ export const POST: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await requireShelterManagerOrSA(request.headers.get('cookie'), code);
 
-		const body = (await request.json().catch(() => ({}))) as unknown;
-		const parsed = reopenZoneSchema.parse(body);
-		const reopenedBy = parsed.reopened_by ?? null;
-
-		const { meta, before, after } = await updateMaster<{
-			updatedZone: Zone;
-			previousStatus: string;
-		}>(code, caller.name, (current) => {
-			const zones = current.zones ?? [];
-			const zoneIndex = zones.findIndex((z) => z.code === zoneCode);
-			if (zoneIndex === -1) {
-				throw new ServiceError('VALIDATION', `Zone "${zoneCode}" not found in shelter ${code}`);
-			}
-			const target = zones[zoneIndex];
-			if (target.status === 'active') {
-				throw new ServiceError('CONFLICT', `Zone "${zoneCode}" is already active`);
-			}
-			const updatedZone: Zone = {
-				...target,
-				status: 'active',
-				closed_at: null,
-				closed_by: null,
-				reopened_at: nowIso(),
-				reopened_by: reopenedBy,
-				reason: null
-			};
-			return {
-				patch: {
-					zones: zones.map((z, i) => (i === zoneIndex ? updatedZone : z))
-				},
-				meta: { updatedZone, previousStatus: target.status }
-			};
+		const result = await applyZoneTransition('reopen', {
+			code,
+			zoneCode,
+			actor: caller.name
 		});
-
-		if (!meta) {
+		if ('lost' in result) {
 			return error(500, { message: 'Zone update lost during write' });
 		}
-		const updatedZone = meta.updatedZone;
-		const previousStatus = meta.previousStatus;
-
-		// Append audit log (per data-model.md §3.6) — ULID for collision-safe id.
-		const auditDoc = {
-			_id: `audit:${ulid()}`,
-			type: 'audit',
-			schema_v: 1,
-			shelter_code: code,
-			action: 'zone.reopen',
-			target_type: 'shelter_zone',
-			target_id: `${code}:${zoneCode}`,
-			reason: '',
-			context: { zone_code: zoneCode, previous_status: previousStatus, actor: reopenedBy },
-			occurred_at: nowIso()
-		};
-		await adminRaw(`/registry/${encodeURIComponent(auditDoc._id)}`, 'PUT', auditDoc);
-		await recordAuditedWrite({
-			actor: caller.name,
-			event: AUDIT_EVENTS.shelterZoneReopened,
-			action: 'status_change',
-			entityType: 'shelter',
-			entityId: code,
-			label: after?.name ?? null,
-			shelterCode: code,
-			before: before as Record<string, unknown> | undefined,
-			after: after as Record<string, unknown> | undefined,
-			reason: zoneCode
-		});
 
 		return json({
 			ok: true,
 			code,
 			zoneCode,
 			status: 'active',
-			reopened_at: updatedZone.reopened_at
+			reopened_at: result.updatedZone.reopened_at
 		});
 	} catch (e) {
 		return serviceError(e);

@@ -13,6 +13,8 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Eye from '@lucide/svelte/icons/eye';
+	import ImageUp from '@lucide/svelte/icons/image-up';
+	import LayoutTemplate from '@lucide/svelte/icons/layout-template';
 	import Upload from '@lucide/svelte/icons/upload';
 	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
@@ -22,7 +24,8 @@
 		bannerFormToInput,
 		bannerToFormValues,
 		emptyKioskBannerForm,
-		kioskBannerFormSchema
+		kioskBannerFormSchema,
+		type KioskBannerFormValues
 	} from '../domain/kiosk-banner-form';
 	import {
 		readBannerFile,
@@ -31,8 +34,16 @@
 	} from '../data/kiosk-banner-file';
 	import { kioskBannerRemoteRepository } from '../data/kiosk-banner.remote';
 	import type { KioskBannerSummary } from '../data/kiosk-banner.repository';
+	import {
+		TEMPLATE_IMAGE_ATTACHMENT,
+		type KioskBannerTemplate
+	} from '../domain/kiosk-banner-template';
 	import type { KioskBannerSlide } from '$lib/features/kiosk';
 	import KioskBannerPreviewDialog from './kiosk-banner-preview-dialog.svelte';
+	import KioskBannerTemplateCanvas from './kiosk-banner-template-canvas.svelte';
+	import KioskBannerTemplateEditor from './kiosk-banner-template-editor.svelte';
+	import { TemplateExportError, exportTemplatePng } from './kiosk-banner-template-export';
+	import { prepareTemplateLogo } from './kiosk-banner-template-logo';
 	import { buildFormPreviewSlide } from './kiosk-banner-preview-slides';
 	import type { KioskBannerSavePayload } from './kiosk-banner-save';
 
@@ -80,20 +91,79 @@
 		? kioskBannerRemoteRepository.imageUrl(banner._id, banner._rev)
 		: null;
 
+	// svelte-ignore state_referenced_locally
+	const storedLogoUrl =
+		banner && 'template' in banner && banner.template?.image === TEMPLATE_IMAGE_ATTACHMENT
+			? kioskBannerRemoteRepository.templateImageUrl(banner._id, banner._rev)
+			: null;
+
 	let file = $state.raw<File | null>(null);
 	let fileError = $state<string | null>(null);
 	let newImageUrl = $state<string | null>(null);
 	let previewOpen = $state(false);
+
+	// Template mode: the logo is wired by hand like the upload (not part of the superform schema).
+	let logoFile = $state.raw<File | null>(null);
+	let logoError = $state<string | null>(null);
+	let newLogoUrl = $state<string | null>(null);
+	let keepStoredLogo = $state(storedLogoUrl !== null);
+	let canvasNode = $state<HTMLElement | null>(null);
+	let logoInput = $state<HTMLInputElement | null>(null);
+	const logoPreviewUrl = $derived(newLogoUrl ?? (keepStoredLogo ? storedLogoUrl : null));
+	const hasLogo = $derived(logoFile !== null || (keepStoredLogo && storedLogoUrl !== null));
 
 	function revokeNewImage() {
 		if (newImageUrl) URL.revokeObjectURL(newImageUrl);
 		newImageUrl = null;
 	}
 
-	// Unmount only (no reactive reads here): free the last preview.
+	// Unmount only (no reactive reads here): free the last preview and drop a logo still shrinking.
 	$effect(() => () => {
+		logoPick++;
 		if (newImageUrl) URL.revokeObjectURL(newImageUrl);
+		if (newLogoUrl) URL.revokeObjectURL(newLogoUrl);
 	});
+
+	function revokeNewLogo() {
+		if (newLogoUrl) URL.revokeObjectURL(newLogoUrl);
+		newLogoUrl = null;
+	}
+
+	/**
+	 * A valid logo (shrunk to fit its 512 KB cap) replaces the current one; an invalid one keeps the
+	 * current logo and says why, which blocks saving until the staff picks again or removes it.
+	 */
+	async function prepareLogo(chosen: File, isCurrent: () => boolean) {
+		const logo = await prepareTemplateLogo(chosen);
+		// A later pick, a removal or an unmount happened while this one was shrinking.
+		if (!isCurrent()) return;
+		if (!logo.ok) {
+			logoError = logo.error;
+			return;
+		}
+		revokeNewLogo();
+		logoError = null;
+		logoFile = logo.file;
+		newLogoUrl = URL.createObjectURL(logo.file);
+	}
+
+	// The latest logo being shrunk; a save waits for it so it never goes out without the chosen
+	// logo. `logoPick` counts picks so only the latest one may land.
+	let logoPick = 0;
+	let logoTask: Promise<void> = Promise.resolve();
+	function chooseLogo(chosen: File | null) {
+		if (!chosen) return;
+		const pick = ++logoPick;
+		logoTask = prepareLogo(chosen, () => pick === logoPick);
+	}
+
+	function removeLogo() {
+		logoPick++;
+		revokeNewLogo();
+		logoFile = null;
+		logoError = null;
+		keepStoredLogo = false;
+	}
 
 	/** One path for the file picker and a drop: validate, then show the preview at once. */
 	function chooseFile(chosen: File | null): boolean {
@@ -131,6 +201,42 @@
 		if (dropped) chooseFile(dropped);
 	}
 
+	/** Template mode: render the preview to the banner PNG, then hand it over with the template. */
+	async function saveFromTemplate(valid: boolean, values: KioskBannerFormValues) {
+		if (!valid) return;
+		await logoTask;
+		if (logoError) {
+			toast.error(logoError);
+			logoInput?.focus();
+			return;
+		}
+		// The PNG is rendered from the logo shown now, so send that one even if it changes meanwhile.
+		const logo = logoFile;
+		const logoRef: KioskBannerTemplate['image'] = hasLogo ? TEMPLATE_IMAGE_ATTACHMENT : null;
+		let image: BannerImagePayload;
+		try {
+			if (!canvasNode) throw new Error('no preview');
+			image = await exportTemplatePng(canvasNode, values.screen_type);
+		} catch (error) {
+			toast.error(error instanceof TemplateExportError ? error.message : 'สร้างรูปประกาศไม่สำเร็จ');
+			return;
+		}
+		let templateImage: BannerImagePayload | undefined;
+		try {
+			templateImage = logo ? await readBannerFile(logo) : undefined;
+		} catch {
+			toast.error('อ่านไฟล์รูปภาพไม่สำเร็จ');
+			return;
+		}
+		const template = { ...values.template, image: logoRef };
+		await onsave({
+			input: bannerFormToInput({ ...values, template }),
+			image,
+			templateImage,
+			rev: initialRev
+		});
+	}
+
 	const form = superForm(defaults(initialValues, zod4Client(kioskBannerFormSchema)), {
 		SPA: true,
 		dataType: 'json',
@@ -140,6 +246,10 @@
 		applyAction: false,
 		warnings: { duplicateId: false },
 		onUpdate: async ({ form: validated }) => {
+			if (validated.data.source === 'template') {
+				await saveFromTemplate(validated.valid, validated.data);
+				return;
+			}
 			const imageMissing = !isEdit && !file;
 			if (imageMissing) fileError = 'เลือกรูปภาพแบนเนอร์';
 			if (!validated.valid || imageMissing || fileError) return;
@@ -154,7 +264,7 @@
 		}
 	});
 
-	const { form: formData, enhance, submitting } = form;
+	const { form: formData, errors, enhance, submitting } = form;
 
 	const imageHelp = $derived(
 		`แนะนำ ${KIOSK_SCREENS[$formData.screen_type].size} px · รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB`
@@ -178,8 +288,13 @@
 	const newGroupHref = resolve('/back-office/kiosks/banners/groups/new');
 </script>
 
+<!-- An error marks the missing half (date, time or both); a complete but wrong value marks both. -->
 {#snippet dateTimeField(name: 'start_at' | 'end_at', label: string, errorsId?: string)}
 	{@const parts = splitLocalInput($formData[name])}
+	{@const failed = ($errors[name]?.length ?? 0) > 0}
+	{@const complete = !!parts.date && !!parts.time}
+	{@const dateInvalid = failed && (complete || !parts.date)}
+	{@const timeInvalid = failed && (complete || !parts.time)}
 	<Form.Field {form} {name}>
 		<Form.Control id="banner-{name}">
 			{#snippet children({ props })}
@@ -190,6 +305,7 @@
 				<div class="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
 					<DatePicker
 						{...props}
+						aria-invalid={dateInvalid || undefined}
 						class="h-11"
 						ariaLabel="วันที่{label}"
 						bind:value={
@@ -198,6 +314,8 @@
 					/>
 					<TimePicker
 						id="banner-{name}-time"
+						invalid={timeInvalid}
+						describedBy={props['aria-describedby']}
 						bind:value={
 							() => parts.time, (time) => ($formData[name] = joinLocalInput(parts.date, time))
 						}
@@ -349,100 +467,147 @@
 		</div>
 
 		<div class="space-y-4">
-			<div class="grid gap-4 sm:grid-cols-2">
-				{#if currentImageUrl}
-					<figure class="space-y-2">
-						<figcaption class="text-sm font-semibold text-slate-700">รูปปัจจุบัน</figcaption>
-						<img
-							data-testid="banner-current-image"
-							src={currentImageUrl}
-							alt="รูปปัจจุบันของแบนเนอร์"
-							class="{imageShape} w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
-						/>
-					</figure>
-				{/if}
-				<figure class="space-y-2">
-					<figcaption class="text-sm font-semibold text-slate-700">
-						{isEdit ? 'รูปใหม่ (ถ้าเลือก)' : 'ตัวอย่างรูป'}
-					</figcaption>
-					{#if newImageUrl}
-						<img
-							data-testid="banner-new-image"
-							src={newImageUrl}
-							alt="ตัวอย่างรูปที่เลือก"
-							class="{imageShape} w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
-						/>
-					{:else}
-						<div
-							class="flex {imageShape} w-full items-center justify-center rounded-lg border-2 border-dashed border-slate-400 bg-slate-50 text-sm text-slate-500"
-						>
-							ยังไม่ได้เลือกรูป
-						</div>
-					{/if}
-				</figure>
+			<div class="space-y-2">
+				<span class="text-sm font-medium">วิธีทำรูปแบนเนอร์</span>
+				<div role="group" aria-label="วิธีทำรูปแบนเนอร์" class="grid grid-cols-2 gap-2">
+					<Button
+						type="button"
+						variant={$formData.source === 'upload' ? 'default' : 'outline'}
+						aria-pressed={$formData.source === 'upload'}
+						class="min-h-11 gap-2"
+						onclick={() => ($formData.source = 'upload')}
+					>
+						<ImageUp class="size-4" />
+						อัปโหลดรูป
+					</Button>
+					<Button
+						type="button"
+						variant={$formData.source === 'template' ? 'default' : 'outline'}
+						aria-pressed={$formData.source === 'template'}
+						class="min-h-11 gap-2"
+						onclick={() => ($formData.source = 'template')}
+					>
+						<LayoutTemplate class="size-4" />
+						สร้างจาก template
+					</Button>
+				</div>
 			</div>
 
-			<!-- The image is not in the superform schema (text fields only), so it is wired by hand.
-			     Same dashed drop box as the Excel imports (people-import / shelter-import), plus drop. -->
-			<div class="space-y-2">
-				<span class={['text-sm font-medium', fileError && 'text-destructive']}>
-					{#if isEdit}เปลี่ยนรูป{:else}รูปแบนเนอร์ <span class="text-destructive">*</span>{/if}
-				</span>
-				<label
-					for="banner-image"
-					ondragover={handleDragOver}
-					ondragleave={() => (dragOver = false)}
-					ondrop={handleDrop}
-					class={[
-						'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-muted/40',
-						dragOver
-							? 'border-primary bg-primary/5'
-							: fileError
-								? 'border-destructive'
-								: 'border-slate-400 hover:border-slate-500'
-					]}
-				>
-					<Upload class="h-8 w-8 text-muted-foreground" />
-					<span class="text-sm font-medium">
-						{file ? file.name : 'ลากรูปมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
+			{#if $formData.source === 'template'}
+				<KioskBannerTemplateCanvas
+					template={$formData.template}
+					screen={$formData.screen_type}
+					logoUrl={logoPreviewUrl}
+					bind:node={canvasNode}
+				/>
+				<KioskBannerTemplateEditor
+					{form}
+					bind:logoInput
+					disabled={$submitting}
+					logoName={logoFile?.name ?? null}
+					{hasLogo}
+					{logoError}
+					onchooselogo={chooseLogo}
+					onremovelogo={removeLogo}
+				/>
+			{:else}
+				<div class="grid gap-4 sm:grid-cols-2">
+					{#if currentImageUrl}
+						<figure class="space-y-2">
+							<figcaption class="text-sm font-semibold text-slate-700">รูปปัจจุบัน</figcaption>
+							<img
+								data-testid="banner-current-image"
+								src={currentImageUrl}
+								alt="รูปปัจจุบันของแบนเนอร์"
+								class="{imageShape} w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
+							/>
+						</figure>
+					{/if}
+					<figure class="space-y-2">
+						<figcaption class="text-sm font-semibold text-slate-700">
+							{isEdit ? 'รูปใหม่ (ถ้าเลือก)' : 'ตัวอย่างรูป'}
+						</figcaption>
+						{#if newImageUrl}
+							<img
+								data-testid="banner-new-image"
+								src={newImageUrl}
+								alt="ตัวอย่างรูปที่เลือก"
+								class="{imageShape} w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
+							/>
+						{:else}
+							<div
+								class="flex {imageShape} w-full items-center justify-center rounded-lg border-2 border-dashed border-slate-400 bg-slate-50 text-sm text-slate-500"
+							>
+								ยังไม่ได้เลือกรูป
+							</div>
+						{/if}
+					</figure>
+				</div>
+
+				<!-- The image is not in the superform schema (text fields only), so it is wired by hand.
+				     Same dashed drop box as the Excel imports (people-import / shelter-import), plus drop. -->
+				<div class="space-y-2">
+					<span class={['text-sm font-medium', fileError && 'text-destructive']}>
+						{#if isEdit}เปลี่ยนรูป{:else}รูปแบนเนอร์ <span class="text-destructive">*</span>{/if}
 					</span>
-					<span id="banner-image-help" class="text-xs text-muted-foreground">
-						{imageHelp}
-					</span>
-					<!-- sr-only, not `hidden`: display:none drops the input out of the tab
-					     order, leaving keyboard users no way to open the file picker. -->
-					<input
-						id="banner-image"
-						type="file"
-						accept="image/png,image/jpeg,image/webp"
-						class="sr-only"
-						aria-invalid={fileError ? true : undefined}
-						aria-describedby={fileError
-							? 'banner-image-help banner-image-error'
-							: 'banner-image-help'}
-						onchange={handleFileChange}
-					/>
-				</label>
-				{#if fileError}
-					<p id="banner-image-error" class="text-sm font-medium text-destructive">{fileError}</p>
-				{/if}
-			</div>
+					<label
+						for="banner-image"
+						ondragover={handleDragOver}
+						ondragleave={() => (dragOver = false)}
+						ondrop={handleDrop}
+						class={[
+							'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-muted/40',
+							dragOver
+								? 'border-primary bg-primary/5'
+								: fileError
+									? 'border-destructive'
+									: 'border-slate-400 hover:border-slate-500'
+						]}
+					>
+						<Upload class="h-8 w-8 text-muted-foreground" />
+						<span class="text-sm font-medium">
+							{file ? file.name : 'ลากรูปมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
+						</span>
+						<span id="banner-image-help" class="text-xs text-muted-foreground">
+							{imageHelp}
+						</span>
+						<!-- sr-only, not `hidden`: display:none drops the input out of the tab
+						     order, leaving keyboard users no way to open the file picker. -->
+						<input
+							id="banner-image"
+							type="file"
+							accept="image/png,image/jpeg,image/webp"
+							class="sr-only"
+							aria-invalid={fileError ? true : undefined}
+							aria-describedby={fileError
+								? 'banner-image-help banner-image-error'
+								: 'banner-image-help'}
+							onchange={handleFileChange}
+						/>
+					</label>
+					{#if fileError}
+						<p id="banner-image-error" class="text-sm font-medium text-destructive">{fileError}</p>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 
 	<div
 		class="flex flex-col-reverse gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between"
 	>
-		<Button
-			type="button"
-			variant="outline"
-			class="min-h-11 gap-2"
-			onclick={() => (previewOpen = true)}
-		>
-			<Eye class="h-4 w-4" />
-			ดูตัวอย่างบน kiosk
-		</Button>
-		<div class="flex flex-col gap-2 sm:flex-row">
+		{#if $formData.source === 'upload'}
+			<Button
+				type="button"
+				variant="outline"
+				class="min-h-11 gap-2"
+				onclick={() => (previewOpen = true)}
+			>
+				<Eye class="h-4 w-4" />
+				ดูตัวอย่างบน kiosk
+			</Button>
+		{/if}
+		<div class="flex flex-col gap-2 sm:ml-auto sm:flex-row">
 			<Button variant="outline" class="min-h-11" href={listHref}>ยกเลิก</Button>
 			<Button type="submit" class="btn-primary-brand min-h-11" disabled={$submitting}>
 				{$submitting ? 'กำลังบันทึก…' : 'บันทึก'}

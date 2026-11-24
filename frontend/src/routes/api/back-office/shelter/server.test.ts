@@ -19,6 +19,10 @@ vi.mock('$lib/server/shelters.admin', async (importOriginal) => {
 vi.mock('$lib/features/shelters/server/provisioner', () => ({
 	provisionShelter: vi.fn()
 }));
+const recordAuditedWrite = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
+vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite }));
 vi.mock('$lib/server/master-data-server', () => ({
 	readMasterDoc: vi.fn()
 }));
@@ -83,6 +87,29 @@ describe('POST /api/back-office/shelter', () => {
 		saMock.mockImplementationOnce(async () => error(403, 'System admin privileges required'));
 		await expect(callPOST({})).rejects.toMatchObject({ status: 403 });
 		expect(provisionMock).not.toHaveBeenCalled();
+	});
+
+	it('records one shelter.created for the provisioned shelter (CR-259 FR-24)', async () => {
+		recordAuditedWrite.mockClear();
+		provisionMock.mockResolvedValue({ code: 'SH009' } as never);
+
+		await callPOST(newShelter);
+
+		expect(recordAuditedWrite).toHaveBeenCalledTimes(1);
+		expect(recordAuditedWrite.mock.calls[0][0]).toMatchObject({
+			event: 'shelter.created',
+			action: 'create',
+			entityType: 'shelter'
+		});
+	});
+
+	it('records nothing when the caller is refused', async () => {
+		recordAuditedWrite.mockClear();
+		saMock.mockImplementationOnce(async () => error(403, 'System admin privileges required'));
+
+		await expect(callPOST({})).rejects.toMatchObject({ status: 403 });
+
+		expect(recordAuditedWrite).not.toHaveBeenCalled();
 	});
 });
 

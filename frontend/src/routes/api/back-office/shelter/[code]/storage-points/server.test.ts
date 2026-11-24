@@ -48,6 +48,11 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	};
 });
 
+const recordAuditedWrite = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
+vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite }));
+
 vi.mock('$lib/server/shelters.admin', () => ({
 	findMasterByCode: vi.fn(async () => state.doc),
 	migrate: (d: unknown) => d,
@@ -106,6 +111,31 @@ beforeEach(() => {
 		capacity: 100,
 		common_areas: { central_kitchen: true, sub_storage: [point('P1', 'ห้อง 1')] }
 	};
+});
+
+describe('audit wiring — CR-259 FR-24', () => {
+	it('records one shelter.storage_point_changed per successful write', async () => {
+		recordAuditedWrite.mockClear();
+
+		await POST(ctx('POST', 'SH001', { _rev: '1-a', point: point('', 'ห้องเก็บของ') }));
+
+		expect(recordAuditedWrite).toHaveBeenCalledTimes(1);
+		expect(recordAuditedWrite.mock.calls[0][0]).toMatchObject({
+			event: 'shelter.storage_point_changed',
+			action: 'update',
+			entityType: 'shelter',
+			entityId: 'SH001',
+			shelterCode: 'SH001'
+		});
+	});
+
+	it('records nothing when the caller is refused', async () => {
+		recordAuditedWrite.mockClear();
+
+		await POST(ctx('POST', 'SH002', { _rev: '1-a', point: point('', 'ห้องเก็บของ') }));
+
+		expect(recordAuditedWrite).not.toHaveBeenCalled();
+	});
 });
 
 describe('POST /storage-points (add)', () => {

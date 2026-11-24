@@ -37,7 +37,7 @@
 					</p>
 					<p class="text-xs text-slate-500">
 						<span>{item.actor.display_name}</span>
-						<span> · {formatThaiDateTime(item.occurred_at)}</span>
+						<span class="tabular-nums"> · {formatThaiDateTime(item.occurred_at)}</span>
 						<span> · {AUDIT_ACTION_LABELS[item.action] ?? item.action}</span>
 						{#if showShelter && item.shelter_code}
 							<span> · {item.shelter_code}</span>

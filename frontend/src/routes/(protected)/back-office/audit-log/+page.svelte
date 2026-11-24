@@ -1,15 +1,20 @@
 <script lang="ts">
-	import { AuditLogPage } from '$lib/features/audit-log';
+	import { AuditLogView } from '$lib/features/audit-log';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { isSystemAdmin, managerShelterCodes } from '$lib/auth/roles';
+	import { resolveShelterCode } from '$lib/db/shelter';
 
-	const isSA = $derived(isSystemAdmin(authStore.user?.roles ?? []));
-	const shelterCode = $derived(getShelterCode());
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
+	const managed = $derived(managerShelterCodes(roles));
+	const selected = $derived(resolveShelterCode());
+	const shelterCode = $derived(
+		isSA ? null : selected && managed.includes(selected) ? selected : (managed[0] ?? null)
+	);
 </script>
 
 <svelte:head>
 	<title>บันทึกการใช้งาน | SmartShelter Thailand</title>
 </svelte:head>
 
-<AuditLogPage isSystemAdmin={isSA} {shelterCode} />
+<AuditLogView isSystemAdmin={isSA} {shelterCode} />

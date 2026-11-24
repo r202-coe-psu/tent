@@ -236,8 +236,78 @@ describe('/api/back-office/kiosk-banners/[id] (FR-KBR-10/12/13)', () => {
 				DOC_ID,
 				'1-a',
 				expect.objectContaining({ title: 'ใหม่' }),
-				expect.objectContaining({ contentType: 'image/png' })
+				{ image: expect.objectContaining({ contentType: 'image/png' }) }
 			);
+		});
+
+		describe('template banners', () => {
+			const template = {
+				heading: 'ปิดปรับปรุง',
+				body: '',
+				align: 'left',
+				bg_color: '#1e3a8a',
+				text_color: '#ffffff',
+				image: 'template_image'
+			};
+			const templateImage = { content_type: 'x', data_base64: PNG_B64 };
+			const put = (extra: Record<string, unknown>) =>
+				call(PUT, 'PUT', { body: { ...fields, _rev: '1-a', template, ...extra } });
+
+			it('passes the decoded template_image to updateBanner', async () => {
+				const response = await put({ template_image: templateImage });
+				expect(response.status).toBe(200);
+				expect(mockUpdate).toHaveBeenCalledWith(
+					DOC_ID,
+					'1-a',
+					expect.objectContaining({ template }),
+					{ image: null, templateImage: expect.objectContaining({ contentType: 'image/png' }) }
+				);
+				expect(mockUpdate.mock.calls[0][2]).not.toHaveProperty('template_image');
+			});
+
+			it('keeps the stored logo when template_image is omitted', async () => {
+				const response = await put({});
+				expect(response.status).toBe(200);
+				expect(mockUpdate.mock.calls[0][3].templateImage).toBeUndefined();
+			});
+
+			it('returns 422 for an unknown template key or an external image url', async () => {
+				for (const bad of [
+					{ ...template, html: '<b>x</b>' },
+					{ ...template, image: 'https://x/y.png' }
+				]) {
+					const response = await call(PUT, 'PUT', {
+						body: { ...fields, _rev: '1-a', template: bad }
+					});
+					expect(response.status).toBe(422);
+				}
+				expect(mockUpdate).not.toHaveBeenCalled();
+			});
+
+			it('returns 422 when template_image is not a real image', async () => {
+				const response = await put({
+					template_image: {
+						content_type: 'image/png',
+						data_base64: Buffer.from('hello world!').toString('base64')
+					}
+				});
+				expect(response.status).toBe(422);
+				expect(mockUpdate).not.toHaveBeenCalled();
+			});
+
+			it('returns 422 when template_image is over 512 KB', async () => {
+				const oversized = new Uint8Array(512 * 1024 + 1);
+				oversized.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+				const response = await put({
+					template_image: {
+						content_type: 'image/png',
+						data_base64: Buffer.from(oversized).toString('base64')
+					}
+				});
+				expect(response.status).toBe(422);
+				expect((await response.json()).error.message).toBe('รูป/โลโก้ต้องมีขนาดไม่เกิน 512 KB');
+				expect(mockUpdate).not.toHaveBeenCalled();
+			});
 		});
 
 		it('passes screen_type to updateBanner and rejects an unknown one', async () => {
@@ -249,7 +319,7 @@ describe('/api/back-office/kiosk-banners/[id] (FR-KBR-10/12/13)', () => {
 				DOC_ID,
 				'1-a',
 				expect.objectContaining({ screen_type: 'portrait' }),
-				null
+				{ image: null }
 			);
 			mockUpdate.mockClear();
 			const bad = await call(PUT, 'PUT', {
@@ -261,7 +331,9 @@ describe('/api/back-office/kiosk-banners/[id] (FR-KBR-10/12/13)', () => {
 
 		it('keeps the current image when image is omitted (FR-KBR-05)', async () => {
 			await send.PUT();
-			expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, '1-a', expect.any(Object), null);
+			expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, '1-a', expect.any(Object), {
+				image: null
+			});
 		});
 
 		it('returns 422 for shelter_code in the body, missing _rev, bad fields or bad image', async () => {

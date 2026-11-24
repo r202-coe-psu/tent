@@ -207,7 +207,10 @@ export interface SheltersFixture {
 	/** Fixture env names that were unset on a read-only remote run (always empty otherwise). */
 	missingEnv: readonly string[];
 	marker: string;
-	hostNear: ShelterForm;
+	/** An evacuation centre ~1 km from the test GPS fix. */
+	evacNear: ShelterForm;
+	/** A host house next to the user: the public search never shows it (#1419). */
+	hostHidden: ShelterForm;
 	evacFar: ShelterForm;
 }
 
@@ -219,11 +222,19 @@ export function sheltersFixture(): SheltersFixture {
 	return {
 		missingEnv,
 		marker,
-		hostNear: {
-			name: `${marker} บ้านพี่เลี้ยงคอหงส์`,
-			siteKind: 'host_house',
+		evacNear: {
+			name: `${marker} ศูนย์อพยพคอหงส์`,
+			siteKind: 'evacuation_center',
 			lat: 7.01,
 			lng: 100.498,
+			subdistrict: 'คอหงส์',
+			capacity: 10
+		},
+		hostHidden: {
+			name: `${marker} บ้านพี่เลี้ยงคอหงส์`,
+			siteKind: 'host_house',
+			lat: 7.011,
+			lng: 100.499,
 			subdistrict: 'คอหงส์',
 			capacity: 10
 		},

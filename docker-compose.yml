@@ -88,6 +88,7 @@ services:
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
       M5_SYNC_INTERVAL_S: ${M5_SYNC_INTERVAL_S:-45}
       M6_SYNC_INTERVAL_S: ${M6_SYNC_INTERVAL_S:-45}
+      COUCH_FEED_MAX_CONNECTIONS: ${COUCH_FEED_MAX_CONNECTIONS:-500}
       # Print housekeeping task (CR-222 FR-17) — dev opt-in: set DEV_PRINT_HOUSEKEEPING_TOKEN to the
       # PRINT_HOUSEKEEPING_TOKEN in frontend/.env. Not PRINT_HOUSEKEEPING_TOKEN: the root .env
       # carries a staging placeholder that would switch the task on against a token-less pnpm dev.
@@ -155,6 +156,26 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["pnpm", "import-worker"]
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  shelter-close-worker:
+    image: tent/frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    environment:
+      SHELTER_CLOSE_WORKER_URL: ${SHELTER_CLOSE_WORKER_URL:-http://host.docker.internal:5173}
+      SHELTER_CLOSE_WORKER_TOKEN: ${SHELTER_CLOSE_WORKER_TOKEN:?SHELTER_CLOSE_WORKER_TOKEN is required}
+      SHELTER_CLOSE_WORKER_POLL_MS: ${SHELTER_CLOSE_WORKER_POLL_MS:-30000}
+      SHELTER_CLOSE_WORKER_TIMEOUT_MS: ${SHELTER_CLOSE_WORKER_TIMEOUT_MS:-30000}
+      SHELTER_CLOSE_CHUNK_BUDGET_MS: ${SHELTER_CLOSE_CHUNK_BUDGET_MS:-20000}
+      SHELTER_CLOSE_LEASE_MS: ${SHELTER_CLOSE_LEASE_MS:-60000}
+      SHELTER_CLOSE_STALE_MS: ${SHELTER_CLOSE_STALE_MS:-600000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["pnpm", "shelter-close-worker"]
     healthcheck:
       disable: true
     restart: unless-stopped

@@ -2,6 +2,8 @@ import {
 	buildAuditEvent,
 	chooseAuditView,
 	computeAuditChanges,
+	cursorMatchesRange,
+	cursorWithinQuery,
 	decodeAuditCursor,
 	encodeAuditCursor,
 	matchesAuditQuery,
@@ -18,6 +20,7 @@ import { AUDIT_LOG_DB, auditLogViewPath } from './audit-log-design';
 import { getDisplayNames } from './user-service';
 
 export const AUDIT_LOG_WRITE_ATTEMPTS = 3;
+const AUDIT_RETRYABLE_STATUSES = new Set([408, 429]);
 const RETRY_DELAY_MS = 150;
 const MAX_SCAN_ROUNDS = 5;
 
@@ -33,7 +36,7 @@ export async function recordAudit(input: AuditEventInput): Promise<boolean> {
 			const res = await adminRaw(path, 'PUT', doc);
 			if (res.status < 400 || res.status === 409) return true;
 			lastError = `HTTP ${res.status}`;
-			if (res.status === 404) break;
+			if (res.status < 500 && !AUDIT_RETRYABLE_STATUSES.has(res.status)) break;
 		} catch (error) {
 			lastError = error;
 		}
@@ -51,9 +54,10 @@ export type AuditedWrite = {
 	entityId: string;
 	label?: string | null;
 	shelterCode: string | null;
-	before?: Record<string, unknown> | null;
-	after?: Record<string, unknown> | null;
+	before?: object | null;
+	after?: object | null;
 	reason?: string | null;
+	onlyWhenChanged?: boolean;
 };
 
 export async function recordAuditedWrites(
@@ -68,6 +72,7 @@ export function recordAuditedWrite(write: AuditedWrite): Promise<boolean> {
 		write.action === 'create' || write.action === 'delete'
 			? undefined
 			: computeAuditChanges(write.entityType, write.before, write.after);
+	if (write.onlyWhenChanged && changes && changes.length === 0) return Promise.resolve(false);
 	return recordAudit({
 		actor: write.actor,
 		action: write.action,
@@ -79,6 +84,20 @@ export function recordAuditedWrite(write: AuditedWrite): Promise<boolean> {
 	});
 }
 
+function nameFromProxiedBody(body: unknown): string | null {
+	if (!body || typeof body !== 'object') return null;
+	const record = body as Record<string, unknown>;
+	if (typeof record.name === 'string') return record.name;
+	for (const key of ['key', 'client', 'api_key', 'thirdparty_client']) {
+		const nested = record[key];
+		if (nested && typeof nested === 'object') {
+			const name = (nested as Record<string, unknown>).name;
+			if (typeof name === 'string') return name;
+		}
+	}
+	return null;
+}
+
 export async function recordProxiedWrite(
 	res: Response,
 	write: Omit<AuditedWrite, 'entityId' | 'label'> & { entityId?: string; label?: string | null }
@@ -87,15 +106,22 @@ export async function recordProxiedWrite(
 	const body = (await res
 		.clone()
 		.json()
-		.catch(() => null)) as { id?: unknown; name?: unknown } | null;
+		.catch(() => null)) as { id?: unknown } | null;
 	const bodyId =
 		typeof body?.id === 'string' || typeof body?.id === 'number' ? String(body.id) : null;
+	const bodyName = nameFromProxiedBody(body);
 	const entityId = write.entityId ?? bodyId;
-	if (!entityId) return;
+	if (!entityId) {
+		console.warn('[audit-log] event not written: upstream body carried no id', {
+			event: write.event,
+			entityType: write.entityType
+		});
+		return;
+	}
 	await recordAuditedWrite({
 		...write,
 		entityId,
-		label: write.label ?? (typeof body?.name === 'string' ? body.name : null)
+		label: write.label ?? bodyName
 	});
 }
 
@@ -104,6 +130,12 @@ type ViewRow = { id: string; key: unknown; doc?: AuditEvent | null };
 export async function queryAuditLog(query: AuditLogQuery): Promise<AuditLogPage> {
 	const range = chooseAuditView(query);
 	const cursor = decodeAuditCursor(query.cursor);
+	if (query.cursor && !cursor) {
+		throw new ServiceError('VALIDATION', 'cursor is not a valid page marker');
+	}
+	if (cursor && !(cursorMatchesRange(range, cursor) && cursorWithinQuery(query, cursor))) {
+		throw new ServiceError('VALIDATION', 'cursor does not belong to this query');
+	}
 	const batch = Math.min(query.limit * 4, 500);
 	const matched: AuditEvent[] = [];
 	let startkey = cursor ? cursor.key : range.startkey;

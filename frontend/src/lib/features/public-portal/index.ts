@@ -2,6 +2,28 @@ export { default as PublicShelterCard } from './ui/public-shelter-card.svelte';
 export { default as ShelterParking } from './ui/shelter-parking.svelte';
 export { default as PublicShelterMetricCard } from './ui/public-shelter-metric-card.svelte';
 export { default as ShelterFilterPanel } from './ui/shelter-filter-panel.svelte';
+export { default as ActiveFilterChips } from './ui/active-filter-chips.svelte';
+export { default as ShelterListEmpty } from './ui/shelter-list-empty.svelte';
+export { default as MapFilterOverlay } from './ui/map-filter-overlay.svelte';
+export {
+	DEFAULT_RADIUS_KM,
+	RADIUS_PRESETS_KM,
+	activeFilterChips,
+	activeFilterCount,
+	emptyListReason,
+	isDefaultRadius,
+	isRadiusActive,
+	nextRadiusKm,
+	paramsWithoutAllFilters,
+	paramsWithoutFilter,
+	paramsWithoutPosition,
+	paramsWithRadius,
+	showMapFilterOverlay,
+	type ActiveFilterChip,
+	type ActiveFilterLabels,
+	type ActiveFilterValues,
+	type EmptyListReason
+} from './domain/active-filters';
 export { default as ExternalShelterChip } from './ui/external-shelter-chip.svelte';
 export { default as ShelterMap } from './ui/shelter-map.svelte';
 export { default as DonationNeedsMap } from './ui/donation-needs-map.svelte';
@@ -38,6 +60,7 @@ export type {
 	PublicShelterDetail,
 	PublicShelterItem,
 	PublicShelterListResponse,
+	PublicShelterSummary,
 	PublicSiteKind
 } from './domain/types';
 export {
@@ -103,6 +126,7 @@ export {
 	PublicApiError,
 	getPublicShelter,
 	listPublicShelters,
+	fetchShelterSummary,
 	fetchShelterTypes,
 	fetchSiteKinds,
 	type ShelterTypeOption

@@ -7,7 +7,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from worker.audit_diff import audit_diff
-from worker.audit_log import copy_audit_doc, is_audit_doc
+from worker.audit_log import (
+    AuditCopy,
+    AuditCopyIncomplete,
+    copy_audit_doc,
+    is_audit_doc,
+)
 from worker.couch.checkpoint import save_checkpoint
 from worker.couch.client import CATALOG_DB
 from worker.masking import shelter_code_from_db_name, shelter_db_name
@@ -146,7 +151,12 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
         if gated_code:
             await audit_diff(couch, database, change)
         if gated_code and not change.get("deleted") and is_audit_doc(change.get("doc")):
-            await copy_audit_doc(couch, change["doc"], database)
+            outcome = await copy_audit_doc(couch, change["doc"], database)
+            if outcome is AuditCopy.RETRY:
+                raise AuditCopyIncomplete(
+                    f"{database}: audit doc {change['doc'].get('_id')} not copied; "
+                    f"holding the checkpoint at seq {seq}"
+                )
             await save_checkpoint(database, seq)
             return
         if gated_code and public_status == "closed":

@@ -1,3 +1,4 @@
+import { capabilitiesForShelter, shelterCodesFromRoles } from '$lib/auth/roles';
 export const AUDIT_ACTIONS = ['create', 'update', 'delete', 'status_change', 'other'] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -129,6 +130,7 @@ const IGNORED_FIELDS = new Set([
 	'created_by',
 	'updated_by',
 	'password',
+	'password_sha',
 	'password_scheme',
 	'derived_key',
 	'salt',
@@ -154,11 +156,11 @@ function isLoggableValue(value: unknown): boolean {
 
 export function computeAuditChanges(
 	entityType: AuditEntityType,
-	before: Record<string, unknown> | null | undefined,
-	after: Record<string, unknown> | null | undefined
+	before: object | null | undefined,
+	after: object | null | undefined
 ): AuditChange[] {
-	const prev = before ?? {};
-	const next = after ?? {};
+	const prev = (before ?? {}) as Record<string, unknown>;
+	const next = (after ?? {}) as Record<string, unknown>;
 	const allowlist = new Set(AUDIT_VALUE_ALLOWLIST[entityType]);
 	const fields = [...new Set([...Object.keys(prev), ...Object.keys(next)])]
 		.filter((f) => !IGNORED_FIELDS.has(f))
@@ -209,6 +211,25 @@ export function buildAuditEvent(input: AuditEventInput, id: string, now: string)
 		source: 'bff',
 		source_ref: null
 	};
+}
+
+export function auditShelterCodesForRoleChange(
+	before: readonly string[] | null | undefined,
+	after: readonly string[] | null | undefined
+): Array<string | null> {
+	const prev = before ?? [];
+	const next = after ?? [];
+	const prevCodes = shelterCodesFromRoles(prev);
+	const nextCodes = shelterCodesFromRoles(next);
+	const changed = new Set<string>();
+	for (const code of new Set([...prevCodes, ...nextCodes])) {
+		const hadScope = prevCodes.includes(code);
+		const hasScope = nextCodes.includes(code);
+		const left = [...capabilitiesForShelter(prev, code)].sort().join('\u0000');
+		const right = [...capabilitiesForShelter(next, code)].sort().join('\u0000');
+		if (hadScope !== hasScope || left !== right) changed.add(code);
+	}
+	return changed.size > 0 ? [...changed].sort() : [null];
 }
 
 export function auditShelterCodesFromRoles(

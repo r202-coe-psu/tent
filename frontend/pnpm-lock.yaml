@@ -230,6 +230,9 @@ importers:
       fuse.js:
         specifier: ^7.5.0
         version: 7.5.0
+      html-to-image:
+        specifier: ^1.11.13
+        version: 1.11.13
       html2canvas-pro:
         specifier: ^2.2.3
         version: 2.2.3
@@ -2385,6 +2388,9 @@ packages:
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
+
+  html-to-image@1.11.13:
+    resolution: {integrity: sha512-cuOPoI7WApyhBElTTb9oqsawRvZ0rHhaHwghRLlTuffoD1B2aDemlCruLeZrUIIdvG7gs9xeELEPm6PhuASqrg==}
 
   html2canvas-pro@2.2.3:
     resolution: {integrity: sha512-PHW1mo/AU4fxXZu2ONzOcSWDwXi3ul/qMqOlmM0uvfvJqw2/dsWIY1jxUqYutO3RaLHxVC6mLYG6Ewfo3xYvhg==}
@@ -5910,6 +5916,8 @@ snapshots:
       minimalistic-crypto-utils: 1.0.1
 
   html-escaper@2.0.2: {}
+
+  html-to-image@1.11.13: {}
 
   html2canvas-pro@2.2.3:
     dependencies:

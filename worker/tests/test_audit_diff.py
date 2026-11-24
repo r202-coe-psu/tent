@@ -746,6 +746,7 @@ def _client() -> CouchClient:
     settings.couch_base_url = "http://couch:5984"
     settings.couchdb_user = "admin"
     settings.couchdb_password = "password"
+    settings.couch_feed_max_connections = 500
     return CouchClient(settings)
 
 

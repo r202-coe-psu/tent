@@ -1458,6 +1458,50 @@ ${consentVduClause()}
       }
     }
   }
+  // 2c. Evacuee status override (CR-262 + A1, schema.md §1.4). A manual stay-status override
+  // (revert_status movement, any status to any other) is manager-level: system_admin or the
+  // shelter_manager of this shelter (isRole covers both), with a reason. Two doors must stay
+  // shut together — the revert_status movement, and a direct evacuee write that lowers
+  // current_stay.status from active/room_confirmed without a movement (registration_staff
+  // must not step an in-shelter evacuee back). Mirror REVERT_TARGET_STATUSES in
+  // frontend/src/lib/features/people/domain/people.ts if the status list ever changes.
+  if (newDoc.type === 'movement' && newDoc.action === 'revert_status') {
+    if (!isRole('shelter_manager')) {
+      throw { forbidden: 'revert_status requires shelter_manager or system_admin' };
+    }
+    if (typeof newDoc.reason !== 'string' || newDoc.reason.trim().length === 0) {
+      throw { forbidden: 'revert_status requires a non-empty reason' };
+    }
+    if (['pre_registered', 'kiosk_registered', 'arriving', 'active', 'room_confirmed',
+         'temporary_leave', 'transferred', 'checked_out', 'deceased', 'cancelled']
+        .indexOf(newDoc.to_status) === -1) {
+      throw { forbidden: 'revert_status to_status must be a valid stay status' };
+    }
+    if (newDoc.from_status === newDoc.to_status) {
+      throw { forbidden: 'revert_status from_status and to_status must differ' };
+    }
+    if ((newDoc.to_status === 'active' || newDoc.to_status === 'room_confirmed') &&
+        (typeof newDoc.zone !== 'string' || newDoc.zone.trim().length === 0)) {
+      throw { forbidden: 'revert_status to active or room_confirmed requires a zone' };
+    }
+  }
+  // Dropping current_stay (or its status) from an active/room_confirmed doc counts as a backward
+  // change too — otherwise a stripped write followed by a second write dodges the guard. A delete
+  // (compensation of a failed registration) is not a status change.
+  if (newDoc.type === 'evacuee' && newDoc._deleted !== true && oldDoc && oldDoc.current_stay) {
+    var stayRank = { pre_registered: 0, kiosk_registered: 0, arriving: 1, active: 2, room_confirmed: 3 };
+    var revertOldRank = stayRank.hasOwnProperty(oldDoc.current_stay.status)
+      ? stayRank[oldDoc.current_stay.status] : -1;
+    var revertNewStatus = newDoc.current_stay ? newDoc.current_stay.status : undefined;
+    var stayStripped = typeof revertNewStatus !== 'string' || revertNewStatus === '';
+    var revertNewRank = !stayStripped && stayRank.hasOwnProperty(revertNewStatus)
+      ? stayRank[revertNewStatus] : -1;
+    if (revertOldRank >= stayRank.active &&
+        (stayStripped || (revertNewRank !== -1 && revertNewRank < revertOldRank)) &&
+        !isRole('shelter_manager')) {
+      throw { forbidden: 'Reverting current_stay.status requires shelter_manager or system_admin' };
+    }
+  }
   // CR-244 FR-13: whoever may receive stock (stock_ledger receipt) may reserve lot numbers.
   // distribution_staff is excluded (loan returns mint no lot number).
   if (newDoc.type === 'lot_counter') {

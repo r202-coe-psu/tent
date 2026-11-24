@@ -41,14 +41,31 @@ class CouchClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._auth = (settings.couchdb_user, settings.couchdb_password)
+        timeout = httpx.Timeout(60.0, connect=10.0)
         self._client = httpx.AsyncClient(
             base_url=settings.couch_base_url,
             auth=self._auth,
-            timeout=httpx.Timeout(60.0, connect=10.0),
+            timeout=timeout,
+        )
+        # Each tailed shelter holds one long-lived ``_changes`` connection for as long as
+        # it is listened to. On the shared pool (httpx default: 100) those starve every
+        # short request once there are more shelters than slots — listener reconcile,
+        # retention sweeps and new shelters' own feeds then die with ``PoolTimeout``.
+        # So feeds get their own pool, sized by ``couch_feed_max_connections`` (above the
+        # listened-shelter count), and ``_client`` stays free for ordinary reads and writes.
+        self.feed_max_connections: int = settings.couch_feed_max_connections
+        self._feed_client = httpx.AsyncClient(
+            base_url=settings.couch_base_url,
+            auth=self._auth,
+            timeout=timeout,
+            limits=httpx.Limits(
+                max_connections=self.feed_max_connections, max_keepalive_connections=0
+            ),
         )
 
     async def close(self) -> None:
         await self._client.aclose()
+        await self._feed_client.aclose()
 
     async def get_json(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         response = await self._client.get(path, params=params)
@@ -240,7 +257,7 @@ class CouchClient:
         if include_docs:
             params["include_docs"] = "true"
 
-        async with self._client.stream(
+        async with self._feed_client.stream(
             "GET", f"/{database}/_changes", params=params
         ) as response:
             response.raise_for_status()

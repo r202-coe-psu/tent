@@ -53,6 +53,16 @@
 		);
 	}
 
+	function clearFilters() {
+		entityType = '';
+		action = '';
+		actor = '';
+		fromDate = '';
+		toDate = '';
+		shelterFilter = '';
+		navigate({ ...EMPTY_AUDIT_FILTER_FORM });
+	}
+
 	function apply(event: SubmitEvent) {
 		event.preventDefault();
 		navigate({
@@ -77,9 +87,9 @@
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 sm:p-6">
 	<header class="space-y-1 border-b border-border/60 pb-5">
-		<h2 class="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+		<h1 class="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
 			บันทึกการใช้งาน (Audit Log)
-		</h2>
+		</h1>
 		<p class="text-sm text-slate-500">
 			{isSystemAdmin
 				? 'ประวัติการสร้าง แก้ไข และลบข้อมูลของทุกศูนย์'
@@ -155,7 +165,7 @@
 				type="button"
 				variant="outline"
 				class="min-h-11 w-full sm:w-auto"
-				onclick={() => navigate({ ...EMPTY_AUDIT_FILTER_FORM })}
+				onclick={clearFilters}
 			>
 				ล้างตัวกรอง
 			</Button>
@@ -165,10 +175,16 @@
 	<section class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs sm:p-6">
 		{#if query.isLoading}
 			<p class="text-sm text-slate-500" role="status">กำลังโหลด...</p>
-		{:else if items.length === 0}
+		{:else if items.length === 0 && !query.hasNextPage}
 			<p class="text-sm text-slate-500">ไม่พบรายการ</p>
 		{:else}
-			<AuditEventList {items} showShelter={isSystemAdmin} />
+			{#if items.length === 0}
+				<p class="text-sm text-slate-500">
+					ยังไม่พบรายการในช่วงที่ค้นไปแล้ว — กดโหลดเพิ่มเพื่อค้นต่อ
+				</p>
+			{:else}
+				<AuditEventList {items} showShelter={isSystemAdmin} />
+			{/if}
 			{#if query.hasNextPage}
 				<div class="pt-3">
 					<Button

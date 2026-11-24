@@ -6,16 +6,15 @@ import {
 	serviceError,
 	ServiceError
 } from '$lib/server/couch-admin';
-import {
-	createOrMergeUser,
-	deleteUser,
-	listUsers,
-	readUserDocForLink,
-	updateUser
-} from '$lib/server/user-service';
+import { createOrMergeUser, deleteUser, listUsers, updateUser } from '$lib/server/user-service';
 import { recordAuditedWrites } from '$lib/server/audit-log';
 import { assertUsersWritable } from '$lib/server/edge-mode';
-import { AUDIT_EVENTS, auditShelterCodesFromRoles } from '$lib/features/audit-log/server';
+import {
+	AUDIT_EVENTS,
+	auditShelterCodesForRoleChange,
+	auditShelterCodesFromRoles,
+	computeAuditChanges
+} from '$lib/features/audit-log/server';
 import { validateProvisionedPassword } from '$lib/server/password-policy';
 import { shelterCodesFromRoles } from '$lib/auth/roles';
 import { assertVolunteerVerifiedForAccess } from '$lib/features/volunteers/server/volunteer-access-grant';
@@ -120,7 +119,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (volunteer_id)
 			await assertVolunteerVerifiedForAccess(shelterCodesFromRoles(roles), volunteer_id);
 		assertUsersWritable();
-		const existing = await readUserDocForLink(name);
 		const result = await createOrMergeUser(
 			{
 				name,
@@ -142,7 +140,6 @@ export const POST: RequestHandler = async ({ request }) => {
 			// A merge into an existing volunteer account checks that account's own profile (A1-7).
 			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
-		const created = await readUserDocForLink(name);
 		await recordAuditedWrites(
 			{
 				actor: caller.name,
@@ -150,9 +147,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				action: result.merged ? 'update' : 'create',
 				entityType: 'user',
 				entityId: name,
-				label: display_name,
-				before: existing as unknown as Record<string, unknown> | null,
-				after: created as unknown as Record<string, unknown> | null
+				label: result.after?.display_name ?? display_name,
+				before: result.before,
+				after: result.after
 			},
 			auditShelterCodesFromRoles(roles)
 		);
@@ -214,8 +211,7 @@ export const PUT: RequestHandler = async ({ request }) => {
 				: undefined;
 
 		assertUsersWritable();
-		const before = await readUserDocForLink(name);
-		await updateUser(
+		const result = await updateUser(
 			name,
 			{
 				password,
@@ -239,26 +235,29 @@ export const PUT: RequestHandler = async ({ request }) => {
 			// (CR-221 A1-7); a save that adds no role is not checked.
 			{ verifyVolunteerRoles: assertVolunteerVerifiedForAccess }
 		);
-		const after = await readUserDocForLink(name);
+		const { before: saved, after } = result;
 		const rolesChanged =
-			JSON.stringify([...(before?.roles ?? [])].sort()) !==
+			JSON.stringify([...(saved?.roles ?? [])].sort()) !==
 			JSON.stringify([...(after?.roles ?? [])].sort());
+		const otherFieldsChanged = computeAuditChanges('user', saved, after).length > 0;
 		await recordAuditedWrites(
 			{
 				actor: caller.name,
 				event: rolesChanged
 					? AUDIT_EVENTS.userRolesChanged
-					: password && !display_name && !roles
+					: password && !otherFieldsChanged
 						? AUDIT_EVENTS.userPasswordReset
 						: AUDIT_EVENTS.userUpdated,
 				action: 'update',
 				entityType: 'user',
 				entityId: name,
-				label: after?.display_name ?? before?.display_name ?? null,
-				before: before as unknown as Record<string, unknown> | null,
-				after: after as unknown as Record<string, unknown> | null
+				label: after?.display_name ?? saved?.display_name ?? null,
+				before: saved,
+				after: after
 			},
-			auditShelterCodesFromRoles(before?.roles, after?.roles)
+			rolesChanged
+				? auditShelterCodesForRoleChange(saved?.roles, after?.roles)
+				: auditShelterCodesFromRoles(saved?.roles, after?.roles)
 		);
 		return json({ ok: true });
 	} catch (e) {
@@ -283,18 +282,30 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
 		const name = url.searchParams.get('name');
 		if (!name) throw new ServiceError('VALIDATION', 'name is required');
 		assertUsersWritable();
-		const before = await readUserDocForLink(name);
-		await deleteUser(name, caller);
+		const { deleted: removed, before, after } = await deleteUser(name, caller);
 		await recordAuditedWrites(
-			{
-				actor: caller.name,
-				event: AUDIT_EVENTS.userDeleted,
-				action: 'delete',
-				entityType: 'user',
-				entityId: name,
-				label: before?.display_name ?? null
-			},
-			auditShelterCodesFromRoles(before?.roles)
+			removed
+				? {
+						actor: caller.name,
+						event: AUDIT_EVENTS.userDeleted,
+						action: 'delete',
+						entityType: 'user',
+						entityId: name,
+						label: before?.display_name ?? null
+					}
+				: {
+						actor: caller.name,
+						event: AUDIT_EVENTS.userRolesChanged,
+						action: 'update',
+						entityType: 'user',
+						entityId: name,
+						label: after?.display_name ?? before?.display_name ?? null,
+						before: before,
+						after: after
+					},
+			removed
+				? auditShelterCodesFromRoles(before?.roles)
+				: auditShelterCodesForRoleChange(before?.roles, after?.roles)
 		);
 		return json({ ok: true });
 	} catch (e) {

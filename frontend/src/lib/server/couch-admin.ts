@@ -73,6 +73,8 @@ export function isProtectedBootstrapAdmin(
 }
 
 /** Raw admin request — returns status + parsed body, never throws on HTTP error. */
+export const ADMIN_RAW_TIMEOUT_MS = 30_000;
+
 export async function adminRaw(
 	path: string,
 	method: string,
@@ -83,7 +85,7 @@ export async function adminRaw(
 	body = stampAdminWrite(path, method, body);
 	const res = await fetch(`${base}${path}`, {
 		method,
-		...(signal ? { signal } : {}),
+		signal: signal ?? AbortSignal.timeout(ADMIN_RAW_TIMEOUT_MS),
 		headers: {
 			Authorization: authHeader,
 			'Content-Type': 'application/json',

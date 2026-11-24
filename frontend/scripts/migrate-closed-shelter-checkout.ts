@@ -11,38 +11,33 @@
  *
  * Needs: COUCHDB_ADMIN_URL in the environment or frontend/.env
  *
- * Walks every registry shelter whose operation_status resolves to `closed` and runs the same
- * `closeShelterPeople` service as the close route: `check_in`ed people get a `check_out` movement
- * (reason `shelter_closed`), `pre_registered` are cancelled, households re-derived. Movements and
- * audits are stamped with the run time (no backdating). The registry is NEVER written: the shelter
- * stays `closed` and `closed_at` is untouched (CR-183 retention clock). Each shelter that changed
- * something (or failed) gets one summary audit in its own DB with
- * `context = { backfill, shelter_closed_at, checked_out, cancelled, failed, households_repaired }`.
- * Households whose stored status no longer matches their (already closed-out) members are
- * re-derived too (FR-12a); the dry-run counts them and both modes print the number per shelter
- * (FR-31a).
+ * Walks every registry shelter whose operation_status resolves to `closed`. `--dry-run` counts
+ * synchronously and writes nothing (CR-243 FR-32). `--write --confirm` does NOT process anyone
+ * itself: it creates one `shelter_close_job` with `mode = backfill` per shelter (skipping a
+ * shelter that already has an active job) in `central_ops`, prints each `job_id` and returns
+ * without waiting (CR-243 FR-31). The `shelter-close-worker` then checks people out
+ * (reason `shelter_closed`), cancels `pre_registered`, re-derives households, and writes one
+ * summary audit per shelter (CR-219 FR-30a) with `context = { backfill, shelter_closed_at,
+ * checked_out, cancelled, failed, households_repaired }` authored by BACKFILL_CREATED_BY.
+ * The registry is NEVER written: the shelter stays `closed` and `closed_at` is untouched
+ * (CR-183 retention clock). The worker must be running; follow a job with
+ * GET /api/back-office/shelter/<code>/close/jobs/<job_id>.
  *
- * Idempotent: a re-run only touches people still in an affected status, and writes no audit when
- * nothing changed. Exits non-zero if any evacuee failed, a shelter DB could not be read, or people
- * remain after the run.
+ * Idempotent (CR-243 FR-33): a re-run only creates jobs for shelters without an active one, and a
+ * job only touches people still in an affected status (no audit when nothing changed). Exits
+ * non-zero if a shelter could not be read or a job could not be created.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
-	BACKFILL_AUDIT_CONTEXT,
 	BACKFILL_CREATED_BY,
-	buildBackfillSummaryAudit,
 	parseBackfillArgs,
 	selectClosedShelters
 } from '$lib/server/closed-shelter-checkout-backfill';
-import {
-	closeShelterPeople,
-	countStaleHouseholds,
-	previewShelterClose
-} from '$lib/server/shelter-close';
-import { shelterDbName } from '$lib/server/shelter-access-design';
+import { dryRunShelterClose, previewShelterClose } from '$lib/server/shelter-close';
+import { createShelterCloseJobStore, readShelterCloseConfig } from '$lib/server/shelter-close-job';
 
 function loadEnv(): Record<string, string> {
 	const envPath = resolve(process.cwd(), '.env');
@@ -139,7 +134,7 @@ async function main(): Promise<void> {
 	console.log(
 		DRY_RUN
 			? '— DRY RUN (counts only; nothing is written) —'
-			: '— WRITE: checking out people in closed shelters (registry is not touched) —'
+			: '— WRITE: queueing backfill close jobs for closed shelters (registry is not touched) —'
 	);
 
 	const selection = selectClosedShelters(
@@ -155,49 +150,45 @@ async function main(): Promise<void> {
 
 	let problems = 0;
 	let totalAffected = 0;
-	let totalCheckedOut = 0;
-	let totalCancelled = 0;
 	let totalHouseholds = 0;
+	let queued = 0;
+	let skipped = 0;
+	const store = DRY_RUN
+		? null
+		: createShelterCloseJobStore({
+				couchReq,
+				config: readShelterCloseConfig({ ...env, ...process.env })
+			});
 
 	for (const shelter of shelters) {
 		const label = `${shelter.code} (closed_at: ${shelter.closed_at ?? 'none'})`;
 		try {
-			if (DRY_RUN) {
-				const preview = await previewShelterClose(couchReq, shelter.code);
-				const stale = await countStaleHouseholds(couchReq, shelter.code);
+			if (!store) {
+				const { preview, stale_households } = await dryRunShelterClose(couchReq, shelter.code);
 				totalAffected += preview.total;
-				totalHouseholds += stale;
+				totalHouseholds += stale_households;
 				console.log(
 					`${label}\n  would close out ${preview.total} (${describeCounts(preview.by_status)})` +
-						` · repair ${stale} household(s)`
+						` · repair ${stale_households} household(s)`
 				);
 				continue;
 			}
 
-			const run = await closeShelterPeople(couchReq, shelter.code, {
-				createdBy: BACKFILL_CREATED_BY,
-				auditContext: { ...BACKFILL_AUDIT_CONTEXT }
+			const preview = await previewShelterClose(couchReq, shelter.code);
+			const result = await store.createJob({
+				shelter_code: shelter.code,
+				mode: 'backfill',
+				requested_by: BACKFILL_CREATED_BY,
+				preview
 			});
-			totalCheckedOut += run.checked_out;
-			totalCancelled += run.cancelled;
-			totalHouseholds += run.households_repaired;
-			console.log(
-				`${label}\n  checked_out=${run.checked_out} cancelled=${run.cancelled} households_repaired=${run.households_repaired} failed=${run.failed.length} remaining=${run.remaining.total}`
-			);
-			for (const f of run.failed) console.log(`    ✗ ${f.evacuee_id}: ${f.error}`);
-			problems += run.failed.length + (run.remaining.total > 0 ? 1 : 0);
-
-			const audit = buildBackfillSummaryAudit(shelter, run);
-			if (audit) {
-				const res = await couchReq(
-					'PUT',
-					`/${shelterDbName(shelter.code)}/${encodeURIComponent(audit._id)}`,
-					audit
+			if (result.created) {
+				queued += 1;
+				console.log(
+					`${label}\n  queued job_id=${result.job.job_ulid} (affected: ${preview.total})`
 				);
-				if (res.status >= 300) {
-					problems += 1;
-					console.log(`    ✗ summary audit not written (${failure(res)})`);
-				}
+			} else {
+				skipped += 1;
+				console.log(`${label}\n  skipped: job ${result.job_id} is already active`);
 			}
 		} catch (err) {
 			problems += 1;
@@ -208,7 +199,7 @@ async function main(): Promise<void> {
 	console.log(
 		DRY_RUN
 			? `\nTotal that would be closed out: ${totalAffected} · households to repair: ${totalHouseholds}`
-			: `\nTotal: checked_out=${totalCheckedOut} cancelled=${totalCancelled} households_repaired=${totalHouseholds} problems=${problems}`
+			: `\nQueued ${queued} job(s), skipped ${skipped} (active job), problems=${problems}. The shelter-close-worker processes them.`
 	);
 	if (problems > 0) process.exitCode = 1;
 }

@@ -78,6 +78,22 @@ describe('recordAudit', () => {
 		expect(console.error).toHaveBeenCalled();
 	});
 
+	it('stops at once on a permanent rejection instead of retrying', async () => {
+		adminRawMock.mockResolvedValue({ status: 403, data: {} });
+
+		await recordAudit(input);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps retrying a throttled write', async () => {
+		adminRawMock.mockResolvedValue({ status: 429, data: {} });
+
+		await recordAudit(input);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(3);
+	});
+
 	it('stops at once when audit_log does not exist', async () => {
 		adminRawMock.mockResolvedValue({ status: 404, data: { error: 'not_found' } });
 		expect(await recordAudit(input)).toBe(false);
@@ -126,11 +142,117 @@ describe('recordProxiedWrite', () => {
 		});
 		expect(await ok.json()).toEqual({ id: 'key-1', name: 'EOC' });
 	});
+
+	it("keeps the caller's own entityId and label over the upstream body", async () => {
+		adminRawMock.mockResolvedValue({ status: 201, data: {} });
+		const ok = new Response(JSON.stringify({ id: 'ignored', name: 'ignored' }), { status: 200 });
+
+		await recordProxiedWrite(ok, {
+			actor: 'sa',
+			event: 'thirdparty_client.revoked',
+			action: 'status_change',
+			entityType: 'thirdparty_client',
+			entityId: 'client-9',
+			label: 'พันธมิตร ก',
+			shelterCode: null
+		});
+
+		expect(adminRawMock.mock.calls[0][2].entity).toEqual({
+			type: 'thirdparty_client',
+			id: 'client-9',
+			label: 'พันธมิตร ก'
+		});
+	});
+
+	it('reads the label from a name nested under key or client', async () => {
+		adminRawMock.mockResolvedValue({ status: 201, data: {} });
+
+		await recordProxiedWrite(
+			new Response(JSON.stringify({ key: { id: 'k-1', name: 'EOC key' } }), { status: 200 }),
+			{
+				actor: 'sa',
+				event: 'api_key.revoked',
+				action: 'status_change',
+				entityType: 'api_key',
+				entityId: 'k-1',
+				shelterCode: null
+			}
+		);
+
+		expect(adminRawMock.mock.calls[0][2].entity).toMatchObject({ label: 'EOC key' });
+	});
+
+	it('writes nothing when a successful upstream body carries no id', async () => {
+		adminRawMock.mockResolvedValue({ status: 201, data: {} });
+
+		await recordProxiedWrite(new Response(JSON.stringify({ ok: true }), { status: 200 }), {
+			actor: 'sa',
+			event: 'api_key.revoked',
+			action: 'status_change',
+			entityType: 'api_key',
+			shelterCode: null
+		});
+
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
 });
 
 describe('queryAuditLog', () => {
 	const rows = (events: AuditEvent[]) =>
 		events.map((doc) => ({ id: doc._id, key: [doc.shelter_code, doc.occurred_at], doc }));
+
+	it('keeps a shelter-scoped caller on by_shelter even with an entity filter', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		await queryAuditLog(
+			parseAuditLogQuery(
+				new URLSearchParams({
+					shelter_code: 'SH001',
+					entity_type: 'shelter',
+					entity_id: 'SH002'
+				})
+			)
+		);
+
+		expect(adminRawMock.mock.calls[0][0]).toContain('/_view/by_shelter?');
+		expect(adminRawMock.mock.calls[0][0]).toContain(encodeURIComponent('"SH001"'));
+	});
+
+	it('refuses a cursor that points at another shelter', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		await expect(
+			queryAuditLog(
+				parseAuditLogQuery(
+					new URLSearchParams({
+						shelter_code: 'SH001',
+						cursor: JSON.stringify({ key: ['SH002', '2099-01-01'], id: 'audit_event:01' })
+					})
+				)
+			)
+		).rejects.toMatchObject({ code: 'VALIDATION' });
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('refuses a cursor outside the requested date range', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { rows: [] } });
+
+		await expect(
+			queryAuditLog(
+				parseAuditLogQuery(
+					new URLSearchParams({
+						shelter_code: 'SH001',
+						to: '2026-11-18',
+						cursor: JSON.stringify({
+							key: ['SH001', '2026-12-25T00:00:00.000Z'],
+							id: 'audit_event:01'
+						})
+					})
+				)
+			)
+		).rejects.toMatchObject({ code: 'VALIDATION' });
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
 
 	it('returns the page newest first with display names and no _rev', async () => {
 		adminRawMock.mockResolvedValue({ status: 200, data: { rows: rows([event(3), event(2)]) } });

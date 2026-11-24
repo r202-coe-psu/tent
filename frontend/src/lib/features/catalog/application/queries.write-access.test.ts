@@ -64,6 +64,34 @@ describe('item_master write access on the client (CR-227)', () => {
 		expect(mocks.createItemMaster).not.toHaveBeenCalled();
 	});
 
+	it('lets a multi-shelter manager write in every shelter they hold, not just the first', async () => {
+		mocks.roles = [
+			'shelter:SH001',
+			'SH001:shelter_manager',
+			'shelter:SH002',
+			'SH002:shelter_manager'
+		];
+
+		await create('SH001');
+		await create('SH002');
+
+		expect(mocks.createItemMaster).toHaveBeenCalledTimes(2);
+		expect(() => create('SH003')).toThrow();
+	});
+
+	it('does not let a manager of one shelter write in another shelter where they are only staff', () => {
+		mocks.roles = [
+			'shelter:SH001',
+			'SH001:shelter_manager',
+			'shelter:SH002',
+			'SH002:registration_staff'
+		];
+
+		expect(() => create('SH001')).not.toThrow();
+		expect(() => create('SH002')).toThrow();
+		expect(mocks.createItemMaster).toHaveBeenCalledTimes(1);
+	});
+
 	it('refuses staff that never had catalog write', () => {
 		mocks.roles = ['shelter:SH001', 'SH001:distribution_staff'];
 

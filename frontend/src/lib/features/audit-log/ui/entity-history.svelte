@@ -37,10 +37,16 @@
 		<p class="text-sm text-slate-500" role="status">กำลังโหลดประวัติ...</p>
 	{:else if query.isError}
 		<p class="text-sm text-red-700" role="status">โหลดประวัติไม่สำเร็จ</p>
-	{:else if items.length === 0}
+	{:else if items.length === 0 && !query.hasNextPage}
 		<p class="text-sm text-slate-500">ยังไม่มีประวัติการแก้ไข</p>
 	{:else}
-		<AuditEventList {items} />
+		{#if items.length === 0}
+			<p class="text-sm text-slate-500">
+				ยังไม่พบประวัติในช่วงที่ค้นไปแล้ว — กดโหลดเพิ่มเพื่อค้นต่อ
+			</p>
+		{:else}
+			<AuditEventList {items} />
+		{/if}
 		{#if query.hasNextPage}
 			<Button
 				type="button"

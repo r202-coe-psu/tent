@@ -21,6 +21,12 @@ export type {
 	ReorderPlan
 } from './domain/kiosk-banner';
 export {
+	TEMPLATE_IMAGE_ATTACHMENT,
+	TEMPLATE_IMAGE_MAX_BYTES,
+	TEMPLATE_IMAGE_TOO_LARGE_MESSAGE
+} from './domain/kiosk-banner-template';
+export type { KioskBannerTemplate } from './domain/kiosk-banner-template';
+export {
 	KIOSK_BANNER_GROUP_LIMITS,
 	createKioskBannerGroup,
 	generateTvCode,

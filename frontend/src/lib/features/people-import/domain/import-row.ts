@@ -3,7 +3,8 @@ import {
 	evacueeInputSchema,
 	householdInputSchema,
 	type EvacueeInput,
-	type HouseholdInput
+	type HouseholdInput,
+	type StayStatus
 } from '$lib/features/people';
 import {
 	CARD_TYPE_CHOICES,
@@ -80,7 +81,10 @@ export interface RowFieldError {
 
 export type RowStatus = 'created' | 'skipped_duplicate' | 'validation_error' | 'server_error';
 
-/** The stay a row reports, resolved and ready to turn into movements (#1399). */
+/**
+ * The stay a row reports, resolved and ready to turn into movements (#1399). A row with a blank
+ * `สถานะ` has no stay (`null`, #1448): the person stays `pre_registered` and waits for Report-in.
+ */
 export interface ImportStay {
 	status: 'active' | 'checked_out';
 	/** UTC ISO instant of the real check-in. */
@@ -96,7 +100,8 @@ export interface MemberPayload {
 	/** 1-based data row on the member sheet — shown when a member is skipped. */
 	line: number;
 	evacuee: EvacueeInput;
-	stay: ImportStay;
+	/** `null` = blank `สถานะ` → left `pre_registered`, no movement (#1448). */
+	stay: ImportStay | null;
 	/** Identity key used for duplicate detection; null when the row has none. */
 	duplicateKey: string | null;
 }
@@ -106,9 +111,15 @@ export interface HouseholdImportPayload {
 	/** `head_evacuee_id` stays null here — the writer fills it once the head exists. */
 	household: HouseholdInput;
 	head: EvacueeInput;
-	headStay: ImportStay;
+	/** `null` = blank `สถานะ` → left `pre_registered`, no movement (#1448). */
+	headStay: ImportStay | null;
 	headDuplicateKey: string | null;
 	members: MemberPayload[];
+}
+
+/** How many people in a validated household have no stay and so wait for Report-in (#1448). */
+export function countPendingReportIn(payload: HouseholdImportPayload): number {
+	return [payload.headStay, ...payload.members.map((m) => m.stay)].filter((s) => s === null).length;
 }
 
 export interface RowValidation {
@@ -479,18 +490,27 @@ function matchZone(value: string, zones: readonly ImportZone[]): ImportZone | un
 }
 
 /**
- * Read one person's stay columns. Returns `null` when any of them is wrong (the errors are already
- * in `sink`), so the caller can never build a payload from a half-valid stay.
+ * Read one person's stay columns. Returns `null` for a blank `สถานะ` (no stay — the person is
+ * imported `pre_registered`, #1448) and also when any column is wrong; the second case always
+ * leaves errors in `sink`, so callers must check `sink` before building a payload.
  */
 function readStay(raw: RawRow, sink: ErrorSink, lookups: Lookups): ImportStay | null {
 	const before = sink.errors.length;
 	const now = lookups.now ?? new Date();
 
-	const rawStatus = cell(raw, H.stay_status);
-	const status = resolveEnum(raw, H.stay_status, STAY_STATUS_CHOICES, sink);
-	if (rawStatus === '') {
-		sink.push(H.stay_status, `ต้องระบุสถานะ: ${optionList(STAY_STATUS_CHOICES)}`);
+	if (cell(raw, H.stay_status) === '') {
+		// Blank status = waits for Report-in at Station 1: nothing else about a stay may be given.
+		for (const header of [H.arrived_at, H.departed_at, H.zone]) {
+			if (cell(raw, header) !== '') {
+				sink.push(
+					header,
+					`ไม่ได้ระบุ "${H.stay_status}" — เลือกสถานะ (${optionList(STAY_STATUS_CHOICES)}) หรือล้างค่า "${header}" ออก (ว่าง = รอรายงานตัวที่ Station 1)`
+				);
+			}
+		}
+		return null;
 	}
+	const status = resolveEnum(raw, H.stay_status, STAY_STATUS_CHOICES, sink);
 
 	const arrived = resolveInstant(raw, H.arrived_at, sink, now);
 	if (cell(raw, H.arrived_at) === '') sink.push(H.arrived_at, 'ต้องระบุเวลามา');
@@ -574,7 +594,7 @@ function validateMembers(
 		warnings.push(...warn.errors);
 		const stay = readStay(row.cells, sink, lookups);
 		const ok = validatePerson(person, sink, MEMBER_PATH_TO_HEADER);
-		if (ok && stay && sink.errors.length === 0) {
+		if (ok && sink.errors.length === 0) {
 			members.push({
 				line: row.line,
 				evacuee: person,
@@ -608,9 +628,10 @@ export function validateRow(
 
 	const memberResult = validateMembers(memberRows, lookups);
 	const assetDescription = cell(raw, H.assets);
-	const stayStatuses = [
-		...(headStay ? [headStay.status] : []),
-		...memberResult.members.map((m) => m.stay.status)
+	// A person without a stay (blank `สถานะ`) is `pre_registered`, and counts that way here.
+	const stayStatuses: StayStatus[] = [
+		headStay?.status ?? 'pre_registered',
+		...memberResult.members.map((m) => m.stay?.status ?? 'pre_registered')
 	];
 	const householdStatus = deriveHouseholdStatus(stayStatuses);
 	const household = {
@@ -654,7 +675,7 @@ export function validateRow(
 	const errors = [...sink.errors, ...memberErrors];
 	const warnings = [...warn.errors, ...memberWarnings];
 
-	if (errors.length === 0 && headOk && headStay && parsedHousehold.success) {
+	if (errors.length === 0 && headOk && parsedHousehold.success) {
 		return {
 			row,
 			label: label || null,

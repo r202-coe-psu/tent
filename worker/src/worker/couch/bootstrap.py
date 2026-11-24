@@ -8,7 +8,12 @@ from typing import Any
 
 import httpx
 
-from worker.audit_log import copy_all_audit_docs, copy_audit_doc
+from worker.audit_log import (
+    AuditCopy,
+    AuditCopyIncomplete,
+    copy_all_audit_docs,
+    copy_audit_doc,
+)
 from worker.couch.checkpoint import (
     get_checkpoint,
     get_projection_version,
@@ -87,6 +92,7 @@ async def bootstrap_database(
     # lands mid-scan (after its doc was already read) is then replayed by the _changes
     # tail instead of being skipped. Projection writes are upserts, so replay is safe.
     seq = await couch.db_update_seq(database)
+    audit_retry = False
 
     shelter_code = shelter_code_from_db_name(database)
     if database == REGISTRY_DB:
@@ -138,8 +144,15 @@ async def bootstrap_database(
                 )
                 await apply_person(action, payload)
                 await sync_booking_stay(doc)
-            elif doc.get("type") == "audit":
-                await copy_audit_doc(couch, doc, database)
+            elif (
+                doc.get("type") == "audit"
+                and await copy_audit_doc(couch, doc, database) is AuditCopy.RETRY
+            ):
+                audit_retry = True
+        if audit_retry:
+            raise AuditCopyIncomplete(
+                f"{database}: bootstrap left audit events uncopied; checkpoint held"
+            )
         await save_checkpoint(database, seq)
         logger.info("Bootstrap complete for %s, persons only (seq=%s)", database, seq)
         return
@@ -201,8 +214,11 @@ async def bootstrap_database(
             # projected here too, or their own profile screen comes back empty.
             action, payload = project_volunteer(doc, shelter_code=shelter_code)
             await apply_volunteer(action, payload)
-        elif doc_type == "audit":
-            await copy_audit_doc(couch, doc, database)
+        elif (
+            doc_type == "audit"
+            and await copy_audit_doc(couch, doc, database) is AuditCopy.RETRY
+        ):
+            audit_retry = True
 
     for job_id, shift_id in sorted(shift_slots):
         await sync_job_shift_slot(job_id=job_id, shift_id=shift_id)
@@ -228,6 +244,10 @@ async def bootstrap_database(
     for action, payload in need_actions:
         await apply_need(action, payload)
 
+    if audit_retry:
+        raise AuditCopyIncomplete(
+            f"{database}: bootstrap left audit events uncopied; checkpoint held"
+        )
     await save_checkpoint(database, seq)
     logger.info("Bootstrap complete for %s (seq=%s)", database, seq)
 

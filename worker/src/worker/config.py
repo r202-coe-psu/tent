@@ -22,6 +22,10 @@ class Settings:
     m6_sync_interval_s: float = 45.0
     audit_diff_enabled: bool = False
     public_writer_name: str = "public_writer"
+    # Cap on concurrent CouchDB ``_changes`` feeds (one long-lived connection per listened
+    # shelter). Kept above the shelter count so feeds never starve ``CouchClient``'s request
+    # pool, but finite so a leaking feed fails loudly instead of eating the host's sockets.
+    couch_feed_max_connections: int = 500
 
     @property
     def couch_base_url(self) -> str:
@@ -63,4 +67,7 @@ def load_settings() -> Settings:
         m6_sync_interval_s=float(os.environ.get("M6_SYNC_INTERVAL_S", "45")),
         audit_diff_enabled=_env_flag("AUDIT_DIFF_ENABLED"),
         public_writer_name=_public_writer_name(),
+        couch_feed_max_connections=int(
+            os.environ.get("COUCH_FEED_MAX_CONNECTIONS", "500")
+        ),
     )

@@ -224,7 +224,13 @@ export const POST: RequestHandler = async ({ request }) => {
 						},
 						{ assertActive: assertActiveClaim }
 					);
-					await recordAuditedWrite({
+					return written;
+				};
+				const recordExistingUpdated = (
+					code: string,
+					written: Awaited<ReturnType<typeof updateExisting>>
+				) =>
+					recordAuditedWrite({
 						actor: job.imported_by,
 						event: AUDIT_EVENTS.shelterImported,
 						action: 'update',
@@ -232,11 +238,9 @@ export const POST: RequestHandler = async ({ request }) => {
 						entityId: code,
 						label: written.after?.name ?? null,
 						shelterCode: code,
-						before: written.before as Record<string, unknown> | undefined,
-						after: written.after as Record<string, unknown> | undefined
+						before: written.before,
+						after: written.after
 					});
-					return written;
-				};
 				const duplicate = await findMasterByName(input.name);
 				const resumingProvision = Boolean(item.code);
 
@@ -250,7 +254,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					});
 				} else if (duplicate && !resumingProvision && job.duplicate_action === 'update') {
 					await assertActiveClaim();
-					await updateExisting(duplicate.code);
+					const written = await updateExisting(duplicate.code);
 					await updateImportItem(item, {
 						status: 'updated',
 						code: duplicate.code,
@@ -258,6 +262,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						worker_id: undefined,
 						claim_token: undefined
 					});
+					await recordExistingUpdated(duplicate.code, written);
 				} else {
 					// Re-read under the name lock immediately before allocating or
 					// provisioning. A shelter may have been created after the first
@@ -276,7 +281,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						});
 					} else if (duplicateBeforeProvision && job.duplicate_action === 'update') {
 						await assertActiveClaim();
-						await updateExisting(duplicateBeforeProvision.code);
+						const written = await updateExisting(duplicateBeforeProvision.code);
 						await updateImportItem(item, {
 							status: 'updated',
 							code: duplicateBeforeProvision.code,
@@ -284,6 +289,7 @@ export const POST: RequestHandler = async ({ request }) => {
 							worker_id: undefined,
 							claim_token: undefined
 						});
+						await recordExistingUpdated(duplicateBeforeProvision.code, written);
 					} else {
 						if (!resumingProvision) checkSiteKind();
 						// Persist the code before touching the shelter DB. If the worker is
@@ -308,6 +314,13 @@ export const POST: RequestHandler = async ({ request }) => {
 							lockOwnerId,
 							assertActive: assertActiveClaim
 						});
+						await updateImportItem(item, {
+							status: 'created',
+							code: result.code,
+							lease_until: undefined,
+							worker_id: undefined,
+							claim_token: undefined
+						});
 						await recordAuditedWrite({
 							actor: job.imported_by,
 							event: AUDIT_EVENTS.shelterImported,
@@ -316,13 +329,6 @@ export const POST: RequestHandler = async ({ request }) => {
 							entityId: result.code,
 							label: input.name,
 							shelterCode: result.code
-						});
-						await updateImportItem(item, {
-							status: 'created',
-							code: result.code,
-							lease_until: undefined,
-							worker_id: undefined,
-							claim_token: undefined
 						});
 					}
 				}
