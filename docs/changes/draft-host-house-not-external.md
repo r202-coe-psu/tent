@@ -35,9 +35,9 @@ affects:
 | FR-2 | กฎ FR-1 อยู่ที่ domain ของ `shelters` (`externalInvariantIssues` / Zod) ตัวเดียว ให้ฟอร์ม, BFF สร้าง/แก้ไข และการนำเข้าไฟล์เรียกใช้ร่วมกัน |
 | FR-3 | ฟอร์มสร้างศูนย์: เมื่อเลือก `site_kind = host_house` สวิตช์ "ศูนย์ภายนอก (External)" ปิดและเปิดไม่ได้ พร้อมข้อความ "บ้านพี่เลี้ยงเป็นศูนย์ภายนอกไม่ได้"; เมื่อเปิด External ตัวเลือก "บ้านพี่เลี้ยง" ใน `site_kind` เลือกไม่ได้ |
 | FR-4 | ฟอร์มแก้ไขศูนย์ External (หลังสร้าง `is_external` เปลี่ยนไม่ได้ ตาม CR-252 FR-9): เปลี่ยน `site_kind` เป็น `host_house` ไม่ได้ |
-| FR-5 | BFF สร้าง/แก้ไข shelter ปฏิเสธคู่ `is_external = true` + `site_kind = host_house` ด้วย 400 และข้อความเดียวกับ FR-3 — รวมกรณี PATCH ส่งแค่ `site_kind` ของศูนย์ External เดิม |
-| FR-6 | การนำเข้าศูนย์จากไฟล์: แถวที่เป็น External + ชนิดสถานที่ "บ้านพี่เลี้ยง" เป็น error ของแถวนั้น (ไม่นำเข้า) |
-| FR-7 | ข้อมูลเดิมที่เป็นคู่นี้แล้ว (ถ้ามี) อ่าน/แสดงได้ตามเดิม ไม่ backfill; การบันทึกครั้งถัดไปต้องเปลี่ยน `site_kind` ก่อน |
+| FR-5 | BFF สร้าง/แก้ไข shelter ปฏิเสธคู่ `is_external = true` + `site_kind = host_house` ด้วย 400 และข้อความเดียวกับ FR-3 — รวมกรณี PATCH ส่งแค่ `site_kind` ของศูนย์ External เดิม; **ยกเว้น** `system_admin` เปลี่ยน `operation_status` เป็น `cancelled` (ถอดออกจาก public ตาม CR-252 FR-4) ต้องผ่านได้เสมอแม้ศูนย์นั้นเป็นคู่ External + `host_house` เดิม โดยไม่ต้องแก้ `site_kind` ก่อน |
+| FR-6 | การนำเข้าศูนย์จากไฟล์: แถวที่เป็น External + `site_kind` รหัส `host_house` (ตรวจที่รหัส ไม่ใช่ป้ายชื่อ "บ้านพี่เลี้ยง" ซึ่ง master data แก้ได้) เป็น error ของแถวนั้น (ไม่นำเข้า) |
+| FR-7 | ข้อมูลเดิมที่เป็นคู่นี้แล้ว (ถ้ามี) อ่าน/แสดงได้ตามเดิม ไม่ backfill; การบันทึกครั้งถัดไปต้องเปลี่ยน `site_kind` ก่อน ยกเว้นการ `cancelled` โดย `system_admin` ตาม FR-5 |
 
 ## 2. Acceptance
 
@@ -47,6 +47,7 @@ affects:
 - **AC-4** ไฟล์นำเข้าที่มีแถว External + บ้านพี่เลี้ยง → แถวนั้นขึ้น error ไม่ถูกนำเข้า แถวอื่นนำเข้าตามปกติ
 - **AC-5** บ้านพี่เลี้ยงปกติ (`is_external = false`) สร้าง/แก้ไข/นำเข้าได้เหมือนเดิม
 - **AC-6** เทสต์ domain: `externalInvariantIssues` คืน issue ที่ `site_kind` สำหรับคู่นี้
+- **AC-7** ศูนย์ External + `host_house` ที่มีอยู่เดิม: `system_admin` PATCH `operation_status = cancelled` ผ่าน (ไม่ต้องแก้ `site_kind`); PATCH อย่างอื่นที่ไม่แก้ `site_kind` ยังโดน 400
 
 ## 3. Why
 
@@ -56,7 +57,7 @@ affects:
 
 ## 4. Impact
 
-- **Domain:** `shelters/domain/schema.ts` — `ExternalInvariantInput` เพิ่ม `site_kind`, issue path ใหม่ `site_kind`; เทสต์
+- **Domain:** `shelters/domain/schema.ts` — `ExternalInvariantInput` เพิ่ม `site_kind`, issue path ใหม่ `site_kind`; ใช้ค่าคงที่ `HOST_HOUSE_SITE_KIND` ที่มีอยู่แล้วในไฟล์เดียวกัน; เทสต์
 - **UI:** `shelters/ui/basic-info-section.svelte` — ล็อกสวิตช์ External / ตัวเลือกบ้านพี่เลี้ยง
 - **BFF:** `routes/api/back-office/shelter/**` (สร้างและ `[code]` PATCH) — ส่ง `site_kind` เข้า invariant (PATCH: ใช้ค่าเดิมของ doc เมื่อ body ไม่ส่ง)
 - **Import:** `shelter-import` — ตรวจแถวด้วยกฎเดียวกัน
@@ -71,3 +72,4 @@ affects:
 
 - 2026-11-23 — @mhapong: บ้านพี่เลี้ยงไม่มี External; track ด้วย CR file; บังคับทุกทางเข้า
 - 2026-11-23 — proposed (ร่าง CR)
+- 2026-11-24 — แก้ร่างตาม review: FR-6 ตรวจที่รหัส `host_house`; FR-5/FR-7/AC-7 ยกเว้น `cancelled` ของ `system_admin` สำหรับคู่เดิม
