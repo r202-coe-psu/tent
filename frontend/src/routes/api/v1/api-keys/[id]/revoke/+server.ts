@@ -4,6 +4,8 @@
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { recordProxiedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
@@ -50,6 +52,14 @@ export const POST: RequestHandler = async ({ request, params }) => {
 				headers: fastapiServiceHeaders({ Accept: 'application/json' })
 			}
 		);
+		await recordProxiedWrite(res, {
+			actor: caller.name,
+			event: AUDIT_EVENTS.apiKeyRevoked,
+			action: 'status_change',
+			entityType: 'api_key',
+			entityId: id,
+			shelterCode: null
+		});
 		const body = await res.json().catch(() => null);
 		if (!res.ok) {
 			const message = fastapiErrorMessage(body, `Upstream request failed (${res.status})`);

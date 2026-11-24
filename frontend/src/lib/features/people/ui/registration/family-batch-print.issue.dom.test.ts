@@ -11,6 +11,9 @@ const rendered = vi.hoisted(() => ({ calls: [] as string[], result: null as unkn
 
 vi.mock('svelte-sonner', () => ({ toast: { error: toastError, success: vi.fn(), info: vi.fn() } }));
 vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({ issueEvacueeQrs: issue }));
+vi.mock('$lib/features/people/application/evacuee-qr-prints', () => ({
+	useEvacueeQrPrints: () => ({ data: [], isError: false })
+}));
 vi.mock('@tanstack/svelte-query', () => ({
 	useQueryClient: () => ({
 		fetchQuery: vi.fn().mockResolvedValue([]),
@@ -26,8 +29,8 @@ vi.mock('$lib/features/printers', async (importOriginal) => ({
 vi.mock('$lib/features/kiosk', () => ({
 	KIOSK_LABEL_MM: { width: 80, height: 60 },
 	renderKioskQrLabelPng: async (payload: string) => {
-		// The embedded cards render their on-open placeholder; only issued payloads count here.
-		if (payload.startsWith('evacuee:')) rendered.calls.push(payload);
+		// The embedded cards preview the current bare id (nothing printed); only issued ones count.
+		if (payload.includes('@')) rendered.calls.push(payload);
 		return 'AAAA';
 	}
 }));
@@ -151,9 +154,9 @@ describe('FamilyBatchPrint card previews', () => {
 			}))
 		);
 
-	it('shows the placeholder note on every card before any print', () => {
+	it('shows the current-QR note on every card before any print', () => {
 		expect(captions()).toHaveLength(2);
-		for (const text of captions()) expect(text).toContain('QR จริงจะออกใหม่เมื่อกดพิมพ์');
+		for (const text of captions()) expect(text).toContain('QR ใบปัจจุบันที่ใช้ได้');
 	});
 
 	it('updates every card preview after the family print rotates all QRs', async () => {

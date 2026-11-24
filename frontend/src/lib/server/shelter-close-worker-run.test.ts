@@ -21,7 +21,7 @@ let couch: FakeCouchServer;
 let now: number;
 let ulidSeq: number;
 let registry: ShelterCloseRegistryShelter | null;
-let closeShelter: Mock<(code: string) => Promise<void>>;
+let closeShelter: Mock<(code: string, actor: string) => Promise<void>>;
 let seq: number;
 
 const config = {
@@ -50,7 +50,7 @@ beforeEach(() => {
 	ulidSeq = 0;
 	seq = 0;
 	registry = { closed: false, closed_at: null };
-	closeShelter = vi.fn<(code: string) => Promise<void>>(async () => {
+	closeShelter = vi.fn<(code: string, actor: string) => Promise<void>>(async () => {
 		registry = { closed: true, closed_at: new Date(now).toISOString() };
 	});
 	store = makeStore();
@@ -151,7 +151,7 @@ describe('phases and finalize close (FR-17..FR-22, AC-15)', () => {
 		// phase recorded AFTER each call: chunk, empty-chunk → next phase, ...
 		expect(phases).toEqual(['people', 'households', 'households', 'sweep', 'finalize', 'done']);
 		expect(closeShelter).toHaveBeenCalledTimes(1);
-		expect(closeShelter).toHaveBeenCalledWith('SH001');
+		expect(closeShelter).toHaveBeenCalledWith('SH001', 'mgr1');
 
 		expect(jobDoc()).toMatchObject({
 			status: 'completed',

@@ -200,6 +200,7 @@ export {
 	type ShelterListOptions,
 	useSearchShelters,
 	useShelter,
+	useShelterActors,
 	useProvinces,
 	useDistricts,
 	useSubdistricts,

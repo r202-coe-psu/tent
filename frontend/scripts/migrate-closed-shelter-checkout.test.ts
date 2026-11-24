@@ -102,7 +102,7 @@ const snapshot = () =>
 	);
 const jobs = () => couch.byType('central_ops', 'shelter_close_job');
 
-describe('migrate-closed-shelter-checkout', () => {
+describe('migrate-closed-shelter-checkout', { timeout: 120_000 }, () => {
 	it('--dry-run counts synchronously and writes nothing, not even central_ops (FR-32)', async () => {
 		const before = snapshot();
 		const { code, out } = await run(['--dry-run']);

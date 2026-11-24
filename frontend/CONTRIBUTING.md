@@ -62,8 +62,11 @@ proxies and `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` for the BFF → FastA
 - **pre-commit** (staged files only): `prettier --write` + `eslint --fix` on staged
   `frontend/` files; fixes are re-staged automatically.
 - **pre-push** (sequential): `pnpm test:changed` (`scripts/test-changed.sh`) — Vitest
-  `--changed origin/develop`, which runs only the test files whose import graph reaches a file
-  changed since the merge-base with `origin/develop` (plus staged/unstaged edits). The whole
+  `--changed <base>`, which runs only the test files whose import graph reaches a file changed
+  since the merge-base with the base (plus staged/unstaged edits). The base is what the branch
+  last pushed (`@{push}`, or `origin/<branch>` when no upstream is set), so a second push
+  re-tests only the new commits; a branch never pushed uses `origin/develop`, and
+  `TEST_CHANGED_BASE=<ref>` overrides. The whole
   suite runs instead when a non-test file was deleted or renamed (Vitest cannot find its
   importers), or on a change to `package.json`, the Vite config, `pnpm-lock.yaml`,
   `tsconfig.json`, `svelte.config.js`, `src/lib/testing/**` or `src/app.css`

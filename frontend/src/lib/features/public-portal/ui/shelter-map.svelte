@@ -297,7 +297,7 @@
 	function parkingPointPinSvg(): string {
 		return `<svg class="marker-pin" width="20" height="28" viewBox="0 0 20 28" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.12));cursor:pointer;">
 			<path d="M10 1.5C5.3 1.5 1.5 5.3 1.5 10c0 5.9 7.2 15.4 8.1 16.5a0.5 0.5 0 0 0 0.8 0C11.3 25.4 18.5 15.9 18.5 10 18.5 5.3 14.7 1.5 10 1.5z" fill="${PARKING_PIN}" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
-			<text x="10" y="10.4" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Sans Thai',sans-serif" font-size="11" font-weight="700" fill="#ffffff">P</text>
+			<text x="10" y="10.4" text-anchor="middle" dominant-baseline="central" font-family="'Noto Sans Thai Looped','IBM Plex Sans Thai',sans-serif" font-size="11" font-weight="700" fill="#ffffff">P</text>
 		</svg>`;
 	}
 
@@ -307,7 +307,7 @@
 		const fontSize = label.length > 2 ? 9 : 12;
 		return `<svg class="marker-pin" width="30" height="40" viewBox="0 0 30 40" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.25));cursor:pointer;transition:transform 0.2s,filter 0.2s;">
 			<path d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z" fill="${pin.fill}" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
-			<text x="15" y="14.5" text-anchor="middle" dominant-baseline="central" font-family="'IBM Plex Sans Thai',sans-serif" font-size="${fontSize}" font-weight="700" fill="${pin.text}">${label}</text>
+			<text x="15" y="14.5" text-anchor="middle" dominant-baseline="central" font-family="'Noto Sans Thai Looped','IBM Plex Sans Thai',sans-serif" font-size="${fontSize}" font-weight="700" fill="${pin.text}">${label}</text>
 		</svg>`;
 	}
 
@@ -588,7 +588,7 @@
 					closeOnClick: false,
 					maxWidth: '280px'
 				}).setLngLat(lngLat).setHTML(`
-					<div style="font-size:0.75rem;font-family:'IBM Plex Sans Thai Looped','IBM Plex Sans Thai',sans-serif;color:#1e293b;min-width:180px;padding:2px 0;">
+					<div style="font-size:0.75rem;font-family:'Noto Sans Thai Looped','IBM Plex Sans Thai Looped','IBM Plex Sans Thai',sans-serif;color:#1e293b;min-width:180px;padding:2px 0;">
 						<strong style="font-size:0.875rem;display:block;margin-bottom:3px;color:#0f172a;line-height:1.3;">${shelter.name}</strong>
 						<div style="margin-bottom:6px;font-size:0.65rem;color:#64748b;font-weight:500;">
 							${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}
@@ -980,6 +980,7 @@
 			0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
 		border: 1px solid #e2e8f0 !important;
 		font-family:
+			'Noto Sans Thai Looped',
 			'IBM Plex Sans Thai Looped',
 			'IBM Plex Sans Thai',
 			-apple-system,
