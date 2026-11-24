@@ -12,6 +12,7 @@ import {
 } from '$lib/utils/errors';
 import { authStore } from '$lib/stores/auth.svelte';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
+import { isAuditedWriteDb } from './audited-db';
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 200;
@@ -225,9 +226,7 @@ export async function getDocWithConflicts<T extends { _id: string }>(
 	}
 }
 
-export function isAuditedWriteDb(dbName: string): boolean {
-	return dbName.startsWith('shelter_') || dbName === 'catalog';
-}
+export { isAuditedWriteDb };
 
 export function stampWriter<T extends object>(dbName: string, doc: T): T {
 	const name = authStore.user?.name;
@@ -535,7 +534,9 @@ export async function saveBulkAtomic<T extends { _id: string; _rev?: string }>(
 ): Promise<T[]> {
 	const MAX_BULK_RETRIES = 3;
 	let attempts = 0;
-	let currentDocs = [...docs];
+	// Stamped once up front: the conflict refresh below only swaps `_rev`, so every
+	// retry still names the writer the `_design/access` rule expects (CR-260).
+	let currentDocs = docs.map((doc) => stampWriter(dbName, doc));
 
 	while (attempts < MAX_BULK_RETRIES) {
 		try {
@@ -595,6 +596,11 @@ interface AttachmentPutResult {
 /**
  * PUT a binary attachment onto an existing doc revision. Bypasses
  * `couchDbFetchRaw` because the request body is binary, not JSON.
+ *
+ * Not stamped (CR-260 exception): an attachment PUT cannot change the doc body,
+ * so the new revision keeps the `updated_by` of the revision it attaches to, and
+ * the `_design/access` rule rejects it unless that is the caller. Only attach to
+ * a revision this caller just wrote through a stamped write (as `saveImage` does).
  */
 export async function putAttachment(
 	dbName: string,

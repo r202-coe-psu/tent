@@ -15,7 +15,7 @@ vi.mock('$lib/stores/endpoint.svelte', () => ({
 	endpointStore: { markConnected: vi.fn(), markDisconnected: vi.fn() }
 }));
 
-import { bulkDocs, bulkDocsDetailed, deleteDoc, putDoc } from './couch-db';
+import { bulkDocs, bulkDocsDetailed, deleteDoc, putDoc, saveBulkAtomic } from './couch-db';
 
 type Call = { url: string; method: string; body: unknown };
 let calls: Call[] = [];
@@ -69,6 +69,45 @@ describe('updated_by stamping (CR-260 FR-C3/FR-C4)', () => {
 		await bulkDocsDetailed('shelter_sh001', [{ _id: 'a:3' }]);
 		const sent = calls.flatMap((c) => (c.body as { docs: Record<string, unknown>[] }).docs);
 		expect(sent.every((d) => d.updated_by === 'sm.user')).toBe(true);
+	});
+
+	it('stamps an atomic bulk write, including the retry after a conflict', async () => {
+		let bulkCalls = 0;
+		vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+			const body = init.body ? JSON.parse(String(init.body)) : null;
+			calls.push({ url: String(url), method: init.method ?? 'GET', body });
+			if (String(url).endsWith('/_bulk_docs')) {
+				bulkCalls++;
+				const docs = (body as { docs: { _id: string }[] }).docs;
+				const result =
+					bulkCalls === 1
+						? docs.map((d) => ({ id: d._id, error: 'conflict', status: 409 }))
+						: docs.map((d) => ({ id: d._id, ok: true, rev: '3-new' }));
+				return new Response(JSON.stringify(result), { status: 201 });
+			}
+			return new Response(JSON.stringify({ _id: 'sop_ratio:01', _rev: '2-fresh' }), {
+				status: 200
+			});
+		});
+
+		const saved = await saveBulkAtomic(
+			'shelter_sh001',
+			[{ _id: 'sop_ratio:01', _rev: '1-old', updated_by: 'someone.else' }],
+			'sop ratio'
+		);
+
+		const bulkBodies = calls
+			.filter((c) => c.url.endsWith('/_bulk_docs'))
+			.map((c) => (c.body as { docs: Record<string, unknown>[] }).docs[0]);
+		expect(bulkBodies).toHaveLength(2);
+		expect(bulkBodies.every((d) => d.updated_by === 'sm.user')).toBe(true);
+		expect(bulkBodies[1]._rev).toBe('2-fresh');
+		expect(saved[0]).toMatchObject({ updated_by: 'sm.user', _rev: '3-new' });
+	});
+
+	it('leaves an atomic bulk write to other databases alone', async () => {
+		await saveBulkAtomic('registry', [{ _id: 'master_data:01' }], 'master data');
+		expect((calls[0].body as { docs: object[] }).docs[0]).not.toHaveProperty('updated_by');
 	});
 
 	it('deletes shelter docs with a tombstone that names the deleter', async () => {
