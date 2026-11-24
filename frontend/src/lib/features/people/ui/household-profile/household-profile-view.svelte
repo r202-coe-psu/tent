@@ -21,7 +21,7 @@
 		zoneLabel
 	} from '../../index';
 	import type { Evacuee, PetGroup, HouseholdVehicle, HouseholdStatus } from '../../domain/people';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { getShelterCode, resolveContextShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
 	import { now } from '$lib/db/model';
@@ -82,9 +82,9 @@
 	let showMergeModal = $state(false);
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
-	const historyShelterCode = $derived(
-		(shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase()
-	);
+	// No 'SH001' fallback: a system admin with no shelter selected reads the
+	// household's history across shelters instead of one guessed shelter.
+	const historyShelterCode = $derived(resolveContextShelterCode()?.toUpperCase() ?? null);
 	const canSeeHistory = $derived(
 		canAccessManagerPages(authStore.user?.roles ?? [], historyShelterCode)
 	);

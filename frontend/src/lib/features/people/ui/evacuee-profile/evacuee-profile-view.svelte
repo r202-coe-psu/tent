@@ -45,7 +45,7 @@
 		isShelterManager,
 		isSystemAdmin
 	} from '$lib/auth/roles';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { getShelterCode, resolveContextShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { EntityHistory } from '$lib/features/audit-log';
 	import { canAccessManagerPages } from '$lib/auth/roles';
@@ -196,9 +196,9 @@
 	// createQuery() options run eagerly at call time, not lazily on first access,
 	// so referencing `evacuee` before this line throws a TDZ ReferenceError.
 	const evacuee = $derived(evacueeQuery.data ?? null);
-	const historyShelterCode = $derived(
-		(shelterStore.selectedShelterCode ?? getShelterCode()).toUpperCase()
-	);
+	// No 'SH001' fallback: a system admin with no shelter selected reads the
+	// evacuee's history across shelters instead of one guessed shelter.
+	const historyShelterCode = $derived(resolveContextShelterCode()?.toUpperCase() ?? null);
 	const canSeeHistory = $derived(
 		canAccessManagerPages(authStore.user?.roles ?? [], historyShelterCode)
 	);
