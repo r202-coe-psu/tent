@@ -56,4 +56,7 @@ per deploy, so batch related projector changes into one bump per release when po
 #: ``passport_id`` / ``id_card_type`` / ``phone`` / ``address{…}`` and no ``*_masked``;
 #: ``shelter_occupants`` carries ``first_name`` / ``last_name`` / ``age`` / ID / ``phone`` and no
 #: ``name_masked`` (masking moved to the API).
-PROJECTION_VERSION: int = 23
+#: 24 — decision sync 2026-11-24 (partner EXT-002/003): ``public_shelters.name_short`` /
+#: ``operating_org`` / ``delivery_note`` (new registry fields, schema_v 12), ``project_level``
+#: and ``profile`` (utilities, facilities, risk, policies, zone metadata).
+PROJECTION_VERSION: int = 24
