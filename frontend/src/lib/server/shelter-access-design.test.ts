@@ -8778,13 +8778,10 @@ describe('updated_by must be the writer (CR-260 FR-C10)', () => {
 		expect(() => compile()(evacuee({ updated_by: 'reg' }), evacuee(), repl)).not.toThrow();
 	});
 
-	it('does not reject a write for this rule when updated_by matches or is absent', () => {
-		for (const doc of [evacuee({ updated_by: 'reg' }), evacuee()]) {
-			try {
-				compile()(doc, evacuee(), REGISTRATION);
-			} catch (e) {
-				expect((e as { forbidden?: string }).forbidden ?? '').not.toMatch(/updated_by/);
-			}
-		}
+	it.each([
+		['matches the user', { updated_by: 'reg' }],
+		['is absent', {}]
+	])('accepts a write when updated_by %s', (_label, fields) => {
+		expect(() => compile()(evacuee(fields), evacuee(), REGISTRATION)).not.toThrow();
 	});
 });
