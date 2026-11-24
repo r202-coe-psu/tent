@@ -12,6 +12,9 @@ function readPersistedShelterCode(): string | undefined {
 
 /** Persist the active workspace shelter so switching remembers the last choice. */
 export function persistSelectedShelter(code: string | undefined): void {
+	// A remembered (or cleared) choice is never a stand-in, so a stale provisional marker must not
+	// outlive it and mistake a later real choice of the same code for a stand-in.
+	shelterStore.provisionalCode = undefined;
 	if (typeof localStorage === 'undefined') return;
 	try {
 		if (code) localStorage.setItem(STORAGE_KEY, code);

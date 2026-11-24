@@ -45,6 +45,7 @@ function persistUser(user: SessionUser | null): void {
  */
 function clearActiveShelter(): void {
 	shelterStore.selectedShelterCode = undefined;
+	shelterStore.provisionalCode = undefined;
 	persistSelectedShelter(undefined);
 }
 

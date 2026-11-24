@@ -16,7 +16,8 @@ vi.mock('$lib/db/couch', () => ({
 
 const persistSelectedShelterMock = vi.fn();
 const shelterStoreMock = vi.hoisted(() => ({
-	selectedShelterCode: undefined as string | undefined
+	selectedShelterCode: undefined as string | undefined,
+	provisionalCode: undefined as string | undefined
 }));
 
 vi.mock('$lib/stores/shelter.svelte', () => ({
@@ -240,6 +241,7 @@ describe('authStore remembered shelter (#1473)', () => {
 		getSessionMock.mockReset();
 		persistSelectedShelterMock.mockReset();
 		shelterStoreMock.selectedShelterCode = 'SH001';
+		shelterStoreMock.provisionalCode = 'SH001';
 	});
 
 	afterEach(() => {
@@ -255,6 +257,8 @@ describe('authStore remembered shelter (#1473)', () => {
 		await vi.waitFor(() => expect(authStore.user?.name).toBe('somchai'));
 
 		expect(shelterStoreMock.selectedShelterCode).toBeUndefined();
+		// A stand-in left by the previous account must not make the next one's pick look provisional.
+		expect(shelterStoreMock.provisionalCode).toBeUndefined();
 		expect(persistSelectedShelterMock).toHaveBeenCalledWith(undefined);
 	});
 

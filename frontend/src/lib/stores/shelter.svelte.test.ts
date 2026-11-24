@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applyActiveShelterChoice, isSelectionProvisional, shelterStore } from './shelter.svelte';
+import {
+	applyActiveShelterChoice,
+	isSelectionProvisional,
+	persistSelectedShelter,
+	shelterStore
+} from './shelter.svelte';
 
 const KEY = 'tent.activeShelterCode';
 
@@ -43,6 +48,13 @@ describe('applyActiveShelterChoice (#1473)', () => {
 	it('treats a code picked by someone else as a real choice, not a stand-in', () => {
 		applyActiveShelterChoice({ code: 'SH002', provisional: true });
 		shelterStore.selectedShelterCode = 'SH001'; // e.g. the user picks in the back-office select
+		expect(isSelectionProvisional()).toBe(false);
+	});
+
+	it('drops the stand-in marker when a choice is persisted, so a later pick of the same code is real', () => {
+		applyActiveShelterChoice({ code: 'SH002', provisional: true });
+		persistSelectedShelter('SH003'); // e.g. the back-office select
+		shelterStore.selectedShelterCode = 'SH002'; // another user picks SH002 for real
 		expect(isSelectionProvisional()).toBe(false);
 	});
 });
