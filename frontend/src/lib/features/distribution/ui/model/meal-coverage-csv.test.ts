@@ -30,21 +30,23 @@ const lines = (csv: string) => csv.split('\r\n');
 describe('coverageStatusLabel', () => {
 	it('says none or how many meals have a record', () => {
 		expect(coverageStatusLabel(row({ received: [], counted: 0 }))).toBe(
-			'รับไม่ครบเกณฑ์ · ยังไม่มีบันทึกรับ'
+			'รับไม่ถึง 2 มื้อ · ยังไม่มีบันทึกรับ'
 		);
-		expect(coverageStatusLabel(row())).toBe('รับไม่ครบเกณฑ์ · รับแล้ว 1/2 มื้อ');
+		expect(coverageStatusLabel(row())).toBe('รับไม่ถึง 2 มื้อ · รับแล้ว 1/2 มื้อ');
 	});
 
 	it('marks a complete row', () => {
 		expect(
 			coverageStatusLabel(row({ received: ['breakfast', 'lunch'], counted: 2, complete: true }))
-		).toBe('รับครบเกณฑ์ · 2/2 มื้อ');
+		).toBe('รับ 2 มื้อขึ้นไป · 2/2 มื้อ');
 	});
 });
 
 describe('coverageStatusLabel progress', () => {
 	it('caps the shown count at 2', () => {
-		expect(coverageStatusLabel(row({ counted: 3, complete: true }))).toBe('รับครบเกณฑ์ · 2/2 มื้อ');
+		expect(coverageStatusLabel(row({ counted: 3, complete: true }))).toBe(
+			'รับ 2 มื้อขึ้นไป · 2/2 มื้อ'
+		);
 	});
 });
 
@@ -66,7 +68,7 @@ describe('coverageRowsToCsv', () => {
 		expect(out).toHaveLength(3);
 		expect(out[0]).toBe(COVERAGE_CSV_HEADER.map((h) => `"${h}"`).join(','));
 		expect(out[1]).toBe(
-			'"สมชาย ใจดี","อาคารหนึ่ง","เช้า","กลางวัน, เย็น","staff1","รับไม่ครบเกณฑ์ · รับแล้ว 1/2 มื้อ","","1","1","0"'
+			'"สมชาย ใจดี","อาคารหนึ่ง","เช้า","กลางวัน, เย็น","staff1","รับไม่ถึง 2 มื้อ · รับแล้ว 1/2 มื้อ","","1","1","0"'
 		);
 		expect(out[2]).toContain('"สมหญิง","","","กลางวัน, เย็น"');
 	});
@@ -79,8 +81,8 @@ describe('coverageRowsToCsv', () => {
 			)
 		);
 		expect(COVERAGE_CSV_HEADER).toContain('ผู้แจก');
-		expect(out[1]).toContain('"กลางวัน, เย็น","amy, zed","รับไม่ครบเกณฑ์ · รับแล้ว 1/2 มื้อ"');
-		expect(out[2]).toContain('"กลางวัน, เย็น","","รับไม่ครบเกณฑ์ · รับแล้ว 1/2 มื้อ"');
+		expect(out[1]).toContain('"กลางวัน, เย็น","amy, zed","รับไม่ถึง 2 มื้อ · รับแล้ว 1/2 มื้อ"');
+		expect(out[2]).toContain('"กลางวัน, เย็น","","รับไม่ถึง 2 มื้อ · รับแล้ว 1/2 มื้อ"');
 	});
 
 	it('quotes a distributor name that starts like a formula', () => {
@@ -93,7 +95,7 @@ describe('coverageRowsToCsv', () => {
 
 	it('includes the meals a household member has a record for', () => {
 		const out = lines(coverageRowsToCsv([row({ householdRecorded: ['lunch'] })], zoneName));
-		expect(out[1]).toContain('"รับไม่ครบเกณฑ์ · รับแล้ว 1/2 มื้อ","กลางวัน"');
+		expect(out[1]).toContain('"รับไม่ถึง 2 มื้อ · รับแล้ว 1/2 มื้อ","กลางวัน"');
 	});
 
 	it('escapes quotes, commas and newlines inside a cell', () => {
@@ -134,9 +136,9 @@ describe('coverage over a range of days', () => {
 	const ranged = row({ judgedDays: 7, shortDays: 3, partialDays: 1, mealsReceived: 9, counted: 8 });
 
 	it('labels a row with the days it fell short instead of a one-day N/T', () => {
-		expect(coverageStatusLabel(ranged, true)).toBe('รับไม่ครบเกณฑ์ 3/7 วัน');
+		expect(coverageStatusLabel(ranged, true)).toBe('รับไม่ถึง 2 มื้อบางวัน 3/7 วัน');
 		expect(coverageStatusLabel(row({ ...ranged, shortDays: 0, complete: true }), true)).toBe(
-			'รับครบเกณฑ์ทุกวัน (7 วัน)'
+			'รับ 2 มื้อขึ้นไปทุกวัน (7 วัน)'
 		);
 	});
 
@@ -153,7 +155,7 @@ describe('coverage over a range of days', () => {
 			'จำนวนวันที่ไม่ถึง 2 มื้อ',
 			'จำนวนวันที่อยู่ในศูนย์ไม่เต็มวัน'
 		]);
-		expect(out[1].endsWith('"รับไม่ครบเกณฑ์ 3/7 วัน","","9","3","1"')).toBe(true);
+		expect(out[1].endsWith('"รับไม่ถึง 2 มื้อบางวัน 3/7 วัน","","9","3","1"')).toBe(true);
 	});
 
 	it('leaves the days-under-2-meals cell empty for someone never judged', () => {

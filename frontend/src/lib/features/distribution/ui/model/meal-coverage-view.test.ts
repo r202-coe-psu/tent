@@ -3,7 +3,11 @@ import {
 	attachHouseholdRecorded,
 	attachZones,
 	COVERAGE_RANGE_PRESETS,
+	COVERAGE_STATUS_TONES,
 	coverageEmptyReasons,
+	coverageFilterLabels,
+	coverageStatusLabels,
+	donutSegments,
 	coverageTodayNote,
 	otherRecipientTotals,
 	coverageRangeLabel,
@@ -648,42 +652,25 @@ describe('coverageRangeLabel', () => {
 });
 
 describe('otherRecipientTotals', () => {
-	const tally = (records: number, portions: number) => ({ records, portions });
-	const zero = tally(0, 0);
 	const meals = [
-		{ meal: 'breakfast' as const, outside: tally(7, 10), volunteer: tally(1, 3), staff: zero },
-		{ meal: 'lunch' as const, outside: tally(4, 6), volunteer: zero, staff: zero },
-		{ meal: 'dinner' as const, outside: zero, volunteer: zero, staff: zero }
+		{ meal: 'breakfast' as const, outside: 10, volunteer: 3, staff: 0 },
+		{ meal: 'lunch' as const, outside: 6, volunteer: 0, staff: 0 },
+		{ meal: 'dinner' as const, outside: 0, volunteer: 0, staff: 0 }
 	];
 
-	it('sums each group over the meals: portions, records and both per meal', () => {
+	it('sums each group over the meals, with the portions per meal', () => {
 		expect(otherRecipientTotals(meals)).toEqual([
-			{
-				group: 'outside',
-				portions: 16,
-				records: 11,
-				byMeal: { breakfast: tally(7, 10), lunch: tally(4, 6), dinner: zero }
-			},
-			{
-				group: 'volunteer',
-				portions: 3,
-				records: 1,
-				byMeal: { breakfast: tally(1, 3), lunch: zero, dinner: zero }
-			},
-			{
-				group: 'staff',
-				portions: 0,
-				records: 0,
-				byMeal: { breakfast: zero, lunch: zero, dinner: zero }
-			}
+			{ group: 'outside', portions: 16, byMeal: { breakfast: 10, lunch: 6, dinner: 0 } },
+			{ group: 'volunteer', portions: 3, byMeal: { breakfast: 3, lunch: 0, dinner: 0 } },
+			{ group: 'staff', portions: 0, byMeal: { breakfast: 0, lunch: 0, dinner: 0 } }
 		]);
 	});
 
 	it('keeps all three groups, zeros included, for no hand-overs', () => {
-		expect(otherRecipientTotals([]).map((g) => [g.group, g.portions, g.records])).toEqual([
-			['outside', 0, 0],
-			['volunteer', 0, 0],
-			['staff', 0, 0]
+		expect(otherRecipientTotals([]).map((g) => [g.group, g.portions])).toEqual([
+			['outside', 0],
+			['volunteer', 0],
+			['staff', 0]
 		]);
 	});
 });
@@ -710,15 +697,100 @@ describe('coverageTodayNote', () => {
 
 	it('says who can still catch up in the remaining meal when two are served', () => {
 		expect(coverageTodayNote(['breakfast', 'lunch'])).toBe(
-			'วันนี้แจกแล้ว 2 จาก 3 มื้อ (เช้า, กลางวัน) · ผู้ที่ยังรับไม่ครบเกณฑ์ยังรับได้ในมื้อเย็น'
+			'วันนี้แจกแล้ว 2 จาก 3 มื้อ (เช้า, กลางวัน) · ผู้ที่ยังรับไม่ถึง 2 มื้อยังรับได้ในมื้อเย็น'
 		);
 		expect(coverageTodayNote(['dinner', 'breakfast'])).toBe(
-			'วันนี้แจกแล้ว 2 จาก 3 มื้อ (เช้า, เย็น) · ผู้ที่ยังรับไม่ครบเกณฑ์ยังรับได้ในมื้อกลางวัน'
+			'วันนี้แจกแล้ว 2 จาก 3 มื้อ (เช้า, เย็น) · ผู้ที่ยังรับไม่ถึง 2 มื้อยังรับได้ในมื้อกลางวัน'
 		);
 	});
 
 	it('has no note once all three meals are served, and ignores a snack', () => {
 		expect(coverageTodayNote(['breakfast', 'lunch', 'dinner'])).toBeNull();
 		expect(coverageTodayNote(['snack'])).toContain('วันนี้ยังไม่ได้แจกมื้อใด');
+	});
+});
+
+describe('coverage status tones and labels', () => {
+	it('gives each status one colour: green complete, amber one meal, red no record', () => {
+		expect(COVERAGE_STATUS_TONES.complete.color).toBe('#10B981');
+		expect(COVERAGE_STATUS_TONES.partial.color).toBe('#F59E0B');
+		expect(COVERAGE_STATUS_TONES.none.color).toBe('#EF4444');
+	});
+
+	it('words the statuses for one day and for a range', () => {
+		expect(coverageStatusLabels(false)).toEqual({
+			complete: 'รับ 2 มื้อขึ้นไป/วัน',
+			incomplete: 'รับไม่ถึง 2 มื้อ/วัน',
+			partial: 'รับแค่ 1 มื้อ',
+			none: 'ยังไม่มีบันทึกรับ'
+		});
+		expect(coverageStatusLabels(true)).toEqual({
+			complete: 'รับ 2 มื้อขึ้นไปทุกวัน',
+			incomplete: 'รับไม่ถึง 2 มื้อบางวัน',
+			partial: 'รับไม่ถึง 2 มื้อบางวัน',
+			none: 'ไม่มีบันทึกรับทั้งช่วง'
+		});
+	});
+});
+
+describe('donutSegments', () => {
+	const C = 100;
+
+	it('lists complete, partial, none in that order with their share of the circle', () => {
+		const segs = donutSegments({ complete: 50, partial: 25, none: 25 }, C, 0);
+		expect(segs.map((s) => [s.status, s.length, s.start])).toEqual([
+			['complete', 50, 0],
+			['partial', 25, 50],
+			['none', 25, 75]
+		]);
+	});
+
+	it('leaves a small gap after each segment when more than one is drawn', () => {
+		const segs = donutSegments({ complete: 50, partial: 25, none: 25 }, C, 2);
+		expect(segs.map((s) => [s.status, s.length, s.start])).toEqual([
+			['complete', 48, 0],
+			['partial', 23, 50],
+			['none', 23, 75]
+		]);
+	});
+
+	it('skips a status with nobody and draws a lone status as a full ring without a gap', () => {
+		expect(donutSegments({ complete: 3, partial: 0, none: 0 }, C, 2)).toEqual([
+			{ status: 'complete', length: 100, start: 0 }
+		]);
+		expect(donutSegments({ complete: 1, partial: 0, none: 1 }, C, 0).map((s) => s.status)).toEqual([
+			'complete',
+			'none'
+		]);
+	});
+
+	it('draws nothing for nobody', () => {
+		expect(donutSegments({ complete: 0, partial: 0, none: 0 }, C, 2)).toEqual([]);
+	});
+});
+
+describe('coverageFilterLabels', () => {
+	it('names every filter, the same set for a day and for a range', () => {
+		const day = coverageFilterLabels(false);
+		expect(Object.keys(day)).toEqual([
+			'all',
+			'complete',
+			'incomplete',
+			'partial',
+			'none',
+			'part_day'
+		]);
+		expect(day.all).toBe('ทั้งหมด');
+		expect(day.complete).toBe('รับ 2 มื้อขึ้นไป/วัน');
+		expect(day.incomplete).toBe('รับไม่ถึง 2 มื้อ/วัน');
+		expect(day.partial).toBe('รับแค่ 1 มื้อ');
+		expect(day.none).toBe('ยังไม่มีบันทึกรับ');
+		expect(day.part_day).toBe('อยู่ในศูนย์ไม่เต็มวัน (ไม่นับเกณฑ์)');
+		const range = coverageFilterLabels(true);
+		expect(range.complete).toBe('รับ 2 มื้อขึ้นไปทุกวัน');
+		// The union and the one-meal group would read the same over a range: the union says so.
+		expect(range.incomplete).toBe('รับไม่ถึง 2 มื้อบางวัน (รวมทุกกลุ่ม)');
+		expect(range.partial).toBe('รับไม่ถึง 2 มื้อบางวัน');
+		expect(range.none).toBe('ไม่มีบันทึกรับทั้งช่วง');
 	});
 });

@@ -35,6 +35,7 @@
 		coverageCounts,
 		coverageEmptyReasons,
 		coverageTodayNote,
+		coverageStatusLabels,
 		coverageRangeFor,
 		coverageRangeLabel,
 		coverageRangeMode,
@@ -298,11 +299,9 @@
 		</Alert>
 	{:else}
 		<MealCoverageKpiCards
-			{filter}
 			{counts}
 			partDayOnly={allRows.filter((r) => r.judgedDays === 0).length}
 			{multiDay}
-			onSelect={selectFilter}
 		/>
 
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -345,7 +344,7 @@
 				accent="#16A34A"
 				rows={peopleRows}
 				summary={{
-					label: multiDay ? 'ครบเกณฑ์' : `ครบ ${MIN_MEALS_PER_DAY} มื้อ`,
+					label: coverageStatusLabels(multiDay).complete,
 					done: shares.complete,
 					total: shares.present
 				}}
@@ -380,25 +379,9 @@
 				class="items-center rounded-xl border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 *:[svg]:row-span-1 *:[svg]:translate-y-0"
 			>
 				<TriangleAlert class="text-amber-600" aria-hidden="true" />
-				<AlertDescription
-					class="flex flex-col gap-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between"
-				>
-					<span class="space-y-1">
-						<span class="block">
-							<span class="font-bold tabular-nums">{counts.incomplete} คน</span>
-							{multiDay
-								? `รับไม่ครบเกณฑ์อย่างน้อย 1 วัน จากผู้พักพิงในศูนย์ ${counts.all} คน`
-								: `รับไม่ครบเกณฑ์ จากผู้พักพิงในศูนย์ ${counts.all} คน`}
-						</span>
-					</span>
-					<Button
-						variant="outline"
-						class="h-11 w-full shrink-0 bg-white sm:h-10 sm:w-auto"
-						aria-pressed={filter === 'incomplete'}
-						onclick={() => selectFilter(filter === 'incomplete' ? 'all' : 'incomplete')}
-					>
-						{filter === 'incomplete' ? 'ดูทุกคน' : 'ดูเฉพาะรายชื่อนี้'}
-					</Button>
+				<AlertDescription class="text-amber-950">
+					<span class="font-bold tabular-nums">{counts.incomplete} คน</span>
+					{`${coverageStatusLabels(multiDay).incomplete} จากผู้พักพิงในศูนย์ ${counts.all} คน`}
 				</AlertDescription>
 			</Alert>
 		{/if}

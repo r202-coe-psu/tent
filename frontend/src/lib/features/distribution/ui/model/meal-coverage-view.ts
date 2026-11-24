@@ -8,7 +8,6 @@ import {
 	COVERAGE_MEALS,
 	MIN_MEALS_PER_DAY,
 	countingLogsByRecipient,
-	type HandoverTally,
 	type OtherRecipientGroup,
 	type OtherRecipientsOfMeal,
 	type CoverageLog,
@@ -337,11 +336,9 @@ export function coverageLevel(percent: number): CoverageLevel {
 
 export interface OtherRecipientTotal {
 	group: OtherRecipientGroup;
-	/** Portions over every meal (sum of `qty`). */
+	/** Portions over every meal. */
 	portions: number;
-	/** Distribution log records over every meal. */
-	records: number;
-	byMeal: Record<(typeof COVERAGE_MEALS)[number], HandoverTally>;
+	byMeal: Record<(typeof COVERAGE_MEALS)[number], number>;
 }
 
 const OTHER_RECIPIENT_GROUPS: readonly OtherRecipientGroup[] = ['outside', 'volunteer', 'staff'];
@@ -351,19 +348,9 @@ export function otherRecipientTotals(
 	meals: readonly OtherRecipientsOfMeal[]
 ): OtherRecipientTotal[] {
 	return OTHER_RECIPIENT_GROUPS.map((group) => {
-		const byMeal = {
-			breakfast: { records: 0, portions: 0 },
-			lunch: { records: 0, portions: 0 },
-			dinner: { records: 0, portions: 0 }
-		};
-		let portions = 0;
-		let records = 0;
-		for (const m of meals) {
-			byMeal[m.meal] = { ...m[group] };
-			portions += m[group].portions;
-			records += m[group].records;
-		}
-		return { group, portions, records, byMeal };
+		const byMeal = { breakfast: 0, lunch: 0, dinner: 0 };
+		for (const m of meals) byMeal[m.meal] += m[group];
+		return { group, portions: byMeal.breakfast + byMeal.lunch + byMeal.dinner, byMeal };
 	});
 }
 
@@ -383,5 +370,81 @@ export function coverageTodayNote(servedToday: readonly MealPeriod[]): string | 
 	if (served.length === 1) {
 		return `วันนี้แจกแล้ว 1 จาก 3 มื้อ (${names}) · ยังไม่มีใครรับครบ ${MIN_MEALS_PER_DAY} มื้อได้จนกว่าจะแจกมื้อ${getMealPeriodLabel(unserved[0])}`;
 	}
-	return `วันนี้แจกแล้ว ${served.length} จาก 3 มื้อ (${names}) · ผู้ที่ยังรับไม่ครบเกณฑ์ยังรับได้ในมื้อ${getMealPeriodLabel(unserved[0])}`;
+	return `วันนี้แจกแล้ว ${served.length} จาก 3 มื้อ (${names}) · ผู้ที่ยังรับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อยังรับได้ในมื้อ${getMealPeriodLabel(unserved[0])}`;
+}
+
+export type CoverageStatus = 'complete' | 'partial' | 'none';
+
+/**
+ * One colour per status, shared by the KPI cards, the donut segments and the legend so they can
+ * never drift apart: green reached the mark, amber has one meal, red has no record.
+ */
+export const COVERAGE_STATUS_TONES = {
+	complete: { color: '#10B981', border: 'border-emerald-200' },
+	partial: { color: '#F59E0B', border: 'border-amber-200' },
+	none: { color: '#EF4444', border: 'border-red-200' }
+} as const satisfies Record<CoverageStatus, { color: string; border: string }>;
+
+/**
+ * Titles of the statuses: reached 2 meals, short of 2 meals (the union of the next two), exactly
+ * one meal, no record. Over a range "short" means short on some day, and the one-meal status
+ * becomes "some record, short on some days".
+ */
+export function coverageStatusLabels(
+	multiDay: boolean
+): Record<CoverageStatus | 'incomplete', string> {
+	return {
+		complete: multiDay
+			? `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไปทุกวัน`
+			: `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไป/วัน`,
+		incomplete: multiDay
+			? `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อบางวัน`
+			: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ/วัน`,
+		partial: multiDay ? `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อบางวัน` : 'รับแค่ 1 มื้อ',
+		none: multiDay ? 'ไม่มีบันทึกรับทั้งช่วง' : 'ยังไม่มีบันทึกรับ'
+	};
+}
+
+export interface DonutSegment {
+	status: CoverageStatus;
+	/** Arc length, gap already taken off. */
+	length: number;
+	/** Where the arc starts along the circumference, from 12 o'clock clockwise. */
+	start: number;
+}
+
+/**
+ * Segments of the coverage donut in the order complete, partial, none. Each draws its share of
+ * `circumference`, minus `gap` when more than one segment is drawn; a status nobody has is left out.
+ */
+export function donutSegments(
+	counts: Record<CoverageStatus, number>,
+	circumference: number,
+	gap: number
+): DonutSegment[] {
+	const order: CoverageStatus[] = ['complete', 'partial', 'none'];
+	const total = order.reduce((sum, s) => sum + counts[s], 0);
+	const drawn = order.filter((s) => counts[s] > 0);
+	if (total === 0) return [];
+	const useGap = drawn.length > 1 ? gap : 0;
+	let start = 0;
+	return drawn.map((status) => {
+		const share = (counts[status] / total) * circumference;
+		const segment = { status, length: Math.max(0, share - useGap), start };
+		start += share;
+		return segment;
+	});
+}
+
+/** Names of every status filter, in the order of the filter menu; used by the menu, chips and legend. */
+export function coverageFilterLabels(multiDay: boolean): Record<CoverageFilter, string> {
+	const status = coverageStatusLabels(multiDay);
+	return {
+		all: 'ทั้งหมด',
+		complete: status.complete,
+		incomplete: multiDay ? `${status.incomplete} (รวมทุกกลุ่ม)` : status.incomplete,
+		partial: status.partial,
+		none: status.none,
+		part_day: 'อยู่ในศูนย์ไม่เต็มวัน (ไม่นับเกณฑ์)'
+	};
 }

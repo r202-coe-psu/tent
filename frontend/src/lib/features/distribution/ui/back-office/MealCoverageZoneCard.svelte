@@ -33,7 +33,7 @@
 			ความครบรายโซน
 		</Card.Title>
 		<Card.Description class="text-sm text-slate-500">
-			รับครบเกณฑ์เทียบผู้ที่อยู่ในโซน เรียงโซนที่ครบน้อยสุดก่อน
+			สัดส่วนคนที่รับ 2 มื้อขึ้นไป แยกตามโซน · โซนที่ต้องดูแลก่อนอยู่บนสุด
 		</Card.Description>
 	</Card.Header>
 	<Card.Content class="px-4 sm:px-5">
@@ -50,7 +50,9 @@
 						</span>
 						<span class="flex shrink-0 items-center gap-2 tabular-nums">
 							<span class="text-slate-500">
-								<strong class="font-bold text-slate-900">{z.complete}</strong> / {z.total} คน
+								รับไปแล้ว
+								<strong class="font-bold text-slate-900">{z.complete}</strong>
+								จาก {z.total} คน
 							</span>
 							<span
 								class="inline-flex items-center rounded-full border px-1.5 text-xs font-semibold {BADGE[

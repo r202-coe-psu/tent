@@ -30,14 +30,14 @@ export function coverageStatusLabel(row: StatusRow, multiDay = false): string {
 	if (row.judgedDays === 0) return 'อยู่ในศูนย์ไม่เต็มวัน';
 	if (multiDay) {
 		return row.complete
-			? `รับครบเกณฑ์ทุกวัน (${row.judgedDays} วัน)`
-			: `รับไม่ครบเกณฑ์ ${row.shortDays}/${row.judgedDays} วัน`;
+			? `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไปทุกวัน (${row.judgedDays} วัน)`
+			: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อบางวัน ${row.shortDays}/${row.judgedDays} วัน`;
 	}
 	const progress = `${Math.min(row.counted, MIN_MEALS_PER_DAY)}/${MIN_MEALS_PER_DAY}`;
-	if (row.complete) return `รับครบเกณฑ์ · ${progress} มื้อ`;
+	if (row.complete) return `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไป · ${progress} มื้อ`;
 	return row.counted === 0
-		? 'รับไม่ครบเกณฑ์ · ยังไม่มีบันทึกรับ'
-		: `รับไม่ครบเกณฑ์ · รับแล้ว ${progress} มื้อ`;
+		? `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ · ยังไม่มีบันทึกรับ`
+		: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ · รับแล้ว ${progress} มื้อ`;
 }
 
 const USER_PREFIX = /^org\.couchdb\.user:/;

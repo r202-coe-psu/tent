@@ -5,8 +5,11 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { MIN_MEALS_PER_DAY } from '../../domain/food-supplies/meal-coverage';
-	import { ALL_ZONES, type CoverageFilter } from '../model/meal-coverage-view';
+	import {
+		ALL_ZONES,
+		coverageFilterLabels,
+		type CoverageFilter
+	} from '../model/meal-coverage-view';
 
 	interface Props {
 		query: string;
@@ -38,14 +41,7 @@
 	}: Props = $props();
 
 	// The same options on every day and range: an option nobody matches just gives the empty row.
-	const FILTER_LABELS = $derived<Record<CoverageFilter, string>>({
-		all: 'ทั้งหมด',
-		complete: `รับครบเกณฑ์ (${MIN_MEALS_PER_DAY} มื้อ/วัน)`,
-		incomplete: 'รับไม่ครบเกณฑ์',
-		partial: multiDay ? 'รับไม่ครบเกณฑ์ – มีบันทึกบ้าง' : 'รับไม่ครบเกณฑ์ – รับแล้ว 1 มื้อ',
-		none: 'รับไม่ครบเกณฑ์ – ยังไม่มีบันทึกรับ',
-		part_day: 'อยู่ในศูนย์ไม่เต็มวัน (ไม่นับเกณฑ์)'
-	});
+	const FILTER_LABELS = $derived(coverageFilterLabels(multiDay));
 	const FILTERS = $derived(Object.keys(FILTER_LABELS) as CoverageFilter[]);
 
 	const zoneText = $derived(

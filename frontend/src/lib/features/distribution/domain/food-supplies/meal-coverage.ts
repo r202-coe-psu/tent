@@ -345,32 +345,25 @@ export function portionsByDistributor(
 
 export type OtherRecipientGroup = 'outside' | 'volunteer' | 'staff';
 
-export interface HandoverTally {
-	/** Distribution log records, so an override duplicate or a second serving counts again. */
-	records: number;
-	portions: number;
-}
-
 export type OtherRecipientsOfMeal = { meal: (typeof COVERAGE_MEALS)[number] } & Record<
 	OtherRecipientGroup,
-	HandoverTally
+	number
 >;
 
 /**
- * Hand-overs to people who are not on the evacuee roster, per main meal: outside (anonymous or
- * named by hand), volunteers and staff. Same counting rule as the portions; evacuees are the
+ * Portions handed to people who are not on the evacuee roster, per main meal: outside (anonymous
+ * or named by hand), volunteers and staff. Same counting rule as the portions; evacuees are the
  * table's business.
  */
 export function otherRecipientsByMeal(
 	logs: readonly CoverageLog[],
 	days: DaySelector
 ): OtherRecipientsOfMeal[] {
-	const tally = (): HandoverTally => ({ records: 0, portions: 0 });
 	const rows = COVERAGE_MEALS.map((meal): OtherRecipientsOfMeal => ({
 		meal,
-		outside: tally(),
-		volunteer: tally(),
-		staff: tally()
+		outside: 0,
+		volunteer: 0,
+		staff: 0
 	}));
 	for (const log of logs) {
 		const group = log.recipient_type;
@@ -378,12 +371,11 @@ export function otherRecipientsByMeal(
 		if (!inSelector(days, thailandCalendarDay(log.distributed_at))) continue;
 		const meal = servedMealOfLog(log);
 		if (!isCoverageMeal(meal)) continue;
-		const entry = rows[COVERAGE_MEALS.indexOf(meal)][group];
-		entry.records += 1;
+		const row = rows[COVERAGE_MEALS.indexOf(meal)];
 		try {
-			entry.portions = Number(addQty(String(entry.portions), log.qty));
+			row[group] = Number(addQty(String(row[group]), log.qty));
 		} catch {
-			// Unreadable qty adds no portions but the hand-over itself still happened.
+			// A log with no readable qty adds no portions.
 		}
 	}
 	return rows;

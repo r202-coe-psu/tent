@@ -61,6 +61,14 @@
 		rows.map((r) => ({ meal: getMealPeriodLabel(r.meal), total: r.total ?? 0, done: r.done }))
 	);
 
+	/** The share of the muted bar the accent bar reaches, for the tooltip: " (50%)" or nothing. */
+	function tipPercent(item: { key: string; payload?: unknown }): string {
+		if (item.key !== 'done') return '';
+		const row = item.payload as { done: number; total: number } | undefined;
+		const pct = row ? percent(row.done, row.total) : null;
+		return pct === null ? '' : ` (${pct}%)`;
+	}
+
 	const isEmpty = $derived(rows.every((r) => r.done === 0 && (r.total ?? 0) === 0));
 
 	const percent = (done: number, total: number | null) =>
@@ -158,7 +166,10 @@
 										<span class="text-muted-foreground">
 											{chartConfig[item.key as keyof typeof chartConfig]?.label ?? name}
 										</span>
-										<span class="font-medium text-foreground tabular-nums">{value} {unit}</span>
+										<span class="font-medium text-foreground tabular-nums">
+											{value}
+											{unit}{tipPercent(item)}
+										</span>
 									</div>
 								{/snippet}
 							</Chart.Tooltip>

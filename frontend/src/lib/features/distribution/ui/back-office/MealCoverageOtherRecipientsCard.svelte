@@ -43,7 +43,6 @@
 
 	const totals = $derived(otherRecipientTotals(meals));
 	const MEALS = COVERAGE_MEALS;
-	const TIP = 'ชุด = จำนวนอาหารที่แจก, รายการ = จำนวนครั้งที่บันทึกการแจก';
 </script>
 
 <section class="space-y-3" aria-labelledby="meal-coverage-others-title">
@@ -51,15 +50,12 @@
 		<h4 id="meal-coverage-others-title" class="text-base font-bold text-slate-900">
 			ผู้รับที่ไม่อยู่ในรายชื่อผู้พักพิง
 		</h4>
-		<p class="text-sm text-slate-500">
-			1 รายการ = ส่งมอบให้ผู้รับ 1 คน 1 ครั้ง (อาจมากกว่า 1 ชุด) · นับแยกจากรายชื่อผู้พักพิง
-			แต่รวมอยู่ในจำนวนชุดที่แจก
-		</p>
+		<p class="text-sm text-slate-500">นับแยกจากรายชื่อผู้พักพิง แต่รวมอยู่ในจำนวนชุดที่แจก</p>
 	</div>
 	<ul class="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
 		{#each totals as t (t.group)}
 			{@const g = GROUPS[t.group]}
-			{@const muted = t.portions === 0 && t.records === 0}
+			{@const muted = t.portions === 0}
 			<li
 				class="space-y-2 rounded-xl border bg-white p-4 shadow-2xs {muted
 					? 'border-slate-200/80'
@@ -79,26 +75,22 @@
 						aria-hidden="true"
 					/>
 				</div>
-				<p class="tabular-nums {muted ? 'text-slate-400' : 'text-slate-900'}" title={TIP}>
+				<p class="tabular-nums {muted ? 'text-slate-400' : 'text-slate-900'}">
 					<span class="text-3xl font-bold">{t.portions}</span>
 					<span class="text-sm font-normal"> ชุด</span>
 				</p>
-				<p class="text-sm tabular-nums {muted ? 'text-slate-400' : 'text-slate-600'}" title={TIP}>
-					จากการแจก {t.records} รายการ
-				</p>
 				<ul class="divide-y divide-slate-100 border-t border-slate-100 text-sm">
 					{#each MEALS as meal (meal)}
-						{@const m = t.byMeal[meal]}
-						{@const none = m.portions === 0 && m.records === 0}
+						{@const portions = t.byMeal[meal]}
+						{@const none = portions === 0}
 						<li
 							class="flex items-center justify-between gap-3 py-1.5 {none
 								? 'text-slate-400'
 								: 'text-slate-700'}"
 						>
 							<span>{getMealPeriodLabel(meal)}</span>
-							<span class="text-right tabular-nums" title={TIP}>
-								<span class={none ? '' : 'font-semibold text-slate-900'}>{m.portions} ชุด</span>
-								· จาก {m.records} รายการ
+							<span class="text-right tabular-nums {none ? '' : 'font-semibold text-slate-900'}">
+								{portions} ชุด
 							</span>
 						</li>
 					{/each}

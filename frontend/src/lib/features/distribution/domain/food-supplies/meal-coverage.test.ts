@@ -580,7 +580,7 @@ describe('otherRecipientsByMeal', () => {
 	const other = (over: Partial<CoverageLog>) =>
 		log({ recipient_type: 'outside', recipient_id: null, ...over });
 
-	it('tallies outside, volunteer and staff hand-overs per meal as times and portions', () => {
+	it('tallies outside, volunteer and staff hand-overs per meal as portions', () => {
 		const logs = [
 			other({ qty: '2' }),
 			other({ qty: '3', distributed_at: '2026-11-10T01:00:00Z' }),
@@ -592,21 +592,21 @@ describe('otherRecipientsByMeal', () => {
 		expect(otherRecipientsByMeal(logs, { from: DAY, to: '2026-11-10' })).toEqual([
 			{
 				meal: 'breakfast',
-				outside: { records: 2, portions: 5 },
-				volunteer: { records: 1, portions: 4 },
-				staff: { records: 0, portions: 0 }
+				outside: 5,
+				volunteer: 4,
+				staff: 0
 			},
 			{
 				meal: 'lunch',
-				outside: { records: 0, portions: 0 },
-				volunteer: { records: 0, portions: 0 },
-				staff: { records: 1, portions: 2 }
+				outside: 0,
+				volunteer: 0,
+				staff: 2
 			},
 			{
 				meal: 'dinner',
-				outside: { records: 1, portions: 1 },
-				volunteer: { records: 0, portions: 0 },
-				staff: { records: 0, portions: 0 }
+				outside: 1,
+				volunteer: 0,
+				staff: 0
 			}
 		]);
 	});
@@ -618,7 +618,7 @@ describe('otherRecipientsByMeal', () => {
 			other({ meal: 'snack' }),
 			other({ distributed_at: '2026-11-08T01:00:00Z' })
 		];
-		expect(otherRecipientsByMeal(logs, DAY).every((m) => m.outside.records === 0)).toBe(true);
+		expect(otherRecipientsByMeal(logs, DAY).every((m) => m.outside === 0)).toBe(true);
 	});
 });
 
