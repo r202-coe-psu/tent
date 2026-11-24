@@ -71,6 +71,27 @@ export function controlledValuesFromMaster(items: readonly MasterSkillItemLike[]
 }
 
 /** Same derivation as the worker projector and `public-application.ts`: quota − confirmed − dispatched. */
+/** Codes of skills whose code or display name contains `text` (CR-264 D3), like FastAPI. */
+export function skillCodesByLabel(
+	items: readonly MasterSkillItemLike[],
+	text: string
+): Set<string> {
+	const needle = norm(text);
+	const codes = new Set<string>();
+	if (!needle) return codes;
+	for (const item of items) {
+		if (item.status === 'inactive' || !item.code) continue;
+		if (
+			[item.label_th, item.label_en, (item as { label?: string }).label].some((n) =>
+				norm(n).includes(needle)
+			)
+		) {
+			codes.add(item.code);
+		}
+	}
+	return codes;
+}
+
 function remainingFrom(row: {
 	quota?: number;
 	slots_confirmed?: number;
@@ -126,6 +147,8 @@ export function filterFallbackJobs(
 		shelterNames: ReadonlyMap<string, string>;
 		/** lower-cased controlled-skill values ({@link controlledValuesFromMaster}). */
 		controlled: ReadonlySet<string>;
+		/** Skill codes whose display name matches `q` ({@link skillCodesByLabel}, CR-264 D3). */
+		skillCodesByLabel?: ReadonlySet<string>;
 		now?: Date;
 	}
 ): { jobs: FallbackJob[]; total: number } {
@@ -139,7 +162,9 @@ export function filterFallbackJobs(
 				norm(job.title).includes(q) ||
 				norm(code).includes(q) ||
 				norm(opts.shelterNames.get(code)).includes(q) ||
-				(job.skills_required ?? []).some((skill) => norm(skill).includes(q));
+				(job.skills_required ?? []).some(
+					(skill) => norm(skill).includes(q) || opts.skillCodesByLabel?.has(skill)
+				);
 			if (!hit) return false;
 		}
 		if (wanted.size > 0 && !(job.skills_required ?? []).some((skill) => wanted.has(skill))) {
@@ -183,4 +208,27 @@ export function boardShelters(
 		.filter((shelter) => withJobs.has(shelter.code.toUpperCase()))
 		.map(({ code, name }) => ({ code, name }))
 		.sort((a, b) => byText(a.code, b.code));
+}
+
+/** Board-wide counts that ignore every filter and page (CR-264 FR-9/10/11), like FastAPI. */
+export function summarizeFallbackJobs(
+	jobs: readonly FallbackJob[],
+	controlled: ReadonlySet<string>,
+	now: Date = new Date()
+): { total: number; open: number; near_full: number; controlled: number } {
+	let open = 0;
+	let nearFull = 0;
+	let controlledCount = 0;
+	for (const job of jobs) {
+		const remaining = remainingOf(job, now);
+		if (remaining.some((r) => r >= 1)) open += 1;
+		if (remaining.some((r) => r >= 1 && r <= 2)) nearFull += 1;
+		if (
+			job.tier === 'staff-capable' ||
+			(job.skills_required ?? []).some((skill) => controlled.has(norm(skill)))
+		) {
+			controlledCount += 1;
+		}
+	}
+	return { total: jobs.length, open, near_full: nearFull, controlled: controlledCount };
 }

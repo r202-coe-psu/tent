@@ -3,6 +3,8 @@ import {
 	boardShelters,
 	controlledValuesFromMaster,
 	filterFallbackJobs,
+	skillCodesByLabel,
+	summarizeFallbackJobs,
 	type FallbackJob
 } from './public-board-fallback';
 
@@ -136,5 +138,38 @@ describe('boardShelters', () => {
 			{ code: 'SH001', name: 'A' },
 			{ code: 'SH003', name: 'C' }
 		]);
+	});
+});
+
+describe('skill label search and summary (CR-264 D3, FR-9)', () => {
+	it('finds a job by the display name of its skill code', () => {
+		const items = [
+			{ code: 'cooking', label_th: 'ทำอาหาร', label_en: 'Cooking' },
+			{ code: 'driving', label_th: 'ขับรถ' }
+		];
+		const jobs = [
+			job('job:k', { skills_required: ['cooking'] }),
+			job('job:d', { skills_required: ['driving'] })
+		];
+		const hit = filterFallbackJobs(jobs, {
+			...base,
+			q: 'cook',
+			skillCodesByLabel: skillCodesByLabel(items, 'cook')
+		});
+		expect(hit.jobs.map((j) => j._id)).toEqual(['job:k']);
+	});
+
+	it('counts the whole board, ignoring filters', () => {
+		const jobs = [
+			job('job:a', { slots_remaining: 5 }),
+			job('job:b', { slots_remaining: 2 }),
+			job('job:c', { slots_remaining: 0, tier: 'staff-capable' })
+		];
+		expect(summarizeFallbackJobs(jobs, new Set(), NOW)).toEqual({
+			total: 3,
+			open: 2,
+			near_full: 1,
+			controlled: 1
+		});
 	});
 });
