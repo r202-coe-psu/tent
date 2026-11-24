@@ -10,7 +10,12 @@ from typing import Any
 
 import httpx
 
-from worker.audit_log import AUDIT_LOG_DB, EVENT_PREFIX
+from worker.audit_log import (
+    AUDIT_LOG_DB,
+    EVENT_PREFIX,
+    RETRYABLE_STATUSES,
+    AuditCopy,
+)
 from worker.couch.client import CATALOG_DB, WORKER_ACTOR
 from worker.masking import shelter_code_from_db_name
 from worker.timeutil import iso_utc
@@ -359,10 +364,17 @@ async def audit_diff(
     change: dict[str, Any],
     *,
     now: datetime | None = None,
-) -> bool:
+) -> AuditCopy:
+    """Write the audit event for one change; the outcome says whether to retry it.
+
+    Classified like ``copy_audit_doc``: ``RETRY`` only for a write that may land
+    next time (5xx, 408/429, network) — the caller holds the checkpoint so the
+    event is not lost. Anything a retry cannot fix (no event to write, a 4xx
+    such as a missing ``audit_log`` DB, a build bug) is ``SKIPPED`` and logged.
+    """
     config = audit_diff_config()
     if not config.enabled or not is_audit_diff_database(database):
-        return False
+        return AuditCopy.SKIPPED
     try:
         event = await build_audit_diff_event(
             couch,
@@ -375,30 +387,31 @@ async def audit_diff(
         logger.exception(
             "Failed to build audit event for %s/%s", database, change.get("id")
         )
-        return False
+        return AuditCopy.SKIPPED
     if event is None:
-        return False
+        return AuditCopy.SKIPPED
     try:
         await couch.put_doc(AUDIT_LOG_DB, event, retry_conflict=False)
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         if status == 409:
-            return True
-        if status == 404:
+            return AuditCopy.COPIED
+        if 400 <= status < 500 and status not in RETRYABLE_STATUSES:
             logger.warning(
-                "Database %s does not exist — audit event for %s/%s not written",
+                "%s rejected the audit event for %s/%s with HTTP %s — not written",
                 AUDIT_LOG_DB,
                 database,
                 change.get("id"),
+                status,
             )
-            return False
+            return AuditCopy.SKIPPED
         logger.exception(
             "Failed to write audit event for %s/%s", database, change.get("id")
         )
-        return False
+        return AuditCopy.RETRY
     except Exception:
         logger.exception(
             "Failed to write audit event for %s/%s", database, change.get("id")
         )
-        return False
-    return True
+        return AuditCopy.RETRY
+    return AuditCopy.COPIED

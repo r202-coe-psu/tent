@@ -16,7 +16,7 @@ from worker.audit_diff import (
     compute_changes,
     resolve_actor,
 )
-from worker.audit_log import AUDIT_LOG_DB
+from worker.audit_log import AUDIT_LOG_DB, AuditCopy, AuditCopyIncomplete
 from worker.config import load_settings
 from worker.couch.bootstrap import bootstrap_database
 from worker.couch.client import CouchClient
@@ -490,7 +490,10 @@ async def test_tombstone_type_comes_from_id_prefix():
 async def test_audit_diff_writes_without_overwriting(enabled):
     couch = _couch(_item(_rev="1-aaa", name="Rice"))
 
-    assert await audit_diff(couch, "catalog", _change(_item()), now=NOW) is True
+    assert (
+        await audit_diff(couch, "catalog", _change(_item()), now=NOW)
+        is AuditCopy.COPIED
+    )
 
     couch.put_doc.assert_awaited_once()
     database, event = couch.put_doc.await_args.args
@@ -504,34 +507,64 @@ async def test_conflict_means_already_written(enabled):
     couch.put_doc.side_effect = _http_error(409)
 
     doc = _item(_rev="1-aaa")
-    assert await audit_diff(couch, "catalog", _change(doc), now=NOW) is True
+    assert await audit_diff(couch, "catalog", _change(doc), now=NOW) is AuditCopy.COPIED
 
 
-async def test_missing_audit_log_database_is_a_warning(enabled, caplog):
+@pytest.mark.parametrize("status", [400, 403, 404])
+async def test_a_write_a_retry_cannot_fix_is_skipped(enabled, caplog, status):
+    # Same classification as copy_audit_doc: a missing audit_log DB (404) or a
+    # rejected event would hold the feed forever if it were retried.
     couch = _couch()
-    couch.put_doc.side_effect = _http_error(404)
+    couch.put_doc.side_effect = _http_error(status)
 
     doc = _item(_rev="1-aaa")
-    assert await audit_diff(couch, "catalog", _change(doc), now=NOW) is False
-    assert "does not exist" in caplog.text
+    assert (
+        await audit_diff(couch, "catalog", _change(doc), now=NOW) is AuditCopy.SKIPPED
+    )
+    assert f"HTTP {status}" in caplog.text
 
 
 @pytest.mark.parametrize(
-    "error", [_http_error(500), httpx.ConnectError("down"), RuntimeError("boom")]
+    "error",
+    [
+        _http_error(500),
+        _http_error(503),
+        _http_error(408),
+        _http_error(429),
+        httpx.ConnectError("down"),
+        RuntimeError("boom"),
+    ],
 )
-async def test_other_write_failures_do_not_raise(enabled, error):
+async def test_a_transient_write_failure_asks_for_a_retry(enabled, error):
     couch = _couch()
     couch.put_doc.side_effect = error
 
     doc = _item(_rev="1-aaa")
-    assert await audit_diff(couch, "catalog", _change(doc), now=NOW) is False
+    assert await audit_diff(couch, "catalog", _change(doc), now=NOW) is AuditCopy.RETRY
+
+
+async def test_a_build_failure_is_skipped_not_retried(enabled):
+    couch = _couch()
+    with patch(
+        "worker.audit_diff.build_audit_diff_event",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("bug"),
+    ):
+        doc = _item(_rev="1-aaa")
+        assert (
+            await audit_diff(couch, "catalog", _change(doc), now=NOW)
+            is AuditCopy.SKIPPED
+        )
+    couch.put_doc.assert_not_awaited()
 
 
 async def test_flag_off_emits_nothing():
     couch = _couch()
 
     doc = _item(_rev="1-aaa")
-    assert await audit_diff(couch, "catalog", _change(doc), now=NOW) is False
+    assert (
+        await audit_diff(couch, "catalog", _change(doc), now=NOW) is AuditCopy.SKIPPED
+    )
     couch.put_doc.assert_not_awaited()
 
 
@@ -539,40 +572,93 @@ async def test_other_databases_emit_nothing(enabled):
     couch = _couch()
 
     doc = _item(_rev="1-aaa")
-    assert await audit_diff(couch, "registry", _change(doc), now=NOW) is False
+    assert (
+        await audit_diff(couch, "registry", _change(doc), now=NOW) is AuditCopy.SKIPPED
+    )
     couch.put_doc.assert_not_awaited()
 
 
-async def test_processor_emits_for_shelter_and_keeps_projecting(enabled):
-    couch = _couch()
-    couch.get_doc = AsyncMock(return_value=None)
-    couch.put_doc.side_effect = _http_error(500)
-    doc = _evacuee(_rev="1-aaa")
-
-    with (
+def _shelter_patches():
+    return (
         patch(
             "worker.couch.processor.projected_shelter_status",
             new_callable=AsyncMock,
             return_value="open",
         ),
-        patch(
-            "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
-        ) as save_cp,
-        patch(
-            "worker.couch.processor.apply_person", new_callable=AsyncMock
-        ) as apply_person,
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
         patch("worker.couch.processor.sync_booking_stay", new_callable=AsyncMock),
         patch("worker.couch.processor.refresh_occupancy", new_callable=AsyncMock),
         patch(
             "worker.couch.processor.refresh_shelter_occupants", new_callable=AsyncMock
         ),
-    ):
+    )
+
+
+async def test_processor_emits_for_shelter_and_keeps_projecting(enabled):
+    couch = _couch()
+    couch.get_doc = AsyncMock(return_value=None)
+    doc = _evacuee(_rev="1-aaa")
+
+    status, save, apply, stay, occ, occupants = _shelter_patches()
+    with status, save as save_cp, apply as apply_person, stay, occ, occupants:
         await process_change(couch, "shelter_sh001", _change(doc, seq=5))
 
     couch.put_doc.assert_awaited_once()
     assert couch.put_doc.await_args.args[0] == AUDIT_LOG_DB
     apply_person.assert_awaited_once()
     save_cp.assert_awaited_once_with("shelter_sh001", 5)
+
+
+async def test_processor_holds_the_shelter_checkpoint_on_a_transient_failure(enabled):
+    couch = _couch()
+    couch.get_doc = AsyncMock(return_value=None)
+    couch.put_doc.side_effect = _http_error(500)
+    doc = _evacuee(_rev="1-aaa")
+
+    status, save, apply, stay, occ, occupants = _shelter_patches()
+    with (
+        status,
+        save as save_cp,
+        apply,
+        stay,
+        occ,
+        occupants,
+        pytest.raises(AuditCopyIncomplete, match="seq 5"),
+    ):
+        await process_change(couch, "shelter_sh001", _change(doc, seq=5))
+
+    save_cp.assert_not_awaited()
+
+
+async def test_processor_moves_on_when_the_audit_log_db_is_missing(enabled):
+    couch = _couch()
+    couch.get_doc = AsyncMock(return_value=None)
+    couch.put_doc.side_effect = _http_error(404)
+    doc = _evacuee(_rev="1-aaa")
+
+    status, save, apply, stay, occ, occupants = _shelter_patches()
+    with status, save as save_cp, apply as apply_person, stay, occ, occupants:
+        await process_change(couch, "shelter_sh001", _change(doc, seq=5))
+
+    apply_person.assert_awaited_once()
+    save_cp.assert_awaited_once_with("shelter_sh001", 5)
+
+
+async def test_processor_holds_the_catalog_checkpoint_on_a_transient_failure(enabled):
+    couch = _couch(_item(_rev="1-aaa", name="Rice"))
+    couch.put_doc.side_effect = httpx.ConnectError("down")
+
+    with patch(
+        "worker.couch.processor.save_checkpoint", new_callable=AsyncMock
+    ) as save_cp:
+        with pytest.raises(AuditCopyIncomplete):
+            await process_change(couch, "catalog", _change(_item(), seq=7))
+        save_cp.assert_not_awaited()
+
+        couch.put_doc.side_effect = None
+        await process_change(couch, "catalog", _change(_item(), seq=7))
+    save_cp.assert_awaited_once_with("catalog", 7)
 
 
 async def test_processor_flag_off_emits_nothing():

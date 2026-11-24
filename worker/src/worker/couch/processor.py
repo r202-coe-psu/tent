@@ -124,13 +124,29 @@ async def _process_closed_shelter_change(
     await sync_booking_stay(doc)
 
 
+async def _audit_diff_or_hold(
+    couch: Any, database: str, change: dict[str, Any], seq: Any
+) -> None:
+    """Write the change's audit event, or raise so the checkpoint stays put.
+
+    Raising before ``save_checkpoint`` makes the feed retry from this seq, the same
+    hold ``copy_audit_doc`` uses — a transient ``audit_log`` outage must not drop
+    the event for good (only ``--bootstrap`` would bring it back).
+    """
+    if await audit_diff(couch, database, change) is AuditCopy.RETRY:
+        raise AuditCopyIncomplete(
+            f"{database}: audit event for {change.get('id')} not written; "
+            f"holding the checkpoint at seq {seq}"
+        )
+
+
 async def process_change(couch: Any, database: str, change: dict[str, Any]) -> None:
     seq = change.get("seq")
     if seq is None:
         return
 
     if database == CATALOG_DB:
-        await audit_diff(couch, database, change)
+        await _audit_diff_or_hold(couch, database, change, seq)
         await save_checkpoint(database, seq)
         return
 
@@ -149,7 +165,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             await save_checkpoint(database, seq)
             return
         if gated_code:
-            await audit_diff(couch, database, change)
+            await _audit_diff_or_hold(couch, database, change, seq)
         if gated_code and not change.get("deleted") and is_audit_doc(change.get("doc")):
             outcome = await copy_audit_doc(couch, change["doc"], database)
             if outcome is AuditCopy.RETRY:
