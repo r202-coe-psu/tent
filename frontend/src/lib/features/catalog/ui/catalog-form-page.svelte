@@ -9,6 +9,8 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { canAccessManagerPages, isSystemAdmin } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { useItemCategory, useItemMaster, useRecipe } from '../application/queries';
+	import { catalogHistoryScope } from '../domain/catalog-history';
 
 	let {
 		entity,
@@ -42,9 +44,35 @@
 				: 'recipe'
 	);
 	const roles = $derived(authStore.user?.roles ?? []);
-	const historyShelterCode = $derived(isSystemAdmin(roles) ? null : getShelterCode());
-	const canSeeHistory = $derived(
+	// Same scope the forms resolve the doc with, so these share their query cache.
+	const shelterCode = $derived(
+		basePath.includes('system-management') ? undefined : getShelterCode()
+	);
+	const editId = (kind: typeof historyEntityType) =>
+		mode === 'edit' && historyEntityType === kind ? id : '';
+	const categoryQuery = useItemCategory(
+		() => editId('item_category'),
+		() => shelterCode ?? null
+	);
+	const itemMasterQuery = useItemMaster(
+		() => editId('item_master'),
+		() => shelterCode ?? null
+	);
+	const recipeQuery = useRecipe(
+		() => editId('recipe'),
+		() => shelterCode ?? null
+	);
+	const historyDoc = $derived(
+		historyEntityType === 'item_category'
+			? categoryQuery.data
+			: historyEntityType === 'item_master'
+				? itemMasterQuery.data
+				: recipeQuery.data
+	);
+	const history = $derived(
 		mode === 'edit' && Boolean(id) && canAccessManagerPages(roles, getShelterCode())
+			? catalogHistoryScope(historyDoc, { isSystemAdmin: isSystemAdmin(roles), shelterCode })
+			: ({ visible: false } as const)
 	);
 
 	function handleBack() {
@@ -70,12 +98,12 @@
 			<RecipeForm {id} isEdit={mode === 'edit'} {basePath} onsuccess={handleBack} />
 		{/if}
 	</div>
-	{#if canSeeHistory}
+	{#if history.visible}
 		<div class="mt-6">
 			<EntityHistory
 				entityType={historyEntityType}
 				entityId={id}
-				shelterCode={historyShelterCode}
+				shelterCode={history.shelterCode}
 			/>
 		</div>
 	{/if}
