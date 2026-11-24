@@ -46,7 +46,12 @@
 		<Skeleton class="h-20 w-full rounded-xl" />
 	</div>
 {:else if summary}
-	<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="site-kind-strip">
+	<!-- One equal-width column per card on wide screens, so the row always spans the full width. -->
+	<div
+		class="grid gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(var(--cards),minmax(0,1fr))]"
+		style:--cards={cards.length}
+		data-testid="site-kind-strip"
+	>
 		{#each cards as card (card.code)}
 			<Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 				<Card.Header class="pb-1">
