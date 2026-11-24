@@ -84,6 +84,8 @@
 
 	// Mobile UI states
 	let isMobile = $state(false);
+	// xl and up: the strip between the two floating panels is wide enough for the whole legend.
+	let isXl = $state(false);
 	let mobileViewMode = $state<'map' | 'list'>('map');
 	let mobileFilterOpen = $state(false);
 
@@ -102,6 +104,12 @@
 			isMobile = e.matches;
 		};
 		mql.addEventListener('change', handler);
+		const xl = window.matchMedia('(min-width: 1280px)');
+		isXl = xl.matches;
+		const xlHandler = (e: MediaQueryListEvent) => {
+			isXl = e.matches;
+		};
+		xl.addEventListener('change', xlHandler);
 
 		// First visit: a GPS fix becomes the search origin in the URL, so the list is cut around the
 		// visitor at the database — on mobile too, where the filter panel is not mounted. Without
@@ -114,8 +122,15 @@
 				});
 		}
 
-		return () => mql.removeEventListener('change', handler);
+		return () => {
+			mql.removeEventListener('change', handler);
+			xl.removeEventListener('change', xlHandler);
+		};
 	});
+
+	// lg–xl with both panels open leaves the legend a narrow strip (~400px at 1024, where it wraps
+	// into a tall block; #1461): fold it into a toggle.
+	const legendCompact = $derived(!isMobile && !isXl && showFilterPanel && showListPanel);
 
 	const origin = $derived.by(() => {
 		const lat = parseFloat(liveUserLat);
@@ -345,12 +360,14 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-{#snippet filterCountBadge()}
+{#snippet filterCountBadge(onPrimary = false)}
 	{#if filterCount > 0}
 		<span
 			aria-hidden="true"
-			class="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 pt-[1.5px] text-2xs leading-none font-bold text-primary-foreground tabular-nums"
-			>{filterCount}</span
+			class={[
+				'inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 pt-[1.5px] text-2xs leading-none font-bold tabular-nums',
+				onPrimary ? 'bg-primary-foreground text-primary' : 'bg-primary text-primary-foreground'
+			]}>{filterCount}</span
 		>
 		<span class="sr-only">({filterCountText})</span>
 	{/if}
@@ -408,8 +425,9 @@
 <div
 	class="relative h-[calc(100dvh-var(--public-navbar-offset,4rem)-var(--testing-banner-height,0px))] w-full overflow-hidden bg-muted"
 >
-	<!-- Map (always on desktop; on mobile while the map tab is picked) -->
-	<div class={['absolute inset-0 z-0', mobileViewMode === 'list' && 'hidden lg:block']}>
+	<!-- Map (always on desktop; on mobile while the map tab is picked). No z-index here: the map
+		isolates itself, and the opened legend must rise above the floating panels (#1461). -->
+	<div class={['absolute inset-0', mobileViewMode === 'list' && 'hidden lg:block']}>
 		<ShelterMap
 			shelters={displayShelters}
 			parkingPoints={parkingPins}
@@ -419,6 +437,7 @@
 			disablePopup={isMobile}
 			onSelectShelter={handleSelectShelter}
 			onLocationPick={applySearchOrigin}
+			{legendCompact}
 			controlsClass="top-[5.75rem] lg:top-12"
 			legendClass={[
 				// keep the legend between the floating panels (left-2 + w-72/80, right-2 + w-72/80/88)
@@ -471,12 +490,21 @@
 
 			<button
 				type="button"
-				class="flex shrink-0 items-center gap-1.5 rounded-xl border border-border/80 bg-card/95 px-3 py-2 text-xs font-bold whitespace-nowrap text-foreground shadow-md backdrop-blur-md transition-all active:scale-95"
+				data-testid="mobile-filter-btn"
+				data-active={filterCount > 0 ? 'true' : undefined}
+				class={[
+					'flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold whitespace-nowrap shadow-md backdrop-blur-md transition-all active:scale-95',
+					filterCount > 0
+						? 'border-primary bg-primary text-primary-foreground'
+						: 'border-border/80 bg-card/95 text-foreground'
+				]}
 				onclick={() => (mobileFilterOpen = true)}
 			>
-				<Filter class="h-3.5 w-3.5 text-primary" />
+				<Filter
+					class={['h-3.5 w-3.5', filterCount > 0 ? 'text-primary-foreground' : 'text-primary']}
+				/>
 				<span>{t.filterBtn}</span>
-				{@render filterCountBadge()}
+				{@render filterCountBadge(filterCount > 0)}
 			</button>
 		</div>
 
