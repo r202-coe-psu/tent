@@ -114,6 +114,7 @@ describe('filterPortalMenu — shelter manager', () => {
 		const views = menu(sm, ON);
 		expect(deptIds(views)).toEqual(SM_ORDER);
 		expect(itemIds(dept(views, 'management'))).toEqual([
+			'system-overview',
 			'shelter-manage',
 			'shelter-readiness',
 			'shelter-users',
@@ -121,6 +122,14 @@ describe('filterPortalMenu — shelter manager', () => {
 			'referrals',
 			'back-office'
 		]);
+	});
+
+	it('opens the system overview from the first management tile', () => {
+		const item = PORTAL_DEPARTMENTS.flatMap((d) => d.items).find(
+			(i) => i.id === 'system-overview'
+		)!;
+		expect(item.label).toBe('ภาพรวมระบบ');
+		expect(resolvePortalHref(item, 'SH001')).toBe('/back-office/overview');
 	});
 
 	it('sees the PR department with the kiosk banners', () => {

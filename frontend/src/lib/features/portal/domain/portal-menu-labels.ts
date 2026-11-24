@@ -92,6 +92,7 @@ const itemsEn: Record<string, PortalText> = {
 		label: 'Zone Settings',
 		desc: 'Set zones, capacity, type and open/closed status'
 	},
+	'system-overview': { label: 'System Overview', desc: 'Evacuee and food distribution overview' },
 	'shelter-manage': {
 		label: 'Manage Shelter and Zones',
 		desc: 'All shelter and zone information'

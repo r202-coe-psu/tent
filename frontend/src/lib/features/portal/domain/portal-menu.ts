@@ -49,6 +49,7 @@ export type PortalIconKey =
 	| 'heart-handshake'
 	| 'heart-pulse'
 	| 'house'
+	| 'layout-dashboard'
 	| 'map-pin'
 	| 'megaphone'
 	| 'monitor'
@@ -385,6 +386,15 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		domain: 'admin',
 		icon: 'building',
 		items: [
+			{
+				id: 'system-overview',
+				label: 'ภาพรวมระบบ',
+				desc: 'ภาพรวมผู้อพยพและการแจกจ่ายอาหาร',
+				icon: 'layout-dashboard',
+				href: '/back-office/overview',
+				scope: 'shelter',
+				roles: []
+			},
 			{
 				id: 'shelter-manage',
 				label: 'จัดการศูนย์พักพิงและโซน',
