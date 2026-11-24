@@ -1531,6 +1531,7 @@ async def _board_job(
         shifts=shifts or [],
         skills_required=skills or [],
         quota=5,
+        slots_confirmed=5 - remaining,
         slots_remaining=remaining,
         status="open" if remaining > 0 else "full",
         updated_at=datetime.now(UTC),
@@ -1644,14 +1645,106 @@ async def test_list_jobs_status_open_uses_shift_remaining(
     job = await PublicJob.get("job:sh1")
     assert job is not None
     job.shifts = [
-        JobShift(shift_id="shift:a", date="2026-09-04", quota=3, slots_remaining=0),
-        JobShift(shift_id="shift:b", date="2026-09-05", quota=3, slots_remaining=3),
+        JobShift(
+            shift_id="shift:a", date="2099-09-04", quota=3, slots_confirmed=3, slots_remaining=0
+        ),
+        JobShift(shift_id="shift:b", date="2099-09-05", quota=3, slots_remaining=3),
     ]
     await job.save()
 
     response = await client.get("/public/v1/jobs?status=open", headers=auth_headers)
 
     assert [item["job_id"] for item in response.json()["jobs"]] == ["job:sh1"]
+
+
+async def test_list_jobs_status_uses_live_counters_not_the_snapshot(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-264 D1 / AC-10: a job the snapshot calls open but the live counter filled is not open."""
+    now = datetime.now(UTC)
+    await _board_job("job:live-full", "เต็มจริง", remaining=5)
+    await seed_job_slot(job_id="job:live-full", shelter_code="SH001", quota=5, now=now)
+    await VolunteerJobSlot.find_one(VolunteerJobSlot.id == "job:live-full").update(
+        {"$set": {"confirmed_qty": 5}}
+    )
+    await _board_job("job:live-near", "ใกล้เต็มจริง", remaining=5)
+    await seed_job_slot(job_id="job:live-near", shelter_code="SH001", quota=5, now=now)
+    await VolunteerJobSlot.find_one(VolunteerJobSlot.id == "job:live-near").update(
+        {"$set": {"confirmed_qty": 4}}
+    )
+
+    async def ids(status_value: str) -> list[str]:
+        response = await client.get(f"/public/v1/jobs?status={status_value}", headers=auth_headers)
+        return sorted(job["job_id"] for job in response.json()["jobs"])
+
+    assert await ids("open") == ["job:live-near"]
+    assert await ids("near_full") == ["job:live-near"]
+
+
+async def test_list_jobs_status_skips_ended_shifts(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-264 D2 / AC-11: seats on a shift that already ended do not make a job open."""
+    await _board_job(
+        "job:ended",
+        "กะจบแล้ว",
+        shifts=[JobShift(shift_id="shift:old", date="2020-01-01", quota=3, slots_remaining=3)],
+    )
+    await _board_job(
+        "job:future",
+        "กะยังไม่ถึง",
+        shifts=[JobShift(shift_id="shift:new", date="2099-01-01", quota=3, slots_remaining=3)],
+    )
+
+    response = await client.get("/public/v1/jobs?status=open", headers=auth_headers)
+
+    assert [job["job_id"] for job in response.json()["jobs"]] == ["job:future"]
+
+
+async def test_list_jobs_q_matches_the_skill_display_name(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-264 D3 / AC-12: typing a skill's label finds jobs stored under its code."""
+    await _board_job("job:code", "งานครัว", skills=["cooking"])
+    await _board_job("job:other", "งานขับรถ", skills=["driving"])
+    collection = PublicJob.get_pymongo_collection().database["public_config"]
+    await collection.replace_one(
+        {"_id": "config:volunteer_skills"},
+        {
+            "_id": "config:volunteer_skills",
+            "controlled_codes": [],
+            "controlled_labels": [],
+            "skills": [
+                {"code": "cooking", "label": "ทำอาหาร", "label_en": "Cooking"},
+                {"code": "driving", "label": "ขับรถ"},
+            ],
+        },
+        upsert=True,
+    )
+
+    for text in ("ทำอาหาร", "cook"):
+        response = await client.get(f"/public/v1/jobs?q={text}", headers=auth_headers)
+        assert [job["job_id"] for job in response.json()["jobs"]] == ["job:code"], text
+
+
+async def test_jobs_summary_ignores_filters_and_counts_live(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-264 D4/D6 / AC-13: board-wide totals that do not follow the filters or page."""
+    await _board_job("job:a", "ว่าง", remaining=5)
+    await _board_job("job:b", "ใกล้เต็ม", remaining=2)
+    await _board_job("job:c", "เต็ม", remaining=0)
+    await _board_job("job:d", "ควบคุม", tier="staff-capable", remaining=4)
+
+    response = await client.get("/public/v1/jobs/summary", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    body = response.json()
+    assert (body["total"], body["open"], body["near_full"], body["controlled"]) == (4, 3, 1, 1)
+    assert body["as_of"]
+    unauthorized = await client.get("/public/v1/jobs/summary")
+    assert unauthorized.status_code in (401, 403)
 
 
 async def test_list_jobs_matches_skill_by_code_or_label(

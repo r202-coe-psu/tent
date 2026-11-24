@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -73,6 +74,17 @@ class PublicJobListResponse(BaseModel):
     #: Every shelter with a job on the board, ignoring the filters, so the shelter
     #: picker does not shrink to whatever happens to be on the current page.
     shelters: list[PublicJobShelter] = Field(default_factory=list)
+
+
+class PublicJobSummaryResponse(BaseModel):
+    """Board-wide counts, independent of any filter or page (CR-264 FR-9)."""
+
+    success: bool = True
+    total: int = 0
+    open: int = 0
+    near_full: int = 0
+    controlled: int = 0
+    as_of: datetime
 
 
 class VolunteerApplyRequest(BaseModel):

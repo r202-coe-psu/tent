@@ -67,6 +67,7 @@ from .schemas import (
     PublicJobListResponse,
     PublicJobShelter,
     PublicJobShift,
+    PublicJobSummaryResponse,
     ScheduleActionResponse,
     ScheduleShift,
     TicketFindItem,
@@ -261,7 +262,11 @@ async def _board_query(
     job_status: str | None,
     controlled: frozenset[str],
 ) -> dict[str, object]:
-    """Mongo filter for the public board: every parameter narrows (AND)."""
+    """Mongo filter for the public board: every parameter narrows (AND).
+
+    ``open`` / ``near_full`` are not Mongo clauses: they compare the *live* slot counters and
+    skip ended shifts (CR-264 FR-3), which only :func:`_open_remaining` can do.
+    """
     clauses: list[dict[str, object]] = [{"status": {"$in": sorted(_BOARD_STATUSES)}}]
     if shelter_code:
         clauses.append({"shelter_code": shelter_code.upper()})
@@ -274,42 +279,133 @@ async def _board_query(
         matched = await PublicShelter.find(
             {"$or": [{"name": _contains(text)}, {"shelter_code": _contains(text)}]}
         ).to_list()
+        # CR-264 D3: the box also finds a job by the skill's display name (label_th / label_en),
+        # resolved to the stored skill codes via the projected Master Data.
+        label_codes = await _skill_codes_by_label(text)
         clauses.append(
             {
                 "$or": [
                     {"title": _contains(text)},
                     {"skills_required": _contains(text)},
+                    {"skills_required": {"$in": label_codes}},
                     {"shelter_code": {"$in": sorted({s.shelter_code for s in matched})}},
                 ]
             }
         )
-    if job_status == "open":
-        clauses.append(_remaining_between(1, None))
-    elif job_status == "near_full":
-        clauses.append(_remaining_between(1, 2))
-    elif job_status == "controlled":
-        clauses.append(
-            {
-                "$or": [
-                    {"tier": "staff-capable"},
-                    {"skills_required": {"$in": sorted(controlled)}},
-                ]
-            }
-        )
+    if job_status == "controlled":
+        clauses.append(_controlled_clause(controlled))
     return {"$and": clauses}
 
 
-def _remaining_between(low: int, high: int | None) -> dict[str, object]:
-    """Some shift (or the job itself when it has none) has ``low..high`` slots left."""
-    bound: dict[str, int] = {"$gte": low}
-    if high is not None:
-        bound["$lte"] = high
+def _controlled_clause(controlled: frozenset[str]) -> dict[str, object]:
     return {
         "$or": [
-            {"shifts": {"$elemMatch": {"slots_remaining": bound}}},
-            {"shifts.0": {"$exists": False}, "slots_remaining": bound},
+            {"tier": "staff-capable"},
+            {"skills_required": {"$in": sorted(controlled)}},
         ]
     }
+
+
+async def _skill_codes_by_label(text: str) -> list[str]:
+    """Codes of Master Data skills whose display name contains ``text`` (case-insensitive)."""
+    needle = text.strip().casefold()
+    if not needle:
+        return []
+    try:
+        collection = PublicJob.get_pymongo_collection().database[_PUBLIC_CONFIG_COLLECTION]
+        docs = await collection.find(
+            {"_id": {"$regex": f"^{re.escape(_VOLUNTEER_SKILLS_CONFIG_ID)}"}}
+        ).to_list(length=None)
+    except Exception:
+        logger.warning("Could not read %s — skill label search skipped", _PUBLIC_CONFIG_COLLECTION)
+        return []
+    codes: set[str] = set()
+    for doc in docs:
+        for skill in doc.get("skills") or []:
+            names = (skill.get("label"), skill.get("label_th"), skill.get("label_en"))
+            if skill.get("code") and any(n and needle in str(n).casefold() for n in names):
+                codes.add(str(skill["code"]))
+    return sorted(codes)
+
+
+#: Fields :func:`_open_remaining` and the open-first order need from each board row.
+_BOARD_ROW_FIELDS = {
+    "_id": 1,
+    "shelter_code": 1,
+    "title": 1,
+    "quota": 1,
+    "slots_confirmed": 1,
+    "slots_dispatched": 1,
+    "shifts.shift_id": 1,
+    "shifts.date": 1,
+    "shifts.end_date": 1,
+    "shifts.start_time": 1,
+    "shifts.end_time": 1,
+    "shifts.quota": 1,
+    "shifts.slots_confirmed": 1,
+    "shifts.slots_dispatched": 1,
+}
+
+
+def _seats_left(quota: int, confirmed: int, dispatched: int) -> int:
+    return max(quota - confirmed - dispatched, 0)
+
+
+def _open_remaining(
+    row: dict,
+    now: datetime,
+    by_job: dict[str, VolunteerJobSlot],
+    by_shift: dict[tuple[str, str], VolunteerJobShiftSlot],
+) -> list[int]:
+    """Seats left per shift that has not ended, from the live counters (CR-264 FR-3).
+
+    The counters win over the projected snapshot; the snapshot is only the fallback when no
+    live row exists yet. A job with no shift rows is judged as a whole.
+    """
+    job_id = row["_id"]
+    shifts = row.get("shifts") or []
+    if not shifts:
+        live = by_job.get(job_id)
+        if live:
+            return [_seats_left(live.quota, live.confirmed_qty, live.dispatched_qty)]
+        return [
+            _seats_left(
+                row.get("quota") or 0,
+                row.get("slots_confirmed") or 0,
+                row.get("slots_dispatched") or 0,
+            )
+        ]
+    out: list[int] = []
+    for shift in shifts:
+        if not _shift_is_open(shift, now):
+            continue
+        live_shift = by_shift.get((job_id, shift.get("shift_id")))
+        if live_shift:
+            out.append(
+                _seats_left(live_shift.quota, live_shift.confirmed_qty, live_shift.dispatched_qty)
+            )
+        else:
+            out.append(
+                _seats_left(
+                    shift.get("quota") or 0,
+                    shift.get("slots_confirmed") or 0,
+                    shift.get("slots_dispatched") or 0,
+                )
+            )
+    return out
+
+
+async def _live_counters(
+    job_ids: list[str],
+) -> tuple[dict[str, VolunteerJobSlot], dict[tuple[str, str], VolunteerJobShiftSlot]]:
+    if not job_ids:
+        return {}, {}
+    slots = await VolunteerJobSlot.find({"_id": {"$in": job_ids}}).to_list()
+    shift_slots = await VolunteerJobShiftSlot.find({"job_id": {"$in": job_ids}}).to_list()
+    return (
+        {slot.id: slot for slot in slots},
+        {(slot.job_id, slot.shift_id): slot for slot in shift_slots},
+    )
 
 
 async def _board_shelters() -> list[PublicJobShelter]:
@@ -613,6 +709,25 @@ class VolunteersUseCase:
             profile=profile,
         )
 
+    async def jobs_summary(self) -> PublicJobSummaryResponse:
+        """Board-wide counts that ignore every filter and page (CR-264 FR-9/10/11)."""
+        controlled = await controlled_skills()
+        base: dict[str, object] = {"status": {"$in": sorted(_BOARD_STATUSES)}}
+        collection = PublicJob.get_pymongo_collection()
+        rows = await collection.find(base, _BOARD_ROW_FIELDS).to_list(None)
+        now = datetime.now(UTC)
+        by_job_live, by_shift_live = await _live_counters([row["_id"] for row in rows])
+        remaining = [_open_remaining(row, now, by_job_live, by_shift_live) for row in rows]
+        return PublicJobSummaryResponse(
+            total=len(rows),
+            open=sum(1 for r in remaining if any(v >= 1 for v in r)),
+            near_full=sum(1 for r in remaining if any(1 <= v <= 2 for v in r)),
+            controlled=await collection.count_documents(
+                {"$and": [base, _controlled_clause(controlled)]}
+            ),
+            as_of=now,
+        )
+
     async def list_jobs(
         self,
         *,
@@ -637,22 +752,23 @@ class VolunteersUseCase:
         # needs), then the page is cut and loaded in that order.
         order_rows = await (
             PublicJob.get_pymongo_collection()
-            .find(
-                query,
-                {
-                    "_id": 1,
-                    "shelter_code": 1,
-                    "title": 1,
-                    "shifts.date": 1,
-                    "shifts.end_date": 1,
-                    "shifts.start_time": 1,
-                    "shifts.end_time": 1,
-                },
-            )
+            .find(query, _BOARD_ROW_FIELDS)
             .sort([("shelter_code", 1), ("title", 1), ("_id", 1)])
             .to_list(None)
         )
         now = datetime.now(UTC)
+        if job_status in ("open", "near_full"):
+            # CR-264 FR-3 / D1 / D2: judged on live counters, ended shifts never count.
+            by_job_live, by_shift_live = await _live_counters([row["_id"] for row in order_rows])
+            upper = None if job_status == "open" else 2
+            order_rows = [
+                row
+                for row in order_rows
+                if any(
+                    r >= 1 and (upper is None or r <= upper)
+                    for r in _open_remaining(row, now, by_job_live, by_shift_live)
+                )
+            ]
         ordered_ids = [
             row["_id"]
             for row in sorted(order_rows, key=lambda row: not _job_has_open_shift(row, now))
@@ -661,11 +777,13 @@ class VolunteersUseCase:
         if page_size is not None:
             start = (page - 1) * page_size
             ordered_ids = ordered_ids[start : start + page_size]
+        shelters = await _board_shelters()
+        if not ordered_ids:
+            return PublicJobListResponse(jobs=[], total=total, shelters=shelters)
         page_jobs = await PublicJob.find({"_id": {"$in": ordered_ids}}).to_list()
         by_job_id = {job.id: job for job in page_jobs}
         jobs = [by_job_id[job_id] for job_id in ordered_ids if job_id in by_job_id]
         names = await _shelter_names({job.shelter_code for job in jobs})
-        shelters = await _board_shelters()
 
         # One read of the live counters rather than trusting the projected snapshot:
         # the snapshot only moves when staff edit the job, so between edits it would

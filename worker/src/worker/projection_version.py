@@ -59,4 +59,6 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 24 — decision sync 2026-11-24 (partner EXT-002/003): ``public_shelters.name_short`` /
 #: ``operating_org`` / ``delivery_note`` (new registry fields, schema_v 12), ``project_level``
 #: and ``profile`` (utilities, facilities, risk, policies, zone metadata).
-PROJECTION_VERSION: int = 24
+#: 25 — CR-265 (#1464): ``config:volunteer_skills.skills`` (code + display names of every active
+#: skill) so the public jobs board can search by skill label; a rescan re-projects it.
+PROJECTION_VERSION: int = 25

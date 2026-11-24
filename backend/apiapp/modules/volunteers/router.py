@@ -11,6 +11,7 @@ from .schemas import (
     DispatchRespondRequest,
     DispatchRespondResponse,
     PublicJobListResponse,
+    PublicJobSummaryResponse,
     ScheduleActionRequest,
     ScheduleActionResponse,
     ScheduleLookupRequest,
@@ -30,6 +31,20 @@ from .schemas import (
 from .use_case import VolunteersUseCase, get_volunteers_use_case
 
 router = APIRouter(prefix="/public/v1", tags=["Volunteers"])
+
+
+@router.get(
+    "/jobs/summary",
+    response_model=PublicJobSummaryResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def jobs_summary(
+    response: Response,
+    use_case: VolunteersUseCase = Depends(get_volunteers_use_case),  # noqa: B008
+) -> PublicJobSummaryResponse:
+    # Counts move with every application, like the board itself.
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.jobs_summary()
 
 
 @router.get(
