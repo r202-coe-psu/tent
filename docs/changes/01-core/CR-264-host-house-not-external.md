@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-264
 title: บ้านพี่เลี้ยง (site_kind = host_house) เป็นศูนย์ External ไม่ได้ (amend CR-252)
-status: proposed
+status: approved
 date: 2026-11-23
+updated: 2026-11-24
 requested_by: "@mhapong (2026-11-23) — หน้าสร้างศูนย์พักพิง: บ้านพี่เลี้ยงไม่มี External"
-decided_by:
+decided_by: kong
 layer: volatile
 affects:
   - docs/changes/00-baseline/CR-252-external-shelter.md (เพิ่ม invariant ใน "Schema / domain")
@@ -16,7 +17,7 @@ affects:
   - frontend/src/lib/features/shelter-import/** (นำเข้าศูนย์จากไฟล์ รวมศูนย์ External)
 ---
 
-# draft — บ้านพี่เลี้ยงเป็นศูนย์ External ไม่ได้
+# บ้านพี่เลี้ยงเป็นศูนย์ External ไม่ได้
 
 > **สรุป (TL;DR):**
 >
@@ -73,3 +74,4 @@ affects:
 - 2026-11-23 — @mhapong: บ้านพี่เลี้ยงไม่มี External; track ด้วย CR file; บังคับทุกทางเข้า
 - 2026-11-23 — proposed (ร่าง CR)
 - 2026-11-24 — แก้ร่างตาม review: FR-6 ตรวจที่รหัส `host_house`; FR-5/FR-7/AC-7 ยกเว้น `cancelled` ของ `system_admin` สำหรับคู่เดิม
+- 2026-11-24 — approved โดย kong; รันเลข CR-264 (เปลี่ยนชื่อจาก draft-host-house-not-external)
