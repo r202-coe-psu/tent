@@ -68,7 +68,12 @@
 	title="ลงทะเบียนล่วงหน้า"
 	description="ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง"
 >
-	<OverviewFilterBar {filters} onChange={onFiltersChange} showHouseholdFilter={true} />
+	<OverviewFilterBar
+		{filters}
+		onChange={onFiltersChange}
+		showHouseholdFilter={true}
+		showExternalOption={false}
+	/>
 
 	{#if listQuery.isError}
 		<Alert variant="destructive">
@@ -133,7 +138,11 @@
 								<div class="min-w-0"><PreRegNameLink {item} /></div>
 								<PreRegStatusBadge {item} />
 							</div>
-							<dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-slate-700">
+							<!-- Phones: label above value (the long address label no longer squeezes the value
+							column); from sm up: fixed label column + value. -->
+							<dl
+								class="grid grid-cols-1 gap-y-0.5 text-slate-700 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-x-3 sm:gap-y-1 [&>dd]:mb-1.5 sm:[&>dd]:mb-0"
+							>
 								<dt class="text-slate-500">ครอบครัว</dt>
 								<dd class="break-words">{@render household(item)}</dd>
 								<dt class="text-slate-500">ศูนย์พักพิง</dt>

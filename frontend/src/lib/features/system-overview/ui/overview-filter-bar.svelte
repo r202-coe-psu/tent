@@ -17,13 +17,16 @@
 		filters,
 		onChange,
 		showHouseholdFilter = false,
-		showSearch = true
+		showSearch = true,
+		showExternalOption = true
 	}: {
 		filters: OverviewFilters;
 		onChange: (next: OverviewFilters) => void;
 		showHouseholdFilter?: boolean;
 		/** Name / phone search of registrants; the overview page hides it (it only has the list page). */
 		showSearch?: boolean;
+		/** "External evacuation center" choice in the shelter-type filter; hidden on the pre-registration list. */
+		showExternalOption?: boolean;
 	} = $props();
 
 	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
@@ -32,7 +35,8 @@
 		onChange({ ...filters, ...partial });
 	}
 
-	const siteKindValue = $derived(filters.site_kind ?? 'all');
+	const EXTERNAL_VALUE = '__external__';
+	const siteKindValue = $derived(filters.external ? EXTERNAL_VALUE : (filters.site_kind ?? 'all'));
 	const operationStatusValue = $derived(filters.operation_status ?? 'all');
 	const stayBucketValue = $derived(filters.stay_bucket ?? 'all');
 	const sourceValue = $derived(filters.source ?? 'all');
@@ -44,7 +48,9 @@
 	const siteKindLabel = $derived(
 		siteKindValue === 'all'
 			? t.all
-			: formatMasterLabelByCode(siteKindValue, siteKindItems, langState.current)
+			: siteKindValue === EXTERNAL_VALUE
+				? t.externalBadge
+				: formatMasterLabelByCode(siteKindValue, siteKindItems, langState.current)
 	);
 
 	const operationStatusLabel = $derived(t.operationStatus[operationStatusValue] ?? t.all);
@@ -55,7 +61,7 @@
 <div
 	class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
 >
-	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[10.5rem]">
+	<div class="min-w-[9rem] flex-1 basis-[9rem] space-y-1.5">
 		<Label for="overview-site-kind" class="text-sm font-semibold text-slate-700"
 			>{t.filterSiteKind}</Label
 		>
@@ -64,8 +70,10 @@
 			value={siteKindValue}
 			onValueChange={(v) => {
 				if (!v) return;
+				// "External" is its own choice: it clears the kind and sets the external-only filter.
 				patch({
-					site_kind: v === 'all' ? undefined : v
+					site_kind: v === 'all' || v === EXTERNAL_VALUE ? undefined : v,
+					external: v === EXTERNAL_VALUE ? 'only' : undefined
 				});
 			}}
 		>
@@ -84,11 +92,14 @@
 				{#each siteKindItems.filter((i) => i.status === 'active') as item (item.code)}
 					<Select.Item value={item.code} label={formatMasterLabel(item, langState.current)} />
 				{/each}
+				{#if showExternalOption}
+					<Select.Item value={EXTERNAL_VALUE} label={t.externalBadge} />
+				{/if}
 			</Select.Content>
 		</Select.Root>
 	</div>
 
-	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[11rem]">
+	<div class="min-w-[9rem] flex-1 basis-[9rem] space-y-1.5">
 		<Label for="overview-op-status" class="text-sm font-semibold text-slate-700"
 			>{t.filterOperationStatus}</Label
 		>
@@ -119,11 +130,12 @@
 				<Select.Item value="full_capacity" label={t.operationStatus.full_capacity} />
 				<Select.Item value="closed" label={t.operationStatus.closed} />
 				<Select.Item value="cancelled" label={t.operationStatus.cancelled} />
+				<Select.Item value="unknown" label={t.operationStatus.unknown} />
 			</Select.Content>
 		</Select.Root>
 	</div>
 
-	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[9rem]">
+	<div class="min-w-[9rem] flex-1 basis-[9rem] space-y-1.5">
 		<Label for="overview-stay" class="text-sm font-semibold text-slate-700">{t.filterStay}</Label>
 		<Select.Root
 			type="single"
@@ -153,7 +165,7 @@
 		</Select.Root>
 	</div>
 
-	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[13.5rem]">
+	<div class="min-w-[9rem] flex-[1.4] basis-[12rem] space-y-1.5">
 		<Label for="overview-source" class="text-sm font-semibold text-slate-700"
 			>{t.filterPreRegSource}</Label
 		>
@@ -184,7 +196,7 @@
 	</div>
 
 	{#if showHouseholdFilter}
-		<div class="w-full min-w-0 space-y-1.5 sm:w-[16rem]">
+		<div class="min-w-[12rem] flex-[1.5] basis-[14rem] space-y-1.5">
 			<Label for="overview-household" class="text-sm font-semibold text-slate-700"
 				>{t.filterHousehold}</Label
 			>
@@ -199,7 +211,7 @@
 	{/if}
 
 	{#if showSearch}
-		<div class="w-full min-w-0 space-y-1.5 sm:w-[12rem] sm:flex-none">
+		<div class="min-w-[12rem] flex-1 basis-[12rem] space-y-1.5">
 			<Label for="overview-q" class="text-sm font-semibold text-slate-700">{t.filterSearch}</Label>
 			<Input
 				id="overview-q"

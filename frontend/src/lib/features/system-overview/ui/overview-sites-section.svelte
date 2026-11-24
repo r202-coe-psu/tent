@@ -46,30 +46,31 @@
 </script>
 
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-	<Card.Header class="grid-cols-[minmax(0,1fr)] space-y-4">
-		<div>
+	<Card.Header class="flex flex-wrap items-center justify-between gap-4 space-y-0">
+		<div class="min-w-0">
 			<Card.Title class="text-lg font-bold text-slate-900">{t.sitesTitle}</Card.Title>
 			<Card.Description class="text-sm text-slate-500">
 				{t.sitesDescription}
 			</Card.Description>
 		</div>
-		<div class="flex flex-wrap items-end gap-3">
-			<div class="max-w-full min-w-0 space-y-1.5">
-				<Label for="sites-movement-range" class="text-sm font-semibold text-slate-700">
-					{t.movementRange}
-				</Label>
-				<DateRangePicker
-					id="sites-movement-range"
-					ariaLabel={t.movementRange}
-					from={movementFrom}
-					to={movementTo}
-					{maxValue}
-					onRangeChange={({ from, to }) => {
-						onMovementRangeChange({ movement_from: from, movement_to: to });
-					}}
-					class="h-9 min-w-0 sm:min-w-[16rem]"
-				/>
-			</div>
+		<div class="flex max-w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+			<Label
+				for="sites-movement-range"
+				class="text-sm font-semibold whitespace-nowrap text-slate-700"
+			>
+				{t.movementRange}
+			</Label>
+			<DateRangePicker
+				id="sites-movement-range"
+				ariaLabel={t.movementRange}
+				from={movementFrom}
+				to={movementTo}
+				{maxValue}
+				onRangeChange={({ from, to }) => {
+					onMovementRangeChange({ movement_from: from, movement_to: to });
+				}}
+				class="h-9 min-w-0 sm:w-auto sm:min-w-[16rem]"
+			/>
 		</div>
 	</Card.Header>
 	<Card.Content>
@@ -100,7 +101,17 @@
 							<Table.Row>
 								<Table.Cell class="font-medium text-slate-900">
 									<div>{site.name}</div>
-									<div class="text-xs text-slate-500">{site.shelter_code}</div>
+									<div class="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+										<span>{site.shelter_code}</span>
+										{#if site.is_external}
+											<Badge
+												variant="outline"
+												class="border-violet-200 bg-violet-50 text-violet-800"
+											>
+												{t.externalBadge}
+											</Badge>
+										{/if}
+									</div>
 								</Table.Cell>
 								<Table.Cell class="text-sm text-slate-700">
 									{siteKindLabel(site.site_kind)}

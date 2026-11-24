@@ -60,7 +60,11 @@ function matchesShelterGeo(master: ShelterMaster, filters: OverviewFilters): boo
 		return false;
 	}
 	if (filters.site_kind && master.site_kind !== filters.site_kind) return false;
-	const op = resolveOperationStatus(master) ?? '';
+	if (filters.external === 'only' && !isExternalShelter(master)) return false;
+	// Picking a regular kind excludes external shelters (they have their own filter option/card).
+	if (filters.site_kind && isExternalShelter(master)) return false;
+	// A shelter with no status is shown (and filtered) as 'unknown', same as the site rows.
+	const op = resolveOperationStatus(master) ?? 'unknown';
 	if (filters.operation_status && op !== filters.operation_status) return false;
 	if (filters.shelter_code && master.code !== filters.shelter_code) return false;
 	return true;
@@ -207,6 +211,7 @@ async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> 
 				checkout: 0,
 				has_coords:
 					typeof master.location?.lat === 'number' && typeof master.location?.lng === 'number',
+				is_external: isExternalShelter(master),
 				dashboard_href: `/back-office/evacuee-management?shelter=${encodeURIComponent(master.code)}`
 			};
 			return {
@@ -333,10 +338,18 @@ export async function buildOverviewSummary(
 	const movements = await Promise.all(sites.map((s) => movementTotals(s.master.code, from, to)));
 	const checkouts = movements.reduce((sum, m) => sum + m.checkout, 0);
 
-	const present_total = sites.reduce((s, x) => s + x.present, 0);
-	const forecast_total = sites.reduce((s, x) => s + x.forecast, 0);
+	// "In shelters" figures (present / forecast / capacity %) skip closed and cancelled shelters
+	// and external ones (run in another system); site counts still cover every shelter.
+	const counted = sites.filter(
+		(s) =>
+			s.operation_status !== 'closed' &&
+			s.operation_status !== 'cancelled' &&
+			!isExternalShelter(s.master)
+	);
+	const present_total = counted.reduce((s, x) => s + x.present, 0);
+	const forecast_total = counted.reduce((s, x) => s + x.forecast, 0);
 	const pre_registered_at_sites = sites.reduce((s, x) => s + x.pre_registered, 0);
-	const capacity_total = sites.reduce((s, x) => s + x.capacity, 0);
+	const capacity_total = counted.reduce((s, x) => s + x.capacity, 0);
 
 	const sites_by_status: Record<string, number> = {};
 	for (const s of sites) {

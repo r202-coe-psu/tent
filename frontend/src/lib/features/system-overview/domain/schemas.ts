@@ -58,6 +58,8 @@ export const overviewFiltersSchema = z.object({
 	shelter_subdistrict: z.string().trim().optional(),
 	operation_status: operationStatusSchema.optional(),
 	site_kind: siteKindSchema.optional(),
+	/** `only` = external shelters (`is_external`) only; offered in the site-kind filter. */
+	external: z.enum(['only']).optional(),
 	stay_bucket: stayBucketSchema.optional().default('all'),
 	country: z.string().trim().optional(),
 	age_band: ageBandSchema.optional(),
@@ -84,6 +86,7 @@ const FILTER_KEYS = [
 	'shelter_subdistrict',
 	'operation_status',
 	'site_kind',
+	'external',
 	'stay_bucket',
 	'country',
 	'age_band',
@@ -204,6 +207,8 @@ export const overviewSiteRowSchema = z.object({
 	/** Check-outs in movement_from…movement_to (inclusive). */
 	checkout: z.number().int().nonnegative(),
 	has_coords: z.boolean(),
+	/** CR-252: shelter run in another system. */
+	is_external: z.boolean(),
 	dashboard_href: z.string()
 });
 export type OverviewSiteRow = z.infer<typeof overviewSiteRowSchema>;

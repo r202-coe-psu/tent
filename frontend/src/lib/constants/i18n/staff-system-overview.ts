@@ -7,7 +7,7 @@
  */
 const th = {
 	pageTitle: 'ภาพรวมระบบ',
-	pageDescription: 'สรุปสถานะศูนย์ คิวลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ',
+	pageDescription: 'สรุปสถานะศูนย์ การลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ',
 	errorTitle: 'เกิดข้อผิดพลาด',
 	errorBody: 'ไม่สามารถโหลดข้อมูลภาพรวมได้ กรุณาลองใหม่อีกครั้ง',
 	all: 'ทั้งหมด',
@@ -18,7 +18,7 @@ const th = {
 	preRegNoShelter: 'ยังไม่ได้เลือกศูนย์',
 	preRegAtShelter: 'ลงทะเบียนล่วงหน้าที่ระบุศูนย์แล้ว',
 	inShelterTitle: 'อยู่ในศูนย์',
-	inShelterDescription: 'ปัจจุบัน / คาดการณ์',
+	inShelterDescription: 'ปัจจุบัน / คาดการณ์ (ไม่รวมศูนย์ที่ปิด ยกเลิก และศูนย์ภายนอก)',
 	current: 'ปัจจุบัน',
 	forecast: 'คาดการณ์',
 	avgCapacityUse: 'อัตราการใช้ความจุเฉลี่ย',
@@ -51,8 +51,10 @@ const th = {
 		active: 'เปิดรับ',
 		full_capacity: 'เต็มความจุ',
 		closed: 'ปิดศูนย์',
-		cancelled: 'ยกเลิกศูนย์'
+		cancelled: 'ยกเลิกศูนย์',
+		unknown: 'ไม่ทราบสถานะ'
 	} as Record<string, string>,
+	externalBadge: 'ศูนย์อพยพภายนอก',
 
 	// ---- filter bar
 	filterSiteKind: 'ประเภทศูนย์',
@@ -94,7 +96,7 @@ const th = {
 
 const en: typeof th = {
 	pageTitle: 'System overview',
-	pageDescription: 'Shelter status, pre-registration queue and movements across the whole system',
+	pageDescription: 'Shelter status, pre-registrations and movements across the whole system',
 	errorTitle: 'Something went wrong',
 	errorBody: 'Could not load the overview. Please try again.',
 	all: 'All',
@@ -104,7 +106,7 @@ const en: typeof th = {
 	preRegNoShelter: 'No shelter chosen yet',
 	preRegAtShelter: 'Pre-registered with a shelter chosen',
 	inShelterTitle: 'In shelters',
-	inShelterDescription: 'Current / forecast',
+	inShelterDescription: 'Current / forecast (excludes closed, cancelled and external shelters)',
 	current: 'Current',
 	forecast: 'Forecast',
 	avgCapacityUse: 'Average capacity in use',
@@ -135,8 +137,10 @@ const en: typeof th = {
 		active: 'Open',
 		full_capacity: 'At full capacity',
 		closed: 'Closed',
-		cancelled: 'Cancelled'
+		cancelled: 'Cancelled',
+		unknown: 'Unknown'
 	},
+	externalBadge: 'External evacuation center',
 
 	filterSiteKind: 'Shelter type',
 	filterOperationStatus: 'Shelter status',
