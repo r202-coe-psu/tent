@@ -47,6 +47,8 @@ describe('toDonationTrackView', () => {
 		expect(donationStatusLabel('received', 'th')).toBe('รับเข้าคลังเรียบร้อย');
 		expect(donationStatusLabel('received', 'en')).toBe('Received into Warehouse');
 		expect(donationStatusLabel('pending_review', 'en')).toBe('Pending Review');
+		expect(donationStatusLabel('verifying', 'th')).toBe('อนุมัติแล้ว · รอนำส่ง');
+		expect(donationStatusLabel('verifying', 'en')).toBe('Approved · Awaiting drop-off');
 	});
 
 	it('allows courier edit only for open parcel donations', () => {
