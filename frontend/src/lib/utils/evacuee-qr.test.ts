@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	currentPersonQrPayload,
 	evaluatePersonQr,
 	looksLikePersonQr,
 	parsePersonQr,
@@ -35,6 +36,19 @@ describe('parsePersonQr', () => {
 		expect(parsePersonQr(ULID)).toBeNull();
 		expect(looksLikePersonQr(`evacuee:${ULID}@zz`)).toBe(true);
 		expect(looksLikePersonQr(ULID)).toBe(false);
+	});
+});
+
+describe('currentPersonQrPayload', () => {
+	const id = `evacuee:${ULID}`;
+	it('is the bare id while the log is empty, and scans valid', () => {
+		expect(currentPersonQrPayload(id, [])).toBe(id);
+		expect(evaluatePersonQr(parsePersonQr(id)!.hash6, [])).toEqual({ status: 'valid' });
+	});
+	it('carries the latest stored hash once printed, and scans valid', () => {
+		const payload = currentPersonQrPayload(id, prints);
+		expect(payload).toBe(`${id}@2d23a3`);
+		expect(evaluatePersonQr(parsePersonQr(payload)!.hash6, prints)).toEqual({ status: 'valid' });
 	});
 });
 

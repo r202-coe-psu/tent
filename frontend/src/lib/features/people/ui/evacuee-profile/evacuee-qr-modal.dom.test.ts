@@ -12,6 +12,12 @@ vi.mock('$lib/features/printers', async () => ({
 const issue = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 const renderPng = vi.hoisted(() => vi.fn(async () => 'AAAA'));
+const readPrints = vi.hoisted(() =>
+	vi.fn(async (): Promise<{ printed_at: string; hash: string }[]> => [])
+);
+vi.mock('$lib/features/people/data/evacuee-qr.remote', () => ({
+	readEvacueeQrPrints: readPrints
+}));
 vi.mock('svelte-sonner', () => ({ toast: { error: toastError, success: vi.fn(), info: vi.fn() } }));
 vi.mock('$lib/utils/pdf', () => ({ previewImageAsPdf: vi.fn() }));
 vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({ issueEvacueeQrs: issue }));
@@ -137,19 +143,43 @@ describe('EvacueeQrModal QR issuing (CR-233)', () => {
 		issue.mockReset();
 		toastError.mockReset();
 		renderPng.mockClear();
+		readPrints.mockReset();
+		readPrints.mockResolvedValue([]);
 		vi.stubGlobal('open', () => ({ close: vi.fn(), document: {}, location: {} }));
 	});
 	afterEach(() => vi.unstubAllGlobals());
 
-	it('opens with a placeholder QR and never calls the issue endpoint (FR-EQR-21a)', async () => {
+	it('opens with the bare id while nothing was printed, without issuing', async () => {
+		readPrints.mockResolvedValue([]);
 		render();
 		await flush();
 
 		expect(issue).not.toHaveBeenCalled();
-		expect(renderPng).toHaveBeenCalled();
-		for (const call of renderPng.mock.calls as unknown as [string][]) {
-			expect(call[0].startsWith('evacuee:')).toBe(false);
-		}
+		const payloads = (renderPng.mock.calls as unknown as [string][]).map((c) => c[0]);
+		expect(payloads.at(-1)).toBe(evacuee._id);
+	});
+
+	it('opens with the latest issued QR from the log, without issuing', async () => {
+		readPrints.mockResolvedValue([
+			{ printed_at: '2026-11-03T02:10:00.000Z', hash: '289170' },
+			{ printed_at: '2026-11-05T09:41:12.512Z', hash: '2d23a3' }
+		]);
+		render();
+		await flush();
+
+		expect(issue).not.toHaveBeenCalled();
+		const payloads = (renderPng.mock.calls as unknown as [string][]).map((c) => c[0]);
+		expect(payloads.at(-1)).toBe(`${evacuee._id}@2d23a3`);
+	});
+
+	it('renders no QR when the log cannot be read, but still allows printing', async () => {
+		readPrints.mockRejectedValue(new Error('offline'));
+		render();
+		await flush();
+
+		expect(renderPng).not.toHaveBeenCalled();
+		expect(document.body.textContent).toContain('โหลด QR ปัจจุบันไม่สำเร็จ');
+		expect(pdfButton().disabled).toBe(false);
 	});
 
 	it('issues once per print click and renders the real payload (FR-EQR-21b)', async () => {
@@ -218,11 +248,11 @@ describe('EvacueeQrModal preview after printing', () => {
 		]);
 	});
 
-	it('shows the placeholder QR and the preview note before any print', async () => {
+	it('shows the current-QR note before any print', async () => {
 		render();
 		await flush();
 
-		expect(caption()).toContain('QR จริงจะออกใหม่เมื่อกดพิมพ์');
+		expect(caption()).toContain('QR ใบปัจจุบันที่ใช้ได้');
 		expect(caption()).not.toContain('QR ล่าสุดที่ออกให้');
 	});
 

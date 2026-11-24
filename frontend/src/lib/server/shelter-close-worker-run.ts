@@ -28,7 +28,7 @@ export interface ShelterCloseWorkerDeps {
 	/** Registry read for finalize: `null` when the shelter does not exist. */
 	readShelter: (code: string) => Promise<ShelterCloseRegistryShelter | null>;
 	/** Registry write `operation_status = closed` (+ `closed_at`) — FR-20, exactly once. */
-	closeShelter: (code: string) => Promise<void>;
+	closeShelter: (code: string, actor: string) => Promise<void>;
 }
 
 export type ShelterCloseWorkerResult =
@@ -124,7 +124,7 @@ export async function runShelterCloseWorkerStep(
 			return { closed: false };
 		}
 		// FR-20: written once, here only; an already-closed shelter is left alone.
-		if (!shelter.closed) await deps.closeShelter(job.shelter_code);
+		if (!shelter.closed) await deps.closeShelter(job.shelter_code, job.requested_by);
 		// "closed by this job" (CR-243 §2): false when the registry was already closed.
 		return { closed: !shelter.closed };
 	};

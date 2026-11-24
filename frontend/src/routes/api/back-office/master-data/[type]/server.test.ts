@@ -40,6 +40,10 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 		adminRaw: vi.fn()
 	};
 });
+const recordAuditedWrite = vi.hoisted(() =>
+	vi.fn<(write: unknown) => Promise<boolean>>(async () => true)
+);
+vi.mock('$lib/server/audit-log', () => ({ recordAuditedWrite }));
 vi.mock('$lib/server/master-data-server', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/master-data-server')>()),
 	readMasterDoc: vi.fn(),
@@ -668,5 +672,34 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		const res = await callPUT('housing_type', { items });
 		expect(res.status).toBe(500);
 		expect((await res.json()).error.code).toBe('INTERNAL');
+	});
+});
+
+describe('PUT /api/back-office/master-data/[type] — audit wiring (CR-259 FR-24)', () => {
+	it('records one master_data.updated for a successful save', async () => {
+		recordAuditedWrite.mockClear();
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT('housing_type', {
+			items: [{ code: 'g1', label_th: 'กระต่าย', label_en: 'กระต่าย', is_default: false }]
+		});
+
+		expect(res.status).toBe(200);
+		expect(recordAuditedWrite).toHaveBeenCalledTimes(1);
+		expect(recordAuditedWrite.mock.calls[0][0]).toMatchObject({
+			event: 'master_data.updated',
+			entityType: 'master_data',
+			entityId: expect.stringContaining('housing_type')
+		});
+	});
+
+	it('records nothing when the save is refused', async () => {
+		recordAuditedWrite.mockClear();
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT('housing_type', { nope: true });
+
+		expect(res.status).toBe(422);
+		expect(recordAuditedWrite).not.toHaveBeenCalled();
 	});
 });

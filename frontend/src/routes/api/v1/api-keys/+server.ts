@@ -5,6 +5,8 @@
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { recordProxiedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
@@ -105,6 +107,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			// injected from the verified SA session so the admin plane never trusts
 			// client-supplied identity.
 			body: JSON.stringify({ name, owner, expires_at, created_by: caller.name })
+		});
+		await recordProxiedWrite(res, {
+			actor: caller.name,
+			event: AUDIT_EVENTS.apiKeyCreated,
+			action: 'create',
+			entityType: 'api_key',
+			label: name,
+			shelterCode: null
 		});
 		return proxyJson(res);
 	} catch (e) {

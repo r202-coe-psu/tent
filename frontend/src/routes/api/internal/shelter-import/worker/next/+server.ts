@@ -17,6 +17,8 @@ import {
 	type ImportItemError
 } from '$lib/features/shelter-import/server/job-store';
 import { findMasterByName, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { allocateShelterCode, provisionShelter } from '$lib/features/shelters/server/provisioner';
 import { validateSiteKindChange } from '$lib/features/shelters/server';
 import { readMasterDoc } from '$lib/server/master-data-server';
@@ -197,9 +199,10 @@ export const POST: RequestHandler = async ({ request }) => {
 					const message = validateSiteKindChange(input.site_kind, siteKindItems, previous);
 					if (message) throw new SiteKindRejected(message);
 				};
-				const updateExisting = (code: string) =>
-					updateMaster(
+				const updateExisting = async (code: string) => {
+					const written = await updateMaster(
 						code,
+						job.imported_by,
 						(current) => {
 							// CR-252 FR-31: authoritative check against the stored doc (the preview list may be stale).
 							const typeMessage = externalTypeChangeVerdict(
@@ -221,6 +224,23 @@ export const POST: RequestHandler = async ({ request }) => {
 						},
 						{ assertActive: assertActiveClaim }
 					);
+					return written;
+				};
+				const recordExistingUpdated = (
+					code: string,
+					written: Awaited<ReturnType<typeof updateExisting>>
+				) =>
+					recordAuditedWrite({
+						actor: job.imported_by,
+						event: AUDIT_EVENTS.shelterImported,
+						action: 'update',
+						entityType: 'shelter',
+						entityId: code,
+						label: written.after?.name ?? null,
+						shelterCode: code,
+						before: written.before,
+						after: written.after
+					});
 				const duplicate = await findMasterByName(input.name);
 				const resumingProvision = Boolean(item.code);
 
@@ -234,7 +254,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					});
 				} else if (duplicate && !resumingProvision && job.duplicate_action === 'update') {
 					await assertActiveClaim();
-					await updateExisting(duplicate.code);
+					const written = await updateExisting(duplicate.code);
 					await updateImportItem(item, {
 						status: 'updated',
 						code: duplicate.code,
@@ -242,6 +262,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						worker_id: undefined,
 						claim_token: undefined
 					});
+					await recordExistingUpdated(duplicate.code, written);
 				} else {
 					// Re-read under the name lock immediately before allocating or
 					// provisioning. A shelter may have been created after the first
@@ -260,7 +281,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						});
 					} else if (duplicateBeforeProvision && job.duplicate_action === 'update') {
 						await assertActiveClaim();
-						await updateExisting(duplicateBeforeProvision.code);
+						const written = await updateExisting(duplicateBeforeProvision.code);
 						await updateImportItem(item, {
 							status: 'updated',
 							code: duplicateBeforeProvision.code,
@@ -268,6 +289,7 @@ export const POST: RequestHandler = async ({ request }) => {
 							worker_id: undefined,
 							claim_token: undefined
 						});
+						await recordExistingUpdated(duplicateBeforeProvision.code, written);
 					} else {
 						if (!resumingProvision) checkSiteKind();
 						// Persist the code before touching the shelter DB. If the worker is
@@ -288,7 +310,7 @@ export const POST: RequestHandler = async ({ request }) => {
 								);
 							}
 						}
-						const result = await provisionShelter(input, allocatedCode, {
+						const result = await provisionShelter(input, job.imported_by, allocatedCode, {
 							lockOwnerId,
 							assertActive: assertActiveClaim
 						});
@@ -298,6 +320,15 @@ export const POST: RequestHandler = async ({ request }) => {
 							lease_until: undefined,
 							worker_id: undefined,
 							claim_token: undefined
+						});
+						await recordAuditedWrite({
+							actor: job.imported_by,
+							event: AUDIT_EVENTS.shelterImported,
+							action: 'create',
+							entityType: 'shelter',
+							entityId: result.code,
+							label: input.name,
+							shelterCode: result.code
 						});
 					}
 				}

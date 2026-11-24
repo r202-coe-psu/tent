@@ -380,6 +380,7 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 				area_m2: shelter.area_m2,
 				zones: shelter.zones.map((z) => ({ ...z })),
 				updated_at: ts,
+				updated_by: 'system:seed',
 				...extras
 			});
 			console.log(
@@ -400,7 +401,8 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 				opened_at: ts,
 				created_at: ts,
 				updated_at: ts,
-				created_by: 'seed',
+				created_by: 'system:seed',
+				updated_by: 'system:seed',
 				...extras
 			});
 			console.log(`  ✓ registry: 1 shelter master (${shelter.code})`);

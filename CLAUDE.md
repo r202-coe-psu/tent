@@ -71,7 +71,8 @@ Dockerfile). Don't add npm/yarn lockfiles.
 
 - **Lint and unit tests are enforced by Lefthook** — pre-commit runs Prettier + ESLint on
   staged files; pre-push runs `pnpm test:changed` — only the Vitest files whose import graph
-  reaches a file changed vs `origin/develop` (config/lockfile/setup changes re-run everything) —
+  reaches a file changed since the branch was last pushed, or vs `origin/develop` on a first
+  push (config/lockfile/setup changes re-run everything) —
   and pytest for backend/worker when those trees change. Do **not** re-run tests by hand before
   each push; while developing run only the tests you touched (`pnpm vitest run <file>`).
 - **Not hooked — you must ensure:** the full `pnpm test` and `pnpm check` (`svelte-check`) once

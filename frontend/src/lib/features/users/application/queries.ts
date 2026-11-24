@@ -1,6 +1,7 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { createUser, deleteUser, listUsers, updateUser } from '../data/users.api';
 import { listShelterStaff } from '../data/staff-directory.api';
+import { auditLogKeys } from '$lib/features/audit-log';
 
 export const usersKeys = {
 	all: ['users'] as const,
@@ -52,7 +53,10 @@ export const useCreateUser = () => {
 			must_change_password?: boolean;
 			affiliation_tags?: string[];
 		}) => createUser(input),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
+			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		}
 	}));
 };
 
@@ -83,7 +87,10 @@ export const useUpdateUser = () => {
 			const { name, ...rest } = input;
 			return updateUser(name, rest);
 		},
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
+			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		}
 	}));
 };
 
@@ -91,6 +98,9 @@ export const useDeleteUser = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (name: string) => deleteUser(name),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: usersKeys.all })
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
+			return queryClient.invalidateQueries({ queryKey: usersKeys.all });
+		}
 	}));
 };
