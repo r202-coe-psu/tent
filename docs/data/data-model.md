@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-11-17
+updated: 2026-11-24
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -186,6 +186,8 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
 | `occupancy` — map movement → reduce `_count` ตาม status                                                                  | dashboard FR-14, occupancy guard FR-12            |
 | `occupancy_by_zone` — map evacuee ที่มี `current_stay.zone` → key `[zone, status]` reduce `_count` (CR-226, manifest v8) | dashboard กราฟความเต็มรายโซน (นับ Present ต่อโซน) |
+| `demographics_by_country_age` — map evacuee ที่อยู่ในศูนย์ (`active` / `room_confirmed`) → key `[country, birth_year]` reduce `_count` (#1502, manifest v9) | หน้าภาพรวมระบบ: อายุ × สัญชาติ (แทน `_find` ทั้งศูนย์) |
+| `prereg_by_created` — map evacuee ลงทะเบียนล่วงหน้า (`current_stay.status = pre_registered` หรือ `registered_via` ∈ web/kiosk/backoffice/import) → key `created_at` reduce `_count` (#1502, manifest v9) | หน้าภาพรวมระบบ: แบ่งหน้ารายการลงทะเบียนล่วงหน้าที่ DB (descending + limit, total จาก reduce) |
 | `stock_balance` — **client** Decimal sum ของ `stock_ledger.qty` (`qty_str`) ต่อ item (CR-038; อย่าพึ่ง `_sum` ของ float) | stock dashboard, reorder alert                    |
 | `latest_screening` — map screening by (evacuee, ts)                                                                      | ผลคัดกรองล่าสุด                                   |
 | `meals_served` — reduce `_sum` ต่อวัน/มื้อ                                                                               | kitchen dashboard                                 |
