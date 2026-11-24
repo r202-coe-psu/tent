@@ -27,6 +27,8 @@ export interface JobsTranslations {
 	selectShelter: string;
 	loadingJobs: string;
 	noJobsFound: string;
+	/** Toast when the board could not be loaded. */
+	boardLoadError: string;
 	noJobsFoundDesc: string;
 	paginationSummary: (from: number, to: number, total: number) => string;
 	clearAllFilters: string;
@@ -201,6 +203,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		selectShelter: 'เลือกศูนย์พักพิง',
 		loadingJobs: 'กำลังโหลดข้อมูลงาน...',
 		noJobsFound: 'ไม่พบกะงานที่ตรงกับเงื่อนไขการค้นหา',
+		boardLoadError: 'โหลดกระดานงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 		noJobsFoundDesc: 'โปรดลองเปลี่ยนตัวกรองหรือคำค้นหาเพื่อดูกะงานอื่น',
 		paginationSummary: (from, to, total) => `แสดงงานที่ ${from} - ${to} จากทั้งหมด ${total} งาน`,
 		clearAllFilters: 'ล้างตัวกรองทั้งหมด',
@@ -380,6 +383,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		selectShelter: 'Select Shelter',
 		loadingJobs: 'Loading volunteer jobs...',
 		noJobsFound: 'No volunteer shifts match your search criteria',
+		boardLoadError: 'Could not load the job board. Please try again.',
 		noJobsFoundDesc: 'Try adjusting your search filters or select a different shelter',
 		paginationSummary: (from, to, total) => `Showing jobs ${from} - ${to} of ${total}`,
 		clearAllFilters: 'Clear all filters',

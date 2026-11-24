@@ -2,7 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { langState } from '$lib/states/i18n.svelte';
-import PublicJobBoard from './public-job-board.svelte';
+import { QueryClient } from '@tanstack/svelte-query';
+import { toast } from 'svelte-sonner';
+import PublicJobBoard from './__fixtures__/public-job-board-harness.svelte';
 
 vi.mock('$lib/features/volunteer-portal/data/volunteer-api', async (original) => ({
 	...(await original<typeof import('$lib/features/volunteer-portal/data/volunteer-api')>()),
@@ -38,9 +40,18 @@ const job = (n: number) => ({
 let instance: ReturnType<typeof mount> | null = null;
 const fetchMock = vi.fn();
 
+const isSummary = (input: unknown) => String(input).includes('/jobs/summary');
+/** Board page requests only — the summary counts load alongside them. */
+const boardCalls = () => fetchMock.mock.calls.filter((call) => !isSummary(call[0]));
+
 function lastUrl(): URL {
-	const call = fetchMock.mock.calls.at(-1);
-	return new URL(String(call?.[0]), 'http://localhost');
+	return new URL(String(boardCalls().at(-1)?.[0]), 'http://localhost');
+}
+
+/** The board inside a fresh query client; nothing is retried so a failure shows at once. */
+function mountBoard(props: Record<string, unknown> = {}) {
+	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+	return mount(PublicJobBoard, { target: document.body, props: { client, ...props } });
 }
 
 async function settle() {
@@ -57,6 +68,19 @@ beforeEach(() => {
 	fetchMock.mockReset();
 	fetchMock.mockImplementation(async (input: string) => {
 		const url = new URL(input, 'http://localhost');
+		if (isSummary(input)) {
+			return {
+				ok: true,
+				json: async () => ({
+					success: true,
+					total: 40,
+					open: 31,
+					near_full: 6,
+					controlled: 9,
+					as_of: 'x'
+				})
+			};
+		}
 		const page = Number(url.searchParams.get('page') ?? '1');
 		return {
 			ok: true,
@@ -83,10 +107,10 @@ afterEach(() => {
 
 describe('public job board server-side filtering', () => {
 	it('asks the BFF for page 1 with the page size and renders only the returned page', async () => {
-		instance = mount(PublicJobBoard, { target: document.body });
+		instance = mountBoard();
 		await settle();
 
-		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(boardCalls()).toHaveLength(1);
 		expect(lastUrl().pathname).toBe('/api/public/v1/volunteer/jobs');
 		expect(lastUrl().searchParams.get('page')).toBe('1');
 		expect(lastUrl().searchParams.get('page_size')).toBe('6');
@@ -96,7 +120,7 @@ describe('public job board server-side filtering', () => {
 	});
 
 	it('debounces typing into a single request carrying q', async () => {
-		instance = mount(PublicJobBoard, { target: document.body });
+		instance = mountBoard();
 		await settle();
 		fetchMock.mockClear();
 
@@ -107,18 +131,18 @@ describe('public job board server-side filtering', () => {
 			flushSync();
 			await vi.advanceTimersByTimeAsync(100);
 		}
-		expect(fetchMock).not.toHaveBeenCalled();
+		expect(boardCalls()).toHaveLength(0);
 
 		await vi.advanceTimersByTimeAsync(300);
 		await settle();
 
-		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(boardCalls()).toHaveLength(1);
 		expect(lastUrl().searchParams.get('q')).toBe('kit');
 		expect(lastUrl().searchParams.get('page')).toBe('1');
 	});
 
 	it('sends the status filter and goes back to page 1', async () => {
-		instance = mount(PublicJobBoard, { target: document.body });
+		instance = mountBoard();
 		await settle();
 		fetchMock.mockClear();
 
@@ -132,7 +156,7 @@ describe('public job board server-side filtering', () => {
 	});
 
 	it('requests the next page when a page number is picked', async () => {
-		instance = mount(PublicJobBoard, { target: document.body });
+		instance = mountBoard();
 		await settle();
 		fetchMock.mockClear();
 
@@ -145,5 +169,28 @@ describe('public job board server-side filtering', () => {
 
 		expect(lastUrl().searchParams.get('page')).toBe('2');
 		expect(document.body.textContent).toContain('Job 20');
+	});
+
+	it('shows the board-wide counts on the filter pills, not the filtered total', async () => {
+		instance = mountBoard();
+		await settle();
+
+		const pills = [...document.body.querySelectorAll('button')].map((b) => b.textContent ?? '');
+		expect(pills.some((text) => text.includes('ทั้งหมด') && text.includes('(40)'))).toBe(true);
+		expect(pills.some((text) => text.includes('ใกล้เต็ม') && text.includes('(6)'))).toBe(true);
+		expect(pills.some((text) => text.includes('(31)'))).toBe(true);
+		expect(pills.some((text) => text.includes('(9)'))).toBe(true);
+	});
+
+	it('tells the reader when the board cannot be loaded', async () => {
+		fetchMock.mockImplementation(async (input: string) =>
+			isSummary(input)
+				? { ok: true, json: async () => ({ total: 0, open: 0, near_full: 0, controlled: 0 }) }
+				: { ok: false, status: 503, json: async () => ({ success: false }) }
+		);
+		instance = mountBoard();
+		await settle();
+
+		expect(toast.error).toHaveBeenCalled();
 	});
 });

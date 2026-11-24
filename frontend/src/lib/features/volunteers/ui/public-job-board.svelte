@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { SvelteSet, SvelteURLSearchParams } from 'svelte/reactivity';
+	import { SvelteSet } from 'svelte/reactivity';
+	import { toast } from 'svelte-sonner';
 	import Filter from '@lucide/svelte/icons/filter';
 	import Search from '@lucide/svelte/icons/search';
 	import Briefcase from '@lucide/svelte/icons/briefcase';
@@ -21,6 +22,7 @@
 	import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
+	import { usePublicBoard, usePublicBoardSummary } from '../application/public-board-queries';
 	import JobCard from './public-job-card.svelte';
 	import QuickApplyModal, { type QuickApplyJob } from './public-quick-apply-modal.svelte';
 
@@ -115,15 +117,8 @@
 		isControlled: boolean;
 	}
 
-	let rawJobs = $state<RawPublicJob[]>([]);
-	// Jobs matching the filters across every page; the API slices, we only render one page.
-	let totalJobs = $state(0);
-	let sheltersList = $state<{ code: string; name: string }[]>([]);
 	// Skills come only from the effective volunteer_skills Master Data endpoint.
 	let skillOptions = $state<VolunteerSkillOption[]>([]);
-	// True only until the first page arrives; later fetches keep the cards and dim them.
-	let isLoading = $state(true);
-	let isFetching = $state(false);
 
 	function resolvedSkillLabel(value: string): string {
 		return skillLabel(value, skillOptions, languageStore.current);
@@ -216,8 +211,6 @@
 		return option?.category?.toLowerCase() === 'controlled';
 	}
 
-	let requestSeq = 0;
-
 	/** Both the master code and its label, so jobs stored in either form match (server-side). */
 	function skillQueryValues(selected: string): string[] {
 		const option = findSkillOption(selected, skillOptions);
@@ -228,38 +221,6 @@
 				)
 			)
 		];
-	}
-
-	async function fetchPublicJobs(page: number) {
-		const seq = ++requestSeq;
-		isFetching = true;
-		try {
-			const params = new SvelteURLSearchParams();
-			if (debouncedQuery) params.set('q', debouncedQuery);
-			if (selectedFilter !== 'all') params.set('status', selectedFilter);
-			if (selectedShelter !== 'all') params.set('shelter_code', selectedShelter);
-			if (selectedSkill !== 'all') {
-				for (const value of skillQueryValues(selectedSkill)) params.append('skill', value);
-			}
-			params.set('page', String(page));
-			params.set('page_size', String(PAGE_SIZE));
-			const res = await fetch(`/api/public/v1/volunteer/jobs?${params}`);
-			if (seq !== requestSeq) return;
-			if (res.ok) {
-				const data = await res.json();
-				if (seq !== requestSeq) return;
-				rawJobs = Array.isArray(data.jobs) ? data.jobs : [];
-				totalJobs = typeof data.total === 'number' ? data.total : rawJobs.length;
-				sheltersList = Array.isArray(data.shelters) ? data.shelters : [];
-			}
-		} catch (err) {
-			console.warn('Failed to load public volunteer jobs:', err);
-		} finally {
-			if (seq === requestSeq) {
-				isLoading = false;
-				isFetching = false;
-			}
-		}
 	}
 
 	async function fetchMasterSkills() {
@@ -434,14 +395,10 @@
 	let selectedShelter = $state(untrack(() => initialShelter) || 'all');
 	// Follows the link the reader arrived by; they can still pick another shelter here.
 	$effect(() => {
-		if (initialShelter) {
-			selectedShelter = initialShelter;
-			currentPage = 1;
-		}
+		if (initialShelter) selectedShelter = initialShelter;
 	});
 	let selectedSkill = $state('all');
 	const PAGE_SIZE = 6;
-	let currentPage = $state(1);
 	let jobList = $state<HTMLElement>();
 
 	/**
@@ -506,28 +463,43 @@
 	const filterState = $derived(
 		`${debouncedQuery}\u0000${selectedFilter}\u0000${selectedShelter}\u0000${selectedSkill}`
 	);
-	const totalPages = $derived(Math.max(1, Math.ceil(totalJobs / PAGE_SIZE)));
-	let appliedFilterState = '';
+	// The page belongs to the filters it was picked under: changing a filter is back to page 1 in
+	// the same render, so the query never runs for (new filters, old page).
+	let pagePick = $state({ key: '', page: 1 });
+	const currentPage = $derived(pagePick.key === filterState ? pagePick.page : 1);
+	function setCurrentPage(page: number) {
+		pagePick = { key: filterState, page };
+	}
 
-	// One fetch per (filters, page). A changed filter always restarts at page 1 first.
+	const boardQuery = usePublicBoard<RawPublicJob>(() => ({
+		q: debouncedQuery,
+		status: selectedFilter,
+		shelterCode: selectedShelter,
+		skills: selectedSkill === 'all' ? [] : skillQueryValues(selectedSkill),
+		page: currentPage,
+		pageSize: PAGE_SIZE
+	}));
+	const summaryQuery = usePublicBoardSummary();
+
+	const rawJobs = $derived(boardQuery.data?.jobs ?? []);
+	// Jobs matching the filters across every page; the API slices, we only render one page.
+	const totalJobs = $derived(boardQuery.data?.total ?? 0);
+	const sheltersList = $derived(boardQuery.data?.shelters ?? []);
+	// True only until the first page arrives; later fetches keep the cards and dim them.
+	const isLoading = $derived(boardQuery.isPending);
+	const isFetching = $derived(boardQuery.isFetching);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalJobs / PAGE_SIZE)));
+	// Board-wide counts (not the filtered total) for the filter pills.
+	const summary = $derived(summaryQuery.data);
+
+	// A failed load is told to the reader, not logged away (the previous page, if any, stays).
 	$effect(() => {
-		const key = filterState;
-		const page = currentPage;
-		untrack(() => {
-			if (key !== appliedFilterState) {
-				appliedFilterState = key;
-				if (page !== 1) {
-					currentPage = 1;
-					return;
-				}
-			}
-			void fetchPublicJobs(page);
-		});
+		if (boardQuery.isError) toast.error(t.boardLoadError);
 	});
 
 	// Keep the current page valid when the result set shrinks under the reader.
 	$effect(() => {
-		if (!isFetching && currentPage > totalPages) currentPage = totalPages;
+		if (!isFetching && currentPage > totalPages) setCurrentPage(totalPages);
 	});
 
 	function openApplyModal(jobId: string, shiftId: string) {
@@ -597,7 +569,7 @@
 						? 'bg-primary text-white shadow-sm'
 						: 'border border-border/80 bg-white text-muted-foreground hover:bg-muted/30'}"
 				>
-					{t.filterAll}{selectedFilter === 'all' ? ` (${totalJobs})` : ''}
+					{t.filterAll}{summary ? ` (${summary.total})` : ''}
 				</button>
 
 				<button
@@ -609,7 +581,7 @@
 						: 'border border-success/30 bg-success/5 text-success hover:bg-success/10'}"
 				>
 					<span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-success"></span>
-					{t.filterOpen}
+					{t.filterOpen}{summary ? ` (${summary.open})` : ''}
 				</button>
 
 				<button
@@ -621,7 +593,7 @@
 						: 'border border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/20'}"
 				>
 					<span class="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-warning"></span>
-					{t.filterNearFull}
+					{t.filterNearFull}{summary ? ` (${summary.near_full})` : ''}
 				</button>
 
 				<button
@@ -632,7 +604,7 @@
 						? 'border border-accent-purple bg-accent-purple/15 text-accent-purple shadow-sm'
 						: 'border border-accent-purple/30 bg-accent-purple/5 text-accent-purple hover:bg-accent-purple/10'}"
 				>
-					{t.filterControlled}
+					{t.filterControlled}{summary ? ` (${summary.controlled})` : ''}
 				</button>
 			</div>
 
@@ -774,7 +746,7 @@
 			{#if totalPages > 1}
 				<div class="w-fit justify-self-center">
 					<Pagination.Root
-						bind:page={currentPage}
+						bind:page={() => currentPage, setCurrentPage}
 						count={totalJobs}
 						perPage={PAGE_SIZE}
 						onPageChange={showNewPage}

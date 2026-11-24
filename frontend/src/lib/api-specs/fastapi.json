@@ -3164,6 +3164,24 @@
 				}
 			}
 		},
+		"/public/v1/jobs/summary": {
+			"get": {
+				"tags": ["Volunteers"],
+				"summary": "Jobs Summary",
+				"operationId": "jobs_summary_public_v1_jobs_summary_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/PublicJobSummaryResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/public/v1/jobs": {
 			"get": {
 				"tags": ["Volunteers"],
@@ -3214,7 +3232,13 @@
 						"name": "page",
 						"in": "query",
 						"required": false,
-						"schema": { "type": "integer", "minimum": 1, "default": 1, "title": "Page" }
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"default": 1,
+							"title": "Page"
+						}
 					},
 					{
 						"name": "page_size",
@@ -6878,6 +6902,20 @@
 				"required": ["shift_id"],
 				"title": "PublicJobShift",
 				"description": "Concrete shift identity plus renderable snapshot fields."
+			},
+			"PublicJobSummaryResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"total": { "type": "integer", "title": "Total", "default": 0 },
+					"open": { "type": "integer", "title": "Open", "default": 0 },
+					"near_full": { "type": "integer", "title": "Near Full", "default": 0 },
+					"controlled": { "type": "integer", "title": "Controlled", "default": 0 },
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["as_of"],
+				"title": "PublicJobSummaryResponse",
+				"description": "Board-wide counts, independent of any filter or page (CR-264 FR-9)."
 			},
 			"PublicSearchRequest": {
 				"properties": {
