@@ -7,6 +7,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { CONSENT_COPY } from '../../src/lib/features/consent/domain/consent-notice.i18n';
 import { acceptFullConsent } from './consent';
+import { stubPsuConsent } from './psu-consent';
 
 export const PRE_REGISTER_PATH = '/pre-register?shelter=unassigned';
 export const SUBMIT_LABEL = 'ยืนยันการลงทะเบียน';
@@ -66,21 +67,10 @@ const GOOGLE_REPORT_ONLY_CSP_TEXT =
 
 const REGISTRATION_WRITE = /\/api\/public\/v1\/(unassigned-registrations|registrations)(\?|$)/;
 
-/**
- * PSU cookie-consent banner (app.html loads `web-consent.psu.ac.th/static/js/psu-consent.min.js`).
- * Its API answers 403 / no CORS header for hosts that are not registered against the site key
- * (staging), which logs console errors the health check would count. It is third-party and not
- * under test here, so serve an empty script: `window.PSUConsent` stays undefined, app.html's
- * loader returns early and nothing else is requested.
- */
-const PSU_CONSENT_URL = /^https:\/\/web-consent\.psu\.ac\.th\//;
-
 /** Start collecting console problems, failed responses and registration writes on `page`. */
 export function watchPage(page: Page): PageHealth {
 	const health: PageHealth = { problems: [], failedResponses: [], registrationWrites: [] };
-	void page.route(PSU_CONSENT_URL, (route) =>
-		route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
-	);
+	void stubPsuConsent(page);
 	page.on('pageerror', (err) => health.problems.push(`pageerror: ${err.message}`));
 	page.on('console', (msg) => {
 		if (RECAPTCHA_FRAME_URL.test(msg.location().url)) return;
