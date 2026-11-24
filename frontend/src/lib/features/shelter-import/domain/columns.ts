@@ -388,7 +388,10 @@ export const MASTER_COLUMNS: readonly MasterColumn[] = ['shelter_type', 'site_ki
 export const APP_ONLY_FIELDS: readonly string[] = [
 	'โซนเทศบาล',
 	'กลุ่มเปราะบางที่ศูนย์รองรับได้',
-	'การตั้งค่า feature_flags'
+	'การตั้งค่า feature_flags',
+	'ชื่อย่อ (แสดงบนแผนที่)',
+	'หน่วยงานที่ดูแล',
+	'ข้อจำกัดการเข้าถึงสำหรับรถส่งของ'
 ];
 
 export interface ColumnDef {
