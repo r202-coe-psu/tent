@@ -95,15 +95,17 @@ export function clearOverviewViewCache(): void {
 	viewCache.clear();
 }
 
+// Loaders THROW on a failed read so memo() drops the entry; callers degrade to "no data"
+// without a transient CouchDB error being cached for the whole TTL.
 function occupancyCounts(code: string): Promise<StatusCounts> {
-	return memo(`occ:${code}`, () => fetchOccupancyCounts(code));
+	return memo(`occ:${code}`, () => fetchOccupancyCounts(code)).catch(() => ({}));
 }
 
 async function fetchOccupancyCounts(code: string): Promise<StatusCounts> {
 	const db = `shelter_${code.toLowerCase()}`;
 	const res = await adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET');
 	const counts: StatusCounts = {};
-	if (res.status >= 400) return counts;
+	if (res.status >= 400) throw new Error(`occupancy view ${res.status}`);
 	const rows = (res.data as { rows?: { key: string; value: number }[] })?.rows ?? [];
 	for (const row of rows) counts[row.key] = (counts[row.key] ?? 0) + row.value;
 	return counts;
@@ -114,7 +116,10 @@ function movementTotals(
 	from: string,
 	to: string
 ): Promise<{ checkin: number; checkout: number }> {
-	return memo(`mov:${code}:${from}:${to}`, () => fetchMovementTotals(code, from, to));
+	return memo(`mov:${code}:${from}:${to}`, () => fetchMovementTotals(code, from, to)).catch(() => ({
+		checkin: 0,
+		checkout: 0
+	}));
 }
 
 async function fetchMovementTotals(
@@ -131,7 +136,7 @@ async function fetchMovementTotals(
 	const res = await adminRaw(viewPath, 'GET');
 	let checkin = 0;
 	let checkout = 0;
-	if (res.status >= 400) return { checkin, checkout };
+	if (res.status >= 400) throw new Error(`movements view ${res.status}`);
 	const rows = (res.data as { rows?: { key: [string, string]; value: number }[] })?.rows ?? [];
 	for (const row of rows) {
 		const series = row.key?.[1];
@@ -401,7 +406,13 @@ export async function buildOverviewSites(filters: OverviewFilters) {
 	// movements read runs only for the rows on the requested page (#1502).
 	const sites = await loadSiteMetrics(filters);
 	const sorted = [...sites].sort((a, b) => (b.row.forecast_pct ?? -1) - (a.row.forecast_pct ?? -1));
-	const pageSites = sorted.slice(filters.offset, filters.offset + filters.limit);
+	// Shrinking totals (filter change, a shelter cancelled) must not strand the caller on an
+	// empty page: snap to the last page and report the offset actually used.
+	const offset =
+		sorted.length > 0 && filters.offset >= sorted.length
+			? Math.floor((sorted.length - 1) / filters.limit) * filters.limit
+			: filters.offset;
+	const pageSites = sorted.slice(offset, offset + filters.limit);
 	const { from, to } = resolveMovementDateRange(filters);
 	const rows = await Promise.all(
 		pageSites.map(async (s) => {
@@ -417,7 +428,7 @@ export async function buildOverviewSites(filters: OverviewFilters) {
 		sites: rows,
 		total: sorted.length,
 		limit: filters.limit,
-		offset: filters.offset
+		offset
 	});
 }
 

@@ -76,7 +76,7 @@
 		sites={sitesQuery.data?.sites}
 		total={sitesQuery.data?.total}
 		limit={SITES_PAGE_SIZE}
-		offset={sitesOffset}
+		offset={sitesQuery.data?.offset ?? sitesOffset}
 		onOffsetChange={(next) => (sitesOffset = next)}
 		loading={sitesQuery.isPending}
 		movementFrom={filters.movement_from ?? defaultRange.from}

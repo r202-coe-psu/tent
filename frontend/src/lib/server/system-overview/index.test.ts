@@ -86,6 +86,37 @@ describe('buildOverviewSites paging (#1502)', () => {
 	});
 });
 
+describe('failed reads are not memoised and offsets are clamped (#1502 review)', () => {
+	it('retries a failed occupancy read instead of caching the empty result', async () => {
+		listShelterMasters.mockResolvedValue([master('A', 10)]);
+		let calls = 0;
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path.includes('/_view/occupancy')) {
+				calls += 1;
+				return calls === 1
+					? { status: 503, data: null }
+					: { status: 200, data: { rows: [{ key: 'active', value: 4 }] } };
+			}
+			return { status: 200, data: { rows: [] } };
+		});
+		const first = await buildOverviewSites(filters());
+		expect(first.sites[0].present).toBe(0);
+		const second = await buildOverviewSites(filters());
+		expect(second.sites[0].present).toBe(4);
+	});
+
+	it('snaps an out-of-range offset to the last page', async () => {
+		listShelterMasters.mockResolvedValue([master('A', 10), master('B', 10), master('C', 10)]);
+		route({
+			'/_view/occupancy': () => ({ rows: [{ key: 'active', value: 1 }] }),
+			registrations_by_date_status: () => ({ rows: [] })
+		});
+		const out = await buildOverviewSites(filters({ limit: 2, offset: 40 }));
+		expect(out.offset).toBe(2);
+		expect(out.sites).toHaveLength(1);
+	});
+});
+
 describe('buildOverviewOrigin (#1502)', () => {
 	it('fetches households in one batched call, not one GET per evacuee', async () => {
 		listShelterMasters.mockResolvedValue([master('A', 10)]);
