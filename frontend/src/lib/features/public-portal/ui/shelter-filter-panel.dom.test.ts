@@ -65,37 +65,12 @@ describe('ShelterFilterPanel — first-visit GPS radius', () => {
 		document.body.innerHTML = '';
 	});
 
-	it('puts the GPS position and the default 5 km radius in the URL', async () => {
+	it('leaves the first-visit GPS request to the page: no navigation on mount', async () => {
+		// The page asks for GPS and writes it to the URL, on mobile too where this panel is not
+		// mounted (CR-261 decision sync 2026-11-24); the panel only follows the URL.
 		await render({});
 
-		const params = committedUrl();
-		expect(params.get('user_lat')).toBe('7.0086');
-		expect(params.get('distance')).toBe('5');
-		// One navigation, not one per commit path (GPS resolve, userLat effect, onMount).
-		expect(env.goto).toHaveBeenCalledTimes(1);
-	});
-
-	it('still commits the radius when the page already resolved the shared position', async () => {
-		// The /shelters page asks for GPS too and binds the result into the panel; when it
-		// wins the race the panel already "has" a position on mount.
-		await render({ userLat: '7.0086', userLng: '100.4968' });
-
-		const params = committedUrl();
-		expect(params.get('user_lng')).toBe('100.4968');
-		expect(params.get('distance')).toBe('5');
-		expect(env.goto).toHaveBeenCalledTimes(1);
-	});
-
-	it('adds the 5 km default once when the URL has the position but no radius', async () => {
-		env.url = new URL('http://localhost/shelters?user_lat=7.0086&user_lng=100.4968');
-		await render({
-			userLat: '7.0086',
-			userLng: '100.4968',
-			filters: { user_lat: '7.0086', user_lng: '100.4968', distance: '5' }
-		});
-
-		expect(committedUrl().get('distance')).toBe('5');
-		expect(env.goto).toHaveBeenCalledTimes(1);
+		expect(env.goto).not.toHaveBeenCalled();
 	});
 
 	it('does not navigate when the URL already carries the position and radius', async () => {
@@ -107,6 +82,27 @@ describe('ShelterFilterPanel — first-visit GPS radius', () => {
 		});
 
 		expect(env.goto).not.toHaveBeenCalled();
+	});
+
+	it('"clear" keeps the position and the default radius, so the default area does not return', async () => {
+		await render({ userLat: '7.0086', userLng: '100.4968' });
+		const clear = [...document.body.querySelectorAll<HTMLAnchorElement>('a')].find((el) =>
+			el.textContent?.includes('ล้างค่า')
+		)!;
+		const params = new URLSearchParams(clear.getAttribute('href')!.split('?')[1]);
+		expect(Object.fromEntries(params)).toEqual({
+			user_lat: '7.0086',
+			user_lng: '100.4968',
+			distance: '5'
+		});
+	});
+
+	it('"clear" goes to the bare page when there is no position', async () => {
+		await render({});
+		const clear = [...document.body.querySelectorAll<HTMLAnchorElement>('a')].find((el) =>
+			el.textContent?.includes('ล้างค่า')
+		)!;
+		expect(clear.getAttribute('href')).toBe('/shelters');
 	});
 
 	it('keeps a radius the visitor picked from the URL and writes it back unchanged', async () => {
@@ -424,7 +420,7 @@ describe('ShelterFilterPanel — active controls are highlighted (#1419)', () =>
 			subdistrict: 'บ้านพรุ',
 			hide_full: 'true',
 			parking_car: 'on',
-			hide_external: 'on'
+			show_external: 'on'
 		};
 		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(filters)}`);
 		await render({
@@ -499,14 +495,14 @@ describe('ShelterFilterPanel — shelter type radio (#1463)', () => {
 		document.body.innerHTML = '';
 	});
 
-	it('offers all / evacuation / external as three radios, "all" chosen by default', async () => {
+	it('offers evacuation / all / external as three radios, "evacuation" chosen by default', async () => {
 		await render({ filters: POS });
 		expect(radios().map((r) => r.getAttribute('aria-label'))).toEqual([
-			'ทั้งหมด',
 			'ศูนย์อพยพ',
+			'ทั้งหมด',
 			'ศูนย์อพยพภายนอก'
 		]);
-		expect(checkedLabels()).toEqual(['ทั้งหมด']);
+		expect(checkedLabels()).toEqual(['ศูนย์อพยพ']);
 		expect(
 			document.body.querySelector('[data-filter="shelter-groups"]')!.getAttribute('data-active')
 		).toBe('false');
@@ -515,54 +511,56 @@ describe('ShelterFilterPanel — shelter type radio (#1463)', () => {
 	it('keeps the three radios on one row', async () => {
 		await render({ filters: POS });
 		const group = document.body.querySelector('[data-testid="group-radio"]')!;
-		expect(group.className).toContain('grid-cols-[1fr_1.2fr_1fr]');
+		expect(group.className).toContain('grid-cols-[1.2fr_1fr_1fr]');
 		for (const label of group.querySelectorAll('label')) {
 			expect(label.className).toContain('whitespace-nowrap');
 		}
 	});
 
-	it('reads hide_external=on as "evacuation only", and hide_evacuation=on as "external only"', async () => {
-		env.url = new URL(
-			`http://localhost/shelters?${new URLSearchParams({ ...POS, hide_external: 'on' })}`
-		);
-		await render({ filters: { ...POS, hide_external: 'on' } });
-		expect(checkedLabels()).toEqual(['ศูนย์อพยพ']);
+	it('reads show_external=on as "all", with hide_evacuation=on as "external only"', async () => {
+		const all = { ...POS, show_external: 'on' };
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(all)}`);
+		await render({ filters: all });
+		expect(checkedLabels()).toEqual(['ทั้งหมด']);
+		expect(
+			document.body.querySelector('[data-filter="shelter-groups"]')!.getAttribute('data-active')
+		).toBe('true');
 		unmount(component!);
 		component = undefined;
 		document.body.innerHTML = '';
 
-		env.url = new URL(
-			`http://localhost/shelters?${new URLSearchParams({ ...POS, hide_evacuation: 'on' })}`
-		);
-		await render({ filters: { ...POS, hide_evacuation: 'on' } });
+		const external = { ...POS, show_external: 'on', hide_evacuation: 'on' };
+		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(external)}`);
+		await render({ filters: external });
 		expect(checkedLabels()).toEqual(['ศูนย์อพยพภายนอก']);
 	});
 
-	it('reads a link that hides both groups as "all" (hiding both would list nothing)', async () => {
+	it('reads an old link (hide_external / hide_evacuation alone) as the default', async () => {
 		const filters = { ...POS, hide_evacuation: 'on', hide_external: 'on' };
 		env.url = new URL(`http://localhost/shelters?${new URLSearchParams(filters)}`);
 		await render({ filters });
-		expect(checkedLabels()).toEqual(['ทั้งหมด']);
+		expect(checkedLabels()).toEqual(['ศูนย์อพยพ']);
 	});
 
-	it('writes the pick to the same query as before: evacuation -> hide_external, external -> hide_evacuation', async () => {
+	it('writes the pick to the URL: all -> show_external, external -> also hide_evacuation', async () => {
 		await render({ filters: POS });
 		env.goto.mockClear();
 
 		radios()[1].click();
 		for (let i = 0; i < 3; i++) await tick();
-		expect(committedUrl().get('hide_external')).toBe('on');
+		expect(committedUrl().get('show_external')).toBe('on');
 		expect(committedUrl().has('hide_evacuation')).toBe(false);
 
 		settle();
 		radios()[2].click();
 		for (let i = 0; i < 3; i++) await tick();
+		expect(committedUrl().get('show_external')).toBe('on');
 		expect(committedUrl().get('hide_evacuation')).toBe('on');
-		expect(committedUrl().has('hide_external')).toBe(false);
 
 		settle();
 		radios()[0].click();
 		for (let i = 0; i < 3; i++) await tick();
+		expect(committedUrl().has('show_external')).toBe(false);
 		expect(committedUrl().has('hide_evacuation')).toBe(false);
 		expect(committedUrl().has('hide_external')).toBe(false);
 	});

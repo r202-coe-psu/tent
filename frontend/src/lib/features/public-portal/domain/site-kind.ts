@@ -99,19 +99,39 @@ export function siteKindTiles(
 }
 
 /**
- * Shelter-type toggles on the `/shelters` filter panel. Both are on by default, so the URL only
- * records the ones switched off (`hide_*=on`). `external` is exactly `is_external === true`; the
- * other never includes external shelters. There is no switch for host houses: the public search
- * never shows a plain one (#1419; the load asks the API to leave them out), so a stale
- * `hide_host_house` in an old link is ignored.
+ * Shelter-group pick on the `/shelters` filter panel. The default is the centres run in this
+ * system only, so the URL records the other two picks: "all" = `show_external=on`, "external
+ * only" = `show_external=on&hide_evacuation=on` (CR-261 decision sync 2026-11-24). `external` is
+ * exactly `is_external === true`; the other never includes external shelters. An old link with
+ * `hide_external=on` reads as the default. There is no switch for host houses: the public search
+ * never shows a plain one (#1419), so a stale `hide_host_house` is ignored.
  */
-export const SHELTER_GROUP_HIDE_PARAMS = {
-	hide_evacuation: 'evacuation',
-	hide_external: 'external'
-} as const;
+export const SHOW_EXTERNAL_PARAM = 'show_external';
+export const HIDE_EVACUATION_PARAM = 'hide_evacuation';
 
-export type ShelterGroup =
-	(typeof SHELTER_GROUP_HIDE_PARAMS)[keyof typeof SHELTER_GROUP_HIDE_PARAMS] | 'host_house';
+export type ShelterGroupChoice = 'evacuation' | 'all' | 'external';
+export const DEFAULT_SHELTER_GROUP_CHOICE: ShelterGroupChoice = 'evacuation';
+
+type FlagValue = string | number | boolean | null | undefined;
+const isOn = (value: FlagValue) => value === true || value === 'on' || value === 'true';
+
+/** The group pick from the URL flags (or the page's `filters` echo of them). */
+export function shelterGroupChoice(flags: {
+	show_external?: FlagValue;
+	hide_evacuation?: FlagValue;
+}): ShelterGroupChoice {
+	if (!isOn(flags.show_external)) return 'evacuation';
+	return isOn(flags.hide_evacuation) ? 'external' : 'all';
+}
+
+/** The URL flags for a pick; the default pick has none. */
+export function shelterGroupParams(choice: ShelterGroupChoice): Record<string, 'on'> {
+	if (choice === 'all') return { [SHOW_EXTERNAL_PARAM]: 'on' };
+	if (choice === 'external') return { [SHOW_EXTERNAL_PARAM]: 'on', [HIDE_EVACUATION_PARAM]: 'on' };
+	return {};
+}
+
+export type ShelterGroup = 'evacuation' | 'external' | 'host_house';
 
 export function shelterGroup(s: {
 	is_external?: boolean | null;
@@ -121,8 +141,13 @@ export function shelterGroup(s: {
 	return isHostHouseKind(s.site_kind) ? 'host_house' : 'evacuation';
 }
 
+/** The groups the API is asked to leave out for the pick in the URL. */
 export function hiddenShelterGroups(params: URLSearchParams): ShelterGroup[] {
-	return Object.entries(SHELTER_GROUP_HIDE_PARAMS)
-		.filter(([key]) => params.get(key) === 'on')
-		.map(([, group]) => group);
+	const choice = shelterGroupChoice({
+		show_external: params.get(SHOW_EXTERNAL_PARAM),
+		hide_evacuation: params.get(HIDE_EVACUATION_PARAM)
+	});
+	if (choice === 'evacuation') return ['external'];
+	if (choice === 'external') return ['evacuation'];
+	return [];
 }

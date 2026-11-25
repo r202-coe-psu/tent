@@ -74,7 +74,8 @@ test.describe('Public shelters: external shelter', { tag: ['@public', '@regressi
 		page
 	}) => {
 		await mockPublicApi(page);
-		await page.goto('/shelters');
+		// External centres show only when picked (CR-261 decision sync 2026-11-24).
+		await page.goto('/shelters?show_external=on');
 
 		const external = page.locator('[data-shelter-code="EXT001"]');
 		await expect(external).toBeVisible();
@@ -98,7 +99,8 @@ test.describe('Public shelters: external shelter', { tag: ['@public', '@regressi
 
 	test('the status filter offers "ไม่ทราบสถานะ" and sends status=unknown', async ({ page }) => {
 		const api = await mockPublicApi(page);
-		await page.goto('/shelters');
+		// External centres show only when picked (CR-261 decision sync 2026-11-24).
+		await page.goto('/shelters?show_external=on');
 		await expect(page.locator('[data-shelter-code="EXT001"]')).toBeVisible();
 
 		await page.getByRole('button', { name: 'สถานะศูนย์' }).click();
