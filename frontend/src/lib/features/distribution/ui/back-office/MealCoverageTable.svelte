@@ -76,8 +76,9 @@
 				? 'border-amber-200 bg-amber-50/40'
 				: 'border-slate-200/80 bg-white'}"
 		>
-			<div class="flex items-start justify-between gap-2">
-				<div class="min-w-0">
+			<!-- Phones stack the status under the name: side by side it squeezes the name to a word per line. -->
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+				<div class="min-w-0 sm:flex-1">
 					<p class="text-base font-bold text-slate-900">{@render personName(row)}</p>
 					<p class="mt-0.5 text-sm text-slate-500">{zoneName(row.zone) || '–'}</p>
 				</div>

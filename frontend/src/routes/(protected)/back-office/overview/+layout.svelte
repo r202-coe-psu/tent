@@ -8,8 +8,8 @@
 	let { children }: LayoutProps = $props();
 
 	const tabs = [
-		{ label: 'ภาพรวมผู้อพยพ', path: '/back-office/overview/evacuees', icon: Users },
-		{ label: 'ภาพรวมการแจกจ่ายอาหาร', path: '/back-office/overview/food', icon: Utensils }
+		{ label: 'ผู้พักพิง', path: '/back-office/overview/evacuees', icon: Users },
+		{ label: 'แจกจ่ายอาหาร', path: '/back-office/overview/food', icon: Utensils }
 	] as const;
 
 	const isActive = (path: string) => page.url.pathname.replace(/\/$/, '') === path;
