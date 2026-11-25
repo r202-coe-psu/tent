@@ -40,6 +40,12 @@ export class SopMasterRemoteRepository implements SopMasterRepository {
 	private readonly dbName: string;
 	private readonly repo: Repository;
 
+	/**
+	 * The `updated_by` values set below (`'system_migration'`, the author…) are placeholders:
+	 * couch-db stamps the logged-in user over them on every `catalog` write (CR-260 FR-C3), and
+	 * the catalog access rule would reject any other name from a non-admin (FR-C11). Nothing in
+	 * the UI reads `updated_by` of a SOP profile or pointer.
+	 */
 	constructor(dbName: string = 'catalog') {
 		this.dbName = dbName;
 		this.repo = createRemoteRepository(dbName);
