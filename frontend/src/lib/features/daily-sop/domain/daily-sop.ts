@@ -629,6 +629,8 @@ export interface DailySopRoleAssessment {
 	created_at: string;
 	updated_at: string;
 	created_by: string;
+	/** CR-260 FR-C1: stamped by couch-db on every write; absent on docs written before it. */
+	updated_by?: string;
 }
 
 export const createEmptyRoleDraft = (role: DailySopRoleCode): DailySopRoleDraft =>
