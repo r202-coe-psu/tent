@@ -376,9 +376,12 @@ async function couchAs(session: string, method: 'GET' | 'PUT', id: string, body?
 async function touchAs(account: Account, role: DailySopRoleCode) {
 	const read = await couchAs(account.session, 'GET', docId(role));
 	expect(read.status, `${account.key} may read ${role}`).toBe(200);
+	// Name the writer like the app's couch-db does (CR-260), so the role rule is what decides —
+	// not the updated_by rule tripping on the previous writer's stamp.
 	return couchAs(account.session, 'PUT', docId(role), {
 		...read.data,
-		updated_at: new Date().toISOString()
+		updated_at: new Date().toISOString(),
+		updated_by: account.user.name
 	});
 }
 
@@ -571,7 +574,8 @@ test.describe(
 					...rest,
 					_id: pastId,
 					assessment_date: YESTERDAY,
-					created_by: account.user.name
+					created_by: account.user.name,
+					updated_by: account.user.name
 				});
 				expect(res.status, `${account.key} past-day create`).toBe(403);
 				expect(res.reason).toMatch(/current Bangkok date/);
@@ -612,7 +616,11 @@ test.describe(
 			const controls = (read.data.controls as Array<Record<string, unknown>>).map((c) =>
 				c.id === questionId ? { ...c, status: 'Pending', notes: '' } : c
 			);
-			const res = await couchAs(owner.session, 'PUT', docId('REG'), { ...read.data, controls });
+			const res = await couchAs(owner.session, 'PUT', docId('REG'), {
+				...read.data,
+				controls,
+				updated_by: owner.user.name
+			});
 			expect(res.status, 'Pending without a note').toBe(403);
 		});
 
