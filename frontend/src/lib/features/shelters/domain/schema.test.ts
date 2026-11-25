@@ -1460,7 +1460,7 @@ describe('CR-205 — storage point drop-off fields', () => {
 	});
 });
 
-describe('CR-205 — migrate to the current schema_v (10 → 11 adds parking_points)', () => {
+describe('CR-205 — migrate to the current schema_v (10 → 11 adds parking_points, 11 → 12)', () => {
 	const doc = (schema_v: number, sub_storage: unknown[]) =>
 		({
 			_id: 'shelter:x',
@@ -1478,8 +1478,8 @@ describe('CR-205 — migrate to the current schema_v (10 → 11 adds parking_poi
 			updated_at: '2024-01-01T00:00:00Z'
 		}) as unknown as ShelterMasterV2;
 
-	it('is schema_v 11', () => {
-		expect(SHELTER_MASTER_SCHEMA_V).toBe(11);
+	it('is schema_v 12', () => {
+		expect(SHELTER_MASTER_SCHEMA_V).toBe(12);
 	});
 
 	it('v8 → v9 fills the defaults (AC-1)', () => {
@@ -1742,7 +1742,7 @@ describe('CR-252 external shelter', () => {
 	});
 });
 
-describe('#1352 — parking_points (schema_v 11)', () => {
+describe('#1352 — parking_points (added in schema_v 11)', () => {
 	const v9 = () =>
 		({
 			_id: 'shelter:x',
@@ -1760,9 +1760,9 @@ describe('#1352 — parking_points (schema_v 11)', () => {
 			updated_at: '2024-01-01T00:00:00Z'
 		}) as unknown as ShelterMasterV2;
 
-	it('v9 → v11 adds an empty parking_points and stamps 11', () => {
+	it('v9 → v12 adds an empty parking_points and stamps 12', () => {
 		const m = migrateShelterV2ToCurrent(v9());
-		expect(m.schema_v).toBe(11);
+		expect(m.schema_v).toBe(12);
 		expect(m.parking_points).toEqual([]);
 	});
 
@@ -1772,20 +1772,29 @@ describe('#1352 — parking_points (schema_v 11)', () => {
 		expect(m.parking_points).toEqual([{ ...pin, vehicles: [] }]);
 	});
 
-	it.each([7, 8])('v%i ends at 11 with parking_points = []', (v) => {
+	it.each([7, 8, 10])('v%i ends at 12 with parking_points = []', (v) => {
 		const m = migrateShelterV2ToCurrent({ ...v9(), schema_v: v } as never);
-		expect(m.schema_v).toBe(11);
+		expect(m.schema_v).toBe(12);
 		expect(m.parking_points).toEqual([]);
 	});
 
-	it('v4 chains through to v11 with parking_points', () => {
+	it('v4 chains through to v12 with parking_points', () => {
 		const m = migrateShelterV2ToCurrent({ ...v9(), schema_v: 4 } as never);
-		expect(m.schema_v).toBe(11);
+		expect(m.schema_v).toBe(12);
 		expect(m.parking_points).toEqual([]);
 	});
 
-	it('a doc stamped 11 without the key is filled, then identity-stable', () => {
+	it('a doc stamped 11 without the key is filled and stamped 12, then identity-stable', () => {
 		const stamped = { ...v9(), schema_v: 11 } as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m).not.toBe(stamped);
+		expect(m.schema_v).toBe(12);
+		expect(m.parking_points).toEqual([]);
+		expect(migrateShelterV2ToCurrent(m)).toBe(m);
+	});
+
+	it('a doc stamped 12 without the key is filled, then identity-stable', () => {
+		const stamped = { ...v9(), schema_v: 12 } as unknown as ShelterMasterV2;
 		const m = migrateShelterV2ToCurrent(stamped);
 		expect(m).not.toBe(stamped);
 		expect(m.parking_points).toEqual([]);
@@ -1801,6 +1810,77 @@ describe('#1352 — parking_points (schema_v 11)', () => {
 		expect(
 			parkingPointSchema.safeParse({ id: 'p1', name: 'a', lat: null, lng: null }).success
 		).toBe(true);
+	});
+});
+
+describe('schema_v 12 — name_short / operating_org / delivery_note', () => {
+	const FIELDS = [
+		['name_short', 64],
+		['operating_org', 200],
+		['delivery_note', 500]
+	] as const;
+
+	it.each(FIELDS)('%s is trimmed', (key) => {
+		const s = shelterSchema.parse({ ...validShelterInput, [key]: '  รร.หาดใหญ่วิทยาลัย  ' });
+		expect(s[key]).toBe('รร.หาดใหญ่วิทยาลัย');
+	});
+
+	it.each(FIELDS)('%s blank or whitespace-only becomes null', (key) => {
+		expect(shelterSchema.parse({ ...validShelterInput, [key]: '' })[key]).toBeNull();
+		expect(shelterSchema.parse({ ...validShelterInput, [key]: '   ' })[key]).toBeNull();
+		expect(shelterSchema.parse({ ...validShelterInput, [key]: null })[key]).toBeNull();
+	});
+
+	it.each(FIELDS)('%s accepts %i characters and rejects one more', (key, max) => {
+		expect(shelterSchema.safeParse({ ...validShelterInput, [key]: 'ก'.repeat(max) }).success).toBe(
+			true
+		);
+		// The limit applies after trimming.
+		expect(
+			shelterSchema.safeParse({ ...validShelterInput, [key]: ` ${'ก'.repeat(max)} ` }).success
+		).toBe(true);
+		const tooLong = shelterSchema.safeParse({ ...validShelterInput, [key]: 'ก'.repeat(max + 1) });
+		expect(tooLong.success).toBe(false);
+		expect(tooLong.error?.issues[0].path).toEqual([key]);
+	});
+
+	it.each(FIELDS)('%s stays absent when omitted — no default that an import would send', (key) => {
+		expect(key in createShelterSchema.parse(validShelterInput)).toBe(false);
+		expect(key in updateShelterSchema.parse({ name: 'x' })).toBe(false);
+	});
+
+	it('the update schema keeps a sent null so the edit form can clear a value', () => {
+		const u = updateShelterSchema.parse({
+			name_short: null,
+			operating_org: ' ',
+			delivery_note: ''
+		});
+		expect(u).toMatchObject({ name_short: null, operating_org: null, delivery_note: null });
+	});
+
+	it('v11 → v12 only stamps: stored values are kept, missing ones stay absent', () => {
+		const v11 = {
+			_id: 'shelter:x',
+			type: 'shelter',
+			schema_v: 11,
+			code: 'SH001',
+			name: 'X',
+			name_short: 'X ย่อ',
+			site_kind: 'evacuation_center',
+			capacity: 10,
+			zones: [],
+			food_distribution_points: [],
+			parking_points: [],
+			common_areas: { sub_storage: [] },
+			created_at: '2024-01-01T00:00:00Z',
+			updated_at: '2024-01-01T00:00:00Z'
+		} as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(v11);
+		expect(m.schema_v).toBe(12);
+		expect(m.name_short).toBe('X ย่อ');
+		expect('operating_org' in m).toBe(false);
+		expect('delivery_note' in m).toBe(false);
+		expect(migrateShelterV2ToCurrent(m)).toBe(m);
 	});
 });
 

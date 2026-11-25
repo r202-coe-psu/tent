@@ -151,8 +151,11 @@ test.describe(
 			// These shelters were just created — the worker's registry listener only
 			// polls for brand-new shelter databases every 30s (listeners/registry.py),
 			// so this first wait needs headroom past that; retry the filter until it does.
+			// Reload with the position already in the URL: a bare `/shelters` asks for GPS again, and
+			// that fix rewrites the URL and the filter panel, wiping a search typed before it lands.
+			const withPosition = `/shelters?user_lat=${USER_LOCATION.latitude}&user_lng=${USER_LOCATION.longitude}&distance=5`;
 			await expect(async () => {
-				await page.goto('/shelters');
+				await page.goto(withPosition);
 				await page.getByRole('textbox', { name: 'ค้นหา' }).fill(MARKER);
 				await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible({
 					timeout: 3_000
@@ -198,13 +201,15 @@ test.describe(
 			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&distance=10`);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(2);
 
-			// "All" starts chosen, so the URL carries no hide_* flag. The radios are always visible.
+			// "Evacuation centres" (in this system) starts chosen, so the URL carries no group flag
+			// (CR-261 decision sync 2026-11-24). The radios are always visible.
 			const group = page.getByTestId('group-radio');
-			await expect(group.getByRole('radio', { name: 'ทั้งหมด' })).toBeChecked();
-			await expect(page).not.toHaveURL(/hide_/);
+			await expect(group.getByRole('radio', { name: 'ศูนย์อพยพ', exact: true })).toBeChecked();
+			await expect(page).not.toHaveURL(/show_external|hide_/);
 
 			// "External" hides the evacuation centres: this run's list empties (the host house never shows).
 			await group.getByRole('radio', { name: 'ศูนย์อพยพภายนอก' }).click();
+			await expect(page).toHaveURL(/show_external=on/);
 			await expect(page).toHaveURL(/hide_evacuation=on/);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
@@ -216,6 +221,7 @@ test.describe(
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
 			await page.getByTestId('group-radio').getByRole('radio', { name: 'ทั้งหมด' }).click();
+			await expect(page).toHaveURL(/show_external=on/);
 			await expect(page).not.toHaveURL(/hide_evacuation/);
 			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeVisible();
@@ -270,13 +276,15 @@ test.describe(
 		});
 
 		test('clears every filter', async ({ page }) => {
-			await page.goto(`/shelters?q=${encodeURIComponent(MARKER)}&hide_evacuation=on&distance=10`);
+			await page.goto(
+				`/shelters?q=${encodeURIComponent(MARKER)}&show_external=on&hide_evacuation=on&distance=10`
+			);
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(0);
 
 			// Let the first-visit GPS commit land first, or it re-applies the old filters after the clear.
 			await expect(page).toHaveURL(/user_lat=/, { timeout: GPS_URL_TIMEOUT_MS });
 			await page.getByRole('link', { name: 'ล้างค่า' }).click();
-			await expect(page).not.toHaveURL(/q=|hide_/);
+			await expect(page).not.toHaveURL(/q=|hide_|show_external/);
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toHaveValue('');
 			await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible();
 		});

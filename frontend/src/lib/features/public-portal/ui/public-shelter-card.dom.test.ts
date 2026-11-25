@@ -108,4 +108,13 @@ describe('PublicShelterCard — external shelter (CR-252 FR-20..22)', () => {
 		expect(root.textContent).toContain('รองรับได้สูงสุด');
 		expect(root.textContent).toContain('ลงทะเบียนล่วงหน้า');
 	});
+
+	it.each([
+		['does not take pre-registration', { status: 'OPEN', accepts_pre_registration: false }],
+		['is closed', { status: 'CLOSED', accepts_pre_registration: true }]
+	])('has no pre-register button at all when the shelter %s', (_, extra) => {
+		// `render` passes `onPreRegister`, so only the shelter's own state can drop the button.
+		const root = render(shelter({ is_external: false, external_url: null, ...extra }));
+		expect(root.textContent).not.toContain('ลงทะเบียนล่วงหน้า');
+	});
 });

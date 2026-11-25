@@ -2717,12 +2717,74 @@ export interface components {
 			/** Occupancy Total */
 			occupancy_total: number;
 			/**
+			 * Site Kind
+			 * @description master_data:site_kind code, e.g. evacuation_center, host_house, test_center
+			 */
+			site_kind: string;
+			/**
+			 * Project Level
+			 * @description community | lao | provincial
+			 */
+			project_level?: string | null;
+			/**
+			 * Occupancy Forecast
+			 * @description Forecast head-count (pre_registered, kiosk_registered, arriving, active, room_confirmed, temporary_leave); null until the row is re-projected
+			 */
+			occupancy_forecast?: number | null;
+			/**
+			 * Capacity Available
+			 * @description max(0, capacity - occupancy_forecast); null for external shelters
+			 */
+			capacity_available?: number | null;
+			/**
+			 * Parking Vehicle Types
+			 * @description motorcycle | car | truck | boat
+			 */
+			parking_vehicle_types?: string[];
+			/**
 			 * Updated At
 			 * Format: date-time
 			 */
 			updated_at: string;
 			/** Facilities */
 			facilities: string[];
+			/** External Url */
+			external_url?: string | null;
+			/** Parking Points */
+			parking_points?: components['schemas']['ParkingPoint'][];
+			/** Donation Points */
+			donation_points?: components['schemas']['DonationPoint'][];
+			/** Area M2 */
+			area_m2?: number | null;
+			/** Area Type */
+			area_type?: string | null;
+			/** Power Source */
+			power_source?: string | null;
+			/** Water Source */
+			water_source?: string | null;
+			/** Communications */
+			communications?: string[];
+			/** Vhf Channel */
+			vhf_channel?: string | null;
+			/** Central Kitchen */
+			central_kitchen?: boolean | null;
+			/** Helipad */
+			helipad?: boolean | null;
+			/** Logistics Area M2 */
+			logistics_area_m2?: number | null;
+			toilets?: components['schemas']['ProfileToilets'] | null;
+			/** Showers */
+			showers?: number | null;
+			risk?: components['schemas']['ProfileRisk'] | null;
+			/**
+			 * Vulnerable Groups
+			 * @description The shelter's stored supported vulnerable groups, as entered (no inference)
+			 */
+			vulnerable_groups?: string[];
+			pet_policy?: components['schemas']['ProfilePetPolicy'] | null;
+			luggage_policy?: components['schemas']['ProfileLuggagePolicy'] | null;
+			/** Zones */
+			zones?: components['schemas']['LocationZone'][];
 		};
 		/** LocationErrorDetail */
 		LocationErrorDetail: {
@@ -2788,6 +2850,31 @@ export interface components {
 			is_external: boolean;
 			/** Occupancy Total */
 			occupancy_total: number;
+			/**
+			 * Site Kind
+			 * @description master_data:site_kind code, e.g. evacuation_center, host_house, test_center
+			 */
+			site_kind: string;
+			/**
+			 * Project Level
+			 * @description community | lao | provincial
+			 */
+			project_level?: string | null;
+			/**
+			 * Occupancy Forecast
+			 * @description Forecast head-count (pre_registered, kiosk_registered, arriving, active, room_confirmed, temporary_leave); null until the row is re-projected
+			 */
+			occupancy_forecast?: number | null;
+			/**
+			 * Capacity Available
+			 * @description max(0, capacity - occupancy_forecast); null for external shelters
+			 */
+			capacity_available?: number | null;
+			/**
+			 * Parking Vehicle Types
+			 * @description motorcycle | car | truck | boat
+			 */
+			parking_vehicle_types?: string[];
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -2866,6 +2953,28 @@ export interface components {
 			updated_at: string;
 			/** Items */
 			items: components['schemas']['StockItem'][];
+		};
+		/** LocationZone */
+		LocationZone: {
+			/** Code */
+			code?: string | null;
+			/** Name */
+			name?: string | null;
+			/** Type */
+			type: string;
+			/** Capacity */
+			capacity?: number | null;
+			/**
+			 * Status
+			 * @default active
+			 * @enum {string}
+			 */
+			status: 'active' | 'closed';
+			/**
+			 * Present
+			 * @description Present head-count in the zone; null until the row is re-projected
+			 */
+			present?: number | null;
 		};
 		/** M5ActionRequest */
 		M5ActionRequest: {
@@ -3941,6 +4050,51 @@ export interface components {
 			has_cage: boolean;
 			/** Image Url */
 			image_url?: string | null;
+		};
+		/** ProfileLuggagePolicy */
+		ProfileLuggagePolicy: {
+			/** Limitation */
+			limitation?: string | null;
+			/** Max Per Family */
+			max_per_family?: number | null;
+			/** Rules */
+			rules?: string[];
+			/** Rules Other */
+			rules_other?: string | null;
+		};
+		/** ProfilePetCategory */
+		ProfilePetCategory: {
+			/** Category */
+			category: string;
+			/** Conditions */
+			conditions?: string[];
+			/** Max Capacity */
+			max_capacity?: number | null;
+		};
+		/** ProfilePetPolicy */
+		ProfilePetPolicy: {
+			/** Policy */
+			policy?: string | null;
+			/** Categories */
+			categories?: components['schemas']['ProfilePetCategory'][];
+		};
+		/** ProfileRisk */
+		ProfileRisk: {
+			/** Elevation M */
+			elevation_m?: number | null;
+			/** Constraints */
+			constraints?: string | null;
+			/** Secondary Muster Point */
+			secondary_muster_point?: string | null;
+		};
+		/** ProfileToilets */
+		ProfileToilets: {
+			/** Male */
+			male?: number | null;
+			/** Female */
+			female?: number | null;
+			/** Accessible */
+			accessible?: number | null;
 		};
 		/**
 		 * PublicAnnouncement

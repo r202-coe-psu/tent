@@ -148,3 +148,43 @@ describe('ShelterFormPage — creator and last editor (CR-259 FR-12/FR-13)', () 
 		expect(actorsLine()?.textContent).toContain('แก้ไขล่าสุดโดย ไม่ทราบ');
 	});
 });
+
+describe('ShelterFormPage — short name, operating agency and delivery note (schema_v 12)', () => {
+	const field = (name: string) =>
+		document.body.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
+
+	async function serve(over: Partial<ShelterSummary>) {
+		served = doc({ _rev: '2-b', ...over });
+		await client.invalidateQueries({ queryKey: sheltersKeys.detail(CODE) });
+		await settle();
+	}
+
+	it('loads the stored values into the form', async () => {
+		await serve({
+			name_short: 'รร.หาดใหญ่วิทยาลัย',
+			operating_org: 'เทศบาลนครหาดใหญ่',
+			delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+		});
+		expect(field('name_short')?.value).toBe('รร.หาดใหญ่วิทยาลัย');
+		expect(field('operating_org')?.value).toBe('เทศบาลนครหาดใหญ่');
+		expect(field('delivery_note')?.value).toBe('รถบรรทุกเกิน 6 ล้อเข้าไม่ได้');
+	});
+
+	it('shows empty inputs for a shelter without the values', () => {
+		expect(field('name_short')?.value).toBe('');
+		expect(field('operating_org')?.value).toBe('');
+		expect(field('delivery_note')?.value).toBe('');
+	});
+
+	it('an external shelter keeps the short name and agency; the delivery note sits in the hidden risk section', async () => {
+		await serve({
+			is_external: true,
+			operation_status: 'unknown',
+			name_short: 'ศูนย์ภายนอก ก',
+			operating_org: 'อบจ.สงขลา'
+		});
+		expect(field('name_short')?.value).toBe('ศูนย์ภายนอก ก');
+		expect(field('operating_org')?.value).toBe('อบจ.สงขลา');
+		expect(field('delivery_note')).toBeNull();
+	});
+});
