@@ -515,8 +515,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		const edit = page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' });
 		await expect(edit).toHaveAttribute('aria-disabled', 'true');
 		// Playwright counts aria-disabled as not clickable; a donor's tap still lands and gets the toast.
-		// Dispatch the click on the element itself: `click({ force: true })` skips the stable-position
-		// check, so a late layout shift (QR image) on a slow staging page made it land beside the button.
+		// Dispatch the click on the element itself so it cannot land beside the button if the layout
+		// shifts (QR image) before the click. Unconfirmed guess for the staging failure: `force: true`
+		// computes the click point once and skips the stable-position check. Not seen locally.
 		await edit.dispatchEvent('click');
 		await expect(
 			page.locator('[data-sonner-toast]').filter({ hasText: 'ไม่สามารถแก้ไขรายการได้' })
