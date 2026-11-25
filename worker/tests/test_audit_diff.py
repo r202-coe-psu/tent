@@ -387,18 +387,28 @@ async def test_missing_revision_history_sets_changes_unknown():
 def test_actor_mapping(updated_by, expected):
     doc = {"updated_by": updated_by, "created_by": "creator"}
 
-    assert resolve_actor(doc, first_rev=False, public_writer=PUBLIC_WRITER) == expected
+    assert resolve_actor(doc, public_writer=PUBLIC_WRITER) == expected
 
 
-def test_first_rev_falls_back_to_created_by():
+def test_created_by_never_names_the_actor():
+    # W2: the access rule does not check created_by, so it cannot be trusted as the actor.
+    assert resolve_actor({"created_by": "creator"}, public_writer=PUBLIC_WRITER) == {
+        "name": "unknown",
+        "kind": "unknown",
+    }
     assert resolve_actor(
-        {"created_by": "creator"}, first_rev=True, public_writer=PUBLIC_WRITER
-    ) == {"name": "creator", "kind": "user"}
-    assert resolve_actor(
-        {"created_by": "creator", "updated_by": "editor"},
-        first_rev=True,
-        public_writer=PUBLIC_WRITER,
+        {"created_by": "creator", "updated_by": "editor"}, public_writer=PUBLIC_WRITER
     ) == {"name": "editor", "kind": "user"}
+
+
+async def test_a_first_rev_without_updated_by_is_unknown():
+    doc = _item(_rev="1-aaa", created_by="someone.else")
+    doc.pop("updated_by", None)
+
+    event = await _build(_couch(), "catalog", _change(doc))
+
+    assert event["action"] == "create"
+    assert event["actor"] == {"name": "unknown", "kind": "unknown"}
 
 
 async def test_event_created_by_is_actor_name():

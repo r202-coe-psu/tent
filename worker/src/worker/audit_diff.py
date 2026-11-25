@@ -207,12 +207,14 @@ def entity_type_of(doc: dict[str, Any], doc_id: str) -> str | None:
     return None
 
 
-def resolve_actor(
-    doc: dict[str, Any], *, first_rev: bool, public_writer: str
-) -> dict[str, str]:
+def resolve_actor(doc: dict[str, Any], *, public_writer: str) -> dict[str, str]:
+    """Who made this revision — only ever from ``updated_by``.
+
+    ``created_by`` is not a fallback, even on rev 1: the access rule checks ``updated_by``
+    against the session user but not ``created_by``, so a client could create a doc that
+    names someone else there. A revision with no ``updated_by`` is ``unknown`` (W2).
+    """
     name = doc.get("updated_by")
-    if not name and first_rev:
-        name = doc.get("created_by")
     if not isinstance(name, str) or not name:
         return {"name": "unknown", "kind": "unknown"}
     if name == WORKER_ACTOR:
@@ -328,7 +330,7 @@ async def build_audit_diff_event(
             changes = compute_changes(entity_type, previous, doc)
 
     stamp = iso_utc(now)
-    actor = resolve_actor(doc, first_rev=first_rev, public_writer=public_writer)
+    actor = resolve_actor(doc, public_writer=public_writer)
     label_source = previous if deleted else doc
     event: dict[str, Any] = {
         "_id": audit_event_id(database, doc_id, rev),
