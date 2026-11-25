@@ -151,8 +151,11 @@ test.describe(
 			// These shelters were just created — the worker's registry listener only
 			// polls for brand-new shelter databases every 30s (listeners/registry.py),
 			// so this first wait needs headroom past that; retry the filter until it does.
+			// Reload with the position already in the URL: a bare `/shelters` asks for GPS again, and
+			// that fix rewrites the URL and the filter panel, wiping a search typed before it lands.
+			const withPosition = `/shelters?user_lat=${USER_LOCATION.latitude}&user_lng=${USER_LOCATION.longitude}&distance=5`;
 			await expect(async () => {
-				await page.goto('/shelters');
+				await page.goto(withPosition);
 				await page.getByRole('textbox', { name: 'ค้นหา' }).fill(MARKER);
 				await expect(page.getByRole('heading', { name: EVAC_NEAR.name })).toBeVisible({
 					timeout: 3_000
