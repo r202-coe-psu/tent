@@ -46,6 +46,7 @@ export interface FallbackShelter {
 
 export interface MasterSkillItemLike {
 	code: string;
+	label?: string;
 	label_th?: string;
 	label_en?: string;
 	category?: string;
@@ -70,7 +71,6 @@ export function controlledValuesFromMaster(items: readonly MasterSkillItemLike[]
 	return new Set(DEFAULT_CONTROLLED_SKILLS.map(norm).filter(Boolean));
 }
 
-/** Same derivation as the worker projector and `public-application.ts`: quota − confirmed − dispatched. */
 /** Codes of skills whose code or display name contains `text` (CR-265 D3), like FastAPI. */
 export function skillCodesByLabel(
 	items: readonly MasterSkillItemLike[],
@@ -81,17 +81,14 @@ export function skillCodesByLabel(
 	if (!needle) return codes;
 	for (const item of items) {
 		if (item.status === 'inactive' || !item.code) continue;
-		if (
-			[item.label_th, item.label_en, (item as { label?: string }).label].some((n) =>
-				norm(n).includes(needle)
-			)
-		) {
+		if ([item.label_th, item.label_en, item.label].some((n) => norm(n).includes(needle))) {
 			codes.add(item.code);
 		}
 	}
 	return codes;
 }
 
+/** Same derivation as the worker projector and `public-application.ts`: quota − confirmed − dispatched. */
 function remainingFrom(row: {
 	quota?: number;
 	slots_confirmed?: number;

@@ -83,4 +83,31 @@ describe('GET /api/public/v1/volunteer/jobs/summary (CR-265 FR-9)', () => {
 		expect(body).toMatchObject({ success: true, total: 3, open: 2, near_full: 1, controlled: 1 });
 		expect(typeof body.as_of).toBe('string');
 	});
+
+	it('does not count a paused job, like the board it summarises (W-1)', async () => {
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path === '/registry/_all_docs?include_docs=true') {
+				return {
+					status: 200,
+					data: {
+						rows: [{ doc: { type: 'shelter', code: 'SH001', name: 'A', db: 'shelter_sh001' } }]
+					}
+				};
+			}
+			if (path.startsWith('/registry/')) return { status: 404, data: {} };
+			return {
+				status: 200,
+				data: {
+					rows: [
+						{ doc: { _id: 'job:a', type: 'job', status: 'open', slots_remaining: 5 } },
+						{ doc: { _id: 'job:p', type: 'job', status: 'paused', slots_remaining: 5 } }
+					]
+				}
+			};
+		});
+
+		const body = await (await call(vi.fn().mockRejectedValue(new Error('fastapi down')))).json();
+
+		expect(body).toMatchObject({ total: 1, open: 1 });
+	});
 });

@@ -8,6 +8,7 @@ import {
 	STAFF_SH001_ROLES
 } from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
+import { mockJobsSummary } from './helpers/volunteer-portal';
 
 /**
  * Volunteer module E2E coverage.
@@ -336,6 +337,7 @@ async function mockAuthStatus(
 }
 
 async function mockPublicVolunteerJobs(page: Page): Promise<void> {
+	await mockJobsSummary(page);
 	await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 		route.fulfill(json({ success: true, jobs: [PUBLIC_JOB], shelters: [SHELTER_DOC] }))
 	);

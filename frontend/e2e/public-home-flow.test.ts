@@ -32,6 +32,7 @@ import {
 	createShelterViaUi,
 	selectActiveShelter
 } from './helpers/staff-ui';
+import { mockJobsSummary } from './helpers/volunteer-portal';
 
 const SHELTER_NAME = `E2E ศูนย์ทดสอบหน้าแรก ${RUN_ID}`;
 const NEED_ITEM = 'น้ำดื่ม 600 มล.';
@@ -281,6 +282,7 @@ test.describe('Public landing: volunteer card (#709)', { tag: ['@public', '@smok
 	});
 
 	test('counts only open urgent jobs and lists them by shelter', async ({ page }) => {
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill({
 				status: 200,
@@ -329,6 +331,7 @@ test.describe('Public landing: volunteer card (#709)', { tag: ['@public', '@smok
 	});
 
 	test('shows a dash, not 0, when the job board cannot be read', async ({ page }) => {
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill({
 				status: 503,

@@ -54,3 +54,26 @@ export async function mockPortal(page: Page, known: () => boolean = () => true) 
 
 export const remembered = (page: Page) =>
 	page.evaluate((key) => localStorage.getItem(key), REMEMBER_KEY);
+
+/**
+ * Board-wide counts for `/volunteers/jobs`. The board's `jobs*` mocks do not match this path
+ * (a glob `*` stops at `/`), so a spec that mocks the board mocks this too — otherwise the
+ * request reaches whatever backend happens to run and the page never goes network-idle.
+ */
+export async function mockJobsSummary(
+	page: Page,
+	counts: { total: number; open: number; near_full: number; controlled: number } = {
+		total: 0,
+		open: 0,
+		near_full: 0,
+		controlled: 0
+	}
+): Promise<void> {
+	await page.route('**/api/public/v1/volunteer/jobs/summary', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ success: true, ...counts, as_of: new Date().toISOString() })
+		})
+	);
+}

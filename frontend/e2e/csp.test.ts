@@ -11,7 +11,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { fakeCameraArgs, writeQrVideo } from './helpers/fake-camera';
-import { BASE, DASHBOARD, TOKEN, mockPortal } from './helpers/volunteer-portal';
+import { BASE, DASHBOARD, TOKEN, mockJobsSummary, mockPortal } from './helpers/volunteer-portal';
 
 test.use({ launchOptions: { args: fakeCameraArgs(writeQrVideo(TOKEN, 'csp-ticket')) } });
 
@@ -52,6 +52,7 @@ test('blocks a script injected into the page', async ({ page }) => {
 for (const path of ['/', '/volunteers', '/volunteers/jobs']) {
 	test(`renders ${path} with no violation`, async ({ page }) => {
 		const violations = await watchViolations(page);
+		await mockJobsSummary(page);
 		await page.goto(`${BASE}${path}`);
 		await expect(page.locator('main').first()).toBeVisible();
 		await page.waitForLoadState('networkidle');

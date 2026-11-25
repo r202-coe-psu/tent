@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { mockJobsSummary } from './helpers/volunteer-portal';
 
 /**
  * Volunteer Access Portal + ตารางทำงานจิตอาสา (CR-092 หน้าจอ 2 + 6).
@@ -125,6 +126,7 @@ async function mockPortalApi(page: Page) {
 	);
 	// The portal counts open jobs for its second tab, and the board it mounts there reads
 	// the same endpoint. Empty is fine — no test here asserts on the board itself.
+	await mockJobsSummary(page);
 	await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 		route.fulfill(json({ success: true, jobs: [] }))
 	);
@@ -338,6 +340,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		applyResponse: Record<string, unknown>,
 		skillsRequired: string[] = []
 	) {
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(
 				json({
@@ -483,6 +486,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await mockPortalApi(page);
 		await mockJobBoard(page, { success: true });
 		// Registered after mockJobBoard, so these answers win.
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(
 				json({
@@ -566,6 +570,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 		await mockPortalApi(page);
 		await mockJobBoard(page, { success: true });
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(
 				json({
@@ -656,6 +661,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 		await mockPortalApi(page);
 		await mockJobBoard(page, { success: true });
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(
 				json({
@@ -705,6 +711,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 		await mockPortalApi(page);
 		await mockJobBoard(page, { success: true });
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(
 				json({
@@ -840,6 +847,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 			boardJob('SH001', 'ศูนย์ทดสอบหนึ่ง', 'งานของศูนย์หนึ่ง'),
 			boardJob('SH002', 'ศูนย์ทดสอบสอง', 'งานของศูนย์สอง')
 		];
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(boardReply(route.request().url(), jobs))
 		);
@@ -848,6 +856,52 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 
 		await expect(page.getByRole('heading', { name: 'งานของศูนย์สอง' })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'งานของศูนย์หนึ่ง' })).toHaveCount(0);
+	});
+
+	test('the filter pills show board-wide counts, not the filtered total (AC-13)', async ({
+		page
+	}) => {
+		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+		await mockPortalApi(page);
+		await mockJobsSummary(page, { total: 40, open: 31, near_full: 6, controlled: 9 });
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				boardReply(route.request().url(), [
+					{
+						job_id: 'job:01COUNT',
+						shelter_code: 'SH001',
+						shelter_name: 'ศูนย์ทดสอบ',
+						title: 'งานนับยอด',
+						description: 'ทดสอบตัวเลขบนปุ่มกรอง',
+						tier: 'operational',
+						skills_required: [],
+						shifts: [
+							{
+								shift_id: 'count-am',
+								date: day,
+								start_time: '08:00',
+								end_time: '12:00',
+								quota: 5,
+								slots_confirmed: 0,
+								slots_remaining: 5,
+								applicants_count: 0
+							}
+						],
+						quota: 5,
+						slots_confirmed: 0,
+						slots_remaining: 5,
+						status: 'open'
+					}
+				] as unknown as { shelter_code: string }[])
+			)
+		);
+
+		await page.goto('/volunteers/jobs');
+
+		await expect(page.getByRole('heading', { name: 'งานนับยอด' })).toBeVisible();
+		// One job came back, yet the pills carry the whole board's figures.
+		await expect(page.getByRole('button', { name: /ใกล้เต็ม.*\(6\)/ })).toBeVisible();
+		await expect(page.getByRole('button', { name: /ทักษะวิชาชีพ\/ควบคุม.*\(9\)/ })).toBeVisible();
 	});
 
 	test('picking another page takes the reader to its first job', async ({ page }) => {
@@ -879,6 +933,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 			status: 'open',
 			requires_review: false
 		}));
+		await mockJobsSummary(page);
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(boardReply(route.request().url(), jobs))
 		);

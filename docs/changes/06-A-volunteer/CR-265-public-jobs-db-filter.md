@@ -15,9 +15,11 @@ affects:
   - packages/tent-model/src/tent_model/{public_job,public_job_application}.py (index เพิ่ม)
   - frontend/src/lib/api-specs/fastapi.json, frontend/src/lib/api/openapi.d.ts (regen)
   - frontend/src/routes/api/public/v1/volunteer/jobs/+server.ts, summary/+server.ts, jobs.test.ts (BFF)
-  - frontend/src/lib/features/volunteers/server/public-board-fallback.ts, public-board-fallback.test.ts
+  - frontend/src/lib/features/volunteers/server/public-board-fallback.ts, public-board-couch.ts, public-board-item.ts (+ tests)
+  - frontend/src/lib/features/volunteers/{data/public-board.api.ts,application/public-board-queries.ts,i18n/jobs.i18n.ts}
+  - worker/src/worker/projectors/master_data.py, worker/src/worker/projection_version.py (`PROJECTION_VERSION` 25), worker/tests/projectors/test_master_data_projector.py
   - frontend/src/lib/features/volunteers/ui/public-job-board.svelte, public-job-board.dom.test.ts
-  - frontend/e2e/volunteer-portal.test.ts
+  - frontend/e2e/{volunteer-portal,volunteer-flow,volunteer-module,public-home-flow,csp}.test.ts, frontend/e2e/helpers/volunteer-portal.ts (mock `/jobs/summary`)
 ---
 
 # CR-265 — กระดานงานจิตอาสาสาธารณะ — กรอง/แบ่งหน้าที่ DB, นับผู้สมัครด้วย aggregation, endpoint สรุปยอด (#1464)
@@ -27,7 +29,7 @@ affects:
 > - **เปลี่ยนอะไร:** `GET /public/v1/jobs` รับ query ใหม่ `q` (รวมค้น label ทักษะ), `status` (`open` / `near_full` / `controlled` — `open`/`near_full` ใช้ live counter และตัดกะที่จบแล้ว), `page` (1–1000), `page_size` (1–50) และคืน `total` + `shelters`; เพิ่ม `GET /public/v1/jobs/summary` (+ BFF `summary`) คืนยอดรวมคงที่ไม่ตามตัวกรอง; นับผู้สมัครด้วย aggregation `$group` แทนการโหลดใบสมัครทุกใบ; หน้า `/volunteers/jobs` ส่งตัวกรองทุกครั้งและดึงทีละหน้า
 > - **ทำไม:** หน้าเดิมดึงงานทั้งหมดครั้งเดียวแล้วกรองที่ browser และ backend โหลด `PublicJobApplication` ทุกใบเพื่อนับอย่างเดียว — หนักเกินไปเมื่อมีผู้เข้าพร้อมกันระดับหมื่นคน
 > - **Dev ต้อง build:** query/response ใหม่ + live-counter/open-shift filter + label lookup + `GET /public/v1/jobs/summary` + aggregation + index ใน FastAPI, BFF whitelist + route `summary` + CouchDB fallback, หน้า job board ส่งตัวกรอง/แสดงทีละหน้า + ยอดรวมจาก `summary`, regen OpenAPI
-> - **กระทบ:** public API (additive — ผู้เรียกเดิมที่ไม่ส่ง query ใหม่ได้ผลเหมือนเดิม), UI `/volunteers/jobs`; ไม่เปลี่ยน schema / `schema_v` / หลังบ้าน; คง `Cache-Control: no-store` (ไม่เปิด cache สั้นฝั่ง server)
+> - **กระทบ:** public API (additive — ผู้เรียกเดิมที่ไม่ส่ง query ใหม่ได้ผลเหมือนเดิม), UI `/volunteers/jobs`; ไม่เปลี่ยน schema / `schema_v`; worker ส่ง `skills` เพิ่มใน `config:volunteer_skills` (additive, `PROJECTION_VERSION` 25 — ต้อง rescan หลัง deploy); คง `Cache-Control: no-store` (ไม่เปิด cache สั้นฝั่ง server)
 
 ---
 
@@ -81,13 +83,15 @@ affects:
 - **Backend:** `backend/apiapp/modules/volunteers/{router,schemas,use_case}.py` (query/response ใหม่, live-counter & open-shift filter, label lookup, `GET /public/v1/jobs/summary`, aggregation, กรอง/แบ่งหน้า); `packages/tent-model/.../public_job.py`, `public_job_application.py` (index; Beanie สร้างตอน init); `backend/tests/test_volunteers.py`
 - **OpenAPI:** `frontend/src/lib/api-specs/fastapi.json`, `frontend/src/lib/api/openapi.d.ts` (regen, เพิ่มอย่างเดียว)
 - **BFF:** `frontend/src/routes/api/public/v1/volunteer/jobs/+server.ts`, `summary/+server.ts`, `jobs.test.ts`, `frontend/src/lib/features/volunteers/server/public-board-fallback.ts`, `public-board-fallback.test.ts`
-- **Frontend:** `frontend/src/lib/features/volunteers/ui/public-job-board.svelte`, `public-job-board.dom.test.ts`, `frontend/e2e/volunteer-portal.test.ts`
+- **Worker:** `worker/src/worker/projectors/master_data.py` ส่ง `skills` (code + ชื่อแสดงผลของทักษะที่ active ทุกตัว) ไปที่ `config:volunteer_skills` เพื่อให้ `q` ค้น label ทักษะได้ (D3); bump `PROJECTION_VERSION` เป็น **25**
+- **Frontend:** `frontend/src/lib/features/volunteers/ui/public-job-board.svelte` (ย้าย fetch ไป `data/public-board.api.ts` + `application/public-board-queries.ts`), `public-job-board.dom.test.ts`, e2e `volunteer-portal` / `volunteer-flow` / `volunteer-module` / `public-home-flow` / `csp` (mock `/jobs/summary`)
+- **Fallback (CouchDB):** `public-board-couch.ts` แสดงเฉพาะสถานะที่ worker ขึ้นกระดาน (`open`, `full` และ `almost_full` ที่เลิกใช้แล้วซึ่ง worker อ่านเป็น `open`) และ `public-board-item.ts` ตอบเฉพาะฟิลด์ของการ์ด (`PublicJobItem`) ไม่ส่ง CouchDB doc ทั้งก้อนให้ผู้ไม่ล็อกอิน
 - **Docs:** `docs/changes/_index.md` ลงแถว `CR-265` แล้ว · `docs/data/api-contract.md` แก้ตามหลัง merge
-- **ข้อควรระวังตอน deploy:** backend ใหม่ก่อน frontend ใหม่ (หน้าใหม่ต้องการ `total`/`shelters` และ `/jobs/summary`); index สร้างตอน backend เริ่มทำงาน
+- **ข้อควรระวังตอน deploy:** หลัง deploy ต้อง **rescan worker** ให้ `PROJECTION_VERSION` 25 re-project `config:volunteer_skills` — ถ้าไม่ rescan ช่องค้น `q` จะหา label ทักษะไม่เจอและคืน 0 งานโดยไม่มี error; backend ใหม่ก่อน frontend ใหม่ (หน้าใหม่ต้องการ `total`/`shelters` และ `/jobs/summary`); index สร้างตอน backend เริ่มทำงาน
 
 ## 5. Migration
 
-ไม่เปลี่ยนรูป doc ที่ persist, ไม่ bump `schema_v` (เพิ่ม index ใน Mongo เท่านั้น)
+ไม่เปลี่ยนรูป doc ที่ persist ใน CouchDB, ไม่ bump `schema_v` — เพิ่ม index ใน Mongo และเพิ่มฟิลด์ `skills` ใน projection `config:volunteer_skills` (additive) จึง **ต้อง rescan worker** หลัง deploy (`PROJECTION_VERSION` 25)
 
 Beanie ไม่ drop index เดิมให้ — index เดี่ยว `shelter_code_1` (`public_jobs`) และ `job_id_1` (`public_job_applications`) ที่มีอยู่แล้วบน DB ยังค้างอยู่และไม่เป็นอันตราย (แค่เปลือง write) จะ drop ด้วยมือเมื่อสะดวกก็ได้: `db.public_jobs.dropIndex("shelter_code_1")`, `db.public_job_applications.dropIndex("job_id_1")`
 
@@ -97,3 +101,4 @@ Beanie ไม่ drop index เดิมให้ — index เดี่ยว `
 - 2026-11-24 — approved และรันเลขเป็น CR-265 (ย้ายจาก `draft-public-jobs-db-filter.md` เข้า `06-A-volunteer/`); ปรับ FR-1 (ขอบบน `page <= 1000` / 400 `invalid_page`), FR-5 (เรียงงานเปิดก่อนงานปิดข้ามหน้าตาม CR-215 FR-4), FR-9 (ส่งต่อ 4xx ไม่ fallback) และ §3 ให้ตรงกับโค้ด
 - 2026-11-24 — เจ้าของโครงการเคาะคำตัดสิน D1–D6: D1=B (กรอง `open`/`near_full` ด้วย live counter), D2=A (ตัดกะที่จบเวลาแล้วออกใน `open`/`near_full`), D3=B (`q` ค้น label ทักษะผ่าน Master Data), D4+D6 (เพิ่ม `GET /public/v1/jobs/summary` + BFF `/api/public/v1/volunteer/jobs/summary` นับยอดรวมคงที่), D5=A (คง `no-store` ยังไม่ cache ฝั่ง server)
 - 2026-11-25 — แก้ FR-8 ตามรีวิว S3: ตัด index เดี่ยวที่ซ้ำ prefix ออกจากโมเดล และเพิ่มบันทึกการ drop index เดิม
+- 2026-11-25 — แก้ตามรีวิวรอบ 3 (W-1/W-2/W-3): เพิ่ม worker (`skills` + `PROJECTION_VERSION` 25 + ขั้น rescan) และไฟล์ fallback/e2e ที่ขาดใน `affects`/Impact/Migration/deploy; fallback ใช้ allow-list สถานะและตอบเฉพาะฟิลด์ของการ์ด; `PROJECTION_VERSION` เลื่อนจาก 24 เป็น 25 เพราะ 24 ถูกใช้บน develop แล้ว

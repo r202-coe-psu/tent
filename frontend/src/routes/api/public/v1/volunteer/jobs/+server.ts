@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { readMasterDoc } from '$lib/server/master-data-server';
 import { loadCouchBoard } from '$lib/features/volunteers/server/public-board-couch';
+import { toPublicBoardItem } from '$lib/features/volunteers/server/public-board-item';
 import {
 	boardShelters,
 	controlledValuesFromMaster,
@@ -68,6 +69,8 @@ function enrichJobsWithQuotaCounts(jobs: JobDoc[]): void {
 
 const BOARD_STATUSES = ['open', 'near_full', 'controlled'] as const;
 const MAX_PAGE_SIZE = 50;
+/** More skill values than any filter UI sends (code + both labels per picked skill). */
+const MAX_SKILLS = 20;
 /** Same bound as FastAPI (`le=` on `page`): far past any real board, so a huge value is refused. */
 const MAX_PAGE = 1000;
 
@@ -92,7 +95,7 @@ function pageOutOfRange(value: string | null): boolean {
 export const GET: RequestHandler = async ({ url, fetch }) => {
 	const query = new URLSearchParams();
 	const shelterCode = url.searchParams.get('shelter_code') || url.searchParams.get('shelter');
-	const skills = url.searchParams.getAll('skill').filter(Boolean);
+	const skills = url.searchParams.getAll('skill').filter(Boolean).slice(0, MAX_SKILLS);
 	const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
 	const statusParam = url.searchParams.get('status');
 	const status = BOARD_STATUSES.find((value) => value === statusParam);
@@ -159,11 +162,13 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		});
 		const pageJobs = result.jobs as JobDoc[];
 		enrichJobsWithQuotaCounts(pageJobs);
+		const shelterNames = new Map(shelters.map((s) => [s.code.toUpperCase(), s.name]));
 
 		return json(
 			{
 				success: true,
-				jobs: pageJobs,
+				// Only the card's own fields — never the CouchDB document (W-2).
+				jobs: pageJobs.map((job) => toPublicBoardItem(job, shelterNames)),
 				total: result.total,
 				shelters: boardShelters(shelters, jobs)
 			},
