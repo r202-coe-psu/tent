@@ -72,7 +72,8 @@ export function usePreRegistrations(getFilters: () => Partial<OverviewFilters>) 
 	return createQuery(() => ({
 		queryKey: overviewKeys.preRegs(getFilters()),
 		queryFn: () => fetchPreRegistrations(getFilters()),
-		staleTime: 10_000
+		staleTime: 10_000,
+		placeholderData: keepPreviousData
 	}));
 }
 

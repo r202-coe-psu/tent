@@ -409,7 +409,7 @@ export async function buildOverviewSites(filters: OverviewFilters) {
 	const sorted = [...sites].sort(
 		(a, b) =>
 			(b.row.forecast_pct ?? -1) - (a.row.forecast_pct ?? -1) ||
-			a.master.code.localeCompare(b.master.code)
+			(a.master.code < b.master.code ? -1 : a.master.code > b.master.code ? 1 : 0)
 	);
 	// Shrinking totals (filter change, a shelter cancelled) must not strand the caller on an
 	// empty page: snap to the last page and report the offset actually used.
