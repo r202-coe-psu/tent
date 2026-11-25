@@ -10,20 +10,20 @@ affects:
   - docs/data/api-contract.md (ไม่มี section overview เดิม — ไม่ต้องแก้; สัญญา BFF อยู่ใน Zod `overviewSummarySchema` / `overviewSiteRowSchema` / `overviewFiltersSchema`)
   - no schema_v bump (ไม่แตะ doc ที่ persist; เพิ่มเฉพาะ field/พารามิเตอร์ใน response/query ของ BFF)
   - frontend/src/lib/server/system-overview/index.ts (`buildOverviewSummary`, `buildOverviewSites`, `matchesShelterGeo`)
-  - frontend/src/lib/features/system-overview/domain/schemas.ts (`overviewSummarySchema` +`sites_by_site_kind` +`sites_external`; `overviewSiteRowSchema` +`is_external`; `overviewFiltersSchema` +`external`)
+  - frontend/src/lib/features/system-overview/domain/schemas.ts (`overviewSummarySchema` +`sites_by_site_kind` +`sites_external` +`sites_closed_or_cancelled`; `overviewSiteRowSchema` +`is_external`; `overviewFiltersSchema` +`external` + `FILTER_KEYS` / `overviewFiltersToSearchParams` +`external`)
   - frontend/src/lib/features/system-overview/ui (การ์ดประเภทศูนย์, ตารางศูนย์, filter bar, หน้ารายการลงทะเบียนล่วงหน้า)
   - frontend/src/lib/constants/i18n/staff-system-overview.ts
-  - tests: BFF summary / sites / filters, DOM test ของการ์ดและตารางศูนย์
+  - tests: BFF summary / sites / filters (รวม `frontend/src/routes/api/back-office/overview/summary/server.test.ts` ที่ assert `sites_total`), DOM test ของการ์ดและตารางศูนย์
 ---
 
 # หน้าภาพรวมระบบ — การ์ดจำนวนศูนย์แยกตามประเภท และกติกานับศูนย์ภายนอก / ปิด / ยกเลิก
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** (1) หน้า `/system-management/overview` เพิ่มแถวการ์ดบนสุด หนึ่งการ์ดต่อ `site_kind` + การ์ด「ศูนย์ภายนอก」แยก; (2) การ์ด「อยู่ในศูนย์」ไม่นับศูนย์ที่ปิด / ยกเลิก / ภายนอก; (3) ตัวกรอง/ตารางศูนย์รองรับศูนย์ภายนอกและสถานะ「ไม่ทราบสถานะ」
+> - **เปลี่ยนอะไร:** (1) หน้า `/system-management/overview` เพิ่มแถวการ์ดบนสุด หนึ่งการ์ดต่อ `site_kind` + การ์ด「ศูนย์ภายนอก」+ การ์ด「ศูนย์ที่ปิด/ยกเลิก」แยก; (2) การ์ด「อยู่ในศูนย์」ไม่นับศูนย์ที่ปิด / ยกเลิก / ภายนอก; (3) ตัวกรอง/ตารางศูนย์รองรับศูนย์ภายนอกและสถานะ「ไม่ทราบสถานะ」
 > - **เพื่อใคร:** SA ที่ต้องเห็นภาพรวมจำนวนศูนย์แยกประเภทและตัวเลขการใช้ความจุที่สะท้อนเฉพาะศูนย์ที่เปิดใช้งานในระบบนี้
-> - **dev ต้อง build:** `summary` เพิ่ม `sites_by_site_kind` (ไม่รวม External) + `sites_external`, ปรับสูตร `present_total` / `forecast_total` / `avg_*_pct`; แถว `sites` เพิ่ม `is_external`; filter `external=only`; UI ตาม FR-10..FR-19
-> - **กระทบ:** response/query ของ BFF (additive + เปลี่ยนสูตรนับ 4 ค่าใน `summary`) · ไม่ bump `schema_v` · ไม่แตะ stable core
+> - **dev ต้อง build:** `summary` เพิ่ม `sites_by_site_kind` (ไม่รวม External) + `sites_external` + `sites_closed_or_cancelled`, ปรับสูตร `sites_total` / `present_total` / `forecast_total` / `avg_*_pct`; แถว `sites` เพิ่ม `is_external`; filter `external=only`; UI ตาม FR-10..FR-19
+> - **กระทบ:** response/query ของ BFF (additive + เปลี่ยนสูตรนับ 5 ค่าใน `summary`: `sites_total`, `present_total`, `forecast_total`, `avg_present_pct`, `avg_forecast_pct`) · ไม่ bump `schema_v` · ไม่แตะ stable core
 
 ---
 
@@ -37,7 +37,12 @@ affects:
 - FR-4 — **ไม่นับ**ศูนย์ที่ `operation_status` เป็น `closed` หรือ `cancelled` ใน `sites_total`, `sites_by_site_kind` และ `sites_external`; ยกเว้นเมื่อตัวกรอง `operation_status` เลือก `closed` / `cancelled` ตรงๆ (นับศูนย์สถานะนั้น เพื่อไม่ให้การ์ดเป็น 0 ขณะตารางแสดงศูนย์เหล่านั้น). `sites_by_status` และ `sites_closed` ยังนับทุกศูนย์. _D-1_
 - FR-5 — ศูนย์ `is_external` **ไม่นับ**ใน `sites_by_site_kind`; นับแยกใน `sites_external: number` (เพิ่มใน `overviewSummarySchema`). _D-2_
 - FR-6 — ตัวเลขนับจากทุกศูนย์ตามตัวกรอง ไม่ขึ้นกับ pagination ของตารางศูนย์ (#1502).
-- FR-7 — `present_total`, `forecast_total`, `avg_present_pct`, `avg_forecast_pct` รวมเฉพาะศูนย์ที่ผ่าน FR-4 และไม่ใช่ `is_external`; **ความจุรวมที่เป็นตัวหารของ `avg_*_pct` ตัดศูนย์กลุ่มเดียวกันออกด้วย**. `sites_by_status`, `sites_closed`, `pre_registered_at_sites` ไม่เปลี่ยน (ยังนับทุกศูนย์ตามตัวกรอง). _D-5_
+- FR-7 — `present_total`, `forecast_total`, `avg_present_pct`, `avg_forecast_pct` รวมเฉพาะศูนย์ที่ผ่าน FR-4 และไม่ใช่ `is_external`; **ความจุรวมที่เป็นตัวหารของ `avg_*_pct` ตัดศูนย์กลุ่มเดียวกันออกด้วย**. เหตุผลของ External: ศูนย์ External ไม่มีข้อมูลผู้พักในระบบนี้ (CR-252 FR-12) แต่กรอกความจุได้ (CR-252 FR-6) ความจุจึงบิดตัวหารของเปอร์เซ็นต์ถ้านับรวม. `sites_by_status`, `sites_closed`, `pre_registered_at_sites` ไม่เปลี่ยน (ยังนับทุกศูนย์ตามตัวกรอง). _D-5_
+- FR-7a — ตัวเลขอื่นใน `summary` ที่ไม่ได้ระบุใน FR-4 / FR-7:
+  - `checkouts_in_window` ไม่เปลี่ยน — นับทุกศูนย์ตามตัวกรอง รวมศูนย์ปิด / ยกเลิก / External (คนที่เช็กเอาต์จริงต้องไม่หายเพราะศูนย์ปิดภายหลัง).
+  - `sites_open_with_present` ไม่เปลี่ยนสูตร — ตัดศูนย์ปิด / ยกเลิกอยู่แล้ว; ศูนย์ External ไม่มีข้อมูลผู้พัก (CR-252 FR-12) จึงไม่ถูกนับอยู่แล้ว.
+  - dev ต้องคำนวณตัวเลขกลุ่ม「ไม่เปลี่ยน」จากรายการศูนย์**ก่อน**ตัดตาม FR-4 / FR-7 ไม่ใช่จากรายการที่ตัดแล้ว (`buildOverviewSummary` ใช้รายการเดียวกันทุกตัวอยู่ในปัจจุบัน).
+- FR-7b — `sites_closed_or_cancelled: number` (ใหม่ใน `overviewSummarySchema`) = จำนวนศูนย์ที่ `operation_status` เป็น `closed` หรือ `cancelled` หลังตัวกรองเดียวกัน (ไม่ขึ้นกับ pagination). ไม่นับซ้ำกับ `sites_by_site_kind` / `sites_external` ในกรณีปกติ เพราะ FR-4 ตัดศูนย์เหล่านี้ออกจากสองค่านั้น. `sites_total` **ไม่เท่า**ผลรวม `sites_by_status` โดยตั้งใจ (ผลรวม `sites_by_status` = `sites_total` + `sites_closed_or_cancelled`).
 
 **BFF `GET /api/back-office/overview/sites` และตัวกรองร่วม**
 
@@ -46,6 +51,8 @@ affects:
   - ใหม่ `external=only` ⇒ เหลือเฉพาะศูนย์ `is_external`.
   - เมื่อมี `site_kind` (ประเภทปกติ) ⇒ **ตัดศูนย์ `is_external` ออก** (ศูนย์ภายนอกเลือกผ่าน `external=only` เท่านั้น).
   - ศูนย์ที่ไม่มี `operation_status` ถือเป็น `unknown` ทั้งในแถวและในตัวกรอง `operation_status=unknown`. _D-6_
+  - `external` ต้องเพิ่มใน `FILTER_KEYS` ของ `parseOverviewFilters` และใน `overviewFiltersToSearchParams` (ไม่เช่นนั้น `?external=only` ถูกทิ้งเงียบ ตารางแสดงทุกศูนย์).
+  - `site_kind` กับ `external=only` เลือกคู่กันไม่ได้: เมื่อ URL มีทั้งสองค่า ให้ `external=only` ชนะและเมินค่า `site_kind` (ไม่ให้ตารางว่างจากเงื่อนไขขัดกัน).
 
 **UI — หน้า `/system-management/overview`**
 
@@ -53,11 +60,13 @@ affects:
 - FR-11 — เรียงตามลำดับ master `site_kind`; label จาก master ตามภาษาปัจจุบัน (th/en) ด้วย `formatMasterLabel`.
 - FR-12 — แสดงทุกประเภทที่ `active` แม้จำนวน = 0; ประเภทที่ไม่ active แต่มีศูนย์ > 0 แสดงต่อท้ายพร้อม label ตาม code.
 - FR-13 — การ์ด「ศูนย์ภายนอก」(`sites_external`) ต่อท้ายการ์ดประเภททั้งหมด; แสดงเสมอแม้เป็น 0; label th「ศูนย์ภายนอก」/ en「External shelters」.
+- FR-13a — การ์ด「ศูนย์ที่ปิด/ยกเลิก」(`sites_closed_or_cancelled`) ต่อท้ายการ์ดศูนย์ภายนอก; แสดงเสมอแม้เป็น 0; label th「ศูนย์ที่ปิด/ยกเลิก」/ en「Closed / cancelled shelters」; ขนาดเท่าการ์ดอื่นตาม FR-10.
+  > [NEEDS DECISION] เมื่อตัวกรองสถานะเลือก `closed` / `cancelled` (ข้อยกเว้นใน FR-4) การ์ดประเภทและ `sites_total` นับศูนย์เหล่านั้น และการ์ดนี้ก็นับด้วย ⇒ ซ้ำกันในกรณีนี้. ทางเลือก: (ก) คงข้อยกเว้นของ FR-4 และยอมให้ซ้ำ (ข) ตัดข้อยกเว้น เพราะมีการ์ดนี้แสดงศูนย์ปิด / ยกเลิกอยู่แล้ว (ผลกระทบ AC-5a, FR-7). รอเจ้าของโครงการเคาะ.
 - FR-14 — การ์ดตามตัวกรองด้านบนของหน้า (ค่า `summary` เดียวกับการ์ดอื่น). _D-4_
 - FR-15 — การ์ด **ไม่** กดกรองตาราง (คงตัวกรอง "ประเภทศูนย์" ที่มีอยู่). _D-3_
 - FR-16 — การ์ด「อยู่ในศูนย์」มีคำอธิบายว่า "ไม่รวมศูนย์ที่ปิด ยกเลิก และศูนย์ภายนอก" (th/en).
 - FR-17 — ตารางศูนย์: สถานะ `unknown` แสดง「ไม่ทราบสถานะ」(en「Unknown」); ศูนย์ `is_external` มี badge「ศูนย์อพยพภายนอก」(en「External evacuation center」) ต่อท้ายรหัสศูนย์.
-- FR-18 — ตัวกรอง「ประเภทศูนย์」มีตัวเลือก「ศูนย์อพยพภายนอก」(`external=only`) ต่อท้ายประเภท master; ตัวกรอง「สถานะศูนย์」มีตัวเลือก「ไม่ทราบสถานะ」.
+- FR-18 — ตัวกรอง「ประเภทศูนย์」มีตัวเลือก「ศูนย์อพยพภายนอก」(`external=only`) ต่อท้ายประเภท master; ตัวกรอง「สถานะศูนย์」มีตัวเลือก「ไม่ทราบสถานะ」. เป็น dropdown เดียว: เลือกประเภทปกติ ⇒ ล้าง `external`; เลือก「ศูนย์อพยพภายนอก」⇒ ล้าง `site_kind`.
 - FR-19 — หน้า `/system-management/pre-registrations` ใช้ตัวกรองชุดเดียวกัน แต่ **ไม่แสดง**ตัวเลือก「ศูนย์อพยพภายนอก」.
 
 ## Decisions
@@ -74,12 +83,15 @@ affects:
 ## Acceptance
 
 - AC-1 — เปิดหน้าภาพรวม เห็นการ์ดจำนวนศูนย์ต่อประเภทบนสุด กว้างเท่ากัน; ผลรวมการ์ดประเภททั้งหมด + การ์ดศูนย์ภายนอก = `sites_total`; ศูนย์ปิด / ยกเลิกไม่ถูกนับ.
+- AC-1a — การ์ด「ศูนย์ที่ปิด/ยกเลิก」แสดงผลรวมศูนย์ `closed` + `cancelled` ตามตัวกรอง; ตัวอย่าง 10 ศูนย์ ปิด 2 ยกเลิก 1 ⇒ การ์ดประเภท + ศูนย์ภายนอก = 7 (`sites_total`), การ์ดปิด/ยกเลิก = 3, ผลรวม `sites_by_status` = 10.
 - AC-2 — ประเภท active ที่ไม่มีศูนย์แสดง 0; ศูนย์ `is_external` แสดงเฉพาะในการ์ดศูนย์ภายนอก ไม่ซ้ำในการ์ดประเภท.
 - AC-3 — ศูนย์ไม่มี `site_kind` นับเป็น `evacuation_center`.
 - AC-4 — สลับภาษาเป็น en แล้ว label เป็นภาษาอังกฤษ.
 - AC-5a — เมื่อตัวกรองสถานะเลือก「ปิดศูนย์」หรือ「ยกเลิกศูนย์」การ์ดนับศูนย์สถานะนั้น (ไม่เป็น 0).
 - AC-5 — `present_total` / `forecast_total` / `avg_*_pct` ไม่รวมศูนย์ `closed` / `cancelled` / External (เทสต์ BFF: ความจุตัวหารก็ตัดด้วย).
 - AC-6 — เลือกประเภท「ศูนย์อพยพ」แล้วไม่มีศูนย์ External ในตารางและการ์ด; เลือก「ศูนย์อพยพภายนอก」เหลือเฉพาะศูนย์ External.
+- AC-6a — เลือก「ศูนย์อพยพภายนอก」(`external=only`): การ์ด「อยู่ในศูนย์」แสดงจำนวนคน = 0 และเปอร์เซ็นต์ใช้ความจุแสดง「—」(ความจุรวมหลังตัด External = 0 ⇒ `avg_*_pct` = `null`); เป็นค่าที่ถูกต้อง ไม่ใช่ข้อมูลหาย.
+- AC-6b — เปิดลิงก์ที่มี `external=only` ตารางเหลือเฉพาะศูนย์ External; ลิงก์ที่มีทั้ง `site_kind=<ประเภทปกติ>` และ `external=only` ให้ผลเท่ากับ `external=only` อย่างเดียว (ไม่ว่าง).
 - AC-7 — ตัวกรองสถานะ「ไม่ทราบสถานะ」เจอศูนย์ที่ไม่มีสถานะ; ตารางแสดงป้าย「ไม่ทราบสถานะ」และ badge ศูนย์ภายนอกถูกต้อง.
 - AC-8 — หน้ารายการลงทะเบียนล่วงหน้าไม่มีตัวเลือก「ศูนย์อพยพภายนอก」.
 - AC-9 — เทสต์ BFF `summary` / `sites` และ DOM test ของการ์ดกับตารางศูนย์ผ่าน.
@@ -110,3 +122,4 @@ N/A — ไม่มี doc ที่ persist เปลี่ยน, ไม่ b
 - 2026-11-24 — D-2 เปลี่ยน: ศูนย์ External แยกเป็นการ์ดของตัวเอง (`sites_external`) ไม่นับรวมในประเภท
 - 2026-11-24 — เพิ่ม FR-7 / D-5 (ตัวเลข「อยู่ในศูนย์」ไม่นับศูนย์ปิด / ยกเลิก / External), FR-8..FR-9 / FR-17..FR-19 / D-6 (ตัวกรอง External และ「ไม่ทราบสถานะ」, ตัดศูนย์ External เมื่อเลือกประเภทปกติ, badge ในตารางศูนย์) ตามข้อสั่งของเจ้าของโครงการ
 - 2026-11-24 — D-1 เปลี่ยนค่าตั้งต้น: ไม่นับศูนย์ที่ปิดและศูนย์ที่ยกเลิกในจำนวนศูนย์ (`sites_total`, การ์ดประเภท, `sites_external`) ยกเว้นเมื่อตัวกรองสถานะเลือกสถานะนั้นตรงๆ (FR-4, AC-1, AC-5a)
+- 2026-11-25 — จากรีวิว PR #1511: เพิ่ม FR-7a (ระบุ `checkouts_in_window` / `sites_open_with_present`), FR-7b + FR-13a + AC-1a (การ์ด「ศูนย์ที่ปิด/ยกเลิก」, `sites_total` ไม่เท่าผลรวม `sites_by_status` โดยตั้งใจ); เพิ่มกติกาตัวกรอง `external` (FR-9 / FR-18 / AC-6a / AC-6b); ค้าง [NEEDS DECISION] เรื่องนับซ้ำเมื่อกรองสถานะปิด / ยกเลิก
