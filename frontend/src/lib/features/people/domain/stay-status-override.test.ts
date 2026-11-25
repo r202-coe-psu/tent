@@ -33,6 +33,10 @@ describe('canOverrideStayStatus (CR-262 A1, #1473)', () => {
 		expect(canOverrideStayStatus(['shelter:SH001', 'SH001:shelter_manager'], 'sh001')).toBe(true);
 	});
 
+	it('needs the shelter scope role too, like the profile edit check (#1538)', () => {
+		expect(canOverrideStayStatus(['SH001:shelter_manager'], 'SH001')).toBe(false);
+	});
+
 	it('refuses without a current shelter or roles', () => {
 		expect(canOverrideStayStatus(['shelter:SH001', 'SH001:shelter_manager'], '')).toBe(false);
 		expect(canOverrideStayStatus([], 'SH001')).toBe(false);
