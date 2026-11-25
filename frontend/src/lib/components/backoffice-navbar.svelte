@@ -26,6 +26,11 @@
 		writeSidebarCollapsed
 	} from './sidebar-collapsed-storage';
 
+	let {
+		/** The hamburger bar shown below `lg`; off where a page keeps the very top of the screen. */
+		showMobileBar = true
+	}: { showMobileBar?: boolean } = $props();
+
 	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice));
 	let mobileMenuOpen = $state(false);
 
@@ -355,7 +360,9 @@
 
 <!-- Mobile Navigation — sticky so hamburger stays reachable while scrolling -->
 <div
-	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden"
+	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden {showMobileBar
+		? ''
+		: 'hidden'}"
 >
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a

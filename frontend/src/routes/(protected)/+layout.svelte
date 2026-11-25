@@ -12,12 +12,37 @@
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import { discardReturnPath, isUserSwitch, takeReturnPath } from '$lib/auth/session-expiry';
 	import { SessionExpiredModal } from '$lib/features/login';
+	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
+	import {
+		showsStaffMobileBar,
+		showsStaffSidebar
+	} from '$lib/components/backoffice-navbar/staff-sidebar';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
 
 	/** Only the portal home is translated; the TH/EN toggle stays off untranslated staff pages. */
 	const onPortal = $derived(page.url.pathname === LANDING_ROUTE);
+
+	/** System admins and the selected shelter's manager keep the back-office sidebar here (#1517). */
+	const staffSidebar = $derived(
+		showsStaffSidebar(
+			page.url.pathname,
+			authStore.user?.roles ?? [],
+			shelterStore.selectedShelterCode
+		)
+	);
+
+	/**
+	 * Under the app bar (`/portal`, `/me`) the sidebar starts below it instead of sliding beneath;
+	 * `/onsite` has no app bar, so it starts at the very top.
+	 */
+	const staffSidebarClass = $derived(
+		page.url.pathname.startsWith('/onsite')
+			? '[&>aside]:top-0 [&>aside]:h-[var(--app-shell-height)]'
+			: '[&>aside]:top-14 [&>aside]:h-[calc(var(--app-shell-height)-3.5rem)]'
+	);
 
 	/** Set while session is expired so we refetch errored queries on reauth. */
 	let pendingReauthRecovery = false;
@@ -108,9 +133,17 @@
 		</header>
 	{/if}
 
-	<main class="flex flex-1 flex-col">
-		{@render children()}
-	</main>
+	<div class="flex min-w-0 flex-1 flex-col lg:flex-row">
+		{#if staffSidebar}
+			<!-- Below the app bar the sidebar must start under it, not slide beneath it. -->
+			<div class="contents {staffSidebarClass}">
+				<BackofficeNavbar showMobileBar={showsStaffMobileBar(page.url.pathname)} />
+			</div>
+		{/if}
+		<main class="flex min-w-0 flex-1 flex-col">
+			{@render children()}
+		</main>
+	</div>
 </div>
 
 <SessionExpiredModal />
