@@ -61,13 +61,16 @@
 	}
 </script>
 
-<svelte:window onpointerdown={() => idleTimeout.recordActivity()} />
+<svelte:window
+	onpointerdown={() => idleTimeout.recordActivity()}
+	onkeydown={() => idleTimeout.recordActivity()}
+/>
 
 <section
 	{@attach (element) => element.focus()}
 	tabindex="-1"
 	aria-label={t.hint}
-	class="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none kiosk-portrait:max-w-5xl kiosk-portrait:gap-6 kiosk-portrait:p-10 kiosk-compact:grid kiosk-compact:max-w-none kiosk-compact:grid-cols-[auto_18rem] kiosk-compact:grid-rows-[1fr_auto] kiosk-compact:items-center kiosk-compact:justify-center kiosk-compact:gap-x-4 kiosk-compact:gap-y-3 kiosk-compact:p-4"
+	class="mx-auto flex w-full max-w-5xl flex-col items-center gap-4 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none kiosk-portrait:gap-6 kiosk-portrait:p-10 kiosk-compact:grid kiosk-compact:max-w-none kiosk-compact:grid-cols-[auto_18rem] kiosk-compact:grid-rows-[1fr_auto] kiosk-compact:items-center kiosk-compact:justify-center kiosk-compact:gap-x-4 kiosk-compact:gap-y-3 kiosk-compact:p-4"
 	data-testid="kiosk-label-screen"
 >
 	<div
