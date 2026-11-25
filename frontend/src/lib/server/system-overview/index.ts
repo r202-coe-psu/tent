@@ -203,6 +203,7 @@ async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> 
 				checkout: 0,
 				has_coords:
 					typeof master.location?.lat === 'number' && typeof master.location?.lng === 'number',
+				public_visible: master.feature_flags?.public_visible !== false,
 				dashboard_href: `/back-office/evacuee-management?shelter=${encodeURIComponent(master.code)}`
 			};
 			return {
@@ -219,6 +220,8 @@ async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> 
 	);
 
 	return settled.filter((site) => {
+		if (filters.public_visibility === 'visible' && !site.row.public_visible) return false;
+		if (filters.public_visibility === 'hidden' && site.row.public_visible) return false;
 		if (filters.stay_bucket === 'present' && site.present <= 0) return false;
 		if (filters.stay_bucket === 'forecast' && site.forecast <= 0) return false;
 		if (filters.stay_bucket === 'pre_registered' && site.pre_registered <= 0) return false;
@@ -533,8 +536,13 @@ export async function buildOverviewOrigin(
 	cookie: string | null
 ) {
 	const bucketMap = new Map<string, OriginBucket>();
-	const bump = (province: string, district: string | null, subdistrict: string | null) => {
-		const key = `${province}|${district ?? ''}|${subdistrict ?? ''}`;
+	const bump = (
+		province: string,
+		district: string | null,
+		subdistrict: string | null,
+		shelterCode: string | null
+	) => {
+		const key = `${province}|${district ?? ''}|${subdistrict ?? ''}|${shelterCode ?? ''}`;
 		const existing = bucketMap.get(key);
 		if (existing) existing.count += 1;
 		else
@@ -542,6 +550,7 @@ export async function buildOverviewOrigin(
 				province: province || 'ไม่ระบุ',
 				district,
 				subdistrict,
+				shelter_code: shelterCode,
 				count: 1
 			});
 	};
@@ -562,7 +571,8 @@ export async function buildOverviewOrigin(
 				bump(
 					item.household.province ?? '',
 					item.household.district ?? null,
-					item.household.subdistrict ?? null
+					item.household.subdistrict ?? null,
+					null
 				);
 			}
 		}
@@ -577,7 +587,7 @@ export async function buildOverviewOrigin(
 				if (!matchesResidence(hh?.province, hh?.district, hh?.subdistrict, filters)) {
 					continue;
 				}
-				bump(hh?.province ?? '', hh?.district ?? null, hh?.subdistrict ?? null);
+				bump(hh?.province ?? '', hh?.district ?? null, hh?.subdistrict ?? null, site.master.code);
 			}
 		}
 	}

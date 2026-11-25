@@ -46,6 +46,9 @@
 	function statusLabel(status: string): string {
 		return STATUS_LABELS[status] ?? status;
 	}
+
+	/** Shelters switched off from the public plane (`public_visible = false`), listed or not. */
+	const hiddenCount = $derived((sites ?? []).filter((site) => !site.public_visible).length);
 </script>
 
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
@@ -54,6 +57,11 @@
 			<Card.Title class="text-lg font-bold text-slate-900">ศูนย์ / ไซต์</Card.Title>
 			<Card.Description class="text-sm text-slate-500">เรียงตาม คาดการณ์ % จาก API</Card.Description
 			>
+			{#if sites && hiddenCount > 0}
+				<p class="mt-1 text-sm text-slate-600" data-testid="hidden-sites-count">
+					ซ่อนจาก public {hiddenCount} ศูนย์ จากทั้งหมด {sites.length} ศูนย์
+				</p>
+			{/if}
 		</div>
 		<div class="flex flex-wrap items-end gap-3">
 			<div class="max-w-full min-w-0 space-y-1.5">
@@ -103,6 +111,15 @@
 								<Table.Cell class="font-medium text-slate-900">
 									<div>{site.name}</div>
 									<div class="text-xs text-slate-500">{site.shelter_code}</div>
+									{#if !site.public_visible}
+										<Badge
+											variant="outline"
+											class="mt-1 border-amber-200 bg-amber-50 text-amber-900"
+											data-testid="hidden-site-badge"
+										>
+											ซ่อนจาก public
+										</Badge>
+									{/if}
 								</Table.Cell>
 								<Table.Cell class="text-sm text-slate-700">
 									{siteKindLabel(site.site_kind)}

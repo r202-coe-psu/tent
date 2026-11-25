@@ -67,6 +67,8 @@ export const overviewFiltersSchema = z.object({
 	movement_to: isoDateSchema.optional(),
 	q: z.string().trim().optional(),
 	source: z.enum(['all', 'unassigned', 'bound']).optional().default('all'),
+	/** Whether the shelter is shown on the public plane (`feature_flags.public_visible`). */
+	public_visibility: z.enum(['all', 'visible', 'hidden']).optional().default('all'),
 	shelter_code: z.string().trim().optional(),
 	household_id: z.string().trim().optional(),
 	limit: z.coerce.number().int().min(1).max(200).optional().default(50),
@@ -92,6 +94,7 @@ const FILTER_KEYS = [
 	'movement_to',
 	'q',
 	'source',
+	'public_visibility',
 	'shelter_code',
 	'household_id',
 	'limit',
@@ -115,6 +118,7 @@ export function overviewFiltersToSearchParams(filters: Partial<OverviewFilters>)
 		if (key === 'movement_window' && value === 'today') continue;
 		if (key === 'stay_bucket' && value === 'all') continue;
 		if (key === 'source' && value === 'all') continue;
+		if (key === 'public_visibility' && value === 'all') continue;
 		if (key === 'limit' && value === 50) continue;
 		if (key === 'offset' && value === 0) continue;
 		params.set(key, String(value));
@@ -200,6 +204,8 @@ export const overviewSiteRowSchema = z.object({
 	/** Check-outs in movement_from…movement_to (inclusive). */
 	checkout: z.number().int().nonnegative(),
 	has_coords: z.boolean(),
+	/** `feature_flags.public_visible !== false`; a hidden shelter is not on the public plane. */
+	public_visible: z.boolean(),
 	dashboard_href: z.string()
 });
 export type OverviewSiteRow = z.infer<typeof overviewSiteRowSchema>;
@@ -213,6 +219,8 @@ export const originBucketSchema = z.object({
 	province: z.string(),
 	district: z.string().nullable(),
 	subdistrict: z.string().nullable(),
+	/** The shelter the registrants are bound to; `null` while they are not bound yet. */
+	shelter_code: z.string().nullable(),
 	count: z.number().int().nonnegative()
 });
 export type OriginBucket = z.infer<typeof originBucketSchema>;

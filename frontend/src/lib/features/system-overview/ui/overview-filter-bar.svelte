@@ -29,6 +29,7 @@
 	const operationStatusValue = $derived(filters.operation_status ?? 'all');
 	const stayBucketValue = $derived(filters.stay_bucket ?? 'all');
 	const sourceValue = $derived(filters.source ?? 'all');
+	const publicVisibilityValue = $derived(filters.public_visibility ?? 'all');
 	const householdMode = $derived(filters.shelter_code ? 'shelter' : 'universal');
 
 	// CR-198 FR-10: options are the active kinds; the trigger resolves against every item.
@@ -54,6 +55,12 @@
 		if (stayBucketValue === 'forecast') return 'คาดการณ์';
 		if (stayBucketValue === 'pre_registered') return 'ลงทะเบียนล่วงหน้า';
 		if (stayBucketValue === 'checked_out') return 'ออกแล้ว';
+		return 'ทั้งหมด';
+	});
+
+	const publicVisibilityLabel = $derived.by(() => {
+		if (publicVisibilityValue === 'visible') return 'แสดงบน public';
+		if (publicVisibilityValue === 'hidden') return 'ซ่อนจาก public';
 		return 'ทั้งหมด';
 	});
 
@@ -127,6 +134,36 @@
 				<Select.Item value="full_capacity" label="เต็มความจุ" />
 				<Select.Item value="closed" label="ปิดศูนย์" />
 				<Select.Item value="cancelled" label="ยกเลิกศูนย์" />
+			</Select.Content>
+		</Select.Root>
+	</div>
+
+	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[10.5rem]">
+		<Label for="overview-public-visibility" class="text-sm font-semibold text-slate-700">
+			การแสดงบน public
+		</Label>
+		<Select.Root
+			type="single"
+			value={publicVisibilityValue}
+			onValueChange={(v) => {
+				if (!v) return;
+				patch({ public_visibility: v as OverviewFilters['public_visibility'] });
+			}}
+		>
+			<Select.Trigger
+				id="overview-public-visibility"
+				class="h-9 w-full min-w-0 overflow-hidden"
+				aria-label="การแสดงบน public"
+				title={`การแสดงบน public: ${publicVisibilityLabel}`}
+			>
+				<span class="min-w-0 flex-1 truncate">
+					{publicVisibilityLabel}
+				</span>
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="all" label="ทั้งหมด" />
+				<Select.Item value="visible" label="แสดงบน public" />
+				<Select.Item value="hidden" label="ซ่อนจาก public" />
 			</Select.Content>
 		</Select.Root>
 	</div>

@@ -17,7 +17,7 @@
 	<Card.Header>
 		<Card.Title class="text-lg font-bold text-slate-900">ต้นทาง (ที่อยู่)</Card.Title>
 		<Card.Description class="text-sm text-slate-500">
-			จำนวนตามจังหวัด / อำเภอ / ตำบล
+			จำนวนตามจังหวัด / อำเภอ / ตำบล และศูนย์ที่ผู้ลงทะเบียนผูกอยู่
 		</Card.Description>
 	</Card.Header>
 	<Card.Content>
@@ -33,15 +33,19 @@
 							<Table.Head>จังหวัด</Table.Head>
 							<Table.Head>อำเภอ</Table.Head>
 							<Table.Head>ตำบล</Table.Head>
+							<Table.Head>ศูนย์</Table.Head>
 							<Table.Head class="text-right">จำนวน</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each buckets as row, i (`${row.province}|${row.district}|${row.subdistrict}|${i}`)}
+						{#each buckets as row, i (`${row.province}|${row.district}|${row.subdistrict}|${row.shelter_code}|${i}`)}
 							<Table.Row>
 								<Table.Cell class="font-medium text-slate-900">{row.province}</Table.Cell>
 								<Table.Cell class="text-slate-700">{row.district ?? '—'}</Table.Cell>
 								<Table.Cell class="text-slate-700">{row.subdistrict ?? '—'}</Table.Cell>
+								<Table.Cell class="text-slate-700"
+									>{row.shelter_code ?? 'ยังไม่ผูกศูนย์'}</Table.Cell
+								>
 								<Table.Cell class="text-right font-semibold text-slate-900 tabular-nums">
 									{row.count}
 								</Table.Cell>
