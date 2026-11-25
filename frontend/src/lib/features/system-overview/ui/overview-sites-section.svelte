@@ -3,7 +3,7 @@
 	import { parseDate } from '@internationalized/date';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
-	import { Button } from '$lib/components/ui/button';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Badge } from '$lib/components/ui/badge';
 	import { DateRangePicker } from '$lib/components/ui/date-picker';
 	import { Label } from '$lib/components/ui/label';
@@ -54,8 +54,7 @@
 
 	const pageStart = $derived(total === 0 ? 0 : offset + 1);
 	const pageEnd = $derived(Math.min(offset + limit, total));
-	const canPrev = $derived(offset > 0);
-	const canNext = $derived(offset + limit < total);
+	const currentPage = $derived(Math.floor(offset / limit) + 1);
 
 	function statusLabel(status: string): string {
 		return STATUS_LABELS[status] ?? status;
@@ -166,26 +165,37 @@
 				</Table.Root>
 			</div>
 			{#if onOffsetChange && total > limit}
-				<div class="mt-3 flex items-center justify-between gap-2 text-sm text-slate-600">
-					<span class="tabular-nums">{pageStart}–{pageEnd} / {total}</span>
-					<div class="flex gap-2">
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={!canPrev}
-							onclick={() => onOffsetChange(Math.max(0, offset - limit))}
-						>
-							ก่อนหน้า
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={!canNext}
-							onclick={() => onOffsetChange(offset + limit)}
-						>
-							ถัดไป
-						</Button>
+				<div
+					class="mt-3 flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/50 px-1 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="text-xs text-slate-500 tabular-nums">
+						แสดง {pageStart} - {pageEnd} จาก {total} แห่ง
 					</div>
+					<Pagination.Root
+						bind:page={() => currentPage, (p) => onOffsetChange((p - 1) * limit)}
+						count={total}
+						perPage={limit}
+					>
+						{#snippet children({ pages })}
+							<Pagination.Content>
+								<Pagination.Previous class="h-7 text-xs" />
+								{#each pages as p (p.key)}
+									<Pagination.Item>
+										{#if p.type === 'page'}
+											<Pagination.Link
+												page={p}
+												isActive={p.value === currentPage}
+												class="h-7 min-w-7 text-xs"
+											/>
+										{:else}
+											<Pagination.Ellipsis class="h-7 w-7 text-xs" />
+										{/if}
+									</Pagination.Item>
+								{/each}
+								<Pagination.Next class="h-7 text-xs" />
+							</Pagination.Content>
+						{/snippet}
+					</Pagination.Root>
 				</div>
 			{/if}
 		{/if}

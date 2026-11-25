@@ -45,10 +45,6 @@ async function render(props: { total: number; limit: number; offset: number }) {
 	return onOffsetChange;
 }
 
-const buttons = () => [...document.querySelectorAll('button')];
-const byText = (t: string) =>
-	buttons().find((b) => b.textContent?.trim() === t) as HTMLButtonElement;
-
 afterEach(() => {
 	if (instance) unmount(instance);
 	instance = null;
@@ -56,24 +52,31 @@ afterEach(() => {
 });
 
 describe('overview-sites-section paging', () => {
-	it('shows the range and disables "ก่อนหน้า" on the first page', async () => {
+	it('shows the range, marks the current page and disables Previous on page 1', async () => {
 		const onChange = await render({ total: 9, limit: 4, offset: 0 });
-		expect(document.body.textContent).toContain('1–4 / 9');
-		expect(byText('ก่อนหน้า').disabled).toBe(true);
-		byText('ถัดไป').click();
+		expect(document.body.textContent).toContain('แสดง 1 - 4 จาก 9 แห่ง');
+		expect(document.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('1');
+		expect(
+			document.querySelector('[aria-label="Go to previous page"]')?.hasAttribute('disabled')
+		).toBe(true);
+		(document.querySelector('[aria-label="Go to next page"]') as HTMLElement).click();
+		await tick();
 		expect(onChange).toHaveBeenCalledWith(4);
 	});
 
-	it('clamps the end of the range and disables "ถัดไป" on the last page', async () => {
+	it('clamps the range end and disables Next on the last page', async () => {
 		const onChange = await render({ total: 9, limit: 4, offset: 8 });
-		expect(document.body.textContent).toContain('9–9 / 9');
-		expect(byText('ถัดไป').disabled).toBe(true);
-		byText('ก่อนหน้า').click();
+		expect(document.body.textContent).toContain('แสดง 9 - 9 จาก 9 แห่ง');
+		expect(document.querySelector('[aria-label="Go to next page"]')?.hasAttribute('disabled')).toBe(
+			true
+		);
+		(document.querySelector('[aria-label="Go to previous page"]') as HTMLElement).click();
+		await tick();
 		expect(onChange).toHaveBeenCalledWith(4);
 	});
 
 	it('hides the pager when everything fits on one page', async () => {
 		await render({ total: 3, limit: 4, offset: 0 });
-		expect(byText('ถัดไป')).toBeUndefined();
+		expect(document.querySelector('[aria-label="Go to next page"]')).toBeNull();
 	});
 });

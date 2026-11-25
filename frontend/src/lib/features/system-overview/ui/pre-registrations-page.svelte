@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table';
-	import { Button } from '$lib/components/ui/button';
+	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
@@ -16,7 +16,9 @@
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
 
-	let filters = $state<OverviewFilters>(overviewFiltersSchema.parse({}));
+	const PAGE_SIZE = 20;
+
+	let filters = $state<OverviewFilters>(overviewFiltersSchema.parse({ limit: PAGE_SIZE }));
 
 	const listQuery = usePreRegistrations(() => filters);
 
@@ -26,8 +28,7 @@
 	const offset = $derived(filters.offset);
 	const pageStart = $derived(total === 0 ? 0 : offset + 1);
 	const pageEnd = $derived(Math.min(offset + limit, total));
-	const canPrev = $derived(offset > 0);
-	const canNext = $derived(offset + limit < total);
+	const currentPage = $derived(Math.floor(offset / limit) + 1);
 
 	function onFiltersChange(next: OverviewFilters) {
 		const resetOffset =
@@ -108,28 +109,6 @@
 						{total.toLocaleString('th-TH')}
 					{/if}
 				</p>
-			</div>
-			<div class="flex gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={!canPrev || listQuery.isPending}
-					onclick={() => {
-						filters = { ...filters, offset: Math.max(0, offset - limit) };
-					}}
-				>
-					ก่อนหน้า
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={!canNext || listQuery.isPending}
-					onclick={() => {
-						filters = { ...filters, offset: offset + limit };
-					}}
-				>
-					ถัดไป
-				</Button>
 			</div>
 		</div>
 		<div class="p-4 sm:p-6">
@@ -216,5 +195,40 @@
 				</div>
 			{/if}
 		</div>
+		{#if total > limit}
+			<div
+				class="flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+			>
+				<div class="text-xs text-slate-500 tabular-nums">
+					แสดง {pageStart.toLocaleString('th-TH')} - {pageEnd.toLocaleString('th-TH')} จาก
+					{total.toLocaleString('th-TH')} รายการ
+				</div>
+				<Pagination.Root
+					bind:page={() => currentPage, (p) => (filters = { ...filters, offset: (p - 1) * limit })}
+					count={total}
+					perPage={limit}
+				>
+					{#snippet children({ pages })}
+						<Pagination.Content>
+							<Pagination.Previous class="h-7 text-xs" />
+							{#each pages as p (p.key)}
+								<Pagination.Item>
+									{#if p.type === 'page'}
+										<Pagination.Link
+											page={p}
+											isActive={p.value === currentPage}
+											class="h-7 min-w-7 text-xs"
+										/>
+									{:else}
+										<Pagination.Ellipsis class="h-7 w-7 text-xs" />
+									{/if}
+								</Pagination.Item>
+							{/each}
+							<Pagination.Next class="h-7 text-xs" />
+						</Pagination.Content>
+					{/snippet}
+				</Pagination.Root>
+			</div>
+		{/if}
 	</div>
 </StaffPageShell>
