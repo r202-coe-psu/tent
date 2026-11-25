@@ -19,6 +19,7 @@
 		offset = 0,
 		onOffsetChange,
 		loading = false,
+		stale = false,
 		movementFrom,
 		movementTo,
 		onMovementRangeChange
@@ -29,6 +30,8 @@
 		offset?: number;
 		onOffsetChange?: (next: number) => void;
 		loading?: boolean;
+		/** Showing the previous query's rows while the next ones load. */
+		stale?: boolean;
 		movementFrom: string; // YYYY-MM-DD
 		movementTo: string;
 		onMovementRangeChange: (next: { movement_from: string; movement_to: string }) => void;
@@ -93,7 +96,12 @@
 		{:else if !sites || sites.length === 0}
 			<p class="py-6 text-center text-sm text-slate-500">ไม่พบศูนย์ที่ตรงเงื่อนไข</p>
 		{:else}
-			<div class="overflow-x-auto rounded-xl border border-slate-200/80">
+			<div
+				class="overflow-x-auto rounded-xl border border-slate-200/80 transition-opacity {stale
+					? 'opacity-60'
+					: ''}"
+				aria-busy={stale}
+			>
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>

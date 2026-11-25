@@ -111,7 +111,10 @@
 				</p>
 			</div>
 		</div>
-		<div class="p-4 sm:p-6">
+		<div
+			class="p-4 transition-opacity sm:p-6 {listQuery.isPlaceholderData ? 'opacity-60' : ''}"
+			aria-busy={listQuery.isPlaceholderData}
+		>
 			{#if listQuery.isPending && items.length === 0}
 				<Skeleton class="h-48 w-full rounded-xl" />
 			{:else if items.length === 0}

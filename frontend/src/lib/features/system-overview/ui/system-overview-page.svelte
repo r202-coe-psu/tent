@@ -79,6 +79,7 @@
 		offset={sitesQuery.isPlaceholderData ? sitesOffset : (sitesQuery.data?.offset ?? sitesOffset)}
 		onOffsetChange={(next) => (sitesOffset = next)}
 		loading={sitesQuery.isPending}
+		stale={sitesQuery.isPlaceholderData}
 		movementFrom={filters.movement_from ?? defaultRange.from}
 		movementTo={filters.movement_to ?? defaultRange.to}
 		onMovementRangeChange={(next) => {
