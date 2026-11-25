@@ -51,6 +51,8 @@ export const REGISTRY_SHELTERS = [
 	{
 		code: SH001_CODE,
 		name: 'ศูนย์อพยพศูนย์กีฬามหาวิทยาลัยสงขลานครินทร์',
+		name_short: 'ศูนย์กีฬา ม.อ.',
+		operating_org: 'มหาวิทยาลัยสงขลานครินทร์ วิทยาเขตหาดใหญ่',
 		location: {
 			lat: 7.010027132382802,
 			lng: 100.50024358303605,
@@ -119,6 +121,9 @@ export const REGISTRY_SHELTERS = [
 	{
 		code: SH002_CODE,
 		name: 'ศูนย์อพยพสำนักงานเทศบาลนครหาดใหญ่',
+		name_short: 'สนง.เทศบาลนครหาดใหญ่',
+		operating_org: 'เทศบาลนครหาดใหญ่',
+		delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้ ให้จอดลงของที่ลานหน้าอาคาร',
 		location: {
 			lat: 7.015427802879699,
 			lng: 100.47291623646029,
@@ -170,6 +175,8 @@ export const REGISTRY_SHELTERS = [
 	{
 		code: SH003_CODE,
 		name: 'ศูนย์อพยพสำนักงานเทศบาลเมืองบ้านพรุ',
+		operating_org: 'เทศบาลเมืองบ้านพรุ',
+		delivery_note: 'ทางเข้าซอยแคบ รถเกิน 4 ล้อเข้าไม่ได้ช่วง 07:00–09:00 น.',
 		location: {
 			lat: 6.948086391528152,
 			lng: 100.47963181135452,
@@ -340,6 +347,9 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 			shelter_type: masterCode(master, 'shelter_type', shelter.shelter_type_key)
 		};
 		if ('site_kind' in shelter) extras.site_kind = shelter.site_kind;
+		if ('name_short' in shelter) extras.name_short = shelter.name_short;
+		if ('operating_org' in shelter) extras.operating_org = shelter.operating_org;
+		if ('delivery_note' in shelter) extras.delivery_note = shelter.delivery_note;
 		if ('province' in shelter) extras.province = shelter.province;
 		if ('district' in shelter) extras.district = shelter.district;
 		if ('subdistrict' in shelter) extras.subdistrict = shelter.subdistrict;

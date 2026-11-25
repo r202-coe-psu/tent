@@ -854,6 +854,20 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 		expect('parking_points' in payload).toBe(false);
 	});
 
+	it('never sends name_short / operating_org / delivery_note, so an import cannot wipe them', () => {
+		expect(rowPayload()).not.toHaveProperty('name_short');
+		const shelter = {
+			...rowPayload(),
+			name_short: 'รร.หาดใหญ่วิทยาลัย',
+			operating_org: 'เทศบาลนครหาดใหญ่',
+			delivery_note: null
+		};
+		const payload = buildUpdatePayload(shelter, null);
+		expect('name_short' in payload).toBe(false);
+		expect('operating_org' in payload).toBe(false);
+		expect('delivery_note' in payload).toBe(false);
+	});
+
 	it('replaces food points only when the latest workbook explicitly supplies the sheet', () => {
 		const shelter = rowPayload();
 		const importedPoints = [{ id: 'p-imported', name: 'จุดใหม่' }];

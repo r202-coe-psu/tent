@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import type { ClassValue } from 'svelte/elements';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type {
@@ -11,6 +11,8 @@
 		LngLatBounds as MapLibreLngLatBounds
 	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Info from '@lucide/svelte/icons/info';
+	import X from '@lucide/svelte/icons/x';
 	import type { PublicSiteKind } from '../domain/types';
 	import type { DonationMapPoint, MapPointFocus } from '../domain/donation-map';
 	import type { ParkingMapPoint } from '../domain/parking';
@@ -81,6 +83,8 @@
 		parkingPoints = [],
 		showLegend = true,
 		legendClass,
+		legendCompact = false,
+		controlsClass,
 		cooperativeGestures = false,
 		onSelectShelter,
 		onSelectPoint,
@@ -107,6 +111,13 @@
 		showLegend?: boolean;
 		/** Extra classes for the legend strip, e.g. insets that keep it clear of floating panels. */
 		legendClass?: ClassValue;
+		/**
+		 * The free strip is too narrow for the legend (#1461): show a small toggle there and open the
+		 * legend across the map width on demand.
+		 */
+		legendCompact?: boolean;
+		/** Position of the "place a pin" control (default `top-4`), e.g. to sit below page overlays. */
+		controlsClass?: ClassValue;
 		/** In a scrolling page, a one-finger drag scrolls the page instead of panning the map. */
 		cooperativeGestures?: boolean;
 		/** Callback when user clicks a shelter pin */
@@ -121,6 +132,30 @@
 	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
 	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 	const siteKindsQuery = useSiteKinds();
+	// Closed again whenever the strip stops being compact, so a legend left open does not pop open
+	// the next time it narrows. (A writable $derived: the buttons assign it, `legendCompact` resets it.)
+	let legendOpen = $derived.by(() => {
+		void legendCompact;
+		return false;
+	});
+	let legendToggleEl = $state<HTMLButtonElement | null>(null);
+	let legendCloseEl = $state<HTMLButtonElement | null>(null);
+
+	// The toggle and the close button replace each other in the DOM, so focus follows the swap
+	// (keyboard users keep their place instead of falling back to <body>).
+	async function openLegend() {
+		legendOpen = true;
+		await tick();
+		legendCloseEl?.focus();
+	}
+	async function closeLegend() {
+		legendOpen = false;
+		await tick();
+		legendToggleEl?.focus();
+	}
+	function onWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && legendCompact && legendOpen) void closeLegend();
+	}
 	const shelterPinLegendKind = $derived(shelterPinKind(siteKindsQuery.data));
 
 	const SEARCH_RADIUS_SOURCE = 'search-radius';
@@ -128,8 +163,10 @@
 	const SEARCH_RADIUS_LINE = 'search-radius-line';
 	/** Civic Design System — Cerulean (location / selection accent) */
 	const CERULEAN = '#0284C7';
-	/** Parking pins: slate, so they never read as a shelter or a drop-off point. */
-	const PARKING_PIN = '#475569';
+	/** Parking pins: the blue of the international parking sign, apart from every shelter pin. */
+	const PARKING_PIN = '#1D4ED8';
+	/** External shelters: dashed slate outline on white, the opposite of the solid in-system pin. */
+	const EXTERNAL_OUTLINE = '#475569';
 	const EMPTY_FEATURE_COLLECTION = {
 		type: 'FeatureCollection' as const,
 		features: [] as never[]
@@ -293,11 +330,12 @@
 		</svg>`;
 	}
 
-	/** Small slate pin with a P for a parking point, apart from shelter (large) and drop-off (cerulean) pins. */
+	/** The parking sign: a blue rounded square with a white P, and a short tip at the point. */
 	function parkingPointPinSvg(): string {
-		return `<svg class="marker-pin" width="20" height="28" viewBox="0 0 20 28" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.12));cursor:pointer;">
-			<path d="M10 1.5C5.3 1.5 1.5 5.3 1.5 10c0 5.9 7.2 15.4 8.1 16.5a0.5 0.5 0 0 0 0.8 0C11.3 25.4 18.5 15.9 18.5 10 18.5 5.3 14.7 1.5 10 1.5z" fill="${PARKING_PIN}" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
-			<text x="10" y="10.4" text-anchor="middle" dominant-baseline="central" font-family="'Noto Sans Thai Looped','IBM Plex Sans Thai',sans-serif" font-size="11" font-weight="700" fill="#ffffff">P</text>
+		return `<svg class="marker-pin" width="24" height="29" viewBox="0 0 24 29" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.25));cursor:pointer;">
+			<path d="M9 22.5L12 27.8 15 22.5z" fill="${PARKING_PIN}" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>
+			<rect x="1.2" y="1.2" width="21.6" height="21.6" rx="4" fill="${PARKING_PIN}" stroke="#ffffff" stroke-width="1.8"/>
+			<text x="12" y="12.4" text-anchor="middle" dominant-baseline="central" font-family="Arial,Helvetica,sans-serif" font-size="15" font-weight="700" fill="#ffffff">P</text>
 		</svg>`;
 	}
 
@@ -311,11 +349,14 @@
 		</svg>`;
 	}
 
-	/** Teardrop pin with an arrow-up-right glyph: a center run in another system, apart from the tent pin. */
-	function externalPinSvg(fill: string): string {
-		return `<svg class="marker-pin" width="30" height="40" viewBox="0 0 30 40" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.12));cursor:pointer;transition:transform 0.2s,filter 0.2s;">
-			<path d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z" fill="${fill}" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" stroke-dasharray="3 2"/>
-			<path d="M10.5 18.5l9-9M12 9.5h7.5V17" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+	/**
+	 * A center run in another system: white body, dashed dark outline and an arrow-out glyph —
+	 * the inverse of the solid, white-edged in-system pin, so the two never read alike.
+	 */
+	function externalPinSvg(): string {
+		return `<svg class="marker-pin" width="30" height="40" viewBox="0 0 30 40" aria-hidden="true" style="display:block;filter:drop-shadow(0 1px 2px rgba(15,23,42,0.25));cursor:pointer;transition:transform 0.2s,filter 0.2s;">
+			<path d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z" fill="#ffffff" stroke="${EXTERNAL_OUTLINE}" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="4 2.5"/>
+			<path d="M10.5 18.5l9-9M12 9.5h7.5V17" fill="none" stroke="${EXTERNAL_OUTLINE}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
 		</svg>`;
 	}
 
@@ -324,7 +365,7 @@
 		fill: string,
 		isExternal = false
 	): string {
-		if (isExternal) return externalPinSvg(fill);
+		if (isExternal) return externalPinSvg();
 		return isHostHouseKind(siteKind) ? hostHousePinSvg(fill) : evacCenterPinSvg(fill);
 	}
 
@@ -533,6 +574,8 @@
 				// Do not apply position: relative to the root element,
 				// as it overrides MapLibre's .maplibregl-marker class (which uses position: absolute).
 				el.className = 'custom-shelter-marker';
+				// In-system pins sit above external ones where they overlap (the selected one above all).
+				el.style.zIndex = isExternal ? '1' : '2';
 				el.dataset.testid = `shelter-marker-${shelterCode || shelterId}`;
 				el.innerHTML = `
 					<div style="position:relative;display:flex;flex-direction:column;align-items:center;width:30px;">
@@ -571,9 +614,8 @@
 						style="display:flex;align-items:center;justify-content:center;gap:6px;background:${CERULEAN};color:#ffffff;padding:6px 12px;border-radius:8px;font-weight:bold;font-size:0.75rem;text-decoration:none;margin-top:8px;box-shadow:0 1px 2px rgba(2,132,199,0.25);">
 						${t.preRegister}
 					</a>`
-						: `<div style="margin-top:8px;text-align:center;font-size:0.7rem;color:#94a3b8;font-weight:600;padding:4px 8px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
-						${t.shelterClosed}
-					</div>`;
+						: // Not taking pre-registration: no button and no stand-in (the status chip says the rest).
+							'';
 
 				const detailsButtonHtml = `
 					<a href="/shelters/${shelterId}"
@@ -805,6 +847,8 @@
 	});
 </script>
 
+<svelte:window onkeydown={onWindowKeydown} />
+
 <svelte:head>
 	<link rel="stylesheet" href="/maplibre-gl.css" />
 </svelte:head>
@@ -813,7 +857,10 @@
 
 {#if onLocationPick}
 	<div
-		class="pointer-events-auto absolute top-4 left-1/2 z-10 flex max-w-[min(100%-1.5rem,16rem)] -translate-x-1/2 flex-col items-center gap-1.5"
+		class={[
+			'pointer-events-auto absolute left-1/2 z-10 flex max-w-[min(100%-1.5rem,16rem)] -translate-x-1/2 flex-col items-center gap-1.5',
+			controlsClass ?? 'top-4'
+		]}
 	>
 		<Button
 			type="button"
@@ -842,68 +889,102 @@
 <!-- Legend overlay: spans the free map width and wraps between items, never inside a label -->
 {#if showLegend}
 	<div
+		id="shelter-map-legend"
 		data-testid="map-legend"
 		class={[
-			'pointer-events-none absolute inset-x-3 bottom-4 z-10 hidden justify-center sm:flex',
-			legendClass
+			'pointer-events-none absolute inset-x-2 bottom-2 hidden justify-center sm:flex',
+			// open: across the whole map and above the floating panels (z-20 in the page)
+			legendCompact && legendOpen ? 'z-30' : ['z-10', legendClass]
 		]}
 	>
-		<div
-			class="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-1.5 rounded-2xl border border-border/80 bg-card/95 px-4 py-2 text-2xs font-medium shadow-md backdrop-blur-md"
-		>
-			<div class="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-				<span class="font-bold whitespace-nowrap text-foreground">{t.siteKindLabel}:</span>
-				<div class="flex shrink-0 items-center gap-1.5">
-					<svg
-						width="14"
-						height="18"
-						viewBox="0 0 30 40"
-						aria-hidden="true"
-						class="shrink-0 drop-shadow-xs"
+		{#if legendCompact && !legendOpen}
+			<button
+				type="button"
+				data-testid="map-legend-toggle"
+				aria-expanded="false"
+				aria-controls="shelter-map-legend"
+				bind:this={legendToggleEl}
+				class="pointer-events-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border/80 bg-card/95 px-4 text-2xs font-bold whitespace-nowrap text-foreground shadow-md backdrop-blur-md transition-colors hover:bg-card focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+				onclick={openLegend}
+			>
+				<Info class="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+				{t.legendToggle}
+			</button>
+		{:else}
+			<div
+				class={[
+					'pointer-events-auto relative flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-border/80 bg-card/95 px-3 py-1 text-2xs font-medium shadow-md backdrop-blur-md',
+					legendCompact && 'pr-14'
+				]}
+			>
+				{#if legendCompact}
+					<button
+						type="button"
+						data-testid="map-legend-close"
+						aria-expanded="true"
+						aria-controls="shelter-map-legend"
+						aria-label={t.legendClose}
+						title={t.legendClose}
+						bind:this={legendCloseEl}
+						class="absolute top-1/2 right-0.5 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+						onclick={closeLegend}
 					>
-						<path
-							d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z"
-							fill="none"
-							stroke="currentColor"
-							class="text-foreground"
-							stroke-width="2.5"
-							stroke-linejoin="round"
-						/>
-					</svg>
-					<span class="whitespace-nowrap text-muted-foreground"
-						>{shelterPinLegendKind ? getSiteKindText(shelterPinLegendKind) : t.otherSiteKinds}</span
-					>
-				</div>
-				<div class="flex shrink-0 items-center gap-1.5" data-testid="external-legend">
-					<svg
-						width="14"
-						height="18"
-						viewBox="0 0 30 40"
-						aria-hidden="true"
-						class="shrink-0 drop-shadow-xs"
-					>
-						<path
-							d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z"
-							fill="none"
-							stroke="currentColor"
-							class="text-foreground"
-							stroke-width="2.5"
-							stroke-linejoin="round"
-							stroke-dasharray="4 3"
-						/>
-						<path
-							d="M10.5 18.5l9-9M12 9.5h7.5V17"
-							fill="none"
-							stroke="currentColor"
-							class="text-foreground"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
-					<span class="whitespace-nowrap text-muted-foreground">{t.externalShelter}</span>
-				</div>
-				<!-- legend บ้านพี่เลี้ยง: ยังไม่ใช้งานตอนนี้ (#1419 ซ่อน host house ที่ไม่ใช่ external) เปิดกลับเมื่อมี host house แบบ external
+						<X class="h-3.5 w-3.5" aria-hidden="true" />
+					</button>
+				{/if}
+				<div class="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+					<span class="font-bold whitespace-nowrap text-foreground">{t.siteKindLabel}:</span>
+					<div class="flex shrink-0 items-center gap-1.5">
+						<svg
+							width="14"
+							height="18"
+							viewBox="0 0 30 40"
+							aria-hidden="true"
+							class="shrink-0 drop-shadow-xs"
+						>
+							<path
+								d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z"
+								fill="none"
+								stroke="currentColor"
+								class="text-foreground"
+								stroke-width="2.5"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						<span class="whitespace-nowrap text-muted-foreground"
+							>{shelterPinLegendKind
+								? getSiteKindText(shelterPinLegendKind)
+								: t.otherSiteKinds}</span
+						>
+					</div>
+					<div class="flex shrink-0 items-center gap-1.5" data-testid="external-legend">
+						<svg
+							width="14"
+							height="18"
+							viewBox="0 0 30 40"
+							aria-hidden="true"
+							class="shrink-0 drop-shadow-xs"
+						>
+							<path
+								d="M15 1.5C8.1 1.5 2.5 7.1 2.5 14c0 8.2 10.2 22.8 12.1 25.2a0.6 0.6 0 0 0 0.8 0C17.3 36.8 27.5 22.2 27.5 14 27.5 7.1 21.9 1.5 15 1.5z"
+								fill="#ffffff"
+								stroke={EXTERNAL_OUTLINE}
+								stroke-width="3"
+								stroke-linejoin="round"
+								stroke-dasharray="4 2.5"
+							/>
+							<path
+								d="M10.5 18.5l9-9M12 9.5h7.5V17"
+								fill="none"
+								stroke={EXTERNAL_OUTLINE}
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						<span class="whitespace-nowrap text-muted-foreground">{t.externalShelter}</span>
+					</div>
+					<!-- legend บ้านพี่เลี้ยง: ยังไม่ใช้งานตอนนี้ (#1419 ซ่อน host house ที่ไม่ใช่ external) เปิดกลับเมื่อมี host house แบบ external
 				<div class="flex shrink-0 items-center gap-1.5">
 					<svg
 						width="14"
@@ -934,40 +1015,41 @@
 					>
 				</div>
 				-->
+				</div>
+				<div class="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+					<span class="font-bold whitespace-nowrap text-foreground">{t.shelterStatus}:</span>
+					<div class="flex shrink-0 items-center gap-1.5">
+						<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#16A34A] shadow-xs"></div>
+						<span class="whitespace-nowrap text-muted-foreground">{t.statusOpen}</span>
+					</div>
+					<div class="flex shrink-0 items-center gap-1.5">
+						<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#F59E0B] shadow-xs"></div>
+						<span class="whitespace-nowrap text-muted-foreground">{t.statusStandby}</span>
+					</div>
+					<div class="flex shrink-0 items-center gap-1.5">
+						<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#DC2626] shadow-xs"></div>
+						<span class="whitespace-nowrap text-muted-foreground">{t.statusFull}</span>
+					</div>
+					<div class="flex shrink-0 items-center gap-1.5">
+						<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#94A3B8] shadow-xs"></div>
+						<span class="whitespace-nowrap text-muted-foreground">{t.statusClosed}</span>
+					</div>
+					<div class="flex shrink-0 items-center gap-1.5">
+						<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#64748B] shadow-xs"></div>
+						<span class="whitespace-nowrap text-muted-foreground">{t.statusUnknown}</span>
+					</div>
+				</div>
+				{#if parkingPoints.length > 0}
+					<div class="flex shrink-0 items-center gap-1.5" data-testid="parking-legend">
+						<span
+							class="flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border border-white bg-[#1D4ED8] font-sans text-[9px] leading-none font-bold text-white shadow-xs"
+							aria-hidden="true">P</span
+						>
+						<span class="whitespace-nowrap text-muted-foreground">{t.parkingPoint}</span>
+					</div>
+				{/if}
 			</div>
-			<div class="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-				<span class="font-bold whitespace-nowrap text-foreground">{t.shelterStatus}:</span>
-				<div class="flex shrink-0 items-center gap-1.5">
-					<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#16A34A] shadow-xs"></div>
-					<span class="whitespace-nowrap text-muted-foreground">{t.statusOpen}</span>
-				</div>
-				<div class="flex shrink-0 items-center gap-1.5">
-					<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#F59E0B] shadow-xs"></div>
-					<span class="whitespace-nowrap text-muted-foreground">{t.statusStandby}</span>
-				</div>
-				<div class="flex shrink-0 items-center gap-1.5">
-					<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#DC2626] shadow-xs"></div>
-					<span class="whitespace-nowrap text-muted-foreground">{t.statusFull}</span>
-				</div>
-				<div class="flex shrink-0 items-center gap-1.5">
-					<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#94A3B8] shadow-xs"></div>
-					<span class="whitespace-nowrap text-muted-foreground">{t.statusClosed}</span>
-				</div>
-				<div class="flex shrink-0 items-center gap-1.5">
-					<div class="h-2.5 w-2.5 rounded-full border border-white bg-[#64748B] shadow-xs"></div>
-					<span class="whitespace-nowrap text-muted-foreground">{t.statusUnknown}</span>
-				</div>
-			</div>
-			{#if parkingPoints.length > 0}
-				<div class="flex shrink-0 items-center gap-1.5" data-testid="parking-legend">
-					<span
-						class="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white bg-slate-600 text-[9px] leading-none font-bold text-white shadow-xs"
-						aria-hidden="true">P</span
-					>
-					<span class="whitespace-nowrap text-muted-foreground">{t.parkingPoint}</span>
-				</div>
-			{/if}
-		</div>
+		{/if}
 	</div>
 {/if}
 

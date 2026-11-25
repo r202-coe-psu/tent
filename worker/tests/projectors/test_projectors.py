@@ -1596,3 +1596,221 @@ def test_parking_vehicle_types_follow_the_effective_vehicle_rule(
 def test_parking_capacity_total_never_decides_a_vehicle_type():
     payload = _parking_shelter([], common_areas={"parking_capacity": 40})
     assert payload["parking_vehicle_types"] == []
+
+
+# --- decision sync 2026-11-24: partner EXT-002/003 fields + profile ---
+
+
+def _profile_shelter(**extra):
+    action, payload = project_shelter(
+        {
+            "type": "shelter",
+            "code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "operation_status": "active",
+            "updated_at": "2026-01-01T00:00:00.000Z",
+            **extra,
+        }
+    )
+    assert action == "upsert" and payload is not None
+    return payload
+
+
+def test_partner_text_fields_are_trimmed_and_blank_is_null():
+    payload = _profile_shelter(
+        name_short="  รร.หาดใหญ่วิทยาลัย ",
+        operating_org="เทศบาลนครหาดใหญ่",
+        delivery_note="   ",
+    )
+    assert payload["name_short"] == "รร.หาดใหญ่วิทยาลัย"
+    assert payload["operating_org"] == "เทศบาลนครหาดใหญ่"
+    assert payload["delivery_note"] is None
+
+
+def test_partner_text_fields_missing_or_not_strings_are_null():
+    payload = _profile_shelter(name_short=12, operating_org=None)
+    assert payload["name_short"] is None
+    assert payload["operating_org"] is None
+    assert payload["delivery_note"] is None
+
+
+@pytest.mark.parametrize(
+    ("level", "expected"),
+    [
+        ("community", "community"),
+        ("lao", "lao"),
+        ("provincial", "provincial"),
+        ("x", None),
+        (None, None),
+    ],
+)
+def test_project_level_only_known_values(level, expected):
+    assert _profile_shelter(project_level=level)["project_level"] == expected
+
+
+def test_profile_projects_the_published_registry_sections():
+    payload = _profile_shelter(
+        area_m2=850,
+        area_type="indoor",
+        utilities={
+            "power_source": "generator",
+            "water_source": "water_tank",
+            "communications": ["cellular", "vhf_radio", " "],
+            "vhf_channel": " CH 7 ",
+        },
+        common_areas={
+            "central_kitchen": True,
+            "helipad": False,
+            "logistics_area_m2": 120.5,
+        },
+        facilities={
+            "toilets_male": 6,
+            "toilets_female": 8,
+            "toilets_accessible": 2,
+            "showers": 4,
+        },
+        risk={
+            "elevation_m": 12,
+            "entrance_description": "ทางเข้าหลัก",
+            "constraints": "น้ำท่วมทางเข้าเมื่อฝนหนัก",
+            "secondary_muster_point": "ลานวัด",
+        },
+        admission_policy={
+            "supported_vulnerable_groups": ["elderly", "wheelchair"],
+            "pet_policy": {
+                "policy": "conditional",
+                "categories": [
+                    {
+                        "category": "small_general",
+                        "conditions": ["ต้องมีกรง"],
+                        "max_capacity": 10,
+                        "location": "หลังอาคาร",
+                    }
+                ],
+            },
+        },
+        luggage_policy={
+            "limitation": "limited",
+            "max_per_family": 2,
+            "rules": ["no_hazardous_items"],
+            "rules_other": " ",
+        },
+    )
+    assert payload["profile"] == {
+        "area_m2": 850.0,
+        "area_type": "indoor",
+        "power_source": "generator",
+        "water_source": "water_tank",
+        "communications": ["cellular", "vhf_radio"],
+        "vhf_channel": "CH 7",
+        "central_kitchen": True,
+        "helipad": False,
+        "logistics_area_m2": 120.5,
+        "toilets": {"male": 6, "female": 8, "accessible": 2},
+        "showers": 4,
+        "risk": {
+            "elevation_m": 12.0,
+            "constraints": "น้ำท่วมทางเข้าเมื่อฝนหนัก",
+            "secondary_muster_point": "ลานวัด",
+        },
+        "vulnerable_groups": ["elderly", "wheelchair"],
+        "pet_policy": {
+            "policy": "conditional",
+            "categories": [
+                {
+                    "category": "small_general",
+                    "conditions": ["ต้องมีกรง"],
+                    "max_capacity": 10,
+                }
+            ],
+        },
+        "luggage_policy": {
+            "limitation": "limited",
+            "max_per_family": 2,
+            "rules": ["no_hazardous_items"],
+            "rules_other": None,
+        },
+        "zones": [],
+    }
+
+
+def test_profile_zones_carry_metadata_without_audit_fields():
+    payload = _profile_shelter(
+        zones=[
+            {
+                "code": "Z1",
+                "name": "โซนหญิง",
+                "short_name": "ญ1",
+                "type": "female",
+                "capacity": 40,
+                "status": "closed",
+                "closed_at": "2026-11-01T00:00:00Z",
+                "closed_by": "staff_a",
+                "reason": "ซ่อมหลังคา",
+                "specifics": "ชั้น 2",
+            },
+            {"code": "Z2", "name": "โซนทั่วไป", "capacity": -3},
+            {"name": "  "},
+            "junk",
+        ]
+    )
+    assert payload["profile"]["zones"] == [
+        {
+            "code": "Z1",
+            "name": "โซนหญิง",
+            "type": "female",
+            "capacity": 40,
+            "status": "closed",
+        },
+        {
+            "code": "Z2",
+            "name": "โซนทั่วไป",
+            "type": "general",
+            "capacity": None,
+            "status": "active",
+        },
+    ]
+
+
+def test_profile_of_a_doc_without_sections_is_empty_not_none():
+    profile = _profile_shelter()["profile"]
+    assert profile["toilets"] is None
+    assert profile["risk"] is None
+    assert profile["pet_policy"] is None
+    assert profile["luggage_policy"] is None
+    assert profile["communications"] == []
+    assert profile["vulnerable_groups"] == []
+    assert profile["zones"] == []
+    assert profile["central_kitchen"] is None
+
+
+@pytest.mark.parametrize("bad", ["junk", 3, ["x"], None])
+def test_profile_survives_corrupt_sections(bad):
+    payload = _profile_shelter(
+        utilities=bad,
+        common_areas=bad,
+        facilities=bad,
+        risk=bad,
+        admission_policy=bad,
+        luggage_policy=bad,
+        zones=bad,
+    )
+    profile = payload["profile"]
+    assert profile["power_source"] is None
+    assert profile["toilets"] is None
+    assert profile["showers"] is None
+    assert profile["risk"] is None
+    assert profile["pet_policy"] is None
+    assert profile["zones"] == []
+
+
+def test_profile_rejects_negative_and_boolean_numbers():
+    profile = _profile_shelter(
+        area_m2=-1,
+        facilities={"toilets_male": True, "toilets_female": -2, "showers": 3.0},
+        risk={"elevation_m": float("nan")},
+    )["profile"]
+    assert profile["area_m2"] is None
+    assert profile["toilets"] == {"male": None, "female": None, "accessible": None}
+    assert profile["showers"] == 3
+    assert profile["risk"]["elevation_m"] is None

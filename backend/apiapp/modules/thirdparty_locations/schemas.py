@@ -7,8 +7,17 @@ Field names and the response envelope follow the partner ODT
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from tent_model.public_shelter import (
+    DonationPoint,
+    ParkingPoint,
+    ProfileLuggagePolicy,
+    ProfilePetPolicy,
+    ProfileRisk,
+    ProfileToilets,
+)
 
 
 class LocationItem(BaseModel):
@@ -38,11 +47,66 @@ class LocationItem(BaseModel):
     # CR-252 (EXT-002/003): run in another system; `location_status` is `unknown`.
     is_external: bool = False
     occupancy_total: int
+    # decision sync 2026-11-24 — additive keys (partner API doc v1.1).
+    site_kind: str = Field(
+        description="master_data:site_kind code, e.g. evacuation_center, host_house, test_center"
+    )
+    project_level: str | None = Field(default=None, description="community | lao | provincial")
+    occupancy_forecast: int | None = Field(
+        default=None,
+        description=(
+            "Forecast head-count (pre_registered, kiosk_registered, arriving, active, "
+            "room_confirmed, temporary_leave); null until the row is re-projected"
+        ),
+    )
+    capacity_available: int | None = Field(
+        default=None,
+        description="max(0, capacity - occupancy_forecast); null for external shelters",
+    )
+    parking_vehicle_types: list[str] = Field(
+        default_factory=list, description="motorcycle | car | truck | boat"
+    )
     updated_at: datetime
+
+
+class LocationZone(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    type: str
+    capacity: int | None = None
+    status: Literal["active", "closed"] = "active"
+    present: int | None = Field(
+        default=None,
+        description="Present head-count in the zone; null until the row is re-projected",
+    )
 
 
 class LocationDetailItem(LocationItem):
     facilities: list[str]
+    # decision sync 2026-11-24 — detail-only additive keys. null / [] until the row is
+    # re-projected by the worker (PROJECTION_VERSION 24).
+    external_url: str | None = None
+    parking_points: list[ParkingPoint] = Field(default_factory=list)
+    donation_points: list[DonationPoint] = Field(default_factory=list)
+    area_m2: float | None = None
+    area_type: str | None = None
+    power_source: str | None = None
+    water_source: str | None = None
+    communications: list[str] = Field(default_factory=list)
+    vhf_channel: str | None = None
+    central_kitchen: bool | None = None
+    helipad: bool | None = None
+    logistics_area_m2: float | None = None
+    toilets: ProfileToilets | None = None
+    showers: int | None = None
+    risk: ProfileRisk | None = None
+    vulnerable_groups: list[str] = Field(
+        default_factory=list,
+        description="The shelter's stored supported vulnerable groups, as entered (no inference)",
+    )
+    pet_policy: ProfilePetPolicy | None = None
+    luggage_policy: ProfileLuggagePolicy | None = None
+    zones: list[LocationZone] = Field(default_factory=list)
 
 
 class PaginationMeta(BaseModel):

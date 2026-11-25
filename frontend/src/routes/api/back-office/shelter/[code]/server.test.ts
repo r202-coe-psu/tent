@@ -588,3 +588,84 @@ describe('PATCH /api/back-office/shelter/[code] — parking points (#1352)', () 
 		expect(res.status).toBe(400);
 	});
 });
+
+describe('/api/back-office/shelter/[code] — name_short / operating_org / delivery_note (schema_v 12)', () => {
+	const values = {
+		name_short: 'รร.หาดใหญ่วิทยาลัย',
+		operating_org: 'เทศบาลนครหาดใหญ่',
+		delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+	};
+
+	async function callGET(stored: Record<string, unknown>) {
+		vi.mocked(findMasterByCode).mockResolvedValue({ code: 'SH001' } as ShelterMaster);
+		vi.mocked(migrate).mockReturnValue({ code: 'SH001', _rev: '4-d', ...stored } as ShelterMaster);
+		const request = new Request('http://localhost/api/back-office/shelter/SH001', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request, params: { code: 'SH001' } } as unknown as Parameters<
+			typeof GET
+		>[0]);
+		return res.json();
+	}
+
+	/** Run the mutator against a stored doc; returns the patch it produced. */
+	async function patchFor(body: unknown, stored: Record<string, unknown> = {}) {
+		let patch: Record<string, unknown> | undefined;
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
+			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
+			return {
+				id: 'shelter:SH001',
+				rev: '5-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
+		});
+		const res = await callPATCH('SH001', body);
+		return { res, patch };
+	}
+
+	it('GET returns the stored values', async () => {
+		expect(await callGET({ schema_v: 12, ...values })).toMatchObject(values);
+	});
+
+	it('GET returns null for a doc stored without the fields', async () => {
+		expect(await callGET({ schema_v: 11 })).toMatchObject({
+			name_short: null,
+			operating_org: null,
+			delivery_note: null
+		});
+	});
+
+	it('PATCH saves the values the form sends, trimmed', async () => {
+		const { res, patch } = await patchFor({
+			name_short: ` ${values.name_short} `,
+			operating_org: values.operating_org,
+			delivery_note: values.delivery_note
+		});
+		expect(res.status).toBe(200);
+		expect(patch).toMatchObject(values);
+	});
+
+	it('PATCH clears a value sent as null or blank', async () => {
+		const { res, patch } = await patchFor(
+			{ name_short: null, operating_org: '  ', delivery_note: '' },
+			values
+		);
+		expect(res.status).toBe(200);
+		expect(patch).toMatchObject({ name_short: null, operating_org: null, delivery_note: null });
+	});
+
+	it('PATCH leaves the stored values alone when the body omits them', async () => {
+		const { res, patch } = await patchFor({ name: 'ชื่อใหม่' }, values);
+		expect(res.status).toBe(200);
+		expect(patch).not.toHaveProperty('name_short');
+		expect(patch).not.toHaveProperty('operating_org');
+		expect(patch).not.toHaveProperty('delivery_note');
+	});
+
+	it('PATCH answers 422 and writes nothing for a name_short over 64 characters', async () => {
+		const { res, patch } = await patchFor({ name_short: 'ก'.repeat(65) });
+		expect(res.status).toBe(422);
+		expect(patch).toBeUndefined();
+	});
+});

@@ -9,6 +9,11 @@ from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 
 from ...utils.shelter_booking import accepts_pre_registration
+from ...utils.shelter_occupancy import (
+    FORECAST_OCCUPANCY_STATUSES,
+    IN_ZONE_OCCUPANCY_STATUSES,
+    PRESENT_OCCUPANCY_STATUSES,
+)
 from .schemas import (
     ShelterDetailResponse,
     ShelterItem,
@@ -19,16 +24,6 @@ from .schemas import (
 # Public occupancy triple (CR-112). `occupancy` response key = Forecast.
 # Kitchen/SOP and partner head-counts stay `active`-only (CR-022 / Q48) and
 # do not use these allow-lists.
-FORECAST_OCCUPANCY_STATUSES = (
-    "pre_registered",
-    "kiosk_registered",
-    "arriving",
-    "active",
-    "room_confirmed",
-    "temporary_leave",
-)
-PRESENT_OCCUPANCY_STATUSES = ("active", "room_confirmed", "temporary_leave")
-IN_ZONE_OCCUPANCY_STATUSES = ("room_confirmed",)
 OCCUPANCY_STATUSES = FORECAST_OCCUPANCY_STATUSES
 
 
