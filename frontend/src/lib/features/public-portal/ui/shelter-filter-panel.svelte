@@ -10,6 +10,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Switch } from '$lib/components/ui/switch';
 	import * as Accordion from '$lib/components/ui/accordion';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import * as Select from '$lib/components/ui/select';
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import Search from '@lucide/svelte/icons/search';
@@ -28,7 +29,13 @@
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { shelterTypeLabel } from '../domain/master-labels';
-	import { RADIUS_PRESETS_KM } from '../domain/active-filters';
+	import { DEFAULT_RADIUS_KM, RADIUS_PRESETS_KM } from '../domain/active-filters';
+	import {
+		DEFAULT_SHELTER_GROUP_CHOICE,
+		shelterGroupChoice,
+		shelterGroupParams,
+		type ShelterGroupChoice
+	} from '../domain/site-kind';
 
 	interface Filters {
 		search?: string;
@@ -58,7 +65,7 @@
 		utility_high_ground?: boolean;
 		utility_truck_access?: boolean;
 		hide_evacuation?: boolean | string;
-		hide_external?: boolean | string;
+		show_external?: boolean | string;
 	}
 
 	let {
@@ -103,8 +110,11 @@
 	let parkCarChecked = $state(false);
 	let parkMotorChecked = $state(false);
 	let parkBoatChecked = $state(false);
-	let showEvacuation = $state(true);
-	let showExternal = $state(true);
+	/** Centres in this system only by default (CR-261 decision sync 2026-11-24). */
+	let groupChoice = $state<ShelterGroupChoice>(DEFAULT_SHELTER_GROUP_CHOICE);
+	function setGroupChoice(next: string) {
+		if (next === 'all' || next === 'evacuation' || next === 'external') groupChoice = next;
+	}
 	/** Open item of the "advanced filters" accordion (province / district / subdistrict). */
 	let advancedOpen = $state<string>('');
 	let hydrating = false;
@@ -114,6 +124,11 @@
 	let lastDistrict: string | null = null;
 
 	const t = $derived(getTranslation(PUBLIC_FILTER_PANEL_I18N, langState.current));
+	const groupOptions = $derived<{ value: ShelterGroupChoice; label: string; short: string }[]>([
+		{ value: 'evacuation', label: t.groupEvacuation, short: t.groupEvacuation },
+		{ value: 'all', label: t.groupAll, short: t.groupAll },
+		{ value: 'external', label: t.groupExternal, short: t.groupExternalShort }
+	]);
 
 	/** URL flags arrive as 'on'; direct callers may pass a boolean. */
 	function isOn(value: boolean | string | undefined): boolean {
@@ -160,8 +175,9 @@
 		if (parkCarChecked) params.set('parking_car', 'on');
 		if (parkMotorChecked) params.set('parking_motorcycle', 'on');
 		if (parkBoatChecked) params.set('parking_boat', 'on');
-		if (!showEvacuation) params.set('hide_evacuation', 'on');
-		if (!showExternal) params.set('hide_external', 'on');
+		for (const [key, value] of Object.entries(shelterGroupParams(groupChoice))) {
+			params.set(key, value);
+		}
 		return params;
 	}
 
@@ -209,7 +225,7 @@
 			f.parking_motorcycle,
 			f.parking_boat,
 			f.hide_evacuation,
-			f.hide_external
+			f.show_external
 		];
 
 		untrack(() => {
@@ -230,8 +246,7 @@
 			parkCarChecked = isOn(f.parking_car);
 			parkMotorChecked = isOn(f.parking_motorcycle);
 			parkBoatChecked = isOn(f.parking_boat);
-			showEvacuation = !isOn(f.hide_evacuation);
-			showExternal = !isOn(f.hide_external);
+			groupChoice = shelterGroupChoice(f);
 
 			if (f.user_lat) userLat = f.user_lat.toString();
 			if (f.user_lng) userLng = f.user_lng.toString();
@@ -304,8 +319,7 @@
 			parkCarChecked,
 			parkMotorChecked,
 			parkBoatChecked,
-			showEvacuation,
-			showExternal
+			groupChoice
 		];
 
 		if (hydrating) return;
@@ -325,7 +339,7 @@
 	// A control that narrows the list is tinted, so the visitor sees what is on (#1419).
 	// Read from the live state, which the URL hydrates, so it holds after a reload too.
 	const ACTIVE_CLASS = 'border-primary/50 bg-primary/5';
-	let groupsActive = $derived(!showEvacuation || !showExternal);
+	let groupsActive = $derived(groupChoice !== DEFAULT_SHELTER_GROUP_CHOICE);
 	let parkingActive = $derived(parkCarChecked || parkMotorChecked || parkBoatChecked);
 	let advancedActive = $derived(
 		Boolean(selectedProvince || selectedDistrict || selectedSubdistrict) || parkingActive
@@ -374,6 +388,15 @@
 	let locating = $state(false);
 	let geoReason = $state<GeoUnavailableReason | null>(null);
 	let hasPosition = $derived(Boolean(userLat && userLng));
+	/**
+	 * "Clear" drops every filter but keeps the search origin and the default radius, so a visitor
+	 * who shared their position is not sent back to the no-position default area.
+	 */
+	let clearHref = $derived(
+		hasPosition
+			? `${action}?${new URLSearchParams({ user_lat: userLat, user_lng: userLng, distance: DEFAULT_RADIUS_KM })}`
+			: action
+	);
 	let distanceLocked = $derived(!hasPosition && (locating || geoReason !== null));
 
 	// Map pin (or GPS) sets bindable lat/lng — clear GPS error so radius stays usable.
@@ -435,11 +458,8 @@
 				loadingLocations = false;
 			});
 
-		// First visit: request GPS so the map can show the user marker without a distance click.
-		// The page binds its own GPS result into `userLat`/`userLng`; when that lands first
-		// `ensureUserPosition` returns early, so commit here too (skipped when the URL already has
-		// it or a navigation to it is in flight).
-		if (await ensureUserPosition()) commitFilters();
+		// The first-visit GPS request lives on the page, which writes the position to the URL on
+		// mobile too, where this panel is not mounted (CR-261 decision sync 2026-11-24).
 		await locationsPromise;
 	});
 
@@ -498,11 +518,11 @@
 
 <div
 	class={[
-		'flex flex-col rounded-2xl border border-border/80 bg-card/95 p-4 shadow-lg backdrop-blur-md sm:p-5',
+		'flex flex-col rounded-2xl border border-border/80 bg-card/95 p-3 shadow-lg backdrop-blur-md',
 		className || 'h-[85vh] max-h-200'
 	]}
 >
-	<div class="mb-3 flex shrink-0 items-center justify-between gap-2">
+	<div class="mb-2 flex shrink-0 items-center justify-between gap-2">
 		<div class="flex min-w-0 flex-col gap-0.5">
 			<div class="flex items-center gap-2">
 				<Filter class="h-4 w-4 shrink-0 text-primary" />
@@ -530,37 +550,31 @@
 		}}
 	>
 		<div class="custom-scrollbar -mr-3 flex-1 overflow-x-hidden overflow-y-auto pr-3">
-			<div class="space-y-4">
+			<div class="space-y-3">
 				<!-- Shelter type groups -->
-				<div
-					data-filter="shelter-groups"
-					data-active={groupsActive}
-					class={[
-						'overflow-hidden rounded-xl border',
-						groupsActive ? ACTIVE_CLASS : 'border-border'
-					]}
-				>
-					<Accordion.Root type="single" class="w-full">
-						<Accordion.Item value="shelter-groups" class="border-none">
-							<Accordion.Trigger
-								class="px-4 py-3 transition-colors hover:bg-muted/50 hover:no-underline"
+				<div data-filter="shelter-groups" data-active={groupsActive} class="space-y-1.5">
+					<div class="text-xs font-semibold text-muted-foreground">{t.shelterTypeGroup}</div>
+					<RadioGroup.Root
+						value={groupChoice}
+						onValueChange={setGroupChoice}
+						aria-label={t.shelterTypeGroup}
+						data-testid="group-radio"
+						class="grid grid-cols-[1.2fr_1fr_1fr] gap-1.5"
+					>
+						{#each groupOptions as option (option.value)}
+							<label
+								class={[
+									'flex min-w-0 cursor-pointer items-center justify-center gap-1 rounded-xl border px-1 py-2 text-xs font-medium whitespace-nowrap transition-colors hover:bg-muted/50',
+									groupChoice === option.value
+										? 'border-primary/60 bg-primary/10'
+										: 'border-border bg-card'
+								]}
 							>
-								<span class="text-sm font-bold text-primary-dark">{t.shelterTypeGroup}</span>
-							</Accordion.Trigger>
-							<Accordion.Content class="pb-2">
-								<div class="flex flex-col gap-3 px-4 pt-2 pb-2">
-									<label class="flex cursor-pointer items-center justify-between gap-3">
-										<span class="text-sm font-medium text-foreground">{t.groupEvacuation}</span>
-										<Switch bind:checked={showEvacuation} aria-label={t.groupEvacuation} />
-									</label>
-									<label class="flex cursor-pointer items-center justify-between gap-3">
-										<span class="text-sm font-medium text-foreground">{t.groupExternal}</span>
-										<Switch bind:checked={showExternal} aria-label={t.groupExternal} />
-									</label>
-								</div>
-							</Accordion.Content>
-						</Accordion.Item>
-					</Accordion.Root>
+								<RadioGroup.Item value={option.value} aria-label={option.label} class="size-3.5" />
+								<span class="text-foreground" aria-hidden="true">{option.short}</span>
+							</label>
+						{/each}
+					</RadioGroup.Root>
 				</div>
 
 				<!-- Search -->
@@ -694,7 +708,7 @@
 					data-filter="hide_full"
 					data-active={hideFullToggle}
 					class={[
-						'flex items-start gap-4 rounded-xl border p-4 shadow-sm',
+						'flex items-start gap-3 rounded-xl border p-3 shadow-sm',
 						hideFullToggle ? ACTIVE_CLASS : 'border-border bg-card'
 					]}
 				>
@@ -1011,10 +1025,10 @@
 		</div>
 
 		<!-- Clear only — filters live-sync to the URL -->
-		<div class="flex shrink-0 border-t border-border pt-4">
+		<div class="flex shrink-0 border-t border-border pt-3">
 			<Button
 				variant="outline"
-				href={action}
+				href={clearHref}
 				size="lg"
 				class="w-full rounded-xl font-bold text-muted-foreground shadow-sm hover:bg-muted"
 			>

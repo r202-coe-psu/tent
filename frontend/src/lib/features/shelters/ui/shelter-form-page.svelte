@@ -8,13 +8,18 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		useShelter,
+		useShelterActors,
 		sheltersKeys,
 		useCreateShelter,
 		useUpdateShelter,
+		useShelterActiveCloseJob,
+		useShelterCloseJob,
+		announceShelterCloseJob,
+		isShelterCloseJobActive,
 		needsShelterCloseModal,
 		ShelterCloseDialog,
 		type Shelter,
-		type ShelterCloseResult,
+		type ShelterCloseJobView,
 		type SiteKind,
 		BasicInfoSection,
 		ZonesFacilitiesSection,
@@ -44,6 +49,8 @@
 	import { ServiceRequestError } from '$lib/api/service';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
+	import ShelterActorsLine from './shelter-actors-line.svelte';
+	import { auditLogKeys, EntityHistory } from '$lib/features/audit-log';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
@@ -103,6 +110,7 @@
 	}
 
 	const shelterQuery = useShelter(() => id);
+	const actorsQuery = useShelterActors(() => (isEdit ? id : ''));
 	const createMutation = useCreateShelter();
 	const updateMutation = useUpdateShelter();
 	const queryClient = useQueryClient();
@@ -118,6 +126,33 @@
 		if (!isEdit) return true;
 		const roles = authStore.user?.roles ?? [];
 		return isSystemAdmin(roles) || isShelterManager(roles, id);
+	});
+
+	// CR-243 FR-28: a close job queued / running for this shelter (also one started before this
+	// page was opened) — banner + the status select is locked. The job is polled so the page
+	// notices when it ends (toast, FR-29) even when the dialog is closed.
+	const activeCloseJobQuery = useShelterActiveCloseJob(
+		() => id,
+		() => isEdit
+	);
+	const activeCloseJobId = $derived(activeCloseJobQuery.data?.job_id ?? null);
+	const watchedCloseJob = useShelterCloseJob(
+		() => id,
+		() => activeCloseJobId,
+		() => isEdit && !!activeCloseJobId
+	);
+	const closeJobRunning = $derived(
+		!!activeCloseJobId && (!watchedCloseJob.data || isShelterCloseJobActive(watchedCloseJob.data))
+	);
+
+	$effect(() => {
+		const view = watchedCloseJob.data;
+		if (!view || isShelterCloseJobActive(view)) return;
+		// Job ended: toast once (the dialog may have done it already), refresh shelter + job state.
+		announceShelterCloseJob(view);
+		queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(id) });
+		queryClient.invalidateQueries({ queryKey: sheltersKeys.closeActive(id) });
+		queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 	});
 
 	function revertOperationStatus() {
@@ -144,6 +179,9 @@
 			operation_status: d.operation_status,
 			is_external: d.is_external === true,
 			external_url: d.external_url ?? null,
+			name_short: d.name_short ?? null,
+			operating_org: d.operating_org ?? null,
+			delivery_note: d.delivery_note ?? null,
 			shelter_type: d.shelter_type ?? null,
 			floor_count: d.floor_count ?? null,
 			project_level: d.project_level ?? null,
@@ -223,10 +261,11 @@
 		);
 	}
 
-	async function handleCloseFinish(result: ShelterCloseResult) {
+	async function handleCloseFinish(view: ShelterCloseJobView) {
 		const data = pendingCloseData;
 		pendingCloseData = null;
-		if (!result.closed || !data) {
+		queryClient.invalidateQueries({ queryKey: sheltersKeys.closeActive(id) });
+		if (view.status !== 'completed' || !view.closed || !data) {
 			revertOperationStatus();
 			return;
 		}
@@ -496,6 +535,9 @@
 								? `รหัสศูนย์: ${id} • จัดการข้อมูลและนโยบายการดำเนินงานศูนย์พักพิง`
 								: 'กรอกข้อมูลศูนย์พักพิงและกำหนดนโยบายเพื่อขึ้นทะเบียนในระบบ'}
 						</p>
+						{#if isEdit && actorsQuery.data}
+							<ShelterActorsLine actors={actorsQuery.data} />
+						{/if}
 					</div>
 				</div>
 
@@ -573,6 +615,26 @@
 					<Alert.Action>
 						<Button type="button" size="sm" variant="outline" onclick={reloadFromLatest}>
 							โหลดข้อมูลล่าสุด
+						</Button>
+					</Alert.Action>
+				</Alert.Root>
+			{/if}
+			{#if isEdit && closeJobRunning}
+				<Alert.Root class="mb-4 border-amber-200 bg-amber-50 text-amber-900" role="status">
+					<Loader2 class="animate-spin" />
+					<Alert.Title>กำลังปิดศูนย์…</Alert.Title>
+					<Alert.Description class="text-amber-900/80">
+						ระบบกำลังเช็คเอาต์ผู้พักพิงในศูนย์นี้ ระหว่างนี้เปลี่ยนสถานะศูนย์ไม่ได้
+						งานจะทำต่อจนเสร็จแม้ปิดหน้านี้
+					</Alert.Description>
+					<Alert.Action>
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							onclick={() => (closeDialogOpen = true)}
+						>
+							ดูความคืบหน้า
 						</Button>
 					</Alert.Action>
 				</Alert.Root>
@@ -685,6 +747,7 @@
 							storedStatus={isEdit ? storedStatus : undefined}
 							isSystemAdmin={isSystemAdmin(authStore.user?.roles ?? [])}
 							{isEdit}
+							statusLocked={closeJobRunning}
 						/>
 						{#if !isExternal}
 							<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
@@ -698,6 +761,11 @@
 							<ParkingPointsSection {form} {formData} />
 						{/if}
 					</form>
+					{#if isEdit && id && canCloseShelter}
+						<div class="mt-6">
+							<EntityHistory entityType="shelter" entityId={id} shelterCode={id} />
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -707,6 +775,7 @@
 				bind:open={closeDialogOpen}
 				code={id}
 				name={shelterQuery.data.name}
+				resumeJobId={activeCloseJobId}
 				oncancel={handleCloseCancel}
 				onfinish={handleCloseFinish}
 			/>

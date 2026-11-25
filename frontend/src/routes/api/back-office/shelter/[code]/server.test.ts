@@ -24,11 +24,29 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 		requireShelterScopeOrSA: vi.fn().mockResolvedValue(c)
 	};
 });
+// CR-243 FR-9: the PATCH asks the close job store whether a job is active. Never the real admin
+// CouchDB — without this mock the status-changing cases below would hit a live `central_ops`.
+const closeStore = vi.hoisted(() => ({ getActiveJob: vi.fn() }));
+vi.mock('$lib/server/shelter-close-job-runtime', () => ({
+	getShelterCloseStore: () => closeStore,
+	adminCouchReq: vi.fn()
+}));
 vi.mock('$lib/server/master-data-server', () => ({
 	readMasterDoc: vi.fn()
 }));
+vi.mock('$lib/server/audit-log', () => ({
+	recordAuditedWrite: vi.fn(async () => true)
+}));
+vi.mock('$lib/server/user-service', () => ({
+	getDisplayNames: vi.fn().mockResolvedValue(new Map())
+}));
 vi.mock('$lib/server/shelters.admin', () => ({
-	updateMaster: vi.fn().mockResolvedValue({ id: 'shelter:SH001', rev: '2-new' }),
+	updateMaster: vi.fn().mockResolvedValue({
+		id: 'shelter:SH001',
+		rev: '2-new',
+		before: {} as ShelterMaster,
+		after: {} as ShelterMaster
+	}),
 	findMasterByCode: vi.fn(),
 	migrate: vi.fn(),
 	nowIso: () => '2026-01-01T00:00:00.000Z'
@@ -38,6 +56,8 @@ import { GET, PATCH } from './+server';
 import { requireShelterManagerOrSA } from '$lib/server/couch-admin';
 import { updateMaster, findMasterByCode, migrate } from '$lib/server/shelters.admin';
 import { readMasterDoc } from '$lib/server/master-data-server';
+import { getDisplayNames } from '$lib/server/user-service';
+import { recordAuditedWrite } from '$lib/server/audit-log';
 import type { MasterData } from '$lib/features/master-data/domain';
 import type { ShelterMaster } from '$lib/features/shelters/server';
 
@@ -55,9 +75,14 @@ const siteKindDoc = {
 
 /** Run the mutator updateMaster is given against a stored shelter of `storedKind`. */
 function useStoredKind(storedKind: string) {
-	updateMock.mockImplementation(async (_code, mutator) => {
+	updateMock.mockImplementation(async (_code, _actor, mutator) => {
 		await mutator({ site_kind: storedKind } as ShelterMaster);
-		return { id: 'shelter:SH001', rev: '2-new' };
+		return {
+			id: 'shelter:SH001',
+			rev: '2-new',
+			before: {} as ShelterMaster,
+			after: {} as ShelterMaster
+		};
 	});
 }
 
@@ -72,8 +97,14 @@ function callPATCH(code: string, body: unknown = {}) {
 
 beforeEach(() => {
 	mgrMock.mockReset().mockResolvedValue(caller);
-	updateMock.mockReset().mockResolvedValue({ id: 'shelter:SH001', rev: '2-new' });
+	updateMock.mockReset().mockResolvedValue({
+		id: 'shelter:SH001',
+		rev: '2-new',
+		before: {} as ShelterMaster,
+		after: {} as ShelterMaster
+	});
 	readMasterDocMock.mockReset().mockResolvedValue(siteKindDoc);
+	closeStore.getActiveJob.mockReset().mockResolvedValue(null);
 });
 
 describe('PATCH /api/back-office/shelter/[code]', () => {
@@ -81,6 +112,17 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		const res = await callPATCH('SH001', {});
 		expect(mgrMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
 		expect(updateMock).toHaveBeenCalledTimes(1);
+		expect(updateMock.mock.calls[0][1]).toBe('mgr');
+		expect(vi.mocked(recordAuditedWrite)).toHaveBeenCalledWith(
+			expect.objectContaining({
+				actor: 'mgr',
+				event: 'shelter.updated',
+				action: 'update',
+				entityType: 'shelter',
+				entityId: 'SH001',
+				shelterCode: 'SH001'
+			})
+		);
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ ok: true, code: 'SH001', rev: '2-new' });
 	});
@@ -95,16 +137,16 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 
 	it('patches only the fields the client sent, not schema defaults', async () => {
 		await callPATCH('SH001', { name: 'ศูนย์ใหม่' });
-		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
+		const mutator = updateMock.mock.calls[0][2] as (c: unknown) => {
 			patch: Record<string, unknown>;
 		};
 		const { patch } = mutator({ operation_status: 'closed' });
-		expect(patch).toEqual({ name: 'ศูนย์ใหม่', updated_at: '2026-01-01T00:00:00.000Z' });
+		expect(patch).toEqual({ name: 'ศูนย์ใหม่' });
 	});
 
 	it('leaves closed_at to updateMaster, even when the client sends one', async () => {
 		await callPATCH('SH001', { operation_status: 'closed' });
-		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
+		const mutator = updateMock.mock.calls[0][2] as (c: unknown) => {
 			patch: Record<string, unknown>;
 		};
 		const { patch } = mutator({ operation_status: 'closed' });
@@ -116,9 +158,14 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 describe('PATCH /api/back-office/shelter/[code] — closing goes through the close route (CR-219 FR-22)', () => {
 	/** Run the PATCH against a stored shelter in `stored` status; returns the response status. */
 	async function patchAgainst(stored: string, body: unknown): Promise<number> {
-		updateMock.mockImplementation(async (_code, mutator) => {
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			await mutator({ operation_status: stored } as ShelterMaster);
-			return { id: 'shelter:SH001', rev: '2-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '2-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		return (await callPATCH('SH001', body)).status;
 	}
@@ -150,9 +197,14 @@ describe('PATCH /api/back-office/shelter/[code] — closing goes through the clo
 	});
 
 	it('answers the close block in the contract envelope so the UI can toast it', async () => {
-		updateMock.mockImplementation(async (_code, mutator) => {
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			await mutator({ operation_status: 'active' } as ShelterMaster);
-			return { id: 'shelter:SH001', rev: '2-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '2-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', { operation_status: 'closed' });
 		expect(res.status).toBe(400);
@@ -162,6 +214,62 @@ describe('PATCH /api/back-office/shelter/[code] — closing goes through the clo
 				message: 'ปิดศูนย์ต้องทำผ่าน POST /api/back-office/shelter/[code]/close'
 			}
 		});
+	});
+});
+
+describe('PATCH /api/back-office/shelter/[code] — blocked while a close job is active (CR-243 FR-9)', () => {
+	const activeJob = { job_ulid: 'JOB1', status: 'running' };
+
+	/** Run the PATCH against a stored shelter in `stored` status; returns the response. */
+	async function patchAgainst(stored: string, body: unknown) {
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
+			await mutator({ operation_status: stored } as ShelterMaster);
+			return {
+				id: 'shelter:SH001',
+				rev: '2-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
+		});
+		return callPATCH('SH001', body);
+	}
+
+	beforeEach(() => closeStore.getActiveJob.mockResolvedValue(activeJob));
+
+	it.each([
+		['active', 'standby'],
+		['standby', 'full_capacity'],
+		['closed', 'active']
+	])('409 when %s -> %s is attempted (incl. reopening a closed shelter)', async (stored, next) => {
+		const res = await patchAgainst(stored, { operation_status: next });
+		expect(res.status).toBe(409);
+		expect(await res.json()).toEqual({
+			error: {
+				code: 'CONFLICT',
+				message: 'กำลังปิดศูนย์อยู่ เปลี่ยนสถานะศูนย์ไม่ได้ในขณะนี้'
+			}
+		});
+		expect(closeStore.getActiveJob).toHaveBeenCalledWith('SH001');
+	});
+
+	it('still answers 400 (CR-219 FR-22) when the PATCH sets closed directly, job or not', async () => {
+		expect((await patchAgainst('active', { operation_status: 'closed' })).status).toBe(400);
+	});
+
+	it('allows resending the unchanged status together with other fields', async () => {
+		expect((await patchAgainst('standby', { operation_status: 'standby', name: 'x' })).status).toBe(
+			200
+		);
+	});
+
+	it('does not even look for a job when the body has no operation_status', async () => {
+		expect((await patchAgainst('standby', { name: 'x' })).status).toBe(200);
+		expect(closeStore.getActiveJob).not.toHaveBeenCalled();
+	});
+
+	it('allows the change once the job is gone', async () => {
+		closeStore.getActiveJob.mockResolvedValue(null);
+		expect((await patchAgainst('active', { operation_status: 'standby' })).status).toBe(200);
 	});
 });
 
@@ -203,9 +311,14 @@ describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + sto
 	/** Run the mutator against a stored doc at `_rev`; returns the status and what it patched. */
 	async function patchAgainst(stored: Record<string, unknown>, body: unknown) {
 		let patch: Record<string, unknown> | undefined;
-		updateMock.mockImplementation(async (_code, mutator) => {
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
-			return { id: 'shelter:SH001', rev: '3-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '3-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', body);
 		return { res, patch };
@@ -221,7 +334,7 @@ describe('PATCH /api/back-office/shelter/[code] — optimistic concurrency + sto
 	it('200 when _rev matches, and never writes _rev into the patch', async () => {
 		const { res, patch } = await patchAgainst({ _rev: '2-b' }, { name: 'x', _rev: '2-b' });
 		expect(res.status).toBe(200);
-		expect(patch).toEqual({ name: 'x', updated_at: '2026-01-01T00:00:00.000Z' });
+		expect(patch).toEqual({ name: 'x' });
 	});
 
 	it('stays optional: a body without _rev is accepted (e2e/direct callers)', async () => {
@@ -279,9 +392,14 @@ describe('PATCH /api/back-office/shelter/[code] — external shelter (CR-252 FR-
 	async function patchAgainst(stored: Record<string, unknown>, body: unknown, sa = false) {
 		if (sa) mgrMock.mockResolvedValue(saCaller);
 		let patch: Record<string, unknown> | undefined;
-		updateMock.mockImplementation(async (_code, mutator) => {
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
-			return { id: 'shelter:SH001', rev: '3-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '3-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', body);
 		return { res, patch };
@@ -377,6 +495,48 @@ describe('GET /api/back-office/shelter/[code] — parking points (#1352)', () =>
 	});
 });
 
+describe('GET /api/back-office/shelter/[code] — creator and last editor (CR-259 FR-9)', () => {
+	async function callGET(stored: Record<string, unknown>) {
+		vi.mocked(findMasterByCode).mockResolvedValue({ code: 'SH001' } as ShelterMaster);
+		vi.mocked(migrate).mockReturnValue({ code: 'SH001', _rev: '3-c', ...stored } as ShelterMaster);
+		const request = new Request('http://localhost/api/back-office/shelter/SH001', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request, params: { code: 'SH001' } } as unknown as Parameters<
+			typeof GET
+		>[0]);
+		return res.json();
+	}
+
+	it('returns the usernames with their display names, falling back to the username', async () => {
+		vi.mocked(getDisplayNames).mockResolvedValueOnce(new Map([['sa.admin', 'สมชาย ใจดี']]));
+		const body = await callGET({ created_by: 'sa.admin', updated_by: 'sm.user' });
+		expect(body).toMatchObject({
+			created_by: 'sa.admin',
+			updated_by: 'sm.user',
+			created_by_name: 'สมชาย ใจดี',
+			updated_by_name: 'sm.user'
+		});
+		expect(vi.mocked(getDisplayNames)).toHaveBeenCalledWith(['sa.admin', 'sm.user']);
+	});
+
+	it('returns null for a shelter saved before actors were recorded', async () => {
+		const body = await callGET({});
+		expect(body).toMatchObject({
+			created_by: null,
+			updated_by: null,
+			created_by_name: null,
+			updated_by_name: null
+		});
+	});
+
+	it('still answers with usernames when display names cannot be read', async () => {
+		vi.mocked(getDisplayNames).mockRejectedValueOnce(new Error('_users down'));
+		const body = await callGET({ created_by: 'sa.admin', updated_by: 'sa.admin' });
+		expect(body.created_by_name).toBe('sa.admin');
+	});
+});
+
 describe('PATCH /api/back-office/shelter/[code] — parking points (#1352)', () => {
 	const pin = {
 		id: '01J0000000000000000000000A',
@@ -390,9 +550,14 @@ describe('PATCH /api/back-office/shelter/[code] — parking points (#1352)', () 
 	/** Run the mutator against a stored doc; returns the patch it produced. */
 	async function patchFor(body: unknown, stored: Record<string, unknown> = {}) {
 		let patch: Record<string, unknown> | undefined;
-		updateMock.mockImplementation(async (_code, mutator) => {
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
 			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
-			return { id: 'shelter:SH001', rev: '3-new' };
+			return {
+				id: 'shelter:SH001',
+				rev: '3-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
 		});
 		const res = await callPATCH('SH001', body);
 		return { res, patch };
@@ -421,5 +586,86 @@ describe('PATCH /api/back-office/shelter/[code] — parking points (#1352)', () 
 	it.fails('answers 400 VALIDATION for an empty parking point name', async () => {
 		const { res } = await patchFor({ parking_points: [{ ...pin, name: '' }] });
 		expect(res.status).toBe(400);
+	});
+});
+
+describe('/api/back-office/shelter/[code] — name_short / operating_org / delivery_note (schema_v 12)', () => {
+	const values = {
+		name_short: 'รร.หาดใหญ่วิทยาลัย',
+		operating_org: 'เทศบาลนครหาดใหญ่',
+		delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+	};
+
+	async function callGET(stored: Record<string, unknown>) {
+		vi.mocked(findMasterByCode).mockResolvedValue({ code: 'SH001' } as ShelterMaster);
+		vi.mocked(migrate).mockReturnValue({ code: 'SH001', _rev: '4-d', ...stored } as ShelterMaster);
+		const request = new Request('http://localhost/api/back-office/shelter/SH001', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request, params: { code: 'SH001' } } as unknown as Parameters<
+			typeof GET
+		>[0]);
+		return res.json();
+	}
+
+	/** Run the mutator against a stored doc; returns the patch it produced. */
+	async function patchFor(body: unknown, stored: Record<string, unknown> = {}) {
+		let patch: Record<string, unknown> | undefined;
+		updateMock.mockImplementation(async (_code, _actor, mutator) => {
+			patch = (await mutator(stored as unknown as ShelterMaster)).patch as Record<string, unknown>;
+			return {
+				id: 'shelter:SH001',
+				rev: '5-new',
+				before: {} as ShelterMaster,
+				after: {} as ShelterMaster
+			};
+		});
+		const res = await callPATCH('SH001', body);
+		return { res, patch };
+	}
+
+	it('GET returns the stored values', async () => {
+		expect(await callGET({ schema_v: 12, ...values })).toMatchObject(values);
+	});
+
+	it('GET returns null for a doc stored without the fields', async () => {
+		expect(await callGET({ schema_v: 11 })).toMatchObject({
+			name_short: null,
+			operating_org: null,
+			delivery_note: null
+		});
+	});
+
+	it('PATCH saves the values the form sends, trimmed', async () => {
+		const { res, patch } = await patchFor({
+			name_short: ` ${values.name_short} `,
+			operating_org: values.operating_org,
+			delivery_note: values.delivery_note
+		});
+		expect(res.status).toBe(200);
+		expect(patch).toMatchObject(values);
+	});
+
+	it('PATCH clears a value sent as null or blank', async () => {
+		const { res, patch } = await patchFor(
+			{ name_short: null, operating_org: '  ', delivery_note: '' },
+			values
+		);
+		expect(res.status).toBe(200);
+		expect(patch).toMatchObject({ name_short: null, operating_org: null, delivery_note: null });
+	});
+
+	it('PATCH leaves the stored values alone when the body omits them', async () => {
+		const { res, patch } = await patchFor({ name: 'ชื่อใหม่' }, values);
+		expect(res.status).toBe(200);
+		expect(patch).not.toHaveProperty('name_short');
+		expect(patch).not.toHaveProperty('operating_org');
+		expect(patch).not.toHaveProperty('delivery_note');
+	});
+
+	it('PATCH answers 422 and writes nothing for a name_short over 64 characters', async () => {
+		const { res, patch } = await patchFor({ name_short: 'ก'.repeat(65) });
+		expect(res.status).toBe(422);
+		expect(patch).toBeUndefined();
 	});
 });

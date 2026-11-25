@@ -59,6 +59,10 @@
 	}
 </script>
 
+{#snippet requiredMark()}
+	<span class="text-danger" aria-hidden="true">*</span>
+{/snippet}
+
 {#snippet fieldError(field: SearchConsentField, message: string)}
 	{#if errors[field]}
 		<p id="consent-err-{field}" class="mt-1 text-sm text-danger" role="alert">{message}</p>
@@ -73,44 +77,52 @@
 		</Dialog.Header>
 
 		<form class="space-y-4" onsubmit={submit} novalidate>
-			<div>
-				<label for="consent-first-name" class="mb-1 block text-sm font-medium">
-					{t.consentFirstName}
-				</label>
-				<Input
-					id="consent-first-name"
-					bind:value={firstName}
-					maxlength={SEARCH_NAME_MAX}
-					autocomplete="given-name"
-					aria-invalid={errors.first_name ? 'true' : undefined}
-					aria-describedby={errors.first_name ? 'consent-err-first_name' : undefined}
-				/>
-				{@render fieldError('first_name', t.consentErrorFirstName)}
+			<div class="grid grid-cols-2 gap-3">
+				<div>
+					<label for="consent-first-name" class="mb-1 block text-sm font-medium">
+						{t.consentFirstName}
+						{@render requiredMark()}
+					</label>
+					<Input
+						id="consent-first-name"
+						bind:value={firstName}
+						maxlength={SEARCH_NAME_MAX}
+						autocomplete="given-name"
+						aria-required="true"
+						aria-invalid={errors.first_name ? 'true' : undefined}
+						aria-describedby={errors.first_name ? 'consent-err-first_name' : undefined}
+					/>
+					{@render fieldError('first_name', t.consentErrorFirstName)}
+				</div>
+
+				<div>
+					<label for="consent-last-name" class="mb-1 block text-sm font-medium">
+						{t.consentLastName}
+					</label>
+					<Input
+						id="consent-last-name"
+						bind:value={lastName}
+						maxlength={SEARCH_NAME_MAX}
+						autocomplete="family-name"
+						aria-invalid={errors.last_name ? 'true' : undefined}
+						aria-describedby={errors.last_name ? 'consent-err-last_name' : undefined}
+					/>
+					{@render fieldError('last_name', t.consentErrorLastName)}
+				</div>
 			</div>
 
 			<div>
-				<label for="consent-last-name" class="mb-1 block text-sm font-medium">
-					{t.consentLastName}
+				<label for="consent-phone" class="mb-1 block text-sm font-medium">
+					{t.consentPhone}
+					{@render requiredMark()}
 				</label>
-				<Input
-					id="consent-last-name"
-					bind:value={lastName}
-					maxlength={SEARCH_NAME_MAX}
-					autocomplete="family-name"
-					aria-invalid={errors.last_name ? 'true' : undefined}
-					aria-describedby={errors.last_name ? 'consent-err-last_name' : undefined}
-				/>
-				{@render fieldError('last_name', t.consentErrorLastName)}
-			</div>
-
-			<div>
-				<label for="consent-phone" class="mb-1 block text-sm font-medium">{t.consentPhone}</label>
 				<Input
 					id="consent-phone"
 					type="tel"
 					inputmode="numeric"
 					bind:value={phone}
 					autocomplete="tel"
+					aria-required="true"
 					aria-invalid={errors.phone ? 'true' : undefined}
 					aria-describedby={errors.phone
 						? 'consent-err-phone consent-phone-hint'
@@ -123,7 +135,10 @@
 			</div>
 
 			<fieldset aria-describedby={errors.purpose ? 'consent-err-purpose' : undefined}>
-				<legend class="mb-1 text-sm font-medium">{t.consentPurposeLegend}</legend>
+				<legend class="mb-1 text-sm font-medium">
+					{t.consentPurposeLegend}
+					{@render requiredMark()}
+				</legend>
 				<div class="space-y-2">
 					{#each SEARCH_PURPOSES as value (value)}
 						<label class="flex items-center gap-2 text-sm">
@@ -132,6 +147,7 @@
 								name="consent-purpose"
 								{value}
 								bind:group={purpose}
+								required
 								class="size-4 accent-primary"
 							/>
 							{purposeLabel[value]}
@@ -145,11 +161,13 @@
 				<div>
 					<label for="consent-purpose-note" class="mb-1 block text-sm font-medium">
 						{t.consentPurposeNote}
+						{@render requiredMark()}
 					</label>
 					<Input
 						id="consent-purpose-note"
 						bind:value={purposeNote}
 						maxlength={SEARCH_PURPOSE_NOTE_MAX}
+						aria-required="true"
 						aria-invalid={errors.purpose_note ? 'true' : undefined}
 						aria-describedby={errors.purpose_note ? 'consent-err-purpose_note' : undefined}
 					/>
@@ -163,6 +181,7 @@
 						id="consent-accept"
 						type="checkbox"
 						bind:checked={accepted}
+						aria-required="true"
 						aria-invalid={errors.consent_accepted ? 'true' : undefined}
 						aria-describedby={errors.consent_accepted ? 'consent-err-consent_accepted' : undefined}
 						class="mt-0.5 size-4 accent-primary"
@@ -177,6 +196,7 @@
 						>
 							{t.consentPolicyLink}
 						</a>
+						{@render requiredMark()}
 					</label>
 				</div>
 				{@render fieldError('consent_accepted', t.consentErrorAccept)}

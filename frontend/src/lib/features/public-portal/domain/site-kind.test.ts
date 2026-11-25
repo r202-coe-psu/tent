@@ -3,7 +3,8 @@ import {
 	activeSiteKinds,
 	countBySiteKind,
 	hiddenShelterGroups,
-	SHELTER_GROUP_HIDE_PARAMS,
+	shelterGroupChoice,
+	shelterGroupParams,
 	isHostHouseKind,
 	normalizeSiteKind,
 	shelterGroup,
@@ -50,9 +51,11 @@ describe('siteKindLabel', () => {
 		expect(siteKindLabel('mobile_clinic', [], 'en')).toBe('mobile_clinic');
 	});
 
-	it('keeps the two seeded labels readable while the list is empty or loading', () => {
+	it('keeps the seeded labels readable while the list is empty or loading', () => {
 		expect(siteKindLabel('host_house', undefined, 'th')).toBe('บ้านพี่เลี้ยง');
 		expect(siteKindLabel('evacuation_center', [], 'en')).toBe('Evacuation Center');
+		expect(siteKindLabel('test_center', undefined, 'th')).toBe('ศูนย์ทดสอบ');
+		expect(siteKindLabel('test_center', [], 'en')).toBe('Test Center');
 	});
 
 	it('reads a missing code as the default kind', () => {
@@ -118,17 +121,22 @@ describe('countBySiteKind', () => {
 
 describe('siteKindTiles', () => {
 	it('lists active kinds in master order, including zero counts', () => {
-		expect(siteKindTiles({ host_house: 2 }, KINDS)).toEqual([
+		expect(siteKindTiles({ field_hospital: 2 }, KINDS)).toEqual([
 			{ code: 'evacuation_center', count: 0 },
-			{ code: 'host_house', count: 2 },
-			{ code: 'field_hospital', count: 0 }
+			{ code: 'field_hospital', count: 2 }
 		]);
+	});
+
+	it('never has a host house tile: /shelters does not list host houses (#1419, CR-261 FR-2)', () => {
+		// active in the master list, at 0 or counted (an external host house), the tile stays out
+		expect(siteKindTiles({}, KINDS).map((t) => t.code)).not.toContain('host_house');
+		expect(siteKindTiles({ host_house: 2 }, KINDS).map((t) => t.code)).not.toContain('host_house');
+		expect(siteKindTiles({ host_house: 1 }, [])).toEqual([]);
 	});
 
 	it('adds an inactive or unknown code only when shelters use it, after the master items', () => {
 		expect(siteKindTiles({ old_camp: 1, mobile_clinic: 3, evacuation_center: 4 }, KINDS)).toEqual([
 			{ code: 'evacuation_center', count: 4 },
-			{ code: 'host_house', count: 0 },
 			{ code: 'field_hospital', count: 0 },
 			{ code: 'old_camp', count: 1 },
 			{ code: 'mobile_clinic', count: 3 }
@@ -136,7 +144,9 @@ describe('siteKindTiles', () => {
 	});
 
 	it('falls back to the counted codes when the master list is empty', () => {
-		expect(siteKindTiles({ host_house: 1 }, [])).toEqual([{ code: 'host_house', count: 1 }]);
+		expect(siteKindTiles({ field_hospital: 1 }, [])).toEqual([
+			{ code: 'field_hospital', count: 1 }
+		]);
 	});
 });
 
@@ -152,15 +162,24 @@ describe('shelter groups (type toggles)', () => {
 		expect(shelterGroup({})).toBe('evacuation');
 	});
 
-	it('reads only switched-off groups from the URL (default all on)', () => {
-		expect(hiddenShelterGroups(new URLSearchParams(''))).toEqual([]);
-		expect(hiddenShelterGroups(new URLSearchParams('hide_evacuation=on&hide_external=on'))).toEqual(
-			['evacuation', 'external']
+	it('hides external shelters by default; show_external brings them back', () => {
+		expect(hiddenShelterGroups(new URLSearchParams(''))).toEqual(['external']);
+		expect(hiddenShelterGroups(new URLSearchParams('show_external=on'))).toEqual([]);
+		expect(hiddenShelterGroups(new URLSearchParams('show_external=on&hide_evacuation=on'))).toEqual(
+			['evacuation']
 		);
 	});
 
-	it('has no switch for host houses: a stale hide_host_house in the URL is ignored (#1419)', () => {
-		expect(hiddenShelterGroups(new URLSearchParams('hide_host_house=on'))).toEqual([]);
-		expect(Object.keys(SHELTER_GROUP_HIDE_PARAMS)).toEqual(['hide_evacuation', 'hide_external']);
+	it('reads old links as the default: hide_external, or hide_evacuation without show_external', () => {
+		expect(hiddenShelterGroups(new URLSearchParams('hide_external=on'))).toEqual(['external']);
+		expect(hiddenShelterGroups(new URLSearchParams('hide_evacuation=on'))).toEqual(['external']);
+		expect(hiddenShelterGroups(new URLSearchParams('hide_host_house=on'))).toEqual(['external']);
+	});
+
+	it('maps each pick to its URL flags and back', () => {
+		for (const choice of ['evacuation', 'all', 'external'] as const) {
+			expect(shelterGroupChoice(shelterGroupParams(choice))).toBe(choice);
+		}
+		expect(shelterGroupParams('evacuation')).toEqual({});
 	});
 });

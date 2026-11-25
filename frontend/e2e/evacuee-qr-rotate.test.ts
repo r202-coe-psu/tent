@@ -4,7 +4,8 @@
  * Covers AC-EQR-12 (print / reprint twice → the older QR is refused on the staff scan page and at
  * the kiosk, the newest one is accepted), AC-EQR-4 (opening the print modal and closing it without
  * printing writes no `evacuee_qr` and the old QR still scans) and AC-EQR-8 (a legacy `evacuee:{ULID}`
- * QR with no `@` stays valid while the evacuee has no print log). #1301: a fast-track screening makes
+ * QR with no `@` stays valid while the evacuee has no print log) and AC-EQR-19 (after prints, the
+ * modal preview shows the live QR and opening it writes nothing). #1301: a fast-track screening makes
  * the profile flag the printed card as outdated, and the next print logs `marker: 'red'` (schema_v 2).
  *
  * One serial suite on its own `E2E` shelter (never SH001): the CouchDB server admin provisions the
@@ -46,6 +47,7 @@ import { acceptFullConsent } from './helpers/consent';
 import { appBaseUrl, CAN_WRITE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
+	decodeQrImage,
 	fillMemberCard,
 	fillWalkInAddress,
 	finishPrintScreen,
@@ -319,7 +321,7 @@ test.describe(
 			test.setTimeout(120_000);
 			const page = desk!;
 			await openQrModal(page);
-			// The preview is a placeholder: nothing was issued by opening it.
+			// The preview shows the current QR: nothing was issued by opening it.
 			expect(await readLog()).toBeNull();
 			await page
 				.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ })
@@ -373,6 +375,20 @@ test.describe(
 			const bare = await kioskLookup(evacueeId);
 			expect(bare.status).toBe(409);
 			expect(bare.data!.error).toMatchObject({ code: 'KIOSK_QR_EXPIRED', issued_at: null });
+		});
+
+		test('AC-EQR-19: the preview shows the live QR after prints and opening writes nothing', async () => {
+			test.setTimeout(120_000);
+			const page = desk!;
+			const before = await readLog();
+			await openQrModal(page);
+			const dialog = page.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ });
+			const shown = await decodeQrImage(page, dialog.locator('img').first());
+			expect(shown).toBe(issued[issued.length - 1]);
+			expect((await readLog())?.prints.length).toBe(before?.prints.length);
+			await dialog.getByRole('button', { name: 'ปิด' }).last().click();
+			await expect(dialog).toHaveCount(0);
+			await expectScanAccepted(page, shown);
 		});
 
 		test('AC-EQR-12 kiosk: a kiosk reprint issues a new QR and expires the staff one', async () => {

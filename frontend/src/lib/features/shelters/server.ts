@@ -77,3 +77,23 @@ export {
 	type ShelterCloseRequest,
 	type ShelterCloseResult
 } from './domain/shelter-close';
+export {
+	describeShelterCloseJobOutcome,
+	isShelterCloseJobActive,
+	isShelterCloseJobActiveStatus,
+	shelterCloseJobViewSchema,
+	shelterCloseJobStartedSchema,
+	SHELTER_CLOSE_JOB_PHASES,
+	SHELTER_CLOSE_JOB_STATUSES,
+	SHELTER_CLOSE_END_REASONS,
+	type ShelterCloseActiveJob,
+	type ShelterCloseEndReason,
+	type ShelterCloseJobCounters,
+	type ShelterCloseJobCursor,
+	type ShelterCloseJobFailure,
+	type ShelterCloseJobMode,
+	type ShelterCloseJobPhase,
+	type ShelterCloseJobStarted,
+	type ShelterCloseJobStatus,
+	type ShelterCloseJobView
+} from './domain/shelter-close-job';

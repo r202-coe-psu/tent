@@ -37,7 +37,8 @@
 		canClose = true,
 		storedStatus,
 		isSystemAdmin = false,
-		isEdit = false
+		isEdit = false,
+		statusLocked = false
 	}: {
 		form: SuperForm<Shelter>;
 		formData: SuperFormData<Shelter>;
@@ -49,6 +50,8 @@
 		/** CR-252 FR-8: only system_admin may mark a shelter external, and only while creating. */
 		isSystemAdmin?: boolean;
 		isEdit?: boolean;
+		/** CR-243 FR-28: a close job is queued / running — the status cannot be changed. */
+		statusLocked?: boolean;
 	} = $props();
 
 	// CR-252: an external shelter is run in another system — a basic-info-only form, locked at
@@ -86,7 +89,7 @@
 	// FR-23: a closed shelter shows its value read-only to anyone who cannot reopen/close it.
 	// FR-4: an external shelter's status is locked unless the system_admin edits it (takedown).
 	const operationStatusLocked = $derived(
-		isExternal ? !canCancelExternal : !canClose && storedStatus === 'closed'
+		statusLocked || (isExternal ? !canCancelExternal : !canClose && storedStatus === 'closed')
 	);
 
 	// draft-shelter-cancelled-status: cancelling hides the shelter from every public page and the
@@ -332,6 +335,25 @@
 				/>
 			{/snippet}
 		</Form.Control>
+		<Form.FieldErrors />
+	</Form.Field>
+
+	<Form.Field {form} name="name_short">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>ชื่อย่อ (แสดงบนแผนที่)</Form.Label>
+				<Input
+					{...props}
+					value={$formData.name_short ?? ''}
+					oninput={(e) => ($formData.name_short = e.currentTarget.value || null)}
+					{disabled}
+					placeholder="เช่น รร.บ้านค่าย"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.Description>
+			ใช้แทนชื่อเต็มบนหมุดแผนที่ ไม่เกิน 64 ตัวอักษร (เว้นว่างได้)
+		</Form.Description>
 		<Form.FieldErrors />
 	</Form.Field>
 
@@ -1021,6 +1043,23 @@
 			<Form.FieldErrors />
 		</Form.Field>
 	</div>
+
+	<Form.Field {form} name="operating_org">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>หน่วยงานที่ดูแล</Form.Label>
+				<Input
+					{...props}
+					value={$formData.operating_org ?? ''}
+					oninput={(e) => ($formData.operating_org = e.currentTarget.value || null)}
+					{disabled}
+					placeholder="เช่น เทศบาลนครหาดใหญ่"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.Description>หน่วยงานที่รับผิดชอบดูแลศูนย์นี้ (เว้นว่างได้)</Form.Description>
+		<Form.FieldErrors />
+	</Form.Field>
 
 	{#if !isExternal}
 		<!-- Key personnel (CR-023 FR-23-2/3) -->

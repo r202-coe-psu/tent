@@ -10,6 +10,7 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		shelterStatus: 'สถานะศูนย์พักพิง',
 		siteKindLabel: 'ชนิด',
 		otherSiteKinds: 'ศูนย์ประเภทอื่น',
+		externalShelter: 'ศูนย์ภายนอก',
 		statusOpen: 'เปิดใช้งาน',
 		statusStandby: 'กำลังเตรียมการ',
 		statusFull: 'เต็มความจุ',
@@ -26,7 +27,9 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		gestureDesktop: 'กด Ctrl ค้างไว้แล้วเลื่อนเพื่อซูมแผนที่',
 		gestureMac: 'กด ⌘ ค้างไว้แล้วเลื่อนเพื่อซูมแผนที่',
 		gestureMobile: 'ใช้สองนิ้วเพื่อเลื่อนแผนที่',
-		parkingPoint: 'จุดจอดรถ'
+		parkingPoint: 'จุดจอดรถ',
+		legendToggle: 'สัญลักษณ์',
+		legendClose: 'ซ่อนสัญลักษณ์'
 	},
 	en: {
 		yourLocation: 'Search origin',
@@ -39,6 +42,7 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		shelterStatus: 'Shelter Status',
 		siteKindLabel: 'Type',
 		otherSiteKinds: 'Other site kinds',
+		externalShelter: 'External center',
 		statusOpen: 'Open',
 		statusStandby: 'Preparing',
 		statusFull: 'Full',
@@ -55,6 +59,8 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		gestureDesktop: 'Use Ctrl + scroll to zoom the map',
 		gestureMac: 'Use ⌘ + scroll to zoom the map',
 		gestureMobile: 'Use two fingers to move the map',
-		parkingPoint: 'Parking'
+		parkingPoint: 'Parking',
+		legendToggle: 'Legend',
+		legendClose: 'Hide legend'
 	}
 } as const;
