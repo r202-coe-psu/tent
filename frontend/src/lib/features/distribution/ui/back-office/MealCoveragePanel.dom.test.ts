@@ -882,7 +882,7 @@ describe('MealCoveragePanel over a range, partial days and other recipients', ()
 	});
 
 	it('counts the days under 2 meals and the meals received for each person over 7 days', () => {
-		// 4-9 Nov are finished days; 10 Nov is today with no meal served yet and is judged too: 6 of 7 days are short.
+		// 4-9 Nov are finished days; 10 Nov is today with no meal served yet, so it is not judged: 5 of 6 days are short.
 		env.logs.data = {
 			items: [log('evacuee:A', 'breakfast', 'amy'), log('evacuee:A', 'lunch', 'bob')],
 			skipped: []
@@ -902,9 +902,9 @@ describe('MealCoveragePanel over a range, partial days and other recipients', ()
 			'สมชาย ใจดี',
 			'',
 			'2 มื้อ',
-			'6 / 7 วัน',
+			'5 / 6 วัน',
 			'amy, bob',
-			'รับไม่ถึง 2 มื้อบางวัน 6/7 วัน'
+			'รับไม่ถึง 2 มื้อบางวัน 5/6 วัน'
 		]);
 	});
 
@@ -1093,7 +1093,7 @@ describe('MealCoveragePanel over a range, partial days and other recipients', ()
 		expect(filename).toBe('meal-coverage-SH001-2026-11-04_2026-11-10.csv');
 		const [header, line] = csv.split('\r\n');
 		expect(header).toContain('"จำนวนวันที่ไม่ถึง 2 มื้อ"');
-		expect(line.endsWith('"รับไม่ถึง 2 มื้อบางวัน 7/7 วัน","","1","7","0"')).toBe(true);
+		expect(line.endsWith('"รับไม่ถึง 2 มื้อบางวัน 6/6 วัน","","1","6","0"')).toBe(true);
 	});
 });
 

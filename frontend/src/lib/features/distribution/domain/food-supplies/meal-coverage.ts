@@ -107,6 +107,14 @@ export function countingLogsByRecipient(
 const NO_MEALS: ReadonlySet<MealPeriod> = new Set();
 
 /**
+ * Over a range, a running day with no meal served yet is not judged: nobody could have two meals.
+ * A single selected day is always judged, so its list still shows everyone at 0 meals.
+ */
+function isJudgedDay(servedMeals: readonly MealPeriod[], single: boolean): boolean {
+	return single || servedMeals.length > 0;
+}
+
+/**
  * One row per resident who was in the shelter on any day of `days`: judged on the days they were
  * there all day and a meal was served, listed but never judged on the days they were there only
  * part of the day.
@@ -129,10 +137,12 @@ export function mealCoverageRoster(input: {
 		let counted = 0;
 		let mealsReceived = 0;
 		let missing: MealPeriod[] = [];
+		let listed = false;
 
 		for (const { day, servedMeals } of input.days) {
 			const presence = resident.presence[day] ?? 'none';
 			if (presence === 'none') continue;
+			listed = true;
 			const entry = byDay.get(day)?.get(resident.id);
 			const got = entry?.meals ?? NO_MEALS;
 			for (const meal of got) received.add(meal);
@@ -146,13 +156,14 @@ export function mealCoverageRoster(input: {
 				partialDays += 1;
 				continue;
 			}
+			if (!isJudgedDay(servedMeals, single)) continue;
 			const dayCounted = COVERAGE_MEALS.filter((m) => servedMeals.includes(m) && got.has(m)).length;
 			judgedDays += 1;
 			counted += dayCounted;
 			if (dayCounted < MIN_MEALS_PER_DAY) shortDays += 1;
 		}
 
-		if (judgedDays === 0 && partialDays === 0) continue;
+		if (!listed) continue;
 		rows.push({
 			id: resident.id,
 			name: resident.name,
@@ -238,7 +249,9 @@ export function mealCoverageShares(input: {
 	const recorded = { breakfast: 0, lunch: 0, dinner: 0 };
 	const total = { breakfast: 0, lunch: 0, dinner: 0 };
 
+	const single = input.days.length === 1;
 	for (const { day, servedMeals } of input.days) {
+		const judged = isJudgedDay(servedMeals, single);
 		for (const resident of input.residents) {
 			const presence = resident.presence[day] ?? 'none';
 			if (presence === 'none') continue;
@@ -249,7 +262,7 @@ export function mealCoverageShares(input: {
 				if (has) recorded[meal] += 1;
 				if (has || (allDay && servedMeals.includes(meal))) total[meal] += 1;
 			}
-			if (allDay) {
+			if (allDay && judged) {
 				present += 1;
 				if (
 					COVERAGE_MEALS.filter((m) => servedMeals.includes(m) && got.has(m)).length >=

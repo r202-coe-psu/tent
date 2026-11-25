@@ -232,6 +232,26 @@ describe('mealCoverageRoster over a range of days', () => {
 		});
 	});
 
+	it('does not judge a running day with no meal served yet, over a range', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all' });
+		const rows = mealCoverageRoster({
+			days: [dayOf(COVERAGE_MEALS, D8), dayOf([], DAY)],
+			residents: [resident],
+			logs: [at(D8, 'breakfast'), at(D8, 'lunch')]
+		});
+		expect(rows[0]).toMatchObject({ judgedDays: 1, shortDays: 0, complete: true });
+	});
+
+	it('does not count that unserved day in the shares, over a range', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all' });
+		const shares = mealCoverageShares({
+			days: [dayOf(COVERAGE_MEALS, D8), dayOf([], DAY)],
+			residents: [resident],
+			logs: [at(D8, 'breakfast'), at(D8, 'lunch')]
+		});
+		expect(shares).toMatchObject({ present: 1, complete: 1 });
+	});
+
 	it('is complete when no day was short', () => {
 		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all' });
 		const logs = [at(D8, 'breakfast'), at(D8, 'lunch'), at(DAY, 'lunch'), at(DAY, 'dinner')];
@@ -265,11 +285,18 @@ describe('mealCoverageRoster over a range of days', () => {
 		expect(rows[0]).toMatchObject({ judgedDays: 2, shortDays: 1, counted: 3, complete: false });
 	});
 
-	it('judges a running day on which no meal was served yet as 0 of 2', () => {
+	it('judges only the served day when the running day has no meal served yet', () => {
 		const days = [dayOf(COVERAGE_MEALS, DAY), dayOf([], D10)];
 		const resident = everyDay('evacuee:A', { [DAY]: 'all', [D10]: 'all' });
 		const rows = mealCoverageRoster({ days, residents: [resident], logs: [] });
-		expect(rows[0]).toMatchObject({ judgedDays: 2, shortDays: 2 });
+		expect(rows[0]).toMatchObject({ judgedDays: 1, shortDays: 1 });
+	});
+
+	it('still lists someone there only on the unserved running day, unjudged', () => {
+		const days = [dayOf(COVERAGE_MEALS, DAY), dayOf([], D10)];
+		const resident = everyDay('evacuee:A', { [D10]: 'all' });
+		const rows = mealCoverageRoster({ days, residents: [resident], logs: [] });
+		expect(rows[0]).toMatchObject({ judgedDays: 0, shortDays: 0, complete: false });
 	});
 
 	it('leaves out someone who was never there during the range', () => {
