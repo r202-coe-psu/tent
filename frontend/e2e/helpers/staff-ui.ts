@@ -95,7 +95,6 @@ export interface MemberForm {
  *  (unified-registration-members-section.svelte) and hides every inactive tab's card. */
 const MEMBER_TABS_MIN = 3;
 
-/** Onsite Station 1 → register one household (first member = primary contact). */
 /**
  * Station 1 registers people as `arriving`; only room confirmation makes them `active`. Public
  * search lists in-shelter people only (#1536), so suites that search for people they just
@@ -109,25 +108,24 @@ export async function admitArrivingEvacueesViaCouch(code: string, expected: numb
 		selector: { type: 'evacuee', 'current_stay.status': 'arriving' },
 		limit: 500
 	});
+	const now = new Date().toISOString();
 	const docs = ((found.data as { docs?: Record<string, unknown>[] } | null)?.docs ?? []).map(
-		(doc) => ({ ...doc, current_stay: { ...(doc.current_stay as object), status: 'active' } })
+		(doc) => ({
+			...doc,
+			current_stay: { ...(doc.current_stay as object), status: 'active', since: now },
+			updated_at: now
+		})
 	);
 	expect(docs, `${code}: arriving evacuees to admit`).toHaveLength(expected);
-	const now = new Date().toISOString();
-	const written = await couchReq('POST', `${db}/_bulk_docs`, {
-		docs: docs.map((doc) => ({
-			...doc,
-			current_stay: { ...doc.current_stay, since: now },
-			updated_at: now
-		}))
-	});
+	const written = await couchReq('POST', `${db}/_bulk_docs`, { docs });
 	const rows = (written.data as { ok?: boolean; error?: string }[] | null) ?? [];
 	expect(
 		written.status < 300 && rows.length === expected && rows.every((row) => row.ok),
-		`${code}: admit ${expected} evacuees`
+		`${code}: admit ${expected} evacuees → ${JSON.stringify(written.data)}`
 	).toBe(true);
 }
 
+/** Onsite Station 1 → register one household (first member = primary contact). */
 export async function registerHouseholdViaUi(
 	page: Page,
 	{ houseNo, members }: { houseNo: string; members: MemberForm[] }

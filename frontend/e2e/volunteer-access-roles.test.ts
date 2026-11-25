@@ -348,7 +348,9 @@ async function expectLoads(page: Page, url: string): Promise<void> {
 	await expect(page.locator('main').first()).toBeVisible();
 	if (url === SHELTERS_PAGE) {
 		// The page opens the active shelter's edit screen from a client-side effect that runs after
-		// <main> is already there, so the path is only final once that redirect has happened.
+		// <main> is already there. Both the bare path and the edit path count as loaded; this only
+		// checks the role was not bounced to another page (a role with no active shelter never
+		// redirects, so waiting for the edit path would hang).
 		await expect
 			.poll(() => pathOf(page), { message: `${url} should load` })
 			.toMatch(new RegExp(`^${SHELTERS_PAGE}(/edit/[^/]+)?$`));

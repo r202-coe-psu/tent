@@ -740,6 +740,9 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 	test('A3 EXT-009 cancel, repeat cancel, then EXT-010 reports CANCELLED', async () => {
 		test.setTimeout(150_000);
 		const r = state();
+		// Proves the row exists before the cancel, so an empty EXT-012 later means "dropped", not
+		// "never projected" (EXT-011 and E12-5 below rely on that).
+		await waitForProjectedStay(r, 'pre_registered');
 		const cancel = await call(r, r.token, byExt('EXT-009'));
 		expect(cancel.status, `cancel (code ${cancel.body?.code})`).toBe(200);
 		expect(cancel.body.result).toMatchObject({
