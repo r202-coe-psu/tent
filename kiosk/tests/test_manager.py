@@ -1073,6 +1073,22 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fulfilled["body"]["error"]["code"], "PRINT_FAILED")
         self.assertNotIn("cancel", [call[0] for call in calls])
 
+    async def test_a_job_that_completed_with_errors_per_lpstat_fails_without_cancel(self):
+        client = self.client()
+        self.ipp_cannot_say(client)
+        completed = FakeLpProcess(
+            stdout=(
+                b"label_q-1  root  1024  Mon 01 Jan 2024 08:00:00 AM +07\n"
+                b"\tStatus: processing\n\tAlerts: job-completed-with-errors\n"
+            )
+        )
+
+        fulfilled, calls = await self.print_through_cups(client, PNG, completed_process=completed)
+
+        self.assertEqual(fulfilled["status"], 502)
+        self.assertEqual(fulfilled["body"]["printed"], 0)
+        self.assertNotIn("cancel", [call[0] for call in calls])
+
     async def test_a_job_neither_ipp_nor_lpstat_can_report_on_is_cancelled_when_its_budget_runs_out(self):
         client = self.client()
         self.ipp_cannot_say(client)
@@ -1414,6 +1430,31 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(client._route_kiosk_api(route), timeout=10)
 
         self.assertEqual(events, ["kill", "wait"])
+
+    async def test_a_cups_cancel_that_is_refused_logs_its_exit_code_and_reason(self):
+        client = self.client()
+        client._cups_job_state = scripted_job_states({"label_q-1": ["pending"]})
+        route = FakePrintRoute(body=labels_body(PNG))
+
+        class RefusedCancel(FakeLpProcess):
+            async def communicate(self, data=None):
+                return b"", b"cancel: Forbidden\n"
+
+        with (
+            patch.object(
+                manager.asyncio,
+                "create_subprocess_exec",
+                new=cups_exec(FakeLpProcess(), cancel_process=RefusedCancel(returncode=1)),
+            ),
+            patch.object(manager, "KIOSK_CUPS_POLL_SEC", 0),
+            patch.object(manager, "KIOSK_PRINT_TIMEOUT_SEC", 0.05),
+            self.assertLogs(manager.logger, level="WARNING") as logs,
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertTrue(
+            any("exited 1" in line and "cancel: Forbidden" in line for line in logs.output)
+        )
 
     async def test_prints_directly_in_every_mode_without_extra_config(self):
         debug_client = manager.ScannerClientManager(valid_config(DEBUG="true"))

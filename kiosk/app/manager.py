@@ -97,11 +97,11 @@ KIOSK_CUPS_JOB_STATE_TIMEOUT_SEC = 1.0
 KIOSK_CUPS_MIN_LABEL_SEC = 8.0
 KIOSK_CUPS_CANCEL_RESERVE_SEC = 3.0
 CUPS_REQUEST_ID = re.compile(r"request id is (\S+)")
-CUPS_BLOCKING_REASONS = {"offline", "media-empty", "media-needed", "door-open", "paused"}
+CUPS_BLOCKING_REASONS = {"offline", "media-empty", "media-needed", "door-open", "cover-open", "paused"}
 CUPS_REASON_SEVERITY_SUFFIX = re.compile(r"-(error|report)$")
 # A finished job printed unless its Alerts say otherwise: CUPS 2.4 writes
 # job-completed-successfully, 2.3.3 leaves processing-to-stop-point (see app/ipp.py).
-CUPS_FAILED_JOB_REASON = re.compile(r"cancel|abort|-error\b")
+CUPS_FAILED_JOB_REASON = re.compile(r"cancel|abort|-errors?\b")
 # The frontend's fetch to KIOSK_PRINT_PATH (kiosk-print.api.ts) times out at 30s; with up to
 # KIOSK_PRINT_MAX_LABELS labels at KIOSK_PRINT_TIMEOUT_SEC each, a slow run could otherwise blow
 # past that and the browser would show "failed" while labels keep printing, inviting a re-tap
@@ -853,7 +853,7 @@ class ScannerClientManager:
                 job_id,
                 timeout=min(KIOSK_CUPS_JOB_STATE_TIMEOUT_SEC, max(deadline - time.monotonic(), 0)),
             )
-            if state is None:
+            if state is None and time.monotonic() < deadline:
                 state = await self._lpstat_job_outcome(job_id, deadline)
             if state == "completed":
                 return "completed"
@@ -894,17 +894,25 @@ class ScannerClientManager:
                 "cancel", *args,
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
             )
         except OSError:
             logger.error(f"Could not cancel CUPS job(s) {target} on {self._print_target}")
             return
         try:
-            await asyncio.wait_for(process.communicate(), timeout=KIOSK_CUPS_CANCEL_RESERVE_SEC)
+            _, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=KIOSK_CUPS_CANCEL_RESERVE_SEC
+            )
         except asyncio.TimeoutError:
             process.kill()
             await process.wait()
             logger.error(f"Could not cancel CUPS job(s) {target} on {self._print_target}")
+            return
+        if process.returncode != 0:
+            detail = (stderr or b"").decode(errors="replace").strip()
+            logger.warning(
+                f"CUPS cancel {target} on {self._print_target} exited {process.returncode}: {detail}"
+            )
 
     def _find_printer_device(self) -> Path | None:
         """Resolve the printer's device node. Looked up per label: replugging changes lpN."""
