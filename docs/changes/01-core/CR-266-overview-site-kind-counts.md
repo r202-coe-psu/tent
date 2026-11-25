@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-266
 title: หน้าภาพรวมระบบ — การ์ดจำนวนศูนย์แยกตามประเภท (site_kind) และกติกานับศูนย์ภายนอก / ปิด / ยกเลิก
-status: proposed
+status: approved
 date: 2026-11-23
+updated: 2026-11-25
 requested_by: Dev Team B GitHub #1504 (+ ข้อสั่งเพิ่มของเจ้าของโครงการ 2026-11-24)
-decided_by:
+decided_by: kong
 layer: volatile
 affects:
   - docs/data/api-contract.md (ไม่มี section overview เดิม — ไม่ต้องแก้; สัญญา BFF อยู่ใน Zod `overviewSummarySchema` / `overviewSiteRowSchema` / `overviewFiltersSchema`)
@@ -98,17 +99,17 @@ affects:
 
 ## Why
 
-#1504: ปัจจุบันหัวหน้ามีเฉพาะการ์ด "ลงทะเบียนล่วงหน้า" / "อยู่ในศูนย์" ไม่เห็นจำนวนศูนย์แยกประเภท ทั้งที่ `site_kind` เป็น master ที่ SA เพิ่มประเภทได้ (CR-198). ระหว่างพัฒนาเจ้าของโครงการกำหนดเพิ่ม (2026-11-24): ศูนย์ External แยกการ์ด, ตัวเลข「อยู่ในศูนย์」ต้องไม่รวมศูนย์ที่ปิด / ยกเลิก / External เพราะบิดอัตราการใช้ความจุ (เช่นศูนย์ทดสอบความจุ 6,000 ทำให้ค่าเฉลี่ยต่ำเกินจริง). การนับเป็น rule ใหม่ของ `summary` (สถานะ / External / ตัวกรอง) จึงบันทึกเป็น CR.
+#1504: ปัจจุบันหัวหน้ามีเฉพาะการ์ด "ลงทะเบียนล่วงหน้า" / "อยู่ในศูนย์" ไม่เห็นจำนวนศูนย์แยกประเภท ทั้งที่ `site_kind` เป็น master ที่ SA เพิ่มประเภทได้ (CR-198). ระหว่างพัฒนาเจ้าของโครงการกำหนดเพิ่ม (2026-11-24): ศูนย์ External แยกการ์ด, ตัวเลข「อยู่ในศูนย์」ต้องไม่รวมศูนย์ที่ปิด / ยกเลิก / External เพราะบิดอัตราการใช้ความจุ (เช่นศูนย์ทดสอบความจุ 6,000 ทำให้ค่าเฉลี่ยต่ำเกินจริง). ศูนย์ปิด / ยกเลิกถูกตัดออกจากการนับแล้ว จึงมีการ์ด「ศูนย์ที่ปิด/ยกเลิก」แสดงว่ามีกี่แห่ง (2026-11-25). การนับเป็น rule ใหม่ของ `summary` (สถานะ / External / ตัวกรอง) จึงบันทึกเป็น CR.
 
 ## Change
 
 - **Before:** `summary` ส่ง `sites_total`, `sites_by_status`; ไม่มีจำนวนตามประเภท; `present_total` / `forecast_total` / `avg_*_pct` รวมทุกศูนย์ตามตัวกรอง; ไม่มีตัวกรอง External / unknown; ตารางศูนย์ไม่บอก External.
-- **After:** ตาม FR-1..FR-19.
+- **After:** ตาม FR-1..FR-19 (รวม FR-7a / FR-7b / FR-13a).
 
 ## Impact
 
 - BFF `summary` / `sites` response (additive) และ query `external` (ใหม่); client ที่ parse ด้วย Zod ใหม่ต้องมี field ใหม่ — deploy FE+BFF เป็น bundle เดียวอยู่แล้ว.
-- ตัวเลข `present_total` / `forecast_total` / `avg_*_pct` เปลี่ยนค่าเมื่อมีศูนย์ปิด / ยกเลิก / External ที่มีคนหรือความจุ.
+- ตัวเลข `present_total` / `forecast_total` / `avg_*_pct` เปลี่ยนค่าเมื่อมีศูนย์ปิด / ยกเลิก / External ที่มีคนหรือความจุ; `sites_total` เปลี่ยนความหมาย (ไม่นับศูนย์ปิด / ยกเลิก) จึงไม่เท่าผลรวม `sites_by_status` โดยตั้งใจ — ตรวจแล้วไม่มีหน้าจอใดอ่าน `sites_total` ตอนนี้ (มีแค่ schema และ `summary/server.test.ts`).
 - ไม่กระทบ `docs/data/schema.md`, worker, FastAPI, role matrix.
 - ลำดับกับ #1502: นับใน `buildOverviewSummary` จากทุกศูนย์ จึงไม่ถูกกระทบ pagination.
 
@@ -123,3 +124,4 @@ N/A — ไม่มี doc ที่ persist เปลี่ยน, ไม่ b
 - 2026-11-24 — เพิ่ม FR-7 / D-5 (ตัวเลข「อยู่ในศูนย์」ไม่นับศูนย์ปิด / ยกเลิก / External), FR-8..FR-9 / FR-17..FR-19 / D-6 (ตัวกรอง External และ「ไม่ทราบสถานะ」, ตัดศูนย์ External เมื่อเลือกประเภทปกติ, badge ในตารางศูนย์) ตามข้อสั่งของเจ้าของโครงการ
 - 2026-11-24 — D-1 เปลี่ยนค่าตั้งต้น: ไม่นับศูนย์ที่ปิดและศูนย์ที่ยกเลิกในจำนวนศูนย์ (`sites_total`, การ์ดประเภท, `sites_external`) ยกเว้นเมื่อตัวกรองสถานะเลือกสถานะนั้นตรงๆ (FR-4, AC-1, AC-5a)
 - 2026-11-25 — จากรีวิว PR #1511: เพิ่ม FR-7a (ระบุ `checkouts_in_window` / `sites_open_with_present`), FR-7b + FR-13a + AC-1a (การ์ด「ศูนย์ที่ปิด/ยกเลิก」, `sites_total` ไม่เท่าผลรวม `sites_by_status` โดยตั้งใจ); เพิ่มกติกาตัวกรอง `external` (FR-9 / FR-18 / AC-6a / AC-6b); ตัดข้อยกเว้นของ FR-4 (ตัวกรองสถานะปิด / ยกเลิก): การ์ดประเภทและ `sites_total` ขึ้น 0 โดยตั้งใจ ศูนย์เหล่านั้นแสดงในการ์ดปิด/ยกเลิก (D-1, D-7, FR-4, AC-5, AC-5a)
+- 2026-11-25 — approved by kong; รันเลข CR-266 (เลข CR-265 ถูกจองโดย PR #1470 ที่ยังเปิดอยู่); ย้ายจาก `draft-overview-site-kind-counts.md` เข้า `01-core/`; ซิงก์ Change / Impact / Why ให้ตรงกับ FR-7a / FR-7b / FR-13a
