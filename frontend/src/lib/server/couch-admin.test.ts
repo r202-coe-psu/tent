@@ -4,6 +4,8 @@ vi.mock('$env/dynamic/private', () => ({
 	env: { COUCHDB_ADMIN_URL: 'http://admin:password@couchdb.test' }
 }));
 import {
+	adminFetch,
+	adminRaw,
 	assertCanGrant,
 	authorizeUserWrite,
 	isProtectedBootstrapAdmin,
@@ -15,6 +17,7 @@ import {
 	type Caller
 } from './couch-admin';
 import { error } from '@sveltejs/kit';
+import { runAsActor } from './request-actor';
 
 const sa: Caller = { name: 'sa', roles: ['system_admin'], isSA: true, shelterCode: null };
 const couchAdmin: Caller = { name: 'admin', roles: ['_admin'], isSA: true, shelterCode: null };
@@ -256,5 +259,62 @@ describe('serviceOrHttpError', () => {
 		expect(res.status).toBe(409);
 		expect(await res.json()).toEqual({ error: { code: 'CONFLICT', message: 'ชน' } });
 		expect(serviceOrHttpError(new Error('x')).status).toBe(500);
+	});
+});
+
+describe('admin writes name their writer (CR-260 FR-C6)', () => {
+	let sent: { url: string; method: string; body: unknown }[];
+
+	beforeEach(() => {
+		sent = [];
+		vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+			sent.push({
+				url: String(url),
+				method: init.method ?? 'GET',
+				body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body
+			});
+			return new Response(JSON.stringify({ ok: true, rev: '3-c' }), { status: 201 });
+		});
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('adminFetch stamps a kiosk write and turns its DELETE into a named tombstone', async () => {
+		await runAsActor('kiosk:kiosk-sh001-01', async () => {
+			await adminFetch('/shelter_sh001/evacuee%3A01', {
+				method: 'PUT',
+				body: JSON.stringify({ _id: 'evacuee:01', _rev: '2-b', updated_by: 'staff01' })
+			});
+			await adminFetch('/shelter_sh001/image%3A01?rev=1-a', { method: 'DELETE' });
+		});
+
+		expect(sent[0]).toMatchObject({
+			method: 'PUT',
+			body: { _id: 'evacuee:01', updated_by: 'kiosk:kiosk-sh001-01' }
+		});
+		expect(sent[1]).toMatchObject({
+			url: 'http://couchdb.test/shelter_sh001/image%3A01',
+			method: 'PUT',
+			body: { _id: 'image:01', _rev: '1-a', _deleted: true, updated_by: 'kiosk:kiosk-sh001-01' }
+		});
+	});
+
+	it('adminRaw clears a carried-over updated_by when no actor is known', async () => {
+		await adminRaw('/shelter_sh001/evacuee%3A01', 'PUT', {
+			_id: 'evacuee:01',
+			_rev: '2-b',
+			updated_by: 'staff01'
+		});
+		expect(sent[0].body).toEqual({ _id: 'evacuee:01', _rev: '2-b' });
+	});
+
+	it('passes other databases and reads through untouched', async () => {
+		await runAsActor('sm', async () => {
+			await adminFetch('/registry/lock%3A01?rev=1-a', { method: 'DELETE' });
+			await adminFetch('/shelter_sh001/evacuee%3A01');
+		});
+		expect(sent.map((r) => [r.method, r.url, r.body])).toEqual([
+			['DELETE', 'http://couchdb.test/registry/lock%3A01?rev=1-a', undefined],
+			['GET', 'http://couchdb.test/shelter_sh001/evacuee%3A01', undefined]
+		]);
 	});
 });

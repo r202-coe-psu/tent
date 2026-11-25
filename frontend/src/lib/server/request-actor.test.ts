@@ -1,12 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	currentActor,
+	prepareAdminWrite,
 	runAsActor,
 	runWithActorScope,
 	setRequestActor,
-	stampAdminWrite,
 	withActor
 } from './request-actor';
+
+const stamp = (path: string, method: string, body: unknown) =>
+	prepareAdminWrite(path, method, body).body;
 
 describe('request actor (CR-260 FR-C6)', () => {
 	it('keeps the actor per request scope', async () => {
@@ -21,16 +24,13 @@ describe('request actor (CR-260 FR-C6)', () => {
 
 	it('stamps admin writes to shelter and catalog documents only', () => {
 		runAsActor('sm.user', () => {
-			expect(stampAdminWrite('/shelter_sh001/evacuee%3A01', 'PUT', { a: 1 })).toEqual({
+			expect(stamp('/shelter_sh001/evacuee%3A01', 'PUT', { a: 1 })).toEqual({
 				a: 1,
 				updated_by: 'sm.user'
 			});
-			expect(stampAdminWrite('/catalog', 'POST', { a: 1 })).toEqual({
-				a: 1,
-				updated_by: 'sm.user'
-			});
+			expect(stamp('/catalog', 'POST', { a: 1 })).toEqual({ a: 1, updated_by: 'sm.user' });
 			expect(
-				stampAdminWrite('/shelter_sh001/_bulk_docs', 'POST', { docs: [{ _id: 'a' }, { _id: 'b' }] })
+				stamp('/shelter_sh001/_bulk_docs', 'POST', { docs: [{ _id: 'a' }, { _id: 'b' }] })
 			).toEqual({
 				docs: [
 					{ _id: 'a', updated_by: 'sm.user' },
@@ -40,17 +40,76 @@ describe('request actor (CR-260 FR-C6)', () => {
 		});
 	});
 
-	it('leaves reads, design docs, security, other DBs and actor-less calls alone', () => {
+	it('leaves reads, design docs, security and other DBs alone', () => {
 		runAsActor('sm.user', () => {
 			const body = { selector: {} };
-			expect(stampAdminWrite('/shelter_sh001/_find', 'POST', body)).toBe(body);
-			expect(stampAdminWrite('/shelter_sh001/_design/access', 'PUT', body)).toBe(body);
-			expect(stampAdminWrite('/shelter_sh001/_security', 'PUT', body)).toBe(body);
-			expect(stampAdminWrite('/registry/shelter%3A01', 'PUT', body)).toBe(body);
-			expect(stampAdminWrite('/audit_log/audit_event%3A01', 'PUT', body)).toBe(body);
+			for (const [path, method] of [
+				['/shelter_sh001/_find', 'POST'],
+				['/shelter_sh001/_design/access', 'PUT'],
+				['/shelter_sh001/_security', 'PUT'],
+				['/registry/shelter%3A01', 'PUT'],
+				['/audit_log/audit_event%3A01', 'PUT'],
+				['/registry/lock%3A01?rev=1-a', 'DELETE']
+			]) {
+				expect(prepareAdminWrite(path, method, body)).toEqual({ path, method, body });
+			}
 		});
-		const body = { a: 1 };
-		expect(stampAdminWrite('/shelter_sh001/evacuee%3A01', 'PUT', body)).toBe(body);
+	});
+
+	it('clears a carried-over updated_by when no actor is known (W3: unknown, not the last writer)', () => {
+		const stale = { _id: 'evacuee:01', _rev: '3-a', name: 'x', updated_by: 'previous.user' };
+		expect(stamp('/shelter_sh001/evacuee%3A01', 'PUT', stale)).toEqual({
+			_id: 'evacuee:01',
+			_rev: '3-a',
+			name: 'x'
+		});
+		expect(
+			stamp('/shelter_sh001/_bulk_docs', 'POST', { docs: [stale, { _id: 'evacuee:02' }] })
+		).toEqual({ docs: [{ _id: 'evacuee:01', _rev: '3-a', name: 'x' }, { _id: 'evacuee:02' }] });
+		const fresh = { _id: 'evacuee:02' };
+		expect(stamp('/shelter_sh001/evacuee%3A02', 'PUT', fresh)).toBe(fresh);
+	});
+
+	describe('DELETE of an audited doc (W4)', () => {
+		beforeEach(() => {
+			vi.useFakeTimers({ toFake: ['Date'] });
+			vi.setSystemTime(new Date('2026-11-25T03:00:00.000Z'));
+		});
+		afterEach(() => vi.useRealTimers());
+
+		it('becomes a PUT tombstone that names the deleter', () => {
+			runAsActor('kiosk:kiosk-sh001-01', () => {
+				expect(prepareAdminWrite('/shelter_sh001/image%3A01?rev=2-b', 'DELETE', undefined)).toEqual(
+					{
+						path: '/shelter_sh001/image%3A01',
+						method: 'PUT',
+						body: {
+							_id: 'image:01',
+							_rev: '2-b',
+							_deleted: true,
+							updated_at: '2026-11-25T03:00:00.000Z',
+							updated_by: 'kiosk:kiosk-sh001-01'
+						}
+					}
+				);
+			});
+		});
+
+		it('names no one when no actor is known, and leaves a rev-less DELETE alone', () => {
+			expect(
+				prepareAdminWrite('/catalog/item_master%3A01?rev=1-a', 'DELETE', undefined).body
+			).toEqual({
+				_id: 'item_master:01',
+				_rev: '1-a',
+				_deleted: true,
+				updated_at: '2026-11-25T03:00:00.000Z'
+			});
+			expect(prepareAdminWrite('/shelter_sh001/image%3A01', 'DELETE', undefined)).toEqual({
+				path: '/shelter_sh001/image%3A01',
+				method: 'DELETE',
+				body: undefined
+			});
+		});
 	});
 
 	it('withActor sets created_by only on a new doc', () => {

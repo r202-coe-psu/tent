@@ -1,5 +1,4 @@
 import { env } from '$env/dynamic/private';
-import { setRequestActor, stampAdminWrite } from './request-actor';
 import { error, json, isHttpError, type HttpError } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
@@ -20,6 +19,7 @@ import {
 	type Caller,
 	type ServiceErrorCode
 } from './session-auth';
+import { prepareAdminWrite, setRequestActor } from './request-actor';
 
 // The credential-free session helpers live in `session-auth.ts` (printer code must not import
 // this module, CR-222 FR-2a); re-exported so every existing caller keeps working unchanged.
@@ -82,9 +82,10 @@ export async function adminRaw(
 	signal?: AbortSignal
 ): Promise<{ status: number; data: unknown }> {
 	const { base, authHeader } = adminConfig();
-	body = stampAdminWrite(path, method, body);
-	const res = await fetch(`${base}${path}`, {
-		method,
+	const req = prepareAdminWrite(path, method, body);
+	body = req.body;
+	const res = await fetch(`${base}${req.path}`, {
+		method: req.method,
 		signal: signal ?? AbortSignal.timeout(ADMIN_RAW_TIMEOUT_MS),
 		headers: {
 			Authorization: authHeader,
@@ -111,11 +112,24 @@ export async function adminAttachment(
 	};
 }
 
+/** A JSON string request body as a value (so it can be stamped); anything else as `undefined`. */
+function parseJsonBody(body: RequestInit['body']): unknown {
+	if (typeof body !== 'string') return undefined;
+	try {
+		return JSON.parse(body);
+	} catch {
+		return undefined;
+	}
+}
+
 /** Admin request that parses JSON and throws CouchDB's reason on HTTP error. */
 export async function adminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const { base, authHeader } = adminConfig();
-	const res = await fetch(`${base}${path}`, {
+	const req = prepareAdminWrite(path, init.method ?? 'GET', parseJsonBody(init.body));
+	const res = await fetch(`${base}${req.path}`, {
 		...init,
+		method: req.method,
+		...(req.body !== undefined ? { body: JSON.stringify(req.body) } : {}),
 		headers: {
 			Authorization: authHeader,
 			'Content-Type': 'application/json',
