@@ -386,6 +386,7 @@ export class ReprintSession {
 		}
 		this.printable = printable;
 		this.qrIssueFailedCount = failedCount;
+		this.unprintedLabels = [];
 		this.step = 'printing';
 		let outcome: KioskPrintFlowResult;
 		try {

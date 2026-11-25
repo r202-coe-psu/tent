@@ -486,6 +486,23 @@ describe('ReprintSession printing', () => {
 		expect(deps.print).toHaveBeenCalledTimes(2);
 	});
 
+	it('drops the labels a failed print left once a retry prints them', async () => {
+		const print = vi
+			.fn<ReprintSessionDeps['print']>()
+			.mockResolvedValueOnce({ kind: 'error', message: 'เครื่องพิมพ์ไม่พร้อม', labels: ['png-a'] })
+			.mockResolvedValueOnce({ kind: 'printed', printed: 2 });
+		const { session } = setup({ print });
+		await toVerify(session);
+		session.idLast4 = '1234';
+		await session.submitVerify();
+		expect(session.unprintedLabels).toEqual(['png-a']);
+
+		await session.retryPrint();
+
+		expect(session.step).toBe('done');
+		expect(session.unprintedLabels).toEqual([]);
+	});
+
 	it('holds the rendered labels on screen instead of reporting done when the kiosk has no printer', async () => {
 		const print = vi
 			.fn<ReprintSessionDeps['print']>()

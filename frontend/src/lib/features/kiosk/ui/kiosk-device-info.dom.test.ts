@@ -123,6 +123,19 @@ describe('KioskDeviceInfo printer (DOM)', () => {
 		expect(byTestId('kiosk-device-info-test-print')).toBeNull();
 	});
 
+	it('offers no test print before the machine says whether it has a printer', async () => {
+		fetchMock.mockImplementation(async (url: string) => {
+			if (url === '/api/v1/kiosk/device-info') return json(200, DEVICE_INFO_BODY);
+			if (url === '/api/v1/kiosk/host-info') return json(200, hostInfoBody);
+			if (url === '/api/v1/kiosk/hardware') return new Promise<Response>(() => {});
+			return json(404, {});
+		});
+		await openPanelWithPin();
+		await settle();
+
+		expect(byTestId('kiosk-device-info-test-print')).toBeNull();
+	});
+
 	it('keeps the test print button and no printer row when the machine has a printer', async () => {
 		hardwareBody = hardware('escpos');
 		await openPanelWithPin();

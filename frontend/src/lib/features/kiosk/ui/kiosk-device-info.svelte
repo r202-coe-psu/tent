@@ -366,7 +366,7 @@
 			{/if}
 
 			<div class="flex gap-3">
-				{#if printer !== 'none'}
+				{#if printer !== null && printer !== 'none'}
 					<Button
 						type="button"
 						variant="outline"
