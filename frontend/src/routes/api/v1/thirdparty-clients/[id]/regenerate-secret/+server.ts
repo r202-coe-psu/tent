@@ -8,6 +8,8 @@
  * (refused 409 once the client is revoked).
  */
 import type { RequestHandler } from './$types';
+import { recordProxiedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders, proxyFastapiJson } from '$lib/server/fastapi';
 
@@ -27,6 +29,15 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			`${fastapiBaseUrl()}/v1/admin/thirdparty-clients/${encodeURIComponent(id)}/regenerate-secret`,
 			{ method: 'POST', headers: fastapiServiceHeaders({ Accept: 'application/json' }) }
 		);
+		await recordProxiedWrite(res, {
+			actor: caller.name,
+			event: AUDIT_EVENTS.thirdpartyClientUpdated,
+			action: 'update',
+			entityType: 'thirdparty_client',
+			entityId: id,
+			shelterCode: null,
+			reason: 'secret_regenerated'
+		});
 		return proxyFastapiJson(res);
 	} catch (e) {
 		return serviceError(e);

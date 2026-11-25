@@ -3,6 +3,7 @@
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter } from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
@@ -82,6 +83,27 @@
 			<Form.FieldErrors />
 		</Form.Field>
 	</div>
+
+	<Form.Field {form} name="delivery_note">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>ข้อจำกัดการเข้าถึงสำหรับรถส่งของ</Form.Label>
+				<Textarea
+					{...props}
+					bind:value={
+						() => $formData.delivery_note ?? '', (v) => ($formData.delivery_note = v || null)
+					}
+					{disabled}
+					rows={2}
+					placeholder="เช่น รถบรรทุกเกิน 6 ล้อเข้าไม่ได้"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.Description>
+			ขนาดรถ ความสูง หรือช่วงเวลาที่รถส่งของเข้าไม่ได้ ไม่เกิน 500 ตัวอักษร (เว้นว่างได้)
+		</Form.Description>
+		<Form.FieldErrors />
+	</Form.Field>
 
 	<Form.Field {form} name="risk.secondary_muster_point">
 		<Form.Control>

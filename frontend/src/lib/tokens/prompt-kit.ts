@@ -19,7 +19,7 @@ A refined, high-contrast, crystal-clear interface designed for disaster manageme
 5. **NO TINY UNREADABLE TEXT**: Base body text is 16px ('text-base'), field reading is 18px ('text-lg'), form labels are 14px ('text-sm font-semibold'). Never use text-[10px] or text-[11px] for vital operational text. Use standard tokens ('text-xs', 'text-sm', 'text-base').
 6. **NO COLOR-ONLY STATUS INDICATORS**: Always pair status colors with explicit text labels and icons for colorblind accessibility (WCAG 2.1 AA/AAA).
 7. **MANDATORY SHADCN-SVELTE FORM CONTROLS**: All inputs, selects, textareas, switches, checkboxes, labels, and dialogs MUST use official shadcn-svelte components ('$lib/components/ui/*') with Svelte 5 runes ($state, $props, bind:value, bind:checked). Never write raw unstyled HTML input tags.
-8. **UNIFIED SINGLE-FONT SYSTEM (IBM Plex Sans Thai Looped)**: 100% of UI typography (headings, body text, form controls, numbers, CID, telemetry KPIs, badges, and tables) MUST use 'IBM Plex Sans Thai Looped' with 'tabular-nums' for digit alignment. 'font-mono' (Geist Mono) is strictly reserved for technical programming code blocks (<pre>, <code>).
+8. **UNIFIED SINGLE-FONT SYSTEM (Noto Sans Thai Looped)**: 100% of UI typography (headings, body text, form controls, numbers, CID, telemetry KPIs, badges, and tables) MUST use 'Noto Sans Thai Looped' with 'tabular-nums' for digit alignment. 'font-mono' (Geist Mono) is strictly reserved for technical programming code blocks (<pre>, <code>).
 
 ---
 
@@ -83,7 +83,7 @@ Each domain has 5 steps: base (identity/icons/large text), strong (solid button 
   - 'rounded-lg' (8px): Form Controls, Buttons, Select Triggers
   - 'rounded-full': Pills, Avatars, Badges
 
-#### Typography Hierarchy (IBM Plex Sans Thai Looped)
+#### Typography Hierarchy (Noto Sans Thai Looped)
 - 'h1': 'text-3xl sm:text-4xl font-extrabold text-[#0A2647] tracking-tight' (36px-40px)
 - 'h2': 'text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight' (24px-28px)
 - 'h3': 'text-lg sm:text-xl font-bold text-slate-900' (18px-20px)

@@ -59,6 +59,71 @@ class ParkingPoint(BaseModel):
     vehicles: list[ParkingVehicle] = Field(default_factory=list)
 
 
+class ProfileToilets(BaseModel):
+    male: int | None = None
+    female: int | None = None
+    accessible: int | None = None
+
+
+class ProfileRisk(BaseModel):
+    elevation_m: float | None = None
+    constraints: str | None = None
+    secondary_muster_point: str | None = None
+
+
+class ProfilePetCategory(BaseModel):
+    category: str
+    conditions: list[str] = Field(default_factory=list)
+    max_capacity: int | None = None
+
+
+class ProfilePetPolicy(BaseModel):
+    policy: str | None = None
+    categories: list[ProfilePetCategory] = Field(default_factory=list)
+
+
+class ProfileLuggagePolicy(BaseModel):
+    limitation: str | None = None
+    max_per_family: int | None = None
+    rules: list[str] = Field(default_factory=list)
+    rules_other: str | None = None
+
+
+class ProfileZone(BaseModel):
+    """Zone metadata for the partner detail — no audit fields, `short_name` or `specifics`."""
+
+    code: str | None = None
+    name: str | None = None
+    type: str = "general"
+    capacity: int | None = None
+    status: str = "active"
+
+
+class PublicShelterProfile(BaseModel):
+    """Registry sections the partner detail (EXT-003) publishes (decision sync 2026-11-24).
+
+    Projected by the worker from the registry doc; the API never reads ``raw_data`` for these.
+    """
+
+    area_m2: float | None = None
+    area_type: str | None = None
+    power_source: str | None = None
+    water_source: str | None = None
+    communications: list[str] = Field(default_factory=list)
+    vhf_channel: str | None = None
+    central_kitchen: bool | None = None
+    helipad: bool | None = None
+    logistics_area_m2: float | None = None
+    toilets: ProfileToilets | None = None
+    showers: int | None = None
+    risk: ProfileRisk | None = None
+    # The stored `admission_policy.supported_vulnerable_groups` as is — no inference.
+    vulnerable_groups: list[str] = Field(default_factory=list)
+    pet_policy: ProfilePetPolicy | None = None
+    luggage_policy: ProfileLuggagePolicy | None = None
+    zones: list[ProfileZone] = Field(default_factory=list)
+
+
 class PublicShelterReadinessSummary(BaseModel):
     latest_assessment_id: str | None = None
     verdict: str | None = None
@@ -88,6 +153,8 @@ class PublicShelter(Document):
     external_url: str | None = None
     location_type: str = "shelter"
     location_subtype: str | None = None
+    # Registry `project_level` (`community` / `lao` / `provincial`) — decision sync 2026-11-24.
+    project_level: str | None = None
     location: GeoJsonPoint | None = None
     geo: GeoPoint | None = None
     capacity: int = 0
@@ -98,6 +165,8 @@ class PublicShelter(Document):
     contact_name: str | None = None
     contact_phone: str | None = None
     operating_org: str | None = None
+    # Not read by the API since decision sync 2026-11-24 — EXT-002/003 compute
+    # `accepts_delivery` from status / is_external / is_active (`utils.shelter_booking`).
     accepts_delivery: bool = True
     delivery_note: str | None = None
     opened_at: datetime | None = None
@@ -121,6 +190,9 @@ class PublicShelter(Document):
     parking_points: list[ParkingPoint] = Field(default_factory=list)
     # Effective vehicle types for the list filter (CR-253 FR-35): motorcycle, car, truck, boat order.
     parking_vehicle_types: list[str] = Field(default_factory=list)
+    # `None` = row not re-projected since PROJECTION_VERSION 24: the partner detail reports
+    # null / [] for these fields rather than reading `raw_data`.
+    profile: PublicShelterProfile | None = None
     raw_data: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime
 

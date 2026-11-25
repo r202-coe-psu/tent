@@ -9,23 +9,12 @@ import {
 	type PublicShelterSummary,
 	type MasterLabelOption,
 	hiddenShelterGroups,
-	wantedParkingTypes
+	wantedParkingTypes,
+	DEFAULT_PUBLIC_AREA,
+	distanceKm,
+	orderShelters
 } from '$lib/features/public-portal';
 import { formatMasterLabel } from '$lib/features/master-data';
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-	const R = 6371;
-	const dLat = ((lat2 - lat1) * Math.PI) / 180;
-	const dLon = ((lon2 - lon1) * Math.PI) / 180;
-	const a =
-		Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-		Math.cos((lat1 * Math.PI) / 180) *
-			Math.cos((lat2 * Math.PI) / 180) *
-			Math.sin(dLon / 2) *
-			Math.sin(dLon / 2);
-	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-	return R * c;
-}
 
 export const load: PageLoad = async ({ url, fetch }) => {
 	const search = url.searchParams.get('q') || '';
@@ -64,6 +53,10 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const hasUser = !Number.isNaN(userLatNum) && !Number.isNaN(userLngNum);
 	const maxDistance = distance ? parseFloat(distance) : NaN;
 	const hasRadius = hasUser && !Number.isNaN(maxDistance) && maxDistance > 0;
+	const origin = hasUser ? { lat: userLatNum, lng: userLngNum } : null;
+	// No position and no area or text of the visitor's own: list only the default area, so the
+	// first load stays small (CR-261 decision sync 2026-11-24). Their own pick always wins.
+	const defaultArea = !hasUser && !province && !district && !subdistrict && !search.trim();
 
 	// The cards count every shelter the page can list, whatever the filters say (#1419).
 	// When it cannot be had the cards say so (`null` → a dash). Zeros would read as "no shelters".
@@ -92,8 +85,8 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	let data: PublicShelterListResponse | null;
 	try {
 		data = await listPublicShelters({
-			province: province || undefined,
-			district: district || undefined,
+			province: (defaultArea ? DEFAULT_PUBLIC_AREA.province : province) || undefined,
+			district: (defaultArea ? DEFAULT_PUBLIC_AREA.district : district) || undefined,
 			subdistrict: subdistrict || undefined,
 			status: status || undefined,
 			// With a radius the database cuts and orders by distance (`$nearSphere`). Without one it
@@ -118,11 +111,8 @@ export const load: PageLoad = async ({ url, fetch }) => {
 
 	const rawShelters = (Array.isArray(data?.shelters) ? data.shelters : []) as PublicShelterItem[];
 
-	let shelters = rawShelters.map((item) => {
-		let dist = 0;
-		if (hasUser && item?.geo && item.geo.lat != null && item.geo.lng != null) {
-			dist = parseFloat(haversineKm(userLatNum, userLngNum, item.geo.lat, item.geo.lng).toFixed(1));
-		}
+	const cards = rawShelters.map((item) => {
+		const dist = distanceKm(origin, item?.geo) ?? 0;
 		const rawAdminType = item?.admin_type || (item as Record<string, unknown>)?.shelter_type;
 		const resolvedAdminType =
 			typeof rawAdminType === 'string'
@@ -139,14 +129,8 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		);
 	});
 
-	// Closest-first when a search origin (GPS or map pin) is present.
-	if (hasUser) {
-		shelters = [...shelters].sort((a, b) => {
-			const da = a.geo ? (a.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
-			const db = b.geo ? (b.distance ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
-			return da - db;
-		});
-	}
+	// Centres in this system first, then closest-first when there is a search origin.
+	const shelters = orderShelters(cards, origin);
 
 	const available_types = Array.from(
 		new Set(
@@ -161,6 +145,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		count: shelters.length,
 		as_of: data?.as_of ?? new Date().toISOString(),
 		summary: await summaryPromise,
+		default_area: defaultArea,
 		filters: {
 			search,
 			province,
@@ -175,8 +160,9 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			parking_car: parkingWanted.includes('car') ? 'on' : '',
 			parking_motorcycle: parkingWanted.includes('motorcycle') ? 'on' : '',
 			parking_boat: parkingWanted.includes('boat') ? 'on' : '',
-			hide_evacuation: groupsHidden.includes('evacuation') ? 'on' : '',
-			hide_external: groupsHidden.includes('external') ? 'on' : ''
+			// The raw group flags; `shelterGroupChoice` reads them (an old `hide_external` is the default).
+			hide_evacuation: url.searchParams.get('hide_evacuation') === 'on' ? 'on' : '',
+			show_external: url.searchParams.get('show_external') === 'on' ? 'on' : ''
 		},
 		available_types
 	};

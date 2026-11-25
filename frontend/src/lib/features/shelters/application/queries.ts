@@ -13,6 +13,7 @@ import {
 import { sheltersRepository, SHELTER_REGISTRY_DB } from '../data/shelters.remote';
 import {
 	createShelter,
+	getShelter,
 	updateShelter,
 	closeZone,
 	reopenZone,
@@ -28,6 +29,7 @@ import {
 import { listProvinces, listDistricts, listSubdistricts } from '../data/thailand-location.api';
 import { withoutExternalShelters, type Shelter } from '../domain/schema';
 import type { ShelterBasic, ShelterSummary } from '../data/shelters.repository';
+import { auditLogKeys } from '$lib/features/audit-log';
 import {
 	describeShelterCloseJobOutcome,
 	isShelterCloseJobActive,
@@ -39,6 +41,7 @@ export const sheltersKeys = {
 	list: () => [...sheltersKeys.all, 'list'] as const,
 	search: () => [...sheltersKeys.all, 'search'] as const,
 	detail: (code: string) => [...sheltersKeys.all, 'detail', code] as const,
+	actors: (code: string) => [...sheltersKeys.detail(code), 'actors'] as const,
 	storagePoints: (code: string) => [...sheltersKeys.all, 'storage-points', code] as const,
 	closePreview: (code: string) => [...sheltersKeys.all, 'close-preview', code] as const,
 	closeActive: (code: string) => [...sheltersKeys.all, 'close-active', code] as const,
@@ -74,6 +77,19 @@ export const useShelter = (code: () => string, enabled: () => boolean = () => tr
 		queryKey: sheltersKeys.detail(code()),
 		queryFn: () => sheltersRepository().getShelter(code()),
 		enabled: !!code() && enabled()
+	}));
+
+export const useShelterActors = (code: () => string) =>
+	createQuery(() => ({
+		queryKey: sheltersKeys.actors(code()),
+		queryFn: () => getShelter(code()),
+		enabled: !!code(),
+		select: (s: ShelterSummary) => ({
+			created_at: s.created_at,
+			updated_at: s.updated_at,
+			created_by_name: s.created_by_name ?? null,
+			updated_by_name: s.updated_by_name ?? null
+		})
 	}));
 
 // ===== Thailand province/district/subdistrict cascade (address selects) =====
@@ -135,6 +151,7 @@ export const useUpdateShelter = () => {
 		// mutation) sees the doc it must reload from the moment the save is reported.
 		onSuccess: async (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			await queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			toast.success(`อัปเดตข้อมูลศูนย์พักพิง ${variables.code} สำเร็จ`);
 		},
@@ -240,18 +257,17 @@ export const useCloseZone = () => {
 		mutationFn: ({
 			code,
 			zoneCode,
-			reason,
-			closedBy
+			reason
 		}: {
 			code: string;
 			zoneCode: string;
 			zoneName?: string;
 			reason?: string;
-			closedBy?: string;
-		}) => closeZone(code, zoneCode, reason, closedBy),
+		}) => closeZone(code, zoneCode, reason),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			const label = variables.zoneName?.trim() || variables.zoneCode;
 			toast.success(`ปิดโซน ${label} ของศูนย์ ${variables.code} เรียบร้อย`);
 		},
@@ -264,19 +280,12 @@ export const useCloseZone = () => {
 export const useReopenZone = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({
-			code,
-			zoneCode,
-			reopenedBy
-		}: {
-			code: string;
-			zoneCode: string;
-			zoneName?: string;
-			reopenedBy?: string;
-		}) => reopenZone(code, zoneCode, reopenedBy),
+		mutationFn: ({ code, zoneCode }: { code: string; zoneCode: string; zoneName?: string }) =>
+			reopenZone(code, zoneCode),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			const label = variables.zoneName?.trim() || variables.zoneCode;
 			toast.success(`เปิดโซน ${label} ของศูนย์ ${variables.code} อีกครั้ง`);
 		},
@@ -336,6 +345,7 @@ export const useSaveStoragePoint = () => {
 			pointId ? editStoragePoint(code, pointId, rev, point) : addStoragePoint(code, rev, point),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			toast.success(variables.pointId ? 'บันทึกจุดเก็บของสำเร็จ' : 'เพิ่มจุดเก็บของสำเร็จ');
 		},
 		onError: (err: Error, variables) => {
@@ -352,6 +362,7 @@ export const useDeleteStoragePoint = () => {
 			deleteStoragePoint(code, pointId, rev),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
+			queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 			toast.success('ลบจุดเก็บของสำเร็จ');
 		},
 		onError: (err: Error, variables) => {
