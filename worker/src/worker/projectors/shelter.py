@@ -174,7 +174,8 @@ def backfill_capacity(doc: dict[str, Any]) -> int:
         # CR-252 (decision sync 2026-11-13): an external shelter shows its own optional
         # max capacity, but never falls back to zones / 100 — 0 means "not given".
         return 0
-    zones = doc.get("zones") or []
+    zones = doc.get("zones")
+    zones = zones if isinstance(zones, list) else []
     zone_sum = sum(int(z.get("capacity") or 0) for z in zones if isinstance(z, dict))
     if zone_sum > 0:
         return zone_sum
@@ -356,6 +357,166 @@ def project_parking_vehicle_types(doc: dict[str, Any]) -> list[str]:
     return [t for t in _VEHICLE_TYPES if t in types]
 
 
+PROJECT_LEVELS = frozenset({"community", "lao", "provincial"})
+
+
+def clean_text(value: Any) -> str | None:
+    """A trimmed non-blank string, else ``None``."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _non_negative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if (
+        isinstance(value, float)
+        and math.isfinite(value)
+        and value.is_integer()
+        and value >= 0
+    ):
+        return int(value)
+    return None
+
+
+def _non_negative_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number >= 0 else None
+
+
+def _flag(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _section(doc: dict[str, Any], key: str) -> dict[str, Any] | None:
+    value = doc.get(key)
+    return value if isinstance(value, dict) else None
+
+
+def _text_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [text for text in (clean_text(v) for v in value) if text]
+
+
+def resolve_project_level(doc: dict[str, Any]) -> str | None:
+    level = doc.get("project_level")
+    return level if level in PROJECT_LEVELS else None
+
+
+def _project_toilets(facilities: dict[str, Any] | None) -> dict[str, Any] | None:
+    if facilities is None:
+        return None
+    return {
+        "male": _non_negative_int(facilities.get("toilets_male")),
+        "female": _non_negative_int(facilities.get("toilets_female")),
+        "accessible": _non_negative_int(facilities.get("toilets_accessible")),
+    }
+
+
+def _project_risk(risk: dict[str, Any] | None) -> dict[str, Any] | None:
+    if risk is None:
+        return None
+    return {
+        "elevation_m": _non_negative_number(risk.get("elevation_m")),
+        "constraints": clean_text(risk.get("constraints")),
+        "secondary_muster_point": clean_text(risk.get("secondary_muster_point")),
+    }
+
+
+def _project_pet_policy(admission: dict[str, Any] | None) -> dict[str, Any] | None:
+    pet = admission.get("pet_policy") if admission else None
+    if not isinstance(pet, dict):
+        return None
+    categories = pet.get("categories")
+    out: list[dict[str, Any]] = []
+    for category in categories if isinstance(categories, list) else []:
+        if not isinstance(category, dict):
+            continue
+        name = clean_text(category.get("category"))
+        if not name:
+            continue
+        out.append(
+            {
+                "category": name,
+                "conditions": _text_list(category.get("conditions")),
+                "max_capacity": _non_negative_int(category.get("max_capacity")),
+            }
+        )
+    return {"policy": clean_text(pet.get("policy")), "categories": out}
+
+
+def _project_luggage_policy(policy: dict[str, Any] | None) -> dict[str, Any] | None:
+    if policy is None:
+        return None
+    return {
+        "limitation": clean_text(policy.get("limitation")),
+        "max_per_family": _non_negative_int(policy.get("max_per_family")),
+        "rules": _text_list(policy.get("rules")),
+        "rules_other": clean_text(policy.get("rules_other")),
+    }
+
+
+def _project_zones(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Zone metadata only — never the close/reopen audit, `reason`, `short_name`, `specifics`."""
+    zones = doc.get("zones")
+    out: list[dict[str, Any]] = []
+    for zone in zones if isinstance(zones, list) else []:
+        if not isinstance(zone, dict):
+            continue
+        code = clean_text(zone.get("code"))
+        name = clean_text(zone.get("name"))
+        if not code and not name:
+            continue
+        out.append(
+            {
+                "code": code,
+                "name": name,
+                "type": clean_text(zone.get("type")) or "general",
+                "capacity": _non_negative_int(zone.get("capacity")),
+                "status": "closed" if zone.get("status") == "closed" else "active",
+            }
+        )
+    return out
+
+
+def project_profile(doc: dict[str, Any]) -> dict[str, Any]:
+    """``public_shelters.profile`` — the registry sections EXT-003 publishes
+    (decision sync 2026-11-24). A malformed section drops only its own fields."""
+    facilities = _section(doc, "facilities")
+    common_areas = _section(doc, "common_areas") or {}
+    utilities = _section(doc, "utilities") or {}
+    admission = _section(doc, "admission_policy")
+    return {
+        "area_m2": _non_negative_number(doc.get("area_m2")),
+        "area_type": clean_text(doc.get("area_type")),
+        "power_source": clean_text(utilities.get("power_source")),
+        "water_source": clean_text(utilities.get("water_source")),
+        "communications": _text_list(utilities.get("communications")),
+        "vhf_channel": clean_text(utilities.get("vhf_channel")),
+        "central_kitchen": _flag(common_areas.get("central_kitchen")),
+        "helipad": _flag(common_areas.get("helipad")),
+        "logistics_area_m2": _non_negative_number(
+            common_areas.get("logistics_area_m2")
+        ),
+        "toilets": _project_toilets(facilities),
+        "showers": _non_negative_int(facilities.get("showers")) if facilities else None,
+        "risk": _project_risk(_section(doc, "risk")),
+        "vulnerable_groups": _text_list(
+            admission.get("supported_vulnerable_groups") if admission else None
+        ),
+        "pet_policy": _project_pet_policy(admission),
+        "luggage_policy": _project_luggage_policy(_section(doc, "luggage_policy")),
+        "zones": _project_zones(doc),
+    }
+
+
 def project_shelter(
     doc: dict[str, Any],
 ) -> tuple[ProjectionAction, dict[str, Any] | None]:
@@ -418,6 +579,10 @@ def project_shelter(
         "external_url": resolve_external_url(doc),
         "location_type": "shelter",
         "location_subtype": doc.get("shelter_type"),
+        "project_level": resolve_project_level(doc),
+        "name_short": clean_text(doc.get("name_short")),
+        "operating_org": clean_text(doc.get("operating_org")),
+        "delivery_note": clean_text(doc.get("delivery_note")),
         "capacity": backfill_capacity(doc),
         "province": doc.get("province"),
         "district": doc.get("district"),
@@ -429,6 +594,7 @@ def project_shelter(
         "donation_points": project_donation_points(doc),
         "parking_points": project_parking_points(doc),
         "parking_vehicle_types": project_parking_vehicle_types(doc),
+        "profile": project_profile(doc),
         "raw_data": doc,
         "updated_at": updated_at,
     }

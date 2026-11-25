@@ -182,7 +182,8 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 				label_en: 'Evacuation Center',
 				is_default: true
 			},
-			{ key: 'host_house', label_th: 'บ้านพี่เลี้ยง', label_en: 'Host House' }
+			{ key: 'host_house', label_th: 'บ้านพี่เลี้ยง', label_en: 'Host House' },
+			{ key: 'test_center', label_th: 'ศูนย์ทดสอบ', label_en: 'Test Center' }
 		]
 	}
 ];

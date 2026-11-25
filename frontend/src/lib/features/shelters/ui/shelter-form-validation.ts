@@ -11,6 +11,7 @@
 export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 	'basic-info': [
 		'name',
+		'name_short',
 		'site_kind',
 		'operation_status',
 		'is_external',
@@ -28,6 +29,7 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 		'district',
 		'province',
 		'postal_code',
+		'operating_org',
 		'key_personnel',
 		'feature_flags'
 	],
@@ -35,7 +37,7 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 	'food-distribution': ['food_distribution_points'],
 	'storage-points': ['common_areas.sub_storage'],
 	utilities: ['utilities'],
-	risk: ['risk'],
+	risk: ['risk', 'delivery_note'],
 	'admission-policy': ['admission_policy'],
 	'luggage-policy': ['luggage_policy'],
 	'parking-policy': ['parking_policy'],

@@ -51,9 +51,11 @@ describe('siteKindLabel', () => {
 		expect(siteKindLabel('mobile_clinic', [], 'en')).toBe('mobile_clinic');
 	});
 
-	it('keeps the two seeded labels readable while the list is empty or loading', () => {
+	it('keeps the seeded labels readable while the list is empty or loading', () => {
 		expect(siteKindLabel('host_house', undefined, 'th')).toBe('บ้านพี่เลี้ยง');
 		expect(siteKindLabel('evacuation_center', [], 'en')).toBe('Evacuation Center');
+		expect(siteKindLabel('test_center', undefined, 'th')).toBe('ศูนย์ทดสอบ');
+		expect(siteKindLabel('test_center', [], 'en')).toBe('Test Center');
 	});
 
 	it('reads a missing code as the default kind', () => {

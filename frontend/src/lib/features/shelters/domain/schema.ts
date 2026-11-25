@@ -671,8 +671,31 @@ export const externalUrlSchema = z.preprocess(
 		.nullable()
 );
 
+/**
+ * Optional free text: trimmed, blank / whitespace-only becomes `null`. No `.default(null)` — the
+ * shelter-import update path parses with `createShelterSchema` and then shallow-merges, so a
+ * default would wipe the stored value on every import.
+ */
+function optionalTextSchema(max: number, tooLong: string) {
+	return z
+		.preprocess(
+			(v) => (typeof v === 'string' ? v.trim() || null : v),
+			z.string().max(max, tooLong).nullable()
+		)
+		.nullish();
+}
+
 export const shelterBaseSchema = z.object({
 	name: z.string().trim().min(1, 'ชื่อศูนย์พักพิงต้องไม่ว่าง'),
+	// Short name for map labels.
+	name_short: optionalTextSchema(64, 'ชื่อย่อต้องไม่เกิน 64 ตัวอักษร'),
+	// The agency that runs the shelter.
+	operating_org: optionalTextSchema(200, 'ชื่อหน่วยงานที่ดูแลต้องไม่เกิน 200 ตัวอักษร'),
+	// Access limits for delivery vehicles, e.g. "no trucks over 6 wheels".
+	delivery_note: optionalTextSchema(
+		500,
+		'ข้อจำกัดการเข้าถึงสำหรับรถส่งของต้องไม่เกิน 500 ตัวอักษร'
+	),
 	site_kind: siteKindSchema,
 	operation_status: operationStatusSchema.default('standby'),
 	// CR-252 FR-1/2/8/9: set at creation by system_admin only, immutable afterwards (BFF).
@@ -815,6 +838,12 @@ export interface ShelterMaster {
 	operation_status?: OperationStatus;
 	is_external?: boolean;
 	external_url?: string | null;
+	/** Short name for map labels (schema_v 12). */
+	name_short?: string | null;
+	/** The agency that runs the shelter (schema_v 12). */
+	operating_org?: string | null;
+	/** Access limits for delivery vehicles (schema_v 12). */
+	delivery_note?: string | null;
 	shelter_type?: string | null;
 	floor_count?: number | null;
 	project_level?: ProjectLevel | null;
@@ -945,7 +974,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
  * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
  * skipping docs that are behind by less than a whole major shape change.
  */
-export const SHELTER_MASTER_SCHEMA_V = 11;
+export const SHELTER_MASTER_SCHEMA_V = 12;
 
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
@@ -1088,14 +1117,26 @@ export function migrateV9ToV10(v9: ShelterMaster): ShelterMaster {
 	return { ...v9, schema_v: 10 };
 }
 
-/** v10 → v11 (CR-253). Parking points start empty; additive, no backfill script. */
+/**
+ * v10 → v11 (CR-253). Parking points start empty (filled by `normalizeCurrent` at the end of the
+ * chain); additive, no backfill script. Stamps its own number so a v10 doc cannot skip
+ * `migrateV11ToV12`.
+ */
 export function migrateV10ToV11(v10: ShelterMaster): ShelterMaster {
-	return normalizeCurrent({ ...v10, schema_v: SHELTER_MASTER_SCHEMA_V });
+	return { ...v10, schema_v: 11 };
 }
 
-/** Tail of the chain: v7 → v8 → v9 → v10 → v11. */
-function migrateV7ToV11(v7: ShelterMaster): ShelterMaster {
-	return migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(migrateV7ToV8(v7))));
+/**
+ * v11 → v12. `name_short` / `operating_org` / `delivery_note` are optional and stay absent until
+ * set, so this only stamps. Tail of the chain: runs the default-fills of the current version.
+ */
+export function migrateV11ToV12(v11: ShelterMaster): ShelterMaster {
+	return normalizeCurrent({ ...v11, schema_v: 12 });
+}
+
+/** Tail of the chain: v7 → v8 → v9 → v10 → v11 → v12. */
+function migrateV7ToV12(v7: ShelterMaster): ShelterMaster {
+	return migrateV11ToV12(migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(migrateV7ToV8(v7)))));
 }
 
 /**
@@ -1140,22 +1181,26 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
 		return normalizeCurrent(master as ShelterMaster);
 	}
-	if (master.schema_v === 10) return migrateV10ToV11(master as unknown as ShelterMaster);
+	if (master.schema_v === 11) return migrateV11ToV12(master as unknown as ShelterMaster);
+	if (master.schema_v === 10)
+		return migrateV11ToV12(migrateV10ToV11(master as unknown as ShelterMaster));
 	if (master.schema_v === 9)
-		return migrateV10ToV11(migrateV9ToV10(master as unknown as ShelterMaster));
+		return migrateV11ToV12(migrateV10ToV11(migrateV9ToV10(master as unknown as ShelterMaster)));
 	if (master.schema_v === 8)
-		return migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(master as unknown as ShelterMaster)));
-	if (master.schema_v === 7) return migrateV7ToV11(master as unknown as ShelterMaster);
+		return migrateV11ToV12(
+			migrateV10ToV11(migrateV9ToV10(migrateV8ToV9(master as unknown as ShelterMaster)))
+		);
+	if (master.schema_v === 7) return migrateV7ToV12(master as unknown as ShelterMaster);
 	if (master.schema_v === 6)
-		return migrateV7ToV11(migrateV6ToV7(master as unknown as ShelterMaster));
+		return migrateV7ToV12(migrateV6ToV7(master as unknown as ShelterMaster));
 	if (master.schema_v === 5)
-		return migrateV7ToV11(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
+		return migrateV7ToV12(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
 	if (master.schema_v === 4)
-		return migrateV7ToV11(
+		return migrateV7ToV12(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster)))
 		);
 	if (master.schema_v === 3)
-		return migrateV7ToV11(
+		return migrateV7ToV12(
 			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster))))
 		);
 	const v2 = master as ShelterMasterV2;
@@ -1219,8 +1264,8 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	// Chain v2→v3→…→v10 so a v2 doc lands on the current shape in one call.
-	return migrateV7ToV11(
+	// Chain v2→v3→…→v12 so a v2 doc lands on the current shape in one call.
+	return migrateV7ToV12(
 		migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster))))
 	);
 }
