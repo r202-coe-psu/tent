@@ -47,6 +47,15 @@ describe('shelter-form-validation', () => {
 		expect(SHELTER_SECTION_FIELDS['basic-info']).toContain('floor_count');
 	});
 
+	it('maps name_short / operating_org to basic-info and delivery_note to risk', () => {
+		expect(findInvalidSectionIds({ name_short: ['ยาวเกิน'] })).toEqual(['basic-info']);
+		expect(findInvalidSectionIds({ operating_org: ['ยาวเกิน'] })).toEqual(['basic-info']);
+		expect(findInvalidSectionIds({ delivery_note: ['ยาวเกิน'] })).toEqual(['risk']);
+		expect(collectErrorMessagesForFields({ delivery_note: ['ยาวเกิน'] }, 'risk')).toEqual([
+			'ยาวเกิน'
+		]);
+	});
+
 	it('maps food_distribution_points errors to food-distribution only', () => {
 		const errors = {
 			food_distribution_points: {

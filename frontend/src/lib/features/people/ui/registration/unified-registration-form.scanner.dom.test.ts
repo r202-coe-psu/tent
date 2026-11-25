@@ -567,12 +567,21 @@ describe('UnifiedRegistrationForm — scanner client card read', () => {
 		});
 
 		it('shows a progress toast while the lookup runs', async () => {
-			renderWalkInForm({ findScannedCardDuplicate: vi.fn(() => new Promise(() => {})) });
+			let finishLookup: (value: null) => void = () => {};
+			renderWalkInForm({
+				findScannedCardDuplicate: vi.fn(
+					() => new Promise<null>((resolve) => (finishLookup = resolve))
+				)
+			});
 
 			dispatchCardRead(card);
 			await settle();
 
 			expect(progress()).toEqual(['loading: กำลังตรวจรายชื่อซ้ำ…']);
+			// End the lookup here: left pending, its 8 s deadline outlives the form and warns
+			// inside whichever test is running 8 s later.
+			finishLookup(null);
+			await settle();
 		});
 
 		it('does not look up a card while the form is locked, and tells staff straight away', async () => {

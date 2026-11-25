@@ -2,8 +2,8 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-11-10
-note: decision sync 2026-11-10 (#1161, PR #1279) — ชี้แจงป้าย homeless ให้ตรง schema โดยคง code และความหมายเดิม
+updated: 2026-11-24
+note: decision sync 2026-11-24 — `site_kind` += `test_center` (ศูนย์ทดสอบ) · decision sync 2026-11-10 (#1161, PR #1279) — ชี้แจงป้าย homeless ให้ตรง schema โดยคง code และความหมายเดิม
 language: th
 ---
 
@@ -186,14 +186,17 @@ Seed ลง global `master_data:allergy` จำนวน 5 รายการ. *
 
 #### `site_kind` — ประเภทศูนย์ (CR-198)
 
-Seed ลง global `master_data:site_kind` จำนวน 2 รายการ. **Global-only** — ไม่มี shelter-local doc
+Seed ลง global `master_data:site_kind` จำนวน 3 รายการ. **Global-only** — ไม่มี shelter-local doc
 (`master_data:site_kind:{shelter_code}`); SA เพิ่ม แก้ หรือปิดใช้ประเภทศูนย์ได้ที่ `/system-management/master-data`.
-ค่าที่ `shelter.site_kind` อ้าง ([schema.md §3.1](../data/schema.md)). code ทั้ง 2 ตัวคงเดิมจาก enum CR-067 เพื่อให้ศูนย์ที่บันทึกไว้แล้วยัง valid โดยไม่ migrate.
+ค่าที่ `shelter.site_kind` อ้าง ([schema.md §3.1](../data/schema.md)). code `evacuation_center` / `host_house` คงเดิมจาก enum CR-067 เพื่อให้ศูนย์ที่บันทึกไว้แล้วยัง valid โดยไม่ migrate.
+`test_center` (decision sync 2026-11-24) เป็นประเภทปกติ — ไม่มีพฤติกรรมพิเศษ ไม่ถูกซ่อนจาก public / Partner API / summary;
+seed เปิดเป็น `active` ใหม่ทุกครั้งที่รัน `seed:master` (ปิดใช้ถาวรต้องเอาออกจาก seed ด้วย).
 
 | code | label_th | label_en | default |
 | --- | --- | --- | --- |
 | `evacuation_center` | ศูนย์อพยพ | Evacuation Center | **ใช่** |
 | `host_house` | บ้านพี่เลี้ยง | Host House | — |
+| `test_center` | ศูนย์ทดสอบ | Test Center | — |
 
 ### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 

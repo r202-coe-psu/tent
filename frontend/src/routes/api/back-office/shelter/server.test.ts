@@ -263,3 +263,93 @@ describe('GET /api/back-office/shelter — parking points (#1352)', () => {
 		expect(rows.find((r) => r.code === 'SH002')?.parking_points).toEqual([pin]);
 	});
 });
+
+describe('/api/back-office/shelter — name_short / operating_org / delivery_note (schema_v 12)', () => {
+	it('POST passes the values to provisioning, trimmed', async () => {
+		provisionMock.mockResolvedValue({} as never);
+		const res = await callPOST({
+			...newShelter,
+			name_short: ' รร.หาดใหญ่วิทยาลัย ',
+			operating_org: 'เทศบาลนครหาดใหญ่',
+			delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+		});
+		expect(res.status).toBe(200);
+		expect(provisionMock.mock.calls[0][0]).toMatchObject({
+			name_short: 'รร.หาดใหญ่วิทยาลัย',
+			operating_org: 'เทศบาลนครหาดใหญ่',
+			delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+		});
+	});
+
+	it('POST accepts them on an external shelter', async () => {
+		provisionMock.mockResolvedValue({} as never);
+		const res = await callPOST({
+			name: 'ศูนย์ภายนอก',
+			site_kind: 'evacuation_center',
+			is_external: true,
+			operation_status: 'unknown',
+			facilities: {},
+			common_areas: {},
+			utilities: {},
+			risk: {},
+			zones: [],
+			name_short: 'ศูนย์ภายนอก ก',
+			operating_org: 'อบจ.สงขลา'
+		});
+		expect(res.status).toBe(200);
+		expect(provisionMock.mock.calls[0][0]).toMatchObject({
+			name_short: 'ศูนย์ภายนอก ก',
+			operating_org: 'อบจ.สงขลา'
+		});
+	});
+
+	it('POST without the fields provisions a doc without them (no default)', async () => {
+		provisionMock.mockResolvedValue({} as never);
+		await callPOST(newShelter);
+		const input = provisionMock.mock.calls[0][0];
+		expect('name_short' in input).toBe(false);
+		expect('operating_org' in input).toBe(false);
+		expect('delivery_note' in input).toBe(false);
+	});
+
+	it('POST answers 422 for an operating_org over 200 characters', async () => {
+		const res = await callPOST({ ...newShelter, operating_org: 'ก'.repeat(201) });
+		expect(res.status).toBe(422);
+		expect(provisionMock).not.toHaveBeenCalled();
+	});
+
+	it('GET list returns the stored values, null when absent', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sa',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
+		vi.mocked(listShelterMasters).mockResolvedValueOnce([
+			{ code: 'SH001', name: 'ศูนย์ 1', schema_v: 11 },
+			{
+				code: 'SH002',
+				name: 'ศูนย์ 2',
+				schema_v: 12,
+				name_short: 'ศ.2',
+				operating_org: 'เทศบาลนครหาดใหญ่',
+				delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+			}
+		] as never);
+		const request = new Request('http://localhost/api/back-office/shelter', {
+			headers: { cookie: 'AuthSession=abc' }
+		});
+		const res = await GET({ request } as unknown as Parameters<typeof GET>[0]);
+		const rows = (await res.json()) as Record<string, unknown>[];
+		expect(rows.find((r) => r.code === 'SH001')).toMatchObject({
+			name_short: null,
+			operating_org: null,
+			delivery_note: null
+		});
+		expect(rows.find((r) => r.code === 'SH002')).toMatchObject({
+			name_short: 'ศ.2',
+			operating_org: 'เทศบาลนครหาดใหญ่',
+			delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+		});
+	});
+});

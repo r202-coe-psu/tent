@@ -26,7 +26,7 @@ const labels: ActiveFilterLabels = {
 	subdistrict: (name) => `ต.${name}`,
 	hideFull: 'ซ่อนที่เต็ม',
 	parking: { car: 'ที่จอดรถยนต์', motorcycle: 'ที่จอดจักรยานยนต์', boat: 'จุดจอดเรือ' },
-	hiddenGroup: { evacuation: 'ซ่อนศูนย์อพยพ', external: 'ซ่อนศูนย์อพยพภายนอก' }
+	group: { all: 'รวมศูนย์ภายนอก', external: 'เฉพาะศูนย์ภายนอก' }
 };
 
 const AT = { user_lat: '7.0086', user_lng: '100.4968' };
@@ -106,8 +106,7 @@ describe('activeFilterChips', () => {
 				parking_car: 'on',
 				parking_motorcycle: 'on',
 				parking_boat: 'on',
-				hide_evacuation: 'on',
-				hide_external: 'on'
+				show_external: 'on'
 			},
 			labels
 		);
@@ -123,10 +122,20 @@ describe('activeFilterChips', () => {
 			['parking_car', 'ที่จอดรถยนต์', true],
 			['parking_motorcycle', 'ที่จอดจักรยานยนต์', true],
 			['parking_boat', 'จุดจอดเรือ', true],
-			['hide_evacuation', 'ซ่อนศูนย์อพยพ', true],
-			['hide_external', 'ซ่อนศูนย์อพยพภายนอก', true]
+			['group', 'รวมศูนย์ภายนอก', true]
 		]);
-		expect(activeFilterCount(chips)).toBe(12);
+		expect(activeFilterCount(chips)).toBe(11);
+	});
+
+	it('shows no group chip for the default pick, one chip for the others', () => {
+		const key = (f: Record<string, string>) =>
+			activeFilterChips(f, labels)
+				.filter((c) => c.key === 'group')
+				.map((c) => c.label);
+		expect(key({})).toEqual([]);
+		expect(key({ hide_evacuation: 'on' })).toEqual([]);
+		expect(key({ show_external: 'on' })).toEqual(['รวมศูนย์ภายนอก']);
+		expect(key({ show_external: 'on', hide_evacuation: 'on' })).toEqual(['เฉพาะศูนย์ภายนอก']);
 	});
 
 	it('removes the lower areas together with a province or a district', () => {
@@ -159,7 +168,7 @@ describe('activeFilterChips', () => {
 	it('ignores blank and "off" values', () => {
 		expect(
 			activeFilterChips(
-				{ search: '   ', status: '', hide_full: '', parking_boat: '', hide_external: false },
+				{ search: '   ', status: '', hide_full: '', parking_boat: '', show_external: false },
 				labels
 			)
 		).toEqual([]);
@@ -214,7 +223,7 @@ describe('URL edits', () => {
 
 	it('clears every counted filter, keeps the position and the default radius', () => {
 		const qs =
-			'user_lat=7&user_lng=100&distance=5&q=วัด&status=open&province=สงขลา&district=หาดใหญ่&hide_full=true&parking_car=on&hide_external=on';
+			'user_lat=7&user_lng=100&distance=5&q=วัด&status=open&province=สงขลา&district=หาดใหญ่&hide_full=true&parking_car=on&show_external=on&hide_evacuation=on';
 		const filters = {
 			user_lat: '7',
 			user_lng: '100',
@@ -225,7 +234,8 @@ describe('URL edits', () => {
 			district: 'หาดใหญ่',
 			hide_full: 'true',
 			parking_car: 'on',
-			hide_external: 'on'
+			show_external: 'on',
+			hide_evacuation: 'on'
 		};
 		const next = paramsWithoutAllFilters(url(qs), activeFilterChips(filters, labels));
 		expect(Object.fromEntries(next)).toEqual({ user_lat: '7', user_lng: '100', distance: '5' });

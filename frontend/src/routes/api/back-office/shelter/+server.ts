@@ -80,6 +80,9 @@ export const GET: RequestHandler = async ({ request }) => {
 					operation_status: migrated.operation_status ?? 'standby',
 					is_external: migrated.is_external === true,
 					external_url: migrated.external_url ?? null,
+					name_short: migrated.name_short ?? null,
+					operating_org: migrated.operating_org ?? null,
+					delivery_note: migrated.delivery_note ?? null,
 					// External shelters may have no capacity; don't invent 0 (fails `positive` on re-save).
 					capacity: migrated.is_external ? migrated.capacity : (migrated.capacity ?? 0),
 					shelter_type: migrated.shelter_type ?? null,

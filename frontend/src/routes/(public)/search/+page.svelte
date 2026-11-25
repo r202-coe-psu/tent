@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Search from '@lucide/svelte/icons/search';
-	import Users from '@lucide/svelte/icons/users';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Clock from '@lucide/svelte/icons/clock';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
@@ -210,22 +209,9 @@
 								class="items-start justify-between space-y-1 border-b border-border/50 p-5 md:flex"
 							>
 								<div>
-									<div class="items-center gap-3 space-y-1 md:flex">
-										<h3 class="text-xl font-bold text-foreground">
-											{person.name || t.unnamed}
-										</h3>
-										{#if person.family_members && person.family_members.length > 0}
-											<span
-												class="rounded-md bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary"
-												>{t.withFamily}</span
-											>
-										{:else}
-											<span
-												class="rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
-												>{t.alone}</span
-											>
-										{/if}
-									</div>
+									<h3 class="text-xl font-bold text-foreground">
+										{person.name || t.unnamed}
+									</h3>
 									<!-- <div class="mt-2 gap-4 text-sm text-muted-foreground md:flex">
 										<p>ID: <span class="font-mono">{person.national_id || '-'}</span></p>
 										<p>{t.genderPrefix} {genderLabel(person.gender)}</p>
@@ -263,52 +249,6 @@
 									</div>
 								</div>
 							</div>
-
-							{#if person.family_members && person.family_members.length > 0}
-								<!--
-									Open by default: someone searching for a relative wants the rest of
-									the household on screen without a second click — that is usually the
-									answer they came for ("did the whole family make it?").
-								-->
-								<details open class="group border-t border-border/50 p-5">
-									<summary
-										class="mb-4 flex cursor-pointer list-none items-center gap-2 font-bold text-foreground/90 transition-colors hover:text-primary"
-									>
-										<Users class="h-5 w-5" />
-										{t.familyInfo} ({person.family_members.length}
-										{t.people})
-										<span
-											class="ml-auto text-xs font-normal text-muted-foreground group-open:hidden"
-											>{t.clickToView}</span
-										>
-										<span
-											class="ml-auto hidden text-xs font-normal text-muted-foreground group-open:inline"
-											>{t.hide}</span
-										>
-									</summary>
-									<div class="mt-4 flex flex-col gap-3">
-										{#each person.family_members as member, i (i)}
-											<div
-												class="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center"
-											>
-												<div>
-													<div class="font-bold text-foreground">
-														{member.name || '-'}
-													</div>
-												</div>
-												<div class="flex flex-wrap items-center gap-2">
-													<StayStatusChip
-														status={member.status}
-														detail={member.shelter_name || null}
-														size="sm"
-													/>
-													<ShelterClosedBadge shelterStatus={member.shelter_status} />
-												</div>
-											</div>
-										{/each}
-									</div>
-								</details>
-							{/if}
 						</div>
 					{/each}
 				</div>

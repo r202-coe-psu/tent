@@ -166,7 +166,7 @@ async def test_evacuee_search_by_national_id_exact_match(
             "national_id_hash": national_id_hash(national_id),
             "national_id_masked": "390-XXXX-XX-192",
             "search_excluded": False,
-            "status": "transferred",
+            "status": "temporary_leave",
             "updated_at": now,
         },
     )
@@ -179,10 +179,10 @@ async def test_evacuee_search_by_national_id_exact_match(
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1
-    assert body["results"][0]["status"] == "transferred"
+    assert body["results"][0]["status"] == "temporary_leave"
 
 
-async def test_evacuee_search_includes_family_members(
+async def test_public_search_omits_family_members(
     client: AsyncClient,
     db_client: AsyncMongoClient,
     settings: Settings,
@@ -228,38 +228,105 @@ async def test_evacuee_search_includes_family_members(
         headers=auth_headers,
     )
     assert response.status_code == 200
-    members = response.json()["results"][0]["family_members"]
-    assert len(members) == 1
-    assert members[0]["name"] == f"ลูก {mask_last_name('ใจดี')}"
-    assert members[0]["status"] == "active"
+    # Decision sync 2026-11-24: the searcher sees only the person they searched for.
+    assert response.json()["results"][0]["family_members"] == []
+    assert "ลูก" not in response.text
 
 
-async def test_evacuee_search_reports_pre_registered_as_itself(
+@pytest.mark.parametrize(
+    "stay_status",
+    [
+        "pre_registered",
+        "kiosk_registered",
+        "arriving",
+        "transferred",
+        "checked_out",
+        "deceased",
+        "cancelled",
+        "teleported",
+    ],
+)
+async def test_public_search_hides_people_not_in_a_shelter(
     client: AsyncClient,
     db_client: AsyncMongoClient,
     settings: Settings,
     auth_headers: dict[str, str],
+    stay_status: str,
 ):
-    """CR-080 — the case the old three-bucket mapping got wrong.
+    """Decision sync 2026-11-24: the public search lists only people in a shelter.
 
-    Someone who booked online (CR-070) and has not arrived is `pre_registered`.
-    The public search used to fold that into `in_shelter`, telling a relative the
-    person was safely at the shelter when nobody had seen them.
+    A pre-registered booking, a person still arriving, one who left, and any status the API
+    has not been taught (`teleported`) all stay out of the anonymous results.
     """
     phone = "0822222222"
-    now = datetime.now(UTC)
-    await _insert_shelter(
+    await _insert_person(
         db_client,
         settings,
         {
-            "_id": "SH001",
+            "_id": "evacuee:hidden",
             "shelter_code": "SH001",
-            "name": "ศูนย์ทดสอบ",
-            "status": "open",
-            "capacity": 100,
-            "updated_at": now,
+            "first_name": "สมปอง",
+            "last_name_masked": mask_last_name("ยังไม่มา"),
+            "phone_hash": phone_hash(phone),
+            "search_excluded": False,
+            "status": stay_status,
+            "updated_at": datetime.now(UTC),
         },
     )
+
+    response = await client.post(
+        "/public/v1/occupants",
+        json=public_search_payload(phone),
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+
+
+@pytest.mark.parametrize("stay_status", ["active", "room_confirmed", "temporary_leave"])
+async def test_public_search_returns_people_in_a_shelter(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+    stay_status: str,
+):
+    phone = "0833333333"
+    await _insert_person(
+        db_client,
+        settings,
+        {
+            "_id": "evacuee:present",
+            "shelter_code": "SH001",
+            "first_name": "สมศรี",
+            "last_name_masked": mask_last_name("อยู่ศูนย์"),
+            "phone_hash": phone_hash(phone),
+            "search_excluded": False,
+            "status": stay_status,
+            "updated_at": datetime.now(UTC),
+        },
+    )
+
+    response = await client.post(
+        "/public/v1/occupants",
+        json=public_search_payload(phone),
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert [r["status"] for r in response.json()["results"]] == [stay_status]
+
+
+async def test_external_search_still_reports_every_status(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+):
+    """The in-shelter filter is public-only: the partner search still sees a booking."""
+    path, headers = search_endpoint
+    if path.startswith("/public/"):
+        pytest.skip("external endpoint only")
+    phone = "0822222223"
     await _insert_person(
         db_client,
         settings,
@@ -271,51 +338,13 @@ async def test_evacuee_search_reports_pre_registered_as_itself(
             "phone_hash": phone_hash(phone),
             "search_excluded": False,
             "status": "pre_registered",
-            "updated_at": now,
+            "updated_at": datetime.now(UTC),
         },
     )
 
-    response = await client.post(
-        "/public/v1/occupants",
-        json=public_search_payload(phone),
-        headers=auth_headers,
-    )
+    response = await client.post(path, json=search_body(path, phone), headers=headers)
     assert response.status_code == 200
     assert response.json()["results"][0]["status"] == "pre_registered"
-
-
-async def test_evacuee_search_reports_unmapped_status_as_unknown(
-    client: AsyncClient,
-    db_client: AsyncMongoClient,
-    settings: Settings,
-    auth_headers: dict[str, str],
-):
-    """A projection emitting a status the API has not been taught must not be
-    guessed at — `unknown` says so plainly instead of picking an outcome."""
-    phone = "0833333333"
-    now = datetime.now(UTC)
-    await _insert_person(
-        db_client,
-        settings,
-        {
-            "_id": "evacuee:weird",
-            "shelter_code": "SH001",
-            "first_name": "สมศรี",
-            "last_name_masked": mask_last_name("แปลก"),
-            "phone_hash": phone_hash(phone),
-            "search_excluded": False,
-            "status": "teleported",
-            "updated_at": now,
-        },
-    )
-
-    response = await client.post(
-        "/public/v1/occupants",
-        json=public_search_payload(phone),
-        headers=auth_headers,
-    )
-    assert response.status_code == 200
-    assert response.json()["results"][0]["status"] == "unknown"
 
 
 async def test_evacuee_search_matches_a_thai_name_prefix(
@@ -898,7 +927,7 @@ async def test_id_search_breaks_first_name_ties_by_id(
     assert await _names(client, search_endpoint, _ID_QUERIES[kind][0]) == expected
 
 
-async def test_public_search_still_returns_cancelled_people_and_family_members(
+async def test_search_cancelled_people_and_family_members_by_endpoint(
     client: AsyncClient,
     db_client: AsyncMongoClient,
     settings: Settings,
@@ -906,8 +935,8 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
 ):
     """Regression (#736 decision 3/4): EXT-012 drops `cancelled` + family at ITS layer only.
 
-    The shared use case behind /public/v1/occupants and /external/v1/occupants keeps reporting
-    a cancelled stay as `cancelled` (CR-099) and keeps the household members (CR-080).
+    Legacy /external/v1/occupants keeps reporting a cancelled stay as `cancelled` (CR-099) with
+    its household (CR-080); the public search hides it (decision sync 2026-11-24).
     """
     phone = "0833333333"
     now = datetime.now(UTC)
@@ -947,11 +976,13 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
     response = await client.post(path, json=search_body(path, phone), headers=headers)
     assert response.status_code == 200
     body = response.json()
+    if path.startswith("/public/"):
+        assert body["count"] == 0
+        return
     assert body["count"] == 1
     assert body["results"][0]["status"] == "cancelled"
     members = body["results"][0]["family_members"]
-    surname = mask_last_name("ใจดี") if path.startswith("/public/") else "ใจดี"
-    assert [m["name"] for m in members] == [f"ลูก {surname}"]
+    assert [m["name"] for m in members] == ["ลูก ใจดี"]
     assert members[0]["status"] == "cancelled"
 
 
@@ -1056,7 +1087,9 @@ async def test_search_reports_shelter_status_on_hit_and_family_member(
     assert response.status_code == 200, response.text
     result = response.json()["results"][0]
     assert result["shelter_status"] == shelter_status
-    assert [m["shelter_status"] for m in result["family_members"]] == [shelter_status]
+    # The public search never returns the household (decision sync 2026-11-24).
+    family = [] if url.startswith("/public/") else [shelter_status]
+    assert [m["shelter_status"] for m in result["family_members"]] == family
 
 
 async def test_search_shelter_status_is_null_without_shelter_row(
@@ -1075,7 +1108,8 @@ async def test_search_shelter_status_is_null_without_shelter_row(
     result = response.json()["results"][0]
     assert result["shelter_status"] is None
     assert result["shelter_name"] == "SH009"
-    assert [m["shelter_status"] for m in result["family_members"]] == [None]
+    family = [] if url.startswith("/public/") else [None]
+    assert [m["shelter_status"] for m in result["family_members"]] == family
 
 
 @pytest.mark.parametrize("shelter_status", ["open", "closed"])
@@ -1420,7 +1454,7 @@ async def test_public_search_masks_plaintext_rows_and_leaks_nothing(
     assert result["name"] == "สมชาย ศรี****รณ"
     assert result["national_id"] == "390-XXXX-XX-192"
     assert result["origin_address"] == "**/* ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา"
-    assert [m["name"] for m in result["family_members"]] == ["ลูก ศรี****รณ"]
+    assert result["family_members"] == []
     for plaintext in (_PLAIN_CID, _PLAIN_PHONE, _PLAIN_PASSPORT, "ศรีสุวรรณ", "99/1", "หมู่ 4"):
         assert plaintext not in response.text
     for key in ("phone", "passport_id", "first_name", "last_name", "id_card_type", "address"):
