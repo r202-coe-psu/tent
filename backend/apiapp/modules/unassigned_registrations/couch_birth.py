@@ -49,6 +49,7 @@ class CouchBirthPort(Protocol):
         household_doc: dict,
         evacuee_docs: list[dict],
         cookie_header: str | None,
+        writer: str,
         image_payloads: list[CouchImagePayload] | None = None,
         append_pets: list[dict] | None = None,
     ) -> None:
@@ -56,6 +57,11 @@ class CouchBirthPort(Protocol):
 
         When household already exists and ``append_pets`` is non-empty, merge those
         Couch pet rows onto ``household.pets`` (draft-persistent-unassigned-family).
+
+        ``writer`` is the CouchDB user behind ``cookie_header``; every doc in the batch is
+        stamped ``updated_by = writer`` (CR-260 FR-C1), which the shelter ``_design/access``
+        rule requires of a non-admin write (FR-C10) — a merged household otherwise still
+        names whoever wrote it last and the whole claim is rejected.
         """
 
 
@@ -284,8 +290,18 @@ async def _put_attachment(
     return rev_out
 
 
+def _stamped(doc: dict, writer: str) -> dict:
+    return {**doc, "updated_by": writer}
+
+
 class HttpCouchBirth:
     """Birth Couch docs using the caller's AuthSession cookie (shelter-scoped write)."""
+
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self._transport = transport
+
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=_COUCH_TIMEOUT_SECONDS, transport=self._transport)
 
     async def birth(
         self,
@@ -294,6 +310,7 @@ class HttpCouchBirth:
         household_doc: dict,
         evacuee_docs: list[dict],
         cookie_header: str | None,
+        writer: str,
         image_payloads: list[CouchImagePayload] | None = None,
         append_pets: list[dict] | None = None,
     ) -> None:
@@ -311,7 +328,7 @@ class HttpCouchBirth:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=_COUCH_TIMEOUT_SECONDS) as client:
+            async with self._client() as client:
                 household_id = household_doc["_id"]
                 existing = await client.get(f"{couch_url}/{db}/{household_id}", headers=headers)
                 docs: list[dict] = list(evacuee_docs)
@@ -345,6 +362,7 @@ class HttpCouchBirth:
                 # Image metadata docs go in the same bulk write; attachments follow.
                 for payload in image_payloads or []:
                     docs.append(payload.doc)
+                docs = [_stamped(doc, writer) for doc in docs]
 
                 response = await client.post(
                     f"{couch_url}/{db}/_bulk_docs",
@@ -387,7 +405,7 @@ class HttpCouchBirth:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=_COUCH_TIMEOUT_SECONDS) as client:
+            async with self._client() as client:
                 for payload in image_payloads:
                     doc_id = payload.doc["_id"]
                     rev = rev_by_id.get(doc_id)
@@ -442,6 +460,7 @@ class InMemoryCouchBirth:
         household_doc: dict,
         evacuee_docs: list[dict],
         cookie_header: str | None,
+        writer: str,
         image_payloads: list[CouchImagePayload] | None = None,
         append_pets: list[dict] | None = None,
     ) -> None:
@@ -454,7 +473,7 @@ class InMemoryCouchBirth:
         counts = self.write_counts.setdefault(shelter_code, {})
         household_id = household_doc["_id"]
         if household_id not in shelter_docs:
-            shelter_docs[household_id] = deepcopy(household_doc)
+            shelter_docs[household_id] = _stamped(deepcopy(household_doc), writer)
             counts[household_id] = counts.get(household_id, 0) + 1
         elif append_pets:
             existing = shelter_docs[household_id]
@@ -462,17 +481,18 @@ class InMemoryCouchBirth:
             if not isinstance(current, list):
                 current = []
             existing["pets"] = [*current, *deepcopy(append_pets)]
+            existing["updated_by"] = writer
             counts[household_id] = counts.get(household_id, 0) + 1
         for doc in evacuee_docs:
             doc_id = doc["_id"]
             if doc_id in shelter_docs:
                 continue
-            shelter_docs[doc_id] = deepcopy(doc)
+            shelter_docs[doc_id] = _stamped(deepcopy(doc), writer)
             counts[doc_id] = counts.get(doc_id, 0) + 1
         for payload in image_payloads or []:
             doc_id = payload.doc["_id"]
             if doc_id not in shelter_docs:
-                shelter_docs[doc_id] = deepcopy(payload.doc)
+                shelter_docs[doc_id] = _stamped(deepcopy(payload.doc), writer)
                 counts[doc_id] = counts.get(doc_id, 0) + 1
             atts = self._attachments.setdefault(shelter_code, {}).setdefault(doc_id, {})
             atts["full"] = payload.full_bytes
