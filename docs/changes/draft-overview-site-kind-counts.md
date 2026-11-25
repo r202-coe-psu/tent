@@ -49,7 +49,7 @@ affects:
 - FR-8 — แต่ละแถวของ `sites` เพิ่ม `is_external: boolean` (`isExternalShelter(master)`).
 - FR-9 — ตัวกรองศูนย์ (ใช้กับ summary / sites / รายการลงทะเบียนล่วงหน้า):
   - ใหม่ `external=only` ⇒ เหลือเฉพาะศูนย์ `is_external`.
-  - เมื่อมี `site_kind` (ประเภทปกติ) ⇒ **ตัดศูนย์ `is_external` ออก** (ศูนย์ภายนอกเลือกผ่าน `external=only` เท่านั้น).
+  - เมื่อมี `site_kind` (ประเภทปกติ) และ**ไม่มี** `external=only` ⇒ **ตัดศูนย์ `is_external` ออก** (ศูนย์ภายนอกเลือกผ่าน `external=only` เท่านั้น). ถ้ามีทั้งสองค่า ดูข้อสุดท้ายของ FR-9.
   - ศูนย์ที่ไม่มี `operation_status` ถือเป็น `unknown` ทั้งในแถวและในตัวกรอง `operation_status=unknown`. _D-6_
   - `external` ต้องเพิ่มใน `FILTER_KEYS` ของ `parseOverviewFilters` และใน `overviewFiltersToSearchParams` (ไม่เช่นนั้น `?external=only` ถูกทิ้งเงียบ ตารางแสดงทุกศูนย์).
   - `site_kind` กับ `external=only` เลือกคู่กันไม่ได้: เมื่อ URL มีทั้งสองค่า ให้ `external=only` ชนะและเมินค่า `site_kind` (ไม่ให้ตารางว่างจากเงื่อนไขขัดกัน).
