@@ -93,7 +93,7 @@
 	 * Re-entry guard for the whole attempt. `printPhase` only turns `printing` on a kiosk with a
 	 * printer, so it cannot stop a second press on the label-screen path.
 	 */
-	let printInFlight = false;
+	let printInFlight = $state(false);
 
 	async function printLabel(): Promise<void> {
 		if (printInFlight) return;
@@ -172,64 +172,75 @@
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={5} step2Label={t.wizardStep} />
-	<KioskNoticePanel
-		tone="success"
-		icon={CheckCircle2}
-		title={t.title}
-		headingTag="h1"
-		role="status"
-	>
-		{#if registration}
-			{#if screenLabels || noPrinter}
-				{#if !viaThaid}<p>{t.removeCard}</p>{/if}
-			{:else}
+	{#if screenLabels}
+		<!-- The label screen replaces the success panel: one way out, and it fits a compact screen. -->
+		<div class="text-center text-lg text-slate-700 kiosk-portrait:text-2xl kiosk-compact:text-base">
+			{#if !viaThaid}<p>{t.removeCard}</p>{/if}
+			{#if registration}
 				<p>
-					{viaThaid ? t.takeQrThaid : t.takeQrCard}
+					{t.consentRef}:
+					<span class="font-mono tracking-wide">{registration.consent_ref}</span>
 				</p>
 			{/if}
-			<p class="text-base kiosk-portrait:text-xl">
-				{t.consentRef}:
-				<span class="font-mono tracking-wide">{registration.consent_ref}</span>
-			</p>
-			{#if printError}
-				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
-					>{noPrinter
-						? t.onScreen.failedHint(printError)
-						: t.printFailedHint(printError)}</KioskInlineAlert
-				>
-				{#if unprintedLabels.length > 0}
+		</div>
+		<KioskLabelScreen labels={screenLabels} ondone={returnHome} />
+	{:else}
+		<KioskNoticePanel
+			tone="success"
+			icon={CheckCircle2}
+			title={t.title}
+			headingTag="h1"
+			role="status"
+		>
+			{#if registration}
+				{#if noPrinter}
+					{#if !viaThaid}<p>{t.removeCard}</p>{/if}
+				{:else}
+					<p>
+						{viaThaid ? t.takeQrThaid : t.takeQrCard}
+					</p>
+				{/if}
+				<p class="text-base kiosk-portrait:text-xl">
+					{t.consentRef}:
+					<span class="font-mono tracking-wide">{registration.consent_ref}</span>
+				</p>
+				{#if printError}
+					<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
+						>{noPrinter
+							? t.onScreen.failedHint(printError)
+							: t.printFailedHint(printError)}</KioskInlineAlert
+					>
+					{#if unprintedLabels.length > 0}
+						<Button
+							type="button"
+							variant="outline"
+							onclick={showOnScreen}
+							class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.showOnScreen}</Button
+						>
+					{/if}
+				{/if}
+			{:else}
+				{#if !viaThaid}<p>{t.removeCard}</p>{/if}
+				<p>{noPrinter ? t.onScreen.contactStaff : t.contactStaff}</p>
+			{/if}
+			{#snippet actions()}
+				{#if registration?.qr_payload && !registration.qr_issue_failed && (!noPrinter || printError)}
 					<Button
 						type="button"
 						variant="outline"
-						onclick={showOnScreen}
-						class={KIOSK_NOTICE_SECONDARY_ACTION}>{t.showOnScreen}</Button
+						onclick={printLabel}
+						disabled={printInFlight}
+						class={KIOSK_NOTICE_SECONDARY_ACTION}
+						>{#if noPrinter}<QrCode aria-hidden="true" />{t.onScreen.showAgain}{:else}<Printer
+								aria-hidden="true"
+							/>{t.printAgain}{/if}</Button
 					>
 				{/if}
-			{/if}
-		{:else}
-			{#if !viaThaid}<p>{t.removeCard}</p>{/if}
-			<p>{noPrinter ? t.onScreen.contactStaff : t.contactStaff}</p>
-		{/if}
-		{#snippet actions()}
-			{#if registration && !screenLabels && (!noPrinter || printError)}
-				<Button
-					type="button"
-					variant="outline"
-					onclick={printLabel}
-					disabled={printPhase === 'printing'}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}
-					>{#if noPrinter}<QrCode aria-hidden="true" />{t.onScreen.showAgain}{:else}<Printer
-							aria-hidden="true"
-						/>{t.printAgain}{/if}</Button
+				<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
+					>{t.home}</Button
 				>
-			{/if}
-			<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
-				>{t.home}</Button
-			>
-		{/snippet}
-	</KioskNoticePanel>
-	{#if screenLabels}
-		<KioskLabelScreen labels={screenLabels} ondone={returnHome} />
+			{/snippet}
+		</KioskNoticePanel>
 	{/if}
 </div>
 {#if registration}

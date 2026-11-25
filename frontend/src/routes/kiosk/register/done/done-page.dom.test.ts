@@ -166,6 +166,21 @@ describe('walk-in done page on a kiosk without a printer (DOM)', () => {
 		expect(bodyText()).not.toContain('พิมพ์');
 	});
 
+	it('replaces the success panel with the label screen, keeping one way out and the consent reference', async () => {
+		await mountPage();
+
+		expect(shownImage()).not.toBeNull();
+		expect(buttonByText('กลับหน้าแรก')).toBeUndefined();
+		expect(buttonByText('เสร็จสิ้น')).toBeDefined();
+		expect(bodyText()).toContain('CR-1');
+	});
+
+	it('offers no show-again button when the QR could not be issued', async () => {
+		await mountPage(true);
+
+		expect(buttonByText('แสดง QR อีกครั้ง')).toBeUndefined();
+	});
+
 	it('goes home from the label screen like the finish button', async () => {
 		await mountPage();
 
