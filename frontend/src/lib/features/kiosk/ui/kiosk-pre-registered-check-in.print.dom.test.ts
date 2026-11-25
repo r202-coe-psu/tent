@@ -305,6 +305,18 @@ describe('KioskPreRegisteredCheckIn labels on screen', () => {
 			expect(onprintbusychange).toHaveBeenLastCalledWith(false);
 		});
 
+		it('does not cover the new visitor with the previous visitor printing overlay', async () => {
+			vi.mocked(printKioskQrLabels).mockReturnValue(new Promise(() => {}));
+			const scanNext = await checkInThenScan({ source: 'qr', token: 'a' });
+			await vi.waitFor(() => expect(screenText()).toContain('กำลังพิมพ์'));
+			vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(NEXT);
+
+			scanNext({ source: 'qr', token: 'b' });
+			await vi.waitFor(() => expect(screenText()).toContain('Somying'));
+
+			await vi.waitFor(() => expect(screenText()).not.toContain('กำลังพิมพ์'));
+		});
+
 		it('drops the failed print of the previous visitor that resolves after the new lookup started', async () => {
 			let finishPrint: (result: Awaited<ReturnType<typeof printKioskQrLabels>>) => void = () => {};
 			vi.mocked(printKioskQrLabels).mockReturnValue(

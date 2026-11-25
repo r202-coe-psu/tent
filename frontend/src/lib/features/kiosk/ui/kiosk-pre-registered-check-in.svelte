@@ -275,6 +275,9 @@
 		isReprintOnly = false;
 		printSelectedIds = [];
 		unprintedLabels = [];
+		// A print of the previous visitor may still be in flight: its overlay and error are not theirs.
+		printPhase = 'idle';
+		printError = '';
 		if (screenLabels.length > 0) {
 			screenLabels = [];
 			onprintbusychange?.(false);
@@ -513,17 +516,20 @@
 	 * Ask /check-in for a fresh QR + the unmasked label text of these members. A lookup carries
 	 * neither; arriving members are not written again, only reissued a QR (CR-233 FR-EQR-23).
 	 */
-	async function fetchFreshQr(ids: string[]): Promise<boolean> {
+	async function fetchFreshQr(ids: string[], generation?: number): Promise<boolean> {
 		if (ids.length === 0) return true;
 		if (!lookup) return false;
+		const superseded = () => generation !== undefined && generation !== lookupGeneration;
 		printError = '';
 		try {
 			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
 				batchLimit: 20
 			});
+			if (superseded()) return false;
 			results = mergeCheckInResults(results, response.members);
 			return true;
 		} catch (error) {
+			if (superseded()) return false;
 			if (endIfClosed(error)) return false;
 			if (error instanceof KioskPartialCheckInError) {
 				results = mergeCheckInResults(results, error.result.members);
@@ -537,11 +543,15 @@
 	 * Reprint: every print command issues a new QR (FR-EQR-21), so these always refetch. A fresh
 	 * check-in already holds its QR and only lacks the label text when it came from a lookup.
 	 */
-	function loadMissingLabels(items: KioskCheckInMemberResult[]): Promise<boolean> {
+	function loadMissingLabels(
+		items: KioskCheckInMemberResult[],
+		generation: number
+	): Promise<boolean> {
 		return fetchFreshQr(
 			items
 				.filter((item) => isReprintOnly || !item.qr_payload || !item.label)
-				.map((item) => item.evacuee_id)
+				.map((item) => item.evacuee_id),
+			generation
 		);
 	}
 
@@ -566,12 +576,12 @@
 		unprintedLabels = [];
 		onprintbusychange?.(true);
 		try {
-			if (!(await loadMissingLabels(printableResults)) || superseded()) return;
+			if (!(await loadMissingLabels(printableResults, generation)) || superseded()) return;
 			// Re-read: a member who moved past arriving since the lookup has no QR to reprint any more.
 			// A member whose QR could not be issued is never printed (FR-EQR-24).
 			const toPrint = printableResults.filter((result) => result.qr_payload);
 			if (toPrint.length === 0) return;
-			if (!(await prepareQrImages(toPrint)) || superseded()) return;
+			if (!(await prepareQrImages(toPrint, generation)) || superseded()) return;
 			let labels: KioskQrLabel[];
 			try {
 				labels = toLabels(toPrint);
