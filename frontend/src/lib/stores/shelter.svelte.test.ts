@@ -30,7 +30,7 @@ describe('applyActiveShelterChoice (#1473)', () => {
 		expect(localStorage.getItem(KEY)).toBe('SH002');
 	});
 
-	it('forgets the remembered shelter when the choice is none (W2)', () => {
+	it('forgets the remembered shelter when the choice is none (#1473)', () => {
 		localStorage.setItem(KEY, 'SH001');
 		shelterStore.selectedShelterCode = 'SH001';
 		applyActiveShelterChoice({ code: undefined, provisional: false });

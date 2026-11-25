@@ -36,7 +36,7 @@ describe('resolveActiveShelter', () => {
 		).toEqual(settled('SH027'));
 	});
 
-	it('follows the roles before the list loads, without remembering the guess (#1473, W1)', () => {
+	it('follows the roles before the list loads, without remembering the guess (#1473)', () => {
 		expect(
 			resolveActiveShelter({
 				...base,
@@ -47,7 +47,7 @@ describe('resolveActiveShelter', () => {
 		).toEqual(provisional('SH027'));
 	});
 
-	it('re-picks in list order once the list loads, like the navbar (W1)', () => {
+	it('re-picks in list order once the list loads, like the navbar', () => {
 		// roles list SH002 first; the registry lists SH001 first.
 		const before = resolveActiveShelter({
 			...base,
@@ -88,7 +88,7 @@ describe('resolveActiveShelter', () => {
 		).toEqual(settled('SH002'));
 	});
 
-	it('forgets the remembered shelter when no shelter role is left (W2)', () => {
+	it('forgets the remembered shelter when no shelter role is left (#1473)', () => {
 		expect(resolveActiveShelter({ ...base, current: 'SH001', allowedCodes: ['SH001'] })).toEqual(
 			settled(undefined)
 		);

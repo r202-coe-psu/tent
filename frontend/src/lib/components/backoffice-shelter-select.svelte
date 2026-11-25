@@ -3,7 +3,13 @@
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import Building from '@lucide/svelte/icons/building';
 	import { useShelters } from '$lib/features/shelters';
-	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
+	import {
+		shelterStore,
+		persistSelectedShelter,
+		isSelectionProvisional,
+		applyActiveShelterChoice
+	} from '$lib/stores/shelter.svelte';
+	import { resolveActiveShelter } from '$lib/features/portal';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, shelterCodesFromRoles } from '$lib/auth/roles';
 	import { cn } from '$lib/utils/shadcn';
@@ -39,10 +45,10 @@
 	// distinct value, so a later manual pick isn't overridden while the param lingers.
 	let appliedUrlShelter: string | null = null;
 
-	// Prefer URL deep link, then persisted selection when still allowed; else first assigned shelter.
+	// Prefer URL deep link, then the shared resolver (#1473): the remembered shelter when still
+	// allowed, else the list-order pick — never remembering a stand-in chosen before the list loaded.
 	$effect(() => {
 		const shelters = availableShelters;
-		if (shelters.length === 0) return;
 		const requested = page.url.searchParams.get('shelter');
 		if (
 			requested &&
@@ -54,15 +60,16 @@
 			persistSelectedShelter(requested);
 			return;
 		}
-		const current = shelterStore.selectedShelterCode;
-		if (current && shelters.some((s) => s.code === current)) {
-			persistSelectedShelter(current);
-			return;
-		}
-		const preferred =
-			shelters.find((s) => userShelterCodes.includes(s.code))?.code ?? shelters[0].code;
-		shelterStore.selectedShelterCode = preferred;
-		persistSelectedShelter(preferred);
+		applyActiveShelterChoice(
+			resolveActiveShelter({
+				current: shelterStore.selectedShelterCode,
+				currentProvisional: isSelectionProvisional(),
+				listLoaded: sheltersQuery.isSuccess,
+				allowedCodes: shelters.map((s) => s.code),
+				userShelterCodes,
+				isSystemAdmin: isSA
+			})
+		);
 	});
 
 	const selectedShelter = $derived(

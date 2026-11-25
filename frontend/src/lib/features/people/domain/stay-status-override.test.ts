@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canOverrideStayStatus } from './stay-status-override';
 
-describe('canOverrideStayStatus (CR-262 A1, #1477 review W3)', () => {
+describe('canOverrideStayStatus (CR-262 A1, #1473)', () => {
 	it('lets a system admin override anywhere', () => {
 		expect(canOverrideStayStatus(['system_admin'], 'SH001')).toBe(true);
 	});

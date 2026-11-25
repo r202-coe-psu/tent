@@ -30,8 +30,8 @@ export type ActiveShelterChoice = {
 /**
  * One order everywhere: the shelter list's (registry) order once it has loaded. Before that the
  * roles pick a stand-in so the menu never waits on a list that may be late or missing — but the
- * stand-in is not remembered and is replaced by the list-order pick when the list arrives (W1).
- * A user with no shelter role left forgets the remembered shelter (W2); a system admin is left
+ * stand-in is not remembered and is replaced by the list-order pick when the list arrives.
+ * A user with no shelter role left forgets the remembered shelter; a system admin is left
  * as is until the list loads.
  */
 export function resolveActiveShelter({
