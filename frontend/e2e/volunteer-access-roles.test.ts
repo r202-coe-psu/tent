@@ -210,6 +210,7 @@ const MANAGEMENT_PAGES = [
 	'/back-office/onedata/m5',
 	'/back-office/onedata/m6',
 	'/back-office/incidents',
+	'/back-office/audit-log',
 	'/back-office/shelters',
 	'/back-office/users',
 	'/back-office/kiosks',
