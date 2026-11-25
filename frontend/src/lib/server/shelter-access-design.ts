@@ -1321,7 +1321,7 @@ ${consentVduClause()}
     var applicationKeys = ['_id', '_rev', '_revisions', 'type', 'schema_v', 'shelter_code',
       'assessment_date', 'role_code', 'role_key', 'role_label', 'question_set_version', 'assessed_at',
       'assessor_name', 'status', 'pass_count', 'fail_count', 'pending_count', 'unanswered_count',
-      'controls', 'created_at', 'updated_at', 'created_by'];
+      'controls', 'created_at', 'updated_at', 'created_by', 'updated_by'];
     var topKeys = Object.keys(newDoc);
     for (var topIndex = 0; topIndex < topKeys.length; topIndex++) {
       if (applicationKeys.indexOf(topKeys[topIndex]) === -1) {

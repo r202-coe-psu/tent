@@ -752,6 +752,10 @@ describe('buildValidateDocUpdate', () => {
 			() => validate({ ...registration, unexpected: true }, null, REGISTRATION),
 			/unregistered field/
 		);
+		// CR-260: couch-db stamps the writer on every save — that field is registered.
+		expect(() =>
+			validate({ ...registration, updated_by: REGISTRATION.name }, null, REGISTRATION)
+		).not.toThrow();
 		expectForbidden(
 			() =>
 				validate(
