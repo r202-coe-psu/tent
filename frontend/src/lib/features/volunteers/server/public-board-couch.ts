@@ -71,9 +71,9 @@ export async function loadCouchBoard<
 					if (
 						doc &&
 						doc.type === 'job' &&
-						doc.status !== 'draft' &&
-						doc.status !== 'closed' &&
-						doc.status !== 'cancelled'
+						// What the worker puts on the board (`PUBLIC_JOB_STATUSES`), plus the retired
+						// `almost_full` it still reads as `open`; `paused` is not shown.
+						(doc.status === 'open' || doc.status === 'full' || doc.status === 'almost_full')
 					) {
 						// The DB names the shelter even when an older job doc does not.
 						jobs.push({ ...doc, shelter_code: doc.shelter_code || s.code });

@@ -155,6 +155,32 @@ describe('public job board server-side filtering', () => {
 		expect(lastUrl().searchParams.get('page')).toBe('1');
 	});
 
+	it('sends the controlled filter as status=controlled', async () => {
+		instance = mountBoard();
+		await settle();
+		fetchMock.mockClear();
+
+		const controlled = [...document.body.querySelectorAll('button')].find((b) =>
+			b.textContent?.includes('ทักษะวิชาชีพ')
+		);
+		controlled?.click();
+		await settle();
+
+		expect(lastUrl().searchParams.get('status')).toBe('controlled');
+	});
+
+	it('opens on the shelter named by the deep link', async () => {
+		instance = mountBoard({ initialShelter: 'SH001' });
+		await settle();
+
+		expect(boardCalls().length).toBeGreaterThan(0);
+		expect(
+			boardCalls().every(
+				(call) => new URL(String(call[0]), 'http://x').searchParams.get('shelter_code') === 'SH001'
+			)
+		).toBe(true);
+	});
+
 	it('requests the next page when a page number is picked', async () => {
 		instance = mountBoard();
 		await settle();

@@ -1727,6 +1727,32 @@ async def test_list_jobs_q_matches_the_skill_display_name(
         assert [job["job_id"] for job in response.json()["jobs"]] == ["job:code"], text
 
 
+async def test_list_jobs_status_controlled_matches_a_master_data_skill(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """A job is controlled by its skill too, not only by ``tier`` (CR-265 FR-3)."""
+    await _project_volunteer_skills(controlled_codes=["medical"], controlled_labels=["ปฐมพยาบาล"])
+    await _board_job("job:ctl1", "ต้องการทักษะควบคุม", skills=["medical"])
+    await _board_job("job:ctl2", "ทักษะทั่วไป", skills=["cooking"])
+
+    response = await client.get("/public/v1/jobs?status=controlled", headers=auth_headers)
+
+    assert [job["title"] for job in response.json()["jobs"]] == ["ต้องการทักษะควบคุม"]
+
+
+async def test_list_jobs_without_page_size_returns_every_job_and_ignores_page(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Callers that never paged (the home page counters) keep getting the whole board."""
+    for index in range(3):
+        await _board_job(f"job:np{index}", f"งาน {index}")
+
+    body = (await client.get("/public/v1/jobs?page=2", headers=auth_headers)).json()
+
+    assert body["total"] == 3
+    assert len(body["jobs"]) == 3
+
+
 async def test_jobs_summary_ignores_filters_and_counts_live(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:

@@ -226,6 +226,51 @@ describe('GET /api/public/v1/volunteer/jobs — board filters', () => {
 	});
 });
 
+describe('GET /api/public/v1/volunteer/jobs — CouchDB fallback statuses', () => {
+	it('lists only what the worker puts on the board: open, full and the retired almost_full', async () => {
+		vi.clearAllMocks();
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path.startsWith('/registry/')) {
+				return {
+					status: 200,
+					data: {
+						rows: [{ doc: { type: 'shelter', code: 'SH001', name: 'A', db: 'shelter_sh001' } }]
+					}
+				};
+			}
+			const doc = (id: string, status: string) => ({
+				doc: { _id: id, type: 'job', title: id, status }
+			});
+			return {
+				status: 200,
+				data: {
+					rows: [
+						doc('job:open', 'open'),
+						doc('job:full', 'full'),
+						doc('job:old', 'almost_full'),
+						doc('job:paused', 'paused'),
+						doc('job:draft', 'draft'),
+						doc('job:closed', 'closed')
+					]
+				}
+			};
+		});
+
+		const res = await GET({
+			url: new URL('http://localhost/api/public/v1/volunteer/jobs'),
+			fetch: vi.fn().mockRejectedValue(new Error('fastapi down')),
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+		const body = await res.json();
+
+		expect(body.jobs.map((j: { _id: string }) => j._id).sort()).toEqual([
+			'job:full',
+			'job:old',
+			'job:open'
+		]);
+	});
+});
+
 describe('GET /api/public/v1/volunteer/jobs — CouchDB fallback matches FastAPI (W3)', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();

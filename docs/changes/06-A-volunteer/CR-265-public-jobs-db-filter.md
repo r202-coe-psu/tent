@@ -3,7 +3,7 @@ id: CR-265
 title: กระดานงานจิตอาสาสาธารณะ — กรอง/แบ่งหน้าที่ DB, นับผู้สมัครด้วย aggregation, endpoint สรุปยอด (#1464)
 status: approved
 date: 2026-11-19
-updated: 2026-11-24
+updated: 2026-11-25
 requested_by: "GitHub #1464 (รองรับผู้ใช้เข้าพร้อมกัน ~10,000 คน)"
 decided_by: kong
 decision_date: 2026-11-24
@@ -42,7 +42,7 @@ affects:
 | FR-5  | แบ่งหน้าฝั่ง server: เรียงงานที่ยังมีกะเปิดรับอยู่ก่อนงานที่กะจบหมดแล้วข้ามทุกหน้า (CR-215 FR-4) โดยภายในแต่ละกลุ่มเรียงตาม `shelter_code`, `title`, `_id` · backend ดึง lightweight projection ของงานที่ตรงเงื่อนไขมาตรวจเงื่อนไข live/เวลา (เมื่อจำเป็น), จัดลำดับเปิด/ปิดและตัดหน้า แล้วจึงโหลดเอกสารเต็มเฉพาะหน้านั้น (`page` ค่าเริ่มต้น 1, เกินหน้าสุดท้ายคืนรายการว่าง); ถ้าไม่ส่ง `page_size` คืนทุกรายการที่ตรงตัวกรองเหมือนเดิม |
 | FR-6  | response เพิ่ม `total` (จำนวนงานที่ตรงตัวกรองทั้งหมด ไม่ใช่เฉพาะหน้า) และ `shelters` (`[{code, name}]` ของศูนย์ที่มีงานบนกระดาน ไม่ตามตัวกรอง เพื่อให้ตัวเลือกศูนย์ไม่หดตามหน้า) |
 | FR-7  | นับ `applicants_count` (ระดับงานและระดับกะ; ไม่นับ `cancelled`) ด้วย aggregation `$group` ใน Mongo เฉพาะงานในหน้าที่ตอบ ไม่โหลดตัวเอกสารใบสมัคร; ค่าที่ได้ต้องเท่าเดิมทุกกรณี (กะอ่านจาก `shift_id` หรือ `selected_shift.shift_id`) |
-| FR-8  | เพิ่ม index: `public_jobs.skills_required`, `public_jobs(shelter_code, title)`, `public_job_applications(job_id, status)`; ตรวจ index เดิม (`shelter_code`, `status`, `job_id`) แล้ว ไม่ซ้ำ |
+| FR-8  | เพิ่ม index: `public_jobs.skills_required`, `public_jobs(shelter_code, title)`, `public_job_applications(job_id, status)`; เลิกประกาศ index เดี่ยว `public_jobs.shelter_code` และ `public_job_applications.job_id` ในโมเดล เพราะ compound ที่เพิ่มใหม่ครอบคลุมเป็น prefix อยู่แล้ว (`status` คงไว้) |
 | FR-9  | BFF `/api/public/v1/volunteer/jobs` ส่งต่อเฉพาะ `shelter_code` (หรือ `shelter`), `skill` (ทุกค่า), `q`, `status`, `page`, `page_size`; query อื่นไม่ถูกส่งต่อ; ปฏิเสธ `page > 1000` หรือเกิน safe integer ด้วย 400 `invalid_page`; ส่งต่อคำตอบ 4xx จาก FastAPI โดยไม่ตกเข้า fallback; ทางสำรอง CouchDB (เฉพาะเมื่อ FastAPI ล่ม/5xx) กรอง/เรียง/แบ่งหน้าด้วยกติกาเดียวกันและคืน `total` + `shelters` · และเพิ่ม BFF `GET /api/public/v1/volunteer/jobs/summary` ส่งต่อ `GET /public/v1/jobs/summary` พร้อมทางสำรอง CouchDB ด้วยกติกาเดียวกับ FR-11 |
 | FR-10 | หน้า `/volunteers/jobs` ส่ง ค้นหา/สถานะ/ศูนย์/ทักษะ/หน้า ให้ BFF ทุกครั้งที่เปลี่ยน แสดงเฉพาะหน้าที่ได้รับ (6 ใบ/หน้า) และ `total`; หน่วงการพิมพ์ค้นหา ~300 มิลลิวินาที; เปลี่ยนตัวกรองแล้วกลับหน้า 1; เปลี่ยนหน้าแล้วเลื่อนไปที่รายการ; คงสถานะว่าง/กำลังโหลดเดิม; ไม่กรองหรือแบ่งหน้าซ้ำที่ browser; และดึงยอดรวมคงที่จาก `/api/public/v1/volunteer/jobs/summary` เพื่อแสดงบนปุ่มตัวกรองโดยไม่เปลี่ยนตามตัวกรองหรือหน้า |
 | FR-11 | endpoint ใหม่ `GET /public/v1/jobs/summary` (Bearer `EXTERNAL_API_SECRET`, ประกาศก่อน `/jobs/{job_id}/...`, `Cache-Control: no-store`) คืน `{ success, total, open, near_full, controlled, as_of }` ของงานบนกระดานทั้งหมดโดย**ไม่ตามตัวกรอง**ของรายการ และนับ `open` / `near_full` / `controlled` ด้วยกติกาเดียวกับ FR-3 (live counter + กะที่ยังเปิดรับตาม CR-215 FR-1) |
@@ -87,10 +87,13 @@ affects:
 
 ## 5. Migration
 
-N/A — ไม่เปลี่ยนรูป doc ที่ persist, ไม่ bump `schema_v` (เพิ่ม index ใน Mongo เท่านั้น)
+ไม่เปลี่ยนรูป doc ที่ persist, ไม่ bump `schema_v` (เพิ่ม index ใน Mongo เท่านั้น)
+
+Beanie ไม่ drop index เดิมให้ — index เดี่ยว `shelter_code_1` (`public_jobs`) และ `job_id_1` (`public_job_applications`) ที่มีอยู่แล้วบน DB ยังค้างอยู่และไม่เป็นอันตราย (แค่เปลือง write) จะ drop ด้วยมือเมื่อสะดวกก็ได้: `db.public_jobs.dropIndex("shelter_code_1")`, `db.public_job_applications.dropIndex("job_id_1")`
 
 ## 6. Decision log
 
 - 2026-11-19 — proposed (ร่าง CR จาก #1464); เจ้าของโครงการเลือกติดตามด้วย CR file
 - 2026-11-24 — approved และรันเลขเป็น CR-265 (ย้ายจาก `draft-public-jobs-db-filter.md` เข้า `06-A-volunteer/`); ปรับ FR-1 (ขอบบน `page <= 1000` / 400 `invalid_page`), FR-5 (เรียงงานเปิดก่อนงานปิดข้ามหน้าตาม CR-215 FR-4), FR-9 (ส่งต่อ 4xx ไม่ fallback) และ §3 ให้ตรงกับโค้ด
 - 2026-11-24 — เจ้าของโครงการเคาะคำตัดสิน D1–D6: D1=B (กรอง `open`/`near_full` ด้วย live counter), D2=A (ตัดกะที่จบเวลาแล้วออกใน `open`/`near_full`), D3=B (`q` ค้น label ทักษะผ่าน Master Data), D4+D6 (เพิ่ม `GET /public/v1/jobs/summary` + BFF `/api/public/v1/volunteer/jobs/summary` นับยอดรวมคงที่), D5=A (คง `no-store` ยังไม่ cache ฝั่ง server)
+- 2026-11-25 — แก้ FR-8 ตามรีวิว S3: ตัด index เดี่ยวที่ซ้ำ prefix ออกจากโมเดล และเพิ่มบันทึกการ drop index เดิม

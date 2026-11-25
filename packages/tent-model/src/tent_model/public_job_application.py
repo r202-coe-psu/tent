@@ -60,6 +60,6 @@ class PublicJobApplication(Document):
         indexes = [
             IndexModel([("tracking_token_hash", 1)]),
             IndexModel([("phone_hash", 1)]),
-            IndexModel([("job_id", 1)]),
+            # `(job_id, status)` also serves `job_id` alone, so no single-field index.
             IndexModel([("job_id", 1), ("status", 1)]),
         ]

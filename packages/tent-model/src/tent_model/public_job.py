@@ -69,7 +69,7 @@ class PublicJob(Document):
     class Settings:
         name = "public_jobs"
         indexes = [
-            IndexModel([("shelter_code", 1)]),
+            # `(shelter_code, title)` also serves `shelter_code` alone, so no single-field index.
             IndexModel([("status", 1)]),
             IndexModel([("skills_required", 1)]),
             IndexModel([("shelter_code", 1), ("title", 1)]),

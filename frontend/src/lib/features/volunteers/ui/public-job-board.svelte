@@ -355,8 +355,6 @@
 					tags.push({ label: t.tagClosed, variant: 'outline' });
 				} else if (job.status === 'open') {
 					tags.push({ label: t.tagOpen, variant: 'success' });
-				} else if (job.status === 'almost_full') {
-					tags.push({ label: t.tagNearFull, variant: 'warning' });
 				} else if (job.status === 'full') {
 					tags.push({ label: t.tagFull, variant: 'outline' });
 				}
