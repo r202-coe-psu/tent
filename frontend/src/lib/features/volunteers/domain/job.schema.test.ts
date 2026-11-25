@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { jobSchema, isJob, makeJob, jobInputSchema, type JobInput } from './job.schema';
+import {
+	jobSchema,
+	isJob,
+	makeJob,
+	jobInputSchema,
+	PUBLIC_JOB_STATUSES,
+	type JobInput
+} from './job.schema';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -287,5 +294,11 @@ describe('makeJob', () => {
 				`status ${status} must not be choosable at create time`
 			).toBe(false);
 		}
+	});
+});
+
+describe('PUBLIC_JOB_STATUSES', () => {
+	it('lists what the worker projects and FastAPI serves: open and full, never paused (CR-265)', () => {
+		expect([...PUBLIC_JOB_STATUSES]).toEqual(['open', 'full']);
 	});
 });

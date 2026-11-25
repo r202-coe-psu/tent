@@ -71,7 +71,7 @@ export async function loadCouchBoard<
 					if (
 						doc &&
 						doc.type === 'job' &&
-						// What the worker puts on the board (`PUBLIC_JOB_STATUSES`), plus the retired
+						// What the board shows (`PUBLIC_JOB_STATUSES`, same as the worker), plus the retired
 						// `almost_full` it still reads as `open`; `paused` is not shown.
 						(doc.status === 'open' || doc.status === 'full' || doc.status === 'almost_full')
 					) {

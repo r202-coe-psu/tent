@@ -21,8 +21,12 @@ export type JobTier = z.infer<typeof jobTierSchema>;
 export const jobStatusSchema = z.enum(['draft', 'open', 'paused', 'full', 'closed', 'cancelled']);
 export type JobStatus = z.infer<typeof jobStatusSchema>;
 
-/** Statuses a public job board is allowed to show (CR-094 FR-VOL-13.2). */
-export const PUBLIC_JOB_STATUSES: readonly JobStatus[] = ['open'];
+/**
+ * Statuses a public job board shows: the same set the worker projects and FastAPI serves
+ * (`PUBLIC_JOB_STATUSES` in `worker/.../projectors/job.py`). A full job stays listed, tagged
+ * full. This replaces the `open`-only rule of CR-094 FR-VOL-13.2 (CR-265).
+ */
+export const PUBLIC_JOB_STATUSES: readonly JobStatus[] = ['open', 'full'];
 
 export const shiftTemplateSchema = z.object({
 	shift_name: z.string().min(1),
