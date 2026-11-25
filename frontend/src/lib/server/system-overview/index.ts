@@ -405,7 +405,12 @@ export async function buildOverviewSites(filters: OverviewFilters) {
 	// Occupancy is one cheap reduced view per shelter and drives sort + total; the costlier
 	// movements read runs only for the rows on the requested page (#1502).
 	const sites = await loadSiteMetrics(filters);
-	const sorted = [...sites].sort((a, b) => (b.row.forecast_pct ?? -1) - (a.row.forecast_pct ?? -1));
+	// shelter_code tie-break keeps page boundaries stable when forecast_pct ties (e.g. all -1).
+	const sorted = [...sites].sort(
+		(a, b) =>
+			(b.row.forecast_pct ?? -1) - (a.row.forecast_pct ?? -1) ||
+			a.master.code.localeCompare(b.master.code)
+	);
 	// Shrinking totals (filter change, a shelter cancelled) must not strand the caller on an
 	// empty page: snap to the last page and report the offset actually used.
 	const offset =

@@ -86,6 +86,25 @@ describe('buildOverviewSites paging (#1502)', () => {
 	});
 });
 
+describe('buildOverviewSites ordering (#1502 review)', () => {
+	it('breaks forecast_pct ties by shelter_code regardless of registry order', async () => {
+		route({
+			'/_view/occupancy': () => ({ rows: [] }),
+			registrations_by_date_status: () => ({ rows: [] })
+		});
+		for (const order of [
+			['C', 'A', 'B'],
+			['B', 'C', 'A']
+		]) {
+			listShelterMasters.mockResolvedValue(order.map((c) => master(c, 10)));
+			clearOverviewViewCache();
+			const p1 = await buildOverviewSites(filters({ limit: 2, offset: 0 }));
+			const p2 = await buildOverviewSites(filters({ limit: 2, offset: 2 }));
+			expect([...p1.sites, ...p2.sites].map((s) => s.shelter_code)).toEqual(['A', 'B', 'C']);
+		}
+	});
+});
+
 describe('failed reads are not memoised and offsets are clamped (#1502 review)', () => {
 	it('retries a failed occupancy read instead of caching the empty result', async () => {
 		listShelterMasters.mockResolvedValue([master('A', 10)]);
@@ -161,6 +180,30 @@ describe('buildOverviewDemographics (#1502)', () => {
 		const out = await buildOverviewDemographics(filters());
 		expect(out.countries).toEqual({ TH: 3, MM: 2 });
 		expect(adminRaw.mock.calls.some(([p]) => String(p).includes('/_find'))).toBe(false);
+	});
+
+	it('falls back to the per-axis views when the shelter is on a stale manifest', async () => {
+		listShelterMasters.mockResolvedValue([master('A', 10)]);
+		// demographics_by_country_age is absent (404) -> legacy views are used.
+		const ok = (rows: unknown[]) => ({ status: 200, data: { rows } });
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path.includes('demographics_by_country_age')) return { status: 404, data: null };
+			if (path.includes('demographics_by_age'))
+				return ok([
+					{ key: 1990, value: 3 },
+					{ key: null, value: 2 }
+				]);
+			if (path.includes('demographics_by_country'))
+				return ok([
+					{ key: 'TH', value: 3 },
+					{ key: 'MM', value: 2 }
+				]);
+			return ok([]);
+		});
+		const out = await buildOverviewDemographics(filters());
+		expect(out.countries).toEqual({ TH: 3, MM: 2 });
+		expect(Object.values(out.age_groups).reduce((a, b) => a + b, 0)).toBe(5);
+		expect(out.age_by_country).toEqual({});
 	});
 });
 
