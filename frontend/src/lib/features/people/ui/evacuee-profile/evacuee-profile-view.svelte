@@ -40,6 +40,7 @@
 		zoneLabel
 	} from '$lib/features/people';
 	import {
+		canAccessManagerPages,
 		hasShelterScope,
 		hasStaffCapability,
 		isShelterManager,
@@ -48,7 +49,6 @@
 	import { getShelterCode, resolveContextShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { EntityHistory } from '$lib/features/audit-log';
-	import { canAccessManagerPages } from '$lib/auth/roles';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { formatDisplayDateTime } from '$lib/utils/date';
 	import type {

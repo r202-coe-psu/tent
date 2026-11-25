@@ -226,9 +226,7 @@ export async function getDocWithConflicts<T extends { _id: string }>(
 	}
 }
 
-export { isAuditedWriteDb };
-
-export function stampWriter<T extends object>(dbName: string, doc: T): T {
+function stampWriter<T extends object>(dbName: string, doc: T): T {
 	const name = authStore.user?.name;
 	if (!name || !isAuditedWriteDb(dbName)) return doc;
 	return { ...doc, updated_by: name };
