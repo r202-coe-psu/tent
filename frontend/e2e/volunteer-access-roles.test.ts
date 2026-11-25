@@ -278,6 +278,9 @@ async function portalDepartments(page: Page): Promise<string[]> {
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
 
+/** Redirects to `<this>/edit/<active shelter>` once its page has mounted. */
+const SHELTERS_PAGE = '/back-office/shelters';
+
 /** Back-office pages with no role guard yet (#845): every role sees them, so they prove nothing. */
 const UNGUARDED_PAGES = [
 	'/back-office/shelters/readiness',
@@ -343,6 +346,14 @@ async function expectLoads(page: Page, url: string): Promise<void> {
 	// protected shell's <main> means the guard has passed or redirected. Not `networkidle`: the
 	// `_changes` longpoll feeds keep the network busy for good.
 	await expect(page.locator('main').first()).toBeVisible();
+	if (url === SHELTERS_PAGE) {
+		// The page opens the active shelter's edit screen from a client-side effect that runs after
+		// <main> is already there, so the path is only final once that redirect has happened.
+		await expect
+			.poll(() => pathOf(page), { message: `${url} should load` })
+			.toMatch(new RegExp(`^${SHELTERS_PAGE}(/edit/[^/]+)?$`));
+		return;
+	}
 	expect.soft(pathOf(page), `${url} should load`).toBe(url);
 }
 

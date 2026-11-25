@@ -8,6 +8,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 import { acceptFullConsent } from './consent';
+import { couchReq } from './couch';
 
 export interface ShelterForm {
 	name: string;
@@ -95,6 +96,38 @@ export interface MemberForm {
 const MEMBER_TABS_MIN = 3;
 
 /** Onsite Station 1 → register one household (first member = primary contact). */
+/**
+ * Station 1 registers people as `arriving`; only room confirmation makes them `active`. Public
+ * search lists in-shelter people only (#1536), so suites that search for people they just
+ * registered must admit them first. This does what the later stations do to the stay, through the
+ * CouchDB admin API (the same channel teardown uses) instead of walking those screens — the
+ * sync worker then projects the new status. Throws unless exactly `expected` people were admitted.
+ */
+export async function admitArrivingEvacueesViaCouch(code: string, expected: number): Promise<void> {
+	const db = `/shelter_${code.toLowerCase()}`;
+	const found = await couchReq('POST', `${db}/_find`, {
+		selector: { type: 'evacuee', 'current_stay.status': 'arriving' },
+		limit: 500
+	});
+	const docs = ((found.data as { docs?: Record<string, unknown>[] } | null)?.docs ?? []).map(
+		(doc) => ({ ...doc, current_stay: { ...(doc.current_stay as object), status: 'active' } })
+	);
+	expect(docs, `${code}: arriving evacuees to admit`).toHaveLength(expected);
+	const now = new Date().toISOString();
+	const written = await couchReq('POST', `${db}/_bulk_docs`, {
+		docs: docs.map((doc) => ({
+			...doc,
+			current_stay: { ...doc.current_stay, since: now },
+			updated_at: now
+		}))
+	});
+	const rows = (written.data as { ok?: boolean; error?: string }[] | null) ?? [];
+	expect(
+		written.status < 300 && rows.length === expected && rows.every((row) => row.ok),
+		`${code}: admit ${expected} evacuees`
+	).toBe(true);
+}
+
 export async function registerHouseholdViaUi(
 	page: Page,
 	{ houseNo, members }: { houseNo: string; members: MemberForm[] }
