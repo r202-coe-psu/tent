@@ -210,6 +210,7 @@ const MANAGEMENT_PAGES = [
 	'/back-office/onedata/m5',
 	'/back-office/onedata/m6',
 	'/back-office/incidents',
+	'/back-office/audit-log',
 	'/back-office/shelters',
 	'/back-office/users',
 	'/back-office/kiosks',
@@ -277,6 +278,9 @@ async function portalDepartments(page: Page): Promise<string[]> {
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
 
+/** Redirects to `<this>/edit/<active shelter>` once its page has mounted. */
+const SHELTERS_PAGE = '/back-office/shelters';
+
 /** Back-office pages with no role guard yet (#845): every role sees them, so they prove nothing. */
 const UNGUARDED_PAGES = [
 	'/back-office/shelters/readiness',
@@ -342,6 +346,16 @@ async function expectLoads(page: Page, url: string): Promise<void> {
 	// protected shell's <main> means the guard has passed or redirected. Not `networkidle`: the
 	// `_changes` longpoll feeds keep the network busy for good.
 	await expect(page.locator('main').first()).toBeVisible();
+	if (url === SHELTERS_PAGE) {
+		// The page opens the active shelter's edit screen from a client-side effect that runs after
+		// <main> is already there. Both the bare path and the edit path count as loaded; this only
+		// checks the role was not bounced to another page (a role with no active shelter never
+		// redirects, so waiting for the edit path would hang).
+		await expect
+			.poll(() => pathOf(page), { message: `${url} should load` })
+			.toMatch(new RegExp(`^${SHELTERS_PAGE}(/edit/[^/]+)?$`));
+		return;
+	}
 	expect.soft(pathOf(page), `${url} should load`).toBe(url);
 }
 

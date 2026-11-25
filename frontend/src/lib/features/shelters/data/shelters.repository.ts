@@ -47,6 +47,9 @@ export interface ShelterSummary {
 	operation_status: OperationStatus;
 	is_external: boolean;
 	external_url: string | null;
+	name_short: string | null;
+	operating_org: string | null;
+	delivery_note: string | null;
 	capacity: number;
 	shelter_type: string | null;
 	floor_count: number | null;

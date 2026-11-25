@@ -3,7 +3,8 @@ import {
 	activeSiteKinds,
 	countBySiteKind,
 	hiddenShelterGroups,
-	SHELTER_GROUP_HIDE_PARAMS,
+	shelterGroupChoice,
+	shelterGroupParams,
 	isHostHouseKind,
 	normalizeSiteKind,
 	shelterGroup,
@@ -50,9 +51,11 @@ describe('siteKindLabel', () => {
 		expect(siteKindLabel('mobile_clinic', [], 'en')).toBe('mobile_clinic');
 	});
 
-	it('keeps the two seeded labels readable while the list is empty or loading', () => {
+	it('keeps the seeded labels readable while the list is empty or loading', () => {
 		expect(siteKindLabel('host_house', undefined, 'th')).toBe('บ้านพี่เลี้ยง');
 		expect(siteKindLabel('evacuation_center', [], 'en')).toBe('Evacuation Center');
+		expect(siteKindLabel('test_center', undefined, 'th')).toBe('ศูนย์ทดสอบ');
+		expect(siteKindLabel('test_center', [], 'en')).toBe('Test Center');
 	});
 
 	it('reads a missing code as the default kind', () => {
@@ -159,15 +162,24 @@ describe('shelter groups (type toggles)', () => {
 		expect(shelterGroup({})).toBe('evacuation');
 	});
 
-	it('reads only switched-off groups from the URL (default all on)', () => {
-		expect(hiddenShelterGroups(new URLSearchParams(''))).toEqual([]);
-		expect(hiddenShelterGroups(new URLSearchParams('hide_evacuation=on&hide_external=on'))).toEqual(
-			['evacuation', 'external']
+	it('hides external shelters by default; show_external brings them back', () => {
+		expect(hiddenShelterGroups(new URLSearchParams(''))).toEqual(['external']);
+		expect(hiddenShelterGroups(new URLSearchParams('show_external=on'))).toEqual([]);
+		expect(hiddenShelterGroups(new URLSearchParams('show_external=on&hide_evacuation=on'))).toEqual(
+			['evacuation']
 		);
 	});
 
-	it('has no switch for host houses: a stale hide_host_house in the URL is ignored (#1419)', () => {
-		expect(hiddenShelterGroups(new URLSearchParams('hide_host_house=on'))).toEqual([]);
-		expect(Object.keys(SHELTER_GROUP_HIDE_PARAMS)).toEqual(['hide_evacuation', 'hide_external']);
+	it('reads old links as the default: hide_external, or hide_evacuation without show_external', () => {
+		expect(hiddenShelterGroups(new URLSearchParams('hide_external=on'))).toEqual(['external']);
+		expect(hiddenShelterGroups(new URLSearchParams('hide_evacuation=on'))).toEqual(['external']);
+		expect(hiddenShelterGroups(new URLSearchParams('hide_host_house=on'))).toEqual(['external']);
+	});
+
+	it('maps each pick to its URL flags and back', () => {
+		for (const choice of ['evacuation', 'all', 'external'] as const) {
+			expect(shelterGroupChoice(shelterGroupParams(choice))).toBe(choice);
+		}
+		expect(shelterGroupParams('evacuation')).toEqual({});
 	});
 });

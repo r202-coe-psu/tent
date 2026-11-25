@@ -39,7 +39,7 @@ function masterToBasic(master: ShelterMaster): ShelterBasic {
 	};
 }
 
-function masterToSummary(master: ShelterMaster): ShelterSummary {
+export function masterToSummary(master: ShelterMaster): ShelterSummary {
 	return {
 		code: master.code,
 		_rev: master._rev,
@@ -49,6 +49,9 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		operation_status: master.operation_status ?? 'standby',
 		is_external: master.is_external === true,
 		external_url: master.external_url ?? null,
+		name_short: master.name_short ?? null,
+		operating_org: master.operating_org ?? null,
+		delivery_note: master.delivery_note ?? null,
 		capacity: master.capacity ?? 0,
 		shelter_type: master.shelter_type ?? null,
 		floor_count: master.floor_count ?? null,

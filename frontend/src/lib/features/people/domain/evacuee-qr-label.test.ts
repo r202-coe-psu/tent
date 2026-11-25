@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Evacuee } from './people';
-import { buildEvacueeQrLabel, EVACUEE_QR_PLACEHOLDER_PAYLOAD } from './evacuee-qr-label';
+import { buildEvacueeQrLabel } from './evacuee-qr-label';
+
+const PAYLOAD = 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0@683508';
 
 function ev(partial: {
 	status: Evacuee['current_stay']['status'];
@@ -40,11 +42,12 @@ describe('buildEvacueeQrLabel', () => {
 	it('builds the label for a checked-in evacuee in a zone, with a screening', () => {
 		expect(
 			buildEvacueeQrLabel(ev({ status: 'active', zone: 'A' }), {
+				qrPayload: PAYLOAD,
 				zones: ZONES,
 				hasScreening: true
 			})
 		).toEqual({
-			qrPayload: EVACUEE_QR_PLACEHOLDER_PAYLOAD,
+			qrPayload: PAYLOAD,
 			label: {
 				name: 'สมชาย\nใจดี',
 				zone: 'เอ',
@@ -57,6 +60,7 @@ describe('buildEvacueeQrLabel', () => {
 
 	it('leaves the zone null when none is assigned', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving' }), {
+			qrPayload: PAYLOAD,
 			zones: ZONES,
 			hasScreening: true
 		});
@@ -65,20 +69,11 @@ describe('buildEvacueeQrLabel', () => {
 
 	it('ticks fewer boxes when the evacuee has no screening', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving' }), {
+			qrPayload: PAYLOAD,
 			zones: ZONES,
 			hasScreening: false
 		});
 		expect(label.checkedCount).toBe(1);
-	});
-
-	it('uses the issued payload when given, and a non-person placeholder otherwise (CR-233)', () => {
-		const e = ev({ status: 'arriving' });
-		const issued = 'evacuee:01JC8ZQ4V6M2N5R7T9XBDEFGH0@683508';
-		const input = { hasScreening: false };
-		expect(buildEvacueeQrLabel(e, { ...input, qrPayload: issued }).qrPayload).toBe(issued);
-		const placeholder = buildEvacueeQrLabel(e, input).qrPayload;
-		expect(placeholder).toBe(EVACUEE_QR_PLACEHOLDER_PAYLOAD);
-		expect(placeholder.startsWith('evacuee:')).toBe(false);
 	});
 
 	it('prints the emergency contact phone as digits only', () => {
@@ -86,12 +81,17 @@ describe('buildEvacueeQrLabel', () => {
 			...ev({ status: 'active', zone: 'A' }),
 			emergency_contact: { name: 'แม่', phone: '081-234 5678' }
 		} as Evacuee;
-		const { label } = buildEvacueeQrLabel(evacuee, { zones: ZONES, hasScreening: true });
+		const { label } = buildEvacueeQrLabel(evacuee, {
+			qrPayload: PAYLOAD,
+			zones: ZONES,
+			hasScreening: true
+		});
 		expect(label.emergencyPhone).toBe('0812345678');
 	});
 
 	it('marks the preview label red when the latest screening is fast_track (#1301)', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'active', zone: 'A' }), {
+			qrPayload: PAYLOAD,
 			zones: ZONES,
 			hasScreening: true,
 			screenings: [
@@ -105,6 +105,7 @@ describe('buildEvacueeQrLabel', () => {
 	it('marks the preview label yellow for vulnerable groups on a normal screening (#1301)', () => {
 		const evacuee = { ...ev({ status: 'active' }), vulnerable_groups: ['elderly'] } as Evacuee;
 		const { label } = buildEvacueeQrLabel(evacuee, {
+			qrPayload: PAYLOAD,
 			hasScreening: true,
 			screenings: [{ track: 'normal', screened_at: '2026-09-03T01:00:00.000Z' }]
 		});
@@ -113,6 +114,7 @@ describe('buildEvacueeQrLabel', () => {
 
 	it('leaves the preview marker null with no fast track and no vulnerable groups (#1301)', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'active' }), {
+			qrPayload: PAYLOAD,
 			hasScreening: true,
 			screenings: [{ track: 'normal', screened_at: '2026-09-03T01:00:00.000Z' }]
 		});
@@ -121,6 +123,7 @@ describe('buildEvacueeQrLabel', () => {
 
 	it('prints the first name alone when there is no last name', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '' }), {
+			qrPayload: PAYLOAD,
 			zones: ZONES,
 			hasScreening: false
 		});
@@ -129,6 +132,7 @@ describe('buildEvacueeQrLabel', () => {
 
 	it('omits a whitespace-only last name', () => {
 		const { label } = buildEvacueeQrLabel(ev({ status: 'arriving', last_name: '   ' }), {
+			qrPayload: PAYLOAD,
 			zones: ZONES,
 			hasScreening: false
 		});
@@ -138,7 +142,7 @@ describe('buildEvacueeQrLabel', () => {
 	it('gives an empty name when both names are blank', () => {
 		const { label } = buildEvacueeQrLabel(
 			ev({ status: 'arriving', first_name: ' ', last_name: '' }),
-			{ zones: ZONES, hasScreening: false }
+			{ qrPayload: PAYLOAD, zones: ZONES, hasScreening: false }
 		);
 		expect(label.name).toBe('');
 	});
@@ -146,7 +150,7 @@ describe('buildEvacueeQrLabel', () => {
 	it('trims each name part before joining', () => {
 		const { label } = buildEvacueeQrLabel(
 			ev({ status: 'arriving', first_name: ' สมชาย ', last_name: ' ใจดี ' }),
-			{ zones: ZONES, hasScreening: false }
+			{ qrPayload: PAYLOAD, zones: ZONES, hasScreening: false }
 		);
 		expect(label.name).toBe('สมชาย\nใจดี');
 	});

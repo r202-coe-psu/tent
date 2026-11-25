@@ -70,12 +70,7 @@ import {
 	type PartnerEndpoint,
 	type PartnerScope
 } from './helpers/partner-api';
-import {
-	publicSearchHits,
-	publicShelter,
-	waitForProjection,
-	type PublicSearchHit
-} from './helpers/public-cleanup';
+import { publicShelter, waitForProjection } from './helpers/public-cleanup';
 import { createShelterViaUi } from './helpers/staff-ui';
 
 const API_KEYS_PATH = '/system-management/api-keys';
@@ -307,13 +302,22 @@ async function waitForWorkerWrite(
 
 /**
  * EXT-012 reads the Mongo `public_persons` projection, which lags the CouchDB write that
- * `waitForWorkerWrite` sees. Wait until public search (same projection) shows the stay as `stay`;
- * before that an EXT-012 assertion would prove nothing.
+ * `waitForWorkerWrite` sees. Public search can no longer show it: it lists only people in a
+ * shelter (#1536), so neither `pre_registered` nor `cancelled` appears there. Poll EXT-012
+ * itself (same projection, unchanged by #1536) until it reports the stay as `stay`:
+ * `pre_registered` is a hit, `cancelled` is dropped from the result (E12-5). Before that an
+ * EXT-012 assertion would prove nothing. Call this only after the booking exists, so an empty
+ * result for `cancelled` means "dropped", not "never projected".
  */
-async function waitForProjectedStay(cid: string, stay: 'pre_registered' | 'cancelled') {
+async function waitForProjectedStay(r: Run, stay: 'pre_registered' | 'cancelled') {
 	await waitForProjection(
-		`${stay} stay of ${cid} on the public plane`,
-		async () => (await publicSearchHits(cid)).some((h) => h.status === stay),
+		`${stay} stay of ${r.cid} on the public plane`,
+		async () => {
+			const res = await call(r, r.token, byExt('EXT-012'));
+			if (res.status !== 200) return false;
+			const hits = (res.body.result ?? []) as { status?: string }[];
+			return stay === 'cancelled' ? hits.length === 0 : hits.some((h) => h.status === stay);
+		},
 		{ timeoutMs: 60_000, intervalMs: 3_000 }
 	);
 }
@@ -670,7 +674,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 	test('E12-1 EXT-012 finds the pre-registered booking by CID: masked, no family, CID never echoed', async () => {
 		test.setTimeout(120_000);
 		const r = state();
-		await waitForProjectedStay(r.cid, 'pre_registered');
+		await waitForProjectedStay(r, 'pre_registered');
 		// Masked view: `occupant-search` without `pii-full` (CR-257).
 		const res = await call(r, await mintMaskedMain(r), byExt('EXT-012'));
 		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
@@ -692,7 +696,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 	test('E12-6 EXT-012 with pii-full returns the whole values (CR-257)', async () => {
 		test.setTimeout(120_000);
 		const r = state();
-		await waitForProjectedStay(r.cid, 'pre_registered');
+		await waitForProjectedStay(r, 'pre_registered');
 		// The main client holds every scope, `pii-full` included.
 		const res = await call(r, r.token, byExt('EXT-012'));
 		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
@@ -736,6 +740,9 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 	test('A3 EXT-009 cancel, repeat cancel, then EXT-010 reports CANCELLED', async () => {
 		test.setTimeout(150_000);
 		const r = state();
+		// Proves the row exists before the cancel, so an empty EXT-012 later means "dropped", not
+		// "never projected" (EXT-011 and E12-5 below rely on that).
+		await waitForProjectedStay(r, 'pre_registered');
 		const cancel = await call(r, r.token, byExt('EXT-009'));
 		expect(cancel.status, `cancel (code ${cancel.body?.code})`).toBe(200);
 		expect(cancel.body.result).toMatchObject({
@@ -841,21 +848,11 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		expect(status.body.result.booking_status).toBe('CANCELLED');
 
 		// EXT-011 reads the Mongo `public_persons` projection, which lags the CouchDB write that
-		// `waitForWorkerWrite` sees. Wait until public search (same projection) shows the cancelled
-		// stay; before that the row is still `pre_registered` and a 404 would prove nothing.
-		let hits: PublicSearchHit[] = [];
-		await waitForProjection(
-			`cancelled stay of ${r.cid} on the public plane`,
-			async () => {
-				hits = await publicSearchHits(r.cid);
-				return hits.some((h) => h.status === 'cancelled');
-			},
-			{ timeoutMs: 60_000, intervalMs: 3_000 }
-		);
-		// The root of #710: the projector used to stamp the cancel time as `checked_in_at`.
-		for (const hit of hits.filter((h) => h.status === 'cancelled')) {
-			expect(hit.checked_in_at, 'cancelled stay carries no check-in time').toBeNull();
-		}
+		// `waitForWorkerWrite` sees. Wait until the cancel is projected; before that the row is
+		// still `pre_registered` and a 404 would prove nothing. (The #710 guard that a cancelled
+		// stay carries no `checked_in_at` lived here via public search, which no longer lists
+		// cancelled stays (#1536); worker/tests/projectors/test_projectors.py covers it.)
+		await waitForProjectedStay(r, 'cancelled');
 		expectExtError(await call(r, r.token, byExt('EXT-011')), 404, 'residency_not_found');
 	});
 
@@ -867,7 +864,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		);
 		// The same projection lag as EXT-011 above: before it shows `cancelled`, the row is still
 		// `pre_registered` and an empty result would prove nothing.
-		await waitForProjectedStay(r.cid, 'cancelled');
+		await waitForProjectedStay(r, 'cancelled');
 		const res = await call(r, r.token, byExt('EXT-012'));
 		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
 		expect(res.body.result).toEqual([]);
