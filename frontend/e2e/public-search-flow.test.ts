@@ -42,6 +42,7 @@ import {
 	waitForProjection
 } from './helpers/public-cleanup';
 import {
+	admitArrivingEvacueesViaCouch,
 	createShelterViaUi,
 	registerHouseholdViaUi,
 	selectActiveShelter
@@ -158,7 +159,8 @@ test.describe('Public family search: server errors', { tag: ['@public', '@smoke'
 		await expect(page.getByRole('textbox', { name: SEARCH_BOX })).toHaveValue('นายทดสอบระบบ');
 
 		await page.getByRole('button', { name: 'ค้นหา' }).click();
-		await dialog.getByLabel('ชื่อ', { exact: true }).fill('E2E');
+		// By role, not label text: the label now also holds an aria-hidden "*" required mark.
+		await dialog.getByRole('textbox', { name: 'ชื่อ', exact: true }).fill('E2E');
 		await dialog.getByLabel('เบอร์โทรศัพท์มือถือ').fill('0812345678');
 		await dialog.getByLabel('ตามหาญาติ/ครอบครัว').check();
 		await dialog.getByLabel(/ข้าพเจ้ายินยอม/).check();
@@ -199,6 +201,8 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 		});
 		await selectActiveShelter(page, shelterCode);
 		for (const household of FIXTURE.households) await registerHouseholdViaUi(page, household);
+		// Station 1 leaves them `arriving`, which public search hides (#1536).
+		await admitArrivingEvacueesViaCouch(shelterCode, TOTAL);
 	});
 
 	test('finds everyone by name prefix and paginates 5 per page', async ({ page }) => {
@@ -260,22 +264,17 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 		}
 	});
 
-	test('shows the household members of a result and toggles them', async ({ page }) => {
+	test('shows only the person searched for, never their household (#1536)', async ({ page }) => {
 		await page.goto('/search');
 		await page.getByRole('textbox', { name: SEARCH_BOX }).fill(HEAD);
 		await page.getByRole('button', { name: 'ค้นหา' }).click();
 		await expect(page.getByText('พบข้อมูลทั้งหมด 1 รายการ')).toBeVisible();
 		await expect(page.getByRole('heading', { name: `${HEAD} ${LAST_NAME_MASKED}` })).toBeVisible();
-		await expect(page.getByText('มากับครอบครัว')).toBeVisible();
 		await expect(page.getByText(SHELTER_NAME, { exact: true })).toBeVisible();
-		await expect(page.getByText(`${MEMBER_1} ${LAST_NAME_MASKED}`)).toBeVisible();
-		await expect(page.getByText(`${MEMBER_2} ${LAST_NAME_MASKED}`)).toBeVisible();
-
-		await page.getByText('ข้อมูลสมาชิกในครอบครัว (2 คน)').click();
-		await expect(page.getByText(`${MEMBER_1} ${LAST_NAME_MASKED}`)).toBeHidden();
-
-		await page.getByText('ข้อมูลสมาชิกในครอบครัว (2 คน)').click();
-		await expect(page.getByText(`${MEMBER_1} ${LAST_NAME_MASKED}`)).toBeVisible();
+		// The head came with two more people; none of them, nor a family section, is shown.
+		await expect(page.getByText(MEMBER_1)).toHaveCount(0);
+		await expect(page.getByText(MEMBER_2)).toHaveCount(0);
+		await expect(page.getByText(/ข้อมูลสมาชิกในครอบครัว/)).toHaveCount(0);
 	});
 
 	test('finds a person by exact phone number without revealing PII', async ({ page }) => {
@@ -340,7 +339,6 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 		await page.getByRole('button', { name: 'ค้นหา' }).click();
 		await expect(page.getByRole('heading', { name: `${SOLO} ${LAST_NAME_MASKED}` })).toBeVisible();
 		await expect(page.getByRole('heading', { name: HEAD })).toHaveCount(0);
-		await expect(page.getByText('มาเดี่ยว')).toBeVisible();
 	});
 
 	test('Z teardown leaves no shelter or searchable person of this run', async () => {
