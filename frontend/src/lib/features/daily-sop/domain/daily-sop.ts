@@ -952,7 +952,9 @@ export const dailySopRoleAssessmentSchema = z
 		controls: z.array(roleControlSchema),
 		created_at: timestampSchema,
 		updated_at: timestampSchema,
-		created_by: nonEmptyTrimmed
+		created_by: nonEmptyTrimmed,
+		// CR-260 FR-C1/C3: stamped by couch-db on every write; absent on docs written before it.
+		updated_by: nonEmptyTrimmed.optional()
 	})
 	.strict()
 	.superRefine((assessment, ctx) => {

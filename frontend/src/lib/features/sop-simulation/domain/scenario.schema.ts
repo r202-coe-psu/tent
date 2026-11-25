@@ -466,6 +466,8 @@ export const scenarioSchema = z
 		created_at: z.string().datetime(),
 		updated_at: z.string().datetime(),
 		created_by: z.string().min(1),
+		// CR-260 FR-C1/C3: stamped by couch-db on every write; absent on docs written before it.
+		updated_by: z.string().min(1).optional(),
 		result: scenarioResultSchema
 	})
 	.strict()
