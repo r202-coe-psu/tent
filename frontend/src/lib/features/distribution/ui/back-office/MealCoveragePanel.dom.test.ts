@@ -326,7 +326,7 @@ describe('MealCoveragePanel', () => {
 			render();
 			expect(rowTexts()).toHaveLength(20);
 			expect(document.body.textContent).toContain('แสดง 1–20 จาก 45 คน');
-			click(document.querySelector('a[aria-label*="next" i], button[aria-label*="next" i]'));
+			click(document.querySelector('a[aria-label*="ถัดไป"], button[aria-label*="ถัดไป"]'));
 			expect(rowTexts()).toHaveLength(20);
 			expect(document.body.textContent).toContain('แสดง 21–40 จาก 45 คน');
 		});
@@ -360,7 +360,7 @@ describe('MealCoveragePanel', () => {
 		it('narrows rows by name search and returns to page 1', () => {
 			env.evacuees.data = names(45);
 			render();
-			click(document.querySelector('a[aria-label*="next" i], button[aria-label*="next" i]'));
+			click(document.querySelector('a[aria-label*="ถัดไป"], button[aria-label*="ถัดไป"]'));
 			expect(document.body.textContent).toContain('แสดง 21–40');
 			search('ชื่อ07');
 			expect(rowTexts()).toHaveLength(1);

@@ -213,6 +213,7 @@
 					bind:page={() => currentPage, (p) => (filters = { ...filters, offset: (p - 1) * limit })}
 					count={total}
 					perPage={limit}
+					class="h-7 min-w-7 text-xs"
 				/>
 			</div>
 		{/if}
