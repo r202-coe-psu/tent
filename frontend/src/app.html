@@ -23,6 +23,36 @@
 		<script nonce="%sveltekit.nonce%">
 			globalThis.__zod_globalConfig = { jitless: true };
 		</script>
+		<!--
+			PSU cookie-consent banner (web-consent.psu.ac.th). Injected asynchronously so a slow or
+			unreachable consent host never blocks the app shell; its origin is allowed in
+			svelte.config.js kit.csp script-src.
+		-->
+		<script nonce="%sveltekit.nonce%">
+			(function () {
+				var s = document.createElement('script');
+				s.src = 'https://web-consent.psu.ac.th/static/js/psu-consent.min.js';
+				s.async = true;
+				s.onload = function () {
+					if (!window.PSUConsent) return;
+					Promise.resolve(
+						window.PSUConsent.init({
+							siteKey:
+								'bcUMZiETvovLS4td7qV6CEqB1qXU4hk9gv4ezqlx248YQlkc1cJcckMTySj89txhYkLOoJenKjPBmd02Rf6AkiIMvk8uZl0gw51wTnWUiAr6Nj9uYI0SfbwLhUhA7spQ',
+							language: 'th',
+							position: 'bottom',
+							primaryColor: '#3b82f6',
+							managePreferences: true,
+							allowEditing: true,
+							editButtonPosition: 'bottom-right',
+							showDeletion: true,
+							categories: {}
+						})
+					).catch(function () {});
+				};
+				document.head.appendChild(s);
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

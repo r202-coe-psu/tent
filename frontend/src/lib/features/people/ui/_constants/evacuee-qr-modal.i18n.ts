@@ -11,7 +11,9 @@ export const EVACUEE_QR_MODAL_I18N = {
 		labelSize: 'ฉลาก 80 × 60 มม.',
 		printHint: 'ตั้งเครื่องพิมพ์เป็นกระดาษขนาดนี้ พิมพ์ขนาดจริง (100%)',
 		labelRenderFailed: 'สร้างภาพฉลากไม่สำเร็จ ลองเปิดหน้าต่างนี้ใหม่',
-		previewNote: 'ตัวอย่าง: QR จริงจะออกใหม่เมื่อกดพิมพ์ และ QR ใบเดิมจะใช้ไม่ได้',
+		previewNote: 'QR ใบปัจจุบันที่ใช้ได้ — กดพิมพ์จะออก QR ใหม่ และใบนี้จะใช้ไม่ได้',
+		loadingQr: 'กำลังโหลด QR...',
+		currentQrLoadFailed: 'โหลด QR ปัจจุบันไม่สำเร็จ — ยังกดพิมพ์เพื่อออก QR ใหม่ได้',
 		printedNote: 'QR ล่าสุดที่ออกให้ — QR ใบก่อนหน้าใช้ไม่ได้แล้ว',
 		issueFailedToast: 'ออก QR ใหม่ไม่สำเร็จ จึงยังไม่พิมพ์ กรุณาลองใหม่',
 		issuePartialToast: (failed: number) =>
@@ -29,7 +31,9 @@ export const EVACUEE_QR_MODAL_I18N = {
 		labelSize: 'Label 80 × 60 mm',
 		printHint: 'Set the printer to this paper size, actual size (100%)',
 		labelRenderFailed: 'Could not render the label. Reopen this window to retry.',
-		previewNote: 'Preview: a new QR is issued when you print, and the previous QR stops working',
+		previewNote: 'Current valid QR — printing issues a new QR and this one stops working',
+		loadingQr: 'Loading QR...',
+		currentQrLoadFailed: 'Could not load the current QR — you can still print to issue a new one',
 		printedNote: 'Latest issued QR — any previous QR no longer works',
 		issueFailedToast: 'Could not issue a new QR, so nothing was printed. Please try again.',
 		issuePartialToast: (failed: number) =>

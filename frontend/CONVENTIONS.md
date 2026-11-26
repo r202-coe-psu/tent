@@ -85,10 +85,10 @@ fixed bug in shelter
 The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`).
 Hooks are installed when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
 
-| Hook       | When it runs                            | Command                                                           | What it catches                     |
-| ---------- | --------------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
-| pre-commit | staged `frontend/` files match          | `prettier --write`, then `eslint --fix`                           | formatting drift, ESLint violations |
-| pre-push   | pushed commits touch `frontend/` source | `pnpm test:changed` (Vitest `--changed origin/develop`, fs cache) | broken domain/data logic            |
+| Hook       | When it runs                            | Command                                                        | What it catches                     |
+| ---------- | --------------------------------------- | -------------------------------------------------------------- | ----------------------------------- |
+| pre-commit | staged `frontend/` files match          | `prettier --write`, then `eslint --fix`                        | formatting drift, ESLint violations |
+| pre-push   | pushed commits touch `frontend/` source | `pnpm test:changed` (affected tests since last push, fs cache) | broken domain/data logic            |
 
 Backend and worker use `ruff` on pre-commit and `pytest` on pre-push the same way. Pre-push jobs
 run one after another. The frontend job runs only tests whose import graph reaches a changed file;

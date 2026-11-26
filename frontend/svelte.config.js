@@ -25,7 +25,9 @@ const config = {
 				'script-src': [
 					'self',
 					'https://www.google.com/recaptcha/',
-					'https://www.gstatic.com/recaptcha/'
+					'https://www.gstatic.com/recaptcha/',
+					// PSU cookie-consent banner (src/app.html).
+					'https://web-consent.psu.ac.th/static/js/'
 				],
 				// maplibre-gl runs its tile worker from a blob: URL.
 				'worker-src': ['self', 'blob:'],

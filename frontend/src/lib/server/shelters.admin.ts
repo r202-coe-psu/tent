@@ -225,13 +225,14 @@ export function migrate(master: ShelterMasterV2 | ShelterMaster): ShelterMaster 
  */
 export async function updateMaster<T = void>(
 	code: string,
+	actor: string,
 	mutator: (
 		current: ShelterMaster
 	) =>
 		| { patch: Partial<ShelterMaster>; meta?: T }
 		| Promise<{ patch: Partial<ShelterMaster>; meta?: T }>,
 	options?: { assertActive?: () => Promise<void> }
-): Promise<{ id: string; rev: string; meta?: T }> {
+): Promise<{ id: string; rev: string; meta?: T; before: ShelterMaster; after: ShelterMaster }> {
 	const MAX_RETRIES = 3;
 	let lastStatus = 0;
 	let lastReason: string | null = null;
@@ -244,14 +245,18 @@ export async function updateMaster<T = void>(
 		const migrated = migrate(current);
 		const next = await mutator(migrated);
 		await options?.assertActive?.();
+		const now = nowIso();
 		const body: ShelterMaster = {
 			...migrated,
 			...next.patch,
+			created_by: migrated.created_by,
+			updated_by: actor,
+			updated_at: now,
 			closed_at: nextClosedAt(
 				resolveOperationStatus(migrated),
 				next.patch.operation_status,
 				migrated.closed_at,
-				nowIso()
+				now
 			),
 			_id: current._id,
 			_rev: current._rev
@@ -275,7 +280,7 @@ export async function updateMaster<T = void>(
 			);
 		}
 		const data = res.data as { id: string; rev: string };
-		return { id: data.id, rev: data.rev, meta: next.meta };
+		return { id: data.id, rev: data.rev, meta: next.meta, before: migrated, after: body };
 	}
 
 	throw new ServiceError(

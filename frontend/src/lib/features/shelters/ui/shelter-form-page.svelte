@@ -8,6 +8,7 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		useShelter,
+		useShelterActors,
 		sheltersKeys,
 		useCreateShelter,
 		useUpdateShelter,
@@ -48,6 +49,8 @@
 	import { ServiceRequestError } from '$lib/api/service';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
+	import ShelterActorsLine from './shelter-actors-line.svelte';
+	import { auditLogKeys, EntityHistory } from '$lib/features/audit-log';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
@@ -107,6 +110,7 @@
 	}
 
 	const shelterQuery = useShelter(() => id);
+	const actorsQuery = useShelterActors(() => (isEdit ? id : ''));
 	const createMutation = useCreateShelter();
 	const updateMutation = useUpdateShelter();
 	const queryClient = useQueryClient();
@@ -148,6 +152,7 @@
 		announceShelterCloseJob(view);
 		queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(id) });
 		queryClient.invalidateQueries({ queryKey: sheltersKeys.closeActive(id) });
+		queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
 	});
 
 	function revertOperationStatus() {
@@ -174,6 +179,9 @@
 			operation_status: d.operation_status,
 			is_external: d.is_external === true,
 			external_url: d.external_url ?? null,
+			name_short: d.name_short ?? null,
+			operating_org: d.operating_org ?? null,
+			delivery_note: d.delivery_note ?? null,
 			shelter_type: d.shelter_type ?? null,
 			floor_count: d.floor_count ?? null,
 			project_level: d.project_level ?? null,
@@ -527,6 +535,9 @@
 								? `รหัสศูนย์: ${id} • จัดการข้อมูลและนโยบายการดำเนินงานศูนย์พักพิง`
 								: 'กรอกข้อมูลศูนย์พักพิงและกำหนดนโยบายเพื่อขึ้นทะเบียนในระบบ'}
 						</p>
+						{#if isEdit && actorsQuery.data}
+							<ShelterActorsLine actors={actorsQuery.data} />
+						{/if}
 					</div>
 				</div>
 
@@ -750,6 +761,11 @@
 							<ParkingPointsSection {form} {formData} />
 						{/if}
 					</form>
+					{#if isEdit && id && canCloseShelter}
+						<div class="mt-6">
+							<EntityHistory entityType="shelter" entityId={id} shelterCode={id} />
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>

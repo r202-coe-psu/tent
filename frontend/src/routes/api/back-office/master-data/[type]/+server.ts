@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import {
 	adminRaw,
 	requireShelterManagerOrSA,
@@ -230,6 +232,17 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		}
 		const rev = (res.data as { rev?: string })?.rev;
 		if (!rev) throw new ServiceError('INTERNAL', 'CouchDB did not return a rev');
+		await recordAuditedWrite({
+			actor: caller,
+			event: AUDIT_EVENTS.masterDataUpdated,
+			action: existing ? 'update' : 'create',
+			entityType: 'master_data',
+			entityId: id,
+			label: MASTER_DATA_TYPE_META[type].title,
+			shelterCode: scope.shelterCode ?? null,
+			before: existing as unknown as Record<string, unknown> | null,
+			after: doc as unknown as Record<string, unknown>
+		});
 		return json({ ok: true, rev });
 	} catch (e) {
 		if (e && typeof e === 'object' && 'status' in e) throw e;

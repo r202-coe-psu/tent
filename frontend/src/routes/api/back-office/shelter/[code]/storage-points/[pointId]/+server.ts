@@ -17,9 +17,9 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 	const { code, pointId } = params;
 	if (!code || !pointId) return error(400, { message: 'Missing code or pointId' });
 	try {
-		await requireStoragePointManager(request.headers.get('cookie'), code);
+		const caller = await requireStoragePointManager(request.headers.get('cookie'), code);
 		const body = storagePointBodySchema.parse(await request.json().catch(() => ({})));
-		const written = await editStoragePoint(code, pointId, body._rev, body.point);
+		const written = await editStoragePoint(code, caller.name, pointId, body._rev, body.point);
 		return json({ ok: true, ...written });
 	} catch (e) {
 		return serviceOrHttpError(validationError(e));
@@ -31,9 +31,12 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 	const { code, pointId } = params;
 	if (!code || !pointId) return error(400, { message: 'Missing code or pointId' });
 	try {
-		await requireStoragePointManager(request.headers.get('cookie'), code);
+		const caller = await requireStoragePointManager(request.headers.get('cookie'), code);
 		const body = storagePointDeleteBodySchema.parse(await request.json().catch(() => ({})));
-		return json({ ok: true, ...(await removeStoragePoint(code, pointId, body._rev)) });
+		return json({
+			ok: true,
+			...(await removeStoragePoint(code, caller.name, pointId, body._rev))
+		});
 	} catch (e) {
 		return serviceOrHttpError(validationError(e));
 	}

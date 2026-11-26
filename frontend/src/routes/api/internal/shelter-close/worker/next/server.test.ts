@@ -28,6 +28,8 @@ vi.mock('$lib/server/shelters.admin', () => ({
 	nowIso: () => '2026-11-10T00:00:00.000Z',
 	updateMaster: registry.updateMaster
 }));
+const audit = vi.hoisted(() => ({ recordAuditedWrite: vi.fn(async () => true) }));
+vi.mock('$lib/server/audit-log', () => audit);
 
 import { POST } from './+server';
 
@@ -91,7 +93,13 @@ beforeEach(() => {
 	store = createShelterCloseJobStore({ couchReq: couch.req, ulid: () => `JOB${++n}` });
 	h.store = store;
 	registry.master = { code: 'SH001', operation_status: 'active' };
-	registry.updateMaster.mockReset().mockResolvedValue({ id: 'shelter:1', rev: '2-x' });
+	registry.updateMaster.mockReset().mockResolvedValue({
+		id: 'shelter:1',
+		rev: '2-x',
+		before: { code: 'SH001', name: 'Shelter 1', operation_status: 'active' },
+		after: { code: 'SH001', name: 'Shelter 1', operation_status: 'closed' }
+	});
+	audit.recordAuditedWrite.mockClear();
 });
 
 describe('POST /api/internal/shelter-close/worker/next — auth (FR-11, AC-9)', () => {
@@ -186,11 +194,22 @@ describe('POST /api/internal/shelter-close/worker/next — work (FR-12..FR-14)',
 		}
 		expect(jobDoc()).toMatchObject({ status: 'completed', closed: true });
 		expect(registry.updateMaster).toHaveBeenCalledTimes(1);
-		const mutator = registry.updateMaster.mock.calls[0][1] as () => { patch: unknown };
+		expect(registry.updateMaster.mock.calls[0][1]).toBe('mgr1');
+		const mutator = registry.updateMaster.mock.calls[0][2] as () => { patch: unknown };
 		expect(mutator().patch).toEqual({
-			operation_status: 'closed',
-			updated_at: '2026-11-10T00:00:00.000Z'
+			operation_status: 'closed'
 		});
+		expect(audit.recordAuditedWrite).toHaveBeenCalledTimes(1);
+		expect(audit.recordAuditedWrite).toHaveBeenCalledWith(
+			expect.objectContaining({
+				actor: 'mgr1',
+				event: 'shelter.closed',
+				action: 'status_change',
+				entityId: 'SH001',
+				label: 'Shelter 1',
+				shelterCode: 'SH001'
+			})
+		);
 		expect((await call(headers)).status).toBe(204);
 	});
 

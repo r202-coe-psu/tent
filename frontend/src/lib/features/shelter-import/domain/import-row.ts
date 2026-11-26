@@ -161,6 +161,10 @@ export function buildUpdatePayload(
 	if (options.foodDistributionPointsProvided !== true) delete rest.food_distribution_points;
 	// #1352: the workbook has no parking sheet, so never send the schema default `[]`.
 	delete rest.parking_points;
+	// No workbook columns (APP_ONLY_FIELDS): never send them, so the stored values stay.
+	delete rest.name_short;
+	delete rest.operating_org;
+	delete rest.delivery_note;
 	if (options.siteKindBlank === true) delete rest.site_kind;
 	return {
 		...(rest as Omit<ShelterInput, 'municipality_zone'>),

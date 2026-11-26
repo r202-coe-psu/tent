@@ -147,7 +147,7 @@
 </script>
 
 <Card.Root
-	class="flex cursor-pointer flex-col gap-1.5! rounded-2xl border-border p-3.5 shadow-sm transition-all hover:border-primary/50 hover:bg-muted/10 hover:shadow-md {isSelected
+	class="flex cursor-pointer flex-col gap-1.5! rounded-2xl border-border p-3 shadow-sm transition-all hover:border-primary/50 hover:bg-muted/10 hover:shadow-md {isSelected
 		? 'border-primary bg-primary/5 shadow-md ring-2 ring-primary/40'
 		: ''}"
 	onclick={(e: MouseEvent) => {
@@ -323,18 +323,15 @@
 
 	<!-- Actions -->
 	<div class="mt-auto flex flex-col gap-1.5 pt-1">
-		{#if onPreRegister && !shelter.is_external}
+		<!-- Only a shelter that takes pre-registration shows the button; others have none at all. -->
+		{#if onPreRegister && canBook}
 			<Button
 				type="button"
 				size="sm"
-				disabled={!canBook}
-				title={canBook ? undefined : t.preRegisterClosed}
-				class="h-8 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 {isSelected
+				class="h-8 w-full rounded-xl bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90 {isSelected
 					? 'shadow-sm ring-2 ring-primary/40'
 					: ''}"
-				onclick={() => {
-					if (canBook) onPreRegister(shelter.code);
-				}}
+				onclick={() => onPreRegister(shelter.code)}
 			>
 				<ClipboardCheck class="mr-1.5 h-3.5 w-3.5" />
 				{t.preRegister}

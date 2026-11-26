@@ -8,6 +8,7 @@
 		isAppSystemAdmin,
 		isStaffOnly,
 		isSystemAdmin,
+		managerShelterCodes,
 		shelterCodeFromRoles,
 		shelterCodesFromRoles,
 		SYSTEM_ADMIN,
@@ -16,6 +17,7 @@
 		type ShelterAssignment
 	} from '$lib/auth/roles';
 	import UserForm from './user-form.svelte';
+	import { EntityHistory } from '$lib/features/audit-log';
 	import { useUsers, useUpdateUser } from '../application/queries';
 	import type { EditUserInput, ShelterAssignmentInput } from '../domain/schema';
 	import { safeReturnPath } from '../domain/user-edit-path';
@@ -38,7 +40,7 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const ownShelterCode = $derived(shelterCodeFromRoles(roles));
+	const ownShelterCode = $derived(managerShelterCodes(roles)[0] ?? shelterCodeFromRoles(roles));
 	const effectiveLock = $derived(
 		lockedShelterCode || (!isSA ? (ownShelterCode ?? undefined) : undefined)
 	);
@@ -211,6 +213,15 @@
 			/>
 		{/if}
 	</div>
+	{#if selectedUser && !outOfScope && (isSA || effectiveLock)}
+		<div class="mt-6">
+			<EntityHistory
+				entityType="user"
+				entityId={selectedUser.name}
+				shelterCode={isSA ? null : (effectiveLock ?? null)}
+			/>
+		</div>
+	{/if}
 </div>
 
 <Dialog.Root bind:open={demoteDialogOpen}>

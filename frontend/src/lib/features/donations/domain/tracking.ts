@@ -125,7 +125,7 @@ export function maskLookupPhone(phone: string): string {
 const STATUS_LABELS: Record<string, { th: string; en: string }> = {
 	declared: { th: 'จองคิวบริจาคแล้ว', en: 'Donation Reserved' },
 	pending_review: { th: 'รอตรวจสอบความเหมาะสม', en: 'Pending Review' },
-	verifying: { th: 'กำลังตรวจรับที่ศูนย์', en: 'Checking in at Shelter' },
+	verifying: { th: 'อนุมัติแล้ว · รอนำส่ง', en: 'Approved · Awaiting drop-off' },
 	received: { th: 'รับเข้าคลังเรียบร้อย', en: 'Received into Warehouse' },
 	redirected: { th: 'ส่งต่อไปศูนย์อื่น', en: 'Redirected to Other Shelter' },
 	rejected: { th: 'ไม่รับรายการนี้', en: 'Rejected' },

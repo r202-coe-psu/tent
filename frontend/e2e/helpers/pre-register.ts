@@ -7,6 +7,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { CONSENT_COPY } from '../../src/lib/features/consent/domain/consent-notice.i18n';
 import { acceptFullConsent } from './consent';
+import { stubPsuConsent } from './psu-consent';
 
 export const PRE_REGISTER_PATH = '/pre-register?shelter=unassigned';
 export const SUBMIT_LABEL = 'ยืนยันการลงทะเบียน';
@@ -69,6 +70,7 @@ const REGISTRATION_WRITE = /\/api\/public\/v1\/(unassigned-registrations|registr
 /** Start collecting console problems, failed responses and registration writes on `page`. */
 export function watchPage(page: Page): PageHealth {
 	const health: PageHealth = { problems: [], failedResponses: [], registrationWrites: [] };
+	void stubPsuConsent(page);
 	page.on('pageerror', (err) => health.problems.push(`pageerror: ${err.message}`));
 	page.on('console', (msg) => {
 		if (RECAPTCHA_FRAME_URL.test(msg.location().url)) return;

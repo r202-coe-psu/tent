@@ -177,9 +177,8 @@ export async function decodeQrImage(page: Page, img: Locator): Promise<string> {
 }
 
 /**
- * On the print screen, check every member has a label preview. CR-233: the preview carries a
- * placeholder, not a usable Person QR — a QR is issued only when staff press print, so the
- * evacuee id can no longer be read from the image (use {@link evacueeIdsFromSearch}).
+ * On the print screen, check every member has a label preview. CR-233 A3: the preview carries the
+ * current Person QR — the bare `evacuee:{ULID}` for a just-registered person (nothing printed yet).
  */
 export async function expectPrintScreen(page: Page, people: OnsitePerson[]): Promise<void> {
 	await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
@@ -189,7 +188,7 @@ export async function expectPrintScreen(page: Page, people: OnsitePerson[]): Pro
 	for (const p of people) {
 		const qr = page.getByAltText(`QR Code สำหรับ ${fullName(p)}`);
 		await expect(qr).toBeVisible({ timeout: 15_000 });
-		expect(await decodeQrImage(page, qr)).toBe('PREVIEW-QR-NOT-ISSUED');
+		expect(await decodeQrImage(page, qr)).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
 	}
 }
 
