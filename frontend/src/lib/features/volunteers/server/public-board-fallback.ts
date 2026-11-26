@@ -63,7 +63,7 @@ export function controlledValuesFromMaster(items: readonly MasterSkillItemLike[]
 	const values = new Set<string>();
 	for (const item of items) {
 		if (norm(item.category) !== 'controlled' || item.status === 'inactive') continue;
-		for (const value of [item.code, item.label_th, item.label_en]) {
+		for (const value of [item.code, item.label, item.label_th, item.label_en]) {
 			if (norm(value)) values.add(norm(value));
 		}
 	}

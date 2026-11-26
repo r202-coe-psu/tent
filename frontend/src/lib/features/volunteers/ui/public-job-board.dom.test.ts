@@ -218,5 +218,8 @@ describe('public job board server-side filtering', () => {
 		await settle();
 
 		expect(toast.error).toHaveBeenCalled();
+		// The empty state says the load failed, not that there are no jobs.
+		expect(document.body.textContent).toContain('โหลดกระดานงานไม่สำเร็จ');
+		expect(document.body.textContent).not.toContain('ไม่พบงาน');
 	});
 });

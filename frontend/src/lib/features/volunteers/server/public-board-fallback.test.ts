@@ -121,6 +121,13 @@ describe('controlledValuesFromMaster', () => {
 		expect(values).toEqual(new Set(['nurse', 'พยาบาล']));
 	});
 
+	it('counts the plain `label` of an item too, as FastAPI does for pre-CR-100 skills', () => {
+		const values = controlledValuesFromMaster([
+			{ code: 'nurse', label: 'พยาบาลวิชาชีพ', category: 'controlled' }
+		]);
+		expect(values).toEqual(new Set(['nurse', 'พยาบาลวิชาชีพ']));
+	});
+
 	it('falls back to the built-in floor when Master Data has no controlled skill', () => {
 		expect(controlledValuesFromMaster([]).size).toBeGreaterThan(0);
 	});

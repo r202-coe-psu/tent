@@ -497,7 +497,9 @@
 
 	// Keep the current page valid when the result set shrinks under the reader.
 	$effect(() => {
-		if (!isFetching && currentPage > totalPages) setCurrentPage(totalPages);
+		if (!isFetching && !boardQuery.isError && currentPage > totalPages) {
+			setCurrentPage(totalPages);
+		}
 	});
 
 	function openApplyModal(jobId: string, shiftId: string) {
@@ -720,10 +722,16 @@
 					class="flex h-full min-h-64 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-card p-8 text-center text-muted-foreground sm:rounded-3xl sm:p-12"
 				>
 					<Briefcase class="mb-3 h-10 w-10 text-muted-foreground/40" />
-					<h3 class="text-sm sm:text-base font-bold text-foreground">{t.noJobsFound}</h3>
-					<p class="mt-1 text-xs text-muted-foreground max-w-sm">
-						{t.noJobsFoundDesc}
-					</p>
+					{#if boardQuery.isError}
+						<h3 role="alert" class="text-sm sm:text-base font-bold text-foreground">
+							{t.boardLoadError}
+						</h3>
+					{:else}
+						<h3 class="text-sm sm:text-base font-bold text-foreground">{t.noJobsFound}</h3>
+						<p class="mt-1 text-xs text-muted-foreground max-w-sm">
+							{t.noJobsFoundDesc}
+						</p>
+					{/if}
 				</div>
 			{/each}
 		{/if}
