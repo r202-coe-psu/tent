@@ -8,11 +8,19 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Html5QrcodeSupportedFormats } from 'html5-qrcode';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
+	import { createReadGuard } from '$lib/components/camera-code-scanner-state';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import { useEvacueeServerSearch, zoneLabel, type Evacuee } from '$lib/features/people';
+	import {
+		checkPersonQr,
+		extractScanPersonQr,
+		staffPersonQrRejectionMessage,
+		useEvacueeServerSearch,
+		zoneLabel,
+		type Evacuee
+	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -22,6 +30,7 @@
 		clearLoaded,
 		loadedSelectionState,
 		pickableEvacuees,
+		resolvePickerScan,
 		selectLoaded,
 		toggleEvacuee
 	} from './evacuee-picker.helpers';
@@ -58,12 +67,47 @@
 
 	const SCAN_FORMATS = [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128];
 	let scannerOpen = $state(false);
+	let scanBusy = $state(false);
+	let scanError = $state<string | null>(null);
+	const scanGuard = createReadGuard();
 
-	/** A camera read is a finished code: search it at once, no debounce (#555). */
-	function onScan(code: string) {
-		clearTimeout(timer);
-		searchText = code;
-		query = code.trim();
+	/**
+	 * A camera read is a finished code: search it at once, no debounce (#555). A Person QR is
+	 * checked against the CR-233 scan rule first, so an expired card cannot pick anyone.
+	 */
+	async function onScan(code: string) {
+		const isLatest = scanGuard.begin();
+		scanBusy = true;
+		scanError = null;
+		try {
+			const outcome = await resolvePickerScan(code, {
+				parse: extractScanPersonQr,
+				check: (parsed) => checkPersonQr(parsed),
+				message: (verdict) => staffPersonQrRejectionMessage(verdict)
+			});
+			if (!isLatest()) return;
+			if (outcome.kind === 'rejected') {
+				scanError = outcome.message;
+				return;
+			}
+			clearTimeout(timer);
+			searchText = outcome.query;
+			query = outcome.query;
+		} catch {
+			if (isLatest()) scanError = 'ตรวจสอบ QR ไม่สำเร็จ กรุณาลองใหม่ หรือค้นหาด้วยชื่อแทน';
+		} finally {
+			if (isLatest()) scanBusy = false;
+		}
+	}
+
+	function cancelScan() {
+		scanGuard.cancel();
+		scanBusy = false;
+	}
+
+	function openScanner() {
+		scanError = null;
+		scannerOpen = true;
 	}
 
 	const search = useEvacueeServerSearch(() => query);
@@ -127,11 +171,7 @@
 				<Search class="h-4 w-4" />
 			</div>
 		</div>
-		<Button
-			variant="outline"
-			class="h-11 shrink-0 gap-2 md:h-9"
-			onclick={() => (scannerOpen = true)}
-		>
+		<Button variant="outline" class="h-11 shrink-0 gap-2 md:h-9" onclick={openScanner}>
 			<QrCode class="h-4 w-4" aria-hidden="true" />
 			<span>สแกน QR</span>
 		</Button>
@@ -337,5 +377,8 @@
 	hint="เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัย หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน"
 	formats={SCAN_FORMATS}
 	manualInputMode="text"
+	busy={scanBusy}
+	error={scanError}
 	{onScan}
+	oncancel={cancelScan}
 />

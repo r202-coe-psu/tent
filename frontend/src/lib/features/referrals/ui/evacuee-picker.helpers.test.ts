@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Evacuee } from '$lib/features/people';
 import {
 	clearLoaded,
 	loadedSelectionState,
 	pickableEvacuees,
+	resolvePickerScan,
+	type PickerScanDeps,
 	selectLoaded,
 	toggleEvacuee
 } from './evacuee-picker.helpers';
@@ -47,5 +49,53 @@ describe('select all over loaded rows (#555)', () => {
 		expect(loadedSelectionState([ev('a'), ev('c')], loaded, blocked)).toBe('all');
 		expect(loadedSelectionState([ev('a')], loaded, blocked)).toBe('some');
 		expect(loadedSelectionState([ev('z')], loaded, blocked)).toBe('none');
+	});
+});
+
+describe('resolvePickerScan (CR-233 FR-EQR-27/30)', () => {
+	const ID = 'evacuee:01JABCDEFGHJKMNPQRSTVWXYZ0';
+	const deps = (status: 'valid' | 'expired' | 'invalid'): PickerScanDeps => ({
+		parse: (raw) => (raw.startsWith('evacuee:') ? { evacuee_id: ID, hash6: 'a1b2c3' } : null),
+		check: vi.fn(async () =>
+			status === 'expired'
+				? { status, issued_at: null, current_printed_at: '2026-11-20T00:00:00Z' }
+				: { status }
+		),
+		message: (v) => `rejected:${v.status}`
+	});
+
+	it('searches the evacuee id of a valid Person QR', async () => {
+		await expect(resolvePickerScan(`${ID}@a1b2c3`, deps('valid'))).resolves.toEqual({
+			kind: 'search',
+			query: ID
+		});
+	});
+
+	it('refuses an expired Person QR instead of searching it', async () => {
+		await expect(resolvePickerScan(`${ID}@000000`, deps('expired'))).resolves.toEqual({
+			kind: 'rejected',
+			message: 'rejected:expired'
+		});
+	});
+
+	it('refuses an invalid Person QR', async () => {
+		await expect(resolvePickerScan(`${ID}@ffffff`, deps('invalid'))).resolves.toEqual({
+			kind: 'rejected',
+			message: 'rejected:invalid'
+		});
+	});
+
+	it('searches a code that is not a Person QR as typed, without reading the prints log', async () => {
+		const d = deps('valid');
+		await expect(resolvePickerScan('  0812345678 ', d)).resolves.toEqual({
+			kind: 'search',
+			query: '0812345678'
+		});
+		expect(d.check).not.toHaveBeenCalled();
+	});
+
+	it('lets a prints-log read error propagate rather than treating the QR as valid', async () => {
+		const d = { ...deps('valid'), check: async () => Promise.reject(new Error('offline')) };
+		await expect(resolvePickerScan(`${ID}@a1b2c3`, d)).rejects.toThrow('offline');
 	});
 });

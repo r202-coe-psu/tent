@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
 
 vi.mock('$lib/features/people', () => ({
 	zoneLabel: () => 'A',
+	extractScanPersonQr: () => null,
+	checkPersonQr: vi.fn(),
+	staffPersonQrRejectionMessage: () => '',
 	useEvacueeServerSearch: (q: () => string) => {
 		state.searchQueries.push(q);
 		return {
