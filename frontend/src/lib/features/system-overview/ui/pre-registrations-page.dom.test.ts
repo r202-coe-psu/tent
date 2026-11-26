@@ -5,7 +5,10 @@ import PreRegistrationsPage from './pre-registrations-page.svelte';
 
 const mocks = vi.hoisted(() => ({
 	seen: [] as { limit?: number; offset?: number; q?: string }[],
-	total: 45
+	total: 45,
+	placeholder: false,
+	onFilters: undefined as ((next: Record<string, unknown>) => void) | undefined,
+	filters: {} as Record<string, unknown>
 }));
 
 vi.mock('../application/queries', () => ({
@@ -58,7 +61,7 @@ describe('pre-registrations-page paging', () => {
 
 	it('moves the offset by one page when Next is clicked', async () => {
 		await render();
-		(document.querySelector('[aria-label="Go to next page"]') as HTMLElement).click();
+		(document.querySelector('[aria-label="ไปหน้าถัดไป"]') as HTMLElement).click();
 		await tick();
 		flushSync();
 		expect(mocks.seen.at(-1)).toMatchObject({ limit: 20, offset: 20 });
@@ -68,19 +71,19 @@ describe('pre-registrations-page paging', () => {
 	it('hides the footer when everything fits on one page', async () => {
 		mocks.total = 12;
 		await render();
-		expect(document.querySelector('[aria-label="Go to next page"]')).toBeNull();
+		expect(document.querySelector('[aria-label="ไปหน้าถัดไป"]')).toBeNull();
 	});
 
 	it('keeps the footer and dims the table while previous rows are shown', async () => {
 		mocks.placeholder = true; // keepPreviousData: old page kept while the next one loads
 		await render();
-		expect(document.querySelector('[aria-label="Go to next page"]')).not.toBeNull();
+		expect(document.querySelector('[aria-label="ไปหน้าถัดไป"]')).not.toBeNull();
 		expect(document.querySelector('[aria-busy="true"]')?.className).toContain('opacity-60');
 	});
 
 	it('returns to page 1 when a filter changes', async () => {
 		await render();
-		(document.querySelector('[aria-label="Go to next page"]') as HTMLElement).click();
+		(document.querySelector('[aria-label="ไปหน้าถัดไป"]') as HTMLElement).click();
 		await tick();
 		flushSync();
 		expect(mocks.seen.at(-1)?.offset).toBe(20);
