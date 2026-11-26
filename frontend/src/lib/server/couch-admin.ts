@@ -282,7 +282,7 @@ export function serviceOrHttpError(e: unknown): Response {
  * `requestedShelter` is the `?shelter_code=` the client works in (#477). When given (`null` =
  * the request named none) the manager capability is checked IN that shelter and the returned
  * caller's `shelterCode` IS that shelter, so the service layer acts on it instead of the first
- * `shelter:` role. Several managed shelters and none named → `VALIDATION` (400). Omitted
+ * `shelter:` role. Several managed shelters and none named → `VALIDATION` (422). Omitted
  * (`undefined`) = the route has no shelter to act on (app config, API keys, …): gate only.
  */
 export async function authorizeUserWrite(

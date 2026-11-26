@@ -4,6 +4,7 @@ vi.mock('$env/dynamic/private', () => ({
 	env: { COUCHDB_ADMIN_URL: 'http://admin:password@couchdb.test' }
 }));
 import {
+	activeManagerShelter,
 	assertCanGrant,
 	authorizeUserWrite,
 	isProtectedBootstrapAdmin,
@@ -289,7 +290,7 @@ describe('authorizeUserWrite active shelter (#477)', () => {
 		await expect(asRoles(both, 'SH009')).rejects.toMatchObject({ code: 'FORBIDDEN' });
 	});
 
-	it('asks a manager of several shelters to name one (400)', async () => {
+	it('asks a manager of several shelters to name one (VALIDATION → 422)', async () => {
 		await expect(asRoles(both, null)).rejects.toMatchObject({ code: 'VALIDATION' });
 	});
 
@@ -308,6 +309,43 @@ describe('authorizeUserWrite active shelter (#477)', () => {
 
 	it('only gates when the route names no shelter (undefined)', async () => {
 		await expect(asRoles(both, undefined)).resolves.toMatchObject({ name: 'u' });
+	});
+});
+
+describe('activeManagerShelter (#477)', () => {
+	const roles = [
+		'shelter:SH001',
+		'SH001:shelter_manager',
+		'shelter:SH002',
+		'SH002:shelter_manager'
+	];
+	const caller = (shelterCode: string | null, r: string[] = roles): Caller => ({
+		name: 'm',
+		roles: r,
+		isSA: false,
+		shelterCode
+	});
+
+	it('keeps the resolved shelter when the caller manages it', () => {
+		expect(activeManagerShelter(caller('SH002'))).toBe('SH002');
+	});
+
+	it('never returns a shelter the caller does not manage', () => {
+		expect(activeManagerShelter(caller('SH009'))).toBe('SH001');
+		const staffInSh001 = [
+			'shelter:SH001',
+			'SH001:registration_staff',
+			'shelter:SH002',
+			'SH002:shelter_manager'
+		];
+		expect(activeManagerShelter(caller('SH001', staffInSh001))).toBe('SH002');
+	});
+
+	it('falls back to the caller scope when no shelter is managed', () => {
+		expect(activeManagerShelter(caller('SH003', ['shelter:SH003', 'shelter_manager']))).toBe(
+			'SH003'
+		);
+		expect(activeManagerShelter(caller(null, []))).toBeNull();
 	});
 });
 

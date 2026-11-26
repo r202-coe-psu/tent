@@ -27,7 +27,7 @@ export const prerender = false;
 
 /**
  * The shelter the request works in (`?shelter_code=`, #477): the manager capability is checked
- * in it, and a manager of several shelters must name one (400). Absent = `null`.
+ * in it, and a manager of several shelters must name one (`VALIDATION`, 422). Absent = `null`.
  */
 const requestedShelter = (request: Request): string | null =>
 	new URL(request.url).searchParams.get('shelter_code')?.trim() || null;

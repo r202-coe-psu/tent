@@ -332,7 +332,7 @@ describe('/api/v1/users names the shelter it works in (#477)', () => {
 		}
 	);
 
-	it('passes null when the request names no shelter, so a multi-shelter manager gets a 400', async () => {
+	it('passes null when the request names no shelter, so a multi-shelter manager gets a 422', async () => {
 		await call(GET, 'GET', '');
 		expect(authorizeUserWrite).toHaveBeenCalledWith('AuthSession=x', null);
 	});

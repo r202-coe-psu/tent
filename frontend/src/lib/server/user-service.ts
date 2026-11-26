@@ -18,6 +18,7 @@ import {
 	isLastAppSystemAdmin,
 	isSystemAdmin,
 	mergeEdgeShelters,
+	managerShelterCodes,
 	mergeShelterAssignment,
 	rolesFromAssignments,
 	shelterCodeFromRoles,
@@ -524,6 +525,29 @@ export type UserDeleteResult = UserWriteResult & { deleted: boolean };
 
 export type UserCreateResult = UserWriteResult & { merged: boolean };
 
+/**
+ * One volunteer profile, one account: refuse to create or merge `name` for a profile already
+ * linked to a different live account in any shelter. The client checks only the accounts of the
+ * shelter it works in (#477), so this is the guard that sees every shelter. Thrown before the
+ * create, so its CONFLICT never reaches the add-from-outside merge.
+ */
+async function assertVolunteerProfileUnlinked(
+	name: string,
+	volunteerId: string | null | undefined
+): Promise<void> {
+	if (!volunteerId) return;
+	const lower = name.toLowerCase();
+	const other = (await fetchAllUserDocs()).find(
+		(d) => d.volunteer_id === volunteerId && d.name.toLowerCase() !== lower
+	);
+	if (other) {
+		throw new ServiceError(
+			'CONFLICT',
+			`อาสาสมัครนี้มีบัญชี ${other.name} แล้ว กรุณาจัดการผ่านหน้าผู้ใช้งาน`
+		);
+	}
+}
+
 export async function createOrMergeUser(
 	input: Parameters<typeof createUser>[0],
 	caller: Caller,
@@ -548,6 +572,7 @@ export async function createOrMergeUser(
 			await options.verifyVolunteerRoles(shelters, input.volunteer_id);
 		}
 	}
+	await assertVolunteerProfileUnlinked(input.name, input.volunteer_id);
 	try {
 		await createUser(input);
 		if (input.personnel_type === 'volunteer') {
@@ -999,11 +1024,15 @@ function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]):
 	if (!code) {
 		throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
 	}
-	// Allow add-from-outside: target need not already be in this shelter.
-	const capsHere = capabilitiesForShelter(targetRoles, code);
-	if (capsHere.includes(SHELTER_MANAGER)) {
+	// Never another manager of ANY shelter this caller manages, not only the active one: the write
+	// can change the password, so a manager of SH001 + SH002 working in SH002 must not take over
+	// an SH001 manager who is merely staff in SH002 (PR #1523 review).
+	const callerManaged = managerShelterCodes(caller.roles);
+	if (managerShelterCodes(targetRoles).some((c) => callerManaged.includes(c))) {
 		throw new ServiceError('FORBIDDEN', 'A manager may not modify another shelter manager');
 	}
+	// Allow add-from-outside: target need not already be in this shelter.
+	const capsHere = capabilitiesForShelter(targetRoles, code);
 	const staff = STAFF_CAPABILITIES as readonly string[];
 	if (capsHere.some((c) => !staff.includes(c))) {
 		throw new ServiceError('FORBIDDEN', 'A manager may only manage staff users in their shelter');

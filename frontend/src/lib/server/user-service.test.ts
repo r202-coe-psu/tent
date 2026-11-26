@@ -1137,6 +1137,51 @@ describe('user-service', () => {
 			expect(roles).toContain('shelter:SH002');
 			expect(roles).not.toContain('shelter:SH001');
 		});
+
+		it('refuses another manager of a shelter they manage, even outside the active one', async () => {
+			// U manages SH001 and is only staff in SH002, where the caller works (PR #1523 review).
+			await seed('0830000008', [
+				'shelter:SH001',
+				'SH001:shelter_manager',
+				'shelter:SH002',
+				'SH002:registration_staff'
+			]);
+			const before = fakeUsersDb[key('0830000008')].password;
+			await expect(
+				updateUser('0830000008', { password: 'Taken-Over-123!' }, inSh002, noCheck)
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			await expect(deleteUser('0830000008', inSh002)).rejects.toMatchObject({
+				code: 'FORBIDDEN'
+			});
+			expect(fakeUsersDb[key('0830000008')].password).toBe(before);
+			expect(fakeUsersDb[key('0830000008')].roles).toContain('shelter:SH002');
+		});
+
+		it('refuses a second account for a volunteer profile linked in another shelter', async () => {
+			await createUser({
+				name: 'vol-a@example.com',
+				password: 'Password123!',
+				display_name: 'Vol',
+				personnel_type: 'volunteer',
+				volunteer_id: 'volunteer:01VOL',
+				roles: ['shelter:SH001', 'SH001:registration_staff']
+			});
+			await expect(
+				createOrMergeUser(
+					{
+						name: 'vol-b@example.com',
+						password: 'Password123!',
+						display_name: 'Vol',
+						personnel_type: 'volunteer',
+						volunteer_id: 'volunteer:01VOL',
+						roles: ['shelter:SH002', 'SH002:registration_staff']
+					},
+					inSh002,
+					noCheck
+				)
+			).rejects.toMatchObject({ code: 'CONFLICT' });
+			expect(fakeUsersDb[key('vol-b@example.com')]).toBeUndefined();
+		});
 	});
 
 	describe('edge_shelters + soft delete (CR-171)', () => {
