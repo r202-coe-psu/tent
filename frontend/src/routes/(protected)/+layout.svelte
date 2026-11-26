@@ -15,7 +15,8 @@
 	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
 	import {
 		showsStaffMobileBar,
-		showsStaffSidebar
+		showsStaffSidebar,
+		staffSidebarClass as sidebarClass
 	} from '$lib/components/backoffice-navbar/staff-sidebar';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import type { LayoutProps } from './$types';
@@ -34,15 +35,8 @@
 		)
 	);
 
-	/**
-	 * Under the app bar (`/portal`, `/me`) the sidebar starts below it instead of sliding beneath;
-	 * `/onsite` has no app bar, so it starts at the very top.
-	 */
-	const staffSidebarClass = $derived(
-		page.url.pathname.startsWith('/onsite')
-			? '[&>aside]:top-0 [&>aside]:h-[var(--app-shell-height)]'
-			: '[&>aside]:top-14 [&>aside]:h-[calc(var(--app-shell-height)-3.5rem)]'
-	);
+	/** Sidebar and phone bar start below the app bar on `/portal` and `/me`; see the helper. */
+	const staffSidebarClass = $derived(sidebarClass(page.url.pathname));
 
 	/** Set while session is expired so we refetch errored queries on reauth. */
 	let pendingReauthRecovery = false;

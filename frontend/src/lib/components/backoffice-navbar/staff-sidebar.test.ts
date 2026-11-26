@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { showsStaffMobileBar, showsStaffSidebar } from './staff-sidebar';
+import { showsStaffMobileBar, showsStaffSidebar, staffSidebarClass } from './staff-sidebar';
 
 const SA = ['system_admin'];
 const SM = ['shelter:SH001', 'SH001:shelter_manager'];
@@ -43,5 +43,19 @@ describe('showsStaffMobileBar', () => {
 		expect(showsStaffMobileBar('/onsite/registration')).toBe(false);
 		expect(showsStaffMobileBar('/portal')).toBe(true);
 		expect(showsStaffMobileBar('/me')).toBe(true);
+	});
+});
+
+describe('staffSidebarClass', () => {
+	it('starts below the app bar on /portal and /me, for the sidebar and the phone bar', () => {
+		for (const path of ['/portal', '/me']) {
+			expect(staffSidebarClass(path)).toContain('[&>aside]:top-14');
+			expect(staffSidebarClass(path)).toContain('[&>div]:top-14');
+		}
+	});
+
+	it('starts at the very top on /onsite, which has no app bar', () => {
+		expect(staffSidebarClass('/onsite')).toContain('[&>aside]:top-0');
+		expect(staffSidebarClass('/onsite/registration')).not.toContain('top-14');
 	});
 });
