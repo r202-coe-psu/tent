@@ -72,7 +72,7 @@
 						</p>
 					{/if}
 					{#each item.changes ?? [] as change (change.field)}
-						<p class="text-slate-700">
+						<p class="wrap-anywhere text-slate-700">
 							<span class="font-semibold">{change.field}:</span>
 							{#if 'from' in change || 'to' in change}
 								{auditChangeValue(change.from)} → {auditChangeValue(change.to)}

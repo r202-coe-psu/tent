@@ -80,9 +80,16 @@ export function auditEntityLabel(type: string): string {
 	return (AUDIT_ENTITY_LABELS as Record<string, string>)[type] ?? type;
 }
 
+/** One change value for display; nested values (objects, arrays of objects) as compact JSON. */
 export function auditChangeValue(value: unknown): string {
 	if (value === null || value === undefined || value === '') return '—';
-	if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
+	if (Array.isArray(value)) {
+		if (!value.length) return '—';
+		return value.every((item) => item === null || typeof item !== 'object')
+			? value.map((item) => auditChangeValue(item)).join(', ')
+			: JSON.stringify(value);
+	}
 	if (typeof value === 'boolean') return value ? 'ใช่' : 'ไม่ใช่';
+	if (typeof value === 'object') return JSON.stringify(value);
 	return String(value);
 }

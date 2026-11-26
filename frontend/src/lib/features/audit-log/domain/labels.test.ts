@@ -23,4 +23,12 @@ describe('audit labels', () => {
 		expect(auditChangeValue(true)).toBe('ใช่');
 		expect(auditChangeValue(150)).toBe('150');
 	});
+
+	it('shows nested values as JSON instead of [object Object]', () => {
+		expect(auditChangeValue({ status: 'arrived', zone: 'B' })).toBe(
+			'{"status":"arrived","zone":"B"}'
+		);
+		expect(auditChangeValue([{ item_id: 'rice', qty: 2 }])).toBe('[{"item_id":"rice","qty":2}]');
+		expect(auditChangeValue([])).toBe('—');
+	});
 });
