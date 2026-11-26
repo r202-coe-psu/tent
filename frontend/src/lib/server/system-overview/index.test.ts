@@ -123,4 +123,23 @@ describe('buildOverviewOrigin — source shelter (#1515)', () => {
 			}
 		]);
 	});
+
+	it('leaves the unassigned queue out when filtering by public visibility', async () => {
+		const fetchFn = vi.fn(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({
+				items: [{ household: { province: 'ยะลา' }, open_member_count: 3 }]
+			})
+		})) as unknown as typeof fetch;
+
+		const { buckets } = await buildOverviewOrigin(
+			filtersOf('source=unassigned&public_visibility=hidden'),
+			fetchFn,
+			null
+		);
+
+		expect(buckets).toEqual([]);
+		expect(fetchFn).not.toHaveBeenCalled();
+	});
 });

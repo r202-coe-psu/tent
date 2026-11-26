@@ -48,7 +48,11 @@
 	title="ภาพรวมระบบ"
 	description="สรุปสถานะศูนย์ คิวลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ"
 >
-	<OverviewFilterBar {filters} onChange={(next) => (filters = next)} />
+	<OverviewFilterBar
+		{filters}
+		onChange={(next) => (filters = next)}
+		showPublicVisibilityFilter={true}
+	/>
 
 	{#if isError}
 		<Alert variant="destructive">

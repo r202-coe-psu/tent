@@ -14,11 +14,14 @@
 	let {
 		filters,
 		onChange,
-		showHouseholdFilter = false
+		showHouseholdFilter = false,
+		showPublicVisibilityFilter = false
 	}: {
 		filters: OverviewFilters;
 		onChange: (next: OverviewFilters) => void;
 		showHouseholdFilter?: boolean;
+		/** Only the overview applies it; the pre-registration list does not read it. */
+		showPublicVisibilityFilter?: boolean;
 	} = $props();
 
 	function patch(partial: Partial<OverviewFilters>) {
@@ -138,35 +141,37 @@
 		</Select.Root>
 	</div>
 
-	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[10.5rem]">
-		<Label for="overview-public-visibility" class="text-sm font-semibold text-slate-700">
-			การแสดงบน public
-		</Label>
-		<Select.Root
-			type="single"
-			value={publicVisibilityValue}
-			onValueChange={(v) => {
-				if (!v) return;
-				patch({ public_visibility: v as OverviewFilters['public_visibility'] });
-			}}
-		>
-			<Select.Trigger
-				id="overview-public-visibility"
-				class="h-9 w-full min-w-0 overflow-hidden"
-				aria-label="การแสดงบน public"
-				title={`การแสดงบน public: ${publicVisibilityLabel}`}
+	{#if showPublicVisibilityFilter}
+		<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[10.5rem]">
+			<Label for="overview-public-visibility" class="text-sm font-semibold text-slate-700">
+				การแสดงบน public
+			</Label>
+			<Select.Root
+				type="single"
+				value={publicVisibilityValue}
+				onValueChange={(v) => {
+					if (!v) return;
+					patch({ public_visibility: v as OverviewFilters['public_visibility'] });
+				}}
 			>
-				<span class="min-w-0 flex-1 truncate">
-					{publicVisibilityLabel}
-				</span>
-			</Select.Trigger>
-			<Select.Content>
-				<Select.Item value="all" label="ทั้งหมด" />
-				<Select.Item value="visible" label="แสดงบน public" />
-				<Select.Item value="hidden" label="ซ่อนจาก public" />
-			</Select.Content>
-		</Select.Root>
-	</div>
+				<Select.Trigger
+					id="overview-public-visibility"
+					class="h-9 w-full min-w-0 overflow-hidden"
+					aria-label="การแสดงบน public"
+					title={`การแสดงบน public: ${publicVisibilityLabel}`}
+				>
+					<span class="min-w-0 flex-1 truncate">
+						{publicVisibilityLabel}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label="ทั้งหมด" />
+					<Select.Item value="visible" label="แสดงบน public" />
+					<Select.Item value="hidden" label="ซ่อนจาก public" />
+				</Select.Content>
+			</Select.Root>
+		</div>
+	{/if}
 
 	<div class="w-[calc(50%-0.375rem)] min-w-0 space-y-1.5 sm:w-[9rem]">
 		<Label for="overview-stay" class="text-sm font-semibold text-slate-700">สถานะพัก</Label>

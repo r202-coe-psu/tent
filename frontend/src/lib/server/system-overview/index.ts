@@ -555,7 +555,9 @@ export async function buildOverviewOrigin(
 			});
 	};
 
-	if (filters.source !== 'bound') {
+	// Unassigned registrations have no shelter, so none can be hidden from or shown on public.
+	const publicVisibilityFiltered = filters.public_visibility && filters.public_visibility !== 'all';
+	if (filters.source !== 'bound' && !publicVisibilityFiltered) {
 		const qs = new URLSearchParams({ limit: '200', offset: '0' });
 		if (filters.residence_province) qs.set('province', filters.residence_province);
 		if (filters.residence_district) qs.set('district', filters.residence_district);
