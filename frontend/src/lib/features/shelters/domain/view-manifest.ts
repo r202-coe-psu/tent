@@ -40,7 +40,8 @@ export const SHELTER_VIEW_MANIFEST: ShelterViewManifest = {
 	// v6 (#658): bulk_return_pool_item_totals (entry / move / void).
 	// v7 (#821): donation_received_by_name / donation_received_by_item (received-donation search).
 	// v8 (CR-226): occupancy_by_zone (per-zone occupancy widget).
-	version: 8,
+	// v9 (#1502): demographics_by_country_age + prereg_by_created (system overview paging).
+	version: 9,
 	designName: 'app',
 	views: SHELTER_DASHBOARD_VIEWS.views
 };

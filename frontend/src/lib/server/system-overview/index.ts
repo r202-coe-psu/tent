@@ -64,17 +64,65 @@ function matchesShelterGeo(master: ShelterMaster, filters: OverviewFilters): boo
 
 type StatusCounts = Record<string, number>;
 
-async function occupancyCounts(code: string): Promise<StatusCounts> {
+/**
+ * Short-lived per-process memo (#1502). The overview page fires summary / sites / origin /
+ * demographics / movements in parallel and each used to re-read the same per-shelter views.
+ * Sharing the in-flight promise collapses those into one request per shelter; the TTL is short
+ * enough that dashboard numbers never lag noticeably.
+ */
+const VIEW_CACHE_TTL_MS = 5_000;
+const viewCache = new Map<string, { at: number; value: Promise<unknown> }>();
+
+function memo<T>(key: string, load: () => Promise<T>): Promise<T> {
+	const now = Date.now();
+	const hit = viewCache.get(key);
+	if (hit && now - hit.at < VIEW_CACHE_TTL_MS) return hit.value as Promise<T>;
+	const value = load();
+	viewCache.set(key, { at: now, value });
+	value.catch(() => {
+		if (viewCache.get(key)?.value === value) viewCache.delete(key);
+	});
+	if (viewCache.size > 2_000) {
+		for (const [k, v] of viewCache) {
+			if (now - v.at >= VIEW_CACHE_TTL_MS) viewCache.delete(k);
+		}
+	}
+	return value;
+}
+
+/** Test hook: drop the memoised per-shelter view reads. */
+export function clearOverviewViewCache(): void {
+	viewCache.clear();
+}
+
+// Loaders THROW on a failed read so memo() drops the entry; callers degrade to "no data"
+// without a transient CouchDB error being cached for the whole TTL.
+function occupancyCounts(code: string): Promise<StatusCounts> {
+	return memo(`occ:${code}`, () => fetchOccupancyCounts(code)).catch(() => ({}));
+}
+
+async function fetchOccupancyCounts(code: string): Promise<StatusCounts> {
 	const db = `shelter_${code.toLowerCase()}`;
 	const res = await adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET');
 	const counts: StatusCounts = {};
-	if (res.status >= 400) return counts;
+	if (res.status >= 400) throw new Error(`occupancy view ${res.status}`);
 	const rows = (res.data as { rows?: { key: string; value: number }[] })?.rows ?? [];
 	for (const row of rows) counts[row.key] = (counts[row.key] ?? 0) + row.value;
 	return counts;
 }
 
-async function movementTotals(
+function movementTotals(
+	code: string,
+	from: string,
+	to: string
+): Promise<{ checkin: number; checkout: number }> {
+	return memo(`mov:${code}:${from}:${to}`, () => fetchMovementTotals(code, from, to)).catch(() => ({
+		checkin: 0,
+		checkout: 0
+	}));
+}
+
+async function fetchMovementTotals(
 	code: string,
 	from: string,
 	to: string
@@ -88,7 +136,7 @@ async function movementTotals(
 	const res = await adminRaw(viewPath, 'GET');
 	let checkin = 0;
 	let checkout = 0;
-	if (res.status >= 400) return { checkin, checkout };
+	if (res.status >= 400) throw new Error(`movements view ${res.status}`);
 	const rows = (res.data as { rows?: { key: [string, string]; value: number }[] })?.rows ?? [];
 	for (const row of rows) {
 		const series = row.key?.[1];
@@ -109,36 +157,31 @@ async function demographicsForShelter(code: string): Promise<{
 	const ageByCountry: Record<string, ReturnType<typeof emptyAgeGroups>> = {};
 	const currentYear = new Date().getFullYear();
 
-	// One Mango pass so we can cross-tab age × country (views only expose each axis alone).
-	const findRes = await adminRaw(`/${db}/_find`, 'POST', {
-		selector: { type: 'evacuee', 'current_stay.status': 'active' },
-		fields: ['birth_year', 'country'],
-		limit: 50_000
-	});
-
-	if (findRes.status < 400) {
-		const docs =
-			(
-				findRes.data as {
-					docs?: { birth_year?: number | null; country?: string | null }[];
-				}
-			)?.docs ?? [];
-		for (const doc of docs) {
-			const country = (doc.country || '').trim().toUpperCase() || 'UNKNOWN';
+	// One reduced view pass cross-tabs country x birth_year (#1502) — no _find over every evacuee.
+	const crossRes = await adminRaw(
+		`/${db}/_design/app/_view/demographics_by_country_age?group=true`,
+		'GET'
+	);
+	if (crossRes.status < 400) {
+		const rows =
+			(crossRes.data as { rows?: { key: [string, number | null]; value: number }[] })?.rows ?? [];
+		for (const row of rows) {
+			const country = row.key?.[0] || 'UNKNOWN';
+			const birthYear = row.key?.[1];
 			const band = ageBandForBirthYear(
-				typeof doc.birth_year === 'number' ? doc.birth_year : null,
+				typeof birthYear === 'number' ? birthYear : null,
 				currentYear
 			);
-			ageGroups[band] += 1;
-			countries[country] = (countries[country] ?? 0) + 1;
+			ageGroups[band] += row.value;
+			countries[country] = (countries[country] ?? 0) + row.value;
 			const perCountry = ageByCountry[country] ?? emptyAgeGroups();
-			perCountry[band] += 1;
+			perCountry[band] += row.value;
 			ageByCountry[country] = perCountry;
 		}
 		return { age_groups: ageGroups, countries, age_by_country: ageByCountry };
 	}
 
-	// Fallback: independent views (no per-country age cross-tab).
+	// Stale shelter DB (view manifest < v9): independent views, no per-country age cross-tab.
 	const [ageRes, countryRes] = await Promise.all([
 		adminRaw(`/${db}/_design/app/_view/demographics_by_age?group=true`, 'GET'),
 		adminRaw(`/${db}/_design/app/_view/demographics_by_country?group=true`, 'GET')
@@ -358,11 +401,29 @@ export async function buildOverviewSummary(
 	});
 }
 
+/**
+ * Shrinking totals (filter change, a record removed) must not strand the caller on an empty
+ * page: snap to the last page and report the offset actually used.
+ */
+function clampOffset(total: number, offset: number, limit: number): number {
+	return total > 0 && offset >= total ? Math.floor((total - 1) / limit) * limit : offset;
+}
+
 export async function buildOverviewSites(filters: OverviewFilters) {
+	// Occupancy is one cheap reduced view per shelter and drives sort + total; the costlier
+	// movements read runs only for the rows on the requested page (#1502).
 	const sites = await loadSiteMetrics(filters);
+	// shelter_code tie-break keeps page boundaries stable when forecast_pct ties (e.g. all -1).
+	const sorted = [...sites].sort(
+		(a, b) =>
+			(b.row.forecast_pct ?? -1) - (a.row.forecast_pct ?? -1) ||
+			(a.master.code < b.master.code ? -1 : a.master.code > b.master.code ? 1 : 0)
+	);
+	const offset = clampOffset(sorted.length, filters.offset, filters.limit);
+	const pageSites = sorted.slice(offset, offset + filters.limit);
 	const { from, to } = resolveMovementDateRange(filters);
 	const rows = await Promise.all(
-		sites.map(async (s) => {
+		pageSites.map(async (s) => {
 			const movements = await movementTotals(s.master.code, from, to);
 			return {
 				...s.row,
@@ -371,8 +432,12 @@ export async function buildOverviewSites(filters: OverviewFilters) {
 			} satisfies OverviewSiteRow;
 		})
 	);
-	rows.sort((a, b) => (b.forecast_pct ?? -1) - (a.forecast_pct ?? -1));
-	return overviewSitesPayloadSchema.parse({ sites: rows });
+	return overviewSitesPayloadSchema.parse({
+		sites: rows,
+		total: sorted.length,
+		limit: filters.limit,
+		offset
+	});
 }
 
 export async function buildOverviewDemographics(filters: OverviewFilters) {
@@ -501,12 +566,22 @@ async function getHouseholdsMap(code: string): Promise<Map<string, HouseholdDoc>
 	return map;
 }
 
-async function getHousehold(code: string, householdId: string): Promise<HouseholdDoc | null> {
-	if (!householdId) return null;
+/** Fetch households by id in one `_all_docs` call (#1502) instead of one GET per evacuee. */
+async function getHouseholdsByIds(
+	code: string,
+	householdIds: Iterable<string>
+): Promise<Map<string, HouseholdDoc>> {
+	const map = new Map<string, HouseholdDoc>();
+	const keys = [...new Set([...householdIds].filter(Boolean))];
+	if (keys.length === 0) return map;
 	const db = `shelter_${code.toLowerCase()}`;
-	const res = await adminRaw(`/${db}/${encodeURIComponent(householdId)}`, 'GET');
-	if (res.status >= 400) return null;
-	return res.data as HouseholdDoc;
+	const res = await adminRaw(`/${db}/_all_docs?include_docs=true`, 'POST', { keys });
+	if (res.status >= 400) return map;
+	const rows = (res.data as { rows?: { doc?: HouseholdDoc | null }[] })?.rows ?? [];
+	for (const row of rows) {
+		if (row.doc && row.doc._id) map.set(row.doc._id, row.doc);
+	}
+	return map;
 }
 
 function displayName(first?: string, last?: string): string {
@@ -572,8 +647,12 @@ export async function buildOverviewOrigin(
 		const sites = await loadSiteMetrics(filters);
 		for (const site of sites) {
 			const evacuees = await findPreRegisteredEvacuees(site.master.code);
+			const households = await getHouseholdsByIds(
+				site.master.code,
+				evacuees.map((ev) => ev.household_id ?? '')
+			);
 			for (const ev of evacuees) {
-				const hh = ev.household_id ? await getHousehold(site.master.code, ev.household_id) : null;
+				const hh = ev.household_id ? (households.get(ev.household_id) ?? null) : null;
 				if (!matchesResidence(hh?.province, hh?.district, hh?.subdistrict, filters)) {
 					continue;
 				}
@@ -616,15 +695,137 @@ function matchesStayBucket(stayStatus: string, stayBucket?: string): boolean {
 	return true;
 }
 
+function boundItem(
+	master: ShelterMaster,
+	ev: EvacueeDoc,
+	hh: HouseholdDoc | null,
+	stayStatus: string,
+	name: string
+): PreRegistrationListItem {
+	let queueStatus = `${stayStatus === 'kiosk_registered' ? 'kiosk_registered' : 'pre_registered'}@${master.code}`;
+	if (stayStatus === 'active') queueStatus = `checked_in@${master.code}`;
+	else if (stayStatus === 'room_confirmed') queueStatus = `room_confirmed@${master.code}`;
+	else if (stayStatus === 'arriving') queueStatus = `arriving@${master.code}`;
+	else if (stayStatus === 'temporary_leave') queueStatus = `temporary_leave@${master.code}`;
+	else if (stayStatus === 'checked_out') queueStatus = `checked_out@${master.code}`;
+	else if (stayStatus === 'transferred') queueStatus = `transferred@${master.code}`;
+	else if (stayStatus === 'cancelled') queueStatus = `cancelled@${master.code}`;
+	return {
+		id: `bound:${master.code}:${ev._id}`,
+		source: 'bound',
+		display_name: name,
+		household_id: ev.household_id ?? null,
+		household_name: hh?.label?.trim() || null,
+		province: hh?.province ?? null,
+		district: hh?.district ?? null,
+		subdistrict: hh?.subdistrict ?? null,
+		country: ev.country ?? null,
+		birth_year: ev.birth_year ?? null,
+		age: ev.age ?? null,
+		age_band: ageBandForBirthYear(ev.birth_year ?? null),
+		queue_status: queueStatus,
+		stay_status: stayStatus,
+		registered_via: ev.registered_via ?? null,
+		shelter_code: master.code,
+		shelter_name: master.name,
+		registered_at: ev.created_at ?? ev.current_stay?.since ?? null,
+		profile_href: `/system-management/pre-registrations/evacuee/${encodeURIComponent(master.code)}/${encodeURIComponent(ev._id)}`,
+		registration_id: null,
+		evacuee_id: ev._id
+	};
+}
+
+/**
+ * Default-view fast path (#1502): page at the DB via `prereg_by_created` (descending, limit =
+ * offset+limit per shelter, merged in Node) instead of loading every evacuee of every shelter.
+ * Only valid when no filter needs per-row data the view does not carry. Returns null when a
+ * shelter DB lacks the view (stale manifest) so the caller falls back to the full scan.
+ */
+async function boundPageFromView(
+	masters: ShelterMaster[],
+	filters: OverviewFilters,
+	unassigned: PreRegistrationListItem[]
+): Promise<{ items: PreRegistrationListItem[]; total: number; offset: number } | null> {
+	const want = filters.offset + filters.limit;
+	const parts = await Promise.all(
+		masters.map(async (master) => {
+			const db = `shelter_${master.code.toLowerCase()}`;
+			const base = `/${db}/_design/app/_view/prereg_by_created`;
+			const [pageRes, countRes] = await Promise.all([
+				adminRaw(`${base}?reduce=false&descending=true&include_docs=true&limit=${want}`, 'GET'),
+				adminRaw(base, 'GET')
+			]);
+			if (pageRes.status >= 400 || countRes.status >= 400) return null;
+			const docs = ((pageRes.data as { rows?: { doc?: EvacueeDoc | null }[] })?.rows ?? [])
+				.map((r) => r.doc)
+				.filter((d): d is EvacueeDoc => Boolean(d) && d?.type === 'evacuee');
+			const count = (countRes.data as { rows?: { value: number }[] })?.rows?.[0]?.value ?? 0;
+			return { master, docs, count };
+		})
+	);
+	if (parts.some((p) => p === null)) return null;
+	const ok = parts as { master: ShelterMaster; docs: EvacueeDoc[]; count: number }[];
+
+	type Candidate = {
+		at: string;
+		unassigned?: PreRegistrationListItem;
+		master?: ShelterMaster;
+		ev?: EvacueeDoc;
+	};
+	const candidates: Candidate[] = [
+		...unassigned.map((u) => ({ at: u.registered_at ?? '', unassigned: u })),
+		...ok.flatMap((p) =>
+			p.docs.map((ev) => ({
+				at: ev.created_at ?? ev.current_stay?.since ?? '',
+				master: p.master,
+				ev
+			}))
+		)
+	];
+	candidates.sort((a, b) => b.at.localeCompare(a.at));
+	const total = unassigned.length + ok.reduce((sum, p) => sum + p.count, 0);
+	// Clamping only ever lowers the offset, so the `want` docs fetched above still cover the page.
+	const offset = clampOffset(total, filters.offset, filters.limit);
+	const page = candidates.slice(offset, offset + filters.limit);
+
+	const idsByShelter = new Map<string, string[]>();
+	for (const c of page) {
+		if (c.master && c.ev?.household_id) {
+			const list = idsByShelter.get(c.master.code) ?? [];
+			list.push(c.ev.household_id);
+			idsByShelter.set(c.master.code, list);
+		}
+	}
+	const households = new Map<string, Map<string, HouseholdDoc>>();
+	await Promise.all(
+		[...idsByShelter].map(async ([code, ids]) => {
+			households.set(code, await getHouseholdsByIds(code, ids));
+		})
+	);
+
+	const items = page.map((c) => {
+		if (c.unassigned) return c.unassigned;
+		const ev = c.ev as EvacueeDoc;
+		const master = c.master as ShelterMaster;
+		const hh = ev.household_id ? (households.get(master.code)?.get(ev.household_id) ?? null) : null;
+		return boundItem(
+			master,
+			ev,
+			hh,
+			ev.current_stay?.status ?? 'pre_registered',
+			displayName(ev.first_name, ev.last_name)
+		);
+	});
+	return { items, total, offset };
+}
+
 export async function buildPreRegistrationsList(
 	filters: OverviewFilters,
 	fetchFn: FastapiFetch,
 	cookie: string | null
 ) {
 	const items: PreRegistrationListItem[] = [];
-	const nameByCode = new Map<string, string>();
 	const masters = (await listShelterMasters()).map(migrate);
-	for (const m of masters) nameByCode.set(m.code, m.name);
 	const filteredMasters = masters.filter((m) => matchesShelterGeo(m, filters));
 
 	if (
@@ -690,6 +891,28 @@ export async function buildPreRegistrationsList(
 		}
 	}
 
+	const fastPathOk =
+		filters.source !== 'unassigned' &&
+		(!filters.stay_bucket || filters.stay_bucket === 'all') &&
+		!filters.q &&
+		!filters.country &&
+		!filters.age_band &&
+		!filters.household_id &&
+		!filters.residence_province &&
+		!filters.residence_district &&
+		!filters.residence_subdistrict;
+	if (fastPathOk) {
+		const fast = await boundPageFromView(filteredMasters, filters, items);
+		if (fast) {
+			return preRegistrationsListPayloadSchema.parse({
+				items: fast.items,
+				total: fast.total,
+				limit: filters.limit,
+				offset: fast.offset
+			});
+		}
+	}
+
 	if (filters.source !== 'unassigned') {
 		for (const master of filteredMasters) {
 			const [evacuees, hhMap] = await Promise.all([
@@ -721,58 +944,20 @@ export async function buildPreRegistrationsList(
 					}
 				}
 
-				let queueStatus = `${stayStatus === 'kiosk_registered' ? 'kiosk_registered' : 'pre_registered'}@${master.code}`;
-				if (stayStatus === 'active') {
-					queueStatus = `checked_in@${master.code}`;
-				} else if (stayStatus === 'room_confirmed') {
-					queueStatus = `room_confirmed@${master.code}`;
-				} else if (stayStatus === 'arriving') {
-					queueStatus = `arriving@${master.code}`;
-				} else if (stayStatus === 'temporary_leave') {
-					queueStatus = `temporary_leave@${master.code}`;
-				} else if (stayStatus === 'checked_out') {
-					queueStatus = `checked_out@${master.code}`;
-				} else if (stayStatus === 'transferred') {
-					queueStatus = `transferred@${master.code}`;
-				} else if (stayStatus === 'cancelled') {
-					queueStatus = `cancelled@${master.code}`;
-				}
-
-				items.push({
-					id: `bound:${master.code}:${ev._id}`,
-					source: 'bound',
-					display_name: name,
-					household_id: ev.household_id ?? null,
-					household_name: hh?.label?.trim() || null,
-					province: hh?.province ?? null,
-					district: hh?.district ?? null,
-					subdistrict: hh?.subdistrict ?? null,
-					country: ev.country ?? null,
-					birth_year: ev.birth_year ?? null,
-					age: ev.age ?? null,
-					age_band: band,
-					queue_status: queueStatus,
-					stay_status: stayStatus,
-					registered_via: ev.registered_via ?? null,
-					shelter_code: master.code,
-					shelter_name: nameByCode.get(master.code) ?? master.name,
-					registered_at: ev.created_at ?? ev.current_stay?.since ?? null,
-					profile_href: `/system-management/pre-registrations/evacuee/${encodeURIComponent(master.code)}/${encodeURIComponent(ev._id)}`,
-					registration_id: null,
-					evacuee_id: ev._id
-				});
+				items.push(boundItem(master, ev, hh, stayStatus, name));
 			}
 		}
 	}
 
 	items.sort((a, b) => (b.registered_at ?? '').localeCompare(a.registered_at ?? ''));
 	const total = items.length;
-	const page = items.slice(filters.offset, filters.offset + filters.limit);
+	const offset = clampOffset(total, filters.offset, filters.limit);
+	const page = items.slice(offset, offset + filters.limit);
 	return preRegistrationsListPayloadSchema.parse({
 		items: page,
 		total,
 		limit: filters.limit,
-		offset: filters.offset
+		offset
 	});
 }
 
@@ -848,7 +1033,9 @@ export async function buildBoundEvacueeProfile(
 	}
 	const masters = (await listShelterMasters()).map(migrate);
 	const master = masters.find((m) => m.code === shelterCode);
-	const hh = ev.household_id ? await getHousehold(shelterCode, ev.household_id) : null;
+	const hh = ev.household_id
+		? ((await getHouseholdsByIds(shelterCode, [ev.household_id])).get(ev.household_id) ?? null)
+		: null;
 	let members: PreRegistrationProfile['members'] = [];
 	if (ev.household_id) {
 		const findRes = await adminRaw(`/${db}/_find`, 'POST', {
