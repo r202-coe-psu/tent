@@ -1,11 +1,6 @@
 <script lang="ts">
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import * as Table from '$lib/components/ui/table';
-	import { Pagination as PaginationPrimitive } from 'bits-ui';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
-	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import { cn } from '$lib/utils/shadcn.js';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
@@ -30,7 +25,10 @@
 	const items = $derived(listQuery.data?.items ?? []);
 	const total = $derived(listQuery.data?.total ?? 0);
 	const limit = $derived(filters.limit);
-	const offset = $derived(filters.offset);
+	// The server snaps to the last page when the total shrinks; show the offset it actually used.
+	const offset = $derived(
+		listQuery.isPlaceholderData ? filters.offset : (listQuery.data?.offset ?? filters.offset)
+	);
 	const pageStart = $derived(total === 0 ? 0 : offset + 1);
 	const pageEnd = $derived(Math.min(offset + limit, total));
 	const currentPage = $derived(Math.floor(offset / limit) + 1);
@@ -211,49 +209,11 @@
 					แสดง {pageStart.toLocaleString('th-TH')} - {pageEnd.toLocaleString('th-TH')} จาก
 					{total.toLocaleString('th-TH')} รายการ
 				</div>
-				<Pagination.Root
+				<PaginationControls
 					bind:page={() => currentPage, (p) => (filters = { ...filters, offset: (p - 1) * limit })}
 					count={total}
 					perPage={limit}
-				>
-					{#snippet children({ pages })}
-						<Pagination.Content>
-							<PaginationPrimitive.PrevButton
-								aria-label="ไปหน้าก่อนหน้า"
-								class={cn(
-									buttonVariants({ variant: 'ghost', size: 'default' }),
-									'h-7 pl-1.5! text-xs'
-								)}
-							>
-								<ChevronLeftIcon data-icon="inline-start" />
-								<span class="hidden sm:block">ก่อนหน้า</span>
-							</PaginationPrimitive.PrevButton>
-							{#each pages as p (p.key)}
-								<Pagination.Item>
-									{#if p.type === 'page'}
-										<Pagination.Link
-											page={p}
-											isActive={p.value === currentPage}
-											class="h-7 min-w-7 text-xs"
-										/>
-									{:else}
-										<Pagination.Ellipsis class="h-7 w-7 text-xs" />
-									{/if}
-								</Pagination.Item>
-							{/each}
-							<PaginationPrimitive.NextButton
-								aria-label="ไปหน้าถัดไป"
-								class={cn(
-									buttonVariants({ variant: 'ghost', size: 'default' }),
-									'h-7 pr-1.5! text-xs'
-								)}
-							>
-								<span class="hidden sm:block">ถัดไป</span>
-								<ChevronRightIcon data-icon="inline-end" />
-							</PaginationPrimitive.NextButton>
-						</Pagination.Content>
-					{/snippet}
-				</Pagination.Root>
+				/>
 			</div>
 		{/if}
 	</div>

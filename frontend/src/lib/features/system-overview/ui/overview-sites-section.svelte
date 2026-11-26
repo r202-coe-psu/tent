@@ -1,14 +1,9 @@
 <script lang="ts">
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { resolve } from '$app/paths';
 	import { parseDate } from '@internationalized/date';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
-	import { Pagination as PaginationPrimitive } from 'bits-ui';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
-	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
-	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import { cn } from '$lib/utils/shadcn.js';
 	import { Badge } from '$lib/components/ui/badge';
 	import { DateRangePicker } from '$lib/components/ui/date-picker';
 	import { Label } from '$lib/components/ui/label';
@@ -184,49 +179,11 @@
 					<div class="text-xs text-slate-500 tabular-nums">
 						แสดง {pageStart} - {pageEnd} จาก {total} แห่ง
 					</div>
-					<Pagination.Root
+					<PaginationControls
 						bind:page={() => currentPage, (p) => onOffsetChange((p - 1) * limit)}
 						count={total}
 						perPage={limit}
-					>
-						{#snippet children({ pages })}
-							<Pagination.Content>
-								<PaginationPrimitive.PrevButton
-									aria-label="ไปหน้าก่อนหน้า"
-									class={cn(
-										buttonVariants({ variant: 'ghost', size: 'default' }),
-										'h-7 pl-1.5! text-xs'
-									)}
-								>
-									<ChevronLeftIcon data-icon="inline-start" />
-									<span class="hidden sm:block">ก่อนหน้า</span>
-								</PaginationPrimitive.PrevButton>
-								{#each pages as p (p.key)}
-									<Pagination.Item>
-										{#if p.type === 'page'}
-											<Pagination.Link
-												page={p}
-												isActive={p.value === currentPage}
-												class="h-7 min-w-7 text-xs"
-											/>
-										{:else}
-											<Pagination.Ellipsis class="h-7 w-7 text-xs" />
-										{/if}
-									</Pagination.Item>
-								{/each}
-								<PaginationPrimitive.NextButton
-									aria-label="ไปหน้าถัดไป"
-									class={cn(
-										buttonVariants({ variant: 'ghost', size: 'default' }),
-										'h-7 pr-1.5! text-xs'
-									)}
-								>
-									<span class="hidden sm:block">ถัดไป</span>
-									<ChevronRightIcon data-icon="inline-end" />
-								</PaginationPrimitive.NextButton>
-							</Pagination.Content>
-						{/snippet}
-					</Pagination.Root>
+					/>
 				</div>
 			{/if}
 		{/if}

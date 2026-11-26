@@ -401,6 +401,14 @@ export async function buildOverviewSummary(
 	});
 }
 
+/**
+ * Shrinking totals (filter change, a record removed) must not strand the caller on an empty
+ * page: snap to the last page and report the offset actually used.
+ */
+function clampOffset(total: number, offset: number, limit: number): number {
+	return total > 0 && offset >= total ? Math.floor((total - 1) / limit) * limit : offset;
+}
+
 export async function buildOverviewSites(filters: OverviewFilters) {
 	// Occupancy is one cheap reduced view per shelter and drives sort + total; the costlier
 	// movements read runs only for the rows on the requested page (#1502).
@@ -411,12 +419,7 @@ export async function buildOverviewSites(filters: OverviewFilters) {
 			(b.row.forecast_pct ?? -1) - (a.row.forecast_pct ?? -1) ||
 			(a.master.code < b.master.code ? -1 : a.master.code > b.master.code ? 1 : 0)
 	);
-	// Shrinking totals (filter change, a shelter cancelled) must not strand the caller on an
-	// empty page: snap to the last page and report the offset actually used.
-	const offset =
-		sorted.length > 0 && filters.offset >= sorted.length
-			? Math.floor((sorted.length - 1) / filters.limit) * filters.limit
-			: filters.offset;
+	const offset = clampOffset(sorted.length, filters.offset, filters.limit);
 	const pageSites = sorted.slice(offset, offset + filters.limit);
 	const { from, to } = resolveMovementDateRange(filters);
 	const rows = await Promise.all(
@@ -742,7 +745,7 @@ async function boundPageFromView(
 	masters: ShelterMaster[],
 	filters: OverviewFilters,
 	unassigned: PreRegistrationListItem[]
-): Promise<{ items: PreRegistrationListItem[]; total: number } | null> {
+): Promise<{ items: PreRegistrationListItem[]; total: number; offset: number } | null> {
 	const want = filters.offset + filters.limit;
 	const parts = await Promise.all(
 		masters.map(async (master) => {
@@ -780,7 +783,10 @@ async function boundPageFromView(
 		)
 	];
 	candidates.sort((a, b) => b.at.localeCompare(a.at));
-	const page = candidates.slice(filters.offset, filters.offset + filters.limit);
+	const total = unassigned.length + ok.reduce((sum, p) => sum + p.count, 0);
+	// Clamping only ever lowers the offset, so the `want` docs fetched above still cover the page.
+	const offset = clampOffset(total, filters.offset, filters.limit);
+	const page = candidates.slice(offset, offset + filters.limit);
 
 	const idsByShelter = new Map<string, string[]>();
 	for (const c of page) {
@@ -810,8 +816,7 @@ async function boundPageFromView(
 			displayName(ev.first_name, ev.last_name)
 		);
 	});
-	const total = unassigned.length + ok.reduce((sum, p) => sum + p.count, 0);
-	return { items, total };
+	return { items, total, offset };
 }
 
 export async function buildPreRegistrationsList(
@@ -903,7 +908,7 @@ export async function buildPreRegistrationsList(
 				items: fast.items,
 				total: fast.total,
 				limit: filters.limit,
-				offset: filters.offset
+				offset: fast.offset
 			});
 		}
 	}
@@ -946,12 +951,13 @@ export async function buildPreRegistrationsList(
 
 	items.sort((a, b) => (b.registered_at ?? '').localeCompare(a.registered_at ?? ''));
 	const total = items.length;
-	const page = items.slice(filters.offset, filters.offset + filters.limit);
+	const offset = clampOffset(total, filters.offset, filters.limit);
+	const page = items.slice(offset, offset + filters.limit);
 	return preRegistrationsListPayloadSchema.parse({
 		items: page,
 		total,
 		limit: filters.limit,
-		offset: filters.offset
+		offset
 	});
 }
 

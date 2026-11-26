@@ -241,6 +241,34 @@ describe('buildPreRegistrationsList paging (#1502)', () => {
 		expect(adminRaw.mock.calls.some(([p]) => String(p).includes('/_find'))).toBe(false);
 	});
 
+	it('snaps an out-of-range offset to the last page (fast path)', async () => {
+		listShelterMasters.mockResolvedValue([master('A', 10)]);
+		const doc = (id: string, at: string) => ({
+			_id: id,
+			type: 'evacuee',
+			created_at: at,
+			current_stay: { status: 'pre_registered' }
+		});
+		route({
+			'prereg_by_created?reduce=false': () => ({
+				rows: [
+					{ doc: doc('e3', '2026-01-03') },
+					{ doc: doc('e2', '2026-01-02') },
+					{ doc: doc('e1', '2026-01-01') }
+				]
+			}),
+			'/_view/prereg_by_created': () => ({ rows: [{ value: 3 }] })
+		});
+		const out = await buildPreRegistrationsList(
+			filters({ limit: 2, offset: 40 }),
+			unassignedFetch,
+			null
+		);
+		expect(out.total).toBe(3);
+		expect(out.offset).toBe(2);
+		expect(out.items.map((i) => i.evacuee_id)).toEqual(['e1']);
+	});
+
 	it('falls back to the full scan when a shelter lacks the view', async () => {
 		listShelterMasters.mockResolvedValue([master('A', 10)]);
 		route({

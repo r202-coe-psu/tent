@@ -56,10 +56,10 @@ describe('overview-sites-section paging', () => {
 		const onChange = await render({ total: 9, limit: 4, offset: 0 });
 		expect(document.body.textContent).toContain('แสดง 1 - 4 จาก 9 แห่ง');
 		expect(document.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('1');
-		expect(document.querySelector('[aria-label="ไปหน้าก่อนหน้า"]')?.hasAttribute('disabled')).toBe(
-			true
-		);
-		(document.querySelector('[aria-label="ไปหน้าถัดไป"]') as HTMLElement).click();
+		expect(
+			document.querySelector('[aria-label="Go to previous page"]')?.hasAttribute('disabled')
+		).toBe(true);
+		(document.querySelector('[aria-label="Go to next page"]') as HTMLElement).click();
 		await tick();
 		expect(onChange).toHaveBeenCalledWith(4);
 	});
@@ -67,16 +67,16 @@ describe('overview-sites-section paging', () => {
 	it('clamps the range end and disables Next on the last page', async () => {
 		const onChange = await render({ total: 9, limit: 4, offset: 8 });
 		expect(document.body.textContent).toContain('แสดง 9 - 9 จาก 9 แห่ง');
-		expect(document.querySelector('[aria-label="ไปหน้าถัดไป"]')?.hasAttribute('disabled')).toBe(
+		expect(document.querySelector('[aria-label="Go to next page"]')?.hasAttribute('disabled')).toBe(
 			true
 		);
-		(document.querySelector('[aria-label="ไปหน้าก่อนหน้า"]') as HTMLElement).click();
+		(document.querySelector('[aria-label="Go to previous page"]') as HTMLElement).click();
 		await tick();
 		expect(onChange).toHaveBeenCalledWith(4);
 	});
 
 	it('hides the pager when everything fits on one page', async () => {
 		await render({ total: 3, limit: 4, offset: 0 });
-		expect(document.querySelector('[aria-label="ไปหน้าถัดไป"]')).toBeNull();
+		expect(document.querySelector('[aria-label="Go to next page"]')).toBeNull();
 	});
 });
