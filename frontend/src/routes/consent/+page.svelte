@@ -54,7 +54,9 @@
 			currentUserRoles = status.roles ?? [];
 			currentPersonnelType = status.personnel_type ?? null;
 		} catch {
-			await goto(resolve(LOGIN_ROUTE));
+			// Stay here: /login would bounce an authed user to /portal, whose guard sends a known
+			// consent gate straight back here — a redirect loop while the BFF is down (#476).
+			toast.error('ตรวจสอบสถานะไม่สำเร็จ กรุณาลองใหม่');
 		}
 	});
 

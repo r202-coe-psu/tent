@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
 	user: { roles: [] as string[] } as { name?: string; roles: string[] } | null,
 	selectedShelterCode: null as string | null,
-	/** What `fetchAuthStatus` resolves with; an `Error` makes it reject (#476). */
-	authStatus: null as Record<string, unknown> | Error | null
+	/** What `/api/v1/auth/me` resolves with; an `Error` makes it reject (#476). */
+	authStatus: null as Record<string, unknown> | Error | null,
+	/** Other `serviceFetch` paths hit by a test (gate-clearing writes). */
+	serviceFetch: vi.fn()
 }));
 
 const CLEAR_STATUS = {
@@ -34,11 +36,13 @@ vi.mock('$lib/stores/shelter.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/features/users', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/features/users')>();
+// Mock only the transport so the real `fetchAuthStatus` cache + last-known status run (#476).
+vi.mock('$lib/api/service', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/api/service')>();
 	return {
 		...actual,
-		fetchAuthStatus: async () => {
+		serviceFetch: async (path: string, init?: RequestInit) => {
+			if (path !== '/api/v1/auth/me') return mocks.serviceFetch(path, init);
 			const status = mocks.authStatus ?? CLEAR_STATUS;
 			if (status instanceof Error) throw status;
 			return status;
@@ -63,12 +67,13 @@ import {
 	requireVolunteerBackoffice,
 	requireWarehouseAccess,
 	requireAuth,
-	resetLastKnownAuthGate,
+	CONSENT_ROUTE,
 	FORCE_SETUP_ROUTE,
 	MFA_CHALLENGE_ROUTE,
 	LANDING_ROUTE,
 	type DeskFallbackHref
 } from './auth';
+import { invalidateAuthStatusRequest, skipMfa, submitForceSetup } from '$lib/features/users';
 
 describe('resolvePostLoginDestination (CR-124)', () => {
 	it('sends force-setup before MFA when password/security setup is required', () => {
@@ -642,15 +647,21 @@ describe('requireAuth when the auth status check fails (#476)', () => {
 			return (e as { location: string }).location;
 		}
 	};
+	const statusOf = (name: string, overrides: Record<string, unknown> = {}) => ({
+		...CLEAR_STATUS,
+		name,
+		...overrides
+	});
 
 	beforeEach(() => {
-		resetLastKnownAuthGate();
+		invalidateAuthStatusRequest();
 		mocks.user = { name: 'alice', roles: [] };
 		mocks.authStatus = null;
+		mocks.serviceFetch.mockReset().mockResolvedValue({ ok: true });
 	});
 
 	it('redirects to the gate the last successful check required', async () => {
-		mocks.authStatus = { ...CLEAR_STATUS, must_change_password: true };
+		mocks.authStatus = statusOf('alice', { must_change_password: true });
 		expect(await redirectTo()).toBe(FORCE_SETUP_ROUTE);
 
 		mocks.authStatus = new Error('BFF down');
@@ -658,14 +669,23 @@ describe('requireAuth when the auth status check fails (#476)', () => {
 	});
 
 	it('keeps a known pending MFA when the check later fails', async () => {
-		mocks.authStatus = { ...CLEAR_STATUS, pending_mfa: true };
+		mocks.authStatus = statusOf('alice', { pending_mfa: true });
 		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
 
 		mocks.authStatus = new Error('offline');
 		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
 	});
 
+	it('keeps a known consent gate when the check later fails', async () => {
+		mocks.authStatus = statusOf('alice', { consent: null });
+		expect(await redirectTo()).toBe(CONSENT_ROUTE);
+
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBe(CONSENT_ROUTE);
+	});
+
 	it('lets through a user last known to be clear', async () => {
+		mocks.authStatus = statusOf('alice');
 		expect(await redirectTo()).toBeNull();
 
 		mocks.authStatus = new Error('offline');
@@ -677,12 +697,58 @@ describe('requireAuth when the auth status check fails (#476)', () => {
 		expect(await redirectTo()).toBeNull();
 	});
 
+	it('lets through once the gate clears, even if a later check fails', async () => {
+		mocks.authStatus = statusOf('alice', { pending_mfa: true });
+		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
+
+		mocks.authStatus = statusOf('alice');
+		expect(await redirectTo()).toBeNull();
+
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBeNull();
+	});
+
+	it('forgets the known gate after a successful force-setup or MFA skip', async () => {
+		mocks.authStatus = statusOf('alice', { must_change_password: true });
+		expect(await redirectTo()).toBe(FORCE_SETUP_ROUTE);
+		await submitForceSetup({ security_question: { question_id: 'q1', answer: 'a' } });
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBeNull();
+
+		mocks.authStatus = statusOf('alice', { pending_mfa: true });
+		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
+		await skipMfa();
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBeNull();
+	});
+
+	it('forgets the known gate when the session is invalidated (login / logout)', async () => {
+		mocks.authStatus = statusOf('alice', { pending_mfa: true });
+		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
+
+		invalidateAuthStatusRequest();
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBeNull();
+	});
+
 	it('does not apply another account’s last known gate', async () => {
-		mocks.authStatus = { ...CLEAR_STATUS, must_change_password: true };
+		mocks.authStatus = statusOf('alice', { must_change_password: true });
 		expect(await redirectTo()).toBe(FORCE_SETUP_ROUTE);
 
 		mocks.user = { name: 'bob', roles: [] };
 		mocks.authStatus = new Error('offline');
 		expect(await redirectTo()).toBeNull();
+	});
+
+	it('keys the known gate to the account in the status, not the cached identity', async () => {
+		// Another tab switched the shared cached identity to alice while this session is bob's.
+		mocks.authStatus = statusOf('bob', { pending_mfa: true });
+		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
+
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBeNull();
+
+		mocks.user = { name: 'bob', roles: [] };
+		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
 	});
 });

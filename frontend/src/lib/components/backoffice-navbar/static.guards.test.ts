@@ -30,7 +30,8 @@ vi.mock('$lib/features/users', () => ({
 		must_change_password: false,
 		has_security_question: true,
 		pending_mfa: false
-	})
+	}),
+	lastKnownAuthStatusFor: () => null
 }));
 
 import {

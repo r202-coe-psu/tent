@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 	logout: vi.fn(),
 	toastError: vi.fn(),
 	toastSuccess: vi.fn(),
+	statusError: null as Error | null,
 	status: {
 		name: 'staff01',
 		roles: ['shelter:SH001', 'registration_staff'],
@@ -38,7 +39,8 @@ vi.mock('$lib/features/users', async () => {
 	const actual = await vi.importActual<typeof import('$lib/features/users')>('$lib/features/users');
 	return {
 		...actual,
-		fetchAuthStatus: () => Promise.resolve(mocks.status),
+		fetchAuthStatus: () =>
+			mocks.statusError ? Promise.reject(mocks.statusError) : Promise.resolve(mocks.status),
 		invalidateAuthStatusRequest: vi.fn(),
 		submitConsent: mocks.submitConsent
 	};
@@ -59,6 +61,7 @@ async function render() {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mocks.statusError = null;
 	document.body.innerHTML = '';
 	mocks.submitConsent.mockResolvedValue({
 		ok: true,
@@ -128,5 +131,14 @@ describe('/consent +page', () => {
 
 		expect(mocks.logout).toHaveBeenCalled();
 		expect(mocks.goto).toHaveBeenCalledWith('/login');
+	});
+
+	it('stays on the page with a toast when the status check fails (#476)', async () => {
+		// Going to /login here loops: /login → /portal → requireAuth's known consent gate → /consent.
+		mocks.statusError = new Error('BFF down');
+		await render();
+
+		expect(mocks.goto).not.toHaveBeenCalled();
+		expect(mocks.toastError).toHaveBeenCalledWith('ตรวจสอบสถานะไม่สำเร็จ กรุณาลองใหม่');
 	});
 });

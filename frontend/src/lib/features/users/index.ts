@@ -35,6 +35,7 @@ export {
 	verifySecurityQuestionAndReset,
 	fetchAuthStatus,
 	invalidateAuthStatusRequest,
+	lastKnownAuthStatusFor,
 	updateOwnProfile,
 	submitForceSetup,
 	submitConsent,

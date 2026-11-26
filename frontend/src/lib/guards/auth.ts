@@ -31,6 +31,7 @@ import {
 } from '$lib/auth/roles';
 import {
 	fetchAuthStatus,
+	lastKnownAuthStatusFor,
 	requiresConsent,
 	type AuthStatus,
 	type UserConsentStatus
@@ -86,21 +87,6 @@ export function resolvePostLoginDestination(
 	return LANDING_ROUTE;
 }
 
-type GateRoute = Exclude<PostLoginDestination, typeof LANDING_ROUTE>;
-
-/**
- * The gate the last successful `/api/v1/auth/me` check sent this user to (`null` = cleared),
- * per account (#476). Lets {@link requireAuth} fail closed on a known gate when the check
- * fails later, while an edge session that never reached the BFF still passes.
- * In memory only: a reload starts unknown again.
- */
-let lastKnownGate: { name: string; gate: GateRoute | null } | null = null;
-
-/** Test hook: forget the last known gate status. */
-export function resetLastKnownAuthGate(): void {
-	lastKnownGate = null;
-}
-
 function activeShelterCode(roles: readonly string[]): string | null {
 	return shelterStore.selectedShelterCode ?? shelterCodeFromRoles(roles);
 }
@@ -128,19 +114,18 @@ export async function requireAuth(fetchFn?: typeof fetch) {
 		throw redirect(302, resolve(LOGIN_ROUTE));
 	}
 
-	const name = authStore.user?.name ?? '';
-	let gate: GateRoute | null;
+	let dest: PostLoginDestination;
 	try {
-		const dest = resolvePostLoginDestination(await fetchAuthStatus());
-		gate = dest === LANDING_ROUTE ? null : dest;
-		lastKnownGate = { name, gate };
+		dest = resolvePostLoginDestination(await fetchAuthStatus());
 	} catch {
-		// Status check failed (offline / BFF down, #476): never bypass a gate we already know this
-		// user owes (force-setup, MFA, consent). Only a user whose status was never learned this
-		// session passes on the Couch session alone — the edge fallback may have no BFF.
-		gate = lastKnownGate?.name === name ? lastKnownGate.gate : null;
+		// Status check failed (offline / BFF down, #476): never bypass a gate this account is
+		// already known to owe (force-setup, MFA, consent). An account whose status was never
+		// learned since the last reload or login passes on the Couch session alone, because the
+		// edge fallback may have no BFF.
+		const known = lastKnownAuthStatusFor(authStore.user?.name ?? '');
+		dest = known ? resolvePostLoginDestination(known) : LANDING_ROUTE;
 	}
-	if (gate) throw redirect(302, resolve(gate));
+	if (dest !== LANDING_ROUTE) throw redirect(302, resolve(dest));
 }
 
 /**

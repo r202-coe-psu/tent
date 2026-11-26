@@ -222,27 +222,48 @@ export interface OwnProfileUpdateResult {
 }
 
 /** Complete first-time or forced security setup */
-export function submitForceSetup(input: ForceSetupInput): Promise<{ ok: true }> {
-	return serviceFetch(FORCE_SETUP_ENDPOINT, {
+export async function submitForceSetup(input: ForceSetupInput): Promise<{ ok: true }> {
+	const result = await serviceFetch<{ ok: true }>(FORCE_SETUP_ENDPOINT, {
 		method: 'POST',
 		body: JSON.stringify(input)
 	});
+	invalidateAuthStatusRequest();
+	return result;
 }
 
 /** Submit PDPA and NDA consent acceptance (#1246) */
-export function submitConsent(agreed: boolean): Promise<{ ok: true; consent: UserConsentStatus }> {
-	return serviceFetch('/api/v1/auth/consent', {
-		method: 'POST',
-		body: JSON.stringify({ agreed })
-	});
+export async function submitConsent(
+	agreed: boolean
+): Promise<{ ok: true; consent: UserConsentStatus }> {
+	const result = await serviceFetch<{ ok: true; consent: UserConsentStatus }>(
+		'/api/v1/auth/consent',
+		{ method: 'POST', body: JSON.stringify({ agreed }) }
+	);
+	invalidateAuthStatusRequest();
+	return result;
 }
 
 /** Check security setup status of currently authenticated user */
 let authStatusRequest: Promise<AuthStatus> | null = null;
 
-/** Forget an in-flight status request when the browser session changes. */
+/**
+ * The last status `/api/v1/auth/me` returned this browser session (#476), so the auth guard can
+ * fail closed on a gate (force-setup, MFA, consent) it already knows the user owes when a later
+ * check fails. Cleared whenever the session or the user's gate state changes. In memory only:
+ * a reload (or a BFF outage on the first load) starts unknown again and the guard lets the Couch
+ * session through — the edge fallback may have no BFF (#476 option a).
+ */
+let lastKnownAuthStatus: AuthStatus | null = null;
+
+/** Forget the cached status (in-flight + last known) when the session or its gates change. */
 export function invalidateAuthStatusRequest(): void {
 	authStatusRequest = null;
+	lastKnownAuthStatus = null;
+}
+
+/** The last successful status for account `name`, or `null` when none is known for it. */
+export function lastKnownAuthStatusFor(name: string): AuthStatus | null {
+	return lastKnownAuthStatus?.name === name ? lastKnownAuthStatus : null;
 }
 
 export function fetchAuthStatus(): Promise<AuthStatus> {
@@ -251,8 +272,11 @@ export function fetchAuthStatus(): Promise<AuthStatus> {
 	const request = serviceFetch<AuthStatus>('/api/v1/auth/me');
 	authStatusRequest = request;
 	void request.then(
-		() => {
-			if (authStatusRequest === request) authStatusRequest = null;
+		(status) => {
+			// A request superseded by invalidateAuthStatusRequest() must not repopulate the cache.
+			if (authStatusRequest !== request) return;
+			lastKnownAuthStatus = status;
+			authStatusRequest = null;
 		},
 		() => {
 			if (authStatusRequest === request) authStatusRequest = null;
@@ -276,8 +300,13 @@ export function clearMfaOk(): Promise<{ ok: true }> {
 }
 
 /** Skip BFF MFA challenge for the current session (sets `mfa_ok` cookie). */
-export function skipMfa(): Promise<{ ok: true }> {
-	return serviceFetch('/api/v1/auth/mfa/skip', { method: 'POST', body: '{}' });
+export async function skipMfa(): Promise<{ ok: true }> {
+	const result = await serviceFetch<{ ok: true }>('/api/v1/auth/mfa/skip', {
+		method: 'POST',
+		body: '{}'
+	});
+	invalidateAuthStatusRequest();
+	return result;
 }
 
 /**
