@@ -50,3 +50,9 @@ removes both at the end (docs with `_purge`).
 
 A non-localhost CouchDB is refused unless `ALLOW_REMOTE_WRITES=true`. Never set it for
 production.
+
+## Git hooks
+
+Lefthook formats staged files under `tests/` on commit, and on push runs `tsc` and
+`prettier --check` here when a pushed file is under `tests/`. Both need `pnpm install` in
+`tests/` first. The hooks do not run the suites, because they need a live stack.

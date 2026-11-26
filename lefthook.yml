@@ -1,4 +1,4 @@
-# Quality gate configuration (frontend + backend + worker)
+# Quality gate configuration (frontend + backend + worker + tests)
 # Install: pnpm install (root) — runs `lefthook install` via prepare script.
 
 pre-commit:
@@ -20,6 +20,12 @@ pre-commit:
       root: worker/
       glob: "**/*.py"
       run: uvx ruff check --fix {staged_files} && uvx ruff format {staged_files}
+      stage_fixed: true
+
+    tests-format:
+      root: tests/
+      glob: "**/*.{ts,json,md,yaml}"
+      run: pnpm exec prettier --write --ignore-unknown {staged_files}
       stage_fixed: true
 
 pre-push:
@@ -47,3 +53,10 @@ pre-push:
       root: frontend/
       glob: "**/*.{ts,js,svelte,json,css,yaml}"
       run: pnpm test:changed
+
+    # tests/ suites need a live CouchDB and app, so the hook only type-checks and checks
+    # formatting; run `pnpm test` in tests/ by hand (tests/README.md).
+    tests-check:
+      root: tests/
+      glob: "**/*.{ts,json,md,yaml}"
+      run: pnpm exec tsc --noEmit && pnpm exec prettier --check .
