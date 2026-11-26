@@ -72,6 +72,13 @@
 		);
 	});
 
+	/** A pick is the user's own choice, so remember it (the effect above only persists fallbacks). */
+	function onShelterChange(code: string | undefined) {
+		if (!code) return;
+		shelterStore.selectedShelterCode = code;
+		persistSelectedShelter(code);
+	}
+
 	const selectedShelter = $derived(
 		availableShelters.find((s) => s.code === shelterStore.selectedShelterCode)
 	);
@@ -88,7 +95,11 @@
 			ศูนย์อพยพ
 		</span>
 	{/if}
-	<Select type="single" bind:value={shelterStore.selectedShelterCode}>
+	<Select
+		type="single"
+		value={shelterStore.selectedShelterCode ?? ''}
+		onValueChange={onShelterChange}
+	>
 		<SelectTrigger
 			class={cn(
 				'h-11 min-h-11',
