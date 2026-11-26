@@ -38,7 +38,7 @@ export async function runKioskPrintFlow(deps: KioskPrintFlowDeps): Promise<Kiosk
 		return { kind: 'fallback' };
 	} catch (error) {
 		const t = KIOSK_PRINT_FLOW_I18N[deps.language ?? 'th'];
-		let message: string = t.renderFailed;
+		let message: string = deps.printer === 'none' ? t.screenRenderFailed : t.renderFailed;
 		if (error instanceof KioskPrintError) {
 			// The printer's own message is kept as it came; only our stock wording follows the language.
 			const stockText = {

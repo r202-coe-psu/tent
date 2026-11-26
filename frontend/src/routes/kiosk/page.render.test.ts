@@ -16,6 +16,7 @@ describe('kiosk home page', () => {
 				data: {
 					queryClient: new QueryClient(),
 					qrCheckInEnabled: true,
+					printer: 'cups',
 					phoneCheckInEnabled: true,
 					thaidCheckInEnabled: false,
 					walkInRegistrationEnabled: false,
@@ -35,6 +36,7 @@ describe('kiosk home page', () => {
 				data: {
 					queryClient: new QueryClient(),
 					qrCheckInEnabled: true,
+					printer: 'cups',
 					phoneCheckInEnabled: true,
 					thaidCheckInEnabled: false,
 					walkInRegistrationEnabled: false,
@@ -45,5 +47,25 @@ describe('kiosk home page', () => {
 
 		expect(body).not.toContain('kiosk-test-print-button');
 		expect(body).toContain('kiosk-device-info-button');
+	});
+
+	it('renders the QR entry as showing instead of printing when the machine has no printer', () => {
+		const { body } = render(Page, {
+			props: {
+				params: {},
+				data: {
+					queryClient: new QueryClient(),
+					qrCheckInEnabled: true,
+					printer: 'none',
+					phoneCheckInEnabled: true,
+					thaidCheckInEnabled: false,
+					walkInRegistrationEnabled: false,
+					serviceOpen: true
+				}
+			}
+		});
+
+		expect(body).toContain('แสดง QR');
+		expect(body).not.toContain('พิมพ์ QR');
 	});
 });

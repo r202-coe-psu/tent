@@ -507,7 +507,7 @@
 		} catch {
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
-			printError = t.errors.qrPrepareFailed;
+			printError = noPrinter ? t.onScreen.qrPrepareFailed : t.errors.qrPrepareFailed;
 			return false;
 		}
 	}
@@ -534,7 +534,7 @@
 			if (error instanceof KioskPartialCheckInError) {
 				results = mergeCheckInResults(results, error.result.members);
 			}
-			printError = t.errors.labelDataFailed;
+			printError = noPrinter ? t.onScreen.labelDataFailed : t.errors.labelDataFailed;
 			return false;
 		}
 	}
@@ -586,7 +586,7 @@
 			try {
 				labels = toLabels(toPrint);
 			} catch {
-				printError = t.errors.labelRenderFailed;
+				printError = noPrinter ? t.onScreen.labelRenderFailed : t.errors.labelRenderFailed;
 				return;
 			}
 			printedCount = toPrint.length;
@@ -1192,7 +1192,9 @@
 							class="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 sm:flex-row sm:items-center kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
 							role="alert"
 						>
-							<p class="flex-1">{t.errors.printHint(printError)}</p>
+							<p class="flex-1">
+								{noPrinter ? t.onScreen.errorHint(printError) : t.errors.printHint(printError)}
+							</p>
 							{#if unprintedLabels.length > 0}
 								<Button
 									type="button"

@@ -4,6 +4,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import { resolve } from '$app/paths';
 	import { navigateToKioskHome } from '../application/kiosk-navigation';
+	import { KioskPrinterState } from '../application/kiosk-printer-state.svelte';
 	import type { KioskContextQuery } from '../domain/display-context';
 	import { KIOSK_REPRINT_PATH, KIOSK_VOLUNTEER_CARD_PATH } from '../domain/identity-method';
 	import KioskBackButton from './kiosk-back-button.svelte';
@@ -14,10 +15,15 @@
 
 	interface Props {
 		contextQuery: KioskContextQuery;
+		/** Optional override for tests; defaults to the machine's hardware printer state. */
+		onScreen?: boolean;
 	}
 
-	let { contextQuery }: Props = $props();
-	const t = $derived(getTranslation(KIOSK_PRINT_I18N, languageStore.current).chooser);
+	let { contextQuery, onScreen }: Props = $props();
+	const printerState = new KioskPrinterState();
+	const noPrinter = $derived(onScreen ?? printerState.hasNoPrinter);
+	const chooser = $derived(getTranslation(KIOSK_PRINT_I18N, languageStore.current).chooser);
+	const t = $derived(noPrinter ? { ...chooser, ...chooser.onScreen } : chooser);
 
 	interface PrintTarget {
 		id: 'evacuee' | 'volunteer';

@@ -131,4 +131,22 @@ describe('printVolunteerLabel', () => {
 
 		expect(mocks.loadKioskHardware).not.toHaveBeenCalled();
 	});
+
+	it("omits print wording when QR generation fails on a 'none' printer", async () => {
+		mocks.generateQrDataUrl.mockRejectedValue(new Error('qr'));
+
+		const thai = await printVolunteerLabel(volunteer, vi.fn(), 'th', 'none');
+		const english = await printVolunteerLabel(volunteer, vi.fn(), 'en', 'none');
+
+		expect(thai).toEqual({
+			kind: 'error',
+			message: 'สร้าง QR Code ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			labels: []
+		});
+		expect(english).toEqual({
+			kind: 'error',
+			message: 'Could not create the QR Code. Please try again.',
+			labels: []
+		});
+	});
 });

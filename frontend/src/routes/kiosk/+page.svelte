@@ -29,6 +29,7 @@
 	qrCheckInEnabled={data.qrCheckInEnabled}
 	reprintEnabled={data.phoneCheckInEnabled}
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
+	onScreen={data.printer === 'none'}
 />
 <KioskDeviceInfo />
 <!-- A new person is at the kiosk: Thai again and pick a language, with or without banners. -->

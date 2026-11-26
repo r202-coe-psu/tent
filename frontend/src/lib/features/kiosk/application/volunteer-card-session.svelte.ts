@@ -17,13 +17,22 @@ export interface VolunteerCardSessionDeps {
 
 const MESSAGES: Record<
 	LanguageCode,
-	Record<'notFound' | 'rateLimited' | 'methodDisabled' | 'printRenderFailed' | 'generic', string>
+	Record<
+		| 'notFound'
+		| 'rateLimited'
+		| 'methodDisabled'
+		| 'printRenderFailed'
+		| 'screenRenderFailed'
+		| 'generic',
+		string
+	>
 > = {
 	th: {
 		notFound: 'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่',
 		rateLimited: 'ลองผิดหลายครั้ง กรุณารอสักครู่หรือติดต่อเจ้าหน้าที่',
 		methodDisabled: 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่',
 		printRenderFailed: 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ',
+		screenRenderFailed: 'สร้าง QR Code ไม่สำเร็จ',
 		generic: 'ระบบไม่สามารถทำรายการได้ กรุณาลองอีกครั้ง'
 	},
 	en: {
@@ -31,6 +40,7 @@ const MESSAGES: Record<
 		rateLimited: 'Too many wrong tries. Please wait a moment or see staff',
 		methodDisabled: 'This option is turned off. Please see staff',
 		printRenderFailed: 'Could not create the QR code to print',
+		screenRenderFailed: 'Could not create the QR code',
 		generic: 'Something went wrong. Please try again'
 	}
 };
@@ -70,7 +80,8 @@ export class VolunteerCardSession {
 	 */
 	constructor(
 		private readonly deps: VolunteerCardSessionDeps,
-		private readonly language: () => LanguageCode = () => 'th'
+		private readonly language: () => LanguageCode = () => 'th',
+		private readonly noPrinter: () => boolean = () => false
 	) {}
 
 	get phone(): string {
@@ -162,7 +173,11 @@ export class VolunteerCardSession {
 			try {
 				outcome = await this.deps.print(this.volunteer);
 			} catch {
-				outcome = { kind: 'error', message: MESSAGES[this.language()].printRenderFailed };
+				const messages = MESSAGES[this.language()];
+				outcome = {
+					kind: 'error',
+					message: this.noPrinter() ? messages.screenRenderFailed : messages.printRenderFailed
+				};
 			}
 			if (generation !== this.generation) return;
 			if (outcome.kind === 'error') {

@@ -54,7 +54,10 @@ const th = {
 		confirm: 'ยืนยันและแสดง QR',
 		memberListHeading: 'เลือกสมาชิกที่ต้องการแสดง QR',
 		qrIssueFailed: (count: number) =>
-			`ออก QR ไม่สำเร็จ ${count} คน กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`
+			`ออก QR ไม่สำเร็จ ${count} คน กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`,
+		failedTitle: 'แสดง QR ไม่สำเร็จ',
+		failedBody: (error: string) => `${error} กดแสดง QR อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
+		failedRetry: 'แสดง QR อีกครั้ง'
 	},
 	memberList: {
 		heading: 'เลือกสมาชิกที่ต้องการพิมพ์ QR',
@@ -122,7 +125,10 @@ const en: typeof th = {
 		confirm: 'Confirm and show QR',
 		memberListHeading: 'Choose members to show a QR for',
 		qrIssueFailed: (count: number) =>
-			`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'}. Please try again or contact staff.`
+			`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'}. Please try again or contact staff.`,
+		failedTitle: 'Could not show the QR',
+		failedBody: (error: string) => `${error} Press show QR again or contact staff.`,
+		failedRetry: 'Show QR again'
 	},
 	memberList: {
 		heading: 'Choose members to print a QR for',

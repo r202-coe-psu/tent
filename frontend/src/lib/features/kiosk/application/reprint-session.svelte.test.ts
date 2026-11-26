@@ -558,6 +558,25 @@ describe('ReprintSession printing', () => {
 		expect(session.qrIssueFailedCount).toBe(1);
 	});
 
+	it('omits print wording from session errors when the kiosk has no printer', async () => {
+		const { deps } = setup({
+			print: vi.fn<ReprintSessionDeps['print']>().mockRejectedValue(new Error('boom'))
+		});
+		const session = new ReprintSession(
+			deps,
+			() => 'th',
+			() => true
+		);
+		await toVerify(session);
+		session.idLast4 = '1234';
+
+		await session.submitVerify();
+
+		expect(session.step).toBe('print_failed');
+		expect(session.error).toBe('สร้าง QR Code ไม่สำเร็จ');
+		expect(session.error).not.toContain('พิมพ์');
+	});
+
 	it.each([
 		['th', 'ออก QR ใหม่ไม่สำเร็จ ยังไม่ได้พิมพ์ กรุณาลองอีกครั้งหรือติดต่อเจ้าหน้าที่'],
 		['en', 'Could not issue a new QR, so nothing was printed. Please try again or contact staff.']

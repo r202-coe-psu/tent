@@ -30,6 +30,7 @@ describe('kiosk home route load', () => {
 
 		await expect(load({ fetch } as unknown as Parameters<typeof load>[0])).resolves.toEqual({
 			qrCheckInEnabled: true,
+			printer: 'cups',
 			phoneCheckInEnabled: enabled,
 			thaidCheckInEnabled: false,
 			walkInRegistrationEnabled: false,
@@ -51,5 +52,19 @@ describe('kiosk home route load', () => {
 		await expect(
 			load({ fetch: vi.fn() } as unknown as Parameters<typeof load>[0])
 		).resolves.toMatchObject({ qrCheckInEnabled: false });
+	});
+
+	it('returns the printer backend from the scanner client so the home screen can hide print wording', async () => {
+		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
+			phoneCheckInEnabled: true,
+			thaidCheckInEnabled: true,
+			walkInRegistrationEnabled: false,
+			serviceOpen: true
+		});
+		vi.mocked(fetchKioskHardware).mockResolvedValueOnce({ ...hardware(true), printer: 'none' });
+
+		await expect(
+			load({ fetch: vi.fn() } as unknown as Parameters<typeof load>[0])
+		).resolves.toMatchObject({ printer: 'none' });
 	});
 });

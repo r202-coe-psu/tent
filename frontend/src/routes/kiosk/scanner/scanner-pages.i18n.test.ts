@@ -119,6 +119,7 @@ describe('kiosk scanner pages language', () => {
 				data: {
 					queryClient: new QueryClient(),
 					qrCheckInEnabled: true,
+					printer: 'cups',
 					phoneCheckInEnabled: false,
 					thaidCheckInEnabled: true,
 					walkInRegistrationEnabled: false,

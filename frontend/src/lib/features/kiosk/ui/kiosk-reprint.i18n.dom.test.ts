@@ -475,6 +475,19 @@ describe('KioskReprint on a kiosk without a printer', () => {
 			).toContain('ออก QR ไม่สำเร็จ 1 คน')
 		);
 	});
+
+	it('words the failed screen without printing wording when rendering fails on a no-printer kiosk', async () => {
+		const print = vi
+			.fn<ReprintSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'error', message: 'สร้าง QR Code ไม่สำเร็จ', labels: [] });
+		await toVerify(reprintResult, print, THAI_WORDS);
+
+		buttonWith('ยืนยันและแสดง QR').click();
+		await vi.waitFor(() => expect(screenText()).toContain('แสดง QR ไม่สำเร็จ'));
+
+		expect(screenText()).not.toContain('พิมพ์');
+		expect(buttonWith('แสดง QR อีกครั้ง')).toBeDefined();
+	});
 });
 
 describe('KioskReprint on a kiosk with a printer', () => {

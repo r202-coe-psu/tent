@@ -184,6 +184,17 @@ describe('KioskVolunteerCard wording on a kiosk without a printer', () => {
 
 		await vi.waitFor(() => expect(bodyText()).toContain('แสดง QR จิตอาสา'));
 		expect(bodyText()).not.toContain('พิมพ์');
+		expect(document.querySelector('a')?.getAttribute('aria-label')).toBe('กลับไปเลือกวิธีแสดง QR');
+	});
+
+	it('words the failed screen without printing wording when rendering fails on a no-printer kiosk', async () => {
+		mountCard({ kind: 'error', message: 'สร้าง QR Code ไม่สำเร็จ', labels: [] });
+		await vi.waitFor(() => expect(bodyText()).toContain('แสดง QR จิตอาสา'));
+		await printVolunteer('แสดง QR');
+		await vi.waitFor(() => expect(bodyText()).toContain('แสดง QR ไม่สำเร็จ'));
+
+		expect(bodyText()).not.toContain('พิมพ์');
+		expect(buttonByText('ลองแสดง QR อีกครั้ง')).toBeDefined();
 	});
 
 	it('words the confirm button as showing the QR, not printing it', async () => {

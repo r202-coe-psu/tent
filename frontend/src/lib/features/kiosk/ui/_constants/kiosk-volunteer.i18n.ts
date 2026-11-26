@@ -29,7 +29,11 @@ const th = {
 	onScreen: {
 		pageTitle: 'แสดง QR จิตอาสา — SmartShelter Kiosk',
 		heading: 'แสดง QR จิตอาสา',
-		show: 'แสดง QR'
+		backToChooser: 'กลับไปเลือกวิธีแสดง QR',
+		show: 'แสดง QR',
+		failedTitle: 'แสดง QR ไม่สำเร็จ',
+		failedBody: (error: string) => `${error} กดแสดง QR อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
+		failedRetry: 'ลองแสดง QR อีกครั้ง'
 	}
 };
 
@@ -62,7 +66,11 @@ const en: typeof th = {
 	onScreen: {
 		pageTitle: 'Show volunteer QR — SmartShelter Kiosk',
 		heading: 'Show volunteer QR',
-		show: 'Show QR'
+		backToChooser: 'Back to the QR options',
+		show: 'Show QR',
+		failedTitle: 'Could not show the QR',
+		failedBody: (error) => `${error} Press show QR to try again, or see staff.`,
+		failedRetry: 'Try showing QR again'
 	}
 };
 

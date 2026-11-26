@@ -6,5 +6,5 @@ export const load: PageLoad = async ({ fetch }) => {
 		fetchKioskConfig(fetch),
 		fetchKioskHardware(fetch)
 	]);
-	return { ...config, qrCheckInEnabled: hardware.qrCheckInEnabled };
+	return { ...config, qrCheckInEnabled: hardware.qrCheckInEnabled, printer: hardware.printer };
 };

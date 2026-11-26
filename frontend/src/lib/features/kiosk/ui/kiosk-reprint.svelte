@@ -109,7 +109,8 @@
 					onClosed: () => goToKioskClosed(contextQuery),
 					...deps
 				},
-				() => languageStore.current
+				() => languageStore.current,
+				() => printerState.hasNoPrinter
 			)
 	);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
@@ -200,17 +201,20 @@
 		<KioskNoticePanel
 			tone="warning"
 			icon={CircleAlert}
-			title={t.failed.title}
+			title={noPrinter ? t.onScreen.failedTitle : t.failed.title}
 			headingTag="h1"
 			role="alert"
 		>
-			<p>{t.failed.body(session.error)}</p>
+			<p>{noPrinter ? t.onScreen.failedBody(session.error) : t.failed.body(session.error)}</p>
 			{#snippet actions()}
 				<Button
 					type="button"
 					onclick={() => void session.retryPrint()}
 					disabled={session.busy}
-					class={KIOSK_NOTICE_PRIMARY_ACTION}><Printer aria-hidden="true" />{t.failed.retry}</Button
+					class={KIOSK_NOTICE_PRIMARY_ACTION}
+					>{#if noPrinter}<QrCode aria-hidden="true" />{t.onScreen.failedRetry}{:else}<Printer
+							aria-hidden="true"
+						/>{t.failed.retry}{/if}</Button
 				>
 				{#if session.unprintedLabels.length > 0}
 					<Button

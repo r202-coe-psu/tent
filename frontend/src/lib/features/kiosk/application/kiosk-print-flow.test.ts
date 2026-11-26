@@ -90,4 +90,32 @@ describe('runKioskPrintFlow', () => {
 		expect(printLabels).not.toHaveBeenCalled();
 		expect(fallbackPrint).not.toHaveBeenCalled();
 	});
+
+	it("omits print wording from the render failure message on a 'none' printer", async () => {
+		const thai = await runKioskPrintFlow({
+			renderLabels: () => Promise.reject(new Error('canvas')),
+			printLabels: vi.fn(),
+			fallbackPrint: vi.fn(),
+			printer: 'none',
+			language: 'th'
+		});
+		const english = await runKioskPrintFlow({
+			renderLabels: () => Promise.reject(new Error('canvas')),
+			printLabels: vi.fn(),
+			fallbackPrint: vi.fn(),
+			printer: 'none',
+			language: 'en'
+		});
+
+		expect(thai).toEqual({
+			kind: 'error',
+			message: 'สร้าง QR Code ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			labels: []
+		});
+		expect(english).toEqual({
+			kind: 'error',
+			message: 'Could not create the QR Code. Please try again.',
+			labels: []
+		});
+	});
 });

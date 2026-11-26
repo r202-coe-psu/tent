@@ -182,7 +182,11 @@ const th = {
 			rowReprintable: 'รายงานตัวแล้ว · แสดง QR ใหม่ได้ (QR ใบเก่าจะใช้ไม่ได้)',
 			rowQrIssueFailed: 'ออก QR ไม่สำเร็จ กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่',
 			qrIssueFailed: (count: number) =>
-				`ออก QR ไม่สำเร็จ ${count} คน กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`
+				`ออก QR ไม่สำเร็จ ${count} คน กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`,
+			qrPrepareFailed: 'สร้าง QR ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			labelDataFailed: 'โหลดข้อมูล QR ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			labelRenderFailed: 'สร้าง QR ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			errorHint: (message: string) => `${message} กดแสดง QR อีกครั้งได้โดยไม่บันทึก check-in ซ้ำ`
 		}
 	}
 };
@@ -368,7 +372,12 @@ const en: typeof th = {
 			rowReprintable: 'Already checked in · a new QR can be shown (the old QR will stop working)',
 			rowQrIssueFailed: 'Could not issue a QR. Please try again or contact staff.',
 			qrIssueFailed: (count: number) =>
-				`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'}. Please try again or contact staff.`
+				`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'}. Please try again or contact staff.`,
+			qrPrepareFailed: 'Could not prepare the QR. Please try again.',
+			labelDataFailed: 'Could not load the QR data. Please try again.',
+			labelRenderFailed: 'Could not create the QR. Please try again.',
+			errorHint: (message: string) =>
+				`${message} You can press show QR again without saving the check-in again.`
 		}
 	}
 };

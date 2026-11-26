@@ -53,4 +53,24 @@ describe('KioskPrintQrChooser language', () => {
 		expect(body).toMatch(/<a[^>]*href="\/kiosk\/volunteer\?shelter_code=SH001"[^>]*>/);
 		expect(body).not.toMatch(THAI);
 	});
+
+	it('words the chooser as showing the QR without mentioning printing when the kiosk has no printer', () => {
+		const thai = render(KioskPrintQrChooser, {
+			props: { contextQuery: '?shelter_code=SH001', onScreen: true }
+		}).body;
+		expect(thai).toMatch(/<h1[^>]*>\s*แสดง QR\s*<\/h1>/);
+		expect(thai).toContain('เลือกประเภทผู้ที่ต้องการแสดง QR');
+		expect(thai).toContain('แสดงบัตร QR จิตอาสาด้วยเบอร์โทร');
+		expect(thai).not.toContain('พิมพ์');
+
+		languageStore.setLanguage('en');
+		const english = render(KioskPrintQrChooser, {
+			props: { contextQuery: '?shelter_code=SH001', onScreen: true }
+		}).body;
+		expect(english).toMatch(/<h1[^>]*>\s*Show QR\s*<\/h1>/);
+		expect(english).toContain('aria-label="Who to show a QR for"');
+		expect(english).toContain('Show a volunteer QR card with a phone number');
+		expect(english.replace(/<[^>]+>/g, ' ')).not.toMatch(/print/i);
+		expect(english).not.toMatch(THAI);
+	});
 });

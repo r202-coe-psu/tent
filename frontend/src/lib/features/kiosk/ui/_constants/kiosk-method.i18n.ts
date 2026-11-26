@@ -23,6 +23,11 @@ const th = {
 	reprint: {
 		title: 'พิมพ์ QR',
 		description: 'กรอกเบอร์โทรที่ลงทะเบียนไว้ เพื่อพิมพ์ QR Code'
+	},
+	/** The same entry for a kiosk without a printer: the QR is shown on screen, nothing is printed. */
+	reprintOnScreen: {
+		title: 'แสดง QR',
+		description: 'กรอกเบอร์โทรที่ลงทะเบียนไว้ เพื่อแสดง QR Code'
 	}
 };
 
@@ -50,6 +55,10 @@ const en: typeof th = {
 	reprint: {
 		title: 'Print QR',
 		description: 'Enter your registered phone number to print your QR Code'
+	},
+	reprintOnScreen: {
+		title: 'Show QR',
+		description: 'Enter your registered phone number to show your QR Code'
 	}
 };
 

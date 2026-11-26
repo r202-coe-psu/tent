@@ -188,6 +188,25 @@ describe('VolunteerCardSession', () => {
 		expect(session.step).toBe('print_failed');
 	});
 
+	it('omits print wording from thrown print errors when the kiosk has no printer', async () => {
+		const { deps } = setup({
+			print: vi.fn<VolunteerCardSessionDeps['print']>().mockRejectedValue(new Error('boom'))
+		});
+		const session = new VolunteerCardSession(
+			deps,
+			() => 'th',
+			() => true
+		);
+		session.phone = '0812345678';
+		await session.submitPhone();
+
+		await session.confirmPrint();
+
+		expect(session.step).toBe('print_failed');
+		expect(session.error).toBe('สร้าง QR Code ไม่สำเร็จ');
+		expect(session.error).not.toContain('พิมพ์');
+	});
+
 	it('goes back from confirm to the phone step and forgets the volunteer', async () => {
 		const { session } = setup();
 		session.phone = '0812345678';

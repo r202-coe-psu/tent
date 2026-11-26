@@ -34,9 +34,10 @@ export async function printVolunteerLabel(
 		const qr = await prepareKioskQrImage(volunteer.qr_payload);
 		sheet = { qrSrc: qr.src, qrSizeMm: qr.sizeMm, ...volunteerLabelIdentity(volunteer) };
 	} catch {
+		const t = KIOSK_PRINT_FLOW_I18N[language ?? 'th'];
 		return {
 			kind: 'error',
-			message: KIOSK_PRINT_FLOW_I18N[language ?? 'th'].renderFailed,
+			message: printer === 'none' ? t.screenRenderFailed : t.renderFailed,
 			labels: []
 		};
 	}

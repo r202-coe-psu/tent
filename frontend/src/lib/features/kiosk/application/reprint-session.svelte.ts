@@ -100,11 +100,13 @@ export class ReprintSession {
 	 */
 	constructor(
 		private readonly deps: ReprintSessionDeps,
-		private readonly language: () => LanguageCode = () => 'th'
+		private readonly language: () => LanguageCode = () => 'th',
+		private readonly noPrinter: () => boolean = () => false
 	) {}
 
 	private get messages(): ReprintSessionMessages {
-		return REPRINT_SESSION_I18N[this.language()];
+		const base = REPRINT_SESSION_I18N[this.language()];
+		return this.noPrinter() ? { ...base, ...base.onScreen } : base;
 	}
 
 	get phone(): string {

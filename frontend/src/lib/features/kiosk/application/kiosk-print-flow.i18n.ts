@@ -5,6 +5,7 @@ const th = {
 	notReady: 'เครื่องพิมพ์ไม่พร้อม กรุณาติดต่อเจ้าหน้าที่',
 	disabled: 'ตู้นี้ไม่มีเครื่องพิมพ์',
 	renderFailed: 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง',
+	screenRenderFailed: 'สร้าง QR Code ไม่สำเร็จ กรุณาลองอีกครั้ง',
 	qrRenderFailed: 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ',
 	printedSoFar: (message: string, printed: number) => `${message} (พิมพ์ออกแล้ว ${printed} ดวง)`
 };
@@ -15,6 +16,7 @@ const en: typeof th = {
 	notReady: 'The printer is not ready. Please ask a staff member.',
 	disabled: 'This kiosk has no printer.',
 	renderFailed: 'Could not create the label to print. Please try again.',
+	screenRenderFailed: 'Could not create the QR Code. Please try again.',
 	qrRenderFailed: 'Could not create the QR Code to print',
 	printedSoFar: (message: string, printed: number) => `${message} (${printed} printed)`
 };

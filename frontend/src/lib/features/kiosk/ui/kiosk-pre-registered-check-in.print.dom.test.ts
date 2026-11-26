@@ -461,6 +461,21 @@ describe('KioskPreRegisteredCheckIn on a kiosk without a printer', () => {
 			document.querySelector('[data-testid="kiosk-label-screen"] [role="status"]')?.textContent
 		).toContain('ออก QR ไม่สำเร็จ 1 คน');
 	});
+
+	it('words the error alert without printing wording when showing the QR fails on a no-printer kiosk', async () => {
+		vi.mocked(printKioskQrLabels).mockResolvedValue({
+			kind: 'error',
+			message: 'สร้าง QR Code ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			labels: []
+		});
+		await confirmCheckIn();
+		buttonWith('แสดง QR Code').click();
+		await vi.waitFor(() =>
+			expect(screenText()).toContain('กดแสดง QR อีกครั้งได้โดยไม่บันทึก check-in ซ้ำ')
+		);
+
+		expect(screenText()).not.toContain('พิมพ์');
+	});
 });
 
 describe('KioskPreRegisteredCheckIn on a kiosk with a printer', () => {
