@@ -9,6 +9,7 @@ import pytest
 
 from worker.audit_diff import (
     AuditDiffConfig,
+    PreviousRevReadError,
     audit_diff,
     audit_event_id,
     build_audit_diff_event,
@@ -353,12 +354,25 @@ async def test_unreadable_previous_rev_sets_changes_unknown():
     assert "changes" not in event
 
 
-async def test_previous_rev_read_error_sets_changes_unknown():
-    couch = AsyncMock()
-    couch.get_doc_rev = AsyncMock(side_effect=httpx.ConnectError("down"))
+async def test_previous_rev_read_error_retries_transient_and_marks_4xx_unknown(
+    enabled,
+):
+    transient = AsyncMock()
+    transient.get_doc_rev = AsyncMock(side_effect=httpx.ConnectError("down"))
 
-    event = await _build(couch, "catalog", _change(_item()))
+    with pytest.raises(PreviousRevReadError):
+        await _build(transient, "catalog", _change(_item()))
 
+    assert (
+        await audit_diff(transient, "catalog", _change(_item()), now=NOW)
+        is AuditCopy.RETRY
+    )
+    transient.put_doc.assert_not_awaited()
+
+    permanent = AsyncMock()
+    permanent.get_doc_rev = AsyncMock(side_effect=_http_error(400))
+
+    event = await _build(permanent, "catalog", _change(_item()))
     assert event is not None
     assert event["changes_unknown"] is True
 
@@ -379,6 +393,7 @@ async def test_missing_revision_history_sets_changes_unknown():
         ("kiosk:dev-01", {"name": "kiosk:dev-01", "kind": "system"}),
         ("system:seed", {"name": "system:seed", "kind": "system"}),
         (PUBLIC_WRITER, {"name": "public", "kind": "system"}),
+        ("public", {"name": "public", "kind": "system"}),
         ("staff.a", {"name": "staff.a", "kind": "user"}),
         (None, {"name": "unknown", "kind": "unknown"}),
         ("", {"name": "unknown", "kind": "unknown"}),

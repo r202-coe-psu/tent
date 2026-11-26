@@ -70,7 +70,7 @@
 				: recipeQuery.data
 	);
 	const history = $derived(
-		mode === 'edit' && Boolean(id) && canAccessManagerPages(roles, getShelterCode())
+		mode === 'edit' && Boolean(id) && canAccessManagerPages(roles, shelterCode ?? null)
 			? catalogHistoryScope(historyDoc, { isSystemAdmin: isSystemAdmin(roles), shelterCode })
 			: ({ visible: false } as const)
 	);

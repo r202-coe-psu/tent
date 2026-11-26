@@ -89,6 +89,7 @@ IGNORED_FIELDS: frozenset[str] = frozenset(
         "created_by",
         "updated_by",
         "password",
+        "password_sha",
         "password_scheme",
         "derived_key",
         "salt",
@@ -219,7 +220,7 @@ def resolve_actor(doc: dict[str, Any], *, public_writer: str) -> dict[str, str]:
         return {"name": "unknown", "kind": "unknown"}
     if name == WORKER_ACTOR:
         return {"name": name, "kind": "worker"}
-    if public_writer and name == public_writer:
+    if name == PUBLIC_ACTOR or (public_writer and name == public_writer):
         return {"name": PUBLIC_ACTOR, "kind": "system"}
     if name.startswith(("kiosk:", "system:")):
         return {"name": name, "kind": "system"}
@@ -261,6 +262,10 @@ def _rev_number(rev: str) -> int:
     return int(head) if head.isdigit() else 0
 
 
+class PreviousRevReadError(RuntimeError):
+    """Raised on a transient error reading the previous revision."""
+
+
 async def read_previous_rev(
     couch: Any, database: str, doc_id: str, rev: str
 ) -> dict[str, Any] | None:
@@ -273,6 +278,39 @@ async def read_previous_rev(
             return None
         previous = f"{start - 1}-{ids[1]}"
         return await couch.get_doc_rev(database, doc_id, previous)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if 400 <= status < 500 and status not in RETRYABLE_STATUSES:
+            logger.warning(
+                "Could not read the previous revision of %s/%s at %s (HTTP %s)",
+                database,
+                doc_id,
+                rev,
+                status,
+                exc_info=True,
+            )
+            return None
+        logger.warning(
+            "Transient error reading the previous revision of %s/%s at %s",
+            database,
+            doc_id,
+            rev,
+            exc_info=True,
+        )
+        raise PreviousRevReadError(
+            f"Transient error reading previous revision of {database}/{doc_id} at {rev}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "Network error reading the previous revision of %s/%s at %s",
+            database,
+            doc_id,
+            rev,
+            exc_info=True,
+        )
+        raise PreviousRevReadError(
+            f"Network error reading previous revision of {database}/{doc_id} at {rev}"
+        ) from exc
     except Exception:
         logger.warning(
             "Could not read the previous revision of %s/%s at %s",
@@ -385,6 +423,8 @@ async def audit_diff(
             public_writer=config.public_writer,
             now=now or datetime.now(UTC),
         )
+    except PreviousRevReadError:
+        return AuditCopy.RETRY
     except Exception:
         logger.exception(
             "Failed to build audit event for %s/%s", database, change.get("id")
