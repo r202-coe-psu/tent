@@ -37,39 +37,55 @@ AUDITED_TYPES: frozenset[str] = frozenset(
     }
 )
 
-VALUE_ALLOWLIST: dict[str, frozenset[str]] = {
-    "item_category": frozenset({"name", "default_class", "is_default", "deactivated"}),
-    "item_master": frozenset(
+# Every changed field of an audited type is recorded with its before -> after values, except
+# the ones below, which keep only the field name ("changed"): personal data and PDPA s.26
+# sensitive data (health, disability, religion), per the audit/privacy spec. `audit_log` is
+# append-only, so a value that lands there can never be removed.
+ALL_FIELDS = "*"
+VALUE_DENYLIST: dict[str, frozenset[str]] = {
+    "medical": frozenset({ALL_FIELDS}),
+    "evacuee": frozenset(
         {
-            "name",
-            "sku",
-            "category",
-            "base_unit",
-            "distribution_type",
-            "type_class",
-            "qty_per_person",
-            "returnable",
-            "shelf_life_days",
-            "storage_type",
-            "deactivated",
-            "merged_into",
+            "first_name",
+            "last_name",
+            "nickname",
+            "phone",
+            "birth_year",
+            "person_id",
+            "photo",
+            "card_snapshot",
+            "emergency_contact",
+            "religion",
+            "religion_other",
+            "vulnerable_groups",
+            "disability_other_detail",
+            "special_needs",
+            "consent",
         }
     ),
-    "recipe": frozenset(
-        {"label", "standard_portions", "standard_duration_hours", "deactivated"}
+    "household": frozenset(
+        {
+            "label",
+            "notes",
+            "vehicles",
+            "residence_landmark",
+            "address_no",
+            "village_no",
+            "subdistrict",
+            "district",
+            "province",
+            "postal_code",
+            "dorm_name",
+            "dorm_building",
+            "dorm_floor",
+            "dorm_room",
+        }
     ),
-    "unit_of_measure": frozenset(
-        {"code", "label_th", "label_en", "dimension", "sort_order", "deactivated"}
-    ),
-    "food_sphere_standard": frozenset(),
-    "requirement_group": frozenset(),
-    "replenishment_policy": frozenset(),
-    "evacuee": frozenset(
-        {"household_id", "preferred_zone", "registered_via", "anonymized"}
-    ),
-    "household": frozenset({"status", "head_evacuee_id", "housing_type"}),
-    "medical": frozenset(),
 }
+
+# A value bigger than this (as JSON) is recorded as "changed" only, so one edit of a large
+# nested doc cannot bloat the append-only log.
+MAX_VALUE_JSON_CHARS = 2000
 
 LABEL_FIELDS: dict[str, str] = {
     "item_category": "name",
@@ -164,10 +180,17 @@ def canonical(value: Any) -> str:
     return json.dumps(value)
 
 
+def _value_hidden(entity_type: str, field: str) -> bool:
+    denied = VALUE_DENYLIST.get(entity_type, frozenset())
+    return ALL_FIELDS in denied or field in denied
+
+
 def _is_loggable(value: Any) -> bool:
-    if value is None or isinstance(value, str | int | float | bool):
-        return True
-    return isinstance(value, list) and all(isinstance(v, str) for v in value)
+    try:
+        encoded = json.dumps(value, ensure_ascii=False, allow_nan=False)
+    except TypeError, ValueError:
+        return False
+    return len(encoded) <= MAX_VALUE_JSON_CHARS
 
 
 def compute_changes(
@@ -177,7 +200,6 @@ def compute_changes(
 ) -> list[dict[str, Any]]:
     prev = before or {}
     nxt = after or {}
-    allowlist = VALUE_ALLOWLIST.get(entity_type, frozenset())
     fields = sorted((set(prev) | set(nxt)) - IGNORED_FIELDS)
     changes: list[dict[str, Any]] = []
     for field in fields:
@@ -185,7 +207,11 @@ def compute_changes(
         new = nxt.get(field)
         if canonical(old) == canonical(new):
             continue
-        if field in allowlist and _is_loggable(old) and _is_loggable(new):
+        if (
+            not _value_hidden(entity_type, field)
+            and _is_loggable(old)
+            and _is_loggable(new)
+        ):
             changes.append({"field": field, "from": old, "to": new})
         else:
             changes.append({"field": field})

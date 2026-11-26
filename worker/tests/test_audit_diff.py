@@ -8,6 +8,8 @@ import httpx
 import pytest
 
 from worker.audit_diff import (
+    MAX_VALUE_JSON_CHARS,
+    VALUE_DENYLIST,
     AuditDiffConfig,
     PreviousRevReadError,
     audit_diff,
@@ -298,10 +300,61 @@ def test_medical_is_always_field_only():
     ) == [{"field": "condition"}]
 
 
-def test_non_scalar_allowlisted_value_is_field_only():
-    assert compute_changes("item_master", {"name": "a"}, {"name": {"th": "b"}}) == [
-        {"field": "name"}
+def test_every_field_keeps_its_values_including_nested_ones():
+    # Review of #1456: fields outside the old allowlist showed only "changed".
+    before = {"name": "a", "note": "x", "items": [{"item_id": "rice", "qty": 1}]}
+    after = {"name": {"th": "b"}, "note": "y", "items": [{"item_id": "rice", "qty": 2}]}
+
+    assert compute_changes("requirement_group", before, after) == [
+        {"field": "items", "from": before["items"], "to": after["items"]},
+        {"field": "name", "from": "a", "to": {"th": "b"}},
+        {"field": "note", "from": "x", "to": "y"},
     ]
+
+
+def test_evacuee_non_personal_fields_keep_values():
+    assert compute_changes(
+        "evacuee",
+        {"gender": "male", "current_stay": {"status": "arrived", "zone": "A"}},
+        {"gender": "female", "current_stay": {"status": "arrived", "zone": "B"}},
+    ) == [
+        {
+            "field": "current_stay",
+            "from": {"status": "arrived", "zone": "A"},
+            "to": {"status": "arrived", "zone": "B"},
+        },
+        {"field": "gender", "from": "male", "to": "female"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("entity_type", "field"),
+    [
+        *[("evacuee", f) for f in sorted(VALUE_DENYLIST["evacuee"])],
+        *[("household", f) for f in sorted(VALUE_DENYLIST["household"])],
+        ("medical", "allergies"),
+        ("medical", "blood_group"),
+    ],
+)
+def test_personal_and_sensitive_fields_stay_field_only(entity_type, field):
+    assert compute_changes(entity_type, {field: "before"}, {field: "after"}) == [
+        {"field": field}
+    ]
+
+
+def test_household_non_personal_fields_keep_values():
+    assert compute_changes(
+        "household",
+        {"pets": [], "address_no": "1"},
+        {"pets": ["dog"], "address_no": "2"},
+    ) == [{"field": "address_no"}, {"field": "pets", "from": [], "to": ["dog"]}]
+
+
+def test_an_oversized_value_is_field_only():
+    big = "x" * (MAX_VALUE_JSON_CHARS + 1)
+    assert compute_changes(
+        "item_master", {"description": "a"}, {"description": big}
+    ) == [{"field": "description"}]
 
 
 def test_string_array_value_is_kept():
