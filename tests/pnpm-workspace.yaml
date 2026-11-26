@@ -1,0 +1,4 @@
+# Own workspace root, like frontend/: keeps tests/ out of the repo-root workspace
+# and gives it its own pnpm-lock.yaml.
+packages:
+  - '.'

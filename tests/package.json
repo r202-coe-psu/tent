@@ -1,0 +1,19 @@
+{
+	"name": "tent-tests",
+	"private": true,
+	"type": "module",
+	"description": "Cross-plane tests that run against a live stack (no browser): CouchDB permissions first.",
+	"scripts": {
+		"test": "playwright test",
+		"test:api": "playwright test --project=api",
+		"format": "prettier --write .",
+		"lint": "prettier --check . && tsc --noEmit"
+	},
+	"packageManager": "pnpm@12.6.0",
+	"devDependencies": {
+		"@playwright/test": "~1.64.0",
+		"@types/node": "^25.9.2",
+		"prettier": "^3.8.3",
+		"typescript": "^6.0.3"
+	}
+}
