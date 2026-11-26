@@ -35,6 +35,7 @@ export type PortalDepartmentId =
 	| 'management'
 	| 'pr'
 	| 'onedata'
+	| 'dailysop'
 	| 'central';
 
 export type PortalIconKey =
@@ -111,6 +112,11 @@ export type PortalMenuItem = {
 	group?: 'stations' | 'tools';
 	/** Shelter feature flag this item depends on. */
 	requires?: 'medicalScreening';
+	/**
+	 * Visible to every authenticated user with a role, whatever their capabilities (the daily
+	 * assessment page has no role guard — #845, PO decision 2026-11-22).
+	 */
+	everyone?: true;
 };
 
 export type PortalDepartment = {
@@ -515,6 +521,28 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				roles: []
 			}
 		]
+	},
+	{
+		// #845: the daily operations assessment, a department of its own so it is a large tab like
+		// the others (replaces the loose button above the menu). Every user with a role sees it;
+		// declared last so it is the last tab for everyone (SA/SM priority departments still lead).
+		id: 'dailysop',
+		label: 'การประเมินประจำวัน',
+		desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
+		domain: 'admin',
+		icon: 'clipboard-list',
+		items: [
+			{
+				id: 'daily-sop',
+				label: 'การประเมินประจำวัน',
+				desc: 'แบบประเมินการดำเนินงานประจำวันของศูนย์',
+				icon: 'clipboard-list',
+				href: '/back-office/dailysop',
+				scope: 'shelter',
+				roles: [],
+				everyone: true
+			}
+		]
 	}
 ];
 
@@ -576,6 +604,7 @@ export function isPortalItemVisible(
 	selectedShelterCode: string | null | undefined
 ): boolean {
 	if (roles.length === 0) return false;
+	if (item.everyone) return true;
 	if (isSystemAdmin(roles)) return true;
 	if (item.scope === 'system') return false;
 	if (isShelterManager(roles, selectedShelterCode)) return true;
