@@ -8,6 +8,10 @@ import Harness from './__fixtures__/shelter-form-page-harness.svelte';
 
 // The real map fetches its stylesheet and needs WebGL, neither of which exists here.
 vi.mock('./location-map-picker.svelte', () => import('./__fixtures__/empty-component.svelte'));
+vi.mock('$lib/features/audit-log', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/audit-log')>()),
+	EntityHistory: (await import('./__fixtures__/empty-component.svelte')).default
+}));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('$app/forms', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$app/forms')>()),
@@ -25,8 +29,13 @@ vi.mock('../data/shelters.remote', () => ({
 	SHELTER_REGISTRY_DB: 'registry',
 	sheltersRepository: () => ({ getShelter: async () => served })
 }));
+vi.mock('../data/shelters.api', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../data/shelters.api')>()),
+	getShelter: async () => servedActors
+}));
 
 const CODE = 'SH001';
+let servedActors: Partial<ShelterSummary> = {};
 const doc = (over: Partial<ShelterSummary> = {}) =>
 	({
 		code: CODE,
@@ -73,6 +82,12 @@ async function type(value: string) {
 
 beforeEach(async () => {
 	served = doc();
+	servedActors = {
+		created_at: '2026-11-12T07:30:00.000Z',
+		updated_at: '2026-11-14T02:10:00.000Z',
+		created_by_name: 'สมชาย ใจดี',
+		updated_by_name: 'suda.p'
+	};
 	client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	instance = mount(Harness, { target: document.body, props: { client, code: CODE } });
 	await settle();
@@ -111,5 +126,65 @@ describe('ShelterFormPage — the stored doc changes while the form is open', ()
 		await settle();
 		expect(nameInput().value).toBe('ศูนย์ใหม่');
 		expect(notice()).toBeNull();
+	});
+});
+
+describe('ShelterFormPage — creator and last editor (CR-259 FR-12/FR-13)', () => {
+	const actorsLine = () => document.body.querySelector('[data-testid="shelter-actors-line"]');
+
+	it('shows who created and who last edited the shelter', () => {
+		expect(actorsLine()?.textContent).toContain('สร้างโดย สมชาย ใจดี');
+		expect(actorsLine()?.textContent).toContain('แก้ไขล่าสุดโดย suda.p');
+	});
+
+	it('says unknown for a shelter saved before actors were recorded', async () => {
+		servedActors = {
+			created_at: '2026-11-12T07:30:00.000Z',
+			updated_at: '2026-11-12T07:30:00.000Z'
+		};
+		await client.invalidateQueries({ queryKey: sheltersKeys.detail(CODE) });
+		await settle();
+		expect(actorsLine()?.textContent).toContain('สร้างโดย ไม่ทราบ (สร้างก่อนมีการบันทึก)');
+		expect(actorsLine()?.textContent).toContain('แก้ไขล่าสุดโดย ไม่ทราบ');
+	});
+});
+
+describe('ShelterFormPage — short name, operating agency and delivery note (schema_v 12)', () => {
+	const field = (name: string) =>
+		document.body.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
+
+	async function serve(over: Partial<ShelterSummary>) {
+		served = doc({ _rev: '2-b', ...over });
+		await client.invalidateQueries({ queryKey: sheltersKeys.detail(CODE) });
+		await settle();
+	}
+
+	it('loads the stored values into the form', async () => {
+		await serve({
+			name_short: 'รร.หาดใหญ่วิทยาลัย',
+			operating_org: 'เทศบาลนครหาดใหญ่',
+			delivery_note: 'รถบรรทุกเกิน 6 ล้อเข้าไม่ได้'
+		});
+		expect(field('name_short')?.value).toBe('รร.หาดใหญ่วิทยาลัย');
+		expect(field('operating_org')?.value).toBe('เทศบาลนครหาดใหญ่');
+		expect(field('delivery_note')?.value).toBe('รถบรรทุกเกิน 6 ล้อเข้าไม่ได้');
+	});
+
+	it('shows empty inputs for a shelter without the values', () => {
+		expect(field('name_short')?.value).toBe('');
+		expect(field('operating_org')?.value).toBe('');
+		expect(field('delivery_note')?.value).toBe('');
+	});
+
+	it('an external shelter keeps the short name and agency; the delivery note sits in the hidden risk section', async () => {
+		await serve({
+			is_external: true,
+			operation_status: 'unknown',
+			name_short: 'ศูนย์ภายนอก ก',
+			operating_org: 'อบจ.สงขลา'
+		});
+		expect(field('name_short')?.value).toBe('ศูนย์ภายนอก ก');
+		expect(field('operating_org')?.value).toBe('อบจ.สงขลา');
+		expect(field('delivery_note')).toBeNull();
 	});
 });

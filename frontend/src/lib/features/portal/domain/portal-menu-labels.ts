@@ -31,6 +31,10 @@ const departmentsEn: Record<PortalDepartment['id'], PortalText> = {
 		label: 'OneData Platform',
 		desc: 'Refer patients and request resources through OneData'
 	},
+	dailysop: {
+		label: 'Daily Assessment',
+		desc: 'Daily operations assessment of the shelter'
+	},
 	pr: { label: 'Public Relations', desc: 'News and announcements on the shelter kiosks' },
 	central: { label: 'Central', desc: 'For central system administrators only' }
 };
@@ -107,6 +111,7 @@ const itemsEn: Record<string, PortalText> = {
 		desc: 'Move to another shelter and track referrals'
 	},
 	'back-office': { label: 'Back Office', desc: 'Shelter settings and reports' },
+	'daily-sop': { label: 'Daily Assessment', desc: 'Daily operations assessment of the shelter' },
 	'onedata-m5': {
 		label: 'OneData Patient Referral (M5)',
 		desc: 'Send patients to a hospital for MOPH review'

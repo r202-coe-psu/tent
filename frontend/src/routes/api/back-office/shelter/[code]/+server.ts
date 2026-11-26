@@ -20,7 +20,10 @@ import {
 	validateSiteKindChange
 } from '$lib/features/shelters/server';
 import { readMasterDoc } from '$lib/server/master-data-server';
-import { findMasterByCode, migrate, nowIso, updateMaster } from '$lib/server/shelters.admin';
+import { findMasterByCode, migrate, updateMaster } from '$lib/server/shelters.admin';
+import { getDisplayNames } from '$lib/server/user-service';
+import { recordAuditedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { getShelterCloseStore } from '$lib/server/shelter-close-job-runtime';
 
 export const prerender = false;
@@ -36,6 +39,12 @@ export const GET: RequestHandler = async ({ request, params }) => {
 		if (!master) return error(404, { message: `Shelter "${code}" not found` });
 
 		const migrated = migrate(master);
+		const createdBy = migrated.created_by ?? null;
+		const updatedBy = migrated.updated_by ?? null;
+		const displayNames = await getDisplayNames(
+			[createdBy, updatedBy].filter((n): n is string => Boolean(n))
+		).catch(() => new Map<string, string>());
+		const displayName = (name: string | null) => (name ? (displayNames.get(name) ?? name) : null);
 		return json({
 			code: migrated.code,
 			_rev: migrated._rev,
@@ -45,6 +54,9 @@ export const GET: RequestHandler = async ({ request, params }) => {
 			operation_status: migrated.operation_status ?? 'standby',
 			is_external: migrated.is_external === true,
 			external_url: migrated.external_url ?? null,
+			name_short: migrated.name_short ?? null,
+			operating_org: migrated.operating_org ?? null,
+			delivery_note: migrated.delivery_note ?? null,
 			// External shelters may have no capacity; don't invent 0 (fails `positive` on re-save).
 			capacity: migrated.is_external ? migrated.capacity : (migrated.capacity ?? 0),
 			shelter_type: migrated.shelter_type ?? null,
@@ -75,7 +87,11 @@ export const GET: RequestHandler = async ({ request, params }) => {
 			parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY,
 			feature_flags: migrated.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS },
 			created_at: migrated.created_at ?? '',
-			updated_at: migrated.updated_at ?? ''
+			updated_at: migrated.updated_at ?? '',
+			created_by: createdBy,
+			updated_by: updatedBy,
+			created_by_name: displayName(createdBy),
+			updated_by_name: displayName(updatedBy)
 		});
 	} catch (e) {
 		return serviceOrHttpError(e);
@@ -148,7 +164,11 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 
 		// updateMaster re-reads the doc + retries 409s internally
 		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
-		const { rev: newRev } = await updateMaster(code, (current) => {
+		const {
+			rev: newRev,
+			before,
+			after
+		} = await updateMaster(code, caller.name, (current) => {
 			// Optimistic concurrency: re-checked against the fresh doc on every updateMaster retry.
 			if (rev !== undefined && current._rev !== rev) {
 				throw new ServiceError(
@@ -180,7 +200,7 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 				);
 				if (siteKindError) throw new ServiceError('VALIDATION', siteKindError);
 			}
-			const next: Record<string, unknown> = { ...patch, updated_at: nowIso() };
+			const next: Record<string, unknown> = { ...patch };
 			if (input.common_areas && !sentSubStorage) {
 				// Keep the points added elsewhere (e.g. via /storage-points) since the form loaded.
 				next.common_areas = {
@@ -191,6 +211,18 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 			return { patch: next as Partial<ShelterMaster> };
 		});
 
+		await recordAuditedWrite({
+			actor: caller.name,
+			event: AUDIT_EVENTS.shelterUpdated,
+			action: 'update',
+			entityType: 'shelter',
+			entityId: code,
+			label: after?.name ?? null,
+			shelterCode: code,
+			before: before,
+			after: after,
+			onlyWhenChanged: true
+		});
 		return json({ ok: true, code, rev: newRev });
 	} catch (e) {
 		// The guard's 403 / the close-block 400 keep their status (CR-219 FR-22).

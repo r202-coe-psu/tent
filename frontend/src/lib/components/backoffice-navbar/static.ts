@@ -38,6 +38,7 @@ import HandHeart from '@lucide/svelte/icons/hand-heart';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import ForkSpoon from '$lib/components/icons/fork-spoon.svelte';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import History from '@lucide/svelte/icons/history';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
@@ -199,6 +200,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: NotebookPen,
 				visibleTo: ({ roles, shelterCode }) => canAccessIncidents(roles, shelterCode)
 			},
+			{
+				label: 'บันทึกการใช้งาน (Audit Log)',
+				href: resolve('/back-office/audit-log'),
+				icon: History,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
+			},
 			{ label: 'รายงานความโปร่งใส', href: null, icon: FileCheck },
 			{ label: 'รายงานสรุปหลังเหตุการณ์', href: null, icon: FileText }
 		]
@@ -287,7 +294,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					{
 						label: 'พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
-						icon: Calculator
+						icon: Calculator,
+						visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
 					},
 					{ label: 'โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]

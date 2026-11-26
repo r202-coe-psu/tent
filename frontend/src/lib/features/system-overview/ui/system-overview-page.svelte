@@ -34,7 +34,13 @@
 	);
 
 	const summaryQuery = useOverviewSummary(() => filters);
-	const sitesQuery = useOverviewSites(() => filters);
+	const SITES_PAGE_SIZE = 20;
+	let sitesOffset = $state(0);
+	const sitesQuery = useOverviewSites(() => ({
+		...filters,
+		limit: SITES_PAGE_SIZE,
+		offset: sitesOffset
+	}));
 	const originQuery = useOverviewOrigin(() => filters);
 	const demographicsQuery = useOverviewDemographics(() => filters);
 
@@ -44,7 +50,14 @@
 </script>
 
 <StaffPageShell title={t.pageTitle} description={t.pageDescription}>
-	<OverviewFilterBar {filters} onChange={(next) => (filters = next)} showSearch={false} />
+	<OverviewFilterBar
+		{filters}
+		showSearch={false}
+		onChange={(next) => {
+			filters = next;
+			sitesOffset = 0; // any filter change restarts the site table on page 1 (#1502)
+		}}
+	/>
 
 	{#if isError}
 		<Alert variant="destructive">
@@ -60,11 +73,17 @@
 
 	<OverviewSitesSection
 		sites={sitesQuery.data?.sites}
+		total={sitesQuery.data?.total}
+		limit={SITES_PAGE_SIZE}
+		offset={sitesQuery.isPlaceholderData ? sitesOffset : (sitesQuery.data?.offset ?? sitesOffset)}
+		onOffsetChange={(next) => (sitesOffset = next)}
 		loading={sitesQuery.isPending}
+		stale={sitesQuery.isPlaceholderData}
 		movementFrom={filters.movement_from ?? defaultRange.from}
 		movementTo={filters.movement_to ?? defaultRange.to}
 		onMovementRangeChange={(next) => {
 			filters = { ...filters, ...next };
+			sitesOffset = 0;
 		}}
 	/>
 

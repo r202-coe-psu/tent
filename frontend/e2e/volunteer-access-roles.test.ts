@@ -82,7 +82,7 @@ const ROLE_ACCESS: RoleAccess[] = [
 		role: 'registration_staff',
 		portalDepartments: ['registration'],
 		allowed: ['/onsite/people', '/onsite/scan-check-in-out', '/back-office/evacuee-management'],
-		forbidden: ['/back-office/supply', '/back-office/kitchen']
+		forbidden: ['/back-office/supply', '/back-office/kitchen', '/back-office/sop-parameters']
 	},
 	{
 		role: 'triage_staff',
@@ -104,7 +104,7 @@ const ROLE_ACCESS: RoleAccess[] = [
 		role: 'kitchen_staff',
 		portalDepartments: ['kitchen'],
 		allowed: ['/back-office/kitchen', '/back-office/tickets/kitchen'],
-		forbidden: ['/back-office/supply']
+		forbidden: ['/back-office/supply', '/back-office/sop-parameters']
 	},
 	{
 		role: 'supply_coordinator',
@@ -116,7 +116,9 @@ const ROLE_ACCESS: RoleAccess[] = [
 		allowed: [
 			'/back-office/supply',
 			'/back-office/stock-donations',
-			'/back-office/tickets/kitchen'
+			'/back-office/tickets/kitchen',
+			// #845: the SOP parameters page opens for the warehouse side (read-only for SC, CR-235).
+			'/back-office/sop-parameters'
 		],
 		// M6 D2: supply_coordinator is not warehouse_staff for OneData M6.
 		forbidden: ['/back-office/kitchen', '/back-office/onedata/m6'],
@@ -131,7 +133,8 @@ const ROLE_ACCESS: RoleAccess[] = [
 			'/back-office/stock-donations',
 			'/back-office/distribution',
 			'/back-office/tickets/kitchen',
-			'/back-office/onedata/m6'
+			'/back-office/onedata/m6',
+			'/back-office/sop-parameters'
 		],
 		forbidden: ['/back-office/kitchen', '/back-office/onedata/m5']
 	},
@@ -141,13 +144,18 @@ const ROLE_ACCESS: RoleAccess[] = [
 		role: 'donation_staff',
 		portalDepartments: ['supply'],
 		allowed: ['/back-office/supply', '/back-office/stock-donations'],
-		forbidden: ['/back-office/distribution', '/back-office/tickets/kitchen', '/back-office/kitchen']
+		forbidden: [
+			'/back-office/distribution',
+			'/back-office/tickets/kitchen',
+			'/back-office/kitchen',
+			'/back-office/sop-parameters'
+		]
 	},
 	{
 		role: 'distribution_staff',
 		portalDepartments: ['supply'],
 		allowed: ['/onsite/distribution'],
-		forbidden: ['/back-office/supply', '/back-office/distribution']
+		forbidden: ['/back-office/supply', '/back-office/distribution', '/back-office/sop-parameters']
 	},
 	{
 		role: 'kiosk_staff',
@@ -210,12 +218,15 @@ const MANAGEMENT_PAGES = [
 	'/back-office/onedata/m5',
 	'/back-office/onedata/m6',
 	'/back-office/incidents',
+	'/back-office/audit-log',
 	'/back-office/shelters',
 	'/back-office/users',
 	'/back-office/kiosks',
 	'/back-office/kiosks/banners',
 	'/back-office/printers',
-	'/back-office/master-data'
+	'/back-office/master-data',
+	// #845: SA, SM, warehouse_staff and supply_coordinator
+	'/back-office/sop-parameters'
 ];
 
 /**
@@ -270,19 +281,23 @@ async function medicalScreeningEnabled(): Promise<boolean> {
 }
 
 async function portalDepartments(page: Page): Promise<string[]> {
-	return page
+	const ids = await page
 		.locator('h2[id^="portal-dept-"]')
 		.evaluateAll((els) => els.map((el) => el.id.replace('portal-dept-', '')));
+	// #845: the daily assessment tab is open to every role, so it tells roles apart by nothing.
+	return ids.filter((id) => id !== 'dailysop');
 }
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
 
-/** Back-office pages with no role guard yet (#845): every role sees them, so they prove nothing. */
-const UNGUARDED_PAGES = [
-	'/back-office/shelters/readiness',
-	'/back-office/dailysop',
-	'/back-office/sop-parameters'
-];
+/** Redirects to `<this>/edit/<active shelter>` once its page has mounted. */
+const SHELTERS_PAGE = '/back-office/shelters';
+
+/**
+ * Back-office pages left out of the sidebar comparison: `/dailysop` is open to every role by decision
+ * (#845) and `/shelters/readiness` has its own manager guard (#1181), so neither tells roles apart.
+ */
+const UNGUARDED_PAGES = ['/back-office/shelters/readiness', '/back-office/dailysop'];
 
 /**
  * The back-office paths the sidebar offers a role (#1037), groups opened one by one in case they
@@ -342,6 +357,16 @@ async function expectLoads(page: Page, url: string): Promise<void> {
 	// protected shell's <main> means the guard has passed or redirected. Not `networkidle`: the
 	// `_changes` longpoll feeds keep the network busy for good.
 	await expect(page.locator('main').first()).toBeVisible();
+	if (url === SHELTERS_PAGE) {
+		// The page opens the active shelter's edit screen from a client-side effect that runs after
+		// <main> is already there. Both the bare path and the edit path count as loaded; this only
+		// checks the role was not bounced to another page (a role with no active shelter never
+		// redirects, so waiting for the edit path would hang).
+		await expect
+			.poll(() => pathOf(page), { message: `${url} should load` })
+			.toMatch(new RegExp(`^${SHELTERS_PAGE}(/edit/[^/]+)?$`));
+		return;
+	}
 	expect.soft(pathOf(page), `${url} should load`).toBe(url);
 }
 
@@ -491,6 +516,11 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 						? row.portalDepartments.filter((id) => id !== 'registration')
 						: row.portalDepartments
 				);
+			// #845: every role is offered the daily assessment tab, always as the last department.
+			const allDepartments = await page
+				.locator('h2[id^="portal-dept-"]')
+				.evaluateAll((els) => els.map((el) => el.id.replace('portal-dept-', '')));
+			expect(allDepartments.at(-1), 'last portal department').toBe('dailysop');
 			for (const url of row.allowed) await expectLoads(page, url);
 			for (const url of row.forbidden) await expectBouncedToPortal(page, url);
 			// #1037: the sidebar offers exactly the back-office pages the guards let this role open.

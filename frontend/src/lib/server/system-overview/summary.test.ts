@@ -22,7 +22,7 @@ vi.mock('$lib/features/shelters/server', () => ({
 	isExternalShelter: (m: { is_external?: boolean }) => m.is_external === true
 }));
 
-import { buildOverviewSites, buildOverviewSummary } from './index';
+import { buildOverviewSites, buildOverviewSummary, clearOverviewViewCache } from './index';
 
 const occupancy = (rows: Record<string, number>) => ({
 	status: 200,
@@ -35,6 +35,7 @@ const fetchStats = (async () =>
 	})) as unknown as typeof fetch;
 
 beforeEach(() => {
+	clearOverviewViewCache();
 	adminRaw.mockReset();
 	adminRaw.mockResolvedValue({ status: 200, data: { rows: [] } });
 	listShelterMasters.mockReset();

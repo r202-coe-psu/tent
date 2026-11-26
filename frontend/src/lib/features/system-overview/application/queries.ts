@@ -1,4 +1,4 @@
-import { createQuery } from '@tanstack/svelte-query';
+import { createQuery, keepPreviousData } from '@tanstack/svelte-query';
 import type { OverviewFilters } from '../domain/schemas';
 import {
 	fetchBoundEvacueeProfile,
@@ -41,7 +41,9 @@ export function useOverviewSummary(getFilters: () => Partial<OverviewFilters>) {
 export function useOverviewSites(getFilters: () => Partial<OverviewFilters>) {
 	return createQuery(() => ({
 		queryKey: overviewKeys.sites(getFilters()),
-		queryFn: () => fetchOverviewSites(getFilters())
+		queryFn: () => fetchOverviewSites(getFilters()),
+		// Keep the old page on screen while the next one loads (no skeleton flash on paging).
+		placeholderData: keepPreviousData
 	}));
 }
 
@@ -70,7 +72,8 @@ export function usePreRegistrations(getFilters: () => Partial<OverviewFilters>) 
 	return createQuery(() => ({
 		queryKey: overviewKeys.preRegs(getFilters()),
 		queryFn: () => fetchPreRegistrations(getFilters()),
-		staleTime: 10_000
+		staleTime: 10_000,
+		placeholderData: keepPreviousData
 	}));
 }
 

@@ -14,6 +14,9 @@ vi.mock('$lib/features/printers', async (importOriginal) => ({
 }));
 const issue = vi.hoisted(() => vi.fn());
 vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({ issueEvacueeQrs: issue }));
+vi.mock('$lib/features/people/application/evacuee-qr-prints', () => ({
+	useEvacueeQrPrints: () => ({ data: [], isError: false })
+}));
 vi.mock('$lib/features/kiosk', () => ({
 	KIOSK_LABEL_MM: { width: 80, height: 60 },
 	renderKioskQrLabelPng: async () => 'AAAA'

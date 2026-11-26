@@ -155,7 +155,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				'true'
 			);
 			const listRow = page.getByRole('row').filter({ hasText: bookingRef });
-			await expect(listRow).toContainText('กำลังตรวจรับที่ศูนย์');
+			await expect(listRow).toContainText('อนุมัติแล้ว · รอนำส่ง');
 			await listRow.getByRole('button', { name: 'จัดการ' }).click();
 			await expect(
 				page.getByRole('heading', { name: `${bookingRef} - ตรวจรับพัสดุบริจาค` })
@@ -515,7 +515,10 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		const edit = page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' });
 		await expect(edit).toHaveAttribute('aria-disabled', 'true');
 		// Playwright counts aria-disabled as not clickable; a donor's tap still lands and gets the toast.
-		await edit.click({ force: true });
+		// Dispatch the click on the element itself so it cannot land beside the button if the layout
+		// shifts (QR image) before the click. Unconfirmed guess for the staging failure: `force: true`
+		// computes the click point once and skips the stable-position check. Not seen locally.
+		await edit.dispatchEvent('click');
 		await expect(
 			page.locator('[data-sonner-toast]').filter({ hasText: 'ไม่สามารถแก้ไขรายการได้' })
 		).toBeVisible();

@@ -52,5 +52,11 @@ describe('portal menu EN mirror', () => {
 		expect(portalItemText(allItems[0], 'en').label).toBe('Register Families and Households');
 		expect(portalGroupLabel('tools', 'en')).toBe('Registration tools');
 		expect(portalPublicLinkLabel('en')).toBe('Public service website');
+		expect(
+			portalDepartmentText(
+				PORTAL_DEPARTMENTS.find((d) => d.id === 'dailysop')!,
+				'en'
+			).label
+		).toBe('Daily Assessment');
 	});
 });

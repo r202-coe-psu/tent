@@ -1,6 +1,6 @@
 <script lang="ts">
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import * as Table from '$lib/components/ui/table';
-	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
@@ -16,18 +16,22 @@
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
 
-	let filters = $state<OverviewFilters>(overviewFiltersSchema.parse({}));
+	const PAGE_SIZE = 20;
+
+	let filters = $state<OverviewFilters>(overviewFiltersSchema.parse({ limit: PAGE_SIZE }));
 
 	const listQuery = usePreRegistrations(() => filters);
 
 	const items = $derived(listQuery.data?.items ?? []);
 	const total = $derived(listQuery.data?.total ?? 0);
 	const limit = $derived(filters.limit);
-	const offset = $derived(filters.offset);
+	// The server snaps to the last page when the total shrinks; show the offset it actually used.
+	const offset = $derived(
+		listQuery.isPlaceholderData ? filters.offset : (listQuery.data?.offset ?? filters.offset)
+	);
 	const pageStart = $derived(total === 0 ? 0 : offset + 1);
 	const pageEnd = $derived(Math.min(offset + limit, total));
-	const canPrev = $derived(offset > 0);
-	const canNext = $derived(offset + limit < total);
+	const currentPage = $derived(Math.floor(offset / limit) + 1);
 
 	function onFiltersChange(next: OverviewFilters) {
 		const resetOffset =
@@ -98,30 +102,11 @@
 					{/if}
 				</p>
 			</div>
-			<div class="flex gap-2">
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={!canPrev || listQuery.isPending}
-					onclick={() => {
-						filters = { ...filters, offset: Math.max(0, offset - limit) };
-					}}
-				>
-					ก่อนหน้า
-				</Button>
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={!canNext || listQuery.isPending}
-					onclick={() => {
-						filters = { ...filters, offset: offset + limit };
-					}}
-				>
-					ถัดไป
-				</Button>
-			</div>
 		</div>
-		<div class="p-4 sm:p-6">
+		<div
+			class="p-4 transition-opacity sm:p-6 {listQuery.isPlaceholderData ? 'opacity-60' : ''}"
+			aria-busy={listQuery.isPlaceholderData}
+		>
 			{#if listQuery.isPending && items.length === 0}
 				<Skeleton class="h-48 w-full rounded-xl" />
 			{:else if items.length === 0}
@@ -203,5 +188,21 @@
 				</div>
 			{/if}
 		</div>
+		{#if total > limit}
+			<div
+				class="flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+			>
+				<div class="text-xs text-slate-500 tabular-nums">
+					แสดง {pageStart.toLocaleString('th-TH')} - {pageEnd.toLocaleString('th-TH')} จาก
+					{total.toLocaleString('th-TH')} รายการ
+				</div>
+				<PaginationControls
+					bind:page={() => currentPage, (p) => (filters = { ...filters, offset: (p - 1) * limit })}
+					count={total}
+					perPage={limit}
+					class="h-7 min-w-7 text-xs"
+				/>
+			</div>
+		{/if}
 	</div>
 </StaffPageShell>

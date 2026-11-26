@@ -338,6 +338,25 @@
 		<Form.FieldErrors />
 	</Form.Field>
 
+	<Form.Field {form} name="name_short">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>ชื่อย่อ (แสดงบนแผนที่)</Form.Label>
+				<Input
+					{...props}
+					value={$formData.name_short ?? ''}
+					oninput={(e) => ($formData.name_short = e.currentTarget.value || null)}
+					{disabled}
+					placeholder="เช่น รร.บ้านค่าย"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.Description>
+			ใช้แทนชื่อเต็มบนหมุดแผนที่ ไม่เกิน 64 ตัวอักษร (เว้นว่างได้)
+		</Form.Description>
+		<Form.FieldErrors />
+	</Form.Field>
+
 	{#if canSetExternal}
 		<div
 			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs"
@@ -1024,6 +1043,23 @@
 			<Form.FieldErrors />
 		</Form.Field>
 	</div>
+
+	<Form.Field {form} name="operating_org">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>หน่วยงานที่ดูแล</Form.Label>
+				<Input
+					{...props}
+					value={$formData.operating_org ?? ''}
+					oninput={(e) => ($formData.operating_org = e.currentTarget.value || null)}
+					{disabled}
+					placeholder="เช่น เทศบาลนครหาดใหญ่"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.Description>หน่วยงานที่รับผิดชอบดูแลศูนย์นี้ (เว้นว่างได้)</Form.Description>
+		<Form.FieldErrors />
+	</Form.Field>
 
 	{#if !isExternal}
 		<!-- Key personnel (CR-023 FR-23-2/3) -->

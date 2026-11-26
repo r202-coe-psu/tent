@@ -511,11 +511,20 @@ export async function createUser(input: {
  * Create a user, or if the username already exists and the caller is a manager,
  * merge the caller's shelter assignment into the existing account (add from outside).
  */
+export type UserWriteResult = {
+	before: CouchUserDoc | null;
+	after: CouchUserDoc | null;
+};
+
+export type UserDeleteResult = UserWriteResult & { deleted: boolean };
+
+export type UserCreateResult = UserWriteResult & { merged: boolean };
+
 export async function createOrMergeUser(
 	input: Parameters<typeof createUser>[0],
 	caller: Caller,
 	options: VolunteerRoleOptions
-): Promise<{ merged: boolean }> {
+): Promise<UserCreateResult> {
 	assertUsersWritable();
 	if (input.personnel_type === 'volunteer') {
 		for (const code of shelterCodesFromRoles(input.roles)) {
@@ -548,7 +557,7 @@ export async function createOrMergeUser(
 				throw auditErr;
 			}
 		}
-		return { merged: false };
+		return { merged: false, before: null, after: null };
 	} catch (e) {
 		if (!(e instanceof ServiceError) || e.code !== 'CONFLICT' || caller.isSA) throw e;
 		if (e instanceof DeletedNameConflictError) throw e; // reserved name: never merge into a deleted account
@@ -574,7 +583,7 @@ export async function createOrMergeUser(
 		}
 		// A manager's merge gives the role for good: a coordinator grant of the same role becomes
 		// permanent instead of lapsing or being replaced later (CR-221 A1).
-		await updateUser(
+		const merged = await updateUser(
 			input.name,
 			{
 				roles: input.roles,
@@ -583,7 +592,7 @@ export async function createOrMergeUser(
 			caller,
 			options
 		);
-		return { merged: true };
+		return { merged: true, ...merged };
 	}
 }
 
@@ -1000,7 +1009,7 @@ function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]):
 }
 
 /** Delete a user. A manager strips own-shelter assignment; full delete only if no shelters remain. */
-export async function deleteUser(name: string, caller: Caller): Promise<void> {
+export async function deleteUser(name: string, caller: Caller): Promise<UserDeleteResult> {
 	assertUsersWritable();
 	const doc = await readUserDoc(name, 'read user');
 
@@ -1027,7 +1036,7 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 			const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 			if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
 			await auditDroppedGrants(name, doc.role_grants, roleGrants, remaining, [], caller.name);
-			return;
+			return { deleted: false, before: doc, after: updatedDoc as CouchUserDoc };
 		}
 	} else {
 		await assertNotLastAppSa(doc.roles ?? []);
@@ -1050,6 +1059,7 @@ export async function deleteUser(name: string, caller: Caller): Promise<void> {
 
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', softDeleted);
 	if (res.status >= 400) throw serviceErrorFromCouch('delete user', res.status, res.data);
+	return { deleted: true, before: doc, after: softDeleted as CouchUserDoc };
 }
 
 /** How a save checks roles it newly gives a volunteer account (CR-221 A1-7). Required: no default. */
@@ -1087,7 +1097,7 @@ export async function updateUser(
 	},
 	caller: Caller,
 	options: VolunteerRoleOptions
-): Promise<void> {
+): Promise<UserWriteResult> {
 	assertUsersWritable();
 	const doc = await readUserDoc(name, 'read user');
 
@@ -1238,6 +1248,8 @@ export async function updateUser(
 		permanentRoles,
 		caller.name
 	);
+
+	return { before: doc, after: updatedDoc as CouchUserDoc };
 }
 
 /** The roles `after` holds in a shelter that `before` did not hold there (compound or legacy flat). */
@@ -1392,7 +1404,7 @@ export async function updateOwnProfile(
 export async function resetUserPasswordByAdmin(
 	name: string,
 	caller: Caller
-): Promise<{ temporary_password: string }> {
+): Promise<{ temporary_password: string; user: CouchUserDoc }> {
 	assertUsersWritable();
 	const doc = await readUserDoc(name, 'read user');
 
@@ -1422,7 +1434,7 @@ export async function resetUserPasswordByAdmin(
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 	if (res.status >= 400) throw serviceErrorFromCouch('admin reset password', res.status, res.data);
 
-	return { temporary_password };
+	return { temporary_password, user: doc };
 }
 
 /** Get security question challenge for a user by phone/username */

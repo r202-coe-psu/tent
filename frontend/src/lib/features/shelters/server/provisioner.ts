@@ -288,6 +288,7 @@ export async function grantCatalogShelterScope(
 /** Provision one shelter. This is shared by the HTTP route and async worker. */
 export async function provisionShelter(
 	input: Shelter,
+	actor: string,
 	allocatedCode?: string,
 	options?: ProvisionOptions
 ): Promise<{ ok: true; code: string; db: string; steps: ProvisionStep[] }> {
@@ -310,7 +311,7 @@ export async function provisionShelter(
 			}
 		};
 		await assertActive();
-		return await provisionShelterUnlocked(input, allocatedCode, assertActive);
+		return await provisionShelterUnlocked(input, actor, allocatedCode, assertActive);
 	} finally {
 		if (ownsNameLock) {
 			await releaseShelterNameLock({ name: input.name, ownerId: lockOwnerId }).catch(
@@ -322,6 +323,7 @@ export async function provisionShelter(
 
 async function provisionShelterUnlocked(
 	input: Shelter,
+	actor: string,
 	allocatedCode?: string,
 	assertActive?: () => Promise<void>
 ): Promise<{ ok: true; code: string; db: string; steps: ProvisionStep[] }> {
@@ -454,7 +456,9 @@ async function provisionShelterUnlocked(
 			...input,
 			closed_at: nextClosedAt(null, input.operation_status, undefined, ts),
 			created_at: ts,
-			updated_at: ts
+			updated_at: ts,
+			created_by: actor,
+			updated_by: actor
 		};
 		let masterRes: { status: number; data: unknown };
 		try {

@@ -4,6 +4,8 @@
  * Caller must be `system_admin` (or Couch `_admin`) via Couch `_session`.
  */
 import type { RequestHandler } from './$types';
+import { recordProxiedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import { authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders, proxyFastapiJson } from '$lib/server/fastapi';
 
@@ -45,7 +47,7 @@ interface CreateBody {
  */
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		await requireSystemAdmin(request.headers.get('cookie'));
+		const caller = await requireSystemAdmin(request.headers.get('cookie'));
 		const body = (await request.json().catch(() => ({}))) as CreateBody;
 
 		const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -74,6 +76,14 @@ export const POST: RequestHandler = async ({ request }) => {
 				'Content-Type': 'application/json'
 			}),
 			body: JSON.stringify({ name, description, module_name, allowed_scopes })
+		});
+		await recordProxiedWrite(res, {
+			actor: caller.name,
+			event: AUDIT_EVENTS.thirdpartyClientCreated,
+			action: 'create',
+			entityType: 'thirdparty_client',
+			label: name,
+			shelterCode: null
 		});
 		return proxyFastapiJson(res);
 	} catch (e) {

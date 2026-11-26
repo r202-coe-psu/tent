@@ -214,7 +214,11 @@ export const overviewSiteRowSchema = z.object({
 export type OverviewSiteRow = z.infer<typeof overviewSiteRowSchema>;
 
 export const overviewSitesPayloadSchema = z.object({
-	sites: z.array(overviewSiteRowSchema)
+	sites: z.array(overviewSiteRowSchema),
+	/** Sites matching the filters across ALL pages (#1502). */
+	total: z.number().int().min(0),
+	limit: z.number().int(),
+	offset: z.number().int()
 });
 export type OverviewSitesPayload = z.infer<typeof overviewSitesPayloadSchema>;
 

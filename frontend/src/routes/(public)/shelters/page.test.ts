@@ -29,6 +29,7 @@ type LoadResult = {
 		counts_by_site_kind: Record<string, number>;
 	} | null;
 	filters: Record<string, string>;
+	default_area: boolean;
 	available_types: string[];
 };
 
@@ -223,14 +224,14 @@ describe('public/shelters load function', () => {
 
 	// #1419 — the database filters; the page only passes the visitor's choices on.
 	describe('filters run in the database', () => {
-		it('asks for nothing narrow by default, except leaving out plain host houses', async () => {
+		it('by default lists only centres in this system, and never plain host houses', async () => {
 			await runLoad(new URL('http://localhost/shelters'));
 
 			expect(listCall()).toMatchObject({
 				hide_host_house: true,
 				hide_full: false,
 				hide_evacuation: false,
-				hide_external: false,
+				hide_external: true,
 				parking: []
 			});
 			expect(listCall()?.q).toBe('');
@@ -284,14 +285,24 @@ describe('public/shelters load function', () => {
 			expect(result.filters.parking_motorcycle).toBe('');
 		});
 
-		it('passes the switched-off shelter types and echoes them back', async () => {
-			const result = await runLoad(
-				new URL('http://localhost/shelters?hide_evacuation=on&hide_external=on')
-			);
+		it('lists external centres too with show_external, and only them with hide_evacuation', async () => {
+			const all = await runLoad(new URL('http://localhost/shelters?show_external=on'));
+			expect(listCall()).toMatchObject({ hide_evacuation: false, hide_external: false });
+			expect(all.filters.show_external).toBe('on');
 
-			expect(listCall()).toMatchObject({ hide_evacuation: true, hide_external: true });
-			expect(result.filters.hide_evacuation).toBe('on');
-			expect(result.filters.hide_external).toBe('on');
+			vi.mocked(listPublicShelters).mockClear();
+			const external = await runLoad(
+				new URL('http://localhost/shelters?show_external=on&hide_evacuation=on')
+			);
+			expect(listCall()).toMatchObject({ hide_evacuation: true, hide_external: false });
+			expect(external.filters).toMatchObject({ show_external: 'on', hide_evacuation: 'on' });
+		});
+
+		it('reads an old hide_external link as the default', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters?hide_external=on'));
+
+			expect(listCall()).toMatchObject({ hide_evacuation: false, hide_external: true });
+			expect(result.filters).not.toHaveProperty('hide_external');
 		});
 
 		it('always leaves host houses out and ignores a stale hide_host_house', async () => {
@@ -372,6 +383,31 @@ describe('public/shelters load function', () => {
 			await runLoad(new URL('http://localhost/shelters?distance=10'));
 
 			expect(listCall()?.radius_km).toBeUndefined();
+		});
+	});
+
+	// CR-261 decision sync 2026-11-24 — without a position the first load stays small.
+	describe('default area without a position', () => {
+		it('lists only Hat Yai when there is no position, area or search text', async () => {
+			const result = await runLoad(new URL('http://localhost/shelters'));
+
+			expect(listCall()).toMatchObject({ province: 'สงขลา', district: 'หาดใหญ่' });
+			expect(result.default_area).toBe(true);
+			// the visitor did not pick it, so the panel and the chips stay clear
+			expect(result.filters.province).toBe('');
+			expect(result.filters.district).toBe('');
+		});
+
+		it.each([
+			['a position', 'user_lat=7.0&user_lng=100.4'],
+			['a province', 'province=ภูเก็ต'],
+			['a district', 'district=เมืองสงขลา'],
+			['search text', 'q=วัด']
+		])('drops the default area once there is %s', async (_, qs) => {
+			const result = await runLoad(new URL(`http://localhost/shelters?${qs}`));
+
+			expect(result.default_area).toBe(false);
+			expect(listCall()?.district).not.toBe('หาดใหญ่');
 		});
 	});
 

@@ -81,7 +81,9 @@ async function seed() {
 				communications: i % 2 === 0 ? ['wifi'] : []
 			},
 			created_at: new Date().toISOString(),
-			updated_at: new Date().toISOString()
+			updated_at: new Date().toISOString(),
+			created_by: 'system:seed',
+			updated_by: 'system:seed'
 		};
 		docs.push(shelter);
 	}
