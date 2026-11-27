@@ -25,18 +25,23 @@ export interface CouchTarget {
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 
 /**
- * The CouchDB these tests write to. Refuses a non-local host unless `ALLOW_REMOTE_WRITES`
- * is exactly `true` (same opt-in as frontend/e2e), so a stray production URL cannot be hit.
+ * Throws for a non-local host unless `ALLOW_REMOTE_WRITES` is exactly `true` (same opt-in as
+ * frontend/e2e), so a stray production URL cannot be written to.
  */
-export function couchTarget(): CouchTarget {
-	const raw = process.env.COUCHDB_ADMIN_URL;
-	if (!raw) throw new Error('COUCHDB_ADMIN_URL is not set (see tests/.env.example)');
-	const url = new URL(raw);
+function assertWritable(url: URL): void {
 	if (!LOCAL_HOSTS.has(url.hostname) && process.env.ALLOW_REMOTE_WRITES?.trim() !== 'true') {
 		throw new Error(
 			`Refusing to write to ${url.host}: set ALLOW_REMOTE_WRITES=true for a staging target`
 		);
 	}
+}
+
+/** The CouchDB these tests write to (refused for a remote host, see `assertWritable`). */
+export function couchTarget(): CouchTarget {
+	const raw = process.env.COUCHDB_ADMIN_URL;
+	if (!raw) throw new Error('COUCHDB_ADMIN_URL is not set (see tests/.env.example)');
+	const url = new URL(raw);
+	assertWritable(url);
 	const user = decodeURIComponent(url.username);
 	const password = decodeURIComponent(url.password);
 	url.username = '';
@@ -45,6 +50,29 @@ export function couchTarget(): CouchTarget {
 		base: url.toString().replace(/\/$/, ''),
 		adminAuth: 'Basic ' + Buffer.from(`${user}:${password}`).toString('base64')
 	};
+}
+
+export interface FastapiTarget {
+	/** Origin of the FastAPI service itself, e.g. `http://localhost:9000`. */
+	base: string;
+	/** `EXTERNAL_API_SECRET`: the Bearer the BFF sends to `/public/v1` and `/v1/admin`. */
+	adminSecret: string;
+}
+
+/**
+ * The FastAPI these tests call: `FASTAPI_URL`, else the BFF's `FASTAPI_INTERNAL_URL`. The run
+ * issues and revokes API keys there, so a remote host needs `ALLOW_REMOTE_WRITES` too.
+ */
+export function fastapiTarget(): FastapiTarget {
+	const raw =
+		process.env.FASTAPI_URL?.trim() ||
+		process.env.FASTAPI_INTERNAL_URL?.trim() ||
+		'http://localhost:9000';
+	const adminSecret = process.env.EXTERNAL_API_SECRET?.trim();
+	if (!adminSecret) throw new Error('EXTERNAL_API_SECRET is not set (see tests/.env.example)');
+	const url = new URL(raw);
+	assertWritable(url);
+	return { base: url.toString().replace(/\/$/, ''), adminSecret };
 }
 
 /** Shelter codes of the two seeded shelters the permission suites use. */
