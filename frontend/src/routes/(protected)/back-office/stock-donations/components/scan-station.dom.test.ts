@@ -57,6 +57,8 @@ async function settle() {
 	for (let i = 0; i < 3; i++) {
 		flushSync();
 		await tick();
+		// Superforms validates and applies its result across timers, not just microtasks.
+		await new Promise((resolve) => setTimeout(resolve, 0));
 	}
 }
 
@@ -152,6 +154,99 @@ describe('scan-station walk-in', () => {
 		save().click();
 		await settle();
 		expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('รายการสิ่งของ'));
+	});
+});
+
+describe('scan-station walk-in form validation', () => {
+	const pickRice = async () => {
+		document
+			.querySelector<HTMLButtonElement>('[data-testid$="-pick-kg"][data-testid^="walkin-item-"]')!
+			.click();
+		await settle();
+	};
+	const qtyError = () => document.querySelector('[data-testid="walkin-qty-error"]');
+
+	it('names the missing donor, focuses the field and sends nothing', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		await render();
+		expect(document.getElementById('donor-name-error')?.textContent?.trim() ?? '').toBe('');
+
+		save().click();
+		await settle();
+
+		const name = document.getElementById('donor-name-input')!;
+		expect(document.getElementById('donor-name-error')?.textContent?.trim()).toBe(
+			'กรุณาระบุชื่อผู้บริจาค'
+		);
+		expect(name.getAttribute('aria-invalid')).toBe('true');
+		expect(name.getAttribute('aria-describedby')).toBe('donor-name-error');
+		expect(toastMock.error).toHaveBeenCalledWith('กรุณาระบุชื่อผู้บริจาค');
+		expect(document.activeElement).toBe(name);
+		expect(fetchMock).not.toHaveBeenCalled();
+
+		await type('donor-name-input', 'สมชาย');
+		expect(document.getElementById('donor-name-error')?.textContent?.trim() ?? '').toBe('');
+	});
+
+	it('asks for a count on a picked item left at 0, then clears when it is given', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		await render();
+		await type('donor-name-input', 'สมชาย');
+		await pickRice();
+		expect(qtyError()).toBeNull();
+
+		save().click();
+		await settle();
+
+		expect(qtyError()?.textContent?.trim()).toBe('กรุณาระบุจำนวนที่รับจริง (มากกว่า 0)');
+		expect(toastMock.error).toHaveBeenCalledWith('กรุณาระบุจำนวนที่รับจริง: ข้าวสาร');
+		expect(fetchMock).not.toHaveBeenCalled();
+
+		await type(document.querySelector<HTMLInputElement>('[id^="walkin-qty-"]')!.id, '2');
+		expect(qtyError()).toBeNull();
+	});
+
+	it('saves a counted walk-in, posts the donor and lines, and leaves the form empty', async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, lots: [], booking_ref: 'WK-1' })
+		});
+		vi.stubGlobal('fetch', fetchMock);
+		const onSaved = vi.fn();
+		instance = mount(ScanStation, {
+			target: document.body,
+			props: { initialView: 'walkin', onSaved }
+		});
+		await settle();
+		await type('donor-name-input', '  สมชาย  ');
+		await type('donor-phone-input', '0891234567');
+		await pickRice();
+		await type(document.querySelector<HTMLInputElement>('[id^="walkin-qty-"]')!.id, '2');
+
+		save().click();
+		await settle();
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/back-office/donations');
+		expect(JSON.parse(init.body)).toMatchObject({
+			donor: { name: 'สมชาย', phone: '0891234567' },
+			items: [{ item_id: 'item:rice', qty: '2', unit: 'kg' }]
+		});
+		expect(toastMock.success).toHaveBeenCalled();
+		expect(onSaved).toHaveBeenCalledTimes(1);
+		// Back on the scan view, and a fresh walk-in starts empty.
+		expect(document.querySelector('[data-testid="walkin-footer"]')).toBeNull();
+		[...document.querySelectorAll('button')]
+			.find((b) => b.textContent?.includes('รับบริจาคหน้าเคาน์เตอร์'))!
+			.click();
+		await settle();
+		expect((document.getElementById('donor-name-input') as HTMLInputElement).value).toBe('');
+		expect((document.getElementById('donor-phone-input') as HTMLInputElement).value).toBe('');
+		expect(document.querySelectorAll('[id^="walkin-qty-"]')).toHaveLength(1);
+		expect(document.querySelector<HTMLInputElement>('[id^="walkin-qty-"]')!.value).toBe('0');
 	});
 });
 

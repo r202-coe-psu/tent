@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
 	supply: [] as { _id: string; name: string; unit: string; category: string }[],
 	/** What `resolveShelterCode` returns; `null` = no shelter selected or scoped. */
 	shelter: 'SH001' as string | null,
-	toastInfo: vi.fn()
+	toastInfo: vi.fn(),
+	toastError: vi.fn()
 }));
 
 const masters = [
@@ -30,7 +31,7 @@ const masters = [
 ];
 
 vi.mock('svelte-sonner', () => ({
-	toast: { success: vi.fn(), error: vi.fn(), info: mocks.toastInfo }
+	toast: { success: vi.fn(), error: mocks.toastError, info: mocks.toastInfo }
 }));
 vi.mock('$lib/stores/auth.svelte', () => ({
 	authStore: {
@@ -92,6 +93,7 @@ afterEach(() => {
 	mocks.supply = [];
 	mocks.shelter = 'SH001';
 	mocks.toastInfo.mockClear();
+	mocks.toastError.mockClear();
 });
 
 describe('create campaign form — create a master item', () => {
@@ -166,5 +168,86 @@ describe('create campaign form — create a master item', () => {
 
 		expect(q<HTMLInputElement>('#campaign-item-title')!.value).toContain('ข้าวสาร');
 		expect(mocks.toastInfo).not.toHaveBeenCalled();
+	});
+});
+
+describe('create campaign form — validation and submit', () => {
+	/** Superforms validates and applies its result across timers, not just microtasks. */
+	async function settle() {
+		for (let i = 0; i < 3; i++) {
+			flushSync();
+			await tick();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+	}
+	async function renderWith(onsubmit = vi.fn()) {
+		instance = mount(CreateCampaignForm, {
+			target: document.body,
+			props: { onclose: vi.fn(), onsubmit }
+		});
+		await settle();
+		return onsubmit;
+	}
+	const submitButton = () => q<HTMLButtonElement>('button[type="submit"]')!;
+	const text = (id: string) => document.getElementById(id)?.textContent?.trim() ?? '';
+	async function fill(selector: string, value: string) {
+		const el = q<HTMLInputElement | HTMLTextAreaElement>(selector)!;
+		el.value = value;
+		el.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+	}
+
+	it('marks every missing field, focuses the first and submits nothing', async () => {
+		const onsubmit = await renderWith();
+
+		submitButton().click();
+		await settle();
+
+		expect(text('campaign-item-title-error')).toBe('กรุณาเลือกรายการสิ่งของจากแคตตาล็อก');
+		expect(text('campaign-target-qty-error')).toBe('กรุณาระบุจำนวนเป้าหมาย');
+		expect(text('campaign-description-error')).toBe('กรุณาระบุเหตุผลหรือรายละเอียดเพิ่มเติม');
+		const target = q<HTMLInputElement>('#campaign-target-qty')!;
+		expect(target.getAttribute('aria-invalid')).toBe('true');
+		expect(target.getAttribute('aria-describedby')).toBe('campaign-target-qty-error');
+		expect(mocks.toastError).toHaveBeenCalledWith('กรุณาแก้ไขข้อมูลที่ไม่ถูกต้องในแบบฟอร์ม');
+		expect(document.activeElement?.id).toBe('campaign-item-title');
+		expect(onsubmit).not.toHaveBeenCalled();
+	});
+
+	it('rejects a zero target, then clears the message once it is fixed', async () => {
+		await renderWith();
+		await fill('#campaign-target-qty', '0');
+
+		submitButton().click();
+		await settle();
+		expect(text('campaign-target-qty-error')).toBe('จำนวนเป้าหมายต้องเป็นตัวเลขมากกว่า 0');
+
+		await fill('#campaign-target-qty', '5');
+		expect(text('campaign-target-qty-error')).toBe('');
+	});
+
+	it('hands the picked item, target and details to onsubmit', async () => {
+		const onsubmit = await renderWith();
+		await click(addButton());
+		await click(q('[data-testid="stub-existing"]'));
+		await fill('#campaign-target-qty', '50');
+		await fill('#campaign-description', '  ทำอาหาร  ');
+
+		submitButton().click();
+		await settle();
+
+		expect(mocks.toastError).not.toHaveBeenCalled();
+		expect(onsubmit).toHaveBeenCalledTimes(1);
+		expect(onsubmit).toHaveBeenCalledWith({
+			itemId: 'item_master:rice',
+			name: 'ข้าวสาร',
+			target: '50',
+			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
+			category: 'อาหารและเครื่องดื่ม',
+			unit: 'kg',
+			urgency: 'critical',
+			description: 'ทำอาหาร',
+			dropOffPointId: null
+		});
 	});
 });
