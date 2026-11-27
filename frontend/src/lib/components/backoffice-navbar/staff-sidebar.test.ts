@@ -6,7 +6,7 @@ const SM = ['shelter:SH001', 'SH001:shelter_manager'];
 const REGISTRATION = ['shelter:SH001', 'SH001:registration_staff'];
 
 describe('showsStaffSidebar (#1517)', () => {
-	it.each(['/portal', '/me', '/onsite', '/onsite/registration/new'])(
+	it.each(['/me', '/onsite', '/onsite/registration/new'])(
 		'gives a system admin the sidebar on %s',
 		(path) => {
 			expect(showsStaffSidebar(path, SA, 'SH001')).toBe(true);
@@ -14,15 +14,15 @@ describe('showsStaffSidebar (#1517)', () => {
 	);
 
 	it('gives the manager of the selected shelter the sidebar', () => {
-		expect(showsStaffSidebar('/portal', SM, 'SH001')).toBe(true);
+		expect(showsStaffSidebar('/me', SM, 'SH001')).toBe(true);
 	});
 
 	it('does not give a manager of another shelter the sidebar', () => {
-		expect(showsStaffSidebar('/portal', SM, 'SH002')).toBe(false);
+		expect(showsStaffSidebar('/me', SM, 'SH002')).toBe(false);
 	});
 
 	it('leaves every other role as before', () => {
-		expect(showsStaffSidebar('/portal', REGISTRATION, 'SH001')).toBe(false);
+		expect(showsStaffSidebar('/me', REGISTRATION, 'SH001')).toBe(false);
 		expect(showsStaffSidebar('/onsite/distribution', REGISTRATION, 'SH001')).toBe(false);
 	});
 
@@ -31,8 +31,13 @@ describe('showsStaffSidebar (#1517)', () => {
 		expect(showsStaffSidebar('/system-management/shelters', SA, 'SH001')).toBe(false);
 	});
 
+	it('keeps /portal without a sidebar: the portal is the menu itself', () => {
+		expect(showsStaffSidebar('/portal', SA, 'SH001')).toBe(false);
+		expect(showsStaffSidebar('/portal', SM, 'SH001')).toBe(false);
+	});
+
 	it('does not match a path that only starts with the same letters', () => {
-		expect(showsStaffSidebar('/portalx', SA, 'SH001')).toBe(false);
+		expect(showsStaffSidebar('/mex', SA, 'SH001')).toBe(false);
 		expect(showsStaffSidebar('/message', SA, 'SH001')).toBe(false);
 	});
 });

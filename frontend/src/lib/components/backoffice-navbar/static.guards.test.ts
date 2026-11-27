@@ -42,12 +42,14 @@ import {
 	requireKioskManagement,
 	requireKitchen,
 	requireManager,
+	requireMedicalScreening,
 	requireReferralAccess,
 	requirePrinterManagement,
 	requireSupplyView,
 	requireTicketAccess,
 	requireVolunteerBackoffice,
-	requireWarehouseAccess
+	requireWarehouseAccess,
+	requireZoning
 } from '$lib/guards/auth';
 import {
 	backofficeNavbarGroups,
@@ -83,7 +85,12 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/audit-log': requireManager,
 	'/back-office/kiosks': requireKioskManagement,
 	'/back-office/kiosks/banners': requireBannerManagement,
-	'/back-office/printers': requirePrinterManagement
+	'/back-office/printers': requirePrinterManagement,
+	'/onsite/people': requireEvacueeRegistration,
+	'/onsite/medical-screening': requireMedicalScreening,
+	'/onsite/zoning': requireZoning,
+	'/onsite/search-edit': requireEvacueeRegistration,
+	'/onsite/scan-check-in-out': requireEvacueeRegistration
 };
 
 /** No page guard yet (R2, #845). */

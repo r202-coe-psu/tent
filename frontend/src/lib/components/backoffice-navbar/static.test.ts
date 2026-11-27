@@ -139,6 +139,15 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'โลจิสติกส์ & GIS'
 	];
 	const registry = 'จัดการผู้เข้าพัก';
+	/** The /portal registration tiles mirrored into the sidebar (#1517). */
+	const screeningDesk = 'สถานี 2 คัดกรองผู้เข้าพัก';
+	const registrationDesks = [
+		'สถานี 1 ลงทะเบียนครอบครัวและครัวเรือน',
+		screeningDesk,
+		'สถานี 3 จัดโซน',
+		'ค้นหาและแก้ไขข้อมูลผู้ประสบภัย',
+		'สแกนเข้า-ออกศูนย์'
+	];
 	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีจิตอาสา'];
 	const referrals = 'การส่งต่อผู้เข้าพัก';
 	/** Draft CR M5 D17: OneData shortcuts. M5 = referral audience; M6 = SA, SM, warehouse_staff (not supply_coordinator). */
@@ -162,6 +171,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	};
 	const managerLabels = [
 		registry,
+		...registrationDesks,
 		...volunteers,
 		referrals,
 		...warehouse,
@@ -201,8 +211,10 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(visibleLeafLabels(ctx(sh('kitchen_staff')))).toEqual(labelsFor(kitchenTickets, kitchen));
 	});
 
-	it('medical_staff sees referrals and OneData M5 only (M5 D8, D17)', () => {
-		expect(visibleLeafLabels(ctx(sh('medical_staff')))).toEqual(labelsFor(referrals, oneDataM5));
+	it('medical_staff sees referrals, OneData M5 and the screening desk only (M5 D8, D17)', () => {
+		expect(visibleLeafLabels(ctx(sh('medical_staff')))).toEqual(
+			labelsFor(referrals, oneDataM5, screeningDesk)
+		);
 	});
 
 	it('supply_coordinator sees warehouse menus and kitchen requisitions, not the central kitchen or OneData M6 (M6 D2) (#842)', () => {
@@ -233,8 +245,10 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(visibleLeafLabels(ctx(sh('volunteer_coordinator')))).toEqual(labelsFor(volunteers));
 	});
 
-	it('registration_staff sees the evacuee registry only (#842)', () => {
-		expect(visibleLeafLabels(ctx(sh('registration_staff')))).toEqual(labelsFor(registry));
+	it('registration_staff sees the evacuee registry and the registration desks only (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('registration_staff')))).toEqual(
+			labelsFor(registry, registrationDesks)
+		);
 	});
 
 	it('scopes to the active shelter: roles held in another shelter open nothing', () => {
@@ -269,7 +283,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	it('registration_staff does not see the kiosk device management', () => {
 		const roles = ['shelter:SH001', 'SH001:registration_staff'];
 		const labels = visibleLeafLabels(ctx(roles, 'SH001'));
-		expect(labels).toEqual(labelsFor(registry));
+		expect(labels).toEqual(labelsFor(registry, registrationDesks));
 		expect(labels).not.toContain(scannerDevices);
 		expect(labels).not.toContain(bannerManagement);
 		expect(labels).not.toContain('จัดการ Kiosk');
@@ -322,7 +336,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(
-			labelsFor(registry, scannerDevices, bannerManagement)
+			labelsFor(registry, registrationDesks, scannerDevices, bannerManagement)
 		);
 	});
 

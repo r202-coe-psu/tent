@@ -9,6 +9,8 @@ import {
 	isSystemAdmin,
 	canAccessDonations,
 	canAccessEvacueeRegistration,
+	canAccessMedicalScreening,
+	canAccessZoning,
 	canAccessIncidents,
 	canAccessKitchen,
 	canAccessManagerPages,
@@ -46,6 +48,10 @@ import Images from '@lucide/svelte/icons/images';
 import Printer from '@lucide/svelte/icons/printer';
 import Ambulance from '@lucide/svelte/icons/ambulance';
 import Boxes from '@lucide/svelte/icons/boxes';
+import House from '@lucide/svelte/icons/house';
+import HeartPulse from '@lucide/svelte/icons/heart-pulse';
+import Search from '@lucide/svelte/icons/search';
+import ScanLine from '@lucide/svelte/icons/scan-line';
 
 type Leaf = {
 	label: string;
@@ -106,6 +112,52 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				href: resolve('/back-office/evacuee-management'),
 				icon: Users,
 				visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+			},
+			// The /portal registration tiles, mirrored here so SA/SM can reach them from the sidebar.
+			// Each is shown exactly when its page guard lets the user in.
+			{
+				label: 'สถานีหน้างาน',
+				href: null,
+				icon: House,
+				children: [
+					{
+						label: 'สถานี 1 ลงทะเบียนครอบครัวและครัวเรือน',
+						href: resolve('/onsite/people'),
+						icon: House,
+						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+					},
+					{
+						label: 'สถานี 2 คัดกรองผู้เข้าพัก',
+						href: resolve('/onsite/medical-screening'),
+						icon: HeartPulse,
+						visibleTo: ({ roles, shelterCode }) => canAccessMedicalScreening(roles, shelterCode)
+					},
+					{
+						label: 'สถานี 3 จัดโซน',
+						href: resolve('/onsite/zoning'),
+						icon: MapPin,
+						visibleTo: ({ roles, shelterCode }) => canAccessZoning(roles, shelterCode)
+					}
+				]
+			},
+			{
+				label: 'เครื่องมือทะเบียน',
+				href: null,
+				icon: Search,
+				children: [
+					{
+						label: 'ค้นหาและแก้ไขข้อมูลผู้ประสบภัย',
+						href: resolve('/onsite/search-edit'),
+						icon: Search,
+						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+					},
+					{
+						label: 'สแกนเข้า-ออกศูนย์',
+						href: resolve('/onsite/scan-check-in-out'),
+						icon: ScanLine,
+						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+					}
+				]
 			},
 			{
 				label: 'จัดการอาสาสมัคร',

@@ -1,11 +1,11 @@
 import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 
 /**
- * Pages outside `/back-office` where a system admin or the shelter manager of the selected
+ * Pages outside `/back-office` (not `/portal`, which is itself the menu) where a system admin or the shelter manager of the selected
  * shelter still gets the back-office sidebar, so they can reach any page they may open without
  * going back to the portal (#1517). `/system-management` keeps its own sidebar.
  */
-const STAFF_SIDEBAR_PREFIXES = ['/portal', '/me', '/onsite'] as const;
+const STAFF_SIDEBAR_PREFIXES = ['/me', '/onsite'] as const;
 
 function underPrefix(pathname: string, prefix: string): boolean {
 	return pathname === prefix || pathname.startsWith(`${prefix}/`);
