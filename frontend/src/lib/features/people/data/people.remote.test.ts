@@ -134,7 +134,7 @@ describe('PeopleRemoteRepository', () => {
 
 		it('rejects assigning a new evacuee to a cancelled/checked-out household', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนปิดแล้ว', head_evacuee_id: null, status: 'cancelled' },
+				{ label: 'ครอบครัวปิดแล้ว', head_evacuee_id: null, status: 'cancelled' },
 				ctx
 			);
 
@@ -147,12 +147,12 @@ describe('PeopleRemoteRepository', () => {
 		it('rejects assigning a new evacuee to a non-existent household', async () => {
 			await expect(
 				repo.createEvacuee(evInput({ household_id: 'household:missing' }), ctx)
-			).rejects.toThrow(/ไม่พบครัวเรือนปลายทาง/);
+			).rejects.toThrow(/ไม่พบครอบครัวปลายทาง/);
 		});
 
 		it('allows assigning a new evacuee to an active household', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนเปิดอยู่', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัวเปิดอยู่', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 
@@ -268,7 +268,7 @@ describe('PeopleRemoteRepository', () => {
 
 		it('listMovementsByEvacuee returns only that evacuee’s movement history', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือน', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัว', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			const evacuee = await repo.createEvacuee(
@@ -289,11 +289,11 @@ describe('PeopleRemoteRepository', () => {
 
 		it('listHouseholdMembers returns only evacuees linked to that household', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือน', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัว', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			const otherHousehold = await repo.createHousehold(
-				{ label: 'ครัวเรือนอื่น', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัวอื่น', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			const member = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
@@ -321,7 +321,7 @@ describe('PeopleRemoteRepository', () => {
 		});
 
 		it('merges household section fields without replacing unrelated values', async () => {
-			const household = await repo.createHousehold({ label: 'ครัวเรือนหนึ่ง' }, ctx);
+			const household = await repo.createHousehold({ label: 'ครอบครัวหนึ่ง' }, ctx);
 
 			await repo.patchHousehold(household._id, { province: 'เชียงใหม่' });
 			await repo.patchHousehold(household._id, { head_evacuee_id: 'evacuee:test' });
@@ -337,11 +337,11 @@ describe('PeopleRemoteRepository', () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
 			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
 			const oldHousehold = await repo.createHousehold(
-				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				{ label: 'ครอบครัวเดิม', head_evacuee_id: first._id, status: 'checked_in' },
 				ctx
 			);
 			const targetHousehold = await repo.createHousehold(
-				{ label: 'ครัวเรือนใหม่', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัวใหม่', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			const linkedFirst = await repo.updateEvacuee({ ...first, household_id: oldHousehold._id });
@@ -357,11 +357,11 @@ describe('PeopleRemoteRepository', () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
 			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
 			const oldHousehold = await repo.createHousehold(
-				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				{ label: 'ครอบครัวเดิม', head_evacuee_id: first._id, status: 'checked_in' },
 				ctx
 			);
 			const targetHousehold = await repo.createHousehold(
-				{ label: 'ครัวเรือนใหม่', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัวใหม่', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			await repo.updateEvacuee({ ...first, household_id: oldHousehold._id });
@@ -382,7 +382,7 @@ describe('PeopleRemoteRepository', () => {
 			const first = await repo.createEvacuee(evInput({ first_name: 'First' }), ctx);
 			const second = await repo.createEvacuee(evInput({ first_name: 'Second' }), ctx);
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนเดิม', head_evacuee_id: first._id, status: 'checked_in' },
+				{ label: 'ครอบครัวเดิม', head_evacuee_id: first._id, status: 'checked_in' },
 				ctx
 			);
 			await repo.patchEvacuee(first._id, { household_id: household._id });
@@ -397,11 +397,11 @@ describe('PeopleRemoteRepository', () => {
 		it('moves a solo member and cancels the old household using fresh persisted data', async () => {
 			const member = await repo.createEvacuee(evInput(), ctx);
 			const oldHousehold = await repo.createHousehold(
-				{ label: 'ครัวเรือนเดิม', head_evacuee_id: member._id, status: 'checked_in' },
+				{ label: 'ครอบครัวเดิม', head_evacuee_id: member._id, status: 'checked_in' },
 				ctx
 			);
 			const targetHousehold = await repo.createHousehold(
-				{ label: 'ครัวเรือนใหม่', head_evacuee_id: member._id, status: 'checked_in' },
+				{ label: 'ครอบครัวใหม่', head_evacuee_id: member._id, status: 'checked_in' },
 				ctx
 			);
 			const linked = await repo.updateEvacuee({ ...member, household_id: oldHousehold._id });
@@ -418,7 +418,7 @@ describe('PeopleRemoteRepository', () => {
 	describe('household history and derived status (CR-112 A2)', () => {
 		it('keeps checked-out households available for direct profile/edit lookups', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนเก่า', head_evacuee_id: null, status: 'checked_out' },
+				{ label: 'ครอบครัวเก่า', head_evacuee_id: null, status: 'checked_out' },
 				ctx
 			);
 
@@ -430,7 +430,7 @@ describe('PeopleRemoteRepository', () => {
 
 		it('ignores free-form status overrides on updateHousehold', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนเก่า', head_evacuee_id: null, status: 'checked_out' },
+				{ label: 'ครอบครัวเก่า', head_evacuee_id: null, status: 'checked_out' },
 				ctx
 			);
 
@@ -441,7 +441,7 @@ describe('PeopleRemoteRepository', () => {
 
 		it('requires checkout_destination when derived status is checked_out', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัวทดสอบ', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			const member = await repo.createEvacuee(
@@ -457,7 +457,7 @@ describe('PeopleRemoteRepository', () => {
 
 		it('rejects checked_out derive when destination type lacks required sub-field', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัวทดสอบ', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			const member = await repo.createEvacuee(
@@ -476,7 +476,7 @@ describe('PeopleRemoteRepository', () => {
 
 		it('accepts derived checked_out with a valid checkout_destination', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'checked_in' },
+				{ label: 'ครอบครัวทดสอบ', head_evacuee_id: null, status: 'checked_in' },
 				ctx
 			);
 			const member = await repo.createEvacuee(
@@ -496,7 +496,7 @@ describe('PeopleRemoteRepository', () => {
 
 		it('derives checked_in after Zone Arrival Confirmation on a member', async () => {
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: null, status: 'arriving' },
+				{ label: 'ครอบครัวทดสอบ', head_evacuee_id: null, status: 'arriving' },
 				ctx
 			);
 			const member = await repo.createEvacuee(
@@ -1060,7 +1060,7 @@ describe('check-in / check-out', () => {
 
 		it('successfully promotes an evacuee from arriving to active and updates zone', async () => {
 			const arrivingEvacuee = await repo.createEvacuee(
-				evInput({ first_name: 'ผู้ประสบภัย', last_name: 'รอตรวจ', status: 'arriving' }),
+				evInput({ first_name: 'ผู้พักพิง', last_name: 'รอตรวจ', status: 'arriving' }),
 				ctx
 			);
 			expect(arrivingEvacuee.current_stay.status).toBe('arriving');
@@ -1317,7 +1317,7 @@ describe('check-in / check-out', () => {
 		});
 
 		it('refreshes the derived household status', async () => {
-			const household = await repo.createHousehold({ label: 'ครัวเรือนปรับสถานะ' }, ctx);
+			const household = await repo.createHousehold({ label: 'ครอบครัวปรับสถานะ' }, ctx);
 			const evacuee = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
 			await repo.revertEvacueeStatus(evacuee, ctx, 'cancelled', 'ผิดคน');
 			expect((await repo.getHousehold(household._id))?.status).toBe('cancelled');
@@ -1329,7 +1329,7 @@ describe('check-in / check-out', () => {
 
 	describe('confirmRoomForHousehold', () => {
 		it('bulk-confirms only pending household members (active with zone)', async () => {
-			const household = await repo.createHousehold({ label: 'ครัวเรือนยืนยันโซน' }, ctx);
+			const household = await repo.createHousehold({ label: 'ครอบครัวยืนยันโซน' }, ctx);
 			const a = await repo.createEvacuee(
 				evInput({ first_name: 'A', household_id: household._id }),
 				ctx
@@ -1342,7 +1342,7 @@ describe('check-in / check-out', () => {
 				evInput({ first_name: 'C', household_id: household._id }),
 				ctx
 			);
-			const otherHh = await repo.createHousehold({ label: 'ครัวเรือนอื่น' }, ctx);
+			const otherHh = await repo.createHousehold({ label: 'ครอบครัวอื่น' }, ctx);
 			const outsider = await repo.createEvacuee(
 				evInput({ first_name: 'Out', household_id: otherHh._id }),
 				ctx
@@ -1526,7 +1526,7 @@ describe('check-in / check-out', () => {
 	describe('cancelPreRegistration', () => {
 		it('cancels the household, cascades member stays to cancelled, and records the actor', async () => {
 			const member = await repo.createEvacuee(evInput(), ctx);
-			await repo.createEvacuee(evInput({ first_name: 'บุคคลนอกครัวเรือน' }), ctx);
+			await repo.createEvacuee(evInput({ first_name: 'บุคคลนอกครอบครัว' }), ctx);
 			const hh = await repo.createHousehold(
 				{
 					label: 'บ้านทดสอบ',
@@ -1567,7 +1567,7 @@ describe('check-in / check-out', () => {
 				target_type: 'household',
 				target_id: hh._id,
 				created_by: 'tester',
-				reason: 'ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า',
+				reason: 'ยกเลิกการลงทะเบียนครอบครัวล่วงหน้า',
 				context: {
 					previous_status: 'pre_registered',
 					next_status: 'cancelled',
@@ -2555,7 +2555,7 @@ describe('submitFamilyReportIn', () => {
 				members: [{ ...evInput(), reporting_in: true }],
 				ctx
 			})
-		).rejects.toThrow('กรุณาเลือกครัวเรือนเดิมหรือยืนยันสร้างครัวเรือนใหม่');
+		).rejects.toThrow('กรุณาเลือกครอบครัวเดิมหรือยืนยันสร้างครอบครัวใหม่');
 	});
 
 	it('reuses the reserved household and member ids when an explicit create report-in is retried', async () => {

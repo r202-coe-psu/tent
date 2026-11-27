@@ -266,9 +266,7 @@
 	<Field.FieldGroup>
 		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 			<div class="mb-6 border-b pb-4">
-				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
-					ข้อมูลหัวหน้าครัวเรือน
-				</h3>
+				<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">ข้อมูลผู้ติดต่อหลัก</h3>
 			</div>
 
 			<div class="grid grid-cols-1 items-start gap-6 md:grid-cols-[200px_1fr]">
@@ -704,7 +702,7 @@
 				disabled={$submitting}
 				class="h-11 bg-[#0d2240] px-8 font-semibold text-white hover:bg-[#1a3a5c]"
 			>
-				ถัดไป (ข้อมูลที่อยู่ครัวเรือน) →
+				ถัดไป (ข้อมูลที่อยู่ครอบครัว) →
 			</Form.Button>
 		</div>
 	</Field.FieldGroup>

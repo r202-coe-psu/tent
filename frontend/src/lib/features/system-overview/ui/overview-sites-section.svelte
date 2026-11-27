@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { resolve } from '$app/paths';
 	import { parseDate } from '@internationalized/date';
 	import * as Card from '$lib/components/ui/card';
@@ -13,13 +14,24 @@
 
 	let {
 		sites,
+		total = 0,
+		limit = 20,
+		offset = 0,
+		onOffsetChange,
 		loading = false,
+		stale = false,
 		movementFrom,
 		movementTo,
 		onMovementRangeChange
 	}: {
 		sites: OverviewSiteRow[] | undefined;
+		total?: number;
+		limit?: number;
+		offset?: number;
+		onOffsetChange?: (next: number) => void;
 		loading?: boolean;
+		/** Showing the previous query's rows while the next ones load. */
+		stale?: boolean;
 		movementFrom: string; // YYYY-MM-DD
 		movementTo: string;
 		onMovementRangeChange: (next: { movement_from: string; movement_to: string }) => void;
@@ -42,6 +54,10 @@
 	const siteKindQuery = useMasterData(() => 'site_kind');
 	const siteKindLabel = (code: string) =>
 		formatMasterLabelByCode(code, siteKindQuery.data?.items ?? [], langState.current);
+
+	const pageStart = $derived(total === 0 ? 0 : offset + 1);
+	const pageEnd = $derived(Math.min(offset + limit, total));
+	const currentPage = $derived(Math.floor(offset / limit) + 1);
 
 	function statusLabel(status: string): string {
 		return STATUS_LABELS[status] ?? status;
@@ -80,7 +96,12 @@
 		{:else if !sites || sites.length === 0}
 			<p class="py-6 text-center text-sm text-slate-500">ไม่พบศูนย์ที่ตรงเงื่อนไข</p>
 		{:else}
-			<div class="overflow-x-auto rounded-xl border border-slate-200/80">
+			<div
+				class="overflow-x-auto rounded-xl border border-slate-200/80 transition-opacity {stale
+					? 'opacity-60'
+					: ''}"
+				aria-busy={stale}
+			>
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
@@ -140,7 +161,7 @@
 								</Table.Cell>
 								<Table.Cell>
 									<a
-										href={resolve(site.dashboard_href as '/back-office/evacuee-management')}
+										href={resolve(site.dashboard_href as '/back-office/overview/evacuees')}
 										class="text-sm font-semibold text-[#0284C7] hover:underline"
 									>
 										แดชบอร์ด
@@ -151,6 +172,21 @@
 					</Table.Body>
 				</Table.Root>
 			</div>
+			{#if onOffsetChange && total > limit}
+				<div
+					class="mt-3 flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/50 px-1 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="text-xs text-slate-500 tabular-nums">
+						แสดง {pageStart} - {pageEnd} จาก {total} แห่ง
+					</div>
+					<PaginationControls
+						bind:page={() => currentPage, (p) => onOffsetChange((p - 1) * limit)}
+						count={total}
+						perPage={limit}
+						class="h-7 min-w-7 text-xs"
+					/>
+				</div>
+			{/if}
 		{/if}
 	</Card.Content>
 </Card.Root>

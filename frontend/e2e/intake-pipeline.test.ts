@@ -428,10 +428,10 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 	}) => {
 		await setupPage(page, STAFF, staffSession);
 		await page.goto('/onsite/people');
-		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 			timeout: 15_000
 		});
-		await expect(page.getByText('สถานี 1', { exact: true })).toBeVisible();
+		await expect(page.getByText('จุดลงทะเบียน', { exact: true }).first()).toBeVisible();
 
 		const search = page.getByLabel(INTAKE_SEARCH_PLACEHOLDER);
 		await search.fill('สมชายไม่มีในระบบ');
@@ -456,7 +456,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 	}) => {
 		await setupPage(page, STAFF, staffSession, { seedDocs: [EXISTING_EVACUEE] });
 		await page.goto('/onsite/people');
-		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 			timeout: 15_000
 		});
 
@@ -484,7 +484,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			seedDocs: [EXISTING_EVACUEE]
 		});
 		await page.goto('/onsite/people');
-		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 			timeout: 15_000
 		});
 
@@ -499,7 +499,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			seedDocs: [EXISTING_EVACUEE]
 		});
 		await page.goto('/onsite/people');
-		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 			timeout: 15_000
 		});
 
@@ -601,7 +601,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		});
 
 		await page.goto('/onsite/people');
-		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 			timeout: 15_000
 		});
 

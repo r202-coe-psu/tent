@@ -21,6 +21,12 @@ from .schemas import (
     PaginationMeta,
 )
 
+#: Site kinds partners may see. `test_center` (and any other kind) is never exposed; partners
+#: narrow further with the `site_kind` query param. `public_visible = false` shelters never
+#: reach `public_shelters` (the worker deletes them, CR-251), so no filter is needed here.
+_PARTNER_SITE_KINDS: tuple[str, ...] = ("evacuation_center", "host_house")
+_PARTNER_VISIBLE_QUERY: dict[str, Any] = {"site_kind": {"$in": list(_PARTNER_SITE_KINDS)}}
+
 
 def _location_error(status_code: int, code: str, message: str) -> HTTPException:
     return HTTPException(
@@ -144,8 +150,11 @@ class ThirdPartyLocationsUseCase:
         page: int = 1,
         limit: int = 50,
         accepts_booking_filter: bool | None = None,
+        site_kind_filter: str | None = None,
     ) -> LocationListEnvelope:
-        query: dict[str, Any] = {}
+        query: dict[str, Any] = dict(_PARTNER_VISIBLE_QUERY)
+        if site_kind_filter:
+            query["site_kind"] = site_kind_filter
         if status_filter:
             query["location_status"] = status_filter
         if not include_inactive:
@@ -171,7 +180,9 @@ class ThirdPartyLocationsUseCase:
         return LocationListEnvelope(result=items, pagination=pagination)
 
     async def get_location(self, location_code: str) -> LocationDetailEnvelope:
-        doc = await PublicShelter.find_one(PublicShelter.shelter_code == location_code)
+        doc = await PublicShelter.find_one(
+            {"shelter_code": location_code, **_PARTNER_VISIBLE_QUERY}
+        )
         if doc is None:
             raise _location_error(
                 status.HTTP_404_NOT_FOUND,

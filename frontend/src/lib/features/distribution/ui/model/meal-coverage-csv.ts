@@ -10,16 +10,32 @@ export const COVERAGE_CSV_HEADER = [
 	'มื้อที่ยังไม่มีบันทึก',
 	'ผู้แจก',
 	'สถานะ',
-	'ครัวเรือนมีบันทึกรับ'
+	'ครัวเรือนมีบันทึกรับ',
+	'จำนวนมื้อที่ได้รับ',
+	`จำนวนวันที่ไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ`,
+	'จำนวนวันที่อยู่ในศูนย์ไม่เต็มวัน'
 ] as const;
 
-/** "N/T" is meals on record over meals needed (capped at T), so a reader sees how far short. */
-export function coverageStatusLabel(
-	row: Pick<CoverageViewRow, 'counted' | 'complete'>,
-	threshold: number = MIN_MEALS_PER_DAY
-): string {
-	const progress = `${Math.min(row.counted, threshold)}/${threshold}`;
-	return row.complete ? `ครบ ${progress} มื้อ` : `ยังไม่ถึง ${threshold} มื้อ · ${progress}`;
+type StatusRow = Pick<
+	CoverageViewRow,
+	'counted' | 'complete' | 'judgedDays' | 'shortDays' | 'partialDays'
+>;
+
+/**
+ * The row's status in the words of the summary cards, so the badge and the card it is counted
+ * under read the same. Over a range (`multiDay`) a short row also says on how many of its judged
+ * days it fell short. Someone who was in the shelter only part of the day is never judged.
+ */
+export function coverageStatusLabel(row: StatusRow, multiDay = false): string {
+	if (row.judgedDays === 0) return 'อยู่ในศูนย์ไม่เต็มวัน';
+	if (multiDay) {
+		if (row.complete) return `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไปทุกวัน (${row.judgedDays} วัน)`;
+		return row.counted === 0
+			? 'รับ 0 มื้อทั้งช่วง'
+			: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ ${row.shortDays} จาก ${row.judgedDays} วัน`;
+	}
+	if (row.complete) return `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไป`;
+	return row.counted === 0 ? 'รับ 0 มื้อ' : 'รับแค่ 1 มื้อ';
 }
 
 const USER_PREFIX = /^org\.couchdb\.user:/;
@@ -54,7 +70,7 @@ function csvCell(value: string): string {
 export function coverageRowsToCsv(
 	rows: readonly CoverageViewRow[],
 	zoneName: (code: string | null) => string,
-	threshold: number = MIN_MEALS_PER_DAY
+	multiDay = false
 ): string {
 	const lines = rows.map((r) =>
 		[
@@ -63,8 +79,11 @@ export function coverageRowsToCsv(
 			mealList(r.received),
 			mealList(r.missing),
 			distributorNames(r),
-			coverageStatusLabel(r, threshold),
-			mealList(r.householdRecorded)
+			coverageStatusLabel(r, multiDay),
+			mealList(r.householdRecorded),
+			String(r.mealsReceived),
+			r.judgedDays > 0 ? String(r.shortDays) : '',
+			String(r.partialDays)
 		]
 			.map(csvCell)
 			.join(',')
@@ -72,6 +91,6 @@ export function coverageRowsToCsv(
 	return [COVERAGE_CSV_HEADER.map(csvCell).join(','), ...lines].join('\r\n');
 }
 
-export function coverageCsvFilename(shelterCode: string, day: string): string {
-	return `meal-coverage-${shelterCode}-${day}.csv`;
+export function coverageCsvFilename(shelterCode: string, from: string, to: string = from): string {
+	return `meal-coverage-${shelterCode}-${from === to ? from : `${from}_${to}`}.csv`;
 }

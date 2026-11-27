@@ -43,7 +43,7 @@ describe('FamilyBatchPrint (Station 1 completion summary)', () => {
 		_rev: '1-abc',
 		type: 'household',
 		schema_v: 6,
-		label: 'ครัวเรือนหนอกสีสุก',
+		label: 'ครอบครัวหนอกสีสุก',
 		head_evacuee_id: 'evacuee:test-1',
 		status: 'arriving',
 		checkout_destination: null,
@@ -81,7 +81,7 @@ describe('FamilyBatchPrint (Station 1 completion summary)', () => {
 		const result = renderSummary();
 
 		expect(result.body).not.toMatch(/Handover Slip/i);
-		expect(result.body).not.toContain('ใบส่งตัวผู้ประสบภัย');
+		expect(result.body).not.toContain('ใบส่งตัวผู้พักพิง');
 		expect(result.body).not.toContain('STATION 1 -> STATION 2');
 	});
 

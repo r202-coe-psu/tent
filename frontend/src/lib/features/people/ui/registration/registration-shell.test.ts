@@ -72,10 +72,10 @@ describe('RegistrationShell Station 1 single-page (CR-106 / FR-03b-H)', () => {
 		expect(result.body).toContain('ครอบครัว');
 		expect(result.body).toContain('บ้านเลขที่');
 		expect(result.body).toContain('เข้าร่วม');
-		expect(result.body).not.toContain('คงครัวเรือนเดิม');
+		expect(result.body).not.toContain('คงครอบครัวเดิม');
 		expect(result.body).not.toContain('สร้างใหม่');
 		expect(result.body).not.toContain('คนเดียว');
-		expect(result.body).not.toContain('ครัวเรือนนี้มีในระบบแล้วหรือยัง');
+		expect(result.body).not.toContain('ครอบครัวนี้มีในระบบแล้วหรือยัง');
 	});
 
 	it('shows linked-mode summary with keep / change residence / leave+create / join other', () => {

@@ -34,6 +34,12 @@ describe('normalizeHeader', () => {
 		expect(normalizeHeader('ประเภทอาคาร *')).toBe('ประเภทอาคาร');
 	});
 
+	it('reads the retired ชนิดสถานที่ header as the current ประเภทศูนย์ column', () => {
+		expect(normalizeHeader('ชนิดสถานที่')).toBe('ประเภทศูนย์');
+		expect(normalizeHeader('ชนิดสถานที่ *')).toBe('ประเภทศูนย์');
+		expect(normalizeHeader('ประเภทศูนย์')).toBe('ประเภทศูนย์');
+	});
+
 	it('does not mistake Object.prototype keys for retired headers', () => {
 		expect(normalizeHeader('constructor')).toBe('constructor');
 	});

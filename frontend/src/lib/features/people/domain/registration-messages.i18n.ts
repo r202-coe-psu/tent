@@ -44,7 +44,7 @@ const EN_BY_THAI_MESSAGE: Readonly<Record<string, string>> = {
 		'Please enter the house number, province, district and subdistrict',
 	ที่พักแบบไร้บ้านเลขที่ต้องมีจุดสังเกตหรือที่ตั้งครบ:
 		'A residence without a house number needs a landmark or a complete location',
-	'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ':
+	'ครอบครัวไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ':
 		'A homeless household needs a house number, a landmark or a complete geographic address',
 	กรุณากรอกชื่อหอพัก: 'Please enter the dormitory name',
 	กรุณากรอกเลขห้อง: 'Please enter the room number',

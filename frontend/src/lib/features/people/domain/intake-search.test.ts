@@ -40,7 +40,7 @@ describe('Station 1 intake search (#251)', () => {
 	});
 
 	it('labels stay status for anti-duplicate display', () => {
-		expect(shelterHitStatusLabel('arriving')).toContain('รอเข้าพัก');
+		expect(shelterHitStatusLabel('arriving')).toContain('รายงานตัวแล้ว · รอจัดโซน');
 		expect(shelterHitStatusLabel('active')).toContain('เข้าพัก');
 	});
 
