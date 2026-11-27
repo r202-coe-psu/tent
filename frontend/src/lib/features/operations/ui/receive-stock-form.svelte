@@ -38,10 +38,14 @@
 	import {
 		applyExpiryAutofill,
 		confirmExpiry,
+		EXPIRY_PRESETS,
+		expiryPresetDate,
+		matchingExpiryPreset,
 		editExpiry,
 		expiryMissing,
 		initialExpiryState,
 		todayLocalIso,
+		type ExpiryPreset,
 		type ExpiryState
 	} from '../domain/lot-expiry';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -49,7 +53,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { sha256Hex } from '$lib/db/hash';
 	import { sanitizePhoneTyping, thaiMobilePhoneSchema } from '$lib/db/model';
-	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE, formatThaiDate } from '$lib/utils/date';
 	import {
 		useDonations,
 		useReceiveStock,
@@ -64,7 +68,6 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import HandHelping from '@lucide/svelte/icons/hand-helping';
 	import Package from '@lucide/svelte/icons/package';
-	import { SvelteDate } from 'svelte/reactivity';
 	import { tick } from 'svelte';
 
 	export type MovementFormSuccess = { keepOpen: boolean; summary?: string };
@@ -403,13 +406,17 @@
 		isDonationDropdownOpen = false;
 	}
 
-	/** Quick expiry shortcuts: +7ว / +6ด / +1ปี */
-	function setQuickExpiry(offset: { days?: number; months?: number; years?: number }) {
-		const d = new SvelteDate();
-		if (offset.years) d.setFullYear(d.getFullYear() + offset.years);
-		if (offset.months) d.setMonth(d.getMonth() + offset.months);
-		if (offset.days) d.setDate(d.getDate() + offset.days);
-		setExpiryDate(d.toISOString().split('T')[0] ?? '');
+	const expiryToday = todayLocalIso();
+	const activeExpiryPreset = $derived(matchingExpiryPreset(expiryToday, expiry.value));
+
+	/** "27 พ.ค. 70" — the year matters once a preset crosses into next year. */
+	function presetDateLabel(preset: ExpiryPreset): string {
+		const iso = expiryPresetDate(expiryToday, preset);
+		return `${formatThaiDate(iso)} ${(Number(iso.slice(0, 4)) + 543) % 100}`;
+	}
+
+	function setQuickExpiry(preset: ExpiryPreset) {
+		setExpiryDate(expiryPresetDate(expiryToday, preset));
 	}
 
 	// Submit handler
@@ -931,41 +938,46 @@
 			<Form.Field {form} name="lot.expiry" class="col-span-1 sm:col-span-2">
 				<Form.Control>
 					{#snippet children({ props })}
-						<div class="mb-1 flex flex-wrap items-center justify-between gap-2">
-							<Form.Label>
-								วันหมดอายุ
-								{#if selectedItem?.requiresExpiry}
-									<span class="font-bold text-destructive">*</span>
-								{:else}
-									<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
-								{/if}
-							</Form.Label>
-							<div class="flex flex-wrap gap-2">
-								<Button
+						<Form.Label>
+							วันหมดอายุ
+							{#if selectedItem?.requiresExpiry}
+								<span class="font-bold text-destructive">*</span>
+							{:else}
+								<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+							{/if}
+						</Form.Label>
+						<p class="mt-1 text-sm text-muted-foreground">
+							เลือกอายุสินค้านับจากวันนี้ หรือเลือกวันที่เองจากปฏิทินด้านล่าง
+						</p>
+						<div
+							class="mt-2 mb-2 grid grid-cols-3 gap-2"
+							role="group"
+							aria-label="อายุสินค้าแบบด่วน"
+						>
+							{#each EXPIRY_PRESETS as preset (preset.id)}
+								{@const active = activeExpiryPreset === preset.id}
+								<button
 									type="button"
-									variant="outline"
-									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-									onclick={() => setQuickExpiry({ days: 7 })}
+									aria-pressed={active}
+									class={[
+										'flex min-h-11 flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+										active
+											? 'border-primary bg-primary text-primary-foreground'
+											: 'border-input bg-background hover:bg-muted'
+									]}
+									onclick={() => setQuickExpiry(preset)}
 								>
-									+7ว
-								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-									onclick={() => setQuickExpiry({ months: 6 })}
-								>
-									+6ด
-								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-									onclick={() => setQuickExpiry({ years: 1 })}
-								>
-									+1ปี
-								</Button>
-							</div>
+									<span class="text-sm font-bold">{preset.label}</span>
+									<span
+										class={[
+											'text-xs font-medium',
+											active ? 'text-primary-foreground' : 'text-foreground'
+										]}
+									>
+										ถึง {presetDateLabel(preset)}
+									</span>
+								</button>
+							{/each}
 						</div>
 						<DatePicker
 							{...props}
