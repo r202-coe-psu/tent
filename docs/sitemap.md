@@ -2,7 +2,7 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-11-27 # draft CR meal-coverage-report §8 — `/back-office/overview/{evacuees,food}` "ภาพรวมศูนย์" (SA, SM) · draft CR central-warehouse-m6 (2026-11-12, implemented on `feat/m6-central-warehouse`, CR number pending) — `/back-office/onedata/m6` คลังกลาง (D18; SA, SM, `warehouse_staff`) · draft CR referral-m5 D17 — `/back-office/onedata/m5` (OneData Platform menu)
+updated: 2026-11-27 # CR-267 (เดิม draft meal-coverage-report) §8 — `/back-office/overview/{evacuees,food}` "ภาพรวมศูนย์" (SA, SM) · draft CR central-warehouse-m6 (2026-11-12, implemented on `feat/m6-central-warehouse`, CR number pending) — `/back-office/onedata/m6` คลังกลาง (D18; SA, SM, `warehouse_staff`) · draft CR referral-m5 D17 — `/back-office/onedata/m5` (OneData Platform menu)
 note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-155 route `/back-office/incidents` (แทน `/reports` ของ CR-040)
 ---
 
