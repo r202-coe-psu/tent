@@ -206,6 +206,25 @@
 		if (value?.recipientType === 'outside') choose(outsideSelection());
 	}
 
+	const isOutside = $derived(value?.recipientType === 'outside');
+
+	const recipientKinds = [
+		{ id: 'inside', label: 'บุคคลในศูนย์', icon: User },
+		{
+			id: 'outside',
+			label: 'บุคคลภายนอก',
+			icon: Building2
+		}
+	] as const;
+
+	function pickKind(kind: 'inside' | 'outside') {
+		if (kind === 'outside') {
+			if (!isOutside) switchToOutside();
+		} else if (isOutside) {
+			handleClearSelection();
+		}
+	}
+
 	function handleClearSelection() {
 		searchTerm = '';
 		scanError = null;
@@ -232,11 +251,37 @@
 </script>
 
 <div class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
-	<p class="text-sm font-semibold text-slate-700">
+	<p id="recipient-kind-label" class="text-sm font-semibold text-slate-700">
 		ผู้รับ <span class="text-red-500">*</span>
 	</p>
 
-	{#if value}
+	{#if allowOutside}
+		<div role="group" aria-labelledby="recipient-kind-label" class="grid grid-cols-2 gap-2">
+			{#each recipientKinds as kind (kind.id)}
+				{@const active = (kind.id === 'outside') === isOutside}
+				<button
+					type="button"
+					aria-pressed={active}
+					onclick={() => pickKind(kind.id)}
+					{disabled}
+					class="flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none disabled:opacity-50 {active
+						? 'border-[#0A2647] bg-sky-50 ring-1 ring-[#0A2647]'
+						: 'border-slate-200 bg-white hover:bg-slate-50'}"
+				>
+					<span
+						class="flex size-9 shrink-0 items-center justify-center rounded-full {active
+							? 'bg-[#0A2647] text-white'
+							: 'bg-slate-100 text-slate-600'}"
+					>
+						<kind.icon class="size-4" aria-hidden="true" />
+					</span>
+					<span class="text-sm font-bold text-slate-900">{kind.label}</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
+
+	{#if value && !isOutside}
 		<!-- Selected recipient -->
 		<div
 			class="flex flex-col gap-3 rounded-lg border px-3 py-3 sm:flex-row sm:items-center sm:justify-between {value.recipientType ===
@@ -291,26 +336,24 @@
 				<span>เปลี่ยนคน</span>
 			</Button>
 		</div>
-
-		{#if value.recipientType === 'outside'}
-			<div class="space-y-1.5">
-				<label for="outside-notes" class="text-sm font-semibold text-slate-700">
-					หมายเหตุผู้รับ (ไม่บังคับ)
-				</label>
-				<Input
-					id="outside-notes"
-					type="text"
-					value={outsideNotes}
-					oninput={handleOutsideNotesInput}
-					placeholder="เช่น ประชาชนชุมชนข้างเคียง, ญาติผู้พักพิง..."
-					class="h-10 rounded-lg text-sm shadow-2xs"
-					{disabled}
-				/>
-				<p class="text-xs text-slate-500">
-					บุคคลภายนอกรับได้เฉพาะอาหารและของแจกจ่าย ไม่สามารถยืมของประเภทต้องคืนได้
-				</p>
-			</div>
-		{/if}
+	{:else if isOutside}
+		<div class="mt-1 space-y-2 border-t border-slate-100 pt-4">
+			<label for="outside-notes" class="text-sm font-semibold text-slate-700">
+				หมายเหตุผู้รับ (ไม่บังคับ)
+			</label>
+			<Input
+				id="outside-notes"
+				type="text"
+				value={outsideNotes}
+				oninput={handleOutsideNotesInput}
+				placeholder="เช่น ประชาชนชุมชนข้างเคียง, ญาติผู้พักพิง..."
+				class="h-10 rounded-lg text-sm shadow-2xs"
+				{disabled}
+			/>
+			<p class="text-xs text-slate-500">
+				บุคคลภายนอกรับได้เฉพาะอาหารและของแจกจ่าย ไม่สามารถยืมของประเภทต้องคืนได้
+			</p>
+		</div>
 	{:else}
 		<!-- Scan first -->
 		<Button
@@ -428,19 +471,6 @@
 					</button>
 				{/each}
 			</div>
-		{/if}
-
-		{#if allowOutside}
-			<Button
-				type="button"
-				variant="ghost"
-				onclick={switchToOutside}
-				{disabled}
-				class="min-h-11 w-full text-sm font-semibold text-slate-600"
-			>
-				<Building2 class="size-4" aria-hidden="true" />
-				<span>บุคคลภายนอก</span>
-			</Button>
 		{/if}
 	{/if}
 </div>
