@@ -407,7 +407,7 @@
 							class="min-h-11 gap-2 rounded-xl text-sm font-bold"
 						>
 							<User class="h-4 w-4" />
-							ลงทะเบียน Walk-in
+							รับบริจาคหน้าเคาน์เตอร์
 						</Button>
 					{/snippet}
 				</PendingReviewBoard>
