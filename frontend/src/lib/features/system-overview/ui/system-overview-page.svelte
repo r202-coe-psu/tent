@@ -34,6 +34,8 @@
 	);
 
 	const summaryQuery = useOverviewSummary(() => filters);
+	// Site-kind cards are fleet-wide totals: deliberately NOT driven by the filter bar.
+	const siteKindSummaryQuery = useOverviewSummary(() => ({}));
 	const SITES_PAGE_SIZE = 20;
 	let sitesOffset = $state(0);
 	const sitesQuery = useOverviewSites(() => ({
@@ -45,11 +47,20 @@
 	const demographicsQuery = useOverviewDemographics(() => filters);
 
 	const isError = $derived(
-		summaryQuery.isError || sitesQuery.isError || originQuery.isError || demographicsQuery.isError
+		summaryQuery.isError ||
+			siteKindSummaryQuery.isError ||
+			sitesQuery.isError ||
+			originQuery.isError ||
+			demographicsQuery.isError
 	);
 </script>
 
 <StaffPageShell title={t.pageTitle} description={t.pageDescription}>
+	<OverviewSiteKindStrip
+		summary={siteKindSummaryQuery.data}
+		loading={siteKindSummaryQuery.isPending}
+	/>
+
 	<OverviewFilterBar
 		{filters}
 		showSearch={false}
@@ -66,8 +77,6 @@
 			<AlertDescription>{t.errorBody}</AlertDescription>
 		</Alert>
 	{/if}
-
-	<OverviewSiteKindStrip summary={summaryQuery.data} loading={summaryQuery.isPending} />
 
 	<OverviewPhaseStrip summary={summaryQuery.data} loading={summaryQuery.isPending} />
 
