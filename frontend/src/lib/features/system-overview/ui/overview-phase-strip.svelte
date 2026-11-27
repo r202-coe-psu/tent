@@ -4,6 +4,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import OverviewTermHint from './overview-term-hint.svelte';
 	import type { OverviewSummary } from '../domain/schemas';
 
 	let {
@@ -56,19 +57,28 @@
 			</Card.Header>
 			<Card.Content class="space-y-2">
 				<div class="flex items-baseline justify-between gap-2">
-					<span class="text-sm text-slate-600">{t.current}</span>
+					<span class="inline-flex items-center gap-1 text-sm text-slate-600">
+						{t.current}
+						<OverviewTermHint text={t.hintCurrent} label={t.current} />
+					</span>
 					<span class="text-2xl font-bold text-slate-900 tabular-nums">
 						{summary?.present_total ?? '—'}
 					</span>
 				</div>
 				<div class="flex items-baseline justify-between gap-2">
-					<span class="text-sm text-slate-600">{t.forecast}</span>
+					<span class="inline-flex items-center gap-1 text-sm text-slate-600">
+						{t.forecast}
+						<OverviewTermHint text={t.hintForecast} label={t.forecast} />
+					</span>
 					<span class="text-2xl font-bold text-slate-900 tabular-nums">
 						{summary?.forecast_total ?? '—'}
 					</span>
 				</div>
 				<div class="flex items-baseline justify-between gap-2 pt-1 text-sm text-slate-600">
-					<span>{t.avgCapacityUse}</span>
+					<span class="inline-flex items-center gap-1">
+						{t.avgCapacityUse}
+						<OverviewTermHint text={t.hintCapacityUse} label={t.avgCapacityUse} />
+					</span>
 					<span class="font-semibold text-slate-800 tabular-nums">
 						{t.avgCapacityValue(
 							formatPct(summary?.avg_present_pct),

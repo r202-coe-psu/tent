@@ -6,6 +6,7 @@
 	import { parseDate } from '@internationalized/date';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
+	import OverviewTermHint from './overview-term-hint.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import { Badge } from '$lib/components/ui/badge';
 	import { DateRangePicker } from '$lib/components/ui/date-picker';
@@ -107,8 +108,18 @@
 							<Table.Head>{t.colName}</Table.Head>
 							<Table.Head>{t.colKind}</Table.Head>
 							<Table.Head>{t.colStatus}</Table.Head>
-							<Table.Head class="text-right">{t.colPresent}</Table.Head>
-							<Table.Head class="text-right">{t.colForecast}</Table.Head>
+							<Table.Head class="text-right">
+								<span class="inline-flex items-center justify-end gap-1">
+									{t.colPresent}
+									<OverviewTermHint text={t.hintCurrent} label={t.colPresent} />
+								</span>
+							</Table.Head>
+							<Table.Head class="text-right">
+								<span class="inline-flex items-center justify-end gap-1">
+									{t.colForecast}
+									<OverviewTermHint text={t.hintForecast} label={t.colForecast} />
+								</span>
+							</Table.Head>
 							<Table.Head class="text-right">{t.colPresentPct}</Table.Head>
 							<Table.Head class="text-right">{t.colForecastPct}</Table.Head>
 							<Table.Head class="text-right">{t.colCheckin}</Table.Head>

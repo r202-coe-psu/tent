@@ -22,6 +22,11 @@ const th = {
 	current: 'ปัจจุบัน',
 	forecast: 'คาดการณ์',
 	avgCapacityUse: 'อัตราการใช้ความจุเฉลี่ย',
+	hintCurrent: 'จำนวนผู้ที่มีสถานะเข้าพักแล้ว ยืนยันห้องพักแล้ว หรือออกจากศูนย์ชั่วคราว',
+	hintForecast:
+		'จำนวนผู้ที่อยู่ในศูนย์และผู้ที่ลงทะเบียนหรือรายงานตัวแล้ว รวมถึงผู้ที่รอคัดกรองและจัดที่พัก',
+	hintCapacityUse:
+		'สัดส่วนความจุของทุกศูนย์รวมกัน โดยคิดจากจำนวนผู้พักทั้งหมดเทียบกับความจุรวม ไม่ใช่การเฉลี่ยเปอร์เซ็นต์ของแต่ละศูนย์',
 	avgCapacityValue: (now: string, forecast: string) => `ตอนนี้ ${now} · คาดการณ์ ${forecast}`,
 
 	// ---- shelter counts per kind
@@ -111,6 +116,12 @@ const en: typeof th = {
 	current: 'Current',
 	forecast: 'Forecast',
 	avgCapacityUse: 'Average capacity in use',
+	hintCurrent:
+		'People whose status is checked in, room confirmed or temporarily away from the shelter',
+	hintForecast:
+		'People in the shelter plus those who have registered or reported in, including those awaiting screening and placement',
+	hintCapacityUse:
+		'Share of the combined capacity of all shelters, calculated from total occupants against total capacity — not an average of each shelter’s percentage',
 	avgCapacityValue: (now: string, forecast: string) => `Now ${now} · forecast ${forecast}`,
 
 	siteUnit: 'shelters',

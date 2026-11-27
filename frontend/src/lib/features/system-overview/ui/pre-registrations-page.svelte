@@ -4,7 +4,6 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
-	import { spatial } from '$lib/tokens';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { AGE_BUCKET_LABELS } from '$lib/features/dashboard';
 	import {
@@ -92,9 +91,9 @@
 		</Alert>
 	{/if}
 
-	<div class={spatial.container.staffPageCard}>
+	<div class="space-y-3">
 		<div
-			class="p-4 transition-opacity sm:p-6 {listQuery.isPlaceholderData ? 'opacity-60' : ''}"
+			class="transition-opacity {listQuery.isPlaceholderData ? 'opacity-60' : ''}"
 			aria-busy={listQuery.isPlaceholderData}
 		>
 			{#if listQuery.isPending && items.length === 0}
@@ -104,7 +103,7 @@
 			{:else}
 				<ul
 					role="list"
-					class="divide-y rounded-xl border border-slate-200/80 md:hidden"
+					class="divide-y rounded-xl border border-slate-200/80 bg-white md:hidden"
 					data-testid="prereg-cards"
 				>
 					{#each items as item (item.id)}
@@ -134,7 +133,7 @@
 						</li>
 					{/each}
 				</ul>
-				<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 md:block">
+				<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 bg-white md:block">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
@@ -179,9 +178,7 @@
 			{/if}
 		</div>
 		{#if total > limit}
-			<div
-				class="flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-			>
+			<div class="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
 				<div class="text-xs text-slate-500 tabular-nums">
 					แสดง {pageStart.toLocaleString('th-TH')} - {pageEnd.toLocaleString('th-TH')} จาก
 					{total.toLocaleString('th-TH')} รายการ
