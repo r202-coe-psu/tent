@@ -48,7 +48,7 @@ describe('StaffAccountMenu trigger', () => {
 		expect(render().textContent?.trim()).toBe('somchai');
 	});
 
-	it('renders no initials avatar', () => {
+	it('renders no initials avatar when there is room for the name', () => {
 		session.user = { name: 'somchai', roles: [], display_name: 'Somchai Jaidee' };
 		const trigger = render();
 		expect(trigger.textContent).not.toContain('SO');
@@ -56,16 +56,14 @@ describe('StaffAccountMenu trigger', () => {
 		expect(trigger.querySelector('.rounded-full')).toBeNull();
 	});
 
-	it('keeps the name visible in compact mode and truncates it', () => {
+	it('shows only an initial badge in compact mode, with the name as label and hover title', () => {
 		session.user = { name: 'somchai', roles: [], display_name: 'สมชาย ใจดี' };
 		const trigger = render({ compact: true });
-		const name = trigger.querySelector('span');
-		expect(name?.textContent?.trim()).toBe('สมชาย ใจดี');
-		expect(name?.className).toContain('truncate');
-		expect(name?.className).not.toContain('hidden');
-		// Stays inside a narrow collapsed rail instead of spilling past it.
-		expect(trigger.className).toContain('overflow-hidden');
-		expect(trigger.className).toContain('max-w-full');
+		const badge = trigger.querySelector('span');
+		expect(badge?.textContent?.trim()).toBe('ส');
+		expect(badge?.className).toContain('rounded-full');
+		expect(trigger.textContent).not.toContain('สมชาย ใจดี');
+		expect(trigger.getAttribute('aria-label')).toBe('สมชาย ใจดี');
 		expect(trigger.getAttribute('title')).toBe('สมชาย ใจดี');
 	});
 });
