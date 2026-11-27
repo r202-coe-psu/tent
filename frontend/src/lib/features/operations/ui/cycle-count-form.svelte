@@ -59,7 +59,7 @@
 	const negativeLotNotes = $derived(
 		counted.negativeLots.map((lot) => ({
 			key: lot.lot_ref,
-			text: `${itemsById.get(lot.item_id)?.name ?? lot.item_id} ${lot.qty} ${lot.unit}`
+			text: `${itemsById.get(lot.item_id)?.name ?? lot.item_id} ${lot.qty} ${unitLabel(lot)}`
 		}))
 	);
 

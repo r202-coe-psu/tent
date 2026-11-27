@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -35,6 +37,10 @@
 		stockSearch?: string;
 		onOpenCart: () => void;
 	} = $props();
+
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 
 	const PAGE_SIZE = 100;
 	const ALL_TYPES = '__all__';
@@ -274,7 +280,7 @@
 										<span class="block text-xs font-normal text-slate-500">{item.item_code}</span>
 									</Table.Cell>
 									<Table.Cell class="text-slate-700">{item.type_code ?? '–'}</Table.Cell>
-									<Table.Cell class="text-slate-700">{item.unit}</Table.Cell>
+									<Table.Cell class="text-slate-700">{unitLabel(item.unit)}</Table.Cell>
 									<Table.Cell class="text-right font-semibold text-slate-900 tabular-nums">
 										{formatQty(item.available)}
 									</Table.Cell>
