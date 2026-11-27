@@ -435,12 +435,12 @@
 		<Form.Field {form} name="site_kind">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>ชนิดสถานที่<span class="text-destructive">*</span></Form.Label>
+					<Form.Label>ประเภทศูนย์<span class="text-destructive">*</span></Form.Label>
 					<Select.Root type="single" bind:value={$formData.site_kind} {disabled}>
 						<Select.Trigger {...props} class={selectTriggerClass}>
 							{$formData.site_kind
 								? formatMasterLabelByCode($formData.site_kind, siteKindItems, langState.current)
-								: '— เลือกชนิดสถานที่ —'}
+								: '— เลือกประเภทศูนย์ —'}
 						</Select.Trigger>
 						<Select.Content>
 							{#each siteKindOptions as opt (opt.value)}
