@@ -722,13 +722,13 @@ describe('coverage status tones and labels', () => {
 			complete: 'รับ 2 มื้อขึ้นไป/วัน',
 			incomplete: 'รับไม่ถึง 2 มื้อ/วัน',
 			partial: 'รับแค่ 1 มื้อ',
-			none: 'ยังไม่มีบันทึกรับ'
+			none: 'รับ 0 มื้อ'
 		});
 		expect(coverageStatusLabels(true)).toEqual({
 			complete: 'รับ 2 มื้อขึ้นไปทุกวัน',
 			incomplete: 'รับไม่ถึง 2 มื้อบางวัน',
 			partial: 'รับไม่ถึง 2 มื้อบางวัน',
-			none: 'ไม่มีบันทึกรับทั้งช่วง'
+			none: 'รับ 0 มื้อทั้งช่วง'
 		});
 	});
 });
@@ -784,13 +784,13 @@ describe('coverageFilterLabels', () => {
 		expect(day.complete).toBe('รับ 2 มื้อขึ้นไป/วัน');
 		expect(day.incomplete).toBe('รับไม่ถึง 2 มื้อ/วัน');
 		expect(day.partial).toBe('รับแค่ 1 มื้อ');
-		expect(day.none).toBe('ยังไม่มีบันทึกรับ');
+		expect(day.none).toBe('รับ 0 มื้อ');
 		expect(day.part_day).toBe('อยู่ในศูนย์ไม่เต็มวัน (ไม่นับเกณฑ์)');
 		const range = coverageFilterLabels(true);
 		expect(range.complete).toBe('รับ 2 มื้อขึ้นไปทุกวัน');
 		// The union and the one-meal group would read the same over a range: the union says so.
 		expect(range.incomplete).toBe('รับไม่ถึง 2 มื้อบางวัน (รวมทุกกลุ่ม)');
 		expect(range.partial).toBe('รับไม่ถึง 2 มื้อบางวัน');
-		expect(range.none).toBe('ไม่มีบันทึกรับทั้งช่วง');
+		expect(range.none).toBe('รับ 0 มื้อทั้งช่วง');
 	});
 });

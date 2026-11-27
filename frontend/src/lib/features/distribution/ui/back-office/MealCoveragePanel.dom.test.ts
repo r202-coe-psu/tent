@@ -202,9 +202,9 @@ describe('MealCoveragePanel', () => {
 		expect(text).toContain('สมชาย ใจดี');
 		expect(text).toContain('รับไม่ถึง 2 มื้อ/วัน จากผู้พักพิงในศูนย์ 2 คน');
 		expect(rowTexts()).toHaveLength(2);
-		expect(rowTexts()[0]).toContain('รับไม่ถึง 2 มื้อ · รับแล้ว 1/2 มื้อ');
+		expect(rowTexts()[0]).toContain('รับแค่ 1 มื้อ');
 		expect(rowTexts()[1]).toContain('สมหญิง');
-		expect(rowTexts()[1]).toContain('รับ 2 มื้อขึ้นไป · 2/2 มื้อ');
+		expect(rowTexts()[1]).toContain('รับ 2 มื้อขึ้นไป');
 		const row = document.querySelector('tbody tr') as Element;
 		expect(mealBadges(row)).toEqual([
 			'เช้า มีบันทึก',
@@ -410,7 +410,7 @@ describe('MealCoveragePanel', () => {
 			env.logs.data = { items: [log('evacuee:B', 'lunch')], skipped: [] };
 			render();
 			expect(rowTexts()).toHaveLength(2);
-			chooseStatus('ยังไม่มีบันทึกรับ');
+			chooseStatus('รับ 0 มื้อ');
 			expect(rowTexts()).toHaveLength(1);
 			expect(rowTexts()[0]).toContain('สมชาย');
 		});
@@ -465,8 +465,8 @@ describe('MealCoveragePanel today', () => {
 		const text = (document.body.textContent ?? '').replace(/\s+/g, ' ');
 		expect(text).toContain('วันนี้ยังไม่ได้แจกมื้อใด · ตัวเลขของวันนี้จะเริ่มนับเมื่อแจกมื้อเช้า');
 		expect(rowTexts()).toHaveLength(2);
-		expect(rowTexts()[0]).toContain('รับไม่ถึง 2 มื้อ · ยังไม่มีบันทึกรับ');
-		expect(text).not.toContain('0 มื้อ');
+		expect(rowTexts()[0]).toContain('รับ 0 มื้อ');
+		expect(text).not.toContain('แจกแล้ว 0');
 		for (const title of ['ภาพรวมการรับอาหาร', 'ความครบรายโซน', 'ผู้แจกอาหาร', 'อาหารที่แจกแล้ว']) {
 			expect(text).toContain(title);
 		}
@@ -482,10 +482,10 @@ describe('MealCoveragePanel today', () => {
 		);
 		expect(rowTexts()).toHaveLength(2);
 		expect(rowTexts()[0]).toContain('สมหญิง');
-		expect(rowTexts()[0]).toContain('รับไม่ถึง 2 มื้อ · ยังไม่มีบันทึกรับ');
+		expect(rowTexts()[0]).toContain('รับ 0 มื้อ');
 		expect(rowTexts()[0]).toContain('ยังไม่ถึงมื้อ');
 		expect(rowTexts()[1]).toContain('สมชาย');
-		expect(rowTexts()[1]).toContain('รับไม่ถึง 2 มื้อ · รับแล้ว 1/2 มื้อ');
+		expect(rowTexts()[1]).toContain('รับแค่ 1 มื้อ');
 	});
 
 	it('shows a meal that is not served yet as a short chip, with the reason for screen readers', () => {
@@ -549,7 +549,7 @@ describe('MealCoveragePanel today', () => {
 		const text = document.body.textContent ?? '';
 		expect(text).toContain('รายชื่อผู้พักพิงและบันทึกรับอาหาร');
 		expect(text).toContain('รับแค่ 1 มื้อ');
-		expect(text).toContain('ยังไม่มีบันทึกรับ');
+		expect(text).toContain('รับ 0 มื้อ');
 		expect(text).toContain('รับไม่ถึง 2 มื้อ/วัน');
 		expect(text).not.toContain('ยังไม่ถึง 1 มื้อ');
 		expect(text).not.toContain('ดูเกณฑ์ครบ');
@@ -657,7 +657,7 @@ describe('MealCoveragePanel zone, household, advisory and export', () => {
 		expect(csv.split('\r\n')).toHaveLength(2);
 		expect(csv).toContain('"สมหญิง ใจดี"');
 		expect(csv).not.toContain('สมชาย');
-		expect(csv).toContain('"รับไม่ถึง 2 มื้อ · ยังไม่มีบันทึกรับ"');
+		expect(csv).toContain('"รับ 0 มื้อ"');
 
 		search('ไม่มีใคร');
 		expect(exportButton().disabled).toBe(true);
@@ -704,7 +704,7 @@ describe('MealCoveragePanel overview and roster', () => {
 		expect(tileText('รับ 2 มื้อขึ้นไป/วัน')).toContain('2');
 		expect(tileText('รับ 2 มื้อขึ้นไป/วัน')).toContain('50% ของผู้พักพิง');
 		expect(tileText('รับแค่ 1 มื้อ')).toBe('รับแค่ 1 มื้อ 1 ขาดอีก 1 มื้อ · 25%');
-		expect(tileText('ยังไม่มีบันทึกรับ')).toBe('ยังไม่มีบันทึกรับ 1 ขาด 2 มื้อ · 25%');
+		expect(tileText('รับ 0 มื้อ')).toBe('รับ 0 มื้อ 1 ขาด 2 มื้อ · 25%');
 	});
 
 	it('shows how many people there only part of the day are left out of the headcount', () => {
@@ -733,8 +733,8 @@ describe('MealCoveragePanel overview and roster', () => {
 		);
 		expect(tileText('รับ 2 มื้อขึ้นไปทุกวัน')).toContain('0% ของผู้พักพิง');
 		expect(tileText('รับไม่ถึง 2 มื้อบางวัน')).toContain('มีวันที่รับ 0–1 มื้อ · ');
-		expect(tileText('ไม่มีบันทึกรับทั้งช่วง')).not.toContain('รับไม่ถึง');
-		expect(tileText('ไม่มีบันทึกรับทั้งช่วง')).toContain('% ของผู้พักพิง');
+		expect(tileText('รับ 0 มื้อทั้งช่วง')).not.toContain('รับไม่ถึง');
+		expect(tileText('รับ 0 มื้อทั้งช่วง')).toContain('% ของผู้พักพิง');
 	});
 
 	it('has plain cards: no buttons, nothing pressed, and a click changes nothing', () => {
@@ -746,7 +746,7 @@ describe('MealCoveragePanel overview and roster', () => {
 			expect(c.hasAttribute('aria-pressed')).toBe(false);
 			expect(c.className).not.toMatch(/cursor-pointer|hover:/);
 		}
-		click(tile('ยังไม่มีบันทึกรับ'));
+		click(tile('รับ 0 มื้อ'));
 		expect(rowTexts()).toHaveLength(4);
 		expect(document.querySelector('[data-active-filters]')).toBeNull();
 	});
@@ -792,14 +792,14 @@ describe('MealCoveragePanel overview and roster', () => {
 		const text = bodyText().replace(/\s+/g, ' ');
 		expect(text).toContain('รับ 2 มื้อขึ้นไป/วัน 2 คน 50%');
 		expect(text).toContain('รับแค่ 1 มื้อ 1 คน 25%');
-		expect(text).toContain('ยังไม่มีบันทึกรับ 1 คน 25%');
+		expect(text).toContain('รับ 0 มื้อ 1 คน 25%');
 	});
 
 	it('filters to the people who got 2 meals or more from the status menu', () => {
 		render();
 		chooseStatus('รับ 2 มื้อขึ้นไป/วัน');
 		expect(rowTexts()).toHaveLength(2);
-		expect(rowTexts().every((t) => t.includes('รับ 2 มื้อขึ้นไป · 2/2 มื้อ'))).toBe(true);
+		expect(rowTexts().every((t) => t.includes('รับ 2 มื้อขึ้นไป'))).toBe(true);
 	});
 
 	it('calls out how many people are under 2 meals, as information only', () => {
@@ -813,7 +813,7 @@ describe('MealCoveragePanel overview and roster', () => {
 
 	it('filters to the no-record and the one-meal groups from the status menu', () => {
 		render();
-		chooseStatus('ยังไม่มีบันทึกรับ');
+		chooseStatus('รับ 0 มื้อ');
 		expect(rowTexts()).toHaveLength(1);
 		expect(rowTexts()[0]).toContain('งาม');
 		chooseStatus('รับแค่ 1 มื้อ');
@@ -904,7 +904,7 @@ describe('MealCoveragePanel over a range, partial days and other recipients', ()
 			'2 มื้อ',
 			'5 / 6 วัน',
 			'amy, bob',
-			'รับไม่ถึง 2 มื้อบางวัน 5/6 วัน'
+			'รับไม่ถึง 2 มื้อ 5 จาก 6 วัน'
 		]);
 	});
 
@@ -1093,7 +1093,7 @@ describe('MealCoveragePanel over a range, partial days and other recipients', ()
 		expect(filename).toBe('meal-coverage-SH001-2026-11-04_2026-11-10.csv');
 		const [header, line] = csv.split('\r\n');
 		expect(header).toContain('"จำนวนวันที่ไม่ถึง 2 มื้อ"');
-		expect(line.endsWith('"รับไม่ถึง 2 มื้อบางวัน 6/6 วัน","","1","6","0"')).toBe(true);
+		expect(line.endsWith('"รับไม่ถึง 2 มื้อ 6 จาก 6 วัน","","1","6","0"')).toBe(true);
 	});
 });
 
@@ -1118,7 +1118,7 @@ describe('MealCoveragePanel filters and tiles are the same on every day', () => 
 		'รับ 2 มื้อขึ้นไป/วัน',
 		'รับไม่ถึง 2 มื้อ/วัน',
 		'รับแค่ 1 มื้อ',
-		'ยังไม่มีบันทึกรับ',
+		'รับ 0 มื้อ',
 		'อยู่ในศูนย์ไม่เต็มวัน (ไม่นับเกณฑ์)'
 	];
 
@@ -1132,12 +1132,7 @@ describe('MealCoveragePanel filters and tiles are the same on every day', () => 
 	])('shows the same four cards on %s', (_name, day) => {
 		render(day);
 		expect(tileLabels()).toHaveLength(4);
-		const expected = [
-			'ผู้พักพิงในศูนย์',
-			'รับ 2 มื้อขึ้นไป/วัน',
-			'รับแค่ 1 มื้อ',
-			'ยังไม่มีบันทึกรับ'
-		];
+		const expected = ['ผู้พักพิงในศูนย์', 'รับ 2 มื้อขึ้นไป/วัน', 'รับแค่ 1 มื้อ', 'รับ 0 มื้อ'];
 		tileLabels().forEach((text, i) => expect(text).toContain(expected[i]));
 	});
 

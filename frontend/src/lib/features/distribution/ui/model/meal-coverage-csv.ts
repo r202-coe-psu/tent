@@ -22,22 +22,20 @@ type StatusRow = Pick<
 >;
 
 /**
- * For one day, "N/T" is meals on record over meals needed (capped at T), so a reader sees how far
- * short. Over a range (`multiDay`) it is the days short out of the days judged. Someone who was
- * in the shelter only part of the day is never judged.
+ * The row's status in the words of the summary cards, so the badge and the card it is counted
+ * under read the same. Over a range (`multiDay`) a short row also says on how many of its judged
+ * days it fell short. Someone who was in the shelter only part of the day is never judged.
  */
 export function coverageStatusLabel(row: StatusRow, multiDay = false): string {
 	if (row.judgedDays === 0) return 'อยู่ในศูนย์ไม่เต็มวัน';
 	if (multiDay) {
-		return row.complete
-			? `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไปทุกวัน (${row.judgedDays} วัน)`
-			: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อบางวัน ${row.shortDays}/${row.judgedDays} วัน`;
+		if (row.complete) return `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไปทุกวัน (${row.judgedDays} วัน)`;
+		return row.counted === 0
+			? 'รับ 0 มื้อทั้งช่วง'
+			: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ ${row.shortDays} จาก ${row.judgedDays} วัน`;
 	}
-	const progress = `${Math.min(row.counted, MIN_MEALS_PER_DAY)}/${MIN_MEALS_PER_DAY}`;
-	if (row.complete) return `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไป · ${progress} มื้อ`;
-	return row.counted === 0
-		? `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ · ยังไม่มีบันทึกรับ`
-		: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ · รับแล้ว ${progress} มื้อ`;
+	if (row.complete) return `รับ ${MIN_MEALS_PER_DAY} มื้อขึ้นไป`;
+	return row.counted === 0 ? 'รับ 0 มื้อ' : 'รับแค่ 1 มื้อ';
 }
 
 const USER_PREFIX = /^org\.couchdb\.user:/;

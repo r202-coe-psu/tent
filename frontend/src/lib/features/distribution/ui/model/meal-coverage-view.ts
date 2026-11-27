@@ -401,7 +401,7 @@ export function coverageStatusLabels(
 			? `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อบางวัน`
 			: `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อ/วัน`,
 		partial: multiDay ? `รับไม่ถึง ${MIN_MEALS_PER_DAY} มื้อบางวัน` : 'รับแค่ 1 มื้อ',
-		none: multiDay ? 'ไม่มีบันทึกรับทั้งช่วง' : 'ยังไม่มีบันทึกรับ'
+		none: multiDay ? 'รับ 0 มื้อทั้งช่วง' : 'รับ 0 มื้อ'
 	};
 }
 
