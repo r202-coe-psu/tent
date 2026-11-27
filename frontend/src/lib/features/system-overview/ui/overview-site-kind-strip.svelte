@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import House from '@lucide/svelte/icons/house';
-	import FlaskConical from '@lucide/svelte/icons/flask-conical';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Ban from '@lucide/svelte/icons/ban';
 	import MapPin from '@lucide/svelte/icons/map-pin';
@@ -30,7 +30,7 @@
 	const KIND_STYLE: Record<string, { icon: typeof MapPin; tone: string }> = {
 		evacuation_center: { icon: Building2, tone: 'text-blue-500' },
 		host_house: { icon: House, tone: 'text-teal-500' },
-		test_center: { icon: FlaskConical, tone: 'text-purple-500' },
+		test_center: { icon: ClipboardCheck, tone: 'text-purple-500' },
 		__external__: { icon: ExternalLink, tone: 'text-orange-500' },
 		__closed_or_cancelled__: { icon: Ban, tone: 'text-slate-400' }
 	};
