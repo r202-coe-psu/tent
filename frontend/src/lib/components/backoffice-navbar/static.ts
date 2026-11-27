@@ -162,12 +162,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/onsite/zoning'),
 						icon: MapPin,
 						visibleTo: managerDesk(canAccessZoning)
-					},
-					{
-						label: 'จุดแจกจ่ายพัสดุและอาหาร',
-						href: resolve('/onsite/distribution'),
-						icon: Truck,
-						visibleTo: managerDesk(canAccessDistributionDesk)
 					}
 				]
 			},
@@ -269,6 +263,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/tickets/kitchen'),
 						icon: ClipboardCheck,
 						visibleTo: ({ roles, shelterCode }) => canAccessTickets(roles, shelterCode)
+					},
+					{
+						// Station 4 desk for SA / SM only (#1517); other roles open it from /portal.
+						label: 'จุดแจกจ่ายพัสดุและอาหาร',
+						href: resolve('/onsite/distribution'),
+						icon: Truck,
+						visibleTo: managerDesk(canAccessDistributionDesk)
 					}
 				]
 			},
