@@ -17,7 +17,6 @@
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table';
 	import * as Select from '$lib/components/ui/select';
-	import * as Tabs from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { useTickets, TICKET_STATUS_LABELS, type TicketStatus } from '$lib/features/tickets';
@@ -349,167 +348,208 @@
 		categoryFilter = 'ALL';
 		directionFilter = 'ALL';
 	}
+
+	const KITCHEN_KPI_CARDS = [
+		{
+			id: 'ALL',
+			label: 'คำร้องทั้งหมด',
+			hint: 'รวมทุกสถานะ',
+			icon: Layers,
+			count: (c: typeof counts) => c.all,
+			border: 'border-slate-200/80',
+			activeClass: 'border-slate-500 ring-slate-500',
+			focusClass: 'focus-visible:ring-slate-500',
+			labelClass: 'text-slate-500',
+			iconClass: 'text-slate-400',
+			hintClass: 'text-slate-400'
+		},
+		{
+			id: 'PENDING_PICK',
+			label: 'รอเบิกวัตถุดิบ',
+			hint: 'รอคลังจ่ายวัตถุดิบ',
+			icon: Clock3,
+			count: (c: typeof counts) => c.PENDING_PICK,
+			border: 'border-amber-200',
+			activeClass: 'border-amber-500 ring-amber-500',
+			focusClass: 'focus-visible:ring-amber-500',
+			labelClass: 'text-amber-800',
+			iconClass: 'text-amber-600',
+			hintClass: 'text-amber-700'
+		},
+		{
+			id: 'COOKING',
+			label: 'ครัวกำลังปรุง',
+			hint: 'อยู่ระหว่างปรุงอาหาร',
+			icon: Flame,
+			count: (c: typeof counts) => c.COOKING,
+			border: 'border-orange-200',
+			activeClass: 'border-orange-500 ring-orange-500',
+			focusClass: 'focus-visible:ring-orange-500',
+			labelClass: 'text-orange-800',
+			iconClass: 'text-orange-600',
+			hintClass: 'text-orange-700'
+		},
+		{
+			id: 'PENDING_RECEIPT',
+			label: 'รอตรวจรับเข้าคลัง',
+			hint: 'ปรุงเสร็จ รอคลังตรวจรับ',
+			icon: PackageCheck,
+			count: (c: typeof counts) => c.PENDING_RECEIPT,
+			border: 'border-sky-200',
+			activeClass: 'border-sky-600 ring-sky-600',
+			focusClass: 'focus-visible:ring-sky-600',
+			labelClass: 'text-sky-800',
+			iconClass: 'text-sky-600',
+			hintClass: 'text-sky-700'
+		},
+		{
+			id: 'DELIVERED_IN',
+			label: 'รับเข้าคลังแล้ว',
+			hint: 'เสร็จสมบูรณ์',
+			icon: CheckCircle2,
+			count: (c: typeof counts) => c.DELIVERED_IN,
+			border: 'border-slate-200/80',
+			activeClass: 'border-emerald-600 ring-emerald-600',
+			focusClass: 'focus-visible:ring-emerald-600',
+			labelClass: 'text-slate-700',
+			iconClass: 'text-emerald-600',
+			hintClass: 'text-slate-400'
+		}
+	] as const;
 </script>
 
-<div class="min-h-full bg-[#F8FAFC]">
-	<div class="mx-auto max-w-[110rem] space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-		<section class="rounded-2xl border border-orange-200 bg-white p-5 shadow-2xs sm:p-7">
+<div class="min-h-full bg-slate-50/50">
+	<div class="mx-auto flex max-w-[110rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+		<!-- Page Header -->
+		<div class="flex items-center gap-3">
 			<div
-				class="mb-3 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"
+				class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-200/80 bg-orange-50 text-orange-600 shadow-2xs"
 			>
-				<ChefHat class="h-3.5 w-3.5" />สายงานโรงครัวและเสบียงอาหาร
+				<ChefHat class="h-6 w-6" />
 			</div>
-			<div class="flex flex-col justify-between gap-5 lg:flex-row lg:items-start">
-				<div>
-					<h1
-						class="flex items-center gap-2 text-3xl font-extrabold tracking-tight text-[#0A2647] sm:text-4xl"
+			<div class="min-w-0">
+				<h1 class="text-2xl font-bold tracking-tight text-slate-900">
+					จัดการคำร้องโรงครัวและเสบียงอาหาร
+				</h1>
+				<p class="text-xs text-slate-500">
+					เบิกวัตถุดิบสำหรับปรุงอาหารแต่ละมื้อ และตรวจรับอาหารปรุงเสร็จ/อาหารบริจาคเข้าสต็อก
+				</p>
+			</div>
+		</div>
+
+		<!-- Status KPI cards (also the status filter) -->
+		<div
+			class="flex flex-wrap justify-center gap-3 *:basis-[calc(50%-0.375rem)] sm:*:basis-[calc(33.333%-0.5rem)] lg:flex-nowrap lg:*:min-w-0 lg:*:flex-1 lg:*:basis-0"
+		>
+			{#each KITCHEN_KPI_CARDS as card (card.id)}
+				{@const isActive = categoryFilter === card.id}
+				<button
+					type="button"
+					aria-pressed={isActive}
+					onclick={() => (categoryFilter = card.id)}
+					class="cursor-pointer rounded-xl border bg-white p-4 text-left shadow-2xs transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:outline-none {card.focusClass} {isActive
+						? `ring-1 ${card.activeClass}`
+						: card.border}"
+				>
+					<div class="flex items-center justify-between">
+						<span class="text-xs font-semibold {card.labelClass}">{card.label}</span>
+						<card.icon class="h-4 w-4 {card.iconClass}" />
+					</div>
+					<div class="mt-2 text-2xl font-bold text-slate-900 tabular-nums">
+						{card.count(counts)}
+					</div>
+					<p class="mt-0.5 text-xs {card.hintClass}">{card.hint}</p>
+				</button>
+			{/each}
+		</div>
+
+		<!-- Search + filters -->
+		<div class="space-y-3">
+			<div class="relative w-full">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+				/><Input
+					bind:value={search}
+					placeholder="ค้นหาในแท็บนี้ (โรงครัวและเสบียงอาหาร)... รหัสคำสั่ง, แหล่งต้นทาง, ปลายทาง หรือชื่อวัสดุเสบียง"
+					class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs placeholder:text-slate-400"
+				/>
+			</div>
+			<div class="flex flex-wrap items-end gap-3">
+				<div class="flex flex-col gap-1.5">
+					<label for="kitchen-filter-date" class="text-xs font-semibold text-slate-600"
+						>วันที่</label
 					>
-						<ChefHat class="h-7 w-7 text-orange-600" />จัดการคำร้องโรงครัวและเสบียงอาหาร
-					</h1>
-					<p
-						class="mt-2 max-w-2xl text-base leading-relaxed text-slate-600 lg:max-w-none lg:whitespace-nowrap"
+					<Select.Root type="single" bind:value={dateRange}
+						><Select.Trigger
+							id="kitchen-filter-date"
+							class="h-9 rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-9 sm:w-40"
+							><Select.Value placeholder="ทุกวันที่"
+								>{dateRange === 'today'
+									? 'วันนี้'
+									: dateRange === 'last7'
+										? '7 วันล่าสุด'
+										: dateRange === 'last30'
+											? '30 วันล่าสุด'
+											: 'ทุกวันที่'}</Select.Value
+							></Select.Trigger
+						><Select.Content
+							><Select.Item value="ALL" label="ทุกวันที่">ทุกวันที่</Select.Item><Select.Item
+								value="today"
+								label="วันนี้">วันนี้</Select.Item
+							><Select.Item value="last7" label="7 วันล่าสุด">7 วันล่าสุด</Select.Item><Select.Item
+								value="last30"
+								label="30 วันล่าสุด">30 วันล่าสุด</Select.Item
+							></Select.Content
+						></Select.Root
 					>
-						ระบบประสานงานเบิกวัตถุดิบสำหรับการปรุงอาหารแต่ละมื้อ
-						พร้อมตรวจรับอาหารปรุงเสร็จ/อาหารบริจาคเข้าสต็อก
-					</p>
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<label for="kitchen-filter-direction" class="text-xs font-semibold text-slate-600"
+						>ทิศทาง</label
+					>
+					<Select.Root type="single" bind:value={directionFilter}
+						><Select.Trigger
+							id="kitchen-filter-direction"
+							class="h-9 rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-9 sm:w-48"
+							><Select.Value placeholder="ทุกทิศทาง"
+								>{directionFilter === 'in'
+									? 'รับเข้า'
+									: directionFilter === 'out'
+										? 'จ่ายออก'
+										: 'ทุกทิศทาง'}</Select.Value
+							></Select.Trigger
+						><Select.Content
+							><Select.Item value="ALL" label="ทุกทิศทาง">ทุกทิศทาง</Select.Item><Select.Item
+								value="in"
+								label="รับเข้า">รับเข้า</Select.Item
+							><Select.Item value="out" label="จ่ายออก">จ่ายออก</Select.Item></Select.Content
+						></Select.Root
+					>
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<label for="kitchen-filter-status" class="text-xs font-semibold text-slate-600"
+						>สถานะ</label
+					>
+					<Select.Root
+						type="single"
+						value={categoryFilter}
+						onValueChange={(v) => (categoryFilter = v as typeof categoryFilter)}
+						><Select.Trigger
+							id="kitchen-filter-status"
+							class="h-9 rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-9 sm:w-44"
+							><Select.Value placeholder="ทุกสถานะ"
+								>{CATEGORY_FILTER_LABELS[categoryFilter]}</Select.Value
+							></Select.Trigger
+						><Select.Content
+							>{#each CATEGORY_FILTER_OPTIONS as option (option.value)}<Select.Item
+									value={option.value}
+									label={option.label}>{option.label}</Select.Item
+								>{/each}</Select.Content
+						></Select.Root
+					>
 				</div>
 			</div>
-
-			<!-- Category tabs -->
-			<Tabs.Root
-				value={categoryFilter}
-				onValueChange={(v) => (categoryFilter = v as typeof categoryFilter)}
-				class="mt-6 gap-0"
-			>
-				<Tabs.List class="h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
-					<Tabs.Trigger
-						value="ALL"
-						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 data-[state=active]:border-[#0A2647] data-[state=active]:bg-[#0A2647] data-[state=active]:text-white"
-					>
-						<Layers class="h-4 w-4" />คำร้องทั้งหมด
-						<span
-							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-							'ALL'
-								? 'bg-white/20'
-								: 'bg-slate-100 text-slate-700'}">{counts.all}</span
-						>
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="PENDING_PICK"
-						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-amber-300 data-[state=active]:border-amber-400 data-[state=active]:bg-amber-500 data-[state=active]:text-white"
-					>
-						<Clock3 class="h-4 w-4" />รอเบิกวัตถุดิบ
-						<span
-							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-							'PENDING_PICK'
-								? 'bg-white/20'
-								: 'bg-amber-100 text-amber-800'}">{counts.PENDING_PICK}</span
-						>
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="COOKING"
-						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-orange-300 data-[state=active]:border-orange-400 data-[state=active]:bg-orange-500 data-[state=active]:text-white"
-					>
-						<Flame class="h-4 w-4" />ครัวกำลังปรุง
-						<span
-							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-							'COOKING'
-								? 'bg-white/20'
-								: 'bg-orange-100 text-orange-800'}">{counts.COOKING}</span
-						>
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="PENDING_RECEIPT"
-						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-sky-300 data-[state=active]:border-sky-400 data-[state=active]:bg-sky-500 data-[state=active]:text-white"
-					>
-						<PackageCheck class="h-4 w-4" />รอตรวจรับเข้าคลัง
-						<span
-							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-							'PENDING_RECEIPT'
-								? 'bg-white/20'
-								: 'bg-sky-100 text-sky-800'}">{counts.PENDING_RECEIPT}</span
-						>
-					</Tabs.Trigger>
-					<Tabs.Trigger
-						value="DELIVERED_IN"
-						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-emerald-300 data-[state=active]:border-emerald-400 data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
-					>
-						<CheckCircle2 class="h-4 w-4" />รับเข้าคลังแล้ว
-						<span
-							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-							'DELIVERED_IN'
-								? 'bg-white/20'
-								: 'bg-emerald-100 text-emerald-800'}">{counts.DELIVERED_IN}</span
-						>
-					</Tabs.Trigger>
-				</Tabs.List>
-			</Tabs.Root>
-
-			<!-- Search + filters -->
-			<div class="mt-4 flex flex-col gap-2 sm:flex-row">
-				<div class="relative min-w-0 flex-1">
-					<Search
-						class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-					/><Input
-						bind:value={search}
-						placeholder="ค้นหาในแท็บนี้ (โรงครัวและเสบียงอาหาร)... รหัสคำสั่ง, แหล่งต้นทาง, ปลายทาง หรือชื่อวัสดุเสบียง"
-						class="min-h-11 pl-9"
-					/>
-				</div>
-				<Select.Root type="single" bind:value={dateRange}
-					><Select.Trigger class="min-h-11 sm:w-40"
-						><Select.Value placeholder="ทุกวันที่"
-							>{dateRange === 'today'
-								? 'วันนี้'
-								: dateRange === 'last7'
-									? '7 วันล่าสุด'
-									: dateRange === 'last30'
-										? '30 วันล่าสุด'
-										: 'ทุกวันที่'}</Select.Value
-						></Select.Trigger
-					><Select.Content
-						><Select.Item value="ALL" label="ทุกวันที่">ทุกวันที่</Select.Item><Select.Item
-							value="today"
-							label="วันนี้">วันนี้</Select.Item
-						><Select.Item value="last7" label="7 วันล่าสุด">7 วันล่าสุด</Select.Item><Select.Item
-							value="last30"
-							label="30 วันล่าสุด">30 วันล่าสุด</Select.Item
-						></Select.Content
-					></Select.Root
-				>
-				<Select.Root type="single" bind:value={directionFilter}
-					><Select.Trigger class="min-h-11 sm:w-48"
-						><Select.Value placeholder="ทิศทาง: ทุกทิศทาง"
-							>{directionFilter === 'in'
-								? 'ทิศทาง: รับเข้า'
-								: directionFilter === 'out'
-									? 'ทิศทาง: จ่ายออก'
-									: 'ทิศทาง: ทุกทิศทาง'}</Select.Value
-						></Select.Trigger
-					><Select.Content
-						><Select.Item value="ALL" label="ทุกทิศทาง">ทุกทิศทาง</Select.Item><Select.Item
-							value="in"
-							label="รับเข้า">รับเข้า</Select.Item
-						><Select.Item value="out" label="จ่ายออก">จ่ายออก</Select.Item></Select.Content
-					></Select.Root
-				>
-				<Select.Root
-					type="single"
-					value={categoryFilter}
-					onValueChange={(v) => (categoryFilter = v as typeof categoryFilter)}
-					><Select.Trigger class="min-h-11 sm:w-44"
-						><Select.Value placeholder="ทุกสถานะ"
-							>{CATEGORY_FILTER_LABELS[categoryFilter]}</Select.Value
-						></Select.Trigger
-					><Select.Content
-						>{#each CATEGORY_FILTER_OPTIONS as option (option.value)}<Select.Item
-								value={option.value}
-								label={option.label}>{option.label}</Select.Item
-							>{/each}</Select.Content
-					></Select.Root
-				>
-			</div>
-		</section>
+		</div>
 
 		<section class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
 			{#if hasActiveFilters}<div
@@ -536,19 +576,20 @@
 					<Table.Root
 						><Table.Header
 							><Table.Row class="bg-slate-50 hover:bg-slate-50"
-								><Table.Head class="px-5 font-semibold text-slate-700">รหัส</Table.Head><Table.Head
-									class="font-semibold text-slate-700">ฝ่ายเบิก &amp; ทิศทางการส่งมอบ</Table.Head
-								><Table.Head class="font-semibold text-slate-700"
+								><Table.Head class="px-5 text-xs font-medium text-slate-500">รหัส</Table.Head
+								><Table.Head class="text-xs font-medium text-slate-500"
+									>ฝ่ายเบิก &amp; ทิศทางการส่งมอบ</Table.Head
+								><Table.Head class="text-xs font-medium text-slate-500"
 									>ภารกิจ / คำสั่งปันส่วนเสบียง</Table.Head
-								><Table.Head class="font-semibold text-slate-700">เวลาที่ออกคำสั่ง</Table.Head
-								><Table.Head class="font-semibold text-slate-700"
+								><Table.Head class="text-xs font-medium text-slate-500">เวลาที่ออกคำสั่ง</Table.Head
+								><Table.Head class="text-xs font-medium text-slate-500"
 									><span class="inline-flex items-center gap-1"
 										>สถานะธุรกรรม<Info
 											class="h-3.5 w-3.5 text-slate-400"
 											title="สถานะการดำเนินงานปัจจุบันของคำร้องนี้"
 										/></span
 									></Table.Head
-								><Table.Head class="px-5 text-right font-semibold text-slate-700"
+								><Table.Head class="px-5 text-right text-xs font-medium text-slate-500"
 									>สิทธิ์จัดการ</Table.Head
 								></Table.Row
 							></Table.Header
@@ -558,12 +599,12 @@
 									class="cursor-pointer transition-colors hover:bg-orange-50/50"
 									onclick={() => openManage(row.manage)}
 									><Table.Cell class="px-5"
-										><p class="inline-flex items-center gap-1 text-sm font-bold text-[#0A2647]">
+										><p class="inline-flex items-center gap-1 text-sm font-semibold text-[#0A2647]">
 											{row.code}<ExternalLink class="h-3.5 w-3.5 text-slate-400" />
 										</p></Table.Cell
 									><Table.Cell
 										><p
-											class="mb-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold {row.direction ===
+											class="mb-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium {row.direction ===
 											'in'
 												? 'bg-emerald-50 text-emerald-700'
 												: row.direction === 'out'
@@ -575,15 +616,13 @@
 											{:else}<Flame class="h-3.5 w-3.5" />ภายใน
 											{/if}
 										</p>
-										<p
-											class="flex max-w-48 items-center gap-1.5 text-sm font-semibold text-slate-800"
-										>
+										<p class="flex max-w-48 items-center gap-1.5 text-sm text-slate-700">
 											<span class="shrink-0">{row.fromLabel}</span><ArrowRight
 												class="h-4 w-4 shrink-0 text-slate-400"
 											/><span class="truncate" title={row.toLabel}>{row.toLabel}</span>
 										</p></Table.Cell
 									><Table.Cell
-										><p class="text-sm font-semibold text-slate-800">{row.missionTitle}</p>
+										><p class="text-sm font-medium text-slate-800">{row.missionTitle}</p>
 										<div class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
 											{#if row.recipeChip}
 												<span
@@ -598,7 +637,7 @@
 											</span>
 										</div></Table.Cell
 									><Table.Cell
-										><p class="text-sm font-semibold text-slate-700">
+										><p class="text-sm text-slate-700">
 											{formatThaiShortDate(row.createdAt)}
 										</p>
 										<p class="text-sm text-slate-400">
@@ -606,7 +645,7 @@
 										</p></Table.Cell
 									><Table.Cell
 										><span
-											class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold {row.statusClass}"
+											class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium {row.statusClass}"
 											><span class="h-1.5 w-1.5 rounded-full bg-current"
 											></span>{row.statusLabel}</span
 										></Table.Cell
