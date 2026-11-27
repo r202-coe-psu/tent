@@ -108,7 +108,7 @@
 	<div class="flex min-w-0 flex-1 flex-col lg:flex-row">
 		{#if staffSidebar}
 			<!-- Full height beside the page: the app bar sits to its right, not above it (#1517). -->
-			<BackofficeNavbar showMobileBar={staffMobileBar} storageKey={null} />
+			<BackofficeNavbar showMobileBar={staffMobileBar} />
 		{/if}
 		<div class="flex min-w-0 flex-1 flex-col">
 			{#if hasAppBar}

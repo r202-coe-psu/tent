@@ -21,26 +21,14 @@
 		navLeafHrefs,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
-	import {
-		SIDEBAR_COLLAPSED_KEYS,
-		readSidebarCollapsed,
-		writeSidebarCollapsed,
-		type SidebarCollapsedKey
-	} from './sidebar-collapsed-storage';
+	import { readSidebarCollapsed, writeSidebarCollapsed } from './sidebar-collapsed-storage';
 
 	let {
 		/** The hamburger bar shown below `lg`; off where a page keeps the very top of the screen. */
-		showMobileBar = true,
-		/**
-		 * Where the collapsed/expanded choice is remembered; each host page keeps its own. `null`
-		 * remembers nothing: the sidebar starts collapsed on every page load.
-		 */
-		storageKey = SIDEBAR_COLLAPSED_KEYS.backoffice
-	}: { showMobileBar?: boolean; storageKey?: SidebarCollapsedKey | null } = $props();
+		showMobileBar = true
+	}: { showMobileBar?: boolean } = $props();
 
-	// Each host passes a fixed key for its whole lifetime, so reading it once on mount is enough.
-	// svelte-ignore state_referenced_locally
-	let collapsed = $state(storageKey === null ? true : readSidebarCollapsed(storageKey));
+	let collapsed = $state(readSidebarCollapsed());
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -48,7 +36,7 @@
 
 	function setCollapsed(next: boolean) {
 		collapsed = next;
-		if (storageKey !== null) writeSidebarCollapsed(storageKey, next);
+		writeSidebarCollapsed(next);
 	}
 
 	function closeMobileMenu() {
