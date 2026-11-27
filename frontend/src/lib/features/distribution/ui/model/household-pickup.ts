@@ -3,6 +3,8 @@ import { formatThaiTime } from '$lib/utils/date';
 import {
 	deriveRecipientMenuTags,
 	evaluateHouseholdMealPickup,
+	householdMealPickupBlocks,
+	isAwaitingAdmissionStayStatus,
 	type HouseholdPickupLog,
 	type MealPeriod,
 	type MenuTagSource
@@ -31,6 +33,8 @@ export interface HouseholdPickupRow {
 	evacueeId: string;
 	label: string;
 	isCollector: boolean;
+	/** Registered at the kiosk or arriving: may eat, not yet admitted (CR-240 R2). */
+	awaitingAdmission: boolean;
 	/** Set when the member already received this meal today. */
 	lastDistributedAt?: string;
 	menuMismatchLabel: string | null;
@@ -40,6 +44,37 @@ export interface HouseholdPickupRow {
 	menuTags: ReturnType<typeof deriveRecipientMenuTags>;
 	/** Selecting this member needs an override reason (FR-MQW-05, FR-MRM-04/08/11). */
 	needsOverride: boolean;
+}
+
+/** A household member who cannot collect at the desk, and why (CR-240 R2). */
+export interface BlockedHouseholdMember {
+	evacueeId: string;
+	label: string;
+	isCollector: boolean;
+	reason: string;
+}
+
+export function buildBlockedHouseholdMembers(
+	members: readonly HouseholdPickupMemberDoc[],
+	collectorId: string
+): BlockedHouseholdMember[] {
+	const byId = new Map(members.map((m) => [m._id, m]));
+	return householdMealPickupBlocks(members)
+		.flatMap(({ evacuee_id, reason }) => {
+			const m = byId.get(evacuee_id);
+			if (!m) return [];
+			return [
+				{
+					evacueeId: m._id,
+					label:
+						[m.first_name, m.last_name].filter(Boolean).join(' ') +
+						(m.nickname ? ` (${m.nickname})` : ''),
+					isCollector: m._id === collectorId,
+					reason
+				}
+			];
+		})
+		.sort((a, b) => Number(b.isCollector) - Number(a.isCollector));
 }
 
 export function buildHouseholdPickupRows(input: {
@@ -80,6 +115,7 @@ export function buildHouseholdPickupRows(input: {
 					[member.first_name, member.last_name].filter(Boolean).join(' ') +
 					(member.nickname ? ` (${member.nickname})` : ''),
 				isCollector: member._id === input.collectorId,
+				awaitingAdmission: isAwaitingAdmissionStayStatus(member.current_stay?.status),
 				lastDistributedAt,
 				menuMismatchLabel: menuCheck.isMismatch ? formatMenuTags(menuCheck.menuTags) : null,
 				allergenConflictLabel:

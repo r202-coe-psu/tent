@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateHouseholdMealPickup, type HouseholdPickupLog } from './household-meal-pickup';
+import {
+	evaluateHouseholdMealPickup,
+	householdMealPickupBlocks,
+	type HouseholdPickupLog
+} from './household-meal-pickup';
 
 const A = 'evacuee:01J0000000000000000000000A';
 const B = 'evacuee:01J0000000000000000000000B';
@@ -39,20 +43,49 @@ describe('evaluateHouseholdMealPickup', () => {
 		]);
 	});
 
-	it('leaves out members who are not in the shelter', () => {
+	it('lets members awaiting admission collect, and leaves out members who are away or gone', () => {
 		const result = evaluateHouseholdMealPickup({
 			members: [
 				member(A),
 				member(B, 'checked_out'),
 				member(C, 'temporary_leave'),
 				member('evacuee:01J0000000000000000000000D', 'arriving'),
-				member('evacuee:01J0000000000000000000000E', null)
+				member('evacuee:01J0000000000000000000000E', null),
+				member('evacuee:01J0000000000000000000000F', 'kiosk_registered'),
+				member('evacuee:01J0000000000000000000000G', 'pre_registered')
 			],
 			logs: [],
 			meal: 'lunch',
 			at: AT
 		});
-		expect(result.map((r) => r.evacuee_id)).toEqual([A]);
+		expect(result.map((r) => r.evacuee_id)).toEqual([
+			A,
+			'evacuee:01J0000000000000000000000D',
+			'evacuee:01J0000000000000000000000F'
+		]);
+	});
+
+	it('explains why each left-out member cannot collect', () => {
+		expect(
+			householdMealPickupBlocks([
+				member(A),
+				member(B, 'checked_out'),
+				member(C, 'temporary_leave'),
+				member('evacuee:01J0000000000000000000000D', 'pre_registered'),
+				member('evacuee:01J0000000000000000000000E', null)
+			])
+		).toEqual([
+			{ evacuee_id: B, reason: 'เช็คเอาต์ออกจากศูนย์แล้ว' },
+			{ evacuee_id: C, reason: 'ออกจากศูนย์ชั่วคราว' },
+			{
+				evacuee_id: 'evacuee:01J0000000000000000000000D',
+				reason: 'ลงทะเบียนล่วงหน้า ยังไม่มารายงานตัวที่ศูนย์'
+			},
+			{
+				evacuee_id: 'evacuee:01J0000000000000000000000E',
+				reason: 'ยังไม่มีข้อมูลการเข้าพักในศูนย์'
+			}
+		]);
 	});
 
 	it('reports the latest pickup time for a member who already received this meal today', () => {

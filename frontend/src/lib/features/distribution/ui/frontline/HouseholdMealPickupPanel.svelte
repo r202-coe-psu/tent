@@ -21,6 +21,7 @@
 	import type { MealPeriod, TicketItem } from '../../domain/food-supplies';
 	import type { FoodDistributionInput } from '../../application/food-supplies/distribution-workflow';
 	import {
+		buildBlockedHouseholdMembers,
 		buildHouseholdPickupRows,
 		householdHeading,
 		isSelectedByDefault,
@@ -96,6 +97,7 @@
 	const loadError = $derived(queries.some((q) => q.isError));
 
 	const allergyItems = $derived(allergyQuery.data?.items ?? []);
+	const blockedMembers = $derived(buildBlockedHouseholdMembers(members, collectorId));
 	const rows = $derived(
 		buildHouseholdPickupRows({
 			members,
@@ -221,7 +223,7 @@
 			</span>
 		</span>
 		<span class="mt-0.5 block text-sm text-slate-500">
-			รับแทนสมาชิกครอบครัว · แสดงเฉพาะสมาชิกที่อยู่ในศูนย์
+			รับแทนสมาชิกครอบครัว · สมาชิกที่อยู่ในศูนย์หรือรอเข้าพัก
 		</span>
 	</legend>
 	{#if !loading && !loadError && rows.length > 0}
@@ -284,6 +286,13 @@
 										ผู้มารับ
 									</span>
 								{/if}
+								{#if row.awaitingAdmission}
+									<span
+										class="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800"
+									>
+										รอเข้าพัก
+									</span>
+								{/if}
 							</Label>
 							{#if row.allergyLabel}
 								<p class="text-sm text-slate-700">
@@ -341,9 +350,26 @@
 					{/if}
 				</li>
 			{:else}
-				<li class="text-sm text-slate-600 md:col-span-2">ไม่มีสมาชิกที่อยู่ในศูนย์</li>
+				<li class="text-sm text-slate-600 md:col-span-2">ไม่มีสมาชิกที่รับอาหารได้</li>
 			{/each}
 		</ul>
+		{#if blockedMembers.length > 0}
+			<div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+				<p class="text-sm font-semibold text-slate-800">
+					รับไม่ได้ {blockedMembers.length} คน
+				</p>
+				<ul class="mt-2 space-y-1.5 text-sm">
+					{#each blockedMembers as member (member.evacueeId)}
+						<li class="flex flex-wrap items-baseline gap-x-2">
+							<span class="font-medium text-slate-800">
+								{member.label}{member.isCollector ? ' (ผู้มารับ)' : ''}
+							</span>
+							<span class="text-slate-600">— {member.reason}</span>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 	{/if}
 
 	{#if failures.length > 0}
