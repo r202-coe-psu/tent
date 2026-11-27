@@ -157,6 +157,7 @@
 				title="กลับหน้าเลือกเมนูหลัก"
 				aria-current={onHome ? 'page' : undefined}
 				data-testid="sidebar-home-link"
+				onclick={() => setCollapsed(true)}
 			>
 				<House
 					class="h-4 w-4 shrink-0 {onHome ? 'text-primary-foreground' : 'text-muted-foreground'}"
