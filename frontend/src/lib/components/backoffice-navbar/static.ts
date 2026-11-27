@@ -113,7 +113,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Users,
 				visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
 			},
-			// The /portal registration tiles, mirrored here so SA/SM can reach them from the sidebar.
+			// The /portal registration tiles, mirrored here and named after each page's own title, so SA/SM can reach them from the sidebar.
 			// Each is shown exactly when its page guard lets the user in.
 			{
 				label: 'สถานีหน้างาน',
@@ -121,19 +121,19 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: House,
 				children: [
 					{
-						label: 'ลงทะเบียนครอบครัวและครัวเรือน',
+						label: 'ทะเบียนผู้ประสบภัย',
 						href: resolve('/onsite/people'),
 						icon: House,
 						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
 					},
 					{
-						label: 'คัดกรองผู้เข้าพัก',
+						label: 'จุดตรวจคัดกรองผู้เข้าพัก',
 						href: resolve('/onsite/medical-screening'),
 						icon: HeartPulse,
 						visibleTo: ({ roles, shelterCode }) => canAccessMedicalScreening(roles, shelterCode)
 					},
 					{
-						label: 'จัดโซน',
+						label: 'จัดสรรที่พัก',
 						href: resolve('/onsite/zoning'),
 						icon: MapPin,
 						visibleTo: ({ roles, shelterCode }) => canAccessZoning(roles, shelterCode)
@@ -146,7 +146,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Search,
 				children: [
 					{
-						label: 'ค้นหาและแก้ไขข้อมูลผู้ประสบภัย',
+						label: 'ค้นหาและแก้ไขข้อมูลผู้พักพิง',
 						href: resolve('/onsite/search-edit'),
 						icon: Search,
 						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
