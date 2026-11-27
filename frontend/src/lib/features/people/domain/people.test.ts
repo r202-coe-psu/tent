@@ -1312,13 +1312,13 @@ describe('composeCheckoutReason (#1493)', () => {
 	});
 
 	it('uses the preset alone, or preset — detail', () => {
-		expect(composeCheckoutReason('ส่งต่อสถานพยาบาล', '  ')).toEqual({
+		expect(composeCheckoutReason('ส่งโรงพยาบาล', '  ')).toEqual({
 			ok: true,
-			reason: 'ส่งต่อสถานพยาบาล'
+			reason: 'ส่งโรงพยาบาล'
 		});
-		expect(composeCheckoutReason('ส่งต่อสถานพยาบาล', ' รพ.หาดใหญ่ ')).toEqual({
+		expect(composeCheckoutReason('ส่งโรงพยาบาล', ' รพ.หาดใหญ่ ')).toEqual({
 			ok: true,
-			reason: 'ส่งต่อสถานพยาบาล — รพ.หาดใหญ่'
+			reason: 'ส่งโรงพยาบาล — รพ.หาดใหญ่'
 		});
 	});
 

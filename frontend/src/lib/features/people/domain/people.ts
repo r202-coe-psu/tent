@@ -2458,11 +2458,10 @@ function resolveNormalStatusChangeAction(
 /** Trim and validate a checkout remark (CR-112 nonempty reason/notes). */
 /** #1493: common checkout reasons staff pick from; the movement `reason` stays free text (stored in Thai). */
 export const CHECKOUT_REASON_PRESETS = [
-	'กลับที่พักอาศัยเดิม',
-	'พักอาศัยกับญาติ',
-	'ย้ายไปศูนย์พักพิงแห่งอื่น',
-	'ส่งต่อสถานพยาบาล',
-	'ย้ายไปพักอาศัยที่อื่น'
+	'กลับบ้าน',
+	'ไปพักกับญาติ/คนรู้จัก',
+	'ย้ายไปศูนย์พักพิงอื่น',
+	'ส่งโรงพยาบาล'
 ] as const;
 export type CheckoutReasonPreset = (typeof CHECKOUT_REASON_PRESETS)[number];
 /** A preset, or `other` when staff describe the reason themselves. */

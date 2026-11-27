@@ -96,7 +96,7 @@ describe('EvacueeStatusModal checkout reason (#1493)', () => {
 			.find((el) => el.textContent?.includes('Checked out'))
 			?.click();
 		await settle();
-		document.body.querySelector<HTMLElement>('#evacuee-status-checkout-ส่งต่อสถานพยาบาล')?.click();
+		document.body.querySelector<HTMLElement>('#evacuee-status-checkout-ส่งโรงพยาบาล')?.click();
 		await settle();
 		const detail = document.body.querySelector<HTMLTextAreaElement>(
 			'#evacuee-status-checkout-detail'
@@ -108,7 +108,7 @@ describe('EvacueeStatusModal checkout reason (#1493)', () => {
 			.find((el) => el.textContent?.trim() === 'ยืนยัน')
 			?.click();
 		await settle();
-		expect(onUpdateStatus).toHaveBeenCalledWith('checked_out', 'ส่งต่อสถานพยาบาล — รพ.หาดใหญ่');
+		expect(onUpdateStatus).toHaveBeenCalledWith('checked_out', 'ส่งโรงพยาบาล — รพ.หาดใหญ่');
 	});
 });
 

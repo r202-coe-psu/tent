@@ -21,24 +21,23 @@ function render(props: { error?: string | null } = {}) {
 }
 
 describe('CheckoutReasonPresets (#1493)', () => {
-	it('offers the five presets plus อื่นๆ as one radio group', () => {
+	it('offers four presets plus อื่นๆ as one radio group', () => {
 		const { target } = render();
 		const labels = [...target.querySelectorAll('[role="radio"]')].map((r) => r.id);
 		expect(labels).toEqual([
-			'co-กลับที่พักอาศัยเดิม',
-			'co-พักอาศัยกับญาติ',
-			'co-ย้ายไปศูนย์พักพิงแห่งอื่น',
-			'co-ส่งต่อสถานพยาบาล',
-			'co-ย้ายไปพักอาศัยที่อื่น',
+			'co-กลับบ้าน',
+			'co-ไปพักกับญาติ/คนรู้จัก',
+			'co-ย้ายไปศูนย์พักพิงอื่น',
+			'co-ส่งโรงพยาบาล',
 			'co-other'
 		]);
 	});
 
 	it('marks the detail optional for a preset and required for อื่นๆ', () => {
 		const { radio, detailLabel } = render();
-		radio('ส่งต่อสถานพยาบาล').click();
+		radio('ส่งโรงพยาบาล').click();
 		flushSync();
-		expect(radio('ส่งต่อสถานพยาบาล').getAttribute('aria-checked')).toBe('true');
+		expect(radio('ส่งโรงพยาบาล').getAttribute('aria-checked')).toBe('true');
 		expect(detailLabel()).toContain('ไม่บังคับ');
 		radio('other').click();
 		flushSync();
