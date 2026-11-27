@@ -57,3 +57,5 @@ reports/
 # Edge appliance (docker-compose.edge.yml) — real values stay on the edge server
 couchdb-edge.ini
 !.env.edge.example
+
+.claude/launch.json
