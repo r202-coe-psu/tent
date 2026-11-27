@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { STAFF_SYSTEM_OVERVIEW_I18N } from '$lib/constants/i18n/staff-system-overview';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -11,15 +14,16 @@
 		useOverviewSummary,
 		useOverviewSites,
 		useOverviewOrigin,
-		useOverviewDemographics,
-		usePreRegistrations
+		useOverviewDemographics
 	} from '../application/queries';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
+	import OverviewSiteKindStrip from './overview-site-kind-strip.svelte';
 	import OverviewPhaseStrip from './overview-phase-strip.svelte';
 	import OverviewOriginSection from './overview-origin-section.svelte';
 	import OverviewDemographicsSection from './overview-demographics-section.svelte';
 	import OverviewSitesSection from './overview-sites-section.svelte';
-	import OverviewPreregPreview from './overview-prereg-preview.svelte';
+
+	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
 
 	const defaultRange = defaultMovementDateRange();
 	let filters = $state<OverviewFilters>(
@@ -30,6 +34,8 @@
 	);
 
 	const summaryQuery = useOverviewSummary(() => filters);
+	// Site-kind cards are fleet-wide totals: deliberately NOT driven by the filter bar.
+	const siteKindSummaryQuery = useOverviewSummary(() => ({}));
 	const SITES_PAGE_SIZE = 20;
 	let sitesOffset = $state(0);
 	const sitesQuery = useOverviewSites(() => ({
@@ -39,23 +45,25 @@
 	}));
 	const originQuery = useOverviewOrigin(() => filters);
 	const demographicsQuery = useOverviewDemographics(() => filters);
-	const preRegsQuery = usePreRegistrations(() => ({ ...filters, limit: 8, offset: 0 }));
 
 	const isError = $derived(
 		summaryQuery.isError ||
+			siteKindSummaryQuery.isError ||
 			sitesQuery.isError ||
 			originQuery.isError ||
-			demographicsQuery.isError ||
-			preRegsQuery.isError
+			demographicsQuery.isError
 	);
 </script>
 
-<StaffPageShell
-	title="ภาพรวมระบบ"
-	description="สรุปสถานะศูนย์ คิวลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ"
->
+<StaffPageShell title={t.pageTitle} description={t.pageDescription}>
+	<OverviewSiteKindStrip
+		summary={siteKindSummaryQuery.data}
+		loading={siteKindSummaryQuery.isPending}
+	/>
+
 	<OverviewFilterBar
 		{filters}
+		showSearch={false}
 		onChange={(next) => {
 			filters = next;
 			sitesOffset = 0; // any filter change restarts the site table on page 1 (#1502)
@@ -65,8 +73,8 @@
 	{#if isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />
-			<AlertTitle>เกิดข้อผิดพลาด</AlertTitle>
-			<AlertDescription>ไม่สามารถโหลดข้อมูลภาพรวมได้ กรุณาลองใหม่อีกครั้ง</AlertDescription>
+			<AlertTitle>{t.errorTitle}</AlertTitle>
+			<AlertDescription>{t.errorBody}</AlertDescription>
 		</Alert>
 	{/if}
 
@@ -97,10 +105,4 @@
 			loading={demographicsQuery.isPending}
 		/>
 	</div>
-
-	<OverviewPreregPreview
-		items={preRegsQuery.data?.items}
-		total={preRegsQuery.data?.total}
-		loading={preRegsQuery.isPending}
-	/>
 </StaffPageShell>

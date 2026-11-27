@@ -4,7 +4,6 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
-	import { spatial } from '$lib/tokens';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { AGE_BUCKET_LABELS } from '$lib/features/dashboard';
 	import {
@@ -14,6 +13,7 @@
 	} from '../domain';
 	import { usePreRegistrations } from '../application/queries';
 	import { formatThaiDateTime } from '$lib/utils/date';
+	import { getCountryName } from '$lib/utils/country';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
 
 	const PAGE_SIZE = 20;
@@ -50,6 +50,10 @@
 		return formatThaiDateTime(value) || value;
 	}
 
+	function countryLabel(item: PreRegistrationListItem): string {
+		return item.country ? getCountryName(item.country) : '—';
+	}
+
 	function originLabel(item: PreRegistrationListItem): string {
 		return [item.province, item.district, item.subdistrict].filter(Boolean).join(' / ') || '—';
 	}
@@ -68,27 +72,16 @@
 	{/if}
 {/snippet}
 
-{#snippet sourceBadge(item: PreRegistrationListItem)}
-	{#if item.source === 'unassigned'}
-		<span
-			class="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-		>
-			ส่วนกลาง
-		</span>
-	{:else}
-		<span
-			class="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-700"
-		>
-			{item.shelter_code ?? 'ผูกศูนย์'}
-		</span>
-	{/if}
-{/snippet}
-
 <StaffPageShell
 	title="ลงทะเบียนล่วงหน้า"
 	description="ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง"
 >
-	<OverviewFilterBar {filters} onChange={onFiltersChange} showHouseholdFilter={true} />
+	<OverviewFilterBar
+		{filters}
+		onChange={onFiltersChange}
+		showHouseholdFilter={true}
+		showExternalOption={false}
+	/>
 
 	{#if listQuery.isError}
 		<Alert variant="destructive">
@@ -98,24 +91,9 @@
 		</Alert>
 	{/if}
 
-	<div class={spatial.container.staffPageCard}>
+	<div class="space-y-3">
 		<div
-			class="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 p-4 sm:p-6"
-		>
-			<div>
-				<h2 class="text-lg font-bold text-slate-900">รายการทั้งหมด</h2>
-				<p class="text-sm text-slate-500">
-					{#if listQuery.isPending && items.length === 0}
-						กำลังโหลด...
-					{:else}
-						แสดง {pageStart.toLocaleString('th-TH')}–{pageEnd.toLocaleString('th-TH')} จาก
-						{total.toLocaleString('th-TH')}
-					{/if}
-				</p>
-			</div>
-		</div>
-		<div
-			class="p-4 transition-opacity sm:p-6 {listQuery.isPlaceholderData ? 'opacity-60' : ''}"
+			class="transition-opacity {listQuery.isPlaceholderData ? 'opacity-60' : ''}"
 			aria-busy={listQuery.isPlaceholderData}
 		>
 			{#if listQuery.isPending && items.length === 0}
@@ -125,7 +103,7 @@
 			{:else}
 				<ul
 					role="list"
-					class="divide-y rounded-xl border border-slate-200/80 md:hidden"
+					class="divide-y rounded-xl border border-slate-200/80 bg-white md:hidden"
 					data-testid="prereg-cards"
 				>
 					{#each items as item (item.id)}
@@ -134,26 +112,28 @@
 								<div class="min-w-0"><PreRegNameLink {item} /></div>
 								<PreRegStatusBadge {item} />
 							</div>
-							<dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-slate-700">
+							<!-- Phones: label above value (the long address label no longer squeezes the value
+							column); from sm up: fixed label column + value. -->
+							<dl
+								class="grid grid-cols-1 gap-y-0.5 text-slate-700 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-x-3 sm:gap-y-1 [&>dd]:mb-1.5 sm:[&>dd]:mb-0"
+							>
 								<dt class="text-slate-500">ครอบครัว</dt>
 								<dd class="break-words">{@render household(item)}</dd>
 								<dt class="text-slate-500">ศูนย์พักพิง</dt>
 								<dd class="break-words"><PreRegShelterCell {item} /></dd>
-								<dt class="text-slate-500">ต้นทาง</dt>
+								<dt class="text-slate-500">ที่อยู่ (จังหวัด / อำเภอ / ตำบล)</dt>
 								<dd class="break-words">{originLabel(item)}</dd>
 								<dt class="text-slate-500">ประเทศ</dt>
-								<dd>{item.country ?? '—'}</dd>
+								<dd>{countryLabel(item)}</dd>
 								<dt class="text-slate-500">ช่วงอายุ</dt>
 								<dd>{AGE_BUCKET_LABELS[item.age_band] ?? item.age_band}</dd>
 								<dt class="text-slate-500">ลงทะเบียน</dt>
 								<dd class="tabular-nums">{formatWhen(item.registered_at)}</dd>
-								<dt class="text-slate-500">แหล่งข้อมูล</dt>
-								<dd>{@render sourceBadge(item)}</dd>
 							</dl>
 						</li>
 					{/each}
 				</ul>
-				<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 md:block">
+				<div class="hidden overflow-x-auto rounded-xl border border-slate-200/80 bg-white md:block">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
@@ -161,11 +141,10 @@
 								<Table.Head>ครอบครัว</Table.Head>
 								<Table.Head>สถานะการเข้าศูนย์</Table.Head>
 								<Table.Head>ศูนย์พักพิง</Table.Head>
-								<Table.Head>ต้นทาง</Table.Head>
+								<Table.Head>ที่อยู่ (จังหวัด / อำเภอ / ตำบล)</Table.Head>
 								<Table.Head>ประเทศ</Table.Head>
 								<Table.Head>ช่วงอายุ</Table.Head>
 								<Table.Head>เวลาลงทะเบียน</Table.Head>
-								<Table.Head>แหล่งข้อมูล</Table.Head>
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
@@ -184,15 +163,12 @@
 										<PreRegShelterCell {item} />
 									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">{originLabel(item)}</Table.Cell>
-									<Table.Cell class="text-sm text-slate-700">{item.country ?? '—'}</Table.Cell>
+									<Table.Cell class="text-sm text-slate-700">{countryLabel(item)}</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">
 										{AGE_BUCKET_LABELS[item.age_band] ?? item.age_band}
 									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700 tabular-nums">
 										{formatWhen(item.registered_at)}
-									</Table.Cell>
-									<Table.Cell class="text-sm text-slate-600">
-										{@render sourceBadge(item)}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -202,9 +178,7 @@
 			{/if}
 		</div>
 		{#if total > limit}
-			<div
-				class="flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-			>
+			<div class="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
 				<div class="text-xs text-slate-500 tabular-nums">
 					แสดง {pageStart.toLocaleString('th-TH')} - {pageEnd.toLocaleString('th-TH')} จาก
 					{total.toLocaleString('th-TH')} รายการ

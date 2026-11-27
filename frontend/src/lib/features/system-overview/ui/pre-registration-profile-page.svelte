@@ -25,7 +25,7 @@
 </script>
 
 <StaffPageShell
-	title="โปรไฟล์ Pre-registration"
+	title="โปรไฟล์ผู้ลงทะเบียนล่วงหน้า"
 	description="ดูอย่างเดียว — ไม่มีการแก้ไขหรือเคลมจากหน้านี้"
 	maxWidth="6xl"
 >
@@ -49,7 +49,7 @@
 		</p>
 	{:else}
 		<div class="flex flex-wrap items-center gap-2">
-			<Badge class="border border-sky-200 bg-sky-50 text-sky-900">ยังไม่ผูกศูนย์</Badge>
+			<Badge class="border border-sky-200 bg-sky-50 text-sky-900">ยังไม่ได้เลือกศูนย์</Badge>
 			<Badge variant="outline" class="border-slate-200 text-slate-700">
 				{profile.queue_status}
 			</Badge>
