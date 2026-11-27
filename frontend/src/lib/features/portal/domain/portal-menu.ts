@@ -388,7 +388,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		items: [
 			{
 				id: 'system-overview',
-				label: 'ภาพรวมระบบ',
+				label: 'ภาพรวมศูนย์',
 				desc: 'ภาพรวมผู้อพยพและการแจกจ่ายอาหาร',
 				icon: 'layout-dashboard',
 				href: '/back-office/overview',

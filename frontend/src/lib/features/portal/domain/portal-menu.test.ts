@@ -128,7 +128,7 @@ describe('filterPortalMenu — shelter manager', () => {
 		const item = PORTAL_DEPARTMENTS.flatMap((d) => d.items).find(
 			(i) => i.id === 'system-overview'
 		)!;
-		expect(item.label).toBe('ภาพรวมระบบ');
+		expect(item.label).toBe('ภาพรวมศูนย์');
 		expect(resolvePortalHref(item, 'SH001')).toBe('/back-office/overview');
 	});
 

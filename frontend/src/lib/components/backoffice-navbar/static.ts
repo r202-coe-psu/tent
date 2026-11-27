@@ -106,7 +106,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: 'ภาพรวม',
 		items: [
 			{
-				label: 'ภาพรวมระบบ',
+				label: 'ภาพรวมศูนย์',
 				href: resolve('/back-office/overview'),
 				icon: LayoutDashboard,
 				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)

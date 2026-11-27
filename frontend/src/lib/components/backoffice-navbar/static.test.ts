@@ -160,7 +160,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const allowed = new Set([...ungated, ...gated.flat()]);
 		return allLeafLabels().filter((l) => allowed.has(l));
 	};
-	const overview = 'ภาพรวมระบบ';
+	const overview = 'ภาพรวมศูนย์';
 	const managerLabels = [
 		overview,
 		registry,
@@ -237,7 +237,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	it('puts the system overview button first, for SA and the active shelter SM only', () => {
 		const first = backofficeNavbarGroups[0].items[0];
-		expect(first.label).toBe('ภาพรวมระบบ');
+		expect(first.label).toBe('ภาพรวมศูนย์');
 		expect(isGroup(first)).toBe(false);
 		expect(String(first.href)).toBe('/back-office/overview');
 		expect(canSeeNavNode(first, ctx(['system_admin']))).toBe(true);
