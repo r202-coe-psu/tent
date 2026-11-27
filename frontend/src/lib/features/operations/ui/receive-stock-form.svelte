@@ -161,7 +161,7 @@
 		const goods = (donation.items ?? [])
 			.map((i) => {
 				const name = i.item_id ? (itemNameById.get(i.item_id) ?? i.item_id) : i.free_text;
-				return `${name} ${i.qty} ${i.unit}`;
+				return `${name} ${i.qty} ${formatUnit(i.unit, units, langState.current) || i.unit}`;
 			})
 			.join(', ');
 		const ticket = donation.booking_ref ? ` (${donation.booking_ref})` : '';

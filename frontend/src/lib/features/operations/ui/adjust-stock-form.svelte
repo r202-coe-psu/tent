@@ -319,7 +319,7 @@
 			success: () => {
 				const name = selectedItem?.name ?? input.item_id;
 				const signed = qtyGt(deltaQty, 0) ? `+${deltaQty}` : `${deltaQty}`;
-				const summary = `${name} ${signed} ${selectedItem?.unit ?? ''}`;
+				const summary = `${name} ${signed} ${unitLabel}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
 				return 'ปรับยอดแล้ว';

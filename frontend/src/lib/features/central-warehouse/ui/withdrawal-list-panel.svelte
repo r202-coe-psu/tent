@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -31,6 +33,10 @@
 		/** Link to the donation intake page — the route layer renders it with `resolve()`. */
 		donationLink: Snippet;
 	} = $props();
+
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 
 	const queryClient = useQueryClient();
 	const listQuery = useWithdrawals();
@@ -133,7 +139,7 @@
 										<td class="px-3 py-2 text-right font-semibold text-slate-900 tabular-nums">
 											{formatQty(shownFulfilled(w.status, l.qty_fulfilled))}
 										</td>
-										<td class="px-3 py-2 text-slate-700">{l.unit}</td>
+										<td class="px-3 py-2 text-slate-700">{unitLabel(l.unit)}</td>
 									</tr>
 								{/each}
 							</tbody>

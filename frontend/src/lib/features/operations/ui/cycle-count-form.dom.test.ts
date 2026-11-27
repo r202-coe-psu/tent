@@ -64,7 +64,7 @@ describe('CycleCountForm negative lots (#855)', () => {
 			await tick();
 		}
 		const items = [...document.body.querySelectorAll('[role="alert"] li')];
-		expect(items.map((li) => li.textContent)).toEqual(['น้ำดื่ม -3 bottle', 'น้ำดื่ม -3 bottle']);
+		expect(items.map((li) => li.textContent)).toEqual(['น้ำดื่ม -3 ขวด', 'น้ำดื่ม -3 ขวด']);
 	});
 });
 
