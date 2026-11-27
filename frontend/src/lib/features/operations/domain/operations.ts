@@ -972,9 +972,9 @@ const REASON_BY_RECEIVE_SOURCE: Record<ReceiveSource, LedgerReason> = {
  */
 export const receiveInputSchema = z
 	.object({
-		item_id: z.string().min(1),
+		item_id: z.string().min(1, 'กรุณาเลือกสินค้า'),
 		qty: qtyStrCoercePositiveSchema,
-		unit: z.string().trim().min(1),
+		unit: z.string().trim().min(1, 'กรุณาระบุหน่วย'),
 		source: receiveSourceSchema,
 		ref_id: z.string().nullable().default(null),
 		lot: stockLotSchema.optional(),
