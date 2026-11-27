@@ -36,7 +36,7 @@
 		)
 	);
 
-	/** Sidebar and phone bar start below the app bar on `/me`; see the helper. */
+	/** Sidebar and phone bar start below the app bar on `/portal` and `/me`; see the helper. */
 	const staffSidebarClass = $derived(sidebarClass(page.url.pathname));
 
 	/** Set while session is expired so we refetch errored queries on reauth. */

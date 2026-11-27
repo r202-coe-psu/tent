@@ -6,7 +6,7 @@ const SM = ['shelter:SH001', 'SH001:shelter_manager'];
 const REGISTRATION = ['shelter:SH001', 'SH001:registration_staff'];
 
 describe('showsStaffSidebar (#1517)', () => {
-	it.each(['/me', '/onsite', '/onsite/people/new'])(
+	it.each(['/portal', '/me', '/onsite', '/onsite/people/new'])(
 		'gives a system admin the sidebar on %s',
 		(path) => {
 			expect(showsStaffSidebar(path, SA, 'SH001')).toBe(true);
@@ -31,11 +31,6 @@ describe('showsStaffSidebar (#1517)', () => {
 		expect(showsStaffSidebar('/system-management/shelters', SA, 'SH001')).toBe(false);
 	});
 
-	it('keeps /portal without a sidebar: the portal is the menu itself', () => {
-		expect(showsStaffSidebar('/portal', SA, 'SH001')).toBe(false);
-		expect(showsStaffSidebar('/portal', SM, 'SH001')).toBe(false);
-	});
-
 	it('does not match a path that only starts with the same letters', () => {
 		expect(showsStaffSidebar('/mex', SA, 'SH001')).toBe(false);
 		expect(showsStaffSidebar('/message', SA, 'SH001')).toBe(false);
@@ -52,8 +47,8 @@ describe('showsStaffMobileBar', () => {
 });
 
 describe('staffSidebarClass', () => {
-	it('starts below the app bar on /me, for the sidebar and the phone bar', () => {
-		for (const path of ['/me', '/me/profile']) {
+	it('starts below the app bar on /portal and /me, for the sidebar and the phone bar', () => {
+		for (const path of ['/portal', '/me']) {
 			expect(staffSidebarClass(path)).toContain('[&>aside]:top-14');
 			expect(staffSidebarClass(path)).toContain('[&>div]:top-14');
 		}

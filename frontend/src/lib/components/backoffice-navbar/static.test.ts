@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Users from '@lucide/svelte/icons/users';
 import {
 	activeNavHref,
+	isBackofficeHome,
 	backofficeNavbarGroups,
 	canSeeNavNode,
 	isGroup,
@@ -472,5 +473,15 @@ describe('activeNavHref — trailing slash before the query string', () => {
 		expect(activeNavHref('/back-office/supply/?tab=catalog', hrefs)).toBe(
 			'/back-office/supply?tab=catalog'
 		);
+	});
+});
+
+describe('isBackofficeHome (#1517)', () => {
+	it('is true on /portal only, with or without a trailing slash', () => {
+		expect(isBackofficeHome('/portal')).toBe(true);
+		expect(isBackofficeHome('/portal/')).toBe(true);
+		expect(isBackofficeHome('/portals')).toBe(false);
+		expect(isBackofficeHome('/me')).toBe(false);
+		expect(isBackofficeHome('/back-office/kitchen')).toBe(false);
 	});
 });

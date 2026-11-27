@@ -14,6 +14,7 @@
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
+		isBackofficeHome,
 		isGroup,
 		canSeeNavNode,
 		activeNavHref,
@@ -70,6 +71,8 @@
 		const fullPath = path + (page.url.search || '');
 		return activeNavHref(fullPath, navHrefs);
 	});
+
+	const onHome = $derived(isBackofficeHome(page.url.pathname));
 
 	function isActive(href: BackofficeNavbarNode['href']): boolean {
 		return !!href && String(href) === activeHref;
@@ -155,12 +158,18 @@
 		<div class="sticky top-0 z-10 bg-card p-4 pb-2">
 			<a
 				href={backofficeHomePath}
-				class="flex w-full items-center justify-center rounded-xl bg-muted py-2.5 text-sm font-normal text-foreground transition-colors hover:bg-muted/70 {collapsed
+				class="flex w-full items-center justify-center rounded-xl py-2.5 text-sm transition-colors {onHome
+					? 'bg-primary font-semibold text-primary-foreground'
+					: 'bg-muted font-normal text-foreground hover:bg-muted/70'} {collapsed
 					? 'px-2'
 					: 'gap-2 px-4'}"
 				title="กลับหน้าเลือกเมนูหลัก"
+				aria-current={onHome ? 'page' : undefined}
+				data-testid="sidebar-home-link"
 			>
-				<House class="h-4 w-4 shrink-0 text-muted-foreground" />
+				<House
+					class="h-4 w-4 shrink-0 {onHome ? 'text-primary-foreground' : 'text-muted-foreground'}"
+				/>
 				{#if !collapsed}<span>กลับหน้าเลือกเมนูหลัก</span>{/if}
 			</a>
 		</div>
@@ -426,11 +435,18 @@
 				<div class="space-y-3 border-b border-sidebar-border p-4 pb-3">
 					<a
 						href={backofficeHomePath}
-						class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-muted px-4 py-3 text-sm font-normal text-foreground transition-colors hover:bg-muted/70"
+						class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm transition-colors {onHome
+							? 'bg-primary font-semibold text-primary-foreground'
+							: 'bg-muted font-normal text-foreground hover:bg-muted/70'}"
 						onclick={closeMobileMenu}
 						title="กลับหน้าเลือกเมนูหลัก"
+						aria-current={onHome ? 'page' : undefined}
 					>
-						<House class="h-5 w-5 shrink-0 text-muted-foreground" />
+						<House
+							class="h-5 w-5 shrink-0 {onHome
+								? 'text-primary-foreground'
+								: 'text-muted-foreground'}"
+						/>
 						<span>กลับหน้าเลือกเมนูหลัก</span>
 					</a>
 					<BackofficeShelterSelect />

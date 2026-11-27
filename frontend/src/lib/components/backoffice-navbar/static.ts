@@ -395,6 +395,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
 
+/** Is this the portal itself, where the "back to the main menu" button is the current page (#1517)? */
+export function isBackofficeHome(pathname: string): boolean {
+	return pathname.replace(/\/$/, '') === String(backofficeHomePath);
+}
+
 /** Drops a trailing slash from the path part only (`/x/?tab=a` → `/x?tab=a`). */
 const stripTrailingSlash = (path: string): string => {
 	const q = path.indexOf('?');
