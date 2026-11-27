@@ -17,7 +17,8 @@ vi.mock('$lib/server/fastapi', () => ({
 	unwrapFastapiError: vi.fn()
 }));
 vi.mock('$lib/features/shelters/server', () => ({
-	resolveOperationStatus: (m: { operation_status?: string }) => m.operation_status ?? 'active'
+	resolveOperationStatus: (m: { operation_status?: string }) => m.operation_status ?? 'active',
+	isExternalShelter: (m: { is_external?: boolean }) => m.is_external === true
 }));
 
 import {

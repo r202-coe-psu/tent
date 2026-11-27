@@ -30,28 +30,32 @@ pre-commit:
 
 pre-push:
   # Sequential: vitest + pytest in parallel starve RAM and run slower overall.
-  # glob is matched relative to `root`; a job is skipped when no pushed file matches.
+  # Every job's file list is `files:` = scripts/hooks/own-push-files.sh: files changed by this
+  # branch's own commits since its last push, minus commits already on origin/develop (so a
+  # merge of develop does not re-test develop; conflict-resolved files still count).
+  # glob is matched relative to `root`; a job is skipped when no listed file matches.
   # svelte-check (`pnpm check`) and the full `pnpm test` are manual before a PR.
-  # Frontend runs only the test files whose import graph reaches a file changed since the
-  # branch was last pushed (origin/develop on a first push); deleted/renamed files and
-  # config/lockfile/setup changes re-run everything (frontend/scripts/test-changed.sh,
-  # forceRerunTriggers in vite.config.ts).
+  # Frontend runs only the test files whose import graph reaches a listed file; deleted/renamed
+  # files and config/lockfile/setup changes re-run everything (frontend/scripts/test-changed.sh).
   # Vitest keeps its fs module cache.
   parallel: false
   commands:
     worker-test:
       root: worker/
       glob: "**/*.{py,toml,lock}"
+      files: sh "$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
       run: uv run pytest tests
 
     backend-test:
       root: backend/
       glob: "**/*.{py,toml,lock}"
+      files: sh "$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
       run: uv run pytest tests
 
     frontend-test:
       root: frontend/
       glob: "**/*.{ts,js,svelte,json,css,yaml}"
+      files: sh "$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
       run: pnpm test:changed
 
     # tests/ suites need a live CouchDB and app, so the hook only type-checks and checks
@@ -59,4 +63,5 @@ pre-push:
     tests-check:
       root: tests/
       glob: "**/*.{ts,json,md,yaml}"
+      files: sh "$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
       run: pnpm exec tsc --noEmit && pnpm exec prettier --check .
