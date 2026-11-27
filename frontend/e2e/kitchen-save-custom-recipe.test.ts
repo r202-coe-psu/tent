@@ -477,7 +477,7 @@ test.describe(
 			await openRecipe(RECIPE);
 			await sheet.getByRole('button', { name: 'แก้ไข' }).click();
 			await expect(sheet.getByText('คุณไม่มีสิทธิ์เข้าถึงส่วนนี้')).toHaveCount(0);
-			await sheet.getByLabel('ยอดกำลังผลิตมาตรฐาน (Portions)').fill('12');
+			await sheet.getByLabel('ยอดกำลังผลิตมาตรฐาน (ที่)').fill('12');
 			await sheet.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
 			await expect
 				.poll(async () => (await recipesLabelled(RECIPE))[0]?.standard_portions, {
