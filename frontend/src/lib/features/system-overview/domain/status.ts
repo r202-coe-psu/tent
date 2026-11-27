@@ -15,7 +15,7 @@ export function getPreRegStatusInfo(
 
 	if (raw === 'active' || raw === 'checked_in') {
 		return {
-			label: 'เข้าศูนย์แล้ว (อยู่ในศูนย์)',
+			label: 'เข้าพักแล้ว',
 			className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
 			dotColor: 'bg-emerald-500',
 			isEntered: true,
@@ -25,21 +25,21 @@ export function getPreRegStatusInfo(
 
 	if (raw === 'room_confirmed') {
 		return {
-			label: 'เข้าศูนย์แล้ว (จัดห้องแล้ว)',
+			label: 'ยืนยันถึงโซนแล้ว',
 			className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
 			dotColor: 'bg-emerald-600',
 			isEntered: true,
-			description: 'ผู้พักพิงเข้าพักและยืนยันการจัดห้อง/โซนเรียบร้อย'
+			description: 'ผู้พักพิงเข้าพักและยืนยันว่าถึงโซนที่จัดให้แล้ว'
 		};
 	}
 
 	if (raw === 'arriving') {
 		return {
-			label: 'กำลังรายงานตัว',
+			label: 'รายงานตัวแล้ว · รอจัดโซน',
 			className: 'border-amber-200 bg-amber-50 text-amber-700',
 			dotColor: 'bg-amber-500',
 			isEntered: false,
-			description: 'ผู้พักพิงกำลังเดินทางหรือรอรายงานตัวเข้าศูนย์'
+			description: 'ผู้พักพิงรายงานตัวที่จุดลงทะเบียนแล้ว รอจัดโซน'
 		};
 	}
 
@@ -49,7 +49,7 @@ export function getPreRegStatusInfo(
 			className: 'border-amber-200 bg-amber-50 text-amber-900',
 			dotColor: 'bg-amber-500',
 			isEntered: true,
-			description: 'ผู้ประสบภัยอยู่ที่ศูนย์และรอเจ้าหน้าที่ยืนยันข้อมูลที่ Station 1'
+			description: 'ผู้พักพิงอยู่ที่ศูนย์และรอเจ้าหน้าที่ยืนยันข้อมูลที่จุดลงทะเบียน'
 		};
 	}
 
@@ -65,7 +65,7 @@ export function getPreRegStatusInfo(
 
 	if (raw === 'checked_out') {
 		return {
-			label: 'ออกจากศูนย์แล้ว',
+			label: 'เช็คเอาต์',
 			className: 'border-slate-200 bg-slate-100 text-slate-600',
 			dotColor: 'bg-slate-400',
 			isEntered: true,
@@ -75,7 +75,7 @@ export function getPreRegStatusInfo(
 
 	if (raw === 'transferred') {
 		return {
-			label: 'ย้ายศูนย์แล้ว',
+			label: 'ย้ายศูนย์',
 			className: 'border-purple-200 bg-purple-50 text-purple-700',
 			dotColor: 'bg-purple-500',
 			isEntered: true,
@@ -95,7 +95,7 @@ export function getPreRegStatusInfo(
 
 	if (raw === 'cancelled') {
 		return {
-			label: 'ยกเลิก',
+			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
 			className: 'border-rose-200 bg-rose-50 text-rose-700',
 			dotColor: 'bg-rose-500',
 			isEntered: false,
@@ -106,7 +106,7 @@ export function getPreRegStatusInfo(
 	if (raw === 'pre_registered' || hasShelter) {
 		if (hasShelter) {
 			return {
-				label: 'รอเข้าศูนย์ (ผูกศูนย์แล้ว)',
+				label: 'รอเข้าศูนย์ (เลือกศูนย์แล้ว)',
 				className: 'border-sky-200 bg-sky-50 text-sky-700',
 				dotColor: 'bg-sky-500',
 				isEntered: false,
@@ -116,7 +116,7 @@ export function getPreRegStatusInfo(
 	}
 
 	return {
-		label: 'ยังไม่ผูกศูนย์',
+		label: 'ยังไม่ได้เลือกศูนย์',
 		className: 'border-slate-200 bg-slate-100 text-slate-600',
 		dotColor: 'bg-slate-400',
 		isEntered: false,

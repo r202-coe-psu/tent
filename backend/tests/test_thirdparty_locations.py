@@ -648,7 +648,7 @@ async def _insert_profiled(code: str = "SH700", **over) -> PublicShelter:
         "id": code,
         "shelter_code": code,
         "name": f"ศูนย์ {code}",
-        "site_kind": "test_center",
+        "site_kind": "evacuation_center",
         "status": "open",
         "location_status": "open",
         "capacity": 100,
@@ -680,7 +680,7 @@ async def test_list_carries_the_new_summary_keys_but_no_detail_keys(
     await _insert_profiled()
     response = await client.get("/external/locations", headers=location_read_headers)
     [item] = response.json()["result"]
-    assert item["site_kind"] == "test_center"
+    assert item["site_kind"] == "evacuation_center"
     assert item["project_level"] == "provincial"
     assert item["occupancy_forecast"] == 35
     assert item["capacity_available"] == 65
@@ -789,3 +789,47 @@ async def test_accepts_delivery_is_computed_not_the_stored_default(
         "result"
     ]
     assert result["accepts_delivery"] is expected
+
+
+# Partners see only evacuation_center + host_house; test_center (or any other kind) is hidden.
+
+
+@pytest.mark.parametrize(
+    ("site_kind", "listed"),
+    [("evacuation_center", True), ("host_house", True), ("test_center", False), ("other", False)],
+)
+async def test_only_partner_site_kinds_are_listed_or_found(
+    client: AsyncClient, location_read_headers: dict[str, str], site_kind: str, listed: bool
+) -> None:
+    await _insert_profiled(site_kind=site_kind)
+    listing = (await client.get("/external/locations", headers=location_read_headers)).json()
+    detail = await client.get("/external/locations/SH700", headers=location_read_headers)
+    assert [item["location_code"] for item in listing["result"]] == (["SH700"] if listed else [])
+    assert listing["pagination"]["total"] == (1 if listed else 0)
+    assert detail.status_code == (200 if listed else 404)
+
+
+@pytest.mark.parametrize("site_kind", ["evacuation_center", "host_house"])
+async def test_list_locations_filters_by_site_kind(
+    client: AsyncClient, location_read_headers: dict[str, str], site_kind: str
+) -> None:
+    await _insert_profiled("SH701", site_kind="evacuation_center")
+    await _insert_profiled("SH702", site_kind="host_house")
+    await _insert_profiled("SH703", site_kind="test_center")
+    listing = (
+        await client.get(
+            "/external/locations", params={"site_kind": site_kind}, headers=location_read_headers
+        )
+    ).json()
+    assert {item["site_kind"] for item in listing["result"]} == {site_kind}
+    assert listing["pagination"]["total"] == 1
+
+
+@pytest.mark.parametrize("site_kind", ["test_center", "EVACUATION_CENTER", "x"])
+async def test_list_locations_rejects_a_non_partner_site_kind(
+    client: AsyncClient, location_read_headers: dict[str, str], site_kind: str
+) -> None:
+    response = await client.get(
+        "/external/locations", params={"site_kind": site_kind}, headers=location_read_headers
+    )
+    assert response.status_code == 422

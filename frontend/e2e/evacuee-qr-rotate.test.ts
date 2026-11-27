@@ -188,7 +188,7 @@ async function openQrModal(page: Page): Promise<void> {
 		.filter({ visible: true })
 		.first()
 		.click({ timeout: 30_000 });
-	await expect(page.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ })).toBeVisible();
+	await expect(page.getByRole('dialog', { name: /บัตรประจำตัวผู้พักพิง/ })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'พิมพ์บัตรประจำตัว' })).toBeEnabled({
 		timeout: 15_000
 	});
@@ -324,11 +324,11 @@ test.describe(
 			// The preview shows the current QR: nothing was issued by opening it.
 			expect(await readLog()).toBeNull();
 			await page
-				.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ })
+				.getByRole('dialog', { name: /บัตรประจำตัวผู้พักพิง/ })
 				.getByRole('button', { name: 'ปิด' })
 				.last()
 				.click();
-			await expect(page.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ })).toHaveCount(0);
+			await expect(page.getByRole('dialog', { name: /บัตรประจำตัวผู้พักพิง/ })).toHaveCount(0);
 			expect(await readLog(), 'closing without print must not write evacuee_qr').toBeNull();
 
 			// AC-EQR-8: no log yet, so the pre-CR-233 payload (no `@`) is still valid, on both surfaces.
@@ -382,7 +382,7 @@ test.describe(
 			const page = desk!;
 			const before = await readLog();
 			await openQrModal(page);
-			const dialog = page.getByRole('dialog', { name: /บัตรประจำตัวผู้ประสบภัย/ });
+			const dialog = page.getByRole('dialog', { name: /บัตรประจำตัวผู้พักพิง/ });
 			const shown = await decodeQrImage(page, dialog.locator('img').first());
 			expect(shown).toBe(issued[issued.length - 1]);
 			expect((await readLog())?.prints.length).toBe(before?.prints.length);

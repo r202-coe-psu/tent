@@ -67,6 +67,7 @@ import {
  */
 type Guard = () => Promise<void>;
 const GUARD_OF: Record<string, Guard> = {
+	'/back-office/overview': requireManager,
 	'/back-office/evacuee-management': requireEvacueeRegistration,
 	'/back-office/volunteers': requireVolunteerBackoffice,
 	'/back-office/volunteers/accounts': requireVolunteerBackoffice,
@@ -81,6 +82,7 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/kitchen': requireKitchen,
 	'/back-office/shelters': requireManager,
 	'/back-office/shelters/readiness': requireManager,
+	'/back-office/sop-parameters': requireWarehouseAccess,
 	'/back-office/users': requireManager,
 	'/back-office/master-data': requireManager,
 	'/back-office/incidents': requireIncidents,
@@ -104,8 +106,8 @@ const MANAGER_DESK_GUARD_OF: Record<string, Guard> = {
 	'/onsite/volunteer-check-in': requireVolunteerCheckIn
 };
 
-/** No page guard yet (R2, #845). */
-const EXEMPT = new Set(['/back-office/dailysop', '/back-office/sop-parameters']);
+/** Open to every role by decision (#845, 2026-11-16): the page filters its own content by role. */
+const EXEMPT = new Set(['/back-office/dailysop']);
 
 const leaves = (): BackofficeNavbarNode[] => {
 	const walk = (nodes: BackofficeNavbarNode[]): BackofficeNavbarNode[] =>

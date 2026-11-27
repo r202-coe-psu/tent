@@ -112,7 +112,7 @@ describe('PhoneHouseholdPicker language', () => {
 	it('keeps the Thai copy byte-identical in Thai', () => {
 		const { body } = render(PhoneHouseholdPicker, { props: { candidates, onselect: noop } });
 
-		expect(body).toContain('พบหลายครัวเรือนที่ใช้เบอร์นี้');
+		expect(body).toContain('พบหลายครอบครัวที่ใช้เบอร์นี้');
 		expect(body).toContain('สมาชิก 3 คน · รอรายงานตัว 2 คน');
 		expect(body).toContain('รายงานตัวครบแล้ว');
 		expect(body).toContain('aria-label="สมชาย ใ***, สมาชิก 3 คน, รอรายงานตัว 2 คน"');

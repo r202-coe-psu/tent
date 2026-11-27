@@ -154,7 +154,7 @@
 				<div
 					class="inline-flex rounded-lg border border-slate-200/80 bg-slate-50/70 p-0.5"
 					role="tablist"
-					aria-label="กรองตามชนิดสถานที่"
+					aria-label="กรองตามประเภทศูนย์"
 				>
 					{#each siteKindOptions as option (option.value)}
 						<button

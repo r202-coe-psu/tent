@@ -84,7 +84,7 @@
 					);
 					if (!conflict.conflicted) continue;
 					toast.error(
-						`ไม่สามารถบันทึกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+						`ไม่สามารถบันทึกได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครอบครัว "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 					);
 					isSubmitting = false;
 					return;
@@ -125,7 +125,7 @@
 				};
 				await updateHouseholdMutation.mutateAsync(updated);
 				householdId = editingHousehold._id;
-				toast.success(`แก้ไขข้อมูลครัวเรือน "${updated.label}" สำเร็จ`);
+				toast.success(`แก้ไขข้อมูลครอบครัว "${updated.label}" สำเร็จ`);
 			} else {
 				// Determine status based on members stay statuses (Path B / Path C)
 				const selectedMembers = allEvacuees.filter((ev) => selectedMemberIds.includes(ev._id));
@@ -143,7 +143,7 @@
 
 				const res = await createHouseholdMutation.mutateAsync({ input: inputWithStatus, ctx });
 				householdId = res._id;
-				toast.success(`สร้างครัวเรือน "${res.label}" สำเร็จ`);
+				toast.success(`สร้างครอบครัว "${res.label}" สำเร็จ`);
 			}
 
 			// Sync membership
@@ -234,7 +234,7 @@
 </script>
 
 <svelte:head>
-	<title>{isEditMode ? 'แก้ไขข้อมูลครัวเรือน' : 'เพิ่มครัวเรือนใหม่'} · SmartShelter</title>
+	<title>{isEditMode ? 'แก้ไขข้อมูลครอบครัว' : 'เพิ่มครอบครัวใหม่'} · SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 md:px-6">
@@ -248,9 +248,7 @@
 			<span>กลับไปหน้ารายชื่อหลัก</span>
 		</button>
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-			{isEditMode
-				? 'แก้ไขข้อมูลครัวเรือน (Edit Household)'
-				: 'เพิ่มครัวเรือนใหม่ (Create Household)'}
+			{isEditMode ? 'แก้ไขข้อมูลครอบครัว (Edit Household)' : 'เพิ่มครอบครัวใหม่ (Create Household)'}
 		</h2>
 	</div>
 
@@ -265,7 +263,7 @@
 		</div>
 	{:else if isEditMode && !editingHousehold}
 		<div class="rounded-2xl border border-border bg-card p-6 py-12 text-center shadow-xs">
-			<p class="text-sm font-semibold text-destructive">ไม่พบข้อมูลครัวเรือนที่ต้องการแก้ไข</p>
+			<p class="text-sm font-semibold text-destructive">ไม่พบข้อมูลครอบครัวที่ต้องการแก้ไข</p>
 			<Button variant="outline" class="mt-4" onclick={handleCancel}>กลับหน้าหลัก</Button>
 		</div>
 	{:else}

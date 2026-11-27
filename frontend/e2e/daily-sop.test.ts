@@ -146,7 +146,7 @@ test.describe('Daily SOP — Design workflow', { tag: '@quarantine' }, () => {
 		await page.getByRole('button', { name: 'เริ่มการประเมิน' }).click();
 		await expect(page.getByTestId('sop-card')).toHaveCount(7);
 
-		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้ประสบภัย/ }).click();
+		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้พักพิง/ }).click();
 		await page.getByTestId('status-select').first().selectOption('Pass');
 		await page.getByRole('button', { name: 'บันทึกและกลับสู่เมนู' }).click();
 		await expect(page).toHaveURL(/view=history/);
@@ -159,7 +159,7 @@ test.describe('Daily SOP — Design workflow', { tag: '@quarantine' }, () => {
 	}) => {
 		await page.goto('/back-office/dailysop');
 		await page.getByRole('button', { name: 'เริ่มการประเมิน' }).click();
-		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้ประสบภัย/ }).click();
+		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้พักพิง/ }).click();
 		await page.getByTestId('status-select').first().selectOption('Pass');
 
 		await page.route(APP_COUCH_PATTERN, (route) => route.abort('internetdisconnected'));
@@ -193,7 +193,7 @@ test.describe('Daily SOP — Design workflow', { tag: '@quarantine' }, () => {
 		await page.goto('/back-office/dailysop');
 		await page.getByRole('button', { name: 'จัดการ' }).nth(2).click();
 		await expect(page.getByTestId('sop-card')).toHaveCount(7);
-		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้ประสบภัย/ }).click();
+		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้พักพิง/ }).click();
 		await expect(page.getByTestId('status-select')).toHaveCount(3);
 		await page.getByTestId('status-select').first().selectOption('Fail');
 		await page.getByRole('button', { name: 'กลับสู่เมนู' }).click();
@@ -209,7 +209,7 @@ test.describe('Daily SOP — Design workflow', { tag: '@quarantine' }, () => {
 		await expect(page.getByTestId('history-row')).toHaveCount(3);
 		await page.reload();
 		await page.getByRole('button', { name: 'จัดการ' }).nth(2).click();
-		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้ประสบภัย/ }).click();
+		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้พักพิง/ }).click();
 		await expect(page.getByTestId('status-select').first()).toHaveValue('Fail');
 		await expect(page.getByText(/ประเมินโดย staff03/).first()).toBeVisible();
 	});
@@ -218,7 +218,7 @@ test.describe('Daily SOP — Design workflow', { tag: '@quarantine' }, () => {
 		ownsTodayAssessment = true;
 		await page.goto('/back-office/dailysop');
 		await page.getByRole('button', { name: 'เริ่มการประเมิน' }).click();
-		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้ประสบภัย/ }).click();
+		await page.getByRole('button', { name: /1\. ระบบลงทะเบียนผู้พักพิง/ }).click();
 		await page.getByTestId('status-select').first().selectOption('Pending');
 		await page.getByRole('button', { name: 'บันทึกและกลับสู่เมนู' }).click();
 		await expect(page.getByTestId('history-row').first()).toContainText('In Progress');
@@ -235,7 +235,7 @@ test.describe('Daily SOP — Design workflow', { tag: '@quarantine' }, () => {
 		await page.goto('/back-office/dailysop');
 		await page.getByRole('button', { name: 'เริ่มการประเมิน' }).click();
 		const sections = [
-			/1\. ระบบลงทะเบียนผู้ประสบภัย/,
+			/1\. ระบบลงทะเบียนผู้พักพิง/,
 			/2\. การดูแลกลุ่มเปราะบาง/,
 			/3\. การบริหารจัดการอาสาสมัคร/,
 			/4\. ระบบสาธารณูปโภคและอาหาร/,

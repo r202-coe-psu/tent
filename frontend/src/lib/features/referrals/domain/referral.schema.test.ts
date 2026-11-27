@@ -22,7 +22,7 @@ const v1Medical = {
 const v2Medical = {
 	...v1Medical,
 	schema_v: 2,
-	close_reason: 'ผู้ประสบภัยกลับบ้านแล้ว'
+	close_reason: 'ผู้พักพิงกลับบ้านแล้ว'
 };
 
 describe('Referral schema_v 1|2 reader (CR-167 FR-C1, FR-C4)', () => {
@@ -41,7 +41,7 @@ describe('Referral schema_v 1|2 reader (CR-167 FR-C1, FR-C4)', () => {
 	it('keeps close_reason in the parsed output (not stripped)', () => {
 		const parsed = referralReadSchema.parse(v2Medical);
 		expect(parsed.schema_v).toBe(2);
-		expect(parsed.close_reason).toBe('ผู้ประสบภัยกลับบ้านแล้ว');
+		expect(parsed.close_reason).toBe('ผู้พักพิงกลับบ้านแล้ว');
 	});
 
 	it('accepts close_reason on every referral_type', () => {

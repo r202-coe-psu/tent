@@ -31,22 +31,26 @@ const departmentsEn: Record<PortalDepartment['id'], PortalText> = {
 		label: 'OneData Platform',
 		desc: 'Refer patients and request resources through OneData'
 	},
+	dailysop: {
+		label: 'Daily Assessment',
+		desc: 'Daily operations assessment of the shelter'
+	},
 	pr: { label: 'Public Relations', desc: 'News and announcements on the shelter kiosks' },
 	central: { label: 'Central', desc: 'For central system administrators only' }
 };
 
 const itemsEn: Record<string, PortalText> = {
 	'station-1': {
-		label: 'Register Families and Households',
+		label: 'Registration desk',
 		desc: 'Record evacuees and families and issue QR cards'
 	},
 	'station-2': {
-		label: 'Occupant Screening',
+		label: 'Health screening desk',
 		desc: 'Screen symptoms and vulnerable groups before zoning'
 	},
 	'station-3': {
-		label: 'Zone Allocation',
-		desc: 'Assign evacuees to zones and tents'
+		label: 'Zoning desk',
+		desc: 'Assign evacuees to zones'
 	},
 	'evacuee-search-edit': {
 		label: 'Search and Edit Evacuee Records',
@@ -92,6 +96,7 @@ const itemsEn: Record<string, PortalText> = {
 		label: 'Zone Settings',
 		desc: 'Set zones, capacity, type and open/closed status'
 	},
+	'system-overview': { label: 'System Overview', desc: 'Evacuee and food distribution overview' },
 	'shelter-manage': {
 		label: 'Manage Shelter and Zones',
 		desc: 'All shelter and zone information'
@@ -107,6 +112,7 @@ const itemsEn: Record<string, PortalText> = {
 		desc: 'Move to another shelter and track referrals'
 	},
 	'back-office': { label: 'Back Office', desc: 'Shelter settings and reports' },
+	'daily-sop': { label: 'Daily Assessment', desc: 'Daily operations assessment of the shelter' },
 	'onedata-m5': {
 		label: 'OneData Patient Referral (M5)',
 		desc: 'Send patients to a hospital for MOPH review'

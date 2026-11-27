@@ -1,6 +1,6 @@
 export const EVACUEE_QR_MODAL_I18N = {
 	th: {
-		cardTitle: 'บัตรประจำตัวผู้ประสบภัย',
+		cardTitle: 'บัตรประจำตัวผู้พักพิง',
 		closeWindow: 'ปิด',
 		backOrRegisterNew: 'ย้อนกลับ / ลงทะเบียนคนใหม่',
 		generatingPdf: 'กำลังสร้าง PDF...',

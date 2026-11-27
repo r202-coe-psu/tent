@@ -4,7 +4,7 @@ type TriageCopy = { label: string; desc: string };
 
 const th = {
 	title: 'ระดับความเร่งด่วน (Triage)',
-	desc: 'เลือกสีตามอาการที่ประเมินได้ — สีเหลืองและแดงระบบจะแนะนำโซนกักตัวที่สถานี 3',
+	desc: 'เลือกสีตามอาการที่ประเมินได้ — สีเหลืองและแดงระบบจะแนะนำโซนกักตัวที่จุดจัดโซน',
 	levels: {
 		green: { label: 'เขียว', desc: 'อาการทั่วไป / ปกติ' },
 		yellow: { label: 'เหลือง', desc: 'เฝ้าระวัง / อาการปานกลาง' },
@@ -15,7 +15,7 @@ const th = {
 
 const en: typeof th = {
 	title: 'Urgency (triage)',
-	desc: 'Pick a colour from the assessment — yellow and red get a quarantine zone recommendation at Station 3',
+	desc: 'Pick a colour from the assessment — yellow and red get a quarantine zone recommendation at the zoning desk',
 	levels: {
 		green: { label: 'Green', desc: 'General / stable' },
 		yellow: { label: 'Yellow', desc: 'Watch / moderate symptoms' },

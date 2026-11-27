@@ -72,7 +72,7 @@ test.describe(
 
 			await page.getByRole('textbox', { name: 'ชื่อศูนย์พักพิง *' }).fill(SHELTER_NAME);
 			await page.getByRole('textbox', { name: /ลิงก์ไปยังระบบต้นทาง/ }).fill(EXTERNAL_URL);
-			await page.getByRole('button', { name: 'ชนิดสถานที่ *' }).click();
+			await page.getByRole('button', { name: 'ประเภทศูนย์ *' }).click();
 			await page.getByRole('option', { name: 'ศูนย์อพยพ', exact: true }).click();
 			await page.getByRole('spinbutton', { name: 'ละติจูด (Latitude)' }).fill('7.008');
 			await page.getByRole('spinbutton', { name: 'ลองจิจูด (Longitude)' }).fill('100.503');

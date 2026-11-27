@@ -67,7 +67,7 @@ describe('GET /api/back-office/overview/households', () => {
 				id: 'household:01',
 				label: 'ครอบครัว สมชาย',
 				status: 'unassigned',
-				statusLabel: 'ยังไม่ผูกศูนย์',
+				statusLabel: 'ยังไม่ได้เลือกศูนย์',
 				shelterCode: null,
 				shelterName: null,
 				province: 'เชียงใหม่',

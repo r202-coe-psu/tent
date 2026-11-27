@@ -56,6 +56,7 @@ import Search from '@lucide/svelte/icons/search';
 import ScanLine from '@lucide/svelte/icons/scan-line';
 import Truck from '@lucide/svelte/icons/truck';
 import UserCheck from '@lucide/svelte/icons/user-check';
+import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 
 type Leaf = {
 	label: string;
@@ -114,6 +115,20 @@ const managerDesk =
 		canAccessManagerPages(roles, shelterCode) && canAccess(roles, shelterCode);
 
 export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
+	{
+		// Centre dashboards (evacuees, food distribution) behind one button — SA + SM of the active
+		// shelter, same predicate as `requireManager` on /back-office/overview. Prefix matching in
+		// `activeNavHref` keeps it lit on both /overview/evacuees and /overview/food.
+		title: 'ภาพรวม',
+		items: [
+			{
+				label: 'ภาพรวมศูนย์',
+				href: resolve('/back-office/overview'),
+				icon: LayoutDashboard,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
+			}
+		]
+	},
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
@@ -368,7 +383,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					{
 						label: 'พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
-						icon: Calculator
+						icon: Calculator,
+						visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
 					},
 					{ label: 'โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]

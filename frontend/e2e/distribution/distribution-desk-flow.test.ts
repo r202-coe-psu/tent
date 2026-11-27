@@ -40,7 +40,7 @@ async function scanUnknownCode(
 	await desk.selectPoint(scenarioPoint(scenario));
 	await desk.itemButton(item.name).click();
 	await desk.chooseRecipientByScan(code);
-	await expect(page.getByText(`ไม่พบผู้ประสบภัยจากรหัส "${code}"`).first()).toBeVisible();
+	await expect(page.getByText(`ไม่พบผู้พักพิงจากรหัส "${code}"`).first()).toBeVisible();
 	await expect(page.getByRole('button', { name: 'เปลี่ยนผู้รับ' })).toHaveCount(0);
 }
 
