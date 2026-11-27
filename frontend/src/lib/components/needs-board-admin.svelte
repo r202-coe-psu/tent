@@ -399,9 +399,11 @@
 									: 'ประกาศที่ปิดรับแล้วแสดงบนหน้าเว็บไม่ได้'}
 							>
 								<Switch
-									checked={row.showOnHome && row.state === 'open'}
+									bind:checked={
+										() => row.showOnHome && row.state === 'open',
+										() => onToggleShowOnHome(row.compoundId)
+									}
 									disabled={row.state !== 'open'}
-									onCheckedChange={() => onToggleShowOnHome(row.compoundId)}
 									aria-label="แสดงบนหน้าเว็บสาธารณะ"
 								/>
 								<span
@@ -603,9 +605,11 @@
 											: 'ประกาศที่ปิดรับแล้วแสดงบนหน้าเว็บไม่ได้'}
 									>
 										<Switch
-											checked={row.showOnHome && row.state === 'open'}
+											bind:checked={
+												() => row.showOnHome && row.state === 'open',
+												() => onToggleShowOnHome(row.compoundId)
+											}
 											disabled={row.state !== 'open'}
-											onCheckedChange={() => onToggleShowOnHome(row.compoundId)}
 											aria-label="แสดงบนหน้าเว็บสาธารณะ"
 										/>
 										<span
