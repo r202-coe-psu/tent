@@ -107,6 +107,12 @@ export type BackofficeNavbarGroup = {
 
 export type BackofficeNavbarLeaf = Leaf;
 
+/** A desk link for SA / the active shelter's SM, and only when its page guard also lets them in. */
+const managerDesk =
+	(canAccess: (roles: readonly string[], shelterCode?: string | null) => boolean) =>
+	({ roles, shelterCode }: NavVisibilityContext): boolean =>
+		canAccessManagerPages(roles, shelterCode) && canAccess(roles, shelterCode);
+
 export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
@@ -117,8 +123,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Users,
 				visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
 			},
-			// The /portal registration tiles, mirrored here and named after each page's own title, so SA/SM can reach them from the sidebar.
-			// Each is shown exactly when its page guard lets the user in.
+			// The /portal onsite desks, mirrored here and named after each page's own title, for SA/SM
+			// only (#1517): other roles keep reaching them from /portal.
 			{
 				label: 'สถานีหน้างาน',
 				href: null,
@@ -128,25 +134,25 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'ทะเบียนผู้ประสบภัย',
 						href: resolve('/onsite/people'),
 						icon: House,
-						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+						visibleTo: managerDesk(canAccessEvacueeRegistration)
 					},
 					{
 						label: 'จุดตรวจคัดกรองผู้เข้าพัก',
 						href: resolve('/onsite/medical-screening'),
 						icon: HeartPulse,
-						visibleTo: ({ roles, shelterCode }) => canAccessMedicalScreening(roles, shelterCode)
+						visibleTo: managerDesk(canAccessMedicalScreening)
 					},
 					{
 						label: 'จัดสรรที่พัก',
 						href: resolve('/onsite/zoning'),
 						icon: MapPin,
-						visibleTo: ({ roles, shelterCode }) => canAccessZoning(roles, shelterCode)
+						visibleTo: managerDesk(canAccessZoning)
 					},
 					{
 						label: 'จุดแจกจ่ายพัสดุและอาหาร',
 						href: resolve('/onsite/distribution'),
 						icon: Truck,
-						visibleTo: ({ roles, shelterCode }) => canAccessDistributionDesk(roles, shelterCode)
+						visibleTo: managerDesk(canAccessDistributionDesk)
 					}
 				]
 			},
@@ -159,13 +165,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'ค้นหาและแก้ไขข้อมูลผู้พักพิง',
 						href: resolve('/onsite/search-edit'),
 						icon: Search,
-						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+						visibleTo: managerDesk(canAccessEvacueeRegistration)
 					},
 					{
 						label: 'สแกนเข้า-ออกศูนย์',
 						href: resolve('/onsite/scan-check-in-out'),
 						icon: ScanLine,
-						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
+						visibleTo: managerDesk(canAccessEvacueeRegistration)
 					}
 				]
 			},
@@ -191,7 +197,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'เช็คอินอาสาสมัคร',
 						href: resolve('/onsite/volunteer-check-in'),
 						icon: UserCheck,
-						visibleTo: ({ roles, shelterCode }) => canAccessVolunteerCheckIn(roles, shelterCode)
+						visibleTo: managerDesk(canAccessVolunteerCheckIn)
 					}
 				]
 			},

@@ -87,7 +87,14 @@ const GUARD_OF: Record<string, Guard> = {
 	'/back-office/audit-log': requireManager,
 	'/back-office/kiosks': requireKioskManagement,
 	'/back-office/kiosks/banners': requireBannerManagement,
-	'/back-office/printers': requirePrinterManagement,
+	'/back-office/printers': requirePrinterManagement
+};
+
+/**
+ * Onsite desks mirrored from /portal for SA / SM only (#1517): visible exactly when the user is a
+ * manager AND the page guard admits them.
+ */
+const MANAGER_DESK_GUARD_OF: Record<string, Guard> = {
 	'/onsite/people': requireEvacueeRegistration,
 	'/onsite/medical-screening': requireMedicalScreening,
 	'/onsite/zoning': requireZoning,
@@ -153,7 +160,7 @@ describe('sidebar visibility matches the page guards (#842)', () => {
 		const unmapped = leaves()
 			.filter((n) => n.href && !isGroup(n))
 			.map((n) => String(n.href))
-			.filter((h) => !(h in GUARD_OF) && !EXEMPT.has(h));
+			.filter((h) => !(h in GUARD_OF) && !(h in MANAGER_DESK_GUARD_OF) && !EXEMPT.has(h));
 		expect(unmapped).toEqual([]);
 	});
 
@@ -167,6 +174,22 @@ describe('sidebar visibility matches the page guards (#842)', () => {
 					mocks.selectedShelterCode = selected;
 					const visible = canSeeNavNode(node!, { roles, shelterCode: selected });
 					expect(visible, `${href} roles=${roles} shelter=${selected}`).toBe(await allows(guard));
+				}
+			}
+		});
+	}
+
+	for (const [href, guard] of Object.entries(MANAGER_DESK_GUARD_OF)) {
+		it(`${href}: visible exactly when the user is SA/SM and its guard admits`, async () => {
+			const node = leaves().find((n) => String(n.href) === href);
+			expect(node, `nav node for ${href}`).toBeDefined();
+			for (const roles of ROLE_SETS) {
+				for (const selected of ['SH001', null]) {
+					mocks.user = { roles };
+					mocks.selectedShelterCode = selected;
+					const visible = canSeeNavNode(node!, { roles, shelterCode: selected });
+					const expected = (await allows(requireManager)) && (await allows(guard));
+					expect(visible, `${href} roles=${roles} shelter=${selected}`).toBe(expected);
 				}
 			}
 		});
