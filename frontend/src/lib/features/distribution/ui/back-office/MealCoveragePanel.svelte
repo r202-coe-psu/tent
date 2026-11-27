@@ -227,7 +227,8 @@
 </script>
 
 <section class="space-y-4" aria-labelledby="meal-coverage-title">
-	<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+	<!-- Title and range picker side by side only from lg: on a tablet the custom range would wrap under the preset, so the picker takes its own row, right-aligned. -->
+	<div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-4">
 		<div class="min-w-0 space-y-1">
 			<h3 id="meal-coverage-title" class="text-lg font-bold text-slate-900 sm:text-xl">
 				ภาพรวมการแจกจ่ายอาหาร

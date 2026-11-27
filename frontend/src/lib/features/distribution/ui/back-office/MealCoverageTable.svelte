@@ -76,9 +76,9 @@
 				? 'border-amber-200 bg-amber-50/40'
 				: 'border-slate-200/80 bg-white'}"
 		>
-			<!-- Status sits top right; the name keeps at least 10rem, so a long range status wraps below it. -->
+			<!-- Status sits top right; it wraps below the name only when the name would get under 8rem. -->
 			<div class="flex flex-wrap items-start justify-between gap-2">
-				<div class="min-w-40 flex-1">
+				<div class="min-w-0 flex-1 basis-[8rem]">
 					<p class="text-base font-bold text-slate-900">{@render personName(row)}</p>
 					<p class="mt-0.5 text-sm text-slate-500">{zoneName(row.zone) || '–'}</p>
 				</div>

@@ -40,7 +40,7 @@
 
 <!-- One labelled group: the preset and, for a custom range, the pickers right next to it. -->
 <div
-	class="w-full min-w-0 space-y-1.5 sm:w-auto"
+	class="w-full min-w-0 space-y-1.5 sm:w-auto sm:self-end"
 	role="group"
 	aria-labelledby="meal-coverage-range-label"
 >
