@@ -155,7 +155,7 @@
 							{...props}
 							bind:value={$formData.name}
 							placeholder="เช่น ข้าวสวยมาตรฐานกุมารแพทย์, ไข่เป็ดต้มสุก"
-							class="w-full rounded-xl border border-slate-200/80 px-4 py-6 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+							class="h-10 w-full rounded-lg text-sm shadow-2xs"
 						/>
 					{/snippet}
 				</Form.Control>

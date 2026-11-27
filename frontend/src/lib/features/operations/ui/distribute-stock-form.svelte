@@ -449,7 +449,7 @@
 				disabled={hasLanded || lineDisabled}
 				aria-label="ปลายทาง / ผู้รับ"
 				aria-invalid={noteProblem ? 'true' : undefined}
-				class="min-h-11"
+				class="h-10 rounded-lg shadow-2xs"
 			/>
 			{#if noteProblem}
 				<p class="text-sm font-semibold text-red-700" role="alert">{noteProblem}</p>

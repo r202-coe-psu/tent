@@ -242,7 +242,12 @@
 			<div class="grid gap-4 sm:grid-cols-[1fr_8rem]">
 				<div class="space-y-1.5">
 					<Label for="sp-name">ชื่อจุดเก็บของ</Label>
-					<Input id="sp-name" bind:value={draft.name} placeholder="เช่น สนามปิงปอง, ห้องเรียน 3" />
+					<Input
+						class="rounded-lg shadow-2xs"
+						id="sp-name"
+						bind:value={draft.name}
+						placeholder="เช่น สนามปิงปอง, ห้องเรียน 3"
+					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="sp-area">พื้นที่ (ตร.ม.)</Label>
@@ -251,7 +256,7 @@
 						type="number"
 						min="0"
 						step="any"
-						class="tabular-nums"
+						class="rounded-lg tabular-nums shadow-2xs"
 						value={draft.area_m2 ?? ''}
 						oninput={(e) =>
 							(draft.area_m2 = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
@@ -302,6 +307,7 @@
 					<div class="space-y-1.5">
 						<Label for="sp-note">คำอธิบายตำแหน่งสำหรับผู้มาส่ง</Label>
 						<Input
+							class="rounded-lg shadow-2xs"
 							id="sp-note"
 							bind:value={draft.location_note}
 							maxlength={SUB_STORAGE_NOTE_MAX}

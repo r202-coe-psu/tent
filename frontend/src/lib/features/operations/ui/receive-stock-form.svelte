@@ -653,7 +653,7 @@
 								aria-controls="donation-listbox"
 								aria-haspopup="listbox"
 								autocomplete="off"
-								class="min-h-11"
+								class="h-10 rounded-lg shadow-2xs"
 							/>
 							{#if selectedDonation}
 								<Button
@@ -718,7 +718,7 @@
 							id="walkin-donor-name"
 							placeholder="ชื่อ"
 							bind:value={walkInDonorName}
-							class="min-h-11"
+							class="h-10 rounded-lg shadow-2xs"
 						/>
 					</div>
 					<div>
@@ -737,7 +737,7 @@
 							onblur={() => (phoneTouched = true)}
 							aria-invalid={shownPhoneError ? true : undefined}
 							aria-describedby={shownPhoneError ? 'walkin-donor-phone-error' : undefined}
-							class="min-h-11"
+							class="h-10 rounded-lg shadow-2xs"
 						/>
 						{#if shownPhoneError}
 							<p
@@ -762,7 +762,7 @@
 							onblur={() => (emailTouched = true)}
 							aria-invalid={shownEmailError ? true : undefined}
 							aria-describedby={shownEmailError ? 'walkin-donor-email-error' : undefined}
-							class="min-h-11"
+							class="h-10 rounded-lg shadow-2xs"
 						/>
 						{#if shownEmailError}
 							<p
@@ -802,6 +802,7 @@
 							{/if}
 						</Form.Label>
 						<ItemCombobox
+							class="min-h-10 rounded-lg shadow-2xs"
 							id={props.id}
 							name={props.name}
 							aria-invalid={props['aria-invalid']}
@@ -846,7 +847,7 @@
 							step={qtyInputStep(unitDimension.resolve($formData.unit))}
 							bind:value={$formData.qty}
 							aria-invalid={qtyWholeError ? true : props['aria-invalid']}
-							class="min-h-11 font-mono font-bold"
+							class="h-10 rounded-lg font-mono font-bold shadow-2xs"
 						/>
 					{/snippet}
 				</Form.Control>
@@ -867,10 +868,16 @@
 								value=""
 								readonly
 								disabled
-								class="min-h-11"
+								class="h-10 rounded-lg shadow-2xs"
 							/>
 						{:else if unitOptions.length <= 1}
-							<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+							<Input
+								{...props}
+								value={selectedUnitLabel}
+								readonly
+								disabled
+								class="h-10 rounded-lg shadow-2xs"
+							/>
 						{:else}
 							<Select.Root
 								type="single"
@@ -881,7 +888,7 @@
 							>
 								<Select.Trigger
 									{...props}
-									class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
+									class="h-10 w-full border border-input bg-white px-3 text-sm font-medium shadow-2xs data-[size=default]:h-10"
 								>
 									{selectedUnitLabel}
 								</Select.Trigger>
@@ -980,6 +987,7 @@
 							{/each}
 						</div>
 						<DatePicker
+							class="!h-10 border-input bg-white shadow-2xs"
 							{...props}
 							bind:value={() => expiry.value, setExpiryDate}
 							placeholder="วว/ดด/ปปปป"
@@ -1030,6 +1038,7 @@
 								{#snippet children({ props })}
 									<Form.Label>วันผลิต</Form.Label>
 									<DatePicker
+										class="!h-10 border-input bg-white shadow-2xs"
 										{...props}
 										bind:value={() => producedAtDate, setProducedAtDate}
 										placeholder="วันนี้ = เข้าคลัง"

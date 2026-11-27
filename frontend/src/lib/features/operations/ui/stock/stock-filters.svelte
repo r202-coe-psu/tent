@@ -94,15 +94,16 @@
 		}, SEARCH_DEBOUNCE_MS);
 	}
 
-	const TRIGGER_CLASS = 'min-h-11 w-full rounded-lg border-slate-300 bg-white text-sm shadow-2xs';
+	const TRIGGER_CLASS =
+		'h-10 w-full rounded-lg border-input bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10 sm:w-52';
+	const FIELD_CLASS = 'flex min-w-[140px] flex-1 flex-col gap-1.5 sm:flex-none';
+	const LABEL_CLASS = 'text-xs font-semibold text-slate-600';
 </script>
 
-<div
-	class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto] md:p-4 lg:grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))_auto]"
->
-	<div class="relative col-span-2 md:col-span-4 lg:col-span-1">
+<div class="flex flex-col gap-3 border-b border-slate-200/80 p-3 md:p-4">
+	<div class="relative w-full">
 		<Search
-			class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+			class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
 			aria-hidden="true"
 		/>
 		<Input
@@ -111,67 +112,81 @@
 			oninput={(e) => onSearchInput(e.currentTarget.value)}
 			placeholder="ค้นหาชื่อ / SKU / สแกนบาร์โค้ด"
 			aria-label="ค้นหาชื่อ, SKU หรือบาร์โค้ด"
-			class="min-h-11 w-full rounded-lg border-slate-300 bg-white pl-9 text-base shadow-2xs md:text-sm"
+			class="h-10 w-full rounded-lg border-input bg-white pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 		/>
 	</div>
 
-	<Select.Root type="single" value={cat} onValueChange={(v) => v && onchange({ cat: v })}>
-		<Select.Trigger class={TRIGGER_CLASS} aria-label="กรองหมวดหมู่">
-			<span class="truncate"><span class="text-slate-500">หมวด:</span> {catLabel}</span>
-		</Select.Trigger>
-		<Select.Content>
-			<Select.Item value="all" label="ทั้งหมด">ทั้งหมด</Select.Item>
-			{#each categories as option (option.value)}
-				<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
-			{/each}
-		</Select.Content>
-	</Select.Root>
+	<div class="flex flex-wrap items-end gap-3">
+		<div class={FIELD_CLASS}>
+			<label for="stock-category-filter" class={LABEL_CLASS}>หมวด</label>
+			<Select.Root type="single" value={cat} onValueChange={(v) => v && onchange({ cat: v })}>
+				<Select.Trigger id="stock-category-filter" class={TRIGGER_CLASS} aria-label="กรองหมวดหมู่">
+					<span class="truncate">{catLabel}</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label="ทั้งหมด">ทั้งหมด</Select.Item>
+					{#each categories as option (option.value)}
+						<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
 
-	<Select.Root type="single" value={loc} onValueChange={(v) => v && onchange({ loc: v })}>
-		<Select.Trigger class={TRIGGER_CLASS} aria-label="กรองที่เก็บ">
-			<span class="truncate"><span class="text-slate-500">ที่เก็บ:</span> {locLabel}</span>
-		</Select.Trigger>
-		<Select.Content>
-			<Select.Item value="all" label="ทุกจุด">ทุกจุด</Select.Item>
-			{#each locations as option (option.value)}
-				<Select.Item value={option.value} label={option.label}>
-					<span class="flex min-w-0 flex-col">
-						<span class="truncate">{option.label}</span>
-						{#if option.hint}
-							<span class="truncate text-xs text-muted-foreground">{option.hint}</span>
-						{/if}
-					</span>
-				</Select.Item>
-			{/each}
-		</Select.Content>
-	</Select.Root>
+		<div class={FIELD_CLASS}>
+			<label for="stock-location-filter" class={LABEL_CLASS}>ที่เก็บ</label>
+			<Select.Root type="single" value={loc} onValueChange={(v) => v && onchange({ loc: v })}>
+				<Select.Trigger id="stock-location-filter" class={TRIGGER_CLASS} aria-label="กรองที่เก็บ">
+					<span class="truncate">{locLabel}</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label="ทุกจุด">ทุกจุด</Select.Item>
+					{#each locations as option (option.value)}
+						<Select.Item value={option.value} label={option.label}>
+							<span class="flex min-w-0 flex-col">
+								<span class="truncate">{option.label}</span>
+								{#if option.hint}
+									<span class="truncate text-xs text-muted-foreground">{option.hint}</span>
+								{/if}
+							</span>
+						</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
 
-	<Select.Root
-		type="single"
-		value={sort}
-		onValueChange={(v) => {
-			const next = SORT_OPTIONS.find((o) => o.value === v);
-			if (next) onchange({ sort: next.value });
-		}}
-	>
-		<Select.Trigger class={TRIGGER_CLASS} aria-label="เรียงลำดับ">
-			<span class="truncate"><span class="text-slate-500">เรียง:</span> {sortLabel}</span>
-		</Select.Trigger>
-		<Select.Content>
-			{#each SORT_OPTIONS as option (option.value)}
-				<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
-			{/each}
-		</Select.Content>
-	</Select.Root>
-
-	<div class="flex min-h-11 items-center gap-2.5 px-1">
-		<Switch id="stock-all-catalog" checked={all} onCheckedChange={(v) => onchange({ all: v })} />
-		<Label for="stock-all-catalog" class="cursor-pointer text-sm whitespace-nowrap text-slate-700">
-			ทั้งแคตตาล็อก
-		</Label>
+		<div class={FIELD_CLASS}>
+			<label for="stock-sort-filter" class={LABEL_CLASS}>เรียง</label>
+			<Select.Root
+				type="single"
+				value={sort}
+				onValueChange={(v) => {
+					const next = SORT_OPTIONS.find((o) => o.value === v);
+					if (next) onchange({ sort: next.value });
+				}}
+			>
+				<Select.Trigger id="stock-sort-filter" class={TRIGGER_CLASS} aria-label="เรียงลำดับ">
+					<span class="truncate">{sortLabel}</span>
+				</Select.Trigger>
+				<Select.Content>
+					{#each SORT_OPTIONS as option (option.value)}
+						<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
 	</div>
 
-	<div class="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 md:col-span-4 lg:col-span-5">
+	<div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+		<div class="flex min-h-10 items-center gap-2.5 px-1">
+			<Switch id="stock-all-catalog" checked={all} onCheckedChange={(v) => onchange({ all: v })} />
+			<Label
+				for="stock-all-catalog"
+				class="cursor-pointer text-sm whitespace-nowrap text-slate-700"
+			>
+				ทั้งแคตตาล็อก
+			</Label>
+		</div>
+
 		<div class="flex min-h-11 items-center gap-2.5 px-1">
 			<Switch
 				id="stock-self-purchased"
@@ -224,7 +239,7 @@
 	</div>
 
 	{#if canShowOverall}
-		<div class="col-span-2 flex min-h-11 items-center gap-2.5 px-1 md:col-span-4 lg:col-span-5">
+		<div class="flex min-h-11 items-center gap-2.5 px-1">
 			<Checkbox id="show-overall" bind:checked={showOverall} />
 			<Label for="show-overall" class="cursor-pointer text-sm font-semibold text-slate-700">
 				แสดงยอดรวมทุกศูนย์

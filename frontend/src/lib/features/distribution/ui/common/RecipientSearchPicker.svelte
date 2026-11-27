@@ -303,7 +303,7 @@
 					value={outsideNotes}
 					oninput={handleOutsideNotesInput}
 					placeholder="เช่น ประชาชนชุมชนข้างเคียง, ญาติผู้พักพิง..."
-					class="h-11 text-sm"
+					class="h-10 rounded-lg text-sm shadow-2xs"
 					{disabled}
 				/>
 				<p class="text-xs text-slate-500">
@@ -357,7 +357,7 @@
 				bind:value={searchTerm}
 				placeholder="ค้นหาด้วยชื่อ ชื่อเล่น หรือเบอร์โทร"
 				aria-label="ค้นหาผู้รับด้วยชื่อ ชื่อเล่น หรือเบอร์โทร"
-				class="h-11 pl-9 text-sm"
+				class="h-10 rounded-lg pl-9 text-sm shadow-2xs"
 				{disabled}
 			/>
 		</div>

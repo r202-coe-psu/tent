@@ -519,6 +519,7 @@
 				{reasonCopy.label} <span class="text-destructive">*</span>
 			</Label>
 			<Textarea
+				class="rounded-lg shadow-2xs"
 				id="transfer-reason"
 				bind:value={reasonText}
 				placeholder={reasonCopy.placeholder}

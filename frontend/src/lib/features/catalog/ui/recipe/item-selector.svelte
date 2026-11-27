@@ -66,7 +66,7 @@
 			onfocus={() => (isOpen = true)}
 			onblur={handleBlur}
 			placeholder="ค้นหาชื่อวัตถุดิบ..."
-			class="h-11 pl-10 sm:h-10"
+			class="h-10 rounded-lg pl-10 shadow-2xs"
 		/>
 	</div>
 

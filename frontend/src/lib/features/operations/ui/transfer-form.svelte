@@ -209,8 +209,13 @@
 						}}
 						disabled={!canPickDestination}
 					>
-						<Select.Trigger {...props} class="min-h-11 w-full">
-							{selectedShelterLabel}
+						<Select.Trigger
+							{...props}
+							class="h-10 w-full min-w-0 shadow-2xs data-[size=default]:h-10"
+						>
+							<span class="min-w-0 flex-1 truncate text-left" title={selectedShelterLabel}>
+								{selectedShelterLabel}
+							</span>
 						</Select.Trigger>
 						<Select.Content>
 							{#each destinationShelters as shelter (shelter.code)}
@@ -240,6 +245,7 @@
 				{#snippet children({ props })}
 					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
 					<ItemCombobox
+						class="min-h-10 rounded-lg shadow-2xs"
 						id={props.id}
 						name={props.name}
 						aria-invalid={props['aria-invalid']}
@@ -276,7 +282,7 @@
 								qtyBadInput = event.currentTarget.validity.badInput;
 							}}
 							aria-invalid={qtyInvalid || qtyWholeError ? true : props['aria-invalid']}
-							class="min-h-11 font-mono font-bold"
+							class="h-10 rounded-lg font-mono font-bold shadow-2xs"
 						/>
 					{/snippet}
 				</Form.Control>
@@ -299,10 +305,16 @@
 								value=""
 								readonly
 								disabled
-								class="min-h-11"
+								class="h-10 rounded-lg shadow-2xs"
 							/>
 						{:else if unitOptions.length <= 1}
-							<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+							<Input
+								{...props}
+								value={selectedUnitLabel}
+								readonly
+								disabled
+								class="h-10 rounded-lg shadow-2xs"
+							/>
 						{:else}
 							<Select.Root
 								type="single"
@@ -311,8 +323,13 @@
 									if (value) $formData.unit = value;
 								}}
 							>
-								<Select.Trigger {...props} class="min-h-11 w-full">
-									{selectedUnitLabel}
+								<Select.Trigger
+									{...props}
+									class="h-10 w-full min-w-0 shadow-2xs data-[size=default]:h-10"
+								>
+									<span class="min-w-0 flex-1 truncate text-left" title={selectedUnitLabel}>
+										{selectedUnitLabel}
+									</span>
 								</Select.Trigger>
 								<Select.Content>
 									{#each unitOptions as option (option.code)}
@@ -350,7 +367,7 @@
 						{...props}
 						placeholder="รายละเอียดเพิ่มเติม"
 						bind:value={$formData.notes}
-						class="min-h-11"
+						class="h-10 rounded-lg shadow-2xs"
 					/>
 				{/snippet}
 			</Form.Control>

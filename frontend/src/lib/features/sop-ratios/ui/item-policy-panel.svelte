@@ -107,7 +107,7 @@
 					type="number"
 					inputmode="numeric"
 					min="0"
-					class="min-h-11"
+					class="h-10 rounded-lg shadow-2xs"
 					bind:value={leadTime}
 				/>
 				{#if errors.lead_time_days}<Field.Error>{errors.lead_time_days}</Field.Error>{/if}
@@ -119,7 +119,7 @@
 					type="number"
 					inputmode="numeric"
 					min="0"
-					class="min-h-11"
+					class="h-10 rounded-lg shadow-2xs"
 					bind:value={reviewPeriod}
 				/>
 				{#if errors.review_period_days}<Field.Error>{errors.review_period_days}</Field.Error>{/if}
@@ -131,7 +131,7 @@
 					type="number"
 					inputmode="numeric"
 					min="0"
-					class="min-h-11"
+					class="h-10 rounded-lg shadow-2xs"
 					bind:value={safetyDays}
 				/>
 				{#if errors.safety_days}<Field.Error>{errors.safety_days}</Field.Error>{/if}
@@ -158,7 +158,7 @@
 					type="number"
 					inputmode="numeric"
 					min="0"
-					class="min-h-11"
+					class="h-10 rounded-lg shadow-2xs"
 					bind:value={minDoc}
 				/>
 				{#if errors.min_doc_days}<Field.Error>{errors.min_doc_days}</Field.Error>{/if}
@@ -170,7 +170,7 @@
 					type="number"
 					inputmode="numeric"
 					min="0"
-					class="min-h-11"
+					class="h-10 rounded-lg shadow-2xs"
 					bind:value={maxDoc}
 				/>
 				{#if errors.max_doc_days}<Field.Error>{errors.max_doc_days}</Field.Error>{/if}
@@ -180,7 +180,10 @@
 		<Field.Field>
 			<Field.Label for="item-policy-status">สถานะการใช้งาน</Field.Label>
 			<Select.Root type="single" bind:value={status}>
-				<Select.Trigger id="item-policy-status" class="min-h-11 w-full">
+				<Select.Trigger
+					id="item-policy-status"
+					class="h-10 w-full shadow-2xs data-[size=default]:h-10"
+				>
 					{status === 'active' ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
 				</Select.Trigger>
 				<Select.Content>
