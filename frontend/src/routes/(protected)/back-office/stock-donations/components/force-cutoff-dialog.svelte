@@ -44,7 +44,7 @@
 <Dialog.Root {open} onOpenChange={(next) => !next && close()}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title class="text-base font-bold">ปิดรับบริจาคด่วน (Force Cut-off)</Dialog.Title>
+			<Dialog.Title class="text-base font-bold">ปิดรับบริจาคด่วน</Dialog.Title>
 			<Dialog.Description class="text-xs leading-relaxed">
 				กำลังปิดรับ <span class="font-bold text-foreground">{itemName}</span>
 				ทั้งที่ยอดยังไม่ครบเป้า — ต้องระบุเหตุผล เพราะเหตุผลนี้จะถูกบันทึกลง audit และแสดงในรายงานความโปร่งใส
@@ -63,7 +63,7 @@
 				bind:value={reason}
 				rows={3}
 				placeholder="เช่น พื้นที่คลังเต็ม / ของหมดอายุใกล้ / เปลี่ยนไปรับที่ศูนย์อื่น"
-				class="text-xs"
+				class="rounded-lg text-sm shadow-2xs"
 			/>
 		</div>
 

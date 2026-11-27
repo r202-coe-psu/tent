@@ -163,16 +163,19 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect.poll(async () => Number((await boardLine(request))?.qty_needed), SYNC).toBe(25);
 
 			// ── Hide from the public home ───────────────────────────────────────────
-			await row.getByRole('button', { name: 'กำลังโชว์บนหน้าเว็บ' }).click();
+			const showOnWeb = row.getByRole('switch', { name: 'แสดงบนหน้าเว็บสาธารณะ' });
+			await expect(showOnWeb).toBeChecked();
+			await showOnWeb.click();
 			await expect(page.getByText(`ซ่อน "${CAMPAIGN_ITEM}" จากหน้าแรก`)).toBeVisible();
 			await expect.poll(async () => await boardLine(request), SYNC).toBeUndefined();
 			// …and back, so the cut-off below has a public line to close.
-			await row.getByRole('button', { name: 'ซ่อนจากหน้าเว็บ' }).click();
+			await expect(showOnWeb).not.toBeChecked();
+			await showOnWeb.click();
 			await expect.poll(async () => (await boardLine(request))?.status, SYNC).toBe('open');
 
 			// ── Force cut-off needs a reason ────────────────────────────────────────
-			await row.getByRole('button', { name: 'Force Cut-off' }).click();
-			const dialog = page.getByRole('dialog', { name: 'ปิดรับบริจาคด่วน (Force Cut-off)' });
+			await row.getByRole('button', { name: 'ปิดรับบริจาคด่วน' }).click();
+			const dialog = page.getByRole('dialog', { name: 'ปิดรับบริจาคด่วน' });
 			const confirm = dialog.getByRole('button', { name: 'ยืนยันปิดรับ' });
 			await expect(confirm).toBeDisabled();
 			await dialog.getByRole('textbox', { name: 'เหตุผลการปิดรับ *' }).fill(`คลังเต็ม ${RUN_ID}`);
@@ -479,7 +482,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 	test.describe('scan station walk-in', () => {
 		test('counter walk-in goes straight to received with a ledger row', async ({ page }) => {
 			await openBackOffice(page, staff);
-			await page.getByRole('button', { name: 'ลงทะเบียน Walk-in' }).click();
+			await page.getByRole('button', { name: 'รับบริจาคหน้าเคาน์เตอร์' }).click();
 			await expect(
 				page.getByRole('heading', { name: 'บันทึกข้อมูลบริจาคหน้าเคาน์เตอร์ (Walk-in Register)' })
 			).toBeVisible();
