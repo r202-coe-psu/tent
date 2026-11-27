@@ -7577,6 +7577,8 @@ export interface operations {
 				include_inactive?: boolean;
 				/** @description Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422. */
 				accepts_booking?: ('true' | 'false') | null;
+				/** @description Filter by site_kind. Only `evacuation_center` and `host_house` are exposed; omit to get both. Anything else is 422. */
+				site_kind?: ('evacuation_center' | 'host_house') | null;
 				/** @description Page number */
 				page?: number;
 				/** @description Items per page */
