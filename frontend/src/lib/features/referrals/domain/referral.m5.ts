@@ -36,7 +36,7 @@ const MAX_AGE = 150;
 // ---------------------------------------------------------------------------
 
 export const m5BatchPatientInputSchema = z.object({
-	evacuee_id: z.string().startsWith('evacuee:', 'กรุณาเลือกผู้ประสบภัย'),
+	evacuee_id: z.string().startsWith('evacuee:', 'กรุณาเลือกผู้พักพิง'),
 	acuity: acuitySchema,
 	reason: z.string().trim().min(1, 'กรุณาระบุอาการ').max(2000)
 });

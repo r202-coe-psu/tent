@@ -36,7 +36,7 @@ describe('master data type meta by language', () => {
 			expect(en[type].affectedForms).toHaveLength(th[type].affectedForms.length);
 		}
 		expect(en.housing_type.shortTitle).toBe('Housing type');
-		expect(en.allergy.affectedForms).toContain('Station 2 health screening');
+		expect(en.allergy.affectedForms).toContain('Health screening desk');
 		expect(hasThai(en)).toBe(false);
 	});
 });

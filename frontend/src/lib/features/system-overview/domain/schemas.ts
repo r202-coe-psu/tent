@@ -58,6 +58,8 @@ export const overviewFiltersSchema = z.object({
 	shelter_subdistrict: z.string().trim().optional(),
 	operation_status: operationStatusSchema.optional(),
 	site_kind: siteKindSchema.optional(),
+	/** `only` = external shelters (`is_external`) only; offered in the site-kind filter. */
+	external: z.enum(['only']).optional(),
 	stay_bucket: stayBucketSchema.optional().default('all'),
 	country: z.string().trim().optional(),
 	age_band: ageBandSchema.optional(),
@@ -84,6 +86,7 @@ const FILTER_KEYS = [
 	'shelter_subdistrict',
 	'operation_status',
 	'site_kind',
+	'external',
 	'stay_bucket',
 	'country',
 	'age_band',
@@ -173,9 +176,16 @@ export const overviewSummarySchema = z.object({
 	avg_present_pct: z.number().nullable(),
 	avg_forecast_pct: z.number().nullable(),
 	sites_by_status: z.record(z.string(), z.number().int().nonnegative()),
+	/** CR-266: shelters per `site_kind` code (sums to sites_total). */
+	sites_by_site_kind: z.record(z.string(), z.number().int().nonnegative()),
+	/** External shelters (`is_external`) — counted here only, never inside sites_by_site_kind. */
+	sites_external: z.number().int().nonnegative(),
 	checkouts_in_window: z.number().int().nonnegative(),
 	sites_closed: z.number().int().nonnegative(),
 	sites_open_with_present: z.number().int().nonnegative(),
+	/** CR-266 FR-7b: closed + cancelled shelters (excluded from sites_total). */
+	sites_closed_or_cancelled: z.number().int().nonnegative(),
+	/** CR-266 FR-4: open shelters only (closed / cancelled excluded). */
 	sites_total: z.number().int().nonnegative(),
 	movement_window: movementWindowSchema
 });
@@ -200,12 +210,18 @@ export const overviewSiteRowSchema = z.object({
 	/** Check-outs in movement_from…movement_to (inclusive). */
 	checkout: z.number().int().nonnegative(),
 	has_coords: z.boolean(),
+	/** CR-252: shelter run in another system. */
+	is_external: z.boolean(),
 	dashboard_href: z.string()
 });
 export type OverviewSiteRow = z.infer<typeof overviewSiteRowSchema>;
 
 export const overviewSitesPayloadSchema = z.object({
-	sites: z.array(overviewSiteRowSchema)
+	sites: z.array(overviewSiteRowSchema),
+	/** Sites matching the filters across ALL pages (#1502). */
+	total: z.number().int().min(0),
+	limit: z.number().int(),
+	offset: z.number().int()
 });
 export type OverviewSitesPayload = z.infer<typeof overviewSitesPayloadSchema>;
 

@@ -218,7 +218,7 @@ export type Referral = z.infer<typeof referralReadSchema>;
 // ---------------------------------------------------------------------------
 
 const baseInput = {
-	evacuee_id: z.string().startsWith('evacuee:', 'กรุณาเลือกผู้ประสบภัย'),
+	evacuee_id: z.string().startsWith('evacuee:', 'กรุณาเลือกผู้พักพิง'),
 	reason: z
 		.string()
 		.min(1, 'Reason is required')
@@ -241,7 +241,7 @@ export const capacityInputSchema = z
 			return data.to_shelter_code ? data.to_shelter_code.length > 0 : false;
 		},
 		{
-			message: 'ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้',
+			message: 'ไม่สามารถส่งต่อผู้พักพิงไปยังศูนย์พักพิงเดียวกันได้',
 			path: ['to_shelter_code']
 		}
 	);

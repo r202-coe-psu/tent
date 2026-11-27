@@ -192,7 +192,7 @@
 
 	async function updateHouseholdZone(zoneCode: string) {
 		if (members.length === 0) {
-			toast.error('ไม่พบสมาชิกในครัวเรือนนี้เพื่อย้ายโซน');
+			toast.error('ไม่พบสมาชิกในครอบครัวนี้เพื่อย้ายโซน');
 			return;
 		}
 		try {
@@ -221,7 +221,7 @@
 				...household,
 				status
 			});
-			toast.success(`เปลี่ยนสถานะครัวเรือนสำเร็จ`);
+			toast.success(`เปลี่ยนสถานะครอบครัวสำเร็จ`);
 			showStatusModal = false;
 		} catch (e: unknown) {
 			toast.error(`เกิดข้อผิดพลาด: ${e instanceof Error ? e.message : String(e)}`);
@@ -254,7 +254,7 @@
 				...evacuee,
 				household_id: household._id
 			});
-			toast.success(`เพิ่ม ${evacuee.first_name} เข้าครัวเรือนเรียบร้อย`);
+			toast.success(`เพิ่ม ${evacuee.first_name} เข้าครอบครัวเรียบร้อย`);
 		} catch (e: unknown) {
 			toast.error(`เกิดข้อผิดพลาด: ${e instanceof Error ? e.message : String(e)}`);
 		}
@@ -263,7 +263,7 @@
 	async function removeMemberFromHousehold(evacuee: Evacuee) {
 		if (!household) return;
 		if (household.head_evacuee_id === evacuee._id) {
-			toast.error('ไม่สามารถลบหัวหน้าครัวเรือนออกได้ กรุณาเปลี่ยนหัวหน้าครัวเรือนก่อน');
+			toast.error('ไม่สามารถลบผู้ติดต่อหลักออกได้ กรุณาเปลี่ยนผู้ติดต่อหลักก่อน');
 			return;
 		}
 		try {
@@ -271,7 +271,7 @@
 				...evacuee,
 				household_id: null
 			});
-			toast.success(`ลบ ${evacuee.first_name} ออกจากครัวเรือนเรียบร้อย`);
+			toast.success(`ลบ ${evacuee.first_name} ออกจากครอบครัวเรียบร้อย`);
 		} catch (e: unknown) {
 			toast.error(`เกิดข้อผิดพลาด: ${e instanceof Error ? e.message : String(e)}`);
 		}
@@ -284,7 +284,7 @@
 				...household,
 				head_evacuee_id: evacueeId
 			});
-			toast.success('เปลี่ยนหัวหน้าครัวเรือนสำเร็จ');
+			toast.success('เปลี่ยนผู้ติดต่อหลักสำเร็จ');
 			showHeadModal = false;
 		} catch (e: unknown) {
 			toast.error(`เกิดข้อผิดพลาด: ${e instanceof Error ? e.message : String(e)}`);
@@ -313,11 +313,11 @@
 		<div
 			class="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"
 		></div>
-		<p class="text-sm font-medium text-muted-foreground">กำลังโหลดข้อมูลครัวเรือน...</p>
+		<p class="text-sm font-medium text-muted-foreground">กำลังโหลดข้อมูลครอบครัว...</p>
 	</div>
 {:else if !household}
 	<div class="space-y-4 rounded-3xl border border-border bg-card py-16 text-center shadow-sm">
-		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลครัวเรือนนี้ในระบบ</p>
+		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลครอบครัวนี้ในระบบ</p>
 		<button
 			class="inline-flex cursor-pointer items-center justify-center rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-muted"
 			onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
@@ -345,7 +345,7 @@
 				role="status"
 			>
 				<div class="min-w-0 space-y-1">
-					<p class="font-semibold">พบครัวเรือนที่อยู่อาจซ้ำในศูนย์นี้</p>
+					<p class="font-semibold">พบครอบครัวที่อยู่อาจซ้ำในศูนย์นี้</p>
 					<p class="text-xs text-amber-900/80">
 						{residenceMergeSuggestions.map((h) => h.label?.trim() || h._id).join(' · ')} — ตรวจสอบแล้วรวมได้ผ่านปุ่มรวมครอบครัว
 					</p>
@@ -399,7 +399,7 @@
 				<li class="flex items-start gap-3">
 					<span class="mt-0.5 text-sm">📝</span>
 					<div class="flex-1 space-y-0.5">
-						<div class="font-semibold text-foreground">ลงทะเบียนครัวเรือนสำเร็จ (Created)</div>
+						<div class="font-semibold text-foreground">ลงทะเบียนครอบครัวสำเร็จ (Created)</div>
 						<div class="text-muted-foreground">
 							{formatDateTime(household.created_at)} · โดย {household.created_by || 'system'}
 						</div>

@@ -223,17 +223,17 @@
 
 <form method="POST" use:form.enhance class="mx-auto w-full max-w-5xl space-y-6">
 	<Field.FieldGroup>
-		<!-- ข้อมูลครัวเรือนเบื้องต้น -->
+		<!-- ข้อมูลครอบครัวเบื้องต้น -->
 		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
-				ข้อมูลครัวเรือนเบื้องต้น
+				ข้อมูลครอบครัวเบื้องต้น
 			</h3>
 			<div class="space-y-4">
 				<div class="space-y-2">
-					<Label for="hh-label">ชื่อเรียกครัวเรือน</Label>
+					<Label for="hh-label">ชื่อเรียกครอบครัว</Label>
 					<Input
 						id="hh-label"
-						value={householdLabel || 'กรุณากรอกชื่อและนามสกุลหัวหน้าครัวเรือน...'}
+						value={householdLabel || 'กรุณากรอกชื่อและนามสกุลผู้ติดต่อหลัก...'}
 						disabled
 						class="bg-muted text-muted-foreground"
 					/>
@@ -266,10 +266,10 @@
 			</div>
 		</div>
 
-		<!-- ที่อยู่ครัวเรือนเดิม -->
+		<!-- ที่อยู่ครอบครัวเดิม -->
 		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
-				ที่อยู่ครัวเรือนเดิม (ก่อนอพยพ)
+				ที่อยู่ครอบครัวเดิม (ก่อนอพยพ)
 			</h3>
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 				<Form.Field {form} name="housingType">
@@ -428,7 +428,7 @@
 						</p>
 					{/if}
 					<p class="text-xs text-muted-foreground">
-						หัวหน้าครัวเรือนจะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
+						ผู้ติดต่อหลักจะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
 					</p>
 					<Button type="button" size="sm" variant="outline" onclick={continueCreateDespiteSuggest}>
 						สร้างครอบครัวใหม่ที่อยู่นี้

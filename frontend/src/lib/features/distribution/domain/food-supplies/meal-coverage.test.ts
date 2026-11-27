@@ -2,20 +2,31 @@ import { describe, expect, it } from 'vitest';
 import type { MealPeriod } from './shared';
 import {
 	COVERAGE_MEALS,
-	MIN_MEALS_PER_DAY,
 	countingLogsByRecipient,
-	coverageThreshold,
+	dailyMealTrend,
 	distributedPortionsByMeal,
 	mealCoverageShares,
+	otherRecipientsByMeal,
 	portionsByDistributor,
 	mealCoverageRoster,
 	unscannedMeals,
-	type CoverageLog
+	type CoverageDay,
+	type CoverageLog,
+	type CoverageResident
 } from './meal-coverage';
 
 const DAY = '2026-11-09';
-const A = { id: 'evacuee:A', name: 'สมชาย', presentAllDay: true };
-const B = { id: 'evacuee:B', name: 'สมหญิง', presentAllDay: true };
+const A: CoverageResident = { id: 'evacuee:A', name: 'สมชาย', presence: { [DAY]: 'all' } };
+const B: CoverageResident = { id: 'evacuee:B', name: 'สมหญิง', presence: { [DAY]: 'all' } };
+/** In the shelter only part of `DAY`. */
+const partly = (r: CoverageResident): CoverageResident => ({
+	...r,
+	presence: { [DAY]: 'partial' }
+});
+const dayOf = (servedMeals: readonly MealPeriod[] = COVERAGE_MEALS, day = DAY): CoverageDay => ({
+	day,
+	servedMeals
+});
 
 const log = (over: Partial<CoverageLog> = {}): CoverageLog => ({
 	recipient_type: 'evacuee',
@@ -34,7 +45,7 @@ const collectedFor = (recipient: string, meal: 'breakfast' | 'lunch') =>
 	Object.assign(log({ recipient_id: recipient, meal }), { collected_by_recipient_id: 'evacuee:A' });
 
 const roster = (residents = [A], logs: CoverageLog[] = [], servedMeals?: readonly MealPeriod[]) =>
-	mealCoverageRoster({ day: DAY, residents, logs, servedMeals });
+	mealCoverageRoster({ days: [dayOf(servedMeals)], residents, logs });
 const incomplete = (...args: Parameters<typeof roster>) =>
 	roster(...args).filter((r) => !r.complete);
 const run = (residents = [A], logs: CoverageLog[] = []) => incomplete(residents, logs);
@@ -53,7 +64,11 @@ describe('mealCoverageRoster', () => {
 				missing: ['lunch', 'dinner'],
 				counted: 1,
 				complete: false,
-				distributedBy: ['staff1']
+				distributedBy: ['staff1'],
+				judgedDays: 1,
+				shortDays: 1,
+				partialDays: 0,
+				mealsReceived: 1
 			}
 		]);
 	});
@@ -67,7 +82,11 @@ describe('mealCoverageRoster', () => {
 				missing: ['breakfast', 'lunch', 'dinner'],
 				counted: 0,
 				complete: false,
-				distributedBy: []
+				distributedBy: [],
+				judgedDays: 1,
+				shortDays: 1,
+				partialDays: 0,
+				mealsReceived: 0
 			}
 		]);
 	});
@@ -132,8 +151,8 @@ describe('mealCoverageRoster', () => {
 		expect(rows.map((r) => r.id)).toEqual(['evacuee:A']);
 	});
 
-	it('does not list residents who were not in the shelter all day', () => {
-		expect(roster([{ ...A, presentAllDay: false }], [])).toEqual([]);
+	it('does not list someone who was not in the shelter at any time of the day', () => {
+		expect(roster([{ ...A, presence: { [DAY]: 'none' } }], [log()])).toEqual([]);
 	});
 
 	it('returns every present resident, flagging who met the threshold', () => {
@@ -158,26 +177,157 @@ describe('mealCoverageRoster', () => {
 	});
 });
 
+describe('mealCoverageRoster for someone there only part of the day', () => {
+	it('lists them as partial, with the meals they got, never judged as short', () => {
+		const rows = roster([partly(A)], [log()]);
+		expect(rows).toEqual([
+			{
+				id: 'evacuee:A',
+				name: 'สมชาย',
+				received: ['breakfast'],
+				missing: ['lunch', 'dinner'],
+				counted: 0,
+				complete: false,
+				distributedBy: ['staff1'],
+				judgedDays: 0,
+				shortDays: 0,
+				partialDays: 1,
+				mealsReceived: 1
+			}
+		]);
+	});
+
+	it('lists them even with no record at all', () => {
+		expect(roster([partly(A)], [])).toHaveLength(1);
+	});
+});
+
+describe('mealCoverageRoster over a range of days', () => {
+	const D8 = '2026-11-08';
+	const D10 = '2026-11-10';
+	const everyDay = (id: string, presence: CoverageResident['presence']): CoverageResident => ({
+		id,
+		name: id,
+		presence
+	});
+	const at = (day: string, meal: MealPeriod, over: Partial<CoverageLog> = {}) =>
+		log({ meal, distributed_at: `${day}T01:00:00Z`, ...over });
+	const range = (residents: CoverageResident[], logs: CoverageLog[], days = [D8, DAY, D10]) =>
+		mealCoverageRoster({ days: days.map((d) => dayOf(COVERAGE_MEALS, d)), residents, logs });
+
+	it('counts the days someone was there all day with fewer than 2 meals', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all', [D10]: 'all' });
+		const rows = range(
+			[resident],
+			[at(D8, 'breakfast'), at(D8, 'lunch'), at(DAY, 'breakfast'), at(D10, 'dinner', {})]
+		);
+		expect(rows[0]).toMatchObject({
+			judgedDays: 3,
+			shortDays: 2,
+			counted: 4,
+			mealsReceived: 4,
+			complete: false,
+			missing: [],
+			received: ['breakfast', 'lunch', 'dinner']
+		});
+	});
+
+	it('does not judge a running day with no meal served yet, over a range', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all' });
+		const rows = mealCoverageRoster({
+			days: [dayOf(COVERAGE_MEALS, D8), dayOf([], DAY)],
+			residents: [resident],
+			logs: [at(D8, 'breakfast'), at(D8, 'lunch')]
+		});
+		expect(rows[0]).toMatchObject({ judgedDays: 1, shortDays: 0, complete: true });
+	});
+
+	it('does not count that unserved day in the shares, over a range', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all' });
+		const shares = mealCoverageShares({
+			days: [dayOf(COVERAGE_MEALS, D8), dayOf([], DAY)],
+			residents: [resident],
+			logs: [at(D8, 'breakfast'), at(D8, 'lunch')]
+		});
+		expect(shares).toMatchObject({ present: 1, complete: 1 });
+	});
+
+	it('is complete when no day was short', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all' });
+		const logs = [at(D8, 'breakfast'), at(D8, 'lunch'), at(DAY, 'lunch'), at(DAY, 'dinner')];
+		expect(range([resident], logs, [D8, DAY])[0]).toMatchObject({
+			judgedDays: 2,
+			shortDays: 0,
+			complete: true
+		});
+	});
+
+	it('judges only the days they were there all day; part days and absent days are not judged', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'none', [DAY]: 'partial', [D10]: 'all' });
+		const rows = range([resident], [at(DAY, 'breakfast')]);
+		expect(rows[0]).toMatchObject({
+			judgedDays: 1,
+			shortDays: 1,
+			partialDays: 1,
+			mealsReceived: 1,
+			counted: 0
+		});
+	});
+
+	it('judges a running day against 2 meals even when only breakfast is served so far', () => {
+		const days = [dayOf(COVERAGE_MEALS, DAY), dayOf(['breakfast'], D10)];
+		const resident = everyDay('evacuee:A', { [DAY]: 'all', [D10]: 'all' });
+		const rows = mealCoverageRoster({
+			days,
+			residents: [resident],
+			logs: [at(DAY, 'breakfast'), at(DAY, 'lunch'), at(D10, 'breakfast')]
+		});
+		expect(rows[0]).toMatchObject({ judgedDays: 2, shortDays: 1, counted: 3, complete: false });
+	});
+
+	it('judges only the served day when the running day has no meal served yet', () => {
+		const days = [dayOf(COVERAGE_MEALS, DAY), dayOf([], D10)];
+		const resident = everyDay('evacuee:A', { [DAY]: 'all', [D10]: 'all' });
+		const rows = mealCoverageRoster({ days, residents: [resident], logs: [] });
+		expect(rows[0]).toMatchObject({ judgedDays: 1, shortDays: 1 });
+	});
+
+	it('still lists someone there only on the unserved running day, unjudged', () => {
+		const days = [dayOf(COVERAGE_MEALS, DAY), dayOf([], D10)];
+		const resident = everyDay('evacuee:A', { [D10]: 'all' });
+		const rows = mealCoverageRoster({ days, residents: [resident], logs: [] });
+		expect(rows[0]).toMatchObject({ judgedDays: 0, shortDays: 0, complete: false });
+	});
+
+	it('leaves out someone who was never there during the range', () => {
+		expect(range([everyDay('evacuee:A', {})], [at(DAY, 'breakfast')])).toEqual([]);
+	});
+
+	it('merges the distributors of every day', () => {
+		const resident = everyDay('evacuee:A', { [D8]: 'all', [DAY]: 'all' });
+		const logs = [
+			at(D8, 'breakfast', { distributed_by: 'amy' }),
+			at(DAY, 'lunch', { distributed_by: 'bob' })
+		];
+		expect(range([resident], logs, [D8, DAY])[0].distributedBy).toEqual(['amy', 'bob']);
+	});
+});
+
 describe('mealCoverageRoster on a running day (served meals)', () => {
 	const today = (servedMeals: MealPeriod[], residents = [A], logs: CoverageLog[] = []) =>
 		incomplete(residents, logs, servedMeals);
 
-	it('lists nobody when no meal has been served yet', () => {
-		expect(today([])).toEqual([]);
+	it('lists everyone as under 2 meals when no meal has been served yet, with nothing missing', () => {
+		expect(today([])).toEqual([
+			expect.objectContaining({ id: 'evacuee:A', missing: [], counted: 0, complete: false })
+		]);
 	});
 
-	it('with only breakfast served, drops who has breakfast and keeps who has none', () => {
+	it('with only breakfast served, nobody reaches 2 meals; missing lists only the served breakfast', () => {
 		const rows = today(['breakfast'], [A, B], [log({ recipient_id: 'evacuee:A' })]);
 		expect(rows).toEqual([
-			{
-				id: 'evacuee:B',
-				name: 'สมหญิง',
-				received: [],
-				missing: ['breakfast'],
-				counted: 0,
-				complete: false,
-				distributedBy: []
-			}
+			expect.objectContaining({ id: 'evacuee:A', missing: [], counted: 1, complete: false }),
+			expect.objectContaining({ id: 'evacuee:B', missing: ['breakfast'], counted: 0 })
 		]);
 	});
 
@@ -198,28 +348,25 @@ describe('mealCoverageRoster on a running day (served meals)', () => {
 				missing: ['breakfast'],
 				counted: 1,
 				complete: false,
-				distributedBy: ['staff1']
+				distributedBy: ['staff1'],
+				judgedDays: 1,
+				shortDays: 1,
+				partialDays: 0,
+				mealsReceived: 1
 			}
 		]);
 	});
 
-	it('still needs two records once two or more meals are served', () => {
-		const logs = [log()];
-		expect(today(['breakfast', 'lunch'], [A], logs)).toHaveLength(1);
-		expect(today(['breakfast', 'lunch', 'dinner'], [A], logs)).toHaveLength(1);
-		expect(today(['breakfast', 'lunch'], [A], [log(), log({ meal: 'lunch' })])).toEqual([]);
+	it('is complete only with two served meals on record, whatever else is served', () => {
+		const two = [log(), log({ meal: 'lunch' })];
+		expect(today(['breakfast', 'lunch'], [A], [log()])).toHaveLength(1);
+		expect(today(['breakfast', 'lunch', 'dinner'], [A], [log()])).toHaveLength(1);
+		expect(today(['breakfast'], [A], two)).toHaveLength(1);
+		expect(today(['breakfast', 'lunch'], [A], two)).toEqual([]);
 	});
 
 	it('defaults to every coverage meal, as for a finished day', () => {
 		expect(run([A], [log()])[0].missing).toEqual(['lunch', 'dinner']);
-	});
-});
-
-describe('coverageThreshold', () => {
-	it('is capped by the number of served meals', () => {
-		expect(coverageThreshold(['breakfast'])).toBe(1);
-		expect(coverageThreshold(['breakfast', 'lunch', 'dinner'])).toBe(MIN_MEALS_PER_DAY);
-		expect(coverageThreshold([])).toBe(0);
 	});
 });
 
@@ -241,62 +388,126 @@ describe('countingLogsByRecipient', () => {
 });
 
 describe('unscannedMeals', () => {
-	it('returns served meals with no counting log from anybody that day', () => {
+	const unscanned = (logs: CoverageLog[], servedMeals: readonly MealPeriod[] = COVERAGE_MEALS) =>
+		unscannedMeals({ days: [dayOf(servedMeals)], residents: [A], logs });
+
+	it('returns the served meals with no log from anybody that day', () => {
 		const logs = [log({ recipient_id: 'evacuee:Z', meal: 'lunch' })];
-		expect(unscannedMeals({ day: DAY, logs, servedMeals: COVERAGE_MEALS })).toEqual([
-			'breakfast',
-			'dinner'
+		expect(unscanned(logs)).toEqual([
+			{ day: DAY, meal: 'breakfast' },
+			{ day: DAY, meal: 'dinner' }
 		]);
+	});
+
+	it('counts a log of any recipient type as a meal that was handed out', () => {
+		const logs = [
+			log({ recipient_type: 'outside', recipient_id: null, meal: 'breakfast' }),
+			log({ recipient_type: 'volunteer', recipient_id: 'volunteer:V', meal: 'lunch' }),
+			log({ recipient_type: 'staff', recipient_id: 'user:s', meal: 'dinner' })
+		];
+		expect(unscanned(logs)).toEqual([]);
 	});
 
 	it('ignores meals that are not served yet', () => {
-		expect(unscannedMeals({ day: DAY, logs: [], servedMeals: ['breakfast'] })).toEqual([
-			'breakfast'
+		expect(unscanned([], ['breakfast'])).toEqual([{ day: DAY, meal: 'breakfast' }]);
+	});
+
+	it('does not count a voided log as a hand-over', () => {
+		expect(unscanned([log({ status: 'voided' })], ['breakfast'])).toEqual([
+			{ day: DAY, meal: 'breakfast' }
 		]);
 	});
 
-	it('does not count a voided log as a scan', () => {
-		const logs = [log({ status: 'voided' })];
-		expect(unscannedMeals({ day: DAY, logs, servedMeals: ['breakfast'] })).toEqual(['breakfast']);
+	it('names the day and the meal for each day of a range', () => {
+		const days = [dayOf(COVERAGE_MEALS, '2026-11-08'), dayOf(COVERAGE_MEALS, DAY)];
+		const everyone = { ...A, presence: { '2026-11-08': 'all', [DAY]: 'all' } } as const;
+		const logs = [
+			log({ distributed_at: '2026-11-08T01:00:00Z', meal: 'breakfast' }),
+			log({ distributed_at: '2026-11-08T05:00:00Z', meal: 'lunch' }),
+			log({ distributed_at: '2026-11-08T11:00:00Z', meal: 'dinner' }),
+			log({ meal: 'breakfast' }),
+			log({ meal: 'lunch' })
+		];
+		expect(unscannedMeals({ days, residents: [everyone], logs })).toEqual([
+			{ day: DAY, meal: 'dinner' }
+		]);
+	});
+
+	it('says nothing for a day when nobody was in the shelter all of it', () => {
+		const days = [dayOf(COVERAGE_MEALS)];
+		expect(unscannedMeals({ days, residents: [partly(A)], logs: [] })).toEqual([]);
 	});
 });
 
 describe('mealCoverageShares (#1257)', () => {
-	const C = { id: 'evacuee:C', name: 'สมศรี', presentAllDay: false };
+	const C = partly({ id: 'evacuee:C', name: 'สมศรี', presence: {} });
 	const logs = [
 		log(),
 		log({ meal: 'lunch' }),
 		log({ recipient_id: 'evacuee:B' }),
 		log({ recipient_id: 'evacuee:C', meal: 'dinner' })
 	];
+	const shares = (residents: CoverageResident[], servedMeals?: readonly MealPeriod[]) =>
+		mealCoverageShares({ days: [dayOf(servedMeals)], residents, logs });
 
 	it('counts per meal over the residents who were in the shelter all day', () => {
-		expect(mealCoverageShares({ day: DAY, residents: [A, B, C], logs })).toEqual({
+		expect(shares([A, B])).toEqual({
 			present: 2,
 			meals: [
-				{ meal: 'breakfast', served: true, recorded: 2 },
-				{ meal: 'lunch', served: true, recorded: 1 },
-				{ meal: 'dinner', served: true, recorded: 0 }
+				{ meal: 'breakfast', served: true, recorded: 2, total: 2 },
+				{ meal: 'lunch', served: true, recorded: 1, total: 2 },
+				{ meal: 'dinner', served: true, recorded: 0, total: 2 }
 			],
 			complete: 1
 		});
 	});
 
-	it('on a running day marks unserved meals and lowers the bar for complete', () => {
-		const shares = mealCoverageShares({
-			day: DAY,
-			residents: [A, B],
-			logs,
-			servedMeals: ['breakfast']
+	it('counts the meals of someone there only part of the day, and no meal they have no record of', () => {
+		expect(shares([A, B, C])).toEqual({
+			present: 2,
+			meals: [
+				{ meal: 'breakfast', served: true, recorded: 2, total: 2 },
+				{ meal: 'lunch', served: true, recorded: 1, total: 2 },
+				{ meal: 'dinner', served: true, recorded: 1, total: 3 }
+			],
+			complete: 1
 		});
-		expect(shares.meals.map((m) => m.served)).toEqual([true, false, false]);
-		expect(shares.complete).toBe(2);
+	});
+
+	it('on a running day marks unserved meals, and the bar for complete stays at 2 served meals', () => {
+		const result = shares([A, B], ['breakfast']);
+		expect(result.meals.map((m) => m.served)).toEqual([true, false, false]);
+		expect(result.present).toBe(2);
+		expect(result.complete).toBe(0);
 	});
 
 	it('adds up with the list: complete plus listed rows is everyone present', () => {
-		const listed = incomplete([A, B, C], logs).length;
-		const shares = mealCoverageShares({ day: DAY, residents: [A, B, C], logs });
-		expect(shares.complete + listed).toBe(shares.present);
+		const listed = incomplete([A, B, C], logs).filter((r) => r.judgedDays > 0).length;
+		const result = shares([A, B, C]);
+		expect(result.complete + listed).toBe(result.present); // C is listed but never judged
+	});
+
+	it('sums person-days over a range, counting each day separately', () => {
+		const days = [dayOf(COVERAGE_MEALS, '2026-11-08'), dayOf(COVERAGE_MEALS, DAY)];
+		const both = { ...A, presence: { '2026-11-08': 'all', [DAY]: 'all' } } as const;
+		const result = mealCoverageShares({
+			days,
+			residents: [both],
+			logs: [
+				log({ distributed_at: '2026-11-08T01:00:00Z' }),
+				log({ distributed_at: '2026-11-08T05:00:00Z', meal: 'lunch' }),
+				log()
+			]
+		});
+		expect(result).toEqual({
+			present: 2,
+			meals: [
+				{ meal: 'breakfast', served: true, recorded: 2, total: 2 },
+				{ meal: 'lunch', served: true, recorded: 1, total: 2 },
+				{ meal: 'dinner', served: true, recorded: 0, total: 2 }
+			],
+			complete: 1
+		});
 	});
 });
 
@@ -362,5 +573,95 @@ describe('portionsByDistributor', () => {
 			log({ distributed_by: 'bob', recipient_type: 'volunteer', recipient_id: null })
 		];
 		expect(portionsByDistributor(logs, DAY)).toEqual([{ by: 'bob', portions: 1 }]);
+	});
+});
+
+describe('portions over a range of days', () => {
+	const range = { from: '2026-11-08', to: '2026-11-10' };
+	const logs = [
+		log({ distributed_at: '2026-11-07T16:59:00Z', qty: '9' }), // 07 Nov 23:59 Thai: before
+		log({ distributed_at: '2026-11-07T17:00:00Z', qty: '1', distributed_by: 'amy' }), // 08 Nov
+		log({ distributed_at: '2026-11-09T01:00:00Z', qty: '2', distributed_by: 'amy' }),
+		log({
+			distributed_at: '2026-11-10T05:00:00Z',
+			meal: 'dinner',
+			qty: '4',
+			distributed_by: 'bob'
+		}),
+		log({ distributed_at: '2026-11-10T17:00:00Z', qty: '9' }) // 11 Nov 00:00 Thai: after
+	];
+
+	it('sums the portions per meal over every day of the range', () => {
+		expect(distributedPortionsByMeal(logs, range)).toEqual({ breakfast: 3, lunch: 0, dinner: 4 });
+	});
+
+	it('sums the portions per distributor over every day of the range', () => {
+		expect(portionsByDistributor(logs, range)).toEqual([
+			{ by: 'bob', portions: 4 },
+			{ by: 'amy', portions: 3 }
+		]);
+	});
+});
+
+describe('otherRecipientsByMeal', () => {
+	const other = (over: Partial<CoverageLog>) =>
+		log({ recipient_type: 'outside', recipient_id: null, ...over });
+
+	it('tallies outside, volunteer and staff hand-overs per meal as portions', () => {
+		const logs = [
+			other({ qty: '2' }),
+			other({ qty: '3', distributed_at: '2026-11-10T01:00:00Z' }),
+			other({ meal: 'dinner', qty: '1' }),
+			log({ recipient_type: 'volunteer', recipient_id: 'volunteer:V', qty: '4' }),
+			log({ recipient_type: 'staff', recipient_id: 'user:s', meal: 'lunch', qty: '2' }),
+			log({ qty: '7' }) // an evacuee is not in this tally
+		];
+		expect(otherRecipientsByMeal(logs, { from: DAY, to: '2026-11-10' })).toEqual([
+			{
+				meal: 'breakfast',
+				outside: 5,
+				volunteer: 4,
+				staff: 0
+			},
+			{
+				meal: 'lunch',
+				outside: 0,
+				volunteer: 0,
+				staff: 2
+			},
+			{
+				meal: 'dinner',
+				outside: 1,
+				volunteer: 0,
+				staff: 0
+			}
+		]);
+	});
+
+	it('ignores voided logs, loans, snacks and other days', () => {
+		const logs = [
+			other({ status: 'voided' }),
+			other({ is_returnable: true }),
+			other({ meal: 'snack' }),
+			other({ distributed_at: '2026-11-08T01:00:00Z' })
+		];
+		expect(otherRecipientsByMeal(logs, DAY).every((m) => m.outside === 0)).toBe(true);
+	});
+});
+
+describe('dailyMealTrend', () => {
+	it('gives portions per meal and distinct evacuees with a record for every day, zeros included', () => {
+		const logs = [
+			log({ qty: '2' }),
+			log({ recipient_id: 'evacuee:B', qty: '1' }),
+			log({ meal: 'lunch', qty: '1' }), // A again: still one person
+			log({ recipient_type: 'outside', recipient_id: null, meal: 'dinner', qty: '3' }),
+			log({ distributed_at: '2026-11-10T01:00:00Z', meal: 'dinner', qty: '5' })
+		];
+		expect(dailyMealTrend(logs, [DAY, '2026-11-10', '2026-11-11'])).toEqual([
+			{ day: DAY, portions: { breakfast: 3, lunch: 1, dinner: 3 }, people: 2 },
+			{ day: '2026-11-10', portions: { breakfast: 0, lunch: 0, dinner: 5 }, people: 1 },
+			{ day: '2026-11-11', portions: { breakfast: 0, lunch: 0, dinner: 0 }, people: 0 }
+		]);
 	});
 });

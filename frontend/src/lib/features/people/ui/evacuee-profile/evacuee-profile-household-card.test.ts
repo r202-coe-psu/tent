@@ -153,9 +153,9 @@ describe('EvacueeProfileHouseholdCard', () => {
 
 	it('keeps the Thai labels when the staff language is TH', () => {
 		const body = renderCard('th');
-		expect(body).toContain('ครัวเรือน / ครอบครัว');
-		expect(body).toContain('แก้ไขสังกัดครัวเรือน');
-		expect(body).toContain('ชื่อครัวเรือน');
+		expect(body).toContain('ครอบครัว');
+		expect(body).toContain('แก้ไขสังกัดครอบครัว');
+		expect(body).toContain('ชื่อครอบครัว');
 		expect(body).toContain('เช็คอินแล้ว');
 		expect(body).toContain('บทบาท: หัวหน้า');
 		expect(body).toContain('ประเภทที่อยู่อาศัย');

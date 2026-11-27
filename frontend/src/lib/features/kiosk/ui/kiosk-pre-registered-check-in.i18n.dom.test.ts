@@ -118,7 +118,7 @@ describe('KioskPreRegisteredCheckIn language', () => {
 		expect(screenText()).toContain('ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว');
 		expect(screenText()).toContain('ผู้ลงทะเบียน');
 		expect(screenText()).toContain('35 ปี ·ลงทะเบียนล่วงหน้า');
-		expect(screenText()).toContain('ไม่ระบุอายุ ·รายงานตัวแล้ว · รอคัดกรอง');
+		expect(screenText()).toContain('ไม่ระบุอายุ ·รายงานตัวแล้ว · รอจัดโซน');
 		expect(screenText()).toContain('ยืนยัน · 1 คน');
 		expect(screenText()).toContain('QR ไม่มีข้อมูลส่วนบุคคล');
 	});
@@ -435,7 +435,7 @@ describe('KioskPreRegisteredCheckIn already checked out', () => {
 		vi.mocked(lookupPreRegisteredEvacuee).mockResolvedValue(checkedOut('kiosk'));
 
 		mountCheckIn({ input: CARD, cardMode: true });
-		await vi.waitFor(() => expect(screenText()).toContain('ผู้อพยพรายนี้เช็คเอาต์แล้ว'));
+		await vi.waitFor(() => expect(screenText()).toContain('ผู้พักพิงรายนี้เช็คเอาต์แล้ว'));
 
 		expect(screenText().match(/เช็คเอาต์แล้ว/g)).toHaveLength(1);
 		expect(panelText()).toContain('หากต้องการกลับเข้าศูนย์ กรุณาติดต่อเจ้าหน้าที่');

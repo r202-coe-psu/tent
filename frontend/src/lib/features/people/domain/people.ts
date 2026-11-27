@@ -188,14 +188,14 @@ export type StayStatus = z.infer<typeof stayStatusSchema>;
 export const STATUS_LABELS: Record<StayStatus, string> = {
 	pre_registered: 'ลงทะเบียนล่วงหน้า',
 	kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
-	arriving: 'รอเข้าพัก',
+	arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 	active: 'เข้าพักแล้ว',
 	room_confirmed: 'ยืนยันถึงโซนแล้ว',
 	temporary_leave: 'ออกชั่วคราว',
 	transferred: 'ย้ายศูนย์',
 	checked_out: 'เช็คเอาต์',
 	deceased: 'เสียชีวิต',
-	cancelled: 'ยกเลิก'
+	cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
 };
 
 export const householdStatusSchema = z.enum([
@@ -661,16 +661,16 @@ export function assertEvacueeHouseholdAssignment(
 
 	if (targetHouseholdId) {
 		const targetHousehold = households.find((household) => household._id === targetHouseholdId);
-		if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
+		if (!targetHousehold) throw new Error('ไม่พบครอบครัวปลายทาง');
 		if (!isActiveHouseholdStatus(targetHousehold.status)) {
-			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
+			throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครอบครัวที่ยกเลิกหรือเช็คเอาต์แล้ว');
 		}
 	}
 
 	const conflict = checkEvacueeHouseholdConflict(evacuee, targetHouseholdId, households, evacuees);
 	if (conflict.conflicted) {
 		throw new Error(
-			`${formatPersonName(evacuee)} สังกัดครัวเรือน "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+			`${formatPersonName(evacuee)} สังกัดครอบครัว "${conflict.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 		);
 	}
 }
@@ -681,7 +681,7 @@ export function assertHouseholdStatusTransition(
 ): void {
 	if (currentStatus === nextStatus) return;
 	if (!HOUSEHOLD_STATUS_TRANSITIONS[currentStatus].includes(nextStatus)) {
-		throw new Error(`ไม่สามารถเปลี่ยนสถานะครัวเรือนจาก ${currentStatus} เป็น ${nextStatus} ได้`);
+		throw new Error(`ไม่สามารถเปลี่ยนสถานะครอบครัวจาก ${currentStatus} เป็น ${nextStatus} ได้`);
 	}
 }
 
@@ -721,7 +721,7 @@ export function assertCheckoutDestination(
 	destination: CheckoutDestination | null | undefined
 ): void {
 	if (!destination) {
-		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาต์ครัวเรือน');
+		throw new Error('ต้องระบุปลายทางเมื่อเช็คเอาต์ครอบครัว');
 	}
 	if (
 		(destination.type === 'transferred_shelter' || destination.type === 'referred_facility') &&
@@ -1195,7 +1195,7 @@ export const householdInputSchema = householdInputFieldsSchema.superRefine((data
 	ctx.addIssue({
 		code: 'custom',
 		path: ['address_no'],
-		message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+		message: 'ครอบครัวไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
 	});
 });
 export type HouseholdInput = z.input<typeof householdInputSchema>;
@@ -1224,7 +1224,7 @@ export const householdAddressFormSchema = householdAddressFieldsSchema.superRefi
 			ctx.addIssue({
 				code: 'custom',
 				path: ['addressNo'],
-				message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+				message: 'ครอบครัวไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
 			});
 		}
 		return;
@@ -1266,7 +1266,7 @@ export const householdPreRegisterAddressFormSchema = householdAddressFieldsSchem
 				ctx.addIssue({
 					code: 'custom',
 					path: ['addressNo'],
-					message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต (ภูมิศาสตร์ครบจากฟอร์มนี้แล้ว)'
+					message: 'ครอบครัวไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต (ภูมิศาสตร์ครบจากฟอร์มนี้แล้ว)'
 				});
 			}
 			return;
@@ -1297,7 +1297,7 @@ export const householdPostArrivalAddressFormSchema = householdAddressFieldsSchem
 				ctx.addIssue({
 					code: 'custom',
 					path: ['addressNo'],
-					message: 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+					message: 'ครอบครัวไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
 				});
 			}
 			return;
