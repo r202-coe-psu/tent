@@ -77,3 +77,35 @@ export function todayLocalIso(now: Date = new Date()): string {
 	const dd = String(now.getDate()).padStart(2, '0');
 	return `${now.getFullYear()}-${mm}-${dd}`;
 }
+
+export type ExpiryPreset = {
+	id: '7d' | '6m' | '1y';
+	label: string;
+	days?: number;
+	months?: number;
+	years?: number;
+};
+
+/** Quick expiry shortcuts on the receive form, counted from the receive date. */
+export const EXPIRY_PRESETS: readonly ExpiryPreset[] = [
+	{ id: '7d', label: '7 วัน', days: 7 },
+	{ id: '6m', label: '6 เดือน', months: 6 },
+	{ id: '1y', label: '1 ปี', years: 1 }
+];
+
+/** `today` (`YYYY-MM-DD`) moved forward by the preset, clamped to month end (31 ม.ค. + 1 เดือน → 28/29 ก.พ.). */
+export function expiryPresetDate(today: string, preset: ExpiryPreset): string {
+	const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+	const year = y + (preset.years ?? 0);
+	const monthIndex = m - 1 + (preset.months ?? 0);
+	const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+	const date = new Date(year, monthIndex, Math.min(d, lastDay));
+	date.setDate(date.getDate() + (preset.days ?? 0));
+	return todayLocalIso(date);
+}
+
+/** The preset whose date equals the current expiry, so the form can show it as chosen. */
+export function matchingExpiryPreset(today: string, value: string): ExpiryPreset['id'] | null {
+	if (!value) return null;
+	return EXPIRY_PRESETS.find((p) => expiryPresetDate(today, p) === value)?.id ?? null;
+}
