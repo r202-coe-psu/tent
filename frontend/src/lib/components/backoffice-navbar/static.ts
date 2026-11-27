@@ -166,7 +166,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				]
 			},
 			{
-				label: 'เครื่องมือทะเบียน',
+				label: 'ค้นหาและสแกนผู้พักพิง',
 				href: null,
 				icon: Search,
 				children: [
