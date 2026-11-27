@@ -53,7 +53,7 @@
 		<!-- Normal / Return Lifecycle Stepper -->
 		<div class="relative">
 			<nav aria-label="ขั้นตอนความคืบหน้าของตั๋วเบิกจ่าย">
-				<ol class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<ol class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
 					{#each steps as step, index (step.id)}
 						{@const isCurrent = step.state === 'current'}
 						{@const isCompleted = step.state === 'completed'}

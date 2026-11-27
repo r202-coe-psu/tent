@@ -72,39 +72,41 @@
 >
 	<Dialog.Content class="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-[540px]">
 		<!-- Header -->
-		<div class="border-b border-red-100 bg-red-50/50 px-6 pt-6 pb-4">
-			<Dialog.Header>
-				<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-red-950">
-					<AlertTriangle class="h-5 w-5 text-red-600" />
-					<span>ยืนยันการยกเลิกใบเบิกจ่าย</span>
+		<div class="flex items-start gap-3 border-b border-slate-200 px-6 pt-6 pb-5">
+			<div
+				class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600"
+			>
+				<AlertTriangle class="h-5 w-5" aria-hidden="true" />
+			</div>
+			<Dialog.Header class="space-y-1 pr-6 text-left">
+				<Dialog.Title class="text-lg font-bold text-slate-900">
+					ยืนยันการยกเลิกใบเบิกจ่าย
 				</Dialog.Title>
-				<Dialog.Description class="text-xs text-red-800/80">
-					การยกเลิกตั๋วเป็นแบบถาวร ตั๋วจะไม่สามารถนำมาจัดสรรหรือปล่อยของได้อีก
+				<Dialog.Description class="text-sm text-slate-600">
+					การยกเลิกเป็นแบบถาวร ตั๋วจะนำไปจัดสรรหรือปล่อยของไม่ได้อีก
 				</Dialog.Description>
 			</Dialog.Header>
 		</div>
 
 		<!-- Body -->
-		<div class="flex-1 space-y-4 overflow-y-auto p-6">
-			<!-- Ticket Summary Card -->
-			<div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs text-slate-700">
-				<div class="flex items-center justify-between">
-					<span class="text-slate-500">เลขที่ตั๋ว:</span>
-					<span class="font-mono font-bold text-slate-900">{ticket.ticket_no}</span>
-				</div>
-				<div class="mt-1.5 flex items-center justify-between">
-					<span class="text-slate-500">จุดหมายปลายทาง:</span>
-					<span class="font-medium text-slate-800">{ticket.destination_location}</span>
-				</div>
-				<div class="mt-1.5 flex items-center justify-between">
-					<span class="text-slate-500">จำนวนรายการ:</span>
-					<span class="font-medium text-slate-800">{ticket.items.length} รายการ</span>
-				</div>
-			</div>
+		<div class="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+			<!-- Ticket Summary -->
+			<dl
+				class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+			>
+				<dt class="text-slate-500">เลขที่ตั๋ว</dt>
+				<dd class="text-right font-mono font-semibold break-all text-slate-900">
+					{ticket.ticket_no}
+				</dd>
+				<dt class="text-slate-500">จุดหมายปลายทาง</dt>
+				<dd class="text-right font-medium text-slate-800">{ticket.destination_location}</dd>
+				<dt class="text-slate-500">จำนวนรายการ</dt>
+				<dd class="text-right font-medium text-slate-800">{ticket.items.length} รายการ</dd>
+			</dl>
 
 			<!-- Cancellation Reason Input -->
-			<div class="space-y-1.5">
-				<label for="cancel-reason" class="text-sm font-semibold text-slate-800">
+			<div class="space-y-2">
+				<label for="cancel-reason" class="block text-sm font-semibold text-slate-800">
 					เหตุผลในการยกเลิก <span class="text-red-600">*</span>
 				</label>
 				<Textarea
@@ -114,15 +116,15 @@
 					placeholder="เช่น ผู้ขอแจ้งยกเลิกความต้องการ, สินค้าไม่เพียงพอ, สร้างตั๋วซ้ำซ้อน"
 					class="w-full text-sm shadow-2xs placeholder:text-slate-400"
 				/>
-				<p class="text-2xs text-slate-500">
-					เหตุผลนี้จะถูกบันทึกในประวัติตั๋วเพื่อใช้ในการตรวจสอบย้อนหลัง
+				<p class="text-xs text-slate-500">
+					เหตุผลนี้จะถูกบันทึกในประวัติตั๋วเพื่อใช้ตรวจสอบย้อนหลัง
 				</p>
 			</div>
 		</div>
 
 		<!-- Footer Actions -->
 		<div
-			class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/75 px-6 py-4"
+			class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end"
 		>
 			<Button
 				type="button"
@@ -131,9 +133,9 @@
 					open = false;
 					onClose();
 				}}
-				class="text-xs font-semibold"
+				class="min-h-11 text-sm font-semibold sm:min-h-10"
 			>
-				ยกเลิก
+				กลับ
 			</Button>
 
 			<Button
@@ -141,7 +143,7 @@
 				variant="destructive"
 				onclick={handleSubmit}
 				disabled={!canSubmit}
-				class="bg-destructive text-xs font-semibold text-white hover:bg-destructive/90"
+				class="min-h-11 bg-destructive text-sm font-semibold text-white hover:bg-destructive/90 sm:min-h-10"
 			>
 				{#if cancelMutation.isPending}
 					<Loader2 class="h-4 w-4 animate-spin" />
