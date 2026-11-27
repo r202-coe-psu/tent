@@ -47,7 +47,7 @@
 	<span id="meal-coverage-range-label" class="block text-sm font-semibold text-slate-700">
 		ช่วงวันที่
 	</span>
-	<div class="flex flex-wrap items-center gap-2">
+	<div class="flex flex-wrap items-center gap-2 sm:justify-end">
 		<Select.Root type="single" bind:value={() => preset, selectPreset}>
 			<Select.Trigger
 				id="meal-coverage-range-preset"
