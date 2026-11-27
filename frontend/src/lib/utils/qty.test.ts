@@ -83,6 +83,19 @@ describe('Zod qty schemas', () => {
 	it('coerces number at boundary to string', () => {
 		expect(qtyStrCoercePositiveSchema.parse(7.5)).toBe('7.5');
 	});
+
+	it.each([
+		[undefined, 'กรุณาระบุจำนวน'],
+		[null, 'กรุณาระบุจำนวน'],
+		['', 'กรุณาระบุจำนวน'],
+		['  ', 'กรุณาระบุจำนวน'],
+		[0, 'จำนวนต้องมากกว่า 0'],
+		['abc', 'จำนวนไม่ถูกต้อง (ทศนิยมได้ไม่เกิน 4 ตำแหน่ง)']
+	])('explains a rejected form qty %j in Thai', (input, message) => {
+		const r = qtyStrCoercePositiveSchema.safeParse(input);
+		expect(r.success).toBe(false);
+		expect(r.error?.issues[0]?.message).toBe(message);
+	});
 });
 
 describe('formatQty', () => {
