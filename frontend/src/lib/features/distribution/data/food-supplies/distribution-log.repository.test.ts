@@ -212,7 +212,7 @@ describe('DistributionLogRemoteRepository', () => {
 		});
 	});
 
-	describe('listByDistributedDay', () => {
+	describe('listByDistributedRange', () => {
 		const logAt = (n: number, distributed_at: string, extra: Record<string, unknown> = {}) => {
 			const id = `distribution_log:01J0000000000000000000A${String(n).padStart(3, '0')}`;
 			store.set(id, {
@@ -239,8 +239,8 @@ describe('DistributionLogRemoteRepository', () => {
 			return id;
 		};
 
-		it('asks for the Thai day as a half-open range on distributed_at', async () => {
-			await repo.listByDistributedDay('2026-11-11');
+		it('asks for a one-day range as a half-open range on distributed_at', async () => {
+			await repo.listByDistributedRange('2026-11-11', '2026-11-11');
 			expect(couch.findQueries[0].selector).toEqual({
 				type: 'distribution_log',
 				distributed_at: { $gte: '2026-11-10T17:00:00.000Z', $lt: '2026-11-11T17:00:00.000Z' }
@@ -253,31 +253,58 @@ describe('DistributionLogRemoteRepository', () => {
 			logAt(3, '2026-11-10T16:59:59.999Z');
 			logAt(4, '2026-11-11T17:00:00.000Z');
 
-			const { items } = await repo.listByDistributedDay('2026-11-11');
+			const { items } = await repo.listByDistributedRange('2026-11-11', '2026-11-11');
 			expect(items.map((l) => l._id)).toEqual([first, last]);
 		});
 
 		it('pages with the bookmark until every log of the day is read', async () => {
 			for (let i = 0; i < 450; i++) logAt(i, '2026-11-11T05:00:00.000Z');
-			const { items } = await repo.listByDistributedDay('2026-11-11');
+			const { items } = await repo.listByDistributedRange('2026-11-11', '2026-11-11');
 			expect(items).toHaveLength(450);
 			expect(couch.findQueries.length).toBeGreaterThan(1);
 		});
 
 		it('reports an unreadable log of that day in skipped', async () => {
 			const bad = logAt(1, '2026-11-11T05:00:00.000Z', { qty: 'abc' });
-			const { items, skipped } = await repo.listByDistributedDay('2026-11-11');
+			const { items, skipped } = await repo.listByDistributedRange('2026-11-11', '2026-11-11');
 			expect(items).toEqual([]);
 			expect(skipped.map((s) => s._id)).toEqual([bad]);
 		});
 
 		it('rejects when the request fails instead of returning an empty list', async () => {
 			vi.spyOn(couch.couchDbModule, 'findDocsPage').mockRejectedValueOnce(new Error('offline'));
-			await expect(repo.listByDistributedDay('2026-11-11')).rejects.toThrow('offline');
+			await expect(repo.listByDistributedRange('2026-11-11', '2026-11-11')).rejects.toThrow(
+				'offline'
+			);
 		});
 
 		it('rejects a malformed day', async () => {
-			await expect(repo.listByDistributedDay('11/11/2026')).rejects.toThrow(RangeError);
+			await expect(repo.listByDistributedRange('11/11/2026', '2026-11-11')).rejects.toThrow(
+				RangeError
+			);
+		});
+		it('spans from the first instant of `from` to the first instant after `to`', async () => {
+			await repo.listByDistributedRange('2026-11-09', '2026-11-11');
+			expect(couch.findQueries[0].selector).toEqual({
+				type: 'distribution_log',
+				distributed_at: { $gte: '2026-11-08T17:00:00.000Z', $lt: '2026-11-11T17:00:00.000Z' }
+			});
+		});
+
+		it('returns the logs of every day in the range and none outside it', async () => {
+			const first = logAt(1, '2026-11-08T17:00:00.000Z');
+			const middle = logAt(2, '2026-11-10T05:00:00.000Z');
+			const last = logAt(3, '2026-11-11T16:59:59.999Z');
+			logAt(4, '2026-11-08T16:59:59.999Z');
+			logAt(5, '2026-11-11T17:00:00.000Z');
+			const { items } = await repo.listByDistributedRange('2026-11-09', '2026-11-11');
+			expect(items.map((l) => l._id)).toEqual([first, middle, last]);
+		});
+
+		it('rejects a range that ends before it starts', async () => {
+			await expect(repo.listByDistributedRange('2026-11-11', '2026-11-09')).rejects.toThrow(
+				RangeError
+			);
 		});
 	});
 

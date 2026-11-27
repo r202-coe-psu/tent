@@ -85,19 +85,21 @@ fixed bug in shelter
 The repo root runs **[Lefthook](https://github.com/evilmartians/lefthook)** (`lefthook.yml`).
 Hooks are installed when you run `pnpm install` at the **repo root** (see `CONTRIBUTING.md` §1).
 
-| Hook       | When it runs                            | Command                                                        | What it catches                     |
-| ---------- | --------------------------------------- | -------------------------------------------------------------- | ----------------------------------- |
-| pre-commit | staged `frontend/` files match          | `prettier --write`, then `eslint --fix`                        | formatting drift, ESLint violations |
-| pre-push   | pushed commits touch `frontend/` source | `pnpm test:changed` (affected tests since last push, fs cache) | broken domain/data logic            |
+| Hook       | When it runs                           | Command                                                        | What it catches                     |
+| ---------- | -------------------------------------- | -------------------------------------------------------------- | ----------------------------------- |
+| pre-commit | staged `frontend/` files match         | `prettier --write`, then `eslint --fix`                        | formatting drift, ESLint violations |
+| pre-push   | branch's own commits touch `frontend/` | `pnpm test:changed` (affected tests since last push, fs cache) | broken domain/data logic            |
 
 Backend and worker use `ruff` on pre-commit and `pytest` on pre-push the same way. Pre-push jobs
-run one after another. The frontend job runs only tests whose import graph reaches a changed file;
+run one after another and look only at files changed by the branch's own commits — changes that
+came in from `origin/develop` through a merge are not re-tested
+(`scripts/hooks/own-push-files.sh`). The frontend job runs only tests whose import graph reaches a changed file;
 config, lockfile and test-setup changes re-run everything (`CONTRIBUTING.md` §1). `pnpm check`
 (`svelte-check`) and the full `pnpm test` stay manual steps before you open a PR.
 
 - **Scope:** the frontend pre-commit job runs when `frontend/` files are staged. A docs-only
-  commit at the repo root skips it. The frontend pre-push job runs when the push includes
-  matching `frontend/` files.
+  commit at the repo root skips it. The frontend pre-push job runs when the branch's own
+  commits in the push include matching `frontend/` files.
 - **Strict Rule — No Bypass:** **Never** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` (ห้าม commit/push แบบ no-verify โดยเด็ดขาด). All quality gates must pass cleanly. Always fix the errors rather than bypassing.
 
 A green pre-commit covers definition-of-done lint/format. A green pre-push covers the unit tests

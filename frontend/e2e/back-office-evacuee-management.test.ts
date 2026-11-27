@@ -187,7 +187,7 @@ test.describe(
 			});
 		});
 
-		test('dashboard tab shows per-zone occupancy and the capacity gauge (CR-226)', async ({
+		test('overview page shows per-zone occupancy and the capacity gauge (CR-226)', async ({
 			page
 		}) => {
 			test.setTimeout(120_000);
@@ -201,7 +201,7 @@ test.describe(
 				.locator('div.rounded-xl')
 				.filter({ has: page.getByRole('heading', { name: 'ความเต็มรายโซน' }) });
 
-			await page.goto('/back-office/evacuee-management?tab=dashboard');
+			await page.goto('/back-office/overview/evacuees');
 			await expect(zoneCard.getByText('ศูนย์นี้ยังไม่มีโซน')).toBeVisible({ timeout: 30_000 });
 			await expect(page.getByRole('heading', { name: 'ภาพรวมความจุ' })).toHaveCount(0);
 
@@ -210,7 +210,7 @@ test.describe(
 				zones: [{ name: ZONE_NAME, capacity: 20 }]
 			});
 
-			await page.goto('/back-office/evacuee-management?tab=dashboard');
+			await page.goto('/back-office/overview/evacuees');
 			const zoneRow = zoneCard.getByRole('listitem').filter({ hasText: ZONE_NAME });
 			await expect(zoneRow).toBeVisible({ timeout: 30_000 });
 			await expect(zoneRow).toContainText('0 / 20 คน');

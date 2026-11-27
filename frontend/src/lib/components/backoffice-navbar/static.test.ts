@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Users from '@lucide/svelte/icons/users';
 import {
 	activeNavHref,
+	isBackofficeHome,
 	backofficeNavbarGroups,
 	canSeeNavNode,
 	isGroup,
@@ -138,7 +139,18 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'โลจิสติกส์ & GIS'
 	];
 	const registry = 'จัดการผู้เข้าพัก';
+	/** The /portal onsite desks mirrored into the sidebar for SA/SM only (#1517). */
+	const screeningDesk = 'จุดคัดกรองสุขภาพ';
+	const registrationDesks = [
+		'จุดลงทะเบียน',
+		screeningDesk,
+		'จุดจัดโซน',
+		'ค้นหาและแก้ไขข้อมูลผู้พักพิง',
+		'สแกนเข้า-ออกศูนย์'
+	];
 	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีจิตอาสา'];
+	const distributionDesk = 'จุดแจกจ่ายพัสดุและอาหาร';
+	const volunteerCheckIn = 'เช็คอินอาสาสมัคร';
 	const referrals = 'การส่งต่อผู้เข้าพัก';
 	/** Draft CR M5 D17: OneData shortcuts. M5 = referral audience; M6 = SA, SM, warehouse_staff (not supply_coordinator). */
 	const oneDataM5 = 'OneData ระบบส่งต่อผู้ป่วย (M5)';
@@ -160,9 +172,14 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const allowed = new Set([...ungated, ...gated.flat()]);
 		return allLeafLabels().filter((l) => allowed.has(l));
 	};
+	const overview = 'ภาพรวมศูนย์';
 	const managerLabels = [
+		overview,
 		registry,
+		...registrationDesks,
+		distributionDesk,
 		...volunteers,
+		volunteerCheckIn,
 		referrals,
 		...warehouse,
 		kitchenTickets,
@@ -225,15 +242,37 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const children = group && isGroup(group) ? group.children : [];
 		expect(children.map((c) => [c.label, String(c.href)])).toEqual([
 			['งานและรายชื่ออาสาสมัคร', '/back-office/volunteers'],
-			['บัญชีจิตอาสา', '/back-office/volunteers/accounts']
+			['บัญชีจิตอาสา', '/back-office/volunteers/accounts'],
+			['เช็คอินอาสาสมัคร', '/onsite/volunteer-check-in']
 		]);
 	});
 
-	it('volunteer_coordinator sees volunteers only (#842)', () => {
+	it('volunteer_coordinator sees volunteers only, not the SA/SM check-in link (#842, #1517)', () => {
 		expect(visibleLeafLabels(ctx(sh('volunteer_coordinator')))).toEqual(labelsFor(volunteers));
 	});
 
-	it('registration_staff sees the evacuee registry only (#842)', () => {
+	it('puts the system overview button first, for SA and the active shelter SM only', () => {
+		const first = backofficeNavbarGroups[0].items[0];
+		expect(first.label).toBe('ภาพรวมศูนย์');
+		expect(isGroup(first)).toBe(false);
+		expect(String(first.href)).toBe('/back-office/overview');
+		expect(canSeeNavNode(first, ctx(['system_admin']))).toBe(true);
+		expect(canSeeNavNode(first, ctx(['shelter:SH001', 'SH001:shelter_manager'], 'SH001'))).toBe(
+			true
+		);
+		expect(canSeeNavNode(first, ctx(['shelter:SH002', 'SH002:shelter_manager'], 'SH001'))).toBe(
+			false
+		);
+		expect(canSeeNavNode(first, ctx(sh('registration_staff')))).toBe(false);
+	});
+
+	it('lights the system overview button on both overview tabs', () => {
+		const hrefs = navLeafHrefs(backofficeNavbarGroups);
+		expect(activeNavHref('/back-office/overview/evacuees', hrefs)).toBe('/back-office/overview');
+		expect(activeNavHref('/back-office/overview/food', hrefs)).toBe('/back-office/overview');
+	});
+
+	it('registration_staff sees the evacuee registry only, not the SA/SM desk links (#842, #1517)', () => {
 		expect(visibleLeafLabels(ctx(sh('registration_staff')))).toEqual(labelsFor(registry));
 	});
 
@@ -434,5 +473,15 @@ describe('activeNavHref — trailing slash before the query string', () => {
 		expect(activeNavHref('/back-office/supply/?tab=catalog', hrefs)).toBe(
 			'/back-office/supply?tab=catalog'
 		);
+	});
+});
+
+describe('isBackofficeHome (#1517)', () => {
+	it('is true on /portal only, with or without a trailing slash', () => {
+		expect(isBackofficeHome('/portal')).toBe(true);
+		expect(isBackofficeHome('/portal/')).toBe(true);
+		expect(isBackofficeHome('/portals')).toBe(false);
+		expect(isBackofficeHome('/me')).toBe(false);
+		expect(isBackofficeHome('/back-office/kitchen')).toBe(false);
 	});
 });

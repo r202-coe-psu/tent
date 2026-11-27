@@ -91,20 +91,24 @@ export const useDistributionLogs = (
 	});
 
 /**
- * Distribution logs of one Thai calendar day plus the docs that failed to parse. The meal coverage
- * report needs `skipped` so unreadable logs show as a warning instead of silently lowering counts.
+ * Distribution logs of Thai calendar days `from`..`to` (inclusive) plus the docs that failed to
+ * parse. The meal coverage report needs `skipped` so unreadable logs show as a warning instead of
+ * silently lowering counts.
  */
-export const useDistributionLogsByDay = (
+export const useDistributionLogsByRange = (
 	shelterCodeGetter: MaybeGetter<string | undefined>,
-	day: MaybeGetter<string>,
+	from: MaybeGetter<string>,
+	to: MaybeGetter<string>,
 	enabled: MaybeGetter<boolean> = true
 ) =>
 	createQuery(() => {
 		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
-		const resolvedDay = toValue(day);
+		const resolvedFrom = toValue(from);
+		const resolvedTo = toValue(to);
 		return {
-			queryKey: distributionKeys.logsByDay(shelterCode, resolvedDay),
-			queryFn: () => distributionLogRepository(shelterCode).listByDistributedDay(resolvedDay),
+			queryKey: distributionKeys.logsByRange(shelterCode, resolvedFrom, resolvedTo),
+			queryFn: () =>
+				distributionLogRepository(shelterCode).listByDistributedRange(resolvedFrom, resolvedTo),
 			enabled: Boolean(toValue(enabled) && shelterCode)
 		};
 	});

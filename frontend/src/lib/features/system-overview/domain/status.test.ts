@@ -23,13 +23,13 @@ describe('getPreRegStatusInfo', () => {
 
 	it('identifies pre_registered with shelter as bound waiting', () => {
 		const res = getPreRegStatusInfo('pre_registered', 'pre_registered@SH001', true);
-		expect(res.label).toBe('รอเข้าศูนย์ (ผูกศูนย์แล้ว)');
+		expect(res.label).toBe('รอเข้าศูนย์ (เลือกศูนย์แล้ว)');
 		expect(res.isEntered).toBe(false);
 	});
 
 	it('identifies unassigned or shelter-less pre-registration', () => {
 		const res = getPreRegStatusInfo('unassigned', 'unassigned', false);
-		expect(res.label).toBe('ยังไม่ผูกศูนย์');
+		expect(res.label).toBe('ยังไม่ได้เลือกศูนย์');
 		expect(res.isEntered).toBe(false);
 	});
 

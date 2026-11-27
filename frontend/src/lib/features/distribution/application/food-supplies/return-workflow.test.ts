@@ -96,7 +96,7 @@ class InMemoryLogRepository implements DistributionLogRepository {
 		return this.logs.get(logId) ?? null;
 	}
 
-	async listByDistributedDay() {
+	async listByDistributedRange() {
 		return { items: [], skipped: [] };
 	}
 

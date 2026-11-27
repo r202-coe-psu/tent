@@ -508,6 +508,20 @@ export function canAccessVolunteerBackoffice(
 }
 
 /**
+ * True when the actor may use volunteer check-in (`/onsite/volunteer-check-in`): system_admin,
+ * shelter_manager, volunteer_coordinator or registration_staff in the shelter (CR-104).
+ */
+export function canAccessVolunteerCheckIn(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		canAccessVolunteerBackoffice(roles, shelterCode) ||
+		hasStaffCapability(roles, 'registration_staff', shelterCode)
+	);
+}
+
+/**
  * True when the actor may use the Distribution Desk (Station 4, `/onsite/distribution`):
  * system_admin, shelter_manager, or distribution_staff in the shelter (CR-161 R5, page-level per
  * CR-159). REG, SC and WH keep their system-level distribution rights but not this page.

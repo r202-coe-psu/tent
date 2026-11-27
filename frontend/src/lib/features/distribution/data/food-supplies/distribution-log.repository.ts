@@ -15,7 +15,7 @@ import {
 import { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
 
-/** Docs per `_find` page in `listByDistributedDay`. */
+/** Docs per `_find` page in `listByDistributedRange`. */
 const FIND_PAGE_SIZE = 200;
 
 /** Ids per `_all_docs` keys request in `getMany`. */
@@ -92,11 +92,15 @@ export interface DistributionLogRepository {
 		filter?: DistributionLogListFilter
 	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
 	/**
-	 * Logs whose `distributed_at` falls in Thai calendar `day` (`[00:00, 24:00)` UTC+7), read through
-	 * `_find` page by page. A Mango index on `[type, distributed_at]` serves it; without the index
-	 * CouchDB still answers by scanning. Any failed request rejects.
+	 * Logs whose `distributed_at` falls in Thai calendar days `from`..`to` inclusive (`[00:00 of
+	 * from, 24:00 of to)` UTC+7), read through `_find` page by page. A Mango index on `[type,
+	 * distributed_at]` serves it; without the index CouchDB still answers by scanning. Any failed
+	 * request rejects; a malformed day or a `to` before `from` throws a `RangeError`.
 	 */
-	listByDistributedDay(day: string): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
+	listByDistributedRange(
+		from: string,
+		to: string
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
 	/**
 	 * Batch get by id (`_all_docs` keys, chunked). Ids with no doc are simply absent from `items`;
 	 * malformed docs are reported in `skipped` instead of failing the read.
@@ -149,10 +153,13 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 		return distributionLogDocSchema.parse(raw);
 	}
 
-	async listByDistributedDay(
-		day: string
+	async listByDistributedRange(
+		from: string,
+		to: string
 	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }> {
-		const { start, end } = thailandDayBounds(day);
+		const { start } = thailandDayBounds(from);
+		const { end } = thailandDayBounds(to);
+		if (end <= start) throw new RangeError(`Range ends before it starts: ${from}..${to}`);
 		const docs: unknown[] = [];
 		let bookmark: string | undefined;
 		for (;;) {

@@ -53,12 +53,25 @@ export interface PresenceInput {
 	current_stay?: { status?: string | null; since?: string | null } | null;
 }
 
-export function wasInShelterAllDay({ day, movements, current_stay }: PresenceInput): boolean {
+export function wasInShelterAllDay(input: PresenceInput): boolean {
+	return presenceOnDay(input) === 'all';
+}
+
+/** How much of the Thai calendar day the evacuee was in the shelter. */
+export type DayPresence = 'all' | 'partial' | 'none';
+
+/**
+ * `all` is `wasInShelterAllDay`; `partial` is in the shelter at some point of the day but not the
+ * whole day (arrived, left or on temporary leave); `none` is not in the shelter at any moment.
+ */
+export function presenceOnDay({ day, movements, current_stay }: PresenceInput): DayPresence {
 	const { start: dayStart, end: dayEnd } = thaiDayRangeMs(day);
 
 	if (movements.length === 0) {
+		if (!isInShelterStayStatus(current_stay?.status)) return 'none';
 		const since = current_stay?.since ? new Date(current_stay.since).getTime() : NaN;
-		return isInShelterStayStatus(current_stay?.status) && since < dayStart;
+		if (since < dayStart) return 'all';
+		return since < dayEnd ? 'partial' : 'none';
 	}
 
 	const sorted = movements
@@ -70,14 +83,22 @@ export function wasInShelterAllDay({ day, movements, current_stay }: PresenceInp
 		.sort((a, b) => a.at - b.at);
 
 	let inside = false;
-	for (const m of sorted) {
-		if (m.at >= dayEnd) break;
-		if (m.at >= dayStart) {
-			if (!inside || isLeave(m)) return false;
-			continue;
-		}
-		if (isEnter(m)) inside = true;
-		else if (isLeave(m)) inside = false;
+	let i = 0;
+	for (; i < sorted.length && sorted[i].at < dayStart; i++) {
+		if (isEnter(sorted[i])) inside = true;
+		else if (isLeave(sorted[i])) inside = false;
 	}
-	return inside;
+	let wholeDay = inside;
+	let anyTime = inside;
+	for (; i < sorted.length && sorted[i].at < dayEnd; i++) {
+		const m = sorted[i];
+		if (!inside || isLeave(m)) wholeDay = false;
+		if (isEnter(m)) {
+			inside = true;
+			anyTime = true;
+		} else if (isLeave(m)) {
+			inside = false;
+		}
+	}
+	return wholeDay ? 'all' : anyTime ? 'partial' : 'none';
 }

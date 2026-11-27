@@ -106,7 +106,7 @@ export function getPreRegStatusInfo(
 	if (raw === 'pre_registered' || hasShelter) {
 		if (hasShelter) {
 			return {
-				label: 'รอเข้าศูนย์ (ผูกศูนย์แล้ว)',
+				label: 'รอเข้าศูนย์ (เลือกศูนย์แล้ว)',
 				className: 'border-sky-200 bg-sky-50 text-sky-700',
 				dotColor: 'bg-sky-500',
 				isEntered: false,
@@ -116,7 +116,7 @@ export function getPreRegStatusInfo(
 	}
 
 	return {
-		label: 'ยังไม่ผูกศูนย์',
+		label: 'ยังไม่ได้เลือกศูนย์',
 		className: 'border-slate-200 bg-slate-100 text-slate-600',
 		dotColor: 'bg-slate-400',
 		isEntered: false,
