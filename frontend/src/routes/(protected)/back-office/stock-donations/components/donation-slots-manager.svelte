@@ -299,7 +299,7 @@
 					id="slot-date"
 					ariaLabel="วันที่ของช่วงเวลา"
 					bind:value={selectedDate}
-					class="h-11"
+					class="!h-10 border-input bg-white shadow-2xs"
 				/>
 			</div>
 
@@ -311,12 +311,18 @@
 						type="time"
 						step="900"
 						bind:value={newFrom}
-						class="h-11 tabular-nums"
+						class="h-10 rounded-lg tabular-nums shadow-2xs"
 					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="slot-to" class="text-sm font-semibold text-slate-700">ถึง</Label>
-					<Input id="slot-to" type="time" step="900" bind:value={newTo} class="h-11 tabular-nums" />
+					<Input
+						id="slot-to"
+						type="time"
+						step="900"
+						bind:value={newTo}
+						class="h-10 rounded-lg tabular-nums shadow-2xs"
+					/>
 				</div>
 			</div>
 
@@ -334,7 +340,7 @@
 					min="1"
 					placeholder={isPickup ? 'เช่น 2' : 'เว้นว่าง = ไม่จำกัด'}
 					bind:value={newCapacity}
-					class="h-11 tabular-nums"
+					class="h-10 rounded-lg tabular-nums shadow-2xs"
 				/>
 				<p class="text-xs text-slate-500">
 					{#if isPickup}
@@ -352,7 +358,7 @@
 					type="text"
 					placeholder="เช่น เข้าประตู 2 / จอดรถลานหลัง"
 					bind:value={newNote}
-					class="h-11"
+					class="h-10 rounded-lg shadow-2xs"
 				/>
 			</div>
 
@@ -564,7 +570,12 @@
 		<div class="space-y-4">
 			<div class="space-y-1.5">
 				<Label for="edit-slot-to" class="text-sm font-semibold text-slate-700">ถึง</Label>
-				<Input id="edit-slot-to" type="time" bind:value={editTo} class="h-11 tabular-nums" />
+				<Input
+					id="edit-slot-to"
+					type="time"
+					bind:value={editTo}
+					class="h-10 rounded-lg tabular-nums shadow-2xs"
+				/>
 			</div>
 			<div class="space-y-1.5">
 				<Label for="edit-slot-capacity" class="text-sm font-semibold text-slate-700">
@@ -577,7 +588,7 @@
 					min="1"
 					placeholder={isPickup ? 'เช่น 2' : 'ไม่จำกัด'}
 					bind:value={editCapacity}
-					class="h-11 tabular-nums"
+					class="h-10 rounded-lg tabular-nums shadow-2xs"
 				/>
 				{#if editing}
 					<p class="text-xs text-slate-500">
@@ -595,7 +606,7 @@
 					id="edit-slot-note"
 					placeholder="เช่น เข้าประตู 2 / จอดรถลานหลัง"
 					bind:value={editNote}
-					class="h-11"
+					class="h-10 rounded-lg shadow-2xs"
 				/>
 			</div>
 		</div>
