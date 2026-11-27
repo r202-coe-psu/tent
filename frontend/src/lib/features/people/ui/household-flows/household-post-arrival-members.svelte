@@ -81,12 +81,12 @@
 		);
 		if (conflict.conflicted) {
 			toast.error(
-				`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evacuee.first_name} ${evacuee.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
+				`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${evacuee.first_name} ${evacuee.last_name} สังกัดครอบครัว "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
 			);
 			return;
 		}
 		if (selectedMembers.some((m) => m._id === evacuee._id)) {
-			toast.error('ผู้เข้าพักรายนี้ถูกเพิ่มเข้าครัวเรือนเรียบร้อยแล้ว');
+			toast.error('ผู้เข้าพักรายนี้ถูกเพิ่มเข้าครอบครัวเรียบร้อยแล้ว');
 			return;
 		}
 		selectedMembers = [...selectedMembers, evacuee];
@@ -95,7 +95,7 @@
 
 	function removeMember(id: string) {
 		if (selectedHead?._id === id) {
-			toast.error('ไม่สามารถลบหัวหน้าครัวเรือนจากรายชื่อสมาชิกได้');
+			toast.error('ไม่สามารถลบผู้ติดต่อหลักจากรายชื่อสมาชิกได้');
 			return;
 		}
 		selectedMembers = selectedMembers.filter((m) => m._id !== id);
@@ -104,10 +104,10 @@
 
 <div class="mx-auto w-full max-w-4xl space-y-6">
 	<div class="space-y-2">
-		<h3 class="text-lg font-bold text-foreground">2. ค้นหาและเลือกสมาชิกในครัวเรือน</h3>
+		<h3 class="text-lg font-bold text-foreground">2. ค้นหาและเลือกสมาชิกในครอบครัว</h3>
 		<p class="text-sm text-muted-foreground">
 			ค้นหาผู้เข้าพักคนอื่นๆ ที่เข้าพักแล้ว เพื่อเพิ่มเข้ากลุ่มครอบครัวนี้
-			(หัวหน้าครอบครัวจะถูกนำมารวมโดยอัตโนมัติ)
+			(ผู้ติดต่อหลักจะถูกนำมารวมโดยอัตโนมัติ)
 		</p>
 	</div>
 

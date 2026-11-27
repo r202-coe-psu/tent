@@ -24,7 +24,7 @@
 </script>
 
 <svelte:head>
-	<title>จุดแจกจ่ายพัสดุและอาหาร (Station 4) · SmartShelter</title>
+	<title>จุดแจกจ่ายพัสดุและอาหาร · SmartShelter</title>
 	<meta
 		name="description"
 		content="สถานีแจกจ่ายอาหารปรุงสุก พัสดุบรรเทาทุกข์ และระบบยืม-คืน สำหรับผู้ปฏิบัติงานส่วนหน้า (Frontline Distribution Desk — Station 4)"

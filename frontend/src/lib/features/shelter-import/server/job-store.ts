@@ -52,7 +52,7 @@ export interface ShelterImportItem {
 	input?: Shelter;
 	/** Whether the uploaded workbook explicitly included the food-point sheet. */
 	food_distribution_points_present?: boolean;
-	/** The row left `ชนิดสถานที่` empty, so an update keeps the stored kind (CR-198 D-4). */
+	/** The row left `ประเภทศูนย์` empty, so an update keeps the stored kind (CR-198 D-4). */
 	site_kind_blank?: boolean;
 	status: ImportItemStatus;
 	attempts: number;

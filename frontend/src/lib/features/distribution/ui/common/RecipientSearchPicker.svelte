@@ -303,7 +303,7 @@
 					type="text"
 					value={outsideNotes}
 					oninput={handleOutsideNotesInput}
-					placeholder="เช่น ประชาชนชุมชนข้างเคียง, ญาติผู้ประสบภัย..."
+					placeholder="เช่น ประชาชนชุมชนข้างเคียง, ญาติผู้พักพิง..."
 					class="h-11 text-sm"
 					{disabled}
 				/>
@@ -387,7 +387,7 @@
 			</div>
 		{:else if hasNoResults}
 			<p class="rounded-lg bg-slate-50 py-3 text-center text-sm text-slate-500">
-				ไม่พบผู้ประสบภัย{allowVolunteer ? 'หรือจิตอาสา' : ''}ที่ตรงกับคำค้นหา
+				ไม่พบผู้พักพิง{allowVolunteer ? 'หรือจิตอาสา' : ''}ที่ตรงกับคำค้นหา
 			</p>
 		{:else if searchResults.length > 0 || volunteerResults.length > 0}
 			<div class="max-h-60 space-y-1 overflow-y-auto rounded-lg border border-slate-200/80 p-1">
@@ -450,8 +450,8 @@
 	bind:open={scannerOpen}
 	title="สแกน QR ผู้รับ"
 	hint={allowVolunteer
-		? 'เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัยหรือบัตรจิตอาสา หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'
-		: 'เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัย หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'}
+		? 'เล็งกล้องไปที่ QR บนบัตรผู้พักพิงหรือบัตรจิตอาสา หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'
+		: 'เล็งกล้องไปที่ QR บนบัตรผู้พักพิง หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'}
 	formats={SCAN_FORMATS}
 	manualInputMode="text"
 	busy={isLookingUp}

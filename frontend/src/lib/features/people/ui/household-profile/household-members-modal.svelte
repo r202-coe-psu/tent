@@ -58,7 +58,7 @@
 		>
 			<div class="flex items-center justify-between border-b border-border pb-2.5">
 				<h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">
-					จัดการสมาชิกในครัวเรือน (Manage Members)
+					จัดการสมาชิกในครอบครัว (Manage Members)
 				</h3>
 				<button
 					onclick={() => {

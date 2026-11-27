@@ -1,19 +1,20 @@
 ---
 title: Partner Data API — Location Master (EXT-002 / EXT-003)
 status: active
-version: 3.3
+version: 3.4
 created: 2026-10-21
-updated: 2026-11-25
-note: decision sync 2026-11-24 — เอกสารส่งมอบ partner (M2 / M6 / M7) ของข้อมูลศูนย์ v3.3 แทน redirect stub เดิม · endpoint อื่น (EXT-001, EXT-004–012) ยังอ้าง api-contract.md §5.3 · ต้นฉบับคำขอ partner (ODT v1.0) ที่ docs/source/B_Data_We_Request_From_Partner_Systems.odt เป็น immutable archive — อย่าแก้
+updated: 2026-11-27
+note: decision sync 2026-11-27 — Partner API v3.4: EXT-002/003 คืนเฉพาะ `site_kind` `evacuation_center` / `host_house` (`test_center` ไม่ส่ง) + query `site_kind` · decision sync 2026-11-24 — เอกสารส่งมอบ partner (M2 / M6 / M7) ของข้อมูลศูนย์ v3.3 แทน redirect stub เดิม · endpoint อื่น (EXT-001, EXT-004–012) ยังอ้าง api-contract.md §5.3 · ต้นฉบับคำขอ partner (ODT v1.0) ที่ docs/source/B_Data_We_Request_From_Partner_Systems.odt เป็น immutable archive — อย่าแก้
 ---
 
-# Partner Data API — Location Master (EXT-002 / EXT-003) · v3.3
+# Partner Data API — Location Master (EXT-002 / EXT-003) · v3.4
 
 > **สรุป (TL;DR)**
 > - v3.3 ขยายข้อมูลศูนย์ใน `GET /external/locations` (EXT-002) และ `GET /external/locations/{location_code}` (EXT-003) ตามที่ M2/M6/M7 ต้องใช้
 > - **key เดิม 4 ตัวเปลี่ยนค่า:** `accepts_delivery` เป็นค่าที่คำนวณแล้ว (เดิม `true` เสมอ) · `name_short`, `operating_org`, `delivery_note` เริ่มมีค่า (เดิม `null` เสมอ)
 > - **key ใหม่ทั้งหมดเป็นแบบเพิ่ม (additive)** ไม่เปลี่ยนชื่อหรือลบ key เดิม · client ต้องรับ key ที่ไม่รู้จักได้และรับมือ `null` ได้ทุก field ที่ระบุว่า nullable
 > - endpoint, auth, scope และรูปแบบ error ไม่เปลี่ยน
+> - **v3.4:** EXT-002/003 คืนเฉพาะศูนย์ `site_kind` = `evacuation_center` หรือ `host_house` (ไม่ส่ง `test_center` อีก) · EXT-002 เพิ่ม query `site_kind`
 
 ---
 
@@ -23,6 +24,7 @@ note: decision sync 2026-11-24 — เอกสารส่งมอบ partner 
 | --- | --- | --- |
 | 3.2 | 2026-10-22 | ฉบับส่งมอบก่อนหน้า (as-built EXT-001–012, docx) — ฟิลด์ศูนย์ตาม partner ODT v1.0 (`B_Data_We_Request_From_Partner_Systems.odt`) |
 | 3.3 | 2026-11-25 | ดู §1.1 และ §1.2 · เอกสารส่งมอบฉบับเต็ม (EXT-001–012) เป็นไฟล์ docx นอก repo |
+| 3.4 | 2026-11-27 | decision sync 2026-11-27 — EXT-002/003 คืนเฉพาะ `site_kind` = `evacuation_center` / `host_house`: ศูนย์ `test_center` (และ code อื่นที่เพิ่มในอนาคต) ไม่อยู่ในรายการ EXT-002 และ EXT-003 ตอบ `404 location_not_found` · EXT-002 เพิ่ม query `site_kind` (§2.1) |
 
 ### 1.1 ค่าของ key เดิมที่เปลี่ยน (behavior change — ตรวจ logic ฝั่ง client)
 
@@ -60,6 +62,7 @@ note: decision sync 2026-11-24 — เอกสารส่งมอบ partner 
 | `updated_since` | Timestamp | ไม่บังคับ | เฉพาะแถวที่ `updated_at` ≥ ค่านี้ |
 | `include_inactive` | Boolean | ไม่บังคับ | `true` = รวมศูนย์ที่ `is_active = false` (ค่าเริ่มต้น `false`) |
 | `accepts_booking` | `true` \| `false` | ไม่บังคับ | กรองตามกติกา `accepts_booking` · ค่าอื่น → 422 |
+| `site_kind` | `evacuation_center` \| `host_house` | ไม่บังคับ | **v3.4** กรองตามประเภทศูนย์ · ไม่ส่ง = ทั้งสองประเภท · ค่าอื่น (รวม `test_center`) → 422 |
 | `page` / `limit` | Number | ไม่บังคับ | ค่าเริ่มต้น `1` / `50` (`limit` ≤ 200) |
 
 ---
@@ -75,7 +78,7 @@ EXT-003 คืนทุก field ของ EXT-002 บวก §4
 | `name_short` | Text\|null | ไม่บังคับ | ชื่อย่อสำหรับแผนที่ (≤64) — **v3.3 มีค่าแล้ว** | `รร.หาดใหญ่วิทยาลัย` |
 | `location_type` | Text | บังคับ | ชุดอ้างอิงเดียวกับ M6 — ปัจจุบัน `shelter` เสมอ | `shelter` |
 | `location_subtype` | Text\|null | ไม่บังคับ | ประเภทอาคาร (code จาก master data ของ Shelter) | `school` |
-| `site_kind` | Text | บังคับ | **ใหม่** ประเภทศูนย์ — `evacuation_center` (ศูนย์อพยพ), `host_house` (บ้านพี่เลี้ยง), `test_center` (ศูนย์ทดสอบ) · **รายการ code เพิ่มได้ในอนาคต** — client ต้องรับ code ที่ไม่รู้จักได้ | `evacuation_center` |
+| `site_kind` | Text | บังคับ | **ใหม่** ประเภทศูนย์ — `evacuation_center` (ศูนย์อพยพ) หรือ `host_house` (บ้านพี่เลี้ยง) เท่านั้น (v3.4 — ศูนย์ประเภทอื่น เช่น `test_center` ไม่ถูกส่งให้ partner) | `evacuation_center` |
 | `project_level` | Text\|null | ไม่บังคับ | **ใหม่** ระดับศูนย์ `community` \| `lao` \| `provincial` | `provincial` |
 | `location_status` | Text | บังคับ | `open` \| `full` \| `standby` \| `closed` \| `unknown` (`unknown` = บริหารในระบบอื่น — ห้ามตีความเป็น open หรือ closed) | `open` |
 | `latitude` / `longitude` | Number\|null | บังคับ* | WGS84 · `null` เมื่อศูนย์ยังไม่ปักหมุด | `7.008612` |
@@ -266,7 +269,8 @@ EXT-003 คืนทุก field ของ EXT-002 บวก §4
   `accepts_delivery = false`, `accepts_booking = false`
 - **`site_kind` และ code ใน enum อื่น (`vulnerable_groups`, `location_subtype`)** มาจาก master data ของ Shelter — เพิ่มได้โดยไม่แจ้งล่วงหน้า
   client ต้องไม่ error เมื่อเจอ code ที่ไม่รู้จัก
-- **`test_center` (ศูนย์ทดสอบ)** เป็นประเภทศูนย์ปกติ ไม่ถูกกรองออกจาก EXT-002/003/006 — กรองฝั่ง client ถ้าไม่ต้องการ
+- **`test_center` (ศูนย์ทดสอบ)** ไม่อยู่ใน EXT-002/003 ตั้งแต่ v3.4 (Shelter กรองให้) · EXT-006 (summary) ยังนับรวมตามเดิม
+- **ศูนย์ที่เจ้าหน้าที่ปิดการแสดงผลสาธารณะ (`public_visible = false`)** ไม่อยู่ใน EXT-002/003 เลย (หายจากรายการ และ EXT-003 ตอบ 404) — กลับมาเมื่อเปิดใหม่
 - **`updated_since`** ครอบคลุมทุก field ใหม่ — แถวที่ข้อมูลศูนย์หรือยอดผู้พักเปลี่ยนจะมี `updated_at` ใหม่
 - **ดึงข้อมูลเต็มหนึ่งครั้งหลัง deploy v3.3:** การประมวลผลใหม่หลัง deploy ไม่รับประกันว่า `updated_at` ของทุกแถวจะขยับ
   client ที่ซิงก์แบบ incremental (`updated_since`) ต้องเรียก EXT-002 โดยไม่ส่ง `updated_since` หนึ่งรอบ (พร้อม

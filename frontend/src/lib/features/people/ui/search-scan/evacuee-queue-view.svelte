@@ -524,7 +524,7 @@
 		</nav>
 	</div>
 
-	<!-- Tab 1: All Evacuees (ผู้ประสบภัยทั้งหมด) -->
+	<!-- Tab 1: All Evacuees (ผู้พักพิงทั้งหมด) -->
 	{#if activeTab === 'all'}
 		<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 			<div

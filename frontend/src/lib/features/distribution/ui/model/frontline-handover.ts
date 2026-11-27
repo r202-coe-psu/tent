@@ -117,7 +117,7 @@ export function getRecipientValidationErrorMessage(
 		return 'กรุณาเลือกผู้รับก่อนทำรายการ';
 	}
 	if (isReturnable && recipient.recipientType === 'outside') {
-		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ยืม (ผู้ประสบภัย จิตอาสา หรือเจ้าหน้าที่) ไม่สามารถแจกให้บุคคลภายนอกได้";
+		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ยืม (ผู้พักพิง จิตอาสา หรือเจ้าหน้าที่) ไม่สามารถแจกให้บุคคลภายนอกได้";
 	}
 	if (isReturnable && !recipient.recipientId) {
 		return "สิ่งของประเภท 'ต้องคืน' จำเป็นต้องมีรหัสผู้รับที่ระบุตัวตนได้";

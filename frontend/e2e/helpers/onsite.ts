@@ -12,7 +12,7 @@ import { pinActiveShelter } from './staff-ui';
 export const INTAKE_SEARCH_LABEL = 'เลขบัตรประชาชน / หนังสือเดินทาง / ชื่อ-นามสกุล / เบอร์โทร';
 
 export const STAY_STATUS = {
-	arriving: 'รอเข้าพัก',
+	arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 	active: 'เข้าพักแล้ว',
 	roomConfirmed: 'ยืนยันถึงโซนแล้ว',
 	checkedOut: 'เช็คเอาต์'
@@ -47,7 +47,7 @@ export async function openAsShelterStaff(
 
 export async function openStation1(page: Page): Promise<Locator> {
 	await page.goto('/onsite/people');
-	await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+	await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 		timeout: 20_000
 	});
 	return page.getByLabel(INTAKE_SEARCH_LABEL);
@@ -304,7 +304,9 @@ export async function screenEvacuee(
 	fill: ScreeningFill
 ): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
-	await expect(page.getByText('สถานี 2', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดคัดกรองสุขภาพ', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
 	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
@@ -318,7 +320,9 @@ export async function screenEvacuee(
 
 export async function assignZone(page: Page, evacueeId: string, zoneName: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await page.locator('div.grid button', { hasText: zoneName }).first().click();
 	await page.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
@@ -326,7 +330,9 @@ export async function assignZone(page: Page, evacueeId: string, zoneName: string
 
 export async function confirmArrivalInZone(page: Page, evacueeId: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await page.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 }

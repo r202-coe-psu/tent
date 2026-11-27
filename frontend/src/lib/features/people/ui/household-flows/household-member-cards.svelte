@@ -25,7 +25,7 @@
 				</p>
 				{#if m.isHead}
 					<span class="shrink-0 rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-						หัวหน้าครอบครัว
+						ผู้ติดต่อหลัก
 					</span>
 				{:else}
 					<span

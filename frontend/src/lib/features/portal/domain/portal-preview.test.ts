@@ -84,7 +84,7 @@ describe('previewing pr_staff', () => {
 			preview: previewOf('pr_staff')
 		});
 		const views = filterPortalMenu({ roles, shelterCode: SH, features });
-		expect(views.map((v) => v.id)).toEqual(['pr']);
+		expect(views.map((v) => v.id)).toEqual(['pr', 'dailysop']);
 		expect(views[0].items.map((i) => i.item.id)).toEqual(['kiosk-banners']);
 	});
 
@@ -104,7 +104,7 @@ describe('previewing donation_staff (CR-227)', () => {
 			preview: previewOf('donation_staff')
 		});
 		const views = filterPortalMenu({ roles, shelterCode: SH, features });
-		expect(views.map((v) => v.id)).toEqual(['supply']);
+		expect(views.map((v) => v.id)).toEqual(['supply', 'dailysop']);
 		expect(views[0].items.map((i) => i.item.id)).toEqual(['warehouse', 'stock-donations']);
 		expect(portalPreviewRoleLabel('donation_staff')).toBe('รับบริจาค');
 	});
@@ -212,7 +212,7 @@ describe('previewed roles drive the portal menu', () => {
 			preview: previewOf('registration_staff')
 		});
 		const views = menuFor(resolved.roles, resolved.features);
-		expect(views.map((v) => v.id)).toEqual(['registration']);
+		expect(views.map((v) => v.id)).toEqual(['registration', 'dailysop']);
 		expect(portalLayoutMode(views)).toBe('focused');
 	});
 

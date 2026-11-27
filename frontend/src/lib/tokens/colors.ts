@@ -163,7 +163,7 @@ export function domainVar(
  *
  * The three registration stations share the `registration` department, so the portal tiles still
  * inherit the department colour. These tokens are for the station PAGES only: staff and evacuees
- * have to tell สถานี 1/2/3 apart across a crowded hall, which an icon and a number cannot do at
+ * have to tell stations 1/2/3 apart across a crowded hall, which an icon and a number cannot do at
  * that distance. Each station gets a dark header band (`strong`) over a very light canvas tint
  * (`subtle`); card surfaces stay `#FFFFFF`.
  *
@@ -174,7 +174,7 @@ export function domainVar(
  */
 export const baseStation = {
 	1: {
-		name: 'ลงทะเบียน',
+		name: 'จุดลงทะเบียน',
 		base: '#124481',
 		strong: '#124481',
 		subtle: '#E4F0FF',
@@ -182,7 +182,7 @@ export const baseStation = {
 		text: '#0B2647'
 	},
 	2: {
-		name: 'คัดกรองผู้เข้าพัก',
+		name: 'จุดคัดกรองสุขภาพ',
 		base: '#0D9488',
 		strong: '#0F766E',
 		subtle: '#F0FDFA',
@@ -190,7 +190,7 @@ export const baseStation = {
 		text: '#134E4A'
 	},
 	3: {
-		name: 'จัดสรรที่พัก',
+		name: 'จุดจัดโซน',
 		base: '#7C3AED',
 		strong: '#6D28D9',
 		subtle: '#F5F3FF',

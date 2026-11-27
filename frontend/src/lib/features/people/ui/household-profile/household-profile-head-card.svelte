@@ -23,7 +23,7 @@
 	<div class="flex items-center justify-between border-b border-border pb-3">
 		<h3 class="flex items-center gap-2 text-base font-black text-slate-800 dark:text-slate-200">
 			<User class="size-5 text-primary" />
-			หัวหน้าครัวเรือน (Head of Household)
+			ผู้ติดต่อหลัก (Head of Household)
 		</h3>
 		<Button variant="outline" size="sm" onclick={onOpenHeadModal}>
 			<Pencil class="mr-1.5 size-3.5" /> เปลี่ยนหัวหน้า
@@ -62,6 +62,6 @@
 			</div>
 		</div>
 	{:else}
-		<p class="py-4 text-center text-sm text-muted-foreground italic">ไม่มีหัวหน้าครัวเรือนหลัก</p>
+		<p class="py-4 text-center text-sm text-muted-foreground italic">ไม่มีผู้ติดต่อหลักหลัก</p>
 	{/if}
 </div>

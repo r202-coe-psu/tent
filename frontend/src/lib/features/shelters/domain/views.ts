@@ -38,6 +38,34 @@ export const SHELTER_DASHBOARD_VIEWS = {
 			}`,
 			reduce: '_count'
 		},
+		// #1502 (view manifest v9): age x country cross-tab for the system overview, so the BFF no
+		// longer pulls every evacuee through _find. Key = [country, birth_year|null].
+		demographics_by_country_age: {
+			map: `function (doc) {
+				if (doc.type !== 'evacuee' || !doc.current_stay) return;
+				var s = doc.current_stay.status;
+				if (s !== 'active' && s !== 'room_confirmed') return;
+				var c = (doc.country || '').trim().toUpperCase() || 'UNKNOWN';
+				emit([c, doc.birth_year || null], 1);
+			}`,
+			reduce: '_count'
+		},
+		// #1502 (view manifest v9): pre-registered evacuees ordered by registration time, so the
+		// system overview pages them at the DB (descending + limit/skip) instead of slicing in Node.
+		// Same membership rule as the overview's pre-registration list.
+		prereg_by_created: {
+			map: `function (doc) {
+				if (doc.type !== 'evacuee') return;
+				var stay = doc.current_stay || {};
+				var via = doc.registered_via;
+				if (
+					stay.status !== 'pre_registered' &&
+					via !== 'web' && via !== 'kiosk' && via !== 'backoffice' && via !== 'import'
+				) return;
+				emit(doc.created_at || stay.since || '', 1);
+			}`,
+			reduce: '_count'
+		},
 		registrations_by_date_status: {
 			map: `function (doc) {
 				// preregister: evacuees registered in advance (web / kiosk / api), counted on the day

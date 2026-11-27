@@ -82,7 +82,7 @@ export async function resolveScannedRecipient(
 		if (!options.allowStaff) {
 			return {
 				kind: 'error',
-				message: 'QR เจ้าหน้าที่ใช้กับรายการนี้ไม่ได้ กรุณาสแกนบัตรผู้ประสบภัย'
+				message: 'QR เจ้าหน้าที่ใช้กับรายการนี้ไม่ได้ กรุณาสแกนบัตรผู้พักพิง'
 			};
 		}
 		if (!parseStaffCardPayload(code)) {
@@ -112,7 +112,7 @@ export async function resolveScannedRecipient(
 	}
 	if (parseVolunteerScanCode(code)) {
 		if (!options.allowVolunteer) {
-			return { kind: 'error', message: 'QR จิตอาสาใช้กับรายการนี้ไม่ได้ กรุณาสแกนบัตรผู้ประสบภัย' };
+			return { kind: 'error', message: 'QR จิตอาสาใช้กับรายการนี้ไม่ได้ กรุณาสแกนบัตรผู้พักพิง' };
 		}
 		const volunteer = await deps.lookupVolunteer(code);
 		if (!volunteer) {
@@ -157,7 +157,7 @@ export async function resolveScannedRecipient(
 	if (!evacuee) {
 		return {
 			kind: 'error',
-			message: `ไม่พบผู้ประสบภัยจากรหัส "${code}" ลองสแกนใหม่หรือค้นหาด้วยชื่อ`
+			message: `ไม่พบผู้พักพิงจากรหัส "${code}" ลองสแกนใหม่หรือค้นหาด้วยชื่อ`
 		};
 	}
 	return qrOverride ? { kind: 'evacuee', evacuee, qrOverride } : { kind: 'evacuee', evacuee };

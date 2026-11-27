@@ -1,0 +1,8 @@
+import { requireManager } from '$lib/guards/auth';
+import type { LayoutLoad } from './$types';
+
+// Centre dashboards: system_admin + shelter_manager of the selected shelter — same predicate
+// as the "ภาพรวมศูนย์" nav button (canAccessManagerPages).
+export const load = (async ({ fetch }) => {
+	await requireManager(fetch);
+}) satisfies LayoutLoad;

@@ -25,7 +25,7 @@ export interface ShelterForm {
 export async function createShelterViaUi(page: Page, shelter: ShelterForm): Promise<string> {
 	await page.goto('/system-management/shelters/create');
 	await page.getByRole('textbox', { name: 'ชื่อศูนย์พักพิง *' }).fill(shelter.name);
-	await page.getByRole('button', { name: 'ชนิดสถานที่ *' }).click();
+	await page.getByRole('button', { name: 'ประเภทศูนย์ *' }).click();
 	// Labels come from the seeded master_data:site_kind (CR-198).
 	await page
 		.getByRole('option', {
@@ -34,7 +34,7 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 		})
 		.click();
 	await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();
-	await page.getByRole('option', { name: 'เปิดรับผู้อพยพ (Active)' }).click();
+	await page.getByRole('option', { name: 'เปิดรับผู้พักพิง (Active)' }).click();
 	await page.getByRole('spinbutton', { name: 'ละติจูด (Latitude)' }).fill(String(shelter.lat));
 	await page.getByRole('spinbutton', { name: 'ลองจิจูด (Longitude)' }).fill(String(shelter.lng));
 	await page.getByRole('button', { name: 'เลือกจังหวัด...' }).click();
