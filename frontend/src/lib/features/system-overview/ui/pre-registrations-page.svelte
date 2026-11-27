@@ -94,21 +94,6 @@
 
 	<div class={spatial.container.staffPageCard}>
 		<div
-			class="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 p-4 sm:p-6"
-		>
-			<div>
-				<h2 class="text-lg font-bold text-slate-900">รายการทั้งหมด</h2>
-				<p class="text-sm text-slate-500">
-					{#if listQuery.isPending && items.length === 0}
-						กำลังโหลด...
-					{:else}
-						แสดง {pageStart.toLocaleString('th-TH')}–{pageEnd.toLocaleString('th-TH')} จาก
-						{total.toLocaleString('th-TH')}
-					{/if}
-				</p>
-			</div>
-		</div>
-		<div
 			class="p-4 transition-opacity sm:p-6 {listQuery.isPlaceholderData ? 'opacity-60' : ''}"
 			aria-busy={listQuery.isPlaceholderData}
 		>
