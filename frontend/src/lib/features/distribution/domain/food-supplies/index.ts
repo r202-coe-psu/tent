@@ -55,6 +55,12 @@ export {
 
 export {
 	evaluateHouseholdMealPickup,
+	householdMealPickupBlocks,
+	isAwaitingAdmissionStayStatus,
+	isMealPickupStayStatus,
+	mealPickupBlockReason,
+	MEAL_PICKUP_STAY_STATUSES,
+	type HouseholdMealPickupBlock,
 	type HouseholdPickupMember,
 	type HouseholdPickupLog,
 	type HouseholdMemberMealStatus
