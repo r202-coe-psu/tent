@@ -141,7 +141,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			// The /portal onsite desks, mirrored here and named as on /portal and in CONTEXT.md, for SA/SM
 			// only (#1517): other roles keep reaching them from /portal.
 			{
-				label: 'สถานีหน้างาน',
+				label: 'รับผู้พักพิงเข้าศูนย์',
 				href: null,
 				icon: House,
 				children: [
