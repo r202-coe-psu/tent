@@ -149,6 +149,9 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'สแกนเข้า-ออกศูนย์'
 	];
 	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีจิตอาสา'];
+	/** Onsite desks from /portal, shown exactly when their page guard lets the user in (#1517). */
+	const distributionDesk = 'จุดแจกจ่ายพัสดุและอาหาร';
+	const volunteerCheckIn = 'เช็คอินอาสาสมัคร';
 	const referrals = 'การส่งต่อผู้เข้าพัก';
 	/** Draft CR M5 D17: OneData shortcuts. M5 = referral audience; M6 = SA, SM, warehouse_staff (not supply_coordinator). */
 	const oneDataM5 = 'OneData ระบบส่งต่อผู้ป่วย (M5)';
@@ -172,7 +175,9 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	const managerLabels = [
 		registry,
 		...registrationDesks,
+		distributionDesk,
 		...volunteers,
+		volunteerCheckIn,
 		referrals,
 		...warehouse,
 		kitchenTickets,
@@ -197,8 +202,8 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	const withScannersAndIncidents = withIncidents(withScanners);
 	const sh = (cap: string) => ['shelter:SH001', `SH001:${cap}`];
 
-	it('distribution_staff sees none of warehouse / kitchen / users / referrals / shelters (#842)', () => {
-		expect(visibleLeafLabels(ctx(sh('distribution_staff')))).toEqual(labelsFor());
+	it('distribution_staff sees only the distribution desk, none of warehouse / kitchen / users / referrals / shelters (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('distribution_staff')))).toEqual(labelsFor(distributionDesk));
 	});
 
 	it('donation_staff sees the stock and donation menus only, not distribution or kitchen requisitions (CR-227)', () => {
@@ -237,17 +242,20 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const children = group && isGroup(group) ? group.children : [];
 		expect(children.map((c) => [c.label, String(c.href)])).toEqual([
 			['งานและรายชื่ออาสาสมัคร', '/back-office/volunteers'],
-			['บัญชีจิตอาสา', '/back-office/volunteers/accounts']
+			['บัญชีจิตอาสา', '/back-office/volunteers/accounts'],
+			['เช็คอินอาสาสมัคร', '/onsite/volunteer-check-in']
 		]);
 	});
 
-	it('volunteer_coordinator sees volunteers only (#842)', () => {
-		expect(visibleLeafLabels(ctx(sh('volunteer_coordinator')))).toEqual(labelsFor(volunteers));
+	it('volunteer_coordinator sees volunteers and volunteer check-in only (#842)', () => {
+		expect(visibleLeafLabels(ctx(sh('volunteer_coordinator')))).toEqual(
+			labelsFor(volunteers, volunteerCheckIn)
+		);
 	});
 
-	it('registration_staff sees the evacuee registry and the registration desks only (#842)', () => {
+	it('registration_staff sees the evacuee registry, the registration desks and volunteer check-in only (#842)', () => {
 		expect(visibleLeafLabels(ctx(sh('registration_staff')))).toEqual(
-			labelsFor(registry, registrationDesks)
+			labelsFor(registry, registrationDesks, volunteerCheckIn)
 		);
 	});
 
@@ -268,7 +276,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 				.filter((g) => g.items.some((n) => canSeeNavNode(n, c)))
 				.map((g) => g.title);
 		expect(visibleGroups(ctx(sh('kiosk_staff')))).toEqual(['5. ตั้งค่าระบบ']);
-		expect(visibleGroups(ctx(sh('distribution_staff')))).not.toContain('1. ทะเบียนและกำลังพล');
+		expect(visibleGroups(ctx(sh('donation_staff')))).not.toContain('1. ทะเบียนและกำลังพล');
 	});
 
 	it('system_admin sees every leaf', () => {
@@ -283,7 +291,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	it('registration_staff does not see the kiosk device management', () => {
 		const roles = ['shelter:SH001', 'SH001:registration_staff'];
 		const labels = visibleLeafLabels(ctx(roles, 'SH001'));
-		expect(labels).toEqual(labelsFor(registry, registrationDesks));
+		expect(labels).toEqual(labelsFor(registry, registrationDesks, volunteerCheckIn));
 		expect(labels).not.toContain(scannerDevices);
 		expect(labels).not.toContain(bannerManagement);
 		expect(labels).not.toContain('จัดการ Kiosk');
@@ -336,7 +344,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(
-			labelsFor(registry, registrationDesks, scannerDevices, bannerManagement)
+			labelsFor(registry, registrationDesks, volunteerCheckIn, scannerDevices, bannerManagement)
 		);
 	});
 

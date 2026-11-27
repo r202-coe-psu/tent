@@ -8,6 +8,7 @@ import {
 	isShelterManager,
 	isSystemAdmin,
 	canAccessDonations,
+	canAccessDistributionDesk,
 	canAccessEvacueeRegistration,
 	canAccessMedicalScreening,
 	canAccessZoning,
@@ -16,6 +17,7 @@ import {
 	canAccessManagerPages,
 	canAccessTickets,
 	canAccessVolunteerBackoffice,
+	canAccessVolunteerCheckIn,
 	canAccessWarehouse,
 	canManagePrinters,
 	canViewSupply,
@@ -52,6 +54,8 @@ import House from '@lucide/svelte/icons/house';
 import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 import Search from '@lucide/svelte/icons/search';
 import ScanLine from '@lucide/svelte/icons/scan-line';
+import Truck from '@lucide/svelte/icons/truck';
+import UserCheck from '@lucide/svelte/icons/user-check';
 
 type Leaf = {
 	label: string;
@@ -137,6 +141,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/onsite/zoning'),
 						icon: MapPin,
 						visibleTo: ({ roles, shelterCode }) => canAccessZoning(roles, shelterCode)
+					},
+					{
+						label: 'จุดแจกจ่ายพัสดุและอาหาร',
+						href: resolve('/onsite/distribution'),
+						icon: Truck,
+						visibleTo: ({ roles, shelterCode }) => canAccessDistributionDesk(roles, shelterCode)
 					}
 				]
 			},
@@ -176,6 +186,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/volunteers/accounts'),
 						icon: KeyRound,
 						visibleTo: ({ roles, shelterCode }) => canAccessVolunteerBackoffice(roles, shelterCode)
+					},
+					{
+						label: 'เช็คอินอาสาสมัคร',
+						href: resolve('/onsite/volunteer-check-in'),
+						icon: UserCheck,
+						visibleTo: ({ roles, shelterCode }) => canAccessVolunteerCheckIn(roles, shelterCode)
 					}
 				]
 			},

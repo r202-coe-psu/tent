@@ -37,6 +37,7 @@ import {
 	requireCentralWarehouseAccess,
 	requireEvacueeRegistration,
 	requireBannerManagement,
+	requireDistributionDesk,
 	requireDonationAccess,
 	requireIncidents,
 	requireKioskManagement,
@@ -48,6 +49,7 @@ import {
 	requireSupplyView,
 	requireTicketAccess,
 	requireVolunteerBackoffice,
+	requireVolunteerCheckIn,
 	requireWarehouseAccess,
 	requireZoning
 } from '$lib/guards/auth';
@@ -90,7 +92,9 @@ const GUARD_OF: Record<string, Guard> = {
 	'/onsite/medical-screening': requireMedicalScreening,
 	'/onsite/zoning': requireZoning,
 	'/onsite/search-edit': requireEvacueeRegistration,
-	'/onsite/scan-check-in-out': requireEvacueeRegistration
+	'/onsite/scan-check-in-out': requireEvacueeRegistration,
+	'/onsite/distribution': requireDistributionDesk,
+	'/onsite/volunteer-check-in': requireVolunteerCheckIn
 };
 
 /** No page guard yet (R2, #845). */
