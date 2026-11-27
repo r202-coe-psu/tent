@@ -550,16 +550,17 @@
 			</div>
 
 			<!-- Step 5: Notes -->
-			<div class="space-y-1.5">
-				<label for="ticket-notes" class="text-sm font-semibold text-slate-700">
-					หมายเหตุเพิ่มเติม (ถ้ามี)
+			<div class="space-y-2">
+				<label for="ticket-notes" class="block text-sm font-semibold text-slate-700">
+					หมายเหตุเพิ่มเติม
+					<span class="ml-1 text-xs font-normal text-slate-500">(ถ้ามี)</span>
 				</label>
 				<Textarea
 					id="ticket-notes"
 					bind:value={notes}
-					rows={2}
+					rows={3}
 					placeholder="เช่น เบิกด่วนสำหรับผู้พักพิงกลุ่มเปราะบาง, ส่งมอบภายใน 12:00 น."
-					class="w-full text-sm shadow-2xs placeholder:text-slate-400"
+					class="min-h-20 w-full resize-y rounded-lg bg-white px-3 py-2.5 text-sm leading-relaxed shadow-2xs placeholder:text-slate-400"
 				/>
 			</div>
 		</div>
