@@ -26,6 +26,8 @@
 	};
 
 	const maxValue = $derived(parseDate(today));
+	// Without a custom range there is nothing for the left column, so the preset takes both.
+	const presetSpan = $derived(preset === 'custom' ? '' : 'sm:col-span-2');
 
 	function isPreset(value: string): value is CoverageRangePreset {
 		return (COVERAGE_RANGE_PRESETS as readonly string[]).includes(value);
@@ -38,21 +40,24 @@
 	}
 </script>
 
-<!-- One labelled group: the preset and, for a custom range, the pickers right next to it. -->
+<!-- One labelled group: the preset and, for a custom range, the pickers next to it. Below xl the
+	group spans the header: two equal columns, dates on the left and the preset on the right. -->
 <div
-	class="w-full min-w-0 space-y-1.5 sm:w-auto sm:self-end"
+	class="w-full min-w-0 space-y-1.5 xl:w-auto xl:self-end"
 	role="group"
 	aria-labelledby="meal-coverage-range-label"
 >
 	<span id="meal-coverage-range-label" class="block text-sm font-semibold text-slate-700">
 		ช่วงวันที่
 	</span>
-	<div class="flex flex-wrap items-center gap-2 sm:justify-end">
+	<div
+		class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center xl:justify-end"
+	>
 		<Select.Root type="single" bind:value={() => preset, selectPreset}>
 			<Select.Trigger
 				id="meal-coverage-range-preset"
 				aria-labelledby="meal-coverage-range-label"
-				class="h-11 w-full min-w-0 rounded-lg bg-white px-3 shadow-2xs sm:h-10 sm:w-44 sm:data-[size=default]:h-10"
+				class="h-11 w-full min-w-0 rounded-lg bg-white px-3 shadow-2xs sm:h-10 sm:data-[size=default]:h-10 xl:w-44 {presetSpan}"
 			>
 				<span class="truncate">{PRESET_LABELS[preset]}</span>
 			</Select.Trigger>
@@ -71,7 +76,7 @@
 				to={customRange?.to}
 				{maxValue}
 				onRangeChange={(next) => (customRange = next)}
-				class="h-11 w-full min-w-0 rounded-lg bg-white sm:h-10 sm:w-auto sm:min-w-[16rem]"
+				class="h-11 w-full min-w-0 rounded-lg bg-white sm:order-first sm:h-10 xl:order-none xl:w-auto xl:min-w-[16rem]"
 			/>
 		{/if}
 	</div>
