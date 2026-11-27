@@ -112,18 +112,18 @@
 <form method="POST" use:form.enhance class="mx-auto w-full max-w-3xl space-y-6">
 	<Field.FieldGroup>
 		<div class="space-y-2">
-			<h3 class="text-lg font-bold text-foreground">3. ระบุข้อมูลที่อยู่ครัวเรือน</h3>
+			<h3 class="text-lg font-bold text-foreground">3. ระบุข้อมูลที่อยู่ครอบครัว</h3>
 			<p class="text-sm text-muted-foreground">
-				กรอกข้อมูลที่อยู่หลักตามภูมิลำเนา และข้อมูลโซนหรือชุมชนในศูนย์ของครัวเรือนนี้
+				กรอกข้อมูลที่อยู่หลักตามภูมิลำเนา และข้อมูลโซนหรือชุมชนในศูนย์ของครอบครัวนี้
 			</p>
 		</div>
 
-		<!-- ข้อมูลครัวเรือนเบื้องต้น -->
+		<!-- ข้อมูลครอบครัวเบื้องต้น -->
 		<div class="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
-			<h4 class="text-base font-bold text-slate-800">ข้อมูลครัวเรือนเบื้องต้น</h4>
+			<h4 class="text-base font-bold text-slate-800">ข้อมูลครอบครัวเบื้องต้น</h4>
 			<div class="space-y-4">
 				<div class="space-y-1.5">
-					<Label for="hh-label">ชื่อเรียกครัวเรือน</Label>
+					<Label for="hh-label">ชื่อเรียกครอบครัว</Label>
 					<Input
 						id="hh-label"
 						value={householdLabel}

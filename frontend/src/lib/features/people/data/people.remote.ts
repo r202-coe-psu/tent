@@ -228,9 +228,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const parsedInput = evacueeInputSchema.parse(input);
 		if (parsedInput.household_id) {
 			const targetHousehold = await this.repo.get<Household>(parsedInput.household_id);
-			if (!targetHousehold) throw new Error('ไม่พบครัวเรือนปลายทาง');
+			if (!targetHousehold) throw new Error('ไม่พบครอบครัวปลายทาง');
 			if (!isActiveHouseholdStatus(migrateHouseholdV3ToV4(targetHousehold).status)) {
-				throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
+				throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครอบครัวที่ยกเลิกหรือเช็คเอาต์แล้ว');
 			}
 		}
 
@@ -372,7 +372,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	async updateEvacuee(evacuee: Evacuee): Promise<Evacuee> {
 		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		if (!latest) throw new Error('ไม่พบข้อมูลผู้พักพิง');
 
 		const oldHouseholdId = latest.household_id;
 		if (oldHouseholdId !== evacuee.household_id) {
@@ -410,7 +410,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		ctx: AuthorContext
 	): Promise<Evacuee | null> {
 		const latest = await this.repo.get<Evacuee>(evacueeId);
-		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		if (!latest) throw new Error('ไม่พบข้อมูลผู้พักพิง');
 		const plan = planSearchVisibilityChange(latest, visible, ctx);
 		if (!plan) return null;
 
@@ -431,7 +431,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	async patchEvacuee(id: string, patch: EvacueePatch): Promise<Evacuee> {
 		const latest = await this.repo.get<Evacuee>(id);
-		if (!latest) throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+		if (!latest) throw new Error('ไม่พบข้อมูลผู้พักพิง');
 		const { person_id: personIdPatch, ...rest } = patch;
 		let next: Evacuee = { ...latest, ...rest };
 		if (rest.vulnerable_groups) {
@@ -565,14 +565,14 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		if (plan.mode === 'join') {
 			const targetId = plan.targetHouseholdId;
-			if (!targetId) throw new Error('ไม่พบครัวเรือนปลายทาง');
+			if (!targetId) throw new Error('ไม่พบครอบครัวปลายทาง');
 
 			try {
 				const targetDoc = await this.repo.get<Household>(targetId);
-				if (!targetDoc) throw new Error('ไม่พบครัวเรือนปลายทาง');
+				if (!targetDoc) throw new Error('ไม่พบครอบครัวปลายทาง');
 				const target = migrateHouseholdV3ToV4(targetDoc);
 				if (!isActiveHouseholdStatus(target.status)) {
-					throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครัวเรือนที่ยกเลิกหรือเช็คเอาต์แล้ว');
+					throw new Error('ไม่สามารถเพิ่มสมาชิกเข้าครอบครัวที่ยกเลิกหรือเช็คเอาต์แล้ว');
 				}
 
 				const memberDocs: Evacuee[] = [];
@@ -871,7 +871,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	async updateHousehold(household: Household): Promise<Household> {
 		const latestDoc = await this.repo.get<Household>(household._id);
-		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
+		if (!latestDoc) throw new Error('ไม่พบข้อมูลครอบครัว');
 		const latest = migrateHouseholdV3ToV4(latestDoc);
 		const members = await this.listHouseholdMembers(household._id);
 		const derived = deriveHouseholdStatus(members.map((m) => m.current_stay.status));
@@ -884,7 +884,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	async patchHousehold(id: string, patch: HouseholdPatch): Promise<Household> {
 		const latestDoc = await this.repo.get<Household>(id);
-		if (!latestDoc) throw new Error('ไม่พบข้อมูลครัวเรือน');
+		if (!latestDoc) throw new Error('ไม่พบข้อมูลครอบครัว');
 		const latest = migrateHouseholdV3ToV4(latestDoc);
 		const members = await this.listHouseholdMembers(id);
 		const derived = deriveHouseholdStatus(members.map((m) => m.current_stay.status));
@@ -973,7 +973,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (input.checkIn && input.zone) {
 			const targetEvacuee = await this.getEvacuee(input.screening.evacuee_id);
 			if (!targetEvacuee) {
-				throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+				throw new Error('ไม่พบข้อมูลผู้พักพิง');
 			}
 			evacuee = await this.checkInEvacuee(targetEvacuee, ctx, input.zone, stationLog);
 		}
@@ -1158,7 +1158,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	private async fetchLatestOrThrow(evacueeId: string): Promise<Evacuee> {
 		const latest = await this.repo.get<Evacuee>(evacueeId);
 		if (!latest) {
-			throw new Error('ไม่พบข้อมูลผู้ประสบภัย (อาจถูกลบไปแล้ว)');
+			throw new Error('ไม่พบข้อมูลผู้พักพิง (อาจถูกลบไปแล้ว)');
 		}
 		return latest;
 	}
@@ -1357,10 +1357,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async cancelPreRegistration(householdId: string, ctx: AuthorContext): Promise<void> {
 		const household = await this.getHousehold(householdId);
 		if (!household) {
-			throw new Error('ไม่พบข้อมูลครัวเรือน');
+			throw new Error('ไม่พบข้อมูลครอบครัว');
 		}
 		if (household.status !== 'pre_registered') {
-			throw new Error('สามารถยกเลิกได้เฉพาะครัวเรือนที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
+			throw new Error('สามารถยกเลิกได้เฉพาะครอบครัวที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
 		}
 		assertHouseholdStatusTransition(household.status, 'cancelled');
 
@@ -1394,7 +1394,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				action: 'other',
 				target_type: 'household',
 				target_id: householdId,
-				reason: 'ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า',
+				reason: 'ยกเลิกการลงทะเบียนครอบครัวล่วงหน้า',
 				context: {
 					previous_status: household.status,
 					next_status: 'cancelled',
@@ -1410,7 +1410,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async cancelEvacueePreRegistration(evacueeId: string, ctx: AuthorContext): Promise<void> {
 		const evacuee = await this.getEvacuee(evacueeId);
 		if (!evacuee) {
-			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+			throw new Error('ไม่พบข้อมูลผู้พักพิง');
 		}
 		if (!canCancelEvacueePreRegistration(evacuee)) {
 			throw new Error('สามารถยกเลิกได้เฉพาะผู้ที่อยู่ในสถานะลงทะเบียนล่วงหน้าเท่านั้น');
@@ -1470,7 +1470,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				action: 'other',
 				target_type: 'household',
 				target_id: household._id,
-				reason: 'ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า — ไม่มีสมาชิกค้าง pre_registered',
+				reason: 'ยกเลิกการลงทะเบียนครอบครัวล่วงหน้า — ไม่มีสมาชิกค้าง pre_registered',
 				context: {
 					previous_status: 'pre_registered',
 					next_status: 'cancelled',
@@ -1489,7 +1489,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async promoteReportIn(evacueeId: string): Promise<Evacuee> {
 		const latest = await this.repo.get<Evacuee>(evacueeId);
 		if (!latest || !isEvacuee(latest)) {
-			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
+			throw new Error('ไม่พบข้อมูลผู้พักพิง');
 		}
 		if (
 			latest.current_stay.status !== 'pre_registered' &&
@@ -1531,7 +1531,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const nextUlid = () => ids?.next() ?? ulid();
 		const requestedHouseholdId = householdId?.trim() ?? '';
 		if (!requestedHouseholdId && !createHousehold) {
-			throw new Error('กรุณาเลือกครัวเรือนเดิมหรือยืนยันสร้างครัวเรือนใหม่');
+			throw new Error('กรุณาเลือกครอบครัวเดิมหรือยืนยันสร้างครอบครัวใหม่');
 		}
 
 		// Reserve the create-path household id before any write. A retry after CouchDB
@@ -1541,7 +1541,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			requestedHouseholdId || makeDocId('household', reservedHouseholdUlid as string);
 		const existingHousehold = await this.getHousehold(targetHouseholdId);
 		if (requestedHouseholdId && !existingHousehold) {
-			throw new Error('ไม่พบครัวเรือนปลายทาง');
+			throw new Error('ไม่พบครอบครัวปลายทาง');
 		}
 		let savedHousehold: Household;
 
@@ -1573,7 +1573,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		if (!existingHousehold) {
 			const headName = formatPersonName(
-				(memberInputs[0] as unknown as Evacuee) ?? { first_name: 'ผู้ประสบภัย', last_name: '' }
+				(memberInputs[0] as unknown as Evacuee) ?? { first_name: 'ผู้พักพิง', last_name: '' }
 			);
 			const label = autoHouseholdLabel(headName);
 			const householdUlid = reservedHouseholdUlid as string;
@@ -1647,7 +1647,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			}
 			const existing = await this.repo.get<Evacuee>(m._id);
 			if (!existing || !isEvacuee(existing)) {
-				throw new Error(`ไม่พบข้อมูลผู้ประสบภัยรหัส ${m._id}`);
+				throw new Error(`ไม่พบข้อมูลผู้พักพิงรหัส ${m._id}`);
 			}
 			existingEvacuees.push(existing);
 		}
@@ -1818,14 +1818,14 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	}> {
 		void ctx;
 		if (sourceHouseholdId === targetHouseholdId) {
-			throw new Error('ไม่สามารถรวมครัวเรือนเข้ากับตัวเองได้');
+			throw new Error('ไม่สามารถรวมครอบครัวเข้ากับตัวเองได้');
 		}
 		const sourceHh = await this.getHousehold(sourceHouseholdId);
-		if (!sourceHh) throw new Error('ไม่พบครัวเรือนต้นทาง');
+		if (!sourceHh) throw new Error('ไม่พบครอบครัวต้นทาง');
 		const targetHh = await this.getHousehold(targetHouseholdId);
-		if (!targetHh) throw new Error('ไม่พบครัวเรือนปลายทาง');
+		if (!targetHh) throw new Error('ไม่พบครอบครัวปลายทาง');
 		if (sourceHh.status === 'merged') {
-			throw new Error('ครัวเรือนต้นทางถูกรวมเข้ากับครัวเรือนอื่นแล้ว');
+			throw new Error('ครอบครัวต้นทางถูกรวมเข้ากับครอบครัวอื่นแล้ว');
 		}
 
 		// 1. Get all members of source household
@@ -1860,7 +1860,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				merged_to_household_id: targetHouseholdId,
 				notes: [
 					latestSource.notes,
-					`รวมเข้ากับครัวเรือน ${targetHouseholdId} (${latestTarget.label})`
+					`รวมเข้ากับครอบครัว ${targetHouseholdId} (${latestTarget.label})`
 				]
 					.filter(Boolean)
 					.join('\n')

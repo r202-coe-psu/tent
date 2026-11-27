@@ -135,7 +135,6 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'การประเมินประจำวัน',
 		'รายงานความโปร่งใส',
 		'รายงานสรุปหลังเหตุการณ์',
-		'พารามิเตอร์',
 		'โลจิสติกส์ & GIS'
 	];
 	const registry = 'จัดการผู้เข้าพัก';
@@ -144,7 +143,8 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	/** Draft CR M5 D17: OneData shortcuts. M5 = referral audience; M6 = SA, SM, warehouse_staff (not supply_coordinator). */
 	const oneDataM5 = 'OneData ระบบส่งต่อผู้ป่วย (M5)';
 	const oneDataM6 = 'OneData ระบบบริหารทรัพยากร (M6)';
-	const warehouse = ['คลัง', 'บริจาค', 'จัดการเบิกจ่ายพัสดุและอาหาร', 'คลังสินค้า'];
+	/** `พารามิเตอร์` (#845) opens for the same set as the warehouse pages: SA, SM, warehouse_staff, supply_coordinator. */
+	const warehouse = ['คลัง', 'บริจาค', 'จัดการเบิกจ่ายพัสดุและอาหาร', 'คลังสินค้า', 'พารามิเตอร์'];
 	const kitchenTickets = 'เบิกวัตถุดิบครัว';
 	const kitchen = 'ครัวกลางและอาหาร';
 	const managerOnly = [

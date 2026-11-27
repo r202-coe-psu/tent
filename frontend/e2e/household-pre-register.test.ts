@@ -245,11 +245,11 @@ async function openWizardAs(page: Page, user: TestUser): Promise<void> {
 	await injectSession(page, user, sessions[user.name]);
 	await page.goto('/back-office/households/pre-register');
 	await waitForAppSettled(page);
-	await expect(page.getByRole('heading', { name: 'ข้อมูลหัวหน้าครัวเรือน' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'ข้อมูลผู้ติดต่อหลัก' })).toBeVisible();
 }
 
 const nextToAddress = (page: Page) =>
-	page.getByRole('button', { name: 'ถัดไป (ข้อมูลที่อยู่ครัวเรือน) →' });
+	page.getByRole('button', { name: 'ถัดไป (ข้อมูลที่อยู่ครอบครัว) →' });
 const nextToAssets = (page: Page) =>
 	page.getByRole('button', { name: 'ถัดไป (ทรัพย์สินและสัตว์เลี้ยง) →' });
 const nextToZone = (page: Page) => page.getByRole('button', { name: 'ถัดไป (จัดสรรพื้นที่)' });
@@ -287,7 +287,7 @@ async function pickFromSearchSelect(page: Page, placeholder: string, value: stri
 }
 
 async function fillAddress(page: Page, address: AddressInput): Promise<void> {
-	await expect(page.getByRole('heading', { name: 'ข้อมูลครัวเรือนเบื้องต้น' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'ข้อมูลครอบครัวเบื้องต้น' })).toBeVisible();
 	await page.getByRole('textbox', { name: 'เขตการปกครอง *' }).fill(address.zone);
 	await page.getByRole('textbox', { name: 'ชุมชน *' }).fill(address.community);
 	await page.getByRole('textbox', { name: 'บ้านเลขที่ *' }).fill(address.addressNo);
@@ -308,7 +308,7 @@ async function goToAssetsStep(page: Page, head: HeadInput, address: AddressInput
 }
 
 async function expectSummary(page: Page, memberCount: number) {
-	await expect(page.getByRole('heading', { name: 'สร้างครัวเรือนล่วงหน้าสำเร็จ' })).toBeVisible({
+	await expect(page.getByRole('heading', { name: 'สร้างครอบครัวล่วงหน้าสำเร็จ' })).toBeVisible({
 		timeout: 20_000
 	});
 	await expect(
@@ -364,20 +364,20 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await expect(nextToAddress(page)).toBeFocused();
 		await page.keyboard.press('Enter');
 		await expect(page.getByText('เลขประจำตัวประชาชนต้องมี 13 หลัก').first()).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'ข้อมูลหัวหน้าครัวเรือน' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ข้อมูลผู้ติดต่อหลัก' })).toBeVisible();
 
 		// National ID shorter than 13 digits.
 		await fillHead(page, { ...HEAD_P3, nationalId: '123456' });
 		await nextToAddress(page).click();
 		await expect(page.getByText('เลขประจำตัวประชาชนต้องมี 13 หลัก').first()).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'ข้อมูลหัวหน้าครัวเรือน' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ข้อมูลผู้ติดต่อหลัก' })).toBeVisible();
 
 		// Phone shorter than 10 digits.
 		await page.getByRole('textbox', { name: 'เลขประจำตัวประชาชน *' }).fill(HEAD_P3.nationalId);
 		await page.getByRole('textbox', { name: 'เบอร์โทรศัพท์ยืนยันตัวตน *' }).fill('081234');
 		await nextToAddress(page).click();
 		await expect(page.getByText(/กรุณากรอกเบอร์โทรศัพท์ 10 หลัก/).first()).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'ข้อมูลหัวหน้าครัวเรือน' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ข้อมูลผู้ติดต่อหลัก' })).toBeVisible();
 
 		// "ไม่มีเบอร์โทร" disables the phone box and lets step 1 through.
 		const phone = page.getByRole('textbox', { name: 'เบอร์โทรศัพท์ยืนยันตัวตน *' });
@@ -386,12 +386,12 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await nextToAddress(page).click();
 
 		// Step 2 with nothing filled in stays on step 2 with field errors.
-		await expect(page.getByRole('heading', { name: 'ข้อมูลครัวเรือนเบื้องต้น' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ข้อมูลครอบครัวเบื้องต้น' })).toBeVisible();
 		await nextToAssets(page).click();
 		await expect(page.getByText('กรุณาระบุเขตการปกครอง')).toBeVisible();
 		await expect(page.getByText('กรุณาระบุชุมชน')).toBeVisible();
 		await expect(page.getByText('กรุณาเลือกจังหวัด')).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'ข้อมูลครัวเรือนเบื้องต้น' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ข้อมูลครอบครัวเบื้องต้น' })).toBeVisible();
 
 		// Nothing reaches the database until step 4 is confirmed.
 		expect(await findDocs({ created_by: STAFF_A.name })).toHaveLength(0);
@@ -409,7 +409,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await expect(page.getByRole('textbox', { name: 'ชุมชน *' })).toHaveValue(
 			SHARED_ADDRESS.community
 		);
-		await expect(page.getByRole('textbox', { name: 'ชื่อเรียกครัวเรือน' })).toHaveValue(
+		await expect(page.getByRole('textbox', { name: 'ชื่อเรียกครอบครัว' })).toHaveValue(
 			`ครอบครัว${HEAD_P3.firstName} ${HEAD_P3.lastName}`
 		);
 
@@ -453,7 +453,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		const headRow = page
 			.getByRole('row')
 			.filter({ hasText: `${HEAD_P3.firstName} ${HEAD_P3.lastName}` });
-		await expect(headRow).toContainText('หัวหน้าครอบครัว');
+		await expect(headRow).toContainText('ผู้ติดต่อหลัก');
 		await expect(headRow).toContainText(
 			`ID: ${HEAD_P3.nationalId.slice(0, 3)}***${HEAD_P3.nationalId.slice(-3)}`
 		);
@@ -471,7 +471,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await memberForm.getByRole('button', { name: 'เพศ', exact: true }).click();
 		await page.getByRole('option', { name: 'หญิง (Female)' }).click();
 		await memberForm.getByRole('checkbox', { name: 'ไม่มีเบอร์โทร' }).check();
-		await memberForm.getByRole('button', { name: 'เพิ่มสมาชิกเข้าร่วมครัวเรือน' }).click();
+		await memberForm.getByRole('button', { name: 'เพิ่มสมาชิกเข้าร่วมครอบครัว' }).click();
 
 		await expectSummary(page, 2);
 		await expect(
@@ -481,7 +481,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 
 		// QR for the head.
 		await page.getByRole('button', { name: 'ออกและพิมพ์ QR ประจำตัว' }).click();
-		const qrTitle = page.getByRole('heading', { name: 'บัตรประจำตัวผู้ประสบภัย' });
+		const qrTitle = page.getByRole('heading', { name: 'บัตรประจำตัวผู้พักพิง' });
 		await expect(qrTitle).toBeVisible();
 		await expect(
 			page.getByRole('img', { name: `QR Code สำหรับ ${HEAD_P3.firstName} ${HEAD_P3.lastName}` })
@@ -684,7 +684,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await nextToAddress(page).click();
 
 		// Step 2: housing type + landmark, a different subdistrict (→ postal code 90110).
-		await expect(page.getByRole('heading', { name: 'ข้อมูลครัวเรือนเบื้องต้น' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ข้อมูลครอบครัวเบื้องต้น' })).toBeVisible();
 		await page.getByRole('button', { name: 'ประเภทที่อยู่อาศัย' }).click();
 		await page.getByRole('option', { name: 'บ้านตนเอง' }).click();
 		await page.getByRole('textbox', { name: 'จุดสังเกตที่อยู่' }).fill('ปากซอย');
@@ -730,7 +730,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 			.getByRole('textbox', { name: 'เบอร์โทรศัพท์ยืนยันตัวตน *' })
 			.fill(MEMBER_P7.phone);
 		await memberForm.getByRole('button', { name: '🤰 ครรภ์' }).click();
-		await memberForm.getByRole('button', { name: 'เพิ่มสมาชิกเข้าร่วมครัวเรือน' }).click();
+		await memberForm.getByRole('button', { name: 'เพิ่มสมาชิกเข้าร่วมครอบครัว' }).click();
 		await expectSummary(page, 2);
 
 		// QR card → "print" opens the PDF in a new window.
@@ -810,9 +810,7 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		expect(refused(), 'the save actually hit the conflict').toBeGreaterThan(0);
 		// Still on step 4 — the success screen never appears.
 		await expect(page.getByRole('button', { name: 'ยืนยันโซนแนะนำ' })).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'สร้างครัวเรือนล่วงหน้าสำเร็จ' })).toHaveCount(
-			0
-		);
+		await expect(page.getByRole('heading', { name: 'สร้างครอบครัวล่วงหน้าสำเร็จ' })).toHaveCount(0);
 
 		expect(
 			await findDocs({ type: 'evacuee', 'person_id.number': HEAD_CONFLICT.nationalId })
@@ -910,7 +908,7 @@ test.describe(
 					await routeCouchThroughApp(page);
 					await injectSession(page, user, session);
 					await page.goto(WIZARD_PATH);
-					await expect(page.getByRole('heading', { name: 'ข้อมูลหัวหน้าครัวเรือน' })).toBeVisible({
+					await expect(page.getByRole('heading', { name: 'ข้อมูลผู้ติดต่อหลัก' })).toBeVisible({
 						timeout: 20_000
 					});
 					await expect(page).toHaveURL(WIZARD_URL);
@@ -925,9 +923,7 @@ test.describe(
 					await injectSession(page, user, session);
 					await page.goto(WIZARD_PATH);
 					await expect(page).not.toHaveURL(WIZARD_URL, { timeout: 15_000 });
-					await expect(page.getByRole('heading', { name: 'ข้อมูลหัวหน้าครัวเรือน' })).toHaveCount(
-						0
-					);
+					await expect(page.getByRole('heading', { name: 'ข้อมูลผู้ติดต่อหลัก' })).toHaveCount(0);
 					expect(await findDocs({ created_by: user.name })).toHaveLength(0);
 				});
 			});

@@ -33,14 +33,14 @@
 
 <div class="space-y-2">
 	<Label class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-		สมาชิกในครัวเรือน
+		สมาชิกในครอบครัว
 	</Label>
 
 	<SearchSelect
 		items={memberItems}
 		bind:value={memberSearchValue}
 		placeholder="พิมพ์ชื่อเพื่อค้นหา..."
-		emptyText="ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา"
+		emptyText="ไม่พบผู้พักพิงที่ตรงกับการค้นหา"
 		class="h-9 w-full"
 	/>
 
@@ -51,7 +51,7 @@
 				{#if member}
 					{@const hasOther = member.household_id && member.household_id !== initialData?._id}
 					{@const otherLabel =
-						households.find((h) => h._id === member.household_id)?.label ?? 'ครัวเรือนอื่น'}
+						households.find((h) => h._id === member.household_id)?.label ?? 'ครอบครัวอื่น'}
 					<div
 						class="flex items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground"
 					>

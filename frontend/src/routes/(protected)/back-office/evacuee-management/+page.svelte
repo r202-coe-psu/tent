@@ -61,7 +61,7 @@
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 			>
 				<Home class="h-4 w-4" />
-				รายชื่อครัวเรือน
+				รายชื่อครอบครัว
 			</button>
 		</nav>
 	</div>

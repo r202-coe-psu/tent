@@ -309,7 +309,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					{
 						label: 'พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
-						icon: Calculator
+						icon: Calculator,
+						visibleTo: ({ roles, shelterCode }) => canAccessWarehouse(roles, shelterCode)
 					},
 					{ label: 'โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]

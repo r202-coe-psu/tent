@@ -50,7 +50,7 @@ const TEST_USER = {
 };
 
 const QUESTION_TH = `ศูนย์พักพิงเปิดให้บริการตลอด 24 ชั่วโมงหรือไม่? ${MARKER}`;
-const ANSWER_TH = `เปิดรับผู้ประสบภัยตลอด 24 ชั่วโมง ${MARKER}`;
+const ANSWER_TH = `เปิดรับผู้พักพิงตลอด 24 ชั่วโมง ${MARKER}`;
 const QUESTION_EN = `Is the shelter open 24 hours? ${MARKER}`;
 const ANSWER_EN = `Yes, it is open 24/7. ${MARKER}`;
 const UPDATED_QUESTION_TH = `มีเจ้าหน้าที่ประจำการตลอด 24 ชั่วโมงหรือไม่? ${MARKER}`;

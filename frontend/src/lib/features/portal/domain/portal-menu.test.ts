@@ -25,7 +25,9 @@ function menu(
 	features: PortalFeatures = ON,
 	shelterCode: string | null = 'SH001'
 ) {
-	return filterPortalMenu({ roles, shelterCode, features });
+	// The daily assessment is visible to everyone with a role; it has its own describe below, so the
+	// role-gating expectations here look at the other departments only.
+	return filterPortalMenu({ roles, shelterCode, features }).filter((v) => v.id !== 'dailysop');
 }
 const deptIds = (views: PortalDepartmentView[]) => views.map((v) => v.id);
 const itemIds = (view: PortalDepartmentView | undefined) => view?.items.map((i) => i.item.id) ?? [];
@@ -378,6 +380,44 @@ describe('filterPortalMenu — no usable roles', () => {
 	});
 });
 
+describe('daily assessment department (#845)', () => {
+	const daily = (roles: string[]) =>
+		filterPortalMenu({ roles, shelterCode: 'SH001', features: ON }).find(
+			(v) => v.id === 'dailysop'
+		);
+
+	it('is a department of its own, so it shows as a large tab', () => {
+		const department = PORTAL_DEPARTMENTS.find((d) => d.id === 'dailysop')!;
+		expect(department.items.map((i) => i.id)).toEqual(['daily-sop']);
+		expect(department.items[0].href).toBe('/back-office/dailysop');
+	});
+
+	it('shows for every authenticated user with a role, including single-role staff', () => {
+		expect(daily([])).toBeUndefined();
+		expect(daily(['foo'])).toBeDefined();
+		expect(daily(staff('distribution_staff'))).toBeDefined();
+		expect(daily(staff('kitchen_staff'))).toBeDefined();
+		expect(daily(SA)).toBeDefined();
+	});
+
+	it('keeps the role-gated departments exactly as before', () => {
+		const all = filterPortalMenu({
+			roles: staff('kitchen_staff'),
+			shelterCode: 'SH001',
+			features: ON
+		});
+		expect(deptIds(all)).toEqual(['kitchen', 'dailysop']);
+	});
+
+	it('is the last tab for everyone, system admin included', () => {
+		const last = (roles: string[]) =>
+			filterPortalMenu({ roles, shelterCode: 'SH001', features: ON }).at(-1)?.id;
+		expect(last(SA)).toBe('dailysop');
+		expect(last(staff('shelter_manager'))).toBe('dailysop');
+		expect(last(staff('pr_staff'))).toBe('dailysop');
+	});
+});
+
 describe('canSeePortalPublicLink', () => {
 	it('needs at least one role', () => {
 		expect(canSeePortalPublicLink([])).toBe(false);
@@ -390,7 +430,8 @@ describe('portal data integrity', () => {
 	const all = PORTAL_DEPARTMENTS.flatMap((d) => d.items.map((item) => ({ dept: d.id, item })));
 
 	it('lists departments in the fixed order', () => {
-		expect(PORTAL_DEPARTMENTS.map((d) => d.id)).toEqual(ORDER);
+		// The daily assessment tab is last; `ORDER` is the role-gated departments only.
+		expect(PORTAL_DEPARTMENTS.map((d) => d.id)).toEqual([...ORDER, 'dailysop']);
 	});
 
 	it('has unique item ids, each in exactly one department', () => {
@@ -443,6 +484,7 @@ describe('portal department colours', () => {
 			facility: 'facility',
 			management: 'admin',
 			onedata: 'admin',
+			dailysop: 'admin',
 			pr: 'pr',
 			central: 'admin'
 		});

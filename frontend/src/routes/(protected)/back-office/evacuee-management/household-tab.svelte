@@ -47,7 +47,7 @@
 				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
 		},
 		arriving: {
-			label: 'กำลังเดินทาง',
+			label: 'รายงานตัวแล้ว · รอจัดโซน',
 			colorClass:
 				'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
 		},
@@ -147,7 +147,7 @@
 		isSelectingAllMatching = true;
 		try {
 			selectedIds = await listMatchingHouseholdIds(search, searchLabels, filters);
-			toast.success(`เลือกแล้ว ${selectedIds.length} ครัวเรือนตามตัวกรอง`);
+			toast.success(`เลือกแล้ว ${selectedIds.length} ครอบครัวตามตัวกรอง`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เลือกทั้งหมดไม่สำเร็จ');
 		} finally {
@@ -170,16 +170,16 @@
 
 		if (cancellableIds.length === 0) {
 			isBulkCancelling = false;
-			toast.info('ไม่มีครัวเรือนที่ยกเลิกได้ในสิ่งที่เลือก');
+			toast.info('ไม่มีครอบครัวที่ยกเลิกได้ในสิ่งที่เลือก');
 			return;
 		}
 
 		const skipped = selectedIds.length - cancellableIds.length;
 		const skippedNote =
-			skipped > 0 ? `\n(ข้าม ${skipped} ครัวเรือนที่ไม่ใช่สถานะลงทะเบียนล่วงหน้า)` : '';
+			skipped > 0 ? `\n(ข้าม ${skipped} ครอบครัวที่ไม่ใช่สถานะลงทะเบียนล่วงหน้า)` : '';
 		if (
 			!window.confirm(
-				`ยืนยันยกเลิกการลงทะเบียนล่วงหน้าของ ${cancellableIds.length} ครัวเรือนหรือไม่?${skippedNote}`
+				`ยืนยันยกเลิกการลงทะเบียนล่วงหน้าของ ${cancellableIds.length} ครอบครัวหรือไม่?${skippedNote}`
 			)
 		) {
 			isBulkCancelling = false;
@@ -199,8 +199,8 @@
 		}
 		isBulkCancelling = false;
 		clearSelection();
-		if (ok > 0) toast.success(`ยกเลิกการลงทะเบียนล่วงหน้าสำเร็จ ${ok} ครัวเรือน`);
-		if (failed > 0) toast.error(`ยกเลิกไม่สำเร็จ ${failed} ครัวเรือน`);
+		if (ok > 0) toast.success(`ยกเลิกการลงทะเบียนล่วงหน้าสำเร็จ ${ok} ครอบครัว`);
+		if (failed > 0) toast.error(`ยกเลิกไม่สำเร็จ ${failed} ครอบครัว`);
 	}
 </script>
 
@@ -208,11 +208,11 @@
 	<!-- Header -->
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 		<div class="space-y-1">
-			<h2 class="text-lg font-bold tracking-tight text-foreground">ทะเบียนครัวเรือน</h2>
+			<h2 class="text-lg font-bold tracking-tight text-foreground">ทะเบียนครอบครัว</h2>
 			<p class="text-sm text-muted-foreground">
 				จำนวนทั้งหมด
 				<span class="ml-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary"
-					>{total} ครัวเรือน</span
+					>{total} ครอบครัว</span
 				>
 			</p>
 		</div>
@@ -241,7 +241,7 @@
 				onclick={() => goto(resolve('/back-office/households/new'))}
 			>
 				<Plus class="h-3.5 w-3.5" />
-				จัดกลุ่มผู้เข้าพักเป็นครัวเรือน
+				จัดกลุ่มผู้เข้าพักเป็นครอบครัว
 			</Button>
 		</div>
 	</div>
@@ -255,7 +255,7 @@
 				<Input
 					id="household-search"
 					type="text"
-					placeholder="ค้นหาชื่อครัวเรือน, เขต หรือ หัวหน้า..."
+					placeholder="ค้นหาชื่อครอบครัว, เขต หรือ หัวหน้า..."
 					bind:value={search}
 					oninput={resetPageOnFilter}
 					class="h-11 rounded-xl bg-background pl-9 shadow-xs"
@@ -270,7 +270,7 @@
 				<Select.Trigger
 					id="household-status-filter"
 					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs data-[size=default]:h-11"
-					aria-label="สถานะครัวเรือน"
+					aria-label="สถานะครอบครัว"
 				>
 					<span class="truncate">
 						{statusOptions.find((option) => option.value === selectedStatus)?.label ?? 'ทุกสถานะ'}
@@ -291,10 +291,10 @@
 			class="sticky top-[var(--bo-evacuee-selection-top,var(--bo-sticky-top))] z-10 flex flex-col gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur supports-backdrop-filter:bg-card/80 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
 		>
 			<p class="text-sm font-medium text-foreground">
-				เลือกแล้ว <span class="text-primary tabular-nums">{selectedIds.length}</span> ครัวเรือน
+				เลือกแล้ว <span class="text-primary tabular-nums">{selectedIds.length}</span> ครอบครัว
 				{#if canCancel && selectedEligibleCount > 0}
 					<span class="text-muted-foreground">
-						· ยกเลิกได้บนหน้านี้ {selectedEligibleCount} ครัวเรือน</span
+						· ยกเลิกได้บนหน้านี้ {selectedEligibleCount} ครอบครัว</span
 					>
 				{/if}
 			</p>
@@ -340,7 +340,7 @@
 			class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20"
 		>
 			<FolderOpen class="h-10 w-10 text-muted-foreground/30" />
-			<p class="text-sm text-muted-foreground">ไม่พบข้อมูลครัวเรือนในระบบ</p>
+			<p class="text-sm text-muted-foreground">ไม่พบข้อมูลครอบครัวในระบบ</p>
 		</div>
 	{:else}
 		<!-- Mobile card list (< md) -->
@@ -461,8 +461,8 @@
 								aria-label="เลือกทั้งหน้า"
 							/>
 						</Table.Head>
-						<Table.Head class="font-semibold text-foreground">ชื่อครัวเรือน</Table.Head>
-						<Table.Head class="font-semibold text-foreground">หัวหน้าครัวเรือน</Table.Head>
+						<Table.Head class="font-semibold text-foreground">ชื่อครอบครัว</Table.Head>
+						<Table.Head class="font-semibold text-foreground">ผู้ติดต่อหลัก</Table.Head>
 						<Table.Head class="font-semibold text-foreground">สมาชิก</Table.Head>
 						<Table.Head class="font-semibold text-foreground">เขต / ชุมชน</Table.Head>
 						<Table.Head class="font-semibold text-foreground">สัตว์เลี้ยง</Table.Head>

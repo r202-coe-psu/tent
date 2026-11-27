@@ -300,7 +300,7 @@ describe('station_log writes (CR-192)', () => {
 			const a = await repo.createEvacuee(evInput({ first_name: 'A' }), ctx);
 			const b = await repo.createEvacuee(evInput({ first_name: 'B' }), ctx);
 			const household = await repo.createHousehold(
-				{ label: 'ครัวเรือนทดสอบ', head_evacuee_id: a._id, status: 'pre_registered' },
+				{ label: 'ครอบครัวทดสอบ', head_evacuee_id: a._id, status: 'pre_registered' },
 				ctx
 			);
 			await repo.updateEvacuee({ ...a, household_id: household._id });

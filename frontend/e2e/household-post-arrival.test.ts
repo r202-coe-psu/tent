@@ -250,7 +250,7 @@ async function openWizardAs(page: Page, user: TestUser): Promise<void> {
 	await page.goto('/back-office/households/new');
 	await waitForAppSettled(page);
 	await expect(
-		page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
+		page.getByRole('heading', { name: '1. ตรวจสอบและเลือกผู้ติดต่อหลัก' })
 	).toBeVisible();
 }
 
@@ -281,7 +281,7 @@ const familyList = (page: Page) =>
 async function pickHead(page: Page, p: Person): Promise<void> {
 	await search(page, fullName(p));
 	await searchHit(page, p).getByRole('button', { name: 'เลือกเป็นหัวหน้า' }).click();
-	await expect(page.getByText('หัวหน้าครัวเรือนที่เลือก')).toBeVisible();
+	await expect(page.getByText('ผู้ติดต่อหลักที่เลือก')).toBeVisible();
 }
 
 async function addMember(page: Page, p: Person): Promise<void> {
@@ -305,7 +305,7 @@ async function fillGeography(page: Page): Promise<void> {
 
 async function expectSummary(page: Page, memberCount: number) {
 	await expect(
-		page.getByRole('heading', { name: 'จัดกลุ่มครอบครัวและออกรหัสครัวเรือนสำเร็จ!' })
+		page.getByRole('heading', { name: 'จัดกลุ่มครอบครัวและออกรหัสครอบครัวสำเร็จ!' })
 	).toBeVisible({ timeout: 20_000 });
 	await expect(
 		page.getByRole('heading', { name: new RegExp(`\\(${memberCount} คน\\)`) })
@@ -374,7 +374,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 
 		// Pick, change mind, pick again.
 		await searchHit(page, HEAD).getByRole('button', { name: 'เลือกเป็นหัวหน้า' }).click();
-		await expect(page.getByText('หัวหน้าครัวเรือนที่เลือก')).toBeVisible();
+		await expect(page.getByText('ผู้ติดต่อหลักที่เลือก')).toBeVisible();
 		await expect(nextStep(page)).toBeEnabled();
 		await page.getByRole('button', { name: 'เปลี่ยนคน' }).click();
 		await expect(nextStep(page)).toBeDisabled();
@@ -394,7 +394,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 
 		// Step 2: the head is already in the list and can't be removed.
 		await expect(
-			page.getByRole('heading', { name: '2. ค้นหาและเลือกสมาชิกในครัวเรือน' })
+			page.getByRole('heading', { name: '2. ค้นหาและเลือกสมาชิกในครอบครัว' })
 		).toBeVisible();
 		const list = familyList(page);
 		await expect(list).toContainText('(1 คน)');
@@ -416,7 +416,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		await nextStep(page).click();
 
 		// Step 3: empty submit is rejected.
-		await expect(page.getByRole('textbox', { name: 'ชื่อเรียกครัวเรือน' })).toHaveValue(
+		await expect(page.getByRole('textbox', { name: 'ชื่อเรียกครอบครัว' })).toHaveValue(
 			`ครอบครัว${fullName(HEAD)}`
 		);
 		await nextToAssets(page).click();
@@ -641,7 +641,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		expect(refused(), 'the save actually hit the conflict').toBeGreaterThan(0);
 		await expect(page.getByRole('button', { name: 'ยืนยันโซนแนะนำ' })).toBeVisible();
 		await expect(
-			page.getByRole('heading', { name: 'จัดกลุ่มครอบครัวและออกรหัสครัวเรือนสำเร็จ!' })
+			page.getByRole('heading', { name: 'จัดกลุ่มครอบครัวและออกรหัสครอบครัวสำเร็จ!' })
 		).toHaveCount(0);
 
 		expect(await getDoc(CONFLICT.id)).toMatchObject({ household_id: null });
@@ -740,7 +740,7 @@ test.describe(
 					await injectSession(page, user, session);
 					await page.goto(WIZARD_PATH);
 					await expect(
-						page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
+						page.getByRole('heading', { name: '1. ตรวจสอบและเลือกผู้ติดต่อหลัก' })
 					).toBeVisible({
 						timeout: 20_000
 					});
@@ -757,7 +757,7 @@ test.describe(
 					await page.goto(WIZARD_PATH);
 					await expect(page).not.toHaveURL(WIZARD_URL, { timeout: 15_000 });
 					await expect(
-						page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
+						page.getByRole('heading', { name: '1. ตรวจสอบและเลือกผู้ติดต่อหลัก' })
 					).toHaveCount(0);
 					expect(await findDocs({ created_by: user.name })).toHaveLength(0);
 				});
