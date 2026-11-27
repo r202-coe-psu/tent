@@ -184,40 +184,42 @@
 			<div
 				class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
 			>
-				<div
-					class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-4 md:p-4"
-				>
-					<div class="relative col-span-2">
+				<div class="space-y-3 border-b border-slate-200/80 p-3 md:p-4">
+					<div class="relative w-full">
 						<Search
-							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+							class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
 							aria-hidden="true"
 						/>
 						<Input
 							bind:value={search}
 							type="search"
 							placeholder="ค้นหากลุ่มความต้องการ"
-							class="min-h-11 w-full rounded-lg border-slate-300 bg-white pl-9 text-base shadow-2xs md:text-sm"
+							class="h-10 w-full rounded-lg border-input bg-white pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 							aria-label="ค้นหากลุ่มความต้องการ"
 						/>
 					</div>
-					<div class="col-span-2">
-						<Select.Root type="single" bind:value={filterStatus}>
-							<Select.Trigger
-								class="min-h-11 w-full rounded-lg border-slate-300 bg-white text-sm shadow-2xs"
-								aria-label="กรองสถานะ"
-							>
-								สถานะ: {filterStatus === 'ALL'
-									? 'ทั้งหมด'
-									: filterStatus === 'active'
-										? 'ใช้งานอยู่'
-										: 'ปิดใช้งาน'}
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="ALL" label="ทั้งหมด" />
-								<Select.Item value="active" label="ใช้งานอยู่" />
-								<Select.Item value="inactive" label="ปิดใช้งาน" />
-							</Select.Content>
-						</Select.Root>
+					<div class="flex flex-wrap items-end gap-3">
+						<div class="flex min-w-[160px] flex-1 flex-col gap-1.5 md:flex-none">
+							<label for="filter-status" class="text-xs font-semibold text-slate-600">สถานะ</label>
+							<Select.Root type="single" bind:value={filterStatus}>
+								<Select.Trigger
+									id="filter-status"
+									class="h-10 w-full rounded-lg border-input bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10 md:w-56"
+									aria-label="กรองสถานะ"
+								>
+									{filterStatus === 'ALL'
+										? 'ทั้งหมด'
+										: filterStatus === 'active'
+											? 'ใช้งานอยู่'
+											: 'ปิดใช้งาน'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="ALL" label="ทั้งหมด" />
+									<Select.Item value="active" label="ใช้งานอยู่" />
+									<Select.Item value="inactive" label="ปิดใช้งาน" />
+								</Select.Content>
+							</Select.Root>
+						</div>
 					</div>
 				</div>
 

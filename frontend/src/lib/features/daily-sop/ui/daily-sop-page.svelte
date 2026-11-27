@@ -1392,6 +1392,7 @@
 																<span class="text-muted-foreground">({field.unit})</span></span
 															>
 															<Input
+																class="rounded-lg shadow-2xs"
 																id={'daily-sop-' + question.id + '-' + field.key}
 																type="number"
 																min="0"
@@ -1437,6 +1438,7 @@
 												></span
 											>
 											<Textarea
+												class="rounded-lg shadow-2xs"
 												id={'daily-sop-' + question.id + '-observations'}
 												rows={3}
 												value={answer?.observations ?? ''}

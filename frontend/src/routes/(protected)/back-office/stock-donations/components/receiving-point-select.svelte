@@ -44,7 +44,7 @@
 		<Select.Trigger
 			{id}
 			data-testid="receiving-point-trigger"
-			class="h-12 w-full min-w-0 rounded-md border border-input bg-white px-3 text-base font-semibold shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none data-[size=default]:h-12"
+			class="h-12 w-full min-w-0 border border-input bg-white px-3 text-base font-semibold shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none data-[size=default]:h-12"
 		>
 			<span class="flex min-w-0 items-center gap-2">
 				<MapPin class="size-4 shrink-0 text-slate-400" aria-hidden="true" />

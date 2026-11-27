@@ -487,25 +487,23 @@
 	>
 		{#if !tableData.error}
 			<!-- Filters -->
-			<div
-				class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-[minmax(0,2.2fr)_repeat(2,minmax(0,1fr))_auto] md:p-4"
-			>
-				<div class="relative col-span-2 md:col-span-1">
+			<div class="space-y-3 border-b border-slate-200/80 p-3 md:p-4">
+				<div class="relative w-full">
 					<Search
-						class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+						class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
 						aria-hidden="true"
 					/>
 					<Input
 						bind:value={searchQuery}
 						placeholder="ค้นหา SKU, ชื่อรายการ หรือกลุ่มความต้องการ"
 						aria-label="ค้นหารายการเสบียง"
-						class="min-h-11 w-full rounded-lg border-slate-300 bg-white pr-10 pl-9 text-base shadow-2xs md:text-sm"
+						class="h-10 w-full rounded-lg border-input bg-white pr-10 pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 					/>
 					{#if searchQuery}
 						<button
 							type="button"
 							onclick={() => (searchQuery = '')}
-							class="absolute top-1/2 right-1 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+							class="absolute top-0.5 right-1 flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
 							aria-label="ล้างคำค้นหา"
 						>
 							<X class="h-4 w-4" />
@@ -513,51 +511,59 @@
 					{/if}
 				</div>
 
-				<label class="flex min-w-0 items-center gap-1.5 text-sm">
-					<span class="sr-only">กรองหมวดหมู่</span>
-					<select
-						bind:value={categoryFilter}
-						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-					>
-						<option value="ALL_GROUPS">หมวด: ทั้งหมด ({tableData.groups.length} กลุ่ม)</option>
-						{#each tableData.groups as g (g.id)}
-							<option value={g.id}>หมวด: {g.name} ({g.items.length})</option>
-						{/each}
-					</select>
-				</label>
-
-				<label class="flex min-w-0 items-center gap-1.5 text-sm">
-					<span class="sr-only">กรองสถานะ</span>
-					<select
-						bind:value={riskFilter}
-						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-					>
-						<option value="ALL">สถานะ: ทั้งหมด ({tableData.summary.totalItems})</option>
-						<option value="CRITICAL">สถานะ: เสี่ยงขาดของ ({tableData.summary.criticalCount})</option
+				<div class="flex flex-wrap items-end gap-3">
+					<div class="flex min-w-[160px] flex-1 flex-col gap-1.5 md:flex-none">
+						<label for="stock-category-filter" class="text-xs font-semibold text-slate-600">
+							หมวด
+						</label>
+						<select
+							id="stock-category-filter"
+							bind:value={categoryFilter}
+							aria-label="กรองหมวดหมู่"
+							class="h-10 w-full min-w-0 rounded-lg border border-input bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:w-56"
 						>
-						<option value="WARNING_REORDER">
-							สถานะ: ควรจัดหาเพิ่ม ({tableData.summary.warningCount})
-						</option>
-						<option value="ADEQUATE">สถานะ: เพียงพอ ({tableData.summary.adequateCount})</option>
-						<option value="OVERSTOCK"
-							>สถานะ: ของเกินจำเป็น ({tableData.summary.overstockCount})</option
-						>
-						<option value="UNCONFIGURED">
-							สถานะ: ยังไม่ตั้งนโยบาย ({tableData.summary.unconfiguredCount})
-						</option>
-					</select>
-				</label>
+							<option value="ALL_GROUPS">ทั้งหมด ({tableData.groups.length} กลุ่ม)</option>
+							{#each tableData.groups as g (g.id)}
+								<option value={g.id}>{g.name} ({g.items.length})</option>
+							{/each}
+						</select>
+					</div>
 
-				{#if searchQuery || categoryFilter !== 'ALL_GROUPS' || riskFilter !== 'ALL'}
-					<button
-						type="button"
-						onclick={clearFilters}
-						class="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-sky-800 hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:col-span-1"
-					>
-						<RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
-						ล้างตัวกรอง
-					</button>
-				{/if}
+					<div class="flex min-w-[160px] flex-1 flex-col gap-1.5 md:flex-none">
+						<label for="stock-risk-filter" class="text-xs font-semibold text-slate-600">
+							สถานะ
+						</label>
+						<select
+							id="stock-risk-filter"
+							bind:value={riskFilter}
+							aria-label="กรองสถานะ"
+							class="h-10 w-full min-w-0 rounded-lg border border-input bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:w-56"
+						>
+							<option value="ALL">ทั้งหมด ({tableData.summary.totalItems})</option>
+							<option value="CRITICAL">เสี่ยงขาดของ ({tableData.summary.criticalCount})</option>
+							<option value="WARNING_REORDER"
+								>ควรจัดหาเพิ่ม ({tableData.summary.warningCount})</option
+							>
+							<option value="ADEQUATE">เพียงพอ ({tableData.summary.adequateCount})</option>
+							<option value="OVERSTOCK">ของเกินจำเป็น ({tableData.summary.overstockCount})</option>
+							<option value="UNCONFIGURED">
+								ยังไม่ตั้งนโยบาย ({tableData.summary.unconfiguredCount})
+							</option>
+						</select>
+					</div>
+
+					{#if searchQuery || categoryFilter !== 'ALL_GROUPS' || riskFilter !== 'ALL'}
+						<Button
+							type="button"
+							variant="outline"
+							onclick={clearFilters}
+							class="h-10 gap-1.5 px-2.5 text-xs font-medium"
+						>
+							<RefreshCw class="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+							ล้างตัวกรอง
+						</Button>
+					{/if}
+				</div>
 			</div>
 
 			<p

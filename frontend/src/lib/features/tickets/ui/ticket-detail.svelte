@@ -623,7 +623,7 @@
 											>
 											<Input
 												id="alloc-{item.item_id}"
-												class="h-11 w-28 text-right text-base font-semibold tabular-nums sm:h-10"
+												class="h-10 w-28 rounded-lg text-right text-base font-semibold tabular-nums shadow-2xs"
 												inputmode={requiresWholeQty(unitDimensions.resolve(item.unit))
 													? 'numeric'
 													: 'decimal'}

@@ -131,7 +131,7 @@
 						aria-label="Segment"
 						bind:value={formSegment}
 						disabled={!!standard}
-						class="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+						class="mt-1 w-full rounded-lg border border-input bg-white px-3 py-2 text-sm shadow-2xs"
 					>
 						{#each targetSegmentSchema.options as segment (segment)}
 							<option value={segment}>{TARGET_SEGMENT_LABELS[segment] ?? segment}</option>
@@ -152,7 +152,7 @@
 							aria-label="กลุ่มความต้องการ"
 							bind:value={formReqGroupId}
 							disabled={!!standard}
-							class="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+							class="mt-1 w-full rounded-lg border border-input bg-white px-3 py-2 font-mono text-sm shadow-2xs"
 						>
 							{#each groups as g (g)}
 								{@const cleanId = g._id.replace(/^requirement_group:/, '')}
@@ -166,7 +166,7 @@
 							bind:value={formReqGroupId}
 							disabled={!!standard}
 							placeholder="เช่น FOOD_ENERGY"
-							class="mt-1 font-mono uppercase"
+							class="mt-1 rounded-lg font-mono uppercase shadow-2xs"
 						/>
 					{/if}
 					{#if formErrors.reqGroupId}
@@ -194,7 +194,7 @@
 						min="0.0001"
 						bind:value={formDailyDemand}
 						placeholder="เช่น 2100"
-						class="mt-1"
+						class="mt-1 rounded-lg shadow-2xs"
 					/>
 					{#if formErrors.dailyDemand}
 						<p class="mt-1 text-xs text-destructive">{formErrors.dailyDemand}</p>
@@ -209,7 +209,7 @@
 						id="form-effective-date"
 						ariaLabel="วันบังคับใช้"
 						bind:value={formEffectiveDate}
-						class="mt-1"
+						class="mt-1 !h-10 border-input bg-white shadow-2xs"
 					/>
 					{#if formErrors.effectiveDate}
 						<p class="mt-1 text-xs text-destructive">{formErrors.effectiveDate}</p>

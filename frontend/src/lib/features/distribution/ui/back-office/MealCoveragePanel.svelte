@@ -217,7 +217,7 @@
 				}
 				max={today}
 				format={formatThaiShortDate}
-				class="w-full bg-white sm:!h-10 sm:w-44"
+				class="!h-10 w-full border-input bg-white shadow-2xs sm:w-44"
 			/>
 		</div>
 	</div>

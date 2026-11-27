@@ -244,7 +244,7 @@
 				bind:value={name}
 				autocomplete="off"
 				aria-invalid={attempted && !!errors.name}
-				class="min-h-12 rounded-lg text-base"
+				class="h-10 rounded-lg text-base shadow-2xs"
 			/>
 			{#if attempted && errors.name}
 				<p class="text-xs font-semibold text-destructive">{errors.name}</p>
@@ -403,7 +403,7 @@
 						min={0}
 						aria-label="จำนวนต่อหน่วยบรรจุ"
 						bind:value={packMultiplier}
-						class="min-h-11 w-24 rounded-lg text-right font-bold tabular-nums"
+						class="h-10 w-24 rounded-lg text-right font-bold tabular-nums shadow-2xs"
 					/>
 					<span class="font-medium">{baseUnit ? unitLabel(baseUnit) : 'หน่วยฐาน'}</span>
 					<Button

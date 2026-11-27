@@ -448,6 +448,7 @@
 								สินค้า <span class="text-red-500">*</span>
 							</Label>
 							<ItemCombobox
+								class="min-h-10 rounded-lg shadow-2xs"
 								{items}
 								allowCreate
 								value={line.item_id}
@@ -486,7 +487,7 @@
 								aria-invalid={problem && ['qty', 'whole'].includes(problemOf(line) ?? '')
 									? 'true'
 									: undefined}
-								class="min-h-11 font-bold tabular-nums"
+								class="h-10 rounded-lg font-bold tabular-nums shadow-2xs"
 							/>
 						</div>
 
@@ -501,6 +502,7 @@
 									{/if}
 								</Label>
 								<DatePicker
+									class="!h-10 border-input bg-white shadow-2xs"
 									bind:value={() => line.expiry.value, (value) => setExpiry(line, value)}
 									placeholder="วว/ดด/ปปปป"
 								/>

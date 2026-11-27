@@ -333,13 +333,13 @@
 	let dateRange = $state<DateRangePreset>('ALL');
 
 	const STATUS_FILTER_LABELS: Record<'ALL' | MealSessionStatus, string> = {
-		ALL: 'สถานะ: ทั้งหมด',
+		ALL: 'ทั้งหมด',
 		active: 'กำลังดำเนินการ',
 		completed: 'เสร็จสิ้นแล้ว',
 		cancelled: 'ยกเลิก'
 	};
 	const DATE_RANGE_LABELS: Record<DateRangePreset, string> = {
-		ALL: 'ช่วงวันที่: ทั้งหมด',
+		ALL: 'ทั้งหมด',
 		today: 'วันนี้',
 		last7: '7 วันล่าสุด',
 		last30: '30 วันล่าสุด'
@@ -452,58 +452,74 @@
 
 		<!-- Filter row (search + status + date range) — matches the AI Studio prototype's
 	     Meal Sessions filter bar; client-side only, no new field/query. -->
-		<div
-			class="flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-card p-3 shadow-2xs"
-		>
-			<div class="relative min-w-0 flex-1">
+		<div class="space-y-3 rounded-xl border border-border/80 bg-card p-3 shadow-2xs">
+			<div class="relative w-full">
 				<Search
-					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+					class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-muted-foreground"
+					aria-hidden="true"
 				/>
 				<Input
 					bind:value={search}
 					placeholder="ค้นหาชื่อมื้อ หรือวันที่..."
-					class="min-h-11 pl-9"
+					aria-label="ค้นหาชื่อมื้อ หรือวันที่"
+					class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs"
 				/>
 			</div>
-			<Select.Root type="single" bind:value={statusFilter}>
-				<Select.Trigger class="min-h-11 w-full sm:w-52"
-					><Select.Value placeholder="สถานะ: ทั้งหมด"
-						>{STATUS_FILTER_LABELS[statusFilter]}</Select.Value
-					></Select.Trigger
-				>
-				<Select.Content>
-					<Select.Item value="ALL" label="สถานะ: ทั้งหมด">สถานะ: ทั้งหมด</Select.Item>
-					<Select.Item value="active" label="กำลังดำเนินการ">กำลังดำเนินการ</Select.Item>
-					<Select.Item value="completed" label="เสร็จสิ้นแล้ว">เสร็จสิ้นแล้ว</Select.Item>
-					<Select.Item value="cancelled" label="ยกเลิก">ยกเลิก</Select.Item>
-				</Select.Content>
-			</Select.Root>
-			<Select.Root type="single" bind:value={dateRange}>
-				<Select.Trigger class="min-h-11 w-full sm:w-52"
-					><Select.Value placeholder="ช่วงวันที่: ทั้งหมด"
-						>{DATE_RANGE_LABELS[dateRange]}</Select.Value
-					></Select.Trigger
-				>
-				<Select.Content>
-					<Select.Item value="ALL" label="ช่วงวันที่: ทั้งหมด">ช่วงวันที่: ทั้งหมด</Select.Item>
-					<Select.Item value="today" label="วันนี้">วันนี้</Select.Item>
-					<Select.Item value="last7" label="7 วันล่าสุด">7 วันล่าสุด</Select.Item>
-					<Select.Item value="last30" label="30 วันล่าสุด">30 วันล่าสุด</Select.Item>
-				</Select.Content>
-			</Select.Root>
-			{#if search || statusFilter !== 'ALL' || dateRange !== 'ALL'}
-				<Button
-					variant="ghost"
-					size="sm"
-					onclick={() => {
-						search = '';
-						statusFilter = 'ALL';
-						dateRange = 'ALL';
-					}}
-				>
-					ล้างตัวกรอง
-				</Button>
-			{/if}
+			<div class="flex flex-wrap items-end gap-3">
+				<div class="flex flex-col gap-1.5">
+					<label for="session-status-filter" class="text-xs font-semibold text-slate-600">
+						สถานะ
+					</label>
+					<Select.Root type="single" bind:value={statusFilter}>
+						<Select.Trigger
+							id="session-status-filter"
+							class="h-10 w-full rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10 sm:w-52"
+							><Select.Value placeholder="ทั้งหมด"
+								>{STATUS_FILTER_LABELS[statusFilter]}</Select.Value
+							></Select.Trigger
+						>
+						<Select.Content>
+							<Select.Item value="ALL" label="ทั้งหมด">ทั้งหมด</Select.Item>
+							<Select.Item value="active" label="กำลังดำเนินการ">กำลังดำเนินการ</Select.Item>
+							<Select.Item value="completed" label="เสร็จสิ้นแล้ว">เสร็จสิ้นแล้ว</Select.Item>
+							<Select.Item value="cancelled" label="ยกเลิก">ยกเลิก</Select.Item>
+						</Select.Content>
+					</Select.Root>
+				</div>
+				<div class="flex flex-col gap-1.5">
+					<label for="session-date-range-filter" class="text-xs font-semibold text-slate-600">
+						ช่วงวันที่
+					</label>
+					<Select.Root type="single" bind:value={dateRange}>
+						<Select.Trigger
+							id="session-date-range-filter"
+							class="h-10 w-full rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10 sm:w-52"
+							><Select.Value placeholder="ทั้งหมด">{DATE_RANGE_LABELS[dateRange]}</Select.Value
+							></Select.Trigger
+						>
+						<Select.Content>
+							<Select.Item value="ALL" label="ทั้งหมด">ทั้งหมด</Select.Item>
+							<Select.Item value="today" label="วันนี้">วันนี้</Select.Item>
+							<Select.Item value="last7" label="7 วันล่าสุด">7 วันล่าสุด</Select.Item>
+							<Select.Item value="last30" label="30 วันล่าสุด">30 วันล่าสุด</Select.Item>
+						</Select.Content>
+					</Select.Root>
+				</div>
+				{#if search || statusFilter !== 'ALL' || dateRange !== 'ALL'}
+					<Button
+						variant="outline"
+						type="button"
+						class="ml-auto h-10 px-2.5 text-xs font-medium"
+						onclick={() => {
+							search = '';
+							statusFilter = 'ALL';
+							dateRange = 'ALL';
+						}}
+					>
+						ล้างตัวกรอง
+					</Button>
+				{/if}
+			</div>
 		</div>
 
 		<!-- Sessions List -->
@@ -1069,18 +1085,26 @@
 				<Label for="session-name" class="text-xs font-medium text-foreground"
 					>ชื่อรอบมื้ออาหาร</Label
 				>
-				<Input id="session-name" bind:value={formName} class="mt-1.5 h-10 text-sm" />
+				<Input
+					id="session-name"
+					bind:value={formName}
+					class="mt-1.5 h-10 rounded-lg text-sm shadow-2xs"
+				/>
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<div>
 					<Label for="session-date" class="text-xs font-medium text-foreground">วันที่</Label>
-					<DatePicker id="session-date" bind:value={formDate} class="mt-1.5 !h-10" />
+					<DatePicker
+						id="session-date"
+						bind:value={formDate}
+						class="mt-1.5 !h-10 border-input bg-white shadow-2xs"
+					/>
 				</div>
 				<div>
 					<Label for="session-meal" class="text-xs font-medium text-foreground">ช่วงมื้อ</Label>
 					<Select.Root type="single" value={formMeal} onValueChange={handleMealChange}>
-						<Select.Trigger id="session-meal" class="mt-1.5 !h-10 w-full text-sm">
+						<Select.Trigger id="session-meal" class="mt-1.5 !h-10 w-full text-sm shadow-2xs">
 							<Select.Value placeholder="เลือกช่วงมื้อ">{MEAL_PERIOD_LABELS[formMeal]}</Select.Value
 							>
 						</Select.Trigger>
@@ -1142,7 +1166,7 @@
 								aria-invalid={!!countErrors.regular}
 								{@attach guard.attach('count-regular')}
 								aria-describedby={countErrors.regular ? 'count-regular-error' : undefined}
-								class="mt-1.5 h-9 text-sm"
+								class="mt-1.5 h-10 rounded-lg text-sm shadow-2xs"
 							/>
 							<CountFieldError {guard} id="count-regular" message={countErrors.regular} />
 						</div>
@@ -1158,7 +1182,7 @@
 								aria-invalid={!!countErrors.volunteer}
 								{@attach guard.attach('count-volunteer')}
 								aria-describedby={countErrors.volunteer ? 'count-volunteer-error' : undefined}
-								class="mt-1.5 h-9 text-sm"
+								class="mt-1.5 h-10 rounded-lg text-sm shadow-2xs"
 							/>
 							<CountFieldError {guard} id="count-volunteer" message={countErrors.volunteer} />
 						</div>
@@ -1177,7 +1201,7 @@
 								aria-invalid={!!countErrors.halal}
 								{@attach guard.attach('count-halal')}
 								aria-describedby={countErrors.halal ? 'count-halal-error' : undefined}
-								class="mt-1.5 h-9 text-sm"
+								class="mt-1.5 h-10 rounded-lg text-sm shadow-2xs"
 							/>
 							<CountFieldError {guard} id="count-halal" message={countErrors.halal} />
 						</div>
@@ -1193,7 +1217,7 @@
 								aria-invalid={!!countErrors.softFood}
 								{@attach guard.attach('count-soft-food')}
 								aria-describedby={countErrors.softFood ? 'count-soft-food-error' : undefined}
-								class="mt-1.5 h-9 text-sm"
+								class="mt-1.5 h-10 rounded-lg text-sm shadow-2xs"
 							/>
 							<CountFieldError {guard} id="count-soft-food" message={countErrors.softFood} />
 						</div>
@@ -1209,7 +1233,7 @@
 								aria-invalid={!!countErrors.infant}
 								{@attach guard.attach('count-infant')}
 								aria-describedby={countErrors.infant ? 'count-infant-error' : undefined}
-								class="mt-1.5 h-9 text-sm"
+								class="mt-1.5 h-10 rounded-lg text-sm shadow-2xs"
 							/>
 							<CountFieldError {guard} id="count-infant" message={countErrors.infant} />
 						</div>
@@ -1226,7 +1250,7 @@
 					bind:value={formNotes}
 					placeholder="เช่น วัตถุดิบบริจาคพิเศษ, มื้อพิเศษ..."
 					rows={3}
-					class="mt-1.5 text-sm"
+					class="mt-1.5 rounded-lg text-sm shadow-2xs"
 				/>
 			</div>
 		</div>

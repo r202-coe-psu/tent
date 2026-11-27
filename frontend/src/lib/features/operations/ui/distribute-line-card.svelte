@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		itemMasterUnit,
@@ -125,6 +125,36 @@
 	const chosenLotRef = $derived(line.lot.mode === 'single' ? line.lot.lot_ref : '');
 	const activeLot = $derived(itemLots.find((lot) => lot.lot_ref === chosenLotRef));
 
+	const itemError = $derived(
+		verdict.kind === 'duplicate'
+			? 'สินค้านี้อยู่ในรายการก่อนหน้าแล้ว — รวมจำนวนไว้ในรายการเดียว หรือเลือกสินค้าอื่น'
+			: null
+	);
+	const shortError = $derived(
+		verdict.kind === 'short'
+			? `${line.lot.mode === 'single' ? 'ยอดคงเหลือในล็อตนี้ไม่พอ' : 'ยอดที่ใช้ได้ไม่พอ'} — มี ${verdict.available} ${baseUnitLabel} ขาดอีก ${subQty(verdict.requested, verdict.available)} ${baseUnitLabel} จึงยังบันทึกไม่ได้`
+			: null
+	);
+	const qtyError = $derived.by(() => {
+		if (verdict.kind === 'incomplete' && verdict.missing === 'qty') {
+			return qtyBadInput || line.qty.trim() !== ''
+				? 'จำนวนต้องเป็นตัวเลขมากกว่า 0 ทศนิยมไม่เกิน 4 ตำแหน่ง'
+				: null;
+		}
+		if (verdict.kind === 'incomplete' && verdict.missing === 'whole') return WHOLE_QTY_MESSAGE;
+		if (verdict.kind === 'incomplete' && verdict.missing === 'unit') {
+			return 'หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้';
+		}
+		return line.lot.mode === 'single' ? null : shortError;
+	});
+	const lotError = $derived.by(() => {
+		if (line.lot.mode !== 'single') return null;
+		if (verdict.kind === 'incomplete' && verdict.missing === 'lot') {
+			return 'กรุณาเลือกล็อตที่ต้องการเบิกจ่าย';
+		}
+		return shortError;
+	});
+
 	function chipClass(active: boolean) {
 		return [
 			'inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
@@ -168,10 +198,6 @@
 		const first = itemLots.find((lot) => !isLotExpired(lot, now, priorityItems.get(lot.item_id)));
 		line.lot = { mode: 'single', lot_ref: first?.lot_ref ?? '' };
 	}
-
-	const shortfall = $derived(
-		verdict.kind === 'short' ? subQty(verdict.requested, verdict.available) : '0'
-	);
 </script>
 
 <div
@@ -227,11 +253,12 @@
 		<p class="text-sm font-medium text-emerald-900 tabular-nums">{statusText}</p>
 	{:else}
 		{#if !landed}
-			<div class="space-y-1.5">
-				<Label for="distribute-item-{line.key}" class="text-sm font-semibold text-slate-700">
+			<Field.Field class="gap-1.5" data-invalid={itemError ? true : undefined}>
+				<Field.Label for="distribute-item-{line.key}" class="text-sm font-semibold">
 					สินค้า <span class="text-red-500">*</span>
-				</Label>
+				</Field.Label>
 				<ItemCombobox
+					class="min-h-10 rounded-lg shadow-2xs"
 					id="distribute-item-{line.key}"
 					items={selectableItems}
 					allowCreate
@@ -243,7 +270,10 @@
 					formatBalanceUnit={(candidate) => unitLabel(candidate.unit) || candidate.unit}
 					onSelect={(picked) => (line = withLineItem(line, picked))}
 				/>
-			</div>
+				{#if itemError}
+					<Field.Error class="font-semibold">{itemError}</Field.Error>
+				{/if}
+			</Field.Field>
 		{/if}
 
 		{#if item}
@@ -261,13 +291,16 @@
 				</span>
 			</div>
 
-			<div class="space-y-2">
-				<Label for="distribute-qty-{line.key}" class="text-sm font-semibold text-slate-700">
+			<Field.Field class="gap-2" data-invalid={qtyError ? true : undefined}>
+				<Field.Label for="distribute-qty-{line.key}" class="text-sm font-semibold">
 					จำนวน <span class="text-red-500">*</span>
-				</Label>
+				</Field.Label>
 				<div class="flex flex-wrap items-stretch gap-2">
 					<div
-						class="flex min-w-40 flex-1 items-stretch overflow-hidden rounded-lg border border-input"
+						class={[
+							'flex min-w-40 flex-1 items-stretch overflow-hidden rounded-lg border',
+							qtyError ? 'border-destructive' : 'border-input'
+						]}
 					>
 						<Button
 							type="button"
@@ -287,7 +320,7 @@
 							min={requiresWholeQty(lineDimension) ? '1' : '0.01'}
 							step={qtyInputStep(lineDimension)}
 							value={line.qty}
-							aria-invalid={verdict.kind === 'incomplete' && verdict.missing === 'whole'}
+							aria-invalid={qtyError ? true : undefined}
 							oninput={(event) => {
 								line.qty = event.currentTarget.value;
 								qtyBadInput = event.currentTarget.validity.badInput;
@@ -317,7 +350,7 @@
 								readonly
 								disabled
 								aria-label="หน่วย"
-								class="min-h-11"
+								class="h-11 rounded-lg shadow-2xs"
 							/>
 						{:else}
 							<Select.Root
@@ -330,7 +363,7 @@
 							>
 								<Select.Trigger
 									aria-label="หน่วย"
-									class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
+									class="h-11 w-full border border-input bg-white px-3 text-sm font-medium shadow-2xs data-[size=default]:h-11"
 								>
 									{selectedUnitLabel}
 								</Select.Trigger>
@@ -368,10 +401,13 @@
 						</button>
 					</div>
 				{/if}
-			</div>
+				{#if qtyError}
+					<Field.Error class="font-semibold tabular-nums">{qtyError}</Field.Error>
+				{/if}
+			</Field.Field>
 
-			<div class="space-y-2">
-				<p class="text-sm font-semibold text-slate-700">ล็อต</p>
+			<Field.Field class="gap-2" data-invalid={lotError ? true : undefined}>
+				<Field.Label class="text-sm font-semibold">ล็อต</Field.Label>
 				{#if lotsLoading}
 					<p class="text-xs text-muted-foreground">กำลังโหลดล็อต…</p>
 				{:else if itemLots.length === 0}
@@ -411,7 +447,7 @@
 						>
 							<Select.Trigger
 								aria-label="ล็อต"
-								class="min-h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-left text-sm font-medium whitespace-normal data-[size=default]:h-auto"
+								class="h-auto min-h-10 w-full rounded-lg border border-input bg-white px-3 py-2 text-left text-sm font-medium whitespace-normal shadow-2xs data-[size=default]:h-auto"
 							>
 								<span class="min-w-0 flex-1 text-left break-words">
 									{activeLot ? lotLabel(activeLot) : 'เลือกล็อต'}
@@ -502,44 +538,10 @@
 						</div>
 					{/if}
 				{/if}
-			</div>
-		{/if}
-
-		{#if verdict.kind === 'duplicate'}
-			<p
-				class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900"
-				role="alert"
-			>
-				<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
-				<span>สินค้านี้อยู่ในรายการก่อนหน้าแล้ว — รวมจำนวนไว้ในรายการเดียว หรือเลือกสินค้าอื่น</span
-				>
-			</p>
-		{:else if verdict.kind === 'short'}
-			<p
-				class="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900 tabular-nums"
-				role="alert"
-			>
-				<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
-				<span>
-					{line.lot.mode === 'single' ? 'ยอดคงเหลือในล็อตนี้ไม่พอ' : 'ยอดที่ใช้ได้ไม่พอ'} — มี {verdict.available}
-					{baseUnitLabel} ขาดอีก {shortfall}
-					{baseUnitLabel} จึงยังบันทึกไม่ได้
-				</span>
-			</p>
-		{:else if verdict.kind === 'incomplete' && verdict.missing === 'qty' && (qtyBadInput || line.qty.trim() !== '')}
-			<p class="text-sm font-semibold text-red-700" role="alert">
-				จำนวนต้องเป็นตัวเลขมากกว่า 0 ทศนิยมไม่เกิน 4 ตำแหน่ง
-			</p>
-		{:else if verdict.kind === 'incomplete' && verdict.missing === 'whole'}
-			<p class="text-sm font-semibold text-red-700" role="alert">{WHOLE_QTY_MESSAGE}</p>
-		{:else if verdict.kind === 'incomplete' && verdict.missing === 'unit'}
-			<p class="text-sm font-semibold text-red-700" role="alert">
-				หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้
-			</p>
-		{:else if verdict.kind === 'incomplete' && verdict.missing === 'lot' && line.lot.mode === 'single'}
-			<p class="text-sm font-semibold text-red-700" role="alert">
-				กรุณาเลือกล็อตที่ต้องการเบิกจ่าย
-			</p>
+				{#if lotError}
+					<Field.Error class="font-semibold tabular-nums">{lotError}</Field.Error>
+				{/if}
+			</Field.Field>
 		{/if}
 
 		{#if line.status.kind === 'failed' && statusText}

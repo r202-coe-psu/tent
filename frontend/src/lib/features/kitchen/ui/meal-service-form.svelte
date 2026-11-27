@@ -138,7 +138,13 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>ผลผลิตที่ทำได้จริง — เพดานการแจก (ไม่บังคับ)</Form.Label>
-						<Input {...props} type="number" min="0" bind:value={$formData.actual_yield} />
+						<Input
+							class="rounded-lg shadow-2xs"
+							{...props}
+							type="number"
+							min="0"
+							bind:value={$formData.actual_yield}
+						/>
 					{/snippet}
 				</Form.Control>
 				<p class="text-xs text-muted-foreground">
@@ -157,7 +163,14 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>เสิร์ฟในศูนย์ (คน/กล่อง)</Form.Label>
-							<Input {...props} type="number" min="0" bind:value={$formData.served} required />
+							<Input
+								class="rounded-lg shadow-2xs"
+								{...props}
+								type="number"
+								min="0"
+								bind:value={$formData.served}
+								required
+							/>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -172,7 +185,14 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label>เหลือทิ้ง (กล่อง)</Form.Label>
-							<Input {...props} type="number" min="0" bind:value={$formData.waste} required />
+							<Input
+								class="rounded-lg shadow-2xs"
+								{...props}
+								type="number"
+								min="0"
+								bind:value={$formData.waste}
+								required
+							/>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
@@ -192,6 +212,7 @@
 							{#snippet children({ props })}
 								<Form.Label class="text-xs">อาสาสมัคร</Form.Label>
 								<Input
+									class="rounded-lg shadow-2xs"
 									{...props}
 									type="number"
 									min="0"
@@ -212,6 +233,7 @@
 							{#snippet children({ props })}
 								<Form.Label class="text-xs">ผู้พักพิงนอกศูนย์</Form.Label>
 								<Input
+									class="rounded-lg shadow-2xs"
 									{...props}
 									type="number"
 									min="0"
@@ -245,7 +267,7 @@
 							bind:value={$formData.notes}
 							rows="2"
 							placeholder="เช่น เสิร์ฟช้ากว่ากำหนด / มีอาสาช่วยแจก"
-							class="flex w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+							class="flex w-full rounded-lg border border-input bg-white px-3 py-1.5 text-sm shadow-2xs focus:ring-1 focus:ring-ring focus:outline-none"
 						></textarea>
 					{/snippet}
 				</Form.Control>

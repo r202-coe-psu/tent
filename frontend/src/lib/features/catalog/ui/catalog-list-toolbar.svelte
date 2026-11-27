@@ -39,7 +39,7 @@
 				type="search"
 				placeholder="ค้นหา..."
 				aria-label="ค้นหา"
-				class="h-11 pl-9 sm:h-10"
+				class="h-10 rounded-lg pl-9 shadow-2xs"
 			/>
 		</div>
 		{#if canWrite}

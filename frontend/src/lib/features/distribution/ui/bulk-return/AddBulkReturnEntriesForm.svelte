@@ -439,7 +439,7 @@
 							<Select.Root type="single" bind:value={() => poolId, handlePoolSelect}>
 								<Select.Trigger
 									id="add-entry-pool"
-									class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:flex-1 sm:data-[size=default]:h-10"
+									class="h-10 w-full min-w-0 bg-white text-sm font-medium shadow-2xs data-[size=default]:h-10 sm:flex-1"
 								>
 									<span class="truncate">
 										{selectedPool && poolScanStatus !== 'not_found'
@@ -587,7 +587,7 @@
 											<Select.Trigger
 												id="add-entry-item-{line.lineId}"
 												aria-invalid={Boolean(lineError)}
-												class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+												class="h-10 w-full min-w-0 bg-white text-sm font-medium shadow-2xs data-[size=default]:h-10"
 											>
 												<span class="truncate">{itemLabel(line.item_id)}</span>
 											</Select.Trigger>
@@ -614,7 +614,7 @@
 											disabled={Boolean(line.relocated) || busy}
 											aria-invalid={Boolean(lineError)}
 											placeholder="0"
-											class="h-11 text-base tabular-nums sm:h-10 sm:text-sm"
+											class="h-10 rounded-lg text-base tabular-nums shadow-2xs sm:text-sm"
 										/>
 									</div>
 									<Button
@@ -672,7 +672,7 @@
 						id="add-entry-notes"
 						bind:value={notes}
 						rows={2}
-						class="w-full text-base sm:text-sm"
+						class="w-full rounded-lg text-base shadow-2xs sm:text-sm"
 					/>
 				</div>
 			</div>

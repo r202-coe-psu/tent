@@ -222,7 +222,7 @@
 												handlePickerQtyBlur(e.currentTarget.value);
 											}}
 											disabled={outOfStock}
-											class="h-9 w-20 text-right text-sm font-semibold tabular-nums shadow-2xs"
+											class="h-9 w-20 rounded-lg text-right text-sm font-semibold tabular-nums shadow-2xs"
 										/>
 										<span class="min-w-[30px] text-xs text-slate-500"
 											>{unitLabel(item.base_unit)}</span

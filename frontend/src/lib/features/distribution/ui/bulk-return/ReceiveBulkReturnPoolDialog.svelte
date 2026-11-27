@@ -190,7 +190,7 @@
 									aria-label="จำนวนที่รับจริงของ {item.name}"
 									aria-invalid={errors?.received_qty ? true : undefined}
 									aria-describedby={errors?.received_qty ? `${qtyId}-error` : undefined}
-									class="h-11 text-base tabular-nums sm:h-10 sm:text-sm"
+									class="h-10 rounded-lg text-base tabular-nums shadow-2xs sm:text-sm"
 								/>
 								{#if errors?.received_qty}
 									<p id="{qtyId}-error" role="alert" class="text-sm font-medium text-red-700">
@@ -215,7 +215,7 @@
 											aria-label="เหตุผลของส่วนต่างของ {item.name}"
 											aria-invalid={errors?.reason ? true : undefined}
 											aria-describedby={errors?.reason ? `${reasonId}-error` : undefined}
-											class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+											class="h-10 w-full min-w-0 border border-input bg-white px-3 text-sm font-medium shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none data-[size=default]:h-10"
 										>
 											<span class="truncate">
 												{line.reason ? discrepancyReasonLabel(line.reason) : 'เลือกเหตุผล'}
@@ -249,7 +249,7 @@
 										aria-label="รายละเอียดส่วนต่างของ {item.name}"
 										aria-invalid={errors?.note ? true : undefined}
 										aria-describedby={errors?.note ? `${noteId}-error` : undefined}
-										class="h-11 text-base sm:h-10 sm:text-sm"
+										class="h-10 rounded-lg text-base shadow-2xs sm:text-sm"
 									/>
 									{#if errors?.note}
 										<p id="{noteId}-error" role="alert" class="text-sm font-medium text-red-700">

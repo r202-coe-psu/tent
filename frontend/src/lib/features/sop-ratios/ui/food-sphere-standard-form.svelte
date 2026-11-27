@@ -149,7 +149,7 @@
 					<Select.Root type="single" bind:value={formSegment} disabled={isEdit}>
 						<Select.Trigger
 							id="form-segment"
-							class="h-9 w-full rounded-md border-input bg-background"
+							class="h-10 w-full border-input shadow-2xs data-[size=default]:h-10"
 						>
 							{TARGET_SEGMENT_LABELS[formSegment] ?? formSegment}
 						</Select.Trigger>
@@ -173,7 +173,7 @@
 						<Select.Root type="single" bind:value={formReqGroupId} disabled={isEdit}>
 							<Select.Trigger
 								id="form-req-group"
-								class="h-9 w-full rounded-md border-input bg-background font-mono"
+								class="h-10 w-full border-input font-mono shadow-2xs data-[size=default]:h-10"
 							>
 								{selectedGroup
 									? `${selectedGroup.name} (${selectedGroup._id.replace(/^requirement_group:/, '')})`
@@ -197,7 +197,7 @@
 							bind:value={formReqGroupId}
 							disabled={isEdit}
 							placeholder="เช่น FOOD_ENERGY"
-							class="font-mono uppercase"
+							class="rounded-lg font-mono uppercase shadow-2xs"
 						/>
 					{/if}
 					{#if formErrors.reqGroupId}
@@ -213,6 +213,7 @@
 						ปริมาณที่ต้องการต่อคนต่อวัน <span class="font-bold text-destructive">*</span>
 					</Field.Label>
 					<Input
+						class="rounded-lg shadow-2xs"
 						id="form-daily-demand"
 						aria-label="ปริมาณต่อวัน"
 						type="number"
@@ -250,6 +251,7 @@
 						วันที่มีผลบังคับใช้ (วัน/เดือน/ปี) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
 					<DatePicker
+						class="!h-10 border-input bg-white shadow-2xs"
 						id="form-effective-date"
 						ariaLabel="วันบังคับใช้"
 						bind:value={formEffectiveDate}
@@ -264,7 +266,7 @@
 					<Select.Root type="single" bind:value={formStatus}>
 						<Select.Trigger
 							id="form-status"
-							class="h-9 w-full rounded-md border-input bg-background"
+							class="h-10 w-full border-input shadow-2xs data-[size=default]:h-10"
 						>
 							{formStatus === 'active' ? 'เปิดใช้งาน (Active)' : 'ปิดใช้งาน (Inactive)'}
 						</Select.Trigger>

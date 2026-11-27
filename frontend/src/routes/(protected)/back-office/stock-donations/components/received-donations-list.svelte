@@ -196,15 +196,15 @@
 
 <!-- Filter Bar — same geometry as the other queue filters; the search asks the server -->
 <div class="border-b border-border/60 bg-card p-4">
-	<form class="flex flex-col gap-2 md:flex-row md:items-end" onsubmit={submit} role="search">
+	<form class="flex flex-col gap-3 md:flex-row md:items-end" onsubmit={submit} role="search">
 		<div class="md:w-44">
-			<label for="received-search-by" class="mb-1 block text-xs font-medium text-muted-foreground">
+			<label for="received-search-by" class="mb-1.5 block text-xs font-semibold text-slate-600">
 				ค้นหาด้วย
 			</label>
 			<Select.Root type="single" value={by} onValueChange={chooseType}>
 				<Select.Trigger
 					id="received-search-by"
-					class="h-9 w-full rounded-xl text-xs data-[size=default]:h-9"
+					class="h-10 w-full rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10"
 				>
 					{typeInfo.label}
 				</Select.Trigger>
@@ -217,7 +217,7 @@
 		</div>
 
 		<div class="min-w-0 flex-1">
-			<label for="received-search" class="mb-1 block text-xs font-medium text-muted-foreground">
+			<label for="received-search" class="mb-1.5 block text-xs font-semibold text-slate-600">
 				ค้นทั้งศูนย์ — ตรงทั้งคำ ไม่ค้นบางส่วน
 			</label>
 			{#if by === 'item'}
@@ -228,30 +228,28 @@
 					bind:value={itemId}
 					placeholder={typeInfo.placeholder}
 					onSelect={(item) => (itemName = item?.name ?? '')}
+					class="min-h-10 rounded-lg shadow-2xs"
 				/>
 			{:else}
 				<div class="relative">
-					<Search
-						class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-						aria-hidden="true"
-					/>
+					<Search class="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
 					<Input
 						id="received-search"
 						type="text"
 						placeholder={typeInfo.placeholder}
 						bind:value={text}
-						class="h-9 rounded-xl pl-9 text-xs"
+						class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 					/>
 				</div>
 			{/if}
 		</div>
 
 		<div class="flex gap-2">
-			<Button type="submit" class="min-h-9 rounded-xl" disabled={!canSubmit || loading}>
+			<Button type="submit" class="h-10 rounded-lg px-4" disabled={!canSubmit || loading}>
 				ค้นหา
 			</Button>
 			{#if searching}
-				<Button type="button" variant="outline" class="min-h-9 rounded-xl" onclick={clear}>
+				<Button type="button" variant="outline" class="h-10 rounded-lg px-4" onclick={clear}>
 					ล้าง
 				</Button>
 			{/if}

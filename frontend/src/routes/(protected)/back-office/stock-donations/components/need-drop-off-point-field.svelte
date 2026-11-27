@@ -33,7 +33,7 @@
 			จุดรับบริจาค <span class="text-destructive">*</span>
 		</Label>
 		<Select.Root type="single" value={value ?? ''} onValueChange={onchange}>
-			<Select.Trigger {id} class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10">
+			<Select.Trigger {id} class="h-10 w-full text-sm shadow-2xs data-[size=default]:h-10">
 				{selectedName || 'เลือกจุดรับบริจาค'}
 			</Select.Trigger>
 			<Select.Content>

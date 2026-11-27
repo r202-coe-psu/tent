@@ -161,7 +161,7 @@
 						autocomplete="off"
 						aria-invalid={nameError ? true : undefined}
 						aria-describedby={nameError ? 'open-pool-name-error' : undefined}
-						class="h-11 text-base sm:h-10 sm:text-sm"
+						class="h-10 rounded-lg text-base shadow-2xs sm:text-sm"
 					/>
 					{#if nameError}
 						<p id="open-pool-name-error" role="alert" class="text-sm font-medium text-red-700">
@@ -198,7 +198,7 @@
 						bind:value={notes}
 						rows={3}
 						placeholder="เช่น รวบรวมของคืนจากโซน B ช่วงเช้า"
-						class="w-full text-base sm:text-sm"
+						class="w-full rounded-lg text-base shadow-2xs sm:text-sm"
 					/>
 				</div>
 			</div>

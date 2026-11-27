@@ -162,7 +162,7 @@
 							id="profile-name"
 							bind:value={$formData.name}
 							maxlength="100"
-							class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm"
+							class="w-full rounded-lg border border-input bg-white px-4 py-2.5 text-sm shadow-2xs"
 						/>
 					</div>
 				{/if}
@@ -192,7 +192,7 @@
 								$formData.ratios[key] = val;
 							}}
 							class={[
-								'w-full rounded-xl border bg-white px-4 py-2.5 font-mono text-sm font-semibold transition-colors outline-none',
+								'w-full rounded-lg border bg-white px-4 py-2.5 font-mono text-sm font-semibold transition-colors outline-none',
 								$formErrors.ratios?.[key]
 									? 'border-red-500 text-red-600 focus:border-red-600 focus:ring-2 focus:ring-red-600/15'
 									: 'border-black/10 text-brand focus:border-brand focus:ring-2 focus:ring-brand/15'
@@ -216,7 +216,7 @@
 							bind:value={$formData.reason}
 							placeholder="เช่น ปรับตามมติ EOC ประชุมวันที่ 4 ก.ค. 2568"
 							rows={2}
-							class="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-slate-700 transition-colors outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15"
+							class="w-full rounded-lg border border-input bg-white px-4 py-2.5 text-sm text-slate-700 shadow-2xs transition-colors outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15"
 						></textarea>
 						{#if !hasAnyChange}
 							<p class="mt-1 text-xs font-medium text-amber-600">
