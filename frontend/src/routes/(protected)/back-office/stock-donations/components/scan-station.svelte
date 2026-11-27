@@ -102,6 +102,7 @@
 	import CloseDonationDialog from './close-donation-dialog.svelte';
 	import CloseM6EmptyDialog from './close-m6-empty-dialog.svelte';
 	import { readReceivingPoint, writeReceivingPoint } from './receiving-point-memory';
+	import { donationLookupFailedMessage } from './donation-lookup-message';
 	import { walkinFormSchema, type WalkinFormValues, type WalkinLine } from './walkin-form.schema';
 
 	let {
@@ -755,12 +756,7 @@
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(query.trim())}`);
 			if (!res.ok) {
-				// The API answers in English ("Donation not found"); staff read Thai.
-				toast.error(
-					res.status === 404
-						? `ไม่พบใบจองบริจาค “${query.trim()}” — ตรวจรหัสอีกครั้ง`
-						: 'ตรวจสอบใบจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
-				);
+				toast.error(donationLookupFailedMessage(res.status, query.trim()));
 				scanState = 'idle';
 				if (fromList) onClose?.();
 				return;
