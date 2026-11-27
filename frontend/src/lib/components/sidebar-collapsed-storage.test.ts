@@ -6,7 +6,7 @@ import {
 	writeSidebarCollapsed
 } from './sidebar-collapsed-storage';
 
-const { backoffice, systemManagement } = SIDEBAR_COLLAPSED_KEYS;
+const { backoffice, systemManagement, staffPages } = SIDEBAR_COLLAPSED_KEYS;
 
 describe('sidebar collapsed storage', () => {
 	beforeEach(() => localStorage.clear());
@@ -14,6 +14,11 @@ describe('sidebar collapsed storage', () => {
 
 	it('reads as collapsed when nothing is stored', () => {
 		expect(readSidebarCollapsed(backoffice)).toBe(true);
+	});
+
+	it('keeps the portal/me/onsite sidebar collapsed when only the back office was expanded', () => {
+		writeSidebarCollapsed(backoffice, false);
+		expect(readSidebarCollapsed(staffPages)).toBe(true);
 	});
 
 	it('reads back an expanded choice', () => {

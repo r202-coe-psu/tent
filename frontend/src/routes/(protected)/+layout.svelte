@@ -13,6 +13,7 @@
 	import { discardReturnPath, isUserSwitch, takeReturnPath } from '$lib/auth/session-expiry';
 	import { SessionExpiredModal } from '$lib/features/login';
 	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
+	import { SIDEBAR_COLLAPSED_KEYS } from '$lib/components/sidebar-collapsed-storage';
 	import {
 		showsStaffMobileBar,
 		showsStaffSidebar,
@@ -131,7 +132,10 @@
 		{#if staffSidebar}
 			<!-- Below the app bar the sidebar must start under it, not slide beneath it. -->
 			<div class="contents {staffSidebarClass}">
-				<BackofficeNavbar showMobileBar={showsStaffMobileBar(page.url.pathname)} />
+				<BackofficeNavbar
+					showMobileBar={showsStaffMobileBar(page.url.pathname)}
+					storageKey={SIDEBAR_COLLAPSED_KEYS.staffPages}
+				/>
 			</div>
 		{/if}
 		<main class="flex min-w-0 flex-1 flex-col">

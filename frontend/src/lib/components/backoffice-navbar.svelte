@@ -23,15 +23,18 @@
 	import {
 		SIDEBAR_COLLAPSED_KEYS,
 		readSidebarCollapsed,
-		writeSidebarCollapsed
+		writeSidebarCollapsed,
+		type SidebarCollapsedKey
 	} from './sidebar-collapsed-storage';
 
 	let {
 		/** The hamburger bar shown below `lg`; off where a page keeps the very top of the screen. */
-		showMobileBar = true
-	}: { showMobileBar?: boolean } = $props();
+		showMobileBar = true,
+		/** Where the collapsed/expanded choice is remembered; each host page keeps its own. */
+		storageKey = SIDEBAR_COLLAPSED_KEYS.backoffice
+	}: { showMobileBar?: boolean; storageKey?: SidebarCollapsedKey } = $props();
 
-	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice));
+	let collapsed = $state(readSidebarCollapsed(storageKey));
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -39,7 +42,7 @@
 
 	function setCollapsed(next: boolean) {
 		collapsed = next;
-		writeSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice, next);
+		writeSidebarCollapsed(storageKey, next);
 	}
 
 	function closeMobileMenu() {
