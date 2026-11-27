@@ -3,8 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
 	user: { roles: [] as string[] } as { name?: string; roles: string[] } | null,
 	selectedShelterCode: null as string | null,
-	/** What `/api/v1/auth/me` resolves with; an `Error` makes it reject (#476). */
-	authStatus: null as Record<string, unknown> | Error | null,
+	/**
+	 * What `/api/v1/auth/me` resolves with; an `Error` makes it reject, a `Promise` is returned
+	 * as-is, and `'non-json'` resolves `null` like `serviceFetch` on a non-JSON 200 (#476).
+	 */
+	authStatus: null as Record<string, unknown> | Error | Promise<unknown> | 'non-json' | null,
 	/** Other `serviceFetch` paths hit by a test (gate-clearing writes). */
 	serviceFetch: vi.fn()
 }));
@@ -45,6 +48,7 @@ vi.mock('$lib/api/service', async (importOriginal) => {
 			if (path !== '/api/v1/auth/me') return mocks.serviceFetch(path, init);
 			const status = mocks.authStatus ?? CLEAR_STATUS;
 			if (status instanceof Error) throw status;
+			if (status === 'non-json') return null;
 			return status;
 		}
 	};
@@ -73,7 +77,15 @@ import {
 	LANDING_ROUTE,
 	type DeskFallbackHref
 } from './auth';
-import { invalidateAuthStatusRequest, skipMfa, submitForceSetup } from '$lib/features/users';
+import {
+	fetchAuthStatus,
+	invalidateAuthStatusRequest,
+	skipMfa,
+	submitForceSetup,
+	unlinkGoogleMfa,
+	unlinkThaidMfa
+} from '$lib/features/users';
+import { ServiceRequestError } from '$lib/api/service';
 
 describe('resolvePostLoginDestination (CR-124)', () => {
 	it('sends force-setup before MFA when password/security setup is required', () => {
@@ -727,6 +739,47 @@ describe('requireAuth when the auth status check fails (#476)', () => {
 		expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
 
 		invalidateAuthStatusRequest();
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBeNull();
+	});
+
+	it('forgets the known gate after unlinking an MFA provider', async () => {
+		for (const unlink of [unlinkGoogleMfa, unlinkThaidMfa]) {
+			mocks.authStatus = statusOf('alice', { pending_mfa: true });
+			expect(await redirectTo()).toBe(MFA_CHALLENGE_ROUTE);
+			await unlink();
+			mocks.authStatus = new Error('offline');
+			expect(await redirectTo()).toBeNull();
+		}
+	});
+
+	it('keeps the known gate when a 200 carries no status (e.g. a captive portal page)', async () => {
+		mocks.authStatus = statusOf('alice', { must_change_password: true });
+		expect(await redirectTo()).toBe(FORCE_SETUP_ROUTE);
+
+		mocks.authStatus = 'non-json';
+		expect(await redirectTo()).toBe(FORCE_SETUP_ROUTE);
+		mocks.authStatus = new Error('offline');
+		expect(await redirectTo()).toBe(FORCE_SETUP_ROUTE);
+	});
+
+	it('keeps a known gate on an explicit 401 from the status check', async () => {
+		mocks.authStatus = statusOf('alice', { consent: null });
+		expect(await redirectTo()).toBe(CONSENT_ROUTE);
+
+		// /consent itself sends a 401 on to /login flagged for re-auth, so this cannot loop.
+		mocks.authStatus = new ServiceRequestError('Unauthorized', 401);
+		expect(await redirectTo()).toBe(CONSENT_ROUTE);
+	});
+
+	it('does not let a request superseded mid-flight repopulate the known gate', async () => {
+		let release!: (v: unknown) => void;
+		mocks.authStatus = new Promise((r) => (release = r));
+		const slow = fetchAuthStatus();
+		invalidateAuthStatusRequest(); // e.g. logout while the check is in flight
+		release(statusOf('alice', { pending_mfa: true }));
+		await slow;
+
 		mocks.authStatus = new Error('offline');
 		expect(await redirectTo()).toBeNull();
 	});

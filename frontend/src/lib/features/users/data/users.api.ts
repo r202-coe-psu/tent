@@ -275,8 +275,10 @@ export function fetchAuthStatus(): Promise<AuthStatus> {
 		(status) => {
 			// A request superseded by invalidateAuthStatusRequest() must not repopulate the cache.
 			if (authStatusRequest !== request) return;
-			lastKnownAuthStatus = status;
 			authStatusRequest = null;
+			// `serviceFetch` yields null for a non-JSON 200 (e.g. a captive portal page); that is
+			// not a status and must not overwrite a known gate.
+			if (status && typeof status.name === 'string') lastKnownAuthStatus = status;
 		},
 		() => {
 			if (authStatusRequest === request) authStatusRequest = null;
@@ -312,11 +314,14 @@ export async function skipMfa(): Promise<{ ok: true }> {
 /**
  * Unlink Google MFA. Omit `name` for self-unlink; pass `name` for admin/manager.
  */
-export function unlinkGoogleMfa(name?: string): Promise<{ ok: true }> {
-	return serviceFetch('/api/v1/auth/oauth/google/unlink', {
+export async function unlinkGoogleMfa(name?: string): Promise<{ ok: true }> {
+	const result = await serviceFetch<{ ok: true }>('/api/v1/auth/oauth/google/unlink', {
 		method: 'POST',
 		body: JSON.stringify(name ? { name } : {})
 	});
+	// Unlinking can change the caller's MFA gate; drop the cached status so it is re-learned.
+	invalidateAuthStatusRequest();
+	return result;
 }
 
 /** Browser navigation target for Google OAuth start (BFF redirects to Google). */
@@ -327,11 +332,14 @@ export function googleOAuthStartHref(mode: 'link' | 'stepup' | 'login'): string 
 /**
  * Unlink ThaID MFA. Omit `name` for self-unlink; pass `name` for admin/manager.
  */
-export function unlinkThaidMfa(name?: string): Promise<{ ok: true }> {
-	return serviceFetch('/api/v1/auth/oauth/thaid/unlink', {
+export async function unlinkThaidMfa(name?: string): Promise<{ ok: true }> {
+	const result = await serviceFetch<{ ok: true }>('/api/v1/auth/oauth/thaid/unlink', {
 		method: 'POST',
 		body: JSON.stringify(name ? { name } : {})
 	});
+	// Unlinking can change the caller's MFA gate; drop the cached status so it is re-learned.
+	invalidateAuthStatusRequest();
+	return result;
 }
 
 /** Browser navigation target for ThaID OAuth start (BFF redirects to ThaID). */

@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { toast } from 'svelte-sonner';
+	import { ServiceRequestError } from '$lib/api/service';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
@@ -14,7 +15,7 @@
 	} from '$lib/guards/auth';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { roleDisplayLabel } from '$lib/auth/roles';
-	import { fetchAuthStatus, invalidateAuthStatusRequest, submitConsent } from '$lib/features/users';
+	import { fetchAuthStatus, submitConsent } from '$lib/features/users';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import Lock from '@lucide/svelte/icons/lock';
@@ -53,9 +54,16 @@
 			currentUsername = status.name;
 			currentUserRoles = status.roles ?? [];
 			currentPersonnelType = status.personnel_type ?? null;
-		} catch {
-			// Stay here: /login would bounce an authed user to /portal, whose guard sends a known
-			// consent gate straight back here — a redirect loop while the BFF is down (#476).
+		} catch (err) {
+			// Session expired: flag it so /login lets the user re-authenticate instead of bouncing
+			// them to /portal (and back here via a known consent gate).
+			if (err instanceof ServiceRequestError && err.status === 401) {
+				authStore.markNeedsReauth();
+				await goto(resolve(LOGIN_ROUTE));
+				return;
+			}
+			// Otherwise stay here: /login would bounce an authed user to /portal, whose guard sends
+			// a known consent gate straight back here — a redirect loop while the BFF is down (#476).
 			toast.error('ตรวจสอบสถานะไม่สำเร็จ กรุณาลองใหม่');
 		}
 	});
@@ -65,7 +73,6 @@
 		loading = true;
 		try {
 			await submitConsent(true);
-			invalidateAuthStatusRequest();
 			toast.success('บันทึกความยินยอมและเข้าสู่ระบบเรียบร้อย');
 			await goto(resolve(LANDING_ROUTE));
 		} catch {
