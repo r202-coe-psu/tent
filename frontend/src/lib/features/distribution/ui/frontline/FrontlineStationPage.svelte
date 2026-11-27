@@ -5,7 +5,6 @@
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import Package from '@lucide/svelte/icons/package';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import Layers from '@lucide/svelte/icons/layers';
 	import Loader from '@lucide/svelte/icons/loader';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -571,21 +570,6 @@
 					จุดแจกจ่ายพัสดุและอาหาร
 				</h1>
 			</div>
-		</div>
-
-		<div class="flex items-center gap-2.5">
-			<span
-				class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-2xs"
-			>
-				<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-				ศูนย์: {currentShelterCode}
-			</span>
-			<span
-				class="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 shadow-2xs"
-			>
-				<Layers class="h-3.5 w-3.5 text-sky-600" />
-				จุดแจกจ่ายส่วนหน้า
-			</span>
 		</div>
 	</header>
 
