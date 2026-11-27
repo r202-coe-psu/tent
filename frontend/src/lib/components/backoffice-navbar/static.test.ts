@@ -140,11 +140,11 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	];
 	const registry = 'จัดการผู้เข้าพัก';
 	/** The /portal registration tiles mirrored into the sidebar (#1517). */
-	const screeningDesk = 'สถานี 2 คัดกรองผู้เข้าพัก';
+	const screeningDesk = 'คัดกรองผู้เข้าพัก';
 	const registrationDesks = [
-		'สถานี 1 ลงทะเบียนครอบครัวและครัวเรือน',
+		'ลงทะเบียนครอบครัวและครัวเรือน',
 		screeningDesk,
-		'สถานี 3 จัดโซน',
+		'จัดโซน',
 		'ค้นหาและแก้ไขข้อมูลผู้ประสบภัย',
 		'สแกนเข้า-ออกศูนย์'
 	];

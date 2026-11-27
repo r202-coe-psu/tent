@@ -121,19 +121,19 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: House,
 				children: [
 					{
-						label: 'สถานี 1 ลงทะเบียนครอบครัวและครัวเรือน',
+						label: 'ลงทะเบียนครอบครัวและครัวเรือน',
 						href: resolve('/onsite/people'),
 						icon: House,
 						visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
 					},
 					{
-						label: 'สถานี 2 คัดกรองผู้เข้าพัก',
+						label: 'คัดกรองผู้เข้าพัก',
 						href: resolve('/onsite/medical-screening'),
 						icon: HeartPulse,
 						visibleTo: ({ roles, shelterCode }) => canAccessMedicalScreening(roles, shelterCode)
 					},
 					{
-						label: 'สถานี 3 จัดโซน',
+						label: 'จัดโซน',
 						href: resolve('/onsite/zoning'),
 						icon: MapPin,
 						visibleTo: ({ roles, shelterCode }) => canAccessZoning(roles, shelterCode)
