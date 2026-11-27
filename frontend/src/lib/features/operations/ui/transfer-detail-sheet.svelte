@@ -106,17 +106,40 @@
 
 				<section>
 					<h4 class="mb-2 text-sm font-bold text-foreground">ไทม์ไลน์</h4>
-					<ol class="space-y-3 border-l border-border pl-4">
-						{#each steps as step (step.key)}
-							<li class="relative text-sm">
+					<ol class="rounded-lg border border-border bg-card p-4">
+						{#each steps as step, i (step.key)}
+							{@const isLatest = i === steps.length - 1}
+							<li class="relative flex gap-3 pb-5 text-sm last:pb-0">
+								{#if !isLatest}
+									<span
+										class="absolute top-5 -bottom-1 left-[9px] w-0.5 rounded-full bg-primary/30"
+										aria-hidden="true"
+									></span>
+								{/if}
 								<span
-									class="absolute top-1.5 -left-[21px] h-2.5 w-2.5 rounded-full bg-primary"
+									class="relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full {isLatest
+										? 'bg-primary text-primary-foreground ring-4 ring-primary/15'
+										: 'border-2 border-primary bg-card text-primary'}"
 									aria-hidden="true"
-								></span>
-								<p class="font-semibold">{step.label}</p>
-								<p class="text-xs text-muted-foreground">
-									{formatThaiDateTime(step.at)}{step.by ? ` · โดย ${step.by}` : ''}
-								</p>
+								>
+									<span class="size-1.5 rounded-full {isLatest ? 'bg-white' : 'bg-primary'}"></span>
+								</span>
+								<div class="min-w-0 pt-px">
+									<p
+										class="leading-5 font-semibold {isLatest
+											? 'text-foreground'
+											: 'text-slate-700'}"
+									>
+										{step.label}
+										{#if isLatest}<span
+												class="ml-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary"
+												>ล่าสุด</span
+											>{/if}
+									</p>
+									<p class="mt-0.5 text-xs text-muted-foreground">
+										{formatThaiDateTime(step.at)}{step.by ? ` · โดย ${step.by}` : ''}
+									</p>
+								</div>
 							</li>
 						{/each}
 					</ol>
