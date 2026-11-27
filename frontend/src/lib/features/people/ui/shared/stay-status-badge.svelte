@@ -20,7 +20,7 @@
 			dotClass: 'bg-amber-500'
 		},
 		arriving: {
-			label: 'รอเข้าพัก',
+			label: 'รายงานตัวแล้ว · รอจัดโซน',
 			badgeClass:
 				'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
 			dotClass: 'bg-amber-500'
@@ -62,7 +62,7 @@
 			dotClass: 'bg-slate-900 dark:bg-slate-100'
 		},
 		cancelled: {
-			label: 'ยกเลิก',
+			label: 'ยกเลิกการลงทะเบียนล่วงหน้า',
 			badgeClass:
 				'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400',
 			dotClass: 'bg-slate-300'

@@ -258,7 +258,7 @@ async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> 
 				has_coords:
 					typeof master.location?.lat === 'number' && typeof master.location?.lng === 'number',
 				is_external: isExternalShelter(master),
-				dashboard_href: `/back-office/evacuee-management?shelter=${encodeURIComponent(master.code)}`
+				dashboard_href: `/back-office/overview/evacuees?shelter=${encodeURIComponent(master.code)}`
 			};
 			return {
 				master,
@@ -1104,7 +1104,7 @@ export async function buildBoundEvacueeProfile(
 		queue_status: `${ev.current_stay?.status === 'kiosk_registered' ? 'kiosk_registered' : 'pre_registered'}@${shelterCode}`,
 		shelter_code: shelterCode,
 		shelter_name: master?.name ?? shelterCode,
-		shelter_href: `/back-office/evacuee-management?shelter=${encodeURIComponent(shelterCode)}`,
+		shelter_href: `/back-office/overview/evacuees?shelter=${encodeURIComponent(shelterCode)}`,
 		registered_via: null,
 		registered_at: ev.current_stay?.since ?? ev.created_at ?? null,
 		residence: hh

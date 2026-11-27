@@ -55,7 +55,7 @@
 			</Badge>
 			{#if profile.shelter_href}
 				<a
-					href={resolve(profile.shelter_href as '/back-office/evacuee-management')}
+					href={resolve(profile.shelter_href as '/back-office/overview/evacuees')}
 					class="text-sm font-semibold text-[#0284C7] hover:underline"
 				>
 					ไปที่ศูนย์
@@ -152,7 +152,7 @@
 
 		<Card.Root class={spatial.container.staffPageCard}>
 			<Card.Header>
-				<Card.Title class="text-lg font-bold text-slate-900">สมาชิกในครัวเรือน</Card.Title>
+				<Card.Title class="text-lg font-bold text-slate-900">สมาชิกในครอบครัว</Card.Title>
 				<Card.Description class="text-sm text-slate-500">
 					{profile.members.length} คน
 				</Card.Description>

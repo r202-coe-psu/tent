@@ -49,7 +49,7 @@ describe('portal menu EN mirror', () => {
 
 	it('returns English for en', () => {
 		expect(portalDepartmentText(PORTAL_DEPARTMENTS[0], 'en').label).toBe('Registration');
-		expect(portalItemText(allItems[0], 'en').label).toBe('Register Families and Households');
+		expect(portalItemText(allItems[0], 'en').label).toBe('Registration desk');
 		expect(portalGroupLabel('tools', 'en')).toBe('Registration tools');
 		expect(portalPublicLinkLabel('en')).toBe('Public service website');
 		expect(

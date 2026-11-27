@@ -30,7 +30,7 @@
 	const STATIONS = [
 		{
 			station: 1,
-			label: 'Station 1',
+			label: 'จุดลงทะเบียน',
 			subtitle: 'รายงานตัว / ลงทะเบียน',
 			color: stationVar(1),
 			card: 'border-station-1-border',
@@ -39,7 +39,7 @@
 		},
 		{
 			station: 2,
-			label: 'Station 2',
+			label: 'จุดคัดกรองสุขภาพ',
 			subtitle: 'คัดกรองสุขภาพ',
 			color: stationVar(2),
 			card: 'border-station-2-border',
@@ -48,7 +48,7 @@
 		},
 		{
 			station: 3,
-			label: 'Station 3',
+			label: 'จุดจัดโซน',
 			subtitle: 'จัดโซนที่พัก',
 			color: stationVar(3),
 			card: 'border-station-3-border',

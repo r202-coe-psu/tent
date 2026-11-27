@@ -333,7 +333,7 @@
 								id={`${inputId}-reason`}
 								type="text"
 								class="h-12 text-base"
-								placeholder="เช่น หัวหน้าครอบครัวยืนยันแล้ว"
+								placeholder="เช่น ผู้ติดต่อหลักยืนยันแล้ว"
 								bind:value={overrideReasons[key(row.evacueeId)]}
 								disabled={mutation.isPending}
 							/>

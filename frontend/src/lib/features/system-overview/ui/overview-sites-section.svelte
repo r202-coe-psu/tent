@@ -170,7 +170,7 @@
 								</Table.Cell>
 								<Table.Cell>
 									<a
-										href={resolve(site.dashboard_href as '/back-office/evacuee-management')}
+										href={resolve(site.dashboard_href as '/back-office/overview/evacuees')}
 										class="inline-flex size-8 items-center justify-center rounded-md text-[#0284C7] hover:bg-sky-50"
 										aria-label={t.dashboard}
 										title={t.dashboard}

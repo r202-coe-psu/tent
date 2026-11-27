@@ -29,7 +29,7 @@
 				class="mt-1 border-sky-300 text-sky-700"
 				data-testid="pending-report-in"
 			>
-				รอรายงานตัว (Station 1){pending > 1 || v.memberCount > 0 ? ` ${pending} คน` : ''}
+				รอรายงานตัวที่จุดลงทะเบียน{pending > 1 || v.memberCount > 0 ? ` ${pending} คน` : ''}
 			</Badge>
 		{/if}
 	{:else}

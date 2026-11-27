@@ -12,18 +12,18 @@ export const EVACUEE_SEARCH_I18N = {
 		statusLabels: {
 			pre_registered: 'ลงทะเบียนล่วงหน้า',
 			kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
-			arriving: 'รอเข้าพัก',
+			arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 			active: 'เข้าพักแล้ว',
 			room_confirmed: 'ยืนยันถึงโซนแล้ว',
 			temporary_leave: 'ออกชั่วคราว',
 			transferred: 'ย้ายศูนย์',
 			checked_out: 'เช็คเอาต์',
 			deceased: 'เสียชีวิต',
-			cancelled: 'ยกเลิก'
+			cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
 		},
 		btnViewEdit: 'ดู / แก้ไข',
 		notFoundTitle: 'ไม่พบข้อมูลในระบบ',
-		notFoundDesc: 'ผู้ประสบภัยรายนี้ยังไม่เคยลงทะเบียน กรุณาดำเนินการลงทะเบียนใหม่'
+		notFoundDesc: 'ผู้พักพิงรายนี้ยังไม่เคยลงทะเบียน กรุณาดำเนินการลงทะเบียนใหม่'
 	},
 	en: {
 		placeholder: 'National ID / Phone / Full Name',

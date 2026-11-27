@@ -99,17 +99,17 @@ afterEach(async () => {
 
 describe('EvacueeQueueView mobile cards', () => {
 	it.each([
-		[true, 'รอส่งต่อคัดกรอง (Station 2)'],
-		[false, 'รอส่งต่อจัดสรรที่พัก (Station 3)']
+		[true, 'รอส่งต่อจุดคัดกรองสุขภาพ'],
+		[false, 'รอส่งต่อจุดจัดโซน']
 	])('names the arriving tab after the next station (medical %s)', async (enableMedical, label) => {
 		await render({ ...callbacks(), initialTab: 'arriving', enableMedical });
 
 		const tab = Array.from(document.querySelectorAll('button')).find(
-			(b) => b.textContent?.includes(label) && !b.textContent?.includes('ผู้ประสบภัยทั้งหมด')
+			(b) => b.textContent?.includes(label) && !b.textContent?.includes('ผู้พักพิงทั้งหมด')
 		);
 		expect(tab).toBeTruthy();
 		expect(document.body.textContent).not.toContain(
-			enableMedical ? 'รอส่งต่อจัดสรรที่พัก' : 'รอส่งต่อคัดกรอง'
+			enableMedical ? 'รอส่งต่อจุดจัดโซน' : 'รอส่งต่อจุดคัดกรองสุขภาพ'
 		);
 	});
 
@@ -285,7 +285,7 @@ describe('EvacueeQueueView mobile cards', () => {
 		data.evacuees = Array.from({ length: 11 }, (_, i) => ({
 			...PRE_REG,
 			_id: `evacuee:SH001:${String(100 + i)}`,
-			first_name: `ผู้ประสบภัย${i}`,
+			first_name: `ผู้พักพิง${i}`,
 			// Oldest registered first: the last fixture registered latest and lands on page 2.
 			created_at: `2026-11-04T01:${String(10 + i)}:00.000Z`,
 			updated_at: `2026-11-04T02:${String(50 - i)}:00.000Z`
@@ -301,7 +301,7 @@ describe('EvacueeQueueView mobile cards', () => {
 		await settle();
 
 		expect(cards()).toHaveLength(1);
-		expect(cards()[0].textContent).toContain('ผู้ประสบภัย10');
+		expect(cards()[0].textContent).toContain('ผู้พักพิง10');
 	});
 
 	it('lists the earliest registered first on every tab, ignoring later edits (#1426)', async () => {

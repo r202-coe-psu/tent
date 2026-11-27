@@ -44,16 +44,7 @@
 </script>
 
 {#snippet title()}
-	<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-		<span class="min-w-0 {labelSize} font-semibold text-slate-900">{text.label}</span>
-		{#if item.station}
-			<span
-				class="inline-flex shrink-0 items-center rounded-full border border-(color:--c-border) bg-(--c-subtle) px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-(color:--c-text) tabular-nums"
-			>
-				{t.stationBadge(item.station)}
-			</span>
-		{/if}
-	</div>
+	<span class="block min-w-0 {labelSize} font-semibold text-slate-900">{text.label}</span>
 {/snippet}
 
 {#if state === 'ready' && href}

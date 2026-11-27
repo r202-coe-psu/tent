@@ -61,12 +61,12 @@ describe('buildSampleWorkbook', () => {
 		expect(sample.shelter[H.shelter_type]).toBeUndefined();
 	});
 
-	it('fills ชนิดสถานที่ with the default evacuation_center label, not the first item', () => {
+	it('fills ประเภทศูนย์ with the default evacuation_center label, not the first item', () => {
 		const sample = buildSampleWorkbook(mastersWithShelterType());
 		expect(sample.shelter[H.site_kind]).toBe('ศูนย์อพยพ');
 	});
 
-	it('leaves ชนิดสถานที่ empty when no site_kind master data exists', () => {
+	it('leaves ประเภทศูนย์ empty when no site_kind master data exists', () => {
 		expect(buildSampleWorkbook(emptyMasters()).shelter[H.site_kind]).toBeUndefined();
 	});
 

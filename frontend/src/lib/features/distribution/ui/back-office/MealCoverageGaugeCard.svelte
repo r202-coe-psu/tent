@@ -1,44 +1,41 @@
 <script lang="ts">
 	import Gauge from '@lucide/svelte/icons/gauge';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { coverageLevel, type CoverageLevel } from '../model/meal-coverage-view';
+	import {
+		COVERAGE_STATUS_TONES,
+		coverageFilterLabels,
+		coverageStatusLabels,
+		donutSegments,
+		type CoverageStatus
+	} from '../model/meal-coverage-view';
 
 	interface Props {
+		/** People judged: complete + partial + none. */
 		present: number;
 		complete: number;
 		partial: number;
 		none: number;
-		/** Records a person needs; names the "complete" group. */
-		threshold: number;
-		showPartial: boolean;
+		/** The report covers several days: the legend words the one-meal status for a range. */
+		multiDay: boolean;
 	}
 
-	let { present, complete, partial, none, threshold, showPartial }: Props = $props();
+	let { present, complete, partial, none, multiDay }: Props = $props();
 
 	const RADIUS = 52;
 	const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+	// A small gap between segments so neighbours read as separate arcs.
+	const GAP = 3;
 
 	const percent = (n: number) => (present === 0 ? 0 : Math.round((n / present) * 100));
 	const completePercent = $derived(percent(complete));
-	const level = $derived<CoverageLevel>(coverageLevel(completePercent));
-	const filled = $derived(CIRCUMFERENCE * (completePercent / 100));
-	const RING: Record<CoverageLevel, string> = {
-		good: 'stroke-emerald-500',
-		fair: 'stroke-amber-500',
-		poor: 'stroke-red-500'
-	};
+	const segments = $derived(donutSegments({ complete, partial, none }, CIRCUMFERENCE, GAP));
 
-	const legend = $derived([
-		{
-			id: 'complete',
-			label: `ได้รับครบ ${threshold} มื้อ`,
-			count: complete,
-			dot: 'bg-emerald-500'
-		},
-		...(showPartial
-			? [{ id: 'partial', label: 'มีบันทึก 1 มื้อ', count: partial, dot: 'bg-amber-500' }]
-			: []),
-		{ id: 'none', label: 'ยังไม่มีบันทึกเลย', count: none, dot: 'bg-red-500' }
+	const labels = $derived(coverageFilterLabels(multiDay));
+	const centreLabel = $derived(coverageStatusLabels(multiDay).complete);
+	const legend = $derived<{ id: CoverageStatus; label: string; count: number }[]>([
+		{ id: 'complete', label: labels.complete, count: complete },
+		{ id: 'partial', label: labels.partial, count: partial },
+		{ id: 'none', label: labels.none, count: none }
 	]);
 </script>
 
@@ -53,30 +50,43 @@
 		<div
 			class="relative size-36 shrink-0"
 			role="img"
-			aria-label="ได้รับครบ {completePercent}% ({complete} จาก {present} คน)"
+			aria-label="{centreLabel} {completePercent}% ({complete} จาก {present} คน)"
 		>
+			<!-- Starts at 12 o'clock: the svg is turned a quarter back. -->
 			<svg viewBox="0 0 120 120" class="size-full -rotate-90" aria-hidden="true">
 				<circle cx="60" cy="60" r={RADIUS} fill="none" stroke-width="12" class="stroke-slate-100" />
-				<circle
-					cx="60"
-					cy="60"
-					r={RADIUS}
-					fill="none"
-					stroke-width="12"
-					stroke-linecap="round"
-					stroke-dasharray="{filled} {CIRCUMFERENCE}"
-					class="{RING[level]} transition-all duration-300"
-				/>
+				{#each segments as seg (seg.status)}
+					<circle
+						data-status={seg.status}
+						cx="60"
+						cy="60"
+						r={RADIUS}
+						fill="none"
+						stroke-width="12"
+						stroke={COVERAGE_STATUS_TONES[seg.status].color}
+						stroke-dasharray="{seg.length} {CIRCUMFERENCE - seg.length}"
+						stroke-dashoffset={-seg.start}
+					/>
+				{/each}
 			</svg>
 			<div class="absolute inset-0 flex flex-col items-center justify-center tabular-nums">
 				<span class="text-2xl font-bold text-slate-900">{completePercent}%</span>
 				<span class="text-xs text-slate-500">{complete} / {present} คน</span>
+				<span class="text-xs text-slate-500">{centreLabel}</span>
 			</div>
 		</div>
+		{#if present === 0}
+			<p class="text-center text-sm text-slate-500">ไม่มีผู้ที่อยู่ในศูนย์ในช่วงนี้</p>
+		{/if}
 		<ul class="w-full space-y-1.5 text-sm">
 			{#each legend as item (item.id)}
-				<li class="flex items-center gap-2">
-					<span class="size-2.5 shrink-0 rounded-full {item.dot}" aria-hidden="true"></span>
+				<li class="flex items-center gap-2" data-status={item.id}>
+					<span
+						data-dot
+						class="size-2.5 shrink-0 rounded-full"
+						style="background-color: {COVERAGE_STATUS_TONES[item.id].color}"
+						aria-hidden="true"
+					></span>
 					<span class="min-w-0 flex-1 text-slate-600">{item.label}</span>
 					<span class="font-semibold text-slate-900 tabular-nums">
 						{item.count} คน {percent(item.count)}%

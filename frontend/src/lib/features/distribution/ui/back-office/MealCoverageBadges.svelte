@@ -24,6 +24,7 @@
 			{@const recorded = received.includes(meal)}
 			{@const notYet = !recorded && !servedMeals.includes(meal)}
 			<li
+				title={notYet ? 'ยังไม่ถึงมื้อ' : undefined}
 				class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold {recorded
 					? 'border-emerald-200 bg-emerald-50 text-emerald-900'
 					: notYet
@@ -38,11 +39,9 @@
 					<Minus class="size-3.5" aria-hidden="true" />
 				{/if}
 				{getMealPeriodLabel(meal)}
-				{#if notYet}
-					<span>ยังไม่ถึงมื้อ</span>
-				{:else}
-					<span class="sr-only">{recorded ? 'มีบันทึก' : 'ยังไม่มีบันทึก'}</span>
-				{/if}
+				<span class="sr-only">
+					{recorded ? 'มีบันทึก' : notYet ? 'ยังไม่ถึงมื้อ' : 'ยังไม่มีบันทึก'}
+				</span>
 			</li>
 		{/each}
 	</ul>
@@ -51,7 +50,7 @@
 			class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900"
 		>
 			<Users class="size-3.5" aria-hidden="true" />
-			ครัวเรือนมีบันทึกรับ: {mealList(householdRecorded)}
+			ครอบครัวมีบันทึกรับ: {mealList(householdRecorded)}
 		</p>
 	{/if}
 </div>

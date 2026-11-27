@@ -50,6 +50,7 @@ export type PortalIconKey =
 	| 'heart-handshake'
 	| 'heart-pulse'
 	| 'house'
+	| 'layout-dashboard'
 	| 'map-pin'
 	| 'megaphone'
 	| 'monitor'
@@ -106,7 +107,7 @@ export type PortalMenuItem = {
 	scope: 'shelter' | 'system';
 	/** Capabilities that may see the item (SA/SM always may when scope is `shelter`). */
 	roles: readonly PortalCapability[];
-	/** Onsite station number — rendered as a "สถานี N" badge. */
+	/** Onsite station number — picks the station colour; the UI shows the desk name, never the number. */
 	station?: 1 | 2 | 3;
 	/** Sub-section inside a department that has both (registration only). */
 	group?: 'stations' | 'tools';
@@ -125,8 +126,8 @@ export type PortalDepartment = {
 	desc: string;
 	/**
 	 * Work-domain colour family for the whole department; every portal tile inherits it (tiles are
-	 * told apart by icon and station number, never by their own colour). Station PAGES are the one
-	 * exception — they carry `baseStation` colours so staff can tell สถานี 1/2/3 apart across a
+	 * told apart by icon and label, never by their own colour). Station PAGES are the one
+	 * exception — they carry `baseStation` colours so staff can tell stations 1/2/3 apart across a
 	 * hall; the tiles here stay on the department colour.
 	 */
 	domain: DomainId;
@@ -165,14 +166,14 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 	{
 		id: 'registration',
 		label: 'ฝ่ายทะเบียน',
-		desc: 'รับลงทะเบียน คัดกรอง และจัดโซนผู้ประสบภัย',
+		desc: 'รับลงทะเบียน คัดกรอง และจัดโซนผู้พักพิง',
 		domain: 'registration',
 		icon: 'clipboard-list',
 		items: [
 			{
 				id: 'station-1',
-				label: 'ลงทะเบียนครอบครัวและครัวเรือน',
-				desc: 'บันทึกผู้ประสบภัย ครอบครัว และออกบัตร QR',
+				label: 'จุดลงทะเบียน',
+				desc: 'บันทึกผู้พักพิง ครอบครัว และออกบัตร QR',
 				icon: 'house',
 				href: '/onsite/people',
 				scope: 'shelter',
@@ -182,7 +183,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'station-2',
-				label: 'คัดกรองผู้เข้าพัก',
+				label: 'จุดคัดกรองสุขภาพ',
 				desc: 'คัดกรองอาการและกลุ่มเปราะบางก่อนจัดโซน',
 				icon: 'heart-pulse',
 				href: '/onsite/medical-screening',
@@ -194,8 +195,8 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'station-3',
-				label: 'จัดโซน',
-				desc: 'จัดผู้ประสบภัยเข้าโซนและเต็นท์ที่พัก',
+				label: 'จุดจัดโซน',
+				desc: 'จัดผู้พักพิงเข้าโซนที่พัก',
 				icon: 'map-pin',
 				href: '/onsite/zoning',
 				// FAC keeps direct-URL access via `requireZoning`, but the portal tile is REG only.
@@ -206,7 +207,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'evacuee-search-edit',
-				label: 'ค้นหาและแก้ไขข้อมูลผู้ประสบภัย',
+				label: 'ค้นหาและแก้ไขข้อมูลผู้พักพิง',
 				desc: 'ค้นหาด้วยชื่อหรือเลขบัตร',
 				icon: 'search',
 				href: '/onsite/search-edit',
@@ -226,8 +227,8 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'evacuee-database',
-				label: 'ฐานข้อมูลผู้ประสบภัย',
-				desc: 'รายชื่อและครัวเรือนทั้งศูนย์',
+				label: 'ฐานข้อมูลผู้พักพิง',
+				desc: 'รายชื่อและครอบครัวทั้งศูนย์',
 				icon: 'database',
 				href: '/back-office/evacuee-management',
 				scope: 'shelter',
@@ -311,7 +312,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			{
 				id: 'frontline-distribution',
 				label: 'จุดแจกจ่ายพัสดุและอาหาร',
-				desc: 'แจกของรายครัวเรือนหน้างาน',
+				desc: 'แจกของรายครอบครัวหน้างาน',
 				icon: 'package-check',
 				href: '/onsite/distribution',
 				scope: 'shelter',
@@ -392,6 +393,15 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		icon: 'building',
 		items: [
 			{
+				id: 'system-overview',
+				label: 'ภาพรวมศูนย์',
+				desc: 'ภาพรวมผู้อพยพและการแจกจ่ายอาหาร',
+				icon: 'layout-dashboard',
+				href: '/back-office/overview',
+				scope: 'shelter',
+				roles: []
+			},
+			{
 				id: 'shelter-manage',
 				label: 'จัดการศูนย์พักพิงและโซน',
 				desc: 'ข้อมูลศูนย์และโซนทั้งหมด',
@@ -433,7 +443,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'referrals',
-				label: 'การส่งต่อผู้ประสบภัย',
+				label: 'การส่งต่อผู้พักพิง',
 				// D17: hospital sends go through OneData M5; this page moves and tracks.
 				desc: 'ย้ายศูนย์ และบันทึกติดตามการส่งต่อ',
 				icon: 'ambulance',

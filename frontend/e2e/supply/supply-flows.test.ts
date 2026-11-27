@@ -863,7 +863,7 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			const people = page.getByRole('button', { name: `ทั้งหมด ${headcount} คน` }).first();
 			await people.click();
 			const tip = page.locator('[data-slot="tooltip-content"]').filter({ hasText: 'เจ้าหน้าที่' });
-			await expect(tip.first()).toContainText('ผู้ประสบภัย');
+			await expect(tip.first()).toContainText('ผู้พักพิง');
 			await expect(tip.first()).toContainText(String(RESIDENTS));
 			await people.click();
 

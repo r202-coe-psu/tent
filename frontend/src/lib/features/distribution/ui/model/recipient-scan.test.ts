@@ -276,7 +276,7 @@ describe('resolveScannedRecipient', () => {
 
 		expect(result).toMatchObject({
 			kind: 'error',
-			message: expect.stringContaining('ไม่พบผู้ประสบภัย')
+			message: expect.stringContaining('ไม่พบผู้พักพิง')
 		});
 	});
 });

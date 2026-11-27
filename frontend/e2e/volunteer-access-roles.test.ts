@@ -207,6 +207,7 @@ const ROLE_ACCESS: RoleAccess[] = [
  */
 const MANAGEMENT_PAGES = [
 	'/back-office/evacuee-management',
+	'/back-office/overview',
 	'/back-office/volunteers',
 	'/back-office/volunteers/accounts',
 	'/back-office/referrals',
@@ -293,6 +294,11 @@ const pathOf = (page: Page) => new URL(page.url()).pathname;
 /** Redirects to `<this>/edit/<active shelter>` once its page has mounted. */
 const SHELTERS_PAGE = '/back-office/shelters';
 
+/** Menu targets with no page of their own: loading one lands on the page it redirects to. */
+const REDIRECTS: Record<string, string> = {
+	'/back-office/overview': '/back-office/overview/evacuees'
+};
+
 /**
  * Back-office pages left out of the sidebar comparison: `/dailysop` is open to every role by decision
  * (#845) and `/shelters/readiness` has its own manager guard (#1181), so neither tells roles apart.
@@ -367,7 +373,7 @@ async function expectLoads(page: Page, url: string): Promise<void> {
 			.toMatch(new RegExp(`^${SHELTERS_PAGE}(/edit/[^/]+)?$`));
 		return;
 	}
-	expect.soft(pathOf(page), `${url} should load`).toBe(url);
+	expect.soft(pathOf(page), `${url} should load`).toBe(REDIRECTS[url] ?? url);
 }
 
 async function expectBouncedToPortal(page: Page, url: string): Promise<void> {

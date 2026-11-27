@@ -34,7 +34,7 @@
 	</div>
 
 	{#if members.length === 0}
-		<p class="py-6 text-center text-sm text-muted-foreground italic">ไม่มีสมาชิกในครัวเรือนนี้</p>
+		<p class="py-6 text-center text-sm text-muted-foreground italic">ไม่มีสมาชิกในครอบครัวนี้</p>
 	{:else}
 		<div class="divide-y divide-border/60">
 			{#each members as m (m._id)}
@@ -54,16 +54,16 @@
 							{#if age != null}อายุ {age} ปี ·
 							{/if}
 							สถานะ: {{
-								active: 'อยู่ในศูนย์',
+								active: 'เข้าพักแล้ว',
 								room_confirmed: 'ยืนยันถึงโซนแล้ว',
 								pre_registered: 'ลงทะเบียนล่วงหน้า',
 								kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
-								arriving: 'รอจัดโซน',
+								arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 								temporary_leave: 'ออกชั่วคราว',
 								transferred: 'ย้ายศูนย์',
-								checked_out: 'ย้ายออก',
+								checked_out: 'เช็คเอาต์',
 								deceased: 'เสียชีวิต',
-								cancelled: 'ยกเลิก'
+								cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
 							}[m.current_stay.status] ?? m.current_stay.status}
 						</p>
 					</div>

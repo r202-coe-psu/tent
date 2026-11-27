@@ -5,9 +5,9 @@ const th = {
 		backToQueue: 'กลับคิวทะเบียน'
 	},
 	desk: {
-		pageTitle: 'ทะเบียนผู้ประสบภัย (Station 1) | SmartShelter',
+		pageTitle: 'จุดลงทะเบียน | SmartShelter',
 		backToMenuAria: 'กลับหน้าเลือกเมนูหลัก',
-		heading: 'ทะเบียนผู้ประสบภัย',
+		heading: 'ทะเบียนผู้พักพิง',
 		subheading: 'Registration Desk — จุดรับรายงานตัวผู้จองล่วงหน้าและรับลงทะเบียนหน้างาน (Walk-in)',
 		walkInCta: '+ ลงทะเบียน Walk-in',
 		searchLabel: 'ค้นหาหรือสแกนก่อนลงทะเบียน (ตรวจซ้ำในศูนย์นี้และคิวกลาง)',
@@ -41,39 +41,39 @@ const th = {
 		toastSuccess: (count: number) => `รายงานตัวสำเร็จ ${count} คน`,
 		failSummary: 'บันทึกการรายงานตัวไม่สำเร็จ',
 		failToast: 'บันทึกการรายงานตัวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
-		heading: 'รายงานตัวผู้ประสบภัย',
-		introReadOnly: 'แสดงข้อมูลแบบอ่านอย่างเดียว — การแก้ไขทำได้ที่หน้าโปรไฟล์ผู้ประสบภัยเท่านั้น',
+		heading: 'รายงานตัวผู้พักพิง',
+		introReadOnly: 'แสดงข้อมูลแบบอ่านอย่างเดียว — การแก้ไขทำได้ที่หน้าโปรไฟล์ผู้พักพิงเท่านั้น',
 		introEdit:
 			'ตรวจสอบข้อมูลครอบครัว เลือกสมาชิกที่เดินทางมารายงานตัวในรอบนี้ และสามารถเพิ่มสมาชิกใหม่ได้',
-		loading: 'กำลังโหลดข้อมูลผู้ประสบภัยและครอบครัว...',
-		notFoundTitle: 'ไม่พบผู้ประสบภัย',
+		loading: 'กำลังโหลดข้อมูลผู้พักพิงและครอบครัว...',
+		notFoundTitle: 'ไม่พบผู้พักพิง',
 		notFoundPrefix: 'รหัส',
 		notFoundSuffix: 'ไม่มีในศูนย์นี้',
-		alreadyTitle: 'ผู้ประสบภัยรายงานตัวแล้ว',
+		alreadyTitle: 'ผู้พักพิงรายงานตัวแล้ว',
 		alreadyBody: (status: string) =>
-			`สถานะปัจจุบัน: ${status} — ข้อมูลด้านล่างแสดงแบบอ่านอย่างเดียว หากต้องการแก้ไข กรุณาไปที่หน้าโปรไฟล์ผู้ประสบภัย`,
+			`สถานะปัจจุบัน: ${status} — ข้อมูลด้านล่างแสดงแบบอ่านอย่างเดียว หากต้องการแก้ไข กรุณาไปที่หน้าโปรไฟล์ผู้พักพิง`,
 		goToProfile: 'ไปที่หน้าโปรไฟล์'
 	},
 	unassigned: {
 		pageTitle: 'ตรวจสอบก่อนรับเข้าศูนย์ | SmartShelter',
-		petCapToast: 'สัตว์เลี้ยงเกินเพดานของครัวเรือน',
+		petCapToast: 'สัตว์เลี้ยงเกินเพดานของครอบครัว',
 		petCapError: (total: number, cap: number, over: number, advice: string) =>
-			`สัตว์เลี้ยงของครัวเรือนนี้จะรวมเป็น ${total} ตัว เกินเพดาน ${cap} ตัวต่อครัวเรือนอยู่ ${over} ตัว — ${advice}`,
+			`สัตว์เลี้ยงของครอบครัวนี้จะรวมเป็น ${total} ตัว เกินเพดาน ${cap} ตัวต่อครอบครัวอยู่ ${over} ตัว — ${advice}`,
 		adviceReduceOrPool:
 			'ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 หรือกลับไปเลือกจากคิวกลางให้น้อยลง',
 		adviceReduceRetry: 'ลดสัตว์เลี้ยงที่กรอกเพิ่มในขั้นตอนที่ 3 แล้วกดยืนยันอีกครั้ง',
 		adviceBackToQueue: 'กลับไปที่คิวทะเบียนแล้วเลือกสัตว์เลี้ยงให้น้อยลง',
 		readHouseholdFailed:
-			'อ่านข้อมูลครัวเรือนหลังรับเข้าศูนย์ไม่ได้ — กดยืนยันอีกครั้งเพื่อบันทึกการรายงานตัว',
+			'อ่านข้อมูลครอบครัวหลังรับเข้าศูนย์ไม่ได้ — กดยืนยันอีกครั้งเพื่อบันทึกการรายงานตัว',
 		claimed: (count: number) => `รับเข้าศูนย์สำเร็จ ${count} คน`,
-		confirmCapSummary: 'ยังยืนยันไม่ได้ — สัตว์เลี้ยงเกินเพดานของครัวเรือน',
+		confirmCapSummary: 'ยังยืนยันไม่ได้ — สัตว์เลี้ยงเกินเพดานของครอบครัว',
 		claimFailedSummary: 'รับเข้าศูนย์ไม่สำเร็จ',
 		reportInFailedSummary: 'บันทึกการรายงานตัวไม่สำเร็จ',
 		reportInFailedRollback:
-			'รับเข้าศูนย์แล้ว — กดยืนยันอีกครั้งเพื่อบันทึกการรายงานตัว หรือไปที่หน้ารายงานตัวของผู้ประสบภัยแต่ละคนแทน',
+			'รับเข้าศูนย์แล้ว — กดยืนยันอีกครั้งเพื่อบันทึกการรายงานตัว หรือไปที่หน้ารายงานตัวของผู้พักพิงแต่ละคนแทน',
 		confirmFailedToast: 'ยืนยันไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 		petsClaimed: (count: number) => `รับเข้าศูนย์ ${count} สัตว์สำเร็จ`,
-		petsCapSummary: 'ยังรับเข้าศูนย์ไม่ได้ — สัตว์เลี้ยงเกินเพดานของครัวเรือน',
+		petsCapSummary: 'ยังรับเข้าศูนย์ไม่ได้ — สัตว์เลี้ยงเกินเพดานของครอบครัว',
 		claimFailedToast: 'รับเข้าศูนย์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 		undoClaimAll: 'เลือกเฉพาะสัตว์เลี้ยงที่ติ๊กมาตอนแรก',
 		leftBehindClaimedTitle: (count: number) => `สัตว์เลี้ยง ${count} ตัวยังค้างอยู่ในคิวกลาง`,
@@ -81,7 +81,7 @@ const th = {
 		leftBehindClaimedBody:
 			'รับเข้าศูนย์ไปแล้วโดยไม่มีสัตว์เลี้ยงด้านล่าง — กดยืนยันซ้ำจะไม่รับเข้าให้อีก ต้องกลับไปที่คิวทะเบียนแล้วรับเข้าแยกอีกครั้ง',
 		leftBehindBody:
-			'ถ้ารับเข้าศูนย์ตอนนี้ สัตว์เลี้ยงด้านล่างจะค้างอยู่ในคิวกลาง และจะไม่ปรากฏในข้อมูลครัวเรือนที่สถานี 1',
+			'ถ้ารับเข้าศูนย์ตอนนี้ สัตว์เลี้ยงด้านล่างจะค้างอยู่ในคิวกลาง และจะไม่ปรากฏในข้อมูลครอบครัวที่จุดลงทะเบียน',
 		addRemainingPets: 'เพิ่มสัตว์เลี้ยงที่เหลือเข้ารายการนี้',
 		heading: 'ตรวจสอบก่อนรับเข้าศูนย์',
 		intro:
@@ -94,7 +94,7 @@ const th = {
 			'สมาชิกที่ติ๊กไว้ถูกรับเข้าศูนย์อื่นไปแล้วระหว่างที่เปิดหน้านี้ค้างไว้ — กลับไปค้นหาใหม่อีกครั้ง',
 		petsToClaimTitle: 'สัตว์เลี้ยงที่จะรับเข้าศูนย์',
 		householdAlreadyHere: (count: number) =>
-			`ครัวเรือนนี้อยู่ในศูนย์แล้ว (${count} สัตว์เดิม) — รายการด้านล่างจะถูกเพิ่มเข้าไป`,
+			`ครอบครัวนี้อยู่ในศูนย์แล้ว (${count} สัตว์เดิม) — รายการด้านล่างจะถูกเพิ่มเข้าไป`,
 		confirming: 'กำลังรับเข้าศูนย์...',
 		confirmClaim: 'ยืนยันรับเข้าศูนย์',
 		petsAlongsideTitle: 'สัตว์เลี้ยงที่จะรับเข้าศูนย์พร้อมกัน'
@@ -133,7 +133,7 @@ const en: typeof th = {
 		backToQueue: 'Back to registration queue'
 	},
 	desk: {
-		pageTitle: 'Evacuee Registry (Station 1) | SmartShelter',
+		pageTitle: 'Registration desk | SmartShelter',
 		backToMenuAria: 'Back to the main menu',
 		heading: 'Evacuee Registry',
 		subheading:
@@ -213,7 +213,7 @@ const en: typeof th = {
 		leftBehindClaimedBody:
 			'Admitted without the pets below — confirming again will not admit them. Go back to the registration queue and admit them separately.',
 		leftBehindBody:
-			'If you admit now, the pets below will stay in the central queue and will not appear in the household record at Station 1',
+			'If you admit now, the pets below will stay in the central queue and will not appear in the household record at the registration desk',
 		addRemainingPets: 'Add the remaining pets to this admission',
 		heading: 'Review before admitting',
 		intro:

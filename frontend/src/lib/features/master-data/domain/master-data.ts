@@ -125,10 +125,10 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 	housing_type: {
 		shortTitle: 'ประเภทที่อยู่',
 		title: 'ประเภทที่อยู่อาศัย',
-		description: 'ประเภทบ้าน/ที่พักก่อนอพยพ ที่ใช้ในที่อยู่ครัวเรือน',
+		description: 'ประเภทบ้าน/ที่พักก่อนอพยพ ที่ใช้ในที่อยู่ครอบครัว',
 		affectedForms: [
-			'ฟอร์มที่อยู่ครัวเรือน (ลงทะเบียนล่วงหน้า / หลังถึงศูนย์)',
-			'แก้ไขครัวเรือน',
+			'ฟอร์มที่อยู่ครอบครัว (ลงทะเบียนล่วงหน้า / หลังถึงศูนย์)',
+			'แก้ไขครอบครัว',
 			'จองที่พักสาธารณะ'
 		]
 	},
@@ -150,9 +150,9 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		description:
 			'รายการโรคประจำตัวมาตรฐาน (ส่วนกลางเท่านั้น) ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ — โรคอื่นพิมพ์เพิ่มเองได้',
 		affectedForms: [
-			'คัดกรองสุขภาพ Station 2',
+			'จุดคัดกรองสุขภาพ',
 			'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง',
-			'นำเข้าไฟล์ผู้อพยพ'
+			'นำเข้าไฟล์ผู้พักพิง'
 		]
 	},
 	allergy: {
@@ -160,7 +160,7 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		title: 'อาการแพ้',
 		description:
 			'รายการสิ่งที่แพ้มาตรฐาน (ส่วนกลางเท่านั้น) ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ — สิ่งอื่น เช่น แพ้ยา พิมพ์เพิ่มเองได้',
-		affectedForms: ['คัดกรองสุขภาพ Station 2', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
+		affectedForms: ['จุดคัดกรองสุขภาพ', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
 	},
 	site_kind: {
 		shortTitle: 'ประเภทศูนย์',
@@ -219,7 +219,7 @@ const masterDataTypeMetaEn: Record<MasterDataType, MasterDataTypeMeta> = {
 		description:
 			'Standard chronic disease list (central only) that staff can pick during health screening. Other conditions can be typed in.',
 		affectedForms: [
-			'Station 2 health screening',
+			'Health screening desk',
 			'Edit health information in the evacuee profile',
 			'Evacuee file import'
 		]
@@ -229,7 +229,7 @@ const masterDataTypeMetaEn: Record<MasterDataType, MasterDataTypeMeta> = {
 		title: 'Allergy',
 		description:
 			'Standard allergen list (central only) that staff can pick during health screening. Others, such as drug allergies, can be typed in.',
-		affectedForms: ['Station 2 health screening', 'Edit health information in the evacuee profile']
+		affectedForms: ['Health screening desk', 'Edit health information in the evacuee profile']
 	},
 	site_kind: {
 		shortTitle: 'Site kind',

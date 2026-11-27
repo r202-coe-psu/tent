@@ -160,7 +160,9 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const allowed = new Set([...ungated, ...gated.flat()]);
 		return allLeafLabels().filter((l) => allowed.has(l));
 	};
+	const overview = 'ภาพรวมศูนย์';
 	const managerLabels = [
+		overview,
 		registry,
 		...volunteers,
 		referrals,
@@ -231,6 +233,27 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	it('volunteer_coordinator sees volunteers only (#842)', () => {
 		expect(visibleLeafLabels(ctx(sh('volunteer_coordinator')))).toEqual(labelsFor(volunteers));
+	});
+
+	it('puts the system overview button first, for SA and the active shelter SM only', () => {
+		const first = backofficeNavbarGroups[0].items[0];
+		expect(first.label).toBe('ภาพรวมศูนย์');
+		expect(isGroup(first)).toBe(false);
+		expect(String(first.href)).toBe('/back-office/overview');
+		expect(canSeeNavNode(first, ctx(['system_admin']))).toBe(true);
+		expect(canSeeNavNode(first, ctx(['shelter:SH001', 'SH001:shelter_manager'], 'SH001'))).toBe(
+			true
+		);
+		expect(canSeeNavNode(first, ctx(['shelter:SH002', 'SH002:shelter_manager'], 'SH001'))).toBe(
+			false
+		);
+		expect(canSeeNavNode(first, ctx(sh('registration_staff')))).toBe(false);
+	});
+
+	it('lights the system overview button on both overview tabs', () => {
+		const hrefs = navLeafHrefs(backofficeNavbarGroups);
+		expect(activeNavHref('/back-office/overview/evacuees', hrefs)).toBe('/back-office/overview');
+		expect(activeNavHref('/back-office/overview/food', hrefs)).toBe('/back-office/overview');
 	});
 
 	it('registration_staff sees the evacuee registry only (#842)', () => {

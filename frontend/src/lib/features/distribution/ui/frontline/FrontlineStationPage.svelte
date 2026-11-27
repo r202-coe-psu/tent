@@ -791,7 +791,7 @@
 					<UtensilsCrossed class="mb-3 h-12 w-12 text-slate-300" />
 					<h3 class="text-sm font-bold text-slate-800">ไม่มีตั๋วอาหารที่เปิดแจกจ่ายอยู่ในขณะนี้</h3>
 					<p class="mt-1 max-w-md text-xs text-slate-500">
-						ตั๋วอาหารต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายให้ผู้ประสบภัยได้
+						ตั๋วอาหารต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายให้ผู้พักพิงได้
 					</p>
 					{#if inTransitTickets.length > 0}
 						<Button
