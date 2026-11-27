@@ -8,12 +8,16 @@ import {
 	isShelterManager,
 	isSystemAdmin,
 	canAccessDonations,
+	canAccessDistributionDesk,
 	canAccessEvacueeRegistration,
+	canAccessMedicalScreening,
+	canAccessZoning,
 	canAccessIncidents,
 	canAccessKitchen,
 	canAccessManagerPages,
 	canAccessTickets,
 	canAccessVolunteerBackoffice,
+	canAccessVolunteerCheckIn,
 	canAccessWarehouse,
 	canManagePrinters,
 	canViewSupply,
@@ -46,6 +50,12 @@ import Images from '@lucide/svelte/icons/images';
 import Printer from '@lucide/svelte/icons/printer';
 import Ambulance from '@lucide/svelte/icons/ambulance';
 import Boxes from '@lucide/svelte/icons/boxes';
+import House from '@lucide/svelte/icons/house';
+import HeartPulse from '@lucide/svelte/icons/heart-pulse';
+import Search from '@lucide/svelte/icons/search';
+import ScanLine from '@lucide/svelte/icons/scan-line';
+import Truck from '@lucide/svelte/icons/truck';
+import UserCheck from '@lucide/svelte/icons/user-check';
 import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 
 type Leaf = {
@@ -98,6 +108,12 @@ export type BackofficeNavbarGroup = {
 
 export type BackofficeNavbarLeaf = Leaf;
 
+/** A desk link for SA / the active shelter's SM, and only when its page guard also lets them in. */
+const managerDesk =
+	(canAccess: (roles: readonly string[], shelterCode?: string | null) => boolean) =>
+	({ roles, shelterCode }: NavVisibilityContext): boolean =>
+		canAccessManagerPages(roles, shelterCode) && canAccess(roles, shelterCode);
+
 export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		// Centre dashboards (evacuees, food distribution) behind one button — SA + SM of the active
@@ -122,6 +138,52 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Users,
 				visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
 			},
+			// The /portal onsite desks, mirrored here and named as on /portal and in CONTEXT.md, for SA/SM
+			// only (#1517): other roles keep reaching them from /portal.
+			{
+				label: 'รับผู้พักพิงเข้าศูนย์',
+				href: null,
+				icon: House,
+				children: [
+					{
+						label: 'จุดลงทะเบียน',
+						href: resolve('/onsite/people'),
+						icon: House,
+						visibleTo: managerDesk(canAccessEvacueeRegistration)
+					},
+					{
+						label: 'จุดคัดกรองสุขภาพ',
+						href: resolve('/onsite/medical-screening'),
+						icon: HeartPulse,
+						visibleTo: managerDesk(canAccessMedicalScreening)
+					},
+					{
+						label: 'จุดจัดโซน',
+						href: resolve('/onsite/zoning'),
+						icon: MapPin,
+						visibleTo: managerDesk(canAccessZoning)
+					}
+				]
+			},
+			{
+				label: 'ค้นหาและสแกนผู้พักพิง',
+				href: null,
+				icon: Search,
+				children: [
+					{
+						label: 'ค้นหาและแก้ไขข้อมูลผู้พักพิง',
+						href: resolve('/onsite/search-edit'),
+						icon: Search,
+						visibleTo: managerDesk(canAccessEvacueeRegistration)
+					},
+					{
+						label: 'สแกนเข้า-ออกศูนย์',
+						href: resolve('/onsite/scan-check-in-out'),
+						icon: ScanLine,
+						visibleTo: managerDesk(canAccessEvacueeRegistration)
+					}
+				]
+			},
 			{
 				label: 'จัดการอาสาสมัคร',
 				href: null,
@@ -139,6 +201,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/volunteers/accounts'),
 						icon: KeyRound,
 						visibleTo: ({ roles, shelterCode }) => canAccessVolunteerBackoffice(roles, shelterCode)
+					},
+					{
+						label: 'เช็คอินอาสาสมัคร',
+						href: resolve('/onsite/volunteer-check-in'),
+						icon: UserCheck,
+						visibleTo: managerDesk(canAccessVolunteerCheckIn)
 					}
 				]
 			},
@@ -195,6 +263,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/tickets/kitchen'),
 						icon: ClipboardCheck,
 						visibleTo: ({ roles, shelterCode }) => canAccessTickets(roles, shelterCode)
+					},
+					{
+						// Station 4 desk for SA / SM only (#1517); other roles open it from /portal.
+						label: 'จุดแจกจ่ายพัสดุและอาหาร',
+						href: resolve('/onsite/distribution'),
+						icon: Truck,
+						visibleTo: managerDesk(canAccessDistributionDesk)
 					}
 				]
 			},
@@ -320,6 +395,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 ];
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
+
+/** Is this the portal itself, where the "back to the main menu" button is the current page (#1517)? */
+export function isBackofficeHome(pathname: string): boolean {
+	return pathname.replace(/\/$/, '') === String(backofficeHomePath);
+}
 
 /** Drops a trailing slash from the path part only (`/x/?tab=a` → `/x?tab=a`). */
 const stripTrailingSlash = (path: string): string => {
