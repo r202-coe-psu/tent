@@ -106,8 +106,10 @@
 	const schema = editCampaignFormSchema({
 		pledged,
 		unitLabel: () => finalUnit,
+		// '' = no explicit pick yet, so the field still holds the need's stored point.
 		pointReady: (chosen) =>
-			donationPoints.isLoaded && needPointToSave(pointField, chosen || null) !== undefined
+			donationPoints.isLoaded &&
+			needPointToSave(pointField, chosen || pointField.value) !== undefined
 	});
 
 	const FIELD_IDS = {

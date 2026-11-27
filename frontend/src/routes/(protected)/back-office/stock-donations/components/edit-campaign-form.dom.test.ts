@@ -5,11 +5,12 @@ import type { NeedItem } from '$lib/features/operations';
 import EditCampaignForm from './edit-campaign-form.svelte';
 
 const toastError = vi.hoisted(() => vi.fn());
+const donationPoints = vi.hoisted(() => ({ list: [] as { id: string; name: string }[] }));
 
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: toastError, info: vi.fn() } }));
 vi.mock('$lib/features/operations', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/operations')>()),
-	useDonationPoints: () => ({ points: [], isLoaded: true })
+	useDonationPoints: () => ({ points: donationPoints.list, isLoaded: true })
 }));
 vi.mock('$lib/features/supply', () => ({ useSupplyItems: () => ({ data: [], isPending: false }) }));
 vi.mock('$lib/features/catalog', async (importOriginal) => ({
@@ -22,7 +23,7 @@ vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 const ITEM_ID = 'item_master:rice';
 
 /** A campaign for one need: 100 kg wanted, 40 kg already pledged by donors. */
-const campaign = (): NeedItem => ({
+const campaign = (dropOffPointId: string | null = null): NeedItem => ({
 	id: 'campaign:1',
 	title: 'ข้าวสาร',
 	location: '',
@@ -40,7 +41,7 @@ const campaign = (): NeedItem => ({
 			unit: 'kg',
 			closeState: 'open',
 			isManualClosed: false,
-			dropOffPointId: null
+			dropOffPointId
 		}
 	],
 	campaignDoc: {} as NeedItem['campaignDoc']
@@ -57,11 +58,11 @@ async function settle() {
 	}
 }
 
-async function render() {
+async function render(item: NeedItem = campaign()) {
 	const onsubmit = vi.fn();
 	instance = mount(EditCampaignForm, {
 		target: document.body,
-		props: { item: campaign(), itemId: ITEM_ID, onclose: vi.fn(), onsubmit }
+		props: { item, itemId: ITEM_ID, onclose: vi.fn(), onsubmit }
 	});
 	await settle();
 	return onsubmit;
@@ -82,6 +83,7 @@ afterEach(() => {
 	instance = null;
 	document.body.innerHTML = '';
 	toastError.mockReset();
+	donationPoints.list = [];
 });
 
 describe('edit campaign form', () => {
@@ -137,5 +139,21 @@ describe('edit campaign form', () => {
 			description: 'ต้องการด่วน',
 			dropOffPointId: null
 		});
+	});
+
+	it('keeps the stored drop-off point when the shelter has several to choose from', async () => {
+		donationPoints.list = [
+			{ id: 'point:a', name: 'จุด A' },
+			{ id: 'point:b', name: 'จุด B' }
+		];
+		const onsubmit = await render(campaign('point:b'));
+		await type('edit-item-target', '120');
+
+		submit().click();
+		await settle();
+
+		expect(toastError).not.toHaveBeenCalled();
+		expect(text('edit-item-drop-off-point-error')).toBe('');
+		expect(onsubmit).toHaveBeenCalledWith(expect.objectContaining({ dropOffPointId: 'point:b' }));
 	});
 });
