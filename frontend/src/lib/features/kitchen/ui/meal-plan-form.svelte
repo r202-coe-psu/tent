@@ -360,7 +360,7 @@
 					<Input
 						id="mp-date"
 						type="date"
-						class="min-h-11 sm:min-h-9"
+						class="h-10 rounded-lg shadow-2xs"
 						bind:value={date}
 						required
 						disabled={isEdit}
@@ -372,7 +372,7 @@
 						id="mp-meal"
 						bind:value={meal}
 						disabled={isEdit}
-						class="flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none disabled:opacity-50 sm:h-9"
+						class="flex h-10 w-full rounded-lg border border-input bg-white px-3 py-1 text-sm shadow-2xs focus:ring-1 focus:ring-ring focus:outline-none disabled:opacity-50"
 					>
 						{#each Object.entries(MEAL_PERIOD_LABELS) as [value, label] (value)}
 							<option {value}>{label}</option>
@@ -385,7 +385,12 @@
 				<div class="space-y-2">
 					<div class="space-y-1.5">
 						<Label for="mp-custom-label">ชื่อเมนู (ไม่บังคับ)</Label>
-						<Input id="mp-custom-label" placeholder="เช่น ข้าวไก่กรอบ" bind:value={customLabel} />
+						<Input
+							class="rounded-lg shadow-2xs"
+							id="mp-custom-label"
+							placeholder="เช่น ข้าวไก่กรอบ"
+							bind:value={customLabel}
+						/>
 					</div>
 					<Label>วัตถุดิบ (เฉพาะหมวดหมู่อาหาร)</Label>
 					{#if supplyItems.isPending}
@@ -407,7 +412,7 @@
 									<select
 										bind:value={row.itemId}
 										onchange={() => onCustomItemPick(row)}
-										class="flex h-11 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none sm:h-9"
+										class="flex h-10 min-w-0 flex-1 rounded-lg border border-input bg-white px-3 py-1 text-sm shadow-2xs focus:ring-1 focus:ring-ring focus:outline-none"
 									>
 										<option value={null} disabled>เลือกวัตถุดิบ...</option>
 										{#if currentUnresolved}
@@ -425,7 +430,7 @@
 											type="number"
 											min="0"
 											step={qtyInputStep(rowDim)}
-											class="min-h-11 w-full sm:min-h-9 sm:w-28"
+											class="h-10 w-full rounded-lg shadow-2xs sm:w-28"
 											placeholder="ต่อคน"
 											aria-label="ปริมาณต่อคน"
 											aria-invalid={!!qtyMessage}
@@ -478,7 +483,7 @@
 						<select
 							id="mp-recipe"
 							bind:value={recipeId}
-							class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+							class="flex h-10 w-full rounded-lg border border-input bg-white px-3 py-1 text-sm shadow-2xs focus:ring-1 focus:ring-ring focus:outline-none"
 						>
 							<option value={null} disabled>เลือกสูตร...</option>
 							{#each validRecipes as r (r._id)}
@@ -518,6 +523,7 @@
 			<div class="space-y-1.5">
 				<Label for="mp-total">จำนวนผู้พักพิงทั้งหมด (คน)</Label>
 				<Input
+					class="rounded-lg shadow-2xs"
 					id="mp-total"
 					type="number"
 					min="1"
@@ -537,7 +543,7 @@
 						id="mp-halal"
 						type="number"
 						min="0"
-						class="min-h-11 sm:min-h-9"
+						class="h-10 rounded-lg shadow-2xs"
 						bind:value={halal}
 						aria-invalid={subCountErrors.halal !== null}
 						aria-describedby={subCountErrors.halal ? 'mp-halal-error' : undefined}
@@ -551,7 +557,7 @@
 						id="mp-soft"
 						type="number"
 						min="0"
-						class="min-h-11 sm:min-h-9"
+						class="h-10 rounded-lg shadow-2xs"
 						bind:value={softFood}
 						aria-invalid={subCountErrors.softFood !== null}
 						aria-describedby={subCountErrors.softFood ? 'mp-soft-error' : undefined}
@@ -565,7 +571,7 @@
 						id="mp-infant"
 						type="number"
 						min="0"
-						class="min-h-11 sm:min-h-9"
+						class="h-10 rounded-lg shadow-2xs"
 						bind:value={infant}
 						aria-invalid={subCountErrors.infant !== null}
 						aria-describedby={subCountErrors.infant ? 'mp-infant-error' : undefined}
@@ -592,7 +598,7 @@
 						bind:value={overrideReason}
 						rows="2"
 						placeholder="เช่น มีอาสาสมัคร/ผู้มาช่วยงานเพิ่ม 20 คน"
-						class="flex w-full rounded-md border border-amber-300 bg-transparent px-3 py-1.5 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+						class="flex w-full rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm shadow-2xs focus:ring-1 focus:ring-ring focus:outline-none"
 					></textarea>
 				</div>
 			{/if}

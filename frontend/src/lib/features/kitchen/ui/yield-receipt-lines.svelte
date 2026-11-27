@@ -171,7 +171,7 @@
 						bind:value={line.qty}
 						aria-invalid={!!qtyErrors.get(line.key)}
 						{disabled}
-						class="h-11 tabular-nums sm:h-10"
+						class="h-10 rounded-lg tabular-nums shadow-2xs"
 					/>
 					{#if qtyErrors.get(line.key)}
 						<p class="text-xs font-semibold text-red-600">{qtyErrors.get(line.key)}</p>
