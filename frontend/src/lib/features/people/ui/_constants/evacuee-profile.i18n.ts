@@ -71,7 +71,7 @@ const th = {
 		noSpecialNeeds: 'ไม่มีความต้องการพิเศษ'
 	},
 	householdCard: {
-		title: 'ครอบครัว / ครอบครัว',
+		title: 'ครอบครัว',
 		editAffiliationAria: 'แก้ไขสังกัดครอบครัว',
 		noHouseholdTitle: 'ยังไม่สังกัดครอบครัว',
 		noHouseholdBody: 'ผู้พักพิงคนนี้ยังไม่ได้เชื่อมกับเอกสารครอบครัวในระบบ',

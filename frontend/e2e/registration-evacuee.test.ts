@@ -527,7 +527,7 @@ async function expectZoningQueue(
 	opts: { screened: boolean }
 ): Promise<void> {
 	await desk.goto('/onsite/zoning');
-	await expect(desk.getByText('Cleared for Zoning — คิวพร้อมจัดสรรที่พัก')).toBeVisible({
+	await expect(desk.getByText('Cleared for Zoning — คิวพร้อมจัดโซน')).toBeVisible({
 		timeout: 20_000
 	});
 	await desk.getByPlaceholder('ค้นหาชื่อ, นามสกุล, เบอร์โทร, เลขบัตร...').fill(query);
