@@ -133,13 +133,9 @@
 		return lotInputMax(lotQty, allocatedQty, others);
 	}
 
-	function setQty(lotRef: string, lotQty: string, value: string) {
-		let next = value;
-		if (isUsableQty(value)) {
-			const max = maxFor(lotRef, lotQty);
-			if (qtyGt(value, max)) next = max;
-		}
-		draft = { ...draft, [lotRef]: next };
+	/** Keeps what was typed; an over-balance or over-allocation shows as an error instead of being clamped. */
+	function setQty(lotRef: string, value: string) {
+		draft = { ...draft, [lotRef]: value };
 		emit(draft);
 	}
 
@@ -324,7 +320,7 @@
 							inputmode={requiresWholeQty(lotDimension) ? 'numeric' : 'decimal'}
 							value={draft[lot.lot_ref] ?? ''}
 							oninput={(e: Event) =>
-								setQty(lot.lot_ref, lot.qty, (e.currentTarget as HTMLInputElement).value)}
+								setQty(lot.lot_ref, (e.currentTarget as HTMLInputElement).value)}
 							disabled={!canEdit}
 							readonly={capped}
 							aria-disabled={capped || !canEdit}
