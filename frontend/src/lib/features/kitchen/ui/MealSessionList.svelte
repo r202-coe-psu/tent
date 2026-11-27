@@ -195,7 +195,7 @@
 
 	const shelterPeople = $derived(mealHeadcount.data?.people);
 	const shelterPeopleCards = $derived([
-		{ key: 'evacuees', label: 'ผู้อพยพ', count: shelterPeople?.evacuees },
+		{ key: 'evacuees', label: 'ผู้พักพิง', count: shelterPeople?.evacuees },
 		{ key: 'staff', label: 'เจ้าหน้าที่', count: shelterPeople?.staff },
 		{ key: 'volunteers', label: 'อาสาสมัคร', count: shelterPeople?.volunteers }
 	]);

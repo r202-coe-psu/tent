@@ -24,19 +24,19 @@
 	const formData = $derived(form.form);
 </script>
 
-<!-- หัวหน้าครัวเรือน -->
+<!-- ผู้ติดต่อหลัก -->
 <Form.Field {form} name="head_evacuee_id">
 	<Form.Control>
 		{#snippet children({ props })}
 			<Form.Label class="flex items-center gap-1.5">
 				<UserRound class="size-3.5 text-muted-foreground" />
-				หัวหน้าครัวเรือน <span class="text-destructive">*</span>
+				ผู้ติดต่อหลัก <span class="text-destructive">*</span>
 			</Form.Label>
 			<SearchSelect
 				items={headItems}
 				bind:value={headComboValue}
 				placeholder="พิมพ์ชื่อเพื่อค้นหา..."
-				emptyText="ไม่พบผู้ประสบภัยที่ตรงกับการค้นหา"
+				emptyText="ไม่พบผู้พักพิงที่ตรงกับการค้นหา"
 				controlProps={props}
 				class="h-9 w-full"
 			/>
@@ -55,7 +55,7 @@
 				for="emergency-phone"
 				class="text-xs font-semibold tracking-wide text-primary uppercase"
 			>
-				เบอร์ติดต่อฉุกเฉินของหัวหน้าครัวเรือน <span class="text-destructive">*</span>
+				เบอร์ติดต่อฉุกเฉินของผู้ติดต่อหลัก <span class="text-destructive">*</span>
 			</Label>
 			<Input
 				id="emergency-phone"

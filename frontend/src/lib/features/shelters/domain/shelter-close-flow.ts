@@ -97,7 +97,7 @@ export function canConfirmShelterClose(input: {
 
 const PHASE_LABELS: Record<ShelterCloseJobPhase, string> = {
 	people: 'เช็คเอาต์ผู้พักพิง',
-	households: 'ตรวจสอบครัวเรือน',
+	households: 'ตรวจสอบครอบครัว',
 	sweep: 'ตรวจคนค้าง',
 	finalize: 'ปิดศูนย์',
 	done: 'เสร็จสิ้น'

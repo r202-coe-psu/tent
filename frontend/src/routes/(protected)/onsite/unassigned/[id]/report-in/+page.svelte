@@ -369,7 +369,7 @@
 		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<ClipboardList class="size-6 text-primary" />
 			<h1 class="text-2xl font-bold md:text-3xl">{t.heading}</h1>
-			<Badge variant="outline">Station 1 · Review</Badge>
+			<Badge variant="outline">จุดลงทะเบียน · ตรวจทาน</Badge>
 		</div>
 		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
 			{t.intro}

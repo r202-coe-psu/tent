@@ -9,8 +9,10 @@ import { filterPortalMenu, type PortalDepartmentView } from './portal-menu';
 const ON = { medicalScreening: true };
 const SH = 'SH001';
 const staff = (cap: string) => [`shelter:${SH}`, `${SH}:${cap}`];
+// The daily assessment tab is visible to everyone, so these cases look at the role-gated
+// departments only; the test below says how the tab counts toward the layout mode.
 const menu = (roles: string[]): PortalDepartmentView[] =>
-	filterPortalMenu({ roles, shelterCode: SH, features: ON });
+	filterPortalMenu({ roles, shelterCode: SH, features: ON }).filter((v) => v.id !== 'dailysop');
 const idsOf = (views: PortalDepartmentView[]) => views.map((v) => v.id);
 
 describe('portalLayoutMode', () => {
@@ -35,6 +37,16 @@ describe('portalLayoutMode', () => {
 			`${SH}:volunteer_coordinator`
 		]);
 		expect(idsOf(views)).toHaveLength(3);
+		expect(portalLayoutMode(views)).toBe('overview');
+	});
+
+	it('counts the daily assessment tab, so two role departments plus it is an overview', () => {
+		const views = filterPortalMenu({
+			roles: [...staff('kitchen_staff'), `${SH}:volunteer_coordinator`],
+			shelterCode: SH,
+			features: ON
+		});
+		expect(idsOf(views)).toEqual(['kitchen', 'volunteer', 'dailysop']);
 		expect(portalLayoutMode(views)).toBe('overview');
 	});
 

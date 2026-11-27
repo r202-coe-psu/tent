@@ -27,6 +27,7 @@ const site = (code: string, publicVisible: boolean): OverviewSiteRow => ({
 	checkin: 0,
 	checkout: 0,
 	has_coords: false,
+	is_external: false,
 	public_visible: publicVisible,
 	dashboard_href: '/back-office/evacuee-management'
 });
@@ -40,10 +41,13 @@ afterEach(() => {
 });
 
 async function mountSites(sites: OverviewSiteRow[]) {
+	const hiddenTotal = sites.filter((s) => !s.public_visible).length;
 	instance = mount(OverviewSitesSection, {
 		target: document.body,
 		props: {
 			sites,
+			total: sites.length,
+			hiddenTotal,
 			movementFrom: '2026-11-01',
 			movementTo: '2026-11-14',
 			onMovementRangeChange: () => {}
@@ -76,7 +80,7 @@ describe('OverviewSitesSection — hidden shelters (#1515)', () => {
 });
 
 describe('OverviewOriginSection — source shelter (#1515)', () => {
-	it('shows the shelter code of each row, or says the registrants are not bound yet', async () => {
+	it('shows the shelter code of each row, or says the registrants have not chosen one yet', async () => {
 		const buckets: OriginBucket[] = [
 			{
 				province: 'สงขลา',
@@ -94,7 +98,7 @@ describe('OverviewOriginSection — source shelter (#1515)', () => {
 		const rows = [...document.body.querySelectorAll('tbody tr')].map((tr) => tr.textContent ?? '');
 		expect(rows).toHaveLength(2);
 		expect(rows[0]).toContain('SH001');
-		expect(rows[1]).toContain('ยังไม่ผูกศูนย์');
+		expect(rows[1]).toContain('ยังไม่ได้เลือกศูนย์');
 		expect(document.body.textContent).toContain('ศูนย์');
 	});
 });

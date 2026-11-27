@@ -186,8 +186,10 @@ test.describe(
 			});
 			const tile = page.getByRole('link', { name: /ข่าวสารบน Kiosk/ });
 			await expect(tile).toHaveCount(1);
-			// The only link into back-office: no other department, no other tile.
-			await expect(page.locator('main a[href^="/back-office"]')).toHaveCount(1);
+			// The only link into back-office besides the daily assessment tab every role sees (#845).
+			await expect(
+				page.locator('main a[href^="/back-office"]:not([href^="/back-office/dailysop"])')
+			).toHaveCount(1);
 			await expect(page.locator('main a[href^="/system-management"]')).toHaveCount(0);
 
 			await tile.click();

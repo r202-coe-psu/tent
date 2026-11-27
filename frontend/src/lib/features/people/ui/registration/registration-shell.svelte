@@ -608,7 +608,7 @@
 			if (!leavePreview.ok) {
 				throw new Error(
 					leavePreview.reason === 'new_head_required'
-						? 'กรุณาเลือกหัวหน้าครอบครัวคนใหม่ก่อนย้ายออก'
+						? 'กรุณาเลือกผู้ติดต่อหลักคนใหม่ก่อนย้ายออก'
 						: 'หัวหน้าคนใหม่ต้องเป็นสมาชิกในครอบครัวปัจจุบัน'
 				);
 			}
@@ -680,7 +680,7 @@
 			if (!hasMinimumResidence(residenceForm)) {
 				throw new Error(
 					residenceForm.housing_type === 'homeless'
-						? 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+						? 'ครอบครัวไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
 						: 'กรุณากรอกที่อยู่ครอบครัวขั้นต่ำ (บ้านเลขที่ จังหวัด อำเภอ ตำบล)'
 				);
 			}
@@ -764,7 +764,7 @@
 		) {
 			shellError =
 				residenceForm.housing_type === 'homeless'
-					? 'ครัวเรือนไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
+					? 'ครอบครัวไร้บ้านต้องมีบ้านเลขที่ หรือจุดสังเกต หรือที่อยู่ภูมิศาสตร์ครบ'
 					: 'กรุณากรอกที่อยู่ครอบครัวขั้นต่ำ (บ้านเลขที่ จังหวัด อำเภอ ตำบล)';
 			scrollToSection('household');
 			toast.error(shellError);
@@ -774,7 +774,7 @@
 		if (leavingHousehold && leavePreview && !leavePreview.ok) {
 			shellError =
 				leavePreview.reason === 'new_head_required'
-					? 'หัวหน้าครอบครัวต้องเลือกหัวหน้าคนใหม่ก่อนย้ายออก'
+					? 'ผู้ติดต่อหลักต้องเลือกหัวหน้าคนใหม่ก่อนย้ายออก'
 					: 'หัวหน้าคนใหม่ไม่ถูกต้อง';
 			scrollToSection('household');
 			toast.error(shellError);
@@ -805,7 +805,7 @@
 			}));
 
 			if (mode === 'report-in') {
-				if (!initialEvacuee) throw new Error('ไม่พบข้อมูลผู้ประสบภัยสำหรับรายงานตัว');
+				if (!initialEvacuee) throw new Error('ไม่พบข้อมูลผู้พักพิงสำหรับรายงานตัว');
 				if (
 					initialEvacuee.current_stay.status !== 'pre_registered' &&
 					initialEvacuee.current_stay.status !== 'kiosk_registered'
@@ -1032,7 +1032,7 @@
 					{#if leavingHousehold && leavePreview && !leavePreview.ok && leavePreview.reason === 'new_head_required'}
 						<div class="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
 							<p class="text-sm font-semibold text-foreground">
-								คุณเป็นหัวหน้าครอบครัว — เลือกหัวหน้าคนใหม่ก่อนย้ายออก
+								คุณเป็นผู้ติดต่อหลัก — เลือกหัวหน้าคนใหม่ก่อนย้ายออก
 							</p>
 							<div class="flex flex-col gap-2">
 								{#each householdMembers.filter((m) => m._id !== initialEvacuee?._id) as member (member._id)}
@@ -1060,7 +1060,7 @@
 						<div class="space-y-3 rounded-xl border border-border p-4">
 							<div class="space-y-1.5">
 								<Label for="join-search" class="text-xs font-semibold">
-									ค้นหาผู้อพยพด้วยชื่อหรือเบอร์โทร
+									ค้นหาผู้พักพิงด้วยชื่อหรือเบอร์โทร
 								</Label>
 								<Input
 									id="join-search"
@@ -1070,7 +1070,7 @@
 								/>
 							</div>
 							{#if joinSearchQuery.trim() && joinCandidates.length === 0}
-								<p class="text-sm text-muted-foreground">ไม่พบผู้อพยพที่มีครอบครัวในศูนย์นี้</p>
+								<p class="text-sm text-muted-foreground">ไม่พบผู้พักพิงที่มีครอบครัวในศูนย์นี้</p>
 							{/if}
 							{#if joinCandidates.length > 0}
 								<ul class="space-y-2">
@@ -1125,7 +1125,7 @@
 						<div class="space-y-3">
 							{#if cardPrefillNote && householdChoice === 'create'}
 								<p class="text-xs text-muted-foreground">
-									เติมจากที่อยู่บนบัตรแล้ว — แก้ได้ก่อนบันทึก (ที่อยู่บัตรยังอยู่ที่ผู้อพยพ)
+									เติมจากที่อยู่บนบัตรแล้ว — แก้ได้ก่อนบันทึก (ที่อยู่บัตรยังอยู่ที่ผู้พักพิง)
 								</p>
 							{/if}
 							{#if householdChoice === 'change_residence'}

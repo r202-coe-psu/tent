@@ -1,8 +1,8 @@
 export const EVACUEE_PAGE_I18N = {
 	th: {
-		pageTitle: 'ลงทะเบียนผู้ประสบภัย | SmartShelter Thailand',
+		pageTitle: 'ลงทะเบียนผู้พักพิง | SmartShelter Thailand',
 		back: 'กลับ',
-		title: 'ลงทะเบียนผู้ประสบภัย',
+		title: 'ลงทะเบียนผู้พักพิง',
 		fastTrackTitle: 'การลงทะเบียนช่องทางพิเศษ (Fast Track)',
 		fastTrackDesc: 'สำหรับกลุ่มเปราะบาง มีความต้องการพิเศษ หรือกรณีฉุกเฉินทางการแพทย์',
 		saveErrorSummary: 'บันทึกไม่สำเร็จ — ระบบปฏิเสธเอกสาร',

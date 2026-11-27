@@ -35,7 +35,7 @@
 	type PeopleRow = { label: string; count: number | null };
 
 	const rows: PeopleRow[] = $derived([
-		{ label: 'ผู้ประสบภัย', count: evacuees },
+		{ label: 'ผู้พักพิง', count: evacuees },
 		{ label: 'เจ้าหน้าที่', count: failed ? null : staff },
 		{ label: 'จิตอาสา', count: failed ? null : volunteers }
 	]);
@@ -67,8 +67,7 @@
 			</dl>
 			{#if failed}
 				<p class="mt-1.5 max-w-[15rem] border-t border-primary-foreground/25 pt-1.5">
-					โหลดจำนวนเจ้าหน้าที่และจิตอาสาไม่สำเร็จ ยอดนี้จึงนับเฉพาะผู้ประสบภัย
-					และต่ำกว่าความเป็นจริง
+					โหลดจำนวนเจ้าหน้าที่และจิตอาสาไม่สำเร็จ ยอดนี้จึงนับเฉพาะผู้พักพิง และต่ำกว่าความเป็นจริง
 				</p>
 			{/if}
 		</Tooltip.Content>

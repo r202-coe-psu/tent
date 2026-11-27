@@ -135,6 +135,7 @@ describe('public visibility filter and rows (#1515)', () => {
 			checkin: 0,
 			checkout: 0,
 			has_coords: false,
+			is_external: false,
 			dashboard_href: '/x'
 		};
 		expect(overviewSiteRowSchema.safeParse(row).success).toBe(false);
