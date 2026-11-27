@@ -61,19 +61,19 @@ const th = {
 		unknown: 'ไม่ทราบสถานะ'
 	} as Record<string, string>,
 	externalBadge: 'ศูนย์อพยพภายนอก',
-	hiddenBadge: 'ซ่อนจาก public',
+	hiddenBadge: 'ซ่อนจากหน้าสาธารณะ',
 	hiddenSitesCount: (hidden: number, total: number) =>
-		`ซ่อนจาก public ${hidden} ศูนย์ จากทั้งหมด ${total} ศูนย์`,
+		`ซ่อนจากหน้าสาธารณะ ${hidden} ศูนย์ จากทั้งหมด ${total} ศูนย์`,
 
 	// ---- filter bar
 	filterSiteKind: 'ประเภทศูนย์',
 	filterOperationStatus: 'สถานะศูนย์',
 	filterStay: 'สถานะการเข้าพัก',
 	filterPreRegSource: 'ประเภทการลงทะเบียนล่วงหน้า',
-	filterPublicVisibility: 'การแสดงบน public',
+	filterPublicVisibility: 'การแสดงบนหน้าสาธารณะ',
 	publicVisibility: {
-		visible: 'แสดงบน public',
-		hidden: 'ซ่อนจาก public'
+		visible: 'แสดงบนหน้าสาธารณะ',
+		hidden: 'ซ่อนจากหน้าสาธารณะ'
 	} as Record<string, string>,
 	filterHousehold: 'ครอบครัว',
 	filterHouseholdPlaceholder: 'ทุกครอบครัวที่ลงทะเบียนไว้',
@@ -163,18 +163,18 @@ const en: typeof th = {
 		unknown: 'Unknown'
 	},
 	externalBadge: 'External evacuation center',
-	hiddenBadge: 'Hidden from public',
+	hiddenBadge: 'Hidden from the public site',
 	hiddenSitesCount: (hidden: number, total: number) =>
-		`${hidden} of ${total} shelters hidden from public`,
+		`${hidden} of ${total} shelters hidden from the public site`,
 
 	filterSiteKind: 'Shelter type',
 	filterOperationStatus: 'Shelter status',
 	filterStay: 'Stay status',
 	filterPreRegSource: 'Pre-registration type',
-	filterPublicVisibility: 'Shown on public',
+	filterPublicVisibility: 'On the public site',
 	publicVisibility: {
-		visible: 'Shown on public',
-		hidden: 'Hidden from public'
+		visible: 'Shown on the public site',
+		hidden: 'Hidden from the public site'
 	} as Record<string, string>,
 	filterHousehold: 'Household',
 	filterHouseholdPlaceholder: 'All registered households',

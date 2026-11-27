@@ -19,7 +19,7 @@
 	let {
 		sites,
 		total = 0,
-		hiddenTotal,
+		hiddenTotal = 0,
 		limit = 20,
 		offset = 0,
 		onOffsetChange,
@@ -72,9 +72,9 @@
 			<Card.Description class="text-sm text-slate-500">
 				{t.sitesDescription}
 			</Card.Description>
-			{#if sites && (hiddenTotal ?? 0) > 0}
+			{#if sites && hiddenTotal > 0}
 				<p class="mt-1 text-sm text-slate-600" data-testid="hidden-sites-count">
-					{t.hiddenSitesCount(hiddenTotal ?? 0, total)}
+					{t.hiddenSitesCount(hiddenTotal, total)}
 				</p>
 			{/if}
 		</div>
