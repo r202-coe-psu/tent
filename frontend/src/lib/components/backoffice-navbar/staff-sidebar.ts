@@ -1,9 +1,10 @@
 import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 
 /**
- * Pages outside `/back-office` (not `/portal`, which is itself the menu) where a system admin or the shelter manager of the selected
- * shelter still gets the back-office sidebar, so they can reach any page they may open without
- * going back to the portal (#1517). `/system-management` keeps its own sidebar.
+ * Pages outside `/back-office` where a system admin or the shelter manager of the selected shelter
+ * still gets the back-office sidebar, so they can reach any page they may open without
+ * going back to the portal (#1517). `/portal` is the menu itself and `/system-management` keeps
+ * its own sidebar, so neither gets this one.
  */
 const STAFF_SIDEBAR_PREFIXES = ['/me', '/onsite'] as const;
 
@@ -30,7 +31,7 @@ export function showsStaffMobileBar(pathname: string): boolean {
 }
 
 /**
- * Layout classes for the wrapper around the sidebar. Under the app bar (`/portal`, `/me`) both the
+ * Layout classes for the wrapper around the sidebar. Under the app bar (`/me`) both the
  * desktop sidebar and the phone bar start below it (`top-14` = the app bar's `h-14`) instead of
  * sliding beneath it or stacking on top; `/onsite` has no app bar, so it starts at the very top.
  */

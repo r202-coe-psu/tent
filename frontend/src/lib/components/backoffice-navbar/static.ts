@@ -138,7 +138,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Users,
 				visibleTo: ({ roles, shelterCode }) => canAccessEvacueeRegistration(roles, shelterCode)
 			},
-			// The /portal onsite desks, mirrored here and named after each page's own title, for SA/SM
+			// The /portal onsite desks, mirrored here and named as on /portal and in CONTEXT.md, for SA/SM
 			// only (#1517): other roles keep reaching them from /portal.
 			{
 				label: 'สถานีหน้างาน',
@@ -146,19 +146,19 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: House,
 				children: [
 					{
-						label: 'ทะเบียนผู้ประสบภัย',
+						label: 'จุดลงทะเบียน',
 						href: resolve('/onsite/people'),
 						icon: House,
 						visibleTo: managerDesk(canAccessEvacueeRegistration)
 					},
 					{
-						label: 'จุดตรวจคัดกรองผู้เข้าพัก',
+						label: 'จุดคัดกรองสุขภาพ',
 						href: resolve('/onsite/medical-screening'),
 						icon: HeartPulse,
 						visibleTo: managerDesk(canAccessMedicalScreening)
 					},
 					{
-						label: 'จัดสรรที่พัก',
+						label: 'จุดจัดโซน',
 						href: resolve('/onsite/zoning'),
 						icon: MapPin,
 						visibleTo: managerDesk(canAccessZoning)

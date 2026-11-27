@@ -139,11 +139,11 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	];
 	const registry = 'จัดการผู้เข้าพัก';
 	/** The /portal onsite desks mirrored into the sidebar for SA/SM only (#1517). */
-	const screeningDesk = 'จุดตรวจคัดกรองผู้เข้าพัก';
+	const screeningDesk = 'จุดคัดกรองสุขภาพ';
 	const registrationDesks = [
-		'ทะเบียนผู้ประสบภัย',
+		'จุดลงทะเบียน',
 		screeningDesk,
-		'จัดสรรที่พัก',
+		'จุดจัดโซน',
 		'ค้นหาและแก้ไขข้อมูลผู้พักพิง',
 		'สแกนเข้า-ออกศูนย์'
 	];

@@ -6,7 +6,7 @@ const SM = ['shelter:SH001', 'SH001:shelter_manager'];
 const REGISTRATION = ['shelter:SH001', 'SH001:registration_staff'];
 
 describe('showsStaffSidebar (#1517)', () => {
-	it.each(['/me', '/onsite', '/onsite/registration/new'])(
+	it.each(['/me', '/onsite', '/onsite/people/new'])(
 		'gives a system admin the sidebar on %s',
 		(path) => {
 			expect(showsStaffSidebar(path, SA, 'SH001')).toBe(true);
@@ -45,15 +45,15 @@ describe('showsStaffSidebar (#1517)', () => {
 describe('showsStaffMobileBar', () => {
 	it('keeps the top of /onsite for the page on phones, and shows the bar elsewhere', () => {
 		expect(showsStaffMobileBar('/onsite')).toBe(false);
-		expect(showsStaffMobileBar('/onsite/registration')).toBe(false);
+		expect(showsStaffMobileBar('/onsite/people')).toBe(false);
 		expect(showsStaffMobileBar('/portal')).toBe(true);
 		expect(showsStaffMobileBar('/me')).toBe(true);
 	});
 });
 
 describe('staffSidebarClass', () => {
-	it('starts below the app bar on /portal and /me, for the sidebar and the phone bar', () => {
-		for (const path of ['/portal', '/me']) {
+	it('starts below the app bar on /me, for the sidebar and the phone bar', () => {
+		for (const path of ['/me', '/me/profile']) {
 			expect(staffSidebarClass(path)).toContain('[&>aside]:top-14');
 			expect(staffSidebarClass(path)).toContain('[&>div]:top-14');
 		}
@@ -61,6 +61,6 @@ describe('staffSidebarClass', () => {
 
 	it('starts at the very top on /onsite, which has no app bar', () => {
 		expect(staffSidebarClass('/onsite')).toContain('[&>aside]:top-0');
-		expect(staffSidebarClass('/onsite/registration')).not.toContain('top-14');
+		expect(staffSidebarClass('/onsite/people')).not.toContain('top-14');
 	});
 });

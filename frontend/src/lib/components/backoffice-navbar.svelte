@@ -34,6 +34,8 @@
 		storageKey = SIDEBAR_COLLAPSED_KEYS.backoffice
 	}: { showMobileBar?: boolean; storageKey?: SidebarCollapsedKey } = $props();
 
+	// Each host passes a fixed key for its whole lifetime, so reading it once on mount is enough.
+	// svelte-ignore state_referenced_locally
 	let collapsed = $state(readSidebarCollapsed(storageKey));
 	let mobileMenuOpen = $state(false);
 
