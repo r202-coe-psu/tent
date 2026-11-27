@@ -151,7 +151,7 @@
 			return;
 		}
 		if (!isQtyValid) {
-			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือในมือ';
+			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือ';
 			return;
 		}
 
