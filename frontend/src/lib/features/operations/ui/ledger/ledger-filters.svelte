@@ -170,9 +170,9 @@
 
 		{#if filter.range === 'custom'}
 			<div class="flex flex-col gap-1.5">
-				<label for="ledger-range-filter" class={LABEL_CLASS}>ช่วงวันที่</label>
+				<label for="ledger-date-range" class={LABEL_CLASS}>ช่วงวันที่</label>
 				<DateRangePicker
-					id="ledger-range-filter"
+					id="ledger-date-range"
 					ariaLabel="ช่วงวันที่"
 					from={filter.from}
 					to={filter.to}
