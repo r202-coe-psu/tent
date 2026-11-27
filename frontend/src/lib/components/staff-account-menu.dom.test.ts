@@ -63,5 +63,9 @@ describe('StaffAccountMenu trigger', () => {
 		expect(name?.textContent?.trim()).toBe('สมชาย ใจดี');
 		expect(name?.className).toContain('truncate');
 		expect(name?.className).not.toContain('hidden');
+		// Stays inside a narrow collapsed rail instead of spilling past it.
+		expect(trigger.className).toContain('overflow-hidden');
+		expect(trigger.className).toContain('max-w-full');
+		expect(trigger.getAttribute('title')).toBe('สมชาย ใจดี');
 	});
 });

@@ -340,7 +340,7 @@
 	</div>
 
 	<!-- Desktop Sidebar Footer: shelter context + account -->
-	<div class="mt-auto border-t border-sidebar-border bg-card p-4">
+	<div class="mt-auto border-t border-sidebar-border bg-card {collapsed ? 'p-2' : 'p-4'}">
 		{#if collapsed}
 			<div class="flex flex-col items-center gap-3">
 				<BackofficeShelterSelect compact />

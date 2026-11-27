@@ -53,9 +53,11 @@
 		aria-label={displayName || t.account}
 		class={cn(
 			'inline-flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none',
-			compact ? 'justify-center' : 'justify-start',
+			// A collapsed rail is 4rem wide: the trigger must shrink to it and truncate the name.
+			compact ? 'w-full max-w-full justify-center overflow-hidden px-1' : 'justify-start',
 			className
 		)}
+		title={compact ? displayName : undefined}
 	>
 		<span class="max-w-[10rem] min-w-0 truncate">{displayName}</span>
 		{#if !compact}
