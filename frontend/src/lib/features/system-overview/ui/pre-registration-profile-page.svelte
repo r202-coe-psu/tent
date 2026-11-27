@@ -152,7 +152,7 @@
 
 		<Card.Root class={spatial.container.staffPageCard}>
 			<Card.Header>
-				<Card.Title class="text-lg font-bold text-slate-900">สมาชิกในครัวเรือน</Card.Title>
+				<Card.Title class="text-lg font-bold text-slate-900">สมาชิกในครอบครัว</Card.Title>
 				<Card.Description class="text-sm text-slate-500">
 					{profile.members.length} คน
 				</Card.Description>

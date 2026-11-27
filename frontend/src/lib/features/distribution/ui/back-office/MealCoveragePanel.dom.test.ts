@@ -509,7 +509,7 @@ describe('MealCoveragePanel zone, household, advisory and export', () => {
 		expect(rowTexts()).toHaveLength(2);
 		expect(rowTexts()[0]).toContain('สมชาย');
 		expect(rowTexts()[0]).toContain('ยังไม่มีบันทึก');
-		expect(rowTexts()[0]).toContain('ครัวเรือนมีบันทึกรับ: กลางวัน, เย็น');
+		expect(rowTexts()[0]).toContain('ครอบครัวมีบันทึกรับ: กลางวัน, เย็น');
 	});
 
 	it('advises that an unscanned meal may have been handed out without scanning', () => {

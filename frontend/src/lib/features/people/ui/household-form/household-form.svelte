@@ -18,7 +18,7 @@
 	// Status is not free-editable here — it follows check-in/check-out flows.
 	const STATUS_DISPLAY: Record<HouseholdStatus, { label: string; variant: BadgeVariant }> = {
 		pre_registered: { label: 'ลงทะเบียนล่วงหน้า', variant: 'secondary' },
-		arriving: { label: 'กำลังเดินทางมา', variant: 'outline' },
+		arriving: { label: 'รายงานตัวแล้ว · รอจัดโซน', variant: 'outline' },
 		checked_in: { label: 'เช็คอินแล้ว', variant: 'default' },
 		checked_out: { label: 'เช็คเอาต์แล้ว', variant: 'secondary' },
 		cancelled: { label: 'ยกเลิก', variant: 'destructive' },
@@ -62,7 +62,7 @@
 		},
 		onUpdate: async ({ form }) => {
 			if (!form.data.head_evacuee_id) {
-				toast.error('กรุณาระบุหัวหน้าครัวเรือน');
+				toast.error('กรุณาระบุผู้ติดต่อหลัก');
 				return;
 			}
 			if (!form.valid) return;
@@ -211,7 +211,7 @@
 					);
 					if (otherMembers.length > 0) {
 						toast.error(
-							`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${formatPersonName(evac)} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+							`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${formatPersonName(evac)} สังกัดครอบครัว "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 						);
 						headComboValue = prevHeadId ?? '';
 						$formData.head_evacuee_id = prevHeadId;
@@ -259,7 +259,7 @@
 						);
 						if (otherMembers.length > 0) {
 							toast.error(
-								`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${formatPersonName(evac)} สังกัดครัวเรือน "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
+								`ไม่สามารถเพิ่มสมาชิกได้ เนื่องจาก ${formatPersonName(evac)} สังกัดครอบครัว "${hh?.label ?? 'อื่น'}" ที่ยังมีสมาชิกอื่นอยู่`
 							);
 							memberSearchValue = '';
 							return;
@@ -278,7 +278,7 @@
 			label: formatPersonName(e),
 			evacuee: e,
 			hasOther: !!(e.household_id && initialData && e.household_id !== initialData._id),
-			otherLabel: households.find((h) => h._id === e.household_id)?.label ?? 'ครัวเรือนอื่น'
+			otherLabel: households.find((h) => h._id === e.household_id)?.label ?? 'ครอบครัวอื่น'
 		}))
 	);
 
@@ -304,7 +304,7 @@
 			<div class="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
 				<div class="flex items-center justify-between gap-2">
 					<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
-						ข้อมูลครัวเรือนเบื้องต้น
+						ข้อมูลครอบครัวเบื้องต้น
 					</h3>
 					{#if initialData}
 						<div class="flex items-center gap-1.5">

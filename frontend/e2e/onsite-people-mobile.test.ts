@@ -76,8 +76,8 @@ const SEED_DOCS = [
 
 const TABS = [
 	{ name: /รอรายงานตัว/, cards: 2 },
-	{ name: /รอส่งต่อ(คัดกรอง|จัดสรรที่พัก)/, cards: 1 },
-	{ name: /ผู้ประสบภัยทั้งหมด/, cards: 4 }
+	{ name: /รอส่งต่อจุด(คัดกรองสุขภาพ|จัดโซน)/, cards: 1 },
+	{ name: /ผู้พักพิงทั้งหมด/, cards: 4 }
 ];
 
 test.describe('Station 1 queue on mobile (#1347)', { tag: ['@onsite', '@regression'] }, () => {
@@ -109,7 +109,7 @@ test.describe('Station 1 queue on mobile (#1347)', { tag: ['@onsite', '@regressi
 		await injectSession(page, MANAGER, managerSession);
 
 		await page.goto('/onsite/people');
-		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 			timeout: 15_000
 		});
 		const tabs = page.getByRole('navigation', { name: 'แท็บกระบวนการลงทะเบียน' });
@@ -146,7 +146,7 @@ test.describe('Station 1 queue on mobile (#1347)', { tag: ['@onsite', '@regressi
 		await injectSession(page, MANAGER, managerSession);
 
 		await page.goto('/onsite/people');
-		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 			timeout: 15_000
 		});
 		await expect(page.locator('table tbody tr')).toHaveCount(2);

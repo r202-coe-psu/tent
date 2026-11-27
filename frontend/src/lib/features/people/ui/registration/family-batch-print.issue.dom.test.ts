@@ -61,7 +61,7 @@ const member = (_id: string) =>
 const household = {
 	_id: 'household:test-1',
 	type: 'household',
-	label: 'ครัวเรือน',
+	label: 'ครอบครัว',
 	head_evacuee_id: A,
 	shelter_code: 'SH001'
 } as unknown as Household;

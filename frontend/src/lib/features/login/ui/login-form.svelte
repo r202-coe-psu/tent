@@ -306,7 +306,7 @@
 			>
 				<p class="font-semibold">สำหรับเจ้าหน้าที่และผู้ดูแลระบบเท่านั้น</p>
 				<p class="mt-0.5 text-xs">
-					ผู้ประสบภัยไม่ต้องเข้าสู่ระบบ —
+					ผู้พักพิงไม่ต้องเข้าสู่ระบบ —
 					<a href={resolve('/pre-register')} class="font-semibold underline underline-offset-2"
 						>ลงทะเบียนล่วงหน้า</a
 					>

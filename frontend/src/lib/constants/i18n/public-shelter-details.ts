@@ -1,7 +1,7 @@
 export const PUBLIC_SHELTER_DETAILS_I18N = {
 	th: {
 		parkingPoints: 'จุดจอดรถ',
-		openAdmission: 'เปิดรับผู้อพยพ',
+		openAdmission: 'เปิดรับผู้พักพิง',
 		statusUnknown: 'ไม่ทราบสถานะ',
 		contactAtShelter: 'ติดต่อ ณ ศูนย์พักพิง',
 		externalLink: 'ไปยังระบบต้นทาง',

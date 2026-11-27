@@ -34,7 +34,7 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 		})
 		.click();
 	await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();
-	await page.getByRole('option', { name: 'เปิดรับผู้อพยพ (Active)' }).click();
+	await page.getByRole('option', { name: 'เปิดรับผู้พักพิง (Active)' }).click();
 	await page.getByRole('spinbutton', { name: 'ละติจูด (Latitude)' }).fill(String(shelter.lat));
 	await page.getByRole('spinbutton', { name: 'ลองจิจูด (Longitude)' }).fill(String(shelter.lng));
 	await page.getByRole('button', { name: 'เลือกจังหวัด...' }).click();

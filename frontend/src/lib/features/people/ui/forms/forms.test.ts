@@ -622,7 +622,7 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 					shelter_zones: [{ code: 'Z-01', name: 'โซน A', type: 'general' }]
 				}
 			});
-			expect(result.body).toContain('โซนที่สถานี 1 ระบุไว้');
+			expect(result.body).toContain('โซนที่จุดลงทะเบียนระบุไว้');
 			expect(result.body).toContain('เลือกไว้ให้แล้ว');
 		});
 
