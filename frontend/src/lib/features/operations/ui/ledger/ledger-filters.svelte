@@ -4,6 +4,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { DateRangePicker } from '$lib/components/ui/date-picker/index.js';
 	import {
 		LEDGER_RANGE_LABELS,
 		type LedgerRangePreset,
@@ -69,119 +70,126 @@
 		}, SEARCH_DEBOUNCE_MS);
 	}
 
-	function chipClass(active: boolean) {
-		return [
-			'inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none',
-			active
-				? 'border-2 border-[#0284C7] bg-sky-50 text-sky-900'
-				: 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400'
-		].join(' ');
-	}
+	const typeLabel = $derived(TYPES.find((t) => t.value === filter.type)?.label ?? 'ทั้งหมด');
+	const reasonLabel = $derived(
+		REASONS.find((r) => r.value === filter.reason)?.label ?? 'ทุกเหตุผล'
+	);
 
-	const DATE_CLASS =
-		'min-h-11 rounded-lg border-slate-300 bg-white text-base shadow-2xs md:w-40 md:text-sm';
+	const DATE_CLASS = 'h-10 rounded-lg border-input bg-white text-sm shadow-2xs md:w-64';
+	const LABEL_CLASS = 'text-xs font-semibold text-slate-600';
 </script>
 
-<div class="flex flex-col gap-2.5 border-b border-slate-200/80 p-3 md:p-4">
-	<div class="flex flex-wrap items-center gap-2.5">
-		<Select.Root
-			type="single"
-			value={filter.range}
-			onValueChange={(v) => v && onchange({ range: v as LedgerRangePreset })}
-		>
-			<Select.Trigger
-				class="min-h-11 w-full rounded-lg border-slate-300 bg-white text-sm shadow-2xs sm:w-52"
-				aria-label="ช่วงเวลา"
-			>
-				<span class="truncate">
-					<span class="text-slate-500">ช่วงเวลา:</span>
-					{LEDGER_RANGE_LABELS[filter.range]}
-				</span>
-			</Select.Trigger>
-			<Select.Content>
-				{#each RANGES as range (range)}
-					<Select.Item value={range} label={LEDGER_RANGE_LABELS[range]}>
-						{LEDGER_RANGE_LABELS[range]}
-					</Select.Item>
-				{/each}
-			</Select.Content>
-		</Select.Root>
+<div class="flex flex-col gap-3 border-b border-slate-200/80 p-3 md:p-4">
+	<div class="relative w-full">
+		<Search
+			class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
+			aria-hidden="true"
+		/>
+		<label for="ledger-search" class="sr-only">ค้นหา</label>
+		<Input
+			id="ledger-search"
+			type="search"
+			value={text}
+			oninput={(e) => onSearchInput(e.currentTarget.value)}
+			placeholder="ค้นหาสินค้า / ผู้รับ / เลขอ้างอิง"
+			aria-label="ค้นหาสินค้า ผู้รับ หรือเลขอ้างอิง"
+			class="h-10 w-full rounded-lg border-input bg-white pl-9 text-sm shadow-2xs placeholder:text-slate-400"
+		/>
+	</div>
 
-		{#if filter.range === 'custom'}
-			<Input
-				type="date"
-				value={filter.from}
-				max={filter.to || undefined}
-				onchange={(e) => onchange({ from: e.currentTarget.value })}
-				aria-label="ตั้งแต่วันที่"
-				class={DATE_CLASS}
-			/>
-			<span class="text-sm text-slate-500" aria-hidden="true">ถึง</span>
-			<Input
-				type="date"
-				value={filter.to}
-				min={filter.from || undefined}
-				onchange={(e) => onchange({ to: e.currentTarget.value })}
-				aria-label="ถึงวันที่"
-				class={DATE_CLASS}
-			/>
+	<div class="flex flex-wrap items-end gap-3">
+		<div class="flex flex-col gap-1.5">
+			<label for="ledger-range-filter" class={LABEL_CLASS}>ช่วงเวลา</label>
+			<Select.Root
+				type="single"
+				value={filter.range}
+				onValueChange={(v) => v && onchange({ range: v as LedgerRangePreset })}
+			>
+				<Select.Trigger
+					id="ledger-range-filter"
+					class="h-10 w-full rounded-lg border-input bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10 sm:w-52"
+					aria-label="ช่วงเวลา"
+				>
+					<span class="truncate">{LEDGER_RANGE_LABELS[filter.range]}</span>
+				</Select.Trigger>
+				<Select.Content>
+					{#each RANGES as range (range)}
+						<Select.Item value={range} label={LEDGER_RANGE_LABELS[range]}>
+							{LEDGER_RANGE_LABELS[range]}
+						</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<div class="flex flex-col gap-1.5">
+			<label for="ledger-type-filter" class={LABEL_CLASS}>ประเภท</label>
+			<Select.Root
+				type="single"
+				value={filter.type}
+				onValueChange={(v) => v && onchange({ type: v as LedgerTypeFilter, reason: 'all' })}
+			>
+				<Select.Trigger
+					id="ledger-type-filter"
+					class="h-10 w-full rounded-lg border-input bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10 sm:w-48"
+					aria-label="ประเภทรายการ"
+				>
+					<span class="truncate">{typeLabel}</span>
+				</Select.Trigger>
+				<Select.Content>
+					{#each TYPES as type (type.value)}
+						<Select.Item value={type.value} label={type.label}>{type.label}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		{#if filter.type === 'adjust'}
+			<div class="flex flex-col gap-1.5">
+				<label for="ledger-reason-filter" class={LABEL_CLASS}>เหตุผล</label>
+				<Select.Root
+					type="single"
+					value={filter.reason}
+					onValueChange={(v) => v && onchange({ reason: v as LedgerReasonFilter })}
+				>
+					<Select.Trigger
+						id="ledger-reason-filter"
+						class="h-10 w-full rounded-lg border-input bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10 sm:w-48"
+						aria-label="เหตุผลการปรับยอด"
+					>
+						<span class="truncate">{reasonLabel}</span>
+					</Select.Trigger>
+					<Select.Content>
+						{#each REASONS as reason (reason.value)}
+							<Select.Item value={reason.value} label={reason.label}>{reason.label}</Select.Item>
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
 		{/if}
 
-		<div class="relative min-w-52 flex-1">
-			<Search
-				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
-				aria-hidden="true"
-			/>
-			<Input
-				type="search"
-				value={text}
-				oninput={(e) => onSearchInput(e.currentTarget.value)}
-				placeholder="ค้นหาสินค้า / ผู้รับ / เลขอ้างอิง"
-				aria-label="ค้นหาสินค้า ผู้รับ หรือเลขอ้างอิง"
-				class="min-h-11 w-full rounded-lg border-slate-300 bg-white pl-9 text-base shadow-2xs md:text-sm"
-			/>
-		</div>
+		{#if filter.range === 'custom'}
+			<div class="flex flex-col gap-1.5">
+				<label for="ledger-range-filter" class={LABEL_CLASS}>ช่วงวันที่</label>
+				<DateRangePicker
+					id="ledger-range-filter"
+					ariaLabel="ช่วงวันที่"
+					from={filter.from}
+					to={filter.to}
+					class={DATE_CLASS}
+					onRangeChange={(next) => onchange({ from: next.from, to: next.to })}
+				/>
+			</div>
+		{/if}
 
 		<Button
 			type="button"
 			variant="outline"
 			onclick={onexport}
-			class="min-h-11 gap-2 rounded-lg border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-800 shadow-2xs"
+			class="ml-auto h-10 gap-2 rounded-lg border-input bg-white px-3.5 text-sm font-semibold text-slate-800 shadow-2xs"
 		>
 			<Download class="h-4 w-4" aria-hidden="true" />
 			ส่งออก CSV
 		</Button>
 	</div>
-
-	<div role="group" aria-label="ประเภทรายการ" class="flex scrollbar-none gap-1.5 overflow-x-auto">
-		{#each TYPES as type (type.value)}
-			<button
-				type="button"
-				aria-pressed={filter.type === type.value}
-				onclick={() => onchange({ type: type.value, reason: 'all' })}
-				class={chipClass(filter.type === type.value)}
-			>
-				{type.label}
-			</button>
-		{/each}
-	</div>
-
-	{#if filter.type === 'adjust'}
-		<div
-			role="group"
-			aria-label="เหตุผลการปรับยอด"
-			class="flex scrollbar-none gap-1.5 overflow-x-auto"
-		>
-			{#each REASONS as reason (reason.value)}
-				<button
-					type="button"
-					aria-pressed={filter.reason === reason.value}
-					onclick={() => onchange({ reason: reason.value })}
-					class={chipClass(filter.reason === reason.value)}
-				>
-					{reason.label}
-				</button>
-			{/each}
-		</div>
-	{/if}
 </div>
