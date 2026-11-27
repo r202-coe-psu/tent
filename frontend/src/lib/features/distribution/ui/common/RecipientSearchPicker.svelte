@@ -266,7 +266,6 @@
 						{#if value.recipientType === 'evacuee'}
 							{#if value.stayInfo}<span>{value.stayInfo}</span>{/if}
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
-							<span class="text-xs break-all text-slate-400">{value.recipientId}</span>
 						{:else if value.recipientType === 'volunteer'}
 							<span>จิตอาสา{value.volunteerCode ? ` · ${value.volunteerCode}` : ''}</span>
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
