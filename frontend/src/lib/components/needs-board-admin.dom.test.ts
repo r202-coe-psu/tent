@@ -190,6 +190,20 @@ describe('needs board row state (#816 / #817)', () => {
 		expect(callbacks.onToggleCutOff).toHaveBeenCalledWith('c1', 'item:rice');
 	});
 
+	it('keeps the switch on the stored value until the campaign actually changes', async () => {
+		await render([campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open' }])]);
+
+		for (const row of [cards()[0], tableRows()[0]]) {
+			const toggle = toggleOf(row)!;
+			toggle.click();
+			flushSync();
+			await tick();
+			// The save failed (or has not landed): the row still says the need is public.
+			expect(isOn(toggle)).toBe(true);
+		}
+		expect(callbacks.onToggleShowOnHome).toHaveBeenCalledTimes(2);
+	});
+
 	it('shows the switch off on open rows of a hidden campaign', async () => {
 		await render([
 			campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open' }], {
