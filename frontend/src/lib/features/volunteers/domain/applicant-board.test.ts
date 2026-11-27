@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildApplicantBoard, historyBreakdown } from './applicant-board';
+import { applicantSummary, buildApplicantBoard, historyBreakdown } from './applicant-board';
 import type { JobApplication } from './job-application.schema';
 import type { ShiftAssignment } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
@@ -256,5 +256,37 @@ describe('historyBreakdown', () => {
 
 	it('is all zero for an empty history', () => {
 		expect(historyBreakdown([])).toEqual({ confirmed: 0, declined: 0, staffAssigned: 0 });
+	});
+});
+
+describe('applicantSummary', () => {
+	it('gives the same counts and staff rows as the full board', () => {
+		const applications = [
+			application({
+				_id: 'job_application:1',
+				status: 'pending_review',
+				volunteer_id: 'volunteer:9'
+			}),
+			application({ _id: 'job_application:2', status: 'confirmed' }),
+			application({ _id: 'job_application:3', status: 'rejected', volunteer_id: 'volunteer:3' }),
+			application({ _id: 'job_application:4', status: 'cancelled', volunteer_id: 'volunteer:4' })
+		];
+		const assignments = [
+			assignment({ _id: 'shift_assignment:1' }), // claimed by the confirmed application
+			assignment({ _id: 'shift_assignment:2', volunteer_id: 'volunteer:5' }), // staff, active
+			assignment({ _id: 'shift_assignment:3', volunteer_id: 'volunteer:6', status: 'cancelled' }),
+			assignment({ _id: 'shift_assignment:4', job_id: 'job:other', volunteer_id: 'volunteer:7' })
+		];
+		const volunteers = new Map<string, Volunteer>();
+
+		const board = buildApplicantBoard({ jobId: JOB, applications, assignments, volunteers });
+		const summary = applicantSummary({ jobId: JOB, applications, assignments });
+
+		expect(summary.counts).toEqual(board.counts);
+		expect(summary.applicationTotal).toBe(4);
+		expect(summary.staff.map((a) => a._id).sort()).toEqual([
+			'shift_assignment:2',
+			'shift_assignment:3'
+		]);
 	});
 });

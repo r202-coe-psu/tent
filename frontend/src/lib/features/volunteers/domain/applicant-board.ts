@@ -111,7 +111,7 @@ export function applicationPerson(
 	};
 }
 
-function applicationEntry(
+export function applicationEntry(
 	application: JobApplication,
 	volunteers: ReadonlyMap<string, Volunteer>
 ): ApplicantHistoryEntry {
@@ -132,7 +132,7 @@ function applicationEntry(
 	};
 }
 
-function staffEntry(
+export function staffEntry(
 	assignment: ShiftAssignment,
 	volunteers: ReadonlyMap<string, Volunteer>
 ): ApplicantHistoryEntry {
@@ -213,4 +213,44 @@ export function historyBreakdown(history: readonly Pick<ApplicantHistoryEntry, '
 		else declined++;
 	}
 	return { confirmed, declined, staffAssigned };
+}
+
+/**
+ * The unfiltered numbers and the staff-assigned rows of one job, from slim projections of its
+ * applications and assignments (`_find` `fields`) — so the tab can show the tiles without
+ * loading the full documents. Same rules and the same numbers as {@link buildApplicantBoard}.
+ *
+ * Only the fields the rules read are needed: applications `_id job_id status volunteer_id
+ * shift_id created_at updated_at reviewed_at selected_shift.{shift_id,date}
+ * applicant.phone_hash`; assignments `_id job_id volunteer_id shift_id date status created_at`.
+ */
+export function applicantSummary(input: {
+	jobId: string;
+	applications: readonly JobApplication[];
+	assignments: readonly ShiftAssignment[];
+}): { counts: ApplicantBoard['counts']; applicationTotal: number; staff: ShiftAssignment[] } {
+	const { jobId } = input;
+	const queue = partitionApplicantQueue(input.applications, jobId);
+	const staff = staffAssignments(
+		queue.reviewed.filter((a) => a.status === 'confirmed'),
+		input.assignments.filter((a) => a.job_id === jobId)
+	).sort((a, b) => b.created_at.localeCompare(a.created_at) || a._id.localeCompare(b._id));
+	const people = new Set([
+		...queue.pending.map(applicantKey),
+		...queue.reviewed.map(applicantKey),
+		...staff.map((a) => a.volunteer_id)
+	]);
+	return {
+		applicationTotal: queue.pending.length + queue.reviewed.length,
+		staff,
+		counts: {
+			people: people.size,
+			pending: queue.pending.length,
+			confirmed: queue.reviewed.filter((a) => a.status === 'confirmed').length,
+			declined:
+				queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled').length +
+				staff.filter((a) => a.status === 'cancelled').length,
+			staffAssigned: staff.filter((a) => a.status !== 'cancelled').length
+		}
+	};
 }

@@ -17,7 +17,12 @@ import { shiftKindFor } from '../domain/assign-roster';
 import { jobRepository } from './job.remote';
 import { shiftAssignmentRepository } from './shift-assignment.remote';
 import type { ShiftAssignment, ShiftAssignmentInput } from '../domain/shift-assignment.schema';
-import type { JobApplicationFilter, JobApplicationRepository } from './volunteer.repository';
+import type {
+	JobApplicationFilter,
+	JobApplicationPage,
+	JobApplicationPageQuery,
+	JobApplicationRepository
+} from './volunteer.repository';
 
 /**
  * Remote CouchDB repository for the volunteers feature (`job_application` doc
@@ -35,6 +40,22 @@ import type { JobApplicationFilter, JobApplicationRepository } from './volunteer
  */
 /** Job statuses that still accept new applications (CR-094 FR-VOL-09.3). */
 const ACCEPTING_APPLICATION_STATUSES: ReadonlySet<string> = new Set(['open']);
+
+/** The fields `applicantSummary` reads — the tiles never need the whole document. */
+const SUMMARY_FIELDS = [
+	'_id',
+	'job_id',
+	'status',
+	'volunteer_id',
+	'shift_id',
+	'created_at',
+	'updated_at',
+	'reviewed_at',
+	'selected_shift.shift_id',
+	'selected_shift.date',
+	'applicant.phone_hash'
+];
+const SUMMARY_PAGE_SIZE = 500;
 
 export class JobApplicationRemoteRepository implements JobApplicationRepository {
 	private readonly repo: Repository;
@@ -108,6 +129,39 @@ export class JobApplicationRemoteRepository implements JobApplicationRepository 
 		if (filter?.status) all = all.filter((a) => a.status === filter.status);
 		if (filter?.volunteerId) all = all.filter((a) => a.volunteer_id === filter.volunteerId);
 		return all;
+	}
+
+	async pageForJob(query: JobApplicationPageQuery): Promise<JobApplicationPage> {
+		const selector: Record<string, unknown> = { type: 'job_application', job_id: query.jobId };
+		if (query.statuses && query.statuses.length > 0) selector.status = { $in: [...query.statuses] };
+		const shift = query.shift;
+		if (shift?.id) {
+			selector.$or = [{ shift_id: shift.id }, { 'selected_shift.shift_id': shift.id }];
+		} else if (shift) {
+			selector['selected_shift.date'] = shift.date;
+		}
+		const page = await this.repo.findPage<unknown>({
+			selector,
+			limit: query.limit,
+			...(query.bookmark ? { bookmark: query.bookmark } : {})
+		});
+		return { items: page.docs.filter(isJobApplication), bookmark: page.bookmark };
+	}
+
+	async summaryForJob(jobId: string): Promise<JobApplication[]> {
+		const out: JobApplication[] = [];
+		let bookmark: string | undefined;
+		for (;;) {
+			const page = await this.repo.findPage<JobApplication>({
+				selector: { type: 'job_application', job_id: jobId },
+				fields: SUMMARY_FIELDS,
+				limit: SUMMARY_PAGE_SIZE,
+				...(bookmark ? { bookmark } : {})
+			});
+			out.push(...page.docs);
+			if (page.docs.length < SUMMARY_PAGE_SIZE || !page.bookmark) return out;
+			bookmark = page.bookmark;
+		}
 	}
 
 	async get(id: string): Promise<JobApplication | null> {

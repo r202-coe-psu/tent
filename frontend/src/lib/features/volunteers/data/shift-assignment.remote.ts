@@ -34,6 +34,19 @@ import type { ShiftAssignmentFilter, ShiftAssignmentRepository } from './volunte
  * order is deliberate (no inverse quota transition exists to "give back" a
  * consumed slot).
  */
+/** One `_find` page; Mango's default of 25 would silently truncate a roster. */
+const FIND_PAGE_SIZE = 200;
+/** The fields `applicantSummary` reads from an assignment. */
+const SUMMARY_FIELDS = [
+	'_id',
+	'job_id',
+	'volunteer_id',
+	'shift_id',
+	'date',
+	'status',
+	'created_at'
+];
+
 export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepository {
 	private readonly repo: Repository;
 
@@ -116,6 +129,75 @@ export class ShiftAssignmentRemoteRepository implements ShiftAssignmentRepositor
 			all = all.filter((a) => a.duty_window.end_ts <= filter.dutyWindowEnd!);
 		}
 		return all;
+	}
+
+	/** Read every page of a `_find` (bookmark paging; a short page is the last one). */
+	private async findAll(selector: Record<string, unknown>): Promise<ShiftAssignment[]> {
+		const out: ShiftAssignment[] = [];
+		let bookmark: string | undefined;
+		for (;;) {
+			const page = await this.repo.findPage<unknown>({
+				selector,
+				limit: FIND_PAGE_SIZE,
+				...(bookmark ? { bookmark } : {})
+			});
+			for (const doc of page.docs) {
+				const normalized = normalizeLegacyShiftAssignment(doc);
+				if (isShiftAssignment(normalized)) out.push(normalized);
+			}
+			if (page.docs.length < FIND_PAGE_SIZE || !page.bookmark) return out;
+			bookmark = page.bookmark;
+		}
+	}
+
+	async listForJob(jobId: string): Promise<ShiftAssignment[]> {
+		return this.findAll({ type: 'shift_assignment', job_id: jobId });
+	}
+
+	async listForJobShifts(jobId: string, shiftIds: readonly string[]): Promise<ShiftAssignment[]> {
+		if (shiftIds.length === 0) return [];
+		const [onShifts, legacy] = await Promise.all([
+			this.findAll({ type: 'shift_assignment', job_id: jobId, shift_id: { $in: [...shiftIds] } }),
+			this.findAll({ type: 'shift_assignment', job_id: jobId, shift_id: { $exists: false } })
+		]);
+		return [...new Map([...onShifts, ...legacy].map((a) => [a._id, a])).values()];
+	}
+
+	async listForJobVolunteers(
+		jobId: string,
+		volunteerIds: readonly string[]
+	): Promise<ShiftAssignment[]> {
+		if (volunteerIds.length === 0) return [];
+		return this.findAll({
+			type: 'shift_assignment',
+			job_id: jobId,
+			volunteer_id: { $in: [...volunteerIds] }
+		});
+	}
+
+	async summaryForJob(jobId: string): Promise<ShiftAssignment[]> {
+		const out: ShiftAssignment[] = [];
+		let bookmark: string | undefined;
+		for (;;) {
+			const page = await this.repo.findPage<ShiftAssignment>({
+				selector: { type: 'shift_assignment', job_id: jobId },
+				fields: SUMMARY_FIELDS,
+				limit: FIND_PAGE_SIZE,
+				...(bookmark ? { bookmark } : {})
+			});
+			out.push(...page.docs);
+			if (page.docs.length < FIND_PAGE_SIZE || !page.bookmark) return out;
+			bookmark = page.bookmark;
+		}
+	}
+
+	async getMany(ids: readonly string[]): Promise<ShiftAssignment[]> {
+		if (ids.length === 0) return [];
+		const found = await this.repo.find<unknown>({
+			selector: { _id: { $in: [...ids] } },
+			limit: ids.length
+		});
+		return found.map(normalizeLegacyShiftAssignment).filter(isShiftAssignment);
 	}
 
 	async get(id: string): Promise<ShiftAssignment | null> {

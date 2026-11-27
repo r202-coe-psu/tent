@@ -362,7 +362,8 @@ describe('mutation invalidation map', () => {
 			keys: () => [
 				volunteerKeys.jobsAll(),
 				volunteerKeys.shiftAssignmentsAll(),
-				volunteerKeys.hubMetrics()
+				volunteerKeys.hubMetrics(),
+				volunteerKeys.applicantBoardAll()
 			]
 		},
 		{
@@ -374,7 +375,8 @@ describe('mutation invalidation map', () => {
 				volunteerKeys.jobApplicationsAll(),
 				volunteerKeys.jobsAll(),
 				volunteerKeys.shiftAssignmentsAll(),
-				volunteerKeys.hubMetrics()
+				volunteerKeys.hubMetrics(),
+				volunteerKeys.applicantBoardAll()
 			]
 		},
 		{
@@ -384,7 +386,8 @@ describe('mutation invalidation map', () => {
 			keys: () => [
 				volunteerKeys.shiftAssignmentsAll(),
 				volunteerKeys.volunteersAll(),
-				volunteerKeys.hubMetrics()
+				volunteerKeys.hubMetrics(),
+				volunteerKeys.applicantBoardAll()
 			]
 		},
 		{
@@ -394,7 +397,8 @@ describe('mutation invalidation map', () => {
 			keys: () => [
 				volunteerKeys.shiftAssignmentsAll(),
 				volunteerKeys.volunteersAll(),
-				volunteerKeys.hubMetrics()
+				volunteerKeys.hubMetrics(),
+				volunteerKeys.applicantBoardAll()
 			]
 		},
 		{
@@ -487,10 +491,12 @@ describe('startVolunteersLiveQuery', () => {
 		expect(keysForType('job')).toEqual([volunteerKeys.jobsAll(), volunteerKeys.hubMetrics()]);
 		expect(keysForType('job_application')).toEqual([
 			volunteerKeys.jobApplicationsAll(),
+			volunteerKeys.applicantBoardAll(),
 			volunteerKeys.hubMetrics()
 		]);
 		expect(keysForType('shift_assignment')).toEqual([
 			volunteerKeys.shiftAssignmentsAll(),
+			volunteerKeys.applicantBoardAll(),
 			volunteerKeys.hubMetrics()
 		]);
 		expect(keysForType('volunteer')).toEqual([

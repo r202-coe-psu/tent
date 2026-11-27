@@ -26,29 +26,20 @@
 	import JobDetailOverviewTab from './job-detail-overview-tab.svelte';
 	import JobShiftsTab from './job-shifts-tab.svelte';
 	import JobApplicantsTab from './job-applicants-tab.svelte';
-	import { useJob, useJobApplications, useShiftAssignments } from '../application/queries';
+	import { useApplicantSummary, useJob, useJobAssignments } from '../application/queries';
 
 	let { jobId }: { jobId: string } = $props();
 
 	const jobQuery = useJob(() => jobId);
-	/**
-	 * `useJobApplications(filter)` takes its filter once at setup, so passing
-	 * `{ jobId }` would freeze the count to whichever job was first rendered
-	 * (SvelteKit reuses this component across `[id]` navigations). Count off the
-	 * unfiltered list instead — the same thing `job-board-tab.svelte` does.
-	 */
-	const applicationsQuery = useJobApplications();
-	const assignmentsQuery = useShiftAssignments();
+	// Both are DB reads scoped to this job (#1520) — not every application and assignment of the
+	// shelter. The badge numbers come from the same slim summary the applicants tab shows.
+	const summaryQuery = useApplicantSummary(() => jobId);
+	const assignmentsQuery = useJobAssignments(() => jobId);
 
 	const job = $derived(jobQuery.data ?? null);
-	const jobApplications = $derived(
-		(applicationsQuery.data ?? []).filter((a) => a.job_id === jobId)
-	);
-	const applicantCount = $derived(jobApplications.length);
+	const applicantCount = $derived(summaryQuery.data?.applicationTotal ?? 0);
 	/** Drives the "N รออนุมัติ" chip — the tab's one call to action. */
-	const pendingCount = $derived(
-		jobApplications.filter((a) => a.status === 'pending_review').length
-	);
+	const pendingCount = $derived(summaryQuery.data?.counts.pending ?? 0);
 
 	const shelterQuery = useShelter(() => job?.shelter_code ?? '');
 	const shelterLabel = $derived(shelterQuery.data?.name ?? job?.shelter_code ?? '—');
