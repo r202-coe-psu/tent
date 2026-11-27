@@ -59,10 +59,13 @@ function matchesShelterGeo(master: ShelterMaster, filters: OverviewFilters): boo
 	if (filters.shelter_subdistrict && (master.subdistrict ?? '') !== filters.shelter_subdistrict) {
 		return false;
 	}
-	if (filters.site_kind && master.site_kind !== filters.site_kind) return false;
-	if (filters.external === 'only' && !isExternalShelter(master)) return false;
-	// Picking a regular kind excludes external shelters (they have their own filter option/card).
-	if (filters.site_kind && isExternalShelter(master)) return false;
+	if (filters.external === 'only') {
+		// CR-266 FR-9: external=only wins over site_kind (a URL with both must not go empty).
+		if (!isExternalShelter(master)) return false;
+	} else if (filters.site_kind) {
+		// Picking a regular kind excludes external shelters (they have their own filter option/card).
+		if (master.site_kind !== filters.site_kind || isExternalShelter(master)) return false;
+	}
 	// A shelter with no status is shown (and filtered) as 'unknown', same as the site rows.
 	const op = resolveOperationStatus(master) ?? 'unknown';
 	if (filters.operation_status && op !== filters.operation_status) return false;
@@ -381,14 +384,14 @@ export async function buildOverviewSummary(
 	const movements = await Promise.all(sites.map((s) => movementTotals(s.master.code, from, to)));
 	const checkouts = movements.reduce((sum, m) => sum + m.checkout, 0);
 
-	// "In shelters" figures (present / forecast / capacity %) skip closed and cancelled shelters
-	// and external ones (run in another system); site counts still cover every shelter.
-	const counted = sites.filter(
-		(s) =>
-			s.operation_status !== 'closed' &&
-			s.operation_status !== 'cancelled' &&
-			!isExternalShelter(s.master)
-	);
+	// CR-266 FR-4: closed / cancelled shelters are not counted in sites_total / per-kind /
+	// external counts (no exception for the status filter); they get their own count (FR-7b).
+	const isClosedOrCancelled = (s: SiteMetric) =>
+		s.operation_status === 'closed' || s.operation_status === 'cancelled';
+	const activeSites = sites.filter((s) => !isClosedOrCancelled(s));
+	// FR-7: "in shelters" figures (present / forecast / capacity %) also skip external shelters
+	// (run in another system; their capacity would skew the percentage divisor).
+	const counted = activeSites.filter((s) => !isExternalShelter(s.master));
 	const present_total = counted.reduce((s, x) => s + x.present, 0);
 	const forecast_total = counted.reduce((s, x) => s + x.forecast, 0);
 	const pre_registered_at_sites = sites.reduce((s, x) => s + x.pre_registered, 0);
@@ -399,12 +402,12 @@ export async function buildOverviewSummary(
 		sites_by_status[s.operation_status] = (sites_by_status[s.operation_status] ?? 0) + 1;
 	}
 
-	// Same site set as sites_total (every status). External shelters get their own count and
+	// Same site set as sites_total (FR-4). External shelters get their own count and
 	// are left out of the per-kind map, so kinds + sites_external sum to sites_total.
 	// migrate() already defaults a missing site_kind to evacuation_center (CR-067).
 	const sites_by_site_kind: Record<string, number> = {};
 	let sites_external = 0;
-	for (const s of sites) {
+	for (const s of activeSites) {
 		if (isExternalShelter(s.master)) {
 			sites_external += 1;
 			continue;
@@ -429,7 +432,8 @@ export async function buildOverviewSummary(
 		sites_open_with_present: sites.filter(
 			(s) => s.operation_status !== 'closed' && s.operation_status !== 'cancelled' && s.present > 0
 		).length,
-		sites_total: sites.length,
+		sites_closed_or_cancelled: sites.length - activeSites.length,
+		sites_total: activeSites.length,
 		movement_window: filters.movement_window
 	});
 }

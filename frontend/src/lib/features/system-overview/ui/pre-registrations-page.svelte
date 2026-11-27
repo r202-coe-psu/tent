@@ -14,6 +14,7 @@
 	} from '../domain';
 	import { usePreRegistrations } from '../application/queries';
 	import { formatThaiDateTime } from '$lib/utils/date';
+	import { getCountryName } from '$lib/utils/country';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
 
 	const PAGE_SIZE = 20;
@@ -48,6 +49,10 @@
 	function formatWhen(value: string | null): string {
 		if (!value) return '—';
 		return formatThaiDateTime(value) || value;
+	}
+
+	function countryLabel(item: PreRegistrationListItem): string {
+		return item.country ? getCountryName(item.country) : '—';
 	}
 
 	function originLabel(item: PreRegistrationListItem): string {
@@ -135,7 +140,7 @@
 								<dt class="text-slate-500">ที่อยู่ (จังหวัด / อำเภอ / ตำบล)</dt>
 								<dd class="break-words">{originLabel(item)}</dd>
 								<dt class="text-slate-500">ประเทศ</dt>
-								<dd>{item.country ?? '—'}</dd>
+								<dd>{countryLabel(item)}</dd>
 								<dt class="text-slate-500">ช่วงอายุ</dt>
 								<dd>{AGE_BUCKET_LABELS[item.age_band] ?? item.age_band}</dd>
 								<dt class="text-slate-500">ลงทะเบียน</dt>
@@ -174,7 +179,7 @@
 										<PreRegShelterCell {item} />
 									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">{originLabel(item)}</Table.Cell>
-									<Table.Cell class="text-sm text-slate-700">{item.country ?? '—'}</Table.Cell>
+									<Table.Cell class="text-sm text-slate-700">{countryLabel(item)}</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">
 										{AGE_BUCKET_LABELS[item.age_band] ?? item.age_band}
 									</Table.Cell>

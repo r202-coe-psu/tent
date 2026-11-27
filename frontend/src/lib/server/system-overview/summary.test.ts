@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 describe('buildOverviewSummary sites_by_site_kind', () => {
-	it('counts every status per kind, defaults a missing kind, and sums to sites_total', async () => {
+	it('skips closed / cancelled, defaults a missing kind, and sums to sites_total', async () => {
 		listShelterMasters.mockResolvedValue([
 			{ code: 'A', name: 'A', site_kind: 'evacuation_center', operation_status: 'active' },
 			{ code: 'B', name: 'B', site_kind: 'host_house', operation_status: 'closed' },
@@ -60,8 +60,14 @@ describe('buildOverviewSummary sites_by_site_kind', () => {
 			fetchStats,
 			null
 		);
-		expect(out.sites_by_site_kind).toEqual({ evacuation_center: 2, host_house: 2 });
+		expect(out.sites_by_site_kind).toEqual({ evacuation_center: 2 });
 		expect(out.sites_external).toBe(0);
+		expect(out.sites_total).toBe(2);
+		expect(out.sites_closed_or_cancelled).toBe(2);
+		// FR-7b: sites_by_status still counts every shelter.
+		expect(Object.values(out.sites_by_status).reduce((a, b) => a + b, 0)).toBe(
+			out.sites_total + out.sites_closed_or_cancelled
+		);
 		expect(Object.values(out.sites_by_site_kind).reduce((a, b) => a + b, 0)).toBe(out.sites_total);
 	});
 
@@ -255,6 +261,75 @@ describe('in-shelter totals skip closed, cancelled and external shelters', () =>
 		expect(out.forecast_total).toBe(15);
 		expect(out.avg_present_pct).toBe(10);
 		expect(out.avg_forecast_pct).toBe(15);
-		expect(out.sites_total).toBe(4);
+		expect(out.sites_total).toBe(2);
+		expect(out.sites_closed_or_cancelled).toBe(2);
+	});
+});
+
+describe('CR-266 FR-4 / FR-9 edge cases', () => {
+	it('lets external=only win over site_kind (FR-9, AC-6b)', async () => {
+		listShelterMasters.mockResolvedValue([
+			{ code: 'A', name: 'A', site_kind: 'evacuation_center' },
+			{ code: 'B', name: 'B', site_kind: 'evacuation_center', is_external: true }
+		]);
+		const out = await buildOverviewSummary(
+			{
+				movement_window: 'today',
+				stay_bucket: 'all',
+				source: 'all',
+				limit: 50,
+				offset: 0,
+				site_kind: 'evacuation_center',
+				external: 'only'
+			} as never,
+			fetchStats,
+			null
+		);
+		expect(out.sites_total).toBe(1);
+		expect(out.sites_external).toBe(1);
+	});
+
+	it('shows 0 kind cards but counts closed shelters when the status filter is closed (AC-5a)', async () => {
+		listShelterMasters.mockResolvedValue([
+			{ code: 'A', name: 'A', site_kind: 'evacuation_center', operation_status: 'active' },
+			{ code: 'B', name: 'B', site_kind: 'evacuation_center', operation_status: 'closed' },
+			{ code: 'C', name: 'C', site_kind: 'host_house', operation_status: 'cancelled' }
+		]);
+		const out = await buildOverviewSummary(
+			{
+				movement_window: 'today',
+				stay_bucket: 'all',
+				source: 'all',
+				limit: 50,
+				offset: 0,
+				operation_status: 'closed'
+			} as never,
+			fetchStats,
+			null
+		);
+		expect(out.sites_total).toBe(0);
+		expect(out.sites_by_site_kind).toEqual({});
+		expect(out.sites_closed_or_cancelled).toBe(1);
+	});
+
+	it('reports null percentages when only external shelters are selected (AC-6a)', async () => {
+		listShelterMasters.mockResolvedValue([
+			{ code: 'B', name: 'B', site_kind: 'evacuation_center', is_external: true, capacity: 500 }
+		]);
+		const out = await buildOverviewSummary(
+			{
+				movement_window: 'today',
+				stay_bucket: 'all',
+				source: 'all',
+				limit: 50,
+				offset: 0,
+				external: 'only'
+			} as never,
+			fetchStats,
+			null
+		);
+		expect(out.present_total).toBe(0);
+		expect(out.avg_present_pct).toBeNull();
+		expect(out.avg_forecast_pct).toBeNull();
 	});
 });

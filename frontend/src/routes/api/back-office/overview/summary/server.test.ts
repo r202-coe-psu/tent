@@ -23,6 +23,7 @@ vi.mock('$lib/server/system-overview', () => ({
 		sites_external: 0,
 		checkouts_in_window: 1,
 		sites_closed: 0,
+		sites_closed_or_cancelled: 0,
 		sites_open_with_present: 1,
 		sites_total: 1,
 		movement_window: 'today'

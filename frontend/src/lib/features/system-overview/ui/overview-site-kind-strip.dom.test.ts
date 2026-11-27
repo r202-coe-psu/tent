@@ -27,11 +27,12 @@ vi.mock('$lib/features/master-data', async () => {
 	};
 });
 
-const summary = (kinds: Record<string, number>, external = 0) =>
+const summary = (kinds: Record<string, number>, external = 0, closedOrCancelled = 0) =>
 	({
 		sites_total: 5,
 		sites_by_site_kind: kinds,
-		sites_external: external
+		sites_external: external,
+		sites_closed_or_cancelled: closedOrCancelled
 	}) as unknown as OverviewSummary;
 
 let instance: ReturnType<typeof mount> | undefined;
@@ -50,20 +51,21 @@ afterEach(() => {
 	languageStore.setLanguage('th');
 });
 
-describe('OverviewSiteKindStrip (CR draft-overview-site-kind-counts)', () => {
+describe('OverviewSiteKindStrip (CR-266)', () => {
 	it('shows one card per active kind in master order, including zero counts', () => {
 		const cards = render(summary({ evacuation_center: 3, host_house: 2 }));
 		expect(cards).toEqual([
 			'ศูนย์อพยพ 3 ศูนย์',
 			'บ้านพี่เลี้ยง 2 ศูนย์',
 			'ค่ายสนาม 0 ศูนย์',
-			'ศูนย์ภายนอก 0 ศูนย์'
+			'ศูนย์ภายนอก 0 ศูนย์',
+			'ศูนย์ที่ปิด/ยกเลิก 0 ศูนย์'
 		]);
 	});
 
 	it('appends an inactive kind that still holds shelters', () => {
 		const cards = render(summary({ evacuation_center: 4, old_kind: 1 }));
-		expect(cards.at(-2)).toBe('ประเภทเดิม 1 ศูนย์');
+		expect(cards.at(-3)).toBe('ประเภทเดิม 1 ศูนย์');
 	});
 
 	it('uses English labels when the language is en', () => {
@@ -72,7 +74,22 @@ describe('OverviewSiteKindStrip (CR draft-overview-site-kind-counts)', () => {
 		expect(cards[0]).toBe('Evacuation center 5 shelters');
 	});
 
-	it('shows External shelters as their own last card, even at 0', () => {
-		expect(render(summary({ evacuation_center: 3 }, 2)).at(-1)).toBe('ศูนย์ภายนอก 2 ศูนย์');
+	it('shows External shelters as their own card after the kinds, even at 0', () => {
+		expect(render(summary({ evacuation_center: 3 }, 2)).at(-2)).toBe('ศูนย์ภายนอก 2 ศูนย์');
+	});
+
+	it('shows closed / cancelled shelters as the last card (FR-13a), even at 0', () => {
+		expect(render(summary({ evacuation_center: 3 }, 0, 3)).at(-1)).toBe(
+			'ศูนย์ที่ปิด/ยกเลิก 3 ศูนย์'
+		);
+		document.body.innerHTML = '';
+		expect(render(summary({ evacuation_center: 3 })).at(-1)).toBe('ศูนย์ที่ปิด/ยกเลิก 0 ศูนย์');
+	});
+
+	it('uses English for the closed / cancelled card', () => {
+		languageStore.setLanguage('en');
+		expect(render(summary({ evacuation_center: 1 }, 0, 2)).at(-1)).toBe(
+			'Closed / cancelled shelters 2 shelters'
+		);
 	});
 });

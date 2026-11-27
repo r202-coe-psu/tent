@@ -16,6 +16,7 @@ const summary = {
 	sites_by_status: {},
 	checkouts_in_window: 0,
 	sites_closed: 0,
+	sites_closed_or_cancelled: 0,
 	sites_open_with_present: 1,
 	sites_total: 1,
 	movement_window: 'today'

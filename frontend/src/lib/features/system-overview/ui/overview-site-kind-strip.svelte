@@ -20,7 +20,7 @@
 	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
 
 	// Master order; active kinds always shown (even 0). A deactivated kind still holding
-	// shelters is appended so the cards keep summing to sites_total.
+	// shelters is appended so the kind + external cards keep summing to sites_total.
 	const cards = $derived.by(() => {
 		const counts = summary?.sites_by_site_kind ?? {};
 		const codes = items.filter((i) => i.status === 'active').map((i) => i.code);
@@ -35,7 +35,13 @@
 		// External shelters are their own card (always shown), never folded into a kind.
 		return [
 			...kindCards,
-			{ code: '__external__', label: t.externalSites, count: summary?.sites_external ?? 0 }
+			{ code: '__external__', label: t.externalSites, count: summary?.sites_external ?? 0 },
+			// CR-266 FR-13a: closed + cancelled shelters, kept out of every card above.
+			{
+				code: '__closed_or_cancelled__',
+				label: t.closedOrCancelledSites,
+				count: summary?.sites_closed_or_cancelled ?? 0
+			}
 		];
 	});
 </script>

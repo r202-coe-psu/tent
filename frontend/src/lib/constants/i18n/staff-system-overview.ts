@@ -27,6 +27,7 @@ const th = {
 	// ---- shelter counts per kind
 	siteUnit: 'ศูนย์',
 	externalSites: 'ศูนย์ภายนอก',
+	closedOrCancelledSites: 'ศูนย์ที่ปิด/ยกเลิก',
 
 	// ---- sites table
 	sitesTitle: 'ศูนย์พักพิงทั้งหมด',
@@ -114,6 +115,7 @@ const en: typeof th = {
 
 	siteUnit: 'shelters',
 	externalSites: 'External shelters',
+	closedOrCancelledSites: 'Closed / cancelled shelters',
 
 	sitesTitle: 'All shelters',
 	sitesDescription: 'Sorted by expected occupants as a share of capacity (high → low)',
