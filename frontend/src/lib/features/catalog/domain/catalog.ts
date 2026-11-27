@@ -795,7 +795,7 @@ export type ItemMasterInput = z.input<typeof itemMasterInputSchema>;
 export type ItemMasterUpdateInput = z.input<typeof itemMasterUpdateInputSchema>;
 
 export const recipeInputSchema = z.object({
-	label: z.string().trim().min(1, 'Name is required'),
+	label: z.string().trim().min(1, 'กรุณากรอกชื่อสูตรอาหาร'),
 	ingredients: z
 		.array(
 			z.object({
