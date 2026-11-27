@@ -197,12 +197,6 @@
 								<!-- Item Details -->
 								<td class="py-3 pr-2 pl-4">
 									<div class="font-bold text-slate-900">{preview.itemName}</div>
-									<div
-										class="max-w-[220px] truncate font-mono text-2xs text-slate-400"
-										title={preview.itemId}
-									>
-										ID: {preview.itemId}
-									</div>
 								</td>
 
 								<!-- Type Badge -->

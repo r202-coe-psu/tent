@@ -88,11 +88,11 @@
 	</div>
 
 	<!-- Dropdown filters + date range + follow-up toggle + reset (one row) -->
-	<div class="flex flex-wrap items-center gap-2">
+	<div class="flex flex-wrap items-end gap-3">
 		<!-- Requisition Type Filter -->
-		<div class="flex items-center gap-1.5">
-			<label for="requisition-type-filter" class="shrink-0 text-xs font-semibold text-slate-600">
-				ประเภท:
+		<div class="flex flex-col gap-1.5">
+			<label for="requisition-type-filter" class="text-xs font-semibold text-slate-600">
+				ประเภท
 			</label>
 			<Select.Root
 				type="single"
@@ -119,10 +119,8 @@
 		</div>
 
 		<!-- Destination Location Filter -->
-		<div class="flex items-center gap-1.5">
-			<label for="destination-filter" class="shrink-0 text-xs font-semibold text-slate-600">
-				จุดหมาย:
-			</label>
+		<div class="flex flex-col gap-1.5">
+			<label for="destination-filter" class="text-xs font-semibold text-slate-600"> จุดหมาย </label>
 			<Select.Root
 				type="single"
 				value={destination}
@@ -150,8 +148,8 @@
 
 		<!-- Multi-select status filter -->
 		{#if onStatusesChange}
-			<div class="flex items-center gap-1.5">
-				<span class="shrink-0 text-xs font-semibold text-slate-600">สถานะ:</span>
+			<div class="flex flex-col gap-1.5">
+				<span class="text-xs font-semibold text-slate-600">สถานะ</span>
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger>
 						{#snippet child({ props })}
@@ -160,7 +158,7 @@
 								type="button"
 								variant="outline"
 								aria-label="กรองตามสถานะ"
-								class="h-9 gap-1 rounded-lg px-2.5 text-sm font-normal shadow-2xs"
+								class="h-9 gap-1 rounded-lg border-input bg-white px-2.5 text-sm font-normal shadow-2xs hover:bg-slate-50"
 							>
 								<span>{statuses.length > 0 ? `เลือก ${statuses.length} สถานะ` : 'ทุกสถานะ'}</span>
 								<ChevronDown class="h-4 w-4 text-slate-400" aria-hidden="true" />
@@ -184,30 +182,32 @@
 
 		{#if onCreatedFromChange || onCreatedToChange}
 			<!-- Both pickers share one group, so it must wrap: at 390px two fixed-width pickers overflow. -->
-			<div class="flex flex-wrap items-center gap-1.5">
-				<span class="shrink-0 text-xs font-semibold text-slate-600">วันที่สร้าง:</span>
-				{#if onCreatedFromChange}
-					<label for="created-from-filter" class="sr-only">ตั้งแต่วันที่</label>
-					<DatePicker
-						id="created-from-filter"
-						class="!h-9 w-[124px] sm:w-[150px]"
-						bind:value={() => createdFrom, (v) => onCreatedFromChange?.(v)}
-					/>
-				{/if}
-				{#if onCreatedToChange}
-					<!-- The dash travels with the "to" picker when the group wraps. -->
-					<div class="flex items-center gap-1.5">
-						{#if onCreatedFromChange}
-							<span class="text-slate-400" aria-hidden="true">–</span>
-						{/if}
-						<label for="created-to-filter" class="sr-only">ถึงวันที่</label>
+			<div class="flex flex-col gap-1.5">
+				<span class="text-xs font-semibold text-slate-600">วันที่สร้าง</span>
+				<div class="flex flex-wrap items-center gap-1.5">
+					{#if onCreatedFromChange}
+						<label for="created-from-filter" class="sr-only">ตั้งแต่วันที่</label>
 						<DatePicker
-							id="created-to-filter"
-							class="!h-9 w-[124px] sm:w-[150px]"
-							bind:value={() => createdTo, (v) => onCreatedToChange?.(v)}
+							id="created-from-filter"
+							class="!h-9 w-[124px] border-input bg-white shadow-2xs sm:w-[150px]"
+							bind:value={() => createdFrom, (v) => onCreatedFromChange?.(v)}
 						/>
-					</div>
-				{/if}
+					{/if}
+					{#if onCreatedToChange}
+						<!-- The dash travels with the "to" picker when the group wraps. -->
+						<div class="flex items-center gap-1.5">
+							{#if onCreatedFromChange}
+								<span class="text-slate-400" aria-hidden="true">–</span>
+							{/if}
+							<label for="created-to-filter" class="sr-only">ถึงวันที่</label>
+							<DatePicker
+								id="created-to-filter"
+								class="!h-9 w-[124px] border-input bg-white shadow-2xs sm:w-[150px]"
+								bind:value={() => createdTo, (v) => onCreatedToChange?.(v)}
+							/>
+						</div>
+					{/if}
+				</div>
 			</div>
 		{/if}
 

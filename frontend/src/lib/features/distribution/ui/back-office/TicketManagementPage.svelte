@@ -534,6 +534,7 @@
 					tickets={filteredTickets}
 					{sortDirection}
 					resetKey={filterKey}
+					showType={selectedType === 'all'}
 					onToggleSort={() => updateFilters({ sort: sortDirection === 'desc' ? 'asc' : 'desc' })}
 					onViewTicket={(ticket) => handleOpenDetail(ticket._id)}
 				/>
