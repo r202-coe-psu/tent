@@ -78,7 +78,7 @@
 				// Join existing household — do not create a new one
 				const existing = await peopleRepository().getHousehold(joinHouseholdId);
 				if (!existing) {
-					throw new Error('ไม่พบครัวเรือนที่เลือกเข้าร่วม');
+					throw new Error('ไม่พบครอบครัวที่เลือกเข้าร่วม');
 				}
 
 				const hasPets = petsList.length > 0;
@@ -112,7 +112,7 @@
 				const refreshed = (await peopleRepository().getHousehold(joinHouseholdId)) ?? existing;
 				createdHousehold = refreshed;
 
-				toast.success(`ลงทะเบียนหัวหน้าครัวเรือนและเข้าร่วมครัวเรือน "${refreshed.label}" สำเร็จ`);
+				toast.success(`ลงทะเบียนผู้ติดต่อหลักและเข้าร่วมครอบครัว "${refreshed.label}" สำเร็จ`);
 				step = 5;
 				return;
 			}
@@ -155,7 +155,7 @@
 			});
 			createdHead = finalHeadDoc;
 
-			toast.success(`ลงทะเบียนหัวหน้าครัวเรือนและสร้างครัวเรือน "${hhDoc.label}" สำเร็จ`);
+			toast.success(`ลงทะเบียนผู้ติดต่อหลักและสร้างครอบครัว "${hhDoc.label}" สำเร็จ`);
 			step = 5;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
@@ -167,7 +167,7 @@
 </script>
 
 <svelte:head>
-	<title>ลงทะเบียนครัวเรือนล่วงหน้า · SmartShelter</title>
+	<title>ลงทะเบียนครอบครัวล่วงหน้า · SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
@@ -179,10 +179,10 @@
 			onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
 		>
 			<ArrowLeft class="size-4" />
-			<span>กลับหน้ารายการครัวเรือนหลัก</span>
+			<span>กลับหน้ารายการครอบครัวหลัก</span>
 		</button>
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-			ลงทะเบียนครัวเรือนล่วงหน้า (Household Pre-registration)
+			ลงทะเบียนครอบครัวล่วงหน้า (Household Pre-registration)
 		</h2>
 	</div>
 
@@ -228,9 +228,9 @@
 							: 'text-muted-foreground'}"
 				>
 					{s === 1
-						? 'ข้อมูลหัวหน้าครัวเรือน'
+						? 'ข้อมูลผู้ติดต่อหลัก'
 						: s === 2
-							? 'ข้อมูลที่อยู่ครัวเรือน'
+							? 'ข้อมูลที่อยู่ครอบครัว'
 							: s === 3
 								? 'ทรัพย์สินและสัตว์เลี้ยง'
 								: s === 4

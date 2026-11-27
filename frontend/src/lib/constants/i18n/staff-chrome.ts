@@ -7,19 +7,18 @@ const th = {
 		back: 'กลับหน้าหลัก',
 		title: 'ระบบส่วนหน้า ณ ศูนย์พักพิง',
 		subtitle: 'เลือกงานที่ต้องการทำ',
-		stationBadge: (n: number) => `สถานี ${n}`,
 		stationNames: {
-			1: 'ลงทะเบียน',
-			2: 'คัดกรองผู้เข้าพัก',
-			3: 'จัดสรรที่พัก'
+			1: 'จุดลงทะเบียน',
+			2: 'จุดคัดกรองสุขภาพ',
+			3: 'จุดจัดโซน'
 		},
 		tiles: {
-			registration: { title: 'ทะเบียนผู้ประสบภัย', caption: 'Registration Desk (Station 1)' },
-			screening: { title: 'คัดกรองผู้เข้าพัก', caption: 'Occupant Screening (Station 2)' },
-			zoning: { title: 'จัดสรรที่พัก', caption: 'Zoning Desk (Station 3)' },
+			registration: { title: 'จุดลงทะเบียน', caption: 'Registration Desk' },
+			screening: { title: 'จุดคัดกรองสุขภาพ', caption: 'Health Screening Desk' },
+			zoning: { title: 'จุดจัดโซน', caption: 'Zoning Desk' },
 			distribution: {
-				title: 'จุดแจกจ่ายพัสดุและอาหาร',
-				caption: 'Distribution Desk (Station 4)'
+				title: 'จุดแจกจ่าย',
+				caption: 'Distribution Desk'
 			},
 			searchEdit: { title: 'ค้นหาและแก้ไขข้อมูล', caption: 'Search & Update' },
 			checkInOut: { title: 'สแกนเข้า-ออกศูนย์', caption: 'Check-in / Out' },
@@ -72,19 +71,18 @@ const en: typeof th = {
 		back: 'Back to home',
 		title: 'Onsite Shelter Operations',
 		subtitle: 'Choose the task you want to do',
-		stationBadge: (n: number) => `Station ${n}`,
 		stationNames: {
-			1: 'Registration',
-			2: 'Occupant Screening',
-			3: 'Shelter Allocation'
+			1: 'Registration desk',
+			2: 'Health screening desk',
+			3: 'Zoning desk'
 		},
 		tiles: {
-			registration: { title: 'Evacuee Registration', caption: 'Registration Desk (Station 1)' },
-			screening: { title: 'Occupant Screening', caption: 'Occupant Screening (Station 2)' },
-			zoning: { title: 'Shelter Allocation', caption: 'Zoning Desk (Station 3)' },
+			registration: { title: 'Registration desk', caption: 'Registration Desk' },
+			screening: { title: 'Health screening desk', caption: 'Health Screening Desk' },
+			zoning: { title: 'Zoning desk', caption: 'Zoning Desk' },
 			distribution: {
-				title: 'Supplies and Food Distribution Point',
-				caption: 'Distribution Desk (Station 4)'
+				title: 'Distribution desk',
+				caption: 'Distribution Desk'
 			},
 			searchEdit: { title: 'Search and Edit Records', caption: 'Search & Update' },
 			checkInOut: { title: 'Scan Entry / Exit', caption: 'Check-in / Out' },

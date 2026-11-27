@@ -132,7 +132,7 @@ export async function createM5Batch(
 	const evacuees = await loadEvacuees(ctx.shelterCode, ids);
 	const missing = ids.filter((id) => !evacuees.has(id));
 	if (missing.length) {
-		throw new M5BatchError(422, 'EVACUEE_NOT_FOUND', 'ไม่พบผู้ประสบภัยบางคนในศูนย์', {
+		throw new M5BatchError(422, 'EVACUEE_NOT_FOUND', 'ไม่พบผู้พักพิงบางคนในศูนย์', {
 			evacuee_ids: missing
 		});
 	}
@@ -142,7 +142,7 @@ export async function createM5Batch(
 		throw new M5BatchError(
 			409,
 			'ACTIVE_REFERRAL',
-			'ผู้ประสบภัยบางคนมีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน',
+			'ผู้พักพิงบางคนมีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน',
 			{ evacuee_ids: busy }
 		);
 	}

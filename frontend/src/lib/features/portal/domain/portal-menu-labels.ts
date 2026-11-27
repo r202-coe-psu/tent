@@ -41,16 +41,16 @@ const departmentsEn: Record<PortalDepartment['id'], PortalText> = {
 
 const itemsEn: Record<string, PortalText> = {
 	'station-1': {
-		label: 'Register Families and Households',
+		label: 'Registration desk',
 		desc: 'Record evacuees and families and issue QR cards'
 	},
 	'station-2': {
-		label: 'Occupant Screening',
+		label: 'Health screening desk',
 		desc: 'Screen symptoms and vulnerable groups before zoning'
 	},
 	'station-3': {
-		label: 'Zone Allocation',
-		desc: 'Assign evacuees to zones and tents'
+		label: 'Zoning desk',
+		desc: 'Assign evacuees to zones'
 	},
 	'evacuee-search-edit': {
 		label: 'Search and Edit Evacuee Records',

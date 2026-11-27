@@ -172,7 +172,7 @@ test.describe(
 			await selectActiveShelter(page, shelterCode!);
 
 			await page.goto('/back-office/evacuee-management?tab=household');
-			await expect(page.getByRole('button', { name: 'รายชื่อครัวเรือน' })).toBeVisible();
+			await expect(page.getByRole('button', { name: 'รายชื่อครอบครัว' })).toBeVisible();
 
 			const householdRow = page.locator('table tbody tr').filter({ hasText: HEAD_FULL });
 			await expect(async () => {

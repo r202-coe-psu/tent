@@ -325,10 +325,10 @@
 				</div>
 				<div>
 					<h3 class="text-lg font-bold text-slate-900 dark:text-slate-50">
-						สร้างครัวเรือนล่วงหน้าสำเร็จ
+						สร้างครอบครัวล่วงหน้าสำเร็จ
 					</h3>
 					<p class="text-sm text-muted-foreground">
-						ครัวเรือนได้รับการจัดตั้งแล้วในระบบ สถานะ:
+						ครอบครัวได้รับการจัดตั้งแล้วในระบบ สถานะ:
 						<span
 							class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800"
 						>
@@ -340,13 +340,13 @@
 
 			<div class="mt-6 grid grid-cols-1 gap-x-4 gap-y-3 border-t pt-4 text-sm sm:grid-cols-2">
 				<div>
-					<span class="text-xs text-muted-foreground">ชื่อครัวเรือน</span>
+					<span class="text-xs text-muted-foreground">ชื่อครอบครัว</span>
 					<p class="font-semibold text-slate-800 dark:text-slate-200">
 						{createdHousehold.label}
 					</p>
 				</div>
 				<div>
-					<span class="text-xs text-muted-foreground">หัวหน้าครัวเรือน</span>
+					<span class="text-xs text-muted-foreground">ผู้ติดต่อหลัก</span>
 					<p class="font-semibold text-slate-800 dark:text-slate-200">
 						{createdHead ? formatPersonName(createdHead) : '—'}
 					</p>
@@ -404,7 +404,7 @@
 								<td class="p-3">
 									{#if isHead}
 										<span class="rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-											หัวหน้าครอบครัว
+											ผู้ติดต่อหลัก
 										</span>
 									{:else}
 										<span
@@ -867,7 +867,7 @@
 					disabled={$memberSubmitting || isSubmitting}
 					class="bg-primary font-semibold text-primary-foreground hover:bg-primary/90"
 				>
-					{$memberSubmitting || isSubmitting ? 'กำลังบันทึก...' : 'เพิ่มสมาชิกเข้าร่วมครัวเรือน'}
+					{$memberSubmitting || isSubmitting ? 'กำลังบันทึก...' : 'เพิ่มสมาชิกเข้าร่วมครอบครัว'}
 				</Form.Button>
 			</div>
 		</Field.FieldGroup>
@@ -879,7 +879,7 @@
 	class="mt-8 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between"
 >
 	<p class="text-xs text-muted-foreground">
-		💡 บันทึกสมาชิกสำเร็จแล้ว สมาชิกทุกคนจะผูกอยู่กับครัวเรือนนี้
+		💡 บันทึกสมาชิกสำเร็จแล้ว สมาชิกทุกคนจะผูกอยู่กับครอบครัวนี้
 	</p>
 	<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 		{#if createdHead}

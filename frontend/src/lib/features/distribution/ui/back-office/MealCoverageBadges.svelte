@@ -51,7 +51,7 @@
 			class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900"
 		>
 			<Users class="size-3.5" aria-hidden="true" />
-			ครัวเรือนมีบันทึกรับ: {mealList(householdRecorded)}
+			ครอบครัวมีบันทึกรับ: {mealList(householdRecorded)}
 		</p>
 	{/if}
 </div>

@@ -1,9 +1,9 @@
 /** Station 2 (medical screening) — queue page, detail page and clinical form copy. */
 const th = {
 	// Queue page
-	queuePageTitle: 'คัดกรองผู้เข้าพัก (Station 2) | SmartShelter',
-	toastCodeNotFound: 'ไม่พบข้อมูลผู้ประสบภัยที่ตรงกับรหัสนี้',
-	toastFoundEvacuee: (name: string) => `พบผู้ประสบภัย: ${name}`,
+	queuePageTitle: 'จุดคัดกรองสุขภาพ | SmartShelter',
+	toastCodeNotFound: 'ไม่พบข้อมูลผู้พักพิงที่ตรงกับรหัสนี้',
+	toastFoundEvacuee: (name: string) => `พบผู้พักพิง: ${name}`,
 	toastFoundCentralQueue: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนคัดกรอง',
 	toastScanLookupFailed: 'ค้นหาจากรหัสที่สแกนไม่สำเร็จ',
 	cameraAccessError: 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง',
@@ -21,11 +21,10 @@ const th = {
 		disabled: 'ผู้พิการ'
 	} as Record<string, string>,
 	timeSuffix: ' น.',
-	disabledTitle: 'จุดคัดกรองผู้เข้าพักถูกปิดใช้งาน',
-	disabledDesc:
-		'ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองผู้เข้าพัก (Station 2) ตามการตั้งค่าศูนย์พักพิง',
+	disabledTitle: 'จุดคัดกรองสุขภาพถูกปิดใช้งาน',
+	disabledDesc: 'ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองสุขภาพตามการตั้งค่าศูนย์พักพิง',
 	backToPortal: 'กลับหน้าเลือกเมนูหลัก',
-	goToStation3: 'ไปจุดจัดสรรที่พัก (Station 3)',
+	goToStation3: 'ไปจุดจัดโซน',
 	heading: 'จุดตรวจคัดกรองผู้เข้าพัก',
 	intro:
 		'เปิดฟอร์มคัดกรองได้ 3 ทาง: เลือกคนจากคิวรอตรวจ · ค้นหาชื่อ/เบอร์/เลขบัตร · สแกน QR (Handover Slip หรือ Person QR) — ไม่จำเป็นต้องสแกนเสมอ',
@@ -44,7 +43,7 @@ const th = {
 	loadingQueue: 'กำลังโหลดคิว...',
 	noMatch: (q: string) => `ไม่พบรายชื่อที่ตรงกับ "${q}"`,
 	clearSearch: 'ล้างการค้นหา',
-	emptyPending: 'ไม่มีผู้ประสบภัยรอตรวจคัดกรองในขณะนี้',
+	emptyPending: 'ไม่มีผู้พักพิงรอตรวจคัดกรองในขณะนี้',
 	emptyScreened: 'ยังไม่มีรายการที่ตรวจแล้ว',
 	colName: 'ชื่อ-นามสกุล',
 	colIdNo: 'เลขประจำตัว',
@@ -67,14 +66,14 @@ const th = {
 	formHeading: 'ฟอร์มคัดกรองผู้เข้าพัก',
 	headerMeta: (gender: string, age: string, idMasked: string, phone: string) =>
 		`เพศ ${gender} · อายุ ${age} ปี · บัตร ${idMasked} · โทร ${phone}`,
-	loadingEvacuee: 'กำลังโหลดข้อมูลผู้ประสบภัย...',
-	notFoundTitle: 'ไม่พบผู้ประสบภัย',
+	loadingEvacuee: 'กำลังโหลดข้อมูลผู้พักพิง...',
+	notFoundTitle: 'ไม่พบผู้พักพิง',
 	notFoundPrefix: 'รหัส',
 	notFoundSuffix:
 		'ไม่มีในศูนย์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง — กลับไปที่คิวคัดกรองแล้วลองค้นหาอีกครั้ง',
 	backToQueueBtn: 'กลับไปคิวคัดกรอง',
 	savedTitle: 'บันทึกผลคัดกรองแล้ว',
-	savedSubtitle: (name: string) => `${name} — ส่งต่อโต๊ะจัดสรรที่พัก (สถานี 3) ได้เลย`,
+	savedSubtitle: (name: string) => `${name} — ส่งต่อจุดจัดโซนได้เลย`,
 	factCareTrack: 'แนวทางดูแล',
 	factFastTrack: 'Fast track',
 	factNormalCare: 'ดูแลตามปกติ',
@@ -84,7 +83,7 @@ const th = {
 	factTriage: 'ระดับความเร่งด่วน (Triage)',
 	factVulnerable: 'กลุ่มเปราะบาง',
 	factGroupCount: (n: number) => `${n} กลุ่ม`,
-	factZone: 'โซนที่ระบบแนะนำ (สถานี 3)',
+	factZone: 'โซนที่ระบบแนะนำให้จุดจัดโซน',
 	goToZoning: 'ไปจัดโซนเลย',
 	nextInQueue: (name: string) => `คนถัดไปในคิว: ${name}`,
 	noNextInQueue: 'ไม่มีคนรอตรวจในคิว',
@@ -97,21 +96,21 @@ const th = {
 	section1Title: '1. ประวัติสุขภาพและแนวทางดูแล (Health History & Care Track)',
 	section1Desc: 'ซักประวัติโรคประจำตัว ยาที่ใช้ประจำ ประวัติการแพ้ และจัดกลุ่มแนวทางดูแล',
 	section2Title: '2. กลุ่มเปราะบาง (Vulnerable Groups)',
-	section2Desc: 'ติ๊กทุกข้อที่ตรงกับผู้ประสบภัย — เลือกได้หลายข้อ · ไม่ตรงข้อไหนเลยให้เว้นว่าง',
+	section2Desc: 'ติ๊กทุกข้อที่ตรงกับผู้พักพิง — เลือกได้หลายข้อ · ไม่ตรงข้อไหนเลยให้เว้นว่าง',
 	section3Title: '3. ความต้องการพิเศษ (Special needs)',
 	section3Desc:
-		'ข้อมูลเดียวกับที่กรอกที่จุดลงทะเบียน (สถานี 1) — แก้ไขหรือเพิ่มได้ · เลือกได้หลายข้อ · ไม่มีให้เว้นว่าง',
+		'ข้อมูลเดียวกับที่กรอกที่จุดลงทะเบียน — แก้ไขหรือเพิ่มได้ · เลือกได้หลายข้อ · ไม่มีให้เว้นว่าง',
 	section4Title: '4. อาการเฝ้าระวังทางระบาดวิทยา (EWAR Surveillance Symptoms)',
 	section4DescBefore: 'ติ๊กเฉพาะอาการที่พบตอนนี้ — เลือกได้หลายข้อ ·',
 	section4DescStrong: 'ไม่มีอาการ ไม่ต้องเลือก',
-	section4DescAfter: '(ถ้าติ๊กอาการใด ระบบจะแนะนำโซนกักตัวที่สถานี 3)',
+	section4DescAfter: '(ถ้าติ๊กอาการใด ระบบจะแนะนำโซนกักตัวที่จุดจัดโซน)',
 	savingData: 'กำลังบันทึกข้อมูล...',
 	saveScreening: 'บันทึกผลคัดกรอง'
 };
 
 const en: typeof th = {
 	// Queue page
-	queuePageTitle: 'Medical Screening (Station 2) | SmartShelter',
+	queuePageTitle: 'Health screening desk | SmartShelter',
 	toastCodeNotFound: 'No evacuee found for this code',
 	toastFoundEvacuee: (name) => `Evacuee found: ${name}`,
 	toastFoundCentralQueue:
@@ -133,10 +132,9 @@ const en: typeof th = {
 	},
 	timeSuffix: '',
 	disabledTitle: 'Medical screening is disabled',
-	disabledDesc:
-		'This shelter has not enabled the medical screening point (Station 2) in its settings.',
+	disabledDesc: 'This shelter has not enabled the health screening desk in its settings.',
 	backToPortal: 'Back to main menu',
-	goToStation3: 'Go to zone allocation (Station 3)',
+	goToStation3: 'Go to the zoning desk',
 	heading: 'Medical Screening Point',
 	intro:
 		'Open the screening form in 3 ways: pick someone from the pending queue · search by name/phone/ID number · scan a QR (Handover Slip or Person QR) — scanning is not required.',
@@ -186,7 +184,7 @@ const en: typeof th = {
 		'is not in this shelter, or you do not have access — go back to the screening queue and search again.',
 	backToQueueBtn: 'Back to screening queue',
 	savedTitle: 'Screening saved',
-	savedSubtitle: (name) => `${name} — ready to hand over to the zone allocation desk (Station 3)`,
+	savedSubtitle: (name) => `${name} — ready to hand over to the zoning desk`,
 	factCareTrack: 'Care track',
 	factFastTrack: 'Fast track',
 	factNormalCare: 'Normal care',
@@ -196,7 +194,7 @@ const en: typeof th = {
 	factTriage: 'Urgency (triage)',
 	factVulnerable: 'Vulnerable groups',
 	factGroupCount: (n) => `${n} ${n === 1 ? 'group' : 'groups'}`,
-	factZone: 'Recommended zone (Station 3)',
+	factZone: 'Zone recommended to the zoning desk',
 	goToZoning: 'Go to zone allocation',
 	nextInQueue: (name) => `Next in queue: ${name}`,
 	noNextInQueue: 'No one waiting in the queue',
@@ -213,12 +211,12 @@ const en: typeof th = {
 	section2Desc: 'Tick all that apply to the evacuee — multiple allowed · leave blank if none apply',
 	section3Title: '3. Special needs',
 	section3Desc:
-		'Same data entered at the registration desk (Station 1) — edit or add · multiple allowed · leave blank if none',
+		'Same data entered at the registration desk — edit or add · multiple allowed · leave blank if none',
 	section4Title: '4. EWAR surveillance symptoms',
 	section4DescBefore: 'Tick only symptoms present now — multiple allowed ·',
 	section4DescStrong: 'No symptoms: select nothing',
 	section4DescAfter:
-		'(ticking any symptom makes the system recommend the quarantine zone at Station 3)',
+		'(ticking any symptom makes the system recommend the quarantine zone at the zoning desk)',
 	savingData: 'Saving...',
 	saveScreening: 'Save screening'
 };

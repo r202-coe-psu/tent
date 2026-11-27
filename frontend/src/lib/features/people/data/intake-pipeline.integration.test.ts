@@ -190,7 +190,7 @@ describe('intake pipeline integration (#209)', () => {
 					track: 'normal',
 					triage_level: 'green',
 					symptoms: [],
-					notes: 'ผู้ประสบภัยแจ้งว่าไม่มีอาการป่วย สบายดี'
+					notes: 'ผู้พักพิงแจ้งว่าไม่มีอาการป่วย สบายดี'
 				},
 				checkIn: false
 			},
@@ -201,7 +201,7 @@ describe('intake pipeline integration (#209)', () => {
 		expect(screening.triage_level).toBe('green');
 		expect(screening.vital_signs).toBeUndefined();
 		expect(screening.symptoms).toEqual([]);
-		expect(screening.notes).toBe('ผู้ประสบภัยแจ้งว่าไม่มีอาการป่วย สบายดี');
+		expect(screening.notes).toBe('ผู้พักพิงแจ้งว่าไม่มีอาการป่วย สบายดี');
 		expect(afterScreen).toBeUndefined();
 
 		// Evacuee stay status remains arriving

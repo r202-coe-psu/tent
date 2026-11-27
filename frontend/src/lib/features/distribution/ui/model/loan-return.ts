@@ -187,7 +187,7 @@ export const NON_PHYSICAL_CLEAR_REASON_OPTIONS: {
 	{
 		value: 'lost',
 		label: 'สูญหาย',
-		description: 'ผู้ประสบภัยทำพัสดุสูญหาย ไม่สามารถนำส่งคืนคลังได้'
+		description: 'ผู้พักพิงทำพัสดุสูญหาย ไม่สามารถนำส่งคืนคลังได้'
 	},
 	{
 		value: 'waived',

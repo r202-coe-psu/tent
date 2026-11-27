@@ -667,7 +667,7 @@ test.describe('Tab 3 — supplies and loans (plan §4.5)', { tag: DESK_TAGS }, (
 		const { desk, kit, ticket } = await suppliesSetup(page, scenario);
 
 		await desk.itemButton(kit.name).click();
-		await desk.chooseOutsideRecipient('ญาติผู้ประสบภัย');
+		await desk.chooseOutsideRecipient('ญาติผู้พักพิง');
 		await desk.fillSuppliesQty('2');
 		await desk.suppliesSubmit('consumable').click();
 		await expect(desk.toast(/บันทึกแจกจ่ายพัสดุสำเร็จ/)).toBeVisible();

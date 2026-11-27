@@ -32,7 +32,7 @@ export const DEFAULT_PUBLIC_PORTAL_CONFIG: PublicConfigBody = {
 				id: 'e6b05673-b95b-4082-9dec-795e977fee10',
 				question: 'สามารถนำสัตว์เลี้ยงเข้ามาพักในศูนย์พักพิงได้หรือไม่?',
 				answer:
-					'ศูนย์พักพิงจัดเตรียมโซนดูแลสัตว์เลี้ยงเฉพาะแยกจากอาคารพักพิงของผู้ประสบภัย โดยขอความร่วมมือเจ้าของนำกรง สายจูง และอาหารสัตว์เลี้ยงมาด้วย เพื่อสุขอนามัยและความปลอดภัยของผู้พักพิงทุกคน',
+					'ศูนย์พักพิงจัดเตรียมโซนดูแลสัตว์เลี้ยงเฉพาะแยกจากอาคารพักพิงของผู้พักพิง โดยขอความร่วมมือเจ้าของนำกรง สายจูง และอาหารสัตว์เลี้ยงมาด้วย เพื่อสุขอนามัยและความปลอดภัยของผู้พักพิงทุกคน',
 				question_en: 'Are pets allowed in the evacuation center?',
 				answer_en:
 					'Designated pet zones are provided separately from human sleeping quarters. Owners are kindly requested to bring crates, leashes, and pet food.',
@@ -67,7 +67,7 @@ export const DEFAULT_PUBLIC_PORTAL_CONFIG: PublicConfigBody = {
 				id: '5e454675-5dae-4f29-b78c-6d7d709261b8',
 				question: 'ต้องใช้เอกสารอะไรบ้างในการลงทะเบียนเข้าพัก?',
 				answer:
-					'ใช้บัตรประจำตัวประชาชนของผู้ประสบภัยหรือหัวหน้าครอบครัว หากไม่มีบัตรประชาชนหรือสูญหายไปกับน้ำท่วม สามารถใช้ใบขับขี่ บัตรคนพิการ หรือแจ้งข้อมูลส่วนบุคคลให้เจ้าหน้าที่ตรวจสอบและบันทึกประวัติเข้าสู่ระบบได้',
+					'ใช้บัตรประจำตัวประชาชนของผู้พักพิงหรือผู้ติดต่อหลัก หากไม่มีบัตรประชาชนหรือสูญหายไปกับน้ำท่วม สามารถใช้ใบขับขี่ บัตรคนพิการ หรือแจ้งข้อมูลส่วนบุคคลให้เจ้าหน้าที่ตรวจสอบและบันทึกประวัติเข้าสู่ระบบได้',
 				question_en: 'What documents are required for shelter registration?',
 				answer_en:
 					'Thai National ID card or any government-issued ID. If lost during the disaster, shelter staff will verify and assist with manual registration.',
@@ -124,7 +124,7 @@ export const DEFAULT_PUBLIC_PORTAL_CONFIG: PublicConfigBody = {
 				id: '5ef35c15-c779-4ab4-a046-c0851e2ac4a6',
 				question: 'มีฝ่ายและบทบาทหน้าที่ใดบ้างที่เปิดรับอาสาสมัคร?',
 				answer:
-					'เปิดรับหลายฝ่ายตามความถนัด ได้แก่ 1) ฝ่ายครัวกลางและแจกจ่ายอาหาร 2) ฝ่ายคลังพัสดุและจัดชุดถุงยังชีพ 3) ฝ่ายต้อนรับและคัดกรองผู้ประสบภัย 4) ฝ่ายขนย้ายและสนับสนุนกู้ภัย โดยปฏิบัติงานแบ่งเป็นกะ (เช้า / บ่าย / ดึก)',
+					'เปิดรับหลายฝ่ายตามความถนัด ได้แก่ 1) ฝ่ายครัวกลางและแจกจ่ายอาหาร 2) ฝ่ายคลังพัสดุและจัดชุดถุงยังชีพ 3) ฝ่ายต้อนรับและคัดกรองผู้พักพิง 4) ฝ่ายขนย้ายและสนับสนุนกู้ภัย โดยปฏิบัติงานแบ่งเป็นกะ (เช้า / บ่าย / ดึก)',
 				question_en: 'What roles and responsibilities are available for volunteers?',
 				answer_en:
 					'Roles include central kitchen, relief distribution, warehouse logistics, screening assistance, and field rescue support.',

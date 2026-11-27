@@ -97,7 +97,7 @@ const ZONE_VULNERABLE = 'โซนดูแลกลุ่มเปราะบ�
 
 /** Stay-status labels as shown in the UI. */
 const STATUS = {
-	arriving: 'รอเข้าพัก',
+	arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 	active: 'เข้าพักแล้ว',
 	roomConfirmed: 'ยืนยันถึงโซนแล้ว',
 	checkedOut: 'เช็คเอาต์'
@@ -329,7 +329,7 @@ const INTAKE_SEARCH_LABEL = 'เลขบัตรประชาชน / หน
 
 async function openStation1(page: Page): Promise<Locator> {
 	await page.goto('/onsite/people');
-	await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+	await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 		timeout: 20_000
 	});
 	return page.getByLabel(INTAKE_SEARCH_LABEL);
@@ -462,7 +462,9 @@ interface ScreeningFill {
 /** Screen one person at Station 2. */
 async function screenEvacuee(page: Page, evacueeId: string, fill: ScreeningFill): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
-	await expect(page.getByText('สถานี 2', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดคัดกรองสุขภาพ', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
 	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
@@ -498,7 +500,9 @@ async function stationTwo(
 /** Assign a zone and check the person in (→ active). */
 async function assignZone(page: Page, evacueeId: string, zoneName: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await page.locator('div.grid button', { hasText: zoneName }).first().click();
 	await page.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
@@ -507,7 +511,9 @@ async function assignZone(page: Page, evacueeId: string, zoneName: string): Prom
 /** Zone Arrival Confirmation: active → room_confirmed. */
 async function confirmArrivalInZone(page: Page, evacueeId: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await page.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 }
@@ -865,14 +871,18 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 
 		// The child's Station 1 preferred zone comes preselected; staff confirm it.
 		await desk.goto(`/onsite/zoning/${ids[child.firstName]}`);
-		await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
-		await expect(desk.getByText(`โซนที่สถานี 1 ระบุไว้: ${ZONE_VULNERABLE}`)).toBeVisible();
+		await expect(desk.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+			timeout: 20_000
+		});
+		await expect(desk.getByText(`โซนที่จุดลงทะเบียนระบุไว้: ${ZONE_VULNERABLE}`)).toBeVisible();
 		await desk.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 		await expect(desk).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 		await expectStay(desk, child, STATUS.active, ZONE_VULNERABLE);
 
 		await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
-		await expect(desk.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+		await expect(desk.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+			timeout: 20_000
+		});
 		await desk.locator('div.grid button', { hasText: ZONE_GYM_1 }).first().click();
 		// The relative is still waiting → offered as a companion.
 		await desk.getByRole('checkbox').first().click();
@@ -884,8 +894,8 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
 		// The household button is a silent no-op until the evacuee list has loaded.
 		await desk.waitForLoadState('networkidle');
-		await desk.getByRole('button', { name: 'ยืนยันทั้งครัวเรือน' }).click();
-		await expect(desk.getByText('ยืนยันถึงโซนทั้งครัวเรือน 3 คน')).toBeVisible();
+		await desk.getByRole('button', { name: 'ยืนยันทั้งครอบครัว' }).click();
+		await expect(desk.getByText('ยืนยันถึงโซนทั้งครอบครัว 3 คน')).toBeVisible();
 		await expect(desk).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 		await expectStay(desk, head, STATUS.roomConfirmed, ZONE_GYM_1);
 		await expectStay(desk, relative, STATUS.roomConfirmed, ZONE_GYM_1);
@@ -1136,7 +1146,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 				await expect(hit.getByText('ลงทะเบียนล่วงหน้า')).toBeVisible();
 				await hit.getByRole('button', { name: 'รับรายงานตัว (Report-in)' }).click();
 				await expect(screenB).toHaveURL(/\/onsite\/people\/.+\/report-in/);
-				await expect(screenB.getByRole('heading', { name: 'รายงานตัวผู้ประสบภัย' })).toBeVisible({
+				await expect(screenB.getByRole('heading', { name: 'รายงานตัวผู้พักพิง' })).toBeVisible({
 					timeout: 20_000
 				});
 				// Both members arrive pre-filled from the booking.

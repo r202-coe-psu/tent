@@ -33,7 +33,7 @@ const th = {
 	assetsCard: {
 		title: 'สิ่งที่นำมาด้วย',
 		editAria: 'แก้ไขทรัพย์สิน ยานพาหนะ และสัตว์เลี้ยง',
-		noHousehold: 'ยังไม่มีข้อมูลครัวเรือนสำหรับแสดงทรัพย์สิน',
+		noHousehold: 'ยังไม่มีข้อมูลครอบครัวสำหรับแสดงทรัพย์สิน',
 		noItems: 'ไม่มีรายการ',
 		vehicles: 'ยานพาหนะ',
 		licensePlate: (plate: string) => `ทะเบียน: ${plate}`,
@@ -71,12 +71,12 @@ const th = {
 		noSpecialNeeds: 'ไม่มีความต้องการพิเศษ'
 	},
 	householdCard: {
-		title: 'ครัวเรือน / ครอบครัว',
-		editAffiliationAria: 'แก้ไขสังกัดครัวเรือน',
-		noHouseholdTitle: 'ยังไม่สังกัดครัวเรือน',
-		noHouseholdBody: 'ผู้พักพิงคนนี้ยังไม่ได้เชื่อมกับเอกสารครัวเรือนในระบบ',
-		linkHousehold: 'เลือก / เชื่อมครัวเรือน',
-		householdName: 'ชื่อครัวเรือน',
+		title: 'ครอบครัว / ครอบครัว',
+		editAffiliationAria: 'แก้ไขสังกัดครอบครัว',
+		noHouseholdTitle: 'ยังไม่สังกัดครอบครัว',
+		noHouseholdBody: 'ผู้พักพิงคนนี้ยังไม่ได้เชื่อมกับเอกสารครอบครัวในระบบ',
+		linkHousehold: 'เลือก / เชื่อมครอบครัว',
+		householdName: 'ชื่อครอบครัว',
 		roleHead: 'บทบาท: หัวหน้า',
 		roleMember: 'บทบาท: สมาชิก',
 		housingType: 'ประเภทที่อยู่อาศัย',
@@ -84,15 +84,15 @@ const th = {
 		zoneCommunity: 'เขต / ชุมชน',
 		zone: (zone: string) => `เขต ${zone}`,
 		community: (community: string) => `ชุมชน ${community}`,
-		address: 'ที่อยู่ครัวเรือน',
+		address: 'ที่อยู่ครอบครัว',
 		editAddress: 'แก้ไขที่อยู่',
 		noAddress: 'ไม่มีที่อยู่จัดเก็บ',
 		subdistrict: (value: string) => `ต.${value}`,
 		district: (value: string) => `อ.${value}`,
 		province: (value: string) => `จ.${value}`,
-		notes: 'หมายเหตุครัวเรือน',
+		notes: 'หมายเหตุครอบครัว',
 		members: (count: number) => `รายชื่อสมาชิก (${count} คน)`,
-		noMembers: 'ไม่มีสมาชิกในครัวเรือนนี้',
+		noMembers: 'ไม่มีสมาชิกในครอบครัวนี้',
 		head: 'หัวหน้า',
 		member: 'สมาชิก',
 		viewing: 'กำลังดู',
@@ -101,23 +101,23 @@ const th = {
 		viewProfile: 'ดูโปรไฟล์',
 		householdStatus: {
 			pre_registered: 'ลงทะเบียนล่วงหน้า',
-			arriving: 'กำลังเดินทางมา',
+			arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 			checked_in: 'เช็คอินแล้ว',
 			checked_out: 'เช็คเอาต์แล้ว',
 			cancelled: 'ยกเลิก',
 			merged: 'รวมแล้ว'
 		} as Record<string, string>,
 		stayStatus: {
-			active: 'อยู่ในศูนย์',
+			active: 'เข้าพักแล้ว',
 			room_confirmed: 'ยืนยันถึงโซนแล้ว',
 			pre_registered: 'ลงทะเบียนล่วงหน้า',
 			kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
-			arriving: 'รอจัดโซน',
+			arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 			temporary_leave: 'ออกชั่วคราว',
 			transferred: 'ย้ายศูนย์',
-			checked_out: 'ย้ายออก',
+			checked_out: 'เช็คเอาต์',
 			deceased: 'เสียชีวิต',
-			cancelled: 'ยกเลิก'
+			cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'
 		} as Record<string, string>
 	},
 	emergencyCard: {
@@ -206,10 +206,10 @@ const th = {
 		unspecified: 'ไม่ระบุ',
 		defaultShelterName: 'ศูนย์พักพิงชั่วคราว',
 		status: {
-			active: { label: 'เช็คอิน / พักพิงในศูนย์ (Check-in)', shortLabel: 'เช็คอิน' },
+			active: { label: 'เข้าพักแล้ว (Active)', shortLabel: 'เข้าพักแล้ว' },
 			room_confirmed: {
-				label: 'ยืนยันถึงโซน (Zone Arrival Confirmed)',
-				shortLabel: 'ยืนยันถึงโซน'
+				label: 'ยืนยันถึงโซนแล้ว (Zone Arrival Confirmed)',
+				shortLabel: 'ยืนยันถึงโซนแล้ว'
 			},
 			pre_registered: {
 				label: 'ลงทะเบียนล่วงหน้า (Pre-registered)',
@@ -220,11 +220,11 @@ const th = {
 				shortLabel: 'ที่ตู้ (รอยืนยัน)'
 			},
 			arriving: {
-				label: 'อยู่ระหว่างรอเข้าพัก (Arriving / Waiting)',
-				shortLabel: 'รอเข้าพัก'
+				label: 'รายงานตัวแล้ว · รอจัดโซน (Arriving)',
+				shortLabel: 'รอจัดโซน'
 			},
 			temporary_leave: { label: 'ออกชั่วคราว (Temporary Leave)', shortLabel: 'ออกชั่วคราว' },
-			transferred: { label: 'ส่งต่อ / ย้ายศูนย์ (Transferred)', shortLabel: 'ย้ายศูนย์' },
+			transferred: { label: 'ย้ายศูนย์ (Transferred)', shortLabel: 'ย้ายศูนย์' },
 			checked_out: { label: 'เช็คเอาต์ (Checked-out)', shortLabel: 'เช็คเอาต์' },
 			deceased: { label: 'เสียชีวิต (Deceased)', shortLabel: 'เสียชีวิต' },
 			cancelled: { label: 'ยกเลิกการลงทะเบียนล่วงหน้า', shortLabel: 'ยกเลิก' }
@@ -257,10 +257,10 @@ const th = {
 		revertNotAllowed: 'เฉพาะผู้จัดการศูนย์หรือผู้ดูแลระบบเท่านั้นที่เปลี่ยนสถานะด้วยตนเองได้',
 		statusUpdated: 'อัปเดตสถานะการพักพิงเรียบร้อย',
 		statusUpdateFailed: (detail: string) => `ไม่สามารถอัปเดตสถานะได้: ${detail}`,
-		noHouseholdForAddress: 'ไม่พบข้อมูลครัวเรือนสำหรับบันทึกที่อยู่',
-		addressSaved: 'แก้ไขที่อยู่ครัวเรือนสำเร็จ',
+		noHouseholdForAddress: 'ไม่พบข้อมูลครอบครัวสำหรับบันทึกที่อยู่',
+		addressSaved: 'แก้ไขที่อยู่ครอบครัวสำเร็จ',
 		addressSaveFailed: (detail: string) => `ไม่สามารถบันทึกที่อยู่ได้: ${detail}`,
-		noHouseholdForAssets: 'ไม่พบข้อมูลครัวเรือนสำหรับบันทึกทรัพย์สิน',
+		noHouseholdForAssets: 'ไม่พบข้อมูลครอบครัวสำหรับบันทึกทรัพย์สิน',
 		assetsSaved: 'แก้ไขข้อมูลทรัพย์สินและสัตว์เลี้ยงสำเร็จ',
 		assetsSaveFailed: (detail: string) => `ไม่สามารถบันทึกข้อมูลได้: ${detail}`,
 		personalSaved: 'บันทึกข้อมูลส่วนบุคคลเรียบร้อย',
@@ -272,8 +272,8 @@ const th = {
 			`บันทึกข้อมูลสุขภาพได้บางส่วน กรุณารีเฟรชและตรวจสอบอีกครั้ง: ${detail}`,
 		healthRolledBack: (detail: string) =>
 			`ไม่สามารถบันทึกข้อมูลสุขภาพได้ ระบบคืนค่าการเปลี่ยนแปลงแล้ว: ${detail}`,
-		householdSaved: 'บันทึกสังกัดครัวเรือนเรียบร้อย',
-		householdSaveFailed: (detail: string) => `ไม่สามารถบันทึกสังกัดครัวเรือนได้: ${detail}`
+		householdSaved: 'บันทึกสังกัดครอบครัวเรียบร้อย',
+		householdSaveFailed: (detail: string) => `ไม่สามารถบันทึกสังกัดครอบครัวได้: ${detail}`
 	},
 	page: {
 		documentTitle: 'ข้อมูลผู้พักพิง · SmartShelter',
