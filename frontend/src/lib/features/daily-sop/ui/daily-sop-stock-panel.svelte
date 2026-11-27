@@ -98,7 +98,7 @@
 						aria-label="ค้นหาชื่อหรือรหัสสินค้า"
 						placeholder="ค้นหาชื่อหรือรหัสสินค้า"
 						bind:value={search}
-						class="h-12 pl-9 text-base sm:h-11"
+						class="h-10 rounded-lg pl-9 text-sm shadow-2xs"
 					/>
 				</div>
 			{/if}
