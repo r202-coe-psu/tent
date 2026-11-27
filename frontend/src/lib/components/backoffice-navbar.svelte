@@ -31,13 +31,16 @@
 	let {
 		/** The hamburger bar shown below `lg`; off where a page keeps the very top of the screen. */
 		showMobileBar = true,
-		/** Where the collapsed/expanded choice is remembered; each host page keeps its own. */
+		/**
+		 * Where the collapsed/expanded choice is remembered; each host page keeps its own. `null`
+		 * remembers nothing: the sidebar starts collapsed on every page load.
+		 */
 		storageKey = SIDEBAR_COLLAPSED_KEYS.backoffice
-	}: { showMobileBar?: boolean; storageKey?: SidebarCollapsedKey } = $props();
+	}: { showMobileBar?: boolean; storageKey?: SidebarCollapsedKey | null } = $props();
 
 	// Each host passes a fixed key for its whole lifetime, so reading it once on mount is enough.
 	// svelte-ignore state_referenced_locally
-	let collapsed = $state(readSidebarCollapsed(storageKey));
+	let collapsed = $state(storageKey === null ? true : readSidebarCollapsed(storageKey));
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -45,7 +48,7 @@
 
 	function setCollapsed(next: boolean) {
 		collapsed = next;
-		writeSidebarCollapsed(storageKey, next);
+		if (storageKey !== null) writeSidebarCollapsed(storageKey, next);
 	}
 
 	function closeMobileMenu() {

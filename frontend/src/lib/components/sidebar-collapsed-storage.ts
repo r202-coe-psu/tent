@@ -7,8 +7,6 @@
 /** localStorage key per sidebar; shared by every user on this device. */
 export const SIDEBAR_COLLAPSED_KEYS = {
 	backoffice: 'backoffice:sidebar-collapsed',
-	/** The same sidebar on `/portal`, `/me`, `/onsite` — its own memory, so expanding it in the back office does not open it here (#1517). */
-	staffPages: 'staff-pages:sidebar-collapsed',
 	systemManagement: 'system-management:sidebar-collapsed'
 } as const;
 

@@ -28,14 +28,3 @@ export function showsStaffSidebar(
 export function showsStaffMobileBar(pathname: string): boolean {
 	return !underPrefix(pathname, '/onsite');
 }
-
-/**
- * Layout classes for the wrapper around the sidebar. Under the app bar (`/portal`, `/me`) both the
- * desktop sidebar and the phone bar start below it (`top-14` = the app bar's `h-14`) instead of
- * sliding beneath it or stacking on top; `/onsite` has no app bar, so it starts at the very top.
- */
-export function staffSidebarClass(pathname: string): string {
-	return underPrefix(pathname, '/onsite')
-		? '[&>aside]:top-0 [&>aside]:h-[var(--app-shell-height)]'
-		: '[&>aside]:top-14 [&>aside]:h-[calc(var(--app-shell-height)-3.5rem)] [&>div]:top-14';
-}
