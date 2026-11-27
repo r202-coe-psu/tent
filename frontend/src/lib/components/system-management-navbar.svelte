@@ -18,18 +18,14 @@
 	} from './system-management-navbar/static';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import {
-		SIDEBAR_COLLAPSED_KEYS,
-		readSidebarCollapsed,
-		writeSidebarCollapsed
-	} from './sidebar-collapsed-storage';
+	import { readSidebarCollapsed, writeSidebarCollapsed } from './sidebar-collapsed-storage';
 
-	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.systemManagement));
+	let collapsed = $state(readSidebarCollapsed());
 	let mobileMenuOpen = $state(false);
 
 	function setCollapsed(next: boolean) {
 		collapsed = next;
-		writeSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.systemManagement, next);
+		writeSidebarCollapsed(next);
 	}
 
 	const roles = $derived(authStore.user?.roles ?? []);

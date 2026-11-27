@@ -1,45 +1,43 @@
 #!/bin/sh
 # Pre-push unit tests (lefthook `frontend-test`). Runs only the Vitest files whose import graph
-# reaches a file changed since the base (plus staged/unstaged edits).
+# reaches a frontend file changed by this branch's own commits since its last push. Commits
+# already on origin/develop are left out, so merging develop does not re-test develop
+# (../../scripts/hooks/own-push-files.sh; TEST_CHANGED_BASE overrides the base).
 #
-# Base: TEST_CHANGED_BASE, else what this branch last pushed (`@{push}`, or `origin/<branch>`
-# when no upstream is set), else origin/develop. So a second push re-tests only the new commits;
-# the earlier ones already passed this hook when they were pushed.
-#
-# Vitest cannot find the importers of a file that no longer exists, so when a non-test file under
-# frontend/ was deleted or renamed this runs the whole suite instead.
+# The whole suite runs instead when the list has a config, lockfile or test-setup file (the same
+# set as forceRerunTriggers in vite.config.ts, which `vitest related` does not apply), or when a
+# non-test file was deleted or renamed (Vitest cannot find the importers of a missing file).
 set -eu
 # Git exports GIT_DIR to hooks. In a linked worktree that makes git treat this cwd (frontend/) as
-# the work tree root, so every file outside it looks deleted and the full suite runs. Drop it and
-# let git find the repository from the cwd.
+# the work tree root. Drop it and let git find the repository from the cwd.
 unset GIT_DIR GIT_WORK_TREE
 
-pushed_ref() {
-	git rev-parse --verify -q --symbolic-full-name '@{push}' 2>/dev/null && return
-	branch=$(git branch --show-current)
-	[ -n "$branch" ] && git rev-parse --verify -q "refs/remotes/origin/$branch" >/dev/null &&
-		echo "refs/remotes/origin/$branch"
-}
+own_files="$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
+frontend_only() { sed -n 's|^frontend/||p'; }
 
-if [ -n "${TEST_CHANGED_BASE:-}" ]; then
-	base=$TEST_CHANGED_BASE
-elif ref=$(pushed_ref) && [ -n "$ref" ]; then
-	base=$ref
-else
-	base=origin/develop
+files=$(sh "$own_files" | frontend_only)
+echo "test:changed: base ${TEST_CHANGED_BASE:-last push}, $(printf '%s' "$files" | grep -c . || true) frontend file(s)"
+
+if [ -z "$files" ]; then
+	echo 'test:changed: no frontend files changed, nothing to run'
+	exit 0
 fi
-echo "test:changed: base $base"
 
-removed=$(
-	{
-		git diff --name-only --diff-filter=DR "$base...HEAD" -- .
-		git diff --cached --name-only --diff-filter=DR -- .
-		git ls-files --deleted -- .
-	} | grep -vE '\.(test|spec)\.[jt]s$' | head -n 1
-)
-
+removed=$(sh "$own_files" --deleted | frontend_only | grep -vE '\.(test|spec)\.[jt]s$' | head -n 1 || true)
 if [ -n "$removed" ]; then
 	echo "test:changed: $removed was deleted or renamed, running the full suite"
 	exec vitest run
 fi
-exec vitest run --changed "$base" --passWithNoTests
+
+trigger=$(printf '%s\n' "$files" | grep -E \
+	'(^|/)(package\.json|pnpm-lock\.yaml|svelte\.config\.js|tsconfig\.json|(vite|vitest)\.config\.[^/]+)$|^src/lib/testing/|^src/app\.css$' |
+	head -n 1 || true)
+if [ -n "$trigger" ]; then
+	echo "test:changed: $trigger changed, running the full suite"
+	exec vitest run
+fi
+
+# One path per word: frontend paths have no spaces. set -f keeps `[id]` route dirs literal.
+set -f
+# shellcheck disable=SC2086
+exec vitest related --run --passWithNoTests $files

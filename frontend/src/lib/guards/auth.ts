@@ -5,8 +5,6 @@ import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
 import {
 	COUCH_ADMIN,
-	hasStaffCapability,
-	isShelterManager,
 	isSystemAdmin,
 	canAccessManagerPages,
 	canAccessDonations,
@@ -20,6 +18,7 @@ import {
 	canAccessMedicalScreening,
 	canAccessIncidents,
 	canAccessVolunteerBackoffice,
+	canAccessVolunteerCheckIn,
 	canAccessZoning,
 	canManageBanners,
 	canManagePrinters,
@@ -398,13 +397,7 @@ export async function requireEvacueeRegistration(fetchFn?: typeof fetch) {
 export async function requireVolunteerCheckIn(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
-	const shelter = activeShelterCode(roles);
-	if (
-		!isSystemAdmin(roles) &&
-		!isShelterManager(roles, shelter) &&
-		!hasStaffCapability(roles, 'volunteer_coordinator', shelter) &&
-		!hasStaffCapability(roles, 'registration_staff', shelter)
-	) {
+	if (!canAccessVolunteerCheckIn(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }
