@@ -136,6 +136,11 @@ describe('summary rows', () => {
 		]);
 	});
 
+	it('shows the Thai label of an English unit code in summary rows', () => {
+		const boxCatalog = [{ _id: 'item_master:fan', name: 'พัดลม', base_unit: 'box' }];
+		expect(liveSummaryRows(makeRow(makePool()), boxCatalog)[0].unit).toBe('กล่อง');
+	});
+
 	it('uses the submit snapshot and falls back to the id when uncatalogued', () => {
 		const pool = makePool({
 			status: 'SUBMITTED',

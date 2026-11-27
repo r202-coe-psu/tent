@@ -54,6 +54,7 @@ vi.mock('../../application/queries', async () => {
 });
 vi.mock('../../application/food-supplies/auth', () => ({ canWriteBulkReturnEntry: () => true }));
 vi.mock('$lib/features/catalog', () => ({
+	formatUnit: (code?: string | null) => code ?? '',
 	useItemMasters: () => ({
 		data: [{ _id: 'item_master:blanket', name: 'ผ้าห่ม', base_unit: 'ผืน', returnable: true }]
 	})

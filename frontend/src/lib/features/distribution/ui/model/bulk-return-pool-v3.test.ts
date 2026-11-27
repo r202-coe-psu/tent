@@ -716,6 +716,11 @@ describe('labels', () => {
 		});
 		expect(resolveItemDisplay('item_master:gone', catalog)).toEqual({ name: 'gone', unit: '' });
 	});
+
+	it('resolveItemDisplay shows the Thai label of an English unit code', () => {
+		const catalog = [{ _id: 'item_master:water', name: 'น้ำดื่ม', base_unit: 'box' }];
+		expect(resolveItemDisplay('item_master:water', catalog).unit).toBe('กล่อง');
+	});
 });
 
 describe('closed-loan warning copy', () => {

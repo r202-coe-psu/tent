@@ -11,6 +11,10 @@ vi.mock('$lib/features/shelters', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/shelters')>()),
 	useShelter: () => ({ data: undefined, isPending: false, isError: false })
 }));
+vi.mock('$lib/features/catalog', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/catalog')>()),
+	useUnitsOfMeasure: () => ({ data: [] })
+}));
 vi.mock('./CatalogItemPicker.svelte', () => ({ default: () => {} }));
 
 import Host from './__fixtures__/create-ticket-dialog-host.svelte';

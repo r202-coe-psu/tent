@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ItemMaster } from '$lib/features/catalog';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { formatUnit, useItemMasters, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { isOutOfStock, sortInStockFirstByName, useStockBalance } from '$lib/features/operations';
 	import type { Flow2RequisitionType } from '../../domain/food-supplies';
 	import {
@@ -36,6 +37,9 @@
 	}: Props = $props();
 
 	const itemsQuery = useItemMasters(() => shelterCode);
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 	const stockBalanceQuery = useStockBalance();
 
 	let searchQuery = $state('');
@@ -182,11 +186,11 @@
 									<span class="font-mono">SKU: {item.sku}</span>
 									<span>•</span>
 								{/if}
-								<span>หน่วย: {item.base_unit}</span>
+								<span>หน่วย: {unitLabel(item.base_unit)}</span>
 								<span>•</span>
 								<span class="tabular-nums">
 									คงเหลือในคลัง: <strong class="font-semibold text-slate-800">{stockOnHand}</strong>
-									{item.base_unit}
+									{unitLabel(item.base_unit)}
 								</span>
 							</div>
 						</div>
@@ -220,7 +224,9 @@
 											disabled={outOfStock}
 											class="h-9 w-20 text-right text-sm font-semibold tabular-nums shadow-2xs"
 										/>
-										<span class="min-w-[30px] text-xs text-slate-500">{item.base_unit}</span>
+										<span class="min-w-[30px] text-xs text-slate-500"
+											>{unitLabel(item.base_unit)}</span
+										>
 									</div>
 								</div>
 

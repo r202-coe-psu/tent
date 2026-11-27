@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { ItemMaster } from '$lib/features/catalog';
+	import { formatUnit, useUnitsOfMeasure, type ItemMaster } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import {
 		thailandCalendarDay,
 		type Flow2RequisitionType,
@@ -36,6 +37,10 @@
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import Package from '@lucide/svelte/icons/package';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 
 	interface SelectedTicketItem {
 		master: ItemMaster;
@@ -449,7 +454,7 @@
 										<td class="py-2.5 pr-2 pl-4">
 											<div class="font-bold text-slate-900">{item.master.name}</div>
 											<div class="text-xs text-slate-500">
-												หน่วย: {item.master.base_unit}
+												หน่วย: {unitLabel(item.master.base_unit)}
 												{#if item.master.sku}
 													• SKU: {item.master.sku}{/if}
 											</div>
@@ -482,7 +487,9 @@
 															? ''
 															: 'border-red-400 focus:ring-red-400'}"
 													/>
-													<span class="text-xs text-slate-500">{item.master.base_unit}</span>
+													<span class="text-xs text-slate-500"
+														>{unitLabel(item.master.base_unit)}</span
+													>
 												</div>
 											</div>
 										</td>

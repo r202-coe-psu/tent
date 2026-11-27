@@ -1,4 +1,5 @@
 import { parseQty, qtyGt, subQty, addQty } from '$lib/utils/qty';
+import { formatUnit } from '$lib/features/catalog';
 import { isBulkReturnEligibleItem, type DistributionLog } from '../../domain/food-supplies';
 import type {
 	AddBulkReturnEntriesInput,
@@ -235,7 +236,7 @@ export function outstandingLoanRows(
 			logId: loan._id,
 			item_id: loan.item_id,
 			itemName: master?.name ?? loan.item_id.replace(/^item_master:|^item:/, ''),
-			unit: master?.base_unit ?? '',
+			unit: formatUnit(master?.base_unit),
 			outstanding,
 			distributed_at: loan.distributed_at
 		});
