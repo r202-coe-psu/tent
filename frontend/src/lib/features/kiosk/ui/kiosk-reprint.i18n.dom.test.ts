@@ -170,7 +170,7 @@ describe('KioskReprint language', () => {
 		await toMembers('ค้นหา', 'เลือกสมาชิกที่ต้องการพิมพ์ QR');
 		expect(screenText()).toContain('ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว');
 		expect(screenText()).toContain('40 ปี ·เข้าพักแล้ว');
-		expect(screenText()).toContain('ไม่ระบุอายุ ·รายงานตัวแล้ว · รอคัดกรอง');
+		expect(screenText()).toContain('ไม่ระบุอายุ ·รายงานตัวแล้ว · รอจัดโซน');
 		expect(screenText()).toContain('ยังไม่ได้ลงทะเบียน — ใช้บัตรประชาชนหรือ ThaiD');
 		expect(screenText()).toContain('เลือกทั้งหมด');
 

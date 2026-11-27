@@ -101,7 +101,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 					_id: `referral:mock_page_${String(i).padStart(2, '0')}`,
 					reason: `เหตุผล ${i}`,
 					created_at: new Date(Date.UTC(2026, 9, 14, 8, 0, 60 - i)).toISOString(),
-					evacuee_summary: { first_name: 'ผู้ประสบภัย', last_name: `ลำดับ ${i}` }
+					evacuee_summary: { first_name: 'ผู้พักพิง', last_name: `ลำดับ ${i}` }
 				})
 			)
 		);
@@ -893,7 +893,7 @@ const MOCK_EVACUEE = {
 	type: 'evacuee',
 	schema_v: 1,
 	first_name: `TestName_${RUN_ID}`,
-	last_name: 'ผู้ประสบภัย',
+	last_name: 'ผู้พักพิง',
 	shelter_code: 'SH001',
 	created_at: new Date().toISOString(),
 	updated_at: new Date().toISOString(),

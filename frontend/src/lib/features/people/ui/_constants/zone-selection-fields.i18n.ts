@@ -5,13 +5,13 @@ const th = {
 	recommendQuarantine: 'แนะนำสำหรับผู้มีอาการเฝ้าระวังหรือ triage เหลือง/แดง (กักตัว)',
 	recommendVulnerable: 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง',
 	recommendGeneral: 'ไม่มีอาการเฝ้าระวังหรือความต้องการพิเศษ — แนะนำโซนทั่วไป',
-	preferredUsePrefix: 'โซนที่สถานี 1 ระบุไว้:',
+	preferredUsePrefix: 'โซนที่จุดลงทะเบียนระบุไว้:',
 	preferredUseSuffix: '— เลือกไว้ให้แล้ว เปลี่ยนได้',
-	quarantineOverridesPrefix: 'สถานี 1 ระบุโซน',
+	quarantineOverridesPrefix: 'จุดลงทะเบียนระบุโซน',
 	quarantineOverridesSuffix:
 		'ไว้ — ไม่ได้เลือกให้ เพราะมีอาการเฝ้าระวังหรือ triage เหลือง/แดง ต้องแยกไปโซนกักโรค',
 	preferredUnavailable: (code: string) =>
-		`โซนที่สถานี 1 ระบุไว้ (${code}) ไม่เปิดใช้งานแล้ว — กรุณาเลือกโซนเอง`,
+		`โซนที่จุดลงทะเบียนระบุไว้ (${code}) ไม่เปิดใช้งานแล้ว — กรุณาเลือกโซนเอง`,
 	noOpenZone: (kind: string) => `ไม่มี${kind} ที่เปิดอยู่`,
 	pickManually: '— กรุณาเลือกโซนด้วยตนเอง',
 	recommendedZone: 'โซนแนะนำ:',
@@ -41,13 +41,13 @@ const en: typeof th = {
 	recommendQuarantine: 'Recommended for watch-list symptoms or yellow/red triage (quarantine)',
 	recommendVulnerable: 'Recommended for people with special needs or vulnerable groups',
 	recommendGeneral: 'No watch-list symptoms or special needs — general zone recommended',
-	preferredUsePrefix: 'Zone given at Station 1:',
+	preferredUsePrefix: 'Zone given at the registration desk:',
 	preferredUseSuffix: '— preselected, you can change it',
-	quarantineOverridesPrefix: 'Station 1 suggested zone',
+	quarantineOverridesPrefix: 'Registration desk suggested zone',
 	quarantineOverridesSuffix:
 		'but it was not preselected because of watch-list symptoms or yellow/red triage — separate into a quarantine zone',
 	preferredUnavailable: (code: string) =>
-		`The zone given at Station 1 (${code}) is no longer active — please choose a zone yourself`,
+		`The zone given at the registration desk (${code}) is no longer active — please choose a zone yourself`,
 	noOpenZone: (kind: string) => `No open ${kind.toLowerCase()}`,
 	pickManually: '— please choose a zone manually',
 	recommendedZone: 'Recommended zone:',

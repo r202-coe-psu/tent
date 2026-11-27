@@ -14,5 +14,5 @@
 {:else if item.shelter_code}
 	<span class="font-mono text-sm font-medium text-slate-900">[{item.shelter_code}]</span>
 {:else}
-	<span class="text-sm text-slate-400">ยังไม่ผูกศูนย์</span>
+	<span class="text-sm text-slate-400">ยังไม่ได้เลือกศูนย์</span>
 {/if}

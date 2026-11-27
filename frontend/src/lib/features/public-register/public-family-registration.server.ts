@@ -62,7 +62,7 @@ async function loadShelterHousehold(
 	const res = await adminRaw(`/${db}/${encodeURIComponent(householdId)}`, 'GET');
 	if (res.status === 404) return null;
 	if (res.status >= 400) {
-		throw new Error('ไม่สามารถอ่านครัวเรือนปลายทางได้');
+		throw new Error('ไม่สามารถอ่านครอบครัวปลายทางได้');
 	}
 	const doc = res.data as Household | null;
 	if (!doc || doc.type !== 'household') return null;
@@ -100,7 +100,7 @@ export async function executePublicFamilyRegistration(
 
 	if (plan.mode === 'join') {
 		const targetId = plan.targetHouseholdId;
-		if (!targetId) throw new Error('ไม่พบครัวเรือนปลายทาง');
+		if (!targetId) throw new Error('ไม่พบครอบครัวปลายทาง');
 
 		let existing = await loadShelterHousehold(options.shelterCode, targetId);
 		let effectiveTargetId = targetId;

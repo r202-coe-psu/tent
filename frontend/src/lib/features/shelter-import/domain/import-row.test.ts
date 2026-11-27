@@ -90,24 +90,24 @@ describe('validateRow — happy path', () => {
 		['label_en', 'Host House', 'host_house'],
 		['code', 'host_house', 'host_house'],
 		['empty cell (is_default)', '', 'evacuation_center']
-	])('resolves ชนิดสถานที่ from %s', (_name, cell, expected) => {
+	])('resolves ประเภทศูนย์ from %s', (_name, cell, expected) => {
 		const r = validateRow(baseRow({ [H.site_kind]: cell }), 1, lookups());
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.site_kind).toBe(expected);
 	});
 
-	it('falls back to evacuation_center on an empty ชนิดสถานที่ when the list has no default', () => {
+	it('falls back to evacuation_center on an empty ประเภทศูนย์ when the list has no default', () => {
 		const r = validateRow(baseRow(), 1, emptyLookups());
 		expect(r.shelter?.site_kind).toBe('evacuation_center');
 	});
 
-	it('flags a ชนิดสถานที่ that is not in the lookup', () => {
+	it('flags a ประเภทศูนย์ that is not in the lookup', () => {
 		const unknown = validateRow(baseRow({ [H.site_kind]: 'โรงพยาบาลสนาม' }), 1, lookups());
 		expect(unknown.ok).toBe(false);
 		expect(unknown.errors.find((e) => e.column === H.site_kind)?.message).toContain('ไม่พบ');
 	});
 
-	it('resolves an inactive ชนิดสถานที่ and records it, but never defaults to it', () => {
+	it('resolves an inactive ประเภทศูนย์ and records it, but never defaults to it', () => {
 		const withInactive: Lookups = {
 			...lookups(),
 			site_kind: buildMasterLookup([

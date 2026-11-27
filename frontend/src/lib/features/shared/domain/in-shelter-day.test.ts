@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { wasInShelterAllDay } from './in-shelter-day';
+import { presenceOnDay, wasInShelterAllDay } from './in-shelter-day';
 
 const DAY = '2026-11-09';
 // Thai day 2026-11-09 = 2026-11-08T17:00Z .. 2026-11-09T17:00Z
@@ -245,5 +245,60 @@ describe('wasInShelterAllDay for a day that is still running', () => {
 				movements: [{ action: 'revert_status', to_status: 'active', ...at('2026-11-09T03:00:00Z') }]
 			})
 		).toBe(false);
+	});
+});
+
+describe('presenceOnDay (all day, part of the day or not at all)', () => {
+	const on = (
+		movements: { action: string; occurred_at: string }[],
+		current_stay?: { status?: string | null; since?: string | null }
+	) => presenceOnDay({ day: DAY, movements, current_stay });
+
+	it('is "all" for someone inside before the day who never leaves', () => {
+		expect(on([{ action: 'check_in', ...at('2026-11-07T03:00:00Z') }])).toBe('all');
+	});
+
+	it('is "partial" for a check-in during the day', () => {
+		expect(on([{ action: 'check_in', ...at('2026-11-09T06:00:00Z') }])).toBe('partial');
+	});
+
+	it('is "partial" for a check-out during the day', () => {
+		expect(
+			on([
+				{ action: 'check_in', ...at('2026-11-07T03:00:00Z') },
+				{ action: 'check_out', ...at('2026-11-09T05:00:00Z') }
+			])
+		).toBe('partial');
+	});
+
+	it('is "partial" for a temporary leave that ends during the day', () => {
+		expect(
+			on([
+				{ action: 'check_in', ...at('2026-11-07T03:00:00Z') },
+				{ action: 'leave_temporary', ...at('2026-11-09T02:00:00Z') },
+				{ action: 'return_from_leave', ...at('2026-11-09T08:00:00Z') }
+			])
+		).toBe('partial');
+	});
+
+	it('is "none" for someone who left the evening before', () => {
+		expect(
+			on([
+				{ action: 'check_in', ...at('2026-11-07T03:00:00Z') },
+				{ action: 'check_out', ...at('2026-11-08T16:00:00Z') }
+			])
+		).toBe('none');
+	});
+
+	it('is "none" for someone who arrives after the day', () => {
+		expect(on([{ action: 'check_in', ...at('2026-11-10T03:00:00Z') }])).toBe('none');
+	});
+
+	it('without movements follows current_stay: before the day is "all", during the day "partial"', () => {
+		const stay = (since: string) => ({ status: 'active', since });
+		expect(on([], stay('2026-11-01T00:00:00Z'))).toBe('all');
+		expect(on([], stay('2026-11-09T03:00:00Z'))).toBe('partial');
+		expect(on([], stay('2026-11-10T03:00:00Z'))).toBe('none');
+		expect(on([], { status: 'checked_out', since: '2026-11-01T00:00:00Z' })).toBe('none');
 	});
 });

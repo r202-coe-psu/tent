@@ -409,7 +409,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 			expect(res.status).toBe(422);
 
 			const data = await res.json();
-			expect(data.error).toBe('ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้');
+			expect(data.error).toBe('ไม่สามารถส่งต่อผู้พักพิงไปยังศูนย์พักพิงเดียวกันได้');
 		});
 
 		it('returns 422 when the capacity destination no longer accepts referrals (CR-251 FR-17)', async () => {
@@ -494,7 +494,7 @@ describe('BFF Referral List and Create Endpoints', () => {
 
 			const data = await res.json();
 			expect(data.error).toBe(
-				'ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน'
+				'ผู้พักพิงรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน'
 			);
 		});
 	});

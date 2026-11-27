@@ -24,12 +24,12 @@ export const PUBLIC_STAY_STATUS_LABELS: Record<'th' | 'en', Record<PublicStaySta
 	th: {
 		pre_registered: 'ลงทะเบียนล่วงหน้า',
 		kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
-		arriving: 'อยู่ระหว่างรอเข้าพัก',
+		arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 		active: 'เข้าพักแล้ว',
 		room_confirmed: 'ยืนยันถึงโซนแล้ว',
 		in_shelter: 'พักพิงอยู่ในศูนย์',
 		temporary_leave: 'ออกชั่วคราว',
-		transferred: 'ย้ายไปแล้ว',
+		transferred: 'ย้ายศูนย์',
 		checked_out: 'เช็คเอาต์',
 		deceased: 'เสียชีวิต',
 		cancelled: 'ยกเลิกการลงทะเบียนล่วงหน้า'

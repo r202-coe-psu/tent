@@ -99,7 +99,7 @@ const SECOND_JOB = {
 	updated_at: '2026-09-01T00:00:00.000Z',
 	created_by: 'volunteer-flow-e2e',
 	title: `งานอาสา E2E จุดลงทะเบียนหน้างาน ${RUN_ID}`,
-	description: 'ช่วยลงทะเบียนผู้ประสบภัยที่จุดคัดกรอง',
+	description: 'ช่วยลงทะเบียนผู้พักพิงที่จุดคัดกรอง',
 	tier: 'operational' as const,
 	required_roles: [],
 	skills_required: [],

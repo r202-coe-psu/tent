@@ -296,7 +296,7 @@
 		{ id: 'storage-points', label: 'จุดเก็บของ', icon: Warehouse },
 		{ id: 'utilities', label: 'สถานะสาธารณูปโภคพื้นฐาน', icon: Zap },
 		{ id: 'risk', label: 'ประเมินความเสี่ยงและโครงสร้าง', icon: ShieldAlert },
-		{ id: 'admission-policy', label: 'นโยบายการรับผู้อพยพ', icon: PawPrint },
+		{ id: 'admission-policy', label: 'นโยบายการรับผู้พักพิง', icon: PawPrint },
 		{ id: 'luggage-policy', label: 'นโยบายทรัพย์สิน / สัมภาระ', icon: Briefcase },
 		{ id: 'parking-policy', label: 'นโยบายยานพาหนะ', icon: Car },
 		{ id: 'parking-points', label: 'จุดจอดรถ', icon: Car }
@@ -456,7 +456,7 @@
 		switch (status) {
 			case 'active':
 				return {
-					label: 'เปิดรับผู้อพยพ (Active)',
+					label: 'เปิดรับผู้พักพิง (Active)',
 					classes: 'border border-emerald-200 bg-emerald-50 text-emerald-900',
 					dot: 'bg-emerald-500'
 				};

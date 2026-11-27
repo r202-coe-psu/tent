@@ -96,7 +96,7 @@ export interface RowValidation {
 	errors: RowFieldError[];
 	/** Whether the current workbook explicitly supplied food points for this row. */
 	foodDistributionPointsProvided?: boolean;
-	/** `ชนิดสถานที่` was left empty: a create takes the default, an update keeps the stored kind (CR-198 D-4). */
+	/** `ประเภทศูนย์` was left empty: a create takes the default, an update keeps the stored kind (CR-198 D-4). */
 	siteKindBlank?: boolean;
 	/** CR-252 FR-27: the row's `ศูนย์จากระบบภายนอก` = ใช่ (blank = ไม่ใช่). Set whenever the cell resolved. */
 	isExternal?: boolean;

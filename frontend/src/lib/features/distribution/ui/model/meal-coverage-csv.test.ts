@@ -17,6 +17,10 @@ const row = (over: Partial<CoverageViewRow> = {}): CoverageViewRow => ({
 	counted: 1,
 	complete: false,
 	distributedBy: ['staff1'],
+	judgedDays: 1,
+	shortDays: 1,
+	partialDays: 0,
+	mealsReceived: 1,
 	householdRecorded: [],
 	...over
 });
@@ -25,23 +29,15 @@ const lines = (csv: string) => csv.split('\r\n');
 
 describe('coverageStatusLabel', () => {
 	it('says none or how many meals have a record', () => {
-		expect(coverageStatusLabel(row({ received: [], counted: 0 }))).toBe('ยังไม่ถึง 2 มื้อ · 0/2');
-		expect(coverageStatusLabel(row())).toBe('ยังไม่ถึง 2 มื้อ · 1/2');
+		expect(coverageStatusLabel(row({ received: [], counted: 0 }))).toBe('รับ 0 มื้อ');
+		expect(coverageStatusLabel(row())).toBe('รับแค่ 1 มื้อ');
 	});
 
 	it('marks a complete row', () => {
 		expect(
 			coverageStatusLabel(row({ received: ['breakfast', 'lunch'], counted: 2, complete: true }))
-		).toBe('ครบ 2/2 มื้อ');
-	});
-});
-
-describe('coverageStatusLabel progress', () => {
-	it('caps the shown count at the threshold and follows a lower threshold', () => {
-		expect(coverageStatusLabel(row({ counted: 3, complete: true }))).toBe('ครบ 2/2 มื้อ');
-		expect(coverageStatusLabel(row({ counted: 0, complete: false }), 1)).toBe(
-			'ยังไม่ถึง 1 มื้อ · 0/1'
-		);
+		).toBe('รับ 2 มื้อขึ้นไป');
+		expect(coverageStatusLabel(row({ counted: 3, complete: true }))).toBe('รับ 2 มื้อขึ้นไป');
 	});
 });
 
@@ -63,7 +59,7 @@ describe('coverageRowsToCsv', () => {
 		expect(out).toHaveLength(3);
 		expect(out[0]).toBe(COVERAGE_CSV_HEADER.map((h) => `"${h}"`).join(','));
 		expect(out[1]).toBe(
-			'"สมชาย ใจดี","อาคารหนึ่ง","เช้า","กลางวัน, เย็น","staff1","ยังไม่ถึง 2 มื้อ · 1/2",""'
+			'"สมชาย ใจดี","อาคารหนึ่ง","เช้า","กลางวัน, เย็น","staff1","รับแค่ 1 มื้อ","","1","1","0"'
 		);
 		expect(out[2]).toContain('"สมหญิง","","","กลางวัน, เย็น"');
 	});
@@ -76,8 +72,8 @@ describe('coverageRowsToCsv', () => {
 			)
 		);
 		expect(COVERAGE_CSV_HEADER).toContain('ผู้แจก');
-		expect(out[1]).toContain('"กลางวัน, เย็น","amy, zed","ยังไม่ถึง 2 มื้อ · 1/2"');
-		expect(out[2]).toContain('"กลางวัน, เย็น","","ยังไม่ถึง 2 มื้อ · 1/2"');
+		expect(out[1]).toContain('"กลางวัน, เย็น","amy, zed","รับแค่ 1 มื้อ"');
+		expect(out[2]).toContain('"กลางวัน, เย็น","","รับแค่ 1 มื้อ"');
 	});
 
 	it('quotes a distributor name that starts like a formula', () => {
@@ -90,7 +86,7 @@ describe('coverageRowsToCsv', () => {
 
 	it('includes the meals a household member has a record for', () => {
 		const out = lines(coverageRowsToCsv([row({ householdRecorded: ['lunch'] })], zoneName));
-		expect(out[1].endsWith('"กลางวัน"')).toBe(true);
+		expect(out[1]).toContain('"รับแค่ 1 มื้อ","กลางวัน"');
 	});
 
 	it('escapes quotes, commas and newlines inside a cell', () => {
@@ -115,6 +111,52 @@ describe('coverageRowsToCsv', () => {
 describe('coverageCsvFilename', () => {
 	it('names the shelter and the day', () => {
 		expect(coverageCsvFilename('SH001', '2026-11-09')).toBe('meal-coverage-SH001-2026-11-09.csv');
+	});
+
+	it('names both ends of a range', () => {
+		expect(coverageCsvFilename('SH001', '2026-11-03', '2026-11-09')).toBe(
+			'meal-coverage-SH001-2026-11-03_2026-11-09.csv'
+		);
+		expect(coverageCsvFilename('SH001', '2026-11-09', '2026-11-09')).toBe(
+			'meal-coverage-SH001-2026-11-09.csv'
+		);
+	});
+});
+
+describe('coverage over a range of days', () => {
+	const ranged = row({ judgedDays: 7, shortDays: 3, partialDays: 1, mealsReceived: 9, counted: 8 });
+
+	it('labels a row with the days it fell short instead of a one-day N/T', () => {
+		expect(coverageStatusLabel(ranged, true)).toBe('รับไม่ถึง 2 มื้อ 3 จาก 7 วัน');
+		expect(coverageStatusLabel(row({ ...ranged, shortDays: 0, complete: true }), true)).toBe(
+			'รับ 2 มื้อขึ้นไปทุกวัน (7 วัน)'
+		);
+		expect(coverageStatusLabel(row({ ...ranged, counted: 0 }), true)).toBe('รับ 0 มื้อทั้งช่วง');
+	});
+
+	it('labels someone there only part of the day, whatever the range', () => {
+		const partDay = row({ judgedDays: 0, shortDays: 0, partialDays: 1, counted: 0 });
+		expect(coverageStatusLabel(partDay)).toBe('อยู่ในศูนย์ไม่เต็มวัน');
+		expect(coverageStatusLabel(partDay, true)).toBe('อยู่ในศูนย์ไม่เต็มวัน');
+	});
+
+	it('adds the meals received, the days under 2 meals and the part days to the CSV', () => {
+		const out = lines(coverageRowsToCsv([ranged], zoneName, true));
+		expect(COVERAGE_CSV_HEADER.slice(-3)).toEqual([
+			'จำนวนมื้อที่ได้รับ',
+			'จำนวนวันที่ไม่ถึง 2 มื้อ',
+			'จำนวนวันที่อยู่ในศูนย์ไม่เต็มวัน'
+		]);
+		expect(out[1].endsWith('"รับไม่ถึง 2 มื้อ 3 จาก 7 วัน","","9","3","1"')).toBe(true);
+	});
+
+	it('leaves the days-under-2-meals cell empty for someone never judged', () => {
+		const partDay = row({ judgedDays: 0, shortDays: 0, partialDays: 2, mealsReceived: 1 });
+		expect(
+			lines(coverageRowsToCsv([partDay], zoneName))[1].endsWith(
+				'"อยู่ในศูนย์ไม่เต็มวัน","","1","","2"'
+			)
+		).toBe(true);
 	});
 });
 

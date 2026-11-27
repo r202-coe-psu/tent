@@ -50,7 +50,7 @@ describe('PeopleTotalTooltip', () => {
 		const trigger = render();
 
 		expect(trigger.textContent?.replace(/\s+/g, ' ').trim()).toBe('ทั้งหมด 290 คน');
-		expect(document.body.textContent).not.toContain('ผู้ประสบภัย');
+		expect(document.body.textContent).not.toContain('ผู้พักพิง');
 	});
 
 	it('opens the count of each group on the first tap, where the tap also focuses', async () => {
@@ -61,7 +61,7 @@ describe('PeopleTotalTooltip', () => {
 
 		await vi.waitFor(() => {
 			const text = squash(breakdown());
-			expect(text).toContain('ผู้ประสบภัย282คน');
+			expect(text).toContain('ผู้พักพิง282คน');
 			expect(text).toContain('เจ้าหน้าที่6คน');
 			expect(text).toContain('จิตอาสา2คน');
 		});
@@ -104,7 +104,7 @@ describe('PeopleTotalTooltip', () => {
 
 		await vi.waitFor(() => {
 			const text = squash(breakdown());
-			expect(text).toContain('ผู้ประสบภัย282คน');
+			expect(text).toContain('ผู้พักพิง282คน');
 			expect(text).toContain('เจ้าหน้าที่—');
 			expect(text).toContain('จิตอาสา—');
 			expect(text).toContain('ต่ำกว่าความเป็นจริง');

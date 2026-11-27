@@ -88,7 +88,7 @@ async function seedPeople(): Promise<void> {
 	const docs: Doc[] = [
 		...Object.entries(HOUSEHOLDS).map(([id, status]) => ({
 			...envelope(id, 'household'),
-			label: `E2E ครัวเรือน ${id.slice(-2)}`,
+			label: `E2E ครอบครัว ${id.slice(-2)}`,
 			status,
 			checkout_destination: null
 		})),
@@ -285,7 +285,7 @@ test.describe('Shelter close checks everyone out (CR-219)', { tag: ['@shelter-cl
 
 		await expect(
 			page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' })
-		).toContainText('เปิดรับผู้อพยพ (Active)');
+		).toContainText('เปิดรับผู้พักพิง (Active)');
 		expect((await registryStatus()).operation_status).toBe('active');
 		expect(await docsOfType('movement')).toEqual([]);
 		await page.context().close();
@@ -396,7 +396,7 @@ test.describe('Shelter close checks everyone out (CR-219)', { tag: ['@shelter-cl
 	test('FR-25 the manager reopens the shelter; nobody gets a stay back', async ({ browser }) => {
 		const before = await stays();
 		const page = await openEditAsManager(browser);
-		await pickStatus(page, 'เปิดรับผู้อพยพ (Active)');
+		await pickStatus(page, 'เปิดรับผู้พักพิง (Active)');
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 		await expect(page.getByRole('alertdialog')).toHaveCount(0);
 		await expect.poll(async () => (await registryStatus()).operation_status).toBe('active');

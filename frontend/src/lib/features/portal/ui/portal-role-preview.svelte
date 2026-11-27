@@ -41,7 +41,7 @@
 	const medicalDetail = $derived(
 		preview.medicalScreening === 'real'
 			? ''
-			: ` · คัดกรองผู้เข้าพัก: ${medicalOptions.find((o) => o.value === preview.medicalScreening)?.label ?? ''}`
+			: ` · คัดกรองสุขภาพ: ${medicalOptions.find((o) => o.value === preview.medicalScreening)?.label ?? ''}`
 	);
 
 	let open = $state(false);
@@ -135,7 +135,7 @@
 
 			<div class="space-y-1.5">
 				<p id="portal-preview-medical-label" class="text-xs font-semibold text-slate-700">
-					คัดกรองผู้เข้าพักของศูนย์
+					คัดกรองสุขภาพของศูนย์
 				</p>
 				<RadioGroup.Root
 					value={preview.medicalScreening}

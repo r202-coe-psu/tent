@@ -38,7 +38,7 @@ const SCHEDULE = {
 		{
 			assignment_id: 'shift_assignment:01STANDBY',
 			job_id: 'job:01JOB',
-			job_title: 'เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย',
+			job_title: 'เจ้าหน้าที่ช่วยลงทะเบียนผู้พักพิง',
 			shelter_code: 'SH002',
 			shelter_name: 'ศูนย์พักพิง โรงเรียนวัดโคกสมานคุณ',
 			date: '2099-09-03',
@@ -218,7 +218,7 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		// Rendered twice by design: once as the booking, once as the shift rostered from it.
 		await expect(page.getByText('ผู้ช่วยครัวจัดเตรียมอาหาร').first()).toBeVisible();
 		await expect(page.getByText('จุดปฏิบัติงาน: ครัวกลาง')).toBeVisible();
-		await expect(page.getByText('เจ้าหน้าที่ช่วยลงทะเบียนผู้ประสบภัย')).toBeVisible();
+		await expect(page.getByText('เจ้าหน้าที่ช่วยลงทะเบียนผู้พักพิง')).toBeVisible();
 	});
 
 	for (const [label, size] of [
