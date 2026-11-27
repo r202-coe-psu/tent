@@ -25,7 +25,7 @@ const th = {
 	disabledDesc: 'ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองสุขภาพตามการตั้งค่าศูนย์พักพิง',
 	backToPortal: 'กลับหน้าเลือกเมนูหลัก',
 	goToStation3: 'ไปจุดจัดโซน',
-	heading: 'จุดตรวจคัดกรองผู้เข้าพัก',
+	heading: 'จุดคัดกรองสุขภาพ',
 	intro:
 		'เปิดฟอร์มคัดกรองได้ 3 ทาง: เลือกคนจากคิวรอตรวจ · ค้นหาชื่อ/เบอร์/เลขบัตร · สแกน QR (Handover Slip หรือ Person QR) — ไม่จำเป็นต้องสแกนเสมอ',
 	pendingBadgeLabel: 'รอตรวจ:',
@@ -61,9 +61,9 @@ const th = {
 
 	// Detail page
 	detailTitle: (name: string) => `คัดกรอง · ${name}`,
-	detailTitleDefault: 'คัดกรองผู้เข้าพัก',
+	detailTitleDefault: 'คัดกรองสุขภาพ',
 	backToQueueTitle: 'กลับไปคิวคัดกรอง',
-	formHeading: 'ฟอร์มคัดกรองผู้เข้าพัก',
+	formHeading: 'ฟอร์มคัดกรองสุขภาพ',
 	headerMeta: (gender: string, age: string, idMasked: string, phone: string) =>
 		`เพศ ${gender} · อายุ ${age} ปี · บัตร ${idMasked} · โทร ${phone}`,
 	loadingEvacuee: 'กำลังโหลดข้อมูลผู้พักพิง...',
@@ -131,11 +131,11 @@ const en: typeof th = {
 		disabled: 'Person with disability'
 	},
 	timeSuffix: '',
-	disabledTitle: 'Medical screening is disabled',
+	disabledTitle: 'The health screening desk is disabled',
 	disabledDesc: 'This shelter has not enabled the health screening desk in its settings.',
 	backToPortal: 'Back to main menu',
 	goToStation3: 'Go to the zoning desk',
-	heading: 'Medical Screening Point',
+	heading: 'Health screening desk',
 	intro:
 		'Open the screening form in 3 ways: pick someone from the pending queue · search by name/phone/ID number · scan a QR (Handover Slip or Person QR) — scanning is not required.',
 	pendingBadgeLabel: 'Pending:',
@@ -172,9 +172,9 @@ const en: typeof th = {
 
 	// Detail page
 	detailTitle: (name) => `Screening · ${name}`,
-	detailTitleDefault: 'Medical Screening',
+	detailTitleDefault: 'Health screening',
 	backToQueueTitle: 'Back to screening queue',
-	formHeading: 'Medical Screening Form',
+	formHeading: 'Health screening form',
 	headerMeta: (gender, age, idMasked, phone) =>
 		`Gender ${gender} · Age ${age} yrs · ID ${idMasked} · Phone ${phone}`,
 	loadingEvacuee: 'Loading evacuee data...',

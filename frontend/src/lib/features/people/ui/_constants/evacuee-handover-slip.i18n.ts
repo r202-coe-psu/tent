@@ -13,7 +13,7 @@ export const EVACUEE_HANDOVER_SLIP_I18N = {
 		noSymptoms: 'ไม่มีอาการป่วย',
 		status: 'สถานะ',
 		statusArriving: 'รอตรวจคัดกรอง (Arriving)',
-		scanInstruction: 'เจ้าหน้าที่แพทย์สแกน QR Code นี้เพื่อเปิดหน้าคัดกรองผู้เข้าพักทันที',
+		scanInstruction: 'เจ้าหน้าที่แพทย์สแกน QR Code นี้เพื่อเปิดหน้าคัดกรองสุขภาพทันที',
 		deepLink: 'ลิงก์ระบบคัดกรอง',
 		print: 'พิมพ์ใบนำทาง',
 		doneNext: 'เสร็จสิ้น / ลงทะเบียนคนถัดไป',
