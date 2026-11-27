@@ -116,15 +116,12 @@
 			{@const needsAction = tile.actionable && (tile.value ?? 0) > 0}
 			<div
 				class={[
-					'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 shadow-sm',
-					'@md:flex-col @md:items-stretch @md:p-4 @3xl:p-5',
+					'flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 shadow-sm',
 					needsAction ? 'border-amber-200 bg-amber-50' : 'border-border bg-card',
 					index === tiles.length - 1 && '@md:col-span-2 @3xl:col-span-1'
 				]}
 			>
-				<div
-					class="flex min-w-0 flex-row-reverse items-center justify-end gap-2 @md:flex-row @md:items-start @md:justify-between"
-				>
+				<div class="flex min-w-0 flex-row-reverse items-center justify-end gap-2">
 					<dt
 						class={[
 							'text-sm leading-snug font-medium',

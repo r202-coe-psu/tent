@@ -1,12 +1,14 @@
 <script lang="ts">
 	/**
-	 * What a job board card says about a multi-shift job (#1521): the emptiest shifts first,
-	 * capped at three so the card keeps one height whether the job has 4 shifts or 180 (a batch
-	 * makes up to 180). Every shift is on the job detail screen. Same buckets as the summary bar.
+	 * The quota block of a job board card (#1521): one total bar plus one line saying how the
+	 * job's shifts split — the same two lines for a job of 1 shift or 180, so every card keeps
+	 * one height. Which shift is short, and on which day, is on the job detail screen. Same
+	 * buckets as the summary bar.
 	 */
 	import { jobShiftAttention, jobShiftCapacities, type FillBucket } from '../domain/capacity';
 	import type { Job } from '../domain/job.schema';
 	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
+	import JobQuotaBar from './job-quota-bar.svelte';
 
 	let {
 		job,
@@ -27,63 +29,38 @@
 				end_time: shift.end_time,
 				quota: shift.quota,
 				confirmed: capacities[i]?.confirmed ?? 0
-			}))
+			})),
+			0
 		);
 	});
 
-	const BAR: Record<FillBucket, string> = {
-		critical: 'bg-red-500',
-		near: 'bg-amber-500',
-		met: 'bg-emerald-500'
-	};
-	const TEXT: Record<FillBucket, string> = {
-		critical: 'text-red-700',
-		near: 'text-amber-700',
-		met: 'text-emerald-700'
-	};
+	const PILLS: { bucket: FillBucket; label: string; class: string }[] = [
+		{ bucket: 'critical', label: 'ขาดหนัก', class: 'bg-red-50 text-red-700' },
+		{ bucket: 'near', label: 'ใกล้ครบ', class: 'bg-amber-50 text-amber-700' },
+		{ bucket: 'met', label: 'ครบ', class: 'bg-emerald-50 text-emerald-700' }
+	];
 </script>
 
 <div class="rounded-xl bg-muted/35 p-3">
 	<div class="mb-2 flex items-center justify-between gap-2">
 		<span class="text-[11px] font-semibold text-muted-foreground">ความคืบหน้าโควตา</span>
-		<span class="text-[11px] text-muted-foreground tabular-nums">
-			รวม {attention.totalConfirmed}/{attention.totalTarget}
+		<span class="text-xs font-bold text-foreground tabular-nums">
+			{attention.totalConfirmed}/{attention.totalTarget}
 		</span>
 	</div>
-	<p class="mb-2 text-[11px] text-muted-foreground">
-		{attention.total} กะ:
-		<span class="font-semibold text-red-700">ขาดหนัก {attention.counts.critical}</span>
-		· <span class="font-semibold text-amber-700">ใกล้ครบ {attention.counts.near}</span>
-		· <span class="font-semibold text-emerald-700">ครบ {attention.counts.met}</span>
-	</p>
-	<ul class="space-y-1.5">
-		{#each attention.rows as row (row.id)}
-			<li
-				data-testid="shift-attention-row"
-				data-shift-id={row.id}
-				class="grid grid-cols-[1fr_auto] items-center gap-x-2 text-[11px]"
-			>
-				<span class="truncate text-foreground tabular-nums">
-					{row.date} · {row.start_time}–{row.end_time}
+	<JobQuotaBar {job} confirmedCount={attention.totalConfirmed} />
+	<p class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+		<span class="font-medium text-foreground">{attention.total} กะ</span>
+		{#each PILLS as pill (pill.bucket)}
+			{#if attention.counts[pill.bucket] > 0}
+				<span
+					data-testid="shift-bucket-pill"
+					class="rounded-full px-2 py-0.5 font-semibold {pill.class}"
+				>
+					{pill.label}
+					{attention.counts[pill.bucket]}
 				</span>
-				<span class="font-semibold tabular-nums {TEXT[row.bucket]}">
-					{row.confirmed}/{row.target}
-					{#if row.missing > 0}(ขาด {row.missing}){/if}
-				</span>
-				<div class="col-span-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-					<div
-						class="h-full {BAR[row.bucket]}"
-						style:width="{row.target > 0
-							? (Math.min(Math.max(row.confirmed, 0), row.target) / row.target) * 100
-							: 0}%"
-					></div>
-				</div>
-			</li>
+			{/if}
 		{/each}
-	</ul>
-	{#if attention.hidden > 0}
-		<p class="mt-1.5 text-[11px] font-medium text-muted-foreground">
-			และอีก {attention.hidden} กะ
-		</p>
-	{/if}
+	</p>
 </div>

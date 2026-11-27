@@ -123,8 +123,10 @@
 		/>
 	{/if}
 
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<JobFilterChips bind:status={statusFilter} bind:excludeClosed bind:urgentOnly />
+	<div class="flex flex-wrap items-center gap-3">
+		<div class="min-w-0 flex-1">
+			<JobFilterChips bind:status={statusFilter} bind:excludeClosed bind:urgentOnly />
+		</div>
 		<Button onclick={openCreate} class="gap-1.5">
 			<Plus class="h-4 w-4" />
 			ประกาศงานอาสาสมัครใหม่

@@ -15,10 +15,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge, type BadgeVariant } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
-	import JobQuotaBar from './job-quota-bar.svelte';
 	import JobShiftAttention from './job-shift-attention.svelte';
 	import { resolveSkillOption } from '../domain/skill-catalog';
-	import { assignmentCountForJob } from '../domain/shift-roster';
 	import { useSkillOptions } from '../application/queries';
 	import type { Job, JobStatus } from '../domain/job.schema';
 	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
@@ -62,9 +60,6 @@
 	);
 
 	const statusDisplay = $derived(STATUS_DISPLAY[job.status]);
-	const confirmedCount = $derived(
-		assignments ? assignmentCountForJob(job, assignments) : job.slots_confirmed
-	);
 	/**
 	 * `resolve()` in this SvelteKit version only prefixes `base`, so the `[id]`
 	 * segment is built here. `job._id` contains a colon (`job:01J…`) — encode it
@@ -154,18 +149,7 @@
 			</div>
 		{/if}
 
-		{#if job.shifts.length > 1}
-			<!-- Several shifts with different quotas: one summed bar hides which shift is short. -->
-			<JobShiftAttention {job} {assignments} />
-		{:else}
-			<div class="rounded-xl bg-muted/35 p-3">
-				<div class="mb-2 flex items-center justify-between gap-2">
-					<span class="text-[11px] font-semibold text-muted-foreground">ความคืบหน้าโควตา</span>
-					<span class="text-xs font-bold text-foreground">{confirmedCount}/{job.quota}</span>
-				</div>
-				<JobQuotaBar {job} {confirmedCount} />
-			</div>
-		{/if}
+		<JobShiftAttention {job} {assignments} />
 
 		<div class="mt-auto border-t border-border pt-4">
 			<div class="space-y-2 text-xs text-muted-foreground">
