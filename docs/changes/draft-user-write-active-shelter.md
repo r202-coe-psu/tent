@@ -3,10 +3,10 @@ id: draft
 title: จัดการผู้ใช้ (User Management) ตรวจสิทธิ์ SM ในศูนย์ที่ทำงานอยู่ แทนศูนย์แรก
 status: proposed
 date: 2026-11-11
-updated: 2026-11-26
+updated: 2026-11-28
 requested_by: RBAC audit follow-ups (#473 → #477 ส่วน user management)
 decided_by: <รอเจ้าของโครงการ>
-layer: volatile # แตะ authz ของ BFF แต่ไม่เปลี่ยน auth/_session/envelope
+layer: stable # เปลี่ยน authz ของ BFF (ไม่เปลี่ยน _session/envelope) — owner ยืนยัน 2026-11-28
 affects:
   - docs/prd/role-permission-matrix.md §3 แถว User Management (ไม่เปลี่ยนตาราง — ดู "Why")
   - frontend/src/lib/server/couch-admin.ts (authorizeUserWrite, assertCanGrant, activeManagerShelter)
@@ -31,12 +31,12 @@ affects:
 
 - **FR-1** — `authorizeUserWrite` ต้องรับ `requestedShelter` และคืน `shelterCode` ที่ resolve แล้วด้วย `resolveActiveShelter` (เช่นเดียวกับ `authorizeTransfer`, #1205)
 - **FR-2** — non-SA ส่ง `shelter_code`: ใช้ศูนย์นั้นเมื่อถือ `shelter_manager` ในศูนย์นั้น ไม่ถือ → `403`
-- **FR-3** — non-SA ไม่ส่ง `shelter_code` และถือ `shelter_manager` หลายศูนย์ → `422` (`VALIDATION`); ศูนย์เดียว → ใช้ศูนย์นั้น
+- **FR-3** — non-SA ไม่ส่ง `shelter_code`: นับเฉพาะศูนย์ที่ถือ `shelter_manager` (ไม่นับศูนย์ที่เป็นแค่ staff) — หลายศูนย์ → `422` (`VALIDATION`); ศูนย์เดียว → ใช้ศูนย์นั้น; ไม่มีศูนย์ที่เป็น SM เลย → `403`
 - **FR-4** — `createOrMergeUser` (ทาง CONFLICT merge), `listUsers`, `managerMayMutateTarget` (ใช้ใน `updateUser`/`deleteUser`) และการตรวจ `permanent_roles` ใน `updateUser` ต้องใช้ศูนย์ที่ resolve แล้วจาก FR-1 ไม่ใช้ `managerShelterCodes(...)[0]`; `listUsers` ของ SM คืนเฉพาะผู้ใช้ของศูนย์นั้น (เดิมคืนทุกศูนย์ที่ดูแล)
 - **FR-5** — SM ต้อง grant/แก้ role ได้เฉพาะ role ที่ขึ้นต้นด้วย `{ศูนย์ที่ resolve}:` (`assertCanGrant` เทียบกับศูนย์ที่ทำงานอยู่ ไม่ใช่ทุกศูนย์ที่ดูแล); กฎเดิม "เฉพาะ staff, ห้าม shelter_manager/system_admin" คงเดิม
-- **FR-5a** — SM ห้ามแก้/ลบผู้ใช้ที่เป็น `shelter_manager` ในศูนย์ใดก็ตามที่ caller ดูแล (ไม่ใช่แค่ศูนย์ที่ resolve) เพราะการแก้รวมถึงเปลี่ยนรหัสผ่าน
-- **FR-5b** — โปรไฟล์อาสาสมัครหนึ่งผูกได้บัญชีเดียว: `createOrMergeUser` ปฏิเสธ (`409`) เมื่อ `volunteer_id` ผูกกับบัญชีอื่นที่ยังไม่ถูกลบอยู่แล้วในศูนย์ใดก็ได้
-- **FR-6** — SA: พฤติกรรมเดิมทุกประการ
+- **FR-5a** — SM ห้ามแก้/ลบ/รีเซ็ตรหัสผ่าน/ถอด MFA ของผู้ใช้ที่เป็น `shelter_manager` ใน**ศูนย์ใดก็ได้** (ไม่จำกัดเฉพาะศูนย์ที่ caller ดูแล) เพราะการแก้รวมถึงยึดบัญชีได้ — มีแค่ SA ที่แก้ SM ได้ (รวมถึงการเพิ่ม role ในศูนย์ตนให้ SM ศูนย์อื่น)
+- **FR-5b** — โปรไฟล์อาสาสมัครหนึ่งผูกได้บัญชีเดียว: `createOrMergeUser` และ `updateUser` (เมื่อเปลี่ยน `volunteer_id`) ปฏิเสธ (`409`) เมื่อ `volunteer_id` ผูกกับบัญชีอื่นที่ยังไม่ถูกลบอยู่แล้วในศูนย์ใดก็ได้ — เป็นกฎความถูกต้องของข้อมูล ใช้กับ SA ด้วย
+- **FR-6** — SA: การตรวจสิทธิ์เดิมทุกประการ (กฎข้อมูล FR-5b ยังใช้)
 - **FR-7** — หน้า `user-create-page`, `user-edit-page`, `user-management-page` และ `grantVolunteerAccess` ต้องส่ง `shelter_code` ของศูนย์ที่ active (ของอาสาสมัครสำหรับ `grantVolunteerAccess`) ไปกับทุกคำขอเขียน/อ่านรายชื่อ และไม่ใช้ `shelterCodeFromRoles` (ศูนย์แรก) เลือกศูนย์ — ใช้ศูนย์ที่เลือก ไม่มีก็ศูนย์แรกที่ตนเป็น SM (`resolveManagedShelterCode`); SA ไม่ส่ง
 - **FR-8** — route อื่นที่เรียก `authorizeUserWrite` (app-config, api-keys, thirdparty-clients, staff-card, ThaID/Google unlink, partner-logos, …) ไม่ส่งศูนย์ → ตรวจแค่ "SA หรือ SM" เหมือนเดิม ไม่เปลี่ยนพฤติกรรม — ส่วนที่กระทบหน้า users (reset-password, staff-card, unlink) ติดตามใน #1560
 
@@ -48,8 +48,9 @@ affects:
 - SM พยายามตั้ง `permanent_roles` ของศูนย์อื่นนอกศูนย์ที่ resolve → `403`
 - SA ทำงานเหมือนเดิม; test เดิมของ `/api/v1/users` ผ่าน
 - SM หลายศูนย์ทำงานใน SH002 ขอ grant role ของ SH001 (ศูนย์ที่ตนก็ดูแล) → `403`
-- SM ของ SH001+SH002 ทำงานใน SH002 เปลี่ยนรหัสผ่านผู้ใช้ที่เป็น `SH001:shelter_manager` + `SH002:registration_staff` → `403` ไม่มีการเขียน
-- สร้างบัญชีที่สองให้โปรไฟล์อาสาสมัครที่ผูกบัญชีในศูนย์อื่นแล้ว → `409` ไม่มีการเขียน
+- SM ของ SH002 **ศูนย์เดียว** (หรือ SH001+SH002) เปลี่ยนรหัสผ่าน / รีเซ็ตรหัสผ่าน / ถอด Google MFA ของผู้ใช้ที่เป็น `SH001:shelter_manager` + `SH002:registration_staff` → `403` ไม่มีการเขียน
+- SM ของ SH002 ที่เป็นแค่ staff ใน SH001 ไม่ส่ง `shelter_code` → ใช้ SH002
+- สร้างบัญชีที่สอง หรือแก้บัญชีเดิมให้ผูกโปรไฟล์อาสาสมัครที่ผูกบัญชีอื่นแล้ว → `409` ไม่มีการเขียน
 - มี test ฝั่ง server ครบทุก FR-1..5 และ test ว่า users API client กับ `grantVolunteerAccess` ส่ง `shelter_code`
 
 ## Why
@@ -65,7 +66,7 @@ affects:
 - **ไม่กระทบ:** schema, `_users` doc shape, ตารางสิทธิ์, `validate_doc_update`
 - **ตรวจแล้ว:** `grantCoordinatorRole` / `revokeCoordinatorGrant` (#1044) ไม่ใช้ `managerShelterCodes(...)[0]` จึงไม่แก้
 - **ไม่อยู่ใน CR นี้:** `listShelterStaffDirectory` (รับ `code` จาก URL และผ่าน `requireShelterScopeOrSA` อยู่แล้ว), `staff-card-service.ts` และ route reset-password / staff-card / Google+ThaID unlink (ติดตามใน #1560)
-- **แยก PR:** ทำเป็น 2 commit ได้ (1) server + test (2) UI — ถ้าปล่อย (1) เดี่ยว SM หลายศูนย์จะได้ `400` บนหน้าผู้ใช้จนกว่า (2) จะตามมา จึงควร merge พร้อมกัน
+- **แยก PR:** ทำเป็น 2 commit ได้ (1) server + test (2) UI — ถ้าปล่อย (1) เดี่ยว SM หลายศูนย์จะได้ `422` บนหน้าผู้ใช้จนกว่า (2) จะตามมา จึงควร merge พร้อมกัน
 
 ## Migration
 
@@ -77,3 +78,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist; ไม่
 - 2026-11-13 — เติม scope ตามที่ implement จริง (listUsers, assertCanGrant, volunteer-access); เลขที่ CR ให้ lead รันตอน PR (ยังเป็น `draft`)
 - 2026-11-24 — ผู้รับผิดชอบเลือก: ถือเป็น implementation ตาม spec เดิม, track เป็น CR แบบเบา (ไฟล์นี้)
 - 2026-11-26 — แก้ตาม review PR #1523: เพิ่ม FR-5a (กัน SM แก้ SM ในทุกศูนย์ที่ดูแล), FR-5b (กัน volunteer_id ซ้ำฝั่ง server), FR-7 ใช้ `resolveManagedShelterCode` ในหน้า route ด้วย; แก้ status code `400` → `422` ให้ตรงกับ `VALIDATION`; owner ตัดสินให้ FR-8 คงเดิมและติดตาม route ที่เหลือใน #1560
+- 2026-11-28 — แก้ตาม review รอบ 2 ของ PR #1523: FR-5a ขยายเป็นกัน SM ของ**ทุกศูนย์** (owner เลือกกันทุกการแก้ ไม่แยกเฉพาะ credential); FR-5b ครอบ `updateUser` และระบุว่าใช้กับ SA; FR-6 จำกัดเป็นการตรวจสิทธิ์; FR-3 นับเฉพาะศูนย์ที่เป็น SM และ SM ไม่มีศูนย์ → `403`; owner ยืนยัน `layer: stable`
