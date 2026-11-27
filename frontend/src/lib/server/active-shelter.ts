@@ -14,6 +14,9 @@ import { hasCapabilityInShelter, shelterCodesFromRoles } from '$lib/auth/roles';
  * - Non-SA without `requested`: the caller's only shelter when they belong to exactly one
  *   (the only unambiguous default), 400 when they belong to several.
  *
+ * The 400s are SvelteKit `HttpError`s as thrown here; `authorizeUserWrite` re-throws them as
+ * `ServiceError('VALIDATION')`, which `/api/v1/users` answers with HTTP 422.
+ *
  * Pure apart from the thrown SvelteKit `HttpError`, so it needs no session to test.
  */
 export function resolveActiveShelter(

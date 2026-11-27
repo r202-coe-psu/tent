@@ -1024,11 +1024,10 @@ function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]):
 	if (!code) {
 		throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
 	}
-	// Never another manager of ANY shelter this caller manages, not only the active one: the write
-	// can change the password, so a manager of SH001 + SH002 working in SH002 must not take over
-	// an SH001 manager who is merely staff in SH002 (PR #1523 review).
-	const callerManaged = managerShelterCodes(caller.roles);
-	if (managerShelterCodes(targetRoles).some((c) => callerManaged.includes(c))) {
+	// Never a manager of ANY shelter, not only one this caller manages: the write can change the
+	// password, reset it or unlink MFA, so a manager of SH002 must not take over an SH001 manager
+	// who is merely staff in SH002 (PR #1523 review). Only a system admin edits managers.
+	if (managerShelterCodes(targetRoles).length > 0) {
 		throw new ServiceError('FORBIDDEN', 'A manager may not modify another shelter manager');
 	}
 	// Allow add-from-outside: target need not already be in this shelter.
@@ -1146,6 +1145,11 @@ export async function updateUser(
 		input.active !== (doc.active ?? true)
 	) {
 		throw new ServiceError('FORBIDDEN', 'บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี');
+	}
+
+	// One volunteer profile, one account (CR FR-5b) — also when an edit relinks the profile.
+	if (input.volunteer_id && input.volunteer_id !== doc.volunteer_id) {
+		await assertVolunteerProfileUnlinked(name, input.volunteer_id);
 	}
 
 	let nextRoles = input.roles;

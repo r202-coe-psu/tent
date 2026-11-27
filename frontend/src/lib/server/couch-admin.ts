@@ -294,11 +294,21 @@ export async function authorizeUserWrite(
 		throw new ServiceError('FORBIDDEN', 'Requires system_admin or shelter_manager');
 	}
 	if (requestedShelter === undefined) return caller;
+	// Default among the shelters the caller MANAGES, not every shelter they belong to: a manager
+	// of SH001 who is also staff in SH002 has one unambiguous default (CR FR-3).
+	let requested = requestedShelter?.trim() || null;
+	if (!caller.isSA && !requested) {
+		const managed = managerShelterCodes(caller.roles);
+		if (managed.length === 0) {
+			throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
+		}
+		if (managed.length === 1) requested = managed[0];
+	}
 	try {
 		const active = resolveActiveShelter(
 			caller.roles,
 			caller.isSA,
-			requestedShelter,
+			requested,
 			[SHELTER_MANAGER],
 			'Requires shelter_manager in the requested shelter'
 		);

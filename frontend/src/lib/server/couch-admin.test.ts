@@ -300,6 +300,22 @@ describe('authorizeUserWrite active shelter (#477)', () => {
 		});
 	});
 
+	it('defaults to the one managed shelter even when the caller is staff elsewhere (CR FR-3)', async () => {
+		await expect(asRoles(managerInSh002Only, null)).resolves.toMatchObject({
+			shelterCode: 'SH002'
+		});
+		await expect(asRoles(managerInSh002Only, '  ')).resolves.toMatchObject({
+			shelterCode: 'SH002'
+		});
+	});
+
+	it('refuses a manager with no managed shelter as FORBIDDEN, not VALIDATION', async () => {
+		await expect(asRoles(['shelter_manager'], null)).rejects.toMatchObject({
+			code: 'FORBIDDEN',
+			message: 'Manager has no shelter scope'
+		});
+	});
+
 	it('leaves SA unrestricted', async () => {
 		await expect(asRoles(['system_admin'], null)).resolves.toMatchObject({ isSA: true });
 		await expect(asRoles(['system_admin'], 'SH009')).resolves.toMatchObject({

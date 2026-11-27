@@ -1157,6 +1157,54 @@ describe('user-service', () => {
 			expect(fakeUsersDb[key('0830000008')].roles).toContain('shelter:SH002');
 		});
 
+		it('refuses a manager of any other shelter, even when the caller manages only one', async () => {
+			// B1 (PR #1523 review 2): M manages SH002 alone; U manages SH001 and is staff in SH002.
+			const onlySh002 = {
+				name: 'sm-only-02',
+				roles: ['shelter:SH002', 'SH002:shelter_manager'],
+				isSA: false,
+				shelterCode: 'SH002'
+			};
+			await seed('0830000009', [
+				'shelter:SH001',
+				'SH001:shelter_manager',
+				'shelter:SH002',
+				'SH002:registration_staff'
+			]);
+			const doc = fakeUsersDb[key('0830000009')];
+			doc.mfa = {
+				providers: [{ type: 'google', subject: 'g-1', linked_at: '2026-11-01T00:00:00Z' }]
+			};
+			const before = structuredClone(doc);
+
+			await expect(
+				updateUser('0830000009', { password: 'Taken-Over-123!' }, onlySh002, noCheck)
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			await expect(resetUserPasswordByAdmin('0830000009', onlySh002)).rejects.toMatchObject({
+				code: 'FORBIDDEN'
+			});
+			await expect(unlinkGoogleMfa('0830000009', onlySh002)).rejects.toMatchObject({
+				code: 'FORBIDDEN'
+			});
+			expect(fakeUsersDb[key('0830000009')]).toEqual(before);
+		});
+
+		it('refuses relinking an account to a volunteer profile another account holds', async () => {
+			await createUser({
+				name: 'vol-c@example.com',
+				password: 'Password123!',
+				display_name: 'Vol C',
+				personnel_type: 'volunteer',
+				volunteer_id: 'volunteer:02VOL',
+				roles: ['shelter:SH001', 'SH001:registration_staff']
+			});
+			await seed('0830000010', ['shelter:SH002', 'registration_staff']);
+			await expect(
+				updateUser('0830000010', { volunteer_id: 'volunteer:02VOL' }, inSh002, noCheck)
+			).rejects.toMatchObject({ code: 'CONFLICT' });
+			expect(fakeUsersDb[key('0830000010')].volunteer_id).not.toBe('volunteer:02VOL');
+		});
+
 		it('refuses a second account for a volunteer profile linked in another shelter', async () => {
 			await createUser({
 				name: 'vol-a@example.com',
