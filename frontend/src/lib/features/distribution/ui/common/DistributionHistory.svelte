@@ -187,7 +187,7 @@
 						oninput={() => (visibleCount = HISTORY_PAGE_SIZE)}
 						placeholder="ค้นหาชื่อผู้รับ หรือเหตุผล"
 						aria-label="ค้นหาประวัติการแจก"
-						class="min-h-11 pl-9"
+						class="h-10 rounded-lg pl-9 shadow-2xs"
 					/>
 				</div>
 				{#if matches.length === 0}

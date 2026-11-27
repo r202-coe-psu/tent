@@ -49,7 +49,7 @@
 	);
 	const fieldLabel = 'text-sm font-semibold text-slate-700';
 	const triggerClass =
-		'h-11 w-full rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10';
+		'h-10 w-full rounded-lg border-input bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10';
 </script>
 
 <div
@@ -67,7 +67,7 @@
 				type="search"
 				placeholder="ชื่อผู้พักพิง"
 				bind:value={() => query, onQueryChange}
-				class="h-11 w-full rounded-lg bg-white pl-9 sm:h-10"
+				class="h-10 w-full rounded-lg border-input bg-white pl-9 text-sm shadow-2xs"
 			/>
 		</div>
 	</div>
@@ -118,12 +118,7 @@
 		<p class="text-sm whitespace-nowrap text-slate-500 tabular-nums">
 			พบ <span class="font-semibold text-slate-800">{shown}</span> จาก {total} คน
 		</p>
-		<Button
-			variant="outline"
-			class="h-11 rounded-lg sm:h-10"
-			disabled={shown === 0}
-			onclick={onExport}
-		>
+		<Button variant="outline" class="h-10 rounded-lg" disabled={shown === 0} onclick={onExport}>
 			<Download class="size-4" aria-hidden="true" />
 			ส่งออก CSV
 		</Button>

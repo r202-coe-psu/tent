@@ -186,7 +186,7 @@
 								bind:value={driverName}
 								placeholder="ระบุชื่อคนขับ (ถ้ามี)"
 								disabled={isSubmitting}
-								class="h-9 w-full rounded-lg pr-3 pl-8 text-xs placeholder:text-slate-400"
+								class="h-10 w-full rounded-lg pr-3 pl-8 text-xs shadow-2xs placeholder:text-slate-400"
 							/>
 						</div>
 					</div>
@@ -203,7 +203,7 @@
 								bind:value={licensePlate}
 								placeholder="ระบุทะเบียนรถ (ถ้ามี)"
 								disabled={isSubmitting}
-								class="h-9 w-full rounded-lg pr-3 pl-8 text-xs placeholder:text-slate-400"
+								class="h-10 w-full rounded-lg pr-3 pl-8 text-xs shadow-2xs placeholder:text-slate-400"
 							/>
 						</div>
 					</div>

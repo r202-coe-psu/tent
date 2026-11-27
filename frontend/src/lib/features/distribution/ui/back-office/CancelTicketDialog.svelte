@@ -114,7 +114,7 @@
 					bind:value={reason}
 					rows={3}
 					placeholder="เช่น ผู้ขอแจ้งยกเลิกความต้องการ, สินค้าไม่เพียงพอ, สร้างตั๋วซ้ำซ้อน"
-					class="w-full text-sm shadow-2xs placeholder:text-slate-400"
+					class="w-full rounded-lg text-sm shadow-2xs placeholder:text-slate-400"
 				/>
 				<p class="text-xs text-slate-500">
 					เหตุผลนี้จะถูกบันทึกในประวัติตั๋วเพื่อใช้ตรวจสอบย้อนหลัง

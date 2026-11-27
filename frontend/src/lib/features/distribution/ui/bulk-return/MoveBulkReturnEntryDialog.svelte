@@ -139,7 +139,7 @@
 						<Select.Root type="single" bind:value={toPoolId}>
 							<Select.Trigger
 								id="move-entry-target"
-								class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+								class="h-10 w-full min-w-0 bg-white text-sm font-medium shadow-2xs data-[size=default]:h-10"
 							>
 								<span class="truncate">
 									{selectedTarget ? selectedTarget.name : 'เลือกกองปลายทาง'}
@@ -163,7 +163,7 @@
 						bind:value={notes}
 						rows={2}
 						placeholder="เช่น ย้ายเพราะกองเดิมปิดรับแล้ว"
-						class="w-full text-base sm:text-sm"
+						class="w-full rounded-lg text-base shadow-2xs sm:text-sm"
 					/>
 				</div>
 			</div>
