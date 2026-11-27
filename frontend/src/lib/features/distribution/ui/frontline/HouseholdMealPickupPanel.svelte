@@ -397,7 +397,7 @@
 	</div>
 
 	{#if !withinInHand}
-		<p class="text-sm text-red-700" role="alert">จำนวนที่เลือกเกินยอดคงเหลือในมือ ({inHandQty})</p>
+		<p class="text-sm text-red-700" role="alert">จำนวนที่เลือกเกินยอดคงเหลือ ({inHandQty})</p>
 	{/if}
 
 	<Button
