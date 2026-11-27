@@ -188,175 +188,188 @@
 	}
 </script>
 
-{#if brokenItemNames}
-	<p
-		class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900"
-		role="alert"
-	>
-		ไม่ได้รวมในการตรวจนับ เพราะประวัติคลังคำนวณยอดรายล็อตไม่ได้: {brokenItemNames} — กรุณาแจ้งผู้ดูแลระบบ
-	</p>
-{/if}
-
-{#if negativeLotNotes.length > 0}
-	<div
-		class="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-900"
-		role="alert"
-	>
-		<p>ล็อตนี้ยอดติดลบ — ต้องแก้ยอด (ไม่ถูกรวมในการตรวจนับ และห้ามเบิกจากล็อตนี้):</p>
-		<ul class="mt-1 list-disc pl-5">
-			{#each negativeLotNotes as negative (negative.key)}
-				<li class="tabular-nums">{negative.text}</li>
-			{/each}
-		</ul>
-	</div>
-{/if}
-
-{#if activeGroupLabel === null}
-	<div class="flex flex-col gap-3">
-		<p class="text-sm text-muted-foreground">
-			เลือกจุดเก็บที่จะเดินตรวจนับ แล้วกรอกจำนวนที่นับได้จริงของทุกล็อต — บันทึกครั้งเดียว
-			ระบบจะปรับเฉพาะรายการที่ไม่ตรง
-		</p>
-		{#if ledgerQuery.isLoading}
-			<p class="text-sm text-muted-foreground">กำลังโหลดยอดคงคลัง…</p>
-		{:else if groups.length === 0}
-			<p class="rounded-xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
-				ยังไม่มีล็อตที่มีของคงเหลือให้ตรวจนับ
-			</p>
-		{:else}
-			<ul class="flex flex-col gap-2">
-				{#each groups as group (group.storage_key)}
-					<li>
-						<button
-							type="button"
-							class="flex min-h-14 w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 text-left hover:border-slate-400 disabled:opacity-50"
-							disabled={offline}
-							onclick={() => startCount(group.storage_key)}
-						>
-							<span class="font-semibold text-slate-900">{group.label}</span>
-							<span class="text-sm text-muted-foreground">{group.lots.length} ล็อต</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</div>
-{:else}
-	<form onsubmit={handleSubmit} class="flex flex-col space-y-4">
-		<div class="flex items-center justify-between gap-3">
-			<div>
-				<p class="text-xs font-semibold text-muted-foreground">จุดเก็บที่กำลังตรวจนับ</p>
-				<p class="text-lg font-bold text-slate-900">{activeGroupLabel}</p>
-			</div>
-			<Button type="button" variant="outline" class="min-h-11" onclick={leaveCount}>
-				เปลี่ยนจุดเก็บ
-			</Button>
-		</div>
-
-		<div
-			class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-muted/40 px-3 py-2 text-sm"
-			aria-live="polite"
-		>
-			<span>นับแล้ว <strong>{summary.counted}/{summary.total}</strong></span>
-			<span class="text-rose-600">ไม่ตรง <strong>{summary.mismatched}</strong></span>
-			{#if summary.invalid + wholeErrorCount > 0}
-				<span class="text-destructive"
-					>กรอกผิด <strong>{summary.invalid + wholeErrorCount}</strong></span
-				>
-			{/if}
-			<Button
-				type="button"
-				variant="link"
-				class="ml-auto h-auto min-h-11 p-0 text-sm"
-				onclick={fillRemainingWithSystem}
-			>
-				ที่เหลือตรงตามระบบ
-			</Button>
-		</div>
-
-		<ul class="flex flex-col gap-2">
-			{#each entries as entry (`${entry.item_id}::${entry.lot_key}`)}
-				{@const inputId = `count-${entry.item_id}-${entry.lot_key}`}
-				<li class={['rounded-xl border p-3', stateClass(entry)]}>
-					<div class="flex items-start justify-between gap-3">
-						<div class="min-w-0">
-							<label
-								for={inputId}
-								class="block font-semibold [overflow-wrap:anywhere] break-words text-slate-900"
-							>
-								{itemName(entry.item_id)}
-							</label>
-							<p class="text-xs text-muted-foreground">{formatExpiry(entry.lot.expiry)}</p>
-							<p class="mt-1 text-xs text-muted-foreground">
-								ในระบบ <span class="font-mono font-bold text-foreground">{entry.system_qty}</span>
-								{unitLabel(entry)}
-							</p>
-						</div>
-						<div class="relative w-32 shrink-0">
-							<Input
-								id={inputId}
-								type="text"
-								inputmode={requiresWholeQty(unitDimension.resolve(entry.unit))
-									? 'numeric'
-									: 'decimal'}
-								placeholder="นับได้"
-								autocomplete="off"
-								bind:value={entry.counted_qty}
-								aria-invalid={classifyCycleCount(entry) === 'invalid' || !!wholeError(entry)}
-								class="min-h-11 bg-white pr-12 font-mono text-base font-bold"
-							/>
-							<span
-								class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs font-bold text-muted-foreground"
-							>
-								{unitLabel(entry)}
-							</span>
-						</div>
-					</div>
-					{#if varianceLabel(entry)}
-						<p class="mt-2 text-xs font-semibold">{varianceLabel(entry)}</p>
-					{/if}
-					{#if wholeError(entry)}
-						<p class="mt-1 text-xs font-semibold text-destructive" role="alert">
-							{wholeError(entry)}
-						</p>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-
-		<Field.Root>
-			<Field.Label for="cycle-count-note">
-				หมายเหตุ <span class="font-normal text-muted-foreground"
-					>(ไม่บังคับ ใช้กับทุกรายการที่ปรับ)</span
-				>
-			</Field.Label>
-			<Textarea
-				id="cycle-count-note"
-				bind:value={note}
-				maxlength={ADJUST_NOTE_MAX_LENGTH}
-				rows={2}
-				class="min-h-11"
-			/>
-		</Field.Root>
-
-		{#if failures.length > 0}
-			<div
-				class="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm"
+<div class="flex min-h-0 flex-1 flex-col">
+	<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+		{#if brokenItemNames}
+			<p
+				class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900"
 				role="alert"
 			>
-				<p class="font-semibold text-destructive">บันทึกไม่สำเร็จ {failures.length} รายการ</p>
+				ไม่ได้รวมในการตรวจนับ เพราะประวัติคลังคำนวณยอดรายล็อตไม่ได้: {brokenItemNames} — กรุณาแจ้งผู้ดูแลระบบ
+			</p>
+		{/if}
+
+		{#if negativeLotNotes.length > 0}
+			<div
+				class="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-900"
+				role="alert"
+			>
+				<p>ล็อตนี้ยอดติดลบ — ต้องแก้ยอด (ไม่ถูกรวมในการตรวจนับ และห้ามเบิกจากล็อตนี้):</p>
 				<ul class="mt-1 list-disc pl-5">
-					{#each failures as failure (failure.ledger_id)}
-						<li>{itemName(failure.item_id)} — {failure.error}</li>
+					{#each negativeLotNotes as negative (negative.key)}
+						<li class="tabular-nums">{negative.text}</li>
 					{/each}
 				</ul>
 			</div>
 		{/if}
 
-		<div
-			class="sticky bottom-0 z-10 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:-mx-6 sm:-mb-6 sm:px-6"
-		>
-			<Button type="submit" size="lg" disabled={!canSave} class="min-h-11 w-full font-bold">
+		{#if activeGroupLabel === null}
+			<div class="flex flex-col gap-3">
+				<p class="text-sm text-muted-foreground">
+					เลือกจุดเก็บที่จะเดินตรวจนับ แล้วกรอกจำนวนที่นับได้จริงของทุกล็อต — บันทึกครั้งเดียว
+					ระบบจะปรับเฉพาะรายการที่ไม่ตรง
+				</p>
+				{#if ledgerQuery.isLoading}
+					<p class="text-sm text-muted-foreground">กำลังโหลดยอดคงคลัง…</p>
+				{:else if groups.length === 0}
+					<p
+						class="rounded-xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground"
+					>
+						ยังไม่มีล็อตที่มีของคงเหลือให้ตรวจนับ
+					</p>
+				{:else}
+					<ul class="flex flex-col gap-2">
+						{#each groups as group (group.storage_key)}
+							<li>
+								<button
+									type="button"
+									class="flex min-h-14 w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 text-left hover:border-slate-400 disabled:opacity-50"
+									disabled={offline}
+									onclick={() => startCount(group.storage_key)}
+								>
+									<span class="font-semibold text-slate-900">{group.label}</span>
+									<span class="text-sm text-muted-foreground">{group.lots.length} ล็อต</span>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+		{:else}
+			<form id="cycle-count-form" onsubmit={handleSubmit} class="flex flex-col space-y-4">
+				<div class="flex items-center justify-between gap-3">
+					<div>
+						<p class="text-xs font-semibold text-muted-foreground">จุดเก็บที่กำลังตรวจนับ</p>
+						<p class="text-lg font-bold text-slate-900">{activeGroupLabel}</p>
+					</div>
+					<Button type="button" variant="outline" class="min-h-11" onclick={leaveCount}>
+						เปลี่ยนจุดเก็บ
+					</Button>
+				</div>
+
+				<div
+					class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-muted/40 px-3 py-2 text-sm"
+					aria-live="polite"
+				>
+					<span>นับแล้ว <strong>{summary.counted}/{summary.total}</strong></span>
+					<span class="text-rose-600">ไม่ตรง <strong>{summary.mismatched}</strong></span>
+					{#if summary.invalid + wholeErrorCount > 0}
+						<span class="text-destructive"
+							>กรอกผิด <strong>{summary.invalid + wholeErrorCount}</strong></span
+						>
+					{/if}
+					<Button
+						type="button"
+						variant="link"
+						class="ml-auto h-auto min-h-11 p-0 text-sm"
+						onclick={fillRemainingWithSystem}
+					>
+						ที่เหลือตรงตามระบบ
+					</Button>
+				</div>
+
+				<ul class="flex flex-col gap-2">
+					{#each entries as entry (`${entry.item_id}::${entry.lot_key}`)}
+						{@const inputId = `count-${entry.item_id}-${entry.lot_key}`}
+						<li class={['rounded-xl border p-3', stateClass(entry)]}>
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0">
+									<label
+										for={inputId}
+										class="block font-semibold [overflow-wrap:anywhere] break-words text-slate-900"
+									>
+										{itemName(entry.item_id)}
+									</label>
+									<p class="text-xs text-muted-foreground">{formatExpiry(entry.lot.expiry)}</p>
+									<p class="mt-1 text-xs text-muted-foreground">
+										ในระบบ <span class="font-mono font-bold text-foreground"
+											>{entry.system_qty}</span
+										>
+										{unitLabel(entry)}
+									</p>
+								</div>
+								<div class="relative w-32 shrink-0">
+									<Input
+										id={inputId}
+										type="text"
+										inputmode={requiresWholeQty(unitDimension.resolve(entry.unit))
+											? 'numeric'
+											: 'decimal'}
+										placeholder="นับได้"
+										autocomplete="off"
+										bind:value={entry.counted_qty}
+										aria-invalid={classifyCycleCount(entry) === 'invalid' || !!wholeError(entry)}
+										class="h-10 rounded-lg bg-white pr-12 font-mono text-base font-bold shadow-2xs"
+									/>
+									<span
+										class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs font-bold text-muted-foreground"
+									>
+										{unitLabel(entry)}
+									</span>
+								</div>
+							</div>
+							{#if varianceLabel(entry)}
+								<p class="mt-2 text-xs font-semibold">{varianceLabel(entry)}</p>
+							{/if}
+							{#if wholeError(entry)}
+								<p class="mt-1 text-xs font-semibold text-destructive" role="alert">
+									{wholeError(entry)}
+								</p>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+
+				<Field.Root>
+					<Field.Label for="cycle-count-note">
+						หมายเหตุ <span class="font-normal text-muted-foreground"
+							>(ไม่บังคับ ใช้กับทุกรายการที่ปรับ)</span
+						>
+					</Field.Label>
+					<Textarea
+						id="cycle-count-note"
+						bind:value={note}
+						maxlength={ADJUST_NOTE_MAX_LENGTH}
+						rows={2}
+						class="min-h-11 rounded-lg shadow-2xs"
+					/>
+				</Field.Root>
+
+				{#if failures.length > 0}
+					<div
+						class="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm"
+						role="alert"
+					>
+						<p class="font-semibold text-destructive">บันทึกไม่สำเร็จ {failures.length} รายการ</p>
+						<ul class="mt-1 list-disc pl-5">
+							{#each failures as failure (failure.ledger_id)}
+								<li>{itemName(failure.item_id)} — {failure.error}</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+			</form>
+		{/if}
+	</div>
+	{#if activeGroupLabel !== null}
+		<div class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-6">
+			<Button
+				type="submit"
+				form="cycle-count-form"
+				size="lg"
+				disabled={!canSave}
+				class="min-h-11 w-full font-bold"
+			>
 				{#if isSaving}
 					กำลังบันทึก…
 				{:else if submission.lines.length === 0}
@@ -366,5 +379,5 @@
 				{/if}
 			</Button>
 		</div>
-	</form>
-{/if}
+	{/if}
+</div>
