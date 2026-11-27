@@ -63,6 +63,7 @@ import {
  */
 type Guard = () => Promise<void>;
 const GUARD_OF: Record<string, Guard> = {
+	'/back-office/overview': requireManager,
 	'/back-office/evacuee-management': requireEvacueeRegistration,
 	'/back-office/volunteers': requireVolunteerBackoffice,
 	'/back-office/volunteers/accounts': requireVolunteerBackoffice,

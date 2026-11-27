@@ -48,7 +48,9 @@ export {
 	type InShelterStatus
 } from './domain/in-shelter';
 export {
+	presenceOnDay,
 	wasInShelterAllDay,
+	type DayPresence,
 	type PresenceInput,
 	type PresenceMovement
 } from './domain/in-shelter-day';

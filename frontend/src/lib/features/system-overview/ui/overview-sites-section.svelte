@@ -161,7 +161,7 @@
 								</Table.Cell>
 								<Table.Cell>
 									<a
-										href={resolve(site.dashboard_href as '/back-office/evacuee-management')}
+										href={resolve(site.dashboard_href as '/back-office/overview/evacuees')}
 										class="text-sm font-semibold text-[#0284C7] hover:underline"
 									>
 										แดชบอร์ด

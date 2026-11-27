@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MealPeriod } from '../../domain/food-supplies';
-import { preparedPortionsOfDay, servedMealsOfDay } from './meal-coverage-served';
+import { coverageDays, preparedPortionsOfDay, servedMealsOfDay } from './meal-coverage-served';
 
 const TODAY = '2026-11-10';
 const service = (id: string, meal: MealPeriod, date = TODAY) => ({ _id: id, date, meal });
@@ -120,5 +120,47 @@ describe('preparedPortionsOfDay', () => {
 	it('is null for a meal whose only meal_service was rejected', () => {
 		const services = [cooked('ms:1', 'dinner', { actual_yield: 10 })];
 		expect(preparedPortionsOfDay(TODAY, services, [receipt('ms:1', 'rejected')]).dinner).toBeNull();
+	});
+});
+
+describe('preparedPortionsOfDay over several days', () => {
+	const cooked = (id: string, meal: MealPeriod, yieldQty: number, date: string) => ({
+		...service(id, meal, date),
+		actual_yield: yieldQty
+	});
+
+	it('adds the portions of every day in the list, null for a meal made on none of them', () => {
+		const services = [
+			cooked('ms:1', 'breakfast', 10, '2026-11-08'),
+			cooked('ms:2', 'breakfast', 6, '2026-11-09'),
+			cooked('ms:3', 'lunch', 4, '2026-11-09'),
+			cooked('ms:4', 'dinner', 99, '2026-11-01')
+		];
+		expect(preparedPortionsOfDay(['2026-11-08', '2026-11-09'], services, [])).toEqual({
+			breakfast: 16,
+			lunch: 4,
+			dinner: null
+		});
+	});
+});
+
+describe('coverageDays', () => {
+	it('counts every main meal on a finished day and only the served ones today', () => {
+		const days = coverageDays({
+			days: ['2026-11-09', TODAY],
+			today: TODAY,
+			services: [service('ms:1', 'breakfast'), service('ms:2', 'lunch', '2026-11-09')],
+			receipts: []
+		});
+		expect(days).toEqual([
+			{ day: '2026-11-09', servedMeals: ['breakfast', 'lunch', 'dinner'] },
+			{ day: TODAY, servedMeals: ['breakfast'] }
+		]);
+	});
+
+	it('has no served meal today until a meal_service exists', () => {
+		expect(coverageDays({ days: [TODAY], today: TODAY, services: [], receipts: [] })).toEqual([
+			{ day: TODAY, servedMeals: [] }
+		]);
 	});
 });

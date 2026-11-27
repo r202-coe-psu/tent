@@ -46,6 +46,7 @@ import Images from '@lucide/svelte/icons/images';
 import Printer from '@lucide/svelte/icons/printer';
 import Ambulance from '@lucide/svelte/icons/ambulance';
 import Boxes from '@lucide/svelte/icons/boxes';
+import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 
 type Leaf = {
 	label: string;
@@ -98,6 +99,20 @@ export type BackofficeNavbarGroup = {
 export type BackofficeNavbarLeaf = Leaf;
 
 export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
+	{
+		// Centre dashboards (evacuees, food distribution) behind one button — SA + SM of the active
+		// shelter, same predicate as `requireManager` on /back-office/overview. Prefix matching in
+		// `activeNavHref` keeps it lit on both /overview/evacuees and /overview/food.
+		title: 'ภาพรวม',
+		items: [
+			{
+				label: 'ภาพรวมศูนย์',
+				href: resolve('/back-office/overview'),
+				icon: LayoutDashboard,
+				visibleTo: ({ roles, shelterCode }) => canAccessManagerPages(roles, shelterCode)
+			}
+		]
+	},
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [

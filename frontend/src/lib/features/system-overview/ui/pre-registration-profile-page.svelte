@@ -55,7 +55,7 @@
 			</Badge>
 			{#if profile.shelter_href}
 				<a
-					href={resolve(profile.shelter_href as '/back-office/evacuee-management')}
+					href={resolve(profile.shelter_href as '/back-office/overview/evacuees')}
 					class="text-sm font-semibold text-[#0284C7] hover:underline"
 				>
 					ไปที่ศูนย์
