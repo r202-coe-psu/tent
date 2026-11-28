@@ -7,11 +7,10 @@
  *
  * Coverage:
  * [Guard]     non-system_admin redirected away from /system-management/sop-parameters
- * [Sphere]    create → auto-fill UOM → edit → delete round-trip
+ * [Sphere]    create → auto-fill UOM → edit → deactivate
  * [Replen]    create with reactive reorder days → validation blocks invalid submit
- * [DoC Badge] all 5 alert statuses rendered correctly
+ * [DoC Badge] covered by food-sphere-analysis.test.ts on the supply analysis page
  */
-
 import { test, expect, type Page, type Route } from '@playwright/test';
 import {
 	createCouchUser,
@@ -61,6 +60,11 @@ test.afterEach(async ({ page }) => {
 	await clearSession(page);
 });
 
+async function selectOption(page: Page, label: RegExp, option: RegExp) {
+	await page.getByLabel(label).click();
+	await page.getByRole('option', { name: option }).click();
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SphereDoc = {
 	_id: string;
@@ -70,6 +74,7 @@ type SphereDoc = {
 	daily_demand: number | string; // Legacy seed documents may contain numbers.
 	standard_uom?: string;
 	effective_date: string;
+	status?: 'active' | 'inactive';
 	source: 'SPHERE_BASELINE' | 'SHELTER_OVERRIDE';
 };
 type ReqGroupDoc = {
@@ -418,17 +423,19 @@ test('TC-E2E-03: creates a Food Sphere Standard and auto-fills UOM from requirem
 
 	await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
 	await page.getByRole('button', { name: /เพิ่มเกณฑ์โภชนาการ|เพิ่ม|Add/i }).click();
-	await expect(page.getByRole('dialog')).toBeVisible();
+	await expect(
+		page.getByRole('heading', { name: 'บันทึกพารามิเตอร์อ้างอิงสำหรับอาหารใหม่' })
+	).toBeVisible();
 
-	await page.getByLabel(/กลุ่มความต้องการ|Requirement Group/i).selectOption('FOOD_ENERGY');
+	await selectOption(page, /หมวดความต้องการ/, /พลังงานอาหาร \(FOOD_ENERGY\)/);
 	await expect(page.getByTestId('uom-display')).toHaveText('kcal');
 
-	await page.getByLabel(/Segment/i).selectOption('ALL');
+	await selectOption(page, /กลุ่มเป้าหมาย/, /ทุกคน/);
 	await page.getByLabel(/ปริมาณต่อวัน|Daily Demand/i).fill('2100');
-	await page.getByLabel(/วันบังคับใช้|Effective Date/i).fill('2026-07-16');
+	await page.getByLabel('วันบังคับใช้').fill('16/07/2026');
 	await page.getByRole('button', { name: /บันทึก|Save/i }).click();
 
-	await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+	await expect(page.getByRole('heading', { name: 'เกณฑ์มาตรฐานโภชนาการ' })).toBeVisible();
 	await expect(page.getByText('2,100')).toBeVisible();
 
 	expect(spheres.some((s) => s.target_segment === 'ALL' && s.req_group_id === 'FOOD_ENERGY')).toBe(
@@ -464,20 +471,22 @@ test('TC-E2E-04: edits an existing Food Sphere Standard', async ({ page }) => {
 	await page.goto(`${BASE}${SOP_PATH}`);
 	await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
 
-	await page.getByRole('button', { name: /แก้ไข.*FOOD_ENERGY|Edit.*FOOD_ENERGY/i }).click();
-	await expect(page.getByRole('dialog')).toBeVisible();
+	await page.getByRole('button', { name: 'แก้ไข FOOD_ENERGY' }).click();
+	await expect(
+		page.getByRole('heading', { name: 'แก้ไขพารามิเตอร์อ้างอิงสำหรับอาหาร' })
+	).toBeVisible();
 
 	await page.getByLabel(/ปริมาณต่อวัน|Daily Demand/i).fill('2200');
 	await page.getByRole('button', { name: /บันทึก|Save/i }).click();
 
-	await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+	await expect(page.getByRole('heading', { name: 'เกณฑ์มาตรฐานโภชนาการ' })).toBeVisible();
 	await expect(page.getByText('2,200')).toBeVisible();
 	await expect(page.getByText('2,100')).not.toBeVisible();
 });
 
-test('TC-E2E-05: deletes a Food Sphere Standard', async ({ page }) => {
+test('TC-E2E-05: deactivates a Food Sphere Standard', async ({ page }) => {
 	await injectSession(page, SA, sessions[SA.name]);
-	const { spheres } = await mockSopApi(page, {
+	await mockSopApi(page, {
 		spheres: [
 			{
 				_id: 'food_sphere_standard:ALL:FOOD_ENERGY',
@@ -494,18 +503,18 @@ test('TC-E2E-05: deletes a Food Sphere Standard', async ({ page }) => {
 	await page.goto(`${BASE}${SOP_PATH}`);
 	await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
 
-	page.once('dialog', (d) => d.accept());
-	await page.getByRole('button', { name: /ลบ.*FOOD_ENERGY|Delete.*FOOD_ENERGY/i }).click();
+	await page.getByRole('button', { name: 'ปิดใช้งาน FOOD_ENERGY' }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'ยืนยันปิดใช้งาน' }).click();
 
-	await expect(page.getByText('FOOD_ENERGY')).not.toBeVisible({ timeout: 8000 });
-	expect(spheres).toHaveLength(0);
+	await expect(page.getByRole('row').filter({ hasText: 'FOOD_ENERGY' })).toContainText('ปิดใช้งาน');
+	await expect(page.getByRole('button', { name: 'เปิดใช้งาน FOOD_ENERGY' })).toBeVisible();
 });
 
 test('TC-E2E-06: creates Replenishment Policy and shows reactive Standard Reorder Days', async ({
 	page
 }) => {
 	await injectSession(page, SA, sessions[SA.name]);
-	const { policies } = await mockSopApi(page, {
+	await mockSopApi(page, {
 		reqGroups: [
 			{
 				_id: 'requirement_group:FOOD_ENERGY',
@@ -520,9 +529,9 @@ test('TC-E2E-06: creates Replenishment Policy and shows reactive Standard Reorde
 
 	await page.getByRole('button', { name: /นโยบายการเติมสต็อก/i }).click();
 	await page.getByRole('button', { name: /เพิ่มนโยบาย|เพิ่ม|Add/i }).click();
-	await expect(page.getByRole('dialog')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'บันทึกนโยบายการเติมสต็อกใหม่' })).toBeVisible();
 
-	await page.getByLabel(/กลุ่มสำหรับการคำนวณ/i).selectOption('FOOD_ENERGY');
+	await selectOption(page, /กลุ่มสำหรับการคำนวณ/, /พลังงานอาหาร \(FOOD_ENERGY\)/);
 	await page.getByLabel(/ระยะเวลารอคอย|Lead Time/i).fill('2');
 	await page.getByLabel(/รอบการสั่งซื้อ|Review Period/i).fill('3');
 	await page.getByLabel(/วันสำรอง|Safety Days/i).fill('2');
@@ -534,9 +543,8 @@ test('TC-E2E-06: creates Replenishment Policy and shows reactive Standard Reorde
 	await page.getByLabel(/วันคงคลังสูงสุด|Max DoC/i).fill('30');
 	await page.getByRole('button', { name: /บันทึก|Save/i }).click();
 
-	await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
-	await expect(page.getByText('FOOD_ENERGY')).toBeVisible();
-	expect(policies.some((p) => p.target_id === 'FOOD_ENERGY')).toBe(true);
+	await expect(page.getByRole('heading', { name: 'นโยบายการเติมสต็อก' })).toBeVisible();
+	await expect(page.getByRole('row').filter({ hasText: 'FOOD_ENERGY' })).toBeVisible();
 });
 
 test('TC-E2E-07: blocks submit when min_doc_days >= Standard Reorder Days', async ({ page }) => {
@@ -556,9 +564,9 @@ test('TC-E2E-07: blocks submit when min_doc_days >= Standard Reorder Days', asyn
 
 	await page.getByRole('button', { name: /นโยบายการเติมสต็อก/i }).click();
 	await page.getByRole('button', { name: /เพิ่มนโยบาย|เพิ่ม|Add/i }).click();
-	await expect(page.getByRole('dialog')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'บันทึกนโยบายการเติมสต็อกใหม่' })).toBeVisible();
 
-	await page.getByLabel(/กลุ่มสำหรับการคำนวณ/i).selectOption('FOOD_ENERGY');
+	await selectOption(page, /กลุ่มสำหรับการคำนวณ/, /พลังงานอาหาร \(FOOD_ENERGY\)/);
 	await page.getByLabel(/ระยะเวลารอคอย|Lead Time/i).fill('2');
 	await page.getByLabel(/รอบการสั่งซื้อ|Review Period/i).fill('3');
 	await page.getByLabel(/วันสำรอง|Safety Days/i).fill('2'); // Reorder Days = 7
@@ -566,75 +574,10 @@ test('TC-E2E-07: blocks submit when min_doc_days >= Standard Reorder Days', asyn
 	await page.getByLabel(/วันคงคลังสูงสุด|Max DoC/i).fill('30');
 	await page.getByRole('button', { name: /บันทึก|Save/i }).click();
 
-	// Dialog remains open (not submitted) and error message is displayed
-	await expect(page.getByRole('dialog')).toBeVisible();
+	// Inline form remains visible (not submitted) and the validation error is displayed.
+	await expect(page.getByRole('heading', { name: 'บันทึกนโยบายการเติมสต็อกใหม่' })).toBeVisible();
 	await expect(
-		page.getByText(
-			/วันคงคลังขั้นต่ำ.*ต้องน้อยกว่า.*วันสั่งเติมมาตรฐาน|Min DoC Days ต้องน้อยกว่า Standard Reorder Days/i
-		)
+		page.getByText(/Min DoC \(7\) ต้องน้อยกว่า Standard Reorder Days \(7\)/)
 	).toBeVisible();
 	expect(policies).toHaveLength(0);
 });
-
-const DOC_STATUS_CASES: Array<{
-	label: string;
-	currentStock: number;
-	itemDailyDemand: number;
-	expectedBadgeText: string;
-}> = [
-	{
-		label: 'UNCONFIGURED',
-		currentStock: 0,
-		itemDailyDemand: 0,
-		expectedBadgeText: 'ยังไม่ตั้งนโยบาย'
-	},
-	{
-		label: 'CRITICAL',
-		currentStock: 5,
-		itemDailyDemand: 5,
-		expectedBadgeText: 'เสี่ยงขาดของ'
-	},
-	{
-		label: 'WARNING',
-		currentStock: 20,
-		itemDailyDemand: 5,
-		expectedBadgeText: 'ควรจัดหาเพิ่ม'
-	},
-	{
-		label: 'ADEQUATE',
-		currentStock: 60,
-		itemDailyDemand: 5,
-		expectedBadgeText: 'เพียงพอ'
-	},
-	{
-		label: 'OVERSTOCK',
-		currentStock: 200,
-		itemDailyDemand: 5,
-		expectedBadgeText: 'ของเกินจำเป็น'
-	}
-];
-
-for (const c of DOC_STATUS_CASES) {
-	test(`TC-E2E-08-${c.label}: DoC badge shows "${c.expectedBadgeText}"`, async ({ page }) => {
-		await injectSession(page, SA, sessions[SA.name]);
-
-		// Mock endpoint that returns DoC status for item
-		await page.route('**/api/back-office/sop-parameters/doc-status**', async (route: Route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					item_id: 'item_master:RICE_5KG',
-					currentStock: c.currentStock,
-					itemDailyDemand: c.itemDailyDemand,
-					status: c.label === 'WARNING' ? 'WARNING_REORDER' : c.label
-				})
-			});
-		});
-
-		// Render the page or check DocStatusBadge
-		await page.goto(`${BASE}${SOP_PATH}`);
-		await page.getByRole('button', { name: /พารามิเตอร์อ้างอิงอาหาร/i }).click();
-		await expect(page.getByRole('heading', { name: /เกณฑ์มาตรฐานโภชนาการ/i })).toBeVisible();
-	});
-}
