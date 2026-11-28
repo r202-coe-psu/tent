@@ -48,6 +48,9 @@
 	const shelterCode = $derived(
 		basePath.includes('system-management') ? undefined : getShelterCode()
 	);
+	// All three queries are created up front: TanStack Query hooks must be called during
+	// component setup, not conditionally. Only the one matching this page's entity gets an id;
+	// the others get '' and stay disabled (`enabled: !!id`), so they never fetch.
 	const editId = (kind: typeof historyEntityType) =>
 		mode === 'edit' && historyEntityType === kind ? id : '';
 	const categoryQuery = useItemCategory(

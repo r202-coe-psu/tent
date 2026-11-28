@@ -76,7 +76,13 @@ export interface AuditEvent {
 	changes_unknown?: boolean;
 }
 
-export const AUDIT_VALUE_ALLOWLIST: Record<AuditEntityType, readonly string[]> = {
+/**
+ * Value allowlist for events the BFF records itself (`recordAudit`, CR-259 FR-30): only these
+ * fields keep `from`/`to`; any other changed field is recorded by name. Types the worker diffs
+ * from CouchDB (catalog, SOP, evacuee, household, medical) are not here — the worker records
+ * every field except a privacy denylist (`VALUE_DENYLIST` in `worker/src/worker/audit_diff.py`).
+ */
+export const AUDIT_VALUE_ALLOWLIST: Partial<Record<AuditEntityType, readonly string[]>> = {
 	shelter: [
 		'name',
 		'operation_status',
@@ -94,30 +100,7 @@ export const AUDIT_VALUE_ALLOWLIST: Record<AuditEntityType, readonly string[]> =
 	user: ['roles', 'display_name', 'active'],
 	master_data: [],
 	api_key: ['name', 'scopes', 'status', 'expires_at'],
-	thirdparty_client: ['name', 'status', 'allowed_scopes'],
-	item_category: ['name', 'default_class', 'is_default', 'deactivated'],
-	item_master: [
-		'name',
-		'sku',
-		'category',
-		'base_unit',
-		'distribution_type',
-		'type_class',
-		'qty_per_person',
-		'returnable',
-		'shelf_life_days',
-		'storage_type',
-		'deactivated',
-		'merged_into'
-	],
-	recipe: ['label', 'standard_portions', 'standard_duration_hours', 'deactivated'],
-	unit_of_measure: ['code', 'label_th', 'label_en', 'dimension', 'sort_order', 'deactivated'],
-	food_sphere_standard: [],
-	requirement_group: [],
-	replenishment_policy: [],
-	evacuee: ['household_id', 'preferred_zone', 'registered_via', 'anonymized'],
-	household: ['status', 'head_evacuee_id', 'housing_type'],
-	medical: []
+	thirdparty_client: ['name', 'status', 'allowed_scopes']
 };
 
 const IGNORED_FIELDS = new Set([
@@ -161,7 +144,7 @@ export function computeAuditChanges(
 ): AuditChange[] {
 	const prev = (before ?? {}) as Record<string, unknown>;
 	const next = (after ?? {}) as Record<string, unknown>;
-	const allowlist = new Set(AUDIT_VALUE_ALLOWLIST[entityType]);
+	const allowlist = new Set(AUDIT_VALUE_ALLOWLIST[entityType] ?? []);
 	const fields = [...new Set([...Object.keys(prev), ...Object.keys(next)])]
 		.filter((f) => !IGNORED_FIELDS.has(f))
 		.sort();
