@@ -234,23 +234,22 @@
 	{:else}
 		<!-- Filter Bar -->
 		<div class="border-b border-border/60 bg-card p-4">
-			<div class="flex flex-col gap-3 md:flex-row md:items-end">
+			<div class="space-y-3">
 				<!-- Search input -->
-				<div class="relative flex-1">
-					<Search
-						class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-					/>
+				<div class="relative w-full">
+					<Search class="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
 					<Input
 						type="text"
 						placeholder="ค้นหาชื่อผู้บริจาค, รหัสคำขอ, หรือรายการสิ่งของ..."
+						aria-label="ค้นหาชื่อผู้บริจาค รหัสคำขอ หรือรายการสิ่งของ"
 						bind:value={searchQuery}
-						class="h-9 rounded-xl pl-9 text-xs"
+						class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 					/>
 				</div>
 
 				<!-- Filter dropdowns -->
-				<div class="flex flex-wrap items-end gap-2">
-					<div class="space-y-1">
+				<div class="flex flex-wrap items-end gap-3">
+					<div class="flex flex-col gap-1.5">
 						<Label
 							id="{sourceId}-label"
 							for={sourceId}
@@ -263,7 +262,7 @@
 							<Select.Trigger
 								id={sourceId}
 								aria-labelledby="{sourceId}-label {sourceId}"
-								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+								class="h-10 rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10"
 							>
 								{sourceLabel}
 							</Select.Trigger>
@@ -275,7 +274,7 @@
 						</Select.Root>
 					</div>
 
-					<div class="space-y-1">
+					<div class="flex flex-col gap-1.5">
 						<Label id="{sortId}-label" for={sortId} class="text-xs font-semibold text-slate-600">
 							เรียง
 						</Label>
@@ -283,7 +282,7 @@
 							<Select.Trigger
 								id={sortId}
 								aria-labelledby="{sortId}-label {sortId}"
-								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+								class="h-10 rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10"
 							>
 								{sortLabel}
 							</Select.Trigger>

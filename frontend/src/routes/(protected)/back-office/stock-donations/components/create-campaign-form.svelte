@@ -6,10 +6,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { toast } from 'svelte-sonner';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		canonicalizeUnitCode,
@@ -24,13 +27,14 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode, resolveShelterCode } from '$lib/db/shelter';
-	import { persistQty, qtyGt } from '$lib/utils/qty';
+	import { persistQty } from '$lib/utils/qty';
 	import {
 		needPointToSave,
 		resolveNeedPointField,
 		useDonationPoints
 	} from '$lib/features/operations';
 	import NeedDropOffPointField from './need-drop-off-point-field.svelte';
+	import { createCampaignFormSchema, type CreateCampaignFormValues } from './campaign-form.schema';
 
 	interface Props {
 		onclose: () => void;
@@ -50,6 +54,72 @@
 
 	let { onclose, onsubmit }: Props = $props();
 
+	// Field rules live in `campaign-form.schema.ts`. The three that read runtime data (catalog
+	// row, UOM master, drop-off points) go through getters, read when validation runs.
+	const schema = createCampaignFormSchema({
+		lookupItem: (itemId) => {
+			const item = catalogItems.find((c) => c._id === itemId);
+			if (!item) return undefined;
+			const unit = item.unit?.trim() ?? '';
+			return { unit, unitCode: canonicalizeUnitCode(unit, unitsOfMeasure) };
+		},
+		pointReady: (chosen) =>
+			donationPoints.isLoaded && needPointToSave(pointField, chosen || null) !== undefined
+	});
+
+	const initialValues: CreateCampaignFormValues = {
+		itemId: '',
+		target: '',
+		urgency: 'critical',
+		dropOffPointId: '',
+		description: ''
+	};
+
+	const FIELD_IDS = {
+		itemId: 'campaign-item-title',
+		target: 'campaign-target-qty',
+		dropOffPointId: 'campaign-drop-off-point',
+		description: 'campaign-description'
+	} as const;
+
+	const form = superForm(defaults(initialValues, zod4Client(schema)), {
+		SPA: true,
+		dataType: 'json',
+		validators: zod4Client(schema),
+		// The parent decides what happens after a save; a failed save must keep what was typed.
+		resetForm: false,
+		applyAction: false,
+		// Focus is moved below, to the same element ids the e2e specs know.
+		autoFocusOnError: false,
+		scrollToError: 'off',
+		warnings: { duplicateId: false },
+		onUpdate: ({ form: validated }) => {
+			if (!validated.valid) {
+				const firstInvalid = (Object.keys(FIELD_IDS) as (keyof typeof FIELD_IDS)[]).find(
+					(k) => validated.errors[k]?.length
+				);
+				if (firstInvalid) document.getElementById(FIELD_IDS[firstInvalid])?.focus();
+				toast.error('กรุณาแก้ไขข้อมูลที่ไม่ถูกต้องในแบบฟอร์ม');
+				return;
+			}
+			if (!selectedItem || pointToSave === undefined) return;
+
+			onsubmit({
+				itemId: validated.data.itemId,
+				name: selectedItem.name,
+				target: persistQty(validated.data.target),
+				location: 'คลังช่วยเหลือภัยพิบัติ EOC',
+				category: category.trim() || 'ของใช้ทั่วไป',
+				unit: finalUnit,
+				urgency: validated.data.urgency,
+				description: validated.data.description.trim(),
+				dropOffPointId: pointToSave
+			});
+		}
+	});
+
+	const { form: formData, enhance } = form;
+
 	/**
 	 * The item is PICKED from the catalog, never guessed from what staff typed.
 	 *
@@ -60,11 +130,9 @@
 	 * catalog — schema.md §2.4). Staff had no way to see the wrong binding before
 	 * saving. Picking the catalog row makes the binding the thing being chosen.
 	 */
-	let selectedItemId = $state('');
 	// `null` = "still following the catalog's value". Set the moment staff pick for
 	// themselves, so changing the item cannot undo their choice.
 	let categoryChoice = $state<string | null>(null);
-	let targetQty = $state('');
 
 	// Same gate and same sheet as the scan station's "เพิ่มสินค้าใหม่".
 	// `null` = no shelter resolved: hide the way in rather than write to the 'SH001' guess.
@@ -84,8 +152,8 @@
 	 * `catalogItems`, so the row the picker shows for that name is selected instead.
 	 */
 	function selectFromSheet(item: { _id: string; name: string }): string {
-		selectedItemId = mergedCatalogIdFor(catalogItems, item);
-		return selectedItemId;
+		$formData.itemId = mergedCatalogIdFor(catalogItems, item);
+		return $formData.itemId;
 	}
 
 	function pickCreatedItem(item: { _id: string; name: string }) {
@@ -114,18 +182,15 @@
 		{ value: 'normal', label: 'ปกติ (Normal)' }
 	] as const;
 
-	let urgency = $state<'critical' | 'important' | 'normal'>('critical');
-
 	// Staff, not donors, decide where this need's goods go (see need-drop-off-point.ts).
 	const donationPoints = useDonationPoints(() => getShelterCode());
 	const pointField = $derived(resolveNeedPointField(donationPoints.points));
-	let pointChoice = $state<string | null>(null);
-	const chosenPoint = $derived(pointChoice ?? pointField.value);
+	// Staff's explicit pick only ('' = none yet); until then the field follows `pointField`.
+	const chosenPoint = $derived($formData.dropOffPointId || pointField.value);
 	const pointToSave = $derived(needPointToSave(pointField, chosenPoint));
 	// Until the shelter doc is read the point list is empty, and saving then would
 	// store `null` for a shelter that does have points.
 	const canSave = $derived(donationPoints.isLoaded && pointToSave !== undefined);
-	let description = $state('');
 
 	// Same two sources the scan station and the hint below read, so all three agree on
 	// what "the catalog" is.
@@ -151,7 +216,7 @@
 				: c.name
 		}))
 	);
-	const selectedItem = $derived(catalogItems.find((c) => c._id === selectedItemId));
+	const selectedItem = $derived(catalogItems.find((c) => c._id === $formData.itemId));
 
 	/**
 	 * Catalog rows carry a code (`food`, `hygiene`, …); this form's dropdown is the
@@ -199,52 +264,9 @@
 	const categoryLabel = $derived(
 		CATEGORY_OPTIONS.find((o) => o.value === category)?.label ?? category
 	);
-	const urgencyLabel = $derived(URGENCY_OPTIONS.find((o) => o.value === urgency)?.label ?? urgency);
-
-	function handleSubmit(e: Event) {
-		e.preventDefault();
-		if (!selectedItemId || !selectedItem) {
-			toast.error('กรุณาเลือกรายการสิ่งของจากแคตตาล็อก');
-			return;
-		}
-		if (!targetQty.trim() || !qtyGt(targetQty, 0)) {
-			toast.error('กรุณาระบุจำนวนเป้าหมายที่ถูกต้อง');
-			return;
-		}
-		// The unit is the catalog's (see `catalogUnit`), so there is nothing to pick —
-		// but an item_master row with no `base_unit` would silently save `piece`, which
-		// the ledger would then disagree with. Refuse instead.
-		if (!catalogUnit) {
-			toast.error('รายการนี้ยังไม่มีหน่วยฐานในแคตตาล็อก — กรุณาตั้งหน่วยที่ Item Master ก่อน');
-			return;
-		}
-		if (!finalUnit) {
-			toast.error(
-				`หน่วย "${catalogUnit}" ของรายการนี้ไม่อยู่ในรายการหน่วยนับ — กรุณาแก้หน่วยที่ Item Master ก่อน`
-			);
-			return;
-		}
-		if (!description.trim()) {
-			toast.error('กรุณาระบุเหตุผลหรือรายละเอียดเพิ่มเติม');
-			return;
-		}
-		if (!canSave || pointToSave === undefined) {
-			toast.error('กรุณาเลือกจุดรับบริจาค');
-			return;
-		}
-
-		onsubmit({
-			itemId: selectedItemId,
-			name: selectedItem.name,
-			target: persistQty(targetQty),
-			location: 'คลังช่วยเหลือภัยพิบัติ EOC',
-			category: category.trim() || 'ของใช้ทั่วไป',
-			unit: finalUnit,
-			urgency,
-			description: description.trim(),
-			dropOffPointId: pointToSave
-		});
-	}
+	const urgencyLabel = $derived(
+		URGENCY_OPTIONS.find((o) => o.value === $formData.urgency)?.label ?? $formData.urgency
+	);
 </script>
 
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
@@ -272,7 +294,7 @@
 	</div>
 
 	<!-- Form Body -->
-	<form onsubmit={handleSubmit} class="space-y-6 p-6 md:p-8">
+	<form method="post" use:enhance novalidate class="space-y-6 p-6 md:p-8">
 		<div class="space-y-4">
 			<h3 class="flex items-center gap-2 text-xs font-bold text-foreground md:text-sm">
 				<PlusCircle class="h-4 w-4 text-muted-foreground" />
@@ -280,21 +302,26 @@
 			</h3>
 
 			<!-- Item — picked from the catalog, not typed -->
-			<div>
-				<Label for="campaign-item-title" class="mb-1.5 text-xs font-bold text-foreground">
-					รายการสิ่งของ (Item) <span class="text-destructive">*</span>
-				</Label>
-				<SearchSelect
-					items={catalogOptions}
-					bind:value={selectedItemId}
-					loading={catalogLoading}
-					placeholder="พิมพ์เพื่อค้นหารายการในแคตตาล็อก..."
-					emptyText={canCreateItem
-						? 'ไม่พบรายการนี้ในแคตตาล็อก — กด “เพิ่มสินค้าใหม่” ด้านล่าง'
-						: 'ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน'}
-					class="h-10 rounded-xl text-xs"
-					controlProps={{ id: 'campaign-item-title' }}
-				/>
+			<Form.Field {form} name="itemId" class="space-y-0">
+				<Form.Control id="campaign-item-title">
+					{#snippet children({ props })}
+						<Form.Label class="mb-1.5 text-xs font-bold text-foreground">
+							รายการสิ่งของ (Item) <span class="text-destructive">*</span>
+						</Form.Label>
+						<SearchSelect
+							items={catalogOptions}
+							bind:value={$formData.itemId}
+							loading={catalogLoading}
+							placeholder="พิมพ์เพื่อค้นหารายการในแคตตาล็อก..."
+							emptyText={canCreateItem
+								? 'ไม่พบรายการนี้ในแคตตาล็อก — กด “เพิ่มสินค้าใหม่” ด้านล่าง'
+								: 'ไม่พบรายการนี้ในแคตตาล็อก — สร้างในหน้าจัดการข้อมูลหลักก่อน'}
+							class="h-10 rounded-xl text-xs"
+							controlProps={props}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors id="campaign-item-title-error" class="text-xs" errorClasses="mt-1.5" />
 				{#if canCreateItem}
 					<p class="mt-1.5 text-3xs text-muted-foreground">
 						ประกาศผูกกับรหัสในแคตตาล็อกโดยตรง — ไม่ได้เดาจากชื่อที่พิมพ์อีกต่อไป ไม่พบรายการ? กด
@@ -315,7 +342,7 @@
 						ถ้ายังไม่มีรายการนี้ ให้สร้างในหน้าจัดการข้อมูลหลักก่อน
 					</p>
 				{/if}
-			</div>
+			</Form.Field>
 
 			<!-- Category -->
 			<div>
@@ -339,19 +366,24 @@
 
 			<!-- Target Qty and Unit (2 columns) -->
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-				<div>
-					<Label for="campaign-target-qty" class="mb-1.5 text-xs font-bold text-foreground">
-						จำนวนเป้าหมาย (Target Quantity) <span class="text-destructive">*</span>
-					</Label>
-					<Input
-						id="campaign-target-qty"
-						type="text"
-						inputmode="decimal"
-						placeholder="เช่น 100, 500"
-						bind:value={targetQty}
-						class="h-10 rounded-xl text-xs"
-					/>
-				</div>
+				<Form.Field {form} name="target" class="space-y-0">
+					<Form.Control id="campaign-target-qty">
+						{#snippet children({ props })}
+							<Form.Label class="mb-1.5 text-xs font-bold text-foreground">
+								จำนวนเป้าหมาย (Target Quantity) <span class="text-destructive">*</span>
+							</Form.Label>
+							<Input
+								{...props}
+								type="text"
+								inputmode="decimal"
+								placeholder="เช่น 100, 500"
+								bind:value={$formData.target}
+								class="h-10 rounded-xl text-xs"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors id="campaign-target-qty-error" class="text-xs" errorClasses="mt-1.5" />
+				</Form.Field>
 
 				<div>
 					<span class="mb-1.5 block text-xs font-bold text-foreground">
@@ -362,7 +394,7 @@
 						title="หน่วยฐานจากแคตตาล็อก — แก้ที่นี่ไม่ได้ เพราะยอดคงคลังนับด้วยหน่วยนี้"
 					>
 						{formatUnit(catalogUnit, unitsOfMeasure, langState.current) ||
-							(selectedItemId ? 'แคตตาล็อกไม่ได้ระบุหน่วย' : 'เลือกรายการพัสดุก่อน')}
+							($formData.itemId ? 'แคตตาล็อกไม่ได้ระบุหน่วย' : 'เลือกรายการพัสดุก่อน')}
 					</div>
 					<p class="mt-1.5 text-3xs text-muted-foreground">
 						มาจากหน่วยฐานของรายการในแคตตาล็อก — ต้องแก้ที่แคตตาล็อกถ้าไม่ถูกต้อง
@@ -382,7 +414,7 @@
 				<Label for="campaign-urgency" class="mb-1.5 text-xs font-bold text-foreground">
 					ความเร่งด่วน (Urgency Level)
 				</Label>
-				<Select.Root type="single" bind:value={urgency}>
+				<Select.Root type="single" bind:value={$formData.urgency}>
 					<Select.Trigger
 						id="campaign-urgency"
 						class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
@@ -402,22 +434,36 @@
 				field={pointField}
 				points={donationPoints.points}
 				value={chosenPoint}
-				onchange={(id) => (pointChoice = id)}
+				onchange={(id) => ($formData.dropOffPointId = id)}
 			/>
+			<Form.Field {form} name="dropOffPointId" class="space-y-0">
+				<Form.FieldErrors
+					id="campaign-drop-off-point-error"
+					class="text-xs"
+					errorClasses="mt-1.5"
+				/>
+			</Form.Field>
 
 			<!-- Reason / Details -->
-			<div>
-				<Label for="campaign-description" class="mb-1.5 text-xs font-bold text-foreground">
-					เหตุผลหรือรายละเอียดเพิ่มเติม (Reason / Details) <span class="text-destructive">*</span>
-				</Label>
-				<Textarea
-					id="campaign-description"
-					rows={3}
-					placeholder="ระบุวัตถุประสงค์ในการประกาศขอรับ เช่น สำหรับใช้ทำอาหารแจกจ่ายประจำวัน หรือ สำหรับผู้เข้าพักที่บ้านเรือนพังเสียหาย..."
-					bind:value={description}
-					class="rounded-xl text-xs"
-				/>
-			</div>
+			<Form.Field {form} name="description" class="space-y-0">
+				<Form.Control id="campaign-description">
+					{#snippet children({ props })}
+						<Form.Label class="mb-1.5 text-xs font-bold text-foreground">
+							เหตุผลหรือรายละเอียดเพิ่มเติม (Reason / Details) <span class="text-destructive"
+								>*</span
+							>
+						</Form.Label>
+						<Textarea
+							{...props}
+							rows={3}
+							placeholder="ระบุวัตถุประสงค์ในการประกาศขอรับ เช่น สำหรับใช้ทำอาหารแจกจ่ายประจำวัน หรือ สำหรับผู้เข้าพักที่บ้านเรือนพังเสียหาย..."
+							bind:value={$formData.description}
+							class="rounded-xl text-xs"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors id="campaign-description-error" class="text-xs" errorClasses="mt-1.5" />
+			</Form.Field>
 		</div>
 
 		<!-- Footer Action Buttons — stacked full width on mobile so the long submit label fits -->

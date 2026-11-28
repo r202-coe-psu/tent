@@ -5,14 +5,17 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
 	import { parseCampaignNotes, type NeedItem } from '$lib/features/operations';
-	import { persistQty, qtyGt, roundQty } from '$lib/utils/qty';
+	import { persistQty, roundQty } from '$lib/utils/qty';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		canonicalizeUnitCode,
@@ -27,6 +30,11 @@
 		useDonationPoints
 	} from '$lib/features/operations';
 	import NeedDropOffPointField from './need-drop-off-point-field.svelte';
+	import {
+		editCampaignFormSchema,
+		isTargetBelowPledged,
+		type EditCampaignFormValues
+	} from './campaign-form.schema';
 
 	interface Props {
 		item: NeedItem;
@@ -70,21 +78,93 @@
 	}));
 	const editedNeed = seed.need;
 
-	let campaignTitle = $state(seed.title);
-	let category = $state(
-		seed.notes.category && CATEGORY_OPTIONS.includes(seed.notes.category)
-			? seed.notes.category
-			: 'อื่นๆ'
-	);
-	let targetQty = $state(editedNeed?.target ?? '0');
-	let urgency = $state<'critical' | 'important' | 'normal'>(seed.notes.urgency);
-	// Seeded like every other note-borne field: the save below rebuilds the whole
-	// notes string, so a value this form does not read back is dropped on save.
+	const initialValues: EditCampaignFormValues = {
+		title: seed.title,
+		category:
+			seed.notes.category && CATEGORY_OPTIONS.includes(seed.notes.category)
+				? seed.notes.category
+				: 'อื่นๆ',
+		target: editedNeed?.target ?? '0',
+		urgency: seed.notes.urgency,
+		dropOffPointId: '',
+		// Seeded like every other note-borne field: the save below rebuilds the whole
+		// notes string, so a value this form does not read back is dropped on save.
+		description: seed.notes.description ?? ''
+	};
+
 	// No input any more (see the urgency row below) but still seeded and written back:
 	// `buildCampaignNotes` rebuilds the WHOLE notes string on save, so dropping this
 	// would silently erase an `imageUrl` an existing campaign already carries.
 	let imageUrl = $state(seed.notes.imageUrl ?? '');
-	let description = $state(seed.notes.description ?? '');
+
+	// What donors already pledged against this need. Read-only: it is derived from
+	// donation docs, and lowering the target below it is what Force Cut-off is for.
+	const pledged = roundQty(editedNeed?.reserved ?? '0');
+
+	// Field rules live in `campaign-form.schema.ts`. `unitLabel` and `pointReady` read runtime
+	// data (catalog, shelter doc), so they are getters, read when validation runs.
+	const schema = editCampaignFormSchema({
+		pledged,
+		unitLabel: () => finalUnit,
+		// '' = no explicit pick yet, so the field still holds the need's stored point.
+		pointReady: (chosen) =>
+			donationPoints.isLoaded &&
+			needPointToSave(pointField, chosen || pointField.value) !== undefined
+	});
+
+	const FIELD_IDS = {
+		title: 'edit-campaign-title',
+		target: 'edit-item-target',
+		dropOffPointId: 'edit-item-drop-off-point'
+	} as const;
+
+	const form = superForm(defaults(initialValues, zod4Client(schema)), {
+		SPA: true,
+		dataType: 'json',
+		validators: zod4Client(schema),
+		// The parent decides what happens after a save; a failed save must keep what was typed.
+		resetForm: false,
+		applyAction: false,
+		// Focus is moved below, to the same element ids the e2e specs know.
+		autoFocusOnError: false,
+		scrollToError: 'off',
+		warnings: { duplicateId: false },
+		onUpdate: ({ form: validated }) => {
+			// The unit comes from the catalog and has no field to mark, so it stays a toast.
+			if (!rawUnit) {
+				toast.error('กรุณาระบุหน่วยนับ');
+				return;
+			}
+			if (!finalUnit) {
+				toast.error(
+					`หน่วย "${rawUnit}" ของรายการนี้ไม่อยู่ในรายการหน่วยนับ — กรุณาแก้หน่วยที่ Item Master ก่อน`
+				);
+				return;
+			}
+			if (!validated.valid) {
+				const firstInvalid = (Object.keys(FIELD_IDS) as (keyof typeof FIELD_IDS)[]).find(
+					(k) => validated.errors[k]?.length
+				);
+				if (firstInvalid) document.getElementById(FIELD_IDS[firstInvalid])?.focus();
+				toast.error('กรุณาแก้ไขข้อมูลที่ไม่ถูกต้องในแบบฟอร์ม');
+				return;
+			}
+			if (pointToSave === undefined) return;
+
+			onsubmit({
+				title: validated.data.title.trim(),
+				category: validated.data.category.trim(),
+				unit: finalUnit,
+				target: persistQty(validated.data.target),
+				urgency: validated.data.urgency,
+				imageUrl: imageUrl.trim(),
+				description: validated.data.description.trim(),
+				dropOffPointId: pointToSave
+			});
+		}
+	});
+
+	const { form: formData, enhance } = form;
 
 	// A null or no-longer-current stored point starts empty when there are several to
 	// choose from, so a save cannot keep a point that has been removed (FR-AP-4a).
@@ -92,14 +172,10 @@
 	const pointField = $derived(
 		resolveNeedPointField(donationPoints.points, editedNeed?.dropOffPointId)
 	);
-	let pointChoice = $state<string | null>(null);
-	const chosenPoint = $derived(pointChoice ?? pointField.value);
+	// Staff's explicit pick only ('' = none yet); until then the field follows `pointField`.
+	const chosenPoint = $derived($formData.dropOffPointId || pointField.value);
 	const pointToSave = $derived(needPointToSave(pointField, chosenPoint));
 	const canSave = $derived(donationPoints.isLoaded && pointToSave !== undefined);
-
-	// What donors already pledged against this need. Read-only: it is derived from
-	// donation docs, and lowering the target below it is what Force Cut-off is for.
-	const pledged = roundQty(editedNeed?.reserved ?? '0');
 
 	/**
 	 * A target below what donors already pledged is refused HERE, at the point of entry.
@@ -114,9 +190,7 @@
 	 * Lowering to EXACTLY the pledged figure is allowed — the need goes full rather than
 	 * over-full. Closing a need that is still short is what Force Cut-off is for.
 	 */
-	const belowPledged = $derived(
-		!!targetQty.trim() && qtyGt(targetQty, 0) && qtyGt(pledged, targetQty)
-	);
+	const belowPledged = $derived(isTargetBelowPledged($formData.target, pledged));
 
 	const URGENCY_OPTIONS = [
 		{ value: 'normal', label: 'ปกติ (Normal)' },
@@ -159,51 +233,9 @@
 	// them through the UOM master so saving the form is what corrects the stored unit.
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
 	const finalUnit = $derived(canonicalizeUnitCode(rawUnit, unitsOfMeasureQuery.data ?? []) ?? '');
-	const urgencyLabel = $derived(URGENCY_OPTIONS.find((o) => o.value === urgency)?.label ?? urgency);
-
-	function handleSubmit(e: Event) {
-		e.preventDefault();
-		if (!campaignTitle.trim()) {
-			toast.error('กรุณาระบุชื่อประกาศ');
-			return;
-		}
-		if (!rawUnit) {
-			toast.error('กรุณาระบุหน่วยนับ');
-			return;
-		}
-		if (!finalUnit) {
-			toast.error(
-				`หน่วย "${rawUnit}" ของรายการนี้ไม่อยู่ในรายการหน่วยนับ — กรุณาแก้หน่วยที่ Item Master ก่อน`
-			);
-			return;
-		}
-		if (!targetQty.trim() || !qtyGt(targetQty, 0)) {
-			toast.error('กรุณาระบุจำนวนเป้าหมายที่ถูกต้อง');
-			return;
-		}
-		if (belowPledged) {
-			toast.error(
-				`ตั้งเป้าต่ำกว่ายอดที่ผู้บริจาคจองไว้แล้ว (${pledged} ${finalUnit}) ไม่ได้ — ใช้ Force Cut-off เพื่อปิดรับแทน`
-			);
-			return;
-		}
-
-		if (!canSave || pointToSave === undefined) {
-			toast.error('กรุณาเลือกจุดรับบริจาค');
-			return;
-		}
-
-		onsubmit({
-			title: campaignTitle.trim(),
-			category: category.trim(),
-			unit: finalUnit,
-			target: persistQty(targetQty),
-			urgency,
-			imageUrl: imageUrl.trim(),
-			description: description.trim(),
-			dropOffPointId: pointToSave
-		});
-	}
+	const urgencyLabel = $derived(
+		URGENCY_OPTIONS.find((o) => o.value === $formData.urgency)?.label ?? $formData.urgency
+	);
 </script>
 
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
@@ -231,31 +263,36 @@
 	</div>
 
 	<!-- Form Body -->
-	<form onsubmit={handleSubmit} class="space-y-6 p-6 md:p-8">
+	<form method="post" use:enhance novalidate class="space-y-6 p-6 md:p-8">
 		<!-- Row 1: Campaign title & Category -->
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-			<div>
-				<Label for="edit-campaign-title" class="mb-1.5 text-xs font-bold text-foreground">
-					ชื่อประกาศ (Campaign) <span class="text-destructive">*</span>
-				</Label>
-				<Input
-					id="edit-campaign-title"
-					type="text"
-					bind:value={campaignTitle}
-					class="h-10 rounded-xl text-xs"
-				/>
-			</div>
+			<Form.Field {form} name="title" class="space-y-0">
+				<Form.Control id="edit-campaign-title">
+					{#snippet children({ props })}
+						<Form.Label class="mb-1.5 text-xs font-bold text-foreground">
+							ชื่อประกาศ (Campaign) <span class="text-destructive">*</span>
+						</Form.Label>
+						<Input
+							{...props}
+							type="text"
+							bind:value={$formData.title}
+							class="h-10 rounded-xl text-xs"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors id="edit-campaign-title-error" class="text-xs" errorClasses="mt-1.5" />
+			</Form.Field>
 
 			<div>
 				<Label for="edit-item-category" class="mb-1.5 text-xs font-bold text-foreground">
 					หมวดหมู่ (Category)
 				</Label>
-				<Select.Root type="single" bind:value={category}>
+				<Select.Root type="single" bind:value={$formData.category}>
 					<Select.Trigger
 						id="edit-item-category"
 						class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
 					>
-						{category}
+						{$formData.category}
 					</Select.Trigger>
 					<Select.Content>
 						{#each CATEGORY_OPTIONS as option (option)}
@@ -291,22 +328,27 @@
 				</p>
 			</div>
 
-			<div>
-				<Label for="edit-item-target" class="mb-1.5 text-xs font-bold text-foreground">
-					เป้าหมายที่ต้องการ (Target) <span class="text-destructive">*</span>
-				</Label>
-				<Input
-					id="edit-item-target"
-					type="text"
-					inputmode="decimal"
-					bind:value={targetQty}
-					class="h-10 rounded-xl text-xs"
-				/>
+			<Form.Field {form} name="target" class="space-y-0">
+				<Form.Control id="edit-item-target">
+					{#snippet children({ props })}
+						<Form.Label class="mb-1.5 text-xs font-bold text-foreground">
+							เป้าหมายที่ต้องการ (Target) <span class="text-destructive">*</span>
+						</Form.Label>
+						<Input
+							{...props}
+							type="text"
+							inputmode="decimal"
+							bind:value={$formData.target}
+							class="h-10 rounded-xl text-xs"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors id="edit-item-target-error" class="text-xs" errorClasses="mt-1.5" />
 				<p class="mt-1.5 text-3xs text-muted-foreground">
 					ผู้บริจาคจองไว้แล้ว {pledged}
 					{finalUnit} — ตั้งเป้าเท่ากับยอดนี้จะทำให้รายการปิดรับทันที และตั้งต่ำกว่านี้ไม่ได้
 				</p>
-			</div>
+			</Form.Field>
 		</div>
 
 		{#if belowPledged}
@@ -317,7 +359,7 @@
 					ผู้บริจาคจองไว้แล้ว {pledged}
 					{finalUnit} ซึ่งเป็นคำสัญญาที่ให้ไปแล้วและยังต้องรับของ — ตั้งเป้าต่ำกว่านี้จะทำให้ยอดจองเกินเป้า
 					ระบบจึงไม่ลดเพดานฝั่งผู้บริจาคตาม ถ้าต้องการหยุดรับบริจาครายการนี้ ให้ใช้
-					<span class="font-bold">Force Cut-off</span> แทนการลดเป้า
+					<span class="font-bold">ปิดรับบริจาคด่วน</span> แทนการลดเป้า
 				</Alert.Description>
 			</Alert.Root>
 		{/if}
@@ -333,7 +375,7 @@
 			<Label for="edit-item-urgency" class="mb-1.5 text-xs font-bold text-foreground">
 				ความเร่งด่วน (Urgency Level)
 			</Label>
-			<Select.Root type="single" bind:value={urgency}>
+			<Select.Root type="single" bind:value={$formData.urgency}>
 				<Select.Trigger
 					id="edit-item-urgency"
 					class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
@@ -353,8 +395,11 @@
 			field={pointField}
 			points={donationPoints.points}
 			value={chosenPoint}
-			onchange={(id) => (pointChoice = id)}
+			onchange={(id) => ($formData.dropOffPointId = id)}
 		/>
+		<Form.Field {form} name="dropOffPointId" class="space-y-0">
+			<Form.FieldErrors id="edit-item-drop-off-point-error" class="text-xs" errorClasses="mt-1.5" />
+		</Form.Field>
 
 		<!-- Row 4: Reason / Details -->
 		<div>
@@ -365,7 +410,7 @@
 				id="edit-item-details"
 				rows={3}
 				placeholder="เช่น ต้องการด่วนสำหรับผู้ป่วยติดเตียง..."
-				bind:value={description}
+				bind:value={$formData.description}
 				class="rounded-xl text-xs"
 			/>
 			<p class="mt-1.5 text-3xs text-muted-foreground">

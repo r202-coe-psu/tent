@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import Search from '@lucide/svelte/icons/search';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -63,7 +64,7 @@
 		{ value: 'showing', label: 'กำลังโชว์บนหน้าเว็บ' },
 		{ value: 'hidden', label: 'ซ่อนจากหน้าเว็บ' },
 		{ value: 'reached', label: 'ครบถ้วน' },
-		{ value: 'closed', label: 'Force Cut-off' }
+		{ value: 'closed', label: 'ปิดรับบริจาคด่วน' }
 	];
 	const SORT_OPTIONS = [
 		{ value: 'progress_asc', label: 'ความคืบหน้าน้อยไปมาก' },
@@ -245,23 +246,22 @@
 
 		<!-- Filter Bar -->
 		<div class="border-b border-border/60 bg-card p-4">
-			<div class="flex flex-col gap-3 md:flex-row md:items-end">
+			<div class="space-y-3">
 				<!-- Search input -->
-				<div class="relative flex-1">
-					<Search
-						class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-					/>
+				<div class="relative w-full">
+					<Search class="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
 					<Input
 						type="text"
 						placeholder="ค้นหาชื่อสินค้า/รายการประกาศ..."
+						aria-label="ค้นหาชื่อสินค้าหรือรายการประกาศ"
 						bind:value={searchQuery}
-						class="h-9 rounded-xl pl-9 text-xs"
+						class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 					/>
 				</div>
 
 				<!-- Filter dropdowns -->
-				<div class="flex flex-wrap items-end gap-2">
-					<div class="space-y-1">
+				<div class="flex flex-wrap items-end gap-3">
+					<div class="flex flex-col gap-1.5">
 						<Label
 							id="{statusId}-label"
 							for={statusId}
@@ -274,7 +274,7 @@
 							<Select.Trigger
 								id={statusId}
 								aria-labelledby="{statusId}-label {statusId}"
-								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+								class="h-10 rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10"
 							>
 								{statusLabel}
 							</Select.Trigger>
@@ -286,7 +286,7 @@
 						</Select.Root>
 					</div>
 
-					<div class="space-y-1">
+					<div class="flex flex-col gap-1.5">
 						<Label id="{sortId}-label" for={sortId} class="text-xs font-semibold text-slate-600">
 							เรียง
 						</Label>
@@ -294,7 +294,7 @@
 							<Select.Trigger
 								id={sortId}
 								aria-labelledby="{sortId}-label {sortId}"
-								class="h-9 rounded-xl text-xs data-[size=default]:h-9"
+								class="h-10 rounded-lg bg-white px-2.5 text-sm shadow-2xs data-[size=default]:h-10"
 							>
 								{sortLabel}
 							</Select.Trigger>
@@ -392,18 +392,28 @@
 
 						<div class="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
 							<!-- Same row state as the badge and bar (#817). -->
-							<Button
-								variant="outline"
-								type="button"
-								onclick={() => onToggleShowOnHome(row.compoundId)}
-								disabled={row.state !== 'open'}
-								class="min-h-11 w-full rounded-xl px-3 text-sm font-bold sm:w-auto
-								{row.showOnHome && row.state === 'open'
-									? 'border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100'
-									: 'border-slate-200 bg-slate-100 text-slate-500 opacity-70'}"
+							<label
+								class="inline-flex min-h-11 cursor-pointer items-center gap-2.5 has-disabled:cursor-not-allowed"
+								title={row.state === 'open'
+									? 'เปิด/ปิดการแสดงประกาศนี้บนหน้าเว็บสาธารณะ'
+									: 'ประกาศที่ปิดรับแล้วแสดงบนหน้าเว็บไม่ได้'}
 							>
-								{row.showOnHome && row.state === 'open' ? 'กำลังโชว์บนหน้าเว็บ' : 'ซ่อนจากหน้าเว็บ'}
-							</Button>
+								<Switch
+									bind:checked={
+										() => row.showOnHome && row.state === 'open',
+										() => onToggleShowOnHome(row.compoundId)
+									}
+									disabled={row.state !== 'open'}
+									aria-label="แสดงบนหน้าเว็บสาธารณะ"
+								/>
+								<span
+									class="text-xs font-semibold {row.showOnHome && row.state === 'open'
+										? 'text-emerald-700 dark:text-emerald-400'
+										: 'text-muted-foreground'}"
+								>
+									{row.state !== 'open' ? 'ปิดรับแล้ว' : row.showOnHome ? 'แสดงอยู่' : 'ซ่อนอยู่'}
+								</span>
+							</label>
 
 							{#if onEdit && row.itemId}
 								<Button
@@ -437,7 +447,7 @@
 											? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
 											: 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'}"
 									>
-										{row.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off'}
+										{row.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'ปิดรับบริจาคด่วน'}
 									</Button>
 								{/if}
 							{/if}
@@ -477,7 +487,7 @@
 							</span>
 						</Table.Head>
 						<Table.Head class="px-6 py-4 text-center text-xs font-bold text-foreground/80"
-							>สถานะโปรโมตหน้าแรก</Table.Head
+							>สถานะโปรโมตหน้า public</Table.Head
 						>
 						<Table.Head class="px-6 py-4 text-right text-xs font-bold text-foreground/80"
 							>การจัดการ</Table.Head
@@ -588,20 +598,32 @@
 
 								<!-- Show on home -->
 								<Table.Cell class="px-6 py-4 text-center">
-									<Button
-										variant="outline"
-										type="button"
-										onclick={() => onToggleShowOnHome(row.compoundId)}
-										disabled={row.state !== 'open'}
-										class="h-8 rounded-xl px-3 text-xs font-bold
-										{row.showOnHome && row.state === 'open'
-											? 'border-blue-200 bg-blue-50/80 text-blue-600 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400'
-											: 'border-transparent bg-muted text-muted-foreground opacity-60'}"
+									<label
+										class="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2.5 has-disabled:cursor-not-allowed"
+										title={row.state === 'open'
+											? 'เปิด/ปิดการแสดงประกาศนี้บนหน้าเว็บสาธารณะ'
+											: 'ประกาศที่ปิดรับแล้วแสดงบนหน้าเว็บไม่ได้'}
 									>
-										{row.showOnHome && row.state === 'open'
-											? 'กำลังโชว์บนหน้าเว็บ'
-											: 'ซ่อนจากหน้าเว็บ'}
-									</Button>
+										<Switch
+											bind:checked={
+												() => row.showOnHome && row.state === 'open',
+												() => onToggleShowOnHome(row.compoundId)
+											}
+											disabled={row.state !== 'open'}
+											aria-label="แสดงบนหน้าเว็บสาธารณะ"
+										/>
+										<span
+											class="text-xs font-semibold {row.showOnHome && row.state === 'open'
+												? 'text-emerald-700 dark:text-emerald-400'
+												: 'text-muted-foreground'}"
+										>
+											{row.state !== 'open'
+												? 'ปิดรับแล้ว'
+												: row.showOnHome
+													? 'แสดงอยู่'
+													: 'ซ่อนอยู่'}
+										</span>
+									</label>
 								</Table.Cell>
 
 								<!-- Actions -->
@@ -639,7 +661,7 @@
 														? 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400'
 														: 'border-rose-200 bg-rose-50/80 text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400'}"
 												>
-													{row.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'Force Cut-off'}
+													{row.isManualClosed ? 'เปิดรับบริจาค (Restore)' : 'ปิดรับบริจาคด่วน'}
 												</Button>
 											{/if}
 										{/if}

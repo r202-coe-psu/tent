@@ -2,7 +2,7 @@
 	import Scan from '@lucide/svelte/icons/scan';
 	import Camera from '@lucide/svelte/icons/camera';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
-	import QrCode from '@lucide/svelte/icons/qr-code';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import Check from '@lucide/svelte/icons/check';
 	import User from '@lucide/svelte/icons/user';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
@@ -32,10 +32,12 @@
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
 	import { toast } from 'svelte-sonner';
-	import { sanitizePhoneTyping, thaiMobilePhoneSchema } from '$lib/db/model';
+	import { defaults, superForm, type SuperValidated } from 'sveltekit-superforms';
+	import { zod4Client } from 'sveltekit-superforms/adapters';
+	import { sanitizePhoneTyping } from '$lib/db/model';
 	import { Html5Qrcode } from 'html5-qrcode';
-	import { qtyGt } from '$lib/utils/qty';
 	import { onMount, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import {
@@ -100,6 +102,8 @@
 	import CloseDonationDialog from './close-donation-dialog.svelte';
 	import CloseM6EmptyDialog from './close-m6-empty-dialog.svelte';
 	import { readReceivingPoint, writeReceivingPoint } from './receiving-point-memory';
+	import { donationLookupFailedMessage } from './donation-lookup-message';
+	import { walkinFormSchema, type WalkinFormValues, type WalkinLine } from './walkin-form.schema';
 
 	let {
 		initialQuery = '',
@@ -108,7 +112,7 @@
 		onClose
 	}: {
 		initialQuery?: string;
-		/** Open straight on the walk-in form (the list's "ลงทะเบียน Walk-in" button). */
+		/** Open straight on the walk-in form (the list's "รับบริจาคหน้าเคาน์เตอร์" button). */
 		initialView?: 'scan' | 'walkin';
 		onSaved?: () => void;
 		onClose?: () => void;
@@ -482,7 +486,7 @@
 			toast.info('กรุณากรอกรหัสการจอง หรือสแกน QR จากใบจองของผู้บริจาค');
 			return;
 		}
-		performLookup(ref, true);
+		performLookup(ref);
 	}
 
 	/**
@@ -685,30 +689,12 @@
 		return null;
 	});
 
-	// Walk-in form state
-	let walkinDonorName = $state('');
-	let walkinDonorPhone = $state('');
-	// Same rule the BFF enforces (it stays the authority); this only stops a doomed submit.
-	const walkinPhoneCheck = $derived(thaiMobilePhoneSchema.safeParse(walkinDonorPhone));
-	const walkinPhoneError = $derived(
-		walkinPhoneCheck.success ? null : walkinPhoneCheck.error.issues[0].message
-	);
-	// Shown once the field is left or a save is tried, not while the first digits go in.
-	let walkinPhoneTouched = $state(false);
-	const walkinPhoneShownError = $derived(walkinPhoneTouched ? walkinPhoneError : null);
-	let walkinDonorEmail = $state('');
-	type WalkinItemState = {
-		id: string;
-		itemId: string;
-		name: string;
-		qty: string;
-		unit: string;
-		expiry: string;
-		/** Chosen storage point id; '' = main store. */
-		storagePointId: string;
-	};
-	let walkinItems = $state<WalkinItemState[]>([
-		{
+	// Walk-in form. Field rules live in `walkin-form.schema.ts`; `isPerishable` is the one runtime
+	// lookup (catalog `requiresExpiry`), read when validation runs. The whole-quantity rule for
+	// unsplittable units stays a derived check (`qtyErrorOf`): it needs the unit-dimension
+	// resolver, must show while typing — before any save — and disables the Save button.
+	function newWalkinLine(): WalkinLine {
+		return {
 			id: ulid(),
 			itemId: '',
 			name: '',
@@ -716,32 +702,61 @@
 			unit: 'piece',
 			expiry: '',
 			storagePointId: ''
-		}
-	]);
+		};
+	}
+	function emptyWalkinValues(): WalkinFormValues {
+		return { name: '', phone: '', email: '', items: [newWalkinLine()] };
+	}
+
+	const walkinSchema = walkinFormSchema({ isPerishable });
 	let walkinSaving = $state(false);
+	/** Set by `onUpdate` once the intake is saved; `onUpdated` then leaves the form (see there). */
+	let walkinSaved = false;
+
+	const walkinForm = superForm(defaults(emptyWalkinValues(), zod4Client(walkinSchema)), {
+		SPA: true,
+		dataType: 'json',
+		validators: zod4Client(walkinSchema),
+		resetForm: false,
+		applyAction: false,
+		// A blocked save moves focus itself (name / phone), as it did before.
+		autoFocusOnError: false,
+		scrollToError: 'off',
+		warnings: { duplicateId: false },
+		onUpdate: async ({ form: validated }) => {
+			walkinSaved = false;
+			await handleSaveWalkin(validated);
+		},
+		// Superforms writes the submitted data back after `onUpdate` returns, so the form is
+		// cleared and the view left here, not there.
+		onUpdated: () => {
+			if (!walkinSaved) return;
+			walkinSaved = false;
+			walkinForm.reset({ data: emptyWalkinValues() });
+			activeView = 'scan';
+			onSaved?.();
+		}
+	});
+	const { form: walkinData, errors: walkinErrors, enhance: walkinEnhance } = walkinForm;
+
 	const hasWalkinWholeError = $derived(
-		walkinItems.some((it) => it.itemId && qtyErrorOf(it.qty, it.unit))
+		$walkinData.items.some((it) => it.itemId && qtyErrorOf(it.qty, it.unit))
 	);
 
 	/**
 	 * `fromList` — opened from a row of the booking list: a miss there sends staff back to
 	 * the list. A typed or scanned code that misses keeps the scanner open to try again.
 	 */
-	async function performLookup(query: string, simulateScanEffect = false, fromList = false) {
+	async function performLookup(query: string, fromList = false) {
 		if (!query.trim()) return;
 		lastLots = [];
 		actionPanel = 'none';
 		scanState = 'scanning';
 
-		if (simulateScanEffect) {
-			await new Promise((r) => setTimeout(r, 600));
-		}
-
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(query.trim())}`);
 			if (!res.ok) {
-				const errorData = await res.json().catch(() => ({}));
-				toast.error(errorData.error || 'ไม่พบข้อมูลการจองบริจาคนี้');
+				toast.error(donationLookupFailedMessage(res.status, query.trim()));
 				scanState = 'idle';
 				if (fromList) onClose?.();
 				return;
@@ -1080,51 +1095,43 @@
 
 	// Walk-in form handlers
 	function addWalkinItem() {
-		walkinItems.push({
-			id: ulid(),
-			itemId: '',
-			name: '',
-			qty: '0',
-			unit: 'piece',
-			expiry: '',
-			storagePointId: ''
-		});
+		$walkinData.items = [...$walkinData.items, newWalkinLine()];
 	}
 
 	function removeWalkinItem(id: string) {
-		walkinItems = walkinItems.filter((i) => i.id !== id);
+		$walkinData.items = $walkinData.items.filter((i) => i.id !== id);
 	}
 
 	function handleWalkinItemSelect(index: number, picked: StockFormItem | null) {
-		const item = walkinItems[index];
-		if (!item) return;
+		if (!$walkinData.items[index]) return;
 		rememberPicked(picked);
-		item.itemId = picked?._id ?? '';
+		$walkinData.items[index].itemId = picked?._id ?? '';
 		if (picked) {
-			item.name = picked.name;
-			item.unit = picked.unit;
+			$walkinData.items[index].name = picked.name;
+			$walkinData.items[index].unit = picked.unit;
 		}
 	}
 
-	async function handleSaveWalkin() {
-		if (!walkinDonorName.trim()) {
-			toast.error('กรุณาระบุชื่อผู้บริจาค');
+	async function handleSaveWalkin(validated: SuperValidated<WalkinFormValues>) {
+		const { errors, data: values } = validated;
+		const focusField = (id: string) => document.getElementById(id)?.focus();
+		if (errors.name?.length) {
+			toast.error(errors.name[0]);
+			focusField('donor-name-input');
 			return;
 		}
-		if (walkinPhoneError) {
-			walkinPhoneTouched = true;
-			toast.error(walkinPhoneError);
-			document.getElementById('donor-phone-input')?.focus();
+		if (errors.phone?.length) {
+			toast.error(errors.phone[0]);
+			focusField('donor-phone-input');
 			return;
 		}
 		// A picked item still at 0 is a missed count, not a line to drop silently.
-		const uncounted = walkinItems.filter((it) => it.itemId && !qtyGt(it.qty || '0', 0));
+		const uncounted = values.items.filter((_, i) => errors.items?.[i]?.qty?.length);
 		if (uncounted.length > 0) {
 			toast.error(`กรุณาระบุจำนวนที่รับจริง: ${uncounted.map((it) => it.name).join(', ')}`);
 			return;
 		}
-		const validItems = walkinItems.filter((it) => it.itemId);
-		if (validItems.length === 0) {
+		if (errors.items?.[0]?.itemId?.length) {
 			toast.error('กรุณาเลือกรายการสิ่งของอย่างน้อย 1 รายการพร้อมระบุจำนวน');
 			return;
 		}
@@ -1132,21 +1139,17 @@
 			toast.error(WHOLE_QTY_MESSAGE);
 			return;
 		}
-
 		// Same rule the intake route enforces (schema.md §2.1): a perishable lot with no
 		// expiry cannot be rotated or discarded on time, and the ledger is append-only.
-		const missingExpiry = linesMissingExpiry(
-			validItems.map((it) => ({
-				item_id: it.itemId,
-				name: it.name,
-				perishable: isPerishable(it.itemId),
-				expiry: it.expiry
-			}))
-		);
+		const missingExpiry = values.items
+			.filter((_, i) => errors.items?.[i]?.expiry?.length)
+			.map((it) => it.name.trim() || it.itemId);
 		if (missingExpiry.length > 0) {
 			toast.error(`ของเน่าเสียง่ายต้องระบุวันหมดอายุ: ${missingExpiry.join(', ')}`);
 			return;
 		}
+		if (!validated.valid) return;
+		const validItems = values.items.filter((it) => it.itemId);
 
 		walkinSaving = true;
 		try {
@@ -1164,9 +1167,9 @@
 					// own — without it the route can only answer SHELTER_REQUIRED.
 					shelter_code: getShelterCode(),
 					donor: {
-						name: walkinDonorName.trim(),
-						...(walkinDonorPhone.trim() ? { phone: walkinDonorPhone.trim() } : {}),
-						...(walkinDonorEmail.trim() ? { email: walkinDonorEmail.trim() } : {})
+						name: values.name.trim(),
+						...(values.phone.trim() ? { phone: values.phone.trim() } : {}),
+						...(values.email.trim() ? { email: values.email.trim() } : {})
 					},
 					items: validItems.map((it) => {
 						const location = lotLocation(it.storagePointId);
@@ -1188,31 +1191,15 @@
 			});
 			const data = await res.json();
 			if (!res.ok || !data.success) {
-				toast.error(data.error || 'บันทึกบริจาค Walk-in ไม่สำเร็จ');
+				toast.error(data.error || 'บันทึกรับบริจาคหน้าเคาน์เตอร์ไม่สำเร็จ');
 				return;
 			}
 
 			lastLots = data.lots ?? [];
 			toast.success(
-				`บันทึกบริจาค Walk-in สำเร็จ (${validItems.length} รายการ) — อ้างอิง ${data.booking_ref ?? data.donation_id}`
+				`บันทึกรับบริจาคหน้าเคาน์เตอร์สำเร็จ (${validItems.length} รายการ) — อ้างอิง ${data.booking_ref ?? data.donation_id}`
 			);
-			activeView = 'scan';
-			walkinDonorName = '';
-			walkinDonorPhone = '';
-			walkinPhoneTouched = false;
-			walkinDonorEmail = '';
-			walkinItems = [
-				{
-					id: ulid(),
-					itemId: '',
-					name: '',
-					qty: '0',
-					unit: 'piece',
-					expiry: '',
-					storagePointId: ''
-				}
-			];
-			onSaved?.();
+			walkinSaved = true;
 		} catch {
 			toast.error('บันทึกไม่สำเร็จ — กรุณาลองใหม่อีกครั้ง');
 		} finally {
@@ -1226,7 +1213,7 @@
 		// the same request twice on every open.
 		if (initialQuery) {
 			searchQuery = initialQuery;
-			performLookup(initialQuery, false, true);
+			performLookup(initialQuery, true);
 		}
 	});
 </script>
@@ -2034,7 +2021,7 @@
 								class="min-h-12 gap-2 rounded-xl bg-card text-sm font-bold shadow-xs"
 							>
 								<User class="h-5 w-5 text-blue-600 dark:text-blue-400" />
-								ลงทะเบียน Walk-in
+								รับบริจาคหน้าเคาน์เตอร์
 							</Button>
 						</div>
 
@@ -2106,20 +2093,9 @@
 						{/if}
 					</div>
 				{:else if scanState === 'scanning'}
-					<!-- Scanning State -->
-					<div
-						class="flex w-full max-w-md animate-in flex-col items-center justify-center rounded-3xl border border-dashed border-border/60 bg-card p-8 text-center shadow-xs duration-200 fade-in"
-					>
-						<div
-							class="relative mb-6 flex h-32 w-32 items-center justify-center overflow-hidden rounded-2xl border border-blue-500/30 bg-slate-900 text-blue-500"
-						>
-							<QrCode class="h-16 w-16" />
-							<div
-								class="absolute inset-x-0 h-1 animate-pulse bg-blue-500/80 shadow-[0_0_8px_rgba(59,130,246,0.8)]"
-								style="animation: scanEffect 1.5s infinite ease-in-out;"
-							></div>
-						</div>
-						<span class="animate-pulse text-xs font-bold text-muted-foreground">กำลังสแกน...</span>
+					<div class="flex w-full justify-center py-16" role="status">
+						<LoaderCircle class="size-6 animate-spin text-muted-foreground" />
+						<span class="sr-only">กำลังค้นหาใบจอง</span>
 					</div>
 				{/if}
 			</div>
@@ -2134,7 +2110,8 @@
 					size="sm"
 					type="button"
 					onclick={() => {
-						walkinPhoneTouched = false;
+						// Inline errors go with the screen; what was typed stays for the next visit.
+						$walkinErrors = {};
 						if (initialView === 'walkin' && onClose) onClose();
 						else activeView = 'scan';
 					}}
@@ -2159,7 +2136,7 @@
 			</div>
 
 			<!-- Walk-in Form Body -->
-			<div class="space-y-8 bg-card p-6 md:p-8">
+			<form method="post" use:walkinEnhance novalidate class="space-y-8 bg-card p-6 md:p-8">
 				<!-- Section 1: ข้อมูลผู้บริจาค (Donor Information) -->
 				<div>
 					<h3 class="mb-4 flex items-center gap-2 text-sm font-bold text-foreground md:text-base">
@@ -2168,61 +2145,70 @@
 					</h3>
 
 					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-						<div class="space-y-1.5">
-							<Label for="donor-name-input" class="text-sm font-semibold text-foreground">
-								ชื่อผู้บริจาค/ผู้ติดต่อ <span class="text-destructive">*</span>
-							</Label>
-							<Input
-								id="donor-name-input"
-								type="text"
-								placeholder="เช่น คุณสมศักดิ์ รักดี"
-								bind:value={walkinDonorName}
-								class="h-10 rounded-xl text-sm"
-							/>
-						</div>
+						<Form.Field form={walkinForm} name="name" class="space-y-1.5">
+							<Form.Control id="donor-name-input">
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold text-foreground">
+										ชื่อผู้บริจาค/ผู้ติดต่อ <span class="text-destructive">*</span>
+									</Form.Label>
+									<Input
+										{...props}
+										type="text"
+										placeholder="เช่น คุณสมศักดิ์ รักดี"
+										bind:value={$walkinData.name}
+										class="h-10 rounded-lg border-input bg-white text-sm shadow-2xs"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors id="donor-name-error" class="text-xs" />
+						</Form.Field>
 
-						<div class="space-y-1.5">
-							<Label for="donor-phone-input" class="text-sm font-semibold text-foreground">
-								เบอร์โทรศัพท์ (ถ้ามี)
-							</Label>
-							<Input
-								id="donor-phone-input"
-								type="text"
-								placeholder="เช่น 0891234567"
-								inputmode="numeric"
-								bind:value={
-									() => walkinDonorPhone,
-									// The input re-reads the getter after set, so it always shows the digits-only value.
-									(v) => (walkinDonorPhone = sanitizePhoneTyping(v ?? ''))
-								}
-								onblur={() => (walkinPhoneTouched = true)}
-								aria-invalid={walkinPhoneShownError ? true : undefined}
-								aria-describedby={walkinPhoneShownError ? 'donor-phone-error' : undefined}
-								class="h-10 rounded-xl text-sm"
-							/>
-							{#if walkinPhoneShownError}
-								<p
-									id="donor-phone-error"
-									class="text-xs text-destructive"
-									data-testid="walkin-phone-error"
-								>
-									{walkinPhoneShownError}
-								</p>
-							{/if}
-						</div>
+						<!-- Shown once the field is left or a save is tried, not while the first digits go in. -->
+						<Form.Field form={walkinForm} name="phone" class="space-y-1.5">
+							<Form.Control id="donor-phone-input">
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold text-foreground">
+										เบอร์โทรศัพท์ (ถ้ามี)
+									</Form.Label>
+									<Input
+										{...props}
+										type="text"
+										placeholder="เช่น 0891234567"
+										inputmode="numeric"
+										bind:value={
+											() => $walkinData.phone,
+											// The input re-reads the getter after set, so it always shows the digits-only value.
+											(v) => ($walkinData.phone = sanitizePhoneTyping(v ?? ''))
+										}
+										class="h-10 rounded-lg border-input bg-white text-sm shadow-2xs"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors id="donor-phone-error" class="text-xs font-normal">
+								{#snippet children({ errors, errorProps })}
+									{#each errors as error (error)}
+										<div {...errorProps} data-testid="walkin-phone-error">{error}</div>
+									{/each}
+								{/snippet}
+							</Form.FieldErrors>
+						</Form.Field>
 
-						<div class="space-y-1.5">
-							<Label for="donor-email-input" class="text-sm font-semibold text-foreground">
-								อีเมล (ถ้ามี)
-							</Label>
-							<Input
-								id="donor-email-input"
-								type="email"
-								placeholder="เช่น donor@example.com"
-								bind:value={walkinDonorEmail}
-								class="h-10 rounded-xl text-sm"
-							/>
-						</div>
+						<Form.Field form={walkinForm} name="email" class="space-y-1.5">
+							<Form.Control id="donor-email-input">
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold text-foreground">
+										อีเมล (ถ้ามี)
+									</Form.Label>
+									<Input
+										{...props}
+										type="email"
+										placeholder="เช่น donor@example.com"
+										bind:value={$walkinData.email}
+										class="h-10 rounded-lg border-input bg-white text-sm shadow-2xs"
+									/>
+								{/snippet}
+							</Form.Control>
+						</Form.Field>
 					</div>
 				</div>
 
@@ -2246,9 +2232,11 @@
 					</div>
 
 					<div class="space-y-4">
-						{#each walkinItems as item, idx (item.id)}
+						{#each $walkinData.items as item, idx (item.id)}
 							{@const qtyDimension = unitDimension.resolve(item.unit)}
-							{@const qtyError = item.itemId ? wholeQtyError(item.qty, qtyDimension) : undefined}
+							{@const qtyError =
+								$walkinErrors.items?.[idx]?.qty?.[0] ||
+								(item.itemId ? wholeQtyError(item.qty, qtyDimension) : undefined)}
 							<div
 								class="relative rounded-2xl border border-border/70 bg-muted/20 p-5 transition-all hover:border-border"
 							>
@@ -2257,7 +2245,7 @@
 										รายการที่ #{idx + 1}
 									</span>
 									<div class="flex items-center gap-3">
-										{#if walkinItems.length > 1}
+										{#if $walkinData.items.length > 1}
 											<Button
 												variant="ghost"
 												size="icon-sm"
@@ -2288,8 +2276,14 @@
 											isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
 											placeholder="ค้นหาและเลือกสินค้า…"
 											formatBalanceUnit={pickerUnitLabel}
+											class="h-10 min-h-10 rounded-lg border-input bg-white py-0 shadow-2xs"
 											onSelect={(picked) => handleWalkinItemSelect(idx, picked)}
 										/>
+										{#if idx === 0}
+											<Form.Field form={walkinForm} name="items[0].itemId" class="space-y-0">
+												<Form.FieldErrors class="text-xs" />
+											</Form.Field>
+										{/if}
 										{#if canCreateItem}
 											<Button
 												type="button"
@@ -2305,20 +2299,30 @@
 									</div>
 
 									<!-- Qty Input -->
-									<div class="space-y-1.5 md:col-span-2">
-										<Label for="walkin-qty-{item.id}" class="text-sm font-semibold text-foreground">
-											จำนวนที่รับจริง <span class="text-destructive">*</span>
-										</Label>
-										<Input
-											id="walkin-qty-{item.id}"
-											type="text"
-											inputmode={requiresWholeQty(qtyDimension) ? 'numeric' : 'decimal'}
-											step={qtyInputStep(qtyDimension)}
-											bind:value={item.qty}
-											aria-invalid={qtyError ? true : undefined}
-											aria-describedby={qtyError ? `walkin-qty-${item.id}-error` : undefined}
-											class="h-10 rounded-xl text-center text-sm font-bold"
-										/>
+									<!-- The error shown here is the schema's OR the live whole-quantity one, so the
+									     message and its aria wiring are rendered by hand, not by Form.FieldErrors. -->
+									<Form.Field
+										form={walkinForm}
+										name={`items[${idx}].qty`}
+										class="space-y-1.5 md:col-span-2"
+									>
+										<Form.Control id="walkin-qty-{item.id}">
+											{#snippet children({ props })}
+												<Form.Label class="text-sm font-semibold text-foreground">
+													จำนวนที่รับจริง <span class="text-destructive">*</span>
+												</Form.Label>
+												<Input
+													{...props}
+													type="text"
+													inputmode={requiresWholeQty(qtyDimension) ? 'numeric' : 'decimal'}
+													step={qtyInputStep(qtyDimension)}
+													bind:value={$walkinData.items[idx].qty}
+													aria-invalid={qtyError ? true : undefined}
+													aria-describedby={qtyError ? `walkin-qty-${item.id}-error` : undefined}
+													class="h-10 rounded-lg border-input bg-white text-center text-sm font-bold shadow-2xs"
+												/>
+											{/snippet}
+										</Form.Control>
 										{#if qtyError}
 											<p
 												id="walkin-qty-{item.id}-error"
@@ -2328,7 +2332,7 @@
 												{qtyError}
 											</p>
 										{/if}
-									</div>
+									</Form.Field>
 
 									<!-- Unit Display / Input -->
 									<!-- Read-only: the unit comes from the chosen item's `base_unit`
@@ -2338,7 +2342,7 @@
 									<div class="space-y-1.5 md:col-span-2">
 										<span class="block text-sm font-semibold text-foreground">หน่วย</span>
 										<div
-											class="flex h-10 items-center justify-center rounded-xl border border-border/60 bg-muted/40 px-3 text-sm font-medium text-muted-foreground"
+											class="flex h-10 items-center justify-center rounded-lg border border-input bg-white px-3 text-sm font-medium text-muted-foreground shadow-2xs"
 											title="หน่วยฐานจากแคตตาล็อก — แก้ที่แคตตาล็อกถ้าไม่ถูกต้อง"
 										>
 											{formatUnit(item.unit, unitsOfMeasure, langState.current) || '—'}
@@ -2349,30 +2353,40 @@
 									     is REQUIRED for a perishable item and the intake route refuses
 									     the line without it — this row is where staff can actually
 									     supply it. -->
-									<div class="space-y-1.5 md:col-span-6">
-										<Label
-											for="walkin-expiry-{item.id}"
-											class="text-sm font-semibold text-foreground"
-										>
-											วันหมดอายุ
-											{#if isPerishable(item.itemId)}
-												<span class="text-destructive">*</span>
-												<span class="ml-1 text-xs font-normal text-rose-600 dark:text-rose-400">
-													(ของเน่าเสียง่าย — ต้องระบุ)
-												</span>
-											{:else}
-												<span class="ml-1 text-xs font-normal text-muted-foreground">(ถ้ามี)</span>
-											{/if}
-										</Label>
-										<DatePicker
-											id="walkin-expiry-{item.id}"
-											ariaLabel="วันหมดอายุ"
-											bind:value={item.expiry}
-											class="h-10 rounded-xl text-sm {isPerishable(item.itemId) && !item.expiry
-												? 'border-rose-300 dark:border-rose-900'
-												: ''}"
-										/>
-									</div>
+									<Form.Field
+										form={walkinForm}
+										name={`items[${idx}].expiry`}
+										class="space-y-1.5 md:col-span-6"
+									>
+										<Form.Control id="walkin-expiry-{item.id}">
+											{#snippet children({ props })}
+												<Form.Label class="text-sm font-semibold text-foreground">
+													วันหมดอายุ
+													{#if isPerishable(item.itemId)}
+														<span class="text-destructive">*</span>
+														<span class="ml-1 text-xs font-normal text-rose-600 dark:text-rose-400">
+															(ของเน่าเสียง่าย — ต้องระบุ)
+														</span>
+													{:else}
+														<span class="ml-1 text-xs font-normal text-muted-foreground"
+															>(ถ้ามี)</span
+														>
+													{/if}
+												</Form.Label>
+												<DatePicker
+													{...props}
+													ariaLabel="วันหมดอายุ"
+													bind:value={$walkinData.items[idx].expiry}
+													class="h-10 rounded-lg border-input bg-white font-sans text-sm shadow-2xs {isPerishable(
+														item.itemId
+													) && !item.expiry
+														? 'border-rose-300 dark:border-rose-900'
+														: ''}"
+												/>
+											{/snippet}
+										</Form.Control>
+										<Form.FieldErrors class="text-xs" />
+									</Form.Field>
 
 									<div class="space-y-1.5 md:col-span-6">
 										<Label
@@ -2382,11 +2396,16 @@
 											สถานที่จัดเก็บ
 											<span class="ml-1 text-xs font-normal text-muted-foreground">(ถ้ามี)</span>
 										</Label>
-										<StoragePointSelect
-											id="walkin-zone-{item.id}"
-											points={storagePoints.points}
-											bind:value={item.storagePointId}
-										/>
+										<!-- `StoragePointSelect` fixes its own trigger style and takes no `class`, so the
+										     walk-in look is applied from this wrapper (important: its `data-size` height
+										     rule outranks a plain utility). -->
+										<div class="[&_button]:h-10! [&_button]:rounded-lg! [&_button]:shadow-2xs!">
+											<StoragePointSelect
+												id="walkin-zone-{item.id}"
+												points={storagePoints.points}
+												bind:value={$walkinData.items[idx].storagePointId}
+											/>
+										</div>
 									</div>
 								</div>
 							</div>
@@ -2409,8 +2428,7 @@
 					</Button>
 
 					<Button
-						type="button"
-						onclick={handleSaveWalkin}
+						type="submit"
 						disabled={walkinSaving || hasWalkinWholeError}
 						class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white shadow-sm hover:bg-[#001f3f] sm:w-auto dark:bg-blue-600 dark:hover:bg-blue-700"
 					>
@@ -2423,7 +2441,7 @@
 						{/if}
 					</Button>
 				</div>
-			</div>
+			</form>
 		</div>
 	{/if}
 </div>

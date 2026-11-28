@@ -110,8 +110,9 @@ const buttonByText = (root: Element, label: string) =>
 const rowFor = (rows: Element[], name: string) => rows.find((r) => text(r).includes(name))!;
 const bar = (root: Element) => root.querySelector('[style*="width"]') as HTMLElement;
 
-const toggleOf = (row: Element) =>
-	buttons(row).find((b) => ['กำลังโชว์บนหน้าเว็บ', 'ซ่อนจากหน้าเว็บ'].includes(text(b)));
+/** The show-on-web switch; `aria-checked` is whether the need is on the public board. */
+const toggleOf = (row: Element) => row.querySelector('[role="switch"]') as HTMLButtonElement | null;
+const isOn = (toggle: Element | null) => toggle?.getAttribute('aria-checked') === 'true';
 
 describe('needs board row state (#816 / #817)', () => {
 	it('shows a reached row as green "ครบถ้วน" with a green bar, not CUT-OFF', async () => {
@@ -155,12 +156,12 @@ describe('needs board row state (#816 / #817)', () => {
 		for (const row of [cards()[0], tableRows()[0]]) {
 			expect(text(row)).toContain('CUT-OFF');
 			expect(text(row)).not.toContain('ปิดอัตโนมัติ (ครบเป้า)');
-			expect(text(row)).not.toContain('Force Cut-off');
+			expect(text(row)).not.toContain('ปิดรับบริจาคด่วน');
 			expect(text(row)).not.toContain('Restore');
 		}
 	});
 
-	it('never says "กำลังโชว์บนหน้าเว็บ" on a reached or cut-off row (#817)', async () => {
+	it('never shows the switch on for a reached or cut-off row (#817)', async () => {
 		await render([
 			campaign('c1', [
 				{ itemId: 'item:rice', name: 'ข้าว', closeState: 'reached' },
@@ -170,25 +171,40 @@ describe('needs board row state (#816 / #817)', () => {
 
 		for (const row of [...cards(), ...tableRows()]) {
 			const toggle = toggleOf(row)!;
-			expect(text(toggle)).toBe('ซ่อนจากหน้าเว็บ');
+			expect(isOn(toggle)).toBe(false);
 			expect(toggle.disabled).toBe(true);
 		}
 	});
 
-	it('keeps the show-on-web toggle and Force Cut-off on an open row', async () => {
+	it('keeps the show-on-web toggle and ปิดรับบริจาคด่วน on an open row', async () => {
 		await render([campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open' }])]);
 
 		const card = cards()[0];
 		expect(card.querySelector('[data-slot="badge"]')).toBeNull();
-		const toggle = buttonByText(card, 'กำลังโชว์บนหน้าเว็บ')!;
+		const toggle = toggleOf(card)!;
+		expect(isOn(toggle)).toBe(true);
 		expect(toggle.disabled).toBe(false);
 		toggle.click();
 		expect(callbacks.onToggleShowOnHome).toHaveBeenCalledWith('c1');
-		buttonByText(card, 'Force Cut-off')!.click();
+		buttonByText(card, 'ปิดรับบริจาคด่วน')!.click();
 		expect(callbacks.onToggleCutOff).toHaveBeenCalledWith('c1', 'item:rice');
 	});
 
-	it('shows "ซ่อนจากหน้าเว็บ" on open rows of a hidden campaign', async () => {
+	it('keeps the switch on the stored value until the campaign actually changes', async () => {
+		await render([campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open' }])]);
+
+		for (const row of [cards()[0], tableRows()[0]]) {
+			const toggle = toggleOf(row)!;
+			toggle.click();
+			flushSync();
+			await tick();
+			// The save failed (or has not landed): the row still says the need is public.
+			expect(isOn(toggle)).toBe(true);
+		}
+		expect(callbacks.onToggleShowOnHome).toHaveBeenCalledTimes(2);
+	});
+
+	it('shows the switch off on open rows of a hidden campaign', async () => {
 		await render([
 			campaign('c1', [{ itemId: 'item:rice', name: 'ข้าว', closeState: 'open' }], {
 				showOnHome: false
@@ -196,7 +212,8 @@ describe('needs board row state (#816 / #817)', () => {
 		]);
 
 		for (const row of [cards()[0], tableRows()[0]]) {
-			const toggle = buttonByText(row, 'ซ่อนจากหน้าเว็บ')!;
+			const toggle = toggleOf(row)!;
+			expect(isOn(toggle)).toBe(false);
 			expect(toggle.disabled).toBe(false);
 		}
 	});
@@ -212,7 +229,8 @@ describe('needs board row state (#816 / #817)', () => {
 		for (const rows of [cards(), tableRows()]) {
 			expect(toggleOf(rowFor(rows, 'ข้าว'))!.disabled).toBe(true);
 			expect(text(rowFor(rows, 'ข้าว'))).toContain('ครบถ้วน');
-			const open = buttonByText(rowFor(rows, 'น้ำ'), 'กำลังโชว์บนหน้าเว็บ');
+			const open = toggleOf(rowFor(rows, 'น้ำ'));
+			expect(isOn(open)).toBe(true);
 			expect(open?.disabled).toBe(false);
 		}
 	});
@@ -222,7 +240,7 @@ describe('needs board row state (#816 / #817)', () => {
 
 		const open = rowFor(cards(), 'c-open');
 		const closed = rowFor(cards(), 'c-closed');
-		expect(buttonByText(open, 'กำลังโชว์บนหน้าเว็บ')).toBeDefined();
+		expect(isOn(toggleOf(open))).toBe(true);
 		expect(open.querySelector('[data-slot="badge"]')).toBeNull();
 		expect(text(closed)).toContain('CUT-OFF');
 	});

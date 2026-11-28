@@ -605,7 +605,7 @@
 												>
 													<Select.Trigger
 														id="review-line-{idx}-point"
-														class="h-11 w-full rounded-xl text-base data-[size=default]:h-11"
+														class="h-10 w-full text-sm shadow-2xs data-[size=default]:h-10"
 													>
 														<span class="truncate {picked ? '' : 'text-slate-500'}">
 															{picked?.name ?? 'เลือกจุดรับบริจาค'}
@@ -705,7 +705,7 @@
 					rows={3}
 					placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
 					bind:value={memo}
-					class="rounded-xl p-3.5 text-base"
+					class="rounded-lg p-3.5 text-sm shadow-2xs"
 				/>
 			</div>
 		{/if}
@@ -782,7 +782,7 @@
 					<Select.Root type="single" bind:value={selectedTargetShelter}>
 						<Select.Trigger
 							id="target-shelter-select"
-							class="h-10 w-full rounded-xl text-xs data-[size=default]:h-10"
+							class="h-10 w-full text-sm shadow-2xs data-[size=default]:h-10"
 						>
 							{redirectTargetLabel}
 						</Select.Trigger>
@@ -803,7 +803,7 @@
 						rows={2}
 						placeholder="เช่น พื้นที่จัดเก็บศูนย์ต้นทางเต็ม หรือต้องการการดูแลจำเพาะจากผู้เชี่ยวชาญ..."
 						bind:value={redirectNote}
-						class="rounded-xl bg-muted/10 text-xs"
+						class="rounded-lg bg-white text-sm shadow-2xs"
 					/>
 				</div>
 
