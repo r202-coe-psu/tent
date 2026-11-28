@@ -89,7 +89,7 @@
 <Card.Root class="border-2 border-slate-300 bg-white shadow-sm">
 	<Card.Header class="border-b border-slate-100 bg-slate-50/60 pb-3">
 		<div class="flex items-center gap-2 text-slate-800">
-			<ShieldCheck class="size-5 text-sky-700" />
+			<ShieldCheck class="size-5 text-primary" />
 			<Card.Title class="text-base font-bold">
 				การสรุปและตัดสินผลการตรวจประเมินความพร้อม (Final Verdict)
 			</Card.Title>
@@ -197,7 +197,7 @@
 			<Button
 				onclick={onSubmitVerdict}
 				disabled={!canSubmit}
-				class="min-h-10 gap-2 bg-sky-700 px-5 text-xs font-bold text-white shadow-2xs hover:bg-sky-800"
+				class="min-h-10 gap-2 bg-primary px-5 text-xs font-bold text-primary-foreground shadow-2xs hover:bg-primary-dark"
 			>
 				{#if submitting}
 					<Loader2 class="size-4 animate-spin" />

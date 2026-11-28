@@ -144,7 +144,7 @@
 					value={item.note ?? ''}
 					oninput={(e) => onChangeNote((e.currentTarget as HTMLInputElement).value)}
 					placeholder="ระบุข้อสังเกต หรือสิ่งที่ต้องจัดหาเพิ่มเติม..."
-					class="h-8 w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 text-xs text-slate-800 focus:border-sky-500 focus:bg-white focus:outline-hidden"
+					class="h-8 w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 text-xs text-slate-800 focus:border-primary focus:bg-white focus:outline-hidden"
 				/>
 				<button
 					type="button"
@@ -160,7 +160,7 @@
 			<button
 				type="button"
 				onclick={() => (showNote = true)}
-				class="flex w-full cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-slate-200/90 bg-slate-50/40 px-3 py-1.5 text-left text-2xs font-medium text-slate-400 transition-all hover:border-sky-300 hover:bg-sky-50/50 hover:text-sky-700"
+				class="flex w-full cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-slate-200/90 bg-slate-50/40 px-3 py-1.5 text-left text-2xs font-medium text-slate-400 transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
 			>
 				<MessageSquare class="size-3.5 shrink-0" />
 				<span>+ เพิ่มหมายเหตุสำหรับข้อนี้...</span>

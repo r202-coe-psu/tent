@@ -24,7 +24,7 @@
 	<title>แบบประเมินความพร้อมศูนย์ {data.shelterCode} · SmartShelter</title>
 </svelte:head>
 
-<div class="min-h-screen w-full bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+<div class="w-full">
 	<ReadinessAssessmentPage
 		shelterCode={data.shelterCode}
 		{shelterName}
