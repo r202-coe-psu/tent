@@ -8,6 +8,8 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import {
 		STANDARD_UOM_OPTIONS,
+		findActiveItemMapConflicts,
+		requirementGroupInputSchema,
 		type RequirementGroup,
 		type ItemMap,
 		itemMapSchema,
@@ -24,12 +26,14 @@
 
 	let {
 		group = null,
+		requirementGroups = [],
 		isEdit = false,
 		shelterCode = '',
 		onsuccess,
 		oncancel
 	}: {
 		group?: RequirementGroup | null;
+		requirementGroups?: RequirementGroup[];
 		isEdit?: boolean;
 		shelterCode?: string;
 		onsuccess?: () => void;
@@ -189,24 +193,50 @@
 
 		const computedSource: Source = resolveSource(shelterCode);
 		const fullId = group ? group._id : `requirement_group:${cleanGroupId}`;
+		const parsedInput = requirementGroupInputSchema.safeParse({
+			name: formName.trim(),
+			standard_uom: formStandardUom.trim(),
+			status: formStatus,
+			source: computedSource,
+			item_maps: formItemMaps.map((im) => ({
+				item_id: im.item_id.trim(),
+				base_uom: im.base_uom.trim(),
+				conversion_factor: qtyStrCoerceSchema.parse(im.conversion_factor),
+				...(im.share_percent == null || im.share_percent === ''
+					? {}
+					: { share_percent: qtyStrCoerceSchema.parse(im.share_percent) })
+			})),
+			shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
+		});
+		if (!parsedInput.success) {
+			for (const issue of parsedInput.error.issues) {
+				if (issue.path[0] === 'item_maps' && typeof issue.path[1] === 'number') {
+					formErrors[`item_${issue.path[1]}_id`] = issue.message;
+				}
+			}
+			return;
+		}
+
+		const conflicts = findActiveItemMapConflicts(
+			{
+				_id: fullId,
+				name: parsedInput.data.name,
+				status: parsedInput.data.status,
+				item_maps: parsedInput.data.item_maps
+			},
+			requirementGroups
+		);
+		for (const conflict of conflicts) {
+			const key = `item_${conflict.item_index}_id`;
+			const message = `สินค้านี้อยู่ในกลุ่ม "${conflict.group_name}" แล้ว`;
+			formErrors[key] = formErrors[key] ? `${formErrors[key]}; ${message}` : message;
+		}
+		if (conflicts.length > 0) return;
+
 		try {
 			await saveMutation.mutateAsync({
 				id: fullId,
-				input: {
-					name: formName.trim(),
-					standard_uom: formStandardUom.trim(),
-					status: formStatus,
-					source: computedSource,
-					item_maps: formItemMaps.map((im) => ({
-						item_id: im.item_id.trim(),
-						base_uom: im.base_uom.trim(),
-						conversion_factor: qtyStrCoerceSchema.parse(im.conversion_factor),
-						...(im.share_percent == null || im.share_percent === ''
-							? {}
-							: { share_percent: qtyStrCoerceSchema.parse(im.share_percent) })
-					})),
-					shelter_code: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
-				},
+				input: parsedInput.data,
 				shelterCode: computedSource === 'SHELTER_OVERRIDE' ? shelterCode : undefined
 			});
 			toast.success(

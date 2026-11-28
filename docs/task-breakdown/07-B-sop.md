@@ -2,14 +2,15 @@
 title: "Task Breakdown — Module B — SOP & Resource Calc"
 status: active
 created: 2026-06-05
-updated: 2026-08-26
+updated: 2026-11-28
 module: B
 note: >
   decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown;
   CR-006 (SOP master/override) applied 2026-06-22;
   CR-042 (OD-1=A, OD-2=B, OD-3=A, OD-4=C) applied 2026-07-23;
   2026-08-13 — CR-066 T-69 occupancy health **approved** (Wave 1–3); T-76 SOP-lite/Sphere = Wave 4 รอบ CR ถัดไป;
-  2026-08-26 — CR-079 owner clarification: saved Scenario ลบได้แบบ authorized tombstone แต่ห้าม update
+  2026-08-26 — CR-079 owner clarification: saved Scenario ลบได้แบบ authorized tombstone แต่ห้าม update;
+  decision sync 2026-11-08 (#1282, kong) — `requirement_group.item_maps[].item_id` ซ้ำไม่ได้ในกลุ่มที่ active ภายใน effective config ของแต่ละศูนย์; FOOD_PROTEIN ใช้หมูสามชั้น 25%, หมูสันคอ 25%, ปลากระป๋อง 50%; ไข่คงอยู่ใน FOOD_PROTEIN_HALAL เท่านั้น
 ---
 
 # Module B — SOP & Resource Calc

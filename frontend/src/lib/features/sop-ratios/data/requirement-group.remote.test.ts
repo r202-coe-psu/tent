@@ -99,4 +99,40 @@ describe('RequirementGroupRemoteRepository (#936)', () => {
 		expect(doc.status).toBe('active');
 		expect(doc.item_maps?.[0]).toMatchObject({ conversion_factor: '6.3333', share_percent: '50' });
 	});
+
+	it('listAllStrict merges effective shelter overrides and propagates read failures', async () => {
+		const shelterRepo = fakeRepo();
+		repos.set('shelter_sh001', shelterRepo);
+		vi.mocked(catalog.allByType).mockResolvedValue([
+			{
+				_id: 'requirement_group:BASE',
+				type: 'requirement_group',
+				schema_v: 2,
+				name: 'baseline',
+				standard_uom: 'gram',
+				item_maps: [{ item_id: 'item_master:rice', base_uom: 'g', conversion_factor: '1' }],
+				source: 'SPHERE_BASELINE'
+			} as never
+		]);
+		vi.mocked(shelterRepo.allByType).mockResolvedValue([
+			{
+				_id: 'requirement_group:BASE',
+				type: 'requirement_group',
+				schema_v: 2,
+				name: 'override',
+				standard_uom: 'gram',
+				item_maps: [{ item_id: 'item_master:egg', base_uom: 'piece', conversion_factor: '6.3' }],
+				source: 'SHELTER_OVERRIDE'
+			} as never
+		]);
+
+		const groups = await new RequirementGroupRemoteRepository().listAllStrict('SH001');
+		expect(groups).toHaveLength(1);
+		expect(groups[0]).toMatchObject({ name: 'override', source: 'SHELTER_OVERRIDE' });
+
+		vi.mocked(shelterRepo.allByType).mockRejectedValueOnce(new Error('forbidden'));
+		await expect(new RequirementGroupRemoteRepository().listAllStrict('SH001')).rejects.toThrow(
+			'forbidden'
+		);
+	});
 });

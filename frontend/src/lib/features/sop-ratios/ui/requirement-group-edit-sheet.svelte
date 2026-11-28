@@ -48,7 +48,13 @@
 			{#if group}
 				<section class="space-y-3">
 					<h3 class="text-sm font-bold">กลุ่มสำหรับการคำนวณ</h3>
-					<RequirementGroupForm {group} isEdit {shelterCode} oncancel={close} />
+					<RequirementGroupForm
+						{group}
+						requirementGroups={groupsQuery.data ?? []}
+						isEdit
+						{shelterCode}
+						oncancel={close}
+					/>
 				</section>
 				<Separator />
 				<section class="space-y-3">

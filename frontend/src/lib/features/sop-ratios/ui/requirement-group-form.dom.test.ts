@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
+import type { RequirementGroup } from '../domain/requirement-group';
 
 const save = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('$lib/features/catalog', () => ({
@@ -23,11 +24,12 @@ afterEach(() => {
 	save.mockClear();
 });
 
-async function render() {
+async function render(requirementGroups: RequirementGroup[] = []) {
 	instance = mount(RequirementGroupForm, {
 		target: document.body,
 		props: {
 			isEdit: true,
+			requirementGroups,
 			group: {
 				_id: 'requirement_group:X',
 				type: 'requirement_group',
@@ -88,5 +90,29 @@ describe('requirement group share form', () => {
 		await setShare('100.00004');
 		await submit();
 		expect(save.mock.calls[0][0].input.item_maps[0].share_percent).toBe('100');
+	});
+	it('shows the conflicting active group and blocks save', async () => {
+		await render([
+			{
+				_id: 'requirement_group:Y',
+				type: 'requirement_group',
+				schema_v: 2,
+				name: 'กลุ่มเดิม',
+				standard_uom: 'kg',
+				status: 'active',
+				source: 'SPHERE_BASELINE',
+				created_at: '2026-01-01T00:00:00.000Z',
+				updated_at: '2026-01-01T00:00:00.000Z',
+				created_by: 'user:test',
+				item_maps: [
+					{ item_id: 'item:x', base_uom: 'kg', conversion_factor: '1', share_percent: '40' }
+				]
+			}
+		]);
+
+		await submit();
+
+		expect(save).not.toHaveBeenCalled();
+		expect(document.body.textContent).toContain('สินค้านี้อยู่ในกลุ่ม "กลุ่มเดิม" แล้ว');
 	});
 });

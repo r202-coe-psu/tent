@@ -82,15 +82,69 @@ export interface RequirementGroup extends CatalogDoc {
 	shelter_code?: string;
 }
 
-export const requirementGroupInputSchema = z.object({
-	name: z.string().trim().min(1, 'กรุณาระบุชื่อกลุ่มความต้องการ'),
-	standard_uom: z.string().trim().min(1, 'กรุณาระบุหน่วยนับมาตรฐาน'),
-	status: z.enum(['active', 'inactive']).optional().default('active'),
-	item_maps: z.array(itemMapSchema).optional(),
-	source: foodSphereSourceSchema.default('SPHERE_BASELINE'),
-	shelter_code: z.string().optional()
-});
+export const requirementGroupInputSchema = z
+	.object({
+		name: z.string().trim().min(1, 'กรุณาระบุชื่อกลุ่มความต้องการ'),
+		standard_uom: z.string().trim().min(1, 'กรุณาระบุหน่วยนับมาตรฐาน'),
+		status: z.enum(['active', 'inactive']).optional().default('active'),
+		item_maps: z.array(itemMapSchema).optional(),
+		source: foodSphereSourceSchema.default('SPHERE_BASELINE'),
+		shelter_code: z.string().optional()
+	})
+	.superRefine((input, ctx) => {
+		const firstIndexById = new Map<string, number>();
+		for (const [index, itemMap] of (input.item_maps ?? []).entries()) {
+			const firstIndex = firstIndexById.get(itemMap.item_id);
+			if (firstIndex !== undefined) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['item_maps', index, 'item_id'],
+					message: `สินค้านี้ซ้ำกับรายการที่ ${firstIndex + 1} ในกลุ่มเดียวกัน`
+				});
+			} else {
+				firstIndexById.set(itemMap.item_id, index);
+			}
+		}
+	});
 export type RequirementGroupInput = z.infer<typeof requirementGroupInputSchema>;
+
+export type RequirementGroupItemMapConflict = {
+	item_id: string;
+	item_index: number;
+	group_id: string;
+	group_name: string;
+};
+
+/** Finds item mappings that overlap another active group in the same effective configuration. */
+export function findActiveItemMapConflicts(
+	candidate: Pick<RequirementGroup, '_id' | 'name' | 'status' | 'item_maps'>,
+	groups: readonly RequirementGroup[]
+): RequirementGroupItemMapConflict[] {
+	if ((candidate.status ?? 'active') !== 'active') return [];
+
+	const conflicts: RequirementGroupItemMapConflict[] = [];
+	const seen = new Set<string>();
+	for (const [itemIndex, itemMap] of (candidate.item_maps ?? []).entries()) {
+		if (seen.has(itemMap.item_id)) continue;
+		seen.add(itemMap.item_id);
+
+		for (const group of groups) {
+			if (
+				group._id !== candidate._id &&
+				(group.status ?? 'active') === 'active' &&
+				(group.item_maps ?? []).some((map) => map.item_id === itemMap.item_id)
+			) {
+				conflicts.push({
+					item_id: itemMap.item_id,
+					item_index: itemIndex,
+					group_id: group._id,
+					group_name: group.name
+				});
+			}
+		}
+	}
+	return conflicts;
+}
 
 export function isRequirementGroup(doc: unknown): doc is RequirementGroup {
 	if (!doc || typeof doc !== 'object') return false;

@@ -370,6 +370,7 @@
 		{#if isSA || canEditOverride}
 			<RequirementGroupForm
 				group={selectedGroup}
+				requirementGroups={groups}
 				isEdit={viewMode === 'edit'}
 				{shelterCode}
 				onsuccess={backToList}

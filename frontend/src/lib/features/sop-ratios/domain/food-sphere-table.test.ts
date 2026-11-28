@@ -24,6 +24,27 @@ describe('Food Sphere Table Domain Logic', () => {
 			base_unit: 'piece'
 		},
 		{
+			_id: 'item_master:pork-belly',
+			name: 'หมูสามชั้น',
+			category: 'food',
+			sku: 'SKU-PORK-BELLY',
+			base_unit: 'g'
+		},
+		{
+			_id: 'item_master:pork-neck',
+			name: 'หมูสันคอ',
+			category: 'food',
+			sku: 'SKU-PORK-NECK',
+			base_unit: 'g'
+		},
+		{
+			_id: 'item_master:canned-fish',
+			name: 'ปลากระป๋อง',
+			category: 'food',
+			sku: 'SKU-CANNED-FISH',
+			base_unit: 'can'
+		},
+		{
 			_id: 'item_master:blanket',
 			name: 'ผ้าห่มกันหนาว',
 			category: 'bedding',
@@ -153,18 +174,28 @@ describe('Food Sphere Table Domain Logic', () => {
 			expect(rice?.docDays).toBeCloseTo(6.0, 1);
 			expect(rice?.status).toBe('WARNING_REORDER');
 
-			// Group 2: FOOD_PROTEIN
-			// FOOD_PROTEIN baseline for ALL = 53 g -> totalGroupDemand = 530 g
-			// Egg: conversionFactor = 6.3 g/piece, share = 50% -> itemDemand = 265 / 6.3 = 42.063 pieces/day
-			// Stock = 0 -> DoC = 0 days <= lead_time (2) -> CRITICAL
+			// Group 2: FOOD_PROTEIN; shares remain decimal strings and sum exactly to 100%.
+			// Baseline for ALL = 53 g -> totalGroupDemand = 530 g.
 			const proteinGroup = result.groups.find((g) => g.id === 'FOOD_PROTEIN');
 			expect(proteinGroup).toBeDefined();
 			expect(proteinGroup?.totalGroupDemand).toBe(530);
-			const egg = proteinGroup?.items[0];
-			expect(egg?.name).toBe('ไข่ไก่สด เบอร์ 2');
-			expect(egg?.itemDailyDemand).toBeCloseTo(42.063, 2);
-			expect(egg?.docDays).toBe(0);
-			expect(egg?.status).toBe('CRITICAL');
+			expect(proteinGroup?.items).toHaveLength(3);
+			expect(
+				proteinGroup?.items.find((item) => item.itemId === 'item_master:pork-belly')
+					?.itemDailyDemand
+			).toBe(132.5);
+			expect(
+				proteinGroup?.items.find((item) => item.itemId === 'item_master:pork-neck')?.itemDailyDemand
+			).toBe(132.5);
+			expect(
+				proteinGroup?.items.find((item) => item.itemId === 'item_master:canned-fish')
+					?.itemDailyDemand
+			).toBeCloseTo(15.5882, 4);
+
+			const eggGroups = result.groups.filter((g) =>
+				g.items.some((item) => item.itemId === 'item_master:egg')
+			);
+			expect(eggGroups.map((g) => g.id)).toEqual(['FOOD_PROTEIN_HALAL']);
 
 			// General group for unmapped items (blanket)
 			const generalGroup = result.groups.find((g) => g.id === 'GENERAL');
@@ -177,8 +208,8 @@ describe('Food Sphere Table Domain Logic', () => {
 			expect(blanket?.status).toBe('UNCONFIGURED');
 
 			// Summary stats
-			expect(result.summary.totalItems).toBe(9);
-			expect(result.summary.criticalCount).toBe(7);
+			expect(result.summary.totalItems).toBe(10);
+			expect(result.summary.criticalCount).toBe(8);
 			expect(result.summary.warningCount).toBe(1);
 			expect(result.summary.unconfiguredCount).toBe(1);
 			expect(result.summary.adequateCount).toBe(0);
