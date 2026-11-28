@@ -114,6 +114,27 @@ describe('BasicInfoSection external shelter (CR-252 FR-8/9/19)', () => {
 		expect(body).toContain('ผู้จัดการศูนย์');
 	});
 
+	it.each([
+		['a regular', false],
+		['an external', true]
+	])('%s form shows the short name and operating agency inputs', (_n, isExternal) => {
+		const body = renderWith(
+			{
+				is_external: isExternal,
+				operation_status: isExternal ? 'unknown' : 'standby',
+				name_short: 'รร.หาดใหญ่วิทยาลัย',
+				operating_org: 'เทศบาลนครหาดใหญ่'
+			},
+			{ isSystemAdmin: true, isEdit: true }
+		);
+		expect(body).toContain('ชื่อย่อ (แสดงบนแผนที่)');
+		expect(body).toContain('name="name_short"');
+		expect(body).toContain('value="รร.หาดใหญ่วิทยาลัย"');
+		expect(body).toContain('หน่วยงานที่ดูแล');
+		expect(body).toContain('name="operating_org"');
+		expect(body).toContain('value="เทศบาลนครหาดใหญ่"');
+	});
+
 	it('a regular form shows no URL input and keeps the operational basics', () => {
 		const body = renderWith({ is_external: false }, { isSystemAdmin: true, isEdit: false });
 		expect(body).not.toContain('ลิงก์ไปยังระบบต้นทาง');

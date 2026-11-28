@@ -6,7 +6,7 @@ date: 2026-11-12
 requested_by: Dev Team B — GitHub #1242
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
-updated: 2026-11-13 # decision sync: ศูนย์ External กรอก/แสดงความจุสูงสุด (FR-6 / FR-19 / FR-21 แก้) — ไม่เปิด CR ใหม่ ไม่ bump schema_v
+updated: 2026-11-24 # รูปหมุด External บน /shelters ตาม CR-261 FR-17 (decision sync) · CR-264: เพิ่ม FR-32 (host_house เป็น External ไม่ได้) · 2026-11-13 decision sync: ศูนย์ External กรอก/แสดงความจุสูงสุด (FR-6 / FR-19 / FR-21 แก้) — ไม่เปิด CR ใหม่ ไม่ bump schema_v
 affects:
   - docs/data/schema.md §3.1 shelter (เพิ่ม `is_external`, `external_url`; `operation_status` +`unknown`; `capacity` req→opt เมื่อ External) · §9.1 `public_shelters` (เพิ่ม `is_external`, `external_url`; `status`/`location_status` +`unknown`; `capacity` = `0` เมื่อ External)
   - schema_v 9 → 10 (shelter; additive, doc เดิมไม่ต้อง backfill)
@@ -89,6 +89,10 @@ affects:
 - FR-30 — แถว External ที่มีข้อมูลในชีตโซน / จุดแจกอาหาร หรือคอลัมน์ policy / สาธารณูปโภคที่ผูกกับแถวนั้น = `validation_error`.
 - FR-31 — จับซ้ำตามชื่อ + `duplicateAction=update`: ถ้าชนิดไม่ตรงกับ doc เดิม = `validation_error` "เปลี่ยนชนิดไม่ได้"; บังคับทั้ง preview และ worker.
 
+### ชนิดสถานที่ (CR-264)
+
+- FR-32 — ศูนย์ External ต้องมี `site_kind` ที่ไม่ใช่ `host_house` (ค่าว่างอ่านเป็น `evacuation_center`); บังคับที่ domain ตัวเดียวทั้งฟอร์ม, BFF สร้าง/แก้ไข และ import; ข้อยกเว้น: `system_admin` เปลี่ยนศูนย์ External คู่เดิมเป็น `cancelled` ได้เสมอ — รายละเอียดใน [CR-264](../01-core/CR-264-host-house-not-external.md).
+
 ---
 
 ## Acceptance
@@ -101,6 +105,7 @@ affects:
 - EXT-002/003 คืน `location_status='unknown'` + `is_external=true`; EXT-008 → 409 `location_not_bookable` แม้มี `booking-bypass`.
 - ศูนย์ External ไม่ปรากฏใน combobox ปฏิบัติการ (user scope, transfer, donation/needs, kiosk, import) แต่ปรากฏในรายการ system-management พร้อม badge.
 - Import: ไฟล์เก่าผ่านเหมือนเดิม; แถว External ที่มีข้อมูลโซน/policy → `validation_error`; เปลี่ยนชนิดผ่าน `duplicateAction=update` → `validation_error`.
+- ศูนย์ External + `site_kind = host_house`: สร้าง/แก้/import ไม่ได้ (CR-264); ข้อมูลเดิมที่เป็นคู่นี้ `system_admin` `cancelled` ได้โดยไม่ต้องแก้ `site_kind`.
 - Test (ตามที่ตกลง): Vitest (Zod invariant, mapper / `toUiShelterStatus`, guard SA, `duplicates.ts`, `import-row` / `template` / `sample-row`, route jobs) · pytest (projector, use_case, `accepts_booking`, EXT API) · Playwright `@regression` mock (public UI 1 ชุด + ปรับ `e2e/shelter-import.test.ts`); ไม่เขียน live e2e ใหม่.
 
 ---
@@ -147,3 +152,5 @@ Team Lead PO Meeting 2026-11-07 (#1242, labels: priority:high, Before Floods): �
 - 2026-11-12 — proposed (draft) — บันทึกร่าง CR ใน PR #1371
 - 2026-11-13 — decision sync (ติดตามด้วย note ใน CR นี้ ไม่เปิด CR ใหม่ ตามที่เจ้าของงานเลือก · #1242): ศูนย์ External กรอกความจุสูงสุดได้ (optional) และ public แสดงความจุนั้น — แก้ FR-6 / FR-19 / FR-21 · `public_shelters.capacity` ของศูนย์ External = ค่าที่กรอก (`backfill_capacity()` ไม่ fallback; เดิมคืน `0`) · ไม่ bump `schema_v` (10) และ `PROJECTION_VERSION` (19 ยังไม่ปล่อย) · occupancy ยังไม่นับ, accepts_booking ยังเป็น false
 - 2026-11-12 — approved โดย Soravit Sukkarn (Team Lead) กำหนดหมายเลข CR-252; เลือกหมวด `00-baseline` (ตาม CR-205 / CR-039 / CR-077 ที่แก้ shelter schema); เคาะ chip สถานะ "ไม่ทราบสถานะ" ใช้สีเทา (Slate/Neutral) ไม่ซ้ำกับสีเหลืองของ standby
+- 2026-11-24 — เพิ่ม FR-32 ตาม [CR-264](../01-core/CR-264-host-house-not-external.md) (approved โดย kong): บ้านพี่เลี้ยงเป็น External ไม่ได้ — ติดตามด้วย CR-264 ไม่ bump `schema_v`
+- 2026-11-24 — หมุด External บนหน้า `/shelters` เปลี่ยนเป็นตัวหมุดพื้นขาว ขอบประสีเทาเข้ม `#475569` และไอคอนลูกศรสีเดียวกัน (แยกจากหมุดศูนย์ในระบบชัดเจน) และอยู่ใต้หมุดศูนย์ในระบบเมื่อซ้อนกัน — ติดตามใน CR-261 FR-16/FR-17 (decision sync 2026-11-24); สีของ chip สถานะ (FR-20) ไม่เปลี่ยน

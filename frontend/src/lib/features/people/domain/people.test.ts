@@ -180,7 +180,7 @@ describe('stayStatusSchema and STATUS_LABELS', () => {
 	});
 
 	it('contains arriving, room_confirmed, and checked_out in STATUS_LABELS with Thai labels', () => {
-		expect(STATUS_LABELS.arriving).toBe('รอเข้าพัก');
+		expect(STATUS_LABELS.arriving).toBe('รายงานตัวแล้ว · รอจัดโซน');
 		expect(STATUS_LABELS.room_confirmed).toBe('ยืนยันถึงโซนแล้ว');
 		expect(STATUS_LABELS.checked_out).toBe('เช็คเอาต์');
 		expect(STATUS_LABELS.kiosk_registered).toBe('ลงทะเบียนที่ตู้ (รอยืนยัน)');

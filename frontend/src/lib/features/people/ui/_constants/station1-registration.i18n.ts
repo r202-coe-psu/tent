@@ -10,7 +10,7 @@ const th = {
 			'ตรวจพบเลขประจำตัวประชาชนนี้มีการลงทะเบียนในระบบแล้ว หากท่านเคยลงทะเบียนไว้แล้ว สามารถตรวจสอบสถานะได้ที่หน้าประวัติ',
 		staffPhonePrefix: 'ตรวจพบเบอร์โทรศัพท์',
 		staffIdPrefix: 'ตรวจพบเลขบัตรประชาชน',
-		staffSuffix: 'มีข้อมูลผู้ประสบภัยอยู่ในระบบแล้ว กรุณาตรวจสอบก่อนกรอกข้อมูลซ้ำ',
+		staffSuffix: 'มีข้อมูลผู้พักพิงอยู่ในระบบแล้ว กรุณาตรวจสอบก่อนกรอกข้อมูลซ้ำ',
 		thisShelter: 'ศูนย์นี้',
 		centralQueue: 'คิวกลาง',
 		idCardLabel: 'เลขบัตรประชาชน:',
@@ -24,7 +24,7 @@ const th = {
 	pull: {
 		title: 'ดึงข้อมูลจากคิวลงทะเบียนล่วงหน้า',
 		description:
-			'เลือกผู้ประสบภัยที่สแกนบัตร Kiosk หรือลงทะเบียนออนไลน์ล่วงหน้าไว้ เพื่อดึงเข้าครอบครัวนี้',
+			'เลือกผู้พักพิงที่สแกนบัตร Kiosk หรือลงทะเบียนออนไลน์ล่วงหน้าไว้ เพื่อดึงเข้าครอบครัวนี้',
 		searchPlaceholder: 'ค้นหาด้วยชื่อ, นามสกุล, เลขบัตรประชาชน 13 หลัก, หรือเบอร์โทร...',
 		clearSearchAria: 'ล้างคำค้นหา',
 		all: 'ทั้งหมด',
@@ -43,16 +43,16 @@ const th = {
 	batch: {
 		title: 'ลงทะเบียนสำเร็จ',
 		subtitle: 'พิมพ์บัตรด้านล่างทีละใบ (Person QR ของทุกคน) แล้วส่งต่อไปขั้นถัดไป',
-		toMedical: 'ไปคัดกรองผู้เข้าพัก (สถานี 2)',
-		toZoning: 'ไปจัดโซน (สถานี 3)',
+		toMedical: 'ไปจุดคัดกรองสุขภาพ',
+		toZoning: 'ไปจุดจัดโซน',
 		factFamily: 'ครอบครัว',
 		factCount: 'จำนวน',
 		count: (n: number) => `${n} คน`,
 		factStatus: 'สถานะ',
 		statusValue: 'รายงานตัวแล้ว · รอเข้าพัก',
 		factNext: 'ขั้นถัดไป',
-		nextMedical: 'คัดกรองผู้เข้าพัก (สถานี 2)',
-		nextZoning: 'จัดโซน (สถานี 3)',
+		nextMedical: 'จุดคัดกรองสุขภาพ',
+		nextZoning: 'จุดจัดโซน',
 		registerAnother: 'ลงทะเบียนครอบครัวถัดไป',
 		backToQueue: 'กลับคิวทะเบียน',
 		member: 'สมาชิก'
@@ -69,7 +69,7 @@ const th = {
 		notSelected: 'ยังไม่เลือก — ไม่มาในรอบนี้',
 		unlinkPull: 'ยกเลิกการดึง',
 		preferredZoneTitle: 'โซนที่ต้องการ (ไม่บังคับ)',
-		preferredZoneHint: 'เป็นค่าแนะนำให้จุดจัดโซน (สถานี 3) — ทุกคนยังต้องผ่านจุดคัดกรองและจัดโซน',
+		preferredZoneHint: 'เป็นค่าแนะนำให้จุดจัดโซน — ทุกคนยังต้องผ่านจุดคัดกรองและจัดโซน',
 		noOpenZones: 'ศูนย์นี้ยังไม่มีโซนที่เปิดใช้งาน',
 		preferredZoneAria: 'โซนที่ต้องการ',
 		unspecified: 'ไม่ระบุ'
@@ -130,16 +130,16 @@ const en: typeof th = {
 		title: 'Registration complete',
 		subtitle:
 			'Print the cards below one by one (everyone’s Person QR), then move on to the next step',
-		toMedical: 'Go to health screening (Station 2)',
-		toZoning: 'Go to zoning (Station 3)',
+		toMedical: 'Go to the health screening desk',
+		toZoning: 'Go to the zoning desk',
 		factFamily: 'Family',
 		factCount: 'Count',
 		count: (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`,
 		factStatus: 'Status',
 		statusValue: 'Reported in · awaiting check-in',
 		factNext: 'Next step',
-		nextMedical: 'Health screening (Station 2)',
-		nextZoning: 'Zoning (Station 3)',
+		nextMedical: 'Health screening desk',
+		nextZoning: 'Zoning desk',
 		registerAnother: 'Register the next family',
 		backToQueue: 'Back to registration queue',
 		member: 'Member'
@@ -157,7 +157,7 @@ const en: typeof th = {
 		unlinkPull: 'Undo pull',
 		preferredZoneTitle: 'Preferred zone (optional)',
 		preferredZoneHint:
-			'A suggestion for the zoning desk (Station 3) — everyone still goes through screening and zoning',
+			'A suggestion for the zoning desk — everyone still goes through screening and zoning',
 		noOpenZones: 'This shelter has no active zones yet',
 		preferredZoneAria: 'Preferred zone',
 		unspecified: 'Not specified'

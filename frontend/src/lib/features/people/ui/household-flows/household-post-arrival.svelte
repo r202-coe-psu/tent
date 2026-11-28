@@ -60,7 +60,7 @@
 				return JSON.parse(saved) as SavedWizardState;
 			}
 		} catch {
-			toast.error('ไม่สามารถโหลดข้อมูลแบบร่างการจัดกลุ่มครัวเรือนได้');
+			toast.error('ไม่สามารถโหลดข้อมูลแบบร่างการจัดกลุ่มครอบครัวได้');
 		}
 		return null;
 	}
@@ -104,7 +104,7 @@
 			try {
 				sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
 			} catch {
-				toast.error('ไม่สามารถบันทึกข้อมูลแบบร่างการจัดกลุ่มครัวเรือนได้');
+				toast.error('ไม่สามารถบันทึกข้อมูลแบบร่างการจัดกลุ่มครอบครัวได้');
 			}
 		}
 		goto(
@@ -171,7 +171,7 @@
 		);
 		if (conflict.conflicted) {
 			toast.error(
-				`ไม่สามารถเพิ่มได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
+				`ไม่สามารถเพิ่มได้ เนื่องจาก ${evac.first_name} ${evac.last_name} สังกัดครอบครัว "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
 			);
 			return;
 		}
@@ -183,7 +183,7 @@
 			}
 		} else {
 			if (selectedMembers.some((m) => m._id === evac._id)) {
-				toast.error('ผู้เข้าพักรายนี้ถูกเพิ่มเข้าครัวเรือนเรียบร้อยแล้ว');
+				toast.error('ผู้เข้าพักรายนี้ถูกเพิ่มเข้าครอบครัวเรียบร้อยแล้ว');
 				return;
 			}
 			selectedMembers = [...selectedMembers, evac];
@@ -207,7 +207,7 @@
 		if (isSubmitting) return;
 
 		if (!selectedHead) {
-			toast.error('กรุณาระบุหัวหน้าครัวเรือน');
+			toast.error('กรุณาระบุผู้ติดต่อหลัก');
 			return;
 		}
 
@@ -238,7 +238,7 @@
 					);
 					if (conflict.conflicted) {
 						throw new Error(
-							`${evac.first_name} ${evac.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
+							`${evac.first_name} ${evac.last_name} สังกัดครอบครัว "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
 						);
 					}
 				}
@@ -293,7 +293,7 @@
 				selectedMembers = selectedMembers.map((m) => (m._id === evac._id ? res : m));
 			}
 
-			toast.success(`จัดกลุ่มครัวเรือน "${hhDoc.label}" สำเร็จ`);
+			toast.success(`จัดกลุ่มครอบครัว "${hhDoc.label}" สำเร็จ`);
 			step = 6;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
@@ -305,7 +305,7 @@
 </script>
 
 <svelte:head>
-	<title>จัดกลุ่มผู้เข้าพักเป็นครัวเรือน · SmartShelter</title>
+	<title>จัดกลุ่มผู้เข้าพักเป็นครอบครัว · SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
@@ -317,10 +317,10 @@
 			onclick={() => goto(resolve('/back-office/evacuee-management?tab=household'))}
 		>
 			<ArrowLeft class="size-4" />
-			<span>กลับหน้ารายการครัวเรือนหลัก</span>
+			<span>กลับหน้ารายการครอบครัวหลัก</span>
 		</button>
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-			จัดกลุ่มผู้เข้าพักเป็นครัวเรือน (Household Post-arrival Grouping)
+			จัดกลุ่มผู้เข้าพักเป็นครอบครัว (Household Post-arrival Grouping)
 		</h2>
 	</div>
 
@@ -366,11 +366,11 @@
 							: 'text-muted-foreground'}"
 				>
 					{s === 1
-						? 'เลือกหัวหน้าครัวเรือน'
+						? 'เลือกผู้ติดต่อหลัก'
 						: s === 2
-							? 'เลือกสมาชิกครัวเรือน'
+							? 'เลือกสมาชิกครอบครัว'
 							: s === 3
-								? 'ระบุที่อยู่ครัวเรือน'
+								? 'ระบุที่อยู่ครอบครัว'
 								: s === 4
 									? 'ทรัพย์สินและสัตว์เลี้ยง'
 									: s === 5

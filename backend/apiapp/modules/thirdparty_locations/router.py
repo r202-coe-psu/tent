@@ -32,6 +32,13 @@ async def list_locations(
             " Only the lowercase strings `true` / `false` are accepted; anything else is 422."
         ),
     ),
+    site_kind: Literal["evacuation_center", "host_house"] | None = Query(
+        default=None,
+        description=(
+            "Filter by site_kind. Only `evacuation_center` and `host_house` are exposed;"
+            " omit to get both. Anything else is 422."
+        ),
+    ),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=50, ge=1, le=200, description="Items per page"),
     use_case: ThirdPartyLocationsUseCase = Depends(get_thirdparty_locations_use_case),  # noqa: B008
@@ -41,6 +48,7 @@ async def list_locations(
         updated_since=updated_since,
         include_inactive=include_inactive,
         accepts_booking_filter=None if accepts_booking is None else accepts_booking == "true",
+        site_kind_filter=site_kind,
         page=page,
         limit=limit,
     )

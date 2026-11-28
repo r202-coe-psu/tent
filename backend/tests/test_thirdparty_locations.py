@@ -581,3 +581,255 @@ async def test_external_location_reports_unknown_and_is_external(
 
     assert await _codes(client, location_read_headers, status="unknown") == {"SH950"}
     assert await _codes(client, location_read_headers, accepts_booking="false") == {"SH950"}
+
+
+# --- decision sync 2026-11-24: partner doc v1.1 fields on EXT-002/003 -----------------------
+
+_DETAIL_ONLY_KEYS = {
+    "facilities",
+    "external_url",
+    "parking_points",
+    "donation_points",
+    "area_m2",
+    "area_type",
+    "power_source",
+    "water_source",
+    "communications",
+    "vhf_channel",
+    "central_kitchen",
+    "helipad",
+    "logistics_area_m2",
+    "toilets",
+    "showers",
+    "risk",
+    "vulnerable_groups",
+    "pet_policy",
+    "luggage_policy",
+    "zones",
+}
+
+_PROFILE = {
+    "area_m2": 850.0,
+    "area_type": "indoor",
+    "power_source": "generator",
+    "water_source": "water_tank",
+    "communications": ["cellular", "vhf_radio"],
+    "vhf_channel": "CH 7",
+    "central_kitchen": True,
+    "helipad": False,
+    "logistics_area_m2": 120.0,
+    "toilets": {"male": 6, "female": 8, "accessible": 2},
+    "showers": 4,
+    "risk": {
+        "elevation_m": 12.0,
+        "constraints": "น้ำท่วมทางเข้าเมื่อฝนหนัก",
+        "secondary_muster_point": "ลานวัด",
+    },
+    "vulnerable_groups": ["elderly"],
+    "pet_policy": {
+        "policy": "conditional",
+        "categories": [{"category": "small_general", "conditions": [], "max_capacity": 10}],
+    },
+    "luggage_policy": {
+        "limitation": "limited",
+        "max_per_family": 2,
+        "rules": ["no_hazardous_items"],
+        "rules_other": None,
+    },
+    "zones": [
+        {"code": "Z1", "name": "โซนหญิง", "type": "female", "capacity": 40, "status": "active"},
+        {"code": "Z2", "name": "โซนปิด", "type": "general", "capacity": 20, "status": "closed"},
+    ],
+}
+
+
+async def _insert_profiled(code: str = "SH700", **over) -> PublicShelter:
+    fields: dict = {
+        "id": code,
+        "shelter_code": code,
+        "name": f"ศูนย์ {code}",
+        "site_kind": "evacuation_center",
+        "status": "open",
+        "location_status": "open",
+        "capacity": 100,
+        "project_level": "provincial",
+        "name_short": "รร.ทดสอบ",
+        "operating_org": "เทศบาลนครหาดใหญ่",
+        "delivery_note": "รถบรรทุกเกิน 6 ล้อเข้าไม่ได้",
+        "external_url": None,
+        "parking_vehicle_types": ["car", "truck"],
+        "occupancy_by_status": {"pre_registered": 5, "active": 30, "checked_out": 9},
+        "occupancy_by_zone": {"Z1": {"active": 3, "room_confirmed": 4, "arriving": 7}},
+        "profile": _PROFILE,
+        # Bogus raw_data — none of it may reach the response for the new keys.
+        "raw_data": {
+            "utilities": {"power_source": "RAW_ONLY", "vhf_channel": "RAW_ONLY"},
+            "zones": [{"code": "RAW", "name": "RAW_ONLY", "short_name": "x"}],
+            "admission_policy": {"supported_vulnerable_groups": ["RAW_ONLY"]},
+            "created_by": "RAW_ONLY",
+        },
+        "updated_at": datetime.now(UTC),
+    }
+    fields.update(over)
+    return await PublicShelter(**fields).insert()
+
+
+async def test_list_carries_the_new_summary_keys_but_no_detail_keys(
+    client: AsyncClient, location_read_headers: dict[str, str]
+) -> None:
+    await _insert_profiled()
+    response = await client.get("/external/locations", headers=location_read_headers)
+    [item] = response.json()["result"]
+    assert item["site_kind"] == "evacuation_center"
+    assert item["project_level"] == "provincial"
+    assert item["occupancy_forecast"] == 35
+    assert item["capacity_available"] == 65
+    assert item["parking_vehicle_types"] == ["car", "truck"]
+    assert item["name_short"] == "รร.ทดสอบ"
+    assert item["operating_org"] == "เทศบาลนครหาดใหญ่"
+    assert item["delivery_note"] == "รถบรรทุกเกิน 6 ล้อเข้าไม่ได้"
+    assert not _DETAIL_ONLY_KEYS & item.keys()
+
+
+async def test_detail_reads_the_projected_profile_never_raw_data(
+    client: AsyncClient, location_read_headers: dict[str, str]
+) -> None:
+    await _insert_profiled()
+    response = await client.get("/external/locations/SH700", headers=location_read_headers)
+    result = response.json()["result"]
+    assert _DETAIL_ONLY_KEYS <= result.keys()
+    for key in ("area_m2", "power_source", "vhf_channel", "toilets", "risk", "luggage_policy"):
+        assert result[key] == _PROFILE[key]
+    assert result["vulnerable_groups"] == ["elderly"]
+    assert result["pet_policy"] == _PROFILE["pet_policy"]
+    assert result["zones"] == [
+        {
+            "code": "Z1",
+            "name": "โซนหญิง",
+            "type": "female",
+            "capacity": 40,
+            "status": "active",
+            "present": 7,
+        },
+        {
+            "code": "Z2",
+            "name": "โซนปิด",
+            "type": "general",
+            "capacity": 20,
+            "status": "closed",
+            "present": 0,
+        },
+    ]
+    assert "RAW_ONLY" not in response.text
+    assert "created_by" not in response.text
+    assert "short_name" not in response.text
+
+
+async def test_detail_of_a_row_not_re_projected_reports_null_and_empty(
+    client: AsyncClient, location_read_headers: dict[str, str]
+) -> None:
+    await _insert_profiled(profile=None, occupancy_by_status=None, occupancy_by_zone=None)
+    result = (await client.get("/external/locations/SH700", headers=location_read_headers)).json()[
+        "result"
+    ]
+    assert result["occupancy_forecast"] is None
+    assert result["capacity_available"] is None
+    assert result["toilets"] is None
+    assert result["risk"] is None
+    assert result["central_kitchen"] is None
+    assert result["zones"] == []
+    assert result["communications"] == []
+    assert result["vulnerable_groups"] == []
+
+
+async def test_capacity_available_never_goes_negative(
+    client: AsyncClient, location_read_headers: dict[str, str]
+) -> None:
+    await _insert_profiled(capacity=10, occupancy_by_status={"active": 25})
+    [item] = (await client.get("/external/locations", headers=location_read_headers)).json()[
+        "result"
+    ]
+    assert item["occupancy_forecast"] == 25
+    assert item["capacity_available"] == 0
+
+
+async def test_external_shelter_has_no_capacity_available(
+    client: AsyncClient, location_read_headers: dict[str, str]
+) -> None:
+    await insert_shelter("SH960", status="unknown", is_external=True)
+    result = (await client.get("/external/locations/SH960", headers=location_read_headers)).json()[
+        "result"
+    ]
+    assert result["capacity_available"] is None
+    assert result["accepts_delivery"] is False
+
+
+@pytest.mark.parametrize(
+    ("status", "is_active", "is_external", "expected"),
+    [
+        ("open", True, False, True),
+        ("standby", True, False, True),
+        ("full", True, False, True),
+        ("closed", True, False, False),
+        ("unknown", True, True, False),
+        ("open", False, False, False),
+    ],
+)
+async def test_accepts_delivery_is_computed_not_the_stored_default(
+    client: AsyncClient,
+    location_read_headers: dict[str, str],
+    status: str,
+    is_active: bool,
+    is_external: bool,
+    expected: bool,
+) -> None:
+    # The stored `accepts_delivery` stays at its default `True`; the API must not read it.
+    await insert_shelter("SH970", status=status, is_active=is_active, is_external=is_external)
+    result = (await client.get("/external/locations/SH970", headers=location_read_headers)).json()[
+        "result"
+    ]
+    assert result["accepts_delivery"] is expected
+
+
+# Partners see only evacuation_center + host_house; test_center (or any other kind) is hidden.
+
+
+@pytest.mark.parametrize(
+    ("site_kind", "listed"),
+    [("evacuation_center", True), ("host_house", True), ("test_center", False), ("other", False)],
+)
+async def test_only_partner_site_kinds_are_listed_or_found(
+    client: AsyncClient, location_read_headers: dict[str, str], site_kind: str, listed: bool
+) -> None:
+    await _insert_profiled(site_kind=site_kind)
+    listing = (await client.get("/external/locations", headers=location_read_headers)).json()
+    detail = await client.get("/external/locations/SH700", headers=location_read_headers)
+    assert [item["location_code"] for item in listing["result"]] == (["SH700"] if listed else [])
+    assert listing["pagination"]["total"] == (1 if listed else 0)
+    assert detail.status_code == (200 if listed else 404)
+
+
+@pytest.mark.parametrize("site_kind", ["evacuation_center", "host_house"])
+async def test_list_locations_filters_by_site_kind(
+    client: AsyncClient, location_read_headers: dict[str, str], site_kind: str
+) -> None:
+    await _insert_profiled("SH701", site_kind="evacuation_center")
+    await _insert_profiled("SH702", site_kind="host_house")
+    await _insert_profiled("SH703", site_kind="test_center")
+    listing = (
+        await client.get(
+            "/external/locations", params={"site_kind": site_kind}, headers=location_read_headers
+        )
+    ).json()
+    assert {item["site_kind"] for item in listing["result"]} == {site_kind}
+    assert listing["pagination"]["total"] == 1
+
+
+@pytest.mark.parametrize("site_kind", ["test_center", "EVACUATION_CENTER", "x"])
+async def test_list_locations_rejects_a_non_partner_site_kind(
+    client: AsyncClient, location_read_headers: dict[str, str], site_kind: str
+) -> None:
+    response = await client.get(
+        "/external/locations", params={"site_kind": site_kind}, headers=location_read_headers
+    )
+    assert response.status_code == 422

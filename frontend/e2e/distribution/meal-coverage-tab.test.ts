@@ -1,10 +1,12 @@
 /**
- * Meal coverage tab (`/back-office/evacuee-management?tab=meals`, #1300).
+ * Food distribution overview (`/back-office/overview/food`, #1300; was
+ * `/back-office/evacuee-management?tab=meals`, which now redirects here).
  *
  * Seeds today's kitchen services (breakfast + lunch), two residents who were in the shelter
  * for days, and breakfast + lunch handovers for one of them — today and yesterday. Proves the
  * summary cards, the roster + status filter, the CSV export (phone-like distributors masked),
- * the past-day view, and that a role outside evacuee registration is redirected away.
+ * the "yesterday" preset, the old tab link redirect, and that a role outside centre management
+ * is sent back to the portal.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -24,7 +26,9 @@ import {
 } from './distribution';
 import { consumable } from './distribution-desk-setup';
 
-const MEALS_URL = '/back-office/evacuee-management?tab=meals';
+const FOOD_URL = '/back-office/overview/food';
+const OLD_MEALS_URL = '/back-office/evacuee-management?tab=meals';
+const HEADING = 'ภาพรวมการแจกจ่ายอาหาร';
 const TAGS = ['@back-office', '@distribution'];
 const PHONE_DISTRIBUTOR = '0812345678';
 const DAY_MS = 24 * 3600_000;
@@ -74,7 +78,7 @@ async function seedMealService(
 	});
 }
 
-test.describe('Meal coverage tab (#1300)', { tag: TAGS }, () => {
+test.describe('Food distribution overview (#1300)', { tag: TAGS }, () => {
 	test('shows summary cards and the roster, filters it and exports CSV', async ({
 		page,
 		scenarioAs,
@@ -110,29 +114,29 @@ test.describe('Meal coverage tab (#1300)', { tag: TAGS }, () => {
 		await seedDistributionLog(scenario, { ticket, item, recipient: fedPerson, meal: 'lunch' });
 
 		await selectActiveShelter(page, shelter.code);
-		await page.goto(MEALS_URL);
+		await page.goto(FOOD_URL);
 
-		await expect(page.getByRole('heading', { name: 'การรับอาหารประจำวัน' })).toBeVisible();
-		await expect(page.getByText('วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว:')).toBeVisible();
+		await expect(page.getByRole('heading', { name: HEADING })).toBeVisible();
+		await expect(page.getByText('วันนี้แจกแล้ว 2 จาก 3 มื้อ')).toBeVisible();
 
 		const roster = page.getByRole('table', { name: 'รายชื่อผู้พักพิงและบันทึกรับอาหาร' });
 		const fedRow = roster.getByRole('row').filter({ hasText: fed });
 		const unfedRow = roster.getByRole('row').filter({ hasText: unfed });
-		await expect(fedRow).toContainText('ครบ 2/2 มื้อ', { timeout: 30_000 });
+		await expect(fedRow).toContainText('รับ 2 มื้อขึ้นไป', { timeout: 30_000 });
 		await expect(fedRow).toContainText(scenario.user.name);
 		await expect(fedRow).toContainText('•••5678');
-		await expect(unfedRow).toContainText('ยังไม่ถึง 2 มื้อ · 0/2');
+		await expect(unfedRow).toContainText('รับ 0 มื้อ');
 
 		// Summary cards count both residents (the shelter holds only these two).
-		const count = (label: string) =>
-			page.getByRole('button', { name: new RegExp(`^${label}`) }).locator('.text-3xl');
-		await expect(count('อยู่ในศูนย์ตั้งแต่ต้นวัน')).toHaveText('2');
-		await expect(count('ได้รับครบ')).toHaveText('1');
-		await expect(count('ยังไม่มีบันทึกเลย')).toHaveText('1');
+		const count = (card: 'all' | 'complete' | 'partial' | 'none') =>
+			page.locator(`[data-card="${card}"] .text-3xl`);
+		await expect(count('all')).toHaveText('2');
+		await expect(count('complete')).toHaveText('1');
+		await expect(count('none')).toHaveText('1');
 
 		// Status filter narrows the roster to people without any record.
 		await page.locator('#meal-coverage-status').click();
-		await page.getByRole('option', { name: 'ยังไม่มีบันทึกเลย' }).click();
+		await page.getByRole('option', { name: 'รับ 0 มื้อ', exact: true }).click();
 		await expect(unfedRow).toBeVisible();
 		await expect(fedRow).toHaveCount(0);
 
@@ -144,14 +148,14 @@ test.describe('Meal coverage tab (#1300)', { tag: TAGS }, () => {
 		expect(filtered.csv).not.toContain(fed);
 
 		await page.locator('#meal-coverage-status').click();
-		await page.getByRole('option', { name: 'ทุกสถานะ' }).click();
+		await page.getByRole('option', { name: 'ทั้งหมด', exact: true }).click();
 		const all = (await exportCsv(page)).csv;
 		expect(all).toContain(fed);
 		expect(all).toContain('•••5678');
 		expect(all).not.toContain(PHONE_DISTRIBUTOR);
 	});
 
-	test('picking a past day counts that day, not today', async ({ page, scenarioAs, shelter }) => {
+	test('the yesterday preset counts that day, not today', async ({ page, scenarioAs, shelter }) => {
 		test.skip(minutesToThaiMidnight() < 5, 'too close to midnight (Thai time) to pick a day');
 		const yesterday = thaiDay(1);
 		const scenario = await scenarioAs('meal_coverage_past');
@@ -180,36 +184,32 @@ test.describe('Meal coverage tab (#1300)', { tag: TAGS }, () => {
 		}
 
 		await selectActiveShelter(page, shelter.code);
-		await page.goto(MEALS_URL);
-		await expect(page.getByRole('heading', { name: 'การรับอาหารประจำวัน' })).toBeVisible();
+		// The old evacuee-management tab link still lands on this page.
+		await page.goto(OLD_MEALS_URL);
+		await expect(page).toHaveURL(new RegExp(`${FOOD_URL}(?:[?#]|$)`));
+		await expect(page.getByRole('heading', { name: HEADING })).toBeVisible();
 
-		await page.locator('#meal-coverage-day').click();
-		// On the 1st, yesterday is in the previous month: page the calendar back first.
-		if (yesterday.slice(0, 7) !== thaiDay().slice(0, 7)) {
-			await page.locator('[data-calendar-prev-button]').click();
-		}
-		await page
-			.locator(`[data-bits-day][data-value="${yesterday}"]:not([data-outside-month])`)
-			.click();
+		await page.locator('#meal-coverage-range-preset').click();
+		await page.getByRole('option', { name: 'เมื่อวาน', exact: true }).click();
 
-		await expect(page.getByText('วันนี้นับเฉพาะมื้อที่ให้บริการแล้ว')).toHaveCount(0);
+		// Today's served-meal note belongs to ranges that include today only.
+		await expect(page.getByText(/^วันนี้(ยังไม่ได้แจก|แจกแล้ว)/)).toHaveCount(0);
 		const roster = page.getByRole('table', { name: 'รายชื่อผู้พักพิงและบันทึกรับอาหาร' });
-		await expect(roster.getByRole('row').filter({ hasText: fed })).toContainText('ครบ 2/2 มื้อ', {
-			timeout: 30_000
-		});
-		await expect(roster.getByRole('row').filter({ hasText: unfed })).toContainText(
-			'ยังไม่ถึง 2 มื้อ · 0/2'
+		await expect(roster.getByRole('row').filter({ hasText: fed })).toContainText(
+			'รับ 2 มื้อขึ้นไป',
+			{ timeout: 30_000 }
 		);
+		await expect(roster.getByRole('row').filter({ hasText: unfed })).toContainText('รับ 0 มื้อ');
 	});
 
-	test('a role outside evacuee registration is redirected to the portal', async ({
+	test('a role outside centre management is redirected to the portal', async ({
 		page,
 		scenarioAs
 	}) => {
 		await scenarioAs('meal_coverage_denied', roleSet('kitchen_staff', 'flat'));
-		await page.goto(MEALS_URL);
+		await page.goto(FOOD_URL);
 		await expect(page).toHaveURL(/\/portal(?:[/?#]|$)/);
-		await expect(page.getByRole('heading', { name: 'การรับอาหารประจำวัน' })).toHaveCount(0);
+		await expect(page.getByRole('heading', { name: HEADING })).toHaveCount(0);
 	});
 });
 

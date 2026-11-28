@@ -69,7 +69,7 @@
 
 	const operationStatusOptions: { value: Shelter['operation_status']; label: string }[] = [
 		{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
-		{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
+		{ value: 'active', label: 'เปิดรับผู้พักพิง (Active)' },
 		{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
 		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' },
 		{ value: 'cancelled', label: 'ยกเลิกศูนย์ (Cancelled)' },
@@ -338,6 +338,25 @@
 		<Form.FieldErrors />
 	</Form.Field>
 
+	<Form.Field {form} name="name_short">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>ชื่อย่อ (แสดงบนแผนที่)</Form.Label>
+				<Input
+					{...props}
+					value={$formData.name_short ?? ''}
+					oninput={(e) => ($formData.name_short = e.currentTarget.value || null)}
+					{disabled}
+					placeholder="เช่น รร.บ้านค่าย"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.Description>
+			ใช้แทนชื่อเต็มบนหมุดแผนที่ ไม่เกิน 64 ตัวอักษร (เว้นว่างได้)
+		</Form.Description>
+		<Form.FieldErrors />
+	</Form.Field>
+
 	{#if canSetExternal}
 		<div
 			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs"
@@ -416,12 +435,12 @@
 		<Form.Field {form} name="site_kind">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>ชนิดสถานที่<span class="text-destructive">*</span></Form.Label>
+					<Form.Label>ประเภทศูนย์<span class="text-destructive">*</span></Form.Label>
 					<Select.Root type="single" bind:value={$formData.site_kind} {disabled}>
 						<Select.Trigger {...props} class={selectTriggerClass}>
 							{$formData.site_kind
 								? formatMasterLabelByCode($formData.site_kind, siteKindItems, langState.current)
-								: '— เลือกชนิดสถานที่ —'}
+								: '— เลือกประเภทศูนย์ —'}
 						</Select.Trigger>
 						<Select.Content>
 							{#each siteKindOptions as opt (opt.value)}
@@ -646,10 +665,10 @@
 			>
 				<div class="min-w-0 flex-1 space-y-1">
 					<label for="accepts-referrals" class="text-sm font-semibold text-slate-800">
-						รับผู้ประสบภัยที่ส่งต่อมาจากศูนย์อื่น
+						รับผู้พักพิงที่ส่งต่อมาจากศูนย์อื่น
 					</label>
 					<p id="accepts-referrals-desc" class="text-xs text-slate-500">
-						เปิด: ศูนย์อื่นส่งผู้ประสบภัยมาที่นี่ได้ · ปิด: ศูนย์อื่นส่งมาไม่ได้
+						เปิด: ศูนย์อื่นส่งผู้พักพิงมาที่นี่ได้ · ปิด: ศูนย์อื่นส่งมาไม่ได้
 						และใบส่งต่อที่รออยู่จะกดรับไม่ได้ (ยังกดปฏิเสธได้) (ค่าเริ่มต้นเปิด)
 					</p>
 				</div>
@@ -667,7 +686,7 @@
 			>
 				<div class="min-w-0 flex-1 space-y-1">
 					<label for="kiosk-walk-in-registration" class="text-sm font-medium text-card-foreground">
-						อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk
+						อนุญาตลงทะเบียนผู้พักพิงใหม่ที่ Kiosk
 					</label>
 					<p class="text-xs text-muted-foreground">
 						เปิด: แสดงปุ่มลงทะเบียนใหม่เมื่อไม่พบข้อมูลในศูนย์นี้ · ปิด: ซ่อนช่องทางนี้
@@ -679,7 +698,7 @@
 					checked={$formData.feature_flags?.kiosk_walk_in_registration_enabled ?? false}
 					onCheckedChange={(v) => setKioskWalkInRegistration(v === true)}
 					{disabled}
-					aria-label="อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk"
+					aria-label="อนุญาตลงทะเบียนผู้พักพิงใหม่ที่ Kiosk"
 				/>
 			</div>
 
@@ -712,8 +731,8 @@
 						รายงานตัวด้วย ThaiD ที่ตู้ kiosk
 					</label>
 					<p class="text-xs text-muted-foreground">
-						เปิด: ผู้ประสบภัยยืนยันตัวตนด้วยแอป ThaiD บนมือถือของตนเอง · ต้องเปิด ThaiD ระดับระบบที่
-						/system-management/security ด้วย และมือถือผู้ประสบภัยต้องมีอินเทอร์เน็ต · ปิด:
+						เปิด: ผู้พักพิงยืนยันตัวตนด้วยแอป ThaiD บนมือถือของตนเอง · ต้องเปิด ThaiD ระดับระบบที่
+						/system-management/security ด้วย และมือถือผู้พักพิงต้องมีอินเทอร์เน็ต · ปิด:
 						ซ่อนช่องทางนี้ (ค่าเริ่มต้นปิด)
 					</p>
 				</div>
@@ -733,14 +752,14 @@
 					for="enable-medical-screening"
 					class="min-w-0 flex-1 text-sm font-semibold text-slate-800"
 				>
-					เปิดคัดกรองผู้เข้าพัก (Station 2)
+					เปิดจุดคัดกรองสุขภาพ
 				</label>
 				<Switch
 					id="enable-medical-screening"
 					checked={$formData.feature_flags?.enable_medical_screening ?? false}
 					onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
 					{disabled}
-					aria-label="เปิดคัดกรองผู้เข้าพัก Station 2"
+					aria-label="เปิดจุดคัดกรองสุขภาพ"
 				/>
 			</div>
 
@@ -1024,6 +1043,23 @@
 			<Form.FieldErrors />
 		</Form.Field>
 	</div>
+
+	<Form.Field {form} name="operating_org">
+		<Form.Control>
+			{#snippet children({ props })}
+				<Form.Label>หน่วยงานที่ดูแล</Form.Label>
+				<Input
+					{...props}
+					value={$formData.operating_org ?? ''}
+					oninput={(e) => ($formData.operating_org = e.currentTarget.value || null)}
+					{disabled}
+					placeholder="เช่น เทศบาลนครหาดใหญ่"
+				/>
+			{/snippet}
+		</Form.Control>
+		<Form.Description>หน่วยงานที่รับผิดชอบดูแลศูนย์นี้ (เว้นว่างได้)</Form.Description>
+		<Form.FieldErrors />
+	</Form.Field>
 
 	{#if !isExternal}
 		<!-- Key personnel (CR-023 FR-23-2/3) -->

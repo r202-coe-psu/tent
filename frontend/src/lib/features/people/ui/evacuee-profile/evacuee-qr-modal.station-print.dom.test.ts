@@ -33,6 +33,9 @@ vi.mock('svelte-sonner', () => ({ toast }));
 vi.mock('$lib/features/people/data/evacuee-qr.api', () => ({
 	issueEvacueeQrs: issueQrs
 }));
+vi.mock('$lib/features/people/data/evacuee-qr.remote', () => ({
+	readEvacueeQrPrints: vi.fn(async () => [])
+}));
 vi.mock('$lib/features/kiosk', () => ({
 	KIOSK_LABEL_MM: { width: 80, height: 60 },
 	renderKioskQrLabelPng: async () => 'AAAA'

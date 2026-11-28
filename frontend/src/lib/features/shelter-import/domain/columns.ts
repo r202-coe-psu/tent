@@ -226,7 +226,7 @@ export const H = {
 
 	// -- sheet 1: ข้อมูลศูนย์ --
 	name: 'ชื่อศูนย์พักพิง',
-	site_kind: 'ชนิดสถานที่',
+	site_kind: 'ประเภทศูนย์',
 	/** CR-252 FR-27 — blank = ไม่ใช่. */
 	is_external: 'ศูนย์จากระบบภายนอก',
 	external_url: 'ลิงก์ศูนย์ภายนอก',
@@ -368,7 +368,8 @@ export function normalizeHeader(text: string): string {
 
 /** Retired header text → current header, so old templates keep importing. */
 const LEGACY_HEADERS: Readonly<Record<string, string>> = {
-	ประเภทศูนย์พักพิง: H.shelter_type
+	ประเภทศูนย์พักพิง: H.shelter_type,
+	ชนิดสถานที่: H.site_kind
 };
 
 /**
@@ -388,7 +389,10 @@ export const MASTER_COLUMNS: readonly MasterColumn[] = ['shelter_type', 'site_ki
 export const APP_ONLY_FIELDS: readonly string[] = [
 	'โซนเทศบาล',
 	'กลุ่มเปราะบางที่ศูนย์รองรับได้',
-	'การตั้งค่า feature_flags'
+	'การตั้งค่า feature_flags',
+	'ชื่อย่อ (แสดงบนแผนที่)',
+	'หน่วยงานที่ดูแล',
+	'ข้อจำกัดการเข้าถึงสำหรับรถส่งของ'
 ];
 
 export interface ColumnDef {
@@ -465,7 +469,7 @@ const SHEET_MAIN: SheetDef = {
 			required: false,
 			masterType: 'site_kind',
 			path: 'site_kind',
-			hint: 'ชนิดสถานที่ — เลือกจากรายการประเภทศูนย์ (ว่าง = ค่าเริ่มต้นของรายการ)'
+			hint: 'เลือกจากรายการประเภทศูนย์ (ว่าง = ค่าเริ่มต้นของรายการ)'
 		},
 		{
 			header: H.is_external,

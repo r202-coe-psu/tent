@@ -58,7 +58,7 @@
 
 	// State
 	const RECIPIENT_TYPE_LABEL: Record<DistributionRecipientType, string> = {
-		evacuee: 'ผู้ประสบภัย',
+		evacuee: 'ผู้พักพิง',
 		volunteer: 'จิตอาสา',
 		staff: 'เจ้าหน้าที่',
 		outside: 'บุคคลภายนอก'

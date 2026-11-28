@@ -255,7 +255,7 @@ test.describe('Public shelters: active filters', { tag: ['@public', '@regression
 			await page.setViewportSize(viewport);
 			await mockPublicApi(page);
 			await page.goto(
-				`/shelters?${HAT_YAI}&distance=10&q=โรงเรียนบ้านคลองแห&status=open&province=สงขลา&district=หาดใหญ่&subdistrict=คอหงส์&parking_car=on&parking_motorcycle=on&parking_boat=on&hide_evacuation=on`
+				`/shelters?${HAT_YAI}&distance=10&q=โรงเรียนบ้านคลองแห&status=open&province=สงขลา&district=หาดใหญ่&subdistrict=คอหงส์&parking_car=on&parking_motorcycle=on&parking_boat=on&show_external=on&hide_evacuation=on`
 			);
 			const row = chipRow(page);
 			await expect(row).toBeVisible(READY);

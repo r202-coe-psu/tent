@@ -43,6 +43,15 @@ def accepts_booking(doc: PublicShelter) -> bool:
     return doc.location_status != "closed" and accepts_pre_registration(doc.raw_data)
 
 
+def accepts_delivery(doc: PublicShelter) -> bool:
+    """EXT-002/003 `accepts_delivery` (decision sync 2026-11-24): M6 may pick the shelter as a
+    delivery destination unless it is deactivated, run in another system (CR-252) or closed.
+    No staff switch yet — the stored `PublicShelter.accepts_delivery` default is not read."""
+    if not doc.is_active or doc.is_external:
+        return False
+    return doc.location_status != "closed"
+
+
 def _accepts_pre_registration_expr() -> dict[str, Any]:
     """Aggregation form of `accepts_pre_registration`: `feature_flags` must be an object and the
     flag a strict boolean `true`. A plain `{path: True}` match would also hit arrays (a list of

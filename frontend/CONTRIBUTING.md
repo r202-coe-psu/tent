@@ -2,7 +2,7 @@
 title: Contributing — frontend
 status: active
 created: 2026-06-10
-updated: 2026-11-12
+updated: 2026-11-27
 note: decision sync 2026-10-10 — §4 session expiry — 401 = session expired → `needsReauth` + global non-dismissable login modal; 403 or BFF 401 → `needsReauth` only when `GET /_session` confirms anonymous, otherwise treat as permission denied (no modal); network errors = offline banner only (replaces "on 401/403 set needsReauth")
 ---
 
@@ -61,15 +61,23 @@ proxies and `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` for the BFF → FastA
 
 - **pre-commit** (staged files only): `prettier --write` + `eslint --fix` on staged
   `frontend/` files; fixes are re-staged automatically.
-- **pre-push** (sequential): `pnpm test:changed` (`scripts/test-changed.sh`) — Vitest
-  `--changed origin/develop`, which runs only the test files whose import graph reaches a file
-  changed since the merge-base with `origin/develop` (plus staged/unstaged edits). The whole
-  suite runs instead when a non-test file was deleted or renamed (Vitest cannot find its
-  importers), or on a change to `package.json`, the Vite config, `pnpm-lock.yaml`,
-  `tsconfig.json`, `svelte.config.js`, `src/lib/testing/**` or `src/app.css`
-  (`forceRerunTriggers` in `vite.config.ts`). Skipped when the pushed
-  commits touch no `frontend/` source files. Keep `origin/develop` fetched — a stale ref only
-  widens the selection.
+- **pre-push** (sequential): every job takes its file list from
+  [`scripts/hooks/own-push-files.sh`](../scripts/hooks/own-push-files.sh) — the files changed by
+  the branch's own commits since its last push (`@{push}`, or `origin/<branch>` when no upstream
+  is set; `TEST_CHANGED_BASE=<ref>` overrides). Commits already on `origin/develop` are left
+  out, so merging develop into a branch does not re-test develop's changes; files edited while
+  resolving a merge conflict still count. A job is skipped when none of those files is in its
+  tree.
+  - `pnpm test:changed` (`scripts/test-changed.sh`) runs `vitest related` on the listed
+    `frontend/` files — only the test files whose import graph reaches them. The whole suite
+    runs instead when a non-test file was deleted or renamed (Vitest cannot find its importers),
+    or on a change to `package.json`, the Vite config, `pnpm-lock.yaml`, `tsconfig.json`,
+    `svelte.config.js`, `src/lib/testing/**` or `src/app.css` (mirrors `forceRerunTriggers` in
+    `vite.config.ts`). Keep `origin/develop` fetched — a stale ref only widens the selection.
+  - Even a small selection spends about a minute while Vitest builds the import graph.
+  - If a push still drops with exit 141 while hooks run, the SSH connection to GitHub timed out;
+    add `ServerAliveInterval 30` and `ServerAliveCountMax 40` under `Host github.com` in
+    `~/.ssh/config`.
 - **Full unit suite** is manual: run `pnpm test` before opening a PR. The scoped hook misses
   tests that read a file from disk instead of importing it, and Jenkins does not run the unit
   suites (it runs deploy + Playwright e2e on `staging`/`main` only — see `ci/README.md`).

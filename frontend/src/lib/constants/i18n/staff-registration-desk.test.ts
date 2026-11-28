@@ -31,7 +31,7 @@ describe('STAFF_REGISTRATION_DESK_I18N', () => {
 		expect(t.walkIn.matchedMember(2, 'สมชาย')).toBe('สมาชิกคนที่ 2 — สมชาย');
 		expect(t.walkIn.matchedMember(1, '')).toBe('สมาชิกคนที่ 1');
 		expect(t.unassigned.petCapError(5, 3, 2, 'x')).toBe(
-			'สัตว์เลี้ยงของครัวเรือนนี้จะรวมเป็น 5 ตัว เกินเพดาน 3 ตัวต่อครัวเรือนอยู่ 2 ตัว — x'
+			'สัตว์เลี้ยงของครอบครัวนี้จะรวมเป็น 5 ตัว เกินเพดาน 3 ตัวต่อครอบครัวอยู่ 2 ตัว — x'
 		);
 		expect(t.reportIn.pageTitle(null)).toBe('รายงานตัว');
 	});

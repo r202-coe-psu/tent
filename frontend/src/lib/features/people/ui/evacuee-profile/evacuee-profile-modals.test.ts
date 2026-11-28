@@ -275,7 +275,7 @@ describe('EvacueeHealthModal', () => {
 
 	it('keeps the Thai text when the staff language is TH', () => {
 		const body = renderIn('th', EvacueeHealthModal, props);
-		expect(body).toContain('แก้ไขข้อมูลสุขภาพ (Station 2 Occupant Screening)');
+		expect(body).toContain('แก้ไขข้อมูลสุขภาพ (จุดคัดกรองสุขภาพ)');
 		expect(body).toContain('1. ประวัติสุขภาพและแนวทางดูแล (Health History &amp; Care Track)');
 		expect(body).toContain('2. กลุ่มเปราะบาง (Vulnerable Groups)');
 		expect(body).toContain('3. ความต้องการพิเศษ (Special needs)');

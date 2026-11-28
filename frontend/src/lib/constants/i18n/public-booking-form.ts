@@ -190,7 +190,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		sectionPetsEmptyHint:
 			'หากนำสัตว์เลี้ยงมาด้วย สามารถกดปุ่มเพิ่มสัตว์เลี้ยงด้านบน หรือเลือกจากปุ่มด้านล่างนี้',
 		sectionVehicles: 'ยานพาหนะและทรัพย์สิน',
-		sectionVehiclesDesc: 'ยานพาหนะและทรัพย์สินมีค่าที่นำติดตัวมา (เฉพาะ Station 1)',
+		sectionVehiclesDesc: 'ยานพาหนะและทรัพย์สินมีค่าที่นำติดตัวมา (เฉพาะจุดลงทะเบียน)',
 		// Live summary card, ThaiD autofill, optional tags
 		summaryTitle: 'สรุปข้อมูลการลงทะเบียน',
 		summaryShelter: 'ศูนย์พักพิงเป้าหมาย',
@@ -234,7 +234,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 			'ให้ผู้ลงทะเบียนใช้กล้องมือถือสแกน QR Code นี้ เพื่อยืนยันตัวตนและยินยอมส่งข้อมูล',
 		thaidScanFamilyMember: 'สมาชิกในครอบครัว',
 		thaidScanMemberN: (n: number) => `สมาชิกคนที่ ${n}`,
-		thaidScanHead: 'หัวหน้าครอบครัว',
+		thaidScanHead: 'ผู้ติดต่อหลัก',
 		thaidScanGenerating: 'กำลังสร้าง QR Code เชื่อมต่อ ThaiD...',
 		thaidScanQrAlt: 'QR Code สำหรับสแกน ThaiD',
 		thaidScanExpiresIn: 'หมดอายุใน',
@@ -701,7 +701,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		sectionPetsEmpty: 'No pets recorded yet',
 		sectionPetsEmptyHint: 'Use the buttons above or below to add a pet if you are bringing one.',
 		sectionVehicles: 'Vehicles & valuables',
-		sectionVehiclesDesc: 'Vehicles and valuables brought along (Station 1 only)',
+		sectionVehiclesDesc: 'Vehicles and valuables brought along (registration desk only)',
 		// Live summary card, ThaiD autofill, optional tags
 		summaryTitle: 'Registration summary',
 		summaryShelter: 'Target shelter',

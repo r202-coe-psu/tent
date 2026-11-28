@@ -9,15 +9,23 @@ from typing import Any
 from fastapi import HTTPException, status
 from tent_model.public_shelter import PublicShelter
 
-from ...utils.shelter_booking import accepts_booking, accepts_booking_query
+from ...utils.shelter_booking import accepts_booking, accepts_booking_query, accepts_delivery
+from ...utils.shelter_occupancy import capacity_available, occupancy_forecast, zone_present
 from .dopa_codes import lookup_dopa_codes
 from .schemas import (
     LocationDetailEnvelope,
     LocationDetailItem,
     LocationItem,
     LocationListEnvelope,
+    LocationZone,
     PaginationMeta,
 )
+
+#: Site kinds partners may see. `test_center` (and any other kind) is never exposed; partners
+#: narrow further with the `site_kind` query param. `public_visible = false` shelters never
+#: reach `public_shelters` (the worker deletes them, CR-251), so no filter is needed here.
+_PARTNER_SITE_KINDS: tuple[str, ...] = ("evacuation_center", "host_house")
+_PARTNER_VISIBLE_QUERY: dict[str, Any] = {"site_kind": {"$in": list(_PARTNER_SITE_KINDS)}}
 
 
 def _location_error(status_code: int, code: str, message: str) -> HTTPException:
@@ -83,21 +91,53 @@ def _to_item(doc: PublicShelter) -> LocationItem:
         contact_name=doc.contact_name,
         operating_org=doc.operating_org,
         accepts_booking=accepts_booking(doc),
-        accepts_delivery=doc.accepts_delivery,
+        accepts_delivery=accepts_delivery(doc),
         delivery_note=doc.delivery_note,
         opened_at=doc.opened_at,
         closed_at=doc.closed_at,
         is_active=doc.is_active,
         is_external=doc.is_external,
         occupancy_total=doc.occupancy_total,
+        site_kind=doc.site_kind,
+        project_level=doc.project_level,
+        occupancy_forecast=occupancy_forecast(doc),
+        capacity_available=capacity_available(doc),
+        parking_vehicle_types=doc.parking_vehicle_types,
         updated_at=doc.updated_at,
     )
+
+
+def _profile_fields(doc: PublicShelter) -> dict[str, Any]:
+    """Detail-only fields from the projected `profile` — never `raw_data`. A row not re-projected
+    yet (`profile is None`) reports the schema defaults (null / [])."""
+    profile = doc.profile
+    if profile is None:
+        return {}
+    zones = [
+        LocationZone(
+            code=zone.code,
+            name=zone.name,
+            type=zone.type,
+            capacity=zone.capacity,
+            status="closed" if zone.status == "closed" else "active",
+            present=zone_present(doc, zone.code),
+        )
+        for zone in profile.zones
+    ]
+    return {
+        **profile.model_dump(exclude={"zones"}),
+        "zones": zones,
+    }
 
 
 def _to_detail(doc: PublicShelter) -> LocationDetailItem:
     return LocationDetailItem(
         **_to_item(doc).model_dump(),
         facilities=_compose_facilities(doc.raw_data),
+        external_url=doc.external_url,
+        parking_points=doc.parking_points,
+        donation_points=doc.donation_points,
+        **_profile_fields(doc),
     )
 
 
@@ -110,8 +150,11 @@ class ThirdPartyLocationsUseCase:
         page: int = 1,
         limit: int = 50,
         accepts_booking_filter: bool | None = None,
+        site_kind_filter: str | None = None,
     ) -> LocationListEnvelope:
-        query: dict[str, Any] = {}
+        query: dict[str, Any] = dict(_PARTNER_VISIBLE_QUERY)
+        if site_kind_filter:
+            query["site_kind"] = site_kind_filter
         if status_filter:
             query["location_status"] = status_filter
         if not include_inactive:
@@ -137,7 +180,9 @@ class ThirdPartyLocationsUseCase:
         return LocationListEnvelope(result=items, pagination=pagination)
 
     async def get_location(self, location_code: str) -> LocationDetailEnvelope:
-        doc = await PublicShelter.find_one(PublicShelter.shelter_code == location_code)
+        doc = await PublicShelter.find_one(
+            {"shelter_code": location_code, **_PARTNER_VISIBLE_QUERY}
+        )
         if doc is None:
             raise _location_error(
                 status.HTTP_404_NOT_FOUND,

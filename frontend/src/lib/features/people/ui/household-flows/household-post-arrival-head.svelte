@@ -78,7 +78,7 @@
 		);
 		if (conflict.conflicted) {
 			toast.error(
-				`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evacuee.first_name} ${evacuee.last_name} สังกัดครัวเรือน "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
+				`ไม่สามารถกำหนดเป็นหัวหน้าได้ เนื่องจาก ${evacuee.first_name} ${evacuee.last_name} สังกัดครอบครัว "${conflict.label}" ที่ยังมีสมาชิกอื่นอยู่`
 			);
 			return;
 		}
@@ -88,9 +88,9 @@
 
 <div class="mx-auto w-full max-w-3xl space-y-6">
 	<div class="space-y-2">
-		<h3 class="text-lg font-bold text-foreground">1. ตรวจสอบและเลือกหัวหน้าครัวเรือน</h3>
+		<h3 class="text-lg font-bold text-foreground">1. ตรวจสอบและเลือกผู้ติดต่อหลัก</h3>
 		<p class="text-sm text-muted-foreground">
-			สืบค้นข้อมูลผู้เข้าพักที่ทำการเช็คอินเข้าพักในศูนย์แล้ว เพื่อกำหนดเป็นหัวหน้าครัวเรือนหลัก
+			สืบค้นข้อมูลผู้เข้าพักที่ทำการเช็คอินเข้าพักในศูนย์แล้ว เพื่อกำหนดเป็นผู้ติดต่อหลักหลัก
 		</p>
 	</div>
 
@@ -99,7 +99,7 @@
 		<div class="space-y-4 rounded-xl border border-green-200 bg-green-50/50 p-6 shadow-xs">
 			<div class="flex items-start justify-between">
 				<div>
-					<Badge class="mb-2 bg-green-600 text-white">หัวหน้าครัวเรือนที่เลือก</Badge>
+					<Badge class="mb-2 bg-green-600 text-white">ผู้ติดต่อหลักที่เลือก</Badge>
 					<h4 class="text-lg font-bold text-green-950">
 						{selectedHead.first_name}
 						{selectedHead.last_name}
@@ -160,7 +160,7 @@
 
 			{#if isSearchingHead}
 				<div class="flex items-center justify-center py-6 text-sm text-muted-foreground">
-					กำลังค้นหาหัวหน้าครัวเรือน...
+					กำลังค้นหาผู้ติดต่อหลัก...
 				</div>
 			{:else if debouncedHeadQuery && headSearchResults.length === 0}
 				<div class="py-6 text-center text-sm text-muted-foreground">

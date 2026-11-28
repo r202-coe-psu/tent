@@ -33,8 +33,6 @@
 			<div
 				class="flex h-9 items-center justify-center gap-2 px-4 text-sm font-bold tracking-wide {tone.band}"
 			>
-				<span class="tabular-nums">{t.stationBadge(station.id)}</span>
-				<span aria-hidden="true" class="opacity-60">·</span>
 				<span class="truncate"
 					>{langState.current === 'th' ? tone.name : t.stationNames[station.id]}</span
 				>

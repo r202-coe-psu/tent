@@ -3,107 +3,99 @@
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Users from '@lucide/svelte/icons/users';
-	import { hasPartialStatus } from '../../domain/food-supplies/meal-coverage';
-	import type { CoverageFilter } from '../model/meal-coverage-view';
+	import { MIN_MEALS_PER_DAY } from '../../domain/food-supplies/meal-coverage';
+	import {
+		COVERAGE_STATUS_TONES,
+		coverageStatusLabels,
+		type CoverageFilter,
+		type CoverageStatus
+	} from '../model/meal-coverage-view';
 
 	interface Props {
-		filter: CoverageFilter;
-		/** `counts.all` is everyone present: the denominator of every share. */
+		/** `counts.all` is everyone judged: the denominator of every share. */
 		counts: Record<CoverageFilter, number>;
-		/** Records a person needs; with 1 there is no "one meal" group, so that tile is left out. */
-		threshold: number;
-		/** Today counts people present since the start of the day, not all day. */
-		isToday: boolean;
-		onSelect: (filter: CoverageFilter) => void;
+		/** People judged on no day, only there part of a day: not in the base of any card. */
+		partDayOnly: number;
+		/** The report covers several days: the titles word the one-meal status for a range. */
+		multiDay: boolean;
 	}
 
-	let { filter, counts, threshold, isToday, onSelect }: Props = $props();
+	let { counts, partDayOnly, multiDay }: Props = $props();
 
-	type Tile = {
-		id: CoverageFilter;
+	const percent = (n: number) => `${counts.all === 0 ? 0 : Math.round((n / counts.all) * 100)}%`;
+	const labels = $derived(coverageStatusLabels(multiDay));
+
+	type Card = {
+		id: 'all' | CoverageStatus;
 		label: string;
 		hint: string;
+		/** A muted second line. */
+		note?: string;
 		icon: typeof Users;
+		/** Accent colour of the icon: the same token as the donut segment and legend dot. */
+		color: string;
 		border: string;
-		active: string;
-		iconClass: string;
-		bar: string;
 	};
 
-	const share = (n: number) => (counts.all === 0 ? 0 : (n / counts.all) * 100);
-	const percent = (n: number) => `${Math.round(share(n))}%`;
-
-	const tiles = $derived<Tile[]>([
+	// Short on purpose: each subtitle fits one line at lg.
+	const share = (n: number) => `${percent(n)} ของผู้พักพิง`;
+	const cards = $derived<Card[]>([
 		{
 			id: 'all',
-			label: isToday ? 'อยู่ในศูนย์ตั้งแต่ต้นวัน' : 'อยู่ในศูนย์ตลอดวัน',
-			hint: `ยังไม่ครบ ${counts.all - counts.complete} คน`,
+			label: multiDay ? 'ผู้พักพิงในช่วงนี้' : 'ผู้พักพิงในศูนย์',
+			hint: multiDay ? 'อยู่ในศูนย์ทั้งวันอย่างน้อย 1 วัน' : 'อยู่ในศูนย์ทั้งวัน',
+			note: partDayOnly > 0 ? `ไม่รวมผู้อยู่ไม่เต็มวัน ${partDayOnly} คน` : undefined,
 			icon: Users,
-			border: 'border-slate-200/80',
-			active: 'border-slate-500 bg-slate-50',
-			iconClass: 'text-slate-500',
-			bar: ''
+			color: '#64748B',
+			border: 'border-slate-200/80'
 		},
 		{
 			id: 'complete',
-			label: 'ได้รับครบ',
-			hint: `${percent(counts.complete)} ของผู้อยู่ในศูนย์`,
+			label: labels.complete,
+			hint: share(counts.complete),
 			icon: CircleCheck,
-			border: 'border-emerald-200',
-			active: 'border-emerald-500 bg-emerald-50',
-			iconClass: 'text-emerald-600',
-			bar: 'bg-emerald-500'
+			color: COVERAGE_STATUS_TONES.complete.color,
+			border: COVERAGE_STATUS_TONES.complete.border
 		},
-		...(hasPartialStatus(threshold)
-			? [
-					{
-						id: 'partial' as const,
-						label: 'มีบันทึก 1 มื้อ',
-						hint: `${percent(counts.partial)} ของผู้อยู่ในศูนย์`,
-						icon: TriangleAlert,
-						border: 'border-amber-200',
-						active: 'border-amber-500 bg-amber-50',
-						iconClass: 'text-amber-600',
-						bar: 'bg-amber-500'
-					}
-				]
-			: []),
+		{
+			id: 'partial',
+			label: labels.partial,
+			hint: multiDay
+				? `มีวันที่รับ 0–1 มื้อ · ${percent(counts.partial)}`
+				: `ขาดอีก 1 มื้อ · ${percent(counts.partial)}`,
+			icon: TriangleAlert,
+			color: COVERAGE_STATUS_TONES.partial.color,
+			border: COVERAGE_STATUS_TONES.partial.border
+		},
 		{
 			id: 'none',
-			label: 'ยังไม่มีบันทึกเลย',
-			hint: `${percent(counts.none)} ของผู้อยู่ในศูนย์`,
+			label: labels.none,
+			hint: multiDay
+				? share(counts.none)
+				: `ขาด ${MIN_MEALS_PER_DAY} มื้อ · ${percent(counts.none)}`,
 			icon: CircleAlert,
-			border: 'border-red-200',
-			active: 'border-red-500 bg-red-50',
-			iconClass: 'text-red-600',
-			bar: 'bg-red-500'
+			color: COVERAGE_STATUS_TONES.none.color,
+			border: COVERAGE_STATUS_TONES.none.border
 		}
 	]);
 </script>
 
-<div
-	class="grid gap-3 sm:gap-4 {tiles.length === 4
-		? 'grid-cols-2 lg:grid-cols-4'
-		: 'grid-cols-1 sm:grid-cols-3'}"
->
-	{#each tiles as tile (tile.id)}
-		{@const isActive = filter === tile.id}
-		<button
-			type="button"
-			aria-pressed={isActive}
-			onclick={() => onSelect(tile.id)}
-			class="min-h-11 cursor-pointer rounded-xl border p-4 text-left shadow-2xs transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {isActive
-				? `${tile.active} ring-1 ring-slate-300`
-				: `${tile.border} bg-white`}"
+<!-- Informational only: the table's own filter bar is the one way to filter. -->
+<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+	{#each cards as card (card.id)}
+		<article
+			data-card={card.id}
+			class="min-h-11 rounded-xl border bg-white p-4 text-left shadow-2xs {card.border}"
 		>
-			<span class="flex items-center justify-between gap-2">
-				<span class="text-sm font-semibold text-slate-700">{tile.label}</span>
-				<tile.icon class="size-5 shrink-0 {tile.iconClass}" aria-hidden="true" />
-			</span>
-			<span class="mt-2 block text-3xl font-bold text-slate-900 tabular-nums">
-				{counts[tile.id]}
-			</span>
-			<span class="mt-0.5 block text-sm text-slate-500 tabular-nums">{tile.hint}</span>
-		</button>
+			<div class="flex items-center justify-between gap-2">
+				<h5 class="text-sm font-semibold text-slate-700">{card.label}</h5>
+				<card.icon class="size-5 shrink-0" style="color: {card.color}" aria-hidden="true" />
+			</div>
+			<p class="mt-2 text-3xl font-bold text-slate-900 tabular-nums">{counts[card.id]}</p>
+			<p class="mt-0.5 text-sm text-slate-500 tabular-nums">{card.hint}</p>
+			{#if card.note}
+				<p class="text-xs text-slate-400">{card.note}</p>
+			{/if}
+		</article>
 	{/each}
 </div>

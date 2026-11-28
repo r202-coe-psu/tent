@@ -210,7 +210,7 @@
 					<Form.Field {form} name="external.outside_evacuees" class="space-y-1.5">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="text-xs">ผู้อพยพนอกศูนย์</Form.Label>
+								<Form.Label class="text-xs">ผู้พักพิงนอกศูนย์</Form.Label>
 								<Input
 									{...props}
 									type="number"

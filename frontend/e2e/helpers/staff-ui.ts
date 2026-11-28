@@ -8,6 +8,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 import { acceptFullConsent } from './consent';
+import { couchReq } from './couch';
 
 export interface ShelterForm {
 	name: string;
@@ -24,7 +25,7 @@ export interface ShelterForm {
 export async function createShelterViaUi(page: Page, shelter: ShelterForm): Promise<string> {
 	await page.goto('/system-management/shelters/create');
 	await page.getByRole('textbox', { name: 'ชื่อศูนย์พักพิง *' }).fill(shelter.name);
-	await page.getByRole('button', { name: 'ชนิดสถานที่ *' }).click();
+	await page.getByRole('button', { name: 'ประเภทศูนย์ *' }).click();
 	// Labels come from the seeded master_data:site_kind (CR-198).
 	await page
 		.getByRole('option', {
@@ -33,7 +34,7 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 		})
 		.click();
 	await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();
-	await page.getByRole('option', { name: 'เปิดรับผู้อพยพ (Active)' }).click();
+	await page.getByRole('option', { name: 'เปิดรับผู้พักพิง (Active)' }).click();
 	await page.getByRole('spinbutton', { name: 'ละติจูด (Latitude)' }).fill(String(shelter.lat));
 	await page.getByRole('spinbutton', { name: 'ลองจิจูด (Longitude)' }).fill(String(shelter.lng));
 	await page.getByRole('button', { name: 'เลือกจังหวัด...' }).click();
@@ -93,6 +94,36 @@ export interface MemberForm {
 /** Station 1 switches to per-member tabs once a household reaches this many members
  *  (unified-registration-members-section.svelte) and hides every inactive tab's card. */
 const MEMBER_TABS_MIN = 3;
+
+/**
+ * Station 1 registers people as `arriving`; only room confirmation makes them `active`. Public
+ * search lists in-shelter people only (#1536), so suites that search for people they just
+ * registered must admit them first. This does what the later stations do to the stay, through the
+ * CouchDB admin API (the same channel teardown uses) instead of walking those screens — the
+ * sync worker then projects the new status. Throws unless exactly `expected` people were admitted.
+ */
+export async function admitArrivingEvacueesViaCouch(code: string, expected: number): Promise<void> {
+	const db = `/shelter_${code.toLowerCase()}`;
+	const found = await couchReq('POST', `${db}/_find`, {
+		selector: { type: 'evacuee', 'current_stay.status': 'arriving' },
+		limit: 500
+	});
+	const now = new Date().toISOString();
+	const docs = ((found.data as { docs?: Record<string, unknown>[] } | null)?.docs ?? []).map(
+		(doc) => ({
+			...doc,
+			current_stay: { ...(doc.current_stay as object), status: 'active', since: now },
+			updated_at: now
+		})
+	);
+	expect(docs, `${code}: arriving evacuees to admit`).toHaveLength(expected);
+	const written = await couchReq('POST', `${db}/_bulk_docs`, { docs });
+	const rows = (written.data as { ok?: boolean; error?: string }[] | null) ?? [];
+	expect(
+		written.status < 300 && rows.length === expected && rows.every((row) => row.ok),
+		`${code}: admit ${expected} evacuees → ${JSON.stringify(written.data)}`
+	).toBe(true);
+}
 
 /** Onsite Station 1 → register one household (first member = primary contact). */
 export async function registerHouseholdViaUi(

@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { STAFF_SYSTEM_OVERVIEW_I18N } from '$lib/constants/i18n/staff-system-overview';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
 	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { getCountryName } from '$lib/utils/country';
@@ -17,10 +20,12 @@
 		loading?: boolean;
 	} = $props();
 
+	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
+
 	let selectedCountry = $state<string | null>(null);
 
 	function countryLabel(code: string): string {
-		return code === 'UNKNOWN' ? 'ไม่ระบุ' : getCountryName(code);
+		return code === 'UNKNOWN' ? t.unknownCountry : getCountryName(code);
 	}
 
 	function toggleCountry(code: string) {
@@ -58,9 +63,9 @@
 
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 	<Card.Header>
-		<Card.Title class="text-lg font-bold text-slate-900">ประชากรศาสตร์</Card.Title>
+		<Card.Title class="text-lg font-bold text-slate-900">{t.demographicsTitle}</Card.Title>
 		<Card.Description class="text-sm text-slate-500">
-			ช่วงอายุและสัญชาติ (Top) — กดประเทศเพื่อจำแนกช่วงอายุตามสัญชาติ
+			{t.demographicsDescription}
 		</Card.Description>
 	</Card.Header>
 	<Card.Content>
@@ -72,9 +77,9 @@
 					<div class="flex items-center justify-between gap-2">
 						<h3 class="text-sm font-semibold text-slate-800">
 							{#if selectedLabel}
-								ช่วงอายุ · {selectedLabel}
+								{t.ageBands} · {selectedLabel}
 							{:else}
-								ช่วงอายุ
+								{t.ageBands}
 							{/if}
 						</h3>
 						{#if selectedCountry}
@@ -83,7 +88,7 @@
 								class="text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
 								onclick={() => (selectedCountry = null)}
 							>
-								ทั้งหมด
+								{t.all}
 							</button>
 						{/if}
 					</div>
@@ -97,9 +102,9 @@
 					</ul>
 				</div>
 				<div class="space-y-3">
-					<h3 class="text-sm font-semibold text-slate-800">ประเทศ (สูงสุด)</h3>
+					<h3 class="text-sm font-semibold text-slate-800">{t.nationalities}</h3>
 					{#if countryRows.length === 0}
-						<p class="text-sm text-slate-500">ไม่มีข้อมูลสัญชาติ</p>
+						<p class="text-sm text-slate-500">{t.noNationalityData}</p>
 					{:else}
 						<ul class="space-y-2">
 							{#each countryRows as row (row.code)}

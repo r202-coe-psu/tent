@@ -57,7 +57,7 @@ export const stationLogInputSchema = z
 			ctx.addIssue({
 				code: 'custom',
 				path: ['channel'],
-				message: 'Station 2 และ 3 ต้องเป็นช่องทาง staff เท่านั้น'
+				message: 'จุดคัดกรองสุขภาพและจุดจัดโซนต้องเป็นช่องทาง staff เท่านั้น'
 			});
 		}
 	});

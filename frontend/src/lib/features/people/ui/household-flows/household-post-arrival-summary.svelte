@@ -46,7 +46,7 @@
 				.writeText(text)
 				.then(() => {
 					copied = true;
-					toast.success('คัดลอกรหัสอ้างอิงครัวเรือนเรียบร้อยแล้ว');
+					toast.success('คัดลอกรหัสอ้างอิงครอบครัวเรียบร้อยแล้ว');
 					clearTimeout(copyTimeout);
 					copyTimeout = setTimeout(() => {
 						copied = false;
@@ -137,10 +137,10 @@
 			</div>
 			<div class="min-w-0 flex-1">
 				<h3 class="dark:text-slate-550 text-lg font-bold text-slate-900">
-					จัดกลุ่มครอบครัวและออกรหัสครัวเรือนสำเร็จ!
+					จัดกลุ่มครอบครัวและออกรหัสครอบครัวสำเร็จ!
 				</h3>
 				<p class="mt-0.5 text-sm text-muted-foreground">
-					ครัวเรือนได้รับการจัดตั้งแล้วในระบบ สถานะ:
+					ครอบครัวได้รับการจัดตั้งแล้วในระบบ สถานะ:
 					<span
 						class="ml-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-200"
 					>
@@ -169,13 +169,13 @@
 			class="mt-6 grid grid-cols-1 gap-x-4 gap-y-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2 dark:border-slate-800/80"
 		>
 			<div>
-				<span class="text-xs text-muted-foreground">ชื่อครัวเรือน</span>
+				<span class="text-xs text-muted-foreground">ชื่อครอบครัว</span>
 				<p class="dark:text-slate-250 mt-0.5 font-semibold text-slate-800">
 					{createdHousehold.label}
 				</p>
 			</div>
 			<div>
-				<span class="text-xs text-muted-foreground">หัวหน้าครัวเรือน</span>
+				<span class="text-xs text-muted-foreground">ผู้ติดต่อหลัก</span>
 				<p class="dark:text-slate-250 mt-0.5 font-semibold text-slate-800">
 					{selectedHead ? `${selectedHead.first_name} ${selectedHead.last_name}` : '—'}
 				</p>
@@ -303,7 +303,7 @@
 							<td class="p-3">
 								{#if isHead}
 									<span class="rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-										หัวหน้าครอบครัว
+										ผู้ติดต่อหลัก
 									</span>
 								{:else}
 									<span
@@ -348,7 +348,7 @@
 	>
 		<p class="text-left text-xs text-muted-foreground">
 			💡 จัดกลุ่มครอบครัวสำเร็จแล้ว
-			สมาชิกทุกคนจะผูกอยู่กับครัวเรือนนี้และมีสถานะเช็คอินอยู่ในโซนที่ระบุ
+			สมาชิกทุกคนจะผูกอยู่กับครอบครัวนี้และมีสถานะเช็คอินอยู่ในโซนที่ระบุ
 		</p>
 		<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 			{#if selectedHead}

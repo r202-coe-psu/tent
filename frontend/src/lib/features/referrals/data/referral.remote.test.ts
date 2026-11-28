@@ -432,7 +432,7 @@ describe('createReferralBatch', () => {
 		const create = vi
 			.fn()
 			.mockRejectedValue(
-				new Error('ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน')
+				new Error('ผู้พักพิงรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน')
 			);
 		const transition = vi.fn();
 		const repo = { create, transition } as unknown as ReferralRepository;
@@ -445,7 +445,7 @@ describe('createReferralBatch', () => {
 		expect(result.failed).toEqual([
 			{
 				evacuee_id: ids[0],
-				error: 'ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน'
+				error: 'ผู้พักพิงรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน'
 			}
 		]);
 	});

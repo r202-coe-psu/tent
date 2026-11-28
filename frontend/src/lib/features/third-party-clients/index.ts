@@ -3,10 +3,15 @@ export {
 	PARTNER_MODULES,
 	PARTNER_MODULE_LABEL,
 	SCOPE_LABEL,
+	SCOPE_SHORT_LABEL,
+	clientHasSensitiveScope,
 	createThirdPartyClientSchema,
+	filterThirdPartyClients,
+	isSensitiveScope,
 	normalizeRevokedThirdPartyClient,
 	normalizeThirdPartyClientList,
 	revealThirdPartyClientSecretSchema,
+	scopeShortLabel,
 	thirdPartyClientDisplayName,
 	updateThirdPartyClientScopesSchema,
 	type CreateThirdPartyClientInput,
@@ -15,6 +20,8 @@ export {
 	type PartnerModule,
 	type RevealThirdPartyClientSecretInput,
 	type ThirdPartyClient,
+	type ThirdPartyClientListFilter,
+	type ThirdPartyClientStatusFilter,
 	type UpdateThirdPartyClientScopesInput
 } from './domain/third-party-client';
 export {
@@ -37,6 +44,7 @@ export {
 	useUpdateThirdPartyClientScopes
 } from './application/queries';
 export { default as ThirdPartyClientList } from './ui/third-party-client-list.svelte';
+export { default as ThirdPartyClientDetailSheet } from './ui/third-party-client-detail-sheet.svelte';
 export { default as CreateThirdPartyClientDialog } from './ui/create-third-party-client-dialog.svelte';
 export { default as RevealThirdPartyClientSecretDialog } from './ui/reveal-third-party-client-secret-dialog.svelte';
 export { default as RevokeThirdPartyClientDialog } from './ui/revoke-third-party-client-dialog.svelte';

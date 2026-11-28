@@ -94,10 +94,55 @@ describe('/search consent gate (CR-231)', () => {
 		);
 	});
 
-	it('links to /policy from the dialog', async () => {
+	it('links to /policy from the dialog as the personal data protection policy', async () => {
 		await render();
 		await search('สมชาย');
-		expect($('a[href="/policy"]')).not.toBeNull();
+		expect($('a[href="/policy"]')?.textContent?.trim()).toBe('นโยบายคุ้มครองข้อมูลส่วนบุคคล');
+	});
+
+	it('marks only the required consent fields with *', async () => {
+		await render();
+		await search('สมชาย');
+		const marked = (selector: string) =>
+			$(selector)?.querySelector('span[aria-hidden="true"]')?.textContent === '*';
+		expect(marked('label[for="consent-first-name"]')).toBe(true);
+		expect(marked('label[for="consent-phone"]')).toBe(true);
+		expect(marked('legend')).toBe(true);
+		expect(marked('label[for="consent-accept"]')).toBe(true);
+		expect(marked('label[for="consent-last-name"]')).toBe(false);
+	});
+
+	it('shows only the person found, never their household', async () => {
+		sessionStorage.setItem(
+			'public-search-consent:v1',
+			JSON.stringify({
+				searcher: { first_name: 'สมชาย', last_name: '', phone: '0812345678' },
+				purpose: 'find_family',
+				consent_accepted: true
+			})
+		);
+		fetchFn.mockImplementation(() =>
+			Promise.resolve({
+				ok: true,
+				status: 200,
+				json: () =>
+					Promise.resolve({
+						results: [
+							{
+								name: 'สมชาย ใจ**',
+								status: 'active',
+								shelter_name: 'ศูนย์ทดสอบ',
+								family_members: [{ name: 'ลูก ใจ**', status: 'active', shelter_name: 'ศูนย์ทดสอบ' }]
+							}
+						]
+					})
+			})
+		);
+		await render();
+		await search('สมชาย');
+		expect(document.body.textContent).toContain('สมชาย ใจ**');
+		expect(document.body.textContent).not.toContain('ลูก ใจ**');
+		expect($('details')).toBeNull();
 	});
 
 	it('cancel closes the dialog, keeps the query and sends nothing', async () => {

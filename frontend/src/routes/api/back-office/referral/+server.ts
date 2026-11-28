@@ -131,7 +131,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			parsed.data.to_shelter_code?.toUpperCase() === shelterCode.toUpperCase()
 		) {
 			return json(
-				{ error: 'ไม่สามารถส่งต่อผู้ประสบภัยไปยังศูนย์พักพิงเดียวกันได้' },
+				{ error: 'ไม่สามารถส่งต่อผู้พักพิงไปยังศูนย์พักพิงเดียวกันได้' },
 				{ status: 422 }
 			);
 		}
@@ -165,7 +165,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		const hasDuplicate = await repo.hasActiveReferral(parsed.data.evacuee_id);
 		if (hasDuplicate) {
 			return json(
-				{ error: 'ผู้ประสบภัยรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน' },
+				{ error: 'ผู้พักพิงรายนี้มีคำร้องส่งต่อที่ยังดำเนินการอยู่ กรุณาปิดคำร้องเดิมก่อน' },
 				{ status: 409 }
 			);
 		}

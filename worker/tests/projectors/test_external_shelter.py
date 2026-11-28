@@ -93,3 +93,13 @@ def test_cancelled_external_shelter_is_hidden():
         _doc(operation_status="cancelled"), retention_months=3, now=NOW
     )
     assert phase is RetentionPhase.HIDDEN
+
+
+def test_external_shelter_projects_an_empty_profile():
+    """decision sync 2026-11-24: the reduced external form has no registry sections."""
+    _, payload = project_shelter(_doc(operating_org=" อบจ.สงขลา "))
+    assert payload["operating_org"] == "อบจ.สงขลา"
+    profile = payload["profile"]
+    assert profile["zones"] == []
+    assert profile["toilets"] is None
+    assert profile["vulnerable_groups"] == []

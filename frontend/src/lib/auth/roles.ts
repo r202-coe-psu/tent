@@ -508,6 +508,20 @@ export function canAccessVolunteerBackoffice(
 }
 
 /**
+ * True when the actor may use volunteer check-in (`/onsite/volunteer-check-in`): system_admin,
+ * shelter_manager, volunteer_coordinator or registration_staff in the shelter (CR-104).
+ */
+export function canAccessVolunteerCheckIn(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		canAccessVolunteerBackoffice(roles, shelterCode) ||
+		hasStaffCapability(roles, 'registration_staff', shelterCode)
+	);
+}
+
+/**
  * True when the actor may use the Distribution Desk (Station 4, `/onsite/distribution`):
  * system_admin, shelter_manager, or distribution_staff in the shelter (CR-161 R5, page-level per
  * CR-159). REG, SC and WH keep their system-level distribution rights but not this page.
@@ -690,7 +704,7 @@ export function isStaffOnly(roles: readonly string[]): boolean {
  */
 export const STAFF_CAPABILITY_DESCRIPTIONS: Record<StaffCapability, string> = {
 	registration_staff:
-		'บันทึกข้อมูลทะเบียนประวัติผู้อพยพ (Evacuees), ข้อมูลครัวเรือน, ยานพาหนะ, สัตว์เลี้ยง, การเช็คอิน-เช็คเอาต์ประจำวัน และออกบัตรประจำตัว',
+		'บันทึกข้อมูลทะเบียนประวัติผู้พักพิง (Evacuees), ข้อมูลครอบครัว, ยานพาหนะ, สัตว์เลี้ยง, การเช็คอิน-เช็คเอาต์ประจำวัน และออกบัตรประจำตัว',
 	triage_staff:
 		'คัดกรองกลุ่มเปราะบาง (ผู้สูงอายุ, ผู้พิการ, เด็ก, สตรีมีครรภ์) และคัดแยกผู้ป่วยเบื้องต้นเพื่อส่งต่อไปยังพื้นที่พักพิงที่เหมาะสม',
 	medical_staff:
@@ -701,7 +715,7 @@ export const STAFF_CAPABILITY_DESCRIPTIONS: Record<StaffCapability, string> = {
 		'รับมอบสิ่งของบริจาค, จัดการคลังพัสดุ, ตัดจ่ายสิ่งของจำเป็น, เบิกถุงยังชีพ, และควบคุมระดับสต็อกขั้นต่ำ',
 	warehouse_staff: 'ดูแลคลังสินค้า รับ-จ่ายวัสดุ และบันทึกสต็อกภายในศูนย์',
 	distribution_staff:
-		'ปฏิบัติงานจุดแจกจ่ายอาหารและสิ่งของ (Station 4) ภายในศูนย์ของตนเอง: รับของจากคลัง, สแกนส่งมอบให้ผู้ประสบภัย, ปิดกะ และส่งคืนของเหลือ',
+		'ปฏิบัติงานจุดแจกจ่ายอาหารและสิ่งของภายในศูนย์ของตนเอง: รับของจากคลัง, สแกนส่งมอบให้ผู้พักพิง, ปิดกะ และส่งคืนของเหลือ',
 	donation_staff:
 		'ดูแลงานบริจาคของศูนย์ตัวเอง: รับของบริจาค (หน้าศูนย์/walk-in), อนุมัติ ปฏิเสธ ส่งต่อ ปิดรายการ, ติดต่อผู้บริจาค, สร้างแคมเปญบริจาคและสินค้าในแคตตาล็อก — ดูคลังได้อย่างเดียว ปรับยอด เบิกจ่าย โอนย้ายไม่ได้',
 	kiosk_staff:

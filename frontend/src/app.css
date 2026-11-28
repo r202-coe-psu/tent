@@ -272,6 +272,23 @@
 	--testing-banner-height: 1.625rem;
 }
 
+/*
+ * PSU cookie consent (app.html) pins its banner and edit button to the viewport bottom above
+ * every z-index — lift both over the fixed system banner. `:root` outranks the library's
+ * runtime-injected single-class rules.
+ */
+:root .psu-consent-banner-bottom,
+:root .psu-consent-banner-bottom-left,
+:root .psu-consent-banner-bottom-right {
+	bottom: var(--testing-banner-height);
+}
+
+:root .psu-consent-edit-button-bottom-left,
+:root .psu-consent-edit-button-bottom-center,
+:root .psu-consent-edit-button-bottom-right {
+	bottom: calc(1rem + var(--testing-banner-height));
+}
+
 .dark {
 	--background: oklch(0.147 0.004 49.25);
 	--foreground: oklch(0.985 0.001 106.423);
@@ -352,8 +369,8 @@
 
 @theme inline {
 	--font-sans:
-		'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont,
-		'Segoe UI', Roboto, sans-serif;
+		'Noto Sans Thai Looped', 'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', -apple-system,
+		BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	--font-mono: 'Geist Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
 
 	--text-3xs: 0.5rem;

@@ -26,6 +26,7 @@
 import type { Page } from '@playwright/test';
 import { COUCH_BASE, type TestUser } from './couch';
 import { appBaseUrl } from './e2e-env';
+import { stubPsuConsent } from './psu-consent';
 
 /**
  * Inject session for a test user into the browser context.
@@ -40,6 +41,7 @@ export async function injectSession(
 	user: Pick<TestUser, 'name' | 'roles'>,
 	authSession: string
 ): Promise<void> {
+	await stubPsuConsent(page);
 	const appBase = appBaseUrl();
 	// 1. Set the AuthSession cookie for the app host (no port — sent to all ports).
 	await page.context().addCookies([

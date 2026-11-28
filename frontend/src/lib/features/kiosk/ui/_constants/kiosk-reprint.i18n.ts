@@ -52,8 +52,8 @@ const th = {
 		noName: 'ไม่ระบุชื่อ',
 		ageUnknown: 'ไม่ระบุอายุ',
 		age: (years: number) => `${years} ปี`,
-		arriving: 'รายงานตัวแล้ว · รอคัดกรอง',
-		room_confirmed: 'ยืนยันที่พักแล้ว',
+		arriving: 'รายงานตัวแล้ว · รอจัดโซน',
+		room_confirmed: 'ยืนยันถึงโซนแล้ว',
 		active: 'เข้าพักแล้ว',
 		preRegisteredReason: REPRINT_PRE_REGISTERED_REASON,
 		temporaryLeaveReason: REPRINT_TEMPORARY_LEAVE_REASON

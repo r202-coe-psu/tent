@@ -12,12 +12,34 @@
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import { discardReturnPath, isUserSwitch, takeReturnPath } from '$lib/auth/session-expiry';
 	import { SessionExpiredModal } from '$lib/features/login';
+	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
+	import {
+		showsStaffMobileBar,
+		showsStaffSidebar
+	} from '$lib/components/backoffice-navbar/staff-sidebar';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
 
 	/** Only the portal home is translated; the TH/EN toggle stays off untranslated staff pages. */
 	const onPortal = $derived(page.url.pathname === LANDING_ROUTE);
+
+	/** System admins and the selected shelter's manager keep the back-office sidebar here (#1517). */
+	const staffSidebar = $derived(
+		showsStaffSidebar(
+			page.url.pathname,
+			authStore.user?.roles ?? [],
+			shelterStore.selectedShelterCode
+		)
+	);
+
+	/** `/back-office`, `/system-management` and `/onsite` bring their own top bar. */
+	const hasAppBar = $derived(
+		!['/back-office', '/system-management', '/onsite'].some((p) => page.url.pathname.startsWith(p))
+	);
+	/** The sidebar's phone bar, above the app bar on `/portal` and `/me` below `lg`. */
+	const staffMobileBar = $derived(staffSidebar && showsStaffMobileBar(page.url.pathname));
 
 	/** Set while session is expired so we refetch errored queries on reauth. */
 	let pendingReauthRecovery = false;
@@ -83,34 +105,46 @@
 <ConnectionBanner />
 
 <div class="flex min-h-[var(--app-shell-height)] flex-col pb-[var(--testing-banner-height)]">
-	{#if !page.url.pathname.startsWith('/back-office') && !page.url.pathname.startsWith('/system-management') && !page.url.pathname.startsWith('/onsite')}
-		<header
-			class="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-6"
-		>
-			<div class="flex min-w-0 items-center gap-6">
-				<a href={resolve('/portal')} class="flex min-h-11 min-w-0 items-center gap-2.5">
-					<img
-						src="/logo.png"
-						alt="PSU Smart Shelter"
-						class="h-8 w-8 shrink-0 rounded-lg object-contain"
-					/>
-					<span class="truncate text-sm font-semibold tracking-tight sm:text-base"
-						>PSU Smart Shelter</span
-					>
-				</a>
-			</div>
-			<div class="flex shrink-0 items-center gap-2">
-				{#if onPortal}
-					<LanguageSwitcher class="shrink-0" />
-				{/if}
-				<StaffAccountMenu />
-			</div>
-		</header>
-	{/if}
-
-	<main class="flex flex-1 flex-col">
-		{@render children()}
-	</main>
+	<div class="flex min-w-0 flex-1 flex-col lg:flex-row">
+		{#if staffSidebar}
+			<!-- Full height beside the page: the app bar sits to its right, not above it (#1517). -->
+			<BackofficeNavbar showMobileBar={staffMobileBar} />
+		{/if}
+		<div class="flex min-w-0 flex-1 flex-col">
+			{#if hasAppBar}
+				<header
+					class="sticky z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-6 {staffMobileBar
+						? 'top-[var(--bo-mobile-nav-height)] lg:top-0'
+						: 'top-0'}"
+				>
+					<div class="flex min-w-0 items-center gap-6">
+						<!-- The sidebar already shows the logo and links home for SA / SM. -->
+						{#if !staffSidebar}
+							<a href={resolve('/portal')} class="flex min-h-11 min-w-0 items-center gap-2.5">
+								<img
+									src="/logo.png"
+									alt="PSU Smart Shelter"
+									class="h-8 w-8 shrink-0 rounded-lg object-contain"
+								/>
+								<span class="truncate text-sm font-semibold tracking-tight sm:text-base"
+									>PSU Smart Shelter</span
+								>
+							</a>
+						{/if}
+					</div>
+					<div class="flex shrink-0 items-center gap-2">
+						{#if onPortal}
+							<LanguageSwitcher class="shrink-0" />
+						{/if}
+						<StaffAccountMenu />
+					</div>
+				</header>
+			{/if}
+			<main class="flex min-w-0 flex-1 flex-col">
+				{@render children()}
+			</main>
+		</div>
+	</div>
 </div>
 
 <SessionExpiredModal />

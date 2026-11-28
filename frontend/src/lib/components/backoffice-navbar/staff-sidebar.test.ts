@@ -1,0 +1,47 @@
+import { describe, expect, it } from 'vitest';
+import { showsStaffMobileBar, showsStaffSidebar } from './staff-sidebar';
+
+const SA = ['system_admin'];
+const SM = ['shelter:SH001', 'SH001:shelter_manager'];
+const REGISTRATION = ['shelter:SH001', 'SH001:registration_staff'];
+
+describe('showsStaffSidebar (#1517)', () => {
+	it.each(['/portal', '/me', '/onsite', '/onsite/people/new'])(
+		'gives a system admin the sidebar on %s',
+		(path) => {
+			expect(showsStaffSidebar(path, SA, 'SH001')).toBe(true);
+		}
+	);
+
+	it('gives the manager of the selected shelter the sidebar', () => {
+		expect(showsStaffSidebar('/me', SM, 'SH001')).toBe(true);
+	});
+
+	it('does not give a manager of another shelter the sidebar', () => {
+		expect(showsStaffSidebar('/me', SM, 'SH002')).toBe(false);
+	});
+
+	it('leaves every other role as before', () => {
+		expect(showsStaffSidebar('/me', REGISTRATION, 'SH001')).toBe(false);
+		expect(showsStaffSidebar('/onsite/distribution', REGISTRATION, 'SH001')).toBe(false);
+	});
+
+	it('leaves pages that already have a sidebar of their own alone', () => {
+		expect(showsStaffSidebar('/back-office/volunteers', SA, 'SH001')).toBe(false);
+		expect(showsStaffSidebar('/system-management/shelters', SA, 'SH001')).toBe(false);
+	});
+
+	it('does not match a path that only starts with the same letters', () => {
+		expect(showsStaffSidebar('/mex', SA, 'SH001')).toBe(false);
+		expect(showsStaffSidebar('/message', SA, 'SH001')).toBe(false);
+	});
+});
+
+describe('showsStaffMobileBar', () => {
+	it('keeps the top of /onsite for the page on phones, and shows the bar elsewhere', () => {
+		expect(showsStaffMobileBar('/onsite')).toBe(false);
+		expect(showsStaffMobileBar('/onsite/people')).toBe(false);
+		expect(showsStaffMobileBar('/portal')).toBe(true);
+		expect(showsStaffMobileBar('/me')).toBe(true);
+	});
+});

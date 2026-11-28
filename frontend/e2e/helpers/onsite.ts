@@ -12,7 +12,7 @@ import { pinActiveShelter } from './staff-ui';
 export const INTAKE_SEARCH_LABEL = 'เลขบัตรประชาชน / หนังสือเดินทาง / ชื่อ-นามสกุล / เบอร์โทร';
 
 export const STAY_STATUS = {
-	arriving: 'รอเข้าพัก',
+	arriving: 'รายงานตัวแล้ว · รอจัดโซน',
 	active: 'เข้าพักแล้ว',
 	roomConfirmed: 'ยืนยันถึงโซนแล้ว',
 	checkedOut: 'เช็คเอาต์'
@@ -47,7 +47,7 @@ export async function openAsShelterStaff(
 
 export async function openStation1(page: Page): Promise<Locator> {
 	await page.goto('/onsite/people');
-	await expect(page.getByRole('heading', { name: 'ทะเบียนผู้ประสบภัย' })).toBeVisible({
+	await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 		timeout: 20_000
 	});
 	return page.getByLabel(INTAKE_SEARCH_LABEL);
@@ -177,9 +177,8 @@ export async function decodeQrImage(page: Page, img: Locator): Promise<string> {
 }
 
 /**
- * On the print screen, check every member has a label preview. CR-233: the preview carries a
- * placeholder, not a usable Person QR — a QR is issued only when staff press print, so the
- * evacuee id can no longer be read from the image (use {@link evacueeIdsFromSearch}).
+ * On the print screen, check every member has a label preview. CR-233 A3: the preview carries the
+ * current Person QR — the bare `evacuee:{ULID}` for a just-registered person (nothing printed yet).
  */
 export async function expectPrintScreen(page: Page, people: OnsitePerson[]): Promise<void> {
 	await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
@@ -189,7 +188,7 @@ export async function expectPrintScreen(page: Page, people: OnsitePerson[]): Pro
 	for (const p of people) {
 		const qr = page.getByAltText(`QR Code สำหรับ ${fullName(p)}`);
 		await expect(qr).toBeVisible({ timeout: 15_000 });
-		expect(await decodeQrImage(page, qr)).toBe('PREVIEW-QR-NOT-ISSUED');
+		expect(await decodeQrImage(page, qr)).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
 	}
 }
 
@@ -305,7 +304,9 @@ export async function screenEvacuee(
 	fill: ScreeningFill
 ): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
-	await expect(page.getByText('สถานี 2', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดคัดกรองสุขภาพ', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
 	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
@@ -319,7 +320,9 @@ export async function screenEvacuee(
 
 export async function assignZone(page: Page, evacueeId: string, zoneName: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await page.locator('div.grid button', { hasText: zoneName }).first().click();
 	await page.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
@@ -327,7 +330,9 @@ export async function assignZone(page: Page, evacueeId: string, zoneName: string
 
 export async function confirmArrivalInZone(page: Page, evacueeId: string): Promise<void> {
 	await page.goto(`/onsite/zoning/${evacueeId}`);
-	await expect(page.getByText('สถานี 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('จุดจัดโซน', { exact: true }).first()).toBeVisible({
+		timeout: 20_000
+	});
 	await page.getByRole('button', { name: 'ยืนยันถึงโซน', exact: true }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 }

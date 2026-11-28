@@ -88,28 +88,26 @@ export function getShelterCloseJob(code: string, jobId: string): Promise<Shelter
 export function closeZone(
 	code: string,
 	zoneCode: string,
-	reason?: string,
-	closedBy?: string
+	reason?: string
 ): Promise<{ ok: true; code: string; zoneCode: string; status: string }> {
 	return serviceFetch(
 		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/zones/${encodeURIComponent(zoneCode)}`,
 		{
 			method: 'POST',
-			body: JSON.stringify({ reason, closed_by: closedBy })
+			body: JSON.stringify({ reason })
 		}
 	);
 }
 
 export function reopenZone(
 	code: string,
-	zoneCode: string,
-	reopenedBy?: string
+	zoneCode: string
 ): Promise<{ ok: true; code: string; zoneCode: string; status: string }> {
 	return serviceFetch(
 		`${SHELTER_ENDPOINT}/${encodeURIComponent(code)}/zones/${encodeURIComponent(zoneCode)}/reopen`,
 		{
 			method: 'POST',
-			body: JSON.stringify({ reopened_by: reopenedBy })
+			body: JSON.stringify({})
 		}
 	);
 }

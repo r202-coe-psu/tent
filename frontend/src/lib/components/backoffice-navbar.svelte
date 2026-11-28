@@ -14,19 +14,21 @@
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
+		isBackofficeHome,
 		isGroup,
 		canSeeNavNode,
 		activeNavHref,
 		navLeafHrefs,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
-	import {
-		SIDEBAR_COLLAPSED_KEYS,
-		readSidebarCollapsed,
-		writeSidebarCollapsed
-	} from './sidebar-collapsed-storage';
+	import { readSidebarCollapsed, writeSidebarCollapsed } from './sidebar-collapsed-storage';
 
-	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice));
+	let {
+		/** The hamburger bar shown below `lg`; off where a page keeps the very top of the screen. */
+		showMobileBar = true
+	}: { showMobileBar?: boolean } = $props();
+
+	let collapsed = $state(readSidebarCollapsed());
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -34,7 +36,7 @@
 
 	function setCollapsed(next: boolean) {
 		collapsed = next;
-		writeSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice, next);
+		writeSidebarCollapsed(next);
 	}
 
 	function closeMobileMenu() {
@@ -60,6 +62,8 @@
 		const fullPath = path + (page.url.search || '');
 		return activeNavHref(fullPath, navHrefs);
 	});
+
+	const onHome = $derived(isBackofficeHome(page.url.pathname));
 
 	function isActive(href: BackofficeNavbarNode['href']): boolean {
 		return !!href && String(href) === activeHref;
@@ -113,7 +117,7 @@
 
 <aside
 	data-testid="backoffice-sidebar"
-	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 lg:flex {collapsed
+	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start overflow-hidden border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 lg:flex {collapsed
 		? 'w-16'
 		: 'w-72'}"
 >
@@ -145,12 +149,19 @@
 		<div class="sticky top-0 z-10 bg-card p-4 pb-2">
 			<a
 				href={backofficeHomePath}
-				class="flex w-full items-center justify-center rounded-xl bg-muted py-2.5 text-sm font-normal text-foreground transition-colors hover:bg-muted/70 {collapsed
+				class="flex w-full items-center justify-center rounded-xl py-2.5 text-sm transition-colors {onHome
+					? 'bg-primary font-semibold text-primary-foreground'
+					: 'bg-muted font-normal text-foreground hover:bg-muted/70'} {collapsed
 					? 'px-2'
 					: 'gap-2 px-4'}"
 				title="กลับหน้าเลือกเมนูหลัก"
+				aria-current={onHome ? 'page' : undefined}
+				data-testid="sidebar-home-link"
+				onclick={() => setCollapsed(true)}
 			>
-				<House class="h-4 w-4 shrink-0 text-muted-foreground" />
+				<House
+					class="h-4 w-4 shrink-0 {onHome ? 'text-primary-foreground' : 'text-muted-foreground'}"
+				/>
 				{#if !collapsed}<span>กลับหน้าเลือกเมนูหลัก</span>{/if}
 			</a>
 		</div>
@@ -332,7 +343,7 @@
 	</div>
 
 	<!-- Desktop Sidebar Footer: shelter context + account -->
-	<div class="mt-auto border-t border-sidebar-border bg-card p-4">
+	<div class="mt-auto border-t border-sidebar-border bg-card {collapsed ? 'p-2' : 'p-4'}">
 		{#if collapsed}
 			<div class="flex flex-col items-center gap-3">
 				<BackofficeShelterSelect compact />
@@ -355,7 +366,9 @@
 
 <!-- Mobile Navigation — sticky so hamburger stays reachable while scrolling -->
 <div
-	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden"
+	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden {showMobileBar
+		? ''
+		: 'hidden'}"
 >
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a
@@ -414,11 +427,18 @@
 				<div class="space-y-3 border-b border-sidebar-border p-4 pb-3">
 					<a
 						href={backofficeHomePath}
-						class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-muted px-4 py-3 text-sm font-normal text-foreground transition-colors hover:bg-muted/70"
+						class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm transition-colors {onHome
+							? 'bg-primary font-semibold text-primary-foreground'
+							: 'bg-muted font-normal text-foreground hover:bg-muted/70'}"
 						onclick={closeMobileMenu}
 						title="กลับหน้าเลือกเมนูหลัก"
+						aria-current={onHome ? 'page' : undefined}
 					>
-						<House class="h-5 w-5 shrink-0 text-muted-foreground" />
+						<House
+							class="h-5 w-5 shrink-0 {onHome
+								? 'text-primary-foreground'
+								: 'text-muted-foreground'}"
+						/>
 						<span>กลับหน้าเลือกเมนูหลัก</span>
 					</a>
 					<BackofficeShelterSelect />

@@ -2,6 +2,11 @@
 	import '../app.css';
 	// Thai faces are self-hosted: label rendering fails closed without them (kiosk-label-image.ts),
 	// so they must load even when Google Fonts is unreachable (WAN down → PDF preview fallback).
+	import '@fontsource/noto-sans-thai-looped/300.css';
+	import '@fontsource/noto-sans-thai-looped/400.css';
+	import '@fontsource/noto-sans-thai-looped/500.css';
+	import '@fontsource/noto-sans-thai-looped/600.css';
+	import '@fontsource/noto-sans-thai-looped/700.css';
 	import '@fontsource/ibm-plex-sans-thai-looped/300.css';
 	import '@fontsource/ibm-plex-sans-thai-looped/400.css';
 	import '@fontsource/ibm-plex-sans-thai-looped/500.css';

@@ -32,6 +32,7 @@
 
 	// Full name when the profile has one, else the login username.
 	const displayName = $derived(authStore.user?.display_name?.trim() || authStore.user?.name || '');
+	const initial = $derived(Array.from(displayName)[0] ?? '?');
 	const roles = $derived(authStore.user?.roles ?? []);
 	const roleLabel = $derived(formatRoleList(roles));
 
@@ -53,12 +54,22 @@
 		aria-label={displayName || t.account}
 		class={cn(
 			'inline-flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none',
-			compact ? 'justify-center' : 'justify-start',
+			// A collapsed rail is 4rem wide: the trigger must shrink to it and truncate the name.
+			compact ? 'justify-center px-1' : 'justify-start',
 			className
 		)}
+		title={compact ? displayName : undefined}
 	>
-		<span class="max-w-[10rem] min-w-0 truncate">{displayName}</span>
-		{#if !compact}
+		{#if compact}
+			<!-- A collapsed rail is too narrow for a name: an initial badge, the name on hover. -->
+			<span
+				aria-hidden="true"
+				class="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary uppercase"
+			>
+				{initial}
+			</span>
+		{:else}
+			<span class="max-w-[10rem] min-w-0 truncate">{displayName}</span>
 			<ChevronDown class="size-4 shrink-0 text-muted-foreground" />
 		{/if}
 	</DropdownMenu.Trigger>

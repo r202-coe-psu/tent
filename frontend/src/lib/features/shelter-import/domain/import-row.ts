@@ -96,7 +96,7 @@ export interface RowValidation {
 	errors: RowFieldError[];
 	/** Whether the current workbook explicitly supplied food points for this row. */
 	foodDistributionPointsProvided?: boolean;
-	/** `ชนิดสถานที่` was left empty: a create takes the default, an update keeps the stored kind (CR-198 D-4). */
+	/** `ประเภทศูนย์` was left empty: a create takes the default, an update keeps the stored kind (CR-198 D-4). */
 	siteKindBlank?: boolean;
 	/** CR-252 FR-27: the row's `ศูนย์จากระบบภายนอก` = ใช่ (blank = ไม่ใช่). Set whenever the cell resolved. */
 	isExternal?: boolean;
@@ -161,6 +161,10 @@ export function buildUpdatePayload(
 	if (options.foodDistributionPointsProvided !== true) delete rest.food_distribution_points;
 	// #1352: the workbook has no parking sheet, so never send the schema default `[]`.
 	delete rest.parking_points;
+	// No workbook columns (APP_ONLY_FIELDS): never send them, so the stored values stay.
+	delete rest.name_short;
+	delete rest.operating_org;
+	delete rest.delivery_note;
 	if (options.siteKindBlank === true) delete rest.site_kind;
 	return {
 		...(rest as Omit<ShelterInput, 'municipality_zone'>),
