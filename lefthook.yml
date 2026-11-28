@@ -37,17 +37,17 @@ pre-push:
     worker-test:
       root: worker/
       glob: "**/*.{py,toml,lock}"
-      files: sh "$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
+      files: sh ../scripts/hooks/own-push-files.sh
       run: uv run pytest tests
 
     backend-test:
       root: backend/
       glob: "**/*.{py,toml,lock}"
-      files: sh "$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
+      files: sh ../scripts/hooks/own-push-files.sh
       run: uv run pytest tests
 
     frontend-test:
       root: frontend/
       glob: "**/*.{ts,js,svelte,json,css,yaml}"
-      files: sh "$(git rev-parse --show-toplevel)/scripts/hooks/own-push-files.sh"
+      files: sh ../scripts/hooks/own-push-files.sh
       run: pnpm test:changed
