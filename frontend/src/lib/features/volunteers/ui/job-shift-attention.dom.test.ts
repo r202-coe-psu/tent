@@ -42,11 +42,33 @@ afterEach(() => {
 });
 
 describe('JobShiftAttention (#1521)', () => {
-	it.each([1, 4, 35, 180])('is the same two lines for a job with %i shifts', async (n) => {
+	it('lists no shift rows for a job of one shift', async () => {
+		await render(job(1, 0));
+		expect(document.querySelector('[data-testid="shift-attention-list"]')).toBeNull();
+		expect(document.body.textContent).toContain('1 กะ');
+		expect(document.body.textContent).toContain('0/5');
+	});
+
+	it.each([4, 35, 180])('lists every one of %i shifts in the scroll box', async (n) => {
 		await render(job(n, 0));
-		expect(document.querySelector('[data-testid="shift-attention-row"]')).toBeNull();
+		expect(document.querySelectorAll('[data-testid="shift-attention-row"]')).toHaveLength(n);
 		expect(document.body.textContent).toContain(`${n} กะ`);
 		expect(document.body.textContent).toContain(`0/${n * 5}`);
+	});
+
+	it('says what each shift lacks, emptiest first', async () => {
+		// 5, 5, 2, 0, 0 confirmed → the two empty shifts lead, the two full ones trail.
+		await render(job(5, 12));
+		const rows = Array.from(document.querySelectorAll('[data-testid="shift-attention-row"]')).map(
+			(e) => (e.textContent ?? '').replace(/\s+/g, ' ')
+		);
+		expect(rows.map((r) => r.match(/12:00\s*(\d+\/\d+(?: \(ขาด \d+\))?)/)?.[1])).toEqual([
+			'0/5 (ขาด 5)',
+			'0/5 (ขาด 5)',
+			'2/5 (ขาด 3)',
+			'5/5',
+			'5/5'
+		]);
 	});
 
 	it('says how the shifts split and keeps the whole-job total', async () => {
