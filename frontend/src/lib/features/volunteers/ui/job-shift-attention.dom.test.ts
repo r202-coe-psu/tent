@@ -30,10 +30,6 @@ async function render(j: Job) {
 	flushSync();
 	await tick();
 }
-const pills = () =>
-	Array.from(document.querySelectorAll('[data-testid="shift-bucket-pill"]')).map((e) =>
-		(e.textContent ?? '').replace(/\s+/g, ' ').trim()
-	);
 
 afterEach(() => {
 	if (instance) unmount(instance);
@@ -42,18 +38,17 @@ afterEach(() => {
 });
 
 describe('JobShiftAttention (#1521)', () => {
-	it('lists no shift rows for a job of one shift', async () => {
+	it('shows the one shift of a single-shift job, and no whole-job total', async () => {
 		await render(job(1, 0));
-		expect(document.querySelector('[data-testid="shift-attention-list"]')).toBeNull();
-		expect(document.body.textContent).toContain('1 กะ');
-		expect(document.body.textContent).toContain('0/5');
+		expect(document.querySelectorAll('[data-testid="shift-attention-row"]')).toHaveLength(1);
+		expect(document.body.textContent).toContain('0/5 (ขาด 5)');
+		expect(document.querySelector('[data-testid="shift-bucket-pill"]')).toBeNull();
 	});
 
 	it.each([4, 35, 180])('lists every one of %i shifts in the scroll box', async (n) => {
 		await render(job(n, 0));
 		expect(document.querySelectorAll('[data-testid="shift-attention-row"]')).toHaveLength(n);
-		expect(document.body.textContent).toContain(`${n} กะ`);
-		expect(document.body.textContent).toContain(`0/${n * 5}`);
+		expect(document.body.textContent).not.toContain(`0/${n * 5}`);
 	});
 
 	it('says what each shift lacks, emptiest first', async () => {
@@ -69,18 +64,5 @@ describe('JobShiftAttention (#1521)', () => {
 			'5/5',
 			'5/5'
 		]);
-	});
-
-	it('says how the shifts split and keeps the whole-job total', async () => {
-		// 5 shifts of 5 seats, 12 confirmed fill front to back: 5, 5, 2, 0, 0 → 2 met, 3 critical.
-		await render(job(5, 12));
-		expect(document.body.textContent).toContain('5 กะ');
-		expect(pills()).toEqual(['ขาดหนัก 3', 'ครบ 2']);
-		expect(document.body.textContent).toContain('12/25');
-	});
-
-	it('leaves out a bucket no shift is in', async () => {
-		await render(job(2, 10));
-		expect(pills()).toEqual(['ครบ 2']);
 	});
 });
