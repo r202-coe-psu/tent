@@ -157,6 +157,65 @@ export function thirdPartyClientDisplayName(client: ThirdPartyClient): string {
 	return client.name ?? client.client_id;
 }
 
+/** Short Thai labels for approved-scope tags. `SCOPE_LABEL` stays the long form. */
+export const SCOPE_SHORT_LABEL: Record<GrantableScope, string> = {
+	'location-read': 'อ่านข้อมูลศูนย์',
+	'location-stock-read': 'อ่านสต็อกศูนย์',
+	'occupancy-read': 'สรุปผู้พักพิง',
+	'occupancy-pii-read': 'อ่านรายบุคคล',
+	'booking-write': 'จอง/ยกเลิกแทนประชาชน',
+	'booking-bypass': 'จองข้ามกติกา',
+	'residency-read': 'ตรวจที่พักตามเลขบัตร',
+	'occupant-search': 'ค้นหาบุคคล',
+	'pii-full': 'ข้อมูลไม่ปิดบัง'
+};
+
+function isGrantableScope(scope: string): scope is GrantableScope {
+	return (GRANTABLE_SCOPES as readonly string[]).includes(scope);
+}
+
+/** Thai tag label. Unknown scopes render the raw code. */
+export function scopeShortLabel(scope: string): string {
+	return isGrantableScope(scope) ? SCOPE_SHORT_LABEL[scope] : scope;
+}
+
+export function isSensitiveScope(scope: string): boolean {
+	return (SENSITIVE_SCOPES as readonly string[]).includes(scope);
+}
+
+export function clientHasSensitiveScope(client: Pick<ThirdPartyClient, 'allowed_scopes'>): boolean {
+	return client.allowed_scopes.some(isSensitiveScope);
+}
+
+export type ThirdPartyClientStatusFilter = 'all' | 'active' | 'revoked';
+
+export interface ThirdPartyClientListFilter {
+	query: string;
+	status: ThirdPartyClientStatusFilter;
+	sensitiveOnly: boolean;
+}
+
+/**
+ * Free-text query matches display name, client id, description, and scope codes.
+ * Status and sensitive-only both AND with that query. An empty filter keeps order.
+ */
+export function filterThirdPartyClients(
+	clients: ThirdPartyClient[],
+	filter: ThirdPartyClientListFilter
+): ThirdPartyClient[] {
+	const query = filter.query.trim().toLowerCase();
+	return clients.filter((client) => {
+		if (filter.status === 'active' && !client.is_active) return false;
+		if (filter.status === 'revoked' && client.is_active) return false;
+		if (filter.sensitiveOnly && !clientHasSensitiveScope(client)) return false;
+		if (!query) return true;
+		if (thirdPartyClientDisplayName(client).toLowerCase().includes(query)) return true;
+		if (client.client_id.toLowerCase().includes(query)) return true;
+		if ((client.description ?? '').toLowerCase().includes(query)) return true;
+		return client.allowed_scopes.some((scope) => scope.toLowerCase().includes(query));
+	});
+}
+
 /** Normalize list payloads from FastAPI (array or wrapped). */
 export function normalizeThirdPartyClientList(payload: unknown): ThirdPartyClient[] {
 	if (Array.isArray(payload)) return payload as ThirdPartyClient[];

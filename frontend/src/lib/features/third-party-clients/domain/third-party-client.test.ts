@@ -5,18 +5,24 @@ import {
 	DEFAULT_SCOPES_BY_MODULE,
 	GRANTABLE_SCOPES,
 	SCOPE_LABEL,
+	SCOPE_SHORT_LABEL,
 	SENSITIVE_SCOPES,
 	SENSITIVE_SCOPE_WARNING,
+	clientHasSensitiveScope,
 	createThirdPartyClientSchema,
+	filterThirdPartyClients,
+	isSensitiveScope,
 	normalizeDeletedThirdPartyClient,
 	normalizeRevealedSecret,
 	normalizeRevokedThirdPartyClient,
 	normalizeThirdPartyClientList,
 	partnerModuleLabel,
 	revealThirdPartyClientSecretSchema,
+	scopeShortLabel,
 	thirdPartyClientDisplayName,
 	updateThirdPartyClientScopesSchema,
-	type ThirdPartyClient
+	type ThirdPartyClient,
+	type ThirdPartyClientListFilter
 } from './third-party-client';
 
 describe('createThirdPartyClientSchema', () => {
@@ -414,6 +420,211 @@ describe('updateThirdPartyClientScopesSchema', () => {
 		expect(
 			updateThirdPartyClientScopesSchema.safeParse({ allowed_scopes: ['not-a-scope'] }).success
 		).toBe(false);
+	});
+});
+
+function sampleClient(
+	partial: Partial<ThirdPartyClient> & Pick<ThirdPartyClient, 'id'>
+): ThirdPartyClient {
+	return {
+		client_id: `tpc_${partial.id}`,
+		name: null,
+		description: null,
+		module_name: null,
+		allowed_scopes: ['location-read'],
+		is_active: true,
+		deleted_at: null,
+		created_at: '2026-01-01T00:00:00.000Z',
+		updated_at: '2026-01-02T00:00:00.000Z',
+		...partial
+	};
+}
+
+const openFilter: ThirdPartyClientListFilter = {
+	query: '',
+	status: 'all',
+	sensitiveOnly: false
+};
+
+describe('scopeShortLabel', () => {
+	it('has a short Thai label for every grantable scope', () => {
+		for (const scope of GRANTABLE_SCOPES) {
+			expect(SCOPE_SHORT_LABEL[scope].length).toBeGreaterThan(0);
+			expect(scopeShortLabel(scope)).toBe(SCOPE_SHORT_LABEL[scope]);
+			expect(scopeShortLabel(scope)).not.toBe(scope);
+		}
+	});
+
+	it('falls back to the raw code for an unknown scope', () => {
+		expect(scopeShortLabel('not-a-scope')).toBe('not-a-scope');
+	});
+});
+
+describe('isSensitiveScope', () => {
+	it('flags PDPA scopes and ignores operational and unknown codes', () => {
+		expect(isSensitiveScope('occupancy-pii-read')).toBe(true);
+		expect(isSensitiveScope('booking-write')).toBe(true);
+		expect(isSensitiveScope('booking-bypass')).toBe(true);
+		expect(isSensitiveScope('pii-full')).toBe(true);
+		expect(isSensitiveScope('location-read')).toBe(false);
+		expect(isSensitiveScope('occupancy-read')).toBe(false);
+		expect(isSensitiveScope('not-a-scope')).toBe(false);
+	});
+
+	it('is true for a client when any allowed scope is sensitive', () => {
+		expect(
+			clientHasSensitiveScope(sampleClient({ id: 'ops', allowed_scopes: ['location-read'] }))
+		).toBe(false);
+		expect(
+			clientHasSensitiveScope(
+				sampleClient({ id: 'pii', allowed_scopes: ['location-read', 'pii-full'] })
+			)
+		).toBe(true);
+	});
+});
+
+describe('filterThirdPartyClients', () => {
+	const rows: ThirdPartyClient[] = [
+		sampleClient({
+			id: '1',
+			client_id: 'tpc_eoc',
+			name: 'EOC Songkhla',
+			description: 'ศูนย์สั่งการ',
+			module_name: 'M7',
+			allowed_scopes: ['location-read', 'occupancy-read'],
+			is_active: true
+		}),
+		sampleClient({
+			id: '2',
+			client_id: 'tpc_wh',
+			name: 'คลัง M6',
+			description: null,
+			module_name: 'M6',
+			allowed_scopes: ['location-stock-read'],
+			is_active: false
+		}),
+		sampleClient({
+			id: '3',
+			client_id: 'tpc_pii',
+			name: 'ค้นหาบุคคล',
+			description: 'partner search',
+			module_name: 'M2',
+			allowed_scopes: ['occupant-search', 'pii-full'],
+			is_active: true
+		}),
+		sampleClient({
+			id: '4',
+			client_id: 'tpc_book',
+			name: 'จองแทน',
+			description: 'booking desk',
+			module_name: 'M2',
+			allowed_scopes: ['booking-write'],
+			is_active: false
+		}),
+		sampleClient({
+			id: '5',
+			client_id: 'tpc_bypass',
+			name: 'ศูนย์ปิด',
+			description: null,
+			module_name: 'M7',
+			allowed_scopes: ['booking-bypass'],
+			is_active: true
+		})
+	];
+
+	it('returns the same list order when the query is empty and no status cut is set', () => {
+		const result = filterThirdPartyClients(rows, openFilter);
+		expect(result.map((client) => client.id)).toEqual(['1', '2', '3', '4', '5']);
+		expect(result[0]).toBe(rows[0]);
+	});
+
+	it('returns an empty list unchanged', () => {
+		expect(filterThirdPartyClients([], openFilter)).toEqual([]);
+		expect(
+			filterThirdPartyClients([], { query: 'pii', status: 'active', sensitiveOnly: true })
+		).toEqual([]);
+	});
+
+	it('matches display name, client id, description, and scope code', () => {
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, query: '  Songkhla ' }).map((c) => c.id)
+		).toEqual(['1']);
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, query: 'TPC_WH' }).map((c) => c.id)
+		).toEqual(['2']);
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, query: 'สั่งการ' }).map((c) => c.id)
+		).toEqual(['1']);
+		expect(filterThirdPartyClients(rows, { ...openFilter, query: 'pii' }).map((c) => c.id)).toEqual(
+			['3']
+		);
+		expect(filterThirdPartyClients(rows, { ...openFilter, query: 'PII' }).map((c) => c.id)).toEqual(
+			['3']
+		);
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, query: 'booking' }).map((c) => c.id)
+		).toEqual(['4', '5']);
+	});
+
+	it('matches a legacy client by client id when name is null and ignores a null description', () => {
+		const legacy = sampleClient({
+			id: '9',
+			client_id: 'legacy-key',
+			name: null,
+			description: null
+		});
+		expect(
+			filterThirdPartyClients([legacy], { ...openFilter, query: 'legacy-key' }).map((c) => c.id)
+		).toEqual(['9']);
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, query: 'คลัง' }).map((c) => c.id)
+		).toEqual(['2']);
+	});
+
+	it('does not match the module label unless that text is already in a searched field', () => {
+		expect(filterThirdPartyClients(rows, { ...openFilter, query: 'จัดการทรัพยากร' })).toEqual([]);
+	});
+
+	it('filters active and revoked without changing relative order', () => {
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, status: 'active' }).map((c) => c.id)
+		).toEqual(['1', '3', '5']);
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, status: 'revoked' }).map((c) => c.id)
+		).toEqual(['2', '4']);
+	});
+
+	it('keeps sensitive clients of any status when sensitiveOnly is set', () => {
+		expect(
+			filterThirdPartyClients(rows, { ...openFilter, sensitiveOnly: true }).map((c) => c.id)
+		).toEqual(['3', '4', '5']);
+	});
+
+	it('ANDs query, status, and sensitiveOnly', () => {
+		expect(
+			filterThirdPartyClients(rows, {
+				query: 'booking',
+				status: 'active',
+				sensitiveOnly: true
+			}).map((c) => c.id)
+		).toEqual(['5']);
+		expect(
+			filterThirdPartyClients(rows, { query: 'pii', status: 'active', sensitiveOnly: true }).map(
+				(c) => c.id
+			)
+		).toEqual(['3']);
+		expect(
+			filterThirdPartyClients(rows, { query: '', status: 'revoked', sensitiveOnly: true }).map(
+				(c) => c.id
+			)
+		).toEqual(['4']);
+		expect(
+			filterThirdPartyClients(rows, {
+				query: 'booking',
+				status: 'revoked',
+				sensitiveOnly: false
+			}).map((c) => c.id)
+		).toEqual(['4']);
 	});
 });
 
