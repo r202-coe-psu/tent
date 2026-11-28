@@ -915,3 +915,59 @@ describe('CR-251 shelter visibility + referral intake — destination intake gat
 		expect(putCalls()).toHaveLength(0);
 	});
 });
+
+describe('CouchDbReferralServerRepository.activeReferralEvacueeIds (#555)', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	it('asks once with $in over the unique ids and the FR-002 active-status rule', async () => {
+		adminRaw.mockResolvedValue({ status: 200, data: { docs: [{ evacuee_id: 'evacuee:B' }] } });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+
+		const ids = await repo.activeReferralEvacueeIds(['evacuee:A', 'evacuee:B', 'evacuee:A']);
+
+		expect(ids).toEqual(['evacuee:B']);
+		const finds = adminRaw.mock.calls.filter(([path]) => String(path).endsWith('/_find'));
+		expect(finds).toHaveLength(1);
+		expect(finds[0][2]).toMatchObject({
+			selector: {
+				type: 'referral',
+				evacuee_id: { $in: ['evacuee:A', 'evacuee:B'] },
+				status: { $nin: ['closed', 'rejected'] }
+			},
+			fields: ['evacuee_id']
+		});
+	});
+
+	it('makes no request for an empty list', async () => {
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		expect(await repo.activeReferralEvacueeIds([])).toEqual([]);
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('follows the bookmark while pages come back full, keeping input order', async () => {
+		const full = Array.from({ length: 500 }, () => ({ evacuee_id: 'evacuee:C' }));
+		adminRaw.mockImplementation(async (path: string, _m: string, body?: { bookmark?: string }) => {
+			if (!path.endsWith('/_find')) return { status: 200, data: {} };
+			return body?.bookmark === 'bm1'
+				? { status: 200, data: { docs: [{ evacuee_id: 'evacuee:A' }], bookmark: 'bm2' } }
+				: { status: 200, data: { docs: full, bookmark: 'bm1' } };
+		});
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+
+		const ids = await repo.activeReferralEvacueeIds(['evacuee:A', 'evacuee:B', 'evacuee:C']);
+
+		expect(ids).toEqual(['evacuee:A', 'evacuee:C']);
+		const finds = adminRaw.mock.calls.filter(([path]) => String(path).endsWith('/_find'));
+		expect(finds).toHaveLength(2);
+	});
+
+	it('throws when CouchDB fails instead of reporting nobody as active', async () => {
+		adminRaw.mockImplementation(async (path: string) =>
+			path.endsWith('/_find') ? { status: 500, data: { error: 'boom' } } : { status: 200, data: {} }
+		);
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		await expect(repo.activeReferralEvacueeIds(['evacuee:A'])).rejects.toBeInstanceOf(
+			CouchDbReferralError
+		);
+	});
+});

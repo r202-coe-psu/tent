@@ -33,6 +33,11 @@ export interface ReferralRepository {
 	getBatch(id: string): Promise<Referral[]>;
 	create(input: ReferralInput, ctx: AuthorContext): Promise<Referral>;
 	transition(id: string, to: ReferralStatus, actor: string, reason?: string): Promise<Referral>;
+	/**
+	 * The subset of `evacueeIds` that already has an active referral (status not closed/rejected),
+	 * i.e. who the create call would answer 409 for. Callers pass the ids they show, not a shelter.
+	 */
+	activeReferralEvacueeIds(evacueeIds: readonly string[]): Promise<string[]>;
 	/** One call for many ids, one shared `reason`; the server enforces every per-item rule. */
 	bulkTransition(
 		ids: string[],

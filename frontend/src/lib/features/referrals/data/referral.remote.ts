@@ -15,6 +15,9 @@ import type {
 	ReferralSubmitIntent
 } from './referral.repository';
 
+/** Matches the BFF's `ACTIVE_LOOKUP_MAX_IDS` (server-only module, so not imported). */
+const ACTIVE_LOOKUP_CHUNK = 200;
+
 /**
  * Every referral transition (capacity and non-capacity) goes through the BFF, which applies the
  * state machine and scope checks. Capacity-specific rules on that path:
@@ -146,6 +149,31 @@ export class ReferralRemoteRepository implements ReferralRepository {
 	): Promise<Referral> {
 		// Every transition goes through the BFF (scope checks, state machine, dest-gated accept).
 		return transitionCapacityViaBff(id, to, reason, getShelterCode());
+	}
+
+	async activeReferralEvacueeIds(evacueeIds: readonly string[]): Promise<string[]> {
+		if (evacueeIds.length === 0) return [];
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const found: string[] = [];
+		// The BFF caps one request at ACTIVE_LOOKUP_MAX_IDS; larger lists go in chunks.
+		for (let i = 0; i < evacueeIds.length; i += ACTIVE_LOOKUP_CHUNK) {
+			const res = await fetch(`/api/back-office/referral/active?${qs}`, {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+				body: JSON.stringify({ evacuee_ids: evacueeIds.slice(i, i + ACTIVE_LOOKUP_CHUNK) })
+			});
+			const payload: unknown = await res.json().catch(() => null);
+			const ids =
+				payload && typeof payload === 'object'
+					? (payload as { evacuee_ids?: unknown }).evacuee_ids
+					: undefined;
+			if (!res.ok || !Array.isArray(ids)) {
+				throw new Error(`Active referral lookup failed (${res.status})`);
+			}
+			found.push(...ids.filter((id): id is string => typeof id === 'string'));
+		}
+		return found;
 	}
 
 	async bulkTransition(
