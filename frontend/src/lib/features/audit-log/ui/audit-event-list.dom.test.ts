@@ -44,4 +44,22 @@ describe('AuditEventList', () => {
 		expect(text()).toContain('capacity: 120 → 150');
 		expect(text()).toContain('contact: มีการแก้ไข');
 	});
+
+	it('shows a compaction notice when changes_unknown is true', () => {
+		const compacted: AuditEventView = {
+			...item,
+			_id: 'audit_event:rev:compacted',
+			changes: undefined,
+			changes_unknown: true,
+			source: 'worker_diff'
+		};
+		instance = mount(AuditEventList, { target: document.body, props: { items: [compacted] } });
+		const text = () => (document.body.textContent ?? '').replace(/\s+/g, ' ');
+
+		document.body.querySelector<HTMLButtonElement>('button')!.click();
+		flushSync();
+		expect(text()).toContain(
+			'ไม่สามารถเปรียบเทียบรายละเอียดการแก้ไขได้ (ข้อมูลเวอร์ชันก่อนหน้าถูกบีบอัดแล้ว)'
+		);
+	});
 });

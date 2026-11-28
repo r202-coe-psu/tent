@@ -20,7 +20,8 @@
 		else open.add(id);
 	}
 
-	const hasDetails = (item: AuditEventView) => Boolean(item.changes?.length || item.reason);
+	const hasDetails = (item: AuditEventView) =>
+		Boolean(item.changes?.length || item.reason || item.changes_unknown);
 </script>
 
 <ul class="divide-y divide-slate-100" data-testid="audit-event-list">
@@ -65,8 +66,13 @@
 					{#if item.reason}
 						<p class="text-slate-700">เหตุผล: {item.reason}</p>
 					{/if}
+					{#if item.changes_unknown}
+						<p class="text-slate-600">
+							ไม่สามารถเปรียบเทียบรายละเอียดการแก้ไขได้ (ข้อมูลเวอร์ชันก่อนหน้าถูกบีบอัดแล้ว)
+						</p>
+					{/if}
 					{#each item.changes ?? [] as change (change.field)}
-						<p class="text-slate-700">
+						<p class="wrap-anywhere text-slate-700">
 							<span class="font-semibold">{change.field}:</span>
 							{#if 'from' in change || 'to' in change}
 								{auditChangeValue(change.from)} → {auditChangeValue(change.to)}

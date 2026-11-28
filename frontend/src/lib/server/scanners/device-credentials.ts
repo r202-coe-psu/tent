@@ -1,3 +1,4 @@
+import { setRequestActor } from '../request-actor';
 import {
 	generateDeviceSecret,
 	hashDeviceSecret,
@@ -139,6 +140,7 @@ export async function authenticateScannerDevice(
 		throw new ScannerAuthError();
 	}
 	if (!verifyDeviceSecret(secret, device.secret_hash)) throw new ScannerAuthError();
+	setRequestActor(`kiosk:${device.device_id}`);
 
 	return {
 		registry_id: device._id,

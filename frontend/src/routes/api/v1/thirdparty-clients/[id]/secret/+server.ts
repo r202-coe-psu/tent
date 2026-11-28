@@ -7,6 +7,8 @@
  * FastAPI `GET /v1/admin/thirdparty-clients/{id}/secret` (decrypts server-side).
  */
 import type { RequestHandler } from './$types';
+import { recordProxiedWrite } from '$lib/server/audit-log';
+import { AUDIT_EVENTS } from '$lib/features/audit-log/server';
 import {
 	authorizeUserWrite,
 	serviceError,
@@ -43,6 +45,15 @@ export const POST: RequestHandler = async ({ request, params }) => {
 			`${fastapiBaseUrl()}/v1/admin/thirdparty-clients/${encodeURIComponent(id)}/secret`,
 			{ headers: fastapiServiceHeaders({ Accept: 'application/json' }) }
 		);
+		await recordProxiedWrite(res, {
+			actor: caller.name,
+			event: AUDIT_EVENTS.thirdpartyClientSecretViewed,
+			action: 'other',
+			entityType: 'thirdparty_client',
+			entityId: id,
+			label: null,
+			shelterCode: null
+		});
 		return proxyFastapiJson(res);
 	} catch (e) {
 		return serviceError(e);

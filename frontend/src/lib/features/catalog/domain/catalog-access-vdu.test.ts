@@ -86,3 +86,46 @@ describe.each(Object.entries(VDUS))('catalog VDU (%s) — #832 compound roles', 
 		expect(() => vdu(item, null, user)).toThrow();
 	});
 });
+
+// CR-260 FR-C11 — same rule as the shelter VDU (FR-C10). Only `sync:central` deploys it; the
+// master-seed copy of this VDU predates several rules (repl:, units, this one) and is not covered.
+describe('catalog VDU (sync-central-db) — CR-260 updated_by must name the writer', () => {
+	const vdu = VDUS['sync-central-db'];
+	const SA: UserCtx = { name: 'sa01', roles: ['system_admin'] };
+	const central = {
+		_id: 'item_master:rice',
+		type: 'item_master',
+		name: 'ข้าวสาร',
+		base_unit: 'kg'
+	};
+
+	it('accepts a write that names its own writer, or names no one', () => {
+		expect(() => vdu({ ...central, updated_by: 'sa01' }, null, SA)).not.toThrow();
+		expect(() => vdu(central, null, SA)).not.toThrow();
+		expect(() => vdu({ ...item, updated_by: 'ws' }, null, WS)).not.toThrow();
+	});
+
+	// VDUs throw a plain `{ forbidden }`, so read the reason to be sure it is this rule.
+	const reason = (run: () => void) => {
+		try {
+			run();
+		} catch (e) {
+			return (e as { forbidden?: string }).forbidden;
+		}
+		return null;
+	};
+
+	it('rejects a write that names someone else, including a tombstone', () => {
+		const rule = 'updated_by must match the authenticated user';
+		expect(reason(() => vdu({ ...central, updated_by: 'mallory' }, null, SA))).toBe(rule);
+		expect(reason(() => vdu({ ...item, updated_by: 'sa01' }, item, WS))).toBe(rule);
+		expect(
+			reason(() => vdu({ _id: item._id, _deleted: true, updated_by: 'mallory' }, item, WS))
+		).toBe(rule);
+	});
+
+	it('lets the server admin write any updated_by (worker, kiosk:*, system:*)', () => {
+		const admin: UserCtx = { name: 'admin', roles: ['_admin'] };
+		expect(() => vdu({ ...central, updated_by: 'worker' }, null, admin)).not.toThrow();
+	});
+});

@@ -1211,6 +1211,7 @@ class UnassignedRegistrationsUseCase:
                 household_doc=household_doc,
                 evacuee_docs=evacuee_docs,
                 cookie_header=cookie_header,
+                writer=session.name,
                 image_payloads=image_payloads,
                 append_pets=couch_pets if claim_pet_targets else None,
             )

@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from worker.audit_diff import audit_diff
 from worker.audit_log import (
     AuditCopy,
     AuditCopyIncomplete,
@@ -13,6 +14,7 @@ from worker.audit_log import (
     is_audit_doc,
 )
 from worker.couch.checkpoint import save_checkpoint
+from worker.couch.client import CATALOG_DB
 from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
     apply_donation,
@@ -122,9 +124,30 @@ async def _process_closed_shelter_change(
     await sync_booking_stay(doc)
 
 
+async def _audit_diff_or_hold(
+    couch: Any, database: str, change: dict[str, Any], seq: Any
+) -> None:
+    """Write the change's audit event, or raise so the checkpoint stays put.
+
+    Raising before ``save_checkpoint`` makes the feed retry from this seq, the same
+    hold ``copy_audit_doc`` uses — a transient ``audit_log`` outage must not drop
+    the event for good (only ``--bootstrap`` would bring it back).
+    """
+    if await audit_diff(couch, database, change) is AuditCopy.RETRY:
+        raise AuditCopyIncomplete(
+            f"{database}: audit event for {change.get('id')} not written; "
+            f"holding the checkpoint at seq {seq}"
+        )
+
+
 async def process_change(couch: Any, database: str, change: dict[str, Any]) -> None:
     seq = change.get("seq")
     if seq is None:
+        return
+
+    if database == CATALOG_DB:
+        await _audit_diff_or_hold(couch, database, change, seq)
+        await save_checkpoint(database, seq)
         return
 
     if database != REGISTRY_DB:
@@ -141,6 +164,8 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
             # CR-252: external shelter — it has no operational DB content to project.
             await save_checkpoint(database, seq)
             return
+        if gated_code:
+            await _audit_diff_or_hold(couch, database, change, seq)
         if gated_code and not change.get("deleted") and is_audit_doc(change.get("doc")):
             outcome = await copy_audit_doc(couch, change["doc"], database)
             if outcome is AuditCopy.RETRY:

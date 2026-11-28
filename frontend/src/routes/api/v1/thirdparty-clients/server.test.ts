@@ -1,17 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { recordProxiedWrite, requireSystemAdmin, authorizeUserWrite } = vi.hoisted(() => ({
-	recordProxiedWrite: vi.fn<(res: Response, write: unknown) => Promise<void>>(
-		async () => undefined
-	),
-	requireSystemAdmin: vi.fn(async () => ({ name: 'sa', roles: ['system_admin'], isSA: true })),
-	authorizeUserWrite: vi.fn(async () => ({ name: 'sa', roles: ['system_admin'], isSA: true }))
-}));
+const { recordProxiedWrite, requireSystemAdmin, authorizeUserWrite, verifyOwnPassword } =
+	vi.hoisted(() => ({
+		recordProxiedWrite: vi.fn<(res: Response, write: unknown) => Promise<void>>(
+			async () => undefined
+		),
+		requireSystemAdmin: vi.fn(async () => ({ name: 'sa', roles: ['system_admin'], isSA: true })),
+		authorizeUserWrite: vi.fn(async () => ({ name: 'sa', roles: ['system_admin'], isSA: true })),
+		verifyOwnPassword: vi.fn(async () => undefined)
+	}));
 
 vi.mock('$lib/server/couch-admin', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/server/couch-admin')>()),
 	requireSystemAdmin,
-	authorizeUserWrite
+	authorizeUserWrite,
+	verifyOwnPassword
 }));
 vi.mock('$lib/server/audit-log', () => ({ recordProxiedWrite }));
 vi.mock('$lib/server/fastapi', async (importOriginal) => ({
@@ -24,6 +27,8 @@ import { POST } from './+server';
 import { PATCH, DELETE } from './[id]/+server';
 import { POST as REVOKE } from './[id]/revoke/+server';
 import { POST as REGENERATE } from './[id]/regenerate-secret/+server';
+import { POST as SECRET } from './[id]/secret/+server';
+import { ServiceError } from '$lib/server/couch-admin';
 
 const upstream = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
 vi.stubGlobal('fetch', upstream);
@@ -44,6 +49,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	requireSystemAdmin.mockResolvedValue(SA);
 	authorizeUserWrite.mockResolvedValue(SA);
+	verifyOwnPassword.mockResolvedValue(undefined);
 	upstream.mockResolvedValue(
 		new Response(JSON.stringify({ id: 'client-1', client: { name: 'พันธมิตร ก' } }), {
 			status: 200,
@@ -146,6 +152,68 @@ describe('thirdparty-clients — CR-259 FR-24 audit wiring', () => {
 	it('records nothing when the body fails validation', async () => {
 		await POST(call<Parameters<typeof POST>[0]>('POST', '', { name: 'พันธมิตร ก' }));
 
+		expect(upstream).not.toHaveBeenCalled();
+		expect(recordProxiedWrite).not.toHaveBeenCalled();
+	});
+
+	it('secret reveal records thirdparty_client.secret_viewed without logging the secret (CR-260 FR-C27)', async () => {
+		upstream.mockResolvedValueOnce(
+			new Response(JSON.stringify({ client_secret: 'super-secret-value' }), {
+				status: 200,
+				headers: { 'content-type': 'application/json' }
+			})
+		);
+
+		const res = await SECRET(
+			call<Parameters<typeof SECRET>[0]>(
+				'POST',
+				'/client-1/secret',
+				{ password: 'correct-password' },
+				'client-1'
+			)
+		);
+
+		expect(res.status).toBe(200);
+		expect(verifyOwnPassword).toHaveBeenCalledWith('AuthSession=x', 'correct-password');
+		expect(recordProxiedWrite).toHaveBeenCalledTimes(1);
+		expect(recordProxiedWrite.mock.calls[0][1]).toEqual({
+			actor: 'sa',
+			event: 'thirdparty_client.secret_viewed',
+			action: 'other',
+			entityType: 'thirdparty_client',
+			entityId: 'client-1',
+			label: null,
+			shelterCode: null
+		});
+		expect(JSON.stringify(recordProxiedWrite.mock.calls[0][1])).not.toContain('super-secret-value');
+	});
+
+	it('secret reveal records nothing when password verification fails', async () => {
+		verifyOwnPassword.mockRejectedValueOnce(new ServiceError('FORBIDDEN', 'รหัสผ่านไม่ถูกต้อง'));
+
+		const res = await SECRET(
+			call<Parameters<typeof SECRET>[0]>(
+				'POST',
+				'/client-1/secret',
+				{ password: 'wrong' },
+				'client-1'
+			)
+		);
+
+		expect(res.status).toBe(403);
+		expect(upstream).not.toHaveBeenCalled();
+		expect(recordProxiedWrite).not.toHaveBeenCalled();
+	});
+
+	it('secret reveal records nothing when a non-admin is refused', async () => {
+		authorizeUserWrite.mockResolvedValue(SM);
+
+		const res = await SECRET(
+			call<Parameters<typeof SECRET>[0]>('POST', '/client-1/secret', { password: 'pw' }, 'client-1')
+		);
+
+		expect(res.status).toBe(403);
+		expect(verifyOwnPassword).not.toHaveBeenCalled();
 		expect(upstream).not.toHaveBeenCalled();
 		expect(recordProxiedWrite).not.toHaveBeenCalled();
 	});

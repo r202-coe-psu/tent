@@ -12,6 +12,7 @@ import {
 } from '$lib/utils/errors';
 import { authStore } from '$lib/stores/auth.svelte';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
+import { isAuditedWriteDb } from './audited-db';
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 200;
@@ -225,6 +226,12 @@ export async function getDocWithConflicts<T extends { _id: string }>(
 	}
 }
 
+function stampWriter<T extends object>(dbName: string, doc: T): T {
+	const name = authStore.user?.name;
+	if (!name || !isAuditedWriteDb(dbName)) return doc;
+	return { ...doc, updated_by: name };
+}
+
 export interface PutDocOptions {
 	onConflict?: 'return-existing' | 'throw';
 }
@@ -237,6 +244,7 @@ export async function putDoc<T extends { _id: string; _rev?: string; type?: stri
 ): Promise<T> {
 	const isCreate = !doc._rev;
 	const onConflict = options.onConflict ?? 'return-existing';
+	const stamped = stampWriter(dbName, doc);
 	try {
 		const res = await withRetry(async () => {
 			const { data, status, ok } = await couchDbFetchRaw<PutResult>(
@@ -244,7 +252,7 @@ export async function putDoc<T extends { _id: string; _rev?: string; type?: stri
 				`/${encodeURIComponent(doc._id)}`,
 				{
 					method: 'PUT',
-					body: JSON.stringify(doc),
+					body: JSON.stringify(stamped),
 					...init
 				}
 			);
@@ -258,7 +266,7 @@ export async function putDoc<T extends { _id: string; _rev?: string; type?: stri
 			}
 			return data as PutResult;
 		});
-		return { ...doc, _rev: res.rev };
+		return { ...stamped, _rev: res.rev };
 	} catch (err) {
 		if (err instanceof ConflictError && isCreate && onConflict === 'return-existing') {
 			const existing = await getDoc<T>(dbName, doc._id, init);
@@ -285,6 +293,20 @@ export async function deleteDoc(
 		const latest = await getDoc<{ _id: string; _rev?: string }>(dbName, doc._id, init);
 		if (!latest?._rev) return;
 		doc = { ...doc, _rev: latest._rev };
+	}
+	if (isAuditedWriteDb(dbName)) {
+		const tombstone = stampWriter(dbName, {
+			_id: doc._id,
+			_rev: doc._rev,
+			_deleted: true,
+			updated_at: new Date().toISOString()
+		});
+		await couchDbFetch(dbName, `/${encodeURIComponent(doc._id)}`, {
+			method: 'PUT',
+			body: JSON.stringify(tombstone),
+			...init
+		});
+		return;
 	}
 	await couchDbFetch(
 		dbName,
@@ -435,9 +457,10 @@ export async function bulkDocs<T extends { _id: string; _rev?: string }>(
 	docs: T[],
 	init?: CouchFetchInit
 ): Promise<T[]> {
+	const stamped = docs.map((doc) => stampWriter(dbName, doc));
 	const results = await couchDbFetch<BulkDocResult[]>(dbName, '/_bulk_docs', {
 		method: 'POST',
-		body: JSON.stringify({ docs }),
+		body: JSON.stringify({ docs: stamped }),
 		...init
 	});
 
@@ -448,7 +471,7 @@ export async function bulkDocs<T extends { _id: string; _rev?: string }>(
 		throw new Error(`bulkDocs: ${failures.length} doc(s) failed: ${JSON.stringify(failures)}`);
 	}
 
-	return docs.map((doc) => {
+	return stamped.map((doc) => {
 		const res = results.find((r) => r.id === doc._id);
 		if (res?.rev) return { ...doc, _rev: res.rev };
 		return doc;
@@ -478,7 +501,7 @@ export async function bulkDocsDetailed<T extends { _id: string; _rev?: string }>
 	if (docs.length === 0) return [];
 	const results = await couchDbFetch<BulkDocResult[]>(dbName, '/_bulk_docs', {
 		method: 'POST',
-		body: JSON.stringify({ docs }),
+		body: JSON.stringify({ docs: docs.map((doc) => stampWriter(dbName, doc)) }),
 		...init
 	});
 
@@ -509,7 +532,9 @@ export async function saveBulkAtomic<T extends { _id: string; _rev?: string }>(
 ): Promise<T[]> {
 	const MAX_BULK_RETRIES = 3;
 	let attempts = 0;
-	let currentDocs = [...docs];
+	// Stamped once up front: the conflict refresh below only swaps `_rev`, so every
+	// retry still names the writer the `_design/access` rule expects (CR-260).
+	let currentDocs = docs.map((doc) => stampWriter(dbName, doc));
 
 	while (attempts < MAX_BULK_RETRIES) {
 		try {
@@ -569,6 +594,11 @@ interface AttachmentPutResult {
 /**
  * PUT a binary attachment onto an existing doc revision. Bypasses
  * `couchDbFetchRaw` because the request body is binary, not JSON.
+ *
+ * Not stamped (CR-260 exception): an attachment PUT cannot change the doc body,
+ * so the new revision keeps the `updated_by` of the revision it attaches to, and
+ * the `_design/access` rule rejects it unless that is the caller. Only attach to
+ * a revision this caller just wrote through a stamped write (as `saveImage` does).
  */
 export async function putAttachment(
 	dbName: string,

@@ -429,6 +429,10 @@ export function buildValidateDocUpdate(code: string): string {
   // central admin. repl:<other code> gets nothing. The rules above the _admin bypass still apply.
   var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1 ||
     userCtx.roles.indexOf('repl:${code}') !== -1;
+  if (!isCouchAdmin && newDoc.updated_by !== undefined && newDoc.updated_by !== null &&
+      newDoc.updated_by !== userCtx.name) {
+    throw { forbidden: 'updated_by must match the authenticated user' };
+  }
   var isRoleAssessmentWrite = newDoc.type === 'daily_sop_role_assessment' ||
     (oldDoc && oldDoc.type === 'daily_sop_role_assessment');
   if (isRoleAssessmentWrite && newDoc._deleted === true) {
@@ -1317,7 +1321,7 @@ ${consentVduClause()}
     var applicationKeys = ['_id', '_rev', '_revisions', 'type', 'schema_v', 'shelter_code',
       'assessment_date', 'role_code', 'role_key', 'role_label', 'question_set_version', 'assessed_at',
       'assessor_name', 'status', 'pass_count', 'fail_count', 'pending_count', 'unanswered_count',
-      'controls', 'created_at', 'updated_at', 'created_by'];
+      'controls', 'created_at', 'updated_at', 'created_by', 'updated_by'];
     var topKeys = Object.keys(newDoc);
     for (var topIndex = 0; topIndex < topKeys.length; topIndex++) {
       if (applicationKeys.indexOf(topKeys[topIndex]) === -1) {

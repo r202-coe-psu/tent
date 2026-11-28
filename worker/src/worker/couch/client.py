@@ -11,6 +11,19 @@ import httpx
 
 from worker.config import Settings
 
+WORKER_ACTOR = "worker"
+CATALOG_DB = "catalog"
+
+
+def stamps_actor(database: str) -> bool:
+    return database.startswith("shelter_") or database == CATALOG_DB
+
+
+def _stamp(database: str, doc: dict[str, Any]) -> dict[str, Any]:
+    if not stamps_actor(database):
+        return doc
+    return {**doc, "updated_by": WORKER_ACTOR}
+
 
 def _doc_path(database: str, doc_id: str) -> str:
     """``/{database}/{doc_id}`` with the id percent-encoded.
@@ -66,6 +79,18 @@ class CouchClient:
         response.raise_for_status()
         return response.json()
 
+    async def get_doc_rev(
+        self, database: str, doc_id: str, rev: str, *, revs: bool = False
+    ) -> dict[str, Any] | None:
+        params: dict[str, Any] = {"rev": rev}
+        if revs:
+            params["revs"] = "true"
+        response = await self._client.get(_doc_path(database, doc_id), params=params)
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+
     async def put_doc(
         self, database: str, doc: dict[str, Any], *, retry_conflict: bool = True
     ) -> dict[str, Any]:
@@ -77,6 +102,7 @@ class CouchClient:
         Returns CouchDB's ``{"ok": true, "id": ..., "rev": ...}`` on success.
         Raises ``httpx.HTTPStatusError`` if the write cannot complete.
         """
+        doc = _stamp(database, doc)
         doc_id = doc["_id"]
         response = await self._client.put(_doc_path(database, doc_id), json=doc)
         if response.status_code != 409 or not retry_conflict:
@@ -119,6 +145,7 @@ class CouchClient:
             changed = await mutate(current)
             if changed is None:
                 return None
+            changed = _stamp(database, changed)
             response = await self._client.put(_doc_path(database, doc_id), json=changed)
             if response.status_code == 409 and attempt + 1 < attempts:
                 continue
@@ -157,7 +184,8 @@ class CouchClient:
         on failure (e.g. ``conflict``); callers decide which row errors matter.
         """
         response = await self._client.post(
-            f"/{database}/_bulk_docs", json={"docs": docs}
+            f"/{database}/_bulk_docs",
+            json={"docs": [_stamp(database, doc) for doc in docs]},
         )
         response.raise_for_status()
         return response.json()

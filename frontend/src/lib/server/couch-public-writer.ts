@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import { adminRaw } from '$lib/server/couch-admin';
+import { isAuditedWriteDb } from '$lib/db/audited-db';
 import { basicAuthHeader, couchUserFromUrl, parseCouchCredentialUrl } from './couch-credentials';
 
 /**
@@ -69,6 +70,15 @@ export async function findAsPublicWriter(
 }
 
 /**
+ * Name the public writer in `updated_by`, but only on databases that track it
+ * ({@link isAuditedWriteDb}) — the same scope the staff client stamps.
+ */
+function stampPublicWriter<T>(dbName: string, doc: T): T {
+	if (!doc || typeof doc !== 'object' || !isAuditedWriteDb(dbName)) return doc;
+	return { ...doc, updated_by: publicWriterName() ?? 'public' };
+}
+
+/**
  * PUT a document using the dedicated limited-permission public writer user
  * (`COUCHDB_PUBLIC_WRITER_URL`) so public `/api/public/v1/*` writes never use the
  * admin credentials. Falls back to `adminRaw` only in dev when the writer isn't
@@ -83,6 +93,7 @@ export async function putAsPublicWriter(
 	doc: unknown
 ): Promise<{ status: number; data: unknown }> {
 	const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;
+	doc = stampPublicWriter(dbName, doc);
 
 	if (writerUrl) {
 		const creds = parseCouchCredentialUrl(writerUrl);
@@ -194,7 +205,7 @@ export async function bulkAsPublicWriter(
 	failed: { id: string; reason: string }[];
 	written: { id: string; rev: string }[];
 }> {
-	const body = { docs, new_edits: true };
+	const body = { docs: docs.map((doc) => stampPublicWriter(dbName, doc)), new_edits: true };
 	const path = `/${dbName}/_bulk_docs`;
 
 	const writerUrl = env.COUCHDB_PUBLIC_WRITER_URL;

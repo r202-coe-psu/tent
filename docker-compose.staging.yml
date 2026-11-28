@@ -78,6 +78,8 @@ services:
       mongodb:
         condition: service_healthy
     environment:
+      AUDIT_DIFF_ENABLED: ${AUDIT_DIFF_ENABLED:-false}
+      COUCHDB_PUBLIC_WRITER_USER: ${COUCHDB_PUBLIC_WRITER_USER:-public_writer}
       COUCHDB_URL: http://couchdb:5984
       COUCHDB_USER: ${COUCHDB_USER}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}

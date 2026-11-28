@@ -78,7 +78,7 @@ migration: >
 - FR-C18 — `entity`: `type` = `doc.type` (tombstone ใช้ prefix ของ `_id`) · `id` = `_id` · `label` = field ตามตาราง §Change (ไม่ใช้ชื่อคน — ผู้อพยพ / ครัวเรือน `label = null`) · `shelter_code` = รหัสจากชื่อ DB (`shelter_*`) หรือ `doc.shelter_code` ของ catalog (ไม่มี = `null` = รายการกลาง)
 - FR-C19 — `occurred_at` = `updated_at` ของ doc (ไม่มี → `created_at` → เวลาที่ worker เห็น) · `source` = `worker_diff`
 - FR-C20 — bootstrap (`--bootstrap`) **ไม่** สร้าง event จาก doc ที่มีอยู่ · สร้างเฉพาะ change ที่เข้ามาใน `_changes` หลังเปิด `AUDIT_DIFF_ENABLED`
-- FR-C21 — `audit_diff` ล้มเหลว (เขียน / อ่าน rev ก่อนหน้าไม่ได้) → log แล้วไปต่อ · ไม่หยุด projection อื่น และไม่ค้าง checkpoint
+- FR-C21 — `audit_diff` ล้มเหลวชั่วคราว (5xx, 408, 429, network error ทั้งตอนอ่าน rev ก่อนหน้าและเขียน `audit_log`) → ค้าง checkpoint ของ DB นั้นไว้เพื่อ retry รอบถัดไป (แบบเดียวกับ `copy_audit_doc`) · กรณีถาวรที่ retry ไม่ช่วย (4xx อื่น เช่น ไม่มี DB `audit_log` หรือ build error) → log แล้วไปต่อไม่ค้าง checkpoint · กรณี rev ก่อนหน้าถูก compaction (404 / ไม่มี `_revisions`) → บันทึก `changes_unknown: true` แล้วไปต่อ
 - FR-C22 — ไม่สร้าง event ของ type นอก `AUDITED_TYPES` · การเพิ่ม type ภายหลังทำใน config + allowlist โดยไม่ต้องมี CR ใหม่ ถ้า type อยู่ในตาราง "รอบถัดไป" ของ CR นี้
 
 ### event ที่ค้างจาก CR-259 (ผ่าน BFF)

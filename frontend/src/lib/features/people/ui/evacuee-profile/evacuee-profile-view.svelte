@@ -40,13 +40,15 @@
 		zoneLabel
 	} from '$lib/features/people';
 	import {
+		canAccessManagerPages,
 		hasShelterScope,
 		hasStaffCapability,
 		isShelterManager,
 		isSystemAdmin
 	} from '$lib/auth/roles';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { getShelterCode, resolveContextShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { EntityHistory } from '$lib/features/audit-log';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { formatDisplayDateTime } from '$lib/utils/date';
 	import type {
@@ -191,6 +193,12 @@
 	// createQuery() options run eagerly at call time, not lazily on first access,
 	// so referencing `evacuee` before this line throws a TDZ ReferenceError.
 	const evacuee = $derived(evacueeQuery.data ?? null);
+	// No 'SH001' fallback: a system admin with no shelter selected reads the
+	// evacuee's history across shelters instead of one guessed shelter.
+	const historyShelterCode = $derived(resolveContextShelterCode()?.toUpperCase() ?? null);
+	const canSeeHistory = $derived(
+		canAccessManagerPages(authStore.user?.roles ?? [], historyShelterCode)
+	);
 	const householdQuery = useHousehold(
 		() => evacuee?.household_id ?? '',
 		() => !!evacuee?.household_id
@@ -976,6 +984,13 @@
 						</li>
 					</ol>
 				</section>
+				{#if canSeeHistory}
+					<EntityHistory
+						entityType="evacuee"
+						entityId={evacuee._id}
+						shelterCode={historyShelterCode}
+					/>
+				{/if}
 			</div>
 		</div>
 	</div>

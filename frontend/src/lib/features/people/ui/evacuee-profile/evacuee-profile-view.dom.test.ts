@@ -81,6 +81,17 @@ vi.mock('@tanstack/svelte-query', async (importOriginal) => ({
 	useQueryClient: () => ({ invalidateQueries: vi.fn() })
 }));
 // The health card's master-data queries need a QueryClient; serve empty results instead.
+// Managers see the CR-260 edit-history panel; give it an empty history instead of a QueryClient.
+vi.mock('$lib/features/audit-log/application/queries', () => ({
+	useAuditLog: () => ({
+		data: { pages: [{ items: [], next_cursor: null }] },
+		isLoading: false,
+		isError: false,
+		hasNextPage: false,
+		isFetchingNextPage: false,
+		fetchNextPage: vi.fn()
+	})
+}));
 vi.mock('$lib/features/master-data', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/master-data')>()),
 	useMasterData: () => query({ items: [] })

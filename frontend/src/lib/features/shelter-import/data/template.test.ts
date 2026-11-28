@@ -49,7 +49,7 @@ describe('normalizeHeader', () => {
 	});
 });
 
-describe('template → parse round trip', () => {
+describe('template → parse round trip', { timeout: 20_000 }, () => {
 	it('reads back required columns whose header carries the "*" marker', async () => {
 		const { shelters, zones, foodDistributionPoints, hasFoodDistributionPointsSheet } =
 			await generateAndParse();

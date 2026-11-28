@@ -112,6 +112,17 @@ describe('ImageRemoteRepository.saveImage', () => {
 		expect(await stored?.get('thumb')?.text()).toBe('thumb');
 	});
 
+	it('attaches only onto the revision it just wrote through the stamped putDoc (CR-260)', async () => {
+		vi.mocked(putAttachment).mockClear();
+		const summary = await repo.saveImage(fakeFile('photo.jpg', 100), ctx);
+
+		// putAttachment cannot restamp updated_by, so the first attachment must target
+		// the revision this caller's own putDoc produced — never an older revision.
+		const [, docId, rev] = vi.mocked(putAttachment).mock.calls[0];
+		expect(docId).toBe(summary._id);
+		expect(rev).toBe('1-test');
+	});
+
 	it('defaults caption to an empty string when omitted', async () => {
 		const summary = await repo.saveImage(fakeFile('photo.jpg', 100), ctx);
 		expect(summary.caption).toBe('');

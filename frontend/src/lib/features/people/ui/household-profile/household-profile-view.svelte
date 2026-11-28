@@ -21,12 +21,13 @@
 		zoneLabel
 	} from '../../index';
 	import type { Evacuee, PetGroup, HouseholdVehicle, HouseholdStatus } from '../../domain/people';
-	import { getShelterCode } from '$lib/db/shelter';
+	import { getShelterCode, resolveContextShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
 	import { now } from '$lib/db/model';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { canCancelHold } from '$lib/auth/roles';
+	import { EntityHistory } from '$lib/features/audit-log';
+	import { canAccessManagerPages, canCancelHold } from '$lib/auth/roles';
 	import { formatThaiDateTime } from '$lib/utils/date';
 
 	// Sub-components
@@ -81,6 +82,12 @@
 	let showMergeModal = $state(false);
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	// No 'SH001' fallback: a system admin with no shelter selected reads the
+	// household's history across shelters instead of one guessed shelter.
+	const historyShelterCode = $derived(resolveContextShelterCode()?.toUpperCase() ?? null);
+	const canSeeHistory = $derived(
+		canAccessManagerPages(authStore.user?.roles ?? [], historyShelterCode)
+	);
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const headOrFirstMember = $derived(head ?? members[0] ?? null);
 	const canCancel = $derived(canCancelHold(authStore.user?.roles ?? []));
@@ -416,6 +423,15 @@
 				{/if}
 			</ol>
 		</div>
+		{#if canSeeHistory}
+			<div class="mt-6">
+				<EntityHistory
+					entityType="household"
+					entityId={household._id}
+					shelterCode={historyShelterCode}
+				/>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Modals -->

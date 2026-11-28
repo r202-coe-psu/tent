@@ -1,3 +1,4 @@
+import { setRequestActor } from './request-actor';
 import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
 import { hasShelterScope, isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
@@ -82,7 +83,9 @@ export async function readSessionUserCtx(
 	const data = (await res.json().catch(() => null)) as {
 		userCtx?: { name: string | null; roles: string[] };
 	} | null;
-	return { name: data?.userCtx?.name ?? null, roles: data?.userCtx?.roles ?? [] };
+	const name = data?.userCtx?.name ?? null;
+	setRequestActor(name);
+	return { name, roles: data?.userCtx?.roles ?? [] };
 }
 
 /**
