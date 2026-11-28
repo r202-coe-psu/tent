@@ -69,16 +69,46 @@ describe('EvacueeStatusModal toasts', () => {
 		expect(toast.error).toHaveBeenCalledWith('A reason is required for a temporary leave');
 	});
 
-	it('explains in English that checkout needs a reason or note when the staff language is EN', async () => {
+	it('asks in English, inline, for a checkout reason when the staff language is EN (#1493)', async () => {
 		langState.current = 'en';
 		await submitWithoutReason('checked_out');
-		expect(toast.error).toHaveBeenCalledWith('A reason or note is required to check out');
+		expect(document.body.querySelector('[role="alert"]')?.textContent).toBe('Pick one reason');
+		expect(toast.error).not.toHaveBeenCalled();
 	});
 
 	it('keeps the Thai toast when the staff language is TH', async () => {
 		langState.current = 'th';
 		await submitWithoutReason('temporary_leave');
 		expect(toast.error).toHaveBeenCalledWith('การออกชั่วคราวต้องระบุเหตุผล');
+	});
+});
+
+describe('EvacueeStatusModal checkout reason (#1493)', () => {
+	it('saves the picked preset with its detail as the reason', async () => {
+		const onUpdateStatus = vi.fn(async () => {});
+		instance = mount(EvacueeStatusModal, {
+			target: document.body,
+			props: { show: true, evacuee, statusConfig, onClose: () => {}, onUpdateStatus }
+		});
+		await settle();
+		const radios = () => [...document.body.querySelectorAll<HTMLElement>('[role="radio"]')];
+		radios()
+			.find((el) => el.textContent?.includes('Checked out'))
+			?.click();
+		await settle();
+		document.body.querySelector<HTMLElement>('#evacuee-status-checkout-ส่งโรงพยาบาล')?.click();
+		await settle();
+		const detail = document.body.querySelector<HTMLTextAreaElement>(
+			'#evacuee-status-checkout-detail'
+		)!;
+		detail.value = 'รพ.หาดใหญ่';
+		detail.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')]
+			.find((el) => el.textContent?.trim() === 'ยืนยัน')
+			?.click();
+		await settle();
+		expect(onUpdateStatus).toHaveBeenCalledWith('checked_out', 'ส่งโรงพยาบาล — รพ.หาดใหญ่');
 	});
 });
 

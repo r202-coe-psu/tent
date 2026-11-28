@@ -131,6 +131,8 @@ export {
 	resolveRevertZone,
 	REVERT_TARGET_STATUSES,
 	normalizeCheckoutRemark,
+	composeCheckoutReason,
+	type CheckoutReasonChoice,
 	statusChangeHandlerKind,
 	maskNationalId,
 	collectMemberRuleIssues,

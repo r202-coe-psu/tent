@@ -31,6 +31,8 @@
 		useEvacuees,
 		formatPersonName,
 		normalizeCheckoutRemark,
+		composeCheckoutReason,
+		type CheckoutReasonChoice,
 		peopleLabels,
 		zoneLabel,
 		type Evacuee,
@@ -47,6 +49,8 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { SEARCH_SCAN_I18N } from '../_constants/search-scan.i18n';
+	import CheckoutReasonPresets from '../checkout-reason-presets.svelte';
+	import { CHECKOUT_REASON_I18N } from '../_constants/checkout-reason.i18n';
 
 	const t = $derived(getTranslation(SEARCH_SCAN_I18N, langState.current).scan);
 	const stayStatusLabels = $derived(peopleLabels(langState.current).stayStatus);
@@ -82,7 +86,8 @@
 	let zoneDialogOpen = $state(false);
 	let pickedZone = $state('');
 	let checkoutDialogOpen = $state(false);
-	let checkoutReason = $state('');
+	let checkoutChoice = $state<CheckoutReasonChoice | null>(null);
+	let checkoutDetail = $state('');
 	let checkoutReasonError = $state<string | null>(null);
 
 	let selectionOverrideIds = $state<string[] | null>(null);
@@ -297,15 +302,23 @@
 
 	function handleBulkCheckOut() {
 		if (selectedMemberIds.length === 0) return;
-		checkoutReason = '';
+		checkoutChoice = null;
+		checkoutDetail = '';
 		checkoutReasonError = null;
 		checkoutDialogOpen = true;
 	}
 
 	async function confirmCheckOut() {
+		const composed = composeCheckoutReason(checkoutChoice, checkoutDetail);
+		if (!composed.ok) {
+			const msg = getTranslation(CHECKOUT_REASON_I18N, langState.current);
+			checkoutReasonError =
+				composed.error === 'choice_required' ? msg.choiceRequired : msg.detailRequired;
+			return;
+		}
 		let reason: string;
 		try {
-			reason = normalizeCheckoutRemark(checkoutReason);
+			reason = normalizeCheckoutRemark(composed.reason);
 		} catch {
 			// The domain only rejects an empty remark; show that in the staff language.
 			checkoutReasonError = t.toast.checkoutReasonRequired;
@@ -766,19 +779,13 @@
 			<Dialog.Title>{t.checkoutDialogTitle}</Dialog.Title>
 			<Dialog.Description>{t.checkoutDialogDescription}</Dialog.Description>
 		</Dialog.Header>
-		<div class="space-y-1.5">
-			<Label for="checkout-reason">{t.checkoutReasonLabel}</Label>
-			<Input
-				id="checkout-reason"
-				bind:value={checkoutReason}
-				oninput={() => (checkoutReasonError = null)}
-				aria-invalid={checkoutReasonError ? true : undefined}
-				aria-describedby={checkoutReasonError ? 'checkout-reason-error' : undefined}
-			/>
-			{#if checkoutReasonError}
-				<p id="checkout-reason-error" class="text-xs text-destructive">{checkoutReasonError}</p>
-			{/if}
-		</div>
+		<CheckoutReasonPresets
+			bind:choice={checkoutChoice}
+			bind:detail={checkoutDetail}
+			error={checkoutReasonError}
+			idPrefix="scan-checkout-reason"
+			onchange={() => (checkoutReasonError = null)}
+		/>
 		<Dialog.Footer>
 			<Button type="button" variant="outline" onclick={() => (checkoutDialogOpen = false)}>
 				{t.cancel}
