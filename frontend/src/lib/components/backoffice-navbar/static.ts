@@ -197,7 +197,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					},
 					{
 						// CR-221 FR-5: same guard as the hub, so SA / SM / VC of the selected shelter.
-						label: 'บัญชีจิตอาสา',
+						label: 'บัญชีอาสาสมัคร',
 						href: resolve('/back-office/volunteers/accounts'),
 						icon: KeyRound,
 						visibleTo: ({ roles, shelterCode }) => canAccessVolunteerBackoffice(roles, shelterCode)

@@ -80,7 +80,7 @@ describe('renderVolunteerLabelPng', () => {
 	const label = {
 		qrSrc: 'data:image/png;base64,AA==',
 		name: 'สมชาย ใจ****ดี',
-		badge: 'จิตอาสา · V-012'
+		badge: 'อาสาสมัคร · V-012'
 	};
 
 	it('preloads the label fonts before drawing anything', async () => {
@@ -107,7 +107,7 @@ describe('renderVolunteerLabelPng', () => {
 		await renderVolunteerLabelPng(label);
 
 		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
-		expect(texts).toEqual(['สมชาย ใจ****ดี', 'จิตอาสา · V-012', 'shelter.psu.ac.th']);
+		expect(texts).toEqual(['สมชาย ใจ****ดี', 'อาสาสมัคร · V-012', 'shelter.psu.ac.th']);
 	});
 
 	it("draws the link left-aligned at the layout's link position", async () => {

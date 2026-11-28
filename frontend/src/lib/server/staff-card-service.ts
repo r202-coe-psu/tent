@@ -232,7 +232,7 @@ function isPrivilegedTarget(doc: CouchUserDoc): boolean {
 async function readStaffTarget(name: string): Promise<CouchUserDoc> {
 	const doc = await readTarget(name);
 	if (doc.volunteer_id || doc.personnel_type === 'volunteer') {
-		throw new ServiceError('CONFLICT', 'ผู้ใช้นี้ใช้บัตรจิตอาสา');
+		throw new ServiceError('CONFLICT', 'ผู้ใช้นี้ใช้บัตรอาสาสมัคร');
 	}
 	return doc;
 }

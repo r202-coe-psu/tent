@@ -124,7 +124,7 @@ describe('VolunteerCard close-profile notices (CR-221 FR-20)', () => {
 describe('VolunteerCard close button for a manager-given role (CR-221 A1-6)', () => {
 	const closeButton = () =>
 		document.body.querySelector<HTMLButtonElement>('[aria-label="ปิดใช้งานอาสาสมัคร"]')!;
-	const REASON = 'จิตอาสามีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
+	const REASON = 'อาสาสมัครมีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
 
 	it('is disabled for a coordinator, with the reason', async () => {
 		await render({ kind: 'active', loginName: 'vol@example.com', roles: [grantRole, managerRole] });

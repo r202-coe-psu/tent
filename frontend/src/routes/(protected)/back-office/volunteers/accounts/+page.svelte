@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-	<title>บัญชีจิตอาสา · SmartShelter</title>
+	<title>บัญชีอาสาสมัคร · SmartShelter</title>
 </svelte:head>
 
 <VolunteerAccountsPage />

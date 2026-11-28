@@ -8,8 +8,8 @@ describe('KioskVolunteerCard', () => {
 			props: { contextQuery: '?shelter_code=SH001' }
 		});
 
-		expect(body).toMatch(/<h1[^>]*>\s*พิมพ์ QR จิตอาสา\s*<\/h1>/);
-		expect(body).toContain('กรอกเบอร์โทรที่ลงทะเบียนเป็นจิตอาสา');
+		expect(body).toMatch(/<h1[^>]*>\s*พิมพ์ QR อาสาสมัคร\s*<\/h1>/);
+		expect(body).toContain('กรอกเบอร์โทรที่ลงทะเบียนเป็นอาสาสมัคร');
 		expect(body).toContain('href="/kiosk/print-qr?shelter_code=SH001"');
 		expect(body).not.toContain('ไม่ใช่ฉัน');
 		expect(body).not.toContain('พิมพ์ QR</button>');

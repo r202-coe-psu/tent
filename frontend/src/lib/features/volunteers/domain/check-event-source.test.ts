@@ -11,7 +11,7 @@ describe('describeCheckEvent', () => {
 			const d = describeCheckEvent({ ...base, kind, method: 'portal' });
 			expect(d.source).toBe('self');
 			expect(d.group).toBe('self');
-			expect(d.sourceLabel).toBe(isIn ? 'จิตอาสาเช็คอินเอง' : 'จิตอาสาเช็คเอาต์เอง');
+			expect(d.sourceLabel).toBe(isIn ? 'อาสาสมัครเช็คอินเอง' : 'อาสาสมัครเช็คเอาต์เอง');
 			expect(d.actorLine).toBe(
 				isIn ? 'คีตศิลป์ คงสี (เช็คอินด้วยตนเอง)' : 'คีตศิลป์ คงสี (เช็คเอาต์ด้วยตนเอง)'
 			);

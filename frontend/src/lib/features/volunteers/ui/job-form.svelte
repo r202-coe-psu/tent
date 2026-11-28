@@ -422,7 +422,7 @@
 				<Badge variant="secondary">เลือกแล้ว {selectedSkillCount} ทักษะ</Badge>
 			</div>
 			<p class="text-xs text-muted-foreground">
-				คลิกเพื่อเลือกทักษะ (ระบบจะใช้ในการแมตช์และคัดกรองจิตอาสาที่มีทักษะรับรอง):
+				คลิกเพื่อเลือกทักษะ (ระบบจะใช้ในการแมตช์และคัดกรองอาสาสมัครที่มีทักษะรับรอง):
 			</p>
 			<div class="grid grid-cols-1 gap-2 rounded-xl border border-border p-3 md:grid-cols-2">
 				{#each skillsList as skill (skill.code)}

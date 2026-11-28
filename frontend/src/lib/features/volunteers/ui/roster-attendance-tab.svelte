@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Tab 2 — "ตารางกะและเช็คอินจิตอาสา (Roster & Live Attendance)"
+	 * Tab 2 — "ตารางกะและเช็คอินอาสาสมัคร (Roster & Live Attendance)"
 	 * (owner-approved mockup, 2026-08-29). Composes the Today's Live Attendance
 	 * Bar, the Fast Scan & Live Roster search/filter bar, and the roster list;
 	 * owns the Check-In Audit Trail dialog.
@@ -203,7 +203,7 @@
 				<div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
 					<CalendarDays class="h-4.5 w-4.5" />
 				</div>
-				<h2 class="text-lg font-bold text-foreground">ตารางกะและเช็คอินจิตอาสา</h2>
+				<h2 class="text-lg font-bold text-foreground">ตารางกะและเช็คอินอาสาสมัคร</h2>
 			</div>
 			<Badge
 				variant="outline"

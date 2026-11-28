@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * Volunteer Access Portal + ตารางทำงานจิตอาสา (CR-092 หน้าจอ 2 + 6).
+ * Volunteer Access Portal + ตารางทำงานอาสาสมัคร (CR-092 หน้าจอ 2 + 6).
  *
  * A volunteer has no account: they sign in with the phone number they applied with, or
  * with their tracking token. These tests cover that entry point, the schedule it opens,

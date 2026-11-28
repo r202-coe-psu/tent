@@ -12,9 +12,9 @@ describe('KioskVolunteerCard language', () => {
 	it('keeps the Thai phone step', () => {
 		const { body, head } = render(KioskVolunteerCard, { props });
 
-		expect(body).toContain('กรอกเบอร์โทรที่ลงทะเบียนเป็นจิตอาสา');
+		expect(body).toContain('กรอกเบอร์โทรที่ลงทะเบียนเป็นอาสาสมัคร');
 		expect(body).toContain('aria-label="เบอร์โทรศัพท์ที่กรอก"');
-		expect(head).toContain('พิมพ์ QR จิตอาสา — SmartShelter Kiosk');
+		expect(head).toContain('พิมพ์ QR อาสาสมัคร — SmartShelter Kiosk');
 	});
 
 	it('shows the phone step in English', () => {

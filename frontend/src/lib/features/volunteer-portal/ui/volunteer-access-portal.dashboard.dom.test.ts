@@ -214,7 +214,7 @@ describe('VolunteerAccessPortal dashboard', () => {
 	it('keeps the Thai copy when the language is TH', () => {
 		openDashboard('th');
 		const text = document.body.textContent ?? '';
-		expect(text).toContain('ตารางงานจิตอาสา');
+		expect(text).toContain('ตารางงานอาสาสมัคร');
 		expect(text).toContain('บัตรอาสาสมัครอัจฉริยะ (QR Role Card)');
 		expect(text).toContain('รหัสอาสาสมัคร: V-1001');
 		expect(text).toContain('ยังไม่ยืนยันตัวตน');

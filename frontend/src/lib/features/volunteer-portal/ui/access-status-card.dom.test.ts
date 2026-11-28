@@ -38,7 +38,7 @@ describe('AccessStatusCard', () => {
 		expect(host.textContent).toContain('สิทธิ์ใช้งานระบบ');
 		expect(host.textContent).toContain('ศูนย์หลัก');
 		expect(host.textContent).toContain(
-			'ยังไม่ได้รับสิทธิ์ใช้งานระบบ — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
+			'ยังไม่ได้รับสิทธิ์ใช้งานระบบ — ติดต่อผู้ประสานงานอาสาสมัครของศูนย์'
 		);
 		expect(loginLink()).toBeNull();
 	});
@@ -47,7 +47,7 @@ describe('AccessStatusCard', () => {
 		render({ rows: [row({ status: 'lapsed', expires_at: '2026-11-01T17:00:00.000Z' })] });
 
 		expect(host.textContent).toContain(
-			'สิทธิ์ใช้งานระบบสิ้นสุดตั้งแต่วันที่ 2/11/2569 — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
+			'สิทธิ์ใช้งานระบบสิ้นสุดตั้งแต่วันที่ 2/11/2569 — ติดต่อผู้ประสานงานอาสาสมัครของศูนย์'
 		);
 		expect(host.textContent).not.toContain('หมดอายุ');
 		expect(loginLink()).toBeNull();
@@ -57,7 +57,7 @@ describe('AccessStatusCard', () => {
 		render({ rows: [row({ status: 'lapsed', expires_at: null })] });
 
 		expect(host.textContent).toContain(
-			'สิทธิ์ใช้งานระบบสิ้นสุดแล้ว — ติดต่อผู้ประสานงานจิตอาสาของศูนย์'
+			'สิทธิ์ใช้งานระบบสิ้นสุดแล้ว — ติดต่อผู้ประสานงานอาสาสมัครของศูนย์'
 		);
 	});
 

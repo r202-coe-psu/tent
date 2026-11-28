@@ -74,7 +74,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			return errorResponse(
 				404,
 				'KIOSK_VOLUNTEER_CARD_NOT_FOUND',
-				'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่'
+				'ไม่พบข้อมูลอาสาสมัครที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่'
 			);
 		}
 		if (error instanceof KioskLookupUnavailableError) {
@@ -93,7 +93,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		return errorResponse(
 			500,
 			'KIOSK_VOLUNTEER_CARD_FAILED',
-			'แสดงบัตรจิตอาสาไม่สำเร็จ กรุณาลองอีกครั้ง'
+			'แสดงบัตรอาสาสมัครไม่สำเร็จ กรุณาลองอีกครั้ง'
 		);
 	}
 };

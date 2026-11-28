@@ -1,8 +1,8 @@
 /** Volunteer QR print screen. The printed label itself stays Thai. */
 const th = {
-	pageTitle: 'พิมพ์ QR จิตอาสา — SmartShelter Kiosk',
-	heading: 'พิมพ์ QR จิตอาสา',
-	phonePrompt: 'กรอกเบอร์โทรที่ลงทะเบียนเป็นจิตอาสา',
+	pageTitle: 'พิมพ์ QR อาสาสมัคร — SmartShelter Kiosk',
+	heading: 'พิมพ์ QR อาสาสมัคร',
+	phonePrompt: 'กรอกเบอร์โทรที่ลงทะเบียนเป็นอาสาสมัคร',
 	phoneLabel: 'เบอร์โทรศัพท์ที่กรอก',
 	phonePlaceholder: 'เบอร์โทรศัพท์',
 	searching: 'กำลังค้นหา…',
@@ -10,7 +10,7 @@ const th = {
 	backToChooser: 'กลับไปเลือกวิธีพิมพ์ QR',
 	back: 'ย้อนกลับ',
 	confirmHeading: 'ใช่คุณหรือไม่',
-	badge: (code: string) => `จิตอาสา · ${code}`,
+	badge: (code: string) => `อาสาสมัคร · ${code}`,
 	print: 'พิมพ์ QR',
 	notMe: 'ไม่ใช่ฉัน',
 	done: {

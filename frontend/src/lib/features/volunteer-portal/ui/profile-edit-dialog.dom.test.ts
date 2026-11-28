@@ -100,7 +100,7 @@ describe('ProfileEditDialog', () => {
 
 	it('keeps the Thai copy and Thai skill names when the language is TH', () => {
 		const text = open('th');
-		expect(text).toContain('แก้ไขโปรไฟล์จิตอาสา');
+		expect(text).toContain('แก้ไขโปรไฟล์อาสาสมัคร');
 		expect(text).toContain('ยังไม่มีรหัสอาสา');
 		expect(text).toContain('อาชีพ: Nurse');
 		expect(text).toContain('ยืนยันตัวตนแล้ว');

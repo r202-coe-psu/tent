@@ -117,7 +117,7 @@ describe('VolunteerQualificationDialog — results from other shelters (CR-228)'
 	it('shows where the identity was verified, without who, and asks for the card first (FR-7, FR-8)', async () => {
 		await render();
 		expect(text()).toContain('ยืนยันตัวตนแล้วที่ ศูนย์กีฬา (SH001) เมื่อ');
-		expect(text()).toContain('ตรวจบัตรประชาชนตัวจริงของจิตอาสาต่อหน้าก่อนกดยืนยัน');
+		expect(text()).toContain('ตรวจบัตรประชาชนตัวจริงของอาสาสมัครต่อหน้าก่อนกดยืนยัน');
 		expect(button('ยืนยันตัวตน (อ้างอิงผลจาก ศูนย์กีฬา (SH001))')).toBeDefined();
 		// Still pending until someone here accepts it.
 		expect(text()).toContain('ยังไม่ได้ตรวจ');

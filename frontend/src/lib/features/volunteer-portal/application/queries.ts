@@ -89,7 +89,7 @@ export function useVolunteerApplications(credential: () => PortalCredential | nu
 }
 
 /**
- * ตารางทำงานจิตอาสา for the signed-in volunteer, however they signed in.
+ * ตารางทำงานอาสาสมัคร for the signed-in volunteer, however they signed in.
  *
  * A query rather than a mutation even though the lookup posts: the portal keeps showing
  * the schedule after sign-in, and check-in state moves while a shift is running, so it

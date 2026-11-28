@@ -390,7 +390,7 @@ test.describe('Volunteer backoffice module', () => {
 
 		await page.getByRole('tab', { name: /ตารางกะและเช็คอิน/ }).click();
 		await expect(page).toHaveURL(/\/back-office\/volunteers\?tab=roster$/);
-		await expect(page.getByRole('heading', { name: /ตารางกะและเช็คอินจิตอาสา/ })).toBeVisible();
+		await expect(page.getByRole('heading', { name: /ตารางกะและเช็คอินอาสาสมัคร/ })).toBeVisible();
 		await expect(page.getByLabel('ตารางกะและเช็คอิน').getByText('อาสา ทดสอบ E2E')).toBeVisible();
 
 		await page.getByRole('tab', { name: /รายชื่อและการอนุมัติ/ }).click();
@@ -428,7 +428,7 @@ test.describe('Volunteer backoffice module', () => {
 		await injectSession(page, ACCOUNTS.sm, sessions.sm);
 		await page.goto(`${BASE}/back-office/master-data?type=volunteer_skills`);
 
-		await expect(page.getByRole('heading', { name: 'ทักษะมาตรฐานจิตอาสา' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ทักษะมาตรฐานอาสาสมัคร' })).toBeVisible();
 		await page.getByRole('button', { name: 'เพิ่มรายการ' }).first().click();
 		await expect(page.getByRole('dialog')).toBeVisible();
 		await expect(page.getByRole('dialog').getByText(/เพิ่มรายการ/)).toBeVisible();

@@ -1654,7 +1654,7 @@
 				</div>
 			</div>
 		{:else}
-			<!-- ── TAB 2: JOB OPENINGS (งานจิตอาสา) ─────────────────────── -->
+			<!-- ── TAB 2: JOB OPENINGS (งานอาสาสมัคร) ─────────────────────── -->
 			<!--
 				The same public board `/volunteers/jobs` renders, mounted here so a signed-in
 				volunteer can pick up another shift without leaving the portal. It carries its

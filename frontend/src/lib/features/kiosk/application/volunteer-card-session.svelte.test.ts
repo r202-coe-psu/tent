@@ -69,7 +69,9 @@ describe('VolunteerCardSession', () => {
 
 		expect(session.step).toBe('phone');
 		expect(session.volunteer).toBeNull();
-		expect(session.error).toBe('ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่');
+		expect(session.error).toBe(
+			'ไม่พบข้อมูลอาสาสมัครที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่'
+		);
 	});
 
 	it.each([

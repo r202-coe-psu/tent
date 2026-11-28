@@ -126,7 +126,7 @@
 	const typeFilterOptions = [
 		{ value: '', label: 'ทั้งหมด' },
 		{ value: 'staff', label: 'เจ้าหน้าที่' },
-		{ value: 'volunteer', label: 'จิตอาสา' }
+		{ value: 'volunteer', label: 'อาสาสมัคร' }
 	];
 
 	function applyFilters() {

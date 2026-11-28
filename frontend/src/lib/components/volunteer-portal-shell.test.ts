@@ -41,6 +41,6 @@ describe('VolunteerPortalShell', () => {
 		const body = renderShell('th');
 		expect(body).toContain('กลับหน้าหลัก');
 		expect(body).toContain('เช็คงาน ติดตามสถานะ และรายงานตัวปฏิบัติหน้าที่');
-		expect(body).toContain('ระบบบริการจิตอาสา');
+		expect(body).toContain('ระบบบริการอาสาสมัคร');
 	});
 });

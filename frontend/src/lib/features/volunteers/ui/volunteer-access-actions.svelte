@@ -103,7 +103,7 @@
 			</Button>
 		{:else if managerCannotReach}
 			<p class="text-xs text-muted-foreground">
-				ให้ผู้ประสานงานจิตอาสาออกสิทธิ์อีกครั้ง หรือผู้ดูแลระบบจัดการบัญชี
+				ให้ผู้ประสานงานอาสาสมัครออกสิทธิ์อีกครั้ง หรือผู้ดูแลระบบจัดการบัญชี
 			</p>
 		{:else if accountSuspended}
 			<p class="text-xs text-muted-foreground">บัญชีถูกระงับโดยผู้ดูแลระบบ</p>

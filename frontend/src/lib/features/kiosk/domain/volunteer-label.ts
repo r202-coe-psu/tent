@@ -19,7 +19,7 @@ export function volunteerLabelIdentity(input: { display_name: string; volunteer_
 	name: string;
 	badge: string;
 } {
-	return { name: input.display_name.trim(), badge: `จิตอาสา · ${input.volunteer_code}` };
+	return { name: input.display_name.trim(), badge: `อาสาสมัคร · ${input.volunteer_code}` };
 }
 
 export type VolunteerLabelLayout = {

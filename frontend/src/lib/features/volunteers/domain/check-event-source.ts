@@ -51,7 +51,7 @@ export function describeCheckEvent(input: CheckEventInput): CheckEventDescriptio
 		case 'self':
 			return {
 				source,
-				sourceLabel: isIn ? 'จิตอาสาเช็คอินเอง' : 'จิตอาสาเช็คเอาต์เอง',
+				sourceLabel: isIn ? 'อาสาสมัครเช็คอินเอง' : 'อาสาสมัครเช็คเอาต์เอง',
 				actorLine: `${volunteerName} (${isIn ? 'เช็คอินด้วยตนเอง' : 'เช็คเอาต์ด้วยตนเอง'})`,
 				noteLine: defaultNote,
 				group: 'self'

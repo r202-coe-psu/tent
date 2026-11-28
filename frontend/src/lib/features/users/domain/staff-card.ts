@@ -69,7 +69,7 @@ export function staffCardRoleLabel(roles: readonly string[], shelterCode: string
 }
 
 const STAFF_CARD_BADGE = 'เจ้าหน้าที่';
-const VOLUNTEER_CARD_BADGE = 'จิตอาสา';
+const VOLUNTEER_CARD_BADGE = 'อาสาสมัคร';
 
 /**
  * Text under the name on the printed card: one prominent badge, and staff never list their roles —
@@ -81,7 +81,7 @@ export function staffCardText(card: { volunteerCode?: string | null }): {
 	lines: string[];
 } {
 	return card.volunteerCode
-		? { badge: VOLUNTEER_CARD_BADGE, lines: [`รหัสจิตอาสา ${card.volunteerCode}`] }
+		? { badge: VOLUNTEER_CARD_BADGE, lines: [`รหัสอาสาสมัคร ${card.volunteerCode}`] }
 		: { badge: STAFF_CARD_BADGE, lines: [] };
 }
 

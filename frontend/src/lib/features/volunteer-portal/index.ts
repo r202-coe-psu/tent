@@ -1,7 +1,7 @@
 /**
  * Everything the public (no-account) volunteer surfaces need — CR-092 หน้าจอ 1, 2 และ 6:
  * the Job Board and its no-auth application form, the Digital Pass, and the Access
- * Portal where a volunteer signs in with their phone number to read ตารางทำงานจิตอาสา
+ * Portal where a volunteer signs in with their phone number to read ตารางทำงานอาสาสมัคร
  * and answer offered shifts.
  *
  * Reads and writes go through the BFF `/api/public/v1/volunteer/*` only — never straight

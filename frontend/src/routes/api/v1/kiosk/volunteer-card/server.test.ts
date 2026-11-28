@@ -138,7 +138,7 @@ describe('POST /api/v1/kiosk/volunteer-card', () => {
 		expect(await response.json()).toEqual({
 			error: {
 				code: 'KIOSK_VOLUNTEER_CARD_NOT_FOUND',
-				message: 'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่'
+				message: 'ไม่พบข้อมูลอาสาสมัครที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่'
 			}
 		});
 	});

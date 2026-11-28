@@ -106,7 +106,7 @@
 			href={`${resolve('/volunteers/jobs')}${shelterQuery}`}
 			class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:rounded-2xl sm:py-4 sm:text-base"
 		>
-			{isEn ? 'Volunteer' : 'สมัครจิตอาสา'}
+			{isEn ? 'Volunteer' : 'สมัครเป็นอาสาสมัคร'}
 		</a>
 	</div>
 </div>

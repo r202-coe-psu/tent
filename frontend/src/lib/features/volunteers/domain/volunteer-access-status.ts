@@ -118,7 +118,7 @@ export function closeProfileAccessNotice(status: VolunteerAccessStatus): {
 }
 
 export const COORDINATOR_CLOSE_BLOCKED_MESSAGE =
-	'จิตอาสามีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
+	'อาสาสมัครมีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
 export const CLOSE_WAITS_FOR_ROLES_MESSAGE = 'กำลังตรวจสิทธิ์ของบัญชี กรุณารอสักครู่';
 
 /**
