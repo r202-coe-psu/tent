@@ -69,6 +69,8 @@ export const overviewFiltersSchema = z.object({
 	movement_to: isoDateSchema.optional(),
 	q: z.string().trim().optional(),
 	source: z.enum(['all', 'unassigned', 'bound']).optional().default('all'),
+	/** Whether the shelter is shown on the public plane (`feature_flags.public_visible`). */
+	public_visibility: z.enum(['all', 'visible', 'hidden']).optional().default('all'),
 	shelter_code: z.string().trim().optional(),
 	household_id: z.string().trim().optional(),
 	limit: z.coerce.number().int().min(1).max(200).optional().default(50),
@@ -95,6 +97,7 @@ const FILTER_KEYS = [
 	'movement_to',
 	'q',
 	'source',
+	'public_visibility',
 	'shelter_code',
 	'household_id',
 	'limit',
@@ -118,6 +121,7 @@ export function overviewFiltersToSearchParams(filters: Partial<OverviewFilters>)
 		if (key === 'movement_window' && value === 'today') continue;
 		if (key === 'stay_bucket' && value === 'all') continue;
 		if (key === 'source' && value === 'all') continue;
+		if (key === 'public_visibility' && value === 'all') continue;
 		if (key === 'limit' && value === 50) continue;
 		if (key === 'offset' && value === 0) continue;
 		params.set(key, String(value));
@@ -212,6 +216,8 @@ export const overviewSiteRowSchema = z.object({
 	has_coords: z.boolean(),
 	/** CR-252: shelter run in another system. */
 	is_external: z.boolean(),
+	/** `feature_flags.public_visible !== false`; a hidden shelter is not on the public plane. */
+	public_visible: z.boolean(),
 	dashboard_href: z.string()
 });
 export type OverviewSiteRow = z.infer<typeof overviewSiteRowSchema>;
@@ -220,6 +226,8 @@ export const overviewSitesPayloadSchema = z.object({
 	sites: z.array(overviewSiteRowSchema),
 	/** Sites matching the filters across ALL pages (#1502). */
 	total: z.number().int().min(0),
+	/** Of `total`, the shelters hidden from the public plane (`public_visible = false`, #1515). */
+	hidden_total: z.number().int().min(0),
 	limit: z.number().int(),
 	offset: z.number().int()
 });
@@ -229,12 +237,19 @@ export const originBucketSchema = z.object({
 	province: z.string(),
 	district: z.string().nullable(),
 	subdistrict: z.string().nullable(),
+	/** The shelter the registrants are bound to; `null` while they are not bound yet. */
+	shelter_code: z.string().nullable(),
 	count: z.number().int().nonnegative()
 });
 export type OriginBucket = z.infer<typeof originBucketSchema>;
 
 export const overviewOriginPayloadSchema = z.object({
-	buckets: z.array(originBucketSchema)
+	/** One page of buckets, largest count first (#1515). */
+	buckets: z.array(originBucketSchema),
+	/** Buckets matching the filters across ALL pages. */
+	total: z.number().int().min(0),
+	limit: z.number().int(),
+	offset: z.number().int()
 });
 export type OverviewOriginPayload = z.infer<typeof overviewOriginPayloadSchema>;
 

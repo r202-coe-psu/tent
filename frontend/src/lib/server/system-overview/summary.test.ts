@@ -9,7 +9,7 @@ vi.mock('$lib/server/couch-admin', () => ({
 	ServiceError: class extends Error {}
 }));
 vi.mock('$lib/server/shelters.admin', () => ({
-	listShelterMasters: () => listShelterMasters(),
+	listShelterMasters: (...a: unknown[]) => listShelterMasters(...a),
 	// Mirrors CR-067: pre-migration masters get evacuation_center.
 	migrate: (m: { site_kind?: string }) => ({ ...m, site_kind: m.site_kind ?? 'evacuation_center' })
 }));

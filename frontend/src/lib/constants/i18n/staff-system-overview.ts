@@ -61,12 +61,20 @@ const th = {
 		unknown: 'ไม่ทราบสถานะ'
 	} as Record<string, string>,
 	externalBadge: 'ศูนย์อพยพภายนอก',
+	hiddenBadge: 'ซ่อนจากหน้าสาธารณะ',
+	hiddenSitesCount: (hidden: number, total: number) =>
+		`ซ่อนจากหน้าสาธารณะ ${hidden} ศูนย์ จากทั้งหมด ${total} ศูนย์`,
 
 	// ---- filter bar
 	filterSiteKind: 'ประเภทศูนย์',
 	filterOperationStatus: 'สถานะศูนย์',
 	filterStay: 'สถานะการเข้าพัก',
 	filterPreRegSource: 'ประเภทการลงทะเบียนล่วงหน้า',
+	filterPublicVisibility: 'การแสดงบนหน้าสาธารณะ',
+	publicVisibility: {
+		visible: 'แสดงบนหน้าสาธารณะ',
+		hidden: 'ซ่อนจากหน้าสาธารณะ'
+	} as Record<string, string>,
 	filterHousehold: 'ครอบครัว',
 	filterHouseholdPlaceholder: 'ทุกครอบครัวที่ลงทะเบียนไว้',
 	filterSearch: 'ค้นหา',
@@ -92,11 +100,14 @@ const th = {
 
 	// ---- home area of pre-registered people
 	originTitle: 'ภูมิลำเนาของผู้ลงทะเบียนล่วงหน้า',
-	originDescription: 'จำนวนตามจังหวัด / อำเภอ / ตำบล',
+	originDescription: 'จำนวนตามจังหวัด / อำเภอ / ตำบล และศูนย์ที่ผู้ลงทะเบียนเลือกไว้',
 	originEmpty: 'ไม่พบข้อมูลภูมิลำเนา',
 	province: 'จังหวัด',
 	district: 'อำเภอ',
 	subdistrict: 'ตำบล',
+	originShelter: 'ศูนย์',
+	originRange: (start: number, end: number, total: number) =>
+		`แสดง ${start} - ${end} จาก ${total} แถว`,
 	count: 'จำนวน'
 };
 
@@ -154,11 +165,19 @@ const en: typeof th = {
 		unknown: 'Unknown'
 	},
 	externalBadge: 'External evacuation center',
+	hiddenBadge: 'Hidden from the public site',
+	hiddenSitesCount: (hidden: number, total: number) =>
+		`${hidden} of ${total} shelters hidden from the public site`,
 
 	filterSiteKind: 'Shelter type',
 	filterOperationStatus: 'Shelter status',
 	filterStay: 'Stay status',
 	filterPreRegSource: 'Pre-registration type',
+	filterPublicVisibility: 'On the public site',
+	publicVisibility: {
+		visible: 'Shown on the public site',
+		hidden: 'Hidden from the public site'
+	} as Record<string, string>,
 	filterHousehold: 'Household',
 	filterHouseholdPlaceholder: 'All registered households',
 	filterSearch: 'Search',
@@ -183,11 +202,14 @@ const en: typeof th = {
 	unknownCountry: 'Unknown',
 
 	originTitle: 'Home area of pre-registered people',
-	originDescription: 'Counts by province / district / sub-district',
+	originDescription: 'Counts by province / district / sub-district and the chosen shelter',
 	originEmpty: 'No home-area data found',
 	province: 'Province',
 	district: 'District',
 	subdistrict: 'Sub-district',
+	originShelter: 'Shelter',
+	originRange: (start: number, end: number, total: number) =>
+		`Showing ${start} - ${end} of ${total} rows`,
 	count: 'Count'
 };
 

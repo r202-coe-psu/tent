@@ -80,12 +80,58 @@ export function nowIso(): string {
  * the registry db has not been created yet (404) — that is the legitimate
  * "no shelters" state on a fresh install. Any other 4xx/5xx bubbles up.
  */
-export async function listShelterMasters(): Promise<ShelterMaster[]> {
+export async function listShelterMasters(
+	opts: { publicVisibility?: 'visible' | 'hidden' } = {}
+): Promise<ShelterMaster[]> {
+	if (opts.publicVisibility) return findShelterMastersByPublicVisibility(opts.publicVisibility);
 	const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_all_docs?include_docs=true`, 'GET');
 	if (res.status === 404) return [];
 	if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
 	const rows = (res.data as { rows?: { id: string; doc: ShelterMaster }[] })?.rows ?? [];
 	return rows.filter((r) => r.id.startsWith('shelter:') && r.doc).map((r) => r.doc);
+}
+
+const SHELTER_MASTER_ID_RANGE = { $gt: 'shelter:', $lt: 'shelter:\ufff0' } as const;
+const SHELTER_MASTER_FIND_PAGE = 500;
+
+/**
+ * Shelter masters filtered in CouchDB by `feature_flags.public_visible` (#1515), page by page with
+ * the bookmark. A missing flag means shown on public, so `visible` also matches docs without it.
+ */
+async function findShelterMastersByPublicVisibility(
+	visibility: 'visible' | 'hidden'
+): Promise<ShelterMaster[]> {
+	const flag = 'feature_flags.public_visible';
+	const selector =
+		visibility === 'hidden'
+			? { _id: SHELTER_MASTER_ID_RANGE, [flag]: false }
+			: {
+					_id: SHELTER_MASTER_ID_RANGE,
+					$or: [{ [flag]: { $exists: false } }, { [flag]: { $ne: false } }]
+				};
+	const docs: ShelterMaster[] = [];
+	let bookmark: string | undefined;
+	for (;;) {
+		const res = await adminRaw(`/${SHELTER_REGISTRY_DB}/_find`, 'POST', {
+			selector,
+			limit: SHELTER_MASTER_FIND_PAGE,
+			...(bookmark ? { bookmark } : {})
+		});
+		if (res.status === 404) return [];
+		if (res.status >= 400) throw new ServiceError('INTERNAL', 'Could not read registry');
+		const page = res.data as { docs?: ShelterMaster[]; bookmark?: string } | null;
+		const pageDocs = page?.docs ?? [];
+		docs.push(...pageDocs);
+		// A short page is the end; a bookmark that does not move would loop forever.
+		if (
+			pageDocs.length < SHELTER_MASTER_FIND_PAGE ||
+			!page?.bookmark ||
+			page.bookmark === bookmark
+		) {
+			return docs;
+		}
+		bookmark = page.bookmark;
+	}
 }
 
 /**

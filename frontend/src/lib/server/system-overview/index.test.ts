@@ -9,7 +9,7 @@ vi.mock('$lib/server/couch-admin', () => ({
 	ServiceError: class extends Error {}
 }));
 vi.mock('$lib/server/shelters.admin', () => ({
-	listShelterMasters: () => listShelterMasters(),
+	listShelterMasters: (...a: unknown[]) => listShelterMasters(...a),
 	migrate: (m: unknown) => m
 }));
 vi.mock('$lib/server/fastapi', () => ({
@@ -290,5 +290,125 @@ describe('buildPreRegistrationsList paging (#1502)', () => {
 		const out = await buildPreRegistrationsList(filters(), unassignedFetch, null);
 		expect(out.total).toBe(1);
 		expect(out.items[0].evacuee_id).toBe('e1');
+	});
+});
+
+describe('buildOverviewSites — hidden shelters (#1515)', () => {
+	const seed = () => {
+		const all: (ReturnType<typeof master> & { feature_flags?: { public_visible: boolean } })[] = [
+			master('A', 10),
+			{ ...master('B', 10), feature_flags: { public_visible: false } },
+			{ ...master('C', 10), feature_flags: { public_visible: true } }
+		];
+		// Stands in for the CouchDB-side filter in listShelterMasters.
+		listShelterMasters.mockImplementation(
+			async (opts: { publicVisibility?: 'visible' | 'hidden' } = {}) =>
+				all.filter((m) => {
+					const hidden = m.feature_flags?.public_visible === false;
+					if (opts.publicVisibility === 'hidden') return hidden;
+					if (opts.publicVisibility === 'visible') return !hidden;
+					return true;
+				})
+		);
+		route({
+			'/_view/occupancy': () => ({ rows: [] }),
+			registrations_by_date_status: () => ({ rows: [] })
+		});
+	};
+
+	it('flags a shelter whose public_visible flag is false, and treats a missing flag as visible', async () => {
+		seed();
+		const out = await buildOverviewSites(filters());
+		const visibility = Object.fromEntries(out.sites.map((s) => [s.shelter_code, s.public_visible]));
+		expect(visibility).toEqual({ A: true, B: false, C: true });
+		expect(out.hidden_total).toBe(1);
+	});
+
+	it('counts hidden shelters across all pages, not just the one returned', async () => {
+		seed();
+		const out = await buildOverviewSites(filters({ limit: 1, offset: 0 }));
+		expect(out.sites).toHaveLength(1);
+		expect(out.total).toBe(3);
+		expect(out.hidden_total).toBe(1);
+	});
+
+	it('keeps only the hidden shelters when asked for them', async () => {
+		seed();
+		const out = await buildOverviewSites(filters({ public_visibility: 'hidden' }));
+		expect(listShelterMasters).toHaveBeenCalledWith({ publicVisibility: 'hidden' });
+		expect(out.sites.map((s) => s.shelter_code)).toEqual(['B']);
+	});
+
+	it('keeps only the shelters shown on public when asked for them', async () => {
+		seed();
+		const out = await buildOverviewSites(filters({ public_visibility: 'visible' }));
+		expect(listShelterMasters).toHaveBeenCalledWith({ publicVisibility: 'visible' });
+		expect(out.sites.map((s) => s.shelter_code).sort()).toEqual(['A', 'C']);
+		expect(out.hidden_total).toBe(0);
+	});
+});
+
+describe('buildOverviewOrigin — source shelter (#1515)', () => {
+	const unassignedFetch = (items: unknown[]) =>
+		vi.fn(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({ items })
+		})) as unknown as typeof fetch;
+
+	it('names the shelter each bound row comes from and keeps the grand total', async () => {
+		listShelterMasters.mockResolvedValue([master('A', 10), master('B', 10)]);
+		route({
+			'/_view/occupancy': () => ({ rows: [] }),
+			'/_find': () => ({
+				docs: [
+					{ _id: 'evacuee:1', type: 'evacuee', household_id: 'household:1' },
+					{ _id: 'evacuee:2', type: 'evacuee', household_id: 'household:1' }
+				]
+			}),
+			'/_all_docs': () => ({ rows: [{ doc: { _id: 'household:1', province: 'ปัตตานี' } }] })
+		});
+		const { buckets } = await buildOverviewOrigin(filters({ source: 'bound' }), fetch, null);
+		expect(buckets.map((b) => b.shelter_code).sort()).toEqual(['A', 'B']);
+		expect(buckets.every((b) => b.count === 2)).toBe(true);
+	});
+
+	it('lists registrants that have not chosen a shelter with no shelter code', async () => {
+		const fetchFn = unassignedFetch([
+			{
+				household: { province: 'ยะลา', district: 'เมือง', subdistrict: 'สะเตง' },
+				open_member_count: 3
+			}
+		]);
+		const { buckets } = await buildOverviewOrigin(filters({ source: 'unassigned' }), fetchFn, null);
+		expect(buckets).toEqual([
+			{ province: 'ยะลา', district: 'เมือง', subdistrict: 'สะเตง', shelter_code: null, count: 3 }
+		]);
+	});
+
+	it('leaves the unassigned queue out when filtering by public visibility', async () => {
+		const fetchFn = unassignedFetch([{ household: { province: 'ยะลา' }, open_member_count: 3 }]);
+		const { buckets } = await buildOverviewOrigin(
+			filters({ source: 'unassigned', public_visibility: 'hidden' }),
+			fetchFn,
+			null
+		);
+		expect(buckets).toEqual([]);
+		expect(fetchFn).not.toHaveBeenCalled();
+	});
+
+	it('returns one page of rows and the total across all pages', async () => {
+		const fetchFn = unassignedFetch(
+			['ก', 'ข', 'ค'].map((province, i) => ({ household: { province }, open_member_count: i + 1 }))
+		);
+		const out = await buildOverviewOrigin(
+			filters({ source: 'unassigned', limit: 2, offset: 2 }),
+			fetchFn,
+			null
+		);
+		expect(out.total).toBe(3);
+		expect(out.offset).toBe(2);
+		// Largest count first: ค(3), ข(2), ก(1) — page 2 holds the last one.
+		expect(out.buckets.map((b) => b.province)).toEqual(['ก']);
 	});
 });

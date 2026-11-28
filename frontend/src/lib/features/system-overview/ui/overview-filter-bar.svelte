@@ -18,7 +18,8 @@
 		onChange,
 		showHouseholdFilter = false,
 		showSearch = true,
-		showExternalOption = true
+		showExternalOption = true,
+		showPublicVisibilityFilter = false
 	}: {
 		filters: OverviewFilters;
 		onChange: (next: OverviewFilters) => void;
@@ -27,6 +28,8 @@
 		showSearch?: boolean;
 		/** "External evacuation center" choice in the shelter-type filter; hidden on the pre-registration list. */
 		showExternalOption?: boolean;
+		/** Only the overview applies it; the pre-registration list does not read it. */
+		showPublicVisibilityFilter?: boolean;
 	} = $props();
 
 	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
@@ -40,6 +43,7 @@
 	const operationStatusValue = $derived(filters.operation_status ?? 'all');
 	const stayBucketValue = $derived(filters.stay_bucket ?? 'all');
 	const sourceValue = $derived(filters.source ?? 'all');
+	const publicVisibilityValue = $derived(filters.public_visibility ?? 'all');
 	const householdMode = $derived(filters.shelter_code ? 'shelter' : 'universal');
 
 	// CR-198 FR-10: options are the active kinds; the trigger resolves against every item.
@@ -56,6 +60,7 @@
 	const operationStatusLabel = $derived(t.operationStatus[operationStatusValue] ?? t.all);
 	const stayBucketLabel = $derived(t.stayBucket[stayBucketValue] ?? t.all);
 	const sourceLabel = $derived(t.source[sourceValue] ?? t.all);
+	const publicVisibilityLabel = $derived(t.publicVisibility[publicVisibilityValue] ?? t.all);
 </script>
 
 <div
@@ -134,6 +139,38 @@
 			</Select.Content>
 		</Select.Root>
 	</div>
+
+	{#if showPublicVisibilityFilter}
+		<div class="min-w-[10.5rem] flex-1 basis-[10.5rem] space-y-1.5">
+			<Label for="overview-public-visibility" class="text-sm font-semibold text-slate-700">
+				{t.filterPublicVisibility}
+			</Label>
+			<Select.Root
+				type="single"
+				value={publicVisibilityValue}
+				onValueChange={(v) => {
+					if (!v) return;
+					patch({ public_visibility: v as OverviewFilters['public_visibility'] });
+				}}
+			>
+				<Select.Trigger
+					id="overview-public-visibility"
+					class="h-9 w-full min-w-0 overflow-hidden"
+					aria-label={t.filterPublicVisibility}
+					title={`${t.filterPublicVisibility}: ${publicVisibilityLabel}`}
+				>
+					<span class="min-w-0 flex-1 truncate">
+						{publicVisibilityLabel}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label={t.all} />
+					<Select.Item value="visible" label={t.publicVisibility.visible} />
+					<Select.Item value="hidden" label={t.publicVisibility.hidden} />
+				</Select.Content>
+			</Select.Root>
+		</div>
+	{/if}
 
 	<div class="min-w-[9rem] flex-1 basis-[9rem] space-y-1.5">
 		<Label for="overview-stay" class="text-sm font-semibold text-slate-700">{t.filterStay}</Label>

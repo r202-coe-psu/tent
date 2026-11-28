@@ -29,6 +29,7 @@ const row = (over: Partial<OverviewSiteRow>): OverviewSiteRow => ({
 	checkout: 0,
 	has_coords: false,
 	is_external: false,
+	public_visible: true,
 	dashboard_href: '/back-office/evacuee-management?shelter=SH001',
 	...over
 });

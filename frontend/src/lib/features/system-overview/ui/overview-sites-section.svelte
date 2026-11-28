@@ -19,6 +19,7 @@
 	let {
 		sites,
 		total = 0,
+		hiddenTotal = 0,
 		limit = 20,
 		offset = 0,
 		onOffsetChange,
@@ -30,6 +31,8 @@
 	}: {
 		sites: OverviewSiteRow[] | undefined;
 		total?: number;
+		/** Of `total`, the shelters hidden from the public plane, across all pages (#1515). */
+		hiddenTotal?: number;
 		limit?: number;
 		offset?: number;
 		onOffsetChange?: (next: number) => void;
@@ -69,6 +72,11 @@
 			<Card.Description class="text-sm text-slate-500">
 				{t.sitesDescription}
 			</Card.Description>
+			{#if sites && hiddenTotal > 0}
+				<p class="mt-1 text-sm text-slate-600" data-testid="hidden-sites-count">
+					{t.hiddenSitesCount(hiddenTotal, total)}
+				</p>
+			{/if}
 		</div>
 		<div class="flex max-w-full min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
 			<Label
@@ -141,6 +149,15 @@
 												class="border-violet-200 bg-violet-50 text-violet-800"
 											>
 												{t.externalBadge}
+											</Badge>
+										{/if}
+										{#if !site.public_visible}
+											<Badge
+												variant="outline"
+												class="border-amber-200 bg-amber-50 text-amber-900"
+												data-testid="hidden-site-badge"
+											>
+												{t.hiddenBadge}
 											</Badge>
 										{/if}
 									</div>

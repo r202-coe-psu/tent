@@ -43,7 +43,13 @@
 		limit: SITES_PAGE_SIZE,
 		offset: sitesOffset
 	}));
-	const originQuery = useOverviewOrigin(() => filters);
+	const ORIGIN_PAGE_SIZE = 20;
+	let originOffset = $state(0);
+	const originQuery = useOverviewOrigin(() => ({
+		...filters,
+		limit: ORIGIN_PAGE_SIZE,
+		offset: originOffset
+	}));
 	const demographicsQuery = useOverviewDemographics(() => filters);
 
 	const isError = $derived(
@@ -61,15 +67,6 @@
 		loading={siteKindSummaryQuery.isPending}
 	/>
 
-	<OverviewFilterBar
-		{filters}
-		showSearch={false}
-		onChange={(next) => {
-			filters = next;
-			sitesOffset = 0; // any filter change restarts the site table on page 1 (#1502)
-		}}
-	/>
-
 	{#if isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />
@@ -80,9 +77,21 @@
 
 	<OverviewPhaseStrip summary={summaryQuery.data} loading={summaryQuery.isPending} />
 
+	<OverviewFilterBar
+		{filters}
+		showSearch={false}
+		showPublicVisibilityFilter={true}
+		onChange={(next) => {
+			filters = next;
+			sitesOffset = 0; // any filter change restarts the site table on page 1 (#1502)
+			originOffset = 0;
+		}}
+	/>
+
 	<OverviewSitesSection
 		sites={sitesQuery.data?.sites}
 		total={sitesQuery.data?.total}
+		hiddenTotal={sitesQuery.data?.hidden_total}
 		limit={SITES_PAGE_SIZE}
 		offset={sitesQuery.isPlaceholderData ? sitesOffset : (sitesQuery.data?.offset ?? sitesOffset)}
 		onOffsetChange={(next) => (sitesOffset = next)}
@@ -97,7 +106,17 @@
 	/>
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<OverviewOriginSection buckets={originQuery.data?.buckets} loading={originQuery.isPending} />
+		<OverviewOriginSection
+			buckets={originQuery.data?.buckets}
+			total={originQuery.data?.total}
+			limit={ORIGIN_PAGE_SIZE}
+			offset={originQuery.isPlaceholderData
+				? originOffset
+				: (originQuery.data?.offset ?? originOffset)}
+			onOffsetChange={(next) => (originOffset = next)}
+			loading={originQuery.isPending}
+			stale={originQuery.isPlaceholderData}
+		/>
 		<OverviewDemographicsSection
 			age_groups={demographicsQuery.data?.age_groups}
 			countries={demographicsQuery.data?.countries}

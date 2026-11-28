@@ -3,7 +3,11 @@ import {
 	ageBandForBirthYear,
 	defaultMovementDateRange,
 	forecastFromCounts,
+	originBucketSchema,
 	overviewFiltersSchema,
+	overviewFiltersToSearchParams,
+	overviewSiteRowSchema,
+	parseOverviewFilters,
 	pct,
 	presentFromCounts,
 	resolveMovementDateRange,
@@ -95,5 +99,49 @@ describe('defaultMovementDateRange', () => {
 		expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 		expect(to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 		expect(from <= to).toBe(true);
+	});
+});
+
+describe('public visibility filter and rows (#1515)', () => {
+	it('defaults to all and keeps a chosen value in the URL, dropping the default', () => {
+		expect(parseOverviewFilters(new URLSearchParams()).public_visibility).toBe('all');
+		const hidden = parseOverviewFilters(new URLSearchParams('public_visibility=hidden'));
+		expect(hidden.public_visibility).toBe('hidden');
+		expect(overviewFiltersToSearchParams(hidden).get('public_visibility')).toBe('hidden');
+		expect(
+			overviewFiltersToSearchParams({ public_visibility: 'all' }).has('public_visibility')
+		).toBe(false);
+	});
+
+	it('refuses an unknown visibility value', () => {
+		expect(() => parseOverviewFilters(new URLSearchParams('public_visibility=maybe'))).toThrow();
+	});
+
+	it('requires public_visible on a site row and a shelter_code (or null) on an origin bucket', () => {
+		const row = {
+			shelter_code: 'SH001',
+			name: 'A',
+			site_kind: 'evacuation_center',
+			operation_status: 'active',
+			province: null,
+			district: null,
+			subdistrict: null,
+			capacity: 1,
+			present: 0,
+			forecast: 0,
+			pre_registered: 0,
+			present_pct: null,
+			forecast_pct: null,
+			checkin: 0,
+			checkout: 0,
+			has_coords: false,
+			is_external: false,
+			dashboard_href: '/x'
+		};
+		expect(overviewSiteRowSchema.safeParse(row).success).toBe(false);
+		expect(overviewSiteRowSchema.safeParse({ ...row, public_visible: false }).success).toBe(true);
+		const bucket = { province: 'สงขลา', district: null, subdistrict: null, count: 1 };
+		expect(originBucketSchema.safeParse(bucket).success).toBe(false);
+		expect(originBucketSchema.safeParse({ ...bucket, shelter_code: null }).success).toBe(true);
 	});
 });

@@ -228,7 +228,12 @@ type SiteMetric = {
 async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> {
 	// Registry may still hold pre-CR-067 masters (no site_kind). Migrate on read
 	// like other back-office routes — raw docs fail overviewSitesPayloadSchema.
-	const masters = (await listShelterMasters())
+	// The public-visibility filter runs in CouchDB (#1515); the rest still filter here.
+	const publicVisibility =
+		filters.public_visibility && filters.public_visibility !== 'all'
+			? filters.public_visibility
+			: undefined;
+	const masters = (await listShelterMasters({ publicVisibility }))
 		.map(migrate)
 		.filter((m) => matchesShelterGeo(m, filters));
 	const settled = await Promise.all(
@@ -257,6 +262,7 @@ async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> 
 				checkout: 0,
 				has_coords:
 					typeof master.location?.lat === 'number' && typeof master.location?.lng === 'number',
+				public_visible: master.feature_flags?.public_visible !== false,
 				is_external: isExternalShelter(master),
 				dashboard_href: `/back-office/overview/evacuees?shelter=${encodeURIComponent(master.code)}`
 			};
@@ -472,6 +478,7 @@ export async function buildOverviewSites(filters: OverviewFilters) {
 	return overviewSitesPayloadSchema.parse({
 		sites: rows,
 		total: sorted.length,
+		hidden_total: sorted.filter((s) => !s.row.public_visible).length,
 		limit: filters.limit,
 		offset
 	});
@@ -645,8 +652,13 @@ export async function buildOverviewOrigin(
 	cookie: string | null
 ) {
 	const bucketMap = new Map<string, OriginBucket>();
-	const bump = (province: string, district: string | null, subdistrict: string | null) => {
-		const key = `${province}|${district ?? ''}|${subdistrict ?? ''}`;
+	const bump = (
+		province: string,
+		district: string | null,
+		subdistrict: string | null,
+		shelterCode: string | null
+	) => {
+		const key = `${province}|${district ?? ''}|${subdistrict ?? ''}|${shelterCode ?? ''}`;
 		const existing = bucketMap.get(key);
 		if (existing) existing.count += 1;
 		else
@@ -654,11 +666,14 @@ export async function buildOverviewOrigin(
 				province: province || 'ไม่ระบุ',
 				district,
 				subdistrict,
+				shelter_code: shelterCode,
 				count: 1
 			});
 	};
 
-	if (filters.source !== 'bound') {
+	// Unassigned registrations have no shelter, so none can be hidden from or shown on public.
+	const publicVisibilityFiltered = filters.public_visibility && filters.public_visibility !== 'all';
+	if (filters.source !== 'bound' && !publicVisibilityFiltered) {
 		const qs = new URLSearchParams({ limit: '200', offset: '0' });
 		if (filters.residence_province) qs.set('province', filters.residence_province);
 		if (filters.residence_district) qs.set('district', filters.residence_district);
@@ -674,7 +689,8 @@ export async function buildOverviewOrigin(
 				bump(
 					item.household.province ?? '',
 					item.household.district ?? null,
-					item.household.subdistrict ?? null
+					item.household.subdistrict ?? null,
+					null
 				);
 			}
 		}
@@ -693,13 +709,22 @@ export async function buildOverviewOrigin(
 				if (!matchesResidence(hh?.province, hh?.district, hh?.subdistrict, filters)) {
 					continue;
 				}
-				bump(hh?.province ?? '', hh?.district ?? null, hh?.subdistrict ?? null);
+				bump(hh?.province ?? '', hh?.district ?? null, hh?.subdistrict ?? null, site.master.code);
 			}
 		}
 	}
 
-	const buckets = [...bucketMap.values()].sort((a, b) => b.count - a.count);
-	return overviewOriginPayloadSchema.parse({ buckets });
+	// Tie-break on the bucket key so page boundaries stay stable when counts tie.
+	const sorted = [...bucketMap.entries()]
+		.sort(([ka, a], [kb, b]) => b.count - a.count || (ka < kb ? -1 : ka > kb ? 1 : 0))
+		.map(([, bucket]) => bucket);
+	const offset = clampOffset(sorted.length, filters.offset, filters.limit);
+	return overviewOriginPayloadSchema.parse({
+		buckets: sorted.slice(offset, offset + filters.limit),
+		total: sorted.length,
+		limit: filters.limit,
+		offset
+	});
 }
 
 function matchesStayBucket(stayStatus: string, stayBucket?: string): boolean {
