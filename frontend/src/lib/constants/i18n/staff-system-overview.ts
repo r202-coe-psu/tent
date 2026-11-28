@@ -106,6 +106,8 @@ const th = {
 	district: 'อำเภอ',
 	subdistrict: 'ตำบล',
 	originShelter: 'ศูนย์',
+	originRange: (start: number, end: number, total: number) =>
+		`แสดง ${start} - ${end} จาก ${total} แถว`,
 	count: 'จำนวน'
 };
 
@@ -206,6 +208,8 @@ const en: typeof th = {
 	district: 'District',
 	subdistrict: 'Sub-district',
 	originShelter: 'Shelter',
+	originRange: (start: number, end: number, total: number) =>
+		`Showing ${start} - ${end} of ${total} rows`,
 	count: 'Count'
 };
 

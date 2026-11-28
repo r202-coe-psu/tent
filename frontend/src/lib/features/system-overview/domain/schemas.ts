@@ -244,7 +244,12 @@ export const originBucketSchema = z.object({
 export type OriginBucket = z.infer<typeof originBucketSchema>;
 
 export const overviewOriginPayloadSchema = z.object({
-	buckets: z.array(originBucketSchema)
+	/** One page of buckets, largest count first (#1515). */
+	buckets: z.array(originBucketSchema),
+	/** Buckets matching the filters across ALL pages. */
+	total: z.number().int().min(0),
+	limit: z.number().int(),
+	offset: z.number().int()
 });
 export type OverviewOriginPayload = z.infer<typeof overviewOriginPayloadSchema>;
 

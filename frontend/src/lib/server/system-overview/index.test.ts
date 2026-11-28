@@ -9,7 +9,7 @@ vi.mock('$lib/server/couch-admin', () => ({
 	ServiceError: class extends Error {}
 }));
 vi.mock('$lib/server/shelters.admin', () => ({
-	listShelterMasters: () => listShelterMasters(),
+	listShelterMasters: (...a: unknown[]) => listShelterMasters(...a),
 	migrate: (m: unknown) => m
 }));
 vi.mock('$lib/server/fastapi', () => ({
@@ -295,11 +295,21 @@ describe('buildPreRegistrationsList paging (#1502)', () => {
 
 describe('buildOverviewSites — hidden shelters (#1515)', () => {
 	const seed = () => {
-		listShelterMasters.mockResolvedValue([
+		const all: (ReturnType<typeof master> & { feature_flags?: { public_visible: boolean } })[] = [
 			master('A', 10),
 			{ ...master('B', 10), feature_flags: { public_visible: false } },
 			{ ...master('C', 10), feature_flags: { public_visible: true } }
-		]);
+		];
+		// Stands in for the CouchDB-side filter in listShelterMasters.
+		listShelterMasters.mockImplementation(
+			async (opts: { publicVisibility?: 'visible' | 'hidden' } = {}) =>
+				all.filter((m) => {
+					const hidden = m.feature_flags?.public_visible === false;
+					if (opts.publicVisibility === 'hidden') return hidden;
+					if (opts.publicVisibility === 'visible') return !hidden;
+					return true;
+				})
+		);
 		route({
 			'/_view/occupancy': () => ({ rows: [] }),
 			registrations_by_date_status: () => ({ rows: [] })
@@ -325,12 +335,14 @@ describe('buildOverviewSites — hidden shelters (#1515)', () => {
 	it('keeps only the hidden shelters when asked for them', async () => {
 		seed();
 		const out = await buildOverviewSites(filters({ public_visibility: 'hidden' }));
+		expect(listShelterMasters).toHaveBeenCalledWith({ publicVisibility: 'hidden' });
 		expect(out.sites.map((s) => s.shelter_code)).toEqual(['B']);
 	});
 
 	it('keeps only the shelters shown on public when asked for them', async () => {
 		seed();
 		const out = await buildOverviewSites(filters({ public_visibility: 'visible' }));
+		expect(listShelterMasters).toHaveBeenCalledWith({ publicVisibility: 'visible' });
 		expect(out.sites.map((s) => s.shelter_code).sort()).toEqual(['A', 'C']);
 		expect(out.hidden_total).toBe(0);
 	});
@@ -383,5 +395,20 @@ describe('buildOverviewOrigin — source shelter (#1515)', () => {
 		);
 		expect(buckets).toEqual([]);
 		expect(fetchFn).not.toHaveBeenCalled();
+	});
+
+	it('returns one page of rows and the total across all pages', async () => {
+		const fetchFn = unassignedFetch(
+			['ก', 'ข', 'ค'].map((province, i) => ({ household: { province }, open_member_count: i + 1 }))
+		);
+		const out = await buildOverviewOrigin(
+			filters({ source: 'unassigned', limit: 2, offset: 2 }),
+			fetchFn,
+			null
+		);
+		expect(out.total).toBe(3);
+		expect(out.offset).toBe(2);
+		// Largest count first: ค(3), ข(2), ก(1) — page 2 holds the last one.
+		expect(out.buckets.map((b) => b.province)).toEqual(['ก']);
 	});
 });

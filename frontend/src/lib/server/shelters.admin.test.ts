@@ -11,6 +11,7 @@ import {
 	buildSecurityMutationLock,
 	deployDonationReceivedMangoIndex,
 	deployRoleGrantAuditMangoIndex,
+	listShelterMasters,
 	updateMaster
 } from './shelters.admin';
 
@@ -240,5 +241,47 @@ describe('updateMaster actor (CR-259 FR-6)', () => {
 		const written = await update({}, { capacity: 120 });
 		expect(written.created_by).toBeUndefined();
 		expect(written.updated_by).toBe('sm.user');
+	});
+});
+
+describe('listShelterMasters public visibility (#1515)', () => {
+	beforeEach(() => adminRawMock.mockReset());
+
+	const findBodies = () =>
+		adminRawMock.mock.calls
+			.filter(([path]) => path === '/registry/_find')
+			.map(([, , body]) => body as { selector: Record<string, unknown>; bookmark?: string });
+
+	it('asks CouchDB for the hidden shelters only', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { docs: [{ code: 'SH004' }] } });
+		await expect(listShelterMasters({ publicVisibility: 'hidden' })).resolves.toEqual([
+			{ code: 'SH004' }
+		]);
+		expect(findBodies()[0].selector).toMatchObject({ 'feature_flags.public_visible': false });
+	});
+
+	it('counts a shelter with no flag as shown on public', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { docs: [] } });
+		await listShelterMasters({ publicVisibility: 'visible' });
+		expect(findBodies()[0].selector.$or).toEqual([
+			{ 'feature_flags.public_visible': { $exists: false } },
+			{ 'feature_flags.public_visible': { $ne: false } }
+		]);
+	});
+
+	it('follows the bookmark until a short page', async () => {
+		const full = Array.from({ length: 500 }, (_, i) => ({ code: `SH${i}` }));
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: { docs: full, bookmark: 'b1' } })
+			.mockResolvedValueOnce({ status: 200, data: { docs: [{ code: 'LAST' }], bookmark: 'b2' } });
+		const out = await listShelterMasters({ publicVisibility: 'visible' });
+		expect(out).toHaveLength(501);
+		expect(findBodies().map((b) => b.bookmark)).toEqual([undefined, 'b1']);
+	});
+
+	it('reads every master through _all_docs when no visibility is asked for', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { rows: [] } });
+		await listShelterMasters();
+		expect(adminRawMock).toHaveBeenCalledWith('/registry/_all_docs?include_docs=true', 'GET');
 	});
 });

@@ -50,7 +50,9 @@ export function useOverviewSites(getFilters: () => Partial<OverviewFilters>) {
 export function useOverviewOrigin(getFilters: () => Partial<OverviewFilters>) {
 	return createQuery(() => ({
 		queryKey: overviewKeys.origin(getFilters()),
-		queryFn: () => fetchOverviewOrigin(getFilters())
+		queryFn: () => fetchOverviewOrigin(getFilters()),
+		// Keep the old page on screen while the next one loads (no skeleton flash on paging).
+		placeholderData: keepPreviousData
 	}));
 }
 

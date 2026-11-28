@@ -5,15 +5,32 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import type { OriginBucket } from '../domain/schemas';
 
 	let {
 		buckets,
-		loading = false
+		total = 0,
+		limit = 20,
+		offset = 0,
+		onOffsetChange,
+		loading = false,
+		stale = false
 	}: {
 		buckets: OriginBucket[] | undefined;
+		/** Buckets across all pages (#1515). */
+		total?: number;
+		limit?: number;
+		offset?: number;
+		onOffsetChange?: (next: number) => void;
 		loading?: boolean;
+		/** Showing the previous page while the next one loads. */
+		stale?: boolean;
 	} = $props();
+
+	const pageStart = $derived(total === 0 ? 0 : offset + 1);
+	const pageEnd = $derived(Math.min(offset + limit, total));
+	const currentPage = $derived(Math.floor(offset / limit) + 1);
 
 	const t = $derived(getTranslation(STAFF_SYSTEM_OVERVIEW_I18N, langState.current));
 </script>
@@ -31,7 +48,12 @@
 		{:else if !buckets || buckets.length === 0}
 			<p class="py-6 text-center text-sm text-slate-500">{t.originEmpty}</p>
 		{:else}
-			<div class="overflow-x-auto rounded-xl border border-slate-200/80">
+			<div
+				class="overflow-x-auto rounded-xl border border-slate-200/80 transition-opacity {stale
+					? 'opacity-60'
+					: ''}"
+				aria-busy={stale}
+			>
 				<Table.Root>
 					<Table.Header>
 						<Table.Row>
@@ -59,6 +81,21 @@
 					</Table.Body>
 				</Table.Root>
 			</div>
+			{#if onOffsetChange && total > limit}
+				<div
+					class="mt-3 flex flex-col gap-2 border-t border-slate-200/80 bg-slate-50/50 px-1 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="text-xs text-slate-500 tabular-nums">
+						{t.originRange(pageStart, pageEnd, total)}
+					</div>
+					<PaginationControls
+						bind:page={() => currentPage, (p) => onOffsetChange((p - 1) * limit)}
+						count={total}
+						perPage={limit}
+						class="h-7 min-w-7 text-xs"
+					/>
+				</div>
+			{/if}
 		{/if}
 	</Card.Content>
 </Card.Root>

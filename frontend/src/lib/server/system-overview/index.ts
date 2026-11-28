@@ -228,7 +228,12 @@ type SiteMetric = {
 async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> {
 	// Registry may still hold pre-CR-067 masters (no site_kind). Migrate on read
 	// like other back-office routes — raw docs fail overviewSitesPayloadSchema.
-	const masters = (await listShelterMasters())
+	// The public-visibility filter runs in CouchDB (#1515); the rest still filter here.
+	const publicVisibility =
+		filters.public_visibility && filters.public_visibility !== 'all'
+			? filters.public_visibility
+			: undefined;
+	const masters = (await listShelterMasters({ publicVisibility }))
 		.map(migrate)
 		.filter((m) => matchesShelterGeo(m, filters));
 	const settled = await Promise.all(
@@ -275,8 +280,6 @@ async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> 
 	);
 
 	return settled.filter((site) => {
-		if (filters.public_visibility === 'visible' && !site.row.public_visible) return false;
-		if (filters.public_visibility === 'hidden' && site.row.public_visible) return false;
 		if (filters.stay_bucket === 'present' && site.present <= 0) return false;
 		if (filters.stay_bucket === 'forecast' && site.forecast <= 0) return false;
 		if (filters.stay_bucket === 'pre_registered' && site.pre_registered <= 0) return false;
@@ -711,8 +714,17 @@ export async function buildOverviewOrigin(
 		}
 	}
 
-	const buckets = [...bucketMap.values()].sort((a, b) => b.count - a.count);
-	return overviewOriginPayloadSchema.parse({ buckets });
+	// Tie-break on the bucket key so page boundaries stay stable when counts tie.
+	const sorted = [...bucketMap.entries()]
+		.sort(([ka, a], [kb, b]) => b.count - a.count || (ka < kb ? -1 : ka > kb ? 1 : 0))
+		.map(([, bucket]) => bucket);
+	const offset = clampOffset(sorted.length, filters.offset, filters.limit);
+	return overviewOriginPayloadSchema.parse({
+		buckets: sorted.slice(offset, offset + filters.limit),
+		total: sorted.length,
+		limit: filters.limit,
+		offset
+	});
 }
 
 function matchesStayBucket(stayStatus: string, stayBucket?: string): boolean {

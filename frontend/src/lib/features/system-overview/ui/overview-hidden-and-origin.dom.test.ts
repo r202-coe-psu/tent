@@ -101,4 +101,43 @@ describe('OverviewOriginSection — source shelter (#1515)', () => {
 		expect(rows[1]).toContain('ยังไม่ได้เลือกศูนย์');
 		expect(document.body.textContent).toContain('ศูนย์');
 	});
+
+	it('pages the rows when there are more than one page of them', async () => {
+		const onOffsetChange = vi.fn();
+		const buckets: OriginBucket[] = Array.from({ length: 2 }, (_, i) => ({
+			province: `จังหวัด${i}`,
+			district: null,
+			subdistrict: null,
+			shelter_code: 'SH001',
+			count: 1
+		}));
+		instance = mount(OverviewOriginSection, {
+			target: document.body,
+			props: { buckets, total: 5, limit: 2, offset: 2, onOffsetChange }
+		});
+		await tick();
+		flushSync();
+
+		expect(document.body.textContent).toContain('แสดง 3 - 4 จาก 5 แถว');
+		const next = [...document.body.querySelectorAll('button')].find(
+			(b) => b.textContent?.trim() === '3'
+		);
+		next?.click();
+		flushSync();
+		expect(onOffsetChange).toHaveBeenCalledWith(4);
+	});
+
+	it('shows no pager when every row fits on one page', async () => {
+		const buckets: OriginBucket[] = [
+			{ province: 'ยะลา', district: null, subdistrict: null, shelter_code: null, count: 2 }
+		];
+		instance = mount(OverviewOriginSection, {
+			target: document.body,
+			props: { buckets, total: 1, limit: 20, offset: 0, onOffsetChange: vi.fn() }
+		});
+		await tick();
+		flushSync();
+
+		expect(document.body.textContent).not.toContain('จาก 1 แถว');
+	});
 });
