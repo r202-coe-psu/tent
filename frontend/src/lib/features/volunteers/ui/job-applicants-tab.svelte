@@ -17,6 +17,8 @@
 	 */
 	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
+	import Hourglass from '@lucide/svelte/icons/hourglass';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -484,114 +486,151 @@
 					<Skeleton class="h-32 w-full rounded-xl" />
 					<Skeleton class="h-32 w-full rounded-xl" />
 				</div>
-			{:else if view.pending.length === 0 && view.history.length === 0}
-				<div
-					class="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-10 text-center text-muted-foreground"
-				>
-					<Search class="h-6 w-6" />
-					<p class="text-sm font-medium">ไม่พบผู้สมัครตามตัวกรอง</p>
-				</div>
-			{/if}
-
-			{#if view.pending.length > 0}
-				<div class="mt-4 flex items-center justify-between gap-3">
-					<h4 class="text-xs font-bold text-foreground">
-						รอพิจารณา ({view.pending.length} คน · {viewPendingShifts} กะในหน้านี้)
-					</h4>
-					<span class="text-2xs text-muted-foreground">เรียงตามวันที่สมัคร</span>
-				</div>
-				<ul class="mt-3 space-y-3">
-					{#each view.pending as group (group.key)}
-						{@const volunteer = volunteerFor(group.applications[0])}
-						<JobApplicantRow
-							applications={group.applications}
-							{volunteer}
-							volunteerCode={volunteer?.volunteer_code ?? null}
-							shiftLabelOf={shiftLabelFor}
-							requiredSkills={job.skills_required ?? []}
-							skillOptions={skillCatalog.options}
-							{assignments}
-							{today}
-							onreview={openReview}
-							accessStatus={volunteer ? volunteerAccessStatus(volunteer, accounts) : null}
-							{shelterLine}
+			{:else}
+				<!-- Two sections so the queue still waiting for a decision is never mixed in with the
+				     history (#1520): pending first, everything already decided below. -->
+				{#if showPending}
+					<section
+						data-testid="applicants-pending-section"
+						aria-labelledby="applicants-pending-heading"
+						class="mt-4 rounded-xl border border-amber-200 bg-amber-50/40 p-3 sm:p-4"
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<h4
+								id="applicants-pending-heading"
+								class="inline-flex items-center gap-2 text-sm font-bold text-foreground"
+							>
+								<Hourglass class="h-4 w-4 text-amber-600" />
+								รอพิจารณา{#if view.pending.length > 0}
+									({view.pending.length} คน · {viewPendingShifts} กะในหน้านี้){/if}
+							</h4>
+							<span class="text-2xs text-muted-foreground"
+								>ทั้งหมด {counts.pending} กะ · เรียงตามวันที่สมัคร</span
+							>
+						</div>
+						{#if view.pending.length > 0}
+							<ul class="mt-3 space-y-3">
+								{#each view.pending as group (group.key)}
+									{@const volunteer = volunteerFor(group.applications[0])}
+									<JobApplicantRow
+										applications={group.applications}
+										{volunteer}
+										volunteerCode={volunteer?.volunteer_code ?? null}
+										shiftLabelOf={shiftLabelFor}
+										requiredSkills={job.skills_required ?? []}
+										skillOptions={skillCatalog.options}
+										{assignments}
+										{today}
+										onreview={openReview}
+										accessStatus={volunteer ? volunteerAccessStatus(volunteer, accounts) : null}
+										{shelterLine}
+									/>
+								{/each}
+							</ul>
+						{:else}
+							<p class="mt-3 text-center text-xs text-muted-foreground">
+								{filtersActive ? 'ไม่มีผู้รอพิจารณาตามตัวกรอง' : 'ไม่มีผู้รอพิจารณา'}
+							</p>
+						{/if}
+						<BookmarkPager
+							page={pagerOf('pending').index + 1}
+							hasNext={(pendingQuery.data?.items.length ?? 0) === PAGE_SIZE}
+							pending={pendingQuery.isFetching}
+							onprev={() => goPrev('pending')}
+							onnext={() => goNext('pending', pendingQuery.data?.bookmark ?? null)}
 						/>
-					{/each}
-				</ul>
-			{/if}
-			{#if showPending}
-				<BookmarkPager
-					page={pagerOf('pending').index + 1}
-					hasNext={(pendingQuery.data?.items.length ?? 0) === PAGE_SIZE}
-					pending={pendingQuery.isFetching}
-					onprev={() => goPrev('pending')}
-					onnext={() => goNext('pending', pendingQuery.data?.bookmark ?? null)}
-				/>
-			{/if}
+					</section>
+				{/if}
 
-			{#if reviewedView.length > 0}
-				<div class="mt-6 border-t border-border pt-4">
-					<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-						<h4 class="text-xs font-bold text-foreground">ประวัติการพิจารณา</h4>
-						<span class="text-2xs text-muted-foreground">
-							ในหน้านี้: อนุมัติ {viewHistory.confirmed} · ปฏิเสธ/ยกเลิก {viewHistory.declined}
-						</span>
-					</div>
-					<ul class="mt-3 space-y-3">
-						{#each reviewedView as entry (entry.key)}
-							{#if entry.kind === 'application'}
-								<JobApplicantRow
-									applications={[entry.application]}
-									volunteer={entry.volunteer}
-									volunteerCode={entry.person.code}
-									shiftLabelOf={shiftLabelFor}
-									requiredSkills={job.skills_required ?? []}
-									skillOptions={skillCatalog.options}
-									{assignments}
-									{today}
-									onreview={openReview}
-									accessStatus={entry.volunteer
-										? volunteerAccessStatus(entry.volunteer, accounts)
-										: null}
-									{shelterLine}
-								/>
-							{/if}
-						{/each}
-					</ul>
-				</div>
-			{/if}
-			{#if showReviewed}
-				<BookmarkPager
-					page={pagerOf('reviewed').index + 1}
-					hasNext={(reviewedQuery.data?.items.length ?? 0) === PAGE_SIZE}
-					pending={reviewedQuery.isFetching}
-					onprev={() => goPrev('reviewed')}
-					onnext={() => goNext('reviewed', reviewedQuery.data?.bookmark ?? null)}
-				/>
-			{/if}
+				{#if showReviewed || showStaff}
+					<section
+						data-testid="applicants-reviewed-section"
+						aria-labelledby="applicants-reviewed-heading"
+						class="mt-4 rounded-xl border border-border bg-muted/20 p-3 sm:p-4"
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<h4
+								id="applicants-reviewed-heading"
+								class="inline-flex items-center gap-2 text-sm font-bold text-foreground"
+							>
+								<CircleCheck class="h-4 w-4 text-emerald-600" />
+								พิจารณาแล้ว
+							</h4>
+							<span class="text-2xs text-muted-foreground">
+								ทั้งหมด: อนุมัติ {counts.confirmed} · ปฏิเสธ/ยกเลิก {counts.declined} · มอบหมายโดยเจ้าหน้าที่
+								{counts.staffAssigned} กะ
+							</span>
+						</div>
 
-			{#if staffView.length > 0}
-				<div class="mt-6 border-t border-border pt-4">
-					<h4 class="text-xs font-bold text-foreground">
-						มอบหมายโดยเจ้าหน้าที่ ({staffRows.length} กะ)
-					</h4>
-					<ul class="mt-3 space-y-3">
-						{#each staffView as entry (entry.key)}
-							{#if entry.kind === 'staff'}
-								<StaffAssignmentRow {entry} shift={staffShiftFor(entry.shiftId)} {today} />
-							{/if}
-						{/each}
-					</ul>
-				</div>
-			{/if}
-			{#if showStaff}
-				<BookmarkPager
-					page={pagerOf('staff').index + 1}
-					hasNext={(pagerOf('staff').index + 1) * PAGE_SIZE < staffRows.length}
-					pending={staffQuery.isFetching}
-					onprev={() => goPrev('staff')}
-					onnext={() => goNext('staff', null)}
-				/>
+						{#if reviewedView.length === 0 && staffView.length === 0}
+							<p class="mt-3 text-center text-xs text-muted-foreground">
+								{filtersActive
+									? 'ไม่มีรายการที่พิจารณาแล้วตามตัวกรอง'
+									: 'ยังไม่มีรายการที่พิจารณาแล้ว'}
+							</p>
+						{/if}
+
+						{#if reviewedView.length > 0}
+							<p class="mt-3 text-2xs text-muted-foreground">
+								ในหน้านี้: อนุมัติ {viewHistory.confirmed} · ปฏิเสธ/ยกเลิก {viewHistory.declined}
+							</p>
+							<ul class="mt-2 space-y-3">
+								{#each reviewedView as entry (entry.key)}
+									{#if entry.kind === 'application'}
+										<JobApplicantRow
+											applications={[entry.application]}
+											volunteer={entry.volunteer}
+											volunteerCode={entry.person.code}
+											shiftLabelOf={shiftLabelFor}
+											requiredSkills={job.skills_required ?? []}
+											skillOptions={skillCatalog.options}
+											{assignments}
+											{today}
+											onreview={openReview}
+											accessStatus={entry.volunteer
+												? volunteerAccessStatus(entry.volunteer, accounts)
+												: null}
+											{shelterLine}
+										/>
+									{/if}
+								{/each}
+							</ul>
+						{/if}
+						{#if showReviewed}
+							<BookmarkPager
+								page={pagerOf('reviewed').index + 1}
+								hasNext={(reviewedQuery.data?.items.length ?? 0) === PAGE_SIZE}
+								pending={reviewedQuery.isFetching}
+								onprev={() => goPrev('reviewed')}
+								onnext={() => goNext('reviewed', reviewedQuery.data?.bookmark ?? null)}
+							/>
+						{/if}
+
+						{#if staffView.length > 0}
+							<div class="mt-4 border-t border-border pt-3">
+								<h5 class="text-xs font-bold text-foreground">
+									มอบหมายโดยเจ้าหน้าที่ ({staffRows.length} กะ)
+								</h5>
+								<ul class="mt-2 space-y-3">
+									{#each staffView as entry (entry.key)}
+										{#if entry.kind === 'staff'}
+											<StaffAssignmentRow {entry} shift={staffShiftFor(entry.shiftId)} {today} />
+										{/if}
+									{/each}
+								</ul>
+							</div>
+						{/if}
+						{#if showStaff}
+							<BookmarkPager
+								page={pagerOf('staff').index + 1}
+								hasNext={(pagerOf('staff').index + 1) * PAGE_SIZE < staffRows.length}
+								pending={staffQuery.isFetching}
+								onprev={() => goPrev('staff')}
+								onnext={() => goNext('staff', null)}
+							/>
+						{/if}
+					</section>
+				{/if}
 			{/if}
 		{/if}
 	</div>
