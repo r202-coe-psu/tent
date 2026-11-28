@@ -5,6 +5,7 @@ const sessionLoginMock = vi.fn();
 const sessionLogoutMock = vi.fn();
 
 const storage = new Map<string, string>();
+const invalidateAuthStatusRequestMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$app/environment', () => ({ browser: true }));
 
@@ -19,7 +20,7 @@ vi.mock('$lib/stores/shelter.svelte', () => ({
 }));
 
 vi.mock('$lib/features/users', () => ({
-	invalidateAuthStatusRequest: vi.fn(),
+	invalidateAuthStatusRequest: invalidateAuthStatusRequestMock,
 	clearMfaOk: vi.fn().mockResolvedValue({ ok: true })
 }));
 
@@ -204,6 +205,20 @@ describe('authStore session expiry', () => {
 		expect(authStore.needsReauth).toBe(false);
 		await authStore.handleAuthFailure(new CouchAuthError(401));
 		expect(authStore.needsReauth).toBe(true);
+	});
+
+	it('forgets the cached auth status (and its known gate) on login and logout (#476)', async () => {
+		sessionLoginMock.mockResolvedValue({ name: 'demo', roles: ['staff'] });
+		sessionLogoutMock.mockResolvedValue(undefined);
+		const { authStore } = await loadStore();
+
+		invalidateAuthStatusRequestMock.mockClear();
+		await authStore.login({ name: 'demo', password: 'x' });
+		expect(invalidateAuthStatusRequestMock).toHaveBeenCalled();
+
+		invalidateAuthStatusRequestMock.mockClear();
+		await authStore.logout();
+		expect(invalidateAuthStatusRequestMock).toHaveBeenCalled();
 	});
 
 	it('revalidateSession flags expiry when the cookie is gone and clears it when valid again', async () => {

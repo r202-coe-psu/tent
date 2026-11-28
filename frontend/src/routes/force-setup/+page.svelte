@@ -61,6 +61,7 @@
 		} catch {
 			currentUsername = authStore.user?.name ?? '';
 			mustChangePassword = false;
+			toast.error('ตรวจสอบสถานะไม่สำเร็จ กรุณาลองใหม่');
 		}
 	});
 

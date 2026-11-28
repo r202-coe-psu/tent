@@ -2,13 +2,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import Page from './+page.svelte';
+import { ServiceRequestError } from '$lib/api/service';
 
 const mocks = vi.hoisted(() => ({
 	goto: vi.fn(),
 	submitConsent: vi.fn(),
 	logout: vi.fn(),
+	markNeedsReauth: vi.fn(),
 	toastError: vi.fn(),
 	toastSuccess: vi.fn(),
+	statusError: null as Error | null,
 	status: {
 		name: 'staff01',
 		roles: ['shelter:SH001', 'registration_staff'],
@@ -25,7 +28,8 @@ vi.mock('svelte-sonner', () => ({
 vi.mock('$lib/stores/auth.svelte', () => ({
 	authStore: {
 		user: { name: 'staff01', roles: [] },
-		logout: mocks.logout
+		logout: mocks.logout,
+		markNeedsReauth: mocks.markNeedsReauth
 	}
 }));
 vi.mock('$lib/guards/auth', () => ({
@@ -38,7 +42,8 @@ vi.mock('$lib/features/users', async () => {
 	const actual = await vi.importActual<typeof import('$lib/features/users')>('$lib/features/users');
 	return {
 		...actual,
-		fetchAuthStatus: () => Promise.resolve(mocks.status),
+		fetchAuthStatus: () =>
+			mocks.statusError ? Promise.reject(mocks.statusError) : Promise.resolve(mocks.status),
 		invalidateAuthStatusRequest: vi.fn(),
 		submitConsent: mocks.submitConsent
 	};
@@ -59,6 +64,7 @@ async function render() {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mocks.statusError = null;
 	document.body.innerHTML = '';
 	mocks.submitConsent.mockResolvedValue({
 		ok: true,
@@ -128,5 +134,24 @@ describe('/consent +page', () => {
 
 		expect(mocks.logout).toHaveBeenCalled();
 		expect(mocks.goto).toHaveBeenCalledWith('/login');
+	});
+
+	it('stays on the page with a toast when the status check fails (#476)', async () => {
+		// Going to /login here loops: /login → /portal → requireAuth's known consent gate → /consent.
+		mocks.statusError = new Error('BFF down');
+		await render();
+
+		expect(mocks.goto).not.toHaveBeenCalled();
+		expect(mocks.toastError).toHaveBeenCalledWith('ตรวจสอบสถานะไม่สำเร็จ กรุณาลองใหม่');
+	});
+
+	it('sends an expired session (401) to login flagged for re-auth instead of a dead end', async () => {
+		// The flag makes redirectIfAuthenticated let /login through, so it cannot loop back here.
+		mocks.statusError = new ServiceRequestError('Unauthorized', 401);
+		await render();
+
+		expect(mocks.markNeedsReauth).toHaveBeenCalledOnce();
+		expect(mocks.goto).toHaveBeenCalledWith('/login');
+		expect(mocks.toastError).not.toHaveBeenCalled();
 	});
 });

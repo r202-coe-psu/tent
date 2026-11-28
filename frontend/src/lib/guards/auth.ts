@@ -30,6 +30,7 @@ import {
 } from '$lib/auth/roles';
 import {
 	fetchAuthStatus,
+	lastKnownAuthStatusFor,
 	requiresConsent,
 	type AuthStatus,
 	type UserConsentStatus
@@ -112,26 +113,18 @@ export async function requireAuth(fetchFn?: typeof fetch) {
 		throw redirect(302, resolve(LOGIN_ROUTE));
 	}
 
+	let dest: PostLoginDestination;
 	try {
-		const status = await fetchAuthStatus();
-		const dest = resolvePostLoginDestination(status);
-		if (dest === FORCE_SETUP_ROUTE) {
-			throw redirect(302, resolve(FORCE_SETUP_ROUTE));
-		}
-		if (dest === MFA_CHALLENGE_ROUTE) {
-			throw redirect(302, resolve(MFA_CHALLENGE_ROUTE));
-		}
-		if (dest === CONSENT_ROUTE) {
-			throw redirect(302, resolve(CONSENT_ROUTE));
-		}
-	} catch (e) {
-		if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 302) {
-			throw e;
-		}
-		// Status fetch failed (offline / BFF down) — do not silently bypass MFA.
-		// Keep the user on a safe path: if we already know they need reauth, login;
-		// otherwise allow through only when Couch session exists (edge may lack BFF).
+		dest = resolvePostLoginDestination(await fetchAuthStatus());
+	} catch {
+		// Status check failed (offline / BFF down, #476): never bypass a gate this account is
+		// already known to owe (force-setup, MFA, consent). An account whose status was never
+		// learned since the last reload or login passes on the Couch session alone, because the
+		// edge fallback may have no BFF.
+		const known = lastKnownAuthStatusFor(authStore.user?.name ?? '');
+		dest = known ? resolvePostLoginDestination(known) : LANDING_ROUTE;
 	}
+	if (dest !== LANDING_ROUTE) throw redirect(302, resolve(dest));
 }
 
 /**

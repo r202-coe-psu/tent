@@ -6,6 +6,7 @@ import Page from './+page.svelte';
 const mocks = vi.hoisted(() => ({
 	submit: vi.fn(),
 	toastError: vi.fn(),
+	statusError: null as Error | null,
 	status: { name: 'vol@example.com', must_change_password: true }
 }));
 
@@ -23,7 +24,8 @@ vi.mock('$lib/guards/auth', () => ({
 vi.mock('$lib/features/users', async () => ({
 	forceSetupFieldErrors: (await import('$lib/features/users/domain/force-setup'))
 		.forceSetupFieldErrors,
-	fetchAuthStatus: () => Promise.resolve(mocks.status),
+	fetchAuthStatus: () =>
+		mocks.statusError ? Promise.reject(mocks.statusError) : Promise.resolve(mocks.status),
 	submitForceSetup: mocks.submit
 }));
 
@@ -55,6 +57,7 @@ const errorOf = (id: string) => document.getElementById(`${id}-error`)?.textCont
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mocks.statusError = null;
 	mocks.submit.mockResolvedValue(undefined);
 });
 
@@ -140,5 +143,12 @@ describe('/force-setup errors under each field (#1065)', () => {
 		expect(document.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
 			'ไม่สามารถบันทึกการตั้งค่าได้ กรุณาลองใหม่อีกครั้ง'
 		);
+	});
+
+	it('tells the user when the status check fails instead of failing silently', async () => {
+		mocks.statusError = new Error('BFF down');
+		await render();
+
+		expect(mocks.toastError).toHaveBeenCalledWith('ตรวจสอบสถานะไม่สำเร็จ กรุณาลองใหม่');
 	});
 });
