@@ -3,6 +3,7 @@ id: CR-260
 title: Audit log เฟส C — `updated_by` ใน envelope + worker สร้าง audit event จากการเปลี่ยนแปลงของ `shelter_{code}` และ `catalog`
 status: approved
 date: 2026-11-18
+updated: 2026-11-28
 requested_by: Jackyzaz — GitHub EPIC #1357 (เฟส C ต่อจาก CR-259)
 decided_by: PM (approved 2026-11-18 · Open questions ตามข้อเสนอ)
 layer: stable + volatile
@@ -13,10 +14,10 @@ related:
 affects:
   - docs/data/schema.md §0 (envelope เพิ่ม `updated_by`) · ไม่ bump `schema_v` ของ doc type ใด (additive)
   - docs/data/schema.md §8 (กฎ VDU ใหม่ — `updated_by` ต้องตรงผู้เขียน)
-  - docs/data/schema.md §11 (`audit_event`: `_id` แบบ deterministic ของ worker, `source` + `worker_diff`, `actor.kind` + `unknown`, `changes_unknown`, entity type ใหม่, allowlist ของ type ใหม่)
-  - frontend/src/lib/db/couch-db.ts (`putDoc`, `putDocStrict`, `bulkDocs`, `bulkDocsDetailed` ประทับ `updated_by` · `deleteDoc` เปลี่ยนจาก HTTP `DELETE` เป็น `PUT` tombstone)
-  - frontend/src/lib/server/** ที่เขียน `shelter_{code}` / `catalog` ด้วย admin credentials (helper ใหม่ `withActor(doc, actor)`) · frontend/src/lib/server/couch-public-writer.ts
-  - frontend/src/lib/server/shelter-access-design.ts (VDU `shelter_{code}` · bump version ของ design) · frontend/scripts/sync-central-db.ts `syncCatalogAccessDesign` (VDU `catalog`)
+  - docs/data/schema.md §11 (`audit_event`: `_id` แบบ deterministic ของ worker, `source` + `worker_diff`, `actor.kind` + `unknown`, `changes_unknown`, entity type ใหม่, value denylist ของ `worker_diff` §11.2)
+  - frontend/src/lib/db/couch-db.ts (`putDoc`, `putDocStrict`, `bulkDocs`, `bulkDocsDetailed`, `saveBulkAtomic` ประทับ `updated_by` · `deleteDoc` เปลี่ยนจาก HTTP `DELETE` เป็น `PUT` tombstone)
+  - frontend/src/lib/server/** ที่เขียน `shelter_{code}` / `catalog` ด้วย admin credentials (`prepareAdminWrite` ใน `adminRaw` / `adminFetch` + `withActor(doc, actor)`) · frontend/src/lib/server/couch-public-writer.ts · backend/apiapp/modules/unassigned_registrations/couch_birth.py
+  - frontend/src/lib/server/shelter-access-design.ts (VDU `shelter_{code}`) · frontend/scripts/sync-central-db.ts `syncCatalogAccessDesign` (VDU `catalog`)
   - worker/src/worker/audit_log.py (projector ใหม่ `audit_diff`) · worker/src/worker/couch/processor.py · worker/src/worker/listeners/ (listener ใหม่ของ `catalog`) · worker เขียน `shelter_{code}` ทุกจุดใส่ `updated_by: "worker"` · worker/tests
   - frontend/src/lib/features/audit-log (label ของ entity type / event ใหม่) · แถบ "ประวัติการแก้ไข" ในหน้าโปรไฟล์ผู้อพยพ, หน้าครัวเรือน และหน้า catalog
   - frontend/src/routes/api/v1/users/staff-card/rotate/+server.ts · frontend/src/routes/api/v1/thirdparty-clients/[id]/secret/+server.ts (event ที่ค้างจาก CR-259)
@@ -57,29 +58,32 @@ migration: >
 
 ### การเขียนจาก server และ worker
 
-- FR-C6 — helper `withActor(doc, actor)` ใน `$lib/server/` ตั้ง `updated_by` (และ `created_by` เมื่อเป็น doc ใหม่ที่ยังไม่มีค่า) · ทุก route / job ฝั่ง SvelteKit ที่เขียน `shelter_{code}` หรือ `catalog` ด้วย admin credentials ใช้ helper นี้ · actor = `caller.name` เมื่อมี session, ค่าตาม FR-C2 เมื่อไม่มี
+- FR-C6 — ทุก request ฝั่ง SvelteKit มี actor ประจำ request (`runWithActorScope` ใน `hooks.server.ts`) · actor = `caller.name` เมื่อยืนยัน session ได้ · `kiosk:{device_id}` เมื่อยืนยันตัวตู้ได้ · ค่าตาม FR-C2 สำหรับ job
+- FR-C6a — `adminRaw` และ `adminFetch` ส่งทุกการเขียน `shelter_{code}` / `catalog` ผ่าน `prepareAdminWrite`: `PUT` / `POST` / `_bulk_docs` → `updated_by = actor` · ไม่มี actor → ลบ `updated_by` ที่ติดมาจาก rev ก่อนหน้า (ผล = `unknown` ตาม FR-C8) · `DELETE /{db}/{id}?rev=` → `PUT` tombstone `{ _id, _rev, _deleted: true, updated_at, updated_by }` (แบบ FR-C4) · การเขียน DB อื่น / design doc / `_security` ไม่เปลี่ยน
+- FR-C6b — helper `withActor(doc, actor)` ใน `$lib/server/` ตั้ง `updated_by` (และ `created_by` เมื่อเป็น doc ใหม่ที่ยังไม่มีค่า) สำหรับจุดที่ต้องกำหนด actor เอง
 - FR-C7 — worker ทุกจุดที่เขียน `shelter_{code}` (role grant, M6, volunteer inbound, shift ฯลฯ) ใส่ `updated_by: "worker"`
 - FR-C8 — จุดเขียนที่ยังไม่ใส่ตาม FR-C6/FR-C7 ไม่ทำให้การเขียนล้ม (admin ผ่าน VDU) แต่ event จะได้ผู้ทำ `unknown` (FR-C16) · Acceptance กำหนดให้หลัง deploy ไม่มี event `unknown` จาก path ที่รู้จัก
-- FR-C9 — public writer (`couch-public-writer.ts`, member ธรรมดา) ประทับ `updated_by` = ชื่อ CouchDB user ของตัวเอง · worker แปลงชื่อนี้เป็น actor `{ name: "public", kind: "system" }`
+- FR-C9 — public writer (`couch-public-writer.ts`, member ธรรมดา) ประทับ `updated_by` = ชื่อ CouchDB user ของตัวเอง เฉพาะ DB `shelter_{code}` / `catalog` · worker แปลงชื่อนี้ (และค่า `public`) เป็น actor `{ name: "public", kind: "system" }`
+- FR-C29 — FastAPI ที่เขียน `shelter_{code}` ด้วย cookie ของเจ้าหน้าที่ (claim ผู้ลงทะเบียน — `couch_birth`) ประทับ `updated_by` = ผู้ใช้ของ session นั้น ทุก doc ใน batch (household ใหม่ / household เดิมที่ต่อสัตว์เลี้ยง, evacuee, image)
 
 ### VDU
 
 - FR-C10 — VDU ของ `shelter_{code}`: ผู้เขียนที่ไม่ใช่ `_admin` / `repl:<CODE>` ถ้า `newDoc.updated_by` มีค่า ต้องเท่ากับ `userCtx.name` ไม่งั้น reject `updated_by must match the authenticated user` · ไม่มีค่า → ผ่าน (ดู Q1) · ใช้กับ tombstone ด้วย
 - FR-C11 — VDU ของ `catalog` (`syncCatalogAccessDesign`) ใช้กฎเดียวกับ FR-C10
-- FR-C12 — ไม่แตะกฎเดิมของแต่ละ type · append-only types ยัง reject update/delete เหมือนเดิม · bump version ของ `_design/access` ของ `shelter_{code}` และ `catalog` เพื่อให้ `redeploy:access` / `sync:central` เขียนทับ
+- FR-C12 — ไม่แตะกฎเดิมของแต่ละ type ยกเว้น allowlist field ระดับบนสุดของ `daily_sop_role_assessment` เพิ่ม `updated_by` · append-only types ยัง reject update/delete เหมือนเดิม · `redeploy:access` / `sync:central` เทียบเนื้อหาฟังก์ชัน VDU แล้วเขียนทับเมื่อต่าง (ไม่มีเลข version ให้ bump)
 
 ### Worker — projector `audit_diff`
 
 - FR-C13 — listener เดิมของ `shelter_{code}` เรียก `audit_diff` ทุก change ที่ type อยู่ใน `AUDITED_TYPES` (ตาราง §Change) · เพิ่ม listener ใหม่ของ DB `catalog` · เปิดด้วย env `AUDIT_DIFF_ENABLED=true` (ค่าเริ่มต้น `false`)
 - FR-C14 — `_id` ของ event = `audit_event:rev:{sha256("{db}|{doc_id}|{rev}") 64 hex}` → replay จาก checkpoint ไม่เกิดแถวซ้ำ (409 = มีแล้ว)
 - FR-C15 — `action`: rev `1-…` และไม่ `_deleted` → `create` · `_deleted` → `delete` · ค่าของ `status`, `operation_status`, `deactivated` หรือ `active` เปลี่ยน → `status_change` · นอกนั้น `update` · `event` = `{type}.{created|updated|deleted|status_changed}` ตาม `action` (รูปเดียวกับ CR-259 FR-25) เช่น `evacuee.updated`, `item_master.deleted`
-- FR-C16 — `actor`: `updated_by` ของ doc ใหม่ (rev 1 ที่ไม่มี `updated_by` ใช้ `created_by`) · `worker` → kind `worker` · `kiosk:*` / `system:*` / public writer → kind `system` · `_users` name → kind `user` · ไม่มีค่าเลย → `{ name: "unknown", kind: "unknown" }`
-- FR-C17 — `changes` (เฉพาะ `update` / `status_change`): worker อ่าน rev ก่อนหน้าด้วย `GET /{db}/{id}?revs=true` แล้ว `GET /{db}/{id}?rev={prev}` · คำนวณด้วยกติกาเดียวกับ CR-259 FR-29/FR-30 และ allowlist ใน §11.2 · อ่าน rev ก่อนหน้าไม่ได้ (ถูก compaction) → ไม่มี `changes` และตั้ง `changes_unknown: true`
+- FR-C16 — `actor`: `updated_by` ของ doc ใหม่เท่านั้น (ไม่ใช้ `created_by` แม้เป็น rev 1 — VDU ไม่ตรวจ `created_by`) · `worker` → kind `worker` · `kiosk:*` / `system:*` / public writer → kind `system` · `_users` name → kind `user` · ไม่มีค่าเลย → `{ name: "unknown", kind: "unknown" }`
+- FR-C17 — `changes` (เฉพาะ `update` / `status_change`): worker อ่าน rev ก่อนหน้าด้วย `GET /{db}/{id}?revs=true` แล้ว `GET /{db}/{id}?rev={prev}` · คำนวณ field ที่เปลี่ยนตาม CR-259 FR-29 · เก็บ `from` / `to` ทุก field (รวมค่า object / array) ยกเว้น field ใน value denylist (§Change) หรือค่าที่ยาวเกิน 2,000 ตัวอักษรเมื่อเป็น JSON → เก็บแค่ `field` · อ่าน rev ก่อนหน้าไม่ได้ (ถูก compaction) → ไม่มี `changes` และตั้ง `changes_unknown: true`
 - FR-C18 — `entity`: `type` = `doc.type` (tombstone ใช้ prefix ของ `_id`) · `id` = `_id` · `label` = field ตามตาราง §Change (ไม่ใช้ชื่อคน — ผู้อพยพ / ครัวเรือน `label = null`) · `shelter_code` = รหัสจากชื่อ DB (`shelter_*`) หรือ `doc.shelter_code` ของ catalog (ไม่มี = `null` = รายการกลาง)
 - FR-C19 — `occurred_at` = `updated_at` ของ doc (ไม่มี → `created_at` → เวลาที่ worker เห็น) · `source` = `worker_diff`
 - FR-C20 — bootstrap (`--bootstrap`) **ไม่** สร้าง event จาก doc ที่มีอยู่ · สร้างเฉพาะ change ที่เข้ามาใน `_changes` หลังเปิด `AUDIT_DIFF_ENABLED`
 - FR-C21 — `audit_diff` ล้มเหลวชั่วคราว (5xx, 408, 429, network error ทั้งตอนอ่าน rev ก่อนหน้าและเขียน `audit_log`) → ค้าง checkpoint ของ DB นั้นไว้เพื่อ retry รอบถัดไป (แบบเดียวกับ `copy_audit_doc`) · กรณีถาวรที่ retry ไม่ช่วย (4xx อื่น เช่น ไม่มี DB `audit_log` หรือ build error) → log แล้วไปต่อไม่ค้าง checkpoint · กรณี rev ก่อนหน้าถูก compaction (404 / ไม่มี `_revisions`) → บันทึก `changes_unknown: true` แล้วไปต่อ
-- FR-C22 — ไม่สร้าง event ของ type นอก `AUDITED_TYPES` · การเพิ่ม type ภายหลังทำใน config + allowlist โดยไม่ต้องมี CR ใหม่ ถ้า type อยู่ในตาราง "รอบถัดไป" ของ CR นี้
+- FR-C22 — ไม่สร้าง event ของ type นอก `AUDITED_TYPES` · การเพิ่ม type ภายหลังทำใน config โดยไม่ต้องมี CR ใหม่ ถ้า type อยู่ในตาราง "รอบถัดไป" ของ CR นี้ · **ต้องกำหนด value denylist ของ type นั้นก่อนเพิ่มเข้า `AUDITED_TYPES`** (ทบทวนข้อมูลส่วนบุคคล / ข้อมูลอ่อนไหว) เพราะ field ที่ไม่ได้ห้ามจะถูกเก็บค่า
 
 ### event ที่ค้างจาก CR-259 (ผ่าน BFF)
 
@@ -115,20 +119,18 @@ migration: >
 | `changes_unknown` | ไม่มี | bool · opt · `true` เมื่ออ่าน rev ก่อนหน้าไม่ได้ |
 | `entity.type` | `shelter`, `user`, `master_data`, `api_key`, `thirdparty_client` + type ของ doc `audit` | + type ใน `AUDITED_TYPES` |
 
-**`AUDITED_TYPES` รอบนี้ + allowlist (§11.2)**
+**`AUDITED_TYPES` รอบนี้ + value denylist (§11.2)** — เก็บ `from` / `to` ทุก field ยกเว้นคอลัมน์ขวา (เก็บแค่ `field`) · ห้ามด้วยเหตุข้อมูลส่วนบุคคลและข้อมูลอ่อนไหวตาม PDPA ม.26 (สุขภาพ ความพิการ ศาสนา)
 
-| type | DB | `label` | เก็บ `from` / `to` |
+| type | DB | `label` | ไม่เก็บค่า (field เท่านั้น) |
 | --- | --- | --- | --- |
-| `item_category` | `catalog`, `shelter_*` | `name` | `name`, `default_class`, `is_default`, `deactivated` |
-| `item_master` | `catalog`, `shelter_*` | `name` | `name`, `sku`, `category`, `base_unit`, `distribution_type`, `type_class`, `qty_per_person`, `returnable`, `shelf_life_days`, `storage_type`, `deactivated`, `merged_into` |
-| `recipe` | `catalog`, `shelter_*` | `label` | `label`, `standard_portions`, `standard_duration_hours`, `deactivated` |
-| `unit_of_measure` | `catalog` | `label_th` | `code`, `label_th`, `label_en`, `dimension`, `sort_order`, `deactivated` |
-| `food_sphere_standard`, `requirement_group`, `replenishment_policy` | `catalog`, `shelter_*` | — | field เท่านั้น |
-| `evacuee` | `shelter_*` | `null` | `household_id`, `preferred_zone`, `registered_via`, `anonymized` |
-| `household` | `shelter_*` | `null` | `status`, `head_evacuee_id`, `housing_type` |
-| `medical` | `shelter_*` | `null` | — (field เท่านั้น เสมอ) |
+| `item_category`, `item_master`, `recipe` | `catalog`, `shelter_*` | `name` / `name` / `label` | — |
+| `unit_of_measure` | `catalog` | `label_th` | — |
+| `food_sphere_standard`, `requirement_group`, `replenishment_policy` | `catalog`, `shelter_*` | — | — |
+| `evacuee` | `shelter_*` | `null` | `first_name`, `last_name`, `nickname`, `phone`, `age`, `birth_year`, `person_id`, `photo`, `card_snapshot`, `emergency_contact`, `religion`, `religion_other`, `vulnerable_groups`, `disability_other_detail`, `special_needs`, `consent` |
+| `household` | `shelter_*` | `null` | `label`, `notes`, `vehicles`, `assets`, `community`, `municipality_zone`, `residence_landmark`, `address_no`, `village_no`, `subdistrict`, `district`, `province`, `postal_code`, `dorm_name`, `dorm_building`, `dorm_floor`, `dorm_room` |
+| `medical` | `shelter_*` | `null` | ทุก field |
 
-**รอบถัดไป (เพิ่มผ่าน config ตาม FR-C22, allowlist = field เท่านั้นจนกว่าจะกำหนด):** `donation`, `donation_campaign`, `donation_slot`, `stock_transfer`, `volunteer`, `shift_assignment`, `job`, `shelter_incident`, `meal_plan`, `requisition_ticket`, `distribution_request`, `distribution_batch`, `sop_override`, `fuel_cylinder`, `daily_sop_assessment`, `daily_sop_role_assessment`
+**รอบถัดไป (เพิ่มผ่าน config ตาม FR-C22 หลังกำหนด value denylist ของแต่ละ type):** `donation`, `donation_campaign`, `donation_slot`, `stock_transfer`, `volunteer`, `shift_assignment`, `job`, `shelter_incident`, `meal_plan`, `requisition_ticket`, `distribution_request`, `distribution_batch`, `sop_override`, `fuel_cylinder`, `daily_sop_assessment`, `daily_sop_role_assessment`
 
 **ไม่ทำ event เด็ดขาด:** append-only types ใน §8 ข้อ 2 (มีประวัติในตัว) · `audit` (CR-259 คัดลอกแล้ว) · doc ประสานงาน / ระบบ (`lot_counter`, `stock_lot_reservation`, `distribution_issue_*`, `distribution_one_time_guard`, `bulk_return_claim`, `loan_return_reservation`, `daily_calc`, `simulation`, `meal_distribution_push`, `evacuee_qr`, `image`)
 
@@ -138,6 +140,8 @@ migration: >
 
 - [ ] เจ้าหน้าที่แก้ชื่อสินค้าใน catalog กลาง → event `item_master.updated` ผู้ทำ = เจ้าหน้าที่คนนั้น · `changes` มี `name` พร้อมค่าเดิม→ใหม่ · `shelter_code = null` · SA เห็น SM ไม่เห็น
 - [ ] แก้เบอร์โทรผู้อพยพ → event `evacuee.updated` มี `{ field: "phone" }` ไม่มีค่า · `label = null`
+- [ ] แก้รายการใน `requirement_group` (ค่า array ของ object) → `changes` มี `from` / `to` ครบ · แก้ `current_stay.zone` ของผู้อพยพ → มีค่าเดิม→ใหม่
+- [ ] สร้าง doc rev 1 โดยไม่มี `updated_by` แต่ตั้ง `created_by` เป็นคนอื่น → ผู้ทำ = `unknown`
 - [ ] ลบรายการ (เช่น recipe ของศูนย์) → event `recipe.deleted` มีผู้ลบ
 - [ ] user ปลอม `updated_by` เป็นคนอื่นแล้วเขียนตรงผ่าน `/couch` → VDU reject · `_admin` / `repl:<CODE>` ไม่ถูกตรวจ
 - [ ] replay `_changes` จาก checkpoint เดิม → ไม่มี event ซ้ำ
@@ -165,7 +169,8 @@ migration: >
 - ประทับที่ `couch-db.ts` จุดเดียว → ทุก feature ได้ `updated_by` โดยไม่ต้องแก้ทีละหน้า
 - HTTP `DELETE` ไม่มี body จึงไม่รู้ผู้ลบ → เปลี่ยนเป็น tombstone `PUT` ที่ CouchDB รองรับอยู่แล้ว
 - `_id` deterministic จาก rev → ทน replay และ worker restart โดยไม่ต้องเก็บ state เพิ่ม
-- allowlist default ปิด + ผู้อพยพ / ครัวเรือน `label = null` → ไม่เอาชื่อหรือข้อมูลส่วนบุคคลเข้า log (spec audit/privacy)
+- value denylist + ผู้อพยพ / ครัวเรือน `label = null` → ผู้ตรวจสอบเห็นค่าเดิม→ใหม่ของ field ทั่วไป (allowlist เดิมทำให้ field ส่วนใหญ่ขึ้นแค่ "มีการแก้ไข") โดยไม่เอาข้อมูลส่วนบุคคล / ข้อมูลอ่อนไหวเข้า log ที่ลบไม่ได้ (spec audit/privacy)
+- actor ไม่ใช้ `created_by` → VDU ตรวจแค่ `updated_by` จึงเป็นค่าเดียวที่เชื่อถือได้
 - เปิดด้วย env flag + ไม่สร้าง event ย้อนหลัง → deploy ทีละขั้นได้และย้อนกลับได้โดยปิด flag
 
 ## Decision log
@@ -175,3 +180,5 @@ migration: >
 - 2026-11-18 — proposed
 - 2026-11-18 — เพิ่ม FR-C26–FR-C28: event ที่ค้างจาก CR-259 (หมุนบัตร QR เจ้าหน้าที่, เปิดดู secret ของ third-party client)
 - 2026-11-18 — approved โดย PM · Q1–Q4 ตามข้อเสนอ · รันเลข CR-260 (CR-259 อยู่ใน PR #1453)
+- 2026-11-26 — FR-C21 (PM, review PR #1456): ล้มเหลวชั่วคราวค้าง checkpoint แบบ `copy_audit_doc` · 4xx ถาวรไปต่อ · compaction = `changes_unknown`
+- 2026-11-28 — review PR #1456: value allowlist → value denylist ของ `worker_diff` (FR-C17, §Change) และ FR-C22 ต้องกำหนด denylist ก่อนเพิ่ม type · actor ไม่ fallback `created_by` (FR-C16) · FR-C6 → actor ประจำ request + `prepareAdminWrite` (FR-C6a/FR-C6b) · FR-C9 จำกัด DB · FR-C12 ไม่มีเลข version + ยกเว้น allowlist ของ `daily_sop_role_assessment` · เพิ่ม FR-C29 (FastAPI `couch_birth`) · allowlist ของ event ฝั่ง BFF (CR-259 FR-30) ไม่เปลี่ยน
