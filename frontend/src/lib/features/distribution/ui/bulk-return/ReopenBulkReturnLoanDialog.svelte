@@ -132,7 +132,7 @@
 						rows={3}
 						maxlength={BULK_RETURN_LOAN_REOPEN_REASON_MAX}
 						required
-						class="w-full text-base sm:text-sm"
+						class="w-full rounded-lg text-base shadow-2xs sm:text-sm"
 					/>
 					<p class="text-right text-xs text-slate-500 tabular-nums">
 						{reason.length}/{BULK_RETURN_LOAN_REOPEN_REASON_MAX}

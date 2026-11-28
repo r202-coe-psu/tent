@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { ItemMaster } from '$lib/features/catalog';
+	import { formatUnit, useUnitsOfMeasure, type ItemMaster } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import {
 		thailandCalendarDay,
 		type Flow2RequisitionType,
@@ -37,6 +38,10 @@
 	import Package from '@lucide/svelte/icons/package';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
+
 	interface SelectedTicketItem {
 		master: ItemMaster;
 		requested_qty: string;
@@ -71,6 +76,28 @@
 	let serviceDate = $derived(today);
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
+	/** Inline errors stay hidden until the first submit attempt, then track edits live. */
+	let submitAttempted = $state(false);
+	const fieldErrors = $derived.by(() => {
+		const destination = resolveDestinationSelection(destinationSelection, customDestinationText)
+			? undefined
+			: isCustomDestination
+				? 'กรุณาพิมพ์ชื่อจุดหมายปลายทาง'
+				: 'กรุณาเลือกจุดหมายปลายทาง';
+		const serviceDay =
+			requisitionType === 'food' && (!serviceDate || serviceDate < thailandCalendarDay())
+				? 'วันที่แจกต้องเป็นวันนี้หรือวันถัดไป'
+				: undefined;
+		const items = selectedItems.length === 0 ? 'กรุณาเพิ่มรายการอย่างน้อย 1 รายการ' : undefined;
+		return { destination, serviceDay, items };
+	});
+	const hasFieldErrors = $derived(
+		!!(fieldErrors.destination || fieldErrors.serviceDay || fieldErrors.items)
+	);
+	function qtyError(raw: string): string | undefined {
+		const v = validatePositiveQuantity(raw);
+		return v.isValid ? undefined : (v.error ?? 'จำนวนต้องมากกว่า 0');
+	}
 	let pickerOpen = $state(false);
 
 	// Grouped destination options from shelter zones and food distribution points
@@ -127,31 +154,16 @@
 		notes = '';
 		selectedItems = [];
 		pickerOpen = false;
+		submitAttempted = false;
 	}
 
 	async function handleSubmit() {
-		// 1. Validation: Destination
+		submitAttempted = true;
 		const destination = resolveDestinationSelection(destinationSelection, customDestinationText);
-		if (!destination) {
-			toast.error('กรุณาระบุจุดหมายปลายทางในการส่งมอบ');
-			return;
-		}
-
-		// 2. Validation: Meal
-		if (requisitionType === 'food' && !meal) {
-			toast.error('ตั๋วเบิกจ่ายอาหารต้องระบุมื้ออาหาร (เช้า, กลางวัน, เย็น, อาหารว่าง)');
-			return;
-		}
-
-		// 2b. Validation: Service day (today or later — draft-food-ticket-service-date)
-		if (requisitionType === 'food' && (!serviceDate || serviceDate < thailandCalendarDay())) {
-			toast.error('วันที่แจกต้องเป็นวันนี้หรือวันถัดไป');
-			return;
-		}
-
-		// 3. Validation: Items count
-		if (selectedItems.length === 0) {
-			toast.error('กรุณาเลือกรายการพัสดุหรืออาหารอย่างน้อย 1 รายการ');
+		const qtyInvalid = selectedItems.some((item) => qtyError(item.requested_qty));
+		if (!destination || hasFieldErrors || qtyInvalid) {
+			toast.error('กรุณาแก้ไขช่องที่ไม่ถูกต้อง');
+			document.querySelector<HTMLElement>('[data-create-ticket] [aria-invalid="true"]')?.focus();
 			return;
 		}
 
@@ -236,10 +248,10 @@
 		</div>
 
 		<!-- Scrollable Form Body -->
-		<div class="flex-1 space-y-6 overflow-y-auto p-6">
+		<div class="flex-1 space-y-7 overflow-y-auto p-6" data-create-ticket>
 			<!-- Step 1: Requisition Type (Food XOR Supplies) -->
-			<fieldset class="m-0 space-y-2 border-0 p-0">
-				<legend class="text-sm font-semibold text-slate-700">
+			<fieldset class="min-w-0 border-0 p-0">
+				<legend class="mb-2.5 text-sm font-semibold text-slate-700">
 					ประเภทการเบิกจ่าย <span class="text-red-500">*</span>
 				</legend>
 				<RadioGroup.Root
@@ -250,10 +262,10 @@
 				>
 					<label
 						for="requisition-food"
-						class="flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 text-left transition-all {requisitionType ===
+						class="flex h-full cursor-pointer items-center gap-3 rounded-xl border p-4 text-left transition-all {requisitionType ===
 						'food'
-							? 'border-[#0A2647] bg-[#0A2647]/5 ring-1 ring-[#0A2647]'
-							: 'border-slate-200 bg-white hover:bg-slate-50'}"
+							? 'border-[#0A2647] bg-white shadow-xs ring-2 ring-[#0A2647]/15'
+							: 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}"
 					>
 						<RadioGroup.Item value="food" id="requisition-food" class="mt-0" />
 						<div
@@ -272,10 +284,10 @@
 
 					<label
 						for="requisition-supplies"
-						class="flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 text-left transition-all {requisitionType ===
+						class="flex h-full cursor-pointer items-center gap-3 rounded-xl border p-4 text-left transition-all {requisitionType ===
 						'supplies'
-							? 'border-[#0A2647] bg-[#0A2647]/5 ring-1 ring-[#0A2647]'
-							: 'border-slate-200 bg-white hover:bg-slate-50'}"
+							? 'border-[#0A2647] bg-white shadow-xs ring-2 ring-[#0A2647]/15'
+							: 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}"
 					>
 						<RadioGroup.Item value="supplies" id="requisition-supplies" class="mt-0" />
 						<div
@@ -295,14 +307,18 @@
 			</fieldset>
 
 			<!-- Step 2: Destination Location -->
-			<div class="space-y-1.5">
-				<label for="destination-select" class="text-sm font-semibold text-slate-700">
+			<div class="space-y-2">
+				<label for="destination-select" class="block text-sm font-semibold text-slate-700">
 					จุดหมายปลายทาง / จุดแจกจ่าย <span class="text-red-500">*</span>
 				</label>
 				<Select.Root type="single" bind:value={destinationSelection}>
 					<Select.Trigger
 						id="destination-select"
 						aria-label="เลือกจุดหมายปลายทาง"
+						aria-invalid={submitAttempted && !!fieldErrors.destination && !isCustomDestination}
+						aria-describedby={submitAttempted && fieldErrors.destination
+							? 'destination-error'
+							: undefined}
 						class="h-10 w-full rounded-lg text-sm shadow-2xs"
 					>
 						<span class="truncate">
@@ -342,10 +358,19 @@
 						type="text"
 						bind:value={customDestinationText}
 						placeholder="พิมพ์ชื่อจุดหมายปลายทางที่ต้องการ..."
+						aria-invalid={submitAttempted && !!fieldErrors.destination}
+						aria-describedby={submitAttempted && fieldErrors.destination
+							? 'destination-error'
+							: undefined}
 						class="h-10 w-full rounded-lg text-sm shadow-2xs placeholder:text-slate-400"
 					/>
 				{/if}
 
+				{#if submitAttempted && fieldErrors.destination}
+					<p id="destination-error" class="text-sm font-medium text-destructive" role="alert">
+						{fieldErrors.destination}
+					</p>
+				{/if}
 				<p class="text-xs text-slate-500">
 					ตั๋ว 1 ใบส่งมอบตรงไปยังจุดหมายเดียวเท่านั้น ทุกรายการในตั๋วนี้จะถูกนำส่งร่วมกัน
 				</p>
@@ -353,19 +378,19 @@
 
 			<!-- Step 3: Meal Period (Only if Food) -->
 			{#if requisitionType === 'food'}
-				<fieldset class="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
-					<legend class="text-sm font-semibold text-slate-800">
+				<fieldset class="min-w-0 rounded-xl border border-amber-200 bg-amber-50/40 p-5">
+					<legend class="float-left mb-3 w-full text-sm font-semibold text-slate-800">
 						มื้ออาหารสำหรับแจกจ่าย <span class="text-red-500">*</span>
 					</legend>
 					<RadioGroup.Root
 						bind:value={meal}
-						class="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4"
+						class="clear-both grid grid-cols-2 gap-2 sm:grid-cols-4"
 						aria-label="มื้ออาหารสำหรับแจกจ่าย"
 					>
 						{#each ['breakfast', 'lunch', 'dinner', 'snack'] as const as m (m)}
 							<label
 								for="meal-{m}"
-								class="flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-xs font-semibold transition-all {meal ===
+								class="flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold transition-all {meal ===
 								m
 									? 'border-amber-600 bg-amber-600 text-white shadow-xs'
 									: 'border-amber-200 bg-white text-slate-700 hover:bg-amber-50'}"
@@ -375,22 +400,27 @@
 							</label>
 						{/each}
 					</RadioGroup.Root>
-					<p class="mt-1 text-xs text-amber-800/80">
+					<p class="mt-2 text-xs text-amber-800/80">
 						ระบบใช้มื้ออาหารในการตรวจสอบสิทธิ์รับอาหารซ้ำของผู้พักพิงในรอบวัน
 					</p>
 
-					<div class="space-y-1 pt-3">
+					<div class="mt-5 space-y-2 border-t border-amber-200/70 pt-5">
 						<label for="service-date" class="block text-sm font-semibold text-slate-800">
 							วันที่แจก <span class="text-red-500">*</span>
 						</label>
 						<DatePicker
 							id="service-date"
+							invalid={submitAttempted && !!fieldErrors.serviceDay}
 							min={today}
 							bind:value={serviceDate}
 							format={(iso) => formatServiceDay(iso, today)}
 							class="!h-10 bg-white sm:w-56"
 						/>
-						{#if serviceDate}
+						{#if submitAttempted && fieldErrors.serviceDay}
+							<p class="text-sm font-medium text-destructive" role="alert">
+								{fieldErrors.serviceDay}
+							</p>
+						{:else if serviceDate}
 							<p class="text-xs text-amber-800/80">
 								ตั๋วนี้จะอยู่ในรอบแจก {formatServiceDay(serviceDate, today)} ของจุดแจก
 							</p>
@@ -422,13 +452,21 @@
 
 				{#if selectedItems.length === 0}
 					<div
-						class="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-8 text-center"
+						class="rounded-xl border border-dashed p-8 text-center {submitAttempted &&
+						fieldErrors.items
+							? 'border-red-300 bg-red-50/40'
+							: 'border-slate-300 bg-slate-50/50'}"
 					>
 						<Package class="mx-auto mb-2 h-8 w-8 text-slate-400" />
 						<p class="text-xs font-semibold text-slate-700">ยังไม่ได้เลือกรายการในตั๋วนี้</p>
 						<p class="mt-0.5 text-xs text-slate-500">
 							กดปุ่ม "เพิ่มรายการ" ด้านบนเพื่อค้นหาจากรายการสินค้า
 						</p>
+						{#if submitAttempted && fieldErrors.items}
+							<p class="mt-2 text-sm font-medium text-destructive" role="alert">
+								{fieldErrors.items}
+							</p>
+						{/if}
 					</div>
 				{:else}
 					<div class="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
@@ -449,7 +487,7 @@
 										<td class="py-2.5 pr-2 pl-4">
 											<div class="font-bold text-slate-900">{item.master.name}</div>
 											<div class="text-xs text-slate-500">
-												หน่วย: {item.master.base_unit}
+												หน่วย: {unitLabel(item.master.base_unit)}
 												{#if item.master.sku}
 													• SKU: {item.master.sku}{/if}
 											</div>
@@ -476,14 +514,18 @@
 															handleItemQtyBlur(item.master._id, item.requested_qty);
 														}}
 														aria-label="จำนวนเบิก {item.master.name}"
-														class="h-8 w-20 text-right text-xs font-bold tabular-nums {validatePositiveQuantity(
-															item.requested_qty
-														).isValid
-															? ''
-															: 'border-red-400 focus:ring-red-400'}"
+														aria-invalid={!!qtyError(item.requested_qty)}
+														class="h-8 w-20 text-right text-xs font-bold tabular-nums"
 													/>
-													<span class="text-xs text-slate-500">{item.master.base_unit}</span>
+													<span class="text-xs text-slate-500"
+														>{unitLabel(item.master.base_unit)}</span
+													>
 												</div>
+												{#if qtyError(item.requested_qty)}
+													<p class="text-xs font-medium text-destructive" role="alert">
+														{qtyError(item.requested_qty)}
+													</p>
+												{/if}
 											</div>
 										</td>
 										<td class="py-2.5 pr-4 pl-2 text-right">
@@ -508,16 +550,17 @@
 			</div>
 
 			<!-- Step 5: Notes -->
-			<div class="space-y-1.5">
-				<label for="ticket-notes" class="text-sm font-semibold text-slate-700">
-					หมายเหตุเพิ่มเติม (ถ้ามี)
+			<div class="space-y-2">
+				<label for="ticket-notes" class="block text-sm font-semibold text-slate-700">
+					หมายเหตุเพิ่มเติม
+					<span class="ml-1 text-xs font-normal text-slate-500">(ถ้ามี)</span>
 				</label>
 				<Textarea
 					id="ticket-notes"
 					bind:value={notes}
-					rows={2}
+					rows={3}
 					placeholder="เช่น เบิกด่วนสำหรับผู้พักพิงกลุ่มเปราะบาง, ส่งมอบภายใน 12:00 น."
-					class="w-full text-sm shadow-2xs placeholder:text-slate-400"
+					class="min-h-20 w-full resize-y rounded-lg bg-white px-3 py-2.5 text-sm leading-relaxed shadow-2xs placeholder:text-slate-400"
 				/>
 			</div>
 		</div>

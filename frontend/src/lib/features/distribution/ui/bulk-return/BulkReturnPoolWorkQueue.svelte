@@ -176,7 +176,7 @@
 						<Select.Trigger
 							id="bulk-queue-my-point-select"
 							aria-label={WORK_QUEUE_COPY.myPointLabel}
-							class="min-h-11 min-w-[160px] bg-white"
+							class="h-10 min-w-[160px] bg-white shadow-2xs data-[size=default]:h-10"
 						>
 							<span class="truncate">{myPointLabel || WORK_QUEUE_COPY.myPointPlaceholder}</span>
 						</Select.Trigger>

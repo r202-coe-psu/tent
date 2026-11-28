@@ -19,6 +19,8 @@
 		onToggleSort?: () => void;
 		/** When this value changes (e.g. a serialized filter state) the table returns to page 1. */
 		resetKey?: string;
+		/** Off when the list is already filtered to one requisition type: every row would match. */
+		showType?: boolean;
 	}
 
 	let {
@@ -27,7 +29,8 @@
 		onViewTicket,
 		sortDirection = 'desc',
 		onToggleSort,
-		resetKey = ''
+		resetKey = '',
+		showType = true
 	}: Props = $props();
 
 	// Writable derived: back to page 1 whenever `resetKey` changes; paging assigns it directly.
@@ -84,7 +87,7 @@
 			>
 				<Table.Row>
 					<Table.Head scope="col" class="py-3.5 pr-3 pl-4 sm:pl-6">เลขที่ตั๋ว</Table.Head>
-					<Table.Head scope="col" class="px-3 py-3.5">ประเภท</Table.Head>
+					{#if showType}<Table.Head scope="col" class="px-3 py-3.5">ประเภท</Table.Head>{/if}
 					<Table.Head scope="col" class="px-3 py-3.5">จุดหมายปลายทาง</Table.Head>
 					<Table.Head scope="col" class="px-3 py-3.5">ผู้ร้องขอ</Table.Head>
 					<Table.Head
@@ -137,16 +140,16 @@
 								</span>
 							{/if}
 						</Table.Cell>
-						<Table.Cell class="px-3 py-3.5 text-sm whitespace-nowrap">
-							<span
-								class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium {ticket.requisition_type ===
-								'food'
-									? 'border border-orange-200 bg-orange-50 text-orange-700'
-									: 'border border-slate-200 bg-slate-100 text-slate-700'}"
-							>
-								{getRequisitionTypeLabel(ticket.requisition_type as 'food' | 'supplies')}
-							</span>
-						</Table.Cell>
+						{#if showType}<Table.Cell class="px-3 py-3.5 text-sm whitespace-nowrap">
+								<span
+									class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium {ticket.requisition_type ===
+									'food'
+										? 'border border-orange-200 bg-orange-50 text-orange-700'
+										: 'border border-slate-200 bg-slate-100 text-slate-700'}"
+								>
+									{getRequisitionTypeLabel(ticket.requisition_type as 'food' | 'supplies')}
+								</span>
+							</Table.Cell>{/if}
 						<Table.Cell class="px-3 py-3.5 text-sm font-medium whitespace-nowrap text-slate-800">
 							{ticket.destination_location}
 						</Table.Cell>

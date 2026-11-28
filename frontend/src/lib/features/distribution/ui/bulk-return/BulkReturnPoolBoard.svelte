@@ -451,7 +451,7 @@
 				bind:value={search}
 				placeholder="ค้นหาชื่อกองหรือชื่อผู้คืน"
 				aria-label="ค้นหากองรับคืนตามชื่อกองหรือชื่อผู้คืน"
-				class="h-11 w-full pl-9 text-base sm:h-10 sm:text-sm"
+				class="h-10 w-full rounded-lg pl-9 text-base shadow-2xs sm:text-sm"
 			/>
 		</div>
 		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -502,7 +502,7 @@
 						<Select.Trigger
 							id="bulk-pool-item-filter"
 							aria-label="กรองตามชนิดสินค้า"
-							class="min-h-11 min-w-[160px]"
+							class="h-10 min-w-[160px] shadow-2xs data-[size=default]:h-10"
 						>
 							<span class="truncate">{itemFilterLabel}</span>
 						</Select.Trigger>
@@ -533,7 +533,7 @@
 						<Select.Trigger
 							id="bulk-pool-storage-filter"
 							aria-label="กรองตามที่เก็บ"
-							class="min-h-11 min-w-[160px]"
+							class="h-10 min-w-[160px] shadow-2xs data-[size=default]:h-10"
 						>
 							<span class="truncate">{storageFilterLabel}</span>
 						</Select.Trigger>

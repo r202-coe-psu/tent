@@ -306,6 +306,8 @@
 			hint: 'รวมทุกสถานะ',
 			icon: ClipboardList,
 			border: 'border-slate-200/80',
+			activeClass: 'border-slate-500 ring-slate-500',
+			focusClass: 'focus-visible:ring-slate-500',
 			labelClass: 'text-slate-500',
 			iconClass: 'text-slate-400',
 			hintClass: 'text-slate-400'
@@ -316,6 +318,8 @@
 			hint: 'รอจัดของ • พร้อมส่งออก',
 			icon: Clock,
 			border: 'border-amber-200',
+			activeClass: 'border-amber-500 ring-amber-500',
+			focusClass: 'focus-visible:ring-amber-500',
 			labelClass: 'text-amber-800',
 			iconClass: 'text-amber-600',
 			hintClass: 'text-amber-700'
@@ -326,6 +330,8 @@
 			hint: 'นำส่ง • แจกจ่าย • ปิดรอบ',
 			icon: Send,
 			border: 'border-blue-200',
+			activeClass: 'border-blue-600 ring-blue-600',
+			focusClass: 'focus-visible:ring-blue-600',
 			labelClass: 'text-blue-800',
 			iconClass: 'text-blue-600',
 			hintClass: 'text-blue-700'
@@ -336,6 +342,8 @@
 			hint: 'รอตรวจรับคืน • ตรวจรับแล้ว',
 			icon: RotateCcw,
 			border: 'border-orange-200',
+			activeClass: 'border-orange-500 ring-orange-500',
+			focusClass: 'focus-visible:ring-orange-500',
 			labelClass: 'text-orange-800',
 			iconClass: 'text-orange-600',
 			hintClass: 'text-orange-700'
@@ -346,6 +354,8 @@
 			hint: 'สมบูรณ์ • ยกเลิก',
 			icon: CheckCircle2,
 			border: 'border-slate-200/80',
+			activeClass: 'border-emerald-600 ring-emerald-600',
+			focusClass: 'focus-visible:ring-emerald-600',
 			labelClass: 'text-slate-700',
 			iconClass: 'text-emerald-600',
 			hintClass: 'text-slate-400'
@@ -356,6 +366,8 @@
 		hint: string;
 		icon: typeof ClipboardList;
 		border: string;
+		activeClass: string;
+		focusClass: string;
 		labelClass: string;
 		iconClass: string;
 		hintClass: string;
@@ -435,9 +447,9 @@
 					type="button"
 					aria-pressed={isActive}
 					onclick={() => handleSelectGroup(card.id)}
-					class="cursor-pointer rounded-xl border bg-white p-4 text-left shadow-2xs transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#0A2647] focus-visible:outline-none {card.border} {isActive
-						? 'ring-2 ring-[#0A2647]'
-						: ''}"
+					class="cursor-pointer rounded-xl border bg-white p-4 text-left shadow-2xs transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:outline-none {card.focusClass} {isActive
+						? `ring-1 ${card.activeClass}`
+						: card.border}"
 				>
 					<div class="flex items-center justify-between">
 						<span class="text-xs font-semibold {card.labelClass}">{card.label}</span>
@@ -522,6 +534,7 @@
 					tickets={filteredTickets}
 					{sortDirection}
 					resetKey={filterKey}
+					showType={selectedType === 'all'}
 					onToggleSort={() => updateFilters({ sort: sortDirection === 'desc' ? 'asc' : 'desc' })}
 					onViewTicket={(ticket) => handleOpenDetail(ticket._id)}
 				/>

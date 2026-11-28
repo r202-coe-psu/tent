@@ -1,4 +1,5 @@
 import { addQty } from '$lib/utils/qty';
+import { formatUnit } from '$lib/features/catalog';
 import {
 	canAppendToPool,
 	canReopenEntryLoans,
@@ -670,7 +671,7 @@ export function resolveItemDisplay(
 	catalog: readonly PoolCatalogItem[]
 ): ItemDisplay {
 	const item = catalog.find((candidate) => candidate._id === itemId);
-	if (item) return { name: item.name, unit: item.base_unit ?? '' };
+	if (item) return { name: item.name, unit: formatUnit(item.base_unit) };
 	return { name: itemId.replace(/^item_master:|^item:/, ''), unit: '' };
 }
 

@@ -416,6 +416,14 @@ describe('outstandingLoanRows', () => {
 		expect(rows[0]).toMatchObject({ itemName: 'พัดลม', unit: 'เครื่อง' });
 	});
 
+	it('shows the Thai label of an English unit code', () => {
+		const rows = outstandingLoanRows(
+			[loan('l1', '2')],
+			[{ _id: 'item_master:fan', name: 'พัดลม', base_unit: 'box' }]
+		);
+		expect(rows[0].unit).toBe('กล่อง');
+	});
+
 	it('falls back to a cleaned item id', () => {
 		expect(outstandingLoanRows([loan('l1', '1')], [])[0].itemName).toBe('fan');
 	});

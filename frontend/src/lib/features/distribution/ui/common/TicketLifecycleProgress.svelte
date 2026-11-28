@@ -53,7 +53,7 @@
 		<!-- Normal / Return Lifecycle Stepper -->
 		<div class="relative">
 			<nav aria-label="ขั้นตอนความคืบหน้าของตั๋วเบิกจ่าย">
-				<ol class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<ol class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
 					{#each steps as step, index (step.id)}
 						{@const isCurrent = step.state === 'current'}
 						{@const isCompleted = step.state === 'completed'}
@@ -65,7 +65,7 @@
 							<!-- Connecting line between steps (horizontal on desktop) -->
 							{#if index > 0}
 								<div
-									class="absolute top-4.5 -left-1/2 hidden h-0.5 w-full -translate-y-1/2 transition-colors sm:block {isCompleted ||
+									class="absolute top-4.5 left-[calc(-50%+1.125rem)] hidden h-0.5 w-[calc(100%-2.25rem)] -translate-y-1/2 transition-colors sm:block {isCompleted ||
 									isCurrent
 										? 'bg-emerald-500'
 										: 'bg-slate-200'}"
@@ -74,12 +74,12 @@
 							{/if}
 
 							<!-- Step Node -->
-							<div class="relative flex items-center gap-3 sm:flex-col sm:gap-2">
+							<div class="relative z-10 flex items-center gap-3 sm:flex-col sm:gap-2">
 								<div
 									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-all {isCompleted
 										? 'border-emerald-600 bg-emerald-600 text-white shadow-2xs'
 										: isCurrent
-											? 'border-[#0A2647] bg-[#0A2647] text-white shadow-xs ring-4 ring-[#0A2647]/15'
+											? 'border-[#0A2647] bg-[#0A2647] text-white shadow-xs ring-4 ring-[#dde1e7]'
 											: 'border-slate-300 bg-slate-50 text-slate-400'}"
 								>
 									{#if isCompleted}

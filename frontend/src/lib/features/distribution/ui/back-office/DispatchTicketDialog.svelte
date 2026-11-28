@@ -2,6 +2,8 @@
 	import type { DispatchLotAllocation, RequisitionTicket } from '../../domain/food-supplies';
 	import { useDispatchTicket } from '../../application/queries';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { formatUnit, useItemMasters, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import PhysicalLotPicker from './PhysicalLotPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -23,6 +25,14 @@
 	let { open = $bindable(false), ticket, shelterCode, onSuccess, onClose }: Props = $props();
 
 	const dispatchMutation = useDispatchTicket();
+	const itemMastersQuery = useItemMasters(() => shelterCode);
+	const unitsQuery = useUnitsOfMeasure();
+	/** Thai label of an item's base unit; undefined until the master is known (picker falls back). */
+	function itemUnitLabel(itemId: string): string | undefined {
+		const baseUnit = (itemMastersQuery.data ?? []).find((im) => im._id === itemId)?.base_unit;
+		if (!baseUnit) return undefined;
+		return formatUnit(baseUnit, unitsQuery.data ?? [], langState.current) || baseUnit;
+	}
 
 	// Local form state
 	let driverName = $state('');
@@ -146,6 +156,7 @@
 							<PhysicalLotPicker
 								itemId={item.item_id}
 								itemName={item.item_name}
+								unit={itemUnitLabel(item.item_id)}
 								allocatedQty={item.allocated_qty}
 								allocations={selectedLots[item.item_id] ?? []}
 								onChange={(allocations, valid) => {
@@ -175,7 +186,7 @@
 								bind:value={driverName}
 								placeholder="ระบุชื่อคนขับ (ถ้ามี)"
 								disabled={isSubmitting}
-								class="h-9 w-full rounded-lg pr-3 pl-8 text-xs placeholder:text-slate-400"
+								class="h-10 w-full rounded-lg pr-3 pl-8 text-xs shadow-2xs placeholder:text-slate-400"
 							/>
 						</div>
 					</div>
@@ -192,7 +203,7 @@
 								bind:value={licensePlate}
 								placeholder="ระบุทะเบียนรถ (ถ้ามี)"
 								disabled={isSubmitting}
-								class="h-9 w-full rounded-lg pr-3 pl-8 text-xs placeholder:text-slate-400"
+								class="h-10 w-full rounded-lg pr-3 pl-8 text-xs shadow-2xs placeholder:text-slate-400"
 							/>
 						</div>
 					</div>
