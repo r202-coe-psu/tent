@@ -3178,6 +3178,24 @@
 				}
 			}
 		},
+		"/public/v1/jobs/summary": {
+			"get": {
+				"tags": ["Volunteers"],
+				"summary": "Jobs Summary",
+				"operationId": "jobs_summary_public_v1_jobs_summary_get",
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/PublicJobSummaryResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/public/v1/jobs": {
 			"get": {
 				"tags": ["Volunteers"],
@@ -3198,7 +3216,52 @@
 						"name": "skill",
 						"in": "query",
 						"required": false,
-						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Skill" }
+						"schema": {
+							"anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }],
+							"title": "Skill"
+						}
+					},
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string", "maxLength": 100 }, { "type": "null" }],
+							"title": "Q"
+						}
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{ "enum": ["open", "near_full", "controlled"], "type": "string" },
+								{ "type": "null" }
+							],
+							"title": "Status"
+						}
+					},
+					{
+						"name": "page",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer",
+							"maximum": 1000,
+							"minimum": 1,
+							"default": 1,
+							"title": "Page"
+						}
+					},
+					{
+						"name": "page_size",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "integer", "maximum": 50, "minimum": 1 }, { "type": "null" }],
+							"title": "Page Size"
+						}
 					}
 				],
 				"responses": {
@@ -6815,10 +6878,25 @@
 						"items": { "$ref": "#/components/schemas/PublicJobItem" },
 						"type": "array",
 						"title": "Jobs"
+					},
+					"total": { "type": "integer", "title": "Total", "default": 0 },
+					"shelters": {
+						"items": { "$ref": "#/components/schemas/PublicJobShelter" },
+						"type": "array",
+						"title": "Shelters"
 					}
 				},
 				"type": "object",
 				"title": "PublicJobListResponse"
+			},
+			"PublicJobShelter": {
+				"properties": {
+					"code": { "type": "string", "title": "Code" },
+					"name": { "type": "string", "title": "Name", "default": "" }
+				},
+				"type": "object",
+				"required": ["code"],
+				"title": "PublicJobShelter"
 			},
 			"PublicJobShift": {
 				"properties": {
@@ -6838,6 +6916,20 @@
 				"required": ["shift_id"],
 				"title": "PublicJobShift",
 				"description": "Concrete shift identity plus renderable snapshot fields."
+			},
+			"PublicJobSummaryResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"total": { "type": "integer", "title": "Total", "default": 0 },
+					"open": { "type": "integer", "title": "Open", "default": 0 },
+					"near_full": { "type": "integer", "title": "Near Full", "default": 0 },
+					"controlled": { "type": "integer", "title": "Controlled", "default": 0 },
+					"as_of": { "type": "string", "format": "date-time", "title": "As Of" }
+				},
+				"type": "object",
+				"required": ["as_of"],
+				"title": "PublicJobSummaryResponse",
+				"description": "Board-wide counts, independent of any filter or page (CR-265 FR-9)."
 			},
 			"PublicSearchRequest": {
 				"properties": {

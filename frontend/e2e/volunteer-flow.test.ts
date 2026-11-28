@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { createCouchUser, deleteCouchUser, couchLogin, SM_SH001_ROLES } from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
+import { mockJobsSummary } from './helpers/volunteer-portal';
 
 /**
  * Full volunteer lifecycle E2E — one continuous flow rather than independent
@@ -409,6 +410,7 @@ async function mockPublicApi(page: Page, world: World): Promise<void> {
 		route.fulfill(json({ volunteerSkills: SKILL_ITEMS }))
 	);
 
+	await mockJobsSummary(page);
 	await page.route('**/api/public/v1/volunteer/jobs*', async (route) => {
 		if (route.request().method() !== 'GET') {
 			await route.fallback();

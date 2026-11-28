@@ -117,6 +117,273 @@ describe('GET /api/public/v1/volunteer/jobs', () => {
 	});
 });
 
+describe('GET /api/public/v1/volunteer/jobs — board filters', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const get = (search: string, fetch: ReturnType<typeof upstream>) =>
+		GET({
+			url: new URL(`http://localhost/api/public/v1/volunteer/jobs${search}`),
+			fetch,
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+	it('forwards q, status, page, page_size and every repeated skill', async () => {
+		const fetch = upstream({ success: true, jobs: [], total: 0 });
+		await get(
+			'?q=%20ครัว%20&status=near_full&page=2&page_size=6&skill=cooking&skill=ทำอาหาร&shelter_code=SH001',
+			fetch
+		);
+
+		const called = new URL(fetch.mock.calls[0][0] as string);
+		expect(called.searchParams.get('q')).toBe('ครัว');
+		expect(called.searchParams.get('status')).toBe('near_full');
+		expect(called.searchParams.get('page')).toBe('2');
+		expect(called.searchParams.get('page_size')).toBe('6');
+		expect(called.searchParams.getAll('skill')).toEqual(['cooking', 'ทำอาหาร']);
+		expect(called.searchParams.get('shelter_code')).toBe('SH001');
+	});
+
+	it('drops unknown params and malformed paging values', async () => {
+		const fetch = upstream({ success: true, jobs: [], total: 0 });
+		await get('?evil=1&status=bogus&page=abc&page_size=0&sort=title', fetch);
+
+		expect(fetch).toHaveBeenCalledWith('http://localhost:9000/public/v1/jobs', expect.anything());
+	});
+
+	it('caps page_size at the backend limit', async () => {
+		const fetch = upstream({ success: true, jobs: [], total: 0 });
+		await get('?page_size=500', fetch);
+
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:9000/public/v1/jobs?page_size=50',
+			expect.anything()
+		);
+	});
+
+	it('refuses a page past the last allowed one, without asking FastAPI or CouchDB (B2)', async () => {
+		const fetch = upstream({ success: true, jobs: [], total: 0 });
+		const res = await get('?page=1000000000000000000000', fetch);
+
+		expect(res.status).toBe(400);
+		expect(fetch).not.toHaveBeenCalled();
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('hands a FastAPI 422 back to the caller instead of scanning CouchDB with admin rights (B2)', async () => {
+		const fetch = upstream({ detail: [{ loc: ['query', 'page'] }] }, false, 422);
+		const res = await get('?page=2', fetch);
+
+		expect(res.status).toBe(422);
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
+	it('still falls back to CouchDB when FastAPI itself fails (5xx)', async () => {
+		const fetch = upstream({ detail: 'boom' }, false, 503);
+		adminRaw.mockResolvedValue({ status: 200, data: { rows: [] } });
+		const res = await get('', fetch);
+
+		expect(res.status).toBe(200);
+		expect(adminRaw).toHaveBeenCalled();
+	});
+
+	it('filters and paginates the CouchDB fallback with the same params and reports total', async () => {
+		const fetch = vi.fn().mockRejectedValue(new Error('fastapi down'));
+		const job = (id: string, title: string, remaining: number) => ({
+			_id: id,
+			type: 'job',
+			title,
+			status: 'open',
+			slots_remaining: remaining
+		});
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path.startsWith('/registry/')) {
+				return {
+					status: 200,
+					data: {
+						rows: [{ doc: { type: 'shelter', code: 'SH001', name: 'A', db: 'shelter_sh001' } }]
+					}
+				};
+			}
+			return {
+				status: 200,
+				data: {
+					rows: [
+						{ doc: job('job:1', 'ครัว 1', 5) },
+						{ doc: job('job:2', 'ครัว 2', 0) },
+						{ doc: job('job:3', 'ครัว 3', 2) },
+						{ doc: job('job:4', 'ขับรถ', 5) }
+					]
+				}
+			};
+		});
+
+		const body = await (await get('?q=ครัว&status=open&page=2&page_size=1', fetch)).json();
+
+		expect(body.total).toBe(2);
+		expect(body.jobs.map((j: { job_id: string }) => j.job_id)).toEqual(['job:3']);
+	});
+});
+
+describe('GET /api/public/v1/volunteer/jobs — CouchDB fallback statuses', () => {
+	it('lists only what the worker puts on the board: open, full and the retired almost_full', async () => {
+		vi.clearAllMocks();
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path.startsWith('/registry/')) {
+				return {
+					status: 200,
+					data: {
+						rows: [{ doc: { type: 'shelter', code: 'SH001', name: 'A', db: 'shelter_sh001' } }]
+					}
+				};
+			}
+			const doc = (id: string, status: string) => ({
+				doc: { _id: id, type: 'job', title: id, status }
+			});
+			return {
+				status: 200,
+				data: {
+					rows: [
+						doc('job:open', 'open'),
+						doc('job:full', 'full'),
+						doc('job:old', 'almost_full'),
+						doc('job:paused', 'paused'),
+						doc('job:draft', 'draft'),
+						doc('job:closed', 'closed')
+					]
+				}
+			};
+		});
+
+		const res = await GET({
+			url: new URL('http://localhost/api/public/v1/volunteer/jobs'),
+			fetch: vi.fn().mockRejectedValue(new Error('fastapi down')),
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+		const body = await res.json();
+
+		expect(body.jobs.map((j: { job_id: string }) => j.job_id).sort()).toEqual([
+			'job:full',
+			'job:old',
+			'job:open'
+		]);
+	});
+
+	it('answers with the card fields only, never the CouchDB document (W-2)', async () => {
+		vi.clearAllMocks();
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path.startsWith('/registry/')) {
+				return {
+					status: 200,
+					data: {
+						rows: [
+							{ doc: { type: 'shelter', code: 'SH001', name: 'ศูนย์ A', db: 'shelter_sh001' } }
+						]
+					}
+				};
+			}
+			return {
+				status: 200,
+				data: {
+					rows: [
+						{
+							doc: {
+								_id: 'job:x',
+								_rev: '1-abc',
+								type: 'job',
+								title: 'ครัว',
+								status: 'open',
+								created_by: 'staff:secret',
+								released_application_ids: ['job_application:private'],
+								required_roles: ['cook'],
+								auto_accept: true,
+								quota: 4,
+								shifts: [
+									{ shift_id: 'shift:1', date: '2099-01-01', quota: 4, internal_note: 'hidden' }
+								]
+							}
+						}
+					]
+				}
+			};
+		});
+
+		const res = await GET({
+			url: new URL('http://localhost/api/public/v1/volunteer/jobs'),
+			fetch: vi.fn().mockRejectedValue(new Error('fastapi down')),
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+		const raw = JSON.stringify(await res.json());
+
+		for (const leaked of [
+			'staff:secret',
+			'job_application:private',
+			'required_roles',
+			'_rev',
+			'internal_note'
+		]) {
+			expect(raw).not.toContain(leaked);
+		}
+		expect(raw).toContain('"shelter_name":"ศูนย์ A"');
+		expect(raw).toContain('"slots_remaining":4');
+	});
+});
+
+describe('GET /api/public/v1/volunteer/jobs — CouchDB fallback matches FastAPI (W3)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path === '/registry/_all_docs?include_docs=true') {
+				return {
+					status: 200,
+					data: {
+						rows: [
+							{ doc: { type: 'shelter', code: 'SH001', name: 'A', db: 'shelter_sh001' } },
+							{ doc: { type: 'shelter', code: 'SH002', name: 'วัดคอหงส์', db: 'shelter_sh002' } },
+							{ doc: { type: 'shelter', code: 'SH003', name: 'ไม่มีงาน', db: 'shelter_sh003' } }
+						]
+					}
+				};
+			}
+			if (path.startsWith('/registry/')) return { status: 404, data: {} };
+			const db = path.split('/')[1];
+			const rows =
+				db === 'shelter_sh001'
+					? [{ doc: { _id: 'job:a', type: 'job', title: 'ครัว', status: 'open' } }]
+					: db === 'shelter_sh002'
+						? [{ doc: { _id: 'job:b', type: 'job', title: 'ขับรถ', status: 'open' } }]
+						: [];
+			return { status: 200, data: { rows } };
+		});
+	});
+
+	const getDown = (search: string) =>
+		GET({
+			url: new URL(`http://localhost/api/public/v1/volunteer/jobs${search}`),
+			fetch: vi.fn().mockRejectedValue(new Error('fastapi down')),
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+	it('takes a lower-case shelter code, like FastAPI (N1)', async () => {
+		const body = await (await getDown('?shelter_code=sh002')).json();
+		expect(body.jobs.map((j: { job_id: string }) => j.job_id)).toEqual(['job:b']);
+	});
+
+	it('lists only shelters with a job, even when filtered to one shelter (FR-6)', async () => {
+		const body = await (await getDown('?shelter_code=SH002')).json();
+		expect(body.shelters).toEqual([
+			{ code: 'SH001', name: 'A' },
+			{ code: 'SH002', name: 'วัดคอหงส์' }
+		]);
+	});
+
+	it('matches q against the shelter name', async () => {
+		const body = await (await getDown('?q=คอหงส์')).json();
+		expect(body.jobs.map((j: { job_id: string }) => j.job_id)).toEqual(['job:b']);
+	});
+});
+
 describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();

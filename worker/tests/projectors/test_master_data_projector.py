@@ -40,6 +40,10 @@ def test_projects_controlled_codes_and_labels():
         "shelter_code": None,
         "controlled_codes": ["medical"],
         "controlled_labels": ["ปฐมพยาบาล"],
+        "skills": [
+            {"code": "kitchen", "label": "ครัวสนาม"},
+            {"code": "medical", "label": "ปฐมพยาบาล"},
+        ],
     }
 
 
@@ -67,6 +71,7 @@ def test_is_an_allow_list_not_a_copy():
         "shelter_code",
         "controlled_codes",
         "controlled_labels",
+        "skills",
     }
 
 
@@ -130,3 +135,24 @@ def test_empty_doc_is_a_noop():
 def test_config_id_helper_matches_what_fastapi_reads():
     assert volunteer_skills_config_id(None) == "config:volunteer_skills"
     assert volunteer_skills_config_id("sh002") == "config:volunteer_skills:SH002"
+
+
+def test_projects_every_active_skill_for_label_search():
+    """CR-265 D3: non-controlled skills ride along (code + names); inactive ones do not."""
+    _, payload = project_master_data(
+        _doc(
+            items=[
+                {
+                    "code": "cooking",
+                    "label": "ทำอาหาร",
+                    "label_en": "Cooking",
+                    "status": "active",
+                },
+                {"code": "old", "label": "เลิกใช้", "status": "inactive"},
+            ]
+        )
+    )
+
+    assert payload["skills"] == [
+        {"code": "cooking", "label": "ทำอาหาร", "label_en": "Cooking"}
+    ]

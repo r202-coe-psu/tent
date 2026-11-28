@@ -1,30 +1,17 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
-import { adminRaw } from '$lib/server/couch-admin';
+import { readMasterDoc } from '$lib/server/master-data-server';
+import { loadCouchBoard } from '$lib/features/volunteers/server/public-board-couch';
+import { toPublicBoardItem } from '$lib/features/volunteers/server/public-board-item';
+import {
+	boardShelters,
+	controlledValuesFromMaster,
+	filterFallbackJobs,
+	skillCodesByLabel
+} from '$lib/features/volunteers/server/public-board-fallback';
 
 export const prerender = false;
-
-interface CouchAllDocsRow<T = Record<string, unknown>> {
-	id: string;
-	key: string;
-	value: { rev: string };
-	doc?: T;
-}
-
-interface CouchAllDocsResponse<T = Record<string, unknown>> {
-	total_rows: number;
-	offset: number;
-	rows: CouchAllDocsRow<T>[];
-}
-
-interface ShelterRegistryDoc {
-	_id: string;
-	type: string;
-	code?: string;
-	name?: string;
-	db?: string;
-}
 
 interface JobDoc {
 	_id: string;
@@ -80,15 +67,58 @@ function enrichJobsWithQuotaCounts(jobs: JobDoc[]): void {
 	}
 }
 
+const BOARD_STATUSES = ['open', 'near_full', 'controlled'] as const;
+const MAX_PAGE_SIZE = 50;
+/** More skill values than any filter UI sends (code + both labels per picked skill). */
+const MAX_SKILLS = 20;
+/** Same bound as FastAPI (`le=` on `page`): far past any real board, so a huge value is refused. */
+const MAX_PAGE = 1000;
+
+/** Positive safe integer from a query value, or undefined when absent or malformed. */
+function positiveInt(value: string | null): number | undefined {
+	if (!value || !/^\d+$/.test(value)) return undefined;
+	const n = Number(value);
+	return Number.isSafeInteger(n) && n >= 1 ? n : undefined;
+}
+
+/** A digits-only `page` too large to serve: refused rather than silently dropped. */
+function pageOutOfRange(value: string | null): boolean {
+	if (!value || !/^\d+$/.test(value)) return false;
+	const n = Number(value);
+	return !Number.isSafeInteger(n) || n > MAX_PAGE;
+}
+
 /**
  * กระดานงานอาสาสาธารณะ (CR-092 หน้าจอ 1) — the read half of the public board.
+ * Only whitelisted filters are forwarded to FastAPI; anything else is dropped.
  */
 export const GET: RequestHandler = async ({ url, fetch }) => {
 	const query = new URLSearchParams();
 	const shelterCode = url.searchParams.get('shelter_code') || url.searchParams.get('shelter');
-	const skill = url.searchParams.get('skill');
+	const skills = url.searchParams.getAll('skill').filter(Boolean).slice(0, MAX_SKILLS);
+	const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
+	const statusParam = url.searchParams.get('status');
+	const status = BOARD_STATUSES.find((value) => value === statusParam);
+	const pageParam = url.searchParams.get('page');
+	// B2: an unbounded page reached FastAPI as "1e+21", got a 422 and sent the request into the
+	// admin CouchDB scan below. Refuse it here, before any upstream call.
+	if (pageOutOfRange(pageParam)) {
+		return json({ success: false, error: 'invalid_page' }, { status: 400 });
+	}
+	const page = positiveInt(pageParam);
+	// S2: a digits-only `page_size` past MAX_SAFE_INTEGER is capped, not dropped (dropping it
+	// would serve the whole board unpaged).
+	const pageSizeParam = url.searchParams.get('page_size');
+	const pageSize =
+		pageSizeParam && /^\d+$/.test(pageSizeParam) && Number(pageSizeParam) >= 1
+			? Math.min(positiveInt(pageSizeParam) ?? MAX_PAGE_SIZE, MAX_PAGE_SIZE)
+			: undefined;
 	if (shelterCode) query.set('shelter_code', shelterCode);
-	if (skill) query.set('skill', skill);
+	for (const skill of skills) query.append('skill', skill);
+	if (q) query.set('q', q);
+	if (status) query.set('status', status);
+	if (page) query.set('page', String(page));
+	if (pageSize) query.set('page_size', String(pageSize));
 	const suffix = query.size > 0 ? `?${query}` : '';
 
 	try {
@@ -102,78 +132,48 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 			}
 			return json(body, { headers: { 'Cache-Control': 'no-store' } });
 		}
-		if (res.status === 429 || res.status === 404 || res.status === 400) {
-			return json(await res.json(), { status: res.status });
+		// Any 4xx is FastAPI's answer to this request: pass it on. Only an unreachable or failing
+		// (5xx) FastAPI falls back to CouchDB, so a bad query can never trigger the admin scan.
+		if (res.status >= 400 && res.status < 500) {
+			const body = await res.json().catch(() => ({ success: false }));
+			return json(body, { status: res.status, headers: { 'Cache-Control': 'no-store' } });
 		}
 	} catch {
 		// Fall through to CouchDB fallback if FastAPI is offline
 	}
 
 	try {
-		const regRes = await adminRaw('/registry/_all_docs?include_docs=true', 'GET');
-		const regData = regRes.data as CouchAllDocsResponse<ShelterRegistryDoc> | undefined;
+		const { shelters, jobs } = await loadCouchBoard<JobDoc>();
 
-		const shelters: { code: string; name: string; db: string }[] = [];
-		if (regRes.status === 200 && Array.isArray(regData?.rows)) {
-			for (const r of regData.rows) {
-				const doc = r.doc;
-				if (doc && doc.type === 'shelter' && doc.code) {
-					shelters.push({
-						code: doc.code,
-						name: doc.name || doc.code,
-						db: doc.db || `shelter_${doc.code.toLowerCase()}`
-					});
-				}
-			}
-		}
+		const wantedShelter = shelterCode?.toUpperCase();
+		const inShelter = wantedShelter
+			? jobs.filter((job) => (job.shelter_code ?? '').toUpperCase() === wantedShelter)
+			: jobs;
+		const master = await readMasterDoc('volunteer_skills').catch(() => null);
+		const result = filterFallbackJobs(inShelter, {
+			q,
+			status,
+			skills,
+			page,
+			pageSize,
+			shelterNames: new Map(shelters.map((s) => [s.code.toUpperCase(), s.name])),
+			controlled: controlledValuesFromMaster(master?.items ?? []),
+			skillCodesByLabel: skillCodesByLabel(master?.items ?? [], q)
+		});
+		const pageJobs = result.jobs as JobDoc[];
+		enrichJobsWithQuotaCounts(pageJobs);
+		const shelterNames = new Map(shelters.map((s) => [s.code.toUpperCase(), s.name]));
 
-		if (shelters.length === 0) {
-			shelters.push({
-				code: 'SH001',
-				name: 'มหาวิทยาลัยสงขลานครินทร์ (ศูนย์อพยพหลักระดับจังหวัด)',
-				db: 'shelter_sh001'
-			});
-		}
-
-		// Query jobs from relevant shelter databases
-		const jobs: JobDoc[] = [];
-		const targetShelters = shelterCode ? shelters.filter((s) => s.code === shelterCode) : shelters;
-
-		for (const s of targetShelters) {
-			try {
-				const jobRes = await adminRaw(
-					`/${s.db}/_all_docs?include_docs=true&startkey="job:"&endkey="job:\ufff0"`,
-					'GET'
-				);
-				const jobData = jobRes.data as CouchAllDocsResponse<JobDoc> | undefined;
-				if (jobRes.status === 200 && Array.isArray(jobData?.rows)) {
-					for (const r of jobData.rows) {
-						const doc = r.doc;
-						if (
-							doc &&
-							doc.type === 'job' &&
-							doc.status !== 'draft' &&
-							doc.status !== 'closed' &&
-							doc.status !== 'cancelled'
-						) {
-							if (
-								skill &&
-								!doc.skills_required?.some((sk) => sk.toLowerCase().includes(skill.toLowerCase()))
-							) {
-								continue;
-							}
-							jobs.push(doc);
-						}
-					}
-				}
-			} catch {
-				// Ignore missing shelter database
-			}
-		}
-
-		enrichJobsWithQuotaCounts(jobs);
-
-		return json({ success: true, jobs, shelters }, { headers: { 'Cache-Control': 'no-store' } });
+		return json(
+			{
+				success: true,
+				// Only the card's own fields — never the CouchDB document (W-2).
+				jobs: pageJobs.map((job) => toPublicBoardItem(job, shelterNames)),
+				total: result.total,
+				shelters: boardShelters(shelters, jobs)
+			},
+			{ headers: { 'Cache-Control': 'no-store' } }
+		);
 	} catch (err) {
 		console.warn('Failed to load public volunteer jobs:', err);
 		return json({ success: false, jobs: [], shelters: [] }, { status: 503 });

@@ -1273,6 +1273,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/jobs/summary': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Jobs Summary */
+		get: operations['jobs_summary_public_v1_jobs_summary_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/jobs': {
 		parameters: {
 			query?: never;
@@ -4190,6 +4207,23 @@ export interface components {
 			success: boolean;
 			/** Jobs */
 			jobs?: components['schemas']['PublicJobItem'][];
+			/**
+			 * Total
+			 * @default 0
+			 */
+			total: number;
+			/** Shelters */
+			shelters?: components['schemas']['PublicJobShelter'][];
+		};
+		/** PublicJobShelter */
+		PublicJobShelter: {
+			/** Code */
+			code: string;
+			/**
+			 * Name
+			 * @default
+			 */
+			name: string;
 		};
 		/**
 		 * PublicJobShift
@@ -4242,6 +4276,42 @@ export interface components {
 			 * @default 0
 			 */
 			applicants_count: number;
+		};
+		/**
+		 * PublicJobSummaryResponse
+		 * @description Board-wide counts, independent of any filter or page (CR-265 FR-9).
+		 */
+		PublicJobSummaryResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Total
+			 * @default 0
+			 */
+			total: number;
+			/**
+			 * Open
+			 * @default 0
+			 */
+			open: number;
+			/**
+			 * Near Full
+			 * @default 0
+			 */
+			near_full: number;
+			/**
+			 * Controlled
+			 * @default 0
+			 */
+			controlled: number;
+			/**
+			 * As Of
+			 * Format: date-time
+			 */
+			as_of: string;
 		};
 		/**
 		 * PublicSearchRequest
@@ -8494,11 +8564,35 @@ export interface operations {
 			};
 		};
 	};
+	jobs_summary_public_v1_jobs_summary_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PublicJobSummaryResponse'];
+				};
+			};
+		};
+	};
 	list_jobs_public_v1_jobs_get: {
 		parameters: {
 			query?: {
 				shelter_code?: string | null;
-				skill?: string | null;
+				skill?: string[] | null;
+				q?: string | null;
+				status?: ('open' | 'near_full' | 'controlled') | null;
+				page?: number;
+				page_size?: number | null;
 			};
 			header?: never;
 			path?: never;

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { toast } from 'svelte-sonner';
 	import Filter from '@lucide/svelte/icons/filter';
 	import Search from '@lucide/svelte/icons/search';
 	import Briefcase from '@lucide/svelte/icons/briefcase';
@@ -21,6 +22,7 @@
 	import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
+	import { usePublicBoard, usePublicBoardSummary } from '../application/public-board-queries';
 	import JobCard from './public-job-card.svelte';
 	import QuickApplyModal, { type QuickApplyJob } from './public-quick-apply-modal.svelte';
 
@@ -115,28 +117,11 @@
 		isControlled: boolean;
 	}
 
-	let rawJobs = $state<RawPublicJob[]>([]);
-	let sheltersList = $state<{ code: string; name: string }[]>([]);
 	// Skills come only from the effective volunteer_skills Master Data endpoint.
 	let skillOptions = $state<VolunteerSkillOption[]>([]);
-	let isLoading = $state(true);
 
 	function resolvedSkillLabel(value: string): string {
 		return skillLabel(value, skillOptions, languageStore.current);
-	}
-
-	/** Compare filter values and stored job values by Master Data code or label. */
-	function skillsMatch(left: string, right: string): boolean {
-		if (!left || !right) return false;
-		if (left.trim().toLowerCase() === right.trim().toLowerCase()) return true;
-		const leftOption = findSkillOption(left, skillOptions);
-		const rightOption = findSkillOption(right, skillOptions);
-		if (leftOption && rightOption && leftOption.code === rightOption.code) return true;
-		if (leftOption && leftOption.label.trim().toLowerCase() === right.trim().toLowerCase())
-			return true;
-		if (rightOption && rightOption.label.trim().toLowerCase() === left.trim().toLowerCase())
-			return true;
-		return false;
 	}
 
 	const weekdayIndexes: Record<string, number> = {
@@ -226,20 +211,16 @@
 		return option?.category?.toLowerCase() === 'controlled';
 	}
 
-	async function fetchPublicJobs() {
-		try {
-			isLoading = true;
-			const res = await fetch('/api/public/v1/volunteer/jobs');
-			if (res.ok) {
-				const data = await res.json();
-				rawJobs = Array.isArray(data.jobs) ? data.jobs : [];
-				sheltersList = Array.isArray(data.shelters) ? data.shelters : [];
-			}
-		} catch (err) {
-			console.warn('Failed to load public volunteer jobs:', err);
-		} finally {
-			isLoading = false;
-		}
+	/** Both the master code and its label, so jobs stored in either form match (server-side). */
+	function skillQueryValues(selected: string): string[] {
+		const option = findSkillOption(selected, skillOptions);
+		return [
+			...new Set(
+				[selected, option?.code, option?.label, option?.label_th, option?.label_en].filter(
+					(v): v is string => !!v
+				)
+			)
+		];
 	}
 
 	async function fetchMasterSkills() {
@@ -257,7 +238,6 @@
 	}
 
 	onMount(() => {
-		fetchPublicJobs();
 		fetchMasterSkills();
 	});
 
@@ -375,8 +355,6 @@
 					tags.push({ label: t.tagClosed, variant: 'outline' });
 				} else if (job.status === 'open') {
 					tags.push({ label: t.tagOpen, variant: 'success' });
-				} else if (job.status === 'almost_full') {
-					tags.push({ label: t.tagNearFull, variant: 'warning' });
 				} else if (job.status === 'full') {
 					tags.push({ label: t.tagFull, variant: 'outline' });
 				}
@@ -415,14 +393,10 @@
 	let selectedShelter = $state(untrack(() => initialShelter) || 'all');
 	// Follows the link the reader arrived by; they can still pick another shelter here.
 	$effect(() => {
-		if (initialShelter) {
-			selectedShelter = initialShelter;
-			currentPage = 1;
-		}
+		if (initialShelter) selectedShelter = initialShelter;
 	});
 	let selectedSkill = $state('all');
 	const PAGE_SIZE = 6;
-	let currentPage = $state(1);
 	let jobList = $state<HTMLElement>();
 
 	/**
@@ -443,11 +417,7 @@
 	const availableShelters = $derived.by<{ code: string; name: string }[]>(() => {
 		const shelters: Record<string, string> = {};
 		for (const s of sheltersList) {
-			if (s.code && s.name) shelters[s.code] = s.name;
-		}
-		for (const job of displayedJobs) {
-			const code = job.shelter_code || job.shelter;
-			if (code && job.shelter && !shelters[code]) shelters[code] = job.shelter;
+			if (s.code) shelters[s.code] = s.name || s.code;
 		}
 		return Object.entries(shelters).map(([code, name]) => ({ code, name }));
 	});
@@ -479,67 +449,57 @@
 		return result;
 	});
 
-	let filteredJobs = $derived(
-		displayedJobs.filter((j) => {
-			if (searchQuery.trim()) {
-				const q = searchQuery.toLowerCase().trim();
-				const matchText =
-					j.title.toLowerCase().includes(q) ||
-					j.shelter.toLowerCase().includes(q) ||
-					j.tags.some((tg) => tg.label.toLowerCase().includes(q)) ||
-					j.skills.some((skill) => skill.label.toLowerCase().includes(q));
-				if (!matchText) return false;
-			}
-
-			if (selectedShelter !== 'all' && (j.shelter_code || j.shelter) !== selectedShelter) {
-				return false;
-			}
-
-			if (selectedSkill !== 'all') {
-				const hasSkill =
-					j.skills_required?.some((s) => skillsMatch(s, selectedSkill)) ||
-					j.skills.some((skill) => skillsMatch(skill.label, selectedSkill)) ||
-					skillsMatch(j.title, selectedSkill);
-				if (!hasSkill) return false;
-			}
-
-			if (selectedFilter === 'open') {
-				return !j.closed && j.shifts.some((s) => s.quota - s.confirmed > 0);
-			}
-			if (selectedFilter === 'near_full') {
-				return (
-					!j.closed &&
-					j.shifts.some((s) => {
-						const rem = s.quota - s.confirmed;
-						return rem > 0 && rem <= 2;
-					})
-				);
-			}
-			if (selectedFilter === 'controlled') {
-				return j.isControlled;
-			}
-
-			return true;
-		})
-	);
-
-	const filterState = $derived(
-		`${searchQuery}\u0000${selectedFilter}\u0000${selectedShelter}\u0000${selectedSkill}`
-	);
-	const totalPages = $derived(Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE)));
-	const paginatedJobs = $derived(
-		filteredJobs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-	);
-
-	// A changed search/filter should always show the first page of the new result set.
+	// Typing waits for a pause before it costs a request; everything else applies at once.
+	const SEARCH_DEBOUNCE_MS = 300;
+	let debouncedQuery = $state('');
 	$effect(() => {
-		void filterState;
-		currentPage = 1;
+		const value = searchQuery.trim();
+		const handle = setTimeout(() => (debouncedQuery = value), SEARCH_DEBOUNCE_MS);
+		return () => clearTimeout(handle);
 	});
 
-	// Keep the current page valid when a filter removes the last visible page.
+	const filterState = $derived(
+		`${debouncedQuery}\u0000${selectedFilter}\u0000${selectedShelter}\u0000${selectedSkill}`
+	);
+	// The page belongs to the filters it was picked under: changing a filter is back to page 1 in
+	// the same render, so the query never runs for (new filters, old page).
+	let pagePick = $state({ key: '', page: 1 });
+	const currentPage = $derived(pagePick.key === filterState ? pagePick.page : 1);
+	function setCurrentPage(page: number) {
+		pagePick = { key: filterState, page };
+	}
+
+	const boardQuery = usePublicBoard<RawPublicJob>(() => ({
+		q: debouncedQuery,
+		status: selectedFilter,
+		shelterCode: selectedShelter,
+		skills: selectedSkill === 'all' ? [] : skillQueryValues(selectedSkill),
+		page: currentPage,
+		pageSize: PAGE_SIZE
+	}));
+	const summaryQuery = usePublicBoardSummary();
+
+	const rawJobs = $derived(boardQuery.data?.jobs ?? []);
+	// Jobs matching the filters across every page; the API slices, we only render one page.
+	const totalJobs = $derived(boardQuery.data?.total ?? 0);
+	const sheltersList = $derived(boardQuery.data?.shelters ?? []);
+	// True only until the first page arrives; later fetches keep the cards and dim them.
+	const isLoading = $derived(boardQuery.isPending);
+	const isFetching = $derived(boardQuery.isFetching);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalJobs / PAGE_SIZE)));
+	// Board-wide counts (not the filtered total) for the filter pills.
+	const summary = $derived(summaryQuery.data);
+
+	// A failed load is told to the reader, not logged away (the previous page, if any, stays).
 	$effect(() => {
-		if (currentPage > totalPages) currentPage = totalPages;
+		if (boardQuery.isError) toast.error(t.boardLoadError);
+	});
+
+	// Keep the current page valid when the result set shrinks under the reader.
+	$effect(() => {
+		if (!isFetching && !boardQuery.isError && currentPage > totalPages) {
+			setCurrentPage(totalPages);
+		}
 	});
 
 	function openApplyModal(jobId: string, shiftId: string) {
@@ -609,7 +569,7 @@
 						? 'bg-primary text-white shadow-sm'
 						: 'border border-border/80 bg-white text-muted-foreground hover:bg-muted/30'}"
 				>
-					{t.filterAll} ({displayedJobs.length})
+					{t.filterAll}{summary ? ` (${summary.total})` : ''}
 				</button>
 
 				<button
@@ -621,7 +581,7 @@
 						: 'border border-success/30 bg-success/5 text-success hover:bg-success/10'}"
 				>
 					<span class="mr-1.5 inline-block h-2 w-2 rounded-full bg-success"></span>
-					{t.filterOpen}
+					{t.filterOpen}{summary ? ` (${summary.open})` : ''}
 				</button>
 
 				<button
@@ -633,7 +593,7 @@
 						: 'border border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/20'}"
 				>
 					<span class="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-warning"></span>
-					{t.filterNearFull}
+					{t.filterNearFull}{summary ? ` (${summary.near_full})` : ''}
 				</button>
 
 				<button
@@ -644,7 +604,7 @@
 						? 'border border-accent-purple bg-accent-purple/15 text-accent-purple shadow-sm'
 						: 'border border-accent-purple/30 bg-accent-purple/5 text-accent-purple hover:bg-accent-purple/10'}"
 				>
-					{t.filterControlled}
+					{t.filterControlled}{summary ? ` (${summary.controlled})` : ''}
 				</button>
 			</div>
 
@@ -743,9 +703,11 @@
 		aria-label={t.jobBoardSectionTitle}
 		class={[
 			'grid min-h-0 scroll-mt-28 items-stretch gap-4 focus:outline-none sm:gap-5',
-			paginatedJobs.length > 0 && 'xl:grid-cols-2'
+			displayedJobs.length > 0 && 'xl:grid-cols-2'
 		]}
-		class:flex-1={!isLoading && paginatedJobs.length === 0}
+		class:flex-1={!isLoading && displayedJobs.length === 0}
+		class:opacity-60={isFetching && !isLoading}
+		aria-busy={isFetching}
 	>
 		{#if isLoading}
 			<div class="space-y-4">
@@ -753,39 +715,45 @@
 				<Skeleton class="h-44 rounded-2xl" />
 			</div>
 		{:else}
-			{#each paginatedJobs as job (job.id)}
+			{#each displayedJobs as job (job.id)}
 				<JobCard {job} onApply={openApplyModal} />
 			{:else}
 				<div
 					class="flex h-full min-h-64 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-card p-8 text-center text-muted-foreground sm:rounded-3xl sm:p-12"
 				>
 					<Briefcase class="mb-3 h-10 w-10 text-muted-foreground/40" />
-					<h3 class="text-sm sm:text-base font-bold text-foreground">{t.noJobsFound}</h3>
-					<p class="mt-1 text-xs text-muted-foreground max-w-sm">
-						{t.noJobsFoundDesc}
-					</p>
+					{#if boardQuery.isError}
+						<h3 role="alert" class="text-sm sm:text-base font-bold text-foreground">
+							{t.boardLoadError}
+						</h3>
+					{:else}
+						<h3 class="text-sm sm:text-base font-bold text-foreground">{t.noJobsFound}</h3>
+						<p class="mt-1 text-xs text-muted-foreground max-w-sm">
+							{t.noJobsFoundDesc}
+						</p>
+					{/if}
 				</div>
 			{/each}
 		{/if}
 	</div>
 
-	{#if !isLoading && filteredJobs.length > 0}
+	{#if !isLoading && totalJobs > 0}
 		<div
 			class="grid grid-cols-1 items-center gap-4 border-t border-border/60 pt-4 sm:grid-cols-[1fr_auto_1fr]"
 		>
 			<p class="text-xs text-muted-foreground sm:justify-self-start">
 				{t.paginationSummary(
-					filteredJobs.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1,
-					Math.min(currentPage * PAGE_SIZE, filteredJobs.length),
-					filteredJobs.length
+					(currentPage - 1) * PAGE_SIZE + 1,
+					Math.min(currentPage * PAGE_SIZE, totalJobs),
+					totalJobs
 				)}
 			</p>
 
 			{#if totalPages > 1}
 				<div class="w-fit justify-self-center">
 					<Pagination.Root
-						bind:page={currentPage}
-						count={filteredJobs.length}
+						bind:page={() => currentPage, setCurrentPage}
+						count={totalJobs}
 						perPage={PAGE_SIZE}
 						onPageChange={showNewPage}
 					>
