@@ -7,7 +7,12 @@
 
 	import { dev } from '$app/environment';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
+	import {
+		shelterStore,
+		persistSelectedShelter,
+		applyActiveShelterChoice,
+		isSelectionProvisional
+	} from '$lib/stores/shelter.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { useShelters } from '$lib/features/shelters';
 	import {
@@ -20,6 +25,7 @@
 		PortalMenuSections,
 		PortalRolePreview,
 		createPortalPreviewState,
+		resolveActiveShelter,
 		resolvePortalPreview,
 		type PortalFeatures,
 		type PortalPreviewState
@@ -59,19 +65,21 @@
 	// Multi-shelter or System Admin can switch shelters
 	const canSwitchShelters = $derived(isSA || allowedShelters.length > 1);
 
-	// Synchronize selected shelter
+	// The remembered shelter can name one this account has no role in (another account, or a
+	// logout, left it behind): follow the roles instead, without waiting for the shelter list,
+	// in the same order as the onsite navbar (#1473).
+	const activeShelter = $derived(
+		resolveActiveShelter({
+			current: shelterStore.selectedShelterCode,
+			currentProvisional: isSelectionProvisional(),
+			listLoaded: sheltersQuery.isSuccess,
+			allowedCodes: allowedShelters.map((s) => s.code),
+			userShelterCodes,
+			isSystemAdmin: isSA
+		})
+	);
 	$effect(() => {
-		if (!allowedShelters.length) return;
-		const current = shelterStore.selectedShelterCode;
-		if (current && allowedShelters.some((s) => s.code === current)) {
-			persistSelectedShelter(current);
-			return;
-		}
-		const preferred =
-			allowedShelters.find((s) => userShelterCodes.includes(s.code))?.code ??
-			allowedShelters[0].code;
-		shelterStore.selectedShelterCode = preferred;
-		persistSelectedShelter(preferred);
+		if (authStore.user) applyActiveShelterChoice(activeShelter);
 	});
 
 	function onShelterChange(code: string | undefined) {

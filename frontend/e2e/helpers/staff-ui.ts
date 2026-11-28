@@ -63,6 +63,9 @@ export async function selectActiveShelter(page: Page, code: string): Promise<voi
 	await page.getByRole('button', { name: 'เลือกศูนย์อพยพ' }).click();
 	await page.getByRole('option', { name: new RegExp(`^${code} — `) }).click();
 	await expectActiveShelter(page, code);
+	// A pick must be remembered: a reload that fell back to another shelter would lose it (#1473).
+	await page.reload();
+	await expectActiveShelter(page, code);
 }
 
 /**

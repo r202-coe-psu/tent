@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
-import { shelterStore } from '$lib/stores/shelter.svelte';
+import { persistSelectedShelter, shelterStore } from '$lib/stores/shelter.svelte';
 import { clearMfaOk, invalidateAuthStatusRequest } from '$lib/features/users';
 import { classifyAuthFailure, createExpiryLatch } from '$lib/auth/session-expiry';
 
@@ -37,6 +37,16 @@ function persistUser(user: SessionUser | null): void {
 	} catch {
 		/* storage unavailable — ignore */
 	}
+}
+
+/**
+ * Forget the active shelter in memory AND in localStorage. Clearing only the store let the next
+ * page load restore the previous account's shelter, which empties the portal menu (#1473).
+ */
+function clearActiveShelter(): void {
+	shelterStore.selectedShelterCode = undefined;
+	shelterStore.provisionalCode = undefined;
+	persistSelectedShelter(undefined);
 }
 
 /** Result of `authStore.handleAuthFailure`. */
@@ -165,6 +175,10 @@ class AuthStore {
 			const sessionUser = await getSession(fetchFn);
 			const user = sessionUser ? await withDisplayName(sessionUser) : null;
 			if (user) {
+				// A Google login lands here without `login()`: a different account than the cached one
+				// must not inherit its shelter.
+				const previous = this.state.user?.name;
+				if (previous && previous !== user.name) clearActiveShelter();
 				this.state.user = user;
 				persistUser(user);
 				this.clearNeedsReauth();
@@ -188,7 +202,7 @@ class AuthStore {
 		invalidateAuthStatusRequest();
 		this.state.user = user;
 		this.clearNeedsReauth();
-		shelterStore.selectedShelterCode = undefined;
+		clearActiveShelter();
 		persistUser(user);
 		this.initPromise = Promise.resolve();
 		// Each new AuthSession round must re-do Google step-up when enrolled.
@@ -212,7 +226,7 @@ class AuthStore {
 		} finally {
 			this.state.user = null;
 			this.clearNeedsReauth();
-			shelterStore.selectedShelterCode = undefined;
+			clearActiveShelter();
 			persistUser(null);
 			this.initPromise = null;
 			invalidateAuthStatusRequest();
