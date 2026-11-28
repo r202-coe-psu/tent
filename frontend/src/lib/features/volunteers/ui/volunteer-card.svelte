@@ -111,11 +111,12 @@
 				.flatMap((option) => [option.code, option.label])
 		)
 	);
-	const pendingSkillCode = $derived(
+	const pendingSkill = $derived(
 		skills.find(
 			(skill) => skill.controlled && skillVerificationStatus(volunteer, skill.code) !== 'verified'
-		)?.code ?? null
+		) ?? null
 	);
+	const pendingSkillCode = $derived(pendingSkill?.code ?? null);
 
 	let manageDialogOpen = $state(false);
 	let qualificationDialogOpen = $state(false);
@@ -280,9 +281,15 @@
 			{/if}
 
 			{#if needsSkillReview}
-				<Badge class="gap-1 border-amber-300 bg-amber-50 text-amber-800" variant="outline">
-					<Lock class="h-3 w-3" />
-					รอรับรองทักษะควบคุม
+				<!-- A controlled skill (e.g. medical) needs its licence or certificate checked by staff
+				     before a job that asks for it (#1571: "ทักษะควบคุม" read as jargon). -->
+				<Badge
+					class="h-auto gap-1 border-amber-300 bg-amber-50 text-left whitespace-normal text-amber-800"
+					variant="outline"
+					title="ทักษะนี้ต้องให้เจ้าหน้าที่ตรวจใบประกอบวิชาชีพหรือใบรับรองก่อน จึงจะรับงานที่ใช้ทักษะนี้ได้"
+				>
+					<Lock class="h-3 w-3 shrink-0" />
+					รอตรวจใบรับรองทักษะ{pendingSkill ? `: ${pendingSkill.label}` : ''}
 				</Badge>
 			{/if}
 
@@ -292,14 +299,10 @@
 					ปฏิบัติหน้าที่อยู่
 				</Badge>
 			{:else if identityStatus === 'verified'}
+				<!-- Verified and not on a shift now: free to be given one (#1571: was "รอสแตนด์บาย"). -->
 				<Badge class="gap-1 border-sky-300 bg-sky-50 text-sky-700" variant="outline">
 					<span class="h-1.5 w-1.5 rounded-full bg-sky-400"></span>
-					รอสแตนด์บาย
-				</Badge>
-			{:else}
-				<Badge variant="outline" class="gap-1 text-muted-foreground">
-					<Lock class="h-3 w-3" />
-					รอสแตนด์บาย
+					พร้อมรับงาน
 				</Badge>
 			{/if}
 
@@ -308,14 +311,15 @@
 			{#if todayAssignment}
 				<p class="text-xs text-muted-foreground">{SHIFT_LABELS[todayAssignment.shift]}</p>
 			{:else if identityStatus !== 'verified'}
-				<p class="text-[11px] text-amber-700">ต้องให้ จนท. ตรวจบัตร ปชช. ก่อนเข้ากะ</p>
+				<p class="text-[11px] text-amber-700">ต้องให้เจ้าหน้าที่ตรวจบัตรประชาชนก่อนเข้ากะ</p>
 			{/if}
 		</div>
 	</Table.Cell>
 
 	<!-- จัดการ (ACTIONS) -->
 	<Table.Cell class="w-[18%] p-4 align-top whitespace-normal">
-		<div class="flex flex-wrap items-center gap-1.5 lg:flex-col lg:items-stretch">
+		<!-- One column of same-width buttons, the main action first (#1571). -->
+		<div class="flex flex-col items-stretch gap-1.5">
 			{#if identityStatus !== 'verified' || needsSkillReview}
 				<Button
 					size="sm"
@@ -340,14 +344,21 @@
 				</Button>
 			{/if}
 
-			<VolunteerAccessActions {volunteer} status={accessStatus} {shelterLine} />
+			<!-- Until identity is checked, "ตรวจสอบ & อนุมัติ" above is the one way in, so the access
+			     button does not repeat it. -->
+			<VolunteerAccessActions
+				{volunteer}
+				status={accessStatus}
+				{shelterLine}
+				hideVerify={identityStatus !== 'verified'}
+			/>
 
-			<div class="flex items-center gap-1.5">
+			<div class="flex flex-col items-stretch gap-1.5">
 				{#if volunteer.status === 'inactive' && canReactivate}
 					<Button
 						size="sm"
 						variant="outline"
-						class="flex-1 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+						class="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
 						onclick={reactivate}
 						disabled={reactivateMutation.isPending}
 					>
@@ -357,9 +368,9 @@
 				{/if}
 
 				<Button
-					size="icon"
+					size="sm"
 					variant="outline"
-					class="shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50"
+					class="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50"
 					aria-label="ปิดใช้งานอาสาสมัคร"
 					aria-describedby={closeBlockedReason
 						? `volunteer-close-blocked-${volunteer._id}`
@@ -369,7 +380,8 @@
 						volunteer.status === 'inactive' ||
 						closeBlockedReason !== null}
 				>
-					<Trash2 class="h-4 w-4" />
+					<Trash2 class="h-3.5 w-3.5" />
+					ปิดใช้งาน
 				</Button>
 			</div>
 			{#if closeBlockedReason && volunteer.status !== 'inactive'}

@@ -25,6 +25,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
+	import { formatMasterLabel, useMasterData } from '$lib/features/master-data';
 	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import VolunteerStatPills, { type PeopleStatFilter } from './volunteer-stat-pills.svelte';
@@ -47,6 +48,14 @@
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterQuery = useShelter(() => shelterCode);
+	// The shelter's type is a master-data code (e.g. `college_university`); show its label, and
+	// nothing rather than the raw code while the list loads or when the code is gone (#1571).
+	const shelterTypeQuery = useMasterData(() => 'shelter_type');
+	const shelterTypeLabel = $derived.by(() => {
+		const code = shelterQuery.data?.shelter_type;
+		const item = code ? shelterTypeQuery.data?.items.find((i) => i.code === code) : undefined;
+		return item ? formatMasterLabel(item, 'th') : undefined;
+	});
 
 	// The shelter's volunteer accounts with their roles here (#1044): SA / SM / coordinator, the
 	// same people who see the grant button (the server 403s anyone else).
@@ -273,7 +282,7 @@
 							{volunteer}
 							skillOptions={skillCatalog.options}
 							shelterName={shelterQuery.data?.name}
-							shelterType={shelterQuery.data?.shelter_type}
+							shelterType={shelterTypeLabel}
 							todayAssignment={attendanceByVolunteer.get(volunteer._id)}
 							accessStatus={volunteerAccessStatus(volunteer, accounts)}
 						/>

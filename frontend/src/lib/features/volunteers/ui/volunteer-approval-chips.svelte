@@ -27,7 +27,12 @@
 	const chips = $derived([
 		{ key: 'all' as const, label: 'ต้องตรวจทั้งหมด', value: countAll, disabled: false },
 		{ key: 'identity' as const, label: 'รอยืนยันตัวตน', value: countIdentity, disabled: false },
-		{ key: 'skill_cert' as const, label: 'รอรับรองทักษะ', value: countSkillCert, disabled: false },
+		{
+			key: 'skill_cert' as const,
+			label: 'รอตรวจใบรับรองทักษะ',
+			value: countSkillCert,
+			disabled: false
+		},
 		{ key: 'shift' as const, label: 'รอเข้ากะ', value: countShift, disabled: countShift === 0 }
 	]);
 </script>
