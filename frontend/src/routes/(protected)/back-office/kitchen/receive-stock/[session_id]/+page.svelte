@@ -30,7 +30,14 @@
 		type YieldDraftLine
 	} from '$lib/features/kitchen';
 	import { useStoragePoints } from '$lib/features/operations';
-	import { ItemMasterForm, systemCategoryId, type ItemMaster } from '$lib/features/catalog';
+	import {
+		ItemMasterForm,
+		formatUnit,
+		systemCategoryId,
+		useUnitsOfMeasure,
+		type ItemMaster
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { isShelterManager, isSystemAdmin, isWarehouseStaff } from '$lib/auth/roles';
 	import { ulid } from '$lib/db/ulid';
 	import { useTickets } from '$lib/features/tickets';
@@ -39,6 +46,10 @@
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 
 	const sessionId = $derived(page.params.session_id);
 	const planId = $derived(page.url.searchParams.get('plan_id'));
@@ -326,7 +337,7 @@
 									{#each receivedLines as row (row._id)}
 										<li class="text-xs text-green-900">
 											<span class="font-semibold">{row.lot?.note ?? row.item_id}</span>
-											<span class="text-green-700"> · {row.qty} {row.unit}</span>
+											<span class="text-green-700"> · {row.qty} {unitLabel(row.unit)}</span>
 											<span class="text-green-700">
 												· {row.lot?.storage_zone ?? 'ไม่ระบุจุดเก็บ'}</span
 											>
