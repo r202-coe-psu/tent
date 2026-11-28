@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
 	REQUIREMENT_GROUP_SCHEMA_VERSION,
+	findActiveItemMapConflicts,
 	isShareSumOff,
 	itemMapSchema,
 	normalizeRequirementGroup,
+	requirementGroupInputSchema,
 	sumSharePercent,
 	type RequirementGroup
 } from './requirement-group';
@@ -21,6 +23,10 @@ describe('sumSharePercent (#936)', () => {
 
 	it('adds 0.1 + 0.2 + 99.7 exactly to 100', () => {
 		expect(sumSharePercent(shareMaps('0.1', '0.2', '99.7'))).toBe('100');
+	});
+
+	it('adds four-decimal shares exactly without float noise', () => {
+		expect(sumSharePercent(shareMaps('33.3333', '33.3333', '33.3334'))).toBe('100');
 	});
 
 	it('returns "0" for no maps', () => {
@@ -81,6 +87,78 @@ describe('itemMapSchema decimal fields (#936)', () => {
 
 	it.each(['100.0001', -1])('rejects share_percent %s', (share_percent) => {
 		expect(itemMapSchema.safeParse({ ...base, share_percent }).success).toBe(false);
+	});
+});
+
+describe('requirement group item mapping uniqueness (#1282)', () => {
+	const group = (id: string, itemIds: string[], status?: 'active' | 'inactive'): RequirementGroup =>
+		({
+			...DEFAULT_REQUIREMENT_GROUPS[0],
+			_id: `requirement_group:${id}`,
+			name: id,
+			status,
+			item_maps: itemIds.map((item_id) => ({
+				item_id,
+				base_uom: 'gram',
+				conversion_factor: '1'
+			}))
+		}) as RequirementGroup;
+
+	it('rejects a mapping already in another active group, including legacy missing status', () => {
+		const conflicts = findActiveItemMapConflicts(group('NEW', ['item_master:egg']), [
+			group('OLD', ['item_master:egg'])
+		]);
+
+		expect(conflicts).toEqual([
+			{
+				item_id: 'item_master:egg',
+				item_index: 0,
+				group_id: 'requirement_group:OLD',
+				group_name: 'OLD'
+			}
+		]);
+	});
+
+	it('allows an item mapped only by an inactive group', () => {
+		expect(
+			findActiveItemMapConflicts(group('NEW', ['item_master:egg']), [
+				group('OLD', ['item_master:egg'], 'inactive')
+			])
+		).toEqual([]);
+	});
+
+	it('does not conflict with the group being edited', () => {
+		expect(
+			findActiveItemMapConflicts(group('OLD', ['item_master:egg']), [
+				group('OLD', ['item_master:egg'])
+			])
+		).toEqual([]);
+	});
+
+	it('allows equal item IDs in separate effective configurations', () => {
+		const candidate = group('LOCAL', ['item_master:egg']);
+		const base = group('BASE', ['item_master:egg']);
+
+		expect(findActiveItemMapConflicts(candidate, [base])).toHaveLength(1);
+		expect(findActiveItemMapConflicts(candidate, [])).toEqual([]);
+	});
+
+	it('rejects the same item twice inside one group schema', () => {
+		const result = requirementGroupInputSchema.safeParse({
+			name: 'โปรตีน',
+			standard_uom: 'gram',
+			status: 'active',
+			source: 'SPHERE_BASELINE',
+			item_maps: [
+				{ item_id: 'item_master:egg', base_uom: 'gram', conversion_factor: '1' },
+				{ item_id: 'item_master:egg', base_uom: 'gram', conversion_factor: '1' }
+			]
+		});
+
+		expect(result.success).toBe(false);
+		expect(result.error?.issues.map((issue) => issue.message)).toContain(
+			'สินค้านี้ซ้ำกับรายการที่ 1 ในกลุ่มเดียวกัน'
+		);
 	});
 });
 

@@ -471,6 +471,20 @@ describe('food sphere seed parameters', () => {
 			},
 			{
 				doc: {
+					_id: 'item_master:01HXYZ1234567890ABCDEFGH04',
+					type: 'item_master',
+					name: 'หมูสามชั้น'
+				}
+			},
+			{
+				doc: {
+					_id: 'item_master:01HXYZ1234567890ABCDEFGH05',
+					type: 'item_master',
+					name: 'หมูสันคอ'
+				}
+			},
+			{
+				doc: {
 					_id: 'requirement_group:FOOD_PROTEIN',
 					_rev: '5-rev-existing-protein',
 					type: 'requirement_group'
@@ -504,16 +518,22 @@ describe('food sphere seed parameters', () => {
 
 		const writtenDocs = couch.putDoc.mock.calls.map(([, doc]) => doc as Record<string, unknown>);
 
-		// Verify FOOD_PROTEIN has the updated egg + canned fish item mappings and preserved _rev
+		// Verify FOOD_PROTEIN maps each non-halal protein item once and preserves _rev.
 		const proteinGroup = writtenDocs.find((d) => d._id === 'requirement_group:FOOD_PROTEIN');
 		expect(proteinGroup).toBeDefined();
 		expect(proteinGroup?._rev).toBe('5-rev-existing-protein');
 		expect(proteinGroup?.item_maps).toEqual([
 			{
-				item_id: 'item_master:01HXYZ1234567890ABCDEFGH02',
-				base_uom: 'egg',
-				conversion_factor: '6.3',
-				share_percent: '50'
+				item_id: 'item_master:01HXYZ1234567890ABCDEFGH04',
+				base_uom: 'g',
+				conversion_factor: '1',
+				share_percent: '25'
+			},
+			{
+				item_id: 'item_master:01HXYZ1234567890ABCDEFGH05',
+				base_uom: 'g',
+				conversion_factor: '1',
+				share_percent: '25'
 			},
 			{
 				item_id: 'item_master:01HXYZ1234567890ABCDEFGH03',
@@ -537,5 +557,18 @@ describe('food sphere seed parameters', () => {
 		// New documents without prior existence should not have _rev
 		const halalProtein = writtenDocs.find((d) => d._id === 'requirement_group:FOOD_PROTEIN_HALAL');
 		expect(halalProtein?._rev).toBeUndefined();
+		expect(halalProtein?.item_maps).toContainEqual({
+			item_id: 'item_master:01HXYZ1234567890ABCDEFGH02',
+			base_uom: 'egg',
+			conversion_factor: '6.3',
+			share_percent: '30'
+		});
+
+		const mappedIds = writtenDocs
+			.filter((doc) => doc.type === 'requirement_group')
+			.flatMap((doc) =>
+				((doc.item_maps as Array<{ item_id: string }> | undefined) ?? []).map((m) => m.item_id)
+			);
+		expect(new Set(mappedIds).size).toBe(mappedIds.length);
 	});
 });

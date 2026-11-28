@@ -6,9 +6,20 @@ import {
 	isRequirementGroup,
 	normalizeRequirementGroup,
 	REQUIREMENT_GROUP_SCHEMA_VERSION,
+	requirementGroupInputSchema,
 	type RequirementGroup,
 	type RequirementGroupInput
 } from '../domain/requirement-group';
+
+function effectiveRequirementGroups(
+	baselineDocs: RequirementGroup[],
+	overrideDocs: RequirementGroup[] = []
+): RequirementGroup[] {
+	const effective = new Map<string, RequirementGroup>();
+	for (const group of baselineDocs) effective.set(group._id, group);
+	for (const group of overrideDocs) effective.set(group._id, group);
+	return Array.from(effective.values()).map(normalizeRequirementGroup);
+}
 
 export class RequirementGroupRemoteRepository {
 	private readonly catalogRepo: Repository;
@@ -28,7 +39,7 @@ export class RequirementGroupRemoteRepository {
 		);
 
 		if (!shelterCode) {
-			return baselineDocs.map(normalizeRequirementGroup);
+			return effectiveRequirementGroups(baselineDocs);
 		}
 
 		try {
@@ -37,19 +48,23 @@ export class RequirementGroupRemoteRepository {
 				'requirement_group',
 				isRequirementGroup
 			);
-
-			const effectiveMap = new Map<string, RequirementGroup>();
-			for (const b of baselineDocs) {
-				effectiveMap.set(b._id, b);
-			}
-			for (const o of overrideDocs) {
-				effectiveMap.set(o._id, o);
-			}
-			return Array.from(effectiveMap.values()).map(normalizeRequirementGroup);
+			return effectiveRequirementGroups(baselineDocs, overrideDocs);
 		} catch (error) {
 			if (error instanceof InvalidRatioQtyError) throw error;
 			return baselineDocs.map(normalizeRequirementGroup);
 		}
+	}
+
+	/** Loads one shelter's effective groups without silently falling back on a failed read. */
+	async listAllStrict(shelterCode: string): Promise<RequirementGroup[]> {
+		const [baselineDocs, overrideDocs] = await Promise.all([
+			this.catalogRepo.allByType<RequirementGroup>('requirement_group', isRequirementGroup),
+			this.getShelterRepo(shelterCode).allByType<RequirementGroup>(
+				'requirement_group',
+				isRequirementGroup
+			)
+		]);
+		return effectiveRequirementGroups(baselineDocs, overrideDocs);
 	}
 
 	async get(id: string, shelterCode?: string): Promise<RequirementGroup | null> {
@@ -77,7 +92,8 @@ export class RequirementGroupRemoteRepository {
 		input: RequirementGroupInput,
 		ctx: { createdBy: string; shelterCode?: string }
 	): Promise<RequirementGroup> {
-		const isOverride = input.source === 'SHELTER_OVERRIDE' && !!ctx.shelterCode;
+		const parsedInput = requirementGroupInputSchema.parse(input);
+		const isOverride = parsedInput.source === 'SHELTER_OVERRIDE' && !!ctx.shelterCode;
 		const repo = isOverride ? this.getShelterRepo(ctx.shelterCode!) : this.catalogRepo;
 
 		const existing = await repo.get<RequirementGroup>(id).catch(() => null);
@@ -88,10 +104,10 @@ export class RequirementGroupRemoteRepository {
 			...(existing?._rev ? { _rev: existing._rev } : {}),
 			type: 'requirement_group',
 			schema_v: REQUIREMENT_GROUP_SCHEMA_VERSION,
-			name: input.name,
-			standard_uom: input.standard_uom,
-			status: input.status ?? existing?.status ?? 'active',
-			item_maps: (input.item_maps ?? []).map((m) => ({
+			name: parsedInput.name,
+			standard_uom: parsedInput.standard_uom,
+			status: parsedInput.status ?? existing?.status ?? 'active',
+			item_maps: (parsedInput.item_maps ?? []).map((m) => ({
 				...m,
 				conversion_factor: persistQty(m.conversion_factor),
 				...(m.share_percent === undefined ? {} : { share_percent: persistQty(m.share_percent) })

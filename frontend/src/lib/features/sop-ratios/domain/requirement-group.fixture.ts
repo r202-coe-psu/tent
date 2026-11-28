@@ -30,10 +30,16 @@ export const DEFAULT_REQUIREMENT_GROUPS: RequirementGroup[] = [
 		status: 'active',
 		item_maps: [
 			{
-				item_id: 'item_master:egg',
-				base_uom: 'egg',
-				conversion_factor: '6.3',
-				share_percent: '50'
+				item_id: 'item_master:pork-belly',
+				base_uom: 'g',
+				conversion_factor: '1',
+				share_percent: '25'
+			},
+			{
+				item_id: 'item_master:pork-neck',
+				base_uom: 'g',
+				conversion_factor: '1',
+				share_percent: '25'
 			},
 			{
 				item_id: 'item_master:canned-fish',

@@ -2023,6 +2023,8 @@ export async function seedCatalogFoodSphereParameters(
 		ไข่ไก่: resolveItemMasterId('ไข่ไก่', 'item_master:egg'),
 		ปลากระป๋อง: resolveItemMasterId('ปลากระป๋อง', 'item_master:canned-fish'),
 		เนื้อไก่สด: resolveItemMasterId('เนื้อไก่สด', 'item_master:chicken'),
+		หมูสามชั้น: resolveItemMasterId('หมูสามชั้น', 'item_master:pork-belly'),
+		หมูสันคอ: resolveItemMasterId('หมูสันคอ', 'item_master:pork-neck'),
 		น้ำมันพืช: resolveItemMasterId('น้ำมันพืช', 'item_master:oil'),
 		'น้ำดื่ม 600 มล.': resolveItemMasterId('น้ำดื่ม 600 มล.', 'item_master:water-600ml'),
 		'น้ำดื่มถัง 5 ลิตร': resolveItemMasterId('น้ำดื่มถัง 5 ลิตร', 'item_master:water-5l')
@@ -2039,6 +2041,10 @@ export async function seedCatalogFoodSphereParameters(
 				resolvedId = itemNameToId['ปลากระป๋อง'];
 			else if (m.item_id === 'item_master:chicken' && itemNameToId['เนื้อไก่สด'])
 				resolvedId = itemNameToId['เนื้อไก่สด'];
+			else if (m.item_id === 'item_master:pork-belly' && itemNameToId['หมูสามชั้น'])
+				resolvedId = itemNameToId['หมูสามชั้น'];
+			else if (m.item_id === 'item_master:pork-neck' && itemNameToId['หมูสันคอ'])
+				resolvedId = itemNameToId['หมูสันคอ'];
 			else if (m.item_id === 'item_master:oil' && itemNameToId['น้ำมันพืช'])
 				resolvedId = itemNameToId['น้ำมันพืช'];
 			else if (m.item_id === 'item_master:water-600ml' && itemNameToId['น้ำดื่ม 600 มล.'])
