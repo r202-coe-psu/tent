@@ -16,7 +16,8 @@ const hardware = (qrCheckInEnabled: boolean) => ({
 	cameraLabel: null,
 	cameraFlip: false,
 	readerMaxGapMs: 50,
-	faceCheck: { mode: 'off' as const, flows: [] }
+	faceCheck: { mode: 'off' as const, flows: [] },
+	printer: 'cups' as const
 });
 
 describe('kiosk QR route load', () => {

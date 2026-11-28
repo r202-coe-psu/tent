@@ -5,9 +5,9 @@ import IdentityMethodSelector from './identity-method-selector.svelte';
 
 const THAI = /[฀-๿]/;
 
-function renderSelector(): string {
+function renderSelector(onScreen = false): string {
 	return render(IdentityMethodSelector, {
-		props: { contextQuery: '', reprintEnabled: true, thaidCheckInEnabled: true }
+		props: { contextQuery: '', reprintEnabled: true, thaidCheckInEnabled: true, onScreen }
 	}).body;
 }
 
@@ -38,5 +38,23 @@ describe('IdentityMethodSelector language', () => {
 		expect(body).toContain('บัตรประชาชน');
 		expect(body).toContain('ขั้น 1 จาก 5 · วิธีค้นหา');
 		expect(body).toContain('aria-label="วิธีค้นหาข้อมูล"');
+	});
+
+	it('words the QR entry as showing instead of printing when the kiosk has no printer', () => {
+		const thai = renderSelector(true);
+		expect(thai).toContain('แสดง QR');
+		expect(thai).toContain('กรอกเบอร์โทรที่ลงทะเบียนไว้ เพื่อแสดง QR Code');
+		expect(thai).not.toContain('พิมพ์');
+
+		languageStore.setLanguage('en');
+		const english = renderSelector(true);
+		expect(english).toContain('Show QR');
+		expect(english).toContain('Enter your registered phone number to show your QR Code');
+		expect(english).toContain(
+			'aria-label="Show QR · Enter your registered phone number to show your QR Code"'
+		);
+		expect(english).not.toContain('lucide-printer');
+		expect(english.replace(/<[^>]+>/g, ' ')).not.toMatch(/print/i);
+		expect(english).not.toMatch(THAI);
 	});
 });

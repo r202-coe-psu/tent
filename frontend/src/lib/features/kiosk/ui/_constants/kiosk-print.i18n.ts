@@ -12,7 +12,15 @@ const th = {
 		subheading: 'เลือกประเภทผู้ที่ต้องการพิมพ์',
 		groupLabel: 'ประเภทผู้ที่ต้องการพิมพ์ QR',
 		evacuee: { title: 'ผู้พักพิง', description: 'ผู้ที่ลงทะเบียนเข้าพักในศูนย์' },
-		volunteer: { title: 'จิตอาสา', description: 'พิมพ์บัตร QR จิตอาสาด้วยเบอร์โทร' }
+		volunteer: { title: 'จิตอาสา', description: 'พิมพ์บัตร QR จิตอาสาด้วยเบอร์โทร' },
+		/** The same texts for a kiosk without a printer: the QR is shown on screen, nothing is printed. */
+		onScreen: {
+			pageTitle: 'แสดง QR — SmartShelter Kiosk',
+			heading: 'แสดง QR',
+			subheading: 'เลือกประเภทผู้ที่ต้องการแสดง QR',
+			groupLabel: 'ประเภทผู้ที่ต้องการแสดง QR',
+			volunteer: { title: 'จิตอาสา', description: 'แสดงบัตร QR จิตอาสาด้วยเบอร์โทร' }
+		}
 	}
 };
 
@@ -31,7 +39,14 @@ const en: typeof th = {
 		subheading: 'Choose who the QR is for',
 		groupLabel: 'Who to print a QR for',
 		evacuee: { title: 'Shelter resident', description: 'People registered to stay at the shelter' },
-		volunteer: { title: 'Volunteer', description: 'Print a volunteer QR card with a phone number' }
+		volunteer: { title: 'Volunteer', description: 'Print a volunteer QR card with a phone number' },
+		onScreen: {
+			pageTitle: 'Show QR — SmartShelter Kiosk',
+			heading: 'Show QR',
+			subheading: 'Choose who the QR is for',
+			groupLabel: 'Who to show a QR for',
+			volunteer: { title: 'Volunteer', description: 'Show a volunteer QR card with a phone number' }
+		}
 	}
 };
 

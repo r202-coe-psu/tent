@@ -12,6 +12,9 @@ import {
 } from '../data/kiosk-check-in.api';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+vi.mock('../application/kiosk-qr-input', () => ({
+	loadKioskHardware: vi.fn().mockResolvedValue({ printer: 'cups' })
+}));
 vi.mock('../data/kiosk-check-in.api', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../data/kiosk-check-in.api')>()),
 	lookupPreRegisteredEvacuee: vi.fn(),

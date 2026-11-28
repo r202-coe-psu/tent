@@ -80,6 +80,20 @@ describe('TestPrint', () => {
 		expect(fallbackPrint).not.toHaveBeenCalled();
 	});
 
+	it('a screen result (a kiosk without a printer) is an error, not a stuck printing status', async () => {
+		const { testPrint } = setup({ kind: 'screen', labels: ['PNG'] });
+		await testPrint.print();
+		expect(testPrint.phase).toBe('error');
+		expect(testPrint.error).toBe('ตู้นี้ไม่มีเครื่องพิมพ์');
+		expect(testPrint.busy).toBe(false);
+	});
+
+	it('words the no-printer error in English on the English screen', async () => {
+		const { testPrint } = setup({ kind: 'screen', labels: ['PNG'] }, 'en');
+		await testPrint.print();
+		expect(testPrint.error).toBe('This kiosk has no printer.');
+	});
+
 	it('a QR render failure is an error too', async () => {
 		const { testPrint, prepareQrImage, printLabels } = setup();
 		prepareQrImage.mockRejectedValueOnce(new Error('qr'));

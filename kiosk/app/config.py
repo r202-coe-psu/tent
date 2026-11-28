@@ -47,7 +47,7 @@ PLACEHOLDER_VALUES = {
 LOOPBACK_HOSTNAMES = {"localhost"}
 
 USB_ID_PATTERN = re.compile(r"[0-9a-fA-F]{4}:[0-9a-fA-F]{4}")
-PRINTER_BACKENDS = ("cups", "escpos")
+PRINTER_BACKENDS = ("cups", "escpos", "none")
 PRINTER_WIDTH_RANGE = (384, 832)
 DEFAULT_PRINTER_WIDTH_DOTS = 576
 KIOSK_QR_INPUTS = ("camera", "reader", "both")
@@ -161,17 +161,23 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
     """
 
     backend = _choice(config, "PRINTER_BACKEND", PRINTER_BACKENDS, "cups")
-    printer_usb_id = _usb_id(config, "PRINTER_USB_ID")
-    printer_device = _clean(config.get("PRINTER_DEVICE"))
-    width_dots = _bounded_int(
-        config, "PRINTER_WIDTH_DOTS", DEFAULT_PRINTER_WIDTH_DOTS, PRINTER_WIDTH_RANGE
-    )
-    if width_dots % 8:
-        raise ScannerConfigError("PRINTER_WIDTH_DOTS must be a multiple of 8")
-    if backend == "escpos" and not (printer_usb_id or printer_device):
-        raise ScannerConfigError(
-            "PRINTER_BACKEND=escpos requires PRINTER_USB_ID or PRINTER_DEVICE"
+    if backend == "none":
+        # No printer attached: printer settings are neither read nor validated.
+        printer_usb_id = ""
+        printer_device = ""
+        width_dots = DEFAULT_PRINTER_WIDTH_DOTS
+    else:
+        printer_usb_id = _usb_id(config, "PRINTER_USB_ID")
+        printer_device = _clean(config.get("PRINTER_DEVICE"))
+        width_dots = _bounded_int(
+            config, "PRINTER_WIDTH_DOTS", DEFAULT_PRINTER_WIDTH_DOTS, PRINTER_WIDTH_RANGE
         )
+        if width_dots % 8:
+            raise ScannerConfigError("PRINTER_WIDTH_DOTS must be a multiple of 8")
+        if backend == "escpos" and not (printer_usb_id or printer_device):
+            raise ScannerConfigError(
+                "PRINTER_BACKEND=escpos requires PRINTER_USB_ID or PRINTER_DEVICE"
+            )
 
     qr_check_in = _choice(config, "KIOSK_QR_CHECK_IN", KIOSK_QR_CHECK_IN_MODES, "on")
     qr_input = _choice(config, "KIOSK_QR_INPUT", KIOSK_QR_INPUTS, "camera")

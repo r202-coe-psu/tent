@@ -11,6 +11,7 @@ export { default as KioskNoticePanel } from './ui/kiosk-notice-panel.svelte';
 export { default as KioskInlineAlert } from './ui/kiosk-inline-alert.svelte';
 export { default as KioskLabelSheet } from './ui/kiosk-label-sheet.svelte';
 export { default as KioskLabelCard } from './ui/kiosk-label-card.svelte';
+export { default as KioskLabelScreen } from './ui/kiosk-label-screen.svelte';
 export { default as KioskDeviceInfo } from './ui/kiosk-device-info.svelte';
 export { default as KioskPrintStatus } from './ui/kiosk-print-status.svelte';
 export { default as KioskBusyStatus } from './ui/kiosk-busy-status.svelte';
@@ -83,6 +84,7 @@ export {
 	type KioskQrLabel
 } from './application/kiosk-label-print';
 export { loadKioskHardware } from './application/kiosk-qr-input';
+export { KioskPrinterState } from './application/kiosk-printer-state.svelte';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
 export { isFaceCheckEnabled, type FaceCheckOutcome } from './domain/face-check';

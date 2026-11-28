@@ -15,7 +15,16 @@ const th = {
 	removeCard: 'กรุณานำบัตรออกจากเครื่อง',
 	contactStaff: 'กรุณาติดต่อเจ้าหน้าที่เพื่อพิมพ์ QR Code',
 	printAgain: 'พิมพ์อีกครั้ง',
-	home: 'กลับหน้าแรก'
+	showOnScreen: 'แสดง QR บนจอแทน',
+	home: 'กลับหน้าแรก',
+	/** The same texts for a kiosk without a printer: the QR is shown on screen, nothing is printed. */
+	onScreen: {
+		failedHint: (error: string) => `${error} กดแสดง QR อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
+		printRenderFailed: 'สร้าง QR Code ไม่สำเร็จ',
+		qrIssueFailed: 'ออก QR ไม่สำเร็จ กรุณาติดต่อเจ้าหน้าที่เพื่อแสดง QR ใหม่',
+		contactStaff: 'กรุณาติดต่อเจ้าหน้าที่เพื่อแสดง QR Code',
+		showAgain: 'แสดง QR อีกครั้ง'
+	}
 };
 
 const en: typeof th = {
@@ -33,7 +42,15 @@ const en: typeof th = {
 	removeCard: 'Please take your card out of the reader',
 	contactStaff: 'Please contact staff to print your QR Code',
 	printAgain: 'Print again',
-	home: 'Back to home'
+	showOnScreen: 'Show the QR on screen instead',
+	home: 'Back to home',
+	onScreen: {
+		failedHint: (error: string) => `${error} Press show QR again or contact staff.`,
+		printRenderFailed: 'Could not create the QR Code',
+		qrIssueFailed: 'Could not issue a QR. Please contact staff to show a new QR.',
+		contactStaff: 'Please contact staff to show your QR Code',
+		showAgain: 'Show QR again'
+	}
 };
 
 export const KIOSK_REGISTER_DONE_I18N = { th, en };

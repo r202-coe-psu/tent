@@ -5,7 +5,8 @@ import { isKioskPhoneSubmittable } from '../domain/phone';
 import type { KioskVolunteerCardResult } from '../data/kiosk-volunteer-card.api';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
 
-export type VolunteerCardStep = 'phone' | 'confirm' | 'printing' | 'done' | 'print_failed';
+export type VolunteerCardStep =
+	'phone' | 'confirm' | 'printing' | 'done' | 'print_failed' | 'on_screen';
 
 export interface VolunteerCardSessionDeps {
 	lookup(phone: string): Promise<KioskVolunteerCardResult>;
@@ -16,13 +17,22 @@ export interface VolunteerCardSessionDeps {
 
 const MESSAGES: Record<
 	LanguageCode,
-	Record<'notFound' | 'rateLimited' | 'methodDisabled' | 'printRenderFailed' | 'generic', string>
+	Record<
+		| 'notFound'
+		| 'rateLimited'
+		| 'methodDisabled'
+		| 'printRenderFailed'
+		| 'screenRenderFailed'
+		| 'generic',
+		string
+	>
 > = {
 	th: {
 		notFound: 'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่',
 		rateLimited: 'ลองผิดหลายครั้ง กรุณารอสักครู่หรือติดต่อเจ้าหน้าที่',
 		methodDisabled: 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่',
 		printRenderFailed: 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ',
+		screenRenderFailed: 'สร้าง QR Code ไม่สำเร็จ',
 		generic: 'ระบบไม่สามารถทำรายการได้ กรุณาลองอีกครั้ง'
 	},
 	en: {
@@ -30,6 +40,7 @@ const MESSAGES: Record<
 		rateLimited: 'Too many wrong tries. Please wait a moment or see staff',
 		methodDisabled: 'This option is turned off. Please see staff',
 		printRenderFailed: 'Could not create the QR code to print',
+		screenRenderFailed: 'Could not create the QR code',
 		generic: 'Something went wrong. Please try again'
 	}
 };
@@ -56,6 +67,8 @@ export class VolunteerCardSession {
 	volunteer = $state.raw<KioskVolunteerCardResult['volunteer'] | null>(null);
 	/** A request is in flight: keys and buttons wait. */
 	busy = $state(false);
+	/** The rendered label PNGs (base64): shown on screen, or kept when printing them failed. */
+	screenLabels = $state.raw<readonly string[]>([]);
 
 	private phoneValue = $state('');
 	/** Bumped by `reset()` so an answer for an abandoned visit is dropped. */
@@ -67,7 +80,8 @@ export class VolunteerCardSession {
 	 */
 	constructor(
 		private readonly deps: VolunteerCardSessionDeps,
-		private readonly language: () => LanguageCode = () => 'th'
+		private readonly language: () => LanguageCode = () => 'th',
+		private readonly noPrinter: () => boolean = () => false
 	) {}
 
 	get phone(): string {
@@ -118,6 +132,17 @@ export class VolunteerCardSession {
 		await this.printVolunteer();
 	}
 
+	/** After a failed print that rendered its labels, they can be shown on screen instead. */
+	get canShowOnScreen(): boolean {
+		return this.step === 'print_failed' && this.screenLabels.length > 0;
+	}
+
+	showOnScreen(): void {
+		if (!this.canShowOnScreen) return;
+		this.error = '';
+		this.step = 'on_screen';
+	}
+
 	back(): void {
 		if (this.step !== 'confirm') return;
 		this.error = '';
@@ -132,6 +157,7 @@ export class VolunteerCardSession {
 		this.volunteer = null;
 		this.error = '';
 		this.busy = false;
+		this.screenLabels = [];
 		this.step = 'phone';
 	}
 
@@ -140,18 +166,29 @@ export class VolunteerCardSession {
 		const generation = this.generation;
 		this.busy = true;
 		this.error = '';
+		this.screenLabels = [];
 		this.step = 'printing';
 		try {
 			let outcome: KioskPrintFlowResult;
 			try {
 				outcome = await this.deps.print(this.volunteer);
 			} catch {
-				outcome = { kind: 'error', message: MESSAGES[this.language()].printRenderFailed };
+				const messages = MESSAGES[this.language()];
+				outcome = {
+					kind: 'error',
+					message: this.noPrinter() ? messages.screenRenderFailed : messages.printRenderFailed
+				};
 			}
 			if (generation !== this.generation) return;
 			if (outcome.kind === 'error') {
 				this.error = outcome.message;
+				this.screenLabels = outcome.labels ?? [];
 				this.step = 'print_failed';
+				return;
+			}
+			if (outcome.kind === 'screen') {
+				this.screenLabels = outcome.labels;
+				this.step = 'on_screen';
 				return;
 			}
 			this.step = 'done';

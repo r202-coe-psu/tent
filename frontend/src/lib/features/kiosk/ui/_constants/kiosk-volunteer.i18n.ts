@@ -22,7 +22,18 @@ const th = {
 		title: 'พิมพ์ไม่สำเร็จ',
 		body: (error: string) => `${error} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
 		retry: 'ลองพิมพ์อีกครั้ง',
+		onScreen: 'แสดง QR บนจอแทน',
 		home: 'กลับหน้าแรก'
+	},
+	/** The same texts for a kiosk without a printer: the QR is shown on screen, nothing is printed. */
+	onScreen: {
+		pageTitle: 'แสดง QR จิตอาสา — SmartShelter Kiosk',
+		heading: 'แสดง QR จิตอาสา',
+		backToChooser: 'กลับไปเลือกวิธีแสดง QR',
+		show: 'แสดง QR',
+		failedTitle: 'แสดง QR ไม่สำเร็จ',
+		failedBody: (error: string) => `${error} กดแสดง QR อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
+		failedRetry: 'ลองแสดง QR อีกครั้ง'
 	}
 };
 
@@ -49,7 +60,17 @@ const en: typeof th = {
 		title: 'Printing failed',
 		body: (error) => `${error} Press print to try again, or see staff.`,
 		retry: 'Try printing again',
+		onScreen: 'Show the QR on screen instead',
 		home: 'Back to home'
+	},
+	onScreen: {
+		pageTitle: 'Show volunteer QR — SmartShelter Kiosk',
+		heading: 'Show volunteer QR',
+		backToChooser: 'Back to the QR options',
+		show: 'Show QR',
+		failedTitle: 'Could not show the QR',
+		failedBody: (error) => `${error} Press show QR to try again, or see staff.`,
+		failedRetry: 'Try showing QR again'
 	}
 };
 

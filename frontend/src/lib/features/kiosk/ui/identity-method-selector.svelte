@@ -22,15 +22,19 @@
 		/** Shelter flag `kiosk_phone_check_in_enabled`: shows the «พิมพ์ QR» entry under the grid. */
 		reprintEnabled: boolean;
 		thaidCheckInEnabled: boolean;
+		/** The kiosk has no printer: the reprint entry speaks of showing the QR, not printing it. */
+		onScreen?: boolean;
 	}
 
 	let {
 		contextQuery,
 		qrCheckInEnabled = true,
 		reprintEnabled,
-		thaidCheckInEnabled
+		thaidCheckInEnabled,
+		onScreen = false
 	}: Props = $props();
 	const t = $derived(getTranslation(KIOSK_METHOD_I18N, languageStore.current));
+	const reprintCopy = $derived(onScreen ? t.reprintOnScreen : t.reprint);
 	const methods = $derived(visibleIdentityMethods({ qrCheckInEnabled, thaidCheckInEnabled }));
 	const columns = $derived(methods.length >= 3 ? 3 : methods.length === 1 ? 1 : 2);
 	const rows = $derived(Math.ceil(methods.length / columns));
@@ -138,22 +142,26 @@
 	{#if reprintEnabled}
 		<a
 			href={resolve(`${KIOSK_REPRINT_ENTRY.href}${contextQuery}`)}
-			aria-label={`${t.reprint.title} · ${t.reprint.description}`}
+			aria-label={`${reprintCopy.title} · ${reprintCopy.description}`}
 			class="reprint-link flex min-h-14 w-full items-center justify-center gap-4 rounded-xl border border-slate-300 bg-white px-4 py-2 text-left no-underline shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none kiosk-portrait:min-h-24 kiosk-portrait:gap-6 kiosk-portrait:px-8"
 		>
 			<span
 				class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#F0F4F8] text-[#0A2647] kiosk-portrait:size-14"
 				aria-hidden="true"
 			>
-				<Printer class="size-5 kiosk-portrait:size-8" />
+				{#if onScreen}
+					<QrCode class="size-5 kiosk-portrait:size-8" />
+				{:else}
+					<Printer class="size-5 kiosk-portrait:size-8" />
+				{/if}
 			</span>
 			<span class="min-w-0">
 				<span class="block text-lg leading-snug font-bold text-slate-900 kiosk-portrait:text-3xl"
-					>{t.reprint.title}</span
+					>{reprintCopy.title}</span
 				>
 				<span
 					class="block text-base leading-snug text-slate-700 kiosk-portrait:mt-1 kiosk-portrait:text-xl"
-					>{t.reprint.description}</span
+					>{reprintCopy.description}</span
 				>
 			</span>
 		</a>

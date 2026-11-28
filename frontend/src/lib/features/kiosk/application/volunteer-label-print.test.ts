@@ -5,13 +5,15 @@ const mocks = vi.hoisted(() => ({
 	generateQrDataUrl: vi.fn(),
 	qrModuleCount: vi.fn(),
 	renderVolunteerLabelPng: vi.fn(),
-	printKioskLabels: vi.fn()
+	printKioskLabels: vi.fn(),
+	loadKioskHardware: vi.fn()
 }));
 
 vi.mock('$lib/utils/qrcode', () => ({
 	generateQrDataUrl: mocks.generateQrDataUrl,
 	qrModuleCount: mocks.qrModuleCount
 }));
+vi.mock('./kiosk-qr-input', () => ({ loadKioskHardware: mocks.loadKioskHardware }));
 vi.mock('./volunteer-label-image', () => ({
 	renderVolunteerLabelPng: mocks.renderVolunteerLabelPng
 }));
@@ -31,6 +33,7 @@ const volunteer = {
 
 beforeEach(() => {
 	vi.resetAllMocks();
+	mocks.loadKioskHardware.mockResolvedValue({ printer: 'cups' });
 	mocks.qrModuleCount.mockResolvedValue(33);
 	mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
 });
@@ -88,7 +91,8 @@ describe('printVolunteerLabel', () => {
 
 		expect(renderFailed).toEqual({
 			kind: 'error',
-			message: 'Could not create the label to print. Please try again.'
+			message: 'Could not create the label to print. Please try again.',
+			labels: []
 		});
 
 		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
@@ -101,7 +105,48 @@ describe('printVolunteerLabel', () => {
 
 		expect(connection).toEqual({
 			kind: 'error',
-			message: 'Could not reach the printer. Please try again.'
+			message: 'Could not reach the printer. Please try again.',
+			labels: ['png-volunteer']
+		});
+	});
+
+	it('shows the label on screen and never prints when told the kiosk has no printer', async () => {
+		// The printer the screen already resolved wins over what a second hardware fetch would say.
+		mocks.renderVolunteerLabelPng.mockResolvedValue('png-volunteer');
+		const fallbackPrint = vi.fn();
+
+		const result = await printVolunteerLabel(volunteer, fallbackPrint, undefined, 'none');
+
+		expect(result).toEqual({ kind: 'screen', labels: ['png-volunteer'] });
+		expect(mocks.printKioskLabels).not.toHaveBeenCalled();
+		expect(fallbackPrint).not.toHaveBeenCalled();
+		expect(mocks.loadKioskHardware).not.toHaveBeenCalled();
+	});
+
+	it('does not ask the scanner client for its hardware again when it prints', async () => {
+		mocks.renderVolunteerLabelPng.mockResolvedValue('png-volunteer');
+		mocks.printKioskLabels.mockResolvedValue({ kind: 'printed', printed: 1 });
+
+		await printVolunteerLabel(volunteer, vi.fn(), undefined, 'escpos');
+
+		expect(mocks.loadKioskHardware).not.toHaveBeenCalled();
+	});
+
+	it("omits print wording when QR generation fails on a 'none' printer", async () => {
+		mocks.generateQrDataUrl.mockRejectedValue(new Error('qr'));
+
+		const thai = await printVolunteerLabel(volunteer, vi.fn(), 'th', 'none');
+		const english = await printVolunteerLabel(volunteer, vi.fn(), 'en', 'none');
+
+		expect(thai).toEqual({
+			kind: 'error',
+			message: 'สร้าง QR Code ไม่สำเร็จ กรุณาลองอีกครั้ง',
+			labels: []
+		});
+		expect(english).toEqual({
+			kind: 'error',
+			message: 'Could not create the QR Code. Please try again.',
+			labels: []
 		});
 	});
 });

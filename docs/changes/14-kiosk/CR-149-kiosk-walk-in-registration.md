@@ -4,7 +4,7 @@ title: Kiosk walk-in registration — เสียบบัตรแล้วไ
 status: approved
 date: 2026-09-27
 created: 2026-09-27
-updated: 2026-11-06 # 2026-11-06 CR-233 supersedes payload ใน FR-KWR-19 / FR-KWR-71 · ทีม kiosk ขอเลิกกรอง registered_via ของหัวหน้าใน FR-KWR-83 · 2026-10-13 ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
+updated: 2026-11-26 # 2026-11-26 โน้ตใต้ FR-KWR-72 ชี้ CR-151 §18 approved โดย Soravit Sukkarn (Team Lead) · 2026-11-19 โน้ตใต้ FR-KWR-72 ชี้ CR-151 §18 (ตู้ไม่มีเครื่องพิมพ์, proposed) · 2026-11-06 CR-233 supersedes payload ใน FR-KWR-19 / FR-KWR-71 · ทีม kiosk ขอเลิกกรอง registered_via ของหัวหน้าใน FR-KWR-83 · 2026-10-13 ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-03 (Asia/Bangkok)
 decision_date: 2026-10-03
@@ -134,6 +134,8 @@ note: >
 | FR-KWR-19a | `scanner_client` allowlist เติม credential ให้ path นี้ (FR-KPC-06)                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 > **Superseded by [CR-233](../02-people/CR-233-evacuee-qr-rotate-on-print.md)** (2026-11-06): FR-KWR-19 — `qr_payload` ไม่ใช่ `'evacuee:<ULID>'` คงที่อีก แต่เป็น `evacuee:<ULID>@<hash6>` ที่ server ออกและเขียน log `evacuee_qr` ก่อนตอบ; ส่วนอื่นของข้อนี้ยังใช้
+
+> **แก้ไขเพิ่มเติม (approved โดย Soravit Sukkarn, Team Lead — 2026-11-26) ใน [CR-151 §18](CR-151-kiosk-pre-registration-check-in.md):** FR-KWR-72 — ตู้ที่ตั้ง `PRINTER_BACKEND=none` ไม่พิมพ์อัตโนมัติ แต่แสดง QR บนจอให้ถ่ายรูปแทน (FR-KPC-135–141) · ตู้ที่มีเครื่องพิมพ์ พิมพ์ไม่สำเร็จมีปุ่ม「แสดง QR บนจอแทน」(FR-KPC-147)
 
 ### 4.5 สถานะ `kiosk_registered`
 

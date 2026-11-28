@@ -6,11 +6,11 @@
 export const KIOSK_PRINT_PATH = '/api/v1/kiosk/print';
 const KIOSK_PRINT_TIMEOUT_MS = 30_000;
 /**
- * Labels per print request. The scanner client takes 1–20 (`KIOSK_PRINT_MAX_LABELS`), but each
- * request also has a 25 s deadline and ESC/POS waits 2 s between labels, which fits about 10; 8
- * keeps every request inside both limits so a household of any size prints in full.
+ * Labels per print request. The scanner client takes 1–20 (`KIOSK_PRINT_MAX_LABELS`), but it waits
+ * for each CUPS job to finish (about 2–4 s per label) inside a 25 s per-request deadline; 4 keeps
+ * every request well inside it so a household of any size prints in full.
  */
-export const KIOSK_PRINT_MAX_LABELS_PER_REQUEST = 8;
+export const KIOSK_PRINT_MAX_LABELS_PER_REQUEST = 4;
 
 export type KioskPrintOutcome = { kind: 'printed'; printed: number } | { kind: 'unavailable' };
 
@@ -18,7 +18,12 @@ export type KioskPrintOutcome = { kind: 'printed'; printed: number } | { kind: '
  * Which stock message a `KioskPrintError` carries, so the screen can word it in the visitor's
  * language. Absent when the message came from the printer itself.
  */
-export type KioskPrintErrorCode = 'connection' | 'send-failed';
+export type KioskPrintErrorCode = 'connection' | 'send-failed' | 'not-ready' | 'disabled';
+
+const KIOSK_STOCK_ERROR_CODES = new Map<unknown, KioskPrintErrorCode>([
+	['PRINTER_NOT_READY', 'not-ready'],
+	['PRINTER_DISABLED', 'disabled']
+]);
 
 export class KioskPrintError extends Error {
 	constructor(
@@ -89,15 +94,16 @@ async function printKioskLabelChunk(
 
 	const body = (await response.json().catch(() => null)) as {
 		printed?: unknown;
-		error?: { message?: unknown };
+		error?: { code?: unknown; message?: unknown };
 	} | null;
 	const printed = typeof body?.printed === 'number' ? body.printed : 0;
 	if (!response.ok) {
 		const message = body?.error?.message;
+		const stockCode = KIOSK_STOCK_ERROR_CODES.get(body?.error?.code);
 		throw new KioskPrintError(
 			typeof message === 'string' ? message : 'ส่งงานพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง',
 			printed,
-			typeof message === 'string' ? undefined : 'send-failed'
+			stockCode ?? (typeof message === 'string' ? undefined : 'send-failed')
 		);
 	}
 	return { kind: 'printed', printed };

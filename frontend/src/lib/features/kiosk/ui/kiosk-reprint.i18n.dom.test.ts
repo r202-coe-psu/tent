@@ -9,11 +9,20 @@ import {
 	type KioskReprintResult
 } from '../data/kiosk-check-in.api';
 import type { ReprintSessionDeps } from '../application/reprint-session.svelte';
+import { loadKioskHardware } from '../application/kiosk-qr-input';
+import { prepareKioskQrImage, printKioskQrLabels } from '../application/kiosk-label-print';
+import { DEFAULT_KIOSK_HARDWARE } from '../domain/kiosk-hardware';
 import KioskReprint from './kiosk-reprint.svelte';
+import { KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 
 const THAI = /[฀-๿]/;
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+vi.mock('../application/kiosk-qr-input', () => ({ loadKioskHardware: vi.fn() }));
+vi.mock('../application/kiosk-label-print', () => ({
+	prepareKioskQrImage: vi.fn(),
+	printKioskQrLabels: vi.fn()
+}));
 
 function member(
 	id: string,
@@ -93,6 +102,7 @@ async function toMembers(searchLabel: string, expected: string) {
 beforeEach(() => {
 	vi.clearAllMocks();
 	languageStore.setLanguage('th');
+	vi.mocked(loadKioskHardware).mockResolvedValue(DEFAULT_KIOSK_HARDWARE);
 	clock = 0;
 	vi.spyOn(Date, 'now').mockImplementation(() => (clock += 200));
 	// happy-dom has no Web Animations: svelte's fade/scale transitions need a finishing stand-in.
@@ -246,5 +256,271 @@ describe('KioskReprint language', () => {
 		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ QR เรียบร้อย'));
 		expect(screenText()).toContain('รับ QR Code 1 ดวงที่ช่องพิมพ์ แล้วไปที่จุดคัดกรอง');
 		expect(screenText()).toContain('กลับหน้าแรก');
+	});
+});
+
+describe('KioskReprint labels on screen', () => {
+	async function toPrint(
+		print: ReprintSessionDeps['print'],
+		labels: { search: string; next: string; confirm: string; heading: string; nextText: string }
+	) {
+		mountReprint({
+			lookup: vi.fn().mockResolvedValue(HOUSEHOLD),
+			reprint: vi.fn().mockResolvedValue(REPRINT_RESULT),
+			print
+		});
+		await toMembers(labels.search, labels.heading);
+		document.querySelector<HTMLButtonElement>('button[role="checkbox"]')!.click();
+		await vi.waitFor(() => expect(screenText()).toContain(labels.nextText));
+		buttonWith(labels.next).click();
+		await vi.waitFor(() => expect(screenText()).toContain(labels.confirm));
+		await tapDigits('1234');
+		buttonWith(labels.confirm).click();
+	}
+
+	const THAI_FLOW = {
+		search: 'ค้นหา',
+		next: 'ต่อไป',
+		confirm: 'ยืนยันและพิมพ์',
+		heading: 'เลือกสมาชิกที่ต้องการพิมพ์ QR',
+		nextText: 'ต่อไป · 1 คน'
+	};
+	const shownImage = () => document.querySelector<HTMLImageElement>('img')?.getAttribute('src');
+
+	it('shows the labels on screen, not a done notice, when the kiosk has no printer', async () => {
+		await toPrint(
+			vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'screen', labels: ['AAA'] }),
+			THAI_FLOW
+		);
+
+		await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
+		expect(screenText()).not.toContain('พิมพ์ QR เรียบร้อย');
+
+		buttonWith('เสร็จสิ้น').click();
+		flushSync();
+		expect(document.querySelector('[data-testid="kiosk-label-screen"]')).toBeNull();
+	});
+
+	it('offers the labels that did not print on screen after a failed print', async () => {
+		await toPrint(
+			vi
+				.fn<ReprintSessionDeps['print']>()
+				.mockResolvedValue({ kind: 'error', message: 'เครื่องพิมพ์ไม่พร้อม', labels: ['BBB'] }),
+			THAI_FLOW
+		);
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ไม่สำเร็จ'));
+
+		buttonWith('แสดง QR บนจอแทน').click();
+
+		await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,BBB'));
+		expect(screenText()).not.toContain('พิมพ์ไม่สำเร็จ');
+	});
+
+	it('does not send the visitor home on its own idle timeout while the labels are on screen', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+		try {
+			await toPrint(
+				vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'screen', labels: ['AAA'] }),
+				THAI_FLOW
+			);
+			await vi.waitFor(() => expect(shownImage()).toBe('data:image/png;base64,AAA'));
+
+			vi.advanceTimersByTime(KIOSK_IDLE_TIMEOUT_MS + 1_000);
+			flushSync();
+
+			expect(shownImage()).toBe('data:image/png;base64,AAA');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('words the on-screen choice in English', async () => {
+		languageStore.setLanguage('en');
+		await toPrint(
+			vi
+				.fn<ReprintSessionDeps['print']>()
+				.mockResolvedValue({ kind: 'error', message: 'Printer is not ready', labels: ['BBB'] }),
+			{
+				search: 'Search',
+				next: 'Next',
+				confirm: 'Confirm and print',
+				heading: 'Choose members to print a QR for',
+				nextText: 'Next · 1 person'
+			}
+		);
+		await vi.waitFor(() => expect(screenText()).toContain('Printing failed'));
+
+		expect(buttonWith('Show the QR on screen instead')).toBeDefined();
+	});
+
+	it('does not offer the on-screen choice when no label is left to show', async () => {
+		await toPrint(
+			vi.fn<ReprintSessionDeps['print']>().mockResolvedValue({ kind: 'error', message: 'x' }),
+			THAI_FLOW
+		);
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ไม่สำเร็จ'));
+
+		expect(
+			[...document.querySelectorAll('button')].some((b) => b.textContent?.includes('แสดง QR'))
+		).toBe(false);
+	});
+});
+
+describe('KioskReprint on a kiosk without a printer', () => {
+	beforeEach(() => {
+		vi.mocked(loadKioskHardware).mockResolvedValue({ ...DEFAULT_KIOSK_HARDWARE, printer: 'none' });
+	});
+
+	async function toVerify(
+		reprint: ReprintSessionDeps['reprint'],
+		print: ReprintSessionDeps['print'] | undefined,
+		words: { search: string; heading: string; nextText: string; next: string; confirm: string }
+	) {
+		mountReprint({
+			lookup: vi.fn().mockResolvedValue(HOUSEHOLD),
+			reprint,
+			...(print && { print })
+		});
+		await toMembers(words.search, words.heading);
+		document.querySelector<HTMLButtonElement>('button[role="checkbox"]')!.click();
+		await vi.waitFor(() => expect(screenText()).toContain(words.nextText));
+		buttonWith(words.next).click();
+		await vi.waitFor(() => expect(screenText()).toContain(words.confirm));
+		await tapDigits('1234');
+	}
+
+	const THAI_WORDS = {
+		search: 'ค้นหา',
+		heading: 'เลือกสมาชิกที่ต้องการแสดง QR',
+		nextText: 'ต่อไป · 1 คน',
+		next: 'ต่อไป',
+		confirm: 'ยืนยันและแสดง QR'
+	};
+	const reprintResult = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue(REPRINT_RESULT);
+
+	it('hands the print flow the printer it already resolved instead of fetching again', async () => {
+		vi.mocked(prepareKioskQrImage).mockResolvedValue({ src: 'data:qr', sizeMm: 30 });
+		vi.mocked(printKioskQrLabels).mockResolvedValue({ kind: 'screen', labels: ['AAA'] });
+		await toVerify(reprintResult, undefined, THAI_WORDS);
+		buttonWith(THAI_WORDS.confirm).click();
+		await vi.waitFor(() => expect(printKioskQrLabels).toHaveBeenCalledTimes(1));
+
+		expect(vi.mocked(printKioskQrLabels).mock.calls[0][3]).toBe('none');
+	});
+
+	it('words the member choice and the confirm button as showing the QR, not printing it', async () => {
+		const print = vi.fn<ReprintSessionDeps['print']>();
+		await toVerify(reprintResult, print, THAI_WORDS);
+
+		expect(screenText()).not.toContain('พิมพ์');
+	});
+
+	it('words the phone step as showing the QR, not printing it', async () => {
+		mountReprint({ lookup: vi.fn() });
+		await vi.waitFor(() => expect(screenText()).toContain('แสดง QR'));
+
+		expect(screenText()).not.toContain('พิมพ์');
+	});
+
+	it('words the whole flow in English as showing the QR', async () => {
+		languageStore.setLanguage('en');
+		const print = vi.fn<ReprintSessionDeps['print']>();
+		await toVerify(reprintResult, print, {
+			search: 'Search',
+			heading: 'Choose members to show a QR for',
+			nextText: 'Next · 1 person',
+			next: 'Next',
+			confirm: 'Confirm and show QR'
+		});
+
+		expect(screenText()).not.toMatch(/print/i);
+	});
+
+	it('does not show the printing overlay before the label screen', async () => {
+		let finishPrint: (result: Awaited<ReturnType<ReprintSessionDeps['print']>>) => void = () => {};
+		const print = vi.fn<ReprintSessionDeps['print']>().mockReturnValue(
+			new Promise((resolve) => {
+				finishPrint = resolve;
+			})
+		);
+		await toVerify(reprintResult, print, THAI_WORDS);
+
+		buttonWith('ยืนยันและแสดง QR').click();
+		await vi.waitFor(() => expect(print).toHaveBeenCalledTimes(1));
+
+		expect(screenText()).not.toContain('กำลังพิมพ์');
+
+		finishPrint({ kind: 'screen', labels: ['AAA'] });
+		await vi.waitFor(() => expect(document.querySelector('img')).not.toBeNull());
+	});
+
+	it('tells the visitor on the label screen when some members QR could not be issued', async () => {
+		const print = vi
+			.fn<ReprintSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'screen', labels: ['AAA'] });
+		const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockResolvedValue({
+			shelter_code: 'SH001',
+			members: [
+				...REPRINT_RESULT.members,
+				{ evacuee_id: 'EV2', qr_issue_failed: true, label: REPRINT_RESULT.members[0].label }
+			]
+		});
+		await toVerify(reprint, print, THAI_WORDS);
+
+		buttonWith('ยืนยันและแสดง QR').click();
+
+		await vi.waitFor(() =>
+			expect(
+				document.querySelector('[data-testid="kiosk-label-screen"] [role="status"]')?.textContent
+			).toContain('ออก QR ไม่สำเร็จ 1 คน')
+		);
+	});
+
+	it('words the failed screen without printing wording when rendering fails on a no-printer kiosk', async () => {
+		const print = vi
+			.fn<ReprintSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'error', message: 'สร้าง QR Code ไม่สำเร็จ', labels: [] });
+		await toVerify(reprintResult, print, THAI_WORDS);
+
+		buttonWith('ยืนยันและแสดง QR').click();
+		await vi.waitFor(() => expect(screenText()).toContain('แสดง QR ไม่สำเร็จ'));
+
+		expect(screenText()).not.toContain('พิมพ์');
+		expect(buttonWith('แสดง QR อีกครั้ง')).toBeDefined();
+	});
+});
+
+describe('KioskReprint on a kiosk with a printer', () => {
+	it('tells the visitor on the label screen when some members QR could not be issued', async () => {
+		const print = vi
+			.fn<ReprintSessionDeps['print']>()
+			.mockResolvedValue({ kind: 'error', message: 'เครื่องพิมพ์ไม่พร้อม', labels: ['AAA'] });
+		mountReprint({
+			lookup: vi.fn().mockResolvedValue(HOUSEHOLD),
+			reprint: vi.fn().mockResolvedValue({
+				shelter_code: 'SH001',
+				members: [
+					...REPRINT_RESULT.members,
+					{ evacuee_id: 'EV2', qr_issue_failed: true, label: REPRINT_RESULT.members[0].label }
+				]
+			}),
+			print
+		});
+		await toMembers('ค้นหา', 'เลือกสมาชิกที่ต้องการพิมพ์ QR');
+		document.querySelector<HTMLButtonElement>('button[role="checkbox"]')!.click();
+		await vi.waitFor(() => expect(screenText()).toContain('ต่อไป · 1 คน'));
+		buttonWith('ต่อไป').click();
+		await vi.waitFor(() => expect(screenText()).toContain('ยืนยันและพิมพ์'));
+		await tapDigits('1234');
+		buttonWith('ยืนยันและพิมพ์').click();
+		await vi.waitFor(() => expect(screenText()).toContain('พิมพ์ไม่สำเร็จ'));
+
+		buttonWith('แสดง QR บนจอแทน').click();
+
+		await vi.waitFor(() =>
+			expect(
+				document.querySelector('[data-testid="kiosk-label-screen"] [role="status"]')?.textContent
+			).toContain('ออก QR ไม่สำเร็จ 1 คน')
+		);
 	});
 });

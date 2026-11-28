@@ -17,7 +17,12 @@ const th = {
 	/** CR-233 FR-EQR-24: no QR could be issued, so nothing is printed. */
 	qrIssueFailed: 'ออก QR ใหม่ไม่สำเร็จ ยังไม่ได้พิมพ์ กรุณาลองอีกครั้งหรือติดต่อเจ้าหน้าที่',
 	blockedPreRegistered: REPRINT_PRE_REGISTERED_REASON,
-	blockedNobody: REPRINT_NOBODY_REASON
+	blockedNobody: REPRINT_NOBODY_REASON,
+	/** The same error texts for a kiosk without a printer: nothing is printed. */
+	onScreen: {
+		printRenderFailed: 'สร้าง QR Code ไม่สำเร็จ',
+		qrIssueFailed: 'ออก QR ใหม่ไม่สำเร็จ กรุณาลองอีกครั้งหรือติดต่อเจ้าหน้าที่'
+	}
 };
 
 const en: typeof th = {
@@ -32,7 +37,11 @@ const en: typeof th = {
 	qrIssueFailed:
 		'Could not issue a new QR, so nothing was printed. Please try again or contact staff.',
 	blockedPreRegistered: localizeReprintReason(REPRINT_PRE_REGISTERED_REASON, 'en'),
-	blockedNobody: localizeReprintReason(REPRINT_NOBODY_REASON, 'en')
+	blockedNobody: localizeReprintReason(REPRINT_NOBODY_REASON, 'en'),
+	onScreen: {
+		printRenderFailed: 'Could not create the QR Code',
+		qrIssueFailed: 'Could not issue a new QR. Please try again or contact staff.'
+	}
 };
 
 export type ReprintSessionMessages = typeof th;

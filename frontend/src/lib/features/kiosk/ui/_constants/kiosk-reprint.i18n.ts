@@ -42,7 +42,22 @@ const th = {
 		title: 'พิมพ์ไม่สำเร็จ',
 		body: (error: string) => `${error} กดพิมพ์อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
 		retry: 'พิมพ์อีกครั้ง',
+		showOnScreen: 'แสดง QR บนจอแทน',
 		home: 'กลับหน้าแรก'
+	},
+	/** The same texts for a kiosk without a printer: the QR is shown on screen, nothing is printed. */
+	onScreen: {
+		pageTitle: 'แสดง QR — SmartShelter Kiosk',
+		phoneHeading: 'แสดง QR',
+		blockedTitle: 'ยังไม่มี QR ให้แสดง',
+		staffPinDescription: 'ตรวจบัตรประชาชนกับตัวบุคคลแล้ว กรอก PIN 6 หลักเพื่อแสดง QR',
+		confirm: 'ยืนยันและแสดง QR',
+		memberListHeading: 'เลือกสมาชิกที่ต้องการแสดง QR',
+		qrIssueFailed: (count: number) =>
+			`ออก QR ไม่สำเร็จ ${count} คน กรุณาลองใหม่หรือติดต่อเจ้าหน้าที่`,
+		failedTitle: 'แสดง QR ไม่สำเร็จ',
+		failedBody: (error: string) => `${error} กดแสดง QR อีกครั้ง หรือติดต่อเจ้าหน้าที่`,
+		failedRetry: 'แสดง QR อีกครั้ง'
 	},
 	memberList: {
 		heading: 'เลือกสมาชิกที่ต้องการพิมพ์ QR',
@@ -98,7 +113,22 @@ const en: typeof th = {
 		title: 'Printing failed',
 		body: (error: string) => `${error} Press print again or contact staff.`,
 		retry: 'Print again',
+		showOnScreen: 'Show the QR on screen instead',
 		home: 'Back to home'
+	},
+	onScreen: {
+		pageTitle: 'Show QR — SmartShelter Kiosk',
+		phoneHeading: 'Show QR',
+		blockedTitle: 'No QR to show yet',
+		staffPinDescription:
+			'Check the ID card against the person, then enter the 6-digit PIN to show the QR',
+		confirm: 'Confirm and show QR',
+		memberListHeading: 'Choose members to show a QR for',
+		qrIssueFailed: (count: number) =>
+			`Could not issue a QR for ${count} ${count === 1 ? 'person' : 'people'}. Please try again or contact staff.`,
+		failedTitle: 'Could not show the QR',
+		failedBody: (error: string) => `${error} Press show QR again or contact staff.`,
+		failedRetry: 'Show QR again'
 	},
 	memberList: {
 		heading: 'Choose members to print a QR for',

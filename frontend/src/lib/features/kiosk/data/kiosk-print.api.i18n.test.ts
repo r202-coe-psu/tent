@@ -32,4 +32,23 @@ describe('printKioskLabels error codes', () => {
 
 		expect((error as KioskPrintError).code).toBeUndefined();
 	});
+
+	it.each([
+		{ status: 503, apiCode: 'PRINTER_NOT_READY', code: 'not-ready' },
+		{ status: 409, apiCode: 'PRINTER_DISABLED', code: 'disabled' }
+	])('marks $apiCode from the kiosk as the $code failure', async ({ status, apiCode, code }) => {
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				new Response(
+					JSON.stringify({ printed: 0, error: { code: apiCode, message: 'ข้อความจากตู้' } }),
+					{ status }
+				)
+			);
+
+		const error = await printKioskLabels(['a'], fetchFn).catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(KioskPrintError);
+		expect(error).toMatchObject({ code, printed: 0 });
+	});
 });

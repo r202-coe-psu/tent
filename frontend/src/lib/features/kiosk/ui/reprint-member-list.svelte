@@ -13,6 +13,8 @@
 		selectedIds: readonly string[];
 		allSelected: boolean;
 		disabled?: boolean;
+		/** The kiosk has no printer: the heading speaks of showing the QR, not printing it. */
+		onScreen?: boolean;
 		ontoggle: (evacueeId: string) => void;
 		ontoggleall: () => void;
 	}
@@ -22,11 +24,15 @@
 		selectedIds,
 		allSelected,
 		disabled = false,
+		onScreen = false,
 		ontoggle,
 		ontoggleall
 	}: Props = $props();
 
 	const t = $derived(getTranslation(KIOSK_REPRINT_I18N, languageStore.current).memberList);
+	const screenHeading = $derived(
+		getTranslation(KIOSK_REPRINT_I18N, languageStore.current).onScreen.memberListHeading
+	);
 	const selectableCount = $derived(members.filter((member) => member.selectable).length);
 
 	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
@@ -62,7 +68,7 @@
 				id="reprint-members-title"
 				class="text-lg font-bold text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
 			>
-				{t.heading}
+				{onScreen ? screenHeading : t.heading}
 			</h2>
 			<p class="text-base text-slate-600 kiosk-portrait:text-xl kiosk-compact:text-sm">
 				{t.nameMasked}
