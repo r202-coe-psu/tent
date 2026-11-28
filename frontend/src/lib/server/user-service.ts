@@ -1,5 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { adminRaw, bootstrapAdminName, isProtectedBootstrapAdmin } from '$lib/server/couch-admin';
+import {
+	activeManagerShelter,
+	adminRaw,
+	bootstrapAdminName,
+	isProtectedBootstrapAdmin
+} from '$lib/server/couch-admin';
 import { ServiceError, serviceErrorFromCouch, type Caller } from '$lib/server/couch-admin';
 import {
 	SHELTER_MANAGER,
@@ -12,8 +17,8 @@ import {
 	isAppSystemAdmin,
 	isLastAppSystemAdmin,
 	isSystemAdmin,
-	managerShelterCodes,
 	mergeEdgeShelters,
+	managerShelterCodes,
 	mergeShelterAssignment,
 	rolesFromAssignments,
 	shelterCodeFromRoles,
@@ -520,6 +525,29 @@ export type UserDeleteResult = UserWriteResult & { deleted: boolean };
 
 export type UserCreateResult = UserWriteResult & { merged: boolean };
 
+/**
+ * One volunteer profile, one account: refuse to create or merge `name` for a profile already
+ * linked to a different live account in any shelter. The client checks only the accounts of the
+ * shelter it works in (#477), so this is the guard that sees every shelter. Thrown before the
+ * create, so its CONFLICT never reaches the add-from-outside merge.
+ */
+async function assertVolunteerProfileUnlinked(
+	name: string,
+	volunteerId: string | null | undefined
+): Promise<void> {
+	if (!volunteerId) return;
+	const lower = name.toLowerCase();
+	const other = (await fetchAllUserDocs()).find(
+		(d) => d.volunteer_id === volunteerId && d.name.toLowerCase() !== lower
+	);
+	if (other) {
+		throw new ServiceError(
+			'CONFLICT',
+			`อาสาสมัครนี้มีบัญชี ${other.name} แล้ว กรุณาจัดการผ่านหน้าผู้ใช้งาน`
+		);
+	}
+}
+
 export async function createOrMergeUser(
 	input: Parameters<typeof createUser>[0],
 	caller: Caller,
@@ -544,6 +572,7 @@ export async function createOrMergeUser(
 			await options.verifyVolunteerRoles(shelters, input.volunteer_id);
 		}
 	}
+	await assertVolunteerProfileUnlinked(input.name, input.volunteer_id);
 	try {
 		await createUser(input);
 		if (input.personnel_type === 'volunteer') {
@@ -561,8 +590,7 @@ export async function createOrMergeUser(
 	} catch (e) {
 		if (!(e instanceof ServiceError) || e.code !== 'CONFLICT' || caller.isSA) throw e;
 		if (e instanceof DeletedNameConflictError) throw e; // reserved name: never merge into a deleted account
-		const managed = managerShelterCodes(caller.roles);
-		const code = managed[0] ?? caller.shelterCode;
+		const code = activeManagerShelter(caller);
 		if (!code) throw e;
 		const caps = capabilitiesForShelter(input.roles, code);
 		if (caps.length === 0) throw e;
@@ -946,15 +974,16 @@ export async function readShelterVolunteerAccounts(
 	});
 }
 
-/** List users, scoped: SA sees all; a manager sees users with their managed shelter scope. */
+/** List users, scoped: SA sees all; a manager sees the users of the shelter they work in (#477). */
 export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const bootstrap = bootstrapAdminName();
 	const all = (await fetchAllUserDocs())
 		.filter((d) => !isProtectedBootstrapAdmin(d, bootstrap))
 		.map(toSummary);
 	if (caller.isSA) return all;
-	const managed = managerShelterCodes(caller.roles);
-	const codes = managed.length > 0 ? managed : caller.shelterCode ? [caller.shelterCode] : [];
+	// The shelter the manager works in (#477), not every shelter they manage.
+	const active = activeManagerShelter(caller);
+	const codes = active ? [active] : [];
 	return all.filter((u) => codes.some((code) => hasShelterScope(u.roles, code)));
 }
 
@@ -991,16 +1020,18 @@ function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]):
 	if (isAppSystemAdmin(targetRoles)) {
 		throw new ServiceError('FORBIDDEN', 'A manager may not modify a system admin');
 	}
-	const managed = managerShelterCodes(caller.roles);
-	const code = managed[0] ?? caller.shelterCode;
+	const code = activeManagerShelter(caller);
 	if (!code) {
 		throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
 	}
-	// Allow add-from-outside: target need not already be in this shelter.
-	const capsHere = capabilitiesForShelter(targetRoles, code);
-	if (capsHere.includes(SHELTER_MANAGER)) {
+	// Never a manager of ANY shelter, not only one this caller manages: the write can change the
+	// password, reset it or unlink MFA, so a manager of SH002 must not take over an SH001 manager
+	// who is merely staff in SH002 (PR #1523 review). Only a system admin edits managers.
+	if (managerShelterCodes(targetRoles).length > 0) {
 		throw new ServiceError('FORBIDDEN', 'A manager may not modify another shelter manager');
 	}
+	// Allow add-from-outside: target need not already be in this shelter.
+	const capsHere = capabilitiesForShelter(targetRoles, code);
 	const staff = STAFF_CAPABILITIES as readonly string[];
 	if (capsHere.some((c) => !staff.includes(c))) {
 		throw new ServiceError('FORBIDDEN', 'A manager may only manage staff users in their shelter');
@@ -1116,6 +1147,11 @@ export async function updateUser(
 		throw new ServiceError('FORBIDDEN', 'บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี');
 	}
 
+	// One volunteer profile, one account (CR FR-5b) — also when an edit relinks the profile.
+	if (input.volunteer_id && input.volunteer_id !== doc.volunteer_id) {
+		await assertVolunteerProfileUnlinked(name, input.volunteer_id);
+	}
+
 	let nextRoles = input.roles;
 
 	if (!caller.isSA) {
@@ -1154,7 +1190,7 @@ export async function updateUser(
 
 	const permanentRoles = input.permanent_roles ?? [];
 	if (!caller.isSA) {
-		const code = managerShelterCodes(caller.roles)[0] ?? caller.shelterCode;
+		const code = activeManagerShelter(caller);
 		if (permanentRoles.some((role) => !code || !role.startsWith(`${code}:`))) {
 			throw new ServiceError('FORBIDDEN', 'A manager may only change grants in their own shelter');
 		}

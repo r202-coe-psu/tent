@@ -729,7 +729,10 @@ describe('coordinator role grants on _users (#955)', () => {
 			});
 
 			it('audits the role a manager merges into an existing volunteer account', async () => {
-				seed('other@example.com', { roles: ['shelter:SH002', 'SH002:kitchen_staff'] });
+				seed('other@example.com', {
+					roles: ['shelter:SH002', 'SH002:kitchen_staff'],
+					volunteer_id: 'volunteer:V2'
+				});
 				await createOrMergeUser(
 					{
 						name: 'other@example.com',
@@ -737,7 +740,7 @@ describe('coordinator role grants on _users (#955)', () => {
 						display_name: 'อื่น',
 						roles: ['shelter:SH001', 'SH001:registration_staff'],
 						personnel_type: 'volunteer',
-						volunteer_id: 'volunteer:V1'
+						volunteer_id: 'volunteer:V2'
 					},
 					sm,
 					noCheck
@@ -975,7 +978,7 @@ describe('coordinator role grants on _users (#955)', () => {
 								display_name: 'Audit Fail',
 								roles: ['shelter:SH001', 'SH001:kitchen_staff'],
 								personnel_type: 'volunteer',
-								volunteer_id: 'volunteer:V1'
+								volunteer_id: 'volunteer:V3'
 							},
 							sm,
 							{ verifyVolunteerRoles: verify }

@@ -2,6 +2,7 @@ import { env } from '$env/dynamic/private';
 import { error, json, isHttpError, type HttpError } from '@sveltejs/kit';
 import {
 	COUCH_ADMIN,
+	SHELTER_MANAGER,
 	SYSTEM_ADMIN,
 	isShelterManager,
 	isStaffOnly,
@@ -19,6 +20,7 @@ import {
 	type Caller,
 	type ServiceErrorCode
 } from './session-auth';
+import { resolveActiveShelter } from './active-shelter';
 
 // The credential-free session helpers live in `session-auth.ts` (printer code must not import
 // this module, CR-222 FR-2a); re-exported so every existing caller keeps working unchanged.
@@ -276,13 +278,56 @@ export function serviceOrHttpError(e: unknown): Response {
  * Authorize a user-management write. Forwards the caller's cookie to central
  * `/_session` (whoami), then requires SA or shelter_manager. Returns the caller
  * so the handler can scope the operation. Throws {@link ServiceError}.
+ *
+ * `requestedShelter` is the `?shelter_code=` the client works in (#477). When given (`null` =
+ * the request named none) the manager capability is checked IN that shelter and the returned
+ * caller's `shelterCode` IS that shelter, so the service layer acts on it instead of the first
+ * `shelter:` role. Several managed shelters and none named → `VALIDATION` (422). Omitted
+ * (`undefined`) = the route has no shelter to act on (app config, API keys, …): gate only.
  */
-export async function authorizeUserWrite(cookie: string | null): Promise<Caller> {
+export async function authorizeUserWrite(
+	cookie: string | null,
+	requestedShelter?: string | null
+): Promise<Caller> {
 	const caller = await authorizeSession(cookie);
 	if (!caller.isSA && !isShelterManager(caller.roles)) {
 		throw new ServiceError('FORBIDDEN', 'Requires system_admin or shelter_manager');
 	}
-	return caller;
+	if (requestedShelter === undefined) return caller;
+	// Default among the shelters the caller MANAGES, not every shelter they belong to: a manager
+	// of SH001 who is also staff in SH002 has one unambiguous default (CR FR-3).
+	let requested = requestedShelter?.trim() || null;
+	if (!caller.isSA && !requested) {
+		const managed = managerShelterCodes(caller.roles);
+		if (managed.length === 0) {
+			throw new ServiceError('FORBIDDEN', 'Manager has no shelter scope');
+		}
+		if (managed.length === 1) requested = managed[0];
+	}
+	try {
+		const active = resolveActiveShelter(
+			caller.roles,
+			caller.isSA,
+			requested,
+			[SHELTER_MANAGER],
+			'Requires shelter_manager in the requested shelter'
+		);
+		return { ...caller, shelterCode: active ?? caller.shelterCode };
+	} catch (e) {
+		if (!isHttpError(e)) throw e;
+		throw new ServiceError(e.status === 403 ? 'FORBIDDEN' : 'VALIDATION', e.body.message);
+	}
+}
+
+/**
+ * The shelter a manager's user write acts on: the one {@link authorizeUserWrite} resolved when
+ * the caller manages it, else the first shelter they manage (a route that resolved none), else
+ * the caller's own scope. Never a shelter the caller does not manage.
+ */
+export function activeManagerShelter(caller: Caller): string | null {
+	const managed = managerShelterCodes(caller.roles);
+	if (caller.shelterCode && managed.includes(caller.shelterCode)) return caller.shelterCode;
+	return managed[0] ?? caller.shelterCode ?? null;
 }
 
 /** Any logged-in caller; the operation itself enforces capability. Throws {@link ServiceError}. */
@@ -382,6 +427,14 @@ export function assertCanGrant(caller: Caller, requestedRoles: readonly string[]
 	}
 	if (shelterCodes.some((code) => !managed.includes(code))) {
 		throw new ServiceError('FORBIDDEN', 'A manager may only add users to their own shelter');
+	}
+	// Only the shelter the manager is working in (#477): not every shelter they happen to manage.
+	const active = activeManagerShelter(caller);
+	if (shelterCodes.some((code) => code !== active)) {
+		throw new ServiceError(
+			'FORBIDDEN',
+			'A manager may only grant roles in the shelter they are working in'
+		);
 	}
 	if (!isStaffOnly(requestedRoles)) {
 		throw new ServiceError(

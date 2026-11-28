@@ -4,6 +4,7 @@ vi.mock('$env/dynamic/private', () => ({
 	env: { COUCHDB_ADMIN_URL: 'http://admin:password@couchdb.test' }
 }));
 import {
+	activeManagerShelter,
 	assertCanGrant,
 	authorizeUserWrite,
 	isProtectedBootstrapAdmin,
@@ -89,6 +90,33 @@ describe('assertCanGrant', () => {
 	it('a manager may not grant manager or system_admin', () => {
 		expect(grantError(mgr, ['shelter:SH001', 'shelter_manager'])?.code).toBe('FORBIDDEN');
 		expect(grantError(mgr, ['shelter:SH001', 'system_admin'])?.code).toBe('FORBIDDEN');
+	});
+
+	// Manages SH001 and SH002, working in SH002 (#477).
+	const multi = (working: string): Caller => ({
+		name: 'multi',
+		roles: ['shelter:SH001', 'SH001:shelter_manager', 'shelter:SH002', 'SH002:shelter_manager'],
+		isSA: false,
+		shelterCode: working
+	});
+
+	it('a multi-shelter manager grants in the shelter they work in, not the first (#477)', () => {
+		expect(grantError(multi('SH002'), ['shelter:SH002', 'registration_staff'])).toBeNull();
+		expect(grantError(multi('SH001'), ['shelter:SH001', 'registration_staff'])).toBeNull();
+	});
+
+	it('a multi-shelter manager may not grant in a managed shelter they are not working in (#477)', () => {
+		expect(grantError(multi('SH002'), ['shelter:SH001', 'registration_staff'])?.code).toBe(
+			'FORBIDDEN'
+		);
+		expect(
+			grantError(multi('SH002'), [
+				'shelter:SH001',
+				'shelter:SH002',
+				'SH001:kitchen_staff',
+				'SH002:kitchen_staff'
+			])?.code
+		).toBe('FORBIDDEN');
 	});
 
 	it('a manager without a shelter scope is forbidden', () => {
@@ -207,12 +235,12 @@ describe('serviceError envelope', () => {
 describe('authorizeUserWrite (generic /api/v1/users gate)', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
-	async function asRoles(roles: string[]) {
+	async function asRoles(roles: string[], requestedShelter?: string | null) {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () => Response.json({ userCtx: { name: 'u', roles } }))
 		);
-		return authorizeUserWrite('AuthSession=x');
+		return authorizeUserWrite('AuthSession=x', requestedShelter);
 	}
 
 	it('refuses a volunteer_coordinator: grants go through /api/v1/volunteer-access (#955)', async () => {
@@ -225,6 +253,115 @@ describe('authorizeUserWrite (generic /api/v1/users gate)', () => {
 		await expect(asRoles(['shelter:SH001', 'SH001:shelter_manager'])).resolves.toMatchObject({
 			name: 'u'
 		});
+	});
+});
+
+describe('authorizeUserWrite active shelter (#477)', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	const both = ['shelter:SH001', 'SH001:shelter_manager', 'shelter:SH002', 'SH002:shelter_manager'];
+	// Manager in SH002, only a registration desk in SH001.
+	const managerInSh002Only = [
+		'shelter:SH001',
+		'SH001:registration_staff',
+		'shelter:SH002',
+		'SH002:shelter_manager'
+	];
+
+	async function asRoles(roles: string[], requested: string | null | undefined) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => Response.json({ userCtx: { name: 'u', roles } }))
+		);
+		return authorizeUserWrite('AuthSession=x', requested);
+	}
+
+	it('returns the requested shelter as the caller shelterCode', async () => {
+		await expect(asRoles(both, 'SH002')).resolves.toMatchObject({ shelterCode: 'SH002' });
+		await expect(asRoles(managerInSh002Only, 'SH002')).resolves.toMatchObject({
+			shelterCode: 'SH002'
+		});
+	});
+
+	it('refuses a shelter where the caller is not a manager (403), even if they belong to it', async () => {
+		await expect(asRoles(managerInSh002Only, 'SH001')).rejects.toMatchObject({
+			code: 'FORBIDDEN'
+		});
+		await expect(asRoles(both, 'SH009')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+	});
+
+	it('asks a manager of several shelters to name one (VALIDATION → 422)', async () => {
+		await expect(asRoles(both, null)).rejects.toMatchObject({ code: 'VALIDATION' });
+	});
+
+	it('defaults a manager of one shelter to it', async () => {
+		await expect(asRoles(['shelter:SH001', 'SH001:shelter_manager'], null)).resolves.toMatchObject({
+			shelterCode: 'SH001'
+		});
+	});
+
+	it('defaults to the one managed shelter even when the caller is staff elsewhere (CR FR-3)', async () => {
+		await expect(asRoles(managerInSh002Only, null)).resolves.toMatchObject({
+			shelterCode: 'SH002'
+		});
+		await expect(asRoles(managerInSh002Only, '  ')).resolves.toMatchObject({
+			shelterCode: 'SH002'
+		});
+	});
+
+	it('refuses a manager with no managed shelter as FORBIDDEN, not VALIDATION', async () => {
+		await expect(asRoles(['shelter_manager'], null)).rejects.toMatchObject({
+			code: 'FORBIDDEN',
+			message: 'Manager has no shelter scope'
+		});
+	});
+
+	it('leaves SA unrestricted', async () => {
+		await expect(asRoles(['system_admin'], null)).resolves.toMatchObject({ isSA: true });
+		await expect(asRoles(['system_admin'], 'SH009')).resolves.toMatchObject({
+			shelterCode: 'SH009'
+		});
+	});
+
+	it('only gates when the route names no shelter (undefined)', async () => {
+		await expect(asRoles(both, undefined)).resolves.toMatchObject({ name: 'u' });
+	});
+});
+
+describe('activeManagerShelter (#477)', () => {
+	const roles = [
+		'shelter:SH001',
+		'SH001:shelter_manager',
+		'shelter:SH002',
+		'SH002:shelter_manager'
+	];
+	const caller = (shelterCode: string | null, r: string[] = roles): Caller => ({
+		name: 'm',
+		roles: r,
+		isSA: false,
+		shelterCode
+	});
+
+	it('keeps the resolved shelter when the caller manages it', () => {
+		expect(activeManagerShelter(caller('SH002'))).toBe('SH002');
+	});
+
+	it('never returns a shelter the caller does not manage', () => {
+		expect(activeManagerShelter(caller('SH009'))).toBe('SH001');
+		const staffInSh001 = [
+			'shelter:SH001',
+			'SH001:registration_staff',
+			'shelter:SH002',
+			'SH002:shelter_manager'
+		];
+		expect(activeManagerShelter(caller('SH001', staffInSh001))).toBe('SH002');
+	});
+
+	it('falls back to the caller scope when no shelter is managed', () => {
+		expect(activeManagerShelter(caller('SH003', ['shelter:SH003', 'shelter_manager']))).toBe(
+			'SH003'
+		);
+		expect(activeManagerShelter(caller(null, []))).toBeNull();
 	});
 });
 

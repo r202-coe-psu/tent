@@ -132,6 +132,8 @@ describe('grantVolunteerAccess', () => {
 			grantVolunteerAccess(volunteer, { ...input, email: ' helper@example.com ' }, MANAGER)
 		).resolves.toEqual({ created: true, roleAdded: false });
 		expect(mocks.repositoryFor).toHaveBeenCalledWith('SH001');
+		// The account is looked up in the shelter the volunteer belongs to, not the manager's first.
+		expect(mocks.listUsers).toHaveBeenCalledWith('SH001');
 		expect(mocks.createUser).toHaveBeenCalledWith(
 			expect.objectContaining({
 				name: input.email,
@@ -143,7 +145,8 @@ describe('grantVolunteerAccess', () => {
 				volunteer_id: volunteer._id,
 				phone: volunteer.phone,
 				must_change_password: false
-			})
+			}),
+			'SH001'
 		);
 		expect(mocks.update).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -162,7 +165,8 @@ describe('grantVolunteerAccess', () => {
 	it('lowercases the email before creating the account', async () => {
 		await grantVolunteerAccess(volunteer, { ...input, email: 'Helper@Example.COM' }, MANAGER);
 		expect(mocks.createUser).toHaveBeenCalledWith(
-			expect.objectContaining({ name: 'helper@example.com', email: 'helper@example.com' })
+			expect.objectContaining({ name: 'helper@example.com', email: 'helper@example.com' }),
+			'SH001'
 		);
 	});
 
@@ -192,7 +196,8 @@ describe('grantVolunteerAccess', () => {
 			expect.objectContaining({
 				password: volunteer.phone,
 				must_change_password: true
-			})
+			}),
+			'SH001'
 		);
 	});
 
@@ -203,7 +208,8 @@ describe('grantVolunteerAccess', () => {
 		mocks.get.mockImplementation(async () => ({ ...volunteer, phone }));
 		await grantVolunteerAccess({ ...volunteer, phone }, input, MANAGER);
 		expect(mocks.createUser).toHaveBeenCalledWith(
-			expect.objectContaining({ phone: expected, must_change_password: false })
+			expect.objectContaining({ phone: expected, must_change_password: false }),
+			'SH001'
 		);
 		expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ phone }));
 	});
@@ -216,7 +222,8 @@ describe('grantVolunteerAccess', () => {
 			roleAdded: false
 		});
 		expect(mocks.createUser).toHaveBeenCalledWith(
-			expect.objectContaining({ phone: null, email: input.email, must_change_password: false })
+			expect.objectContaining({ phone: null, email: input.email, must_change_password: false }),
+			'SH001'
 		);
 	});
 
@@ -284,9 +291,13 @@ describe('grantVolunteerAccess', () => {
 				created: false,
 				roleAdded: true
 			});
-			expect(mocks.updateUser).toHaveBeenCalledWith(input.email, {
-				roles: ['shelter:SH001', `SH001:${input.role}`]
-			});
+			expect(mocks.updateUser).toHaveBeenCalledWith(
+				input.email,
+				{
+					roles: ['shelter:SH001', `SH001:${input.role}`]
+				},
+				'SH001'
+			);
 			expect(mocks.createUser).not.toHaveBeenCalled();
 			expect(mocks.update).toHaveBeenCalledWith(
 				expect.objectContaining({ user_name: input.email, email: input.email })
@@ -296,9 +307,13 @@ describe('grantVolunteerAccess', () => {
 		it('keeps the other shelters roles when a system admin saves the whole list', async () => {
 			mocks.listUsers.mockResolvedValue([elsewhere]);
 			await grantVolunteerAccess(volunteer, input, ['system_admin']);
-			expect(mocks.updateUser).toHaveBeenCalledWith(input.email, {
-				roles: ['shelter:SH002', 'SH002:kitchen_staff', 'shelter:SH001', `SH001:${input.role}`]
-			});
+			expect(mocks.updateUser).toHaveBeenCalledWith(
+				input.email,
+				{
+					roles: ['shelter:SH002', 'SH002:kitchen_staff', 'shelter:SH001', `SH001:${input.role}`]
+				},
+				'SH001'
+			);
 		});
 
 		it('reports the role added when the server merged into an account the manager cannot list', async () => {

@@ -25,6 +25,13 @@ import { assertVolunteerVerifiedForAccess } from '$lib/features/volunteers/serve
 // Absent from the static prod build (a reverse proxy routes /api/v1/* → FastAPI).
 export const prerender = false;
 
+/**
+ * The shelter the request works in (`?shelter_code=`, #477): the manager capability is checked
+ * in it, and a manager of several shelters must name one (`VALIDATION`, 422). Absent = `null`.
+ */
+const requestedShelter = (request: Request): string | null =>
+	new URL(request.url).searchParams.get('shelter_code')?.trim() || null;
+
 interface CreateUserBody {
 	name?: unknown;
 	password?: unknown;
@@ -64,7 +71,10 @@ interface UpdateUserBody {
 /** POST — create a user (SA: any non-_admin; SM: own-shelter staff). */
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		const caller = await authorizeUserWrite(
+			request.headers.get('cookie'),
+			requestedShelter(request)
+		);
 		const body = (await request.json().catch(() => ({}))) as CreateUserBody;
 
 		const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -162,7 +172,10 @@ export const POST: RequestHandler = async ({ request }) => {
 /** PUT — update a user (SA: any; SM: own-shelter staff). */
 export const PUT: RequestHandler = async ({ request }) => {
 	try {
-		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		const caller = await authorizeUserWrite(
+			request.headers.get('cookie'),
+			requestedShelter(request)
+		);
 		const body = (await request.json().catch(() => ({}))) as UpdateUserBody;
 
 		const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -265,10 +278,13 @@ export const PUT: RequestHandler = async ({ request }) => {
 	}
 };
 
-/** GET — list users (SA: all; SM: own shelter only). */
+/** GET — list users (SA: all; SM: the shelter they work in). */
 export const GET: RequestHandler = async ({ request }) => {
 	try {
-		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		const caller = await authorizeUserWrite(
+			request.headers.get('cookie'),
+			requestedShelter(request)
+		);
 		return json(await listUsers(caller));
 	} catch (e) {
 		return serviceError(e);
@@ -278,7 +294,10 @@ export const GET: RequestHandler = async ({ request }) => {
 /** DELETE ?name= — remove a user (SM scoped to own shelter). */
 export const DELETE: RequestHandler = async ({ request, url }) => {
 	try {
-		const caller = await authorizeUserWrite(request.headers.get('cookie'));
+		const caller = await authorizeUserWrite(
+			request.headers.get('cookie'),
+			requestedShelter(request)
+		);
 		const name = url.searchParams.get('name');
 		if (!name) throw new ServiceError('VALIDATION', 'name is required');
 		assertUsersWritable();

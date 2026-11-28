@@ -1,5 +1,5 @@
 import { authStore } from '$lib/stores/auth.svelte';
-import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
+import { isSystemAdmin, managerShelterCodes, shelterCodeFromRoles } from '$lib/auth/roles';
 import { shelterStore } from '$lib/stores/shelter.svelte';
 
 /**
@@ -26,6 +26,18 @@ export function resolveShelterCode(): string | null {
 	}
 	const roles = authStore.user?.roles ?? [];
 	return shelterCodeFromRoles(roles) ?? null;
+}
+
+/**
+ * The shelter user management works in (#477): the selected shelter, else the first shelter this
+ * user manages, else {@link resolveShelterCode}. Unlike the plain resolution it never defaults to
+ * a shelter where a multi-shelter user is only staff, which the users BFF would refuse with 403.
+ */
+export function resolveManagedShelterCode(): string | null {
+	if (shelterStore.selectedShelterCode) {
+		return shelterStore.selectedShelterCode;
+	}
+	return managerShelterCodes(authStore.user?.roles ?? [])[0] ?? resolveShelterCode();
 }
 
 /**

@@ -1,13 +1,9 @@
 <script lang="ts">
 	import { UserManagementPage } from '$lib/features/users';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { authStore } from '$lib/stores/auth.svelte';
-	import { shelterCodeFromRoles } from '$lib/auth/roles';
+	import { resolveManagedShelterCode } from '$lib/db/shelter';
 
-	const roles = $derived(authStore.user?.roles ?? []);
-	const lockedShelterCode = $derived(
-		shelterStore.selectedShelterCode ?? shelterCodeFromRoles(roles) ?? undefined
-	);
+	// Selected shelter, else the first one this user manages, not the first `shelter:` role (#477).
+	const lockedShelterCode = $derived(resolveManagedShelterCode() ?? undefined);
 </script>
 
 {#if lockedShelterCode}

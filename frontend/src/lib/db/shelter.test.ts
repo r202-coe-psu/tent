@@ -4,6 +4,7 @@ import {
 	getShelterCode,
 	getShelterDb,
 	resolveContextShelterCode,
+	resolveManagedShelterCode,
 	resolveShelterCode
 } from './shelter';
 import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -85,5 +86,42 @@ describe('shelter database config', () => {
 
 		shelterStore.selectedShelterCode = 'SH005';
 		expect(resolveContextShelterCode()).toBe('SH005');
+	});
+});
+
+describe('resolveManagedShelterCode (#477)', () => {
+	beforeEach(() => {
+		shelterStore.selectedShelterCode = undefined;
+		shelterStore.listDefaultCode = undefined;
+		mockRoles = [];
+	});
+
+	it('uses the selected shelter first', () => {
+		shelterStore.selectedShelterCode = 'SH001';
+		mockRoles = [
+			'shelter:SH001',
+			'SH001:registration_staff',
+			'shelter:SH002',
+			'SH002:shelter_manager'
+		];
+		expect(resolveManagedShelterCode()).toBe('SH001');
+	});
+
+	it('defaults to a managed shelter, not the first shelter role', () => {
+		mockRoles = [
+			'shelter:SH001',
+			'SH001:registration_staff',
+			'shelter:SH002',
+			'SH002:shelter_manager'
+		];
+		shelterStore.listDefaultCode = 'SH001';
+		expect(resolveManagedShelterCode()).toBe('SH002');
+	});
+
+	it('falls back to the plain resolution when the user manages no shelter', () => {
+		mockRoles = ['shelter:SH003', 'registration_staff'];
+		expect(resolveManagedShelterCode()).toBe('SH003');
+		mockRoles = ['system_admin'];
+		expect(resolveManagedShelterCode()).toBeNull();
 	});
 });
