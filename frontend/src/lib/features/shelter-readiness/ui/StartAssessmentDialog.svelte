@@ -53,7 +53,7 @@
 	<Dialog.Content class="max-w-lg">
 		<Dialog.Header>
 			<div class="flex items-center gap-2 text-slate-800">
-				<ShieldAlert class="size-5 text-sky-600" />
+				<ShieldAlert class="size-5 text-primary" />
 				<Dialog.Title class="text-base font-bold">เลือกรูปแบบการทำแบบประเมินความพร้อม</Dialog.Title>
 			</div>
 			<Dialog.Description class="pt-1 text-xs text-slate-500">
@@ -67,7 +67,7 @@
 				<label
 					class="flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all {startMode ===
 					'prefill'
-						? 'border-sky-500 bg-sky-50/70 ring-2 ring-sky-400/30'
+						? 'border-primary bg-primary/5 ring-2 ring-primary/30'
 						: 'border-slate-200 bg-white hover:border-slate-300'}"
 				>
 					<input
@@ -80,7 +80,7 @@
 					/>
 					<div class="space-y-1">
 						<div class="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-							<CopyPlus class="size-4 text-sky-600" />
+							<CopyPlus class="size-4 text-primary" />
 							<span>คัดลอกจากรอบล่าสุดมาตั้งต้น (แนะนำ)</span>
 						</div>
 						<p class="text-2xs leading-relaxed text-slate-600">
@@ -102,7 +102,7 @@
 			<label
 				class="flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all {startMode ===
 				'new'
-					? 'border-sky-500 bg-sky-50/70 ring-2 ring-sky-400/30'
+					? 'border-primary bg-primary/5 ring-2 ring-primary/30'
 					: 'border-slate-200 bg-white hover:border-slate-300'}"
 			>
 				<input
@@ -130,7 +130,7 @@
 							</Label>
 							<select
 								bind:value={selectedTier}
-								class="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-sky-500 focus:outline-hidden"
+								class="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-primary focus:outline-hidden"
 							>
 								<option value="community">ระดับชุมชน (10+ คน / บ้านพัก 1-2 ชั้น)</option>
 								<option value="local_admin">ระดับ อปท. (50–500 คน / วัด โรงเรียน มัสยิด)</option>
@@ -146,7 +146,7 @@
 			<Button variant="outline" size="sm" onclick={onCancel}>ยกเลิก</Button>
 			<Button
 				size="sm"
-				class="bg-sky-700 text-xs font-bold text-white hover:bg-sky-800"
+				class="bg-primary text-xs font-bold text-primary-foreground hover:bg-primary-dark"
 				onclick={handleConfirm}
 			>
 				เริ่มต้นการประเมิน

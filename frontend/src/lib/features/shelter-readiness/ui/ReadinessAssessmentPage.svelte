@@ -239,7 +239,11 @@
 	}
 </script>
 
-<div class="relative w-full space-y-5 pb-16">
+<div
+	class={view === 'history'
+		? 'relative w-full'
+		: 'relative w-full space-y-5 p-4 pb-16 sm:p-6 lg:p-8'}
+>
 	{#if view === 'history'}
 		<!-- View 1: หน้ารวมประวัติการประเมินความพร้อม (History Overview) -->
 		<ReadinessHistoryTimeline
@@ -283,7 +287,7 @@
 					variant="outline"
 					size="sm"
 					onclick={() => (startModalOpen = true)}
-					class="h-9 gap-1.5 border-sky-300 bg-sky-50 text-xs font-bold text-sky-900 hover:bg-sky-100"
+					class="h-9 gap-1.5 border-primary/30 bg-primary/10 text-xs font-bold text-primary hover:bg-primary/10"
 				>
 					<PlusCircle class="size-3.5" />
 					<span>เริ่มรอบใหม่</span>

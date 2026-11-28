@@ -61,7 +61,7 @@
 
 	const sizeClasses = $derived(
 		size === 'sm'
-			? 'text-xs px-2 py-0.5 gap-1'
+			? 'text-xs px-2 py-1 gap-1'
 			: size === 'lg'
 				? 'text-sm font-semibold px-3 py-1.5 gap-2'
 				: 'text-xs font-medium px-2.5 py-1 gap-1.5'
@@ -69,8 +69,8 @@
 </script>
 
 <span
-	class="inline-flex items-center rounded-full border {config.classes} {sizeClasses} tabular-nums"
+	class="inline-flex items-center rounded-full border leading-none {config.classes} {sizeClasses} tabular-nums"
 >
 	<Icon class="size-3.5 shrink-0" />
-	<span>{config.label}</span>
+	<span class="leading-none">{config.label}</span>
 </span>

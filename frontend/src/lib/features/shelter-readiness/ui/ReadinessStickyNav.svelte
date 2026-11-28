@@ -37,7 +37,7 @@
 				<button
 					type="button"
 					onclick={() => onScrollToSection(section.id)}
-					class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-900"
+					class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
 				>
 					<span
 						class="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-3xs font-bold text-slate-700"
@@ -107,7 +107,7 @@
 				class="h-2 w-24 overflow-hidden rounded-full border border-slate-200 bg-slate-100 sm:w-32"
 			>
 				<div
-					class="h-full bg-sky-600 transition-all duration-300"
+					class="h-full bg-primary transition-all duration-300"
 					style="width: {progressPercent}%"
 				></div>
 			</div>

@@ -35,7 +35,7 @@
 	<Card.Header class="border-b border-slate-100 pb-3">
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div class="flex items-center gap-2.5">
-				<div class="rounded-lg bg-sky-50 p-2 text-sky-700">
+				<div class="rounded-lg bg-primary/10 p-2 text-primary">
 					<Building2 class="size-5" />
 				</div>
 				<div>
@@ -51,18 +51,18 @@
 			<!-- Tier Selector Dropdown / Segment -->
 			<div class="flex flex-col gap-1 sm:items-end">
 				<span class="flex items-center gap-1 text-xs font-semibold text-slate-700">
-					<ShieldAlert class="size-3.5 text-sky-600" />
+					<ShieldAlert class="size-3.5 text-primary" />
 					ระดับเกณฑ์มาตรฐาน (Tier):
 				</span>
 				{#if readOnly}
 					<span
-						class="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-900"
+						class="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
 					>
 						{tierDescriptions[tier].title}
 					</span>
 				{:else}
 					<select
-						class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-sky-500 focus:outline-hidden"
+						class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-primary focus:outline-hidden"
 						value={tier}
 						onchange={(e) =>
 							onTierChangeRequest((e.currentTarget as HTMLSelectElement).value as ReadinessTier)}
