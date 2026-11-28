@@ -68,7 +68,7 @@ export interface SupplyItem extends BaseDoc {
 export const supplyItemSchema = z.object({
 	name: z.string().trim().min(1, 'Item name is required'),
 	category: supplyCategorySchema,
-	unit: z.string().trim().min(1, 'Unit is required'),
+	unit: z.string().trim().min(1, 'กรุณาระบุหน่วย'),
 	reorder_level: z.coerce.number().positive().nullable().default(null),
 	perishable: z.boolean().default(false)
 });

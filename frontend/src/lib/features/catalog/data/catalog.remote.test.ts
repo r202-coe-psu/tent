@@ -448,7 +448,7 @@ describe('CatalogRemoteRepository', () => {
 					},
 					ctx
 				)
-			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+			).rejects.toThrow(/หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก/);
 		});
 
 		it('allows legacy item_master edits when base_unit is unchanged', async () => {
@@ -469,7 +469,7 @@ describe('CatalogRemoteRepository', () => {
 
 			await expect(
 				repo.updateItemMaster({ ...legacy, base_unit: 'หน่วยใหม่' } as unknown as ItemMaster)
-			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+			).rejects.toThrow(/หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก/);
 		});
 
 		it('creates and lists units of measure sorted by sort_order', async () => {

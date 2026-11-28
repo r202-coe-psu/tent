@@ -729,20 +729,20 @@ function validateItemMasterFields(
 		if (!data.base_unit || data.base_unit.trim() === '') {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: 'Unit is required',
+				message: 'กรุณาเลือกหน่วยฐาน',
 				path: ['base_unit']
 			});
 		} else if (!isValidBaseUnit(data.base_unit)) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+				message: 'หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก (เช่น kg, piece, can)',
 				path: ['base_unit']
 			});
 		}
 		if (!data.distribution_type) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: 'Distribution type is required',
+				message: 'กรุณาเลือกรูปแบบการแจกจ่าย',
 				path: ['distribution_type']
 			});
 		}
@@ -750,14 +750,14 @@ function validateItemMasterFields(
 		if (data.base_unit && !isValidBaseUnit(data.base_unit)) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+				message: 'หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก (เช่น kg, piece, can)',
 				path: ['base_unit']
 			});
 		}
 		if (!data.asset_status) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: 'Asset status is required',
+				message: 'กรุณาเลือกสถานะอุปกรณ์',
 				path: ['asset_status']
 			});
 		}
