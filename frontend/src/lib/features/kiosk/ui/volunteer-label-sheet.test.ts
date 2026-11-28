@@ -6,7 +6,7 @@ const sheet = {
 	qrSrc: 'data:image/png;base64,QRPIXELS',
 	qrSizeMm: 24,
 	name: 'สมหญิง ใจดี',
-	badge: 'จิตอาสา · VOL-0042'
+	badge: 'อาสาสมัคร · VOL-0042'
 };
 
 describe('VolunteerLabelSheet', () => {
@@ -14,7 +14,7 @@ describe('VolunteerLabelSheet', () => {
 		const { body } = render(VolunteerLabelSheet, { props: { sheet } });
 
 		expect(body).toContain('สมหญิง ใจดี');
-		expect(body).toContain('จิตอาสา · VOL-0042');
+		expect(body).toContain('อาสาสมัคร · VOL-0042');
 		expect(body).toContain('src="data:image/png;base64,QRPIXELS"');
 		expect(body).toContain('width: 24mm');
 		expect(body).toContain('shelter.psu.ac.th');

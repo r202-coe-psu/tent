@@ -1,5 +1,5 @@
 /**
- * Rows, search and filters of the "บัญชีจิตอาสา" page (CR-221 FR-8). Pure: the page only renders
+ * Rows, search and filters of the "บัญชีอาสาสมัคร" page (CR-221 FR-8). Pure: the page only renders
  * what these return.
  *
  * A row is one volunteer account the shelter's accounts endpoint returned (linked both ways,

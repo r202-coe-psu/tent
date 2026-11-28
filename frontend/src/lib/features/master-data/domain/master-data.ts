@@ -85,7 +85,7 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
 	housing_type: 'ประเภทที่อยู่อาศัย (Housing Type)',
 	shelter_type: 'ประเภทอาคาร (Building Type)',
-	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)',
+	volunteer_skills: 'ทักษะมาตรฐานอาสาสมัคร (Volunteer Skills)',
 	chronic_disease: 'โรคประจำตัว (Chronic Disease)',
 	allergy: 'อาการแพ้ (Allergy)',
 	site_kind: 'ประเภทศูนย์ (Site Kind)'
@@ -140,7 +140,7 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 	},
 	volunteer_skills: {
 		shortTitle: 'ทักษะอาสา',
-		title: 'ทักษะมาตรฐานจิตอาสา',
+		title: 'ทักษะมาตรฐานอาสาสมัคร',
 		description: 'ทักษะที่กำหนดงานอาสาและให้ผู้สมัครเลือก',
 		affectedForms: ['ตั้งค่างานอาสา', 'สมัครอาสา (สาธารณะ)', 'โปรไฟล์/มอบหมายอาสา']
 	},

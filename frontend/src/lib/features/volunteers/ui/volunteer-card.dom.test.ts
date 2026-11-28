@@ -124,7 +124,7 @@ describe('VolunteerCard close-profile notices (CR-221 FR-20)', () => {
 describe('VolunteerCard close button for a manager-given role (CR-221 A1-6)', () => {
 	const closeButton = () =>
 		document.body.querySelector<HTMLButtonElement>('[aria-label="ปิดใช้งานอาสาสมัคร"]')!;
-	const REASON = 'จิตอาสามีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
+	const REASON = 'อาสาสมัครมีสิทธิ์ถาวรจากผู้จัดการศูนย์ ให้ผู้จัดการศูนย์ปิดหรือถอนสิทธิ์ก่อน';
 
 	it('is disabled for a coordinator, with the reason', async () => {
 		await render({ kind: 'active', loginName: 'vol@example.com', roles: [grantRole, managerRole] });
@@ -175,5 +175,51 @@ describe('VolunteerCard occupation display (CR-245)', () => {
 	it('omits occupation when null or undefined', async () => {
 		await render({ kind: 'none' }, { occupation: null });
 		expect(document.body.textContent).not.toContain('พยาบาลวิชาชีพ');
+	});
+});
+
+describe('VolunteerCard wording (#1571)', () => {
+	const unverified = {
+		identity_verified: false,
+		identity_verification: { status: 'pending' }
+	} as unknown as Partial<Volunteer>;
+
+	it('says a verified volunteer off shift is ready for work', async () => {
+		await render({ kind: 'none' });
+		expect(document.body.textContent).toContain('พร้อมรับงาน');
+		expect(document.body.textContent).not.toContain('รอสแตนด์บาย');
+	});
+
+	it('shows no standby badge before identity is checked, only what staff must do', async () => {
+		await render({ kind: 'none' }, unverified);
+		expect(document.body.textContent).not.toContain('รอสแตนด์บาย');
+		expect(document.body.textContent).not.toContain('พร้อมรับงาน');
+		expect(document.body.textContent).toContain('ต้องให้เจ้าหน้าที่ตรวจบัตรประชาชนก่อนเข้ากะ');
+	});
+
+	it('shows the shelter type label it is given, not a code', async () => {
+		instance = null;
+		const table = document.createElement('table');
+		const body = document.createElement('tbody');
+		table.append(body);
+		document.body.append(table);
+		instance = mount(VolunteerCard, {
+			target: body,
+			props: {
+				volunteer,
+				shelterName: 'มหาวิทยาลัยสงขลานครินทร์',
+				shelterType: 'สถาบันการศึกษา',
+				todayAssignment: null,
+				accessStatus: { kind: 'none' }
+			}
+		});
+		await settle();
+		expect(document.body.textContent).toContain('มหาวิทยาลัยสงขลานครินทร์ (สถาบันการศึกษา)');
+	});
+
+	it('labels the close button with text', async () => {
+		await render({ kind: 'none' });
+		const close = document.body.querySelector('[aria-label="ปิดใช้งานอาสาสมัคร"]');
+		expect(close?.textContent).toContain('ปิดใช้งาน');
 	});
 });

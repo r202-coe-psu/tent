@@ -12,7 +12,7 @@ const th = {
 		subheading: 'เลือกประเภทผู้ที่ต้องการพิมพ์',
 		groupLabel: 'ประเภทผู้ที่ต้องการพิมพ์ QR',
 		evacuee: { title: 'ผู้พักพิง', description: 'ผู้ที่ลงทะเบียนเข้าพักในศูนย์' },
-		volunteer: { title: 'จิตอาสา', description: 'พิมพ์บัตร QR จิตอาสาด้วยเบอร์โทร' }
+		volunteer: { title: 'อาสาสมัคร', description: 'พิมพ์บัตร QR อาสาสมัครด้วยเบอร์โทร' }
 	}
 };
 

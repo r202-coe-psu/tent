@@ -11,8 +11,8 @@ describe('KioskPrintQrChooser', () => {
 		expect(result.body).toContain('ผู้พักพิง');
 		expect(result.body).toContain('ผู้ที่ลงทะเบียนเข้าพักในศูนย์');
 		expect(result.body).toMatch(/<a[^>]*href="\/kiosk\/volunteer\?shelter_code=SH001"[^>]*>/);
-		expect(result.body).toContain('จิตอาสา');
-		expect(result.body).toContain('พิมพ์บัตร QR จิตอาสาด้วยเบอร์โทร');
+		expect(result.body).toContain('อาสาสมัคร');
+		expect(result.body).toContain('พิมพ์บัตร QR อาสาสมัครด้วยเบอร์โทร');
 		expect(result.body).toContain('href="/kiosk?shelter_code=SH001"');
 	});
 });

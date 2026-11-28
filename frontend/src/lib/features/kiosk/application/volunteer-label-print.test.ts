@@ -48,7 +48,7 @@ describe('printVolunteerLabel', () => {
 		expect(mocks.renderVolunteerLabelPng).toHaveBeenCalledExactlyOnceWith({
 			qrSrc: 'data:image/png;base64,qr',
 			name: 'สม** ใจ**',
-			badge: 'จิตอาสา · V-012'
+			badge: 'อาสาสมัคร · V-012'
 		});
 		expect(mocks.printKioskLabels).toHaveBeenCalledWith(['png-volunteer']);
 		expect(fallbackPrint).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe('printVolunteerLabel', () => {
 			qrSrc: 'data:image/png;base64,qr',
 			qrSizeMm: kioskQrPrintSize(33).sizeMm,
 			name: 'สม** ใจ**',
-			badge: 'จิตอาสา · V-012'
+			badge: 'อาสาสมัคร · V-012'
 		});
 	});
 

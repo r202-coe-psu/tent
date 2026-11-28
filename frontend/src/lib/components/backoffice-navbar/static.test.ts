@@ -148,7 +148,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'ค้นหาและแก้ไขข้อมูลผู้พักพิง',
 		'สแกนเข้า-ออกศูนย์'
 	];
-	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีจิตอาสา'];
+	const volunteers = ['งานและรายชื่ออาสาสมัคร', 'บัญชีอาสาสมัคร'];
 	const distributionDesk = 'จุดแจกจ่ายพัสดุและอาหาร';
 	const volunteerCheckIn = 'เช็คอินอาสาสมัคร';
 	const referrals = 'การส่งต่อผู้เข้าพัก';
@@ -242,7 +242,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const children = group && isGroup(group) ? group.children : [];
 		expect(children.map((c) => [c.label, String(c.href)])).toEqual([
 			['งานและรายชื่ออาสาสมัคร', '/back-office/volunteers'],
-			['บัญชีจิตอาสา', '/back-office/volunteers/accounts'],
+			['บัญชีอาสาสมัคร', '/back-office/volunteers/accounts'],
 			['เช็คอินอาสาสมัคร', '/onsite/volunteer-check-in']
 		]);
 	});

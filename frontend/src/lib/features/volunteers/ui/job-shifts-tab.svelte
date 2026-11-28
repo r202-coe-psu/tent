@@ -25,6 +25,7 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { ulid } from '$lib/db/ulid';
 	import { errorMessage } from '$lib/utils/errors';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
@@ -37,7 +38,8 @@
 	import { firstShiftCardError, shiftCardErrors } from '../domain/shift-draft';
 	import ShiftCardList from './shift-card-list.svelte';
 	import {
-		useShiftAssignments,
+		useJobAssignments,
+		useJobShiftAssignments,
 		useUnassignVolunteer,
 		useUpdateJob,
 		useVolunteers
@@ -50,7 +52,6 @@
 	const unassignMutation = useUnassignVolunteer(queryClient);
 	const saving = $derived(updateMutation.isPending);
 
-	const assignmentsQuery = useShiftAssignments();
 	const volunteersQuery = useVolunteers();
 	const volunteersById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
 
@@ -81,11 +82,29 @@
 		)
 	);
 	const splits = $derived(jobShiftQuotaSplits({ ...job, shifts: orderedShifts }));
+
+	// A job can carry up to 180 shifts; one page keeps the grid readable. 12 fills 2, 3 and 4 columns.
+	// The page is cut from the job's own `shifts[]` (it lives in the job document, so there is
+	// nothing for the DB to page); what the DB filters is the roster, below.
+	const SHIFT_PAGE_SIZE = 12;
+	let shiftPage = $state(1);
+	const shiftTotalPages = $derived(Math.max(1, Math.ceil(orderedShifts.length / SHIFT_PAGE_SIZE)));
+	const safeShiftPage = $derived(Math.max(1, Math.min(shiftPage, shiftTotalPages)));
+	const pageStart = $derived((safeShiftPage - 1) * SHIFT_PAGE_SIZE);
+	const pagedShifts = $derived(orderedShifts.slice(pageStart, pageStart + SHIFT_PAGE_SIZE));
+
+	// Assignments are read from CouchDB with a `_find` for the shifts on this page only (#1520),
+	// not by loading every assignment of the shelter and filtering in the browser.
+	const pageAssignmentsQuery = useJobShiftAssignments(
+		() => job._id,
+		() => pagedShifts.map((s) => s.id)
+	);
+	const pageAssignments = $derived(pageAssignmentsQuery.data ?? []);
 	const rows = $derived(
-		orderedShifts.map((shift, index) => ({
+		pagedShifts.map((shift, i) => ({
 			shift,
-			split: splits[index],
-			roster: shiftRoster(shift, job._id, assignmentsQuery.data ?? [], volunteersById)
+			split: splits[pageStart + i],
+			roster: shiftRoster(shift, job._id, pageAssignments, volunteersById)
 		}))
 	);
 
@@ -206,6 +225,12 @@
 	 * releasable rows to close the gap, deletion stays blocked rather than
 	 * guessing.
 	 */
+	// The job's other shifts may be off this page, so the overflow case reads the whole job — lazily,
+	// and only once a removal is being confirmed.
+	const jobAssignmentsQuery = useJobAssignments(
+		() => job._id,
+		() => removeShiftId !== null
+	);
 	const removeOverflow = $derived.by(() => {
 		if (!removeRow) return { needed: 0, candidates: [] as ShiftRosterEntry[] };
 		const newQuota = job.quota - removeRow.shift.quota;
@@ -214,7 +239,7 @@
 		if (needed <= 0) return { needed: 0, candidates: [] };
 
 		const alreadyCascaded = new Set(removeCascade.map((e) => e.assignmentId));
-		const candidates = (assignmentsQuery.data ?? [])
+		const candidates = (jobAssignmentsQuery.data ?? [])
 			.filter(
 				(a) =>
 					a.job_id === job._id &&
@@ -356,6 +381,22 @@
 				/>
 			{/each}
 		</div>
+
+		{#if shiftTotalPages > 1}
+			<div class="flex flex-col items-center justify-between gap-3 pt-3 sm:flex-row">
+				<p class="text-xs text-muted-foreground">
+					แสดงกะที่ {(safeShiftPage - 1) * SHIFT_PAGE_SIZE + 1} - {Math.min(
+						safeShiftPage * SHIFT_PAGE_SIZE,
+						orderedShifts.length
+					)} จากทั้งหมด {orderedShifts.length} กะ
+				</p>
+				<PaginationControls
+					bind:page={shiftPage}
+					count={orderedShifts.length}
+					perPage={SHIFT_PAGE_SIZE}
+				/>
+			</div>
+		{/if}
 	</div>
 
 	<JobShiftRosterDialog

@@ -50,36 +50,35 @@
 	}
 </script>
 
+<p class="mb-2 text-xs text-muted-foreground" data-testid="capacity-scope">
+	นับเป็นรายกะ จากงานที่เปิดรับอยู่ {capacityJobs.length} งาน ({capacities.length} กะ)
+</p>
 <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-	<Card.Root class="border-0 shadow-sm">
-		<Card.Content
-			class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
-		>
-			<div class="rounded-lg bg-primary/10 p-2">
-				<TrendingUp class="h-5 w-5 text-primary" />
+	<Card.Root class="gap-0 border-0 py-0 shadow-sm">
+		<Card.Content class="flex items-center gap-2.5 px-3 py-2.5">
+			<div class="rounded-lg bg-primary/10 p-1.5">
+				<TrendingUp class="h-4 w-4 text-primary" />
 			</div>
 			<div class="min-w-0">
-				<p class="text-xs text-muted-foreground">อัตราจองกะรวม</p>
-				<p class="mt-0.5 text-xl font-bold">{Math.round(overallRate * 100)}%</p>
+				<p class="text-xs text-muted-foreground">อัตราจองรวมทุกกะ</p>
+				<p class="text-lg leading-tight font-bold">{Math.round(overallRate * 100)}%</p>
 			</div>
 		</Card.Content>
 	</Card.Root>
 
 	<button type="button" class="text-left" onclick={() => toggle('critical')}>
 		<Card.Root
-			class="border-0 shadow-sm transition-shadow {selected === 'critical'
+			class="gap-0 border-0 py-0 shadow-sm transition-shadow {selected === 'critical'
 				? 'ring-2 ring-destructive'
 				: 'hover:shadow-md'}"
 		>
-			<Card.Content
-				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
-			>
-				<div class="rounded-lg bg-destructive/10 p-2">
-					<AlertTriangle class="h-5 w-5 text-destructive" />
+			<Card.Content class="flex items-center gap-2.5 px-3 py-2.5">
+				<div class="rounded-lg bg-destructive/10 p-1.5">
+					<AlertTriangle class="h-4 w-4 text-destructive" />
 				</div>
 				<div class="min-w-0">
-					<p class="text-xs text-muted-foreground">ขาดแคลนหนัก (&lt;50%)</p>
-					<p class="mt-0.5 text-xl font-bold text-destructive">{counts.critical}</p>
+					<p class="text-xs text-muted-foreground">กะขาดแคลนหนัก (&lt;50%)</p>
+					<p class="text-lg leading-tight font-bold text-destructive">{counts.critical}</p>
 				</div>
 			</Card.Content>
 		</Card.Root>
@@ -87,19 +86,17 @@
 
 	<button type="button" class="text-left" onclick={() => toggle('near')}>
 		<Card.Root
-			class="border-0 shadow-sm transition-shadow {selected === 'near'
+			class="gap-0 border-0 py-0 shadow-sm transition-shadow {selected === 'near'
 				? 'ring-2 ring-amber-500'
 				: 'hover:shadow-md'}"
 		>
-			<Card.Content
-				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
-			>
-				<div class="rounded-lg bg-amber-500/10 p-2">
-					<Gauge class="h-5 w-5 text-amber-600" />
+			<Card.Content class="flex items-center gap-2.5 px-3 py-2.5">
+				<div class="rounded-lg bg-amber-500/10 p-1.5">
+					<Gauge class="h-4 w-4 text-amber-600" />
 				</div>
 				<div class="min-w-0">
-					<p class="text-xs text-muted-foreground">ใกล้ครบเป้า (50–99%)</p>
-					<p class="mt-0.5 text-xl font-bold text-amber-600">{counts.near}</p>
+					<p class="text-xs text-muted-foreground">กะใกล้ครบเป้า (50–99%)</p>
+					<p class="text-lg leading-tight font-bold text-amber-600">{counts.near}</p>
 				</div>
 			</Card.Content>
 		</Card.Root>
@@ -107,19 +104,17 @@
 
 	<button type="button" class="text-left" onclick={() => toggle('met')}>
 		<Card.Root
-			class="border-0 shadow-sm transition-shadow {selected === 'met'
+			class="gap-0 border-0 py-0 shadow-sm transition-shadow {selected === 'met'
 				? 'ring-2 ring-emerald-500'
 				: 'hover:shadow-md'}"
 		>
-			<Card.Content
-				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
-			>
-				<div class="rounded-lg bg-emerald-500/10 p-2">
-					<CheckCircle2 class="h-5 w-5 text-emerald-600" />
+			<Card.Content class="flex items-center gap-2.5 px-3 py-2.5">
+				<div class="rounded-lg bg-emerald-500/10 p-1.5">
+					<CheckCircle2 class="h-4 w-4 text-emerald-600" />
 				</div>
 				<div class="min-w-0">
-					<p class="text-xs text-muted-foreground">ครบตามเป้า (100%)</p>
-					<p class="mt-0.5 text-xl font-bold text-emerald-600">{counts.met}</p>
+					<p class="text-xs text-muted-foreground">กะครบตามเป้า (100%)</p>
+					<p class="text-lg leading-tight font-bold text-emerald-600">{counts.met}</p>
 				</div>
 			</Card.Content>
 		</Card.Root>

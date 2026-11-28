@@ -7,7 +7,7 @@ import {
 } from '$lib/features/volunteers/server/public-schedule-action';
 
 /**
- * ตารางทำงานจิตอาสา — the Access Portal's schedule (CR-092 หน้าจอ 6).
+ * ตารางทำงานอาสาสมัคร — the Access Portal's schedule (CR-092 หน้าจอ 6).
  *
  * Takes either sign-in credential — the phone the volunteer applied with, or the ticket
  * token behind the QR on their pass (CR-092 หน้าจอ 6). Both resolve to the same

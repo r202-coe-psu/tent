@@ -196,7 +196,7 @@
 				<span>ระบบตั้งค่าส่วนกลาง (Central System Management)</span>
 			</div>
 			<h1 class="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-foreground">
-				4. ตั้งค่าทักษะมาตรฐานจิตอาสา (Volunteer Skills)
+				4. ตั้งค่าทักษะมาตรฐานอาสาสมัคร (Volunteer Skills)
 			</h1>
 			<p class="mt-1 text-sm text-muted-foreground">
 				กำหนดค่ามาตรฐานทักษะความสามารถสำหรับงานอาสาสมัครในระบบ — แบ่งประเภททักษะทั่วไป (Operational)

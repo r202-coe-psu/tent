@@ -15,6 +15,7 @@
 	 * `VolunteerFilter` per keystroke/toggle.
 	 */
 	import Inbox from '@lucide/svelte/icons/inbox';
+	import UsersRound from '@lucide/svelte/icons/users-round';
 	import Zap from '@lucide/svelte/icons/zap';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -24,6 +25,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
+	import { formatMasterLabel, useMasterData } from '$lib/features/master-data';
 	import { canAccessVolunteerBackoffice } from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import VolunteerStatPills, { type PeopleStatFilter } from './volunteer-stat-pills.svelte';
@@ -46,6 +48,14 @@
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterQuery = useShelter(() => shelterCode);
+	// The shelter's type is a master-data code (e.g. `college_university`); show its label, and
+	// nothing rather than the raw code while the list loads or when the code is gone (#1571).
+	const shelterTypeQuery = useMasterData(() => 'shelter_type');
+	const shelterTypeLabel = $derived.by(() => {
+		const code = shelterQuery.data?.shelter_type;
+		const item = code ? shelterTypeQuery.data?.items.find((i) => i.code === code) : undefined;
+		return item ? formatMasterLabel(item, 'th') : undefined;
+	});
 
 	// The shelter's volunteer accounts with their roles here (#1044): SA / SM / coordinator, the
 	// same people who see the grant button (the server 403s anyone else).
@@ -171,6 +181,12 @@
 </script>
 
 <div class="space-y-4">
+	<div class="flex items-center gap-2">
+		<div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+			<UsersRound class="h-4.5 w-4.5" />
+		</div>
+		<h2 class="text-lg font-bold text-foreground">รายชื่อและการอนุมัติ</h2>
+	</div>
 	<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 		{#if volunteersQuery.isPending}
 			<div class="flex gap-2">
@@ -266,7 +282,7 @@
 							{volunteer}
 							skillOptions={skillCatalog.options}
 							shelterName={shelterQuery.data?.name}
-							shelterType={shelterQuery.data?.shelter_type}
+							shelterType={shelterTypeLabel}
 							todayAssignment={attendanceByVolunteer.get(volunteer._id)}
 							accessStatus={volunteerAccessStatus(volunteer, accounts)}
 						/>

@@ -606,7 +606,7 @@ describe('coordinator role grants on _users (#955)', () => {
 			const before = JSON.stringify(db);
 			await expect(updateUser(EMAIL, { active: false }, sm, noCheck)).rejects.toMatchObject({
 				code: 'FORBIDDEN',
-				message: 'บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี'
+				message: 'บัญชีอาสาสมัครใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี'
 			});
 			seed(EMAIL, { roles: granted, role_grants: [grant()], active: false });
 			await expect(updateUser(EMAIL, { active: true }, sm, noCheck)).rejects.toMatchObject({

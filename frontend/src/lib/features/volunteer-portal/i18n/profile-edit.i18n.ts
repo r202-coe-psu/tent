@@ -22,7 +22,7 @@ export interface ProfileEditTranslations {
 
 export const profileEditI18n: Record<LanguageCode, ProfileEditTranslations> = {
 	th: {
-		title: 'แก้ไขโปรไฟล์จิตอาสา',
+		title: 'แก้ไขโปรไฟล์อาสาสมัคร',
 		occupationLabel: 'อาชีพ',
 		noProfile:
 			'ยังไม่พบโปรไฟล์ของคุณในระบบ — ลองจองงานอาสาสมัครสักงานก่อน แล้วกลับมาแก้ไขได้ที่นี่',

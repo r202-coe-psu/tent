@@ -580,7 +580,7 @@ describe('staff card administration', () => {
 
 			const err = await rejection(rotateStaffCard(systemAdmin, 'vol@x.com'));
 
-			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรจิตอาสา' });
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรอาสาสมัคร' });
 			expect(puts).toEqual([]);
 		});
 
@@ -591,7 +591,7 @@ describe('staff card administration', () => {
 
 			const err = await rejection(rotateStaffCard(systemAdmin, 'vol@x.com'));
 
-			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรจิตอาสา' });
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรอาสาสมัคร' });
 			expect(puts).toEqual([]);
 		});
 
@@ -813,7 +813,7 @@ describe('staff card administration', () => {
 
 			const err = await rejection(getStaffCardForAdmin(systemAdmin, 'vol@x.com'));
 
-			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรจิตอาสา' });
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรอาสาสมัคร' });
 		});
 
 		it('rejects a volunteer-type user without a linked profile as CONFLICT', async () => {
@@ -824,7 +824,7 @@ describe('staff card administration', () => {
 
 			const err = await rejection(getStaffCardForAdmin(systemAdmin, 'vol@x.com'));
 
-			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรจิตอาสา' });
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'ผู้ใช้นี้ใช้บัตรอาสาสมัคร' });
 		});
 	});
 });

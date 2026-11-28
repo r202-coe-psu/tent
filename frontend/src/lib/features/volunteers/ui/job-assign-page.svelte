@@ -620,7 +620,7 @@
 			</div>
 		</div>
 
-		<!-- 2 Columns Layout: Left = กะงาน, Right = จิตอาสา -->
+		<!-- 2 Columns Layout: Left = กะงาน, Right = อาสาสมัคร -->
 		<div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-12">
 			<!-- Col ซ้าย: เลือกเวลากะงาน (Multi-select โดยคลิกที่การ์ด กะเต็ม disabled) -->
 			<aside class="min-w-0 space-y-3 lg:sticky lg:top-4 lg:col-span-5 xl:col-span-4">
@@ -740,7 +740,7 @@
 				</div>
 			</aside>
 
-			<!-- Col ขวา: จิตอาสา -->
+			<!-- Col ขวา: อาสาสมัคร -->
 			<main class="min-w-0 space-y-4 lg:col-span-7 xl:col-span-8">
 				<!-- Search + the three filter groups -->
 				<div class="space-y-3 rounded-2xl border border-border bg-card p-3.5">
@@ -751,7 +751,7 @@
 						<Input
 							bind:value={search}
 							class="!h-11 pl-9"
-							placeholder="ค้นหาชื่อ-นามสกุล, ชื่อเล่น, เบอร์โทรศัพท์, รหัสประจำตัวจิตอาสา..."
+							placeholder="ค้นหาชื่อ-นามสกุล, ชื่อเล่น, เบอร์โทรศัพท์, รหัสประจำตัวอาสาสมัคร..."
 							aria-label="ค้นหาอาสาสมัคร"
 						/>
 					</div>

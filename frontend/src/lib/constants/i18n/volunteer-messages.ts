@@ -92,7 +92,7 @@ const EN_BY_THAI_MESSAGE: Readonly<Record<string, string>> = {
 		'This phone number was not found in the volunteer system. Please check the number you applied with',
 	'ไม่สามารถตรวจสอบสิทธิ์ใช้งานระบบได้ กรุณาลองใหม่อีกครั้ง':
 		'Could not check your system access. Please try again',
-	'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง':
+	'ไม่สามารถตรวจสอบข้อมูลอาสาสมัครได้ กรุณาลองใหม่อีกครั้ง':
 		'Could not check your volunteer details. Please try again',
 	'ไม่พบข้อมูล role card ของอาสาสมัคร': 'The volunteer role card was not found',
 	'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง':
@@ -109,7 +109,7 @@ const EN_BY_THAI_MESSAGE: Readonly<Record<string, string>> = {
 	ไม่สามารถโหลดกระดานงานอาสาได้: 'Could not load the volunteer job board',
 	ส่งใบสมัครไม่สำเร็จ: 'Could not send the application',
 	ไม่สามารถโหลดโปรไฟล์ได้: 'Could not load your profile',
-	ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้: 'Could not check your volunteer details',
+	ไม่สามารถตรวจสอบข้อมูลอาสาสมัครได้: 'Could not check your volunteer details',
 	'ไม่สามารถสร้าง QR Role Card ได้': 'Could not create the QR role card',
 	บันทึกโปรไฟล์ไม่สำเร็จ: 'Could not save your profile',
 	ไม่สามารถโหลดรายการทักษะได้: 'Could not load the skill list'

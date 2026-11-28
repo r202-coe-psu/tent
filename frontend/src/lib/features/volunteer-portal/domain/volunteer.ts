@@ -105,7 +105,7 @@ export type VolunteerTicket = {
 };
 
 /**
- * One shift on ตารางทำงานจิตอาสา (CR-092 หน้าจอ 6).
+ * One shift on ตารางทำงานอาสาสมัคร (CR-092 หน้าจอ 6).
  *
  * Sourced from `shift_assignment`, not from an application: this is what the volunteer
  * is rostered to turn up for, and it carries the duty window the Time-Bound access

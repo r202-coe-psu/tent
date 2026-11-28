@@ -58,7 +58,9 @@ describe('volunteer portal page titles', () => {
 		expect(headOf(EntryPage, 'th')).toContain(
 			'<title>เข้าสู่ระบบอาสาสมัคร — Smart Shelter</title>'
 		);
-		expect(headOf(DashboardPage, 'th')).toContain('<title>ตารางงานจิตอาสา — Smart Shelter</title>');
+		expect(headOf(DashboardPage, 'th')).toContain(
+			'<title>ตารางงานอาสาสมัคร — Smart Shelter</title>'
+		);
 		expect(headOf(OpeningsPage as typeof DashboardPage, 'th')).toContain(
 			'<title>งานอาสาที่เปิดรับ — Smart Shelter</title>'
 		);

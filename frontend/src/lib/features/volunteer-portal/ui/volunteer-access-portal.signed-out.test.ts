@@ -54,7 +54,7 @@ describe('VolunteerAccessPortal sign-in screen', () => {
 
 	it('keeps the Thai copy when the language is TH', () => {
 		const body = renderPortal('th');
-		expect(body).toContain('เข้าสู่ระบบตารางทำงานจิตอาสา');
+		expect(body).toContain('เข้าสู่ระบบตารางทำงานอาสาสมัคร');
 		expect(body).toContain(
 			'กรุณาระบุหมายเลขโทรศัพท์ หรือสแกน QR Code / กรอกรหัส Token เพื่อเข้าสู่ระบบและจัดการตารางงาน'
 		);

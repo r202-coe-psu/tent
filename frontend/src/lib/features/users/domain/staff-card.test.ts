@@ -164,8 +164,8 @@ describe('staffCardText', () => {
 
 	it('badges a volunteer card as volunteer with its code', () => {
 		expect(staffCardText({ volunteerCode: 'V-0012' })).toEqual({
-			badge: 'จิตอาสา',
-			lines: ['รหัสจิตอาสา V-0012']
+			badge: 'อาสาสมัคร',
+			lines: ['รหัสอาสาสมัคร V-0012']
 		});
 	});
 });

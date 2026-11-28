@@ -55,7 +55,7 @@ const ERROR_COPY: Record<string, string> = {
 	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
 	VOLUNTEER_NOT_FOUND: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
 	ACCESS_STATUS_UNAVAILABLE: 'ไม่สามารถตรวจสอบสิทธิ์ใช้งานระบบได้ กรุณาลองใหม่อีกครั้ง',
-	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง',
+	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลอาสาสมัครได้ กรุณาลองใหม่อีกครั้ง',
 	ROLE_CARD_NOT_FOUND: 'ไม่พบข้อมูล role card ของอาสาสมัคร',
 	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
 };
@@ -338,7 +338,7 @@ export async function resolvePortalAccess(
 	});
 	const data = await readJson(response);
 	if (!response.ok || !data) {
-		throw apiError(data, response.status, 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้');
+		throw apiError(data, response.status, 'ไม่สามารถตรวจสอบข้อมูลอาสาสมัครได้');
 	}
 	return (data as { profile?: VolunteerProfile | null }).profile ?? null;
 }

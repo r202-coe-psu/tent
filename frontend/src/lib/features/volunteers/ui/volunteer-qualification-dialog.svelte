@@ -356,7 +356,9 @@
 						<p class="text-xs font-semibold text-sky-900">
 							ผลยืนยันตัวตนจากศูนย์อื่น (ข้อมูลอ้างอิง)
 						</p>
-						<p class="text-xs text-sky-900">ตรวจบัตรประชาชนตัวจริงของจิตอาสาต่อหน้าก่อนกดยืนยัน</p>
+						<p class="text-xs text-sky-900">
+							ตรวจบัตรประชาชนตัวจริงของอาสาสมัครต่อหน้าก่อนกดยืนยัน
+						</p>
 						{#each identityReferences as match (match.shelter_code)}
 							<div
 								class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background px-3 py-2"

@@ -28,7 +28,7 @@ export const GET: RequestHandler = async ({ params, url, fetch }) => {
 			const wanted = url.searchParams.get('application');
 			const app =
 				(wanted ? resolved.applications.find((a) => a._id === wanted) : undefined) ?? resolved.app;
-			let jobTitle = 'งานจิตอาสาประจำศูนย์พักพิง';
+			let jobTitle = 'งานอาสาสมัครประจำศูนย์พักพิง';
 			if (app?.job_id) {
 				try {
 					const jobRes = await adminRaw(`/${dbName}/${encodeURIComponent(app.job_id)}`, 'GET');
@@ -43,7 +43,7 @@ export const GET: RequestHandler = async ({ params, url, fetch }) => {
 				? `${app.applicant.first_name} ${app.applicant.last_name || ''}`.trim()
 				: volunteer
 					? `${volunteer.first_name} ${volunteer.last_name || ''}`.trim()
-					: 'จิตอาสาผู้สมัคร';
+					: 'อาสาสมัคร';
 			const tokenOut = app?.tracking_token || volunteer?.tracking_token || token;
 
 			return json(

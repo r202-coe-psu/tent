@@ -60,7 +60,7 @@
 							variant="outline"
 							class="h-auto shrink-0 gap-1.5 border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700"
 						>
-							<Users class="size-3.5 shrink-0" /> จิตอาสา
+							<Users class="size-3.5 shrink-0" /> อาสาสมัคร
 						</Badge>
 					{:else}
 						<Badge
@@ -226,7 +226,7 @@
 										variant="outline"
 										class="h-auto gap-1.5 border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700"
 									>
-										<Users class="size-3.5 shrink-0" /> จิตอาสา
+										<Users class="size-3.5 shrink-0" /> อาสาสมัคร
 									</Badge>
 								{:else}
 									<Badge

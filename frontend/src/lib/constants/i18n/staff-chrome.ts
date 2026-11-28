@@ -22,7 +22,7 @@ const th = {
 			},
 			searchEdit: { title: 'ค้นหาและแก้ไขข้อมูล', caption: 'Search & Update' },
 			checkInOut: { title: 'สแกนเข้า-ออกศูนย์', caption: 'Check-in / Out' },
-			volunteer: { title: 'เช็คอินจิตอาสาเข้างาน', caption: 'Check-in Volunteer' }
+			volunteer: { title: 'เช็คอินอาสาสมัครเข้างาน', caption: 'Check-in Volunteer' }
 		}
 	},
 	navbar: {

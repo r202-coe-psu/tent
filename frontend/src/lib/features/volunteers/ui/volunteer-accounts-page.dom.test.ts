@@ -265,6 +265,6 @@ describe('VolunteerAccountsPage (CR-221 FR-8)', () => {
 	it('says so when the shelter has no volunteer account yet', async () => {
 		mocks.accounts = { data: [], isPending: false, error: null };
 		await render();
-		expect(document.body.textContent).toContain('ยังไม่มีบัญชีจิตอาสาในศูนย์นี้');
+		expect(document.body.textContent).toContain('ยังไม่มีบัญชีอาสาสมัครในศูนย์นี้');
 	});
 });

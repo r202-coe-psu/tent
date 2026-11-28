@@ -13,7 +13,7 @@ export const GET: RequestHandler = async ({ request }) => {
 
 		const card = await getMyCard(name, roles).catch((e: unknown) => {
 			if (e instanceof PublicScheduleError) {
-				throw new ServiceError('INTERNAL', 'ออกบัตรจิตอาสาไม่สำเร็จ กรุณาลองใหม่');
+				throw new ServiceError('INTERNAL', 'ออกบัตรอาสาสมัครไม่สำเร็จ กรุณาลองใหม่');
 			}
 			throw e;
 		});

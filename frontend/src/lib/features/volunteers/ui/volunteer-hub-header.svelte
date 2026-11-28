@@ -98,9 +98,7 @@
 	<header class="flex flex-col gap-3 @2xl:flex-row @2xl:items-end @2xl:justify-between @2xl:gap-8">
 		<div class="min-w-0 space-y-1">
 			<h2 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">จัดการอาสาสมัคร</h2>
-			<p class="text-base text-slate-600">
-				ศูนย์ปฏิบัติการจิตอาสา: คำนวณด้วยฟังก์ชันมาตรฐานเดียว (Single Source of Truth)
-			</p>
+			<p class="text-base text-slate-600">ศูนย์ปฏิบัติการอาสาสมัคร</p>
 			{#if hubMetrics.isError}
 				<p class="text-sm font-medium text-red-700" role="alert">
 					โหลดตัวนับไม่สำเร็จ: {hubMetrics.error instanceof Error
@@ -118,15 +116,12 @@
 			{@const needsAction = tile.actionable && (tile.value ?? 0) > 0}
 			<div
 				class={[
-					'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 shadow-sm',
-					'@md:flex-col @md:items-stretch @md:p-4 @3xl:p-5',
+					'flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 shadow-sm',
 					needsAction ? 'border-amber-200 bg-amber-50' : 'border-border bg-card',
 					index === tiles.length - 1 && '@md:col-span-2 @3xl:col-span-1'
 				]}
 			>
-				<div
-					class="flex min-w-0 flex-row-reverse items-center justify-end gap-2 @md:flex-row @md:items-start @md:justify-between"
-				>
+				<div class="flex min-w-0 flex-row-reverse items-center justify-end gap-2">
 					<dt
 						class={[
 							'text-sm leading-snug font-medium',

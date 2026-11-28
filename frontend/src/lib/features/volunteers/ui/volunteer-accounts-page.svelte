@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * "บัญชีจิตอาสา" — `/back-office/volunteers/accounts` (CR-221 FR-5, FR-8). Every volunteer
+	 * "บัญชีอาสาสมัคร" — `/back-office/volunteers/accounts` (CR-221 FR-5, FR-8). Every volunteer
 	 * account of the active shelter with its roles here: who it is, what it may do, until when and
 	 * who gave it, plus the same access buttons as the people tab (`VolunteerAccessActions`, FR-9).
 	 *
@@ -120,7 +120,7 @@
 </script>
 
 <StaffPageShell
-	title="บัญชีจิตอาสา"
+	title="บัญชีอาสาสมัคร"
 	description="บัญชีเข้าใช้ระบบของอาสาสมัครในศูนย์นี้ ตำแหน่งที่ได้รับ วันหมดอายุ และผู้ออกสิทธิ์"
 	maxWidth="7xl"
 >
@@ -177,7 +177,7 @@
 				role="alert"
 				class="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive"
 			>
-				โหลดบัญชีจิตอาสาไม่สำเร็จ: {loadError instanceof Error
+				โหลดบัญชีอาสาสมัครไม่สำเร็จ: {loadError instanceof Error
 					? loadError.message
 					: 'เกิดข้อผิดพลาด'}
 			</p>
@@ -188,7 +188,7 @@
 				<Inbox class="h-8 w-8" />
 				<p class="text-sm font-medium">
 					{rows.length === 0
-						? 'ยังไม่มีบัญชีจิตอาสาในศูนย์นี้'
+						? 'ยังไม่มีบัญชีอาสาสมัครในศูนย์นี้'
 						: 'ไม่มีบัญชีที่ตรงกับคำค้นหาหรือตัวกรองที่เลือก'}
 				</p>
 			</div>

@@ -743,7 +743,7 @@ const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	kitchen_staff: 'เจ้าหน้าที่ครัว',
 	supply_coordinator: 'ผู้ประสานงานพัสดุและคลัง',
 	warehouse_staff: 'เจ้าหน้าที่คลัง',
-	volunteer_coordinator: 'ผู้ประสานงานจิตอาสา',
+	volunteer_coordinator: 'ผู้ประสานงานอาสาสมัคร',
 	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
 	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
 	distribution_staff: 'เจ้าหน้าที่แจกจ่าย',

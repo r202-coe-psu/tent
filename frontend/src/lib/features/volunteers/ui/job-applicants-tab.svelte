@@ -10,16 +10,15 @@
 	 * application doc rolled back if the slot cannot be taken) already lives in
 	 * the data layer; this screen is the queue that drives it.
 	 *
-	 * Every list is read from an UNFILTERED query and narrowed here with
-	 * `buildApplicantBoard`. `useJobApplications(filter)` takes its filter
-	 * once at setup, so a `{ jobId }` filter would freeze to whichever job was
-	 * rendered first (SvelteKit reuses this component across `[id]`
-	 * navigations) — and sharing the unfiltered cache entry with the tab badge
-	 * means the badge and this list can never disagree. Shift assignments (for the
-	 * per-shift check-in action) are read the same unfiltered way.
+	 * Everything is read from CouchDB with `_find` scoped to this job (#1520), not by loading every
+	 * application and assignment of the shelter. The tiles come from slim field projections
+	 * (`applicantSummary`); each list below is one DB page — status and shift go into the selector,
+	 * `bookmark` pages it — and the name search and attendance filters narrow the rows on screen.
 	 */
 	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
+	import Hourglass from '@lucide/svelte/icons/hourglass';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -30,10 +29,12 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import BookmarkPager from './bookmark-pager.svelte';
 	import JobApplicantRow from './job-applicant-row.svelte';
 	import JobApplicantReviewDialog from './job-applicant-review-dialog.svelte';
 	import StaffAssignmentRow from './staff-assignment-row.svelte';
-	import { buildApplicantBoard, historyBreakdown } from '../domain/applicant-board';
+	import { applicationEntry, historyBreakdown, staffEntry } from '../domain/applicant-board';
+	import { groupApplicationsByApplicant } from '../domain/applicant-queue';
 	import { volunteerAccessStatus } from '../domain/volunteer-access-status';
 	import {
 		EMPTY_APPLICANT_FILTERS,
@@ -46,19 +47,20 @@
 	import type { JobApplication } from '../domain/job-application.schema';
 	import {
 		todayDateString,
-		useJobApplications,
+		useApplicantSummary,
+		useJobApplicationPage,
 		useShelterVolunteerAccounts,
-		useShiftAssignments,
 		useSkillOptions,
+		useStaffAssignmentPage,
+		useVolunteerPageAssignments,
 		useVolunteers
 	} from '../application/queries';
 	import { createMinuteClock } from './minute-clock.svelte';
 
 	let { job }: { job: Job } = $props();
 
-	const applicationsQuery = useJobApplications();
+	const summaryQuery = useApplicantSummary(() => job._id);
 	const volunteersQuery = useVolunteers();
-	const assignmentsQuery = useShiftAssignments();
 	const skillCatalog = useSkillOptions();
 
 	// Each applicant's system account and role here, with the same give / edit / revoke button as
@@ -75,26 +77,23 @@
 	);
 	const accounts = $derived(canReadAccounts ? accountsQuery.data : undefined);
 
-	const loading = $derived(
-		applicationsQuery.isPending || assignmentsQuery.isPending || volunteersQuery.isPending
-	);
-	const assignments = $derived(assignmentsQuery.data ?? []);
+	const loading = $derived(summaryQuery.isPending || volunteersQuery.isPending);
 	// #885 — "รอยืนยันการเข้างาน" turns on as time passes, so the clock ticks every minute;
 	// `today` rides the same clock so it rolls over at Bangkok midnight with the page open.
 	const { now } = createMinuteClock();
 	const today = $derived(todayDateString(now));
 	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
-	const board = $derived(
-		buildApplicantBoard({
-			jobId: job._id,
-			applications: applicationsQuery.data ?? [],
-			assignments,
-			volunteers: volunteerById
-		})
-	);
 	// People are counted once however many shifts they applied for or were assigned to; the
 	// other tiles count shifts (#716).
-	const counts = $derived(board.counts);
+	const counts = $derived(
+		summaryQuery.data?.counts ?? {
+			people: 0,
+			pending: 0,
+			confirmed: 0,
+			declined: 0,
+			staffAssigned: 0
+		}
+	);
 
 	// Filters narrow the lists only; the tiles above keep counting everything (#849).
 	let statusFilter = $state<ApplicantStatusFilter>('all');
@@ -136,16 +135,129 @@
 		attendance: attendanceFilter
 	});
 	const filtersActive = $derived(hasActiveApplicantFilters(filters));
-	const view = $derived(
-		filterApplicantBoard(board, filters, {
-			assignments,
-			volunteers: volunteerById,
-			today,
-			now
+
+	// Each list is one DB page of PAGE_SIZE. The bookmarks seen so far are kept per list and per
+	// filter choice, so changing a filter starts again at page 1 without any reset code.
+	const PAGE_SIZE = 20;
+	type Section = 'pending' | 'reviewed' | 'staff';
+	let pagers = $state<Record<string, { marks: (string | null)[]; index: number }>>({});
+	const pagerKey = (section: Section) => `${section}|${statusFilter}|${shiftChoice}`;
+	const pagerOf = (section: Section) => pagers[pagerKey(section)] ?? { marks: [null], index: 0 };
+	function goNext(section: Section, bookmark: string | null) {
+		const pager = pagerOf(section);
+		pagers[pagerKey(section)] = {
+			marks: [...pager.marks.slice(0, pager.index + 1), bookmark],
+			index: pager.index + 1
+		};
+	}
+	function goPrev(section: Section) {
+		const pager = pagerOf(section);
+		pagers[pagerKey(section)] = { ...pager, index: Math.max(0, pager.index - 1) };
+	}
+
+	// Pending applications have no attendance to match, so any attendance filter hides them.
+	const showPending = $derived(
+		(statusFilter === 'all' || statusFilter === 'pending') && attendanceFilter === 'all'
+	);
+	const showReviewed = $derived(
+		statusFilter === 'all' || statusFilter === 'confirmed' || statusFilter === 'declined'
+	);
+	const showStaff = $derived(
+		statusFilter === 'all' || statusFilter === 'staff' || statusFilter === 'declined'
+	);
+	const reviewedStatuses = $derived(
+		statusFilter === 'confirmed'
+			? (['confirmed'] as const)
+			: statusFilter === 'declined'
+				? (['rejected', 'cancelled'] as const)
+				: (['confirmed', 'rejected', 'cancelled'] as const)
+	);
+
+	const pendingQuery = useJobApplicationPage(
+		() => ({
+			jobId: job._id,
+			statuses: ['pending_review'],
+			shift: shiftCriterion,
+			bookmark: pagerOf('pending').marks[pagerOf('pending').index],
+			limit: PAGE_SIZE
+		}),
+		() => showPending
+	);
+	const reviewedQuery = useJobApplicationPage(
+		() => ({
+			jobId: job._id,
+			statuses: reviewedStatuses,
+			shift: shiftCriterion,
+			bookmark: pagerOf('reviewed').marks[pagerOf('reviewed').index],
+			limit: PAGE_SIZE
+		}),
+		() => showReviewed
+	);
+
+	// Staff-assigned rows are what no confirmed application accounts for, so the summary (which
+	// sees every application and assignment of the job) names them; only this page's documents
+	// are then read.
+	const staffRows = $derived(
+		(summaryQuery.data?.staff ?? []).filter((a) => {
+			if (statusFilter === 'staff' && a.status === 'cancelled') return false;
+			if (statusFilter === 'declined' && a.status !== 'cancelled') return false;
+			const crit = shiftCriterion;
+			if (!crit) return true;
+			return crit.id && a.shift_id ? crit.id === a.shift_id : crit.date === a.date;
 		})
 	);
+	const staffIds = $derived(
+		showStaff
+			? staffRows
+					.slice(pagerOf('staff').index * PAGE_SIZE, (pagerOf('staff').index + 1) * PAGE_SIZE)
+					.map((a) => a._id)
+			: []
+	);
+	const staffQuery = useStaffAssignmentPage(() => staffIds);
+	const staffDocs = $derived.by(() => {
+		const byId = new Map((staffQuery.data ?? []).map((a) => [a._id, a]));
+		return staffIds.map((id) => byId.get(id)).filter((a) => a !== undefined);
+	});
+
+	const pendingItems = $derived(showPending ? (pendingQuery.data?.items ?? []) : []);
+	const reviewedItems = $derived(showReviewed ? (reviewedQuery.data?.items ?? []) : []);
+
+	// The check-in actions on a row need that volunteer's assignments; read just those.
+	const pageVolunteerIds = $derived.by(() => {
+		const ids = [
+			...[...pendingItems, ...reviewedItems].map((a) => a.volunteer_id),
+			...staffDocs.map((a) => a.volunteer_id)
+		].filter((id): id is string => !!id);
+		return ids.filter((id, i) => ids.indexOf(id) === i).sort();
+	});
+	const assignmentsQuery = useVolunteerPageAssignments(
+		() => job._id,
+		() => pageVolunteerIds
+	);
+	const assignments = $derived(assignmentsQuery.data ?? []);
+
+	const view = $derived(
+		filterApplicantBoard(
+			{
+				pending: groupApplicationsByApplicant(pendingItems),
+				history: [
+					...reviewedItems.map((a) => applicationEntry(a, volunteerById)),
+					...staffDocs.map((a) => staffEntry(a, volunteerById))
+				].sort((a, b) => b.decidedAt.localeCompare(a.decidedAt) || a.key.localeCompare(b.key))
+			},
+			{ status: 'all', shift: null, search, attendance: attendanceFilter },
+			{ assignments, volunteers: volunteerById, today, now }
+		)
+	);
+	const reviewedView = $derived(view.history.filter((e) => e.kind === 'application'));
+	const staffView = $derived(view.history.filter((e) => e.kind === 'staff'));
 	const viewPendingShifts = $derived(view.pending.reduce((n, g) => n + g.applications.length, 0));
 	const viewHistory = $derived(historyBreakdown(view.history));
+	const listsLoading = $derived(
+		(showPending && pendingQuery.isPending) ||
+			(showReviewed && reviewedQuery.isPending) ||
+			(showStaff && staffIds.length > 0 && staffQuery.isPending)
+	);
 
 	function clearFilters() {
 		statusFilter = EMPTY_APPLICANT_FILTERS.status;
@@ -369,75 +481,156 @@
 				{/if}
 			</div>
 
-			{#if view.pending.length === 0 && view.history.length === 0}
-				<div
-					class="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-10 text-center text-muted-foreground"
-				>
-					<Search class="h-6 w-6" />
-					<p class="text-sm font-medium">ไม่พบผู้สมัครตามตัวกรอง</p>
+			{#if listsLoading}
+				<div class="mt-4 space-y-3">
+					<Skeleton class="h-32 w-full rounded-xl" />
+					<Skeleton class="h-32 w-full rounded-xl" />
 				</div>
-			{/if}
-
-			{#if view.pending.length > 0}
-				<div class="mt-4 flex items-center justify-between gap-3">
-					<h4 class="text-xs font-bold text-foreground">
-						รอพิจารณา ({view.pending.length} คน · {viewPendingShifts} กะ)
-					</h4>
-					<span class="text-2xs text-muted-foreground">เรียงตามวันที่สมัคร</span>
-				</div>
-				<ul class="mt-3 space-y-3">
-					{#each view.pending as group (group.key)}
-						{@const volunteer = volunteerFor(group.applications[0])}
-						<JobApplicantRow
-							applications={group.applications}
-							{volunteer}
-							volunteerCode={volunteer?.volunteer_code ?? null}
-							shiftLabelOf={shiftLabelFor}
-							requiredSkills={job.skills_required ?? []}
-							skillOptions={skillCatalog.options}
-							{assignments}
-							{today}
-							onreview={openReview}
-							accessStatus={volunteer ? volunteerAccessStatus(volunteer, accounts) : null}
-							{shelterLine}
+			{:else}
+				<!-- Two sections so the queue still waiting for a decision is never mixed in with the
+				     history (#1520): pending first, everything already decided below. -->
+				{#if showPending}
+					<section
+						data-testid="applicants-pending-section"
+						aria-labelledby="applicants-pending-heading"
+						class="mt-4 rounded-xl border border-amber-200 bg-amber-50/40 p-3 sm:p-4"
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<h4
+								id="applicants-pending-heading"
+								class="inline-flex items-center gap-2 text-sm font-bold text-foreground"
+							>
+								<Hourglass class="h-4 w-4 text-amber-600" />
+								รอพิจารณา{#if view.pending.length > 0}
+									({view.pending.length} คน · {viewPendingShifts} กะในหน้านี้){/if}
+							</h4>
+							<span class="text-2xs text-muted-foreground"
+								>ทั้งหมด {counts.pending} กะ · เรียงตามวันที่สมัคร</span
+							>
+						</div>
+						{#if view.pending.length > 0}
+							<ul class="mt-3 space-y-3">
+								{#each view.pending as group (group.key)}
+									{@const volunteer = volunteerFor(group.applications[0])}
+									<JobApplicantRow
+										applications={group.applications}
+										{volunteer}
+										volunteerCode={volunteer?.volunteer_code ?? null}
+										shiftLabelOf={shiftLabelFor}
+										requiredSkills={job.skills_required ?? []}
+										skillOptions={skillCatalog.options}
+										{assignments}
+										{today}
+										onreview={openReview}
+										accessStatus={volunteer ? volunteerAccessStatus(volunteer, accounts) : null}
+										{shelterLine}
+									/>
+								{/each}
+							</ul>
+						{:else}
+							<p class="mt-3 text-center text-xs text-muted-foreground">
+								{filtersActive ? 'ไม่มีผู้รอพิจารณาตามตัวกรอง' : 'ไม่มีผู้รอพิจารณา'}
+							</p>
+						{/if}
+						<BookmarkPager
+							page={pagerOf('pending').index + 1}
+							hasNext={(pendingQuery.data?.items.length ?? 0) === PAGE_SIZE}
+							pending={pendingQuery.isFetching}
+							onprev={() => goPrev('pending')}
+							onnext={() => goNext('pending', pendingQuery.data?.bookmark ?? null)}
 						/>
-					{/each}
-				</ul>
-			{/if}
+					</section>
+				{/if}
 
-			{#if view.history.length > 0}
-				<div class="mt-6 border-t border-border pt-4">
-					<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-						<h4 class="text-xs font-bold text-foreground">ประวัติ ({view.history.length} กะ)</h4>
-						<span class="text-2xs text-muted-foreground">
-							อนุมัติ {viewHistory.confirmed} · ปฏิเสธ/ยกเลิก {viewHistory.declined} · มอบหมายโดยเจ้าหน้าที่
-							{viewHistory.staffAssigned}
-						</span>
-					</div>
-					<ul class="mt-3 space-y-3">
-						{#each view.history as entry (entry.key)}
-							{#if entry.kind === 'staff'}
-								<StaffAssignmentRow {entry} shift={staffShiftFor(entry.shiftId)} {today} />
-							{:else}
-								<JobApplicantRow
-									applications={[entry.application]}
-									volunteer={entry.volunteer}
-									volunteerCode={entry.person.code}
-									shiftLabelOf={shiftLabelFor}
-									requiredSkills={job.skills_required ?? []}
-									skillOptions={skillCatalog.options}
-									{assignments}
-									{today}
-									onreview={openReview}
-									accessStatus={entry.volunteer
-										? volunteerAccessStatus(entry.volunteer, accounts)
-										: null}
-									{shelterLine}
-								/>
-							{/if}
-						{/each}
-					</ul>
-				</div>
+				{#if showReviewed || showStaff}
+					<section
+						data-testid="applicants-reviewed-section"
+						aria-labelledby="applicants-reviewed-heading"
+						class="mt-4 rounded-xl border border-border bg-muted/20 p-3 sm:p-4"
+					>
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<h4
+								id="applicants-reviewed-heading"
+								class="inline-flex items-center gap-2 text-sm font-bold text-foreground"
+							>
+								<CircleCheck class="h-4 w-4 text-emerald-600" />
+								พิจารณาแล้ว
+							</h4>
+							<span class="text-2xs text-muted-foreground">
+								ทั้งหมด: อนุมัติ {counts.confirmed} · ปฏิเสธ/ยกเลิก {counts.declined} · มอบหมายโดยเจ้าหน้าที่
+								{counts.staffAssigned} กะ
+							</span>
+						</div>
+
+						{#if reviewedView.length === 0 && staffView.length === 0}
+							<p class="mt-3 text-center text-xs text-muted-foreground">
+								{filtersActive
+									? 'ไม่มีรายการที่พิจารณาแล้วตามตัวกรอง'
+									: 'ยังไม่มีรายการที่พิจารณาแล้ว'}
+							</p>
+						{/if}
+
+						{#if reviewedView.length > 0}
+							<p class="mt-3 text-2xs text-muted-foreground">
+								ในหน้านี้: อนุมัติ {viewHistory.confirmed} · ปฏิเสธ/ยกเลิก {viewHistory.declined}
+							</p>
+							<ul class="mt-2 space-y-3">
+								{#each reviewedView as entry (entry.key)}
+									{#if entry.kind === 'application'}
+										<JobApplicantRow
+											applications={[entry.application]}
+											volunteer={entry.volunteer}
+											volunteerCode={entry.person.code}
+											shiftLabelOf={shiftLabelFor}
+											requiredSkills={job.skills_required ?? []}
+											skillOptions={skillCatalog.options}
+											{assignments}
+											{today}
+											onreview={openReview}
+											accessStatus={entry.volunteer
+												? volunteerAccessStatus(entry.volunteer, accounts)
+												: null}
+											{shelterLine}
+										/>
+									{/if}
+								{/each}
+							</ul>
+						{/if}
+						{#if showReviewed}
+							<BookmarkPager
+								page={pagerOf('reviewed').index + 1}
+								hasNext={(reviewedQuery.data?.items.length ?? 0) === PAGE_SIZE}
+								pending={reviewedQuery.isFetching}
+								onprev={() => goPrev('reviewed')}
+								onnext={() => goNext('reviewed', reviewedQuery.data?.bookmark ?? null)}
+							/>
+						{/if}
+
+						{#if staffView.length > 0}
+							<div class="mt-4 border-t border-border pt-3">
+								<h5 class="text-xs font-bold text-foreground">
+									มอบหมายโดยเจ้าหน้าที่ ({staffRows.length} กะ)
+								</h5>
+								<ul class="mt-2 space-y-3">
+									{#each staffView as entry (entry.key)}
+										{#if entry.kind === 'staff'}
+											<StaffAssignmentRow {entry} shift={staffShiftFor(entry.shiftId)} {today} />
+										{/if}
+									{/each}
+								</ul>
+							</div>
+						{/if}
+						{#if showStaff}
+							<BookmarkPager
+								page={pagerOf('staff').index + 1}
+								hasNext={(pagerOf('staff').index + 1) * PAGE_SIZE < staffRows.length}
+								pending={staffQuery.isFetching}
+								onprev={() => goPrev('staff')}
+								onnext={() => goNext('staff', null)}
+							/>
+						{/if}
+					</section>
+				{/if}
 			{/if}
 		{/if}
 	</div>

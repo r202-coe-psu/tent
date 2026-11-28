@@ -531,7 +531,7 @@ export async function createOrMergeUser(
 			if (capabilitiesForShelter(input.roles, code).length === 0) {
 				throw new ServiceError(
 					'VALIDATION',
-					`บัญชีจิตอาสาไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
+					`บัญชีอาสาสมัครไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
 				);
 			}
 		}
@@ -1113,7 +1113,7 @@ export async function updateUser(
 		doc.personnel_type === 'volunteer' &&
 		input.active !== (doc.active ?? true)
 	) {
-		throw new ServiceError('FORBIDDEN', 'บัญชีจิตอาสาใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี');
+		throw new ServiceError('FORBIDDEN', 'บัญชีอาสาสมัครใช้การถอนสิทธิ์ในศูนย์แทนการปิดบัญชี');
 	}
 
 	let nextRoles = input.roles;
@@ -1178,7 +1178,7 @@ export async function updateUser(
 			if (capabilitiesForShelter(rawRoles, code).length === 0) {
 				throw new ServiceError(
 					'VALIDATION',
-					`บัญชีจิตอาสาไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
+					`บัญชีอาสาสมัครไม่สามารถถือสิทธิ์ประจำศูนย์ ${code} โดยไม่มีบทบาทหน้าที่ได้`
 				);
 			}
 		}

@@ -58,7 +58,7 @@
 					<p class="badge">{sheet.badge}</p>
 					<p class="link">{KIOSK_LABEL_LINK}</p>
 				</div>
-				<img class="qr" src={sheet.qrSrc} alt="QR จิตอาสา" style:width="{sheet.qrSizeMm}mm" />
+				<img class="qr" src={sheet.qrSrc} alt="QR อาสาสมัคร" style:width="{sheet.qrSizeMm}mm" />
 			</div>
 		</div>
 	</div>

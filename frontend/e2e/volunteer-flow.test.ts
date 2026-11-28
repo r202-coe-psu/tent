@@ -914,7 +914,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await expect(page.getByRole('dialog').getByText(APPLICANT_OCCUPATION)).toBeVisible();
 			await page.keyboard.press('Escape');
 
-			await page.getByRole('button', { name: /งานจิตอาสา/ }).click();
+			await page.getByRole('button', { name: /งานอาสาสมัคร/ }).click();
 			await expect(page).toHaveURL(/\/openings$/);
 			await expect(page.getByText(SECOND_JOB.title)).toBeVisible();
 

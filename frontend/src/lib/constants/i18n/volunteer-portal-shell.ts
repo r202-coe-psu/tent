@@ -4,7 +4,7 @@ export const VOLUNTEER_PORTAL_SHELL_I18N = {
 		tagline: 'เช็คงาน ติดตามสถานะ และรายงานตัวปฏิบัติหน้าที่',
 		backShort: 'กลับ',
 		backHome: 'กลับหน้าหลัก',
-		footer: 'ระบบบริการจิตอาสา · Smart Shelter Project'
+		footer: 'ระบบบริการอาสาสมัคร · Smart Shelter Project'
 	},
 	en: {
 		backHomeAria: 'Back to home',

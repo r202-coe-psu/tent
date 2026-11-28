@@ -17,11 +17,18 @@ const collate = new Intl.Collator('und').compare;
 
 function matchesSelector(doc: Record<string, unknown>, selector: Record<string, unknown>): boolean {
 	for (const [key, cond] of Object.entries(selector)) {
+		if (key === '$or') {
+			const branches = cond as Record<string, unknown>[];
+			if (!branches.some((branch) => matchesSelector(doc, branch))) return false;
+			continue;
+		}
 		const val = valueAtPath(doc, key);
 		if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
 			for (const [op, opVal] of Object.entries(cond as Record<string, unknown>)) {
 				if (op === '$in') {
 					if (!Array.isArray(opVal) || !opVal.includes(val)) return false;
+				} else if (op === '$exists') {
+					if ((val !== undefined) !== Boolean(opVal)) return false;
 				} else if (op === '$eq') {
 					if (val !== opVal) return false;
 				} else if (op === '$gte' || op === '$gt' || op === '$lte' || op === '$lt') {

@@ -28,6 +28,7 @@ import {
 } from '$lib/db/subscribe-data-changes';
 import { authStore } from '$lib/stores/auth.svelte';
 import { useMasterData } from '$lib/features/master-data';
+import { applicantSummary } from '../domain/applicant-board';
 import { bangkokDateString } from '../domain/duty-window';
 import { computeHubMetrics } from '../domain/hub-metrics';
 import { parseVolunteerScanCode } from '../domain/scan-code';
@@ -53,6 +54,7 @@ import {
 } from './volunteer-access';
 import type {
 	JobApplicationFilter,
+	JobApplicationPageQuery,
 	JobFilter,
 	ShiftAssignmentFilter,
 	VolunteerFilter,
@@ -93,6 +95,24 @@ export const volunteerKeys = {
 	shiftAssignmentsAll: () => [...volunteerKeys.all, 'shiftAssignments', getShelterCode()] as const,
 	shiftAssignmentsList: (filter?: ShiftAssignmentFilter) =>
 		[...volunteerKeys.shiftAssignmentsAll(), 'list', filter] as const,
+	/**
+	 * Everything the job detail applicants tab reads. Invalidated by every write that touches an
+	 * application or an assignment (see `invalidateApplicantBoard`).
+	 */
+	applicantBoardAll: () => [...volunteerKeys.all, 'applicantBoard', getShelterCode()] as const,
+	applicantSummary: (jobId: string) =>
+		[...volunteerKeys.applicantBoardAll(), 'summary', jobId] as const,
+	applicantPage: (q: object) => [...volunteerKeys.applicantBoardAll(), 'page', q] as const,
+	staffPage: (ids: readonly string[]) =>
+		[...volunteerKeys.applicantBoardAll(), 'staff', ids] as const,
+	pageAssignments: (jobId: string, volunteerIds: readonly string[]) =>
+		[...volunteerKeys.applicantBoardAll(), 'assignments', jobId, volunteerIds] as const,
+	/** One job's assignments, read by `job_id`. Under `shiftAssignmentsAll()`, so writes bust it. */
+	shiftAssignmentsForJob: (jobId: string) =>
+		[...volunteerKeys.shiftAssignmentsAll(), 'job', jobId] as const,
+	/** Only the given shifts of one job (the shifts tab's current page). */
+	shiftAssignmentsForJobShifts: (jobId: string, shiftIds: readonly string[]) =>
+		[...volunteerKeys.shiftAssignmentsAll(), 'job-shifts', jobId, shiftIds] as const,
 	/** Nested under `shiftAssignmentsAll()` so invalidating that key also busts today's attendance. */
 	todayAttendance: (date: string) =>
 		[...volunteerKeys.shiftAssignmentsAll(), 'today', date] as const,
@@ -249,6 +269,66 @@ export async function lookupVolunteerByScanCode(
 	}
 }
 
+/** Assignments of the shifts on screen, from a DB `_find` (re-keys when the page changes). */
+export const useJobShiftAssignments = (jobId: () => string, shiftIds: () => readonly string[]) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.shiftAssignmentsForJobShifts(jobId(), shiftIds()),
+		queryFn: () => shiftAssignmentRepository().listForJobShifts(jobId(), shiftIds()),
+		enabled: !!jobId() && shiftIds().length > 0
+	}));
+
+/** Every assignment of one job; `enabled` keeps it lazy for the rare delete-overflow case. */
+export const useJobAssignments = (jobId: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.shiftAssignmentsForJob(jobId()),
+		queryFn: () => shiftAssignmentRepository().listForJob(jobId()),
+		enabled: enabled() && !!jobId()
+	}));
+
+/** Tiles and staff-assigned rows of one job, from slim DB projections (no full documents). */
+export const useApplicantSummary = (jobId: () => string) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.applicantSummary(jobId()),
+		queryFn: async () => {
+			const [applications, assignments] = await Promise.all([
+				jobApplicationRepository().summaryForJob(jobId()),
+				shiftAssignmentRepository().summaryForJob(jobId())
+			]);
+			return applicantSummary({ jobId: jobId(), applications, assignments });
+		},
+		enabled: !!jobId()
+	}));
+
+/** One DB page of a job's applications (status + shift in the selector, bookmark paging). */
+export const useJobApplicationPage = (
+	query: () => JobApplicationPageQuery,
+	enabled: () => boolean
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.applicantPage(query()),
+		queryFn: () => jobApplicationRepository().pageForJob(query()),
+		enabled: enabled()
+	}));
+
+/** Full documents of one page of staff-assigned rows. */
+export const useStaffAssignmentPage = (ids: () => readonly string[]) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.staffPage(ids()),
+		queryFn: () => shiftAssignmentRepository().getMany(ids()),
+		enabled: ids().length > 0
+	}));
+
+/** The assignments of the volunteers on screen, for the check-in actions on their rows. */
+export const useVolunteerPageAssignments = (
+	jobId: () => string,
+	volunteerIds: () => readonly string[]
+) =>
+	createQuery(() => ({
+		queryKey: volunteerKeys.pageAssignments(jobId(), volunteerIds()),
+		queryFn: () => shiftAssignmentRepository().listForJobVolunteers(jobId(), volunteerIds()),
+		enabled: !!jobId() && volunteerIds().length > 0
+	}));
+
 export const useShiftAssignments = (filter?: ShiftAssignmentFilter) =>
 	createQuery(() => ({
 		queryKey: volunteerKeys.shiftAssignmentsList(filter),
@@ -358,6 +438,7 @@ export const useDispatchVolunteers = (queryClient: QueryClient) =>
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));
@@ -377,6 +458,7 @@ export const useAssignVolunteers = (queryClient: QueryClient) =>
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));
@@ -425,6 +507,7 @@ export const useCreateJobApplication = (queryClient: QueryClient) =>
 			jobApplicationRepository().create(input, authorContext(), { controlledSkills }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
@@ -450,6 +533,7 @@ export const useReviewApplication = (queryClient: QueryClient) =>
 		}) => jobApplicationRepository().review(id, decision, authStore.user?.name ?? 'unknown', notes),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
@@ -465,6 +549,7 @@ export const useCancelApplication = (queryClient: QueryClient) =>
 			jobApplicationRepository().cancel(id, authStore.user?.name ?? 'unknown'),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
@@ -491,6 +576,7 @@ export const useCheckIn = (queryClient: QueryClient) =>
 			shiftAssignmentRepository().checkIn(id, authStore.user?.name ?? 'unknown', method, reason),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
@@ -511,6 +597,7 @@ export const useCheckOut = (queryClient: QueryClient) =>
 			shiftAssignmentRepository().checkOut(id, authStore.user?.name ?? 'unknown', method, reason),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
@@ -527,6 +614,7 @@ export const useUnassignVolunteer = (queryClient: QueryClient) =>
 		mutationFn: (id: string) => shiftAssignmentRepository().unassign(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
@@ -607,6 +695,7 @@ export const useReviewVolunteerIdentity = (queryClient: QueryClient) =>
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));
@@ -642,6 +731,7 @@ export const useReviewVolunteerSkill = (queryClient: QueryClient) =>
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.volunteersAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.applicantBoardAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));
@@ -721,10 +811,18 @@ export function startVolunteersLiveQuery(queryClient: QueryClient): SubscribeDat
 			return [volunteerKeys.jobsAll(), volunteerKeys.hubMetrics()];
 		}
 		if (type === 'job_application') {
-			return [volunteerKeys.jobApplicationsAll(), volunteerKeys.hubMetrics()];
+			return [
+				volunteerKeys.jobApplicationsAll(),
+				volunteerKeys.applicantBoardAll(),
+				volunteerKeys.hubMetrics()
+			];
 		}
 		if (type === 'shift_assignment') {
-			return [volunteerKeys.shiftAssignmentsAll(), volunteerKeys.hubMetrics()];
+			return [
+				volunteerKeys.shiftAssignmentsAll(),
+				volunteerKeys.applicantBoardAll(),
+				volunteerKeys.hubMetrics()
+			];
 		}
 		if (type === 'volunteer') {
 			return [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()];

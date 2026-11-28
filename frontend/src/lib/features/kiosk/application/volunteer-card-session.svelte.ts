@@ -19,7 +19,7 @@ const MESSAGES: Record<
 	Record<'notFound' | 'rateLimited' | 'methodDisabled' | 'printRenderFailed' | 'generic', string>
 > = {
 	th: {
-		notFound: 'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่',
+		notFound: 'ไม่พบข้อมูลอาสาสมัครที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่',
 		rateLimited: 'ลองผิดหลายครั้ง กรุณารอสักครู่หรือติดต่อเจ้าหน้าที่',
 		methodDisabled: 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่',
 		printRenderFailed: 'สร้าง QR Code สำหรับพิมพ์ไม่สำเร็จ',

@@ -6,17 +6,17 @@
 
 <script lang="ts">
 	/**
-	 * Job board filter chips (CR-094 FR-VOL-09.3).
+	 * Job board filters (CR-094 FR-VOL-09.3), grouped by what they do:
 	 *
-	 * "ไม่รวมงานที่ปิดแล้ว" is a default-on toggle that only applies while no
-	 * specific status chip is selected (`status === 'all'`) — it hides `closed`
-	 * and `cancelled` jobs. Picking a status chip (เปิดรับ/พักรับ/เต็มโควตา/ร่าง/
-	 * ปิดงาน) narrows to exactly that status. "ด่วนพิเศษ" is an independent
-	 * toggle that combines with whichever status is active. "แสดงทั้งหมด" resets
-	 * both the status filter and the exclude-closed toggle. This chip
-	 * interaction shape is not specified by CR-094/01-tab-job-board.md beyond
-	 * the chip list itself — documented judgment call, flagged for owner review.
+	 * - Left, tabs: the status to look at — exactly one at a time (ทั้งหมด, เปิดรับ, พักรับ,
+	 *   เต็มโควตา, ร่าง, ปิดงาน).
+	 * - Right, switches: "ซ่อนงานที่ปิดแล้ว" hides `closed` and `cancelled` jobs and only applies
+	 *   under "ทั้งหมด" — a specific status already says what to show, so the switch is
+	 *   disabled then and can never contradict it. "ด่วนพิเศษ" combines with any status.
 	 */
+	import Flame from '@lucide/svelte/icons/flame';
+	import { Switch } from '$lib/components/ui/switch/index.js';
+
 	let {
 		status = $bindable<JobBoardStatusFilter>('all'),
 		excludeClosed = $bindable(true),
@@ -27,7 +27,8 @@
 		urgentOnly?: boolean;
 	} = $props();
 
-	const statusChips: { value: JobStatus; label: string }[] = [
+	const tabs: { value: JobBoardStatusFilter; label: string }[] = [
+		{ value: 'all', label: 'ทั้งหมด' },
 		{ value: 'open', label: 'เปิดรับ' },
 		{ value: 'paused', label: 'พักรับ' },
 		{ value: 'full', label: 'เต็มโควตา' },
@@ -35,56 +36,45 @@
 		{ value: 'closed', label: 'ปิดงาน' }
 	];
 
-	function selectStatus(value: JobStatus) {
-		status = status === value ? 'all' : value;
-	}
-
-	function showAll() {
-		status = 'all';
-		excludeClosed = false;
-	}
-
-	const chipBase =
-		'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors';
-	const chipOn = 'border-primary bg-primary text-primary-foreground';
-	const chipOff = 'border-border bg-background text-muted-foreground hover:bg-muted';
+	const switchLocked = $derived(status !== 'all');
 </script>
 
-<div class="flex flex-wrap items-center gap-2">
-	<button
-		type="button"
-		class="{chipBase} {status === 'all' && excludeClosed ? chipOn : chipOff}"
-		disabled={status !== 'all'}
-		onclick={() => (excludeClosed = !excludeClosed)}
-	>
-		ไม่รวมงานที่ปิดแล้ว
-	</button>
+<div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+	<div role="tablist" aria-label="สถานะงาน" class="flex flex-wrap items-center gap-x-1 gap-y-1">
+		{#each tabs as tab (tab.value)}
+			<button
+				type="button"
+				role="tab"
+				aria-selected={status === tab.value}
+				class="min-h-9 border-b-2 px-3 text-sm font-medium transition-colors {status === tab.value
+					? 'border-primary font-bold text-foreground'
+					: 'border-transparent text-muted-foreground hover:text-foreground'}"
+				onclick={() => (status = tab.value)}
+			>
+				{tab.label}
+			</button>
+		{/each}
+	</div>
 
-	<button
-		type="button"
-		class="{chipBase} {urgentOnly ? 'border-destructive bg-destructive text-white' : chipOff}"
-		onclick={() => (urgentOnly = !urgentOnly)}
-	>
-		ด่วนพิเศษ
-	</button>
-
-	<span class="mx-1 h-4 w-px bg-border"></span>
-
-	{#each statusChips as chip (chip.value)}
+	<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+		<label
+			class="inline-flex items-center gap-2 text-xs font-medium {switchLocked
+				? 'text-muted-foreground/60'
+				: 'text-foreground'}"
+		>
+			<Switch bind:checked={excludeClosed} disabled={switchLocked} aria-label="ซ่อนงานที่ปิดแล้ว" />
+			ซ่อนงานที่ปิดแล้ว
+		</label>
 		<button
 			type="button"
-			class="{chipBase} {status === chip.value ? chipOn : chipOff}"
-			onclick={() => selectStatus(chip.value)}
+			aria-pressed={urgentOnly}
+			class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors {urgentOnly
+				? 'border-destructive bg-destructive text-white'
+				: 'border-border bg-background text-muted-foreground hover:bg-muted'}"
+			onclick={() => (urgentOnly = !urgentOnly)}
 		>
-			{chip.label}
+			<Flame class="h-3.5 w-3.5" />
+			ด่วนพิเศษ
 		</button>
-	{/each}
-
-	<button
-		type="button"
-		class="{chipBase} {status === 'all' && !excludeClosed ? chipOn : chipOff}"
-		onclick={showAll}
-	>
-		แสดงทั้งหมด
-	</button>
+	</div>
 </div>

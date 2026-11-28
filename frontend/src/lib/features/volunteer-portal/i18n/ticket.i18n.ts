@@ -64,7 +64,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		backToJobs: 'กลับไปยังกระดานงาน',
 		findOtherTicket: 'ค้นหาตั๋วใบอื่น',
 		offlineCached: 'แคชออฟไลน์พร้อมใช้',
-		digitalPassBadge: 'บัตรประจำตัวจิตอาสาดิจิทัล',
+		digitalPassBadge: 'บัตรประจำตัวอาสาสมัครดิจิทัล',
 		tokenLabel: 'Token :',
 		appliedAtLabel: 'สมัครเมื่อ :',
 		defaultJobTitle: 'งานอาสาสมัคร',
@@ -94,7 +94,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		downloadQrButton: 'บันทึกรูป QR Code ลงเครื่อง',
 		copyLinkButton: 'คัดลอกลิงก์ตั๋วนี้',
 		cancelTicketButton: 'ขอยกเลิกการสมัครล่วงหน้า (คืนโควตาให้ระบบ)',
-		cancelModalTitle: 'ยืนยันการยกเลิกการสมัครจิตอาสา',
+		cancelModalTitle: 'ยืนยันการยกเลิกการสมัครงานอาสาสมัคร',
 		cancelModalDesc:
 			'คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการสมัครกะงานนี้? เมื่อยกเลิกแล้วระบบจะคืนโควตาให้ผู้สมัครท่านอื่น และการยกเลิกนี้ไม่สามารถเรียกคืนได้',
 		cancelModalCancelBtn: 'กลับไป',
@@ -105,7 +105,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		toastCancelSuccess: 'ยกเลิกการสมัครเรียบร้อยแล้ว',
 		toastCancelError: 'ยกเลิกการสมัครไม่สำเร็จ',
 		notFoundError: 'ไม่พบตั๋วนี้',
-		pageTitle: 'ตั๋วประจำตัวจิตอาสา — Smart Shelter',
+		pageTitle: 'ตั๋วประจำตัวอาสาสมัคร — Smart Shelter',
 		finderPageTitle: 'ค้นหาตั๋วอาสาสมัคร — Smart Shelter',
 		finderTitle: 'ค้นหาตั๋วของฉัน',
 		finderSubtitle: 'กรอกเบอร์โทรศัพท์ที่ใช้สมัครเพื่อดูตั๋วดิจิทัล',
@@ -118,7 +118,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 			'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
 		finderSignInFailed: 'ไม่สามารถเข้าสู่ระบบได้',
 		finderNoTickets: 'ไม่พบตั๋วสำหรับเบอร์นี้ หากเพิ่งสมัคร กรุณาเปิดจากลิงก์ตั๋วที่ได้รับ',
-		finderOpenPortal: 'เข้าสู่ตารางงานจิตอาสา',
+		finderOpenPortal: 'เข้าสู่ตารางงานอาสาสมัคร',
 		finderReadOnlyNote:
 			'เปิดจากการค้นด้วยเบอร์โทร — ดูได้อย่างเดียว หากต้องการยกเลิก ใช้ลิงก์ตั๋วที่ได้รับตอนสมัคร'
 	},

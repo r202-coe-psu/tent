@@ -3,12 +3,12 @@ import { kioskLabelDots } from './print-label';
 import { volunteerLabelIdentity, volunteerLabelLayout } from './volunteer-label';
 
 describe('volunteerLabelIdentity', () => {
-	it('reads the volunteer badge as จิตอาสา · code and keeps the given display name', () => {
+	it('reads the volunteer badge as อาสาสมัคร · code and keeps the given display name', () => {
 		expect(
 			volunteerLabelIdentity({ display_name: 'สมชาย ใจ****ดี', volunteer_code: 'V-012' })
 		).toEqual({
 			name: 'สมชาย ใจ****ดี',
-			badge: 'จิตอาสา · V-012'
+			badge: 'อาสาสมัคร · V-012'
 		});
 	});
 });

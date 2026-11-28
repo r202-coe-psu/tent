@@ -253,8 +253,27 @@ export type JobApplicationFilter = {
 	volunteerId?: string;
 };
 
+/** One page of a job's applications read with `_find` (bookmark paging, never `skip`). */
+export type JobApplicationPageQuery = {
+	jobId: string;
+	/** Omit for every status. */
+	statuses?: readonly JobApplicationStatus[];
+	/** The applicant board's shift/date choice; matched on the application's chosen shift. */
+	shift?: { id: string | null; date: string } | null;
+	bookmark?: string | null;
+	limit: number;
+};
+export type JobApplicationPage = { items: JobApplication[]; bookmark: string | null };
+
 export interface JobApplicationRepository {
 	list(filter?: JobApplicationFilter): Promise<JobApplication[]>;
+	/** A page of one job's applications, filtered by status and shift in the DB selector. */
+	pageForJob(query: JobApplicationPageQuery): Promise<JobApplicationPage>;
+	/**
+	 * Slim projection of every application of one job (just the fields `applicantSummary` reads),
+	 * for the tiles and staff rows. Not for display: the documents are partial.
+	 */
+	summaryForJob(jobId: string): Promise<JobApplication[]>;
 	get(id: string): Promise<JobApplication | null>;
 	getByTrackingToken(token: string): Promise<JobApplication | null>;
 	/**
@@ -308,6 +327,20 @@ export type ShiftAssignmentFilter = {
 
 export interface ShiftAssignmentRepository {
 	list(filter?: ShiftAssignmentFilter): Promise<ShiftAssignment[]>;
+	/** Every assignment of one job, read with a Mango `_find` on `job_id` (not the whole shelter). */
+	listForJob(jobId: string): Promise<ShiftAssignment[]>;
+	/**
+	 * The assignments of the given shifts of one job, read with `_find` (`job_id` + `shift_id $in`),
+	 * plus the job's legacy rows that carry no `shift_id` (`shiftRoster` matches those by duty
+	 * window). Lets the shifts tab load only the shifts on screen.
+	 */
+	listForJobShifts(jobId: string, shiftIds: readonly string[]): Promise<ShiftAssignment[]>;
+	/** The assignments of the given volunteers within one job (the rows on screen). */
+	listForJobVolunteers(jobId: string, volunteerIds: readonly string[]): Promise<ShiftAssignment[]>;
+	/** Slim projection of one job's assignments for `applicantSummary`; documents are partial. */
+	summaryForJob(jobId: string): Promise<ShiftAssignment[]>;
+	/** Full documents for known ids (a page of the staff-assigned rows). */
+	getMany(ids: readonly string[]): Promise<ShiftAssignment[]>;
 	get(id: string): Promise<ShiftAssignment | null>;
 	/**
 	 * SM dispatches a volunteer to a job: creates the `shift_assignment`

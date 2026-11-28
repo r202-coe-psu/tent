@@ -27,7 +27,7 @@ test('a QR that is not a ticket says so', async ({ page }) => {
 	await page.goto(`${BASE}/volunteers/portal`);
 	await page.getByRole('button', { name: 'สแกน QR ตั๋ว / รหัส Token' }).click();
 
-	await expect(page.getByText('QR Code นี้ไม่ใช่ตั๋วจิตอาสา').first()).toBeVisible({
+	await expect(page.getByText('QR Code นี้ไม่ใช่ตั๋วอาสาสมัคร').first()).toBeVisible({
 		timeout: 15_000
 	});
 	await expect(page).toHaveURL(/\/volunteers\/portal$/);
@@ -41,7 +41,7 @@ test('a remembered device signs straight in from a new tab; sign-out forgets it'
 	await page.goto(`${BASE}/volunteers/portal`);
 	await page.getByRole('button', { name: 'สแกน QR ตั๋ว / รหัส Token' }).click();
 	await page.getByLabel('จดจำเครื่องนี้ 7 วัน').check();
-	await page.getByLabel('กรอกรหัส Token หรือ รหัสตั๋วจิตอาสา').fill(TOKEN);
+	await page.getByLabel('กรอกรหัส Token หรือ รหัสตั๋วอาสาสมัคร').fill(TOKEN);
 	await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
 	await expect(page).toHaveURL(DASHBOARD);
 
@@ -151,7 +151,7 @@ async function signInWithToken(page: Page, remember: boolean) {
 	await page.goto(`${BASE}/volunteers/portal`);
 	await page.getByRole('button', { name: 'สแกน QR ตั๋ว / รหัส Token' }).click();
 	if (remember) await page.getByLabel('จดจำเครื่องนี้ 7 วัน').check();
-	await page.getByLabel('กรอกรหัส Token หรือ รหัสตั๋วจิตอาสา').fill(TOKEN);
+	await page.getByLabel('กรอกรหัส Token หรือ รหัสตั๋วอาสาสมัคร').fill(TOKEN);
 	await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
 	await expect(page).toHaveURL(DASHBOARD);
 }
