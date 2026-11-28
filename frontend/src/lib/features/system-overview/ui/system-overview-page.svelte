@@ -61,16 +61,6 @@
 		loading={siteKindSummaryQuery.isPending}
 	/>
 
-	<OverviewFilterBar
-		{filters}
-		showSearch={false}
-		showPublicVisibilityFilter={true}
-		onChange={(next) => {
-			filters = next;
-			sitesOffset = 0; // any filter change restarts the site table on page 1 (#1502)
-		}}
-	/>
-
 	{#if isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />
@@ -80,6 +70,16 @@
 	{/if}
 
 	<OverviewPhaseStrip summary={summaryQuery.data} loading={summaryQuery.isPending} />
+
+	<OverviewFilterBar
+		{filters}
+		showSearch={false}
+		showPublicVisibilityFilter={true}
+		onChange={(next) => {
+			filters = next;
+			sitesOffset = 0; // any filter change restarts the site table on page 1 (#1502)
+		}}
+	/>
 
 	<OverviewSitesSection
 		sites={sitesQuery.data?.sites}
