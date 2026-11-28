@@ -3,7 +3,7 @@ id: draft
 title: Daily SOP — เพิ่ม Role "จุดแจกจ่าย" (DST) ให้ distribution_staff ประเมินงานของตนเอง (amend CR-153)
 status: proposed
 date: 2026-11-23
-updated: 2026-11-27
+updated: 2026-11-28
 requested_by: "@Fishcanwalk — ทดสอบมือ #1422 ข้อ 7 (2026-11-22): distribution_staff เปิด /back-office/dailysop แล้วไม่มีแบบประเมินให้ทำ"
 decided_by:
 layer: volatile
@@ -67,6 +67,8 @@ affects:
 > - **(ข)** ซ่อนปุ่ม "การประเมินประจำวัน" ใน `/portal` สำหรับ role ที่ `assessableRoles(...)` ว่าง
 > - **(ค)** ยอมรับข้อความเดิม บันทึกเป็นข้อยกเว้นใน CR นี้
 >
+> **ข้อเสนอแนะ:** เลือก (ข) สำหรับ `donation_staff`, `kiosk_staff` และ `pr_staff` ในขอบเขตนี้ เพื่อไม่พาผู้ใช้ไปยังหน้าที่ไม่มีแบบประเมิน และไม่เพิ่มชุดคำถามโดยยังไม่มีข้อกำหนดจากเจ้าของงาน หากต้องการแบบประเมินให้ role เหล่านี้ ควรเสนอชุดคำถามแยกใน CR ถัดไป
+>
 > หมายเหตุ: (ข) ต้องไม่ขัด CR-263 FR-5/AC-6 (เปิดหน้าได้ทุก role) — ซ่อนเฉพาะปุ่มใน portal ไม่ใช่เพิ่ม guard
 
 > [NEEDS DECISION: D6 — โครงสร้าง role matrix] `docs/prd/role-permission-matrix.md` มีคอลัมน์ SA SM REG TRG MED KS SC DON VC SO FAC และไม่มี `distribution_staff`. ต้องตัดสินว่าเพิ่มคอลัมน์ใหม่ หรือ map `distribution_staff` ไปคอลัมน์เดิม (เช่น SC) และระบุหมายเหตุ — เป็นการเปลี่ยนโครงสร้างตารางสิทธิ์ ไม่ใช่แค่เพิ่มแถว
@@ -123,3 +125,4 @@ affects:
 - 2026-11-23 — @Fishcanwalk: `distribution_staff` ต้องประเมินตัวเองได้; @mhapong เลือก Role ใหม่ (DST) และ track ด้วย CR file
 - 2026-11-23 — proposed (ร่าง CR)
 - 2026-11-27 — แก้ตาม review: เพิ่ม D5 (role ที่เหลือ, จากคอมเมนต์ #1422) และ D6 (โครงสร้าง matrix), อ้าง CR-263, `affects` ครบ, แตก FR-4/FR-7 ให้ atomic
+- 2026-11-28 — เสนอชุดคำถาม DST 5 ข้อใน D1 และแนะนำตัวเลือก D5(ข) เพื่อไม่พา role ที่ไม่มีแบบประเมินไปยังหน้าทางตัน
