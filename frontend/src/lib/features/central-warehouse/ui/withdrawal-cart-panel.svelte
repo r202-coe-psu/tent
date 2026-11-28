@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -27,6 +29,10 @@
 		enabled: boolean;
 		onSubmitted: () => void;
 	} = $props();
+
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 
 	const queryClient = useQueryClient();
 	const createMutation = useCreateWithdrawal(queryClient);
@@ -142,7 +148,7 @@
 									class="h-11 w-32 tabular-nums sm:h-10"
 								/>
 							</Table.Cell>
-							<Table.Cell class="text-slate-700">{line.unit}</Table.Cell>
+							<Table.Cell class="text-slate-700">{unitLabel(line.unit)}</Table.Cell>
 							<Table.Cell class="text-right text-slate-700 tabular-nums">
 								{formatQty(line.available)}
 							</Table.Cell>

@@ -11,6 +11,8 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import type { LotPriorityItem } from '../domain/lot-priority';
 	import { qtyGt } from '$lib/utils/qty';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
@@ -56,6 +58,9 @@
 	} = $props();
 
 	const storagePoints = useStoragePoints(() => shelterCode);
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 	const LOT_EXPIRY_CLASS = {
 		expired: 'text-red-700',
 		expiring: 'text-amber-700',
@@ -213,7 +218,7 @@
 													<span class="text-lg font-bold text-slate-900 tabular-nums"
 														>{lot.qty}</span
 													>
-													<span class="text-sm text-slate-500">{lot.unit}</span>
+													<span class="text-sm text-slate-500">{unitLabel(lot.unit)}</span>
 												</p>
 												<div class="flex flex-wrap items-center justify-end gap-1.5">
 													{#if lot.isNegative}

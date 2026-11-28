@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -19,6 +21,10 @@
 		/** Jump to the warehouse tab on `warehouseCode`, searching for `name`. */
 		onViewStock: (warehouseCode: string, name: string) => void;
 	} = $props();
+
+	const unitsQuery = useUnitsOfMeasure();
+	const unitLabel = (code: string) =>
+		formatUnit(code, unitsQuery.data ?? [], langState.current) || code;
 
 	const MIN_QUERY = 2;
 	const ANY_WAREHOUSE = '__any__';
@@ -121,7 +127,7 @@
 						<p class="text-sm font-bold break-words text-slate-900">{item.name_th}</p>
 						<p class="text-xs text-slate-500">
 							{item.name_en ? `${item.name_en} · ` : ''}{item.type_code ?? 'ไม่ระบุประเภท'}
-							{item.base_unit ? ` · หน่วย ${item.base_unit}` : ''}
+							{item.base_unit ? ` · หน่วย ${unitLabel(item.base_unit)}` : ''}
 						</p>
 					</div>
 					<div class="flex flex-wrap items-center gap-2">

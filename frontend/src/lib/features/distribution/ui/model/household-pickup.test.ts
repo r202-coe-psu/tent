@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildBlockedHouseholdMembers,
 	buildHouseholdPickupRows,
 	isPreselected,
 	isSelectedByDefault,
@@ -173,5 +174,45 @@ describe('householdHeading', () => {
 		expect(householdHeading('ครอบครัวใจดี')).toBe('ครอบครัวใจดี');
 		expect(householdHeading(undefined)).toBe('ครอบครัวของผู้รับ');
 		expect(householdHeading('  ')).toBe('ครอบครัวของผู้รับ');
+	});
+});
+
+describe('awaiting admission at the food desk (CR-240 R2)', () => {
+	it('lists a member registered at the kiosk or arriving, flagged as awaiting admission', () => {
+		const rows = buildHouseholdPickupRows({
+			...base,
+			members: [member(A, 'ก'), member(B, 'ข', 'kiosk_registered'), member(C, 'ค', 'arriving')]
+		});
+		expect(rows.map((r) => [r.evacueeId, r.awaitingAdmission])).toEqual([
+			[B, true],
+			[A, false],
+			[C, true]
+		]);
+	});
+
+	it('lists members who cannot collect with the reason, collector first', () => {
+		const blocked = buildBlockedHouseholdMembers(
+			[
+				member(A, 'ก'),
+				member(B, 'ข', 'temporary_leave'),
+				{ ...member(C, 'ค', 'checked_out'), nickname: 'ต้น' }
+			],
+			C
+		);
+		expect(blocked).toEqual([
+			{
+				evacueeId: C,
+				label: 'ค ใจดี (ต้น)',
+				isCollector: true,
+				reason: 'เช็คเอาต์ออกจากศูนย์แล้ว'
+			},
+			{ evacueeId: B, label: 'ข ใจดี', isCollector: false, reason: 'ออกจากศูนย์ชั่วคราว' }
+		]);
+	});
+
+	it('lists nobody when every member may collect', () => {
+		expect(buildBlockedHouseholdMembers([member(A, 'ก'), member(B, 'ข', 'arriving')], A)).toEqual(
+			[]
+		);
 	});
 });

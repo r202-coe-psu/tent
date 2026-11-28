@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+	EXPIRY_PRESETS,
+	expiryPresetDate,
+	matchingExpiryPreset,
 	applyExpiryAutofill,
 	confirmExpiry,
 	editExpiry,
@@ -104,5 +107,25 @@ describe('lot expiry autofill state (CR-143 FR-D2a–D2c)', () => {
 		const state: ExpiryState = editExpiry(initialExpiryState(), '   ');
 		expect(state.value).toBe('');
 		expect(expiryMissing(chilled, state)).toBe(true);
+	});
+});
+
+describe('expiry presets', () => {
+	const preset = (id: string) => EXPIRY_PRESETS.find((p) => p.id === id)!;
+
+	it.each([
+		['2026-11-27', '7d', '2026-12-04'],
+		['2026-11-27', '6m', '2027-05-27'],
+		['2026-11-27', '1y', '2027-11-27'],
+		['2026-08-31', '6m', '2027-02-28'],
+		['2028-02-29', '1y', '2029-02-28']
+	])('from %s, %s lands on %s', (today, id, expected) => {
+		expect(expiryPresetDate(today, preset(id))).toBe(expected);
+	});
+
+	it('marks the preset whose date the field holds', () => {
+		expect(matchingExpiryPreset('2026-11-27', '2027-05-27')).toBe('6m');
+		expect(matchingExpiryPreset('2026-11-27', '2027-05-28')).toBeNull();
+		expect(matchingExpiryPreset('2026-11-27', '')).toBeNull();
 	});
 });

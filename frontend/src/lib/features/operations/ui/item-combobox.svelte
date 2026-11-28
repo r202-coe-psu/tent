@@ -184,11 +184,20 @@
 			open = false;
 			return;
 		}
-		if (canCreate) {
-			openCreate(code);
+		// Typed text is often a name or SKU, not a barcode: search the list before offering create.
+		const typed = code.trim();
+		const found = filterStockFormItems(items, typed);
+		if (found.length > 0) {
+			searchValue = typed;
+			open = true;
+			toast.info(`ไม่พบบาร์โค้ด “${typed}” — แสดงสินค้าที่ชื่อใกล้เคียงให้เลือก`);
 			return;
 		}
-		toast.error(`ไม่พบสินค้าที่ตรงกับบาร์โค้ด ${code}`);
+		if (canCreate && looksLikeBarcode(typed)) {
+			openCreate(typed);
+			return;
+		}
+		toast.error(`ไม่พบสินค้าที่ตรงกับ “${typed}” ในคลัง`);
 	}
 
 	function handleInputKeydown(event: KeyboardEvent) {
@@ -200,6 +209,19 @@
 	}
 
 	let scanOpen = $state(false);
+	/** Shown inside the scan dialog so a miss keeps it open for another try. */
+	let scanError = $state<string | null>(null);
+
+	function handleScan(code: string) {
+		scanError = null;
+		const typed = code.trim();
+		const known = findItemByBarcode(items, typed) || filterStockFormItems(items, typed).length > 0;
+		if (!known && !(canCreate && looksLikeBarcode(typed))) {
+			scanError = `ไม่พบสินค้าที่ตรงกับ “${typed}” — ลองสแกนหรือพิมพ์รหัสใหม่`;
+			return;
+		}
+		handleBarcode(typed);
+	}
 
 	// ---------------------------------------------------------------- quick-create
 
@@ -274,6 +296,10 @@
 				searchValue = e.currentTarget.value;
 			}}
 			onkeydown={handleInputKeydown}
+			// Open the list on click: an empty box made staff think there was nothing to pick.
+			onpointerdown={() => {
+				if (!disabled && !open) open = true;
+			}}
 			class={cn(
 				'flex min-h-11 w-full rounded-md border border-input bg-white px-3 py-2 pr-36 text-sm shadow-xs ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-muted disabled:font-bold disabled:text-muted-foreground disabled:opacity-100',
 				className
@@ -303,6 +329,7 @@
 					onclick={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
+						scanError = null;
 						scanOpen = true;
 					}}
 				>
@@ -416,7 +443,9 @@
 	bind:open={scanOpen}
 	title="สแกนบาร์โค้ดสินค้า"
 	hint="เล็งกล้องไปที่บาร์โค้ดที่ตัวสินค้า หรือพิมพ์รหัสด้วยมือ / เครื่องสแกนบาร์โค้ด"
-	onScan={handleBarcode}
+	busy={false}
+	error={scanError}
+	onScan={handleScan}
 />
 
 {#if canCreate && shelterCode}

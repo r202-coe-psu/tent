@@ -176,7 +176,7 @@
 						<Select.Root type="single" bind:value={formTargetId} disabled={isEdit}>
 							<Select.Trigger
 								id="form-replen-group"
-								class="h-9 w-full rounded-md border-input bg-background font-mono"
+								class="h-10 w-full border-input font-mono shadow-2xs data-[size=default]:h-10"
 							>
 								{selectedGroup
 									? `${selectedGroup.name} (${selectedGroup._id.replace(/^requirement_group:/, '')})`
@@ -200,7 +200,7 @@
 							bind:value={formTargetId}
 							disabled={isEdit}
 							placeholder="เช่น FOOD_ENERGY"
-							class="font-mono uppercase"
+							class="rounded-lg font-mono uppercase shadow-2xs"
 						/>
 					{/if}
 					{#if formErrors.targetId}
@@ -213,7 +213,7 @@
 					<Select.Root type="single" bind:value={formStatus}>
 						<Select.Trigger
 							id="form-replen-status"
-							class="h-9 w-full rounded-md border-input bg-background"
+							class="h-10 w-full border-input shadow-2xs data-[size=default]:h-10"
 						>
 							{formStatus === 'active' ? 'เปิดใช้งาน (Active)' : 'ปิดใช้งาน (Inactive)'}
 						</Select.Trigger>
@@ -232,6 +232,7 @@
 						ระยะเวลารอคอยสินค้า (วัน) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
 					<Input
+						class="rounded-lg shadow-2xs"
 						id="form-lead-time"
 						aria-label="ระยะเวลารอคอยสินค้า (Lead Time)"
 						type="number"
@@ -248,6 +249,7 @@
 						รอบการสั่งซื้อ (วัน) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
 					<Input
+						class="rounded-lg shadow-2xs"
 						id="form-review-period"
 						aria-label="รอบการสั่งซื้อ (Review Period)"
 						type="number"
@@ -264,6 +266,7 @@
 						วันสำรองเผื่อฉุกเฉิน (วัน) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
 					<Input
+						class="rounded-lg shadow-2xs"
 						id="form-safety-days"
 						aria-label="วันสำรองเผื่อฉุกเฉิน (Safety Days)"
 						type="number"
@@ -296,6 +299,7 @@
 						วันคงคลังขั้นต่ำ (วัน) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
 					<Input
+						class="rounded-lg shadow-2xs"
 						id="form-min-doc"
 						aria-label="วันคงคลังขั้นต่ำ (Min DoC)"
 						type="number"
@@ -312,6 +316,7 @@
 						วันคงคลังสูงสุด (วัน) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
 					<Input
+						class="rounded-lg shadow-2xs"
 						id="form-max-doc"
 						aria-label="วันคงคลังสูงสุด (Max DoC)"
 						type="number"

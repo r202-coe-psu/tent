@@ -142,6 +142,7 @@
 			<Field.Root>
 				<Field.Label for="merge-target">รวมเข้ากับสินค้า</Field.Label>
 				<ItemCombobox
+					class="min-h-10 rounded-lg shadow-2xs"
 					id="merge-target"
 					items={pickerItems}
 					value={targetId}

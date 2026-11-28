@@ -972,9 +972,9 @@ const REASON_BY_RECEIVE_SOURCE: Record<ReceiveSource, LedgerReason> = {
  */
 export const receiveInputSchema = z
 	.object({
-		item_id: z.string().min(1),
+		item_id: z.string().min(1, 'กรุณาเลือกสินค้า'),
 		qty: qtyStrCoercePositiveSchema,
-		unit: z.string().trim().min(1),
+		unit: z.string().trim().min(1, 'กรุณาระบุหน่วย'),
 		source: receiveSourceSchema,
 		ref_id: z.string().nullable().default(null),
 		lot: stockLotSchema.optional(),
@@ -1722,14 +1722,14 @@ export type ReceivedItemInput = z.input<typeof receivedItemSchema>;
  * so this schema (plus `transition()`) is the only thing enforcing it.
  */
 export const dispatchInfoSchema = z.object({
-	driver_name: z.string().trim().min(1, 'Driver name is required to dispatch a transfer'),
-	vehicle_plate: z.string().trim().min(1, 'Vehicle plate is required to dispatch a transfer')
+	driver_name: z.string().trim().min(1, 'กรุณาระบุชื่อผู้ขับขี่'),
+	vehicle_plate: z.string().trim().min(1, 'กรุณาระบุทะเบียนรถ')
 });
 export type DispatchInfoInput = z.input<typeof dispatchInfoSchema>;
 
 /** CR-089 FR-03 — cancelling a transfer must say why. */
 export const cancelInfoSchema = z.object({
-	cancel_reason: z.string().trim().min(1, 'A reason is required to cancel a transfer')
+	cancel_reason: z.string().trim().min(1, 'กรุณาระบุเหตุผลที่ยกเลิก')
 });
 export type CancelInfoInput = z.input<typeof cancelInfoSchema>;
 

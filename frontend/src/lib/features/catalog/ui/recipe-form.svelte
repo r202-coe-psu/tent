@@ -224,19 +224,17 @@
 								{...props}
 								bind:value={$formData.label}
 								placeholder="เช่น ข้าวหอมมะลิ 100%, น้ำดื่ม 600ml"
-								class="h-11 sm:h-10"
+								class="h-10 rounded-lg shadow-2xs"
 							/>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors />
 				</Form.Field>
-				<!-- SECTION 2: รายการส่วนประกอบ (Ingredients / JSON) -->
+				<!-- SECTION 2: รายการวัตถุดิบ -->
 				<section class={sectionClass}>
 					<div class="flex items-center justify-between">
 						<div class="space-y-1">
-							<h2 class="text-sm font-bold text-foreground">
-								รายการส่วนประกอบ (Ingredients / JSON)
-							</h2>
+							<h2 class="text-sm font-bold text-foreground">รายการวัตถุดิบ</h2>
 							<Form.Field {form} name="ingredients">
 								<Form.Control>
 									{#snippet children({ props })}
@@ -299,7 +297,7 @@
 											onblur={() => {
 												if (conv.quantity === '') conv.quantity = '1';
 											}}
-											class="h-11 text-center font-medium sm:h-10"
+											class="h-10 rounded-lg text-center font-medium shadow-2xs"
 										/>
 										{#if qtyMessages.has(index)}
 											<p class="text-xs font-semibold text-destructive">{qtyMessages.get(index)}</p>
@@ -323,7 +321,7 @@
 											type="text"
 											bind:value={conv.uom}
 											placeholder="kg"
-											class="h-11 text-center font-semibold sm:h-10"
+											class="h-10 rounded-lg text-center font-semibold shadow-2xs"
 										/>
 									</div>
 
@@ -361,9 +359,7 @@
 						<Form.Field {form} name="standard_portions" class="space-y-1.5">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold">
-										ยอดกำลังผลิตมาตรฐาน (Portions)
-									</Form.Label>
+									<Form.Label class="text-sm font-semibold">ยอดกำลังผลิตมาตรฐาน (ที่)</Form.Label>
 									<Input
 										{...props}
 										type="text"
@@ -373,7 +369,7 @@
 										oninput={(e) => {
 											$formData.standard_portions = sanitizeInteger(e.currentTarget.value);
 										}}
-										class="h-11 sm:h-10"
+										class="h-10 rounded-lg shadow-2xs"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -395,7 +391,7 @@
 										oninput={(e) => {
 											$formData.standard_duration_hours = sanitizeQuantity(e.currentTarget.value);
 										}}
-										class="h-11 sm:h-10"
+										class="h-10 rounded-lg shadow-2xs"
 									/>
 								{/snippet}
 							</Form.Control>

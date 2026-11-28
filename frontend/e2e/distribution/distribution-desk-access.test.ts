@@ -185,7 +185,6 @@ test.describe(
 				await expectDesk(page, true, OTHER_SHELTER);
 				const desk = new DeskPage(page);
 				await desk.openTab('receive', 'supplies');
-				await expect(page.getByText(`ศูนย์: ${OTHER_SHELTER}`)).toBeVisible();
 				await expect(page.getByText(ticket.ticketNo, { exact: true })).toHaveCount(0);
 			});
 

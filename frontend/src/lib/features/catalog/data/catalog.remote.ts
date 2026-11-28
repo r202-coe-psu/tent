@@ -242,7 +242,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			!isCanonicalUnitCode(item.base_unit) &&
 			isLegacyUnitLabel(item.base_unit);
 		if (!legacyBaseUnchanged && !isCanonicalUnitCode(item.base_unit)) {
-			throw new Error(`Base unit must be a valid lowercase English code: ${item.base_unit}`);
+			throw new Error(`หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก: ${item.base_unit}`);
 		}
 		const canonicalCodes = [
 			item.default_inventory_uom,

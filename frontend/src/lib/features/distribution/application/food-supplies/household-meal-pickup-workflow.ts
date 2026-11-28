@@ -1,7 +1,10 @@
 import type { AuthorContext } from '$lib/db/model';
-import { isInShelterStayStatus } from '$lib/features/shared';
 import { peopleRepository } from '$lib/features/people';
-import type { DistributionLog, HouseholdPickupMember } from '../../domain/food-supplies';
+import {
+	isMealPickupStayStatus,
+	type DistributionLog,
+	type HouseholdPickupMember
+} from '../../domain/food-supplies';
 import { assertCanPerformFrontlineDistribution } from './auth';
 import { WorkflowValidationError } from './errors';
 import {
@@ -68,7 +71,7 @@ export async function recordHouseholdMealPickup(
 		);
 	}
 	const eligible = new Set(
-		members.filter((m) => isInShelterStayStatus(m.current_stay?.status)).map((m) => m._id)
+		members.filter((m) => isMealPickupStayStatus(m.current_stay?.status)).map((m) => m._id)
 	);
 	const seen = new Set<string>();
 	for (const { evacuee_id } of input.selections) {

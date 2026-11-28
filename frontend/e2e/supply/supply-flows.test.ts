@@ -653,10 +653,12 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			await expect(rows.filter({ hasText: /-1 ขวด.*นับไม่ตรง/ })).toBeVisible();
 			await expect(rows.first()).toContainText(sourceStaff.user.name);
 
-			const types = page.getByRole('group', { name: 'ประเภทรายการ' });
-			await types.getByRole('button', { name: /^ปรับยอด/ }).click();
+			const typeFilter = page.getByRole('combobox', { name: 'ประเภทรายการ' });
+			await typeFilter.click();
+			await page.getByRole('option', { name: /^ปรับยอด/ }).click();
 			await expect(rows).toHaveCount(3);
-			await types.getByRole('button', { name: /^ทั้งหมด/ }).click();
+			await typeFilter.click();
+			await page.getByRole('option', { name: /^ทั้งหมด/ }).click();
 			await expect(rows).toHaveCount(5);
 
 			// The one distribution list left two ledger rows, one per item, with one destination.
@@ -744,10 +746,8 @@ test.describe('Supply module journeys', { tag: ['@critical', '@supply'] }, () =>
 			await stockTabs(page).getByRole('button', { name: 'สต็อก' }).click();
 			await expectOnHand(page, WATER, 117);
 			await page.goto('/back-office/supply?tab=movements');
-			await page
-				.getByRole('group', { name: 'ประเภทรายการ' })
-				.getByRole('button', { name: /^โอน/ })
-				.click();
+			await page.getByRole('combobox', { name: 'ประเภทรายการ' }).click();
+			await page.getByRole('option', { name: /^โอน/ }).click();
 			await expect(page.getByRole('row').filter({ hasText: WATER })).toHaveCount(1);
 			await expect(page.getByRole('row').filter({ hasText: WATER })).toContainText('-20 ขวด');
 

@@ -186,55 +186,68 @@
 			<div
 				class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
 			>
-				<div
-					class="grid grid-cols-2 gap-2.5 border-b border-slate-200/80 p-3 md:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] md:p-4"
-				>
-					<div class="relative col-span-2 md:col-span-1">
+				<div class="space-y-3 border-b border-slate-200/80 p-3 md:p-4">
+					<div class="relative w-full">
 						<Search
-							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500"
+							class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
 							aria-hidden="true"
 						/>
 						<Input
 							bind:value={search}
 							type="search"
 							placeholder="ค้นหาเกณฑ์"
-							class="min-h-11 w-full rounded-lg border-slate-300 bg-white pl-9 text-base shadow-2xs md:text-sm"
+							class="h-10 w-full rounded-lg border-input bg-white pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 							aria-label="ค้นหาเกณฑ์"
 						/>
 					</div>
-					<select
-						id="filter-segment"
-						bind:value={filterSegment}
-						aria-label="กรองกลุ่มเป้าหมาย"
-						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-					>
-						<option value="ALL_SEGMENTS">กลุ่มเป้าหมาย: ทั้งหมด</option>
-						{#each targetSegmentSchema.options as seg (seg)}
-							<option value={seg}>กลุ่มเป้าหมาย: {TARGET_SEGMENT_LABELS[seg] ?? seg}</option>
-						{/each}
-					</select>
-					<select
-						id="filter-group"
-						bind:value={filterGroup}
-						aria-label="กรองกลุ่มสารอาหาร"
-						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-					>
-						<option value="ALL_GROUPS">กลุ่มสารอาหาร: ทั้งหมด</option>
-						{#each reqGroups as g (g)}
-							{@const cleanId = g._id.replace(/^requirement_group:/, '')}
-							<option value={cleanId}>กลุ่มสารอาหาร: {g.name} ({cleanId})</option>
-						{/each}
-					</select>
-					<select
-						id="filter-status"
-						bind:value={filterStatus}
-						aria-label="กรองสถานะ"
-						class="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-					>
-						<option value="ALL">สถานะ: ทั้งหมด</option>
-						<option value="active">สถานะ: ใช้งานอยู่</option>
-						<option value="inactive">สถานะ: ปิดใช้งาน</option>
-					</select>
+					<div class="flex flex-wrap items-end gap-3">
+						<div class="flex min-w-[160px] flex-1 flex-col gap-1.5 md:flex-none">
+							<label for="filter-segment" class="text-xs font-semibold text-slate-600">
+								กลุ่มเป้าหมาย
+							</label>
+							<select
+								id="filter-segment"
+								bind:value={filterSegment}
+								aria-label="กรองกลุ่มเป้าหมาย"
+								class="h-10 w-full min-w-0 rounded-lg border border-input bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:w-56"
+							>
+								<option value="ALL_SEGMENTS">ทั้งหมด</option>
+								{#each targetSegmentSchema.options as seg (seg)}
+									<option value={seg}>{TARGET_SEGMENT_LABELS[seg] ?? seg}</option>
+								{/each}
+							</select>
+						</div>
+						<div class="flex min-w-[160px] flex-1 flex-col gap-1.5 md:flex-none">
+							<label for="filter-group" class="text-xs font-semibold text-slate-600">
+								กลุ่มสารอาหาร
+							</label>
+							<select
+								id="filter-group"
+								bind:value={filterGroup}
+								aria-label="กรองกลุ่มสารอาหาร"
+								class="h-10 w-full min-w-0 rounded-lg border border-input bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:w-56"
+							>
+								<option value="ALL_GROUPS">ทั้งหมด</option>
+								{#each reqGroups as g (g)}
+									{@const cleanId = g._id.replace(/^requirement_group:/, '')}
+									<option value={cleanId}>{g.name} ({cleanId})</option>
+								{/each}
+							</select>
+						</div>
+						<div class="flex min-w-[160px] flex-1 flex-col gap-1.5 md:flex-none">
+							<label for="filter-status" class="text-xs font-semibold text-slate-600">สถานะ</label>
+							<select
+								id="filter-status"
+								bind:value={filterStatus}
+								aria-label="กรองสถานะ"
+								class="h-10 w-full min-w-0 rounded-lg border border-input bg-white px-3 text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none md:w-56"
+							>
+								<option value="ALL">ทั้งหมด</option>
+								<option value="active">ใช้งานอยู่</option>
+								<option value="inactive">ปิดใช้งาน</option>
+							</select>
+						</div>
+					</div>
 				</div>
 
 				<p class="border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600">

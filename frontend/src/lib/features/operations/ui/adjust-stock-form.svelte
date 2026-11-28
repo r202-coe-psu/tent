@@ -319,7 +319,7 @@
 			success: () => {
 				const name = selectedItem?.name ?? input.item_id;
 				const signed = qtyGt(deltaQty, 0) ? `+${deltaQty}` : `${deltaQty}`;
-				const summary = `${name} ${signed} ${selectedItem?.unit ?? ''}`;
+				const summary = `${name} ${signed} ${unitLabel}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
 				return 'ปรับยอดแล้ว';
@@ -351,6 +351,7 @@
 				>สินค้า <span class="font-bold text-destructive">*</span></Field.Label
 			>
 			<ItemCombobox
+				class="min-h-10 rounded-lg shadow-2xs"
 				id="item-search"
 				{items}
 				allowCreate
@@ -375,7 +376,7 @@
 					<Select.Trigger
 						id="lot-select"
 						aria-describedby={lotsIntegrityError ? 'lot-integrity-error' : undefined}
-						class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium {currentLot?.expired
+						class="h-10 w-full rounded-lg border border-input bg-white px-3 text-sm font-medium shadow-2xs data-[size=default]:h-10 {currentLot?.expired
 							? 'text-destructive'
 							: ''}"
 					>
@@ -423,7 +424,12 @@
 						วันหมดอายุ
 						<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 					</Field.Label>
-					<DatePicker id="custom-expiry" ariaLabel="วันหมดอายุ" bind:value={customExpiry} />
+					<DatePicker
+						class="!h-10 border-input bg-white shadow-2xs"
+						id="custom-expiry"
+						ariaLabel="วันหมดอายุ"
+						bind:value={customExpiry}
+					/>
 				</Field.Root>
 			{/if}
 
@@ -458,7 +464,7 @@
 									newQtyBadInput = event.currentTarget.validity.badInput;
 								}}
 								aria-invalid={newQtyInvalid || newQtyError ? 'true' : undefined}
-								class="min-h-11 border-sky-200 bg-white pr-14 font-mono text-lg font-bold"
+								class="h-10 rounded-lg border-sky-200 bg-white pr-14 font-mono text-lg font-bold shadow-2xs"
 							/>
 							<span
 								class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground"
@@ -551,7 +557,7 @@
 						maxlength={ADJUST_NOTE_MAX_LENGTH}
 						required={noteRequired}
 						rows={2}
-						class="min-h-11"
+						class="min-h-11 rounded-lg shadow-2xs"
 					/>
 				</div>
 

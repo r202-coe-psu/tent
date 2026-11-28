@@ -155,29 +155,35 @@ export const qtyStrSignedNonZeroSchema = qtyStrSchema.refine((s) => !qtyIsZero(s
  * Accept string | number from forms/legacy, coerce to persist qty_str.
  * Prefer raw strings from UI; numbers are accepted only at boundaries.
  */
-export const qtyStrCoerceSchema = z.union([z.string(), z.number()]).transform((v, ctx) => {
-	try {
-		const raw = typeof v === 'number' ? String(v) : v.trim();
-		const out = persistQty(raw);
-		if (!QTY_STR_RE.test(out)) {
-			ctx.addIssue({ code: 'custom', message: 'Invalid quantity' });
+export const qtyStrCoerceSchema = z
+	.union([z.string(), z.number()], { error: 'กรุณาระบุจำนวน' })
+	.transform((v, ctx) => {
+		try {
+			const raw = typeof v === 'number' ? String(v) : v.trim();
+			if (raw === '') {
+				ctx.addIssue({ code: 'custom', message: 'กรุณาระบุจำนวน' });
+				return z.NEVER;
+			}
+			const out = persistQty(raw);
+			if (!QTY_STR_RE.test(out)) {
+				ctx.addIssue({ code: 'custom', message: 'จำนวนไม่ถูกต้อง (ทศนิยมได้ไม่เกิน 4 ตำแหน่ง)' });
+				return z.NEVER;
+			}
+			return out;
+		} catch {
+			ctx.addIssue({ code: 'custom', message: 'จำนวนไม่ถูกต้อง (ทศนิยมได้ไม่เกิน 4 ตำแหน่ง)' });
 			return z.NEVER;
 		}
-		return out;
-	} catch {
-		ctx.addIssue({ code: 'custom', message: 'Invalid quantity' });
-		return z.NEVER;
-	}
-});
+	});
 
 export const qtyStrCoercePositiveSchema = qtyStrCoerceSchema.refine((s) => qtyGt(s, 0), {
-	message: 'Quantity must be greater than 0'
+	message: 'จำนวนต้องมากกว่า 0'
 });
 
 export const qtyStrCoerceNonNegativeSchema = qtyStrCoerceSchema.refine((s) => qtyGte(s, 0), {
-	message: 'Quantity must be ≥ 0'
+	message: 'จำนวนต้องไม่ติดลบ'
 });
 
 export const qtyStrCoerceSignedNonZeroSchema = qtyStrCoerceSchema.refine((s) => !qtyIsZero(s), {
-	message: 'Quantity cannot be zero'
+	message: 'จำนวนต้องไม่เป็น 0'
 });

@@ -346,7 +346,7 @@
 					/>
 					<Input
 						type="search"
-						class="pl-9"
+						class="h-10 rounded-lg pl-9 shadow-2xs"
 						placeholder="ค้นหาชื่อสินค้า (เช่น เต็นท์, มุ้ง)..."
 						aria-label="ค้นหาสินค้า"
 						bind:value={search}

@@ -232,7 +232,12 @@
 					<Field.Label for="form-name">
 						ชื่อกลุ่มความต้องการ (ภาษาไทย) <span class="font-bold text-destructive">*</span>
 					</Field.Label>
-					<Input id="form-name" bind:value={formName} placeholder="เช่น พลังงานอาหาร" />
+					<Input
+						class="rounded-lg shadow-2xs"
+						id="form-name"
+						bind:value={formName}
+						placeholder="เช่น พลังงานอาหาร"
+					/>
 					{#if formErrors.name}
 						<Field.Error>{formErrors.name}</Field.Error>
 					{/if}
@@ -247,7 +252,7 @@
 						bind:value={formGroupId}
 						disabled={isEdit}
 						placeholder="เช่น FOOD_ENERGY"
-						class="font-mono uppercase"
+						class="rounded-lg font-mono uppercase shadow-2xs"
 					/>
 					{#if formErrors.groupId}
 						<Field.Error>{formErrors.groupId}</Field.Error>
@@ -264,7 +269,7 @@
 					<Select.Root type="single" bind:value={formStandardUom}>
 						<Select.Trigger
 							id="form-standard-uom"
-							class="h-9 w-full rounded-md border-input bg-background font-mono"
+							class="h-10 w-full border-input font-mono shadow-2xs data-[size=default]:h-10"
 						>
 							{uomOptions.find((o) => o.value === formStandardUom)?.label ??
 								(formStandardUom
@@ -293,7 +298,7 @@
 					<Select.Root type="single" bind:value={formStatus}>
 						<Select.Trigger
 							id="form-group-status"
-							class="h-9 w-full rounded-md border-input bg-background"
+							class="h-10 w-full border-input shadow-2xs data-[size=default]:h-10"
 						>
 							{formStatus === 'active' ? 'เปิดใช้งาน (Active)' : 'ปิดใช้งาน (Inactive)'}
 						</Select.Trigger>
@@ -428,7 +433,7 @@
 												bind:value={itemMap.base_uom}
 												placeholder="ดึงจากสิ่งของ"
 												readonly
-												class="h-9 cursor-not-allowed bg-muted font-medium text-muted-foreground"
+												class="h-10 cursor-not-allowed rounded-lg bg-muted font-medium text-muted-foreground shadow-2xs"
 											/>
 											{#if formErrors[`item_${index}_uom`]}
 												<p class="mt-1 text-[10px] text-destructive">
@@ -445,6 +450,7 @@
 												ตัวคูณแปลงค่า
 											</label>
 											<Input
+												class="rounded-lg shadow-2xs"
 												id={`item-map-cf-${index}`}
 												type="number"
 												step="any"
@@ -467,6 +473,7 @@
 												สัดส่วน (%)
 											</label>
 											<Input
+												class="rounded-lg shadow-2xs"
 												id={`item-map-share-${index}`}
 												type="number"
 												step="any"

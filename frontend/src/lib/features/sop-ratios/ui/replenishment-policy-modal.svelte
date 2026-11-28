@@ -149,7 +149,7 @@
 							aria-label="กลุ่มสำหรับการคำนวณ"
 							bind:value={formTargetId}
 							disabled={!!policy}
-							class="mt-1 w-full rounded-md border bg-background px-3 py-2 font-mono text-sm"
+							class="mt-1 w-full rounded-lg border border-input bg-white px-3 py-2 font-mono text-sm shadow-2xs"
 						>
 							{#each groups as g (g._id)}
 								{@const cleanId = g._id.replace(/^requirement_group:/, '')}
@@ -166,7 +166,7 @@
 							bind:value={formTargetId}
 							disabled={!!policy}
 							placeholder="เช่น FOOD_ENERGY"
-							class="mt-1 font-mono uppercase"
+							class="mt-1 rounded-lg font-mono uppercase shadow-2xs"
 						/>
 					{/if}
 					{#if formErrors.targetId}
@@ -185,7 +185,7 @@
 							type="number"
 							min="0"
 							bind:value={formLeadTime}
-							class="mt-1 text-sm"
+							class="mt-1 rounded-lg text-sm shadow-2xs"
 						/>
 						{#if formErrors.leadTime}
 							<p class="mt-1 text-[10px] text-destructive">{formErrors.leadTime}</p>
@@ -202,7 +202,7 @@
 							type="number"
 							min="0"
 							bind:value={formReviewPeriod}
-							class="mt-1 text-sm"
+							class="mt-1 rounded-lg text-sm shadow-2xs"
 						/>
 						{#if formErrors.reviewPeriod}
 							<p class="mt-1 text-[10px] text-destructive">{formErrors.reviewPeriod}</p>
@@ -219,7 +219,7 @@
 							type="number"
 							min="0"
 							bind:value={formSafetyDays}
-							class="mt-1 text-sm"
+							class="mt-1 rounded-lg text-sm shadow-2xs"
 						/>
 						{#if formErrors.safetyDays}
 							<p class="mt-1 text-[10px] text-destructive">{formErrors.safetyDays}</p>
@@ -248,7 +248,7 @@
 							type="number"
 							min="0"
 							bind:value={formMinDoc}
-							class="mt-1 text-sm"
+							class="mt-1 rounded-lg text-sm shadow-2xs"
 						/>
 						{#if formErrors.minDoc}
 							<p class="mt-1 text-xs text-destructive">{formErrors.minDoc}</p>
@@ -265,7 +265,7 @@
 							type="number"
 							min="0"
 							bind:value={formMaxDoc}
-							class="mt-1 text-sm"
+							class="mt-1 rounded-lg text-sm shadow-2xs"
 						/>
 						{#if formErrors.maxDoc}
 							<p class="mt-1 text-xs text-destructive">{formErrors.maxDoc}</p>

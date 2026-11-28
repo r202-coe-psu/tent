@@ -265,7 +265,7 @@
 			return;
 		}
 		if (!isQtyValid) {
-			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือในมือ';
+			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือ';
 			return;
 		}
 		if (preflightLoading || preflightError) return;
@@ -294,7 +294,7 @@
 			return;
 		}
 		if (!isQtyValid) {
-			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือในมือ';
+			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือ';
 			return;
 		}
 

@@ -595,7 +595,7 @@
 	disabled = false
 )}
 	<Select.Root type="single" value={value ?? ''} onValueChange={onChange} {disabled}>
-		<Select.Trigger {...props} class="w-full data-[size=default]:h-11 sm:data-[size=default]:h-10">
+		<Select.Trigger {...props} class="h-10 w-full shadow-2xs data-[size=default]:h-10">
 			{options.find((o) => o.value === value)?.label ?? placeholder}
 		</Select.Trigger>
 		<Select.Content>
@@ -634,7 +634,7 @@
 								{...props}
 								bind:value={$formData.name}
 								placeholder="เช่น ข้าวสาร, น้ำดื่ม"
-								class="h-11 sm:h-10"
+								class="h-10 rounded-lg shadow-2xs"
 							/>
 						{/snippet}
 					</Form.Control>
@@ -667,7 +667,7 @@
 									{...props}
 									bind:value={$formData.sku}
 									placeholder="เช่น RICE-001"
-									class="h-11 sm:h-10"
+									class="h-10 rounded-lg shadow-2xs"
 								/>
 							{/snippet}
 						</Form.Control>
@@ -680,7 +680,7 @@
 									{...props}
 									bind:value={$formData.description}
 									placeholder="เช่น ข้าวสารหอมมะลิ บรรจุถุง"
-									class="h-11 sm:h-10"
+									class="h-10 rounded-lg shadow-2xs"
 								/>
 							{/snippet}
 						</Form.Control>
@@ -765,7 +765,7 @@
 							inputmode="numeric"
 							autocomplete="off"
 							placeholder="สแกนหรือพิมพ์บาร์โค้ดที่ตัวสินค้า"
-							class="h-11 rounded-xl"
+							class="h-10 rounded-lg shadow-2xs"
 						/>
 						{#if barcodeConflict(baseBarcode)}
 							<p class="text-xs font-semibold text-amber-900">
@@ -825,7 +825,7 @@
 											const val = e.currentTarget.value;
 											$formData.conversions[i].multiplier = val === '' ? '1' : val;
 										}}
-										class="h-10 w-24 rounded-lg"
+										class="h-10 w-24 rounded-lg shadow-2xs"
 									/>
 									<span class="font-medium">{baseUnitLabel}</span>
 									<Button
@@ -848,7 +848,7 @@
 										oninput={(e) => {
 											$formData.conversions[i].barcode = e.currentTarget.value;
 										}}
-										class="h-10 rounded-lg"
+										class="h-10 rounded-lg shadow-2xs"
 									/>
 									{#if barcodeConflict(conversion.barcode)}
 										<p class="text-xs font-semibold text-amber-900">
@@ -943,7 +943,7 @@
 										step="any"
 										min={0}
 										bind:value={$formData.capacity_kg}
-										class="h-11 sm:h-10"
+										class="h-10 rounded-lg shadow-2xs"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -962,7 +962,7 @@
 										step="any"
 										min={0}
 										bind:value={$formData.burn_rate_kg_per_hour}
-										class="h-11 sm:h-10"
+										class="h-10 rounded-lg shadow-2xs"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -981,7 +981,7 @@
 										step="any"
 										min={0}
 										bind:value={$formData.time_multiplier}
-										class="h-11 sm:h-10"
+										class="h-10 rounded-lg shadow-2xs"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -1011,7 +1011,7 @@
 													const val = e.currentTarget.value;
 													$formData.shelf_life_days = val === '' ? undefined : Number(val);
 												}}
-												class="h-11 sm:h-10"
+												class="h-10 rounded-lg shadow-2xs"
 											/>
 										{/snippet}
 									</Form.Control>
@@ -1127,7 +1127,7 @@
 													const val = e.currentTarget.value;
 													$formData.qty_per_person = val === '' ? undefined : Number(val);
 												}}
-												class="h-11 sm:h-10"
+												class="h-10 rounded-lg shadow-2xs"
 											/>
 										{/snippet}
 									</Form.Control>

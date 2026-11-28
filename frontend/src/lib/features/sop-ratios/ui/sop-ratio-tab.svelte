@@ -47,7 +47,7 @@
 					bind:value={search}
 					type="search"
 					placeholder="ค้นหา..."
-					class="pl-9"
+					class="h-10 rounded-lg pl-9 shadow-2xs"
 					aria-label="ค้นหา"
 				/>
 				<svg

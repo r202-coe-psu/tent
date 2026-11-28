@@ -353,7 +353,7 @@ describe('catalog domain', () => {
 				distribution_type: 'recurring' as const,
 				type_class: 'CONSUMABLE' as const
 			})
-		).toThrow(/Base unit must be a valid lowercase English code/);
+		).toThrow(/หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก/);
 
 		expect(() =>
 			itemMasterInputSchema.parse({
@@ -362,7 +362,7 @@ describe('catalog domain', () => {
 				distribution_type: 'recurring' as const,
 				type_class: 'CONSUMABLE' as const
 			})
-		).toThrow(/Base unit must be a valid lowercase English code/);
+		).toThrow(/หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก/);
 
 		// For Consumable/Durable, distribution_type is required
 		expect(() =>
@@ -398,7 +398,7 @@ describe('catalog domain', () => {
 				distribution_type: 'recurring' as const,
 				type_class: 'CONSUMABLE' as const
 			})
-		).toThrow(/Base unit must be a valid lowercase English code/);
+		).toThrow(/หน่วยฐานต้องเป็นรหัสภาษาอังกฤษตัวพิมพ์เล็ก/);
 	});
 });
 

@@ -387,7 +387,9 @@
 			const negative = negativeLots(lots);
 			if (negative.length === 0) return [];
 			const name = items.find((item) => item._id === itemId)?.name ?? itemId;
-			return [`${name} (${negative.map((l) => `${l.qty} ${l.unit}`).join(', ')})`];
+			return [
+				`${name} (${negative.map((l) => `${l.qty} ${formatUnit(l.unit, units, langState.current) || l.unit}`).join(', ')})`
+			];
 		})
 	);
 
@@ -848,7 +850,9 @@
 		<div
 			class={[
 				'min-h-0 flex-1',
-				quickActionKind === 'distribute' ? 'flex flex-col' : 'overflow-y-auto p-4 sm:p-6'
+				quickActionKind === 'distribute' || quickActionKind === 'count'
+					? 'flex flex-col'
+					: 'overflow-y-auto p-4 sm:p-6'
 			]}
 		>
 			{#if quickActionKind === 'receive'}

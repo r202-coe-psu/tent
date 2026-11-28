@@ -29,6 +29,19 @@
 
 	let driverName = $state('');
 	let vehiclePlate = $state('');
+	let submitted = $state(false);
+
+	// Inline messages from the same schema the server parses; shown once a confirm was tried.
+	const fieldErrors = $derived.by(() => {
+		if (!submitted) return { driver: '', plate: '' };
+		const r = dispatchInfoSchema.safeParse({
+			driver_name: driverName,
+			vehicle_plate: vehiclePlate
+		});
+		const msg = (key: string) =>
+			r.success ? '' : (r.error.issues.find((i) => i.path[0] === key)?.message ?? '');
+		return { driver: msg('driver_name'), plate: msg('vehicle_plate') };
+	});
 
 	function handleOpenChange(next: boolean) {
 		open = next;
@@ -36,6 +49,7 @@
 		if (!next) {
 			driverName = '';
 			vehiclePlate = '';
+			submitted = false;
 		}
 	}
 
@@ -45,8 +59,15 @@
 			driver_name: driverName,
 			vehicle_plate: vehiclePlate
 		});
+		submitted = true;
 		if (!parsed.success) {
-			toast.error(parsed.error.issues[0]?.message ?? 'กรุณากรอกผู้ขับขี่และทะเบียนรถ');
+			const first = parsed.error.issues[0]?.path[0];
+			document
+				.getElementById(
+					first === 'vehicle_plate' ? 'dispatch-vehicle-plate' : 'dispatch-driver-name'
+				)
+				?.focus();
+			toast.error('กรุณากรอกผู้ขับขี่และทะเบียนรถให้ครบ');
 			return;
 		}
 		onConfirm(parsed.data);
@@ -69,12 +90,20 @@
 					ชื่อผู้ขับขี่ <span class="text-destructive">*</span>
 				</Label>
 				<Input
+					class="rounded-lg shadow-2xs"
 					id="dispatch-driver-name"
+					aria-invalid={fieldErrors.driver ? true : undefined}
+					aria-describedby={fieldErrors.driver ? 'dispatch-driver-name-error' : undefined}
 					bind:value={driverName}
 					placeholder="เช่น สมชาย ใจดี"
 					autocomplete="off"
 					disabled={isPending}
 				/>
+				{#if fieldErrors.driver}
+					<p id="dispatch-driver-name-error" class="text-xs font-medium text-destructive">
+						{fieldErrors.driver}
+					</p>
+				{/if}
 			</div>
 
 			<div class="grid gap-2">
@@ -82,12 +111,20 @@
 					ทะเบียนรถ <span class="text-destructive">*</span>
 				</Label>
 				<Input
+					class="rounded-lg shadow-2xs"
 					id="dispatch-vehicle-plate"
+					aria-invalid={fieldErrors.plate ? true : undefined}
+					aria-describedby={fieldErrors.plate ? 'dispatch-vehicle-plate-error' : undefined}
 					bind:value={vehiclePlate}
 					placeholder="เช่น กท 1234"
 					autocomplete="off"
 					disabled={isPending}
 				/>
+				{#if fieldErrors.plate}
+					<p id="dispatch-vehicle-plate-error" class="text-xs font-medium text-destructive">
+						{fieldErrors.plate}
+					</p>
+				{/if}
 			</div>
 		</div>
 
